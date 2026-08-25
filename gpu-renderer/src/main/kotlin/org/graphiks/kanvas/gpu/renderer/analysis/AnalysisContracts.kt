@@ -1891,7 +1891,21 @@ class GPUFirstRoutePlanner(
             pathDescriptor.edgeCount < 0 -> "unsupported.geometry.path_invalid_edges"
             transform.type == GPUTransformType.Perspective -> "unsupported.transform.perspective"
             transform.type == GPUTransformType.Singular -> "unsupported.transform.singular"
-            transform.type !in acceptedFillPathTransformTypes -> "unsupported.transform.class_downgrade"
+            transform.type == GPUTransformType.Scale &&
+                antiAlias &&
+                material.kind == GPUMaterialKind.SolidColor &&
+                pathDescriptor.fillRule == "NonZero" &&
+                !pathDescriptor.inverseFill &&
+                !stroke &&
+                maskFilter == null ->
+                "unsupported.core_primitive.coverage_sample.color_capability"
+            !transform.isAcceptedFillPathTransform(
+                scaleAdmitted = material.kind == GPUMaterialKind.SolidColor &&
+                    pathDescriptor.fillRule == "NonZero" &&
+                    !pathDescriptor.inverseFill &&
+                    !stroke &&
+                    maskFilter == null,
+            ) -> "unsupported.transform.class_downgrade"
             clip.kind == GPUClipKind.ComplexStack &&
                 (
                     clip.coveragePlan == null ||
@@ -2227,9 +2241,6 @@ class GPUFirstRoutePlanner(
             GPUMaterialKind.RuntimeEffect,
         )
 
-        /** Transform classes accepted by the FillPath route. */
-        val acceptedFillPathTransformTypes = setOf(GPUTransformType.Identity, GPUTransformType.Translate)
-
         /** Material kinds accepted by the FillPath prepared route. */
         val acceptedFillPathMaterialKinds = setOf(
             GPUMaterialKind.SolidColor,
@@ -2436,6 +2447,19 @@ private fun GPUTransformFacts.hasNonFiniteFacts(): Boolean =
     !translateX.isFinite() || !translateY.isFinite() ||
         !scaleX.isFinite() || !scaleY.isFinite() ||
         !skewX.isFinite() || !skewY.isFinite()
+
+/** Admits only identity, translation, or finite strictly-positive uniform scale for FillPath. */
+private fun GPUTransformFacts.isAcceptedFillPathTransform(scaleAdmitted: Boolean): Boolean = when (type) {
+    GPUTransformType.Identity,
+    GPUTransformType.Translate,
+    -> true
+    GPUTransformType.Scale ->
+        scaleAdmitted && scaleX.isFinite() && scaleY.isFinite() && scaleX > 0f && scaleX == scaleY
+    GPUTransformType.Affine,
+    GPUTransformType.Perspective,
+    GPUTransformType.Singular,
+    -> false
+}
 
 private fun GPUTransformFacts.isNonAxisAlignedAffine(): Boolean =
     type == GPUTransformType.Affine && (skewX != 0f || skewY != 0f)

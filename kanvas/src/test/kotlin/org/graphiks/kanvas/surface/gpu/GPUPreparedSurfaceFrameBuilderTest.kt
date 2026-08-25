@@ -72,14 +72,11 @@ import org.graphiks.kanvas.types.Vertices
 
 class GPUPreparedSurfaceFrameBuilderTest {
     @Test
-    fun `matrix transform facts classify only coherent pure scales as Scale`() {
+    fun `matrix transform facts classify coherent pure scales as Scale`() {
         val cases = listOf(
             Triple("identity", Matrix3x3F32.Identity, GPUTransformType.Identity),
             Triple("positive-scale", Matrix3x3F32(sx = 2f, sy = 3f), GPUTransformType.Scale),
             Triple("reflected-scale", Matrix3x3F32(sx = -2f, sy = 3f), GPUTransformType.Scale),
-            Triple("translation", Matrix3x3F32(tx = 4f), GPUTransformType.Affine),
-            Triple("scale-translation", Matrix3x3F32(sx = 2f, sy = 3f, tx = 4f), GPUTransformType.Affine),
-            Triple("skew", Matrix3x3F32(kx = 0.25f), GPUTransformType.Affine),
             Triple("singular", Matrix3x3F32(sx = 0f, sy = 1f), GPUTransformType.Affine),
             Triple(
                 "non-finite-determinant",
@@ -92,6 +89,19 @@ class GPUPreparedSurfaceFrameBuilderTest {
                 GPUTransformType.Affine,
             ),
             Triple("perspective", Matrix3x3F32(persp0 = 0.25f), GPUTransformType.Perspective),
+        )
+
+        cases.forEach { (label, matrix, expectedType) ->
+            assertEquals(expectedType, matrix.toGPUTransformFacts().type, label)
+        }
+    }
+
+    @Test
+    fun `matrix transform facts classify pure translation separately from scale translation and skew`() {
+        val cases = listOf(
+            Triple("pure-translation", Matrix3x3F32(tx = 4f, ty = 5f), GPUTransformType.Translate),
+            Triple("scale-translation", Matrix3x3F32(sx = 2f, sy = 3f, tx = 4f, ty = 5f), GPUTransformType.Affine),
+            Triple("skew", Matrix3x3F32(kx = 0.25f), GPUTransformType.Affine),
         )
 
         cases.forEach { (label, matrix, expectedType) ->
@@ -827,6 +837,33 @@ class GPUPreparedSurfaceFrameBuilderTest {
             "unsupported.core_primitive.coverage_sample.color_capability",
             unsupportedAaPath.diagnostic.code.value,
         )
+    }
+
+    @Test
+    fun `public frame accepts uniformly scaled non-AA FillPath in native stencil cover`() {
+        val operation = DisplayOp.DrawPath(
+            Path().apply {
+                moveTo(8f, 8f)
+                lineTo(40f, 8f)
+                lineTo(8f, 40f)
+                close()
+            },
+            Paint.fill(ColorARGB.Blue).copy(antiAlias = false),
+            Matrix3x3F32(sx = 1.5f, sy = 1.5f),
+            ClipStack.WideOpen,
+        )
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            GPUPreparedSurfaceFrameBuilder.build(
+                request(listOf(operation)).copy(
+                    targetFacts = GPUTargetFacts(64, 64, "rgba8unorm-srgb"),
+                    targetBounds = GPUPixelBounds(0, 0, 64, 64),
+                ),
+            ),
+        )
+        val packets = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+        assertTrue(ready.taskList.tasks.none { it is GPUTask.Refused })
+        assertTrue(packets.isNotEmpty())
     }
 
     private fun srgbToLinear(encoded: Float): Float = if (encoded <= 0.04045f) {

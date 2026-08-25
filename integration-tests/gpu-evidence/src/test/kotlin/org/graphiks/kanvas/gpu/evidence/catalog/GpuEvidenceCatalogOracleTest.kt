@@ -184,6 +184,29 @@ class GpuEvidenceCatalogOracleTest {
         assertEquals(2320, fillPixelCount(inverseEvenOdd, green))
     }
 
+    @Test
+    fun `closure and transform path oracles preserve hand-derived device triangles`() {
+        val orange = intArrayOf(242, 135, 46, 255)
+        val blue = intArrayOf(31, 115, 209, 255)
+        val green = intArrayOf(56, 220, 120, 255)
+
+        listOf(
+            Triple("implicit-closure-triangle-path", orange, 1128 to listOf(8, 8, 55, 8, 31, 31, 32, 31)),
+            Triple("translated-triangle-path", blue, 1128 to listOf(12, 13, 60, 13, 35, 36, 50, 40)),
+            Triple("uniform-scaled-triangle-path", green, 1128 to listOf(12, 12, 60, 12, 35, 35, 50, 40)),
+        ).forEach { (id, color, expectation) ->
+            val (count, samples) = expectation
+            val pixels = oracle(id)
+            assertPixel(pixels, 64, 64, samples[0], samples[1], color)
+            assertPixel(pixels, 64, 64, samples[2], samples[3], intArrayOf(13, 20, 33, 255))
+            assertPixel(pixels, 64, 64, samples[4], samples[5], color)
+            assertPixel(pixels, 64, 64, samples[6], samples[7], intArrayOf(13, 20, 33, 255))
+            assertEquals(count, fillPixelCount(pixels, color), id)
+        }
+        val scaled = oracle("uniform-scaled-triangle-path")
+        assertPixel(scaled, 64, 64, 59, 12, intArrayOf(13, 20, 33, 255))
+    }
+
     private fun oracle(id: String): ByteArray = assertNotNull(
         GpuEvidenceCatalog.renderCases.firstOrNull { it.descriptor.id.value == id }?.oracle,
     ).render(64, 64)

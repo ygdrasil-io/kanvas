@@ -41,6 +41,9 @@ object GpuEvidenceCatalog {
         windingPathHole(),
         inverseWindingTrianglePath(),
         inverseEvenOddPathHole(),
+        implicitClosureTrianglePath(),
+        translatedTrianglePath(),
+        uniformScaledTrianglePath(),
     )
     val refusalCases: List<EvidenceCase> = listOf(
         unregisteredRuntimeEffectRefusal(),
@@ -511,6 +514,51 @@ object GpuEvidenceCatalog {
         comparisonRationale = "Exact opaque RGBA8 output from independent pixel-center inverse winding/even-odd polygon membership.",
     )
 
+    private fun implicitClosureTrianglePath() = pathFillCase(
+        id = "implicit-closure-triangle-path",
+        title = "Implicit closure triangle path",
+        description = "Public Kanvas Surface non-AA winding triangle path filled without an explicit close command.",
+        tags = setOf("path-fill", "winding", "implicit-closure", "kanvas-surface"),
+        program = KanvasScenePrograms.implicitClosureTrianglePath(),
+        fill = intArrayOf(242, 135, 46, 255),
+        contours = listOf(
+            SurfaceSrgbPathFillCpuOracle.Contour(listOf(
+                point(8f, 8f), point(56f, 8f), point(8f, 55f),
+            )),
+        ),
+        fillRule = SurfaceSrgbPathFillCpuOracle.FillRule.Winding,
+    )
+
+    private fun translatedTrianglePath() = pathFillCase(
+        id = "translated-triangle-path",
+        title = "Translated triangle path",
+        description = "Public Kanvas Surface non-AA winding triangle path under literal translation (4,5).",
+        tags = setOf("path-fill", "winding", "translate", "kanvas-surface"),
+        program = KanvasScenePrograms.translatedTrianglePath(),
+        fill = intArrayOf(31, 115, 209, 255),
+        contours = listOf(
+            SurfaceSrgbPathFillCpuOracle.Contour(listOf(
+                point(12f, 13f), point(60f, 13f), point(12f, 60f),
+            )),
+        ),
+        fillRule = SurfaceSrgbPathFillCpuOracle.FillRule.Winding,
+    )
+
+    private fun uniformScaledTrianglePath() = pathFillCase(
+        id = "uniform-scaled-triangle-path",
+        title = "Uniform scaled triangle path",
+        description = "Public Kanvas Surface non-AA winding triangle path under literal uniform scale (1.5,1.5).",
+        tags = setOf("path-fill", "winding", "scale", "kanvas-surface"),
+        program = KanvasScenePrograms.uniformScaledTrianglePath(),
+        fill = intArrayOf(56, 220, 120, 255),
+        contours = listOf(
+            SurfaceSrgbPathFillCpuOracle.Contour(listOf(
+                point(12f, 12f), point(60f, 12f), point(12f, 60f),
+            )),
+        ),
+        fillRule = SurfaceSrgbPathFillCpuOracle.FillRule.Winding,
+    )
+
     private fun pathFillCase(
         id: String,
         title: String,
@@ -520,7 +568,7 @@ object GpuEvidenceCatalog {
         fill: IntArray,
         contours: List<SurfaceSrgbPathFillCpuOracle.Contour>,
         fillRule: SurfaceSrgbPathFillCpuOracle.FillRule,
-        oracleVersion: Int = 1,
+        oracleVersion: Int = 2,
         comparisonRationale: String = "Exact opaque RGBA8 output from independent pixel-center winding/even-odd polygon membership.",
     ) = EvidenceCase(
         EvidenceSceneDescriptor(

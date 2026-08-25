@@ -86,12 +86,14 @@ class SurfaceSrgbPathFillCpuOracleTest {
     }
 
     @Test
-    fun `inverse winding excludes a pixel center on the contour boundary`() {
+    fun `winding triangle excludes pixel center on descending hypotenuse under top left rule`() {
         val windingPixels = boundaryTriangleOracle(SurfaceSrgbPathFillCpuOracle.FillRule.Winding).render(64, 64)
         val inversePixels = boundaryTriangleOracle(SurfaceSrgbPathFillCpuOracle.FillRule.InverseWinding).render(64, 64)
 
-        assertPixel(windingPixels, 10, 10, ORANGE)
-        assertPixel(inversePixels, 10, 10, BACKGROUND)
+        assertPixel(windingPixels, 59, 12, BACKGROUND)
+        assertPixel(windingPixels, 31, 31, ORANGE)
+        assertPixel(inversePixels, 59, 12, ORANGE)
+        assertPixel(inversePixels, 31, 31, BACKGROUND)
     }
 
     @Test
@@ -229,7 +231,7 @@ class SurfaceSrgbPathFillCpuOracleTest {
             ORANGE,
             listOf(
                 SurfaceSrgbPathFillCpuOracle.Contour(
-                    listOf(point(8f, 8f), point(20f, 20f), point(8f, 24f)),
+                    listOf(point(12f, 12f), point(60f, 12f), point(12f, 60f)),
                 ),
             ),
             fillRule,

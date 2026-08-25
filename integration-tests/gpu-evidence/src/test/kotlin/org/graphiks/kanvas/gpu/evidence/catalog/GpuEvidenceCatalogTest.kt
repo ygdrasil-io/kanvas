@@ -14,6 +14,7 @@ import org.graphiks.kanvas.gpu.evidence.runner.SceneProgram
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.geometry.FillType
+import org.graphiks.kanvas.geometry.PathMeasure
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Paint
@@ -30,7 +31,7 @@ import org.graphiks.math.matrix.Matrix3x3F32
 
 class GpuEvidenceCatalogTest {
     @Test
-    fun `catalog separates twenty five public surface renders from two refusals`() {
+    fun `catalog separates twenty eight public surface renders from two refusals`() {
         val cases = GpuEvidenceCatalog.cases
 
         assertEquals(
@@ -55,6 +56,9 @@ class GpuEvidenceCatalogTest {
                 "winding-path-hole",
                 "inverse-winding-triangle-path",
                 "inverse-even-odd-path-hole",
+                "implicit-closure-triangle-path",
+                "translated-triangle-path",
+                "uniform-scaled-triangle-path",
                 "custom-runtime-effect-unregistered-refusal",
                 "aggregate-memory-budget-refusal",
             ),
@@ -82,6 +86,9 @@ class GpuEvidenceCatalogTest {
                 "winding-path-hole",
                 "inverse-winding-triangle-path",
                 "inverse-even-odd-path-hole",
+                "implicit-closure-triangle-path",
+                "translated-triangle-path",
+                "uniform-scaled-triangle-path",
             ),
             GpuEvidenceCatalog.renderCases.map { it.descriptor.id.value },
         )
@@ -94,7 +101,7 @@ class GpuEvidenceCatalogTest {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            List(25) { "kanvas.surface.render" },
+            List(28) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
@@ -211,6 +218,9 @@ class GpuEvidenceCatalogTest {
             "winding-path-hole",
             "inverse-winding-triangle-path",
             "inverse-even-odd-path-hole",
+            "implicit-closure-triangle-path",
+            "translated-triangle-path",
+            "uniform-scaled-triangle-path",
         )
         assertEquals(
             expectedRenderIds.associateWith { "kanvas.surface.render" },
@@ -250,12 +260,15 @@ class GpuEvidenceCatalogTest {
                 "asymmetric-solid-rrect" to OraclePolicy.GeneratedCpu("surface-srgb-rrect-pixel-center", 2),
                 "ellipse-solid-rrect" to OraclePolicy.GeneratedCpu("surface-srgb-rrect-pixel-center", 2),
                 "asymmetric-solid-drrect-hole" to OraclePolicy.GeneratedCpu("surface-srgb-rrect-pixel-center", 2),
-                "solid-triangle-path" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 1),
-                "solid-concave-path" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 1),
-                "even-odd-path-hole" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 1),
-                "winding-path-hole" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 1),
+                "solid-triangle-path" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 2),
+                "solid-concave-path" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 2),
+                "even-odd-path-hole" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 2),
+                "winding-path-hole" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 2),
                 "inverse-winding-triangle-path" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 2),
                 "inverse-even-odd-path-hole" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 2),
+                "implicit-closure-triangle-path" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 2),
+                "translated-triangle-path" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 2),
+                "uniform-scaled-triangle-path" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 2),
             ),
             GpuEvidenceCatalog.renderCases.associate { evidenceCase ->
                 evidenceCase.descriptor.id.value to evidenceCase.descriptor.oracle
@@ -288,6 +301,9 @@ class GpuEvidenceCatalogTest {
                 "winding-path-hole" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent pixel-center winding/even-odd polygon membership."),
                 "inverse-winding-triangle-path" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent pixel-center inverse winding/even-odd polygon membership."),
                 "inverse-even-odd-path-hole" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent pixel-center inverse winding/even-odd polygon membership."),
+                "implicit-closure-triangle-path" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent pixel-center winding/even-odd polygon membership."),
+                "translated-triangle-path" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent pixel-center winding/even-odd polygon membership."),
+                "uniform-scaled-triangle-path" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent pixel-center winding/even-odd polygon membership."),
             ),
             GpuEvidenceCatalog.renderCases.associate { evidenceCase ->
                 evidenceCase.descriptor.id.value to evidenceCase.descriptor.comparison
@@ -651,13 +667,53 @@ class GpuEvidenceCatalogTest {
         )
     }
 
+    @Test
+    fun `closure and transform path cases keep literal local geometry and public Surface state`() {
+        val orange = ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)
+        val blue = ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)
+        val green = ColorARGB.fromRGBA(56f / 255f, 220f / 255f, 120f / 255f)
+
+        assertPathCase(
+            id = "implicit-closure-triangle-path",
+            fillType = FillType.WINDING,
+            bounds = RectF32.ofLTRB(8f, 8f, 56f, 55f),
+            paint = Paint.fill(orange).copy(antiAlias = false),
+            convex = true,
+        )
+        val implicit = assertIs<DisplayOp.DrawPath>(ops("implicit-closure-triangle-path")[1])
+        assertFalse(PathMeasure(implicit.path).isClosed)
+
+        assertPathCase(
+            id = "translated-triangle-path",
+            fillType = FillType.WINDING,
+            bounds = RectF32.ofLTRB(8f, 8f, 56f, 55f),
+            paint = Paint.fill(blue).copy(antiAlias = false),
+            convex = true,
+            transform = Matrix3x3F32(tx = 4f, ty = 5f),
+        )
+        val translated = assertIs<DisplayOp.DrawPath>(ops("translated-triangle-path")[2])
+        assertTrue(PathMeasure(translated.path).isClosed)
+
+        assertPathCase(
+            id = "uniform-scaled-triangle-path",
+            fillType = FillType.WINDING,
+            bounds = RectF32.ofLTRB(8f, 8f, 40f, 40f),
+            paint = Paint.fill(green).copy(antiAlias = false),
+            convex = true,
+            transform = Matrix3x3F32(sx = 1.5f, sy = 1.5f),
+        )
+        val scaled = assertIs<DisplayOp.DrawPath>(ops("uniform-scaled-triangle-path")[2])
+        assertTrue(PathMeasure(scaled.path).isClosed)
+    }
+
     private fun assertPathCase(
         id: String,
         fillType: FillType,
         bounds: RectF32,
         paint: Paint,
         convex: Boolean,
-        oracleVersion: Int = 1,
+        transform: Matrix3x3F32 = Matrix3x3F32.Identity,
+        oracleVersion: Int = 2,
         comparisonRationale: String = "Exact opaque RGBA8 output from independent pixel-center winding/even-odd polygon membership.",
     ) {
         val evidenceCase = assertNotNull(GpuEvidenceCatalog.renderCases.firstOrNull { it.descriptor.id.value == id })
@@ -673,17 +729,20 @@ class GpuEvidenceCatalogTest {
         assertEquals("kanvas.surface.render", assertIs<KanvasSurfaceProgram>(evidenceCase.program).routeId)
 
         val operations = ops(id)
-        assertEquals(2, operations.size)
+        assertEquals(if (transform == Matrix3x3F32.Identity) 2 else 3, operations.size)
         assertEquals(
             DisplayOp.DrawColor(ColorARGB.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f), BlendMode.SRC_OVER, Matrix3x3F32.Identity, ClipStack.WideOpen),
             operations[0],
         )
-        val drawPath = assertIs<DisplayOp.DrawPath>(operations[1])
+        if (transform != Matrix3x3F32.Identity) {
+            assertEquals(DisplayOp.SetTransform(transform), operations[1])
+        }
+        val drawPath = assertIs<DisplayOp.DrawPath>(operations.last())
         assertEquals(fillType, drawPath.path.fillType)
         assertEquals(bounds, drawPath.path.computeBounds())
         assertEquals(convex, drawPath.path.isConvex())
         assertEquals(paint, drawPath.paint)
-        assertEquals(Matrix3x3F32.Identity, drawPath.transform)
+        assertEquals(transform, drawPath.transform)
         assertEquals(ClipStack.WideOpen, drawPath.clip)
     }
 

@@ -40,17 +40,11 @@ class SurfaceSrgbPathFillCpuOracle(
         for (y in 0 until height) for (x in 0 until width) {
             val pointX = x + 0.5
             val pointY = y + 0.5
-            val baseCovered = if (contours.any { contour ->
-                    edges(contour).any { (start, end) -> pointOnSegment(pointX, pointY, start, end) }
-                }) {
-                true
-            } else {
-                when (fillRule) {
-                    FillRule.Winding, FillRule.InverseWinding ->
-                        contours.sumOf { windingNumber(pointX, pointY, it) } != 0
-                    FillRule.EvenOdd, FillRule.InverseEvenOdd -> contours.fold(false) { inside, contour ->
-                        inside.xor(oddCrossings(pointX, pointY, contour))
-                    }
+            val baseCovered = when (fillRule) {
+                FillRule.Winding, FillRule.InverseWinding ->
+                    contours.sumOf { windingNumber(pointX, pointY, it) } != 0
+                FillRule.EvenOdd, FillRule.InverseEvenOdd -> contours.fold(false) { inside, contour ->
+                    inside.xor(oddCrossings(pointX, pointY, contour))
                 }
             }
             val covered = when (fillRule) {
@@ -94,18 +88,6 @@ class SurfaceSrgbPathFillCpuOracle(
             }
         }
         return odd
-    }
-
-    private fun pointOnSegment(pointX: Double, pointY: Double, start: Point, end: Point): Boolean {
-        val startX = start.x.toDouble()
-        val startY = start.y.toDouble()
-        val endX = end.x.toDouble()
-        val endY = end.y.toDouble()
-        val cross = (pointX - startX) * (endY - startY) -
-            (pointY - startY) * (endX - startX)
-        if (cross != 0.0) return false
-        return pointX >= minOf(startX, endX) && pointX <= maxOf(startX, endX) &&
-            pointY >= minOf(startY, endY) && pointY <= maxOf(startY, endY)
     }
 
     private fun edges(contour: Contour): Sequence<Pair<Point, Point>> =
