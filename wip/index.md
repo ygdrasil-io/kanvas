@@ -16,7 +16,7 @@ un support : une route ne devient supportée qu'après test de la route publique
 `Surface`, oracle/référence applicable, capture GPU, diagnostics,
 diff/statistiques et politique de fallback vérifiée.
 
-## Lots
+## Lots (inventaires, pas autorisations)
 
 | Lot | But | Brief |
 | --- | --- | --- |
@@ -29,6 +29,11 @@ diff/statistiques et politique de fallback vérifiée.
 | 60 | Tester texte, vertices, mesh et picture. | [60-text-vertices-mesh-and-picture.md](60-text-vertices-mesh-and-picture.md) |
 | 70 | Tester cycle de vie WebGPU, caches, performance et promotion GM. | [70-webgpu-lifecycle-performance-and-gm.md](70-webgpu-lifecycle-performance-and-gm.md) |
 | Carte | Empêcher toute suppression de WIP avant classification des APIs/types publics. | [coverage-map.md](coverage-map.md) |
+
+Un lot est un inventaire de travail et non l'autorisation d'ajouter des scènes,
+du code ou des captures. Tout travail ultérieur est découpé en petites vagues
+explicitement approuvées, avec IDs de cas exacts et preuves d'acceptation. Il
+n'existe actuellement aucune vague de catalogue autorisée.
 
 ## Graphe de dépendances
 
@@ -48,15 +53,39 @@ lire ou à écrire les tests de refus. Par exemple, `20` et `60` peuvent ajouter
 leurs cas de refus dès la première vague ; leurs captures de rendu attendent
 le lowerer et l'oracle correspondants.
 
-## Ordre d'exécution et parallélisme
+## État observé et contraintes de session
 
-| Vague | Lots | Mode | Précondition et règle de sortie |
-| --- | --- | --- | --- |
-| A | 00 | Exclusif | Figer les contrats d'evidence et vérifier le catalogue courant à 12 rendus / 4 refus. `REPEAT` reste un refus ; sa promotion exige un futur changement de code, pas un rebaseline documentaire. |
-| B | 10, 30, 40, 50, 60-refus | Parallèle par branches | Chaque lot peut écrire ses tests unitaires et ses scénarios de refus en parallèle. Une seule branche à la fois modifie le même bloc de `GpuEvidenceCatalog.kt` lors de l'intégration. |
-| C | 20, 60-rendu | Parallèle conditionnel | `20` attend les contrats state/coverage de 10 pour les captures rendables. Le texte, les images atlas et les codecs restent dependency-gated : pas de substitut temporaire. |
-| D | 10, 20, 30, 40, 50, 60-promotions | Sérialisé par adapter | Les captures hardware et promotions se font une scène à la fois sur un adapter identifié. Les tests unitaires/CI restent parallèles. |
-| E | 70 | Partiellement parallèle puis final | Les tests unitaires de cache/layout/lifecycle peuvent commencer après A. Les mesures et GMs ne deviennent des gates qu'après les preuves correctness des routes concernées. |
+Le catalogue promu courant contient 16 cas : 14 rendus `Surface` et 2 refus
+`RoutedSceneProgram` internes. La preuve correctness promue a été capturée
+depuis `226674870ee09e080beee62b8d2935704f4b3331`, puis le travail a été
+fusionné dans `origin/master` par
+`116ce6ec3547c1d367e4c51881597a351eb285c4`. Les 122 hashes de manifest et
+les bundles promus vivent sous `reports/gpu-renderer/evidence/`.
+
+Cette session n'écrit pas dans `gpu-renderer-scenes` et ne lance aucune vague
+de catalogue. Elle applique Subagent-Driven execution : modèles abordables
+pour l'implémentation/capture et Sol seulement pour les revues. La promotion
+correctness et la capture de performance sont deux gates humaines séparées.
+Une baseline performance locale non promue ne devient jamais une preuve de
+release par simple reformulation documentaire.
+
+### Stop points humains non transférables
+
+1. Avant une promotion correctness transactionnelle, arrêter après la
+   vérification du catalogue generated complet et obtenir une autorisation
+   utilisateur explicite pour `promoteGpuEvidence --all`, en présentant le SHA
+   exact, le root generated exact et l'adapter de capture exact. La métadonnée
+   `promotionReviewer` ne remplace pas cette autorisation préalable. Cette
+   autorisation ne couvre ni capture performance, ni nouvelle vague,
+   `gpu-renderer-scenes` ou publication.
+2. Avant une capture performance, arrêter et obtenir une autorisation
+   utilisateur distincte pour le catalogue rendu au HEAD/SHA exact, au root de
+   sortie exact et à l'adapter exact. Cette autorisation ne vaut ni promotion
+   correctness, ni nouvelle vague, ni travail `gpu-renderer-scenes`, ni
+   publication.
+
+Réciproquement, l'autorisation du premier stop point ne couvre pas le second
+ni aucune de ces opérations hors portée.
 
 ## Concurrence réelle : ce qui est parallélisable et ce qui ne l'est pas
 
@@ -91,9 +120,20 @@ le lowerer et l'oracle correspondants.
 ./gradlew :integration-tests:gpu-evidence:test
 ./gradlew :integration-tests:gpu-evidence:verifyPromotedGpuEvidence
 ./gradlew :integration-tests:gpu-evidence:generateGpuEvidence -PsourceCommit=<sha>
+./gradlew :integration-tests:gpu-evidence:promoteGpuEvidence -PsourceCommit=<sha> -PpromotionReviewer=<reviewer> -PpromotionReason=<reason>
 ./gradlew :integration-tests:gpu-evidence:gpuEvidencePerformance -PsourceCommit=<sha>
 ```
 
 Une commande hardware qui ne dispose pas d'un adapter admissible produit une
 observation indisponible ou un refus explicite ; elle ne produit pas une
 promotion par approximation.
+
+`promoteGpuEvidence` impose `--all` : la promotion checked-in est une
+transaction de catalogue complet. Une capture de diagnostic peut cibler une
+scène, mais ne se substitue pas à cette promotion complète.
+
+La CLI de promotion accepte aussi le rebaseline et les comparaisons
+prior/nouveau, mais la tâche Gradle affichée ne les transmet pas. Sur le root
+promoted actuel non vide, cette tâche échoue donc avant remplacement; seul un
+follow-up explicitement approuvé peut lui ajouter des propriétés/chemins
+officiels. Aucun init script caché n'est un workflow valide.

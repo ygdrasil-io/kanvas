@@ -39,6 +39,34 @@ changent doivent réutiliser le même pipeline ; un changement de tile mode,
 shader ou blend state peut former une nouvelle clé. Capturer draw count,
 pipeline creations/hits et fallback reason.
 
+## Carte Paint / produit croisé observée
+
+Cette carte décrit les bornes effectivement exercées ; elle n'autorise pas à
+élargir le support. Le lot 30 possède le matériau gradient et le comportement
+tile mode, tandis que le lot 10 possède la géométrie et l'état du stroke.
+
+| Axe Paint | `repeat-gradient-refusal` (ID historique, rendu actuel) | `gradient-stroke-refusal` (ID historique, rendu actuel) | Hors borne actuelle |
+| --- | --- | --- | --- |
+| Style | `Fill` sur `drawRect` borné | `Stroke` sur `drawRect` | Le renderer refuse le gradient `REPEAT` sur `FillRRect` et `FillPath`; le generic gradient `drawPath` stroke est également refusé. |
+| Largeur de stroke | Sans objet | 4, largeur entière paire | Hairline, largeur nulle/non finie, impaire ou fractionnaire sont refusées. |
+| Anti-aliasing | Probe non-AA | Non-AA | Le stroke AA est refusé. Le probe `REPEAT` non-AA ne prouve pas un refus renderer du `REPEAT` AA. |
+| Cap / join / miter | Sans objet | `Butt` / `Miter` / 4 (défaut) | Les autres caps/joins, miter non fini ou sous le minimum sont refusés. |
+| Shader / tile mode | Dégradé linéaire sRGB `REPEAT` | Dégradé linéaire sRGB `CLAMP` nu, valide | `MIRROR`, `DECAL`, radial/sweep `REPEAT` sont refusés; le stroke refuse autre shader, tile mode ou local matrix. |
+| Transform | Identité dans le probe | Identité | Le stroke gradient refuse translate et tout transform non identité; le probe `REPEAT` n'élargit pas la frontière transform. |
+| Mask/path/color filters | Aucun filtre | Aucun filtre ni path effect/local matrix/blender | Le renderer refuse `FillRect` `REPEAT` mask-filtered; le stroke refuse mask/image/color filter, path effect et blender. |
+
+`repeat-gradient-refusal` est le probe catalogue : rectangle rempli `Surface`
+borné, linéaire sRGB `REPEAT`, sans filtre, à transform identité et non-AA. La
+frontière renderer est plus précise : l'exception `REPEAT` est seulement le
+FillRect linéaire non mask-filtered; RRect, Path, FillRect mask-filtered,
+radial/sweep `REPEAT`, `MIRROR` et `DECAL` sont actuellement refusés. L'absence
+d'un probe AA ne transforme pas le non-AA de ce probe en refus renderer.
+
+`gradient-stroke-refusal` est le probe exact du stroke rectangle décrit dans
+la table; il ne teste pas `drawPath`, `clipRRect` ou `clipPath`. Un tile mode
+ou un refus dit « distinct » désigne ici un comportement explicitement testé,
+pas nécessairement un code d'erreur de production unique.
+
 ## Dépendances et sortie
 
 Peut commencer après le lot 00 et se développer en parallèle avec 10, 40, 50
