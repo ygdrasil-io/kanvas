@@ -137,7 +137,7 @@ class GpuEvidenceCatalogOracleTest {
     }
 
     @Test
-    fun `path fill oracles preserve literal winding and even odd coverage`() {
+    fun `path fill oracles preserve literal winding and inverse coverage`() {
         val background = intArrayOf(13, 20, 33, 255)
         val orange = intArrayOf(242, 135, 46, 255)
         val blue = intArrayOf(31, 115, 209, 255)
@@ -145,6 +145,9 @@ class GpuEvidenceCatalogOracleTest {
         val triangle = oracle("solid-triangle-path")
         val concave = oracle("solid-concave-path")
         val evenOdd = oracle("even-odd-path-hole")
+        val windingHole = oracle("winding-path-hole")
+        val inverseWinding = oracle("inverse-winding-triangle-path")
+        val inverseEvenOdd = oracle("inverse-even-odd-path-hole")
 
         assertPixel(triangle, 64, 64, 8, 8, orange)
         assertPixel(triangle, 64, 64, 55, 8, background)
@@ -162,6 +165,23 @@ class GpuEvidenceCatalogOracleTest {
         assertPixel(evenOdd, 64, 64, 30, 30, background)
         assertPixel(evenOdd, 64, 64, 44, 30, green)
         assertEquals(1776, fillPixelCount(evenOdd, green))
+
+        assertPixel(windingHole, 64, 64, 10, 10, blue)
+        assertPixel(windingHole, 64, 64, 30, 30, background)
+        assertPixel(windingHole, 64, 64, 44, 30, blue)
+        assertEquals(1776, fillPixelCount(windingHole, blue))
+
+        assertPixel(inverseWinding, 64, 64, 4, 4, orange)
+        assertPixel(inverseWinding, 64, 64, 8, 8, background)
+        assertPixel(inverseWinding, 64, 64, 31, 31, background)
+        assertPixel(inverseWinding, 64, 64, 55, 8, orange)
+        assertEquals(2968, fillPixelCount(inverseWinding, orange))
+
+        assertPixel(inverseEvenOdd, 64, 64, 4, 4, green)
+        assertPixel(inverseEvenOdd, 64, 64, 10, 10, background)
+        assertPixel(inverseEvenOdd, 64, 64, 30, 30, green)
+        assertPixel(inverseEvenOdd, 64, 64, 44, 30, background)
+        assertEquals(2320, fillPixelCount(inverseEvenOdd, green))
     }
 
     private fun oracle(id: String): ByteArray = assertNotNull(

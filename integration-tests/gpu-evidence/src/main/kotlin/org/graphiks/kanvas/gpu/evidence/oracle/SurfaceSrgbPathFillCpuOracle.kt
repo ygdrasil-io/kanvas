@@ -24,7 +24,7 @@ class SurfaceSrgbPathFillCpuOracle(
         }
     }
 
-    enum class FillRule { Winding, EvenOdd }
+    enum class FillRule { Winding, EvenOdd, InverseWinding, InverseEvenOdd }
 
     private val background = background.copyOf().also(::requireRgba)
     private val fill = fill.copyOf().also(::requireRgba)
@@ -40,17 +40,22 @@ class SurfaceSrgbPathFillCpuOracle(
         for (y in 0 until height) for (x in 0 until width) {
             val pointX = x + 0.5
             val pointY = y + 0.5
-            val covered = if (contours.any { contour ->
+            val baseCovered = if (contours.any { contour ->
                     edges(contour).any { (start, end) -> pointOnSegment(pointX, pointY, start, end) }
                 }) {
                 true
             } else {
                 when (fillRule) {
-                    FillRule.Winding -> contours.sumOf { windingNumber(pointX, pointY, it) } != 0
-                    FillRule.EvenOdd -> contours.fold(false) { inside, contour ->
+                    FillRule.Winding, FillRule.InverseWinding ->
+                        contours.sumOf { windingNumber(pointX, pointY, it) } != 0
+                    FillRule.EvenOdd, FillRule.InverseEvenOdd -> contours.fold(false) { inside, contour ->
                         inside.xor(oddCrossings(pointX, pointY, contour))
                     }
                 }
+            }
+            val covered = when (fillRule) {
+                FillRule.InverseWinding, FillRule.InverseEvenOdd -> !baseCovered
+                else -> baseCovered
             }
             val color = if (covered) fill else background
             val offset = (y * width + x) * 4
