@@ -480,6 +480,7 @@ private fun Matrix3x3F32.captureTransformClass(): String = when {
     hasPerspective() -> "perspective"
     this == Matrix3x3F32.Identity -> "identity"
     kx == 0f && ky == 0f && sx == 1f && sy == 1f -> "translate"
+    kx == 0f && ky == 0f && sx == sy && sx > 0f -> "uniform-positive-scale-translate"
     kx == 0f && ky == 0f && tx == 0f && ty == 0f -> "scale"
     else -> "affine"
 }

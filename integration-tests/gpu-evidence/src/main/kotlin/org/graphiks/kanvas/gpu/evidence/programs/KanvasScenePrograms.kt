@@ -147,6 +147,66 @@ object KanvasScenePrograms {
         restore()
     })
 
+    fun clipPathTranslatedTriangleSolid() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        save()
+        translate(2f, 0f)
+        clipPath(
+            Path {
+                moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close()
+            }.apply { fillType = FillType.WINDING },
+            ClipOp.INTERSECT,
+            antiAlias = false,
+        )
+        drawRect(
+            RectF32.ofLTRB(0f, 0f, 64f, 64f),
+            Paint.fill(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)).copy(antiAlias = false),
+        )
+        restore()
+    })
+
+    fun clipPathUniformScaledTriangleSolid() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        save()
+        translate(8f, 4f)
+        scale(0.75f, 0.75f)
+        clipPath(
+            Path {
+                moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close()
+            }.apply { fillType = FillType.WINDING },
+            ClipOp.INTERSECT,
+            antiAlias = false,
+        )
+        drawRect(
+            RectF32.ofLTRB(0f, 0f, 64f, 64f),
+            Paint.fill(ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)).copy(antiAlias = false),
+        )
+        restore()
+    })
+
+    fun clipPathUniformScaledTriangleTwoBands() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        save()
+        translate(8f, 4f)
+        scale(0.75f, 0.75f)
+        clipPath(
+            Path {
+                moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close()
+            }.apply { fillType = FillType.WINDING },
+            ClipOp.INTERSECT,
+            antiAlias = false,
+        )
+        drawRect(
+            RectF32.ofLTRB(0f, 0f, 64f, 64f),
+            Paint.fill(ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)).copy(antiAlias = false),
+        )
+        drawRect(
+            RectF32.ofLTRB(32f, 0f, 64f, 64f),
+            Paint.fill(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)).copy(antiAlias = false),
+        )
+        restore()
+    })
+
     fun strokeRectOutline() = KanvasSurfaceProgram(ROUTE_ID, record = {
         drawColor(BACKGROUND)
         drawRect(

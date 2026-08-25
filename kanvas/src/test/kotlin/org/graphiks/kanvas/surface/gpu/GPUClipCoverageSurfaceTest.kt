@@ -172,7 +172,64 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `public transformed hard path clip remains refused with capture provenance`() {
+    fun `public translated hard path clip renders at its captured device-space coordinates`() {
+        requireWebGpu()
+        val triangle = Path().apply {
+            moveTo(8f, 8f)
+            lineTo(56f, 8f)
+            lineTo(8f, 55f)
+            close()
+        }
+        val background = ColorARGB.of(255, 13, 20, 33)
+        val fill = ColorARGB.of(255, 242, 135, 46)
+        val surface = Surface(64, 64)
+        surface.canvas {
+            drawColor(background)
+            save()
+            translate(2f, 0f)
+            clipPath(triangle, ClipOp.INTERSECT, antiAlias = false)
+            drawRect(RectF32(0f, 0f, 64f, 64f), Paint.fill(fill).copy(antiAlias = false))
+            restore()
+        }
+
+        val result = surface.render()
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertRgbaNear(result.pixels, 64, 11, 9, fill)
+        assertRgbaNear(result.pixels, 64, 9, 9, background)
+        assertRgbaNear(result.pixels, 64, 59, 9, background)
+    }
+
+    @Test
+    fun `public uniformly scaled hard path clip renders at its captured device-space coordinates`() {
+        requireWebGpu()
+        val triangle = Path().apply {
+            moveTo(8f, 8f)
+            lineTo(56f, 8f)
+            lineTo(8f, 55f)
+            close()
+        }
+        val background = ColorARGB.of(255, 13, 20, 33)
+        val fill = ColorARGB.of(255, 31, 115, 209)
+        val surface = Surface(64, 64)
+        surface.canvas {
+            drawColor(background)
+            save()
+            translate(8f, 4f)
+            scale(0.75f, 0.75f)
+            clipPath(triangle, ClipOp.INTERSECT, antiAlias = false)
+            drawRect(RectF32(0f, 0f, 64f, 64f), Paint.fill(fill).copy(antiAlias = false))
+            restore()
+        }
+
+        val result = surface.render()
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertRgbaNear(result.pixels, 64, 15, 11, fill)
+        assertRgbaNear(result.pixels, 64, 13, 11, background)
+        assertRgbaNear(result.pixels, 64, 51, 11, background)
+    }
+
+    @Test
+    fun `public non uniform scaled hard path clip remains refused with capture provenance`() {
         requireWebGpu()
         val triangle = Path().apply {
             moveTo(4f, 4f)
@@ -183,7 +240,7 @@ class GPUClipCoverageSurfaceTest {
         val surface = Surface(32, 32)
         surface.canvas {
             save()
-            translate(2f, 0f)
+            scale(0.75f, 0.5f)
             clipPath(triangle, ClipOp.INTERSECT, antiAlias = false)
             drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(ColorARGB.Red))
             restore()
