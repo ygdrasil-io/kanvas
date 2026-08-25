@@ -121,6 +121,7 @@ ni aucune de ces opérations hors portée.
 ./gradlew :integration-tests:gpu-evidence:verifyPromotedGpuEvidence
 ./gradlew :integration-tests:gpu-evidence:generateGpuEvidence -PsourceCommit=<sha>
 ./gradlew :integration-tests:gpu-evidence:promoteGpuEvidence -PsourceCommit=<sha> -PpromotionReviewer=<reviewer> -PpromotionReason=<reason>
+./gradlew :integration-tests:gpu-evidence:promoteGpuEvidence -PsourceCommit=<sha> -PpromotionReviewer=<reviewer> -PpromotionReason=<reason> -PpromotionRebaseline=true -PpromotionPriorComparison='<comparaison précédente>' -PpromotionNewComparison='<comparaison nouvelle>'
 ./gradlew :integration-tests:gpu-evidence:gpuEvidencePerformance -PsourceCommit=<sha>
 ```
 
@@ -132,8 +133,9 @@ promotion par approximation.
 transaction de catalogue complet. Une capture de diagnostic peut cibler une
 scène, mais ne se substitue pas à cette promotion complète.
 
-La CLI de promotion accepte aussi le rebaseline et les comparaisons
-prior/nouveau, mais la tâche Gradle affichée ne les transmet pas. Sur le root
-promoted actuel non vide, cette tâche échoue donc avant remplacement; seul un
-follow-up explicitement approuvé peut lui ajouter des propriétés/chemins
-officiels. Aucun init script caché n'est un workflow valide.
+La tâche Gradle transmet aussi le rebaseline et les comparaisons prior/nouveau
+via `promotionRebaseline`, `promotionPriorComparison` et
+`promotionNewComparison`. `promotionRebaseline` est strictement `true` ou
+`false` (absent vaut `false`) ; avec `true`, les deux comparaisons non vides
+sont obligatoires. Avec `false` ou absent, une comparaison est rejetée au lieu
+d'être ignorée. Aucun init script caché n'est un workflow valide.

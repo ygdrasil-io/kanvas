@@ -1,3 +1,5 @@
+import org.graphiks.kanvas.build.promotionRebaselineArguments
+
 plugins {
     id("buildsrc.convention.kotlin-jvm")
     id("java-library")
@@ -106,6 +108,9 @@ tasks.register<JavaExec>("promoteGpuEvidence") {
     mainClass.set("org.graphiks.kanvas.gpu.evidence.artifacts.PromoteEvidenceCliKt")
     val reviewer = providers.gradleProperty("promotionReviewer")
     val reason = providers.gradleProperty("promotionReason")
+    val rebaseline = providers.gradleProperty("promotionRebaseline")
+    val priorComparison = providers.gradleProperty("promotionPriorComparison")
+    val newComparison = providers.gradleProperty("promotionNewComparison")
     doFirst {
         require(sourceCommit.isPresent && sourceCommit.get().matches(Regex("[0-9a-f]{40}"))) { "sourceCommit with 40 hexadecimal characters is required" }
         require(reviewer.isPresent && reviewer.get().isNotBlank()) { "promotionReviewer is required" }
@@ -115,6 +120,6 @@ tasks.register<JavaExec>("promoteGpuEvidence") {
         listOf(
             "--repository-root", rootProject.layout.projectDirectory.asFile.absolutePath,
             "--source-commit", sourceCommit.get(), "--reviewer", reviewer.get(), "--reason", reason.get(), "--all",
-        )
+        ) + promotionRebaselineArguments(rebaseline.orNull, priorComparison.orNull, newComparison.orNull)
     })
 }

@@ -51,15 +51,14 @@ Une capture doit être faite après rebase/cherry-pick seulement si le SHA exact
 une nouvelle capture et un nouvel audit ; elle ne peut pas hériter de la preuve
 du SHA précédent.
 
-### Follow-up du harness (Lot 00, non autorisé par ce document)
+### Rebaseline du harness
 
-La CLI `PromoteEvidenceCli` sait accepter `--rebaseline` et les comparaisons
-prior/nouveau. La tâche Gradle `promoteGpuEvidence` actuelle ne transmet que le
-root, le SHA, reviewer, reason et `--all` : elle n'expose ni ce booléen ni ces
-deux comparaisons et échoue donc sur un root promoted non vide. Une petite vague
-explicitement approuvée devra exposer propriétés Gradle et chemins officiels
-pour ces entrées. Cette correction ne modifie pas Gradle et ne normalise aucun
-contournement caché par init script.
+La tâche Gradle `promoteGpuEvidence` expose le rebaseline par les propriétés
+officielles `promotionRebaseline`, `promotionPriorComparison` et
+`promotionNewComparison`. `promotionRebaseline` accepte exactement `true` ou
+`false` (absent équivaut à `false`) ; `true` exige les deux comparaisons non
+vides et les transmet à la CLI. Sans rebaseline, toute comparaison est rejetée
+plutôt qu'ignorée. Aucun init script caché n'est un workflow valide.
 
 ## Dépendances et sortie
 
