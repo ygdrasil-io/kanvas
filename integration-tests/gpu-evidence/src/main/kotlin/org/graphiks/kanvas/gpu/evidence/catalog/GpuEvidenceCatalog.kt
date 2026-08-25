@@ -8,6 +8,7 @@ import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbSrcOverCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbGradientCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbLinearGradientStrokeBandsCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRRectCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbPathFillCpuOracle
 import org.graphiks.kanvas.gpu.evidence.programs.KanvasScenePrograms
 import org.graphiks.kanvas.gpu.evidence.programs.RendererRefusalPrograms
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.GPUCustomRuntimeEffectID
@@ -34,6 +35,9 @@ object GpuEvidenceCatalog {
         asymmetricSolidRRect(),
         ellipseSolidRRect(),
         asymmetricSolidDRRectHole(),
+        solidTrianglePath(),
+        solidConcavePath(),
+        evenOddPathHole(),
     )
     val refusalCases: List<EvidenceCase> = listOf(
         unregisteredRuntimeEffectRefusal(),
@@ -399,6 +403,77 @@ object GpuEvidenceCatalog {
             ),
         ),
     )
+
+    private fun solidTrianglePath() = pathFillCase(
+        id = "solid-triangle-path",
+        title = "Solid triangle path",
+        description = "Public Kanvas Surface non-AA winding triangle path.",
+        tags = setOf("path-fill", "winding", "kanvas-surface"),
+        program = KanvasScenePrograms.solidTrianglePath(),
+        fill = intArrayOf(242, 135, 46, 255),
+        contours = listOf(
+            SurfaceSrgbPathFillCpuOracle.Contour(listOf(
+                point(8f, 8f), point(56f, 8f), point(8f, 55f),
+            )),
+        ),
+        fillRule = SurfaceSrgbPathFillCpuOracle.FillRule.Winding,
+    )
+
+    private fun solidConcavePath() = pathFillCase(
+        id = "solid-concave-path",
+        title = "Solid concave path",
+        description = "Public Kanvas Surface non-AA winding concave path.",
+        tags = setOf("path-fill", "winding", "concave", "kanvas-surface"),
+        program = KanvasScenePrograms.solidConcavePath(),
+        fill = intArrayOf(31, 115, 209, 255),
+        contours = listOf(
+            SurfaceSrgbPathFillCpuOracle.Contour(listOf(
+                point(8f, 8f), point(56f, 8f), point(56f, 24f), point(32f, 24f),
+                point(32f, 40f), point(56f, 40f), point(56f, 56f), point(8f, 56f),
+            )),
+        ),
+        fillRule = SurfaceSrgbPathFillCpuOracle.FillRule.Winding,
+    )
+
+    private fun evenOddPathHole() = pathFillCase(
+        id = "even-odd-path-hole",
+        title = "Even-odd path hole",
+        description = "Public Kanvas Surface non-AA even-odd path with a rectangular hole.",
+        tags = setOf("path-fill", "even-odd", "kanvas-surface"),
+        program = KanvasScenePrograms.evenOddPathHole(),
+        fill = intArrayOf(56, 220, 120, 255),
+        contours = listOf(
+            SurfaceSrgbPathFillCpuOracle.Contour(listOf(
+                point(8f, 8f), point(56f, 8f), point(56f, 56f), point(8f, 56f),
+            )),
+            SurfaceSrgbPathFillCpuOracle.Contour(listOf(
+                point(22f, 20f), point(44f, 20f), point(44f, 44f), point(22f, 44f),
+            )),
+        ),
+        fillRule = SurfaceSrgbPathFillCpuOracle.FillRule.EvenOdd,
+    )
+
+    private fun pathFillCase(
+        id: String,
+        title: String,
+        description: String,
+        tags: Set<String>,
+        program: org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram,
+        fill: IntArray,
+        contours: List<SurfaceSrgbPathFillCpuOracle.Contour>,
+        fillRule: SurfaceSrgbPathFillCpuOracle.FillRule,
+    ) = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId(id), title, description, 64, 64, 1L, tags, EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 1),
+            ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent pixel-center winding/even-odd polygon membership."), emptySet(),
+        ),
+        program,
+        SurfaceSrgbPathFillCpuOracle(intArrayOf(13, 20, 33, 255), fill, contours, fillRule),
+    )
+
+    private fun point(x: Float, y: Float) = SurfaceSrgbPathFillCpuOracle.Point(x, y)
+
     private fun surfaceRefusal(id: String, title: String, description: String, tags: Set<String>, code: String, program: org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram) = EvidenceCase(
         EvidenceSceneDescriptor(EvidenceSceneId(id), title, description, 16, 16, 1L, tags, EvidenceExpectation.ShouldRefuse(code), OraclePolicy.StableRefusal, null, emptySet()), program, null,
     )

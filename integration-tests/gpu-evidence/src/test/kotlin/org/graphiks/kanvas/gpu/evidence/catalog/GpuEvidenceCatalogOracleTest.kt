@@ -136,6 +136,34 @@ class GpuEvidenceCatalogOracleTest {
         assertEquals(1889, fillPixelCount(drrect, blue))
     }
 
+    @Test
+    fun `path fill oracles preserve literal winding and even odd coverage`() {
+        val background = intArrayOf(13, 20, 33, 255)
+        val orange = intArrayOf(242, 135, 46, 255)
+        val blue = intArrayOf(31, 115, 209, 255)
+        val green = intArrayOf(56, 220, 120, 255)
+        val triangle = oracle("solid-triangle-path")
+        val concave = oracle("solid-concave-path")
+        val evenOdd = oracle("even-odd-path-hole")
+
+        assertPixel(triangle, 64, 64, 8, 8, orange)
+        assertPixel(triangle, 64, 64, 55, 8, background)
+        assertPixel(triangle, 64, 64, 31, 31, orange)
+        assertPixel(triangle, 64, 64, 32, 31, background)
+        assertEquals(1128, fillPixelCount(triangle, orange))
+
+        assertPixel(concave, 64, 64, 10, 10, blue)
+        assertPixel(concave, 64, 64, 40, 30, background)
+        assertPixel(concave, 64, 64, 40, 44, blue)
+        assertEquals(1920, fillPixelCount(concave, blue))
+
+        assertPixel(evenOdd, 64, 64, 10, 10, green)
+        assertPixel(evenOdd, 64, 64, 22, 20, background)
+        assertPixel(evenOdd, 64, 64, 30, 30, background)
+        assertPixel(evenOdd, 64, 64, 44, 30, green)
+        assertEquals(1776, fillPixelCount(evenOdd, green))
+    }
+
     private fun oracle(id: String): ByteArray = assertNotNull(
         GpuEvidenceCatalog.renderCases.firstOrNull { it.descriptor.id.value == id }?.oracle,
     ).render(64, 64)

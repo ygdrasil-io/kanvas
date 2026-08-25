@@ -9,6 +9,20 @@
 rasterisation approximative. Chaque famille doit prouver son coverage CPU/GPU
 ou garder un refus diagnostiqué, notamment pour AA, stroke et clips complexes.
 
+## Preuve bornée actuelle
+
+Le code, les tests et les artefacts générés/promus vérifiés font autorité pour
+les affirmations ci-dessous ; ce WIP n'est qu'une vue dérivée. Trois fills path
+solides non-AA sont actuellement prouvés par la route publique native
+`kanvas.surface.render` et le stencil-cover WebGPU : `solid-triangle-path`
+(1128 pixels), `solid-concave-path` (1920 pixels) et `even-odd-path-hole`
+(1776 pixels). Les trois scènes sont 64×64, exactes à `100.0` de similarité,
+avec zéro pixel différent et zéro écart de canal.
+
+Ne sont pas revendiqués par cette preuve : l'AA, les strokes, les contours
+curves (quadratiques ou cubiques), les inverse fills, les oval/circle et tous
+les clips (`clipPath`, `clipRRect` ou interactions de clip).
+
 ## Code et tests à lire
 
 | Zone | Fichiers principaux |
@@ -23,10 +37,10 @@ ou garder un refus diagnostiqué, notamment pour AA, stroke et clips complexes.
 
 | Sous-famille | Scènes et oracles | Limites/refus contractuels |
 | --- | --- | --- |
-| Fills path | Ligne, quadratique, cubique, contours multiples, fermeture implicite, winding/even-odd, convexité et auto-intersection. | Nombre de verbes/edges, NaN/Inf, fill type absent, perspective et auto-intersection non prise en charge. |
-| Coverage AA | Arêtes horizontales/verticales/diagonales, positions à demi-pixel, petite primitive, primitive proche du bord et superposition. | Pas d'AA prétendu sans coverage mesurable ; la route sans AA reste distinguée de la route AA. |
-| Strokes | Width aux bornes, butt/round/square caps, miter/round/bevel joins, miter limit, dash phase et hairline. | Path effect, dash trop long, largeur hors borne, transform ou material incompatible refusés avant soumission. |
-| `clipPath` / `clipRRect` | Intersection, clips imbriqués, clip AA, clip transformé, clip vide, rrect avec rayons distincts. | Difference/inverse, perspective, profondeur, stencil/mask trop grand : code de refus et compteur de ressources nul ou borné. |
+| Fills path | `solid-triangle-path`, `solid-concave-path` et `even-odd-path-hole` : fills solides non-AA, `WINDING`/`EVEN_ODD`, contours explicitement fermés et oracle pixel-center. | Aucun autre contour ou fill path n'est revendiqué ; notamment lignes, courbes quadratiques/cubiques, auto-intersection et inverse fills. |
+| Coverage AA | Aucun cas revendiqué. | Arêtes et positions AA, petites primitives et superpositions restent non revendiquées sans coverage mesurable. |
+| Strokes | Aucun cas revendiqué. | Caps, joins, miter, dash, hairline et path effects restent non revendiqués. |
+| `clipPath` / `clipRRect` | Aucun cas revendiqué. | Intersections, clips imbriqués/AA/transformés, clips vides et clips avec rayons distincts restent non revendiqués. |
 | Interactions | Path sous clip, stroke sous clip, path translucide, transform + clip + restore et sentinelle post-restore. | Aucun état de stencil/mask ne fuit dans la primitive suivante. |
 
 ## Preuves à exiger

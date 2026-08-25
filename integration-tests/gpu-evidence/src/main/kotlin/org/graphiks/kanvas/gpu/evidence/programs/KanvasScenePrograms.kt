@@ -6,6 +6,8 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.pipeline.BlurStyle
+import org.graphiks.kanvas.geometry.FillType
+import org.graphiks.kanvas.geometry.Path
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.math.geometry.Point2F32
@@ -217,6 +219,30 @@ object KanvasScenePrograms {
             ),
             Paint.fill(ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)).copy(antiAlias = false),
         )
+    })
+
+    fun solidTrianglePath() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        drawPath(Path {
+            moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close()
+        }.apply { fillType = FillType.WINDING }, Paint.fill(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)).copy(antiAlias = false))
+    })
+
+    fun solidConcavePath() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        drawPath(Path {
+            moveTo(8f, 8f); lineTo(56f, 8f); lineTo(56f, 24f); lineTo(32f, 24f)
+            lineTo(32f, 40f); lineTo(56f, 40f); lineTo(56f, 56f); lineTo(8f, 56f); close()
+        }.apply { fillType = FillType.WINDING }, Paint.fill(ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)).copy(antiAlias = false))
+    })
+
+    fun evenOddPathHole() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        drawPath(Path {}.apply {
+            addRect(RectF32.ofLTRB(8f, 8f, 56f, 56f))
+            addRect(RectF32.ofLTRB(22f, 20f, 44f, 44f))
+            fillType = FillType.EVEN_ODD
+        }, Paint.fill(ColorARGB.fromRGBA(56f / 255f, 220f / 255f, 120f / 255f)).copy(antiAlias = false))
     })
 
     private val BACKGROUND = ColorARGB.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f, 1f)
