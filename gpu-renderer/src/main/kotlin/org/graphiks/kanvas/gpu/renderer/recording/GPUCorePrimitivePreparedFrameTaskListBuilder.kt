@@ -2160,11 +2160,19 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             }
             val validDirectPrefix = prefix.all { packet ->
                 val semantic = request.coreSemantics().getValue(packet.commandIdValue)
+                val geometry = semantic.geometry as? GPUCorePrimitiveGeometry.Rect
+                val material = semantic.material as? GPUCorePrimitiveMaterialPayload.SolidColor
                 packet.clipExecutionPlan == GPUClipExecutionPlan.NoClip &&
                     packet.role == GPUDrawPacketRole.Shading &&
                     packet.renderStepId.value == CORE_PRIMITIVE_FILL_RECT_STEP_IDENTITY &&
-                    semantic.geometry is GPUCorePrimitiveGeometry.Rect &&
-                    semantic.material is GPUCorePrimitiveMaterialPayload.SolidColor &&
+                    geometry != null &&
+                    geometry.left == request.targetBounds.left.toFloat() &&
+                    geometry.top == request.targetBounds.top.toFloat() &&
+                    geometry.right == request.targetBounds.right.toFloat() &&
+                    geometry.bottom == request.targetBounds.bottom.toFloat() &&
+                    material != null &&
+                    material.premultipliedRgba.getOrNull(3) == 1f &&
+                    packet.blendPlan.isCanonicalSolidRectSrcOver() &&
                     semantic.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor &&
                     directCorePrimitiveGeometryBytes(packet, semantic) != null
             }

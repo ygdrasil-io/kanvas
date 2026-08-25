@@ -416,10 +416,32 @@ internal class GPUWgpu4kFrameEncodingBackend(
         override fun discard(): GPUFrameDiscardResult {
             if (finished) return GPUFrameDiscardResult.AlreadyReleased
             finished = true
+            val renderPassFailure = closeActiveRenderPass()
             synchronized(this@GPUWgpu4kFrameEncodingBackend) {
                 liveEncoders.remove(id)
             }
-            return closeOrQuarantine(native, quarantinedEncoders)
+            val encoderResult = closeOrQuarantine(native, quarantinedEncoders)
+            return renderPassFailure?.let { failure ->
+                // Preserve a failed render-pass cleanup as the discard result while still
+                // closing/quarantining the encoder above.
+                GPUFrameDiscardResult.Failed(failure::class.simpleName.orEmpty())
+            } ?: encoderResult
+        }
+
+        private fun closeActiveRenderPass(): Throwable? {
+            val passEncoder = activeRenderPass ?: run {
+                activeRenderPassSegment = null
+                return null
+            }
+            return try {
+                passEncoder.end()
+                null
+            } catch (failure: Throwable) {
+                failure
+            } finally {
+                activeRenderPass = null
+                activeRenderPassSegment = null
+            }
         }
 
         private fun encodeRender(render: GPUPreparedNativeScopeOperand.Render) {

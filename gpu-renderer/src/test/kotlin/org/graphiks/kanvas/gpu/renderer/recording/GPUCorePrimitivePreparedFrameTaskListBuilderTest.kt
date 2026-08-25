@@ -2070,14 +2070,23 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
     @Test
     fun `native path clip accepts a direct solid background prefix before its consumers`() {
         val plan = nativePathStencilPlan(GPUClipFillRule.Winding)
-        val base = recording(command(341, 0), command(340, 7)).taskList.withClipPlans(
+        val base = recording(command(341, 0, rect = targetRect()), command(340, 7)).taskList.withClipPlans(
             mapOf(341 to GPUClipExecutionPlan.NoClip, 340 to plan),
         )
         val packets = base.tasks.filterIsInstance<GPUTask.Render>()
             .flatMap(GPUTask.Render::drawPackets)
 
         val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
-            request(base, packets.associate { it.commandIdValue to semantic(it) }),
+            request(
+                base,
+                packets.associate { packet ->
+                    packet.commandIdValue to if (packet.commandIdValue == 341) {
+                        semantic(packet, geometry = GPUCorePrimitiveGeometryInput.Rect(0f, 0f, 16f, 16f))
+                    } else {
+                        semantic(packet)
+                    }
+                },
+            ),
         )
         val taskList = when (result) {
             is GPUCorePrimitivePreparedFrameResult.Recorded -> result.taskList
@@ -2096,6 +2105,25 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
         assertEquals(1, taskList.dependencies.count {
             it.fromTaskId == renders[1].taskId && it.toTaskId == renders.last().taskId
         })
+    }
+
+    @Test
+    fun `native path clip refuses a partial opaque background prefix`() {
+        val plan = nativePathStencilPlan(GPUClipFillRule.Winding)
+        val base = recording(command(341, 0), command(340, 7)).taskList.withClipPlans(
+            mapOf(341 to GPUClipExecutionPlan.NoClip, 340 to plan),
+        )
+        val packets = base.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+
+        val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            request(base, packets.associate { it.commandIdValue to semantic(it) }),
+        )
+
+        assertEquals(
+            "unsupported.recording.core_primitive_clip_stencil_mixed_geometry",
+            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+        )
     }
 
     @Test
@@ -4124,6 +4152,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
         paintOrder: Int,
         provenance: GPUFrameProvenance = GPUFrameProvenance.GmContent,
         clipPlan: GPUClipCoveragePlan = GPUClipCoveragePlan.NoClip,
+        rect: GPURect = GPURect(1f, 1f, 8f, 8f),
     ) = command(
         commandId,
         paintOrder,
@@ -4140,6 +4169,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
             coveragePlan = clipPlan,
         ),
         provenance,
+        rect,
     )
 
     private fun command(
@@ -4147,15 +4177,18 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
         paintOrder: Int,
         clip: GPUClipFacts,
         provenance: GPUFrameProvenance = GPUFrameProvenance.GmContent,
+        rect: GPURect = GPURect(1f, 1f, 8f, 8f),
     ) = GPUFillRectCommandBuilder.build(
         commandId = GPUDrawCommandID(commandId),
-        rect = GPURect(1f, 1f, 8f, 8f),
+        rect = rect,
         target = targetFacts,
         material = GPUMaterialDescriptor.SolidColor(0.25f, 0.5f, 0.75f, 1f),
         clip = clip,
         paintOrder = paintOrder,
         source = GPUCommandSource("unit-test", "fillRect", provenance),
     )
+
+    private fun targetRect() = GPURect(0f, 0f, 16f, 16f)
 
     private fun scissor() = GPUClipCoveragePlan.Scissor(GPUClipBounds(0f, 0f, 16f, 16f))
 

@@ -1375,12 +1375,17 @@ internal class GPUFramePreflighter(
         val hasBackgroundPrefix = prefixLocations.isNotEmpty()
         prefixLocations.singleOrNull()?.let { prefix ->
             val semantic = prefix.packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive
+            val geometry = semantic?.geometry as? GPUCorePrimitiveGeometry.Rect
             val material = semantic?.material as? GPUCorePrimitiveMaterialPayload.SolidColor
             val opaque = material?.premultipliedRgba?.getOrNull(3) == 1f
             if (prefix.packet.role != GPUDrawPacketRole.Shading ||
                 semantic == null ||
                 semantic.sourceFamily != GPUCorePrimitiveSourceFamily.Rect ||
-                semantic.geometry !is GPUCorePrimitiveGeometry.Rect ||
+                geometry == null ||
+                geometry.left != semantic.targetBounds.left.toFloat() ||
+                geometry.top != semantic.targetBounds.top.toFloat() ||
+                geometry.right != semantic.targetBounds.right.toFloat() ||
+                geometry.bottom != semantic.targetBounds.bottom.toFloat() ||
                 material == null ||
                 !opaque ||
                 !hasExactNoClipAuthority(semantic, prefix.packet.clipExecutionPlan) ||
