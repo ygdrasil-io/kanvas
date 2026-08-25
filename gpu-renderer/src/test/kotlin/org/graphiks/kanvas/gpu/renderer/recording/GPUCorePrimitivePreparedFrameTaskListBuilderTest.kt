@@ -2068,6 +2068,37 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
     }
 
     @Test
+    fun `native path clip accepts a direct solid background prefix before its consumers`() {
+        val plan = nativePathStencilPlan(GPUClipFillRule.Winding)
+        val base = recording(command(341, 0), command(340, 7)).taskList.withClipPlans(
+            mapOf(341 to GPUClipExecutionPlan.NoClip, 340 to plan),
+        )
+        val packets = base.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+
+        val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            request(base, packets.associate { it.commandIdValue to semantic(it) }),
+        )
+        val taskList = when (result) {
+            is GPUCorePrimitivePreparedFrameResult.Recorded -> result.taskList
+            is GPUCorePrimitivePreparedFrameResult.Refused -> error(
+                "${result.diagnostic.code.value}: ${result.diagnostic.message}",
+            )
+        }
+        val renders = taskList.tasks.filterIsInstance<GPUTask.Render>()
+        assertEquals(3, renders.size)
+        assertEquals(341, renders.first().drawPackets.single().commandIdValue)
+        assertEquals(GPUDrawPacketRole.StencilProducer, renders[1].drawPackets.single().role)
+        assertEquals(340, renders.last().drawPackets.last().commandIdValue)
+        assertEquals(1, taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
+            .flatMap(GPUTask.PrepareResources::requests)
+            .count { it.role == GPUFrameResourceRole.ClipDepthStencil })
+        assertEquals(1, taskList.dependencies.count {
+            it.fromTaskId == renders[1].taskId && it.toTaskId == renders.last().taskId
+        })
+    }
+
+    @Test
     fun `no clip and dynamic scissor share one shading pipeline key`() {
         val base = recording(command(29, 0)).taskList.withClipPlans(mapOf(29 to GPUClipExecutionPlan.NoClip))
         val packet = base.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()

@@ -2077,11 +2077,53 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 nativeClipStencilConsumerGeometryBytesByCommandId.size ==
                 staticNativeClipStencilConsumers.size
         }
-        if (nativeClipStencilPlan != null && staticNativeClipStencilConsumers.size != basePackets.size) {
+        val validNativeClipStencilConsumers = nativeClipStencilPlan?.sampleCount == 1 &&
+            staticNativeClipStencilConsumers.size in 1..2 &&
+            staticNativeClipStencilConsumers.all { packet ->
+                val semantic = request.coreSemantics().getValue(packet.commandIdValue)
+                packet.role == GPUDrawPacketRole.Shading &&
+                    packet.renderStepId.value == CORE_PRIMITIVE_FILL_RECT_STEP_IDENTITY &&
+                    semantic.geometry is GPUCorePrimitiveGeometry.Rect &&
+                    semantic.material is GPUCorePrimitiveMaterialPayload.SolidColor &&
+                    semantic.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor
+            }
+        if (nativeClipStencilPlan?.sampleCount == 1 && !validNativeClipStencilConsumers) {
             return refused(
                 "unsupported.recording.core_primitive_clip_stencil_mixed_geometry",
-                "The bounded clip-stencil arena cannot share slabs with foreign geometry.",
+                "The bounded clip-stencil scope accepts only one or two solid FillRect consumers.",
             )
+        }
+        if (nativeClipStencilPlan != null && staticNativeClipStencilConsumers.size != basePackets.size) {
+            if (nativeClipStencilPlan.sampleCount != 1) {
+                return refused(
+                    "unsupported.recording.core_primitive_clip_stencil_mixed_geometry",
+                    "The bounded clip-stencil arena cannot share slabs with foreign geometry.",
+                )
+            }
+            val firstConsumerIndex = basePackets.indexOfFirst { packet ->
+                packet.clipExecutionPlan?.canonicalIdentity() == nativeClipStencilPlan.canonicalIdentity()
+            }
+            val prefix = if (firstConsumerIndex < 0) emptyList() else basePackets.take(firstConsumerIndex)
+            val hasForeignSuffix = firstConsumerIndex < 0 ||
+                basePackets.drop(firstConsumerIndex).any { packet ->
+                    packet.clipExecutionPlan?.canonicalIdentity() != nativeClipStencilPlan.canonicalIdentity()
+                }
+            val validDirectPrefix = prefix.all { packet ->
+                val semantic = request.coreSemantics().getValue(packet.commandIdValue)
+                packet.clipExecutionPlan == GPUClipExecutionPlan.NoClip &&
+                    packet.role == GPUDrawPacketRole.Shading &&
+                    packet.renderStepId.value == CORE_PRIMITIVE_FILL_RECT_STEP_IDENTITY &&
+                    semantic.geometry is GPUCorePrimitiveGeometry.Rect &&
+                    semantic.material is GPUCorePrimitiveMaterialPayload.SolidColor &&
+                    semantic.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor &&
+                    directCorePrimitiveGeometryBytes(packet, semantic) != null
+            }
+            if (hasForeignSuffix || !validDirectPrefix) {
+                return refused(
+                    "unsupported.recording.core_primitive_clip_stencil_mixed_geometry",
+                    "The bounded clip-stencil scope accepts only a direct solid FillRect prefix.",
+                )
+            }
         }
         val nativeClipStencilProducerNdcVertices = nativeClipStencilPlan?.let { candidate ->
             val path = requireNotNull(candidate.corePrimitiveClipStencilNativePathOrNull())
@@ -3622,8 +3664,20 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 preparations,
             ),
         )
-        tasks += clipTopologies.flatMap(GPUCoreClipArtifactTopology::producerTasks)
-        tasks += preparedRenders
+        if (nativeClipStencilPlan != null) {
+            val nativePlanIdentity = nativeClipStencilPlan.canonicalIdentity()
+            val directPrefixRenders = preparedRenders.takeWhile { render ->
+                render.drawPackets.all { packet ->
+                    packet.clipExecutionPlan?.canonicalIdentity() != nativePlanIdentity
+                }
+            }
+            tasks += directPrefixRenders
+            tasks += clipTopologies.flatMap(GPUCoreClipArtifactTopology::producerTasks)
+            tasks += preparedRenders.drop(directPrefixRenders.size)
+        } else {
+            tasks += clipTopologies.flatMap(GPUCoreClipArtifactTopology::producerTasks)
+            tasks += preparedRenders
+        }
         val baseRenderIds = baseRenders.map(GPUTask.Render::taskId).toSet()
         val baseDependencies = request.baseTaskList.dependencies.filter { dependency ->
             dependency.fromTaskId in baseRenderIds && dependency.toTaskId in baseRenderIds
