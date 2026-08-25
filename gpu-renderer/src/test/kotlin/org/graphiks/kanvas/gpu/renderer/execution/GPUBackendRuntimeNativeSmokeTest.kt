@@ -1096,6 +1096,7 @@ class GPUBackendRuntimeNativeSmokeTest {
                 setOf(
                     "first_slice.fill_rect.native",
                     "first_slice.fill_rrect.native",
+                    "first_slice.fill_drrect.native",
                     GPUFirstSliceCapabilityName.SCISSOR_NATIVE,
                     GPUFirstSliceCapabilityName.BOUNDED_CLIP_NATIVE,
                     GPUFirstSliceCapabilityName.PATH_FILL_STENCIL_COVER,
@@ -1112,6 +1113,11 @@ class GPUBackendRuntimeNativeSmokeTest {
             assertEquals("supported", rrect.value)
             assertTrue(rrect.affectsValidity)
             assertEquals("core-primitive-direct-native", rrect.evidenceLabel)
+            val drrect = nativeRouteFacts.getValue("first_slice.fill_drrect.native")
+            assertEquals("runtime", drrect.source)
+            assertEquals("supported", drrect.value)
+            assertTrue(drrect.affectsValidity)
+            assertEquals("core-primitive-direct-native", drrect.evidenceLabel)
             val expectedNativeEvidence = mapOf(
                 GPUFirstSliceCapabilityName.SCISSOR_NATIVE to "core-primitive-direct-native",
                 GPUFirstSliceCapabilityName.BOUNDED_CLIP_NATIVE to "core-primitive-bounded-clip-native",

@@ -30,6 +30,7 @@ class GPUCapabilityContractsTest {
             File("../kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUOpMapper.kt"),
         )
         val literals = listOf(
+            "first_slice.fill_drrect.native",
             "first_slice.scissor.native",
             "first_slice.bounded_clip.native",
             "first_slice.path_fill.stencil_cover",

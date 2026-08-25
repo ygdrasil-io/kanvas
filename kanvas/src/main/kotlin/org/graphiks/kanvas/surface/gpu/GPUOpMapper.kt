@@ -763,16 +763,14 @@ internal object GPUOpMapper {
             ).toPathCommand(commandId, target, config).copy(
                 stroke = operation.mode != PointMode.POINTS,
             )
-            is DisplayOp.DrawDRRect -> if (operation.isAnalyticSolidDRRectCandidate()) {
-                operation.toNormalizedCommand(commandId, target)
-            } else {
-                DisplayOp.DrawPath(
-                    operation.toPath(),
-                    operation.paint,
-                    operation.transform,
-                    operation.clip,
-                ).toPathCommand(commandId, target, config)
-            }
+            is DisplayOp.DrawDRRect -> operation.analyticSolidDRRectMaterialOrNull()?.let { material ->
+                operation.toNormalizedCommand(commandId, target, material)
+            } ?: DisplayOp.DrawPath(
+                operation.toPath(),
+                operation.paint,
+                operation.transform,
+                operation.clip,
+            ).toPathCommand(commandId, target, config)
                 else -> null
             }
         } catch (failure: IllegalStateException) {
@@ -1875,15 +1873,24 @@ internal fun DisplayOp.DrawRRect.toNormalizedCommand(
     )
 }
 
-private fun DisplayOp.DrawDRRect.isAnalyticSolidDRRectCandidate(): Boolean =
-    !paint.isStroke() && !paint.antiAlias && paint.shader == null && paint.maskFilter == null &&
-        paint.color.a == 1f && paint.blendMode == BlendMode.SRC_OVER &&
-        transform == Matrix3x3F32.Identity && clip == ClipStack.WideOpen &&
-        exactLoweringRefusalOrNull() == null
+private fun DisplayOp.DrawDRRect.analyticSolidDRRectMaterialOrNull(): GPUMaterialDescriptor.SolidColor? {
+    // Keep one mapped material instance for admission and the typed command. Source paint fields
+    // alone are insufficient: color filters can turn an opaque paint into a translucent solid or
+    // a RuntimeEffect descriptor.
+    val material = paint.toMaterial() as? GPUMaterialDescriptor.SolidColor ?: return null
+    return material.takeIf {
+        !paint.isStroke() && !paint.antiAlias && paint.maskFilter == null &&
+            paint.imageFilter == null && paint.pathEffect == null && paint.blender == null &&
+            it.a == 1f && paint.blendMode == BlendMode.SRC_OVER &&
+            transform == Matrix3x3F32.Identity && clip == ClipStack.WideOpen &&
+            exactLoweringRefusalOrNull() == null
+    }
+}
 
 internal fun DisplayOp.DrawDRRect.toNormalizedCommand(
     cmdId: GPUDrawCommandID,
     target: GPUTargetFacts,
+    material: GPUMaterialDescriptor,
 ): NormalizedDrawCommand.FillDRRect {
     fun RRectF32.toGpuRRect() = GPURRect(
         GPURect(rect.left, rect.top, rect.right, rect.bottom),
@@ -1901,7 +1908,7 @@ internal fun DisplayOp.DrawDRRect.toNormalizedCommand(
         transform = transform.toGPUTransformFacts(),
         clip = clip.toGPUClipFacts(target),
         layer = GPULayerFacts.root(target),
-        material = paint.toMaterial(),
+        material = material,
         blend = paint.blendMode.toGpuBlendFacts(),
         bounds = GPUBounds(outer.rect.left, outer.rect.top, outer.rect.right, outer.rect.bottom),
         ordering = GPUOrderingFacts(0, false, false),

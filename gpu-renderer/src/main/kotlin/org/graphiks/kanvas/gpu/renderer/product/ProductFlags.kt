@@ -43,6 +43,11 @@ data class GPUProductFlagConfig(
                 affectsValidity = true,
                 evidenceLabel = "product-flag:fillRRect",
             )
+            facts += supportedGPUCapabilityFact(
+                name = GPUFirstSliceCapabilityName.FILL_DRRECT_NATIVE,
+                source = "product-flags",
+                evidenceLabel = "product-flag:fillDRRect",
+            )
         }
         if (linearGradientEnabled) {
             facts += GPUCapabilityFact(

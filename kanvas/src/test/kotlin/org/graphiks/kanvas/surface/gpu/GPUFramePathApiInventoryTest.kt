@@ -47,7 +47,10 @@ import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_AFFINE_FILL_RECT
 import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_AFFINE_FILL_RECT_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.paint.Blender
+import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.GradientStop
+import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.paint.Shader
@@ -59,6 +62,7 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.color.ColorMatrixF32
 import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.math.matrix.Matrix3x3F32
@@ -1071,6 +1075,46 @@ class GPUFramePathApiInventoryTest {
             ClipStack.WideOpen,
         ))
         assertEquals("unsupported.core_primitive.drrect.inner_outside_outer", gatherRefusal(invalid).code)
+    }
+
+    @Test
+    fun `drrect paint effects stay out of the direct analytic route`() {
+        val outer = RRectF32.of(RectF32.ofLTRB(8f, 8f, 56f, 56f), radius = 8f)
+        val inner = RRectF32.of(RectF32.ofLTRB(20f, 20f, 44f, 44f), radius = 4f)
+        val opaque = Paint.fill(ColorARGB.Blue).copy(antiAlias = false)
+        val alphaMatrix = ColorMatrixF32.ofIdentity().apply {
+            setScale(1f, 1f, 1f, 0.5f)
+        }
+        val cases = listOf(
+            "color-filter-alpha" to opaque.copy(colorFilter = ColorFilter.Matrix(alphaMatrix)),
+            "image-filter" to opaque.copy(imageFilter = ImageFilter.Blur(1f, 1f)),
+            "path-effect" to opaque.copy(pathEffect = PathEffect.Dash(floatArrayOf(2f, 2f))),
+            "blender" to opaque.copy(blender = Blender.Mode(BlendMode.SRC)),
+        )
+
+        cases.forEach { (label, paint) ->
+            val inventory = inventoryFor(
+                DisplayOp.DrawDRRect(outer, inner, paint, Matrix3x3F32.Identity, ClipStack.WideOpen),
+            )
+
+            assertIs<NormalizedDrawCommand.FillPath>(
+                inventory.normalizedCommands.single(),
+                "$label must not retain a direct FillDRRect command",
+            )
+            when (val result = GPUFramePathApiInventory.gatherCorePrimitiveSemantics(
+                inventory,
+                GPUPixelBounds(0, 0, 32, 32),
+            )) {
+                is GPUCorePrimitiveSemanticGatherResult.Gathered -> assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(
+                    assertIs<GPUDrawSemanticPayload.CorePrimitive>(result.semantics.values.single()).geometry,
+                    "$label must retain only the stable path fallback semantic",
+                )
+                is GPUCorePrimitiveSemanticGatherResult.Refused -> assertTrue(
+                    result.code.startsWith("unsupported.core_primitive."),
+                    "$label must retain a stable core-primitive refusal: ${result.code}",
+                )
+            }
+        }
     }
 
     @Test

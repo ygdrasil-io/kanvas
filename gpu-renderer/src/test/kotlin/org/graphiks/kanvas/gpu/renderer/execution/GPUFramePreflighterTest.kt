@@ -8403,6 +8403,13 @@ class GPUFramePreflighterTest {
                     true,
                     "preflight",
                 ),
+                GPUCapabilityFact(
+                    "first_slice.fill_drrect.native",
+                    "unit-test",
+                    "supported",
+                    true,
+                    "preflight",
+                ),
             )
         } else {
             emptyList()

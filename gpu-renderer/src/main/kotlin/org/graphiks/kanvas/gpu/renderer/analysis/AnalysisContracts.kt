@@ -44,6 +44,7 @@ import org.graphiks.kanvas.gpu.renderer.images.GPUImageDecodePlanner
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPass
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlanner
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendSpecializationRequest
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
@@ -683,21 +684,24 @@ class GPUFirstRoutePlanner(
         require(command.drawKind == GPUDrawKind.FillDRRect) {
             "GPUFirstRoutePlanner accepts only FillDRRect commands"
         }
-        require(command.transform.type == GPUTransformType.Identity &&
-            command.clip.kind == GPUClipKind.WideOpen &&
-            !command.stroke && !command.antiAlias && command.maskFilter == null &&
-            command.material is GPUMaterialDescriptor.SolidColor && command.material.a == 1f
-        ) { "FillDRRect command must satisfy the bounded analytic admission contract" }
-        val (outerAccepted, innerAccepted) = normalizeFirstRouteRRects(command.outer, command.inner)
-            .map { requireNotNull(it as? GPURRectNormalizationResult.Accepted) }
-        val outerAuthority = requireNotNull(
-            (corePrimitiveRRectGeometryAuthority(command.outer, outerAccepted, command.transform)
-                as? GPUCorePrimitiveRRectGeometryAuthorityIssue.Issued)?.authority,
-        )
-        val innerAuthority = requireNotNull(
-            (corePrimitiveRRectGeometryAuthority(command.inner, innerAccepted, command.transform)
-                as? GPUCorePrimitiveRRectGeometryAuthorityIssue.Issued)?.authority,
-        )
+        command.refusalCode()?.let { code -> return refusedPlan(command, code) }
+        val (outerNormalization, innerNormalization) = normalizeFirstRouteRRects(command.outer, command.inner)
+        val outerAccepted = outerNormalization as? GPURRectNormalizationResult.Accepted
+            ?: return refusedPlan(command, "unsupported.core_primitive.drrect.geometry_normalization")
+        val innerAccepted = innerNormalization as? GPURRectNormalizationResult.Accepted
+            ?: return refusedPlan(command, "unsupported.core_primitive.drrect.geometry_normalization")
+        val outerAuthority = (corePrimitiveRRectGeometryAuthority(
+            command.outer,
+            outerAccepted,
+            command.transform,
+        ) as? GPUCorePrimitiveRRectGeometryAuthorityIssue.Issued)?.authority
+            ?: return refusedPlan(command, "unsupported.core_primitive.drrect.geometry_authority")
+        val innerAuthority = (corePrimitiveRRectGeometryAuthority(
+            command.inner,
+            innerAccepted,
+            command.transform,
+        ) as? GPUCorePrimitiveRRectGeometryAuthorityIssue.Issued)?.authority
+            ?: return refusedPlan(command, "unsupported.core_primitive.drrect.geometry_authority")
         val recordId = "analysis.fill_drrect.${command.commandId.value}"
         val renderStep = CORE_PRIMITIVE_RENDER_STEP_IDENTITY
         val analysisRecord = GPUDrawAnalysisRecord(
@@ -723,7 +727,7 @@ class GPUFirstRoutePlanner(
                 commandIdValue = command.commandId.value,
                 pipelinePreimageHash = "pending.pipeline.fill_drrect.solid.${command.layer.target.colorFormat}.src_over",
                 renderStepIdentity = renderStep,
-                requirements = listOf(firstRRectRouteCapabilityName),
+                requirements = listOf(firstDRRectRouteCapabilityName),
             ),
             pass = GPUFirstRoutePassBuilder.acceptedFillRRect(
                 commandIdValue = command.commandId.value,
@@ -1659,6 +1663,41 @@ class GPUFirstRoutePlanner(
         )
     }
 
+    /** Builds a typed refusal for an out-of-contract analytic FillDRRect. */
+    private fun refusedPlan(command: NormalizedDrawCommand.FillDRRect, code: String): GPUFirstRoutePlan {
+        val recordId = "analysis.fill_drrect.${command.commandId.value}"
+        val diagnostic = GPUAnalysisDiagnostic(
+            code = code,
+            recordId = recordId,
+            decisionId = "refused.fill_drrect.${command.commandId.value}",
+            terminal = true,
+        )
+        return GPUFirstRoutePlan(
+            analysisRecord = GPUDrawAnalysisRecord(
+                recordId = recordId,
+                commandIdValue = command.commandId.value,
+                commandFamily = "FillDRRect",
+                boundsHash = command.bounds.stableHash(),
+                routeDecisionLabel = "refused.$code",
+                materialKeyHash = "none",
+                renderStepCandidates = emptyList(),
+                sortKey = SortKey(command.ordering.paintOrder.toLong()),
+                diagnostics = listOf(diagnostic),
+            ),
+            analysisDecision = GPUDrawAnalysisDecision.Refuse(recordId, diagnostic),
+            routeDecision = GPUFirstRouteDecisionBuilder.refused(
+                code = code,
+                stage = "analysis",
+                subject = "FillDRRect analytic-hole route",
+            ),
+            pass = GPUFirstRoutePassBuilder.refusedFillDRRect(
+                commandIdValue = command.commandId.value,
+                targetStateHash = command.targetStateHash(),
+                code = code,
+            ),
+        )
+    }
+
     /** Builds refused FillPath analysis, route, and pass descriptors. */
     private fun refusedPlan(command: NormalizedDrawCommand.FillPath, code: String): GPUFirstRoutePlan {
         val recordId = "analysis.fill_path.${command.commandId.value}"
@@ -1783,6 +1822,25 @@ class GPUFirstRoutePlanner(
             layer.requiresFilter -> "unsupported.layer.filter_chain"
             layer.target.colorFormat !in firstRouteTargetFormats -> "unsupported.target.format_blend_incompatible"
             !capabilities.hasFact(firstRRectRouteCapabilityName) -> "unsupported.pipeline.capability_missing"
+            else -> null
+        }
+
+    /** Refuses any FillDRRect fact outside the narrow opaque analytic-hole contract. */
+    private fun NormalizedDrawCommand.FillDRRect.refusalCode(): String? =
+        coordinateRefusalCode() ?: when {
+            transform.type != GPUTransformType.Identity -> "unsupported.core_primitive.drrect.analytic_transform"
+            clip.kind != GPUClipKind.WideOpen -> "unsupported.core_primitive.drrect.analytic_clip"
+            stroke -> "unsupported.core_primitive.drrect.analytic_stroke"
+            antiAlias -> "unsupported.core_primitive.drrect.analytic_antialias"
+            maskFilter != null -> "unsupported.core_primitive.drrect.analytic_mask_filter"
+            material !is GPUMaterialDescriptor.SolidColor -> "unsupported.core_primitive.drrect.analytic_material"
+            material.a != 1f -> "unsupported.core_primitive.drrect.analytic_alpha"
+            blend.mode != GPUBlendMode.SRC_OVER -> "unsupported.core_primitive.drrect.analytic_blend"
+            layer.scopeKind != GPULayerScopeKind.Root -> "unsupported.core_primitive.drrect.analytic_layer"
+            layer.requiresFilter -> "unsupported.core_primitive.drrect.analytic_layer_filter"
+            layer.target.colorFormat !in firstRouteTargetFormats ->
+                "unsupported.core_primitive.drrect.analytic_target_format"
+            !capabilities.hasFact(firstDRRectRouteCapabilityName) -> "unsupported.pipeline.capability_missing"
             else -> null
         }
 
@@ -2119,6 +2177,9 @@ class GPUFirstRoutePlanner(
         /** Required capability fact for the first native FillRRect expansion route. */
         const val firstRRectRouteCapabilityName = "first_slice.fill_rrect.native"
 
+        /** Required capability fact for the deliberately bounded analytic FillDRRect route. */
+        const val firstDRRectRouteCapabilityName = GPUFirstSliceCapabilityName.FILL_DRRECT_NATIVE
+
         /** Required capability fact for the linear gradient material route. */
         const val firstLinearGradientCapabilityName = "first_slice.linear_gradient.native"
 
@@ -2268,6 +2329,15 @@ private fun NormalizedDrawCommand.FillRRect.coordinateRefusalCode(
         bounds.hasNaN() || clip.bounds.hasNaN() -> "unsupported.bounds.nan"
         bounds.hasNonFinite() || clip.bounds.hasNonFinite() ->
             "unsupported.bounds.non_finite"
+        else -> null
+    }
+
+/** Returns a terminal coordinate or bounds refusal code before DRRect analytic admission. */
+private fun NormalizedDrawCommand.FillDRRect.coordinateRefusalCode(): String? =
+    when {
+        transform.hasNonFiniteFacts() -> "unsupported.transform.non_finite"
+        bounds.hasNaN() || clip.bounds.hasNaN() -> "unsupported.bounds.nan"
+        bounds.hasNonFinite() || clip.bounds.hasNonFinite() -> "unsupported.bounds.non_finite"
         else -> null
     }
 

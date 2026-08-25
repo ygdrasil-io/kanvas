@@ -6437,7 +6437,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         } else {
             emptyList()
         } + if (includeRRect) {
-            listOf(GPUCapabilityFact("first_slice.fill_rrect.native", "unit", "supported", true, "core"))
+            listOf(
+                GPUCapabilityFact("first_slice.fill_rrect.native", "unit", "supported", true, "core"),
+                GPUCapabilityFact("first_slice.fill_drrect.native", "unit", "supported", true, "core"),
+            )
         } else {
             emptyList()
         },
