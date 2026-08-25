@@ -23,7 +23,7 @@ harness commun ; les familles graphiques sont détaillées dans les autres brief
 
 | Sujet | Scénarios précis | Résultat exigé |
 | --- | --- | --- |
-| Snapshot du catalogue | Lire le catalogue de la branche avant toute capture, puis relire tous les IDs après chaque changement de code. | État courant : 14 rendus / 2 refus. Les IDs historiques `repeat-gradient-refusal` et `gradient-stroke-refusal` sont désormais des rendus publics `Surface`. |
+| Snapshot du catalogue | Lire le catalogue de la branche avant toute capture, puis relire tous les IDs après chaque changement de code. | État courant : 22 rendus / 2 refus. Les IDs historiques `repeat-gradient-refusal` et `gradient-stroke-refusal` sont désormais des rendus publics `Surface`. |
 | Route réelle | Vérifier le type de programme de chaque cas : `KanvasSurfaceProgram` ou `RoutedSceneProgram` interne. | Les rendus sont des preuves `Surface`; les deux refus internes ne sont jamais présentés comme couverture de cette route publique. |
 | Unicité/complétude | Un ID unique, une scène publique littérale par rendu, un oracle par rendu, aucun oracle de réussite pour un refus. | Échec de test sur ID doublon, scène implicite, oracle absent, raison de refus vide ou verdict contradictoire. |
 | Intégrité de route | Rendu avec readback/draw/pipeline positifs ; refus sans submission, readback, draw ou pipeline. | Impossible de promouvoir un fallback CPU, une exécution partielle ou une preuve d'environnement différente. |
@@ -45,6 +45,9 @@ promotion checked-in est une transaction de catalogue complet via
 `promoteGpuEvidence` (avec `--all` imposé), après vérification du catalogue
 entier. Les rapports et preuves associés vivent sous
 `reports/gpu-renderer/evidence/`.
+
+Les formulations de ce WIP sont dérivées du code, des tests et des artefacts
+générés/promus vérifiés ; ces éléments font autorité, pas le Markdown.
 
 Une capture doit être faite après rebase/cherry-pick seulement si le SHA exact
 à capturer est fixé. Après capture ou promotion, toute réécriture du SHA exige

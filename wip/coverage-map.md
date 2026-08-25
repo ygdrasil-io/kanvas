@@ -12,7 +12,8 @@ Ce document est temporaire. Il est dérivé des API publiques actuelles et des t
 | `N` | Aucune preuve catalogue actuelle; le lot doit ajouter un probe puis classifier rendu, refus stable ou dependency gate. |
 | `DG` | Dependency gate (bloqué par une dépendance réelle), sans substitut temporaire. |
 
-Les sources de vérité sont le code, notamment [`Canvas.kt`](../kanvas/src/main/kotlin/org/graphiks/kanvas/canvas/Canvas.kt), les types scellés de `kanvas`, et le catalogue [`GpuEvidenceCatalog.kt`](../integration-tests/gpu-evidence/src/main/kotlin/org/graphiks/kanvas/gpu/evidence/catalog/GpuEvidenceCatalog.kt).
+Les sources de vérité sont le code, les tests et les artefacts
+générés/promus vérifiés, notamment [`Canvas.kt`](../kanvas/src/main/kotlin/org/graphiks/kanvas/canvas/Canvas.kt), les types scellés de `kanvas`, et le catalogue [`GpuEvidenceCatalog.kt`](../integration-tests/gpu-evidence/src/main/kotlin/org/graphiks/kanvas/gpu/evidence/catalog/GpuEvidenceCatalog.kt). Cette carte est une vue dérivée et ne fait pas autorité.
 
 ## Canvas public
 
@@ -23,7 +24,8 @@ Les sources de vérité sont le code, notamment [`Canvas.kt`](../kanvas/src/main
 | `save`, `saveLayer`, `restore`, `restoreToCount`, `flushAndSnapshot` | 10 | `N` — probes d'empilement, isolation de layer et snapshot. |
 | `translate`, `scale`, `rotate`, `skew`, `concat`, `setMatrix`, `resetMatrix` | 10 | `R` pour la transform affine de rect et le seul scale `(2,1)` du `drawRRect` solide non-AA; `N` pour les autres combinaisons. |
 | `clipRect` | 10 | `R` pour le scissor rectangulaire; `N` pour les autres opérations de clip. |
-| `drawPath`, `clipRRect`, `clipPath` | 20 | `N` — le stroke rectangulaire rendu est un `drawRect`, non `drawPath`; `clipRRect` et `clipPath` ne sont pas exercés. Le stroke générique `drawPath` avec gradient reste refusé par le renderer, sans probe de refus `Surface` dans le catalogue courant. |
+| `drawPath` | 20 | `R` uniquement pour les trois fills solides non-AA prouvés par artefacts natifs : `solid-triangle-path`, `solid-concave-path` et `even-odd-path-hole`. Les courbes, strokes, inverse fills, oval/circle et AA restent `N`/non revendiqués. |
+| `clipRRect`, `clipPath` | 20 | `N` — aucune preuve catalogue publique `Surface` ; les clips et leurs variantes restent non revendiqués. |
 | `drawImage`, `drawImageRect`, `drawImageNine`, `drawImageLattice`, `drawAtlas` | 40 | `N` — images, sampling, 9-patch, lattice et sprites. Le lot 40 est l'unique propriétaire de `drawAtlas`. |
 | `drawString`, `drawText`, `measureText` | 60 | `DG` / `N` — probes texte et métriques; conserver un dependency gate si les fonts/codecs requis ne sont pas livrés. |
 | `drawVertices`, `drawMesh`, `drawPicture` | 60 | `N` — probes vertices, mesh et picture. |
