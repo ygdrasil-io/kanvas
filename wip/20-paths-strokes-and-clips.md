@@ -22,7 +22,7 @@ publique native `kanvas.surface.render` et le stencil-cover WebGPU :
 `inverse-even-odd-path-hole` (2320, `INVERSE_EVEN_ODD`). La même preuve couvre
 désormais `implicit-closure-triangle-path` (1128, `WINDING`, fermeture
 implicite), `translated-triangle-path` (1128, `WINDING`, translation
-positive `(4,5)`) et `uniform-scaled-triangle-path` (1176, `WINDING`, scale
+positive `(4,5)`) et `uniform-scaled-triangle-path` (1128, `WINDING`, scale
 uniforme positif `(1.5,1.5)`). Les neuf scènes sont 64×64, utilisent leurs
 bounds littéraux documentés, l'oracle CPU `surface-srgb-path-pixel-center`
 version 2 et sont exactes à `100.0`
