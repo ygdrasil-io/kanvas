@@ -8,7 +8,8 @@
 Tester les routes qui consomment des textures ou créent des surfaces
 intermédiaires : sampling image, grilles, sprites, `saveLayer` et image filters.
 La qualité dépend autant des pixels que des bounds, allocations et durées de
-vie des intermédiaires.
+vie des intermédiaires. Ce lot est l'unique propriétaire de `drawAtlas` : il
+couvre le sampling, les instances et les artefacts image de cette API.
 
 ## Code et tests à lire
 
@@ -27,7 +28,7 @@ vie des intermédiaires.
 | `drawImage` | Image opaque/translucide, nearest/bilinear, source entière, alpha paint, translation/scale/rotation et bord hors surface. | Image nulle/vide, format ou codec absent, dimensions texture hors limite et sampling non pris en charge. |
 | `drawImageRect` | Crop interne, crop à cheval, src/dst inversé, dst fractionnaire, couleur/filter paint et destination non opaque. | Src invalide, sampling/tile mode absent, transform/perspective rejeté avant upload coûteux. |
 | `drawImageNine` / lattice | Coins fixes, centre étiré, cellules transparentes, lattice tronquée, bounds petites et grandes. | Découpage invalide, seams, grille trop grande et mode de sampling non routable. |
-| `drawAtlas` | Plusieurs sprites, transforms indépendantes, tex rects, couleurs par sprite, blend et paint. | Longueurs de listes incohérentes, budget d'instances, texture absente et blend non admis. |
+| `drawAtlas` | Plusieurs sprites, transforms indépendantes, tex rects, couleurs par sprite, blend et paint. | Longueurs de listes incohérentes, budget d'instances, texture absente et blend non admis. Ce lot possède les IDs de scène et les oracles atlas. |
 | `saveLayer` | Bounds nulles/explicites, alpha, clip parent, layer vide, layers imbriquées et composite avec paint. | Bounds non finies, profondeur/allocation au-delà du budget et destination read indisponible. |
 | Blur/filters | Blur sigma 0/borne, offset, crop, color matrix, affine, blend deux enfants, DAG 2–4 nœuds. | Tile mode, transform, DAG/cycle, taille d'intermédiaire, child absent et budget hors contrat. |
 

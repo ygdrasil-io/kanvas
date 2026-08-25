@@ -23,7 +23,8 @@ harness commun ; les familles graphiques sont détaillées dans les autres brief
 
 | Sujet | Scénarios précis | Résultat exigé |
 | --- | --- | --- |
-| Réalignement du catalogue | Capturer `repeat-gradient-refusal` après le correctif `REPEAT`, puis relire tous les IDs. | Le catalogue et les preuves promues convergent vers 13 rendus / 3 refus ; le nom historique de la scène ne modifie pas son verdict rendu. |
+| Snapshot du catalogue | Lire le catalogue de la branche avant toute capture, puis relire tous les IDs après chaque changement de code. | État courant : 12 rendus / 4 refus. `repeat-gradient-refusal` reste un refus jusqu'à une implémentation séparée, son oracle et sa capture hardware validée. |
+| Route réelle | Vérifier le type de programme de chaque cas : `KanvasSurfaceProgram` ou `RoutedSceneProgram` interne. | Les rendus sont des preuves `Surface`; les deux refus internes ne sont jamais présentés comme couverture de cette route publique. |
 | Unicité/complétude | Un ID unique, une scène publique littérale par rendu, un oracle par rendu, aucun oracle de réussite pour un refus. | Échec de test sur ID doublon, scène implicite, oracle absent, raison de refus vide ou verdict contradictoire. |
 | Intégrité de route | Rendu avec readback/draw/pipeline positifs ; refus sans submission, readback, draw ou pipeline. | Impossible de promouvoir un fallback CPU, une exécution partielle ou une preuve d'environnement différente. |
 | Bundles | Round-trip, hash/PNG/JSON modifié, symlink, chemin de sortie, JSON ambigu et fichier manquant. | Le verifier rejette la corruption et l'écriture reste atomique. |
@@ -41,8 +42,8 @@ succès ni statistiques présentées comme performance valide.
 
 Ce lot est la seule dépendance dure de tous les autres briefs. Il est intégré
 seul, car `GpuEvidenceCatalog.kt` et les programmes de scène sont des points de
-conflit. Sa sortie est un harness capable de rejeter une fausse preuve, plus la
-capture hardware qui réconcilie le catalogue courant avec les artefacts promus.
+conflit. Sa sortie est un harness capable de rejeter une fausse preuve, plus un
+catalogue et des artefacts promus cohérents avec le code de la branche.
 
 ## Vérification
 
