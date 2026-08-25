@@ -240,9 +240,19 @@ internal sealed interface GPUCorePrimitiveClipStencilPreparedFrameRouteSeal {
         val geometryArena: GPUCorePrimitiveClipStencilPreparedGeometryArena,
         val slabAuthority: GPUCorePrimitiveClipStencilPreparedSlabAuthority,
         val attachmentAuthority: GPUCorePrimitiveClipStencilPreparedAttachmentAuthority,
+        prefixPacketIdsBySourceStepIndex: Map<Int, GPUDrawPacketID>,
         viewsBySourceStepIndex: Map<Int, GPUCorePrimitiveClipStencilPreparedScopeRouteSeal>,
     ) : GPUCorePrimitiveClipStencilPreparedFrameRouteSeal {
         private val viewsBySourceStepIndex = immutableMap(viewsBySourceStepIndex)
+        private val prefixPacketIdsBySourceStepIndex = immutableMap(prefixPacketIdsBySourceStepIndex)
+
+        init {
+            require(this.prefixPacketIdsBySourceStepIndex.size <= 1 &&
+                this.prefixPacketIdsBySourceStepIndex.keys.all { sourceStepIndex ->
+                    sourceStepIndex >= 0 && sourceStepIndex < key.producerSourceStepIndex
+                }
+            ) { "Prepared clip-stencil prefix must be one exact pre-producer render packet" }
+        }
 
         fun retainedFor(
             sourceStepIndex: Int,
@@ -263,6 +273,13 @@ internal sealed interface GPUCorePrimitiveClipStencilPreparedFrameRouteSeal {
                 GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Missing
             }
         }
+
+        fun retainsPrefixFor(
+            sourceStepIndex: Int,
+            packetIds: List<GPUDrawPacketID>,
+        ): Boolean = prefixPacketIdsBySourceStepIndex[sourceStepIndex]?.let { packetId ->
+            packetIds == listOf(packetId)
+        } == true
     }
 }
 
@@ -276,6 +293,10 @@ internal fun sealGPUCorePrimitiveClipStencilPreparedFrameRoute(
     producerPacketId: GPUDrawPacketID,
     producerCommandId: Int,
     consumers: List<GPUCorePrimitiveClipStencilPreparedConsumerLocation>,
+    prefixCommandIds: List<Int> = emptyList(),
+    prefixPacketIdsBySourceStepIndex: Map<Int, GPUDrawPacketID> = emptyMap(),
+    prefixVertexBytes: Long = 0L,
+    prefixIndexBytes: Long = 0L,
 ): GPUCorePrimitiveClipStencilPreparedFrameRouteSeal.Route {
     require(producerSourceStepIndex >= 0 && producerCommandId >= 0 && consumers.isNotEmpty()) {
         "Prepared clip-stencil frame route requires one producer before consumers"
@@ -297,6 +318,10 @@ internal fun sealGPUCorePrimitiveClipStencilPreparedFrameRoute(
         consumers.mapNotNull { it.dependencyFromPreviousConsumerToken }.distinct().size ==
         consumers.size - 1
     ) { "Prepared clip-stencil consumers require strict frame order and one exact packet per render scope" }
+    require(prefixPacketIdsBySourceStepIndex.size == prefixCommandIds.size &&
+        prefixPacketIdsBySourceStepIndex.keys.all { it in 0 until producerSourceStepIndex } &&
+        prefixPacketIdsBySourceStepIndex.values.distinct().size == prefixPacketIdsBySourceStepIndex.size
+    ) { "Prepared clip-stencil prefix packet identity must exactly match its reserved uniform slots" }
 
     val entries = buildList {
         add(
@@ -325,9 +350,9 @@ internal fun sealGPUCorePrimitiveClipStencilPreparedFrameRoute(
     }
     val arena = GPUCorePrimitiveClipStencilPreparedGeometryArena.pack(entries)
     require(slabAuthority.vertexByteSize ==
-        Math.multiplyExact(arena.vertexFloatCount.toLong(), 4L) &&
-        slabAuthority.indexByteSize == Math.multiplyExact(arena.indexCount.toLong(), 4L) &&
-        slabAuthority.uniformSlabSeal.commandIds == consumers.map { it.commandId } &&
+        Math.addExact(Math.multiplyExact(arena.vertexFloatCount.toLong(), 4L), prefixVertexBytes) &&
+        slabAuthority.indexByteSize == Math.addExact(Math.multiplyExact(arena.indexCount.toLong(), 4L), prefixIndexBytes) &&
+        slabAuthority.uniformSlabSeal.commandIds == prefixCommandIds + consumers.map { it.commandId } &&
         attachmentAuthority.resource.value == route.attachment.logicalReference &&
         attachmentAuthority.resourceGeneration == route.attachment.resourceGeneration
     ) { "Prepared clip-stencil slab sizes and uniform commands must match the exact arena" }
@@ -356,7 +381,9 @@ internal fun sealGPUCorePrimitiveClipStencilPreparedFrameRoute(
             arena.slices[index + 1],
             slabAuthority,
             attachmentAuthority,
-            slabAuthority.uniformSlabSeal.plan.slots[index].let { slot ->
+            // Prefix uniforms occupy the leading slots. Consumers keep their route order,
+            // but their dynamic offsets must address the corresponding trailing slab slots.
+            slabAuthority.uniformSlabSeal.plan.slots[prefixCommandIds.size + index].let { slot ->
                 GPUCorePrimitiveClipStencilPreparedUniformSlice(
                     slabAuthority.uniformResource,
                     slabAuthority.uniformGeneration,
@@ -378,6 +405,7 @@ internal fun sealGPUCorePrimitiveClipStencilPreparedFrameRoute(
         geometryArena = arena,
         slabAuthority = slabAuthority,
         attachmentAuthority = attachmentAuthority,
+        prefixPacketIdsBySourceStepIndex = prefixPacketIdsBySourceStepIndex,
         viewsBySourceStepIndex = views,
     )
 }

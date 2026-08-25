@@ -1,8 +1,11 @@
 package org.graphiks.kanvas.gpu.renderer.recording
 
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendComponent
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 
@@ -24,3 +27,10 @@ internal fun canonicalSolidRectSrcOverBlendPlan(): GPUBlendPlan.FixedFunctionBle
 
 internal fun GPUBlendPlan?.isCanonicalSolidRectSrcOver(): Boolean =
     this == canonicalSolidRectSrcOverBlendPlan()
+
+/** Keeps clip-package matching outside execution while validating an admitted direct prefix. */
+internal fun hasExactNoClipAuthority(
+    semantic: GPUDrawSemanticPayload.CorePrimitive,
+    plan: GPUClipExecutionPlan?,
+): Boolean = semantic.clipCoveragePlan == GPUClipCoveragePlan.NoClip &&
+    plan == GPUClipExecutionPlan.NoClip

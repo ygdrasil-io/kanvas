@@ -146,3 +146,108 @@ Final catalog verification after the source commit:
   (245 tests, 1 skipped).
 - `git diff --check` — PASS.
 - Worktree is clean at the catalog commit; native capture remains intentionally pending.
+
+## Capture gate — blocked
+
+At source commit `816d0879a06a958f27e8a24f1e1716ae7cb5f40b`, the first required native public
+capture was attempted with:
+
+```text
+:integration-tests:gpu-evidence:generateGpuEvidence
+  -PsourceCommit=816d0879a06a958f27e8a24f1e1716ae7cb5f40b
+  -Pscene=clip-path-triangle-solid
+```
+
+The public `kanvas.surface.render` route failed before submission during preflight with the exact
+diagnostic:
+
+```text
+invalid.preflight.core_primitive_clip_producer_authority
+```
+
+No scene bundle was accepted, and the remaining two captures, full 36-scene generation, and
+`verifyGenerated` gate were intentionally not run. No production change was made after the
+catalog commit; capture is blocked pending investigation of the producer-authority mismatch.
+
+## Native public capture root-cause follow-up — blocked
+
+The public Surface RED regression was added first in
+`GPUClipCoverageSurfaceTest.public drawColor hard path clip renders through one stencil scope`.
+Before the correction it reproduced the exact producer-authority refusal. The first causal
+mismatch was target-format provenance: public Surface uses `RGBA8UnormSrgb`, while the late
+producer-authority check reconstructed the default `RGBA8Unorm` target state and structural
+color format. The preflight correction now derives both from the prepared target descriptor.
+
+That exposed the next public-only boundary: the approved direct opaque background prefix is an
+`Empty` clip scope, but native operand planning/materialization previously assumed every render
+scope in the prepared clip frame was a producer or consumer. The narrow correction now carries
+one prefix through the exact bridge/key, command, slab-size, scope-order, and semantic-operation
+contracts. The first RED at this boundary was
+`Native payload operand keys must exactly describe each typed native operand`; the diagnostic
+showed prefix declared `[target,pipeline,bind-group,vertex,index]` while its scope keys stopped
+at `[target,pipeline,bind-group]`. Prefix geometry is now explicitly included in the public
+scope key/bridge partition, and the native payload is accepted.
+
+Focused native retry status: the public route reaches submission with zero fatal diagnostics,
+and the prefix pixels are retained, but the clip consumer produces no covered pixels (`1128`
+expected, `0` observed). The same public hard triangle without the prefix produces exactly `1128`
+covered pixels, proving the remaining defect is the prefix-plus-shared-clip-slab native
+materialization boundary rather than the independent stencil producer/consumer route. This is
+not being hidden in the CPU oracle or bypassed via fallback. Capture remains BLOCKED pending a
+minimal production correction for that last native boundary.
+
+### Final attachment/lifetime trace (last normal attempt)
+
+The failing and control routes were compared at the native pass boundary. The prefix route
+uses the same borrowed scene-target view as the producer and consumers, stores the prefix
+color pass, then enters the producer with the existing D24S8 authority and stencil clear;
+the consumer remains stencil-read-only with retained-load and store. The no-prefix control
+uses the identical producer/consumer attachment and stencil state and renders `1128` pixels.
+The prefix route reaches the same native submission and preserves all `4096` background
+pixels, but the producer/consumer sequence yields no covered pixels. Temporary alternatives
+for shared slab index/base offsets and prefix stencil attachment initialization did not change
+the zero-covered result (the latter correctly failed the exact operand-key contract and was
+reverted). No oracle, fallback, shader, or ABI path was changed.
+
+Focused verification after the final attempt:
+
+- `:gpu-renderer:compileKotlin` — PASS;
+- `git diff --check` — PASS;
+- public Surface RED/GREEN regression — still FAIL: `expected 1128, got 0` covered pixels;
+- no capture, generation, promotion, or commit was performed.
+
+Status: **BLOCKED**. The remaining defect is isolated to native execution continuity when a
+color-only direct prefix precedes the shared D24S8 clip producer; further progress requires a
+new targeted native attachment/command trace or an architecture decision about prefix slab
+ownership.
+
+## Native continuity resolution
+
+The final native trace and the local Skia Graphite/Dawn reference converged on one model: the
+opaque background, stencil producer, and ordered consumers must share one physical D24S8
+`RenderPass`; Dawn does not retain stencil across pass boundaries. The prepared frame therefore
+keeps its logical render scopes separate but seals the bounded prefix chain as one native
+render-pass segment. The prefix clears color and stencil, the producer writes stencil, and the
+consumers retain it read-only.
+
+The correction also packs the prefix geometry and uniform before the clip geometry, shifts
+producer/consumer indexed slices accordingly, and addresses consumer uniform slots after that
+leading prefix slot. A null clip scissor remains the route-seal authority; it is canonicalized to
+the semantic full target only when validating or encoding the actual WebGPU scissor.
+
+Final RED→GREEN checks:
+
+- `GPUClipCoverageSurfaceTest.public drawColor hard path clip renders through one stencil scope`
+  — PASS: zero fatal diagnostics and exactly `1128` non-background pixels;
+- `GPUWgpu4kClipStencilPreparedFrameSmokeTest.public prepared clip with opaque background
+  encodes one D24 pass` — PASS: background, producer, consumers, and exactly one native render
+  pass are asserted;
+- `GPUCorePrimitiveClipStencilNativeRouteTest` — PASS;
+- `GPUCorePrimitivePreparedFrameTaskListBuilderTest` — PASS.
+
+The full `:gpu-renderer:test` run has one known independent failure in
+`GPURendererPackageBoundaryTest`; the identical test also fails on `origin/master` with the same
+pre-existing package-cycle report. No evidence capture, generation, promotion, commit, or push
+has been performed since the correction.
+
+Status: **READY_FOR_CAPTURE**.

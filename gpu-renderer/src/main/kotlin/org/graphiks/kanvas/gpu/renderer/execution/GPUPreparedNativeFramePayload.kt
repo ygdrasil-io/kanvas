@@ -998,6 +998,34 @@ internal sealed interface GPUPreparedNativeScopeOperand {
     val exactOperandKeys: List<GPUPreparedNativeOperandKey>
         get() = emptyList()
 
+    /**
+     * Explicit native render-pass grouping for semantic scopes that must share one WebGPU pass.
+     *
+     * A render operand remains tied to its semantic source step, while this immutable authority
+     * tells the encoder whether it opens, continues, or closes the shared pass.  This is used by
+     * the hard path-clip lane to keep the background, stencil producer, and consumers inside one
+     * D24S8-backed pass.
+     */
+    data class RenderPassSegment(
+        val id: String,
+        val firstSourceStepIndex: Int,
+        val lastSourceStepIndex: Int,
+    ) {
+        init {
+            require(id.isNotBlank()) { "Native render-pass segment id must not be blank" }
+            require(firstSourceStepIndex >= 0 && lastSourceStepIndex >= firstSourceStepIndex) {
+                "Native render-pass segment source range must be ordered and non-negative"
+            }
+        }
+
+        fun contains(sourceStepIndex: Int): Boolean =
+            sourceStepIndex in firstSourceStepIndex..lastSourceStepIndex
+
+        fun isFirst(sourceStepIndex: Int): Boolean = sourceStepIndex == firstSourceStepIndex
+
+        fun isLast(sourceStepIndex: Int): Boolean = sourceStepIndex == lastSourceStepIndex
+    }
+
     class Render(
         override val sourceStepIndex: Int,
         val pass: GPUPreparedNativeRenderPassConfig,
@@ -1006,6 +1034,7 @@ internal sealed interface GPUPreparedNativeScopeOperand {
         val operandLayout: GPUPreparedNativeRenderOperandLayout =
             GPUPreparedNativeRenderOperandLayout.CommandOrder,
         operationKindOverride: GPUEncoderOperationKind? = null,
+        val passSegment: RenderPassSegment? = null,
     ) : GPUPreparedNativeScopeOperand {
         val commands = immutableList(commands)
         val semanticPayloads = immutableList(semanticPayloads)
@@ -1013,6 +1042,14 @@ internal sealed interface GPUPreparedNativeScopeOperand {
             operationKindOverride ?: GPUEncoderOperationKind.Render
         override val operands: List<GPUPreparedNativeOperand> =
             immutableList(renderOperands())
+
+        init {
+            passSegment?.let { segment ->
+                require(segment.contains(sourceStepIndex)) {
+                    "Native render operand must belong to its declared pass segment"
+                }
+            }
+        }
 
         private fun renderOperands(): List<GPUPreparedNativeOperand> {
             val attachments = listOfNotNull(
@@ -1812,7 +1849,21 @@ internal class GPUPreparedNativeFramePayload(
             operands.size == keys.size && operands.zip(keys).all { (operand, key) ->
                 operand.first == key.kind && operand.second == key.ownership
             }
-        }) { "Native payload operand keys must exactly describe each typed native operand" }
+        }) {
+            val mismatch = this.scopeOperands.indices.firstOrNull { index ->
+                val operands = this.scopeOperands[index].declaredOperandDescriptors()
+                val keys = this.scopeOperandKeys[index]
+                operands.size != keys.size || operands.zip(keys).any { (operand, key) ->
+                    operand.first != key.kind || operand.second != key.ownership
+                }
+            }
+            "Native payload operand keys must exactly describe each typed native operand " +
+                "(scope=${mismatch?.let { this.scopeOperands[it].sourceStepIndex }} " +
+                "operandCount=${mismatch?.let { this.scopeOperands[it].declaredOperandDescriptors().size }} " +
+                "keyCount=${mismatch?.let { this.scopeOperandKeys[it].size }} " +
+                "operands=${mismatch?.let { this.scopeOperands[it].declaredOperandDescriptors() }} " +
+                "keys=${mismatch?.let { this.scopeOperandKeys[it].map { key -> key.kind to key.ownership } }})"
+        }
         require(
             this.scopeOperands.indices.map { index ->
                 GPUPreparedNativeScopeKey(
