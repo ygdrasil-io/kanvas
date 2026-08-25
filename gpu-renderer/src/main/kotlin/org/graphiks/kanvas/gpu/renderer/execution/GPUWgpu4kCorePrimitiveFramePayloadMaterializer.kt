@@ -363,7 +363,11 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             singleKeySeal.structuralPipelineKey.shader ==
             GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient ||
             singleKeySeal.structuralPipelineKey.shader ==
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradientRepeat ||
+            singleKeySeal.structuralPipelineKey.shader ==
             GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradient
+            || singleKeySeal.structuralPipelineKey.shader ==
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradientRepeat
         ) {
             if (singleKeySeal.structuralPipelineKey.blend is
                 GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination

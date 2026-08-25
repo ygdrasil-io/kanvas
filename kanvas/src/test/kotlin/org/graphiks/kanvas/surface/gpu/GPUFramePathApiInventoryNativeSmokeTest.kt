@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.surface.gpu
 
 import java.util.concurrent.TimeUnit
+import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -56,6 +57,39 @@ class GPUFramePathApiInventoryNativeSmokeTest {
             assertEquals(listOf(255, 0, 0, 255), rgba(result.pixels, 47, 32, 64))
             assertEquals(listOf(0, 0, 0, 0), rgba(result.pixels, 32, 32, 64))
             assertEquals(listOf(0, 0, 0, 0), rgba(result.pixels, 8, 8, 64))
+        } finally {
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
+    fun `public Surface render paints exact clamp gradient stroke RGB annulus and preserves transparent center`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        GPUBackendRuntimeNativeFactory.dispose()
+        val surface = Surface(width = 64, height = 64)
+        surface.canvas {
+            drawRect(
+                RectF32.ofLTRB(8f, 16f, 56f, 48f),
+                Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                    shader = Shader.LinearGradient(
+                        Point2F32(8.5f, 32.5f), Point2F32(55.5f, 32.5f),
+                        listOf(GradientStop(0f, ColorARGB.of(255, 255, 56, 56)), GradientStop(1f, ColorARGB.of(255, 56, 112, 255))),
+                    ),
+                    antiAlias = false,
+                ),
+            )
+        }
+
+        try {
+            val result = surface.render()
+
+            assertEquals(4, result.stats.opsDispatched)
+            assertEquals(0, result.stats.opsRefused)
+            assertRgbaWithinOneLsb(listOf(255, 56, 56, 255), rgba(result.pixels, 8, 16, 64))
+            assertRgbaWithinOneLsb(listOf(56, 112, 255, 255), rgba(result.pixels, 55, 47, 64))
+            assertEquals(listOf(0, 0, 0, 0), rgba(result.pixels, 32, 32, 64))
+            assertEquals(listOf(0, 0, 0, 0), rgba(result.pixels, 4, 4, 64))
         } finally {
             GPUBackendRuntimeNativeFactory.dispose()
         }
@@ -196,4 +230,13 @@ class GPUFramePathApiInventoryNativeSmokeTest {
         val offset = (y * width + x) * 4
         return (0..3).map { channel -> bytes[offset + channel].toInt() }
     }
+}
+
+private fun assertRgbaWithinOneLsb(expected: List<Int>, actual: List<Int>) {
+    assertTrue(
+        expected.zip(actual).all { (expectedChannel, actualChannel) ->
+            abs(expectedChannel - actualChannel) <= 1
+        },
+        "expected RGBA within one LSB of $expected but was $actual",
+    )
 }

@@ -568,6 +568,7 @@ class GPUCorePrimitivePayloadContractsTest {
             "matrix" to linearMaterial(localMatrix = listOf(1f, 0f, 2f, 0f, 1f, 0f, 0f, 0f, 1f)),
             "positions" to linearMaterial(positions = listOf(0.25f, 1f)),
             "colors" to linearMaterial(colors = listOf(0.5f, 0f, 0f, 1f, 0f, 0f, 1f, 1f)),
+            "tileMode" to linearMaterial(tileMode = "repeat"),
         )
 
         variants.forEach { (category, variant) ->
@@ -575,7 +576,6 @@ class GPUCorePrimitivePayloadContractsTest {
         }
         listOf(
             "interpolation" to { linearMaterial(interpolation = "linear") },
-            "tileMode" to { linearMaterial(tileMode = "repeat") },
         ).forEach { (category, create) ->
             assertFailsWith<IllegalArgumentException>(category) { create() }
         }
@@ -601,6 +601,47 @@ class GPUCorePrimitivePayloadContractsTest {
         assertEquals(GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientUniform592V1, direct.uniformLayout)
         assertEquals(GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradient, analytic.shader)
         assertEquals(GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientAnalyticShape656V1, analytic.uniformLayout)
+    }
+
+    @Test
+    fun `linear repeat selects cache-distinct direct and analytic structural programs with unchanged ABIs`() {
+        val direct = corePrimitiveRenderPipelineStructuralKey(
+            gather(material = linearMaterial(tileMode = "repeat")),
+            GPUClipExecutionPlan.NoClip,
+            blend(GPUBlendMode.SRC_OVER),
+        )
+        val analytic = corePrimitiveRenderPipelineStructuralKey(
+            gather(
+                material = linearMaterial(tileMode = "repeat"),
+                coverageMode = GPUCorePrimitiveCoverageMode.ScalarAA,
+            ),
+            GPUClipExecutionPlan.NoClip,
+            blend(GPUBlendMode.SRC_OVER),
+        )
+
+        assertEquals(GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradientRepeat, direct.shader)
+        assertEquals(GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientUniform592V1, direct.uniformLayout)
+        assertEquals(GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradientRepeat, analytic.shader)
+        assertEquals(GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientAnalyticShape656V1, analytic.uniformLayout)
+        assertNotEquals(
+            direct.stableRenderPipelineKey("core-primitive"),
+            corePrimitiveRenderPipelineStructuralKey(
+                gather(material = linearMaterial()),
+                GPUClipExecutionPlan.NoClip,
+                blend(GPUBlendMode.SRC_OVER),
+            ).stableRenderPipelineKey("core-primitive"),
+        )
+        assertNotEquals(
+            analytic.stableRenderPipelineKey("core-primitive"),
+            corePrimitiveRenderPipelineStructuralKey(
+                gather(
+                    material = linearMaterial(),
+                    coverageMode = GPUCorePrimitiveCoverageMode.ScalarAA,
+                ),
+                GPUClipExecutionPlan.NoClip,
+                blend(GPUBlendMode.SRC_OVER),
+            ).stableRenderPipelineKey("core-primitive"),
+        )
     }
 
     @Test

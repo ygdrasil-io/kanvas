@@ -221,9 +221,20 @@ class GPUCorePrimitiveSemanticBuilderTest {
     }
 
     @Test
+    fun `core builder preserves repeat on bounded linear material`() {
+        val descriptor = linearDescriptor(tileMode = "repeat")
+
+        val result = assertIs<GPUCorePrimitiveSemanticGatherResult.Gathered>(gatherMaterial(descriptor))
+        val semantic = assertIs<GPUDrawSemanticPayload.CorePrimitive>(result.semantics.getValue(0))
+        val material = assertIs<GPUCorePrimitiveMaterialPayload.LinearGradient>(semantic.material)
+
+        assertEquals("repeat", material.tileMode)
+        assertNotEquals(linearDescriptor().toString(), descriptor.toString())
+    }
+
+    @Test
     fun `core builder refuses unsupported linear gradient facts before semantic payload creation`() {
         val cases = listOf(
-            linearDescriptor(tileMode = "repeat") to "unsupported.core_primitive.material.tile_mode",
             linearDescriptor(tileMode = "mirror") to "unsupported.core_primitive.material.tile_mode",
             linearDescriptor(tileMode = "decal") to "unsupported.core_primitive.material.tile_mode",
             linearDescriptor(interpolation = "linear") to "unsupported.core_primitive.material.interpolation",

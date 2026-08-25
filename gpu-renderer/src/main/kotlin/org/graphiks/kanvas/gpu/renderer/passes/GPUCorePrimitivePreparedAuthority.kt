@@ -70,9 +70,11 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
         DirectGeometry,
         AnalyticShape,
         DirectLinearGradient,
+        DirectLinearGradientRepeat,
         DirectRadialGradient,
         DirectSweepGradient,
         AnalyticLinearGradient,
+        AnalyticLinearGradientRepeat,
         AnalyticRadialGradient,
         AnalyticSweepGradient,
         AnalyticRRect,
@@ -114,10 +116,12 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
                 UniformLayout.AnalyticShapeUniform80V1
             role == Role.Shading -> when (shader) {
                 Shader.DirectLinearGradient,
+                Shader.DirectLinearGradientRepeat,
                 Shader.DirectRadialGradient,
                 Shader.DirectSweepGradient,
                 -> UniformLayout.GradientUniform592V1
                 Shader.AnalyticLinearGradient,
+                Shader.AnalyticLinearGradientRepeat,
                 Shader.AnalyticRadialGradient,
                 Shader.AnalyticSweepGradient,
                 -> UniformLayout.GradientAnalyticShape656V1
@@ -708,9 +712,17 @@ internal fun corePrimitiveRenderPipelineStructuralKey(
         is GPUCorePrimitiveMaterialPayload.SolidColor -> geometryShader
         is GPUCorePrimitiveMaterialPayload.LinearGradient -> when (geometryShader) {
             GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry ->
-                GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient
+                if (semantic.material.tileMode == "repeat") {
+                    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradientRepeat
+                } else {
+                    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient
+                }
             GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticShape ->
-                GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradient
+                if (semantic.material.tileMode == "repeat") {
+                    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradientRepeat
+                } else {
+                    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticLinearGradient
+                }
             else -> error("Gradient materials are not admitted on path-stencil CorePrimitive roles")
         }
         is GPUCorePrimitiveMaterialPayload.RadialGradient -> when (geometryShader) {

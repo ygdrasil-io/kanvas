@@ -350,7 +350,7 @@ private fun GPUMaterialDescriptor?.toCorePrimitiveMaterial(
     }
     is GPUMaterialDescriptor.LinearGradient -> {
         val facts = this@toCorePrimitiveMaterial.corePrimitiveMaterialFacts()
-        if (tileMode != "clamp") {
+        if (tileMode !in setOf("clamp", "repeat")) {
             refuseCoreMaterial("unsupported.core_primitive.material.tile_mode", facts)
         }
         if (interpolation != "srgb") {

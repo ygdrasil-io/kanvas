@@ -1,1 +1,1 @@
-{"attemptId":"attempt-1","diagnostics":["diagnostic.code=unsupported.stroke.rect_material"],"stableReasonCode":"unsupported.stroke.rect_material","message":"unsupported.stroke.rect_material: Prepared Surface operation could not be lowered.","submissionDelta":0}
+{"attemptId":"attempt-1","diagnostics":[],"stableReasonCode":null,"message":null,"submissionDelta":1}

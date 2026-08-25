@@ -7,6 +7,51 @@ import kotlin.test.assertFailsWith
 
 class SurfaceSrgbGradientCpuOracleTest {
     @Test
+    fun `stroke band oracle keeps horizontal and vertical gradient samples while leaving its center transparent`() {
+        val pixels = SurfaceSrgbLinearGradientStrokeBandsCpuOracle(
+            listOf(
+                SurfaceSrgbLinearGradientStrokeBandsCpuOracle.Rect(6, 14, 58, 18),
+                SurfaceSrgbLinearGradientStrokeBandsCpuOracle.Rect(6, 46, 58, 50),
+                SurfaceSrgbLinearGradientStrokeBandsCpuOracle.Rect(6, 18, 10, 46),
+                SurfaceSrgbLinearGradientStrokeBandsCpuOracle.Rect(54, 18, 58, 46),
+            ),
+            SurfaceSrgbLinearGradientStrokeBandsCpuOracle.Point(8.5, 32.5),
+            SurfaceSrgbLinearGradientStrokeBandsCpuOracle.Point(55.5, 32.5),
+            SurfaceSrgbLinearGradientStrokeBandsCpuOracle.Stop(0.0, 255, 56, 56),
+            SurfaceSrgbLinearGradientStrokeBandsCpuOracle.Stop(1.0, 56, 112, 255),
+        ).render(64, 64)
+
+        assertPixel(pixels, 64, 8, 16, intArrayOf(255, 56, 56, 255))
+        assertPixel(pixels, 64, 55, 16, intArrayOf(56, 112, 255, 255))
+        assertPixel(pixels, 64, 8, 32, intArrayOf(255, 56, 56, 255))
+        assertPixel(pixels, 64, 55, 32, intArrayOf(56, 112, 255, 255))
+        // Pixel center (32.5, 16.5) has t = (32.5 - 8.5) / (55.5 - 8.5) = 24/47.
+        // Linear-light interpolation of (255,56,56) to (56,112,255), then sRGB encoding,
+        // yields the independent interior band RGBA (189,90,192,255).
+        assertPixel(pixels, 64, 32, 16, intArrayOf(189, 90, 192, 255))
+        assertPixel(pixels, 64, 32, 32, intArrayOf(0, 0, 0, 0))
+    }
+
+    @Test
+    fun `linear repeat wraps hand derived negative and post-first-cycle samples unlike clamp`() {
+        val bounds = SurfaceSrgbGradientCpuOracle.Rect(0f, 0f, 4f, 1f)
+        val start = SurfaceSrgbGradientCpuOracle.Point(1.5f, .5f)
+        val end = SurfaceSrgbGradientCpuOracle.Point(3.5f, .5f)
+        val stops = listOf(
+            SurfaceSrgbGradientCpuOracle.Stop(0f, 0, 0, 0),
+            SurfaceSrgbGradientCpuOracle.Stop(1f, 255, 255, 255),
+        )
+
+        val repeat = SurfaceSrgbGradientCpuOracle.linearRepeat(bounds, start, end, stops).render(4, 1)
+        val clamp = SurfaceSrgbGradientCpuOracle.linear(bounds, start, end, stops).render(4, 1)
+
+        assertPixel(repeat, 4, 0, 0, intArrayOf(188, 188, 188, 255)) // t_raw = -0.5 -> 0.5
+        assertPixel(repeat, 4, 3, 0, intArrayOf(0, 0, 0, 255)) // t_raw = 1.0 -> 0.0
+        assertPixel(clamp, 4, 0, 0, intArrayOf(0, 0, 0, 255))
+        assertPixel(clamp, 4, 3, 0, intArrayOf(255, 255, 255, 255))
+    }
+
+    @Test
     fun `opaque midpoint interpolates in linear light before sRGB storage`() {
         val bounds = SurfaceSrgbGradientCpuOracle.Rect(0f, 0f, 3f, 1f)
         val midpoint = SurfaceSrgbGradientCpuOracle.linear(
