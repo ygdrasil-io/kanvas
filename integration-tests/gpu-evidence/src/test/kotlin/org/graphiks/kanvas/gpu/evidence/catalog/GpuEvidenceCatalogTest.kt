@@ -724,14 +724,26 @@ class GpuEvidenceCatalogTest {
 
     @Test
     fun `hard clip rrect cases keep one identity non AA intersect clip and opaque draw order`() {
-        assertHardClipRRectCase("clip-rrect-solid", 1, RRectF32.of(RectF32.ofLTRB(8f, 8f, 56f, 56f), radius = 8f))
-        assertHardClipRRectCase("clip-rrect-ellipse", 1, RRectF32.of(
-            RectF32.ofLTRB(12f, 20f, 52f, 44f),
-            CornerRadiiF32.of(20f, 12f), CornerRadiiF32.of(20f, 12f),
-            CornerRadiiF32.of(20f, 12f), CornerRadiiF32.of(20f, 12f),
-        ))
+        val blue = ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)
+        val orange = ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)
+        assertHardClipRRectCase(
+            "clip-rrect-solid", 1, RRectF32.of(RectF32.ofLTRB(8f, 8f, 56f, 56f), radius = 8f),
+            listOf(RectF32.ofLTRB(0f, 0f, 64f, 64f) to blue),
+        )
+        assertHardClipRRectCase(
+            "clip-rrect-ellipse", 1, RRectF32.of(
+                RectF32.ofLTRB(12f, 20f, 52f, 44f),
+                CornerRadiiF32.of(20f, 12f), CornerRadiiF32.of(20f, 12f),
+                CornerRadiiF32.of(20f, 12f), CornerRadiiF32.of(20f, 12f),
+            ),
+            listOf(RectF32.ofLTRB(0f, 0f, 64f, 64f) to orange),
+        )
         assertHardClipRRectCase(
             "clip-rrect-two-bands", 2, RRectF32.of(RectF32.ofLTRB(8f, 8f, 56f, 56f), radius = 8f),
+            listOf(
+                RectF32.ofLTRB(0f, 0f, 64f, 64f) to blue,
+                RectF32.ofLTRB(32f, 0f, 64f, 64f) to orange,
+            ),
             "Exact opaque RGBA8 output from independent hard pixel-center RRect clip membership and paint order.",
         )
     }
@@ -740,6 +752,7 @@ class GpuEvidenceCatalogTest {
         id: String,
         drawCount: Int,
         expectedRRect: RRectF32,
+        expectedDraws: List<Pair<RectF32, ColorARGB>>,
         rationale: String = "Exact opaque RGBA8 output from independent hard pixel-center RRect clip membership.",
     ) {
         val evidenceCase = assertNotNull(GpuEvidenceCatalog.renderCases.firstOrNull { it.descriptor.id.value == id })
@@ -752,7 +765,15 @@ class GpuEvidenceCatalogTest {
 
         val operations = ops(id)
         assertEquals(drawCount + 2, operations.size)
-        assertIs<DisplayOp.DrawColor>(operations[0])
+        assertEquals(
+            DisplayOp.DrawColor(
+                ColorARGB.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f),
+                BlendMode.SRC_OVER,
+                Matrix3x3F32.Identity,
+                ClipStack.WideOpen,
+            ),
+            operations[0],
+        )
         val clip = assertIs<DisplayOp.SetClip>(operations[1]).clip
         val complex = assertIs<ClipStack.Complex>(clip)
         assertEquals(1, complex.ops.size)
@@ -760,11 +781,14 @@ class GpuEvidenceCatalogTest {
         assertEquals(expectedRRect, rrectOp.rrect)
         assertEquals(ClipOp.INTERSECT, rrectOp.op)
         assertFalse(rrectOp.antiAlias)
-        operations.drop(2).forEach { operation ->
+        assertEquals(drawCount, expectedDraws.size)
+        operations.drop(2).zip(expectedDraws).forEach { (operation, expected) ->
             val draw = assertIs<DisplayOp.DrawRect>(operation)
+            assertEquals(expected.first, draw.rect)
             assertEquals(Matrix3x3F32.Identity, draw.transform)
             assertEquals(complex, draw.clip)
             assertFalse(draw.paint.antiAlias)
+            assertEquals(expected.second, draw.paint.color)
             assertEquals(1f, draw.paint.color.a)
         }
     }
