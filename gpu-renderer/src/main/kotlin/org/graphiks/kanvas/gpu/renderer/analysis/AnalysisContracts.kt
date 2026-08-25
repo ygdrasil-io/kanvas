@@ -1895,7 +1895,6 @@ class GPUFirstRoutePlanner(
                 scaleAdmitted = material.kind == GPUMaterialKind.SolidColor &&
                     pathDescriptor.fillRule == "NonZero" &&
                     !pathDescriptor.inverseFill &&
-                    !antiAlias &&
                     !stroke &&
                     maskFilter == null,
             ) -> "unsupported.transform.class_downgrade"

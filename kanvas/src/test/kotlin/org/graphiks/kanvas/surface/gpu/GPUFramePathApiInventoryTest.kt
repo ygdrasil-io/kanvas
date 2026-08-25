@@ -2543,7 +2543,6 @@ class GPUFramePathApiInventoryTest {
             "linear-gradient" to DisplayOp.DrawPath(scaledTriangle(), gradient, Matrix3x3F32(sx = 1.5f, sy = 1.5f), ClipStack.WideOpen),
             "even-odd" to DisplayOp.DrawPath(scaledTriangle(FillType.EVEN_ODD), Paint.fill(ColorARGB.Blue).copy(antiAlias = false), Matrix3x3F32(sx = 1.5f, sy = 1.5f), ClipStack.WideOpen),
             "inverse-winding" to DisplayOp.DrawPath(scaledTriangle(FillType.INVERSE_WINDING), Paint.fill(ColorARGB.Blue).copy(antiAlias = false), Matrix3x3F32(sx = 1.5f, sy = 1.5f), ClipStack.WideOpen),
-            "anti-aliased" to DisplayOp.DrawPath(scaledTriangle(), Paint.fill(ColorARGB.Blue).copy(antiAlias = true), Matrix3x3F32(sx = 1.5f, sy = 1.5f), ClipStack.WideOpen),
         )
         val capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER, "first_slice.linear_gradient.native")
 
@@ -2607,7 +2606,7 @@ class GPUFramePathApiInventoryTest {
                 GPUPixelBounds(0, 0, 64, 64),
             ),
         )
-        assertEquals("unsupported.transform.class_downgrade", aaRefusal.diagnostic.code.value)
+        assertEquals("unsupported.core_primitive.coverage_sample.color_capability", aaRefusal.diagnostic.code.value)
     }
 
     @Test
