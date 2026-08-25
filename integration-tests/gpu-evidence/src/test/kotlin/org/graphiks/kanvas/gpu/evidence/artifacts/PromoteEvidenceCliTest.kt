@@ -161,7 +161,7 @@ class PromoteEvidenceCliTest {
     }
 
     @Test
-    fun `rebaseline promotes a verified historical seven scene subset to the current thirty scene catalog`() {
+    fun `rebaseline promotes a verified historical seven scene subset to the current thirty three scene catalog`() {
         writeAllBundles(repository, COMMIT)
         assertEquals(0, PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial")))
         listOf(
@@ -169,6 +169,7 @@ class PromoteEvidenceCliTest {
             "linear-gradient-three-stops", "sweep-gradient-partial-angle", "affine-solid-rect", "scissored-radial-gradient",
             "repeat-gradient-refusal", "gradient-stroke-refusal", "scaled-solid-rrect", "solid-drrect-hole",
             "asymmetric-solid-rrect", "ellipse-solid-rrect", "asymmetric-solid-drrect-hole",
+            "clip-rrect-solid", "clip-rrect-ellipse", "clip-rrect-two-bands",
             "solid-triangle-path", "solid-concave-path", "even-odd-path-hole",
             "winding-path-hole", "inverse-winding-triangle-path", "inverse-even-odd-path-hole",
             "implicit-closure-triangle-path", "translated-triangle-path", "uniform-scaled-triangle-path",
