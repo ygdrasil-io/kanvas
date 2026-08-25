@@ -2077,6 +2077,22 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 nativeClipStencilConsumerGeometryBytesByCommandId.size ==
                 staticNativeClipStencilConsumers.size
         }
+        if (nativeClipStencilPlan != null && nativeClipStencilPlan.pathTransformClass != "identity") {
+            return refused(
+                "unsupported.recording.core_primitive_clip_stencil_transform",
+                "Native hard path clips require identity capture-time CTM.",
+            )
+        }
+        if (staticNativeClipStencilPlan != null && staticNativeClipStencilConsumers.any { packet ->
+                packet.blendPlan?.destinationReadRequirement != GPUBlendDestinationReadRequirement.None ||
+                    packet.blendPlan is GPUBlendPlan.LayerCompositeBlend
+            }
+        ) {
+            return refused(
+                "unsupported.recording.core_primitive_clip_stencil_consumer",
+                "Native hard path clips accept only direct non-layer, non-destination-read consumers.",
+            )
+        }
         val validNativeClipStencilConsumers = nativeClipStencilPlan?.sampleCount == 1 &&
             staticNativeClipStencilConsumers.size in 1..2 &&
             staticNativeClipStencilConsumers.all { packet ->
@@ -2118,7 +2134,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                     semantic.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor &&
                     directCorePrimitiveGeometryBytes(packet, semantic) != null
             }
-            if (hasForeignSuffix || !validDirectPrefix) {
+            if (hasForeignSuffix || prefix.size != 1 || !validDirectPrefix) {
                 return refused(
                     "unsupported.recording.core_primitive_clip_stencil_mixed_geometry",
                     "The bounded clip-stencil scope accepts only a direct solid FillRect prefix.",

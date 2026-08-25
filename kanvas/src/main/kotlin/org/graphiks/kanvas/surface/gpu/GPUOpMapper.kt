@@ -1344,6 +1344,12 @@ private fun GPUClipCoveragePlan.Mask.toMaskExecutionPlan(
                 message = "Path clip execution requires bounded clip support.",
             )
         }
+        if (single.transformClass != "identity") {
+            return clipExecutionRefusal(
+                code = "unsupported.clip.path_transform",
+                message = "Native hard path clips require identity capture-time CTM.",
+            )
+        }
         val geometry = single.executionGeometryOrRefusal() as? GPUClipExecutionGeometry.Path
             ?: return invalidClipGeometryRefusal(single)
         val targetBounds = GPUPixelBounds(0, 0, target.width, target.height)
@@ -1380,6 +1386,7 @@ private fun GPUClipCoveragePlan.Mask.toMaskExecutionPlan(
                     GPUClipStencilCompare.NotEqual
                 },
             ),
+            pathTransformClass = single.transformClass,
         )
     }
 
@@ -2620,26 +2627,70 @@ private fun ClipStack.Complex.collapsedIntersectingRectOrNull(): ClipStack.Devic
 private fun ClipStack.DeviceRect.rectForPictureReplay(matrix: Matrix3x3F32, antiAlias: Boolean): ClipStack = when {
     matrix.isScaleTranslate() -> ClipStack.DeviceRect(matrix.mapAxisAlignedRect(rect), antiAlias)
     !matrix.hasPerspective() -> ClipStack.Complex(
-        listOf(ClipStackOp.PathOp(Path().addRect(rect).transform(matrix), org.graphiks.kanvas.pipeline.ClipOp.INTERSECT, antiAlias)),
+        listOf(
+            ClipStackOp.PathOp(
+                Path().addRect(rect).transform(matrix),
+                org.graphiks.kanvas.pipeline.ClipOp.INTERSECT,
+                antiAlias,
+                transformClass = "affine",
+            ),
+        ),
     )
     else -> ClipStack.Complex(
-        listOf(ClipStackOp.PathOp(Path().addRect(rect), org.graphiks.kanvas.pipeline.ClipOp.INTERSECT, antiAlias, perspectiveCaptureRefusal = true)),
+        listOf(
+            ClipStackOp.PathOp(
+                Path().addRect(rect),
+                org.graphiks.kanvas.pipeline.ClipOp.INTERSECT,
+                antiAlias,
+                perspectiveCaptureRefusal = true,
+                transformClass = "perspective",
+            ),
+        ),
     )
 }
 
 private fun ClipStackOp.transformForPictureReplay(matrix: Matrix3x3F32): ClipStackOp = when (this) {
     is ClipStackOp.RectOp -> when {
         matrix.isScaleTranslate() -> copy(rect = matrix.mapAxisAlignedRect(rect))
-        !matrix.hasPerspective() -> ClipStackOp.PathOp(Path().addRect(rect).transform(matrix), op, antiAlias, perspectiveCaptureRefusal)
-        else -> ClipStackOp.PathOp(Path().addRect(rect), op, antiAlias, perspectiveCaptureRefusal = true)
+        !matrix.hasPerspective() -> ClipStackOp.PathOp(
+            Path().addRect(rect).transform(matrix),
+            op,
+            antiAlias,
+            perspectiveCaptureRefusal,
+            transformClass = "affine",
+        )
+        else -> ClipStackOp.PathOp(
+            Path().addRect(rect),
+            op,
+            antiAlias,
+            perspectiveCaptureRefusal = true,
+            transformClass = "perspective",
+        )
     }
     is ClipStackOp.RRectOp -> when {
         matrix.isScaleTranslate() -> copy(rrect = rrect.mapAxisAligned(matrix))
-        !matrix.hasPerspective() -> ClipStackOp.PathOp(Path().addRRect(rrect).transform(matrix), op, antiAlias, perspectiveCaptureRefusal)
-        else -> ClipStackOp.PathOp(Path().addRRect(rrect), op, antiAlias, perspectiveCaptureRefusal = true)
+        !matrix.hasPerspective() -> ClipStackOp.PathOp(
+            Path().addRRect(rrect).transform(matrix),
+            op,
+            antiAlias,
+            perspectiveCaptureRefusal,
+            transformClass = "affine",
+        )
+        else -> ClipStackOp.PathOp(
+            Path().addRRect(rrect),
+            op,
+            antiAlias,
+            perspectiveCaptureRefusal = true,
+            transformClass = "perspective",
+        )
     }
     is ClipStackOp.PathOp -> copy(
         path = if (!matrix.hasPerspective()) path.transform(matrix) else path,
         perspectiveCaptureRefusal = perspectiveCaptureRefusal || matrix.hasPerspective(),
+        transformClass = if (matrix == Matrix3x3F32.Identity) {
+            transformClass
+        } else {
+            "affine"
+        },
     )
 }

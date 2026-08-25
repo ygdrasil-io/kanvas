@@ -312,6 +312,8 @@ sealed interface GPUClipExecutionPlan {
         val orderingToken: GPUClipOrderingToken,
         val producer: GPUClipStencilProducerPlan,
         val consumer: GPUClipStencilConsumerPlan,
+        /** Capture-time CTM class for the native path clip; only identity is admitted. */
+        val pathTransformClass: String = "identity",
     ) : GPUClipExecutionPlan {
         val depthStencilBytes: Long = bounds.checkedClipByteSize(sampleCount)
         val requiredBytes: Long get() = depthStencilBytes
@@ -331,6 +333,7 @@ sealed interface GPUClipExecutionPlan {
             string(orderingToken.value)
             stencilProducer(producer)
             stencilConsumer(consumer)
+            string(pathTransformClass)
         }
     }
 

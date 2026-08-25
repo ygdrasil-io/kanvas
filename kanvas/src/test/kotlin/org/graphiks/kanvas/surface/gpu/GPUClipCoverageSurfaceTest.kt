@@ -144,6 +144,27 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
+    fun `public transformed hard path clip remains refused with capture provenance`() {
+        requireWebGpu()
+        val triangle = Path().apply {
+            moveTo(4f, 4f)
+            lineTo(28f, 4f)
+            lineTo(4f, 28f)
+            close()
+        }
+        val surface = Surface(32, 32)
+        surface.canvas {
+            save()
+            translate(2f, 0f)
+            clipPath(triangle, ClipOp.INTERSECT, antiAlias = false)
+            drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(ColorARGB.Red))
+            restore()
+        }
+
+        assertTerminal("unsupported.clip.path_transform", surface::render)
+    }
+
+    @Test
     fun `adapter backed inverse difference clip preserves fill exterior and AA edge`() {
         requireWebGpu()
         val inverseRect = Path().apply {

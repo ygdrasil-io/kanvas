@@ -60,3 +60,29 @@ The public `KanvasSurfaceProgram` scenes and independent CPU oracle still need t
 captured on this clean commit. Capture must confirm the required producer-before-consumer order,
 single D24S8 resource, one submission, exact 64×64 pixel counts, and zero fallback before any
 promotion.
+
+## Sol review round 1 / TDD follow-up
+
+Sol identified three admission gaps. RED regressions were added first for two background
+`FillRect` prefixes, destination-read/layer consumers, transformed clip provenance, and an AA
+scope mixed with an un-clipped background. The existing foreign-geometry, difference, nesting,
+RRect/DRRect, and filter/layer refusal coverage was retained.
+
+The follow-up correction now:
+
+- carries capture-time `transformClass` through `ClipStack.PathOp`, clip coverage transport,
+  content keys, and `StencilCoverage`; non-identity native hard path clips refuse with
+  `unsupported.recording.core_primitive_clip_stencil_transform`;
+- rejects `ShaderBlendWithDstRead` and `LayerCompositeBlend` consumers with
+  `unsupported.recording.core_primitive_clip_stencil_consumer`;
+- requires exactly one direct no-clip solid `FillRect` prefix and still allows only one or two
+  direct opaque consumers;
+- preserves picture-replay transform provenance and rejects the public translated path scene with
+  `unsupported.clip.path_transform`.
+
+Follow-up verification:
+
+- focused builder suite: PASS, 70 tests;
+- `GPUClipCoverageSurfaceTest`: PASS, including public transformed hard clip refusal;
+- `GPUClipCoverageContractsTest`: PASS;
+- `git diff --check`: PASS.

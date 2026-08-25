@@ -2099,6 +2099,110 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
     }
 
     @Test
+    fun `native path clip refuses more than one direct background prefix`() {
+        val plan = nativePathStencilPlan(GPUClipFillRule.Winding)
+        val base = recording(command(341, 0), command(342, 1), command(340, 7)).taskList.withClipPlans(
+            mapOf(
+                341 to GPUClipExecutionPlan.NoClip,
+                342 to GPUClipExecutionPlan.NoClip,
+                340 to plan,
+            ),
+        )
+        val packets = base.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+
+        val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            request(base, packets.associate { it.commandIdValue to semantic(it) }),
+        )
+
+        assertEquals(
+            "unsupported.recording.core_primitive_clip_stencil_mixed_geometry",
+            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+        )
+    }
+
+    @Test
+    fun `native path clip refuses destination read and layer consumers`() {
+        val destinationRead = GPUBlendPlan.LayerCompositeBlend(
+            child = GPUBlendPlan.ShaderBlendWithDstRead(
+                mode = GPUBlendMode.LIGHTEN,
+                formulaId = "lighten@v1",
+                sourceCoverageEncoding = GPUSourceCoverageEncoding.None,
+            ),
+            layerOrderingToken = "test.clip.dst-read-layer",
+        )
+        listOf(
+            destinationRead,
+            GPUBlendPlan.LayerCompositeBlend(
+                child = GPUBlendPlan.ShaderBlendNoDstRead(
+                    mode = GPUBlendMode.SRC_OVER,
+                    formulaId = "src-over@v1",
+                    sourceCoverageEncoding = GPUSourceCoverageEncoding.None,
+                ),
+                layerOrderingToken = "test.clip.layer-only",
+            ),
+        ).forEachIndexed { index, blend ->
+            val commandId = 343 + index
+            val plan = nativePathStencilPlan(GPUClipFillRule.Winding)
+            val base = recording(command(341, 0), command(commandId, 7)).taskList
+                .withClipPlans(mapOf(341 to GPUClipExecutionPlan.NoClip, commandId to plan))
+                .withPacketBlend(commandId, blend)
+            val packets = base.tasks.filterIsInstance<GPUTask.Render>()
+                .flatMap(GPUTask.Render::drawPackets)
+
+            val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+                request(base, packets.associate { it.commandIdValue to semantic(it) }),
+            )
+
+            assertEquals(
+                "unsupported.recording.core_primitive_clip_stencil_consumer",
+                assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+                "blend=$blend",
+            )
+        }
+    }
+
+    @Test
+    fun `native path clip refuses transformed clip provenance`() {
+        val plan = nativePathStencilPlan(GPUClipFillRule.Winding, pathTransformClass = "affine")
+        val base = recording(command(341, 0), command(340, 7)).taskList.withClipPlans(
+            mapOf(341 to GPUClipExecutionPlan.NoClip, 340 to plan),
+        )
+        val packets = base.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+
+        val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            request(base, packets.associate { it.commandIdValue to semantic(it) }),
+        )
+
+        assertEquals(
+            "unsupported.recording.core_primitive_clip_stencil_transform",
+            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+        )
+    }
+
+    @Test
+    fun `native path clip refuses an AA scope mixed with an un-clipped background`() {
+        val plan = nativePathStencilPlan(GPUClipFillRule.Winding, sampleCount = 4)
+        val base = recording(command(341, 0), command(340, 7)).taskList.withClipPlans(
+            mapOf(341 to GPUClipExecutionPlan.NoClip, 340 to plan),
+        ).withSamplePlan(GPUSamplePlan.MultisampleFrame(4))
+        val packets = base.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+
+        val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            request(base, packets.associate { it.commandIdValue to semantic(it) }).copy(
+                capabilities = msaaCapabilities(),
+            ),
+        )
+
+        assertEquals(
+            "unsupported.recording.core_primitive_msaa_color_only",
+            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+        )
+    }
+
+    @Test
     fun `no clip and dynamic scissor share one shading pipeline key`() {
         val base = recording(command(29, 0)).taskList.withClipPlans(mapOf(29 to GPUClipExecutionPlan.NoClip))
         val packet = base.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
@@ -3907,6 +4011,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
     private fun nativePathStencilPlan(
         fillRule: GPUClipFillRule,
         sampleCount: Int = 1,
+        pathTransformClass: String = "identity",
     ) = GPUClipExecutionPlan.StencilCoverage(
         contentKey = "clip.native.path.${fillRule.name}",
         bounds = targetBounds,
@@ -3943,6 +4048,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
             reference = 0u,
             compare = GPUClipStencilCompare.NotEqual,
         ),
+        pathTransformClass = pathTransformClass,
     )
 
     private fun maskPlan(
