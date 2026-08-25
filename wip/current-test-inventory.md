@@ -97,6 +97,10 @@ manifest, puis le code associé a été fusionné au SHA master
 `repeat-gradient-refusal` et `gradient-stroke-refusal` restent historiques,
 mais décrivent désormais des rendus.
 
+Le catalogue Kotlin courant contient 18 cas, mais le root promu reste à
+réaligner lors du Task 4 ; cet index ne remplace ni le code ni les artefacts
+vérifiés.
+
 Séparément, une baseline performance locale non promue a été auditée au SHA
 `a1143cee2425e3a818dabe076ac468c551fbae75` sur Apple M2 Max natif
 non-fallback : 14 rendus, 1 cold + 10 warmups + 90 mesures par scène, 1260

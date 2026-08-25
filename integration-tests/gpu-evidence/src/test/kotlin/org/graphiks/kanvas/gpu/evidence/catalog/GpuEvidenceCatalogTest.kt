@@ -477,6 +477,7 @@ class GpuEvidenceCatalogTest {
         val scale = Matrix3x3F32(sx = 2f, sy = 1f)
         assertEquals(
             listOf(
+                DisplayOp.DrawColor(ColorARGB.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f), BlendMode.SRC_OVER, Matrix3x3F32.Identity, ClipStack.WideOpen),
                 DisplayOp.SetTransform(scale),
                 DisplayOp.DrawRRect(
                     RRectF32.of(RectF32.ofLTRB(8f, 16f, 24f, 48f), radius = 4f),

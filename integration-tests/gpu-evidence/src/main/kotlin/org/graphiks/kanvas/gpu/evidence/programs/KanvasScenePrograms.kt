@@ -154,6 +154,7 @@ object KanvasScenePrograms {
     })
 
     fun scaledSolidRRect() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
         scale(2f, 1f)
         drawRRect(
             RRectF32.of(RectF32.ofLTRB(8f, 16f, 24f, 48f), radius = 4f),
