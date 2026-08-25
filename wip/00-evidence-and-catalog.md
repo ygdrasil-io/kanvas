@@ -51,7 +51,7 @@ Une capture doit être faite après rebase/cherry-pick seulement si le SHA exact
 une nouvelle capture et un nouvel audit ; elle ne peut pas hériter de la preuve
 du SHA précédent.
 
-### Follow-up du harness (Lot 00, non autorisé par ce document)
+### Rebaseline du harness
 
 La tâche Gradle `promoteGpuEvidence` expose le rebaseline par les propriétés
 officielles `promotionRebaseline`, `promotionPriorComparison` et
