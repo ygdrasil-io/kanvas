@@ -86,6 +86,26 @@ class SurfaceSrgbPathFillCpuOracleTest {
     }
 
     @Test
+    fun `inverse winding excludes a pixel center on the contour boundary`() {
+        val windingPixels = boundaryTriangleOracle(SurfaceSrgbPathFillCpuOracle.FillRule.Winding).render(64, 64)
+        val inversePixels = boundaryTriangleOracle(SurfaceSrgbPathFillCpuOracle.FillRule.InverseWinding).render(64, 64)
+
+        assertPixel(windingPixels, 10, 10, ORANGE)
+        assertPixel(inversePixels, 10, 10, BACKGROUND)
+    }
+
+    @Test
+    fun `inverse winding distinguishes same orientation nesting from inverse parity`() {
+        val inverseWindingPixels = inverseWindingNestedOracle().render(64, 64)
+        val inverseEvenOddPixels = inverseEvenOddHoleOracle().render(64, 64)
+
+        assertPixel(inverseWindingPixels, 4, 4, GREEN)
+        assertPixel(inverseWindingPixels, 30, 30, BACKGROUND)
+        assertEquals(1792, count(inverseWindingPixels, GREEN))
+        assertPixel(inverseEvenOddPixels, 30, 30, GREEN)
+    }
+
+    @Test
     fun `oracle validates colors contours points and target dimensions`() {
         assertFailsWith<IllegalArgumentException> {
             SurfaceSrgbPathFillCpuOracle(intArrayOf(0, 0, 0), ORANGE, validContours(), SurfaceSrgbPathFillCpuOracle.FillRule.Winding)
@@ -201,6 +221,32 @@ class SurfaceSrgbPathFillCpuOracleTest {
             ),
         ),
         SurfaceSrgbPathFillCpuOracle.FillRule.InverseEvenOdd,
+    )
+
+    private fun boundaryTriangleOracle(fillRule: SurfaceSrgbPathFillCpuOracle.FillRule) =
+        SurfaceSrgbPathFillCpuOracle(
+            BACKGROUND,
+            ORANGE,
+            listOf(
+                SurfaceSrgbPathFillCpuOracle.Contour(
+                    listOf(point(8f, 8f), point(20f, 20f), point(8f, 24f)),
+                ),
+            ),
+            fillRule,
+        )
+
+    private fun inverseWindingNestedOracle() = SurfaceSrgbPathFillCpuOracle(
+        BACKGROUND,
+        GREEN,
+        listOf(
+            SurfaceSrgbPathFillCpuOracle.Contour(
+                listOf(point(8f, 8f), point(56f, 8f), point(56f, 56f), point(8f, 56f)),
+            ),
+            SurfaceSrgbPathFillCpuOracle.Contour(
+                listOf(point(22f, 20f), point(44f, 20f), point(44f, 44f), point(22f, 44f)),
+            ),
+        ),
+        SurfaceSrgbPathFillCpuOracle.FillRule.InverseWinding,
     )
 
     private fun validContours() = listOf(
