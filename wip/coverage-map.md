@@ -24,7 +24,7 @@ générés/promus vérifiés, notamment [`Canvas.kt`](../kanvas/src/main/kotlin/
 | `save`, `saveLayer`, `restore`, `restoreToCount`, `flushAndSnapshot` | 10 | `N` — probes d'empilement, isolation de layer et snapshot. |
 | `translate`, `scale`, `rotate`, `skew`, `concat`, `setMatrix`, `resetMatrix` | 10 | `R` pour la transform affine de rect et le seul scale `(2,1)` du `drawRRect` solide non-AA; `N` pour les autres combinaisons. |
 | `clipRect` | 10 | `R` pour le scissor rectangulaire; `N` pour les autres opérations de clip. |
-| `drawPath` | 20 | `R` uniquement pour les trois fills solides non-AA prouvés par artefacts natifs : `solid-triangle-path`, `solid-concave-path` et `even-odd-path-hole`. Les courbes, strokes, inverse fills, oval/circle et AA restent `N`/non revendiqués. |
+| `drawPath` | 20 | `R` uniquement pour six fills solides opaques non-AA prouvés par artefacts natifs : `solid-triangle-path`, `solid-concave-path`, `even-odd-path-hole`, `winding-path-hole`, `inverse-winding-triangle-path` et `inverse-even-odd-path-hole`. Les quatre fill types sont couverts seulement par ces formes littérales et leurs target bounds. Les courbes, strokes, implicit closure, oval/circle, AA, autres transforms et toute autre géométrie restent `N`/non revendiqués. |
 | `clipRRect`, `clipPath` | 20 | `N` — aucune preuve catalogue publique `Surface` ; les clips et leurs variantes restent non revendiqués. |
 | `drawImage`, `drawImageRect`, `drawImageNine`, `drawImageLattice`, `drawAtlas` | 40 | `N` — images, sampling, 9-patch, lattice et sprites. Le lot 40 est l'unique propriétaire de `drawAtlas`. |
 | `drawString`, `drawText`, `measureText` | 60 | `DG` / `N` — probes texte et métriques; conserver un dependency gate si les fonts/codecs requis ne sont pas livrés. |
