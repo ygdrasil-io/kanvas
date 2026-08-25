@@ -13,6 +13,7 @@ import org.graphiks.kanvas.gpu.evidence.runner.RoutedSceneProgram
 import org.graphiks.kanvas.gpu.evidence.runner.SceneProgram
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Paint
@@ -29,7 +30,7 @@ import org.graphiks.math.matrix.Matrix3x3F32
 
 class GpuEvidenceCatalogTest {
     @Test
-    fun `catalog separates nineteen public surface renders from two refusals`() {
+    fun `catalog separates twenty two public surface renders from two refusals`() {
         val cases = GpuEvidenceCatalog.cases
 
         assertEquals(
@@ -48,6 +49,9 @@ class GpuEvidenceCatalogTest {
                 "asymmetric-solid-rrect",
                 "ellipse-solid-rrect",
                 "asymmetric-solid-drrect-hole",
+                "solid-triangle-path",
+                "solid-concave-path",
+                "even-odd-path-hole",
                 "custom-runtime-effect-unregistered-refusal",
                 "aggregate-memory-budget-refusal",
             ),
@@ -69,6 +73,9 @@ class GpuEvidenceCatalogTest {
                 "asymmetric-solid-rrect",
                 "ellipse-solid-rrect",
                 "asymmetric-solid-drrect-hole",
+                "solid-triangle-path",
+                "solid-concave-path",
+                "even-odd-path-hole",
             ),
             GpuEvidenceCatalog.renderCases.map { it.descriptor.id.value },
         )
@@ -81,7 +88,7 @@ class GpuEvidenceCatalogTest {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            List(19) { "kanvas.surface.render" },
+            List(22) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
@@ -192,6 +199,9 @@ class GpuEvidenceCatalogTest {
             "asymmetric-solid-rrect",
             "ellipse-solid-rrect",
             "asymmetric-solid-drrect-hole",
+            "solid-triangle-path",
+            "solid-concave-path",
+            "even-odd-path-hole",
         )
         assertEquals(
             expectedRenderIds.associateWith { "kanvas.surface.render" },
@@ -231,6 +241,9 @@ class GpuEvidenceCatalogTest {
                 "asymmetric-solid-rrect" to OraclePolicy.GeneratedCpu("surface-srgb-rrect-pixel-center", 2),
                 "ellipse-solid-rrect" to OraclePolicy.GeneratedCpu("surface-srgb-rrect-pixel-center", 2),
                 "asymmetric-solid-drrect-hole" to OraclePolicy.GeneratedCpu("surface-srgb-rrect-pixel-center", 2),
+                "solid-triangle-path" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 1),
+                "solid-concave-path" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 1),
+                "even-odd-path-hole" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 1),
             ),
             GpuEvidenceCatalog.renderCases.associate { evidenceCase ->
                 evidenceCase.descriptor.id.value to evidenceCase.descriptor.oracle
@@ -257,6 +270,9 @@ class GpuEvidenceCatalogTest {
                 "asymmetric-solid-rrect" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent per-corner analytic pixel-center RRect membership."),
                 "ellipse-solid-rrect" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent per-corner analytic pixel-center RRect membership."),
                 "asymmetric-solid-drrect-hole" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent per-corner analytic pixel-center RRect membership."),
+                "solid-triangle-path" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent pixel-center winding/even-odd polygon membership."),
+                "solid-concave-path" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent pixel-center winding/even-odd polygon membership."),
+                "even-odd-path-hole" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent pixel-center winding/even-odd polygon membership."),
             ),
             GpuEvidenceCatalog.renderCases.associate { evidenceCase ->
                 evidenceCase.descriptor.id.value to evidenceCase.descriptor.comparison
@@ -564,6 +580,63 @@ class GpuEvidenceCatalogTest {
             ),
             ops("asymmetric-solid-drrect-hole"),
         )
+    }
+
+    @Test
+    fun `path fill public Surface programs record approved literal path operations`() {
+        val orange = ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)
+        val blue = ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)
+        val green = ColorARGB.fromRGBA(56f / 255f, 220f / 255f, 120f / 255f)
+
+        assertPathCase(
+            id = "solid-triangle-path",
+            fillType = FillType.WINDING,
+            bounds = RectF32.ofLTRB(8f, 8f, 56f, 55f),
+            paint = Paint.fill(orange).copy(antiAlias = false),
+            convex = true,
+        )
+        assertPathCase(
+            id = "solid-concave-path",
+            fillType = FillType.WINDING,
+            bounds = RectF32.ofLTRB(8f, 8f, 56f, 56f),
+            paint = Paint.fill(blue).copy(antiAlias = false),
+            convex = false,
+        )
+        assertPathCase(
+            id = "even-odd-path-hole",
+            fillType = FillType.EVEN_ODD,
+            bounds = RectF32.ofLTRB(8f, 8f, 56f, 56f),
+            paint = Paint.fill(green).copy(antiAlias = false),
+            convex = false,
+        )
+    }
+
+    private fun assertPathCase(id: String, fillType: FillType, bounds: RectF32, paint: Paint, convex: Boolean) {
+        val evidenceCase = assertNotNull(GpuEvidenceCatalog.renderCases.firstOrNull { it.descriptor.id.value == id })
+        assertEquals(64, evidenceCase.descriptor.width)
+        assertEquals(64, evidenceCase.descriptor.height)
+        assertIs<EvidenceExpectation.ShouldRender>(evidenceCase.descriptor.expectation)
+        assertEquals(OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 1), evidenceCase.descriptor.oracle)
+        assertEquals(
+            ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent pixel-center winding/even-odd polygon membership."),
+            evidenceCase.descriptor.comparison,
+        )
+        assertTrue(evidenceCase.descriptor.requiredCapabilities.isEmpty())
+        assertEquals("kanvas.surface.render", assertIs<KanvasSurfaceProgram>(evidenceCase.program).routeId)
+
+        val operations = ops(id)
+        assertEquals(2, operations.size)
+        assertEquals(
+            DisplayOp.DrawColor(ColorARGB.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f), BlendMode.SRC_OVER, Matrix3x3F32.Identity, ClipStack.WideOpen),
+            operations[0],
+        )
+        val drawPath = assertIs<DisplayOp.DrawPath>(operations[1])
+        assertEquals(fillType, drawPath.path.fillType)
+        assertEquals(bounds, drawPath.path.computeBounds())
+        assertEquals(convex, drawPath.path.isConvex())
+        assertEquals(paint, drawPath.paint)
+        assertEquals(Matrix3x3F32.Identity, drawPath.transform)
+        assertEquals(ClipStack.WideOpen, drawPath.clip)
     }
 
     private fun ops(id: String): List<DisplayOp> {
