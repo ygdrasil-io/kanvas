@@ -1946,6 +1946,14 @@ internal fun GPUBlendMode.canonicalFixedFunctionState(
 internal fun Matrix3x3F32.toGPUTransformFacts(): GPUTransformFacts {
     if (hasPerspective()) return GPUTransformFacts.perspective()
     if (this == Matrix3x3F32.Identity) return GPUTransformFacts.identity()
+    val determinant = sx * sy
+    if (
+        kx.toRawBits() == 0 && ky.toRawBits() == 0 &&
+        tx.toRawBits() == 0 && ty.toRawBits() == 0 &&
+        determinant.isFinite() && determinant != 0f
+    ) {
+        return GPUTransformFacts.scale(sx, sy)
+    }
     return GPUTransformFacts.affine(
         scaleX = this.sx,
         skewX = this.kx,

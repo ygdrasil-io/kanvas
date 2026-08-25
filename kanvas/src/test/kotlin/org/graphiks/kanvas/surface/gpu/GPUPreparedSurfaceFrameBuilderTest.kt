@@ -32,6 +32,8 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceFamily
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedAtlasSourceBlend
@@ -68,6 +70,44 @@ import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
 
 class GPUPreparedSurfaceFrameBuilderTest {
+    @Test
+    fun `public axis scaled solid DrawRRect records sealed device geometry`() {
+        val result = GPUPreparedSurfaceFrameBuilder.build(
+            request(
+                listOf(
+                    DisplayOp.DrawRRect(
+                        RRectF32.of(RectF32.ofLTRB(8f, 16f, 24f, 48f), radius = 4f),
+                        Paint.fill(ColorARGB.of(255, 255, 165, 0)).copy(antiAlias = false),
+                        Matrix3x3F32(sx = 2f, sy = 1f),
+                        ClipStack.WideOpen,
+                    ),
+                ),
+            ).copy(
+                targetFacts = GPUTargetFacts(64, 64, "rgba8unorm-srgb"),
+                targetBounds = GPUPixelBounds(0, 0, 64, 64),
+            ),
+        )
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            result,
+            (result as? GPUPreparedSurfaceFrameBuildResult.Refused)?.diagnostic?.let { diagnostic ->
+                "${diagnostic.code.value}: ${diagnostic.facts}"
+            },
+        )
+        val packet = ready.taskList.tasks
+            .filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+            .single()
+        val semantic = assertIs<GPUDrawSemanticPayload.CorePrimitive>(packet.semanticPayload)
+        val geometry = assertIs<GPUCorePrimitiveGeometry.RRect>(semantic.geometry)
+
+        assertEquals(GPUCorePrimitiveSourceFamily.RRect, semantic.sourceFamily)
+        assertEquals(16f, geometry.left)
+        assertEquals(16f, geometry.top)
+        assertEquals(48f, geometry.right)
+        assertEquals(48f, geometry.bottom)
+        assertEquals(listOf(8f, 4f, 8f, 4f, 8f, 4f, 8f, 4f), geometry.radii)
+    }
+
     @Test
     fun `public DrawRect stroke records four ordinary fill visuals with one source operation ownership`() {
         val result = GPUPreparedSurfaceFrameBuilder.build(

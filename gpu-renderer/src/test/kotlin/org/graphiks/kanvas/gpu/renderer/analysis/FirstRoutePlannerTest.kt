@@ -1202,7 +1202,7 @@ class FirstRoutePlannerTest {
     }
 
     @Test
-    fun `valid refused rrect retains geometry authority while malformed rrect does not`() {
+    fun `valid scaled rrect retains geometry authority while malformed rrect does not`() {
         val target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm")
         val validRefused = firstRRectRouteCommand(
             target = target,
@@ -1215,11 +1215,11 @@ class FirstRoutePlannerTest {
             ),
         )
 
-        val validRefusedPlan = GPUFirstRoutePlanner(validRefused.capabilities).plan(validRefused.command)
+        val validScalePlan = GPUFirstRoutePlanner(validRefused.capabilities).plan(validRefused.command)
         val malformedPlan = GPUFirstRoutePlanner(malformed.capabilities).plan(malformed.command)
 
-        assertIs<GPURouteDecision.Refused>(validRefusedPlan.routeDecision)
-        assertNotNull(validRefusedPlan.analysisRecord.corePrimitiveRRectGeometryAuthority)
+        assertIs<GPURouteDecision.Native>(validScalePlan.routeDecision)
+        assertNotNull(validScalePlan.analysisRecord.corePrimitiveRRectGeometryAuthority)
         assertIs<GPURouteDecision.Refused>(malformedPlan.routeDecision)
         assertNull(malformedPlan.analysisRecord.corePrimitiveRRectGeometryAuthority)
     }
@@ -1369,10 +1369,8 @@ class FirstRoutePlannerTest {
             transform = GPUTransformFacts.scale(2f, 3f),
         )
         val validScalePlan = GPUFirstRoutePlanner(validScale.capabilities).plan(validScale.command)
-        assertEquals(
-            "unsupported.transform.rrect_scale_unproven",
-            assertIs<GPURouteDecision.Refused>(validScalePlan.routeDecision).diagnostic.code,
-        )
+        val routeDecision = assertIs<GPURouteDecision.Native>(validScalePlan.routeDecision)
+        assertEquals("native.fill_rrect.solid", routeDecision.route.consumerKind)
         assertNotNull(validScalePlan.analysisRecord.corePrimitiveRRectGeometryAuthority)
     }
 
@@ -1590,10 +1588,6 @@ class FirstRoutePlannerTest {
             "unsupported.geometry.rrect_radii_negative" to firstRRectRouteCommand(
                 target = target,
                 rrect = firstRouteRRect.copy(bottomRight = firstRouteRRect.bottomRight.copy(x = -1f)),
-            ),
-            "unsupported.transform.rrect_scale_unproven" to firstRRectRouteCommand(
-                target = target,
-                transform = GPUTransformFacts.scale(x = 2f, y = 2f),
             ),
             "unsupported.transform.rrect_affine_unproven" to firstRRectRouteCommand(
                 target = target,
