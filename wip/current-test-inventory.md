@@ -4,40 +4,42 @@
 > `wip/` et doit être supprimé lorsque ces lots ont été exécutés et que leurs
 > preuves ont été intégrées aux artefacts et au code vérifiés.
 
-État relevé au commit `c11c10b2b01017cc993042c06a5bee1f17526aa1`.
+État relevé au commit `bd4542ec20275dc51bd5a4de56ed6c14526890d1`.
 
 Ce document est un index de lecture : le code Kotlin est la source de vérité,
 principalement `GpuEvidenceCatalog.kt` et les classes de test sous
 `../integration-tests/gpu-evidence/src/test/kotlin`. Il ne remplace ni les
 preuves générées, ni les artefacts promus.
 
-Le module contient 16 cas de catalogue (13 rendus attendus, 3 refus attendus),
+Le module contient 16 cas de catalogue (12 rendus attendus, 4 refus attendus),
 27 classes de test et 204 annotations `@Test`.
 
-## Cas de catalogue exécutés par la route publique `Kanvas Surface`
+## Cas de catalogue et route réellement exercée
 
-| ID | Attente | Ce qui est testé |
-| --- | --- | --- |
-| `solid-card-stack` | rendu | Deux rectangles opaques superposés, composés en `SrcOver`. |
-| `separable-blur-rect` | rendu | Rectangle avec un masque de blur normal séparable. |
-| `translucent-card-overlap` | rendu | Composition linéaire prémultipliée de deux rectangles semi-transparents. |
-| `scissor-overlay` | rendu | Deux séquences `save` / `clipRect` / `restore` qui bornent des rectangles. |
-| `stroke-rect-outline` | rendu | Contour de rectangle à largeur fixe, sans anti-aliasing. |
-| `linear-gradient-lanes` | rendu | Dégradé linéaire `CLAMP` à deux stops. |
-| `radial-swatch` | rendu | Dégradé radial `CLAMP` à deux stops. |
-| `sweep-disk` | rendu | Dégradé sweep `CLAMP` sur un tour complet de 360°. |
-| `linear-gradient-three-stops` | rendu | Dégradé linéaire `CLAMP` à trois stops, dont un stop médian. |
-| `sweep-gradient-partial-angle` | rendu | Dégradé sweep `CLAMP` sur une plage partielle de 45° à 315°. |
-| `affine-solid-rect` | rendu | Rectangle opaque sous transformation affine avec cisaillement. |
-| `scissored-radial-gradient` | rendu | Dégradé radial `CLAMP` limité par un clip rectangulaire non AA. |
-| `repeat-gradient-refusal` | rendu | Dégradé linéaire `REPEAT` couvrant des coordonnées négatives et un cycle ultérieur. Le nom de scène est historique : l’attente est désormais un rendu. |
-| `custom-runtime-effect-unregistered-refusal` | refus | Un runtime effect non enregistré est refusé avant toute soumission GPU. |
-| `aggregate-memory-budget-refusal` | refus | Une frame dépassant le budget mémoire agrégé est refusée pendant l’enregistrement. |
-| `gradient-stroke-refusal` | refus | Un contour de rectangle avec dégradé est refusé avant soumission. |
+| ID | Route réelle | Attente | Ce qui est testé |
+| --- | --- | --- | --- |
+| `solid-card-stack` | `KanvasSurfaceProgram` | rendu | Deux rectangles opaques superposés, composés en `SrcOver`. |
+| `separable-blur-rect` | `KanvasSurfaceProgram` | rendu | Rectangle avec un masque de blur normal séparable. |
+| `translucent-card-overlap` | `KanvasSurfaceProgram` | rendu | Composition linéaire prémultipliée de deux rectangles semi-transparentes. |
+| `scissor-overlay` | `KanvasSurfaceProgram` | rendu | Deux séquences `save` / `clipRect` / `restore` qui bornent des rectangles. |
+| `stroke-rect-outline` | `KanvasSurfaceProgram` | rendu | Contour de rectangle à largeur fixe, sans anti-aliasing. |
+| `linear-gradient-lanes` | `KanvasSurfaceProgram` | rendu | Dégradé linéaire `CLAMP` à deux stops. |
+| `radial-swatch` | `KanvasSurfaceProgram` | rendu | Dégradé radial `CLAMP` à deux stops. |
+| `sweep-disk` | `KanvasSurfaceProgram` | rendu | Dégradé sweep `CLAMP` sur un tour complet de 360°. |
+| `linear-gradient-three-stops` | `KanvasSurfaceProgram` | rendu | Dégradé linéaire `CLAMP` à trois stops, dont un stop médian. |
+| `sweep-gradient-partial-angle` | `KanvasSurfaceProgram` | rendu | Dégradé sweep `CLAMP` sur une plage partielle de 45° à 315°. |
+| `affine-solid-rect` | `KanvasSurfaceProgram` | rendu | Rectangle opaque sous transformation affine avec cisaillement. |
+| `scissored-radial-gradient` | `KanvasSurfaceProgram` | rendu | Dégradé radial `CLAMP` limité par un clip rectangulaire non AA. |
+| `repeat-gradient-refusal` | `KanvasSurfaceProgram` | refus | Dégradé linéaire `REPEAT` refusé avant soumission par `unsupported.material.gradient_tile_mode_unsupported`. |
+| `gradient-stroke-refusal` | `KanvasSurfaceProgram` | refus | Contour de rectangle avec dégradé refusé avant soumission. |
+| `custom-runtime-effect-unregistered-refusal` | `RoutedSceneProgram` interne | refus | Runtime effect custom non enregistré refusé avant toute soumission GPU. |
+| `aggregate-memory-budget-refusal` | `RoutedSceneProgram` interne | refus | Frame dépassant le budget mémoire agrégé refusée pendant l’enregistrement. |
 
-Chaque rendu a un oracle CPU indépendant, une comparaison de pixels, des
-compteurs de draw/pipeline et une preuve de soumission. Chaque refus vérifie
-un code stable et l’absence de soumission.
+Chaque rendu passe par la route publique `Surface` et a un oracle CPU
+indépendant, une comparaison de pixels, des compteurs de draw/pipeline et une
+preuve de soumission. Chaque refus vérifie un code stable et l’absence de
+soumission, mais seuls les deux refus marqués `KanvasSurfaceProgram` sont des
+preuves de la route publique.
 
 ## Suites de tests du harness
 
@@ -77,11 +79,12 @@ utilisés par les tests ; ils ne déclarent pas de test directement.
 
 ## État des preuves promues
 
-Les artefacts sous `correctness/promoted/` reflètent encore le catalogue
-précédent : 12 rendus et 4 refus, dont `repeat-gradient-refusal` comme refus.
-Ils ne constituent donc pas encore une preuve du catalogue courant à 13
-rendus et 3 refus. Il faut recapturer puis promouvoir ce cas après la
-validation hardware du correctif `REPEAT`.
+Les artefacts sous `reports/gpu-renderer/evidence/correctness/promoted/`
+reflètent le catalogue courant : 12 rendus et 4 refus, dont
+`repeat-gradient-refusal` comme refus. Aucun rebaseline `REPEAT` n'est à faire
+sur cette branche. Une future conversion en rendu exige d'abord un changement
+de code séparé, son oracle, son test de route publique et une capture hardware
+validée.
 
 ## Matrice de couverture requise pour un backend Skia-like
 
@@ -113,20 +116,20 @@ Kanvas comme référence Skia : celui-ci reste un contrôle de cohérence intern
 
 ### Priorité P0 — préserver les routes déjà rendables
 
-Ces contrôles complètent les 13 rendus actuels avant d'élargir une promesse de
-support. Ils doivent être des captures hardware promouvables, pas seulement
-des tests unitaires d'oracle.
+Ces contrôles préservent les 12 rendus actuels et les 4 refus contractuels
+avant d'élargir une promesse de support. Ils doivent être des captures hardware
+promouvables, pas seulement des tests unitaires d'oracle.
 
 | Domaine | Cas supplémentaires nécessaires | Vérifications déterminantes |
 | --- | --- | --- |
-| Catalogue courant | Recapturer et promouvoir `repeat-gradient-refusal` comme rendu, puis vérifier exactement 13 rendus et 3 refus. | Pixels sur coordonnées négatives et plusieurs périodes ; `REPEAT` est rendu sans fallback ni nouveau pipeline par frame chaude. |
+| Catalogue courant | Vérifier exactement 12 rendus et 4 refus, dont le refus `REPEAT` actuel. | `REPEAT` conserve `unsupported.material.gradient_tile_mode_unsupported`, zéro submission et zéro artefact de réussite. Une promotion future est conditionnée par une implémentation distincte. |
 | Rectangles solides et `SrcOver` | Bords négatifs/hors surface, rectangles vides, coordonnées fractionnaires, ordre de trois draws et alpha 0/1/partiel. | Règle top-left/coverage, clipping de surface, prémultiplication et ordre de composition. |
 | Transformations et pile d'état | `save`/`restore` imbriqués, `restoreToCount`, translation, scale, rotate, skew, `concat`, `setMatrix`, `resetMatrix`. | Matrice courante restaurée exactement ; aucun état, clip ou alpha ne fuit vers le draw suivant. |
 | Clip rectangulaire | Intersection, clip vide, clip hors surface, clip après transformation et plusieurs `save`/`restore`. | Bounds exactes, zéro draw visible pour un clip vide, route scissor ou refus explicite documenté. |
 | Stroke rect | Largeurs minimale/maximale autorisées, intérieur/extérieur de surface, jointures aux quatre coins et transformation. | Contour sans remplissage parasite, budget respecté ; AA, path effect, material gradient et autres limites conservent leur refus stable tant qu'ils ne sont pas rendus. |
-| Gradients actuels | Stops transparents, stops coïncidents, positions non uniformes, géométrie dégénérée, local matrix, `CLAMP`, `REPEAT`, `MIRROR`, `DECAL` selon le support. | Paramétrisation identique CPU/GPU, bornes de tile mode et arrêt hors domaine explicitement diagnostiqués. |
+| Gradients actuels | Stops transparents, stops coïncidents, positions non uniformes, géométrie dégénérée, local matrix et `CLAMP` rendu ; `REPEAT`, `MIRROR`, `DECAL` selon le support réel. | Paramétrisation identique CPU/GPU pour les routes rendables ; chaque tile mode absent, dont `REPEAT` actuellement, est explicitement diagnostiqué. |
 | Blur masque | Sigma 0, bornes autorisées, bord de surface, rect minuscule, translation et dépassement de budget. | Kernel, tile mode, quantification et bounds d'intermédiaire ; refus avant allocation/soumission au-delà des limites. |
-| Refus actuels | Runtime effect non enregistré, budget mémoire agrégé et stroke gradient. | Code inchangé, aucune submission, aucun bundle de réussite ou compteur de pipeline/draw positif. |
+| Refus actuels | Runtime effect non enregistré, budget mémoire agrégé, `REPEAT` et stroke gradient. | Code inchangé, aucune submission, aucun bundle de réussite ou compteur de pipeline/draw positif ; distinguer les deux refus internes des deux refus `Surface`. |
 
 ### Priorité P1 — couvrir toute surface Canvas exposée
 
@@ -209,8 +212,9 @@ gate de release.
 
 ## Ordre concret d'ajout
 
-1. Recapturer `REPEAT` sur hardware et réaligner les preuves promues sur le
-   catalogue 13 rendus / 3 refus.
+1. Vérifier le catalogue courant à 12 rendus / 4 refus et conserver les
+   artefacts promus alignés. Ne convertir `REPEAT` en rendu qu'après un
+   changement de code distinct et toutes les preuves de la règle commune.
 2. Ajouter les probes `Surface` P1 pour chaque entrée publique sans preuve :
    elles attendent le rendu natif existant ou le refus explicite correspondant.
 3. Pour chaque refus révélant une route manquante, ajouter d'abord le cas

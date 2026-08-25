@@ -8,10 +8,13 @@
 ## Règle de lecture
 
 [current-test-inventory.md](current-test-inventory.md) décrit l'état observé
-au commit de départ. Les briefs numérotés détaillent les groupes de tests. Ils
-n'autorisent jamais à annoncer un support : une route ne devient supportée
-qu'après test de la route publique `Surface`, oracle/référence applicable,
-capture GPU, diagnostics, diff/statistiques et politique de fallback vérifiée.
+sur `master` au commit de départ, y compris la route réelle de chaque cas. La
+[coverage-map.md](coverage-map.md) est la liste source-derived des APIs et
+sous-types publics à classer, avec un unique lot propriétaire. Les briefs
+numérotés détaillent les groupes de tests. Ils n'autorisent jamais à annoncer
+un support : une route ne devient supportée qu'après test de la route publique
+`Surface`, oracle/référence applicable, capture GPU, diagnostics,
+diff/statistiques et politique de fallback vérifiée.
 
 ## Lots
 
@@ -23,8 +26,9 @@ capture GPU, diagnostics, diff/statistiques et politique de fallback vérifiée.
 | 30 | Tester paint, blend, couleur et gradients. | [30-paint-color-and-gradients.md](30-paint-color-and-gradients.md) |
 | 40 | Tester images, layers et image filters. | [40-images-layers-and-filters.md](40-images-layers-and-filters.md) |
 | 50 | Tester runtime effects enregistrés, WGSL, reflection et layouts. | [50-runtime-effects-and-wgsl.md](50-runtime-effects-and-wgsl.md) |
-| 60 | Tester texte, vertices, mesh, atlas et picture. | [60-text-vertices-mesh-and-picture.md](60-text-vertices-mesh-and-picture.md) |
+| 60 | Tester texte, vertices, mesh et picture. | [60-text-vertices-mesh-and-picture.md](60-text-vertices-mesh-and-picture.md) |
 | 70 | Tester cycle de vie WebGPU, caches, performance et promotion GM. | [70-webgpu-lifecycle-performance-and-gm.md](70-webgpu-lifecycle-performance-and-gm.md) |
+| Carte | Empêcher toute suppression de WIP avant classification des APIs/types publics. | [coverage-map.md](coverage-map.md) |
 
 ## Graphe de dépendances
 
@@ -48,7 +52,7 @@ le lowerer et l'oracle correspondants.
 
 | Vague | Lots | Mode | Précondition et règle de sortie |
 | --- | --- | --- | --- |
-| A | 00 | Exclusif | Figer les contrats d'evidence, réaligner `REPEAT` et recapturer le catalogue courant. Sortie : 13 rendus / 3 refus observables, sans transformer les anciens artefacts en preuve du nouveau catalogue. |
+| A | 00 | Exclusif | Figer les contrats d'evidence et vérifier le catalogue courant à 12 rendus / 4 refus. `REPEAT` reste un refus ; sa promotion exige un futur changement de code, pas un rebaseline documentaire. |
 | B | 10, 30, 40, 50, 60-refus | Parallèle par branches | Chaque lot peut écrire ses tests unitaires et ses scénarios de refus en parallèle. Une seule branche à la fois modifie le même bloc de `GpuEvidenceCatalog.kt` lors de l'intégration. |
 | C | 20, 60-rendu | Parallèle conditionnel | `20` attend les contrats state/coverage de 10 pour les captures rendables. Le texte, les images atlas et les codecs restent dependency-gated : pas de substitut temporaire. |
 | D | 10, 20, 30, 40, 50, 60-promotions | Sérialisé par adapter | Les captures hardware et promotions se font une scène à la fois sur un adapter identifié. Les tests unitaires/CI restent parallèles. |
@@ -62,7 +66,7 @@ le lowerer et l'oracle correspondants.
 | Tests unitaires Gradle de fichiers disjoints | Oui | Lancer les ciblages de classes en parallèle ; le module complet reste le contrôle d'intégration. |
 | Modification de `GpuEvidenceCatalog.kt`, `KanvasScenePrograms.kt` ou `KanvasSurfaceProgram.kt` | Non à l'intégration | Ces fichiers concentrent les scènes publiques. Préparer les commits en parallèle est acceptable, mais les rebaser/cherry-pick dans l'ordre du présent index. |
 | Modification d'un même lowerer ou d'un même oracle | Non | Un seul propriétaire jusqu'au test vert et au commit ; les autres lots emploient le refus stable existant. |
-| Capture GPU, adapter hardware, répertoire `correctness/promoted/` | Non | Une capture à la fois pour empêcher le mélange d'environnement, de commit, de hash ou d'artefacts. |
+| Capture GPU, adapter hardware, répertoire `reports/gpu-renderer/evidence/correctness/promoted/` | Non | Une capture à la fois pour empêcher le mélange d'environnement, de commit, de hash ou d'artefacts. |
 | Référence Skia et analyse de diff de familles disjointes | Oui | Chaque résultat conserve sa provenance et ses seuils ; aucune réécriture de seuil global. |
 | Performance sur une même machine | Non | Exécuter séquentiellement, appareil refroidi/stable, mêmes warmups/mesures et métadonnées. |
 
@@ -77,8 +81,9 @@ le lowerer et l'oracle correspondants.
 6. Capturer et promouvoir seulement sur hardware admissible ; attacher les
    diagnostics, route, stats, environnement et références quand applicables.
 7. Reporter dans le brief la décision finale (rendu, refus stable ou
-   dependency-gated), puis intégrer les tests. Le brief peut alors être
-   supprimé lorsque son contenu est absorbé.
+   dependency-gated), puis intégrer les tests. Vérifier aussi que chaque ligne
+   de `coverage-map.md` a cette décision et que son lot propriétaire l'a
+   absorbée ; le brief peut alors être supprimé.
 
 ## Commandes d'intégration
 

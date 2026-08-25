@@ -7,7 +7,8 @@
 
 Prouver que chaque runtime effect supporté est un descriptor Kanvas enregistré,
 avec comportement CPU associé, WGSL parsé/réfléchi et bindings matériels
-conformes. Tous les autres effets sont refusés avant création de pipeline.
+conformes. Tous les autres effets sont refusés avant création de pipeline. La
+validation WGSL d'un custom effect n'est pas une preuve de support `Surface`.
 
 ## Code et tests à lire
 
@@ -24,10 +25,11 @@ conformes. Tous les autres effets sont refusés avant création de pipeline.
 | Sous-famille | Cas à couvrir | Résultat exigé |
 | --- | --- | --- |
 | Descriptors enregistrés | Un scénario par descriptor, entrées usuelles, bornes de valeurs, uniforme scalaire/vector/matrice/tableau et uniforme non défini. | Même résultat CPU/GPU, ID du descriptor et programme WGSL signalés dans la route. |
+| Frontière built-in/custom | Distinguer les descriptors de `KanvasRuntimeEffectRegistry` des entrées de `KanvasCustomRuntimeEffectRegistry`, qui ne garantit que validation/reflection WGSL. | Un custom descriptor sans comportement Kotlin/CPU associé ne peut pas devenir une scène `Surface` rendue ni un bundle promouvable ; il est refusé avec diagnostic avant pipeline. |
 | Children | Aucun child, shader child, image child, plusieurs children ordonnés, child absent et type incompatible. | Ordre et bindings conservés ; refus avant draw sur child impossible. |
 | Layout/packer | Alignement, padding, offsets, taille finale, ordre des bindings, sampler/texture et tableau aux bornes. | Octets packés égaux au layout réfléchi ; le changement de valeur seule ne recrée pas le pipeline. |
 | WGSL | Parse, reflection et impression déterministe de chaque module généré/enregistré ; entry point, binding ou type invalide. | Parse/diagnostic reproductible ; aucune supposition silencieuse quand wgsl4k est ambigu. |
-| Refus | Effect inconnu, custom effect non enregistré, uniforme absent/en trop, type faux et WGSL non compatible. | Code stable, zéro pipeline/draw/submission et aucun artefact de réussite. |
+| Refus | Effect inconnu, custom effect non enregistré, custom WGSL sans sémantique Kotlin/CPU, uniforme absent/en trop, type faux et WGSL non compatible. | Code stable, zéro pipeline/draw/submission et aucun artefact de réussite. |
 
 ## Assertions de preuve
 
