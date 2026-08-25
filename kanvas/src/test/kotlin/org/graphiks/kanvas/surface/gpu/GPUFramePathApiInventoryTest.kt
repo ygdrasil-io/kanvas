@@ -2454,6 +2454,83 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `public uniformly scaled FillPath keeps native stencil cover with device geometry`() {
+        val surface = Surface(64, 64)
+        surface.canvas {
+            scale(1.5f, 1.5f)
+            drawPath(
+                Path().apply {
+                    moveTo(8f, 8f)
+                    lineTo(40f, 8f)
+                    lineTo(8f, 40f)
+                    close()
+                },
+                Paint.fill(ColorARGB.Blue).copy(antiAlias = false),
+            )
+        }
+        val plan = GPUFramePathApiInventory.plan(
+            surface.snapshotOps(),
+            target(64, 64),
+            RenderConfig.DEFAULT,
+            capabilitiesWith(PATH_FILL_STENCIL_COVER),
+        )
+
+        assertEquals(null, plan.preparedRefusal)
+        assertEquals("native.path_fill.stencil_cover", plan.recording.analysis.records.single().routeDecisionLabel)
+        val command = assertIs<NormalizedDrawCommand.FillPath>(plan.visualCommands.single().normalized)
+        assertEquals(GPUTransformType.Scale, command.transform.type)
+        assertEquals("scale", command.pathDescriptor.transformClass)
+        val semantic = assertIs<GPUCorePrimitiveSemanticGatherResult.Gathered>(
+            GPUFramePathApiInventory.gatherCorePrimitiveSemantics(
+                plan,
+                GPUPixelBounds(0, 0, 64, 64),
+            ),
+        ).semantics.values.single() as GPUDrawSemanticPayload.CorePrimitive
+        val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
+        assertEquals(GPUCorePrimitiveCoverageMode.Stencil1x, semantic.coverageMode)
+        assertEquals(GPUPixelBounds(12, 12, 60, 60), geometry.coverBounds)
+        val deviceVertices = geometry.vertices.chunked(2).map { it[0] to it[1] }
+        assertTrue(listOf(12f to 12f, 60f to 12f, 12f to 60f).all { it in deviceVertices })
+    }
+
+    @Test
+    fun `public scaled FillPath retains stable refusals for unsupported transforms and AA`() {
+        val variants = listOf(
+            "non-uniform" to Matrix3x3F32(sx = 1.5f, sy = 1.25f),
+            "scale-translation" to Matrix3x3F32(sx = 1.5f, sy = 1.5f, tx = 2f),
+            "negative-scale" to Matrix3x3F32(sx = -1.5f, sy = -1.5f),
+            "zero-scale" to Matrix3x3F32(sx = 0f, sy = 0f),
+        )
+        variants.forEach { (label, transform) ->
+            val plan = GPUFramePathApiInventory.plan(
+                listOf(DisplayOp.DrawPath(path = scaledTriangle(), paint = Paint.fill(ColorARGB.Blue).copy(antiAlias = false), transform = transform, clip = ClipStack.WideOpen)),
+                target(64, 64),
+                RenderConfig.DEFAULT,
+                capabilitiesWith(PATH_FILL_STENCIL_COVER),
+            )
+            assertEquals(
+                "refused.unsupported.transform.class_downgrade",
+                plan.recording.analysis.records.single().routeDecisionLabel,
+                label,
+            )
+        }
+        val aaPlan = GPUFramePathApiInventory.plan(
+            listOf(DisplayOp.DrawPath(scaledTriangle(), Paint.fill(ColorARGB.Blue).copy(antiAlias = true), Matrix3x3F32(sx = 1.5f, sy = 1.5f), ClipStack.WideOpen)),
+            target(64, 64),
+            RenderConfig.DEFAULT,
+            capabilitiesWith(PATH_FILL_STENCIL_COVER),
+        )
+        val aaRefusal = assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(
+            GPUFramePathApiInventory.prepareNativeTaskList(
+                aaPlan,
+                capabilitiesWith(PATH_FILL_STENCIL_COVER),
+                GPUPixelBounds(0, 0, 64, 64),
+            ),
+        )
+        assertEquals("unsupported.core_primitive.coverage_sample.color_capability", aaRefusal.diagnostic.code.value)
+    }
+
+    @Test
     fun `mapper selects one path clip as stencil only when stencil capability exists`() {
         val surface = Surface(32, 32)
         surface.canvas {
@@ -2813,6 +2890,13 @@ class GPUFramePathApiInventoryTest {
         moveTo(1f, 1f)
         lineTo(8f, 1f)
         lineTo(4f, 8f)
+        close()
+    }
+
+    private fun scaledTriangle() = Path().apply {
+        moveTo(8f, 8f)
+        lineTo(40f, 8f)
+        lineTo(8f, 40f)
         close()
     }
 }

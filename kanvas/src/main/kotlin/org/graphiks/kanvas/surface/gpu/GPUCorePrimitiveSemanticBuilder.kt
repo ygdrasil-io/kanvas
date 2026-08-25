@@ -827,7 +827,7 @@ private fun NormalizedDrawCommand.FillPath.pathDeviceGeometry(
         indices = edgeFan.indices.toList(),
         sourceContourStarts = contourStarts,
         sourceVertexCount = transformed.size,
-        coverBounds = if (pathDescriptor.inverseFill) targetBounds else bounds.toPixelCoverBounds(targetBounds),
+        coverBounds = if (pathDescriptor.inverseFill) targetBounds else transformed.toPixelCoverBounds(targetBounds),
         geometryMode = GPUCorePrimitiveGeometryMode.StencilEdgeFan,
         fillRule = pathDescriptor.fillRule.toCoreFillRule(),
         inverseFill = pathDescriptor.inverseFill,

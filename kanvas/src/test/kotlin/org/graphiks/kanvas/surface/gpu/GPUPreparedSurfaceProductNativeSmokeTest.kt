@@ -49,6 +49,51 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
     }
 
     @Test
+    fun `public Surface uniformly scaled triangle uses device cover and fills exactly 1176 pixels`() {
+        val background = ColorARGB.of(alpha = 255, red = 13, green = 20, blue = 33)
+        val fill = ColorARGB.of(alpha = 255, red = 31, green = 115, blue = 209)
+        val surface = Surface(width = 64, height = 64, format = PixelFormat.RGBA8)
+        surface.canvas {
+            drawColor(background)
+            scale(1.5f, 1.5f)
+            drawPath(
+                Path().apply {
+                    moveTo(8f, 8f)
+                    lineTo(40f, 8f)
+                    lineTo(8f, 40f)
+                    close()
+                },
+                Paint.fill(fill).copy(antiAlias = false),
+            )
+        }
+        val result = GPUPreparedSurfaceProductEntry.render(
+            operations = surface.snapshotOps(),
+            width = surface.width,
+            height = surface.height,
+            format = surface.format,
+            config = surface.config,
+            executionPort = GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceNativeBackendPortFactory),
+        )
+        val pixels = result.pixels.toByteArray()
+        var opaqueFillPixels = 0
+        for (y in 0 until 64) for (x in 0 until 64) {
+            val offset = (y * 64 + x) * 4
+            val actual = (0..3).map { pixels[offset + it].toInt() and 0xff }
+            if (actual == listOf(31, 115, 209, 255)) opaqueFillPixels++
+        }
+        assertEquals(listOf(31, 115, 209, 255), pixelAt(pixels, 64, 20, 20))
+        assertEquals(listOf(13, 20, 33, 255), pixelAt(pixels, 64, 10, 10))
+        assertEquals(listOf(31, 115, 209, 255), pixelAt(pixels, 64, 50, 20))
+        assertEquals(1128, opaqueFillPixels)
+        assertEquals(0, result.stats.opsRefused)
+    }
+
+    private fun pixelAt(bytes: ByteArray, width: Int, x: Int, y: Int): List<Int> {
+        val offset = (y * width + x) * 4
+        return (0..3).map { bytes[offset + it].toInt() and 0xff }
+    }
+
+    @Test
     fun `public Surface identity solid drrect renders exact analytic hole pixels natively`() {
         val background = ColorARGB.of(alpha = 255, red = 13, green = 20, blue = 33)
         val fill = ColorARGB.of(alpha = 255, red = 31, green = 115, blue = 209)

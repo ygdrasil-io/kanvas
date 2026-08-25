@@ -839,6 +839,33 @@ class GPUPreparedSurfaceFrameBuilderTest {
         )
     }
 
+    @Test
+    fun `public frame accepts uniformly scaled non-AA FillPath in native stencil cover`() {
+        val operation = DisplayOp.DrawPath(
+            Path().apply {
+                moveTo(8f, 8f)
+                lineTo(40f, 8f)
+                lineTo(8f, 40f)
+                close()
+            },
+            Paint.fill(ColorARGB.Blue).copy(antiAlias = false),
+            Matrix3x3F32(sx = 1.5f, sy = 1.5f),
+            ClipStack.WideOpen,
+        )
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            GPUPreparedSurfaceFrameBuilder.build(
+                request(listOf(operation)).copy(
+                    targetFacts = GPUTargetFacts(64, 64, "rgba8unorm-srgb"),
+                    targetBounds = GPUPixelBounds(0, 0, 64, 64),
+                ),
+            ),
+        )
+        val packets = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+        assertTrue(ready.taskList.tasks.none { it is GPUTask.Refused })
+        assertTrue(packets.isNotEmpty())
+    }
+
     private fun srgbToLinear(encoded: Float): Float = if (encoded <= 0.04045f) {
         encoded / 12.92f
     } else {
