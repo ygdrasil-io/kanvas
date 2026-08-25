@@ -543,7 +543,9 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
     val rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority?
     val rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority?
     val rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority?
-    val sealedRRectGeometry: GPUCorePrimitiveGeometryInput.RRect?
+    val drrectOuterGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority?
+    val drrectInnerGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority?
+    val sealedGeometry: GPUCorePrimitiveGeometryInput?
     when (sourceFamily) {
         GPUCorePrimitiveSourceFamily.Rect -> {
             val fillRect = normalized as NormalizedDrawCommand.FillRect
@@ -579,7 +581,9 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
                 ),
             )
             rrectGeometryAuthority = null
-            sealedRRectGeometry = null
+            drrectOuterGeometryAuthority = null
+            drrectInnerGeometryAuthority = null
+            sealedGeometry = null
         }
         GPUCorePrimitiveSourceFamily.RRect -> {
             val fillRRect = normalized as NormalizedDrawCommand.FillRRect
@@ -611,7 +615,30 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
             rectRouteAuthority = null
             rectGeometryAuthority = null
             rrectGeometryAuthority = authority
-            sealedRRectGeometry = authority.sealedDeviceGeometryInput()
+            drrectOuterGeometryAuthority = null
+            drrectInnerGeometryAuthority = null
+            sealedGeometry = authority.sealedDeviceGeometryInput()
+        }
+        GPUCorePrimitiveSourceFamily.DRRect -> {
+            val fillDRRect = normalized as NormalizedDrawCommand.FillDRRect
+            val outerAuthority = analysisRecord.corePrimitiveDRRectOuterGeometryAuthority
+                ?: refuseGeometry("unsupported.core_primitive.drrect.outer_analysis_authority_missing", mapOf("analysisRecordId" to analysisRecord.recordId))
+            val innerAuthority = analysisRecord.corePrimitiveDRRectInnerGeometryAuthority
+                ?: refuseGeometry("unsupported.core_primitive.drrect.inner_analysis_authority_missing", mapOf("analysisRecordId" to analysisRecord.recordId))
+            if (!outerAuthority.matchesCorePrimitiveRRectGeometry(fillDRRect.outer, fillDRRect.transform) ||
+                !innerAuthority.matchesCorePrimitiveRRectGeometry(fillDRRect.inner, fillDRRect.transform)
+            ) {
+                refuseGeometry("unsupported.core_primitive.drrect.geometry_authority_mismatch", mapOf("analysisRecordId" to analysisRecord.recordId))
+            }
+            rectRouteAuthority = null
+            rectGeometryAuthority = null
+            rrectGeometryAuthority = null
+            drrectOuterGeometryAuthority = outerAuthority
+            drrectInnerGeometryAuthority = innerAuthority
+            sealedGeometry = GPUCorePrimitiveGeometryInput.DRRect(
+                outerAuthority.sealedDeviceGeometryInput(),
+                innerAuthority.sealedDeviceGeometryInput(),
+            )
         }
         else -> {
             if (analysisRecord.corePrimitiveRectRouteAuthority != null ||
@@ -637,10 +664,12 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
             rectRouteAuthority = null
             rectGeometryAuthority = null
             rrectGeometryAuthority = null
-            sealedRRectGeometry = null
+            drrectOuterGeometryAuthority = null
+            drrectInnerGeometryAuthority = null
+            sealedGeometry = null
         }
     }
-    val geometry = sealedRRectGeometry ?: normalized.toDeviceGeometry(targetBounds)
+    val geometry = sealedGeometry ?: normalized.toDeviceGeometry(targetBounds)
     val scissor = clipCoverage.toPreparedScissorBounds(
         targetBounds = targetBounds,
         nonScissorClipRetainedSeparately = true,
@@ -667,15 +696,19 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
         },
         analysisRecordId = analysisRecord.recordId.takeIf {
             sourceFamily == GPUCorePrimitiveSourceFamily.Rect ||
-                sourceFamily == GPUCorePrimitiveSourceFamily.RRect
+                sourceFamily == GPUCorePrimitiveSourceFamily.RRect ||
+                sourceFamily == GPUCorePrimitiveSourceFamily.DRRect
         },
         analysisCommandFamily = analysisRecord.commandFamily.takeIf {
             sourceFamily == GPUCorePrimitiveSourceFamily.Rect ||
-                sourceFamily == GPUCorePrimitiveSourceFamily.RRect
+                sourceFamily == GPUCorePrimitiveSourceFamily.RRect ||
+                sourceFamily == GPUCorePrimitiveSourceFamily.DRRect
         },
         rectRouteAuthority = rectRouteAuthority,
         rectGeometryAuthority = rectGeometryAuthority,
         rrectGeometryAuthority = rrectGeometryAuthority,
+        drrectOuterGeometryAuthority = drrectOuterGeometryAuthority,
+        drrectInnerGeometryAuthority = drrectInnerGeometryAuthority,
     )
 }
 
@@ -704,6 +737,7 @@ private fun GPUFramePathVisualCommand.coverageMode(): GPUCorePrimitiveCoverageMo
 private fun NormalizedDrawCommand.antiAlias(): Boolean = when (this) {
     is NormalizedDrawCommand.FillRect -> antiAlias
     is NormalizedDrawCommand.FillRRect -> antiAlias
+    is NormalizedDrawCommand.FillDRRect -> antiAlias
     is NormalizedDrawCommand.FillPath -> antiAlias
     else -> false
 }
@@ -996,6 +1030,7 @@ private fun refuseGeometry(code: String, facts: Map<String, String>): Nothing =
 private fun NormalizedDrawCommand.analysisCommandFamily(): String = when (this) {
     is NormalizedDrawCommand.FillRect -> "FillRect"
     is NormalizedDrawCommand.FillRRect -> "FillRRect"
+    is NormalizedDrawCommand.FillDRRect -> "FillDRRect"
     is NormalizedDrawCommand.FillPath -> "FillPath"
     else -> error("Non-core command reached Slice 12A semantic gathering")
 }
@@ -1003,6 +1038,7 @@ private fun NormalizedDrawCommand.analysisCommandFamily(): String = when (this) 
 private fun NormalizedDrawCommand.analysisRecordId(): String = when (this) {
     is NormalizedDrawCommand.FillRect -> "analysis.fill_rect.${commandId.value}"
     is NormalizedDrawCommand.FillRRect -> "analysis.fill_rrect.${commandId.value}"
+    is NormalizedDrawCommand.FillDRRect -> "analysis.fill_drrect.${commandId.value}"
     is NormalizedDrawCommand.FillPath -> "analysis.fill_path.${commandId.value}"
     else -> error("Non-core command reached Slice 12A semantic gathering")
 }
@@ -1010,10 +1046,10 @@ private fun NormalizedDrawCommand.analysisRecordId(): String = when (this) {
 private fun NormalizedDrawCommand.toCoreSourceFamily(): GPUCorePrimitiveSourceFamily = when (this) {
     is NormalizedDrawCommand.FillRect -> GPUCorePrimitiveSourceFamily.Rect
     is NormalizedDrawCommand.FillRRect -> GPUCorePrimitiveSourceFamily.RRect
+    is NormalizedDrawCommand.FillDRRect -> GPUCorePrimitiveSourceFamily.DRRect
     is NormalizedDrawCommand.FillPath -> when {
         source.operation.startsWith("drawPoint") || source.operation.startsWith("drawPoints") ->
             GPUCorePrimitiveSourceFamily.PointLine
-        source.operation.startsWith("drawDRRect") -> GPUCorePrimitiveSourceFamily.DRRect
         else -> GPUCorePrimitiveSourceFamily.Path
     }
     else -> error("Non-core command reached Slice 12A semantic gathering")

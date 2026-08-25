@@ -77,6 +77,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.COLOR_GLYPH_PACKET_PASS_AUTHOR
 import org.graphiks.kanvas.gpu.renderer.recording.preparedColorGlyphPacketAuthorityRefusal
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_BINDING_LAYOUT_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_ANALYTIC_SHAPE_BINDING_LAYOUT_HASH
+import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_ANALYTIC_DRRECT_BINDING_LAYOUT_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_ANALYTIC_CLIP_BINDING_LAYOUT_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_ANALYTIC_INTERSECTION_BINDING_LAYOUT_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_RENDER_PIPELINE_KEY
@@ -1183,6 +1184,8 @@ internal class GPUFramePreflighter(
                     geometry.vertices.size / 2 to geometry.indices.size
                 is GPUCorePrimitiveGeometry.RRect ->
                     return refuse("Prepared coverage-mask consumer RRect geometry is unsupported.")
+                is GPUCorePrimitiveGeometry.DRRect ->
+                    return refuse("Prepared coverage-mask consumer DRRect geometry is unsupported.")
             }
             geometrySlices += GPUCorePrimitiveCoverageMaskPreparedGeometrySlice(
                 firstIndex,
@@ -3833,7 +3836,9 @@ internal class GPUFramePreflighter(
             ) {
                 val message = "Direct CorePrimitive packet has non-canonical shading pipeline authority."
                 return if (expectedStructuralKey.uniformLayout ==
-                    GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1
+                    GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ||
+                    expectedStructuralKey.uniformLayout ==
+                    GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticDRRectUniform128V1
                 ) {
                     refuseShape(message)
                 } else {
@@ -3866,7 +3871,9 @@ internal class GPUFramePreflighter(
         ) {
             val message = "Direct CorePrimitive packet has non-canonical shading pipeline authority."
             return if (structuralPipelineKey.uniformLayout ==
-                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ||
+                structuralPipelineKey.uniformLayout ==
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticDRRectUniform128V1
             ) {
                 refuseShape(message)
             } else {
@@ -3964,7 +3971,8 @@ internal class GPUFramePreflighter(
                         stepSeal.plan,
                     )
                 }
-                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 -> {
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1,
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticDRRectUniform128V1 -> {
                     if (stepAuthorities.any { authority ->
                             authority.uniformSlabSeal != null ||
                                 authority.analyticClipUniformSeal != null ||
@@ -4175,14 +4183,22 @@ internal class GPUFramePreflighter(
             }
         }
         val analyticShapeSteps = stepUniformAuthorities.values.filter {
-            it.layout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1
+            it.layout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ||
+                it.layout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticDRRectUniform128V1
         }
         if (analyticShapeSteps.isNotEmpty()) {
-            val uniform80AcceptedIndices = layoutAcceptedIndices(
-                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1,
-            )
+            val analyticLayout = analyticShapeSteps.first().layout
+            if (analyticShapeSteps.any { it.layout != analyticLayout }) {
+                return refuseShape("Analytic shape and DRRect packets require separate uniform slabs.")
+            }
+            val uniform80AcceptedIndices = layoutAcceptedIndices(analyticLayout)
             val frame80Plan = analyticShapeSteps.first().uniformPlan
-            if (frame80Plan.sourceLabel != "core-primitive-analytic-shape-uniform-pass" ||
+            val analyticUniformBytes = if (
+                analyticLayout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticDRRectUniform128V1
+            ) 128L else 80L
+            val expectedSourceLabel = if (analyticUniformBytes == 128L)
+                "core-primitive-analytic-drrect-uniform-pass" else "core-primitive-analytic-shape-uniform-pass"
+            if (frame80Plan.sourceLabel != expectedSourceLabel ||
                 frame80Plan.slots.size != uniform80AcceptedIndices.size ||
                 analyticShapeSteps.flatMap { it.analyticShapeSeals }.any { seal -> seal.plan !== frame80Plan }
             ) {
@@ -4200,7 +4216,7 @@ internal class GPUFramePreflighter(
                     GPUCorePrimitivePreparedSemanticAuthority.capture(entry.semantic),
                 )
                 val expectedBytes = when (rebuilt) {
-                    is GPUCorePrimitiveAnalyticShapeUniformBuildResult.Accepted -> rebuilt.block.packedBytes()
+                    is GPUCorePrimitiveAnalyticShapeUniformBuildResult.Accepted -> rebuilt.bytes
                     is GPUCorePrimitiveAnalyticShapeUniformBuildResult.Refused -> return refuseShape(
                         "Analytic shape semantic can no longer be recomposed into the sealed uniform80 ABI.",
                     )
@@ -4209,7 +4225,7 @@ internal class GPUFramePreflighter(
                     "Analytic shape route is missing its exact non-empty render scissor.",
                 )
                 val exactRange = try {
-                    Math.addExact(slot.alignedOffset, 80L) <= frame80Plan.totalBytes
+                    Math.addExact(slot.alignedOffset, analyticUniformBytes) <= frame80Plan.totalBytes
                 } catch (_: ArithmeticException) {
                     false
                 }
@@ -4221,17 +4237,22 @@ internal class GPUFramePreflighter(
                     seal.slotIndex != indexAt || seal.commandId != entry.packet.commandIdValue ||
                     seal.packetId != entry.packet.packetId ||
                     seal.structuralPipelineKey != packetAuthorities[acceptedIndex].structuralPipelineKey ||
-                    seal.structuralPipelineKey.shader !=
-                    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticShape ||
+                    seal.structuralPipelineKey.shader != (if (analyticUniformBytes == 128L)
+                        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticDRRect
+                    else GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticShape) ||
                     seal.renderPipelineKey != packetAuthorities[acceptedIndex].renderPipelineKey ||
-                    seal.bindingLayoutHash != CORE_PRIMITIVE_ANALYTIC_SHAPE_BINDING_LAYOUT_HASH ||
+                    seal.bindingLayoutHash != (if (analyticUniformBytes == 128L)
+                        CORE_PRIMITIVE_ANALYTIC_DRRECT_BINDING_LAYOUT_HASH
+                    else CORE_PRIMITIVE_ANALYTIC_SHAPE_BINDING_LAYOUT_HASH) ||
                     entry.packet.bindingLayoutHash != seal.bindingLayoutHash ||
                     seal.resourceGeneration != entry.packet.resourceGeneration ||
                     seal.resourceGeneration != PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION ||
                     seal.deviceGeneration != context.deviceGeneration.value ||
                     seal.alignmentBytes != limits.minUniformBufferOffsetAlignment ||
-                    seal.payloadBytes != 80L || slot.payloadBytes != 80L ||
-                    slot.slotLabel != "analytic-shape-draw-${entry.packet.commandIdValue}" ||
+                    seal.payloadBytes != analyticUniformBytes || slot.payloadBytes != analyticUniformBytes ||
+                    slot.slotLabel != (if (analyticUniformBytes == 128L)
+                        "analytic-drrect-draw-${entry.packet.commandIdValue}"
+                    else "analytic-shape-draw-${entry.packet.commandIdValue}") ||
                     seal.alignedOffset != slot.alignedOffset || slot.alignedOffset > UInt.MAX_VALUE.toLong() ||
                     !exactRange || !seal.hasExactPayload(expectedBytes)
                 ) {
@@ -4448,7 +4469,9 @@ internal class GPUFramePreflighter(
             ) {
                 val message = "Direct CorePrimitive uniform slab descriptor, size, alignment, usages, or lifetime is not exact."
                 return if (stepAuthority.layout ==
-                    GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1
+                    GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ||
+                    stepAuthority.layout ==
+                    GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticDRRectUniform128V1
                 ) {
                     refuseShape(message)
                 } else {
@@ -4532,7 +4555,9 @@ internal class GPUFramePreflighter(
                 val stepAuthority = stepUniformAuthorities.getValue(stepIndex)
                 val stepAnalyticShapeSeals = when {
                     stepAuthority.layout !=
-                        GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ->
+                        GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 &&
+                        stepAuthority.layout !=
+                        GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticDRRectUniform128V1 ->
                         emptyList()
                     analyticShapeSteps.size <= 1 -> stepAuthority.analyticShapeSeals
                     else -> sliceAnalyticShapeUniformSealsToCommands(
@@ -4572,7 +4597,8 @@ internal class GPUFramePreflighter(
                                 structuralPipelineKeys = stepStructuralKeys.distinct(),
                                 uniformSlabSeal = requireNotNull(uniformSlabSealByStep.getValue(stepIndex)),
                             )
-                        GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ->
+                        GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1,
+                        GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticDRRectUniform128V1 ->
                             try {
                                 GPUCorePrimitiveMultiKeyDirectPreparedPassSeal.analyticShape(
                                     structuralPipelineKeys = stepStructuralKeys.distinct(),
@@ -4589,7 +4615,9 @@ internal class GPUFramePreflighter(
                     }
                 } else if (
                     stepAuthority.layout ==
-                    GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1
+                    GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ||
+                    stepAuthority.layout ==
+                    GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticDRRectUniform128V1
                 ) {
                     try {
                         GPUCorePrimitiveDirectPreparedPassSeal.analyticShape(
@@ -5386,6 +5414,8 @@ internal class GPUFramePreflighter(
         ) ?: when (expectedStructuralPipelineKey.uniformLayout) {
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ->
                 CORE_PRIMITIVE_ANALYTIC_SHAPE_BINDING_LAYOUT_HASH
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticDRRectUniform128V1 ->
+                CORE_PRIMITIVE_ANALYTIC_DRRECT_BINDING_LAYOUT_HASH
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2 ->
                 CORE_PRIMITIVE_BINDING_LAYOUT_HASH
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1 ->

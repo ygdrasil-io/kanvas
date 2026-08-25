@@ -1210,6 +1210,19 @@ sealed interface GPUCorePrimitiveGeometry {
         val radii: List<Float> = immutableList(radii)
     }
 
+    class DRRect internal constructor(
+        outerBounds: List<Float>,
+        outerRadii: List<Float>,
+        innerBounds: List<Float>,
+        innerRadii: List<Float>,
+    ) : GPUCorePrimitiveGeometry {
+        override val canonicalType: String = "DRRect"
+        val outerBounds: List<Float> = immutableList(outerBounds)
+        val outerRadii: List<Float> = immutableList(outerRadii)
+        val innerBounds: List<Float> = immutableList(innerBounds)
+        val innerRadii: List<Float> = immutableList(innerRadii)
+    }
+
     class TriangulatedPath internal constructor(
         vertices: List<Float>,
         indices: List<Int>,
@@ -1249,6 +1262,8 @@ data class GPUCorePrimitivePayloadInput(
     val rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority? = null,
     val rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority? = null,
     val rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = null,
+    val drrectOuterGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = null,
+    val drrectInnerGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = null,
     /** New material authority; null preserves the pre-Task-2 solid constructor surface. */
     val material: GPUCorePrimitiveMaterialPayload? = null,
 ) {
@@ -1288,6 +1303,8 @@ data class GPUCorePrimitivePayloadInput(
         rectGeometryAuthority,
         rrectGeometryAuthority,
         null,
+        null,
+        null,
     )
 }
 
@@ -1302,6 +1319,11 @@ sealed interface GPUCorePrimitiveGeometryInput {
         val right: Float,
         val bottom: Float,
         val radii: List<Float>,
+    ) : GPUCorePrimitiveGeometryInput
+
+    data class DRRect(
+        val outer: RRect,
+        val inner: RRect,
     ) : GPUCorePrimitiveGeometryInput
 
     data class TriangulatedPath(
@@ -1458,6 +1480,8 @@ sealed interface GPUDrawSemanticPayload {
         val rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority? = null,
         val rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority? = null,
         val rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = null,
+        val drrectOuterGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = null,
+        val drrectInnerGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = null,
         material: GPUCorePrimitiveMaterialPayload? = null,
     ) : GPUDrawSemanticPayload {
         override val canonicalType: String = "CorePrimitive"
@@ -1486,6 +1510,8 @@ sealed interface GPUDrawSemanticPayload {
                 rectRouteAuthority = rectRouteAuthority,
                 rectGeometryAuthority = rectGeometryAuthority,
                 rrectGeometryAuthority = rrectGeometryAuthority,
+                drrectOuterGeometryAuthority = drrectOuterGeometryAuthority,
+                drrectInnerGeometryAuthority = drrectInnerGeometryAuthority,
             )
         }
 
@@ -1514,6 +1540,8 @@ sealed interface GPUDrawSemanticPayload {
                     rectRouteAuthority,
                     rectGeometryAuthority,
                     rrectGeometryAuthority,
+                    drrectOuterGeometryAuthority,
+                    drrectInnerGeometryAuthority,
                 )
 
         internal fun hasCanonicalHashIntegrity(): Boolean =
@@ -1559,6 +1587,8 @@ sealed interface GPUDrawSemanticPayload {
                 rectRouteAuthority = rectRouteAuthority,
                 rectGeometryAuthority = rectGeometryAuthority,
                 rrectGeometryAuthority = rrectGeometryAuthority,
+                drrectOuterGeometryAuthority = drrectOuterGeometryAuthority,
+                drrectInnerGeometryAuthority = drrectInnerGeometryAuthority,
             )
         }
     }
@@ -2050,6 +2080,8 @@ class GPUCorePrimitivePayloadGatherer {
                 input.rectRouteAuthority,
                 input.rectGeometryAuthority,
                 input.rrectGeometryAuthority,
+                input.drrectOuterGeometryAuthority,
+                input.drrectInnerGeometryAuthority,
             ),
         ) {
             "Core primitive analysis authority must match source family, identity, and exact geometry"
@@ -2106,6 +2138,8 @@ class GPUCorePrimitivePayloadGatherer {
             rectRouteAuthority = input.rectRouteAuthority,
             rectGeometryAuthority = input.rectGeometryAuthority,
             rrectGeometryAuthority = input.rrectGeometryAuthority,
+            drrectOuterGeometryAuthority = input.drrectOuterGeometryAuthority,
+            drrectInnerGeometryAuthority = input.drrectInnerGeometryAuthority,
         )
     }
 }
@@ -2168,6 +2202,8 @@ private fun corePrimitiveCanonicalHash(
     rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority?,
     rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority?,
     rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority?,
+    drrectOuterGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = null,
+    drrectInnerGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = null,
 ): String = sha256Hex(
     listOf(
         "type=CorePrimitive",
@@ -2178,6 +2214,8 @@ private fun corePrimitiveCanonicalHash(
         "rectRoute=${rectRouteAuthority?.name ?: "none"}",
         "rectGeometryAuthority=${rectGeometryAuthority.canonicalPreimage()}",
         "rrectGeometryAuthority=${rrectGeometryAuthority.canonicalPreimage()}",
+        "drrectOuterGeometryAuthority=${drrectOuterGeometryAuthority.canonicalPreimage()}",
+        "drrectInnerGeometryAuthority=${drrectInnerGeometryAuthority.canonicalPreimage()}",
         "fingerprint=${requireNotNull(payloadRef.uniformBlock).fingerprint.value}",
         "geometry=${geometry.canonicalPreimage()}",
         "color=${premultipliedRgba.joinToString(",")}",
@@ -2203,6 +2241,8 @@ private fun hasCorePrimitiveAnalysisGeometryAuthorityIntegrity(
     rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority?,
     rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority?,
     rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority?,
+    drrectOuterGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = null,
+    drrectInnerGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = null,
 ): Boolean {
     return when (sourceFamily) {
         GPUCorePrimitiveSourceFamily.Rect -> {
@@ -2257,10 +2297,27 @@ private fun hasCorePrimitiveAnalysisGeometryAuthorityIntegrity(
                     rrect,
                 )
         }
+        GPUCorePrimitiveSourceFamily.DRRect -> {
+            val drrect = geometry as? GPUCorePrimitiveGeometry.DRRect ?: return false
+            rectRouteAuthority == null && rectGeometryAuthority == null &&
+                rrectGeometryAuthority == null &&
+                drrectOuterGeometryAuthority != null && drrectInnerGeometryAuthority != null &&
+                analysisRecordId == "analysis.fill_drrect.$commandIdValue" &&
+                analysisCommandFamily == "FillDRRect" &&
+                coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor &&
+                GPUCorePrimitiveRRectGeometryAuthority.hasExactDeviceGeometry(
+                    drrectOuterGeometryAuthority,
+                    GPUCorePrimitiveGeometry.RRect(drrect.outerBounds[0], drrect.outerBounds[1], drrect.outerBounds[2], drrect.outerBounds[3], drrect.outerRadii),
+                ) && GPUCorePrimitiveRRectGeometryAuthority.hasExactDeviceGeometry(
+                    drrectInnerGeometryAuthority,
+                    GPUCorePrimitiveGeometry.RRect(drrect.innerBounds[0], drrect.innerBounds[1], drrect.innerBounds[2], drrect.innerBounds[3], drrect.innerRadii),
+                )
+        }
         else ->
             rectRouteAuthority == null &&
                 rectGeometryAuthority == null &&
                 rrectGeometryAuthority == null &&
+                drrectOuterGeometryAuthority == null && drrectInnerGeometryAuthority == null &&
                 analysisRecordId == null &&
                 analysisCommandFamily == null
     }
@@ -2333,6 +2390,25 @@ private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
             "Core RRect geometry requires four finite non-negative xy radii pairs"
         }
         GPUCorePrimitiveGeometry.RRect(left, top, right, bottom, radii.toList())
+    }
+    is GPUCorePrimitiveGeometryInput.DRRect -> {
+        fun validate(rrect: GPUCorePrimitiveGeometryInput.RRect, label: String) {
+            require(listOf(rrect.left, rrect.top, rrect.right, rrect.bottom).all(Float::isFinite) &&
+                rrect.left < rrect.right && rrect.top < rrect.bottom
+            ) { "Core DRRect $label bounds must be finite and non-empty" }
+            require(rrect.radii.size == 8 && rrect.radii.all { it.isFinite() && it >= 0f }) {
+                "Core DRRect $label radii require four finite non-negative xy pairs"
+            }
+        }
+        validate(outer, "outer")
+        validate(inner, "inner")
+        require(inner.left >= outer.left && inner.top >= outer.top &&
+            inner.right <= outer.right && inner.bottom <= outer.bottom
+        ) { "Core DRRect inner bounds must be contained by outer bounds" }
+        GPUCorePrimitiveGeometry.DRRect(
+            listOf(outer.left, outer.top, outer.right, outer.bottom), outer.radii,
+            listOf(inner.left, inner.top, inner.right, inner.bottom), inner.radii,
+        )
     }
     is GPUCorePrimitiveGeometryInput.TriangulatedPath -> {
         require(vertices.size >= 6 && vertices.size % 2 == 0 && vertices.all(Float::isFinite)) {
@@ -2453,6 +2529,7 @@ private fun hasCanonicalStencilEdgeFanTopology(
 private fun GPUCorePrimitiveGeometry.canonicalPreimage(): String = when (this) {
     is GPUCorePrimitiveGeometry.Rect -> "$canonicalType:$left,$top,$right,$bottom"
     is GPUCorePrimitiveGeometry.RRect -> "$canonicalType:$left,$top,$right,$bottom:${radii.joinToString(",")}" 
+    is GPUCorePrimitiveGeometry.DRRect -> "$canonicalType:${outerBounds.joinToString(",")}:${outerRadii.joinToString(",")}:${innerBounds.joinToString(",")}:${innerRadii.joinToString(",")}"
     is GPUCorePrimitiveGeometry.TriangulatedPath ->
         "$canonicalType:${vertices.joinToString(",")}:${indices.joinToString(",")}:" +
             "${sourceContourStarts.joinToString(",")}:$sourceVertexCount:${coverBounds.canonicalBounds()}:" +

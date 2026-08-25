@@ -117,6 +117,13 @@ internal val PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY =
         vertexLayoutIdentity = CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY,
     )
 
+internal val PRODUCTION_CORE_PRIMITIVE_ANALYTIC_DRRECT_COMPONENT_IDENTITY =
+    GPUWgpu4kCorePrimitiveComponentIdentity(
+        shaderIdentity = CORE_PRIMITIVE_ANALYTIC_DRRECT_NATIVE_SHADER_IDENTITY,
+        bindingLayoutIdentity = CORE_PRIMITIVE_ANALYTIC_DRRECT_NATIVE_BINDING_LAYOUT_IDENTITY,
+        vertexLayoutIdentity = CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY,
+    )
+
 internal val PRODUCTION_CORE_PRIMITIVE_DIRECT_LINEAR_GRADIENT_COMPONENT_IDENTITY =
     GPUWgpu4kCorePrimitiveComponentIdentity(
         shaderIdentity = corePrimitiveGradientNativeShaderIdentity(
@@ -308,6 +315,8 @@ private fun GPUWgpu4kCorePrimitivePipelineCacheKey.hasCompatibleComponentIdentit
         pipelineIdentity.blendProgram.isDstRead() && componentIdentity.dstReadModeLabelOrNull() != null
     pipelineIdentity.program.isAnalyticShape() ->
         componentIdentity == PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY
+    pipelineIdentity.program.isAnalyticDRRect() ->
+        componentIdentity == PRODUCTION_CORE_PRIMITIVE_ANALYTIC_DRRECT_COMPONENT_IDENTITY
     pipelineIdentity.program.isGradient() ->
         componentIdentity.gradientProgramOrNull() == pipelineIdentity.program
     pipelineIdentity.program.isClipStencilProducer() ->
@@ -662,6 +671,7 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
             if (!key.componentIdentity.isCorePrimitiveDstRead() &&
                 key.componentIdentity != PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY &&
                 key.componentIdentity != PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY &&
+                key.componentIdentity != PRODUCTION_CORE_PRIMITIVE_ANALYTIC_DRRECT_COMPONENT_IDENTITY &&
                 key.componentIdentity != PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY &&
                 key.componentIdentity != PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY &&
                 key.componentIdentity != PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_COMPONENT_IDENTITY &&
@@ -777,6 +787,8 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
                 val shader = when (key.componentIdentity) {
                     PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY ->
                         buildCorePrimitiveAnalyticShapeNativeShader()
+                    PRODUCTION_CORE_PRIMITIVE_ANALYTIC_DRRECT_COMPONENT_IDENTITY ->
+                        buildCorePrimitiveAnalyticDRRectNativeShader()
                     PRODUCTION_CORE_PRIMITIVE_DIRECT_LINEAR_GRADIENT_COMPONENT_IDENTITY,
                     PRODUCTION_CORE_PRIMITIVE_DIRECT_LINEAR_GRADIENT_REPEAT_COMPONENT_IDENTITY,
                     PRODUCTION_CORE_PRIMITIVE_DIRECT_RADIAL_GRADIENT_COMPONENT_IDENTITY,
@@ -891,6 +903,7 @@ private fun GPUWgpu4kCorePrimitiveComponentIdentity.uniformBindingSizeBytes(): U
     PRODUCTION_CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_COMPONENT_IDENTITY ->
         error("Clip-stencil producer has no uniform binding")
     PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY -> 80uL
+    PRODUCTION_CORE_PRIMITIVE_ANALYTIC_DRRECT_COMPONENT_IDENTITY -> 128uL
     PRODUCTION_CORE_PRIMITIVE_DIRECT_LINEAR_GRADIENT_COMPONENT_IDENTITY,
     PRODUCTION_CORE_PRIMITIVE_DIRECT_LINEAR_GRADIENT_REPEAT_COMPONENT_IDENTITY,
     PRODUCTION_CORE_PRIMITIVE_DIRECT_RADIAL_GRADIENT_COMPONENT_IDENTITY,

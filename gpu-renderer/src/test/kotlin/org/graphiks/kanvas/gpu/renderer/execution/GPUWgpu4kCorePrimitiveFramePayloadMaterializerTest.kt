@@ -3289,7 +3289,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         assertTrue(source.contains("retainedCoverageMaskRenderSteps"))
         val directPacketAuthorityValidation = source
             .substringAfter("val acceptedGeometries = semanticPackets.mapIndexed")
-            .substringBefore("if (uniformLayout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1)")
+            .substringBefore("if (uniformLayout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ||")
         assertTrue(
             directPacketAuthorityValidation.contains("semantic.hasStructuralIntegrity()"),
             "materialization remains an independent semantic-integrity boundary",
@@ -3301,7 +3301,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         val analyticShapeValidation = source.balancedBlockAfter(
             anchor = "val acceptedGeometries = semanticPackets.mapIndexed",
             blockCondition = "if (uniformLayout == " +
-                "GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1)",
+                "GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ||",
         )
         assertFalse(
             analyticShapeValidation.contains("ByteArray(sealedUniformPlan.totalBytes.toInt())"),
@@ -3318,6 +3318,11 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         assertFalse(
             analyticShapeValidation.contains(".hasExactPayloads("),
             "uniform80 materialization must validate exact bytes without repeating planner SHA-256 per draw",
+        )
+        assertTrue(
+            analyticShapeValidation.contains("AnalyticDRRectUniform128V1") &&
+                analyticShapeValidation.contains("analytic-drrect-draw-${'$'}{packet.commandIdValue}"),
+            "the same in-place seal validator must retain the isolated uniform128 DRRect slot contract",
         )
     }
 

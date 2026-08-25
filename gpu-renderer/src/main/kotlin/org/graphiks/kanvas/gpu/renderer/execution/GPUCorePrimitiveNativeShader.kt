@@ -4,6 +4,7 @@ import org.graphiks.kanvas.gpu.renderer.color.GPUColorWgslReflection
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorWgslValidation
 import org.graphiks.kanvas.gpu.renderer.color.validateColorWgsl
 import org.graphiks.kanvas.gpu.renderer.passes.CORE_PRIMITIVE_ANALYTIC_SHAPE_UNIFORM_BYTES
+import org.graphiks.kanvas.gpu.renderer.passes.CORE_PRIMITIVE_ANALYTIC_DRRECT_UNIFORM_BYTES
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_GRADIENT_UNIFORM_BYTES
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUBlendFormulaProgramLibrary
@@ -111,6 +112,60 @@ private fun analyticShapeReflectionInvalidMessage(reflection: GPUColorWgslReflec
         return "Analytic-shape executable WGSL uniform block members do not match the sealed ABI80 offsets."
     }
     return null
+}
+
+internal const val CORE_PRIMITIVE_ANALYTIC_DRRECT_REFLECTION_INVALID_REASON =
+    "wgsl_analytic_drrect_reflection_invalid"
+
+internal fun buildCorePrimitiveAnalyticDRRectNativeShader(): GPUCorePrimitiveNativeShaderResult =
+    when (val validation = validateColorWgsl(
+        sourceId = CORE_PRIMITIVE_ANALYTIC_DRRECT_NATIVE_SHADER_IDENTITY,
+        wgslSource = CORE_PRIMITIVE_ANALYTIC_DRRECT_NATIVE_WGSL,
+    )) {
+        is GPUColorWgslValidation.Validated -> {
+            val invalid = analyticDRRectReflectionInvalidMessage(validation.reflection)
+            if (invalid == null) GPUCorePrimitiveNativeShaderResult.Ready(
+                GPUCorePrimitiveNativeShaderPlan(
+                    CORE_PRIMITIVE_ANALYTIC_DRRECT_NATIVE_WGSL,
+                    requireNotNull(validation.reflection),
+                ),
+            ) else GPUCorePrimitiveNativeShaderResult.Rejected(
+                CORE_PRIMITIVE_ANALYTIC_DRRECT_REFLECTION_INVALID_REASON,
+                invalid,
+            )
+        }
+        is GPUColorWgslValidation.Rejected -> GPUCorePrimitiveNativeShaderResult.Rejected(
+            validation.reason,
+            validation.message,
+        )
+    }
+
+private fun analyticDRRectReflectionInvalidMessage(reflection: GPUColorWgslReflection?): String? {
+    if (reflection == null || !reflection.validated || !reflection.report.validation.success) {
+        return "Analytic DRRect executable WGSL requires parser-validated reflection."
+    }
+    if (reflection.report.entryPoints.map { it.name to it.stage }.toSet() !=
+        setOf("vs_main" to "vertex", "fs_main" to "fragment")
+    ) return "Analytic DRRect WGSL must expose exactly vs_main and fs_main."
+    val binding = reflection.report.bindings.singleOrNull()
+    if (binding == null || binding.group != 0 || binding.binding != 0 ||
+        binding.resourceKind != "uniformBuffer" ||
+        binding.minBindingSize != CORE_PRIMITIVE_ANALYTIC_DRRECT_UNIFORM_BYTES
+    ) return "Analytic DRRect WGSL must expose exactly one 128-byte uniform binding."
+    val layout = reflection.report.layouts.singleOrNull {
+        it.structName == "CorePrimitiveAnalyticDRRectBlock" && it.addressSpace == "uniform"
+    } ?: return "Analytic DRRect WGSL must reflect its uniform block."
+    if (layout.size != CORE_PRIMITIVE_ANALYTIC_DRRECT_UNIFORM_BYTES) {
+        return "Analytic DRRect WGSL uniform block must be exactly 128 bytes."
+    }
+    val members = listOf(
+        "target_size" to (0 to 8), "anti_alias" to (8 to 4), "padding0" to (12 to 4),
+        "premul_rgba" to (16 to 16), "outer_bounds" to (32 to 16),
+        "outer_radii0" to (48 to 16), "outer_radii1" to (64 to 16),
+        "inner_bounds" to (80 to 16), "inner_radii0" to (96 to 16), "inner_radii1" to (112 to 16),
+    )
+    return if (layout.members.map { it.name to (it.offset to it.size) } == members) null
+    else "Analytic DRRect WGSL uniform members do not match sealed ABI128 offsets."
 }
 
 internal const val CORE_PRIMITIVE_GRADIENT_ANALYTIC_SHAPE_UNIFORM_BYTES = 656
@@ -790,6 +845,10 @@ internal const val CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_SHADER_IDENTITY =
     "core-primitive-analytic-shape-device-geometry-wgsl-v1"
 internal const val CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_BINDING_LAYOUT_IDENTITY =
     "dynamic-uniform80-analytic-shape-v1"
+internal const val CORE_PRIMITIVE_ANALYTIC_DRRECT_NATIVE_SHADER_IDENTITY =
+    "core-primitive-analytic-drrect-device-geometry-wgsl-v1"
+internal const val CORE_PRIMITIVE_ANALYTIC_DRRECT_NATIVE_BINDING_LAYOUT_IDENTITY =
+    "dynamic-uniform128-analytic-drrect-v1"
 internal const val CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_VERTEX_ENTRY_POINT = "vs_main"
 internal const val CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_FRAGMENT_ENTRY_POINT = "fs_main"
 internal const val CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_NATIVE_SHADER_IDENTITY =
@@ -921,6 +980,62 @@ internal val CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_WGSL = """
     fn fs_main(@builtin(position) fragment_position: vec4<f32>) -> @location(0) vec4<f32> {
         let coverage = analytic_shape_coverage(fragment_position.xy);
         return analytic.premul_rgba * coverage;
+    }
+""".trimIndent()
+
+/** Hard, non-AA difference of two normalized rounded rectangles.  Bounds are half-open. */
+internal val CORE_PRIMITIVE_ANALYTIC_DRRECT_NATIVE_WGSL = """
+    struct CorePrimitiveAnalyticDRRectBlock {
+        target_size: vec2<f32>,
+        anti_alias: u32,
+        padding0: u32,
+        premul_rgba: vec4<f32>,
+        outer_bounds: vec4<f32>,
+        outer_radii0: vec4<f32>,
+        outer_radii1: vec4<f32>,
+        inner_bounds: vec4<f32>,
+        inner_radii0: vec4<f32>,
+        inner_radii1: vec4<f32>,
+    }
+
+    @group(0) @binding(0) var<uniform> drrect: CorePrimitiveAnalyticDRRectBlock;
+
+    @vertex
+    fn vs_main(@location(0) device_position: vec2<f32>) -> @builtin(position) vec4<f32> {
+        let ndc_x = device_position.x / drrect.target_size.x * 2.0 - 1.0;
+        let ndc_y = 1.0 - device_position.y / drrect.target_size.y * 2.0;
+        return vec4<f32>(ndc_x, ndc_y, 0.0, 1.0);
+    }
+
+    fn inside_rrect(
+        position: vec2<f32>, bounds: vec4<f32>, radii0: vec4<f32>, radii1: vec4<f32>,
+    ) -> bool {
+        if (position.x < bounds.x || position.x >= bounds.z ||
+            position.y < bounds.y || position.y >= bounds.w) { return false; }
+        var center = position;
+        var radii = vec2<f32>(0.0);
+        if (position.x < bounds.x + radii0.x && position.y < bounds.y + radii0.y) {
+            center = vec2<f32>(bounds.x + radii0.x, bounds.y + radii0.y); radii = radii0.xy;
+        } else if (position.x >= bounds.z - radii0.z && position.y < bounds.y + radii0.w) {
+            center = vec2<f32>(bounds.z - radii0.z, bounds.y + radii0.w); radii = radii0.zw;
+        } else if (position.x >= bounds.z - radii1.x && position.y >= bounds.w - radii1.y) {
+            center = vec2<f32>(bounds.z - radii1.x, bounds.w - radii1.y); radii = radii1.xy;
+        } else if (position.x < bounds.x + radii1.z && position.y >= bounds.w - radii1.w) {
+            center = vec2<f32>(bounds.x + radii1.z, bounds.w - radii1.w); radii = radii1.zw;
+        } else { return true; }
+        if (radii.x == 0.0 || radii.y == 0.0) { return true; }
+        let normalized = (position - center) / radii;
+        return dot(normalized, normalized) <= 1.0;
+    }
+
+    @fragment
+    fn fs_main(@builtin(position) fragment_position: vec4<f32>) -> @location(0) vec4<f32> {
+        let position = fragment_position.xy;
+        if (!inside_rrect(position, drrect.outer_bounds, drrect.outer_radii0, drrect.outer_radii1) ||
+            inside_rrect(position, drrect.inner_bounds, drrect.inner_radii0, drrect.inner_radii1)) {
+            discard;
+        }
+        return drrect.premul_rgba;
     }
 """.trimIndent()
 

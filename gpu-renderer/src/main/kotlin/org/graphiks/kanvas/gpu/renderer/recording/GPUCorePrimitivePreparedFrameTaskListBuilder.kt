@@ -136,6 +136,8 @@ const val CORE_PRIMITIVE_RENDER_PIPELINE_KEY = CORE_PRIMITIVE_STRUCTURAL_PIPELIN
 const val CORE_PRIMITIVE_BINDING_LAYOUT_HASH = "layout.core-primitive.dynamic-uniform32-v2"
 const val CORE_PRIMITIVE_ANALYTIC_SHAPE_BINDING_LAYOUT_HASH =
     "layout.core-primitive.dynamic-uniform80-analytic-shape-v1"
+const val CORE_PRIMITIVE_ANALYTIC_DRRECT_BINDING_LAYOUT_HASH =
+    "layout.core-primitive.dynamic-uniform128-analytic-drrect-v1"
 const val CORE_PRIMITIVE_ANALYTIC_CLIP_BINDING_LAYOUT_HASH =
     "layout.core-primitive.dynamic-uniform64-analytic-clip-v1"
 const val CORE_PRIMITIVE_ANALYTIC_INTERSECTION_BINDING_LAYOUT_HASH =
@@ -586,6 +588,7 @@ internal fun corePrimitiveClipProducerPipelineKey(
 private fun GPUCorePrimitiveGeometry.pipelineTopologyIdentity(): String = when (this) {
     is GPUCorePrimitiveGeometry.Rect -> "triangle-list-device-xy-v1"
     is GPUCorePrimitiveGeometry.RRect -> "analytic-rrect-device-xy-v1"
+    is GPUCorePrimitiveGeometry.DRRect -> "analytic-drrect-device-xy-v1"
     is GPUCorePrimitiveGeometry.TriangulatedPath -> when (geometryMode) {
         GPUCorePrimitiveGeometryMode.DirectTriangles -> "triangle-list-device-xy-v1"
         GPUCorePrimitiveGeometryMode.StencilEdgeFan,
@@ -699,6 +702,7 @@ private fun GPUDrawSemanticPayload.CorePrimitive.usesAnalyticShapeUniform80(): B
         is GPUCorePrimitiveGeometry.RRect ->
             coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor ||
                 coverageMode == GPUCorePrimitiveCoverageMode.ScalarAA
+        is GPUCorePrimitiveGeometry.DRRect -> coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor
         is GPUCorePrimitiveGeometry.TriangulatedPath -> false
     }
 
@@ -730,6 +734,14 @@ private fun GPUDrawPacket.hasCorePrimitiveSemanticAuthority(
                     else -> false
                 }
         }
+        if (semantic.sourceFamily == GPUCorePrimitiveSourceFamily.DRRect) {
+            return analysisRecordId == semantic.analysisRecordId &&
+                semantic.analysisRecordId == "analysis.fill_drrect.$commandIdValue" &&
+                semantic.analysisCommandFamily == "FillDRRect" &&
+                semantic.geometry is GPUCorePrimitiveGeometry.DRRect &&
+                semantic.material is GPUCorePrimitiveMaterialPayload.SolidColor &&
+                renderStepId.value == CORE_PRIMITIVE_RENDER_STEP_IDENTITY
+        }
         if (semantic.analysisRecordId != null || semantic.analysisCommandFamily != null ||
             semantic.rectRouteAuthority != null || semantic.rectGeometryAuthority != null ||
             semantic.rrectGeometryAuthority != null
@@ -737,7 +749,6 @@ private fun GPUDrawPacket.hasCorePrimitiveSemanticAuthority(
         return when (semantic.sourceFamily) {
             GPUCorePrimitiveSourceFamily.Color -> semantic.geometry is GPUCorePrimitiveGeometry.Rect
             GPUCorePrimitiveSourceFamily.PointLine,
-            GPUCorePrimitiveSourceFamily.DRRect,
             GPUCorePrimitiveSourceFamily.Path,
             -> semantic.geometry is GPUCorePrimitiveGeometry.TriangulatedPath
             GPUCorePrimitiveSourceFamily.RRect -> false
@@ -821,6 +832,7 @@ private fun directCorePrimitiveGeometryBytes(
     val (vertexCount, indexCount) = when (val geometry = semantic.geometry) {
         is GPUCorePrimitiveGeometry.Rect -> 8 to 6
         is GPUCorePrimitiveGeometry.RRect -> if (gradientMaterial) 8 to 6 else return null
+        is GPUCorePrimitiveGeometry.DRRect -> if (gradientMaterial) 8 to 6 else return null
         is GPUCorePrimitiveGeometry.TriangulatedPath -> {
             if (geometry.geometryMode != GPUCorePrimitiveGeometryMode.DirectTriangles ||
                 geometry.inverseFill || geometry.strokeStyle != null
@@ -1765,8 +1777,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                     preparedSemantic,
                     semanticAuthority,
                 )) {
-                    is GPUCorePrimitiveAnalyticShapeUniformBuildResult.Accepted ->
-                        uniform.block.packedBytes()
+                    is GPUCorePrimitiveAnalyticShapeUniformBuildResult.Accepted -> uniform.bytes
                     is GPUCorePrimitiveAnalyticShapeUniformBuildResult.Refused ->
                         return refused(uniform.code, uniform.message)
                 }
@@ -2370,7 +2381,11 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             null
         } else {
             when (val planned = GPUUniformSlabPlanner.plan(
-                sourceLabel = "core-primitive-analytic-shape-uniform-pass",
+                sourceLabel = if (analyticShapeUniformPackets.all { packet ->
+                    request.coreSemantics().getValue(packet.commandIdValue).geometry is
+                        GPUCorePrimitiveGeometry.DRRect
+                }) "core-primitive-analytic-drrect-uniform-pass"
+                else "core-primitive-analytic-shape-uniform-pass",
                 deviceGeneration = request.baseTaskList.capabilitySeal.deviceGeneration.value,
                 alignmentBytes = limits.minUniformBufferOffsetAlignment,
                 uploadBudgetBytes = minOf(
@@ -2381,7 +2396,10 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 maxDynamicUniformBuffersPerPipelineLayout = requireNotNull(maxDynamicUniformBuffers),
                 payloads = analyticShapeUniformPackets.map { packet ->
                     GPUUniformSlabPayload(
-                        slotLabel = "analytic-shape-draw-${packet.commandIdValue}",
+                        slotLabel = if (request.coreSemantics().getValue(packet.commandIdValue).geometry is
+                            GPUCorePrimitiveGeometry.DRRect
+                        ) "analytic-drrect-draw-${packet.commandIdValue}"
+                        else "analytic-shape-draw-${packet.commandIdValue}",
                         bytes = preparedAnalyticShapesByCommandId
                             .getValue(packet.commandIdValue)
                             .uniformBytes,
@@ -3150,6 +3168,8 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             return when {
                 clip is GPUClipExecutionPlan.AnalyticIntersection -> "uniform160"
                 clip is GPUClipExecutionPlan.AnalyticCoverage -> "uniform64"
+                analyticShape && request.coreSemantics().getValue(packet.commandIdValue).geometry is
+                    GPUCorePrimitiveGeometry.DRRect -> "uniform128"
                 analyticShape -> "uniform80"
                 else -> "uniform32"
             }
@@ -4390,6 +4410,8 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             coverageMaskConsumerSlot != null -> coverageMaskConsumerSlot.bindingLayoutHash
             corePrimitiveGradientBindingLayoutHash(structuralPipelineKey.shader) != null ->
                 requireNotNull(corePrimitiveGradientBindingLayoutHash(structuralPipelineKey.shader))
+            preparedSemantic.geometry is GPUCorePrimitiveGeometry.DRRect ->
+                CORE_PRIMITIVE_ANALYTIC_DRRECT_BINDING_LAYOUT_HASH
             analyticShape != null -> CORE_PRIMITIVE_ANALYTIC_SHAPE_BINDING_LAYOUT_HASH
             analyticClipAuthority != null -> CORE_PRIMITIVE_ANALYTIC_CLIP_BINDING_LAYOUT_HASH
             analyticIntersectionAuthority != null -> CORE_PRIMITIVE_ANALYTIC_INTERSECTION_BINDING_LAYOUT_HASH
@@ -4401,7 +4423,9 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             }
             val plan = requireNotNull(analyticShapeUniformSlabPlan)
             val slotIndex = plan.slots.indexOfFirst {
-                it.slotLabel == "analytic-shape-draw-${basePacket.commandIdValue}"
+                it.slotLabel == if (preparedSemantic.geometry is GPUCorePrimitiveGeometry.DRRect)
+                    "analytic-drrect-draw-${basePacket.commandIdValue}"
+                else "analytic-shape-draw-${basePacket.commandIdValue}"
             }
             GPUCorePrimitiveAnalyticShapeUniformSeal(
                 plan = plan,

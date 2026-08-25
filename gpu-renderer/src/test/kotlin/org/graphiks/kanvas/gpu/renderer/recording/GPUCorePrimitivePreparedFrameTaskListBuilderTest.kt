@@ -3339,6 +3339,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
         val resolvedSourceFamily = sourceFamily ?: when (geometry) {
             is GPUCorePrimitiveGeometryInput.Rect -> GPUCorePrimitiveSourceFamily.Rect
             is GPUCorePrimitiveGeometryInput.RRect -> GPUCorePrimitiveSourceFamily.RRect
+            is GPUCorePrimitiveGeometryInput.DRRect -> GPUCorePrimitiveSourceFamily.DRRect
             is GPUCorePrimitiveGeometryInput.TriangulatedPath -> GPUCorePrimitiveSourceFamily.Path
         }
         return GPUCorePrimitivePayloadGatherer().gatherSemantic(

@@ -130,6 +130,28 @@ class GPUCorePrimitiveSessionNativeCacheTest {
     }
 
     @Test
+    fun `analytic drrect component exposes and reuses its isolated uniform128 binding`() {
+        val descriptor = corePrimitiveBindGroupLayoutDescriptor(
+            PRODUCTION_CORE_PRIMITIVE_ANALYTIC_DRRECT_COMPONENT_IDENTITY,
+        )
+        val uniform = requireNotNull(descriptor.entries.single().buffer)
+        assertEquals(128uL, uniform.minBindingSize)
+        assertTrue(uniform.hasDynamicOffset)
+
+        val native = SessionNativeProxy(acceptPipelineIdentity = { true })
+        val cache = GPUWgpu4kCorePrimitiveSessionCache(native.device, GENERATION, native)
+        val key = analyticDRRectProductionKey()
+        val first = cache.acquire(key).acquiredHandles()
+        val second = cache.acquire(key.copy()).acquiredHandles()
+
+        assertSame(first, second)
+        assertEquals(PRODUCTION_CORE_PRIMITIVE_ANALYTIC_DRRECT_COMPONENT_IDENTITY, first.componentIdentity)
+        assertEquals(1, native.pipelineCreationCount)
+        assertEquals(GPUCorePrimitiveNativeCacheCounters(1, 1, 0), cache.counters())
+        cache.close()
+    }
+
+    @Test
     fun `analytic shape cache identity is unique and reused within the thirty entry ceiling`() {
         val native = SessionNativeProxy(acceptPipelineIdentity = { true })
         val cache = GPUWgpu4kCorePrimitiveSessionCache(native.device, GENERATION, native)
@@ -908,6 +930,11 @@ class GPUCorePrimitiveSessionNativeCacheTest {
     private fun analyticShapeProductionKey() =
         productionKey(GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeSrcOver).copy(
             componentIdentity = PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY,
+        )
+
+    private fun analyticDRRectProductionKey() =
+        productionKey(GPUWgpu4kCorePrimitivePipelineProgram.AnalyticDRRectSrcOver).copy(
+            componentIdentity = PRODUCTION_CORE_PRIMITIVE_ANALYTIC_DRRECT_COMPONENT_IDENTITY,
         )
 
     private fun analyticIntersection4ProductionKey() =

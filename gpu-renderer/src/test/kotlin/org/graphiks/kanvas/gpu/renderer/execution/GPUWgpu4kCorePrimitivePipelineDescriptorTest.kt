@@ -452,7 +452,7 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1,
             key.uniformLayout,
         )
-        assertEquals(39, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
+        assertEquals(40, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
         assertTrue(CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES >= GPUWgpu4kCorePrimitivePipelineProgram.entries.size + 1)
         assertEquals(CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_VERTEX_ENTRY_POINT, descriptor.vertex.entryPoint)
         assertEquals(1, descriptor.vertex.buffers.size)
@@ -468,6 +468,36 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
         assertEquals(GPUBlendFactor.OneMinusSrcAlpha, blend.color.dstFactor)
         assertEquals(GPUBlendFactor.One, blend.alpha.srcFactor)
         assertEquals(GPUBlendFactor.OneMinusSrcAlpha, blend.alpha.dstFactor)
+    }
+
+    @Test
+    fun `analytic drrect owns an isolated uniform128 src over pipeline descriptor`() {
+        val key = analyticDRRectKey()
+        val mapped = assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>(
+            mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(key),
+        )
+        val descriptor = corePrimitiveWgpu4kRenderPipelineDescriptor(
+            mapped.identity,
+            shader,
+            pipelineLayout,
+        )
+
+        assertEquals(GPUWgpu4kCorePrimitivePipelineProgram.AnalyticDRRectSrcOver, mapped.identity.program)
+        assertEquals(PRODUCTION_CORE_PRIMITIVE_ANALYTIC_DRRECT_COMPONENT_IDENTITY, mapped.componentIdentity)
+        assertEquals(
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticDRRectUniform128V1,
+            key.uniformLayout,
+        )
+        assertEquals("vs_main", descriptor.vertex.entryPoint)
+        assertEquals(
+            "fs_main",
+            requireNotNull(descriptor.fragment).entryPoint,
+        )
+        val target = assertIs<ColorTargetState>(requireNotNull(descriptor.fragment).targets.single())
+        assertEquals(GPUBlendFactor.One, requireNotNull(target.blend).color.srcFactor)
+        assertEquals(GPUBlendFactor.OneMinusSrcAlpha, requireNotNull(target.blend).color.dstFactor)
+        assertNull(descriptor.depthStencil)
+        assertEquals(1u, descriptor.multisample.count)
     }
 
     @Test
@@ -628,7 +658,7 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
                 mapped.componentIdentity,
             )
         }
-        assertEquals(39, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
+        assertEquals(40, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
         assertTrue(CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES >= GPUWgpu4kCorePrimitivePipelineProgram.entries.size + 1)
     }
 
@@ -786,7 +816,7 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
                 assertEquals(GPUWgpu4kCorePrimitiveBindingPolicy.DynamicUniformRequired, mapped.componentIdentity.bindingPolicy)
             }
         }
-        assertEquals(39, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
+        assertEquals(40, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
         assertTrue(CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES >= GPUWgpu4kCorePrimitivePipelineProgram.entries.size + 1)
     }
 
@@ -1472,6 +1502,10 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
 
     private fun analyticShapeKey() = directKey().copy(
         shader = GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticShape,
+    )
+
+    private fun analyticDRRectKey() = directKey().copy(
+        shader = GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticDRRect,
     )
 
     private fun analyticKey(

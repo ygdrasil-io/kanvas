@@ -1626,6 +1626,12 @@ private fun CanonicalHashSink.semanticPayload(value: GPUDrawSemanticPayload) {
                     int("bottomBits", geometry.bottom.toRawBits())
                     list("radii", geometry.radii) { radius -> int("radiusBits", radius.toRawBits()) }
                 }
+                is GPUCorePrimitiveGeometry.DRRect -> {
+                    list("outerBounds", geometry.outerBounds) { value -> int("bits", value.toRawBits()) }
+                    list("outerRadii", geometry.outerRadii) { value -> int("bits", value.toRawBits()) }
+                    list("innerBounds", geometry.innerBounds) { value -> int("bits", value.toRawBits()) }
+                    list("innerRadii", geometry.innerRadii) { value -> int("bits", value.toRawBits()) }
+                }
                 is GPUCorePrimitiveGeometry.TriangulatedPath -> {
                     list("vertices", geometry.vertices) { coordinate -> int("coordinateBits", coordinate.toRawBits()) }
                     list("indices", geometry.indices) { index -> int("index", index) }

@@ -8120,6 +8120,8 @@ class GPUFramePreflighterTest {
                     when (val geometry = geometries[commandId]) {
                         is GPUCorePrimitiveGeometryInput.RRect ->
                             rrectBuilderCommand(commandId, paintOrder, geometry)
+                        is GPUCorePrimitiveGeometryInput.DRRect ->
+                            pathBuilderCommand(commandId, paintOrder)
                         else -> pathBuilderCommand(commandId, paintOrder)
                     },
                 )
@@ -8134,6 +8136,7 @@ class GPUFramePreflighterTest {
                 sourceFamily = when (geometry) {
                     is GPUCorePrimitiveGeometryInput.Rect -> GPUCorePrimitiveSourceFamily.Rect
                     is GPUCorePrimitiveGeometryInput.RRect -> GPUCorePrimitiveSourceFamily.RRect
+                    is GPUCorePrimitiveGeometryInput.DRRect -> GPUCorePrimitiveSourceFamily.DRRect
                     is GPUCorePrimitiveGeometryInput.TriangulatedPath -> GPUCorePrimitiveSourceFamily.Path
                 },
                 geometry = geometry,

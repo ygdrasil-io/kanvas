@@ -25,6 +25,7 @@ class GPUCorePrimitiveCoverageSampleAuthorityTest {
         assertNull(code(rect, GPUCorePrimitiveCoverageMode.ScalarAA, GPUSamplePlan.SingleSampleFrame))
         assertNull(code(rrect, GPUCorePrimitiveCoverageMode.FullOrScissor, GPUSamplePlan.SingleSampleFrame))
         assertNull(code(rrect, GPUCorePrimitiveCoverageMode.ScalarAA, GPUSamplePlan.SingleSampleFrame))
+        assertNull(code(drrect, GPUCorePrimitiveCoverageMode.FullOrScissor, GPUSamplePlan.SingleSampleFrame))
     }
 
     @Test
@@ -32,6 +33,7 @@ class GPUCorePrimitiveCoverageSampleAuthorityTest {
         listOf(
             rect to GPUCorePrimitiveCoverageMode.Stencil1x,
             rrect to GPUCorePrimitiveCoverageMode.Stencil1x,
+            drrect to GPUCorePrimitiveCoverageMode.ScalarAA,
             directTriangles to GPUCorePrimitiveCoverageMode.Stencil1x,
             directTriangles to GPUCorePrimitiveCoverageMode.ScalarAA,
             stencilEdgeFan to GPUCorePrimitiveCoverageMode.FullOrScissor,
@@ -154,6 +156,10 @@ class GPUCorePrimitiveCoverageSampleAuthorityTest {
             code(rrect, GPUCorePrimitiveCoverageMode.FullOrScissor, GPUSamplePlan.MultisampleFrame(4)),
         )
         assertEquals(
+            "unsupported.core_primitive.coverage_sample.drrect_not_promoted",
+            code(drrect, GPUCorePrimitiveCoverageMode.FullOrScissor, GPUSamplePlan.MultisampleFrame(4)),
+        )
+        assertEquals(
             "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted",
             code(rect, GPUCorePrimitiveCoverageMode.ScalarAA, GPUSamplePlan.MultisampleFrame(4)),
         )
@@ -226,6 +232,10 @@ class GPUCorePrimitiveCoverageSampleAuthorityTest {
         val targetBounds = GPUPixelBounds(0, 0, 16, 16)
         val rect = GPUCorePrimitiveGeometry.Rect(1f, 1f, 8f, 8f)
         val rrect = GPUCorePrimitiveGeometry.RRect(1f, 1f, 8f, 8f, List(8) { 1f })
+        val drrect = GPUCorePrimitiveGeometry.DRRect(
+            outerBounds = listOf(1f, 1f, 8f, 8f), outerRadii = List(8) { 1f },
+            innerBounds = listOf(3f, 3f, 6f, 6f), innerRadii = List(8) { 0.5f },
+        )
         val directTriangles = path(GPUCorePrimitiveGeometryMode.DirectTriangles)
         val stencilEdgeFan = path(GPUCorePrimitiveGeometryMode.StencilEdgeFan)
         val strokeStencilEdgeFan = path(GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan)

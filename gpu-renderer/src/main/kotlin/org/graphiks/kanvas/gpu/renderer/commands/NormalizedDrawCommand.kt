@@ -95,6 +95,8 @@ enum class GPUDrawKind {
     FillRect,
     /** Filled rounded rectangle command family. */
     FillRRect,
+    /** Filled outer rounded rectangle with a rounded-rectangle hole. */
+    FillDRRect,
     /** Filled path command family with tessellated vertex buffers. */
     FillPath,
     /** Text run command family with prepared text stack artifacts. */
@@ -3558,6 +3560,26 @@ sealed interface NormalizedDrawCommand {
         val maskFilter: NormalizedMaskFilter? = null,
     ) : NormalizedDrawCommand {
         override val drawKind: GPUDrawKind = GPUDrawKind.FillRRect
+    }
+
+    /** Bounded analytic double-rounded-rectangle command retained before any path lowering. */
+    data class FillDRRect(
+        override val commandId: GPUDrawCommandID,
+        val outer: GPURRect,
+        val inner: GPURRect,
+        override val transform: GPUTransformFacts,
+        override val clip: GPUClipFacts,
+        override val layer: GPULayerFacts,
+        override val material: GPUMaterialDescriptor,
+        override val blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
+        override val bounds: GPUBounds,
+        override val ordering: GPUOrderingFacts,
+        override val source: GPUCommandSource,
+        val stroke: Boolean = false,
+        val antiAlias: Boolean = true,
+        val maskFilter: NormalizedMaskFilter? = null,
+    ) : NormalizedDrawCommand {
+        override val drawKind: GPUDrawKind = GPUDrawKind.FillDRRect
     }
 
     /** M15 path-fill command with tessellated vertex buffers from the shadow adapter. */

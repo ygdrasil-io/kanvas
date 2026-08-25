@@ -978,21 +978,99 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
-    fun `drrect preserves outer and inner contours instead of filling two fans`() {
+    fun `identity solid drrect retains exact typed outer and inner rrect geometry`() {
         val semantic = semanticFor(DisplayOp.DrawDRRect(
-            RRectF32.of(RectF32.ofLTRB(2f, 2f, 30f, 30f), radius = 4f),
-            RRectF32.of(RectF32.ofLTRB(9f, 9f, 23f, 23f), radius = 2f),
-            Paint.fill(ColorARGB.White),
+            RRectF32.of(RectF32.ofLTRB(8f, 8f, 56f, 56f), radius = 8f),
+            RRectF32.of(RectF32.ofLTRB(20f, 20f, 44f, 44f), radius = 4f),
+            Paint.fill(ColorARGB.Blue).copy(antiAlias = false),
             Matrix3x3F32.Identity,
             org.graphiks.kanvas.canvas.ClipStack.WideOpen,
         ))
-        val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
 
         assertEquals(GPUCorePrimitiveSourceFamily.DRRect, semantic.sourceFamily)
-        assertEquals(GPUCorePrimitiveGeometryMode.StencilEdgeFan, geometry.geometryMode)
-        assertEquals(2, geometry.sourceContourStarts.size)
-        assertEquals(GPUCorePrimitiveFillRule.Winding, geometry.fillRule)
-        assertFalse(geometry.inverseFill)
+        val geometry = assertIs<GPUCorePrimitiveGeometry.DRRect>(semantic.geometry)
+        assertEquals(listOf(8f, 8f, 56f, 56f), geometry.outerBounds)
+        assertEquals(List(8) { 8f }, geometry.outerRadii)
+        assertEquals(listOf(20f, 20f, 44f, 44f), geometry.innerBounds)
+        assertEquals(List(8) { 4f }, geometry.innerRadii)
+        assertEquals(GPUCorePrimitiveCoverageMode.FullOrScissor, semantic.coverageMode)
+    }
+
+    @Test
+    fun `drrect analytic route remains closed to aa non solid filters transforms clips and invalid containment`() {
+        val outer = RRectF32.of(RectF32.ofLTRB(8f, 8f, 56f, 56f), radius = 8f)
+        val inner = RRectF32.of(RectF32.ofLTRB(20f, 20f, 44f, 44f), radius = 4f)
+        val blurOperation = DisplayOp.DrawDRRect(
+            outer,
+            inner,
+            Paint.fill(ColorARGB.Blue).copy(
+                antiAlias = false,
+                maskFilter = org.graphiks.kanvas.paint.MaskFilter.Blur(
+                    org.graphiks.kanvas.pipeline.BlurStyle.NORMAL,
+                    1f,
+                ),
+            ),
+            Matrix3x3F32.Identity,
+            ClipStack.WideOpen,
+        )
+        val operations = listOf(
+            DisplayOp.DrawDRRect(outer, inner, Paint.fill(ColorARGB.Blue), Matrix3x3F32.Identity, ClipStack.WideOpen),
+            DisplayOp.DrawDRRect(
+                outer,
+                inner,
+                Paint.fill(ColorARGB.of(alpha = 160, red = 31, green = 115, blue = 209)).copy(antiAlias = false),
+                Matrix3x3F32.Identity,
+                ClipStack.WideOpen,
+            ),
+            DisplayOp.DrawDRRect(outer, inner, Paint.stroke(ColorARGB.Blue, 2f).copy(antiAlias = false), Matrix3x3F32.Identity, ClipStack.WideOpen),
+            DisplayOp.DrawDRRect(
+                outer,
+                inner,
+                Paint(shader = Shader.LinearGradient(
+                    Point2F32(0f, 0f),
+                    Point2F32(64f, 0f),
+                    listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                )).copy(antiAlias = false),
+                Matrix3x3F32.Identity,
+                ClipStack.WideOpen,
+            ),
+            DisplayOp.DrawDRRect(outer, inner, Paint.fill(ColorARGB.Blue).copy(antiAlias = false), Matrix3x3F32.translation(1f, 0f), ClipStack.WideOpen),
+            DisplayOp.DrawDRRect(
+                outer,
+                inner,
+                Paint.fill(ColorARGB.Blue).copy(antiAlias = false),
+                Matrix3x3F32.Identity,
+                ClipStack.Complex(listOf(org.graphiks.kanvas.canvas.ClipStackOp.RectOp(RectF32.ofLTRB(0f, 0f, 60f, 60f), ClipOp.INTERSECT, false))),
+            ),
+        )
+
+        operations.forEach { operation ->
+            when (val result = GPUFramePathApiInventory.gatherCorePrimitiveSemantics(
+                inventoryFor(operation),
+                GPUPixelBounds(0, 0, 32, 32),
+            )) {
+                is GPUCorePrimitiveSemanticGatherResult.Gathered -> assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(
+                    assertIs<GPUDrawSemanticPayload.CorePrimitive>(
+                        result.semantics.values.single(),
+                    ).geometry,
+                )
+                is GPUCorePrimitiveSemanticGatherResult.Refused -> assertTrue(
+                    result.code.startsWith("unsupported.core_primitive."),
+                    "Neighbour refusal must remain a stable core-primitive boundary: ${result.code}",
+                )
+            }
+        }
+        assertIs<NormalizedDrawCommand.FillPath>(
+            inventoryFor(blurOperation).normalizedCommands.single(),
+        )
+        val invalid = inventoryFor(DisplayOp.DrawDRRect(
+            outer,
+            RRectF32.of(RectF32.ofLTRB(4f, 20f, 44f, 44f), radius = 4f),
+            Paint.fill(ColorARGB.Blue).copy(antiAlias = false),
+            Matrix3x3F32.Identity,
+            ClipStack.WideOpen,
+        ))
+        assertEquals("unsupported.core_primitive.drrect.inner_outside_outer", gatherRefusal(invalid).code)
     }
 
     @Test

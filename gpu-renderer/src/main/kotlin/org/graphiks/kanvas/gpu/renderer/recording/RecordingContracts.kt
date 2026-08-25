@@ -365,6 +365,7 @@ class GPURecorder(
         when (command) {
             is NormalizedDrawCommand.FillRect -> routed(GPUFirstRoutePlanner(capabilities = capabilities).plan(command))
             is NormalizedDrawCommand.FillRRect -> routed(GPUFirstRoutePlanner(capabilities = capabilities).plan(command))
+            is NormalizedDrawCommand.FillDRRect -> routed(GPUFirstRoutePlanner(capabilities = capabilities).plan(command))
             is NormalizedDrawCommand.DrawTextRun -> routed(planDrawTextRun(command))
             is NormalizedDrawCommand.FillPath -> routed(GPUFirstRoutePlanner(capabilities = capabilities).plan(command))
             is NormalizedDrawCommand.DrawImageRect -> routed(GPUFirstRoutePlanner(capabilities = capabilities).plan(command))

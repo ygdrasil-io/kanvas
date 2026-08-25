@@ -332,6 +332,7 @@ private fun GPUCorePrimitiveGeometry.isDirectConsumerGeometry(): Boolean = when 
     is GPUCorePrimitiveGeometry.TriangulatedPath ->
         geometryMode == GPUCorePrimitiveGeometryMode.DirectTriangles
     is GPUCorePrimitiveGeometry.RRect -> false
+    is GPUCorePrimitiveGeometry.DRRect -> false
 }
 
 private fun GPUCorePrimitiveRenderPipelineStructuralKey.Blend.isCanonicalPremulSrcOver(): Boolean {

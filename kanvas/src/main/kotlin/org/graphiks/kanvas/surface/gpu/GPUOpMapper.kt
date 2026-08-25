@@ -83,6 +83,7 @@ import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.matrix.mapAxisAligned
 import org.graphiks.math.matrix.mapAxisAlignedRect
 import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.color.ColorARGB
@@ -762,7 +763,9 @@ internal object GPUOpMapper {
             ).toPathCommand(commandId, target, config).copy(
                 stroke = operation.mode != PointMode.POINTS,
             )
-            is DisplayOp.DrawDRRect -> {
+            is DisplayOp.DrawDRRect -> if (operation.isAnalyticSolidDRRectCandidate()) {
+                operation.toNormalizedCommand(commandId, target)
+            } else {
                 DisplayOp.DrawPath(
                     operation.toPath(),
                     operation.paint,
@@ -814,6 +817,7 @@ internal object GPUOpMapper {
         return when (command) {
             is NormalizedDrawCommand.FillRect -> command.copy(bounds = targetBounds, ordering = ordering, source = source)
             is NormalizedDrawCommand.FillRRect -> command.copy(bounds = targetBounds, ordering = ordering, source = source)
+            is NormalizedDrawCommand.FillDRRect -> command.copy(bounds = targetBounds, ordering = ordering, source = source)
             is NormalizedDrawCommand.FillPath -> command.copy(
                 bounds = targetBounds,
                 ordering = ordering,
@@ -1174,6 +1178,7 @@ private fun NormalizedDrawCommand.geometryCoverage(): GPUCoverageConsumption = w
     } else {
         GPUCoverageConsumption.FullOrScissor
     }
+    is NormalizedDrawCommand.FillDRRect -> GPUCoverageConsumption.FullOrScissor
     is NormalizedDrawCommand.FillRect -> if (antiAlias) {
         GPUCoverageConsumption.ScalarCoverage
     } else {
@@ -1190,6 +1195,9 @@ private fun NormalizedDrawCommand.withClipPlans(
         clip = clip.copy(coveragePlan = coveragePlan, executionPlan = executionPlan),
     )
     is NormalizedDrawCommand.FillRRect -> copy(
+        clip = clip.copy(coveragePlan = coveragePlan, executionPlan = executionPlan),
+    )
+    is NormalizedDrawCommand.FillDRRect -> copy(
         clip = clip.copy(coveragePlan = coveragePlan, executionPlan = executionPlan),
     )
     is NormalizedDrawCommand.FillPath -> copy(
@@ -1217,6 +1225,7 @@ private fun GPUClipCoveragePlan.toExecutionPlan(
 private fun NormalizedDrawCommand.hasBlurMaskFilter(): Boolean = when (this) {
     is NormalizedDrawCommand.FillRect -> maskFilter != null
     is NormalizedDrawCommand.FillRRect -> maskFilter != null
+    is NormalizedDrawCommand.FillDRRect -> maskFilter != null
     is NormalizedDrawCommand.FillPath -> maskFilter != null
     else -> false
 }
@@ -1863,6 +1872,43 @@ internal fun DisplayOp.DrawRRect.toNormalizedCommand(
         antiAlias = paint.antiAlias,
         blend = paint.blendMode.toGpuBlendFacts(),
         maskFilter = paint.maskFilter.toNormalizedMaskFilter(),
+    )
+}
+
+private fun DisplayOp.DrawDRRect.isAnalyticSolidDRRectCandidate(): Boolean =
+    !paint.isStroke() && !paint.antiAlias && paint.shader == null && paint.maskFilter == null &&
+        paint.color.a == 1f && paint.blendMode == BlendMode.SRC_OVER &&
+        transform == Matrix3x3F32.Identity && clip == ClipStack.WideOpen &&
+        exactLoweringRefusalOrNull() == null
+
+internal fun DisplayOp.DrawDRRect.toNormalizedCommand(
+    cmdId: GPUDrawCommandID,
+    target: GPUTargetFacts,
+): NormalizedDrawCommand.FillDRRect {
+    fun RRectF32.toGpuRRect() = GPURRect(
+        GPURect(rect.left, rect.top, rect.right, rect.bottom),
+        GPURRectCornerRadii(topLeft.x, topLeft.y),
+        GPURRectCornerRadii(topRight.x, topRight.y),
+        GPURRectCornerRadii(bottomRight.x, bottomRight.y),
+        GPURRectCornerRadii(bottomLeft.x, bottomLeft.y),
+    )
+    val outer = outer.toGpuRRect()
+    val inner = inner.toGpuRRect()
+    return NormalizedDrawCommand.FillDRRect(
+        commandId = cmdId,
+        outer = outer,
+        inner = inner,
+        transform = transform.toGPUTransformFacts(),
+        clip = clip.toGPUClipFacts(target),
+        layer = GPULayerFacts.root(target),
+        material = paint.toMaterial(),
+        blend = paint.blendMode.toGpuBlendFacts(),
+        bounds = GPUBounds(outer.rect.left, outer.rect.top, outer.rect.right, outer.rect.bottom),
+        ordering = GPUOrderingFacts(0, false, false),
+        source = GPUCommandSource(adapter = "kanvas-surface", operation = "drawDRRect"),
+        stroke = false,
+        antiAlias = false,
+        maskFilter = null,
     )
 }
 
