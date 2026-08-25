@@ -1891,6 +1891,14 @@ class GPUFirstRoutePlanner(
             pathDescriptor.edgeCount < 0 -> "unsupported.geometry.path_invalid_edges"
             transform.type == GPUTransformType.Perspective -> "unsupported.transform.perspective"
             transform.type == GPUTransformType.Singular -> "unsupported.transform.singular"
+            transform.type == GPUTransformType.Scale &&
+                antiAlias &&
+                material.kind == GPUMaterialKind.SolidColor &&
+                pathDescriptor.fillRule == "NonZero" &&
+                !pathDescriptor.inverseFill &&
+                !stroke &&
+                maskFilter == null ->
+                "unsupported.core_primitive.coverage_sample.color_capability"
             !transform.isAcceptedFillPathTransform(
                 scaleAdmitted = material.kind == GPUMaterialKind.SolidColor &&
                     pathDescriptor.fillRule == "NonZero" &&

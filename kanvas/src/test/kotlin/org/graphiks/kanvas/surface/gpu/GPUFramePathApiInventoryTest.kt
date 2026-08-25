@@ -2610,6 +2610,35 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `public scaled FillPath AA refuses before native candidate regardless of MSAA capabilities`() {
+        listOf(
+            "incomplete" to capabilitiesWith(PATH_FILL_STENCIL_COVER),
+            "complete" to completeMsaaCapabilities(),
+        ).forEach { (label, capabilities) ->
+            val plan = GPUFramePathApiInventory.plan(
+                listOf(
+                    DisplayOp.DrawPath(
+                        scaledTriangle(),
+                        Paint.fill(ColorARGB.Blue).copy(antiAlias = true),
+                        Matrix3x3F32(sx = 1.5f, sy = 1.5f),
+                        ClipStack.WideOpen,
+                    ),
+                ),
+                target(64, 64),
+                RenderConfig.DEFAULT,
+                capabilities,
+            )
+
+            assertEquals(
+                "refused.unsupported.core_primitive.coverage_sample.color_capability",
+                plan.recording.analysis.records.single().routeDecisionLabel,
+                "$label route=${plan.recording.analysis.records.singleOrNull()?.routeDecisionLabel}",
+            )
+            assertTrue(plan.recording.taskList.tasks.none { it is GPUTask.Render }, label)
+        }
+    }
+
+    @Test
     fun `mapper selects one path clip as stencil only when stencil capability exists`() {
         val surface = Surface(32, 32)
         surface.canvas {
@@ -2941,6 +2970,46 @@ class GPUFramePathApiInventoryTest {
         org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig()
             .buildCapabilities()
             .withCapabilities(*names)
+
+    private fun completeMsaaCapabilities(): GPUCapabilities {
+        val base = capabilitiesWith(PATH_FILL_STENCIL_COVER)
+        val formatClass = Class.forName("io.ygdrasil.webgpu.GPUTextureFormat")
+        fun format(name: String): Any =
+            formatClass.enumConstants.first { (it as Enum<*>).name == name }
+
+        val sampleSupportClass = Class.forName(
+            "org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureSampleCountSupport",
+        )
+        fun sampleSupport(resolve: Set<Int>): Any =
+            sampleSupportClass
+                .getConstructor(Set::class.java, Set::class.java)
+                .newInstance(setOf(1, 4), resolve)
+
+        val formatSupport = Class.forName(
+            "org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureFormatSampleSupport",
+        ).getConstructor(Map::class.java).newInstance(
+            mapOf(
+                format("RGBA8Unorm") to sampleSupport(setOf(4)),
+                format("Depth24PlusStencil8") to sampleSupport(emptySet()),
+            ),
+        )
+        val copy = GPUCapabilities::class.java.methods.first {
+            it.name.startsWith("copy") && it.parameterCount == 10
+        }
+        return copy.invoke(
+            base,
+            base.implementation,
+            base.facts,
+            base.knownUnsupportedFacts,
+            "complete-msaa",
+            base.limits,
+            emptySet<Any>(),
+            null,
+            formatSupport,
+            base.rendererFeatures,
+            base.copyAsDrawCapability,
+        ) as GPUCapabilities
+    }
 
     private fun GPUCapabilities.withCapabilities(vararg names: String): GPUCapabilities {
         return GPUCapabilities(
