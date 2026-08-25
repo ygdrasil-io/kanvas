@@ -19,7 +19,7 @@ Les sources de vérité sont le code, notamment [`Canvas.kt`](../kanvas/src/main
 | Surface source | Lot propriétaire unique | Statut actuel / probe requis |
 |---|---:|---|
 | `matrix`, `saveCount`, `localClipBounds`, `quickReject(RectF32)`, `quickReject(Path)`, `isClipEmpty`, `isClipRect` | 10 | `N` — probes de contrat d'état, clip et rejet. |
-| `drawColor`, `clear`, `drawPoint`, `drawPoints`, `drawRect`, `drawRRect`, `drawDRRect` | 10 | `R` pour `drawRect` solide, le `drawRRect` solide non-AA sous scale `(2,1)` et le `drawDRRect` solide non-AA identité; `N` pour les autres primitives et `clear`. |
+| `drawColor`, `clear`, `drawPoint`, `drawPoints`, `drawRect`, `drawRRect`, `drawDRRect` | 10 | `R` pour `drawRect` solide, le `drawRRect` solide uniforme non-AA sous scale `(2,1)`, le `drawRRect` solide asymétrique par coin, le `drawRRect` elliptique à rayons égaux aux demi-dimensions, le `drawDRRect` solide uniforme non-AA identité avec trou et le `drawDRRect` solide à trou asymétrique par coin; `N` pour les autres primitives et `clear`. |
 | `save`, `saveLayer`, `restore`, `restoreToCount`, `flushAndSnapshot` | 10 | `N` — probes d'empilement, isolation de layer et snapshot. |
 | `translate`, `scale`, `rotate`, `skew`, `concat`, `setMatrix`, `resetMatrix` | 10 | `R` pour la transform affine de rect et le seul scale `(2,1)` du `drawRRect` solide non-AA; `N` pour les autres combinaisons. |
 | `clipRect` | 10 | `R` pour le scissor rectangulaire; `N` pour les autres opérations de clip. |

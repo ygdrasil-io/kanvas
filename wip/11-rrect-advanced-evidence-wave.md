@@ -108,3 +108,13 @@ reste non promue et la vague s'arrête avec le diagnostic précis.
 - clip RRect/path et transforms non axis-aligned ;
 - nouveaux codes de support larges ou changements de seuil globaux ;
 - modifications de `gpu-renderer-scenes`.
+
+## Résultat dérivé
+
+- Commit source accepté : `9945a52cc89c7086d7f24d9a4004d7297ca7adcc`.
+- `asymmetric-solid-rrect` : similarité `100.0%`, `0` pixel différent, delta maximal de canal `0`, compte de remplissage `2265`.
+- `ellipse-solid-rrect` : similarité `100.0%`, `0` pixel différent, delta maximal de canal `0`, compte de remplissage `764`.
+- `asymmetric-solid-drrect-hole` : similarité `100.0%`, `0` pixel différent, delta maximal de canal `0`, compte de remplissage `1889`.
+- Adaptateur natif non-fallback : `Apple M2 Max` (`available=true`, `isFallbackAdapter=false`) pour les trois captures.
+- Correction de production nécessaire : non ; aucune source de production n’a été modifiée.
+- Racine des artefacts promus : `reports/gpu-renderer/evidence/correctness/promoted/`.
