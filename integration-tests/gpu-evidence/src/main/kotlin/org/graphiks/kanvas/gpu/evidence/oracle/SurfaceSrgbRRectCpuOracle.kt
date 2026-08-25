@@ -12,25 +12,42 @@ class SurfaceSrgbRRectCpuOracle(
         const val HEIGHT = 64
     }
 
+    data class CornerRadii(val x: Float, val y: Float) {
+        init {
+            require(x.isFinite() && y.isFinite() && x >= 0f && y >= 0f) {
+                "RRect radii must be finite and non-negative"
+            }
+        }
+    }
+
     data class DeviceRRect(
         val left: Float,
         val top: Float,
         val right: Float,
         val bottom: Float,
-        val radiusX: Float,
-        val radiusY: Float,
+        val topLeft: CornerRadii,
+        val topRight: CornerRadii = topLeft,
+        val bottomRight: CornerRadii = topRight,
+        val bottomLeft: CornerRadii = topLeft,
     ) {
+        constructor(
+            left: Float,
+            top: Float,
+            right: Float,
+            bottom: Float,
+            radiusX: Float,
+            radiusY: Float,
+        ) : this(left, top, right, bottom, CornerRadii(radiusX, radiusY))
+
         init {
             require(left.isFinite() && top.isFinite() && right.isFinite() && bottom.isFinite()) {
                 "RRect bounds must be finite"
             }
             require(right > left && bottom > top) { "RRect bounds must be non-empty" }
-            require(radiusX.isFinite() && radiusY.isFinite() && radiusX >= 0f && radiusY >= 0f) {
-                "RRect radii must be finite and non-negative"
-            }
-            require(radiusX <= (right - left) / 2f && radiusY <= (bottom - top) / 2f) {
-                "RRect radii must fit within bounds"
-            }
+            require(topLeft.x + topRight.x <= right - left)
+            require(bottomLeft.x + bottomRight.x <= right - left)
+            require(topLeft.y + bottomLeft.y <= bottom - top)
+            require(topRight.y + bottomRight.y <= bottom - top)
         }
     }
 
@@ -59,18 +76,23 @@ class SurfaceSrgbRRectCpuOracle(
     private fun contains(shape: DeviceRRect, x: Float, y: Float): Boolean {
         if (x < shape.left || x >= shape.right || y < shape.top || y >= shape.bottom) return false
         val corner = when {
-            shape.radiusX > 0f && shape.radiusY > 0f && x < shape.left + shape.radiusX && y < shape.top + shape.radiusY ->
-                floatArrayOf(shape.left + shape.radiusX, shape.top + shape.radiusY)
-            shape.radiusX > 0f && shape.radiusY > 0f && x >= shape.right - shape.radiusX && y < shape.top + shape.radiusY ->
-                floatArrayOf(shape.right - shape.radiusX, shape.top + shape.radiusY)
-            shape.radiusX > 0f && shape.radiusY > 0f && x < shape.left + shape.radiusX && y >= shape.bottom - shape.radiusY ->
-                floatArrayOf(shape.left + shape.radiusX, shape.bottom - shape.radiusY)
-            shape.radiusX > 0f && shape.radiusY > 0f && x >= shape.right - shape.radiusX && y >= shape.bottom - shape.radiusY ->
-                floatArrayOf(shape.right - shape.radiusX, shape.bottom - shape.radiusY)
+            shape.topLeft.x > 0f && shape.topLeft.y > 0f &&
+                x < shape.left + shape.topLeft.x && y < shape.top + shape.topLeft.y ->
+                shape.topLeft to floatArrayOf(shape.left + shape.topLeft.x, shape.top + shape.topLeft.y)
+            shape.topRight.x > 0f && shape.topRight.y > 0f &&
+                x >= shape.right - shape.topRight.x && y < shape.top + shape.topRight.y ->
+                shape.topRight to floatArrayOf(shape.right - shape.topRight.x, shape.top + shape.topRight.y)
+            shape.bottomLeft.x > 0f && shape.bottomLeft.y > 0f &&
+                x < shape.left + shape.bottomLeft.x && y >= shape.bottom - shape.bottomLeft.y ->
+                shape.bottomLeft to floatArrayOf(shape.left + shape.bottomLeft.x, shape.bottom - shape.bottomLeft.y)
+            shape.bottomRight.x > 0f && shape.bottomRight.y > 0f &&
+                x >= shape.right - shape.bottomRight.x && y >= shape.bottom - shape.bottomRight.y ->
+                shape.bottomRight to floatArrayOf(shape.right - shape.bottomRight.x, shape.bottom - shape.bottomRight.y)
             else -> null
         } ?: return true
-        val dx = (x - corner[0]) / shape.radiusX
-        val dy = (y - corner[1]) / shape.radiusY
+        val (radii, center) = corner
+        val dx = (x - center[0]) / radii.x
+        val dy = (y - center[1]) / radii.y
         return dx * dx + dy * dy <= 1f
     }
 
