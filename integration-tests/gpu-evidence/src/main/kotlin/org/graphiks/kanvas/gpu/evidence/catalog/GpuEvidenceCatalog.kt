@@ -568,7 +568,7 @@ object GpuEvidenceCatalog {
         fill: IntArray,
         contours: List<SurfaceSrgbPathFillCpuOracle.Contour>,
         fillRule: SurfaceSrgbPathFillCpuOracle.FillRule,
-        oracleVersion: Int = 1,
+        oracleVersion: Int = 2,
         comparisonRationale: String = "Exact opaque RGBA8 output from independent pixel-center winding/even-odd polygon membership.",
     ) = EvidenceCase(
         EvidenceSceneDescriptor(

@@ -260,15 +260,15 @@ class GpuEvidenceCatalogTest {
                 "asymmetric-solid-rrect" to OraclePolicy.GeneratedCpu("surface-srgb-rrect-pixel-center", 2),
                 "ellipse-solid-rrect" to OraclePolicy.GeneratedCpu("surface-srgb-rrect-pixel-center", 2),
                 "asymmetric-solid-drrect-hole" to OraclePolicy.GeneratedCpu("surface-srgb-rrect-pixel-center", 2),
-                "solid-triangle-path" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 1),
-                "solid-concave-path" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 1),
-                "even-odd-path-hole" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 1),
-                "winding-path-hole" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 1),
+                "solid-triangle-path" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 2),
+                "solid-concave-path" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 2),
+                "even-odd-path-hole" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 2),
+                "winding-path-hole" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 2),
                 "inverse-winding-triangle-path" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 2),
                 "inverse-even-odd-path-hole" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 2),
-                "implicit-closure-triangle-path" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 1),
-                "translated-triangle-path" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 1),
-                "uniform-scaled-triangle-path" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 1),
+                "implicit-closure-triangle-path" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 2),
+                "translated-triangle-path" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 2),
+                "uniform-scaled-triangle-path" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 2),
             ),
             GpuEvidenceCatalog.renderCases.associate { evidenceCase ->
                 evidenceCase.descriptor.id.value to evidenceCase.descriptor.oracle
@@ -713,7 +713,7 @@ class GpuEvidenceCatalogTest {
         paint: Paint,
         convex: Boolean,
         transform: Matrix3x3F32 = Matrix3x3F32.Identity,
-        oracleVersion: Int = 1,
+        oracleVersion: Int = 2,
         comparisonRationale: String = "Exact opaque RGBA8 output from independent pixel-center winding/even-odd polygon membership.",
     ) {
         val evidenceCase = assertNotNull(GpuEvidenceCatalog.renderCases.firstOrNull { it.descriptor.id.value == id })

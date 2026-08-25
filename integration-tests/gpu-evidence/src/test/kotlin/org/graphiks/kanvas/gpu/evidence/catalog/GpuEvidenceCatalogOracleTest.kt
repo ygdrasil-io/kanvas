@@ -193,7 +193,7 @@ class GpuEvidenceCatalogOracleTest {
         listOf(
             Triple("implicit-closure-triangle-path", orange, 1128 to listOf(8, 8, 55, 8, 31, 31, 32, 31)),
             Triple("translated-triangle-path", blue, 1128 to listOf(12, 13, 60, 13, 35, 36, 50, 40)),
-            Triple("uniform-scaled-triangle-path", green, 1176 to listOf(12, 12, 60, 12, 35, 35, 50, 40)),
+            Triple("uniform-scaled-triangle-path", green, 1128 to listOf(12, 12, 60, 12, 35, 35, 50, 40)),
         ).forEach { (id, color, expectation) ->
             val (count, samples) = expectation
             val pixels = oracle(id)
@@ -203,6 +203,8 @@ class GpuEvidenceCatalogOracleTest {
             assertPixel(pixels, 64, 64, samples[6], samples[7], intArrayOf(13, 20, 33, 255))
             assertEquals(count, fillPixelCount(pixels, color), id)
         }
+        val scaled = oracle("uniform-scaled-triangle-path")
+        assertPixel(scaled, 64, 64, 59, 12, intArrayOf(13, 20, 33, 255))
     }
 
     private fun oracle(id: String): ByteArray = assertNotNull(

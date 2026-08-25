@@ -49,7 +49,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
     }
 
     @Test
-    fun `public Surface uniformly scaled triangle uses device cover and fills exactly 1176 pixels`() {
+    fun `public Surface uniformly scaled triangle uses device cover and fills exactly 1128 pixels`() {
         val background = ColorARGB.of(alpha = 255, red = 13, green = 20, blue = 33)
         val fill = ColorARGB.of(alpha = 255, red = 31, green = 115, blue = 209)
         val surface = Surface(width = 64, height = 64, format = PixelFormat.RGBA8)
