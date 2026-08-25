@@ -2454,6 +2454,43 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `public translated FillPath exposes transformed device cover and vertices`() {
+        val surface = Surface(64, 64)
+        surface.canvas {
+            translate(4f, 5f)
+            drawPath(
+                Path().apply {
+                    moveTo(8f, 8f)
+                    lineTo(56f, 8f)
+                    lineTo(8f, 55f)
+                    close()
+                },
+                Paint.fill(ColorARGB.Blue).copy(antiAlias = false),
+            )
+        }
+        val plan = GPUFramePathApiInventory.plan(
+            surface.snapshotOps(),
+            target(64, 64),
+            RenderConfig.DEFAULT,
+            capabilitiesWith(PATH_FILL_STENCIL_COVER),
+        )
+
+        assertEquals(null, plan.preparedRefusal)
+        assertEquals("native.path_fill.stencil_cover", plan.recording.analysis.records.single().routeDecisionLabel)
+        val semantic = assertIs<GPUCorePrimitiveSemanticGatherResult.Gathered>(
+            GPUFramePathApiInventory.gatherCorePrimitiveSemantics(
+                plan,
+                GPUPixelBounds(0, 0, 64, 64),
+            ),
+        ).semantics.values.single() as GPUDrawSemanticPayload.CorePrimitive
+        val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
+        assertEquals(GPUCorePrimitiveCoverageMode.Stencil1x, semantic.coverageMode)
+        assertEquals(GPUPixelBounds(12, 13, 60, 60), geometry.coverBounds)
+        val deviceVertices = geometry.vertices.chunked(2).map { it[0] to it[1] }
+        assertTrue(listOf(12f to 13f, 60f to 13f, 12f to 60f).all { it in deviceVertices })
+    }
+
+    @Test
     fun `public uniformly scaled FillPath keeps native stencil cover with device geometry`() {
         val surface = Surface(64, 64)
         surface.canvas {
@@ -2494,6 +2531,49 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `public scale FillPath is limited to solid non inverse winding without AA`() {
+        val gradient = Paint(
+            shader = Shader.LinearGradient(
+                Point2F32(0f, 0f),
+                Point2F32(64f, 64f),
+                listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+            ),
+        ).copy(antiAlias = false)
+        val variants = listOf(
+            "linear-gradient" to DisplayOp.DrawPath(scaledTriangle(), gradient, Matrix3x3F32(sx = 1.5f, sy = 1.5f), ClipStack.WideOpen),
+            "even-odd" to DisplayOp.DrawPath(scaledTriangle(FillType.EVEN_ODD), Paint.fill(ColorARGB.Blue).copy(antiAlias = false), Matrix3x3F32(sx = 1.5f, sy = 1.5f), ClipStack.WideOpen),
+            "inverse-winding" to DisplayOp.DrawPath(scaledTriangle(FillType.INVERSE_WINDING), Paint.fill(ColorARGB.Blue).copy(antiAlias = false), Matrix3x3F32(sx = 1.5f, sy = 1.5f), ClipStack.WideOpen),
+            "anti-aliased" to DisplayOp.DrawPath(scaledTriangle(), Paint.fill(ColorARGB.Blue).copy(antiAlias = true), Matrix3x3F32(sx = 1.5f, sy = 1.5f), ClipStack.WideOpen),
+        )
+        val capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER, "first_slice.linear_gradient.native")
+
+        variants.forEach { (label, operation) ->
+            val plan = GPUFramePathApiInventory.plan(
+                listOf(operation),
+                target(64, 64),
+                RenderConfig.DEFAULT,
+                capabilities,
+            )
+            assertEquals(
+                "refused.unsupported.transform.class_downgrade",
+                plan.recording.analysis.records.single().routeDecisionLabel,
+                label,
+            )
+        }
+
+        listOf(Matrix3x3F32.Identity, Matrix3x3F32.translation(4f, 5f)).forEach { transform ->
+            val plan = GPUFramePathApiInventory.plan(
+                listOf(DisplayOp.DrawPath(scaledTriangle(), gradient, transform, ClipStack.WideOpen)),
+                target(64, 64),
+                RenderConfig.DEFAULT,
+                capabilities,
+            )
+            assertEquals(null, plan.preparedRefusal, transform.toString())
+            assertEquals("native.path_fill.stencil_cover", plan.recording.analysis.records.single().routeDecisionLabel, transform.toString())
+        }
+    }
+
+    @Test
     fun `public scaled FillPath retains stable refusals for unsupported transforms and AA`() {
         val variants = listOf(
             "non-uniform" to Matrix3x3F32(sx = 1.5f, sy = 1.25f),
@@ -2527,7 +2607,7 @@ class GPUFramePathApiInventoryTest {
                 GPUPixelBounds(0, 0, 64, 64),
             ),
         )
-        assertEquals("unsupported.core_primitive.coverage_sample.color_capability", aaRefusal.diagnostic.code.value)
+        assertEquals("unsupported.transform.class_downgrade", aaRefusal.diagnostic.code.value)
     }
 
     @Test
@@ -2893,7 +2973,8 @@ class GPUFramePathApiInventoryTest {
         close()
     }
 
-    private fun scaledTriangle() = Path().apply {
+    private fun scaledTriangle(fillType: FillType = FillType.WINDING) = Path().apply {
+        this.fillType = fillType
         moveTo(8f, 8f)
         lineTo(40f, 8f)
         lineTo(8f, 40f)

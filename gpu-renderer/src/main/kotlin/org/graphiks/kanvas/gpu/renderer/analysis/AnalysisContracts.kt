@@ -1891,7 +1891,14 @@ class GPUFirstRoutePlanner(
             pathDescriptor.edgeCount < 0 -> "unsupported.geometry.path_invalid_edges"
             transform.type == GPUTransformType.Perspective -> "unsupported.transform.perspective"
             transform.type == GPUTransformType.Singular -> "unsupported.transform.singular"
-            !transform.isAcceptedFillPathTransform() -> "unsupported.transform.class_downgrade"
+            !transform.isAcceptedFillPathTransform(
+                scaleAdmitted = material.kind == GPUMaterialKind.SolidColor &&
+                    pathDescriptor.fillRule == "NonZero" &&
+                    !pathDescriptor.inverseFill &&
+                    !antiAlias &&
+                    !stroke &&
+                    maskFilter == null,
+            ) -> "unsupported.transform.class_downgrade"
             clip.kind == GPUClipKind.ComplexStack &&
                 (
                     clip.coveragePlan == null ||
@@ -2435,12 +2442,12 @@ private fun GPUTransformFacts.hasNonFiniteFacts(): Boolean =
         !skewX.isFinite() || !skewY.isFinite()
 
 /** Admits only identity, translation, or finite strictly-positive uniform scale for FillPath. */
-private fun GPUTransformFacts.isAcceptedFillPathTransform(): Boolean = when (type) {
+private fun GPUTransformFacts.isAcceptedFillPathTransform(scaleAdmitted: Boolean): Boolean = when (type) {
     GPUTransformType.Identity,
     GPUTransformType.Translate,
     -> true
     GPUTransformType.Scale ->
-        scaleX.isFinite() && scaleY.isFinite() && scaleX > 0f && scaleX == scaleY
+        scaleAdmitted && scaleX.isFinite() && scaleY.isFinite() && scaleX > 0f && scaleX == scaleY
     GPUTransformType.Affine,
     GPUTransformType.Perspective,
     GPUTransformType.Singular,

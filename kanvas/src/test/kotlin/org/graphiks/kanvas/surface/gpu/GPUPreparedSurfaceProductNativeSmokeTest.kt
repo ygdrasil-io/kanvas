@@ -66,14 +66,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
                 Paint.fill(fill).copy(antiAlias = false),
             )
         }
-        val result = GPUPreparedSurfaceProductEntry.render(
-            operations = surface.snapshotOps(),
-            width = surface.width,
-            height = surface.height,
-            format = surface.format,
-            config = surface.config,
-            executionPort = GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceNativeBackendPortFactory),
-        )
+        val result = surface.render()
         val pixels = result.pixels.toByteArray()
         var opaqueFillPixels = 0
         for (y in 0 until 64) for (x in 0 until 64) {
