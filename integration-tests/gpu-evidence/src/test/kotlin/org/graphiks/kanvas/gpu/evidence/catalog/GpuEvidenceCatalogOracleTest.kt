@@ -137,6 +137,31 @@ class GpuEvidenceCatalogOracleTest {
     }
 
     @Test
+    fun `hard clip rrect oracles preserve clip membership and ordered band counts`() {
+        val background = intArrayOf(13, 20, 33, 255)
+        val blue = intArrayOf(31, 115, 209, 255)
+        val orange = intArrayOf(242, 135, 46, 255)
+        val solid = oracle("clip-rrect-solid")
+        val ellipse = oracle("clip-rrect-ellipse")
+        val bands = oracle("clip-rrect-two-bands")
+
+        assertPixel(solid, 64, 64, 8, 8, background)
+        assertPixel(solid, 64, 64, 13, 8, blue)
+        assertPixel(solid, 64, 64, 56, 32, background)
+        assertEquals(2256, fillPixelCount(solid, blue))
+
+        assertPixel(ellipse, 64, 64, 25, 20, background)
+        assertPixel(ellipse, 64, 64, 26, 20, orange)
+        assertPixel(ellipse, 64, 64, 38, 20, background)
+        assertEquals(764, fillPixelCount(ellipse, orange))
+
+        assertPixel(bands, 64, 64, 31, 32, blue)
+        assertPixel(bands, 64, 64, 32, 32, orange)
+        assertEquals(1128, fillPixelCount(bands, blue))
+        assertEquals(1128, fillPixelCount(bands, orange))
+    }
+
+    @Test
     fun `path fill oracles preserve literal winding and inverse coverage`() {
         val background = intArrayOf(13, 20, 33, 255)
         val orange = intArrayOf(242, 135, 46, 255)

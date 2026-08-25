@@ -36,6 +36,17 @@ les contours curves (quadratiques ou cubiques), les oval/circle, les scales
 non uniformes, réfléchis ou composés, et tous les clips (`clipPath`,
 `clipRRect` ou interactions de clip).
 
+La preuve Wave 2 ajoute exactement trois scènes publiques `Surface` natives de
+`clipRRect` hard non-AA, à CTM identité, avec une seule intersection
+`ClipStack.Complex` `RRectOp` (`ClipOp.INTERSECT`, `antiAlias=false`) et des
+consommateurs `DrawRect` opaques non-AA : `clip-rrect-solid` (bleu 2256),
+`clip-rrect-ellipse` (orange 764) et `clip-rrect-two-bands` (bleu 1128,
+orange 1128, dans cet ordre). Elles sont prouvées sur la route
+`kanvas.surface.render`, avec exactitude RGBA8 native et zéro pixel différent.
+Cette preuve ne revendique pas l'AA, `ClipOp.DIFFERENCE`, les clips multiples ou
+imbriqués, les transforms, `clipPath`, les rayons par coin distincts, ni un
+`drawRRect` consommateur sous le clip.
+
 ## Code et tests à lire
 
 | Zone | Fichiers principaux |
@@ -53,7 +64,7 @@ non uniformes, réfléchis ou composés, et tous les clips (`clipPath`,
 | Fills path | Les neuf scènes `solid-triangle-path`, `solid-concave-path`, `even-odd-path-hole`, `winding-path-hole`, `inverse-winding-triangle-path`, `inverse-even-odd-path-hole`, `implicit-closure-triangle-path`, `translated-triangle-path` et `uniform-scaled-triangle-path` : fills solides opaques non-AA, les quatre fill types (`WINDING`, `EVEN_ODD`, `INVERSE_WINDING`, `INVERSE_EVEN_ODD`), formes polygonales littérales, translation positive et scale uniforme positif, avec oracle pixel-center v2. | La preuve est limitée à ces neuf formes littérales et leurs target bounds ; aucun autre contour ou fill path n'est revendiqué, notamment lignes, courbes quadratiques/cubiques, auto-intersection, oval/circle, AA, strokes, scales non uniformes/réfléchis/composés et autres transforms. |
 | Coverage AA | Aucun cas revendiqué. | Arêtes et positions AA, petites primitives et superpositions restent non revendiquées sans coverage mesurable. |
 | Strokes | Aucun cas revendiqué. | Caps, joins, miter, dash, hairline et path effects restent non revendiqués. |
-| `clipPath` / `clipRRect` | Aucun cas revendiqué. | Intersections, clips imbriqués/AA/transformés, clips vides et clips avec rayons distincts restent non revendiqués. |
+| `clipPath` / `clipRRect` | `R` uniquement pour les trois scènes Wave 2 `clip-rrect-solid`, `clip-rrect-ellipse` et `clip-rrect-two-bands` : une intersection hard non-AA à identité et des `DrawRect` opaques non-AA. | `N` pour `clipPath` et toutes les variantes AA, `DIFFERENCE`, multiples/imbriquées, transformées, à rayons distincts ou avec un `drawRRect` consommateur. |
 | Interactions | Path sous clip, stroke sous clip, path translucide, transform + clip + restore et sentinelle post-restore. | Aucun état de stencil/mask ne fuit dans la primitive suivante. |
 
 ## Preuves à exiger

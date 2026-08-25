@@ -6,6 +6,7 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.pipeline.BlurStyle
+import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.math.color.ColorARGB
@@ -57,6 +58,36 @@ object KanvasScenePrograms {
         save()
         clipRect(RectF32.ofLTRB(24f, 24f, 48f, 48f), antiAlias = false)
         drawRect(RectF32.ofLTRB(16f, 16f, 56f, 56f), Paint.fill(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)))
+        restore()
+    })
+
+    fun clipRRectSolid() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        save()
+        clipRRect(RRectF32.of(RectF32.ofLTRB(8f, 8f, 56f, 56f), radius = 8f), ClipOp.INTERSECT, antiAlias = false)
+        drawRect(RectF32.ofLTRB(0f, 0f, 64f, 64f), Paint.fill(ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)).copy(antiAlias = false))
+        restore()
+    })
+
+    fun clipRRectEllipse() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        save()
+        val radii = CornerRadiiF32.of(20f, 12f)
+        clipRRect(
+            RRectF32.of(RectF32.ofLTRB(12f, 20f, 52f, 44f), radii, radii, radii, radii),
+            ClipOp.INTERSECT,
+            antiAlias = false,
+        )
+        drawRect(RectF32.ofLTRB(0f, 0f, 64f, 64f), Paint.fill(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)).copy(antiAlias = false))
+        restore()
+    })
+
+    fun clipRRectTwoBands() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        save()
+        clipRRect(RRectF32.of(RectF32.ofLTRB(8f, 8f, 56f, 56f), radius = 8f), ClipOp.INTERSECT, antiAlias = false)
+        drawRect(RectF32.ofLTRB(0f, 0f, 64f, 64f), Paint.fill(ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)).copy(antiAlias = false))
+        drawRect(RectF32.ofLTRB(32f, 0f, 64f, 64f), Paint.fill(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)).copy(antiAlias = false))
         restore()
     })
 

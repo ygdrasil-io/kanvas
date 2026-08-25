@@ -8,6 +8,7 @@ import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbSrcOverCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbGradientCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbLinearGradientStrokeBandsCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRRectCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbPathFillCpuOracle
 import org.graphiks.kanvas.gpu.evidence.programs.KanvasScenePrograms
 import org.graphiks.kanvas.gpu.evidence.programs.RendererRefusalPrograms
@@ -35,6 +36,9 @@ object GpuEvidenceCatalog {
         asymmetricSolidRRect(),
         ellipseSolidRRect(),
         asymmetricSolidDRRectHole(),
+        clipRRectSolid(),
+        clipRRectEllipse(),
+        clipRRectTwoBands(),
         solidTrianglePath(),
         solidConcavePath(),
         evenOddPathHole(),
@@ -406,6 +410,54 @@ object GpuEvidenceCatalog {
                 topRight = SurfaceSrgbRRectCpuOracle.CornerRadii(6f, 2f),
                 bottomRight = SurfaceSrgbRRectCpuOracle.CornerRadii(4f, 6f),
                 bottomLeft = SurfaceSrgbRRectCpuOracle.CornerRadii(3f, 2f),
+            ),
+        ),
+    )
+
+    private fun clipRRectSolid() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("clip-rrect-solid"), "Solid hard RRect clip", "Public Kanvas Surface hard non-AA uniform RRect clip over an opaque rectangle.",
+            64, 64, 1L, setOf("clip-rrect", "solid-rect", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-clip-rrect-pixel-center", 1),
+            ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent hard pixel-center RRect clip membership."), emptySet(),
+        ),
+        KanvasScenePrograms.clipRRectSolid(),
+        SurfaceSrgbClipRRectCpuOracle(
+            background = intArrayOf(13, 20, 33, 255),
+            clip = SurfaceSrgbClipRRectCpuOracle.DeviceRRect(8f, 8f, 56f, 56f, 8f, 8f),
+            draws = listOf(SurfaceSrgbClipRRectCpuOracle.OpaqueRect(0f, 0f, 64f, 64f, intArrayOf(31, 115, 209, 255))),
+        ),
+    )
+
+    private fun clipRRectEllipse() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("clip-rrect-ellipse"), "Ellipse hard RRect clip", "Public Kanvas Surface hard non-AA elliptical RRect clip over an opaque rectangle.",
+            64, 64, 1L, setOf("clip-rrect", "ellipse", "solid-rect", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-clip-rrect-pixel-center", 1),
+            ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent hard pixel-center RRect clip membership."), emptySet(),
+        ),
+        KanvasScenePrograms.clipRRectEllipse(),
+        SurfaceSrgbClipRRectCpuOracle(
+            background = intArrayOf(13, 20, 33, 255),
+            clip = SurfaceSrgbClipRRectCpuOracle.DeviceRRect(12f, 20f, 52f, 44f, 20f, 12f),
+            draws = listOf(SurfaceSrgbClipRRectCpuOracle.OpaqueRect(0f, 0f, 64f, 64f, intArrayOf(242, 135, 46, 255))),
+        ),
+    )
+
+    private fun clipRRectTwoBands() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("clip-rrect-two-bands"), "Two-band hard RRect clip", "Public Kanvas Surface hard non-AA uniform RRect clip reused by ordered opaque blue and orange rectangles.",
+            64, 64, 1L, setOf("clip-rrect", "solid-rect", "paint-order", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-clip-rrect-pixel-center", 1),
+            ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent hard pixel-center RRect clip membership and paint order."), emptySet(),
+        ),
+        KanvasScenePrograms.clipRRectTwoBands(),
+        SurfaceSrgbClipRRectCpuOracle(
+            background = intArrayOf(13, 20, 33, 255),
+            clip = SurfaceSrgbClipRRectCpuOracle.DeviceRRect(8f, 8f, 56f, 56f, 8f, 8f),
+            draws = listOf(
+                SurfaceSrgbClipRRectCpuOracle.OpaqueRect(0f, 0f, 64f, 64f, intArrayOf(31, 115, 209, 255)),
+                SurfaceSrgbClipRRectCpuOracle.OpaqueRect(32f, 0f, 64f, 64f, intArrayOf(242, 135, 46, 255)),
             ),
         ),
     )
