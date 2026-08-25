@@ -23,7 +23,7 @@ harness commun ; les familles graphiques sont détaillées dans les autres brief
 
 | Sujet | Scénarios précis | Résultat exigé |
 | --- | --- | --- |
-| Snapshot du catalogue | Lire le catalogue de la branche avant toute capture, puis relire tous les IDs après chaque changement de code. | État courant : 12 rendus / 4 refus. `repeat-gradient-refusal` reste un refus jusqu'à une implémentation séparée, son oracle et sa capture hardware validée. |
+| Snapshot du catalogue | Lire le catalogue de la branche avant toute capture, puis relire tous les IDs après chaque changement de code. | État courant : 14 rendus / 2 refus. Les IDs historiques `repeat-gradient-refusal` et `gradient-stroke-refusal` sont désormais des rendus publics `Surface`. |
 | Route réelle | Vérifier le type de programme de chaque cas : `KanvasSurfaceProgram` ou `RoutedSceneProgram` interne. | Les rendus sont des preuves `Surface`; les deux refus internes ne sont jamais présentés comme couverture de cette route publique. |
 | Unicité/complétude | Un ID unique, une scène publique littérale par rendu, un oracle par rendu, aucun oracle de réussite pour un refus. | Échec de test sur ID doublon, scène implicite, oracle absent, raison de refus vide ou verdict contradictoire. |
 | Intégrité de route | Rendu avec readback/draw/pipeline positifs ; refus sans submission, readback, draw ou pipeline. | Impossible de promouvoir un fallback CPU, une exécution partielle ou une preuve d'environnement différente. |
@@ -31,12 +31,35 @@ harness commun ; les familles graphiques sont détaillées dans les autres brief
 | Reproductibilité | Même scène, commit, seed, taille et adapter ; environnement manquant ou incohérent. | Bundle réutilisable et comparaison non ambiguë ; les métadonnées sont obligatoires. |
 | CLI | Catalogue complet, filtre d'ID, échec d'initialisation, échec de close/dispose et tentative de promotion invalide. | Aucun artefact partiel ne survit et l'erreur expose une cause actionnable. |
 
-## Artefacts requis
+## Artefacts requis et promotion
 
-Un rendu contient CPU/reference, GPU, diff, stats, route, diagnostics,
-environnement, manifest, verdict et promotion. Un refus contient route,
-diagnostics, environnement, manifest, verdict et promotion ; il n'a ni PNG de
-succès ni statistiques présentées comme performance valide.
+Un bundle généré de rendu contient CPU/reference, GPU, diff, stats, route,
+diagnostics, environnement, manifest et verdict. Un bundle généré de refus
+contient route, diagnostics, environnement, manifest et verdict ; il n'a ni
+PNG de succès ni statistiques présentées comme performance valide. Les bundles
+générés ne contiennent pas `promotion.json`; les bundles promus y ajoutent ces
+métadonnées.
+
+Une capture de diagnostic peut être faite scène par scène. En revanche, la
+promotion checked-in est une transaction de catalogue complet via
+`promoteGpuEvidence` (avec `--all` imposé), après vérification du catalogue
+entier. Les rapports et preuves associés vivent sous
+`reports/gpu-renderer/evidence/`.
+
+Une capture doit être faite après rebase/cherry-pick seulement si le SHA exact
+à capturer est fixé. Après capture ou promotion, toute réécriture du SHA exige
+une nouvelle capture et un nouvel audit ; elle ne peut pas hériter de la preuve
+du SHA précédent.
+
+### Follow-up du harness (Lot 00, non autorisé par ce document)
+
+La CLI `PromoteEvidenceCli` sait accepter `--rebaseline` et les comparaisons
+prior/nouveau. La tâche Gradle `promoteGpuEvidence` actuelle ne transmet que le
+root, le SHA, reviewer, reason et `--all` : elle n'expose ni ce booléen ni ces
+deux comparaisons et échoue donc sur un root promoted non vide. Une petite vague
+explicitement approuvée devra exposer propriétés Gradle et chemins officiels
+pour ces entrées. Cette correction ne modifie pas Gradle et ne normalise aucun
+contournement caché par init script.
 
 ## Dépendances et sortie
 

@@ -23,7 +23,7 @@ Les sources de vérité sont le code, notamment [`Canvas.kt`](../kanvas/src/main
 | `save`, `saveLayer`, `restore`, `restoreToCount`, `flushAndSnapshot` | 10 | `N` — probes d'empilement, isolation de layer et snapshot. |
 | `translate`, `scale`, `rotate`, `skew`, `concat`, `setMatrix`, `resetMatrix` | 10 | `R` pour la transform affine de rect; `N` pour les autres combinaisons. |
 | `clipRect` | 10 | `R` pour le scissor rectangulaire; `N` pour les autres opérations de clip. |
-| `drawPath`, `clipRRect`, `clipPath` | 20 | `R` pour le stroke rectangulaire; `N` pour path, rrect et clips non rectangulaires. |
+| `drawPath`, `clipRRect`, `clipPath` | 20 | `N` — le stroke rectangulaire rendu est un `drawRect`, non `drawPath`; `clipRRect` et `clipPath` ne sont pas exercés. Le stroke générique `drawPath` avec gradient reste refusé par le renderer, sans probe de refus `Surface` dans le catalogue courant. |
 | `drawImage`, `drawImageRect`, `drawImageNine`, `drawImageLattice`, `drawAtlas` | 40 | `N` — images, sampling, 9-patch, lattice et sprites. Le lot 40 est l'unique propriétaire de `drawAtlas`. |
 | `drawString`, `drawText`, `measureText` | 60 | `DG` / `N` — probes texte et métriques; conserver un dependency gate si les fonts/codecs requis ne sont pas livrés. |
 | `drawVertices`, `drawMesh`, `drawPicture` | 60 | `N` — probes vertices, mesh et picture. |
@@ -34,7 +34,7 @@ Les sources de vérité sont le code, notamment [`Canvas.kt`](../kanvas/src/main
 | Variante source | Lot propriétaire unique | Statut actuel / probe requis |
 |---|---:|---|
 | `SolidColor` | 30 | `R` — `solid-card-stack` et `affine-solid-rect`. |
-| `LinearGradient`, `RadialGradient`, `SweepGradient` | 30 | `R` pour les formes `CLAMP` du catalogue; `FS` pour `LinearGradient` en `REPEAT`; `N` pour les autres variantes. |
+| `LinearGradient`, `RadialGradient`, `SweepGradient` | 30 | `R` pour les formes `CLAMP` du catalogue et le `LinearGradient` `REPEAT` borné/non mask-filtered sur `drawRect`. Le probe est non-AA et identité sans conclure au refus AA. Le renderer refuse `REPEAT` sur rrect/path ou `drawRect` mask-filtered, radial/sweep `REPEAT`, ainsi que `MIRROR` et `DECAL`; `N` pour les autres variantes. |
 | `ConicalGradient` | 30 | `N` — probe radial à deux points ou refus stable. |
 | `Image` | 40 | `N` — owner image/sampling. |
 | `Blend` | 30 | `N` — probe composition de shaders. |

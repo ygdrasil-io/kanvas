@@ -4,15 +4,20 @@
 > `wip/` et doit être supprimé lorsque ces lots ont été exécutés et que leurs
 > preuves ont été intégrées aux artefacts et au code vérifiés.
 
-État relevé au commit `bd4542ec20275dc51bd5a4de56ed6c14526890d1`.
+État du code fusionné dans `origin/master` au commit
+`116ce6ec3547c1d367e4c51881597a351eb285c4`. La capture correctness promue
+correspondante provient du SHA source
+`226674870ee09e080beee62b8d2935704f4b3331`.
 
 Ce document est un index de lecture : le code Kotlin est la source de vérité,
 principalement `GpuEvidenceCatalog.kt` et les classes de test sous
 `../integration-tests/gpu-evidence/src/test/kotlin`. Il ne remplace ni les
 preuves générées, ni les artefacts promus.
 
-Le module contient 16 cas de catalogue (12 rendus attendus, 4 refus attendus),
-27 classes de test et 204 annotations `@Test`.
+Le module contient 16 cas de catalogue (14 rendus attendus, 2 refus attendus),
+27 fichiers/classes de test et 212 annotations littérales `@Test`. L'exécution
+rapporte aussi 212 tests / 1 skipped : il n'y a pas de delta à attribuer à la
+mécanique de test.
 
 ## Cas de catalogue et route réellement exercée
 
@@ -30,16 +35,18 @@ Le module contient 16 cas de catalogue (12 rendus attendus, 4 refus attendus),
 | `sweep-gradient-partial-angle` | `KanvasSurfaceProgram` | rendu | Dégradé sweep `CLAMP` sur une plage partielle de 45° à 315°. |
 | `affine-solid-rect` | `KanvasSurfaceProgram` | rendu | Rectangle opaque sous transformation affine avec cisaillement. |
 | `scissored-radial-gradient` | `KanvasSurfaceProgram` | rendu | Dégradé radial `CLAMP` limité par un clip rectangulaire non AA. |
-| `repeat-gradient-refusal` | `KanvasSurfaceProgram` | refus | Dégradé linéaire `REPEAT` refusé avant soumission par `unsupported.material.gradient_tile_mode_unsupported`. |
-| `gradient-stroke-refusal` | `KanvasSurfaceProgram` | refus | Contour de rectangle avec dégradé refusé avant soumission. |
+| `repeat-gradient-refusal` | `KanvasSurfaceProgram` | rendu | Rectangle rempli borné, non filtré, à dégradé linéaire sRGB `REPEAT`, avec anti-aliasing désactivé. |
+| `gradient-stroke-refusal` | `KanvasSurfaceProgram` | rendu | Stroke `drawRect` : largeur entière paire 4, non-AA, cap `Butt`, join `Miter`, miter par défaut 4, transform identité, dégradé linéaire sRGB `CLAMP` valide et nu, sans path effect/local matrix/filters/blender. |
 | `custom-runtime-effect-unregistered-refusal` | `RoutedSceneProgram` interne | refus | Runtime effect custom non enregistré refusé avant toute soumission GPU. |
 | `aggregate-memory-budget-refusal` | `RoutedSceneProgram` interne | refus | Frame dépassant le budget mémoire agrégé refusée pendant l’enregistrement. |
 
 Chaque rendu passe par la route publique `Surface` et a un oracle CPU
 indépendant, une comparaison de pixels, des compteurs de draw/pipeline et une
-preuve de soumission. Chaque refus vérifie un code stable et l’absence de
-soumission, mais seuls les deux refus marqués `KanvasSurfaceProgram` sont des
-preuves de la route publique.
+preuve de soumission. Les deux refus actuels vérifient un code stable et
+l'absence de soumission, mais sont des `RoutedSceneProgram` internes. Le
+catalogue ne possède donc pas de probe de refus public `Surface` : c'est un
+gap de couverture pour une vague future explicitement approuvée, pas une
+autorisation d'en ajouter un ici.
 
 ## Suites de tests du harness
 
@@ -77,14 +84,22 @@ preuves de la route publique.
 `EvidenceBundleWriterFixtureCompatibility` sont des adaptateurs de fixtures
 utilisés par les tests ; ils ne déclarent pas de test directement.
 
-## État des preuves promues
+## État des preuves promues et mesures locales
 
-Les artefacts sous `reports/gpu-renderer/evidence/correctness/promoted/`
-reflètent le catalogue courant : 12 rendus et 4 refus, dont
-`repeat-gradient-refusal` comme refus. Aucun rebaseline `REPEAT` n'est à faire
-sur cette branche. Une future conversion en rendu exige d'abord un changement
-de code séparé, son oracle, son test de route publique et une capture hardware
-validée.
+Les artefacts checked-in sous
+`reports/gpu-renderer/evidence/correctness/promoted/` reflètent 16 cas : 14
+rendus et 2 refus, capturés depuis
+`226674870ee09e080beee62b8d2935704f4b3331`. Ils contiennent 122 hashes de
+manifest, puis le code associé a été fusionné au SHA master
+`116ce6ec3547c1d367e4c51881597a351eb285c4`. Les IDs
+`repeat-gradient-refusal` et `gradient-stroke-refusal` restent historiques,
+mais décrivent désormais des rendus.
+
+Séparément, une baseline performance locale non promue a été auditée au SHA
+`a1143cee2425e3a818dabe076ac468c551fbae75` sur Apple M2 Max natif
+non-fallback : 14 rendus, 1 cold + 10 warmups + 90 mesures par scène, 1260
+échantillons et p95 entre 4,30 et 8,40 ms. Elle est reporting-only et
+reproductible, sans statut de release-blocking evidence.
 
 ## Matrice de couverture requise pour un backend Skia-like
 
@@ -116,20 +131,20 @@ Kanvas comme référence Skia : celui-ci reste un contrôle de cohérence intern
 
 ### Priorité P0 — préserver les routes déjà rendables
 
-Ces contrôles préservent les 12 rendus actuels et les 4 refus contractuels
+Ces contrôles préservent les 14 rendus actuels et les 2 refus contractuels
 avant d'élargir une promesse de support. Ils doivent être des captures hardware
 promouvables, pas seulement des tests unitaires d'oracle.
 
 | Domaine | Cas supplémentaires nécessaires | Vérifications déterminantes |
 | --- | --- | --- |
-| Catalogue courant | Vérifier exactement 12 rendus et 4 refus, dont le refus `REPEAT` actuel. | `REPEAT` conserve `unsupported.material.gradient_tile_mode_unsupported`, zéro submission et zéro artefact de réussite. Une promotion future est conditionnée par une implémentation distincte. |
+| Catalogue courant | Vérifier exactement 14 rendus et 2 refus internes. | Les IDs `repeat-gradient-refusal` et `gradient-stroke-refusal` sont des rendus `Surface`; il n'existe pas de probe de refus `Surface` dans le catalogue courant. |
 | Rectangles solides et `SrcOver` | Bords négatifs/hors surface, rectangles vides, coordonnées fractionnaires, ordre de trois draws et alpha 0/1/partiel. | Règle top-left/coverage, clipping de surface, prémultiplication et ordre de composition. |
 | Transformations et pile d'état | `save`/`restore` imbriqués, `restoreToCount`, translation, scale, rotate, skew, `concat`, `setMatrix`, `resetMatrix`. | Matrice courante restaurée exactement ; aucun état, clip ou alpha ne fuit vers le draw suivant. |
 | Clip rectangulaire | Intersection, clip vide, clip hors surface, clip après transformation et plusieurs `save`/`restore`. | Bounds exactes, zéro draw visible pour un clip vide, route scissor ou refus explicite documenté. |
-| Stroke rect | Largeurs minimale/maximale autorisées, intérieur/extérieur de surface, jointures aux quatre coins et transformation. | Contour sans remplissage parasite, budget respecté ; AA, path effect, material gradient et autres limites conservent leur refus stable tant qu'ils ne sont pas rendus. |
-| Gradients actuels | Stops transparents, stops coïncidents, positions non uniformes, géométrie dégénérée, local matrix et `CLAMP` rendu ; `REPEAT`, `MIRROR`, `DECAL` selon le support réel. | Paramétrisation identique CPU/GPU pour les routes rendables ; chaque tile mode absent, dont `REPEAT` actuellement, est explicitement diagnostiqué. |
+| Stroke rect | Largeurs minimale/maximale autorisées, intérieur/extérieur de surface, jointures aux quatre coins et transformation. | Contour sans remplissage parasite, budget respecté. Le matériau solide reste admis; le gradient nouvellement rendu est borné au linéaire sRGB `CLAMP` nu. AA, path effect, autres shaders/tile modes/local matrix, filters, blender, largeur invalide/impaire et alternatives cap/join/miter sont refusés. |
+| Gradients actuels | Stops transparents, stops coïncidents, positions non uniformes, géométrie dégénérée, local matrix, `CLAMP` et le `REPEAT` linéaire borné rendu. | Paramétrisation identique CPU/GPU pour les routes rendables. `MIRROR`, `DECAL`, radial/sweep `REPEAT`, ainsi que le linéaire `REPEAT` sur RRect/Path ou `drawRect` mask-filtered sont refusés. |
 | Blur masque | Sigma 0, bornes autorisées, bord de surface, rect minuscule, translation et dépassement de budget. | Kernel, tile mode, quantification et bounds d'intermédiaire ; refus avant allocation/soumission au-delà des limites. |
-| Refus actuels | Runtime effect non enregistré, budget mémoire agrégé, `REPEAT` et stroke gradient. | Code inchangé, aucune submission, aucun bundle de réussite ou compteur de pipeline/draw positif ; distinguer les deux refus internes des deux refus `Surface`. |
+| Refus actuels | Runtime effect non enregistré et budget mémoire agrégé. | Code inchangé, aucune submission, aucun bundle de réussite ou compteur de pipeline/draw positif ; les deux refus sont internes, donc ne couvrent pas la route publique `Surface`. |
 
 ### Priorité P1 — couvrir toute surface Canvas exposée
 
@@ -212,9 +227,10 @@ gate de release.
 
 ## Ordre concret d'ajout
 
-1. Vérifier le catalogue courant à 12 rendus / 4 refus et conserver les
-   artefacts promus alignés. Ne convertir `REPEAT` en rendu qu'après un
-   changement de code distinct et toutes les preuves de la règle commune.
+1. Vérifier le catalogue courant à 14 rendus / 2 refus et conserver les
+   artefacts promus alignés. Aucun ajout de catalogue n'est autorisé sans une
+   petite vague explicitement approuvée, ses IDs précis et ses preuves
+   d'acceptation.
 2. Ajouter les probes `Surface` P1 pour chaque entrée publique sans preuve :
    elles attendent le rendu natif existant ou le refus explicite correspondant.
 3. Pour chaque refus révélant une route manquante, ajouter d'abord le cas

@@ -28,7 +28,7 @@ ne remplace jamais une capture correctness ni une référence Skia traçable.
 | Ressources | Upload/image/vertices, scratch textures, readback, frame annulée, close/dispose et double close. | Comptage bytes/handles exact, libération sans fuite et diagnostic sur handle périmé. |
 | Device lifecycle | Resize, perte/récupération device, adapter fallback, session interrompue puis réouverte. | Invalidation des caches, refus/résultat indisponible explicite et absence de resource réutilisée après perte. |
 | Déterminisme | Même scène/seed/adapter, sérialisation/replay, ordre de passes et routes de fallback. | Pixels et diagnostics stables sur le même adapter ; les variations inter-adapter conservent leurs métadonnées. |
-| Benchmarks | Rects solides, rect/rrect AA, gradients, images nearest/bilinear, blend alpha, `saveLayer`, blur/filter, texte/vertices seulement quand rendables. | 10 warmups, 90 mesures, échantillons bruts, p50/p95, adapter/commit/dimensions et compteurs de pipeline/draw/bytes. |
+| Benchmarks | Rects solides, rect/rrect AA, gradients, images nearest/bilinear, blend alpha, `saveLayer`, blur/filter, texte/vertices seulement quand rendables. | 1 cold, 10 warmups, 90 mesures, échantillons bruts, p50/p95, adapter/commit/dimensions et compteurs de pipeline/draw/bytes. |
 | GMs/références | Cas simple, bord et composition par famille supportée ; diff à cause classifiée. | Provenance Skia, référence, CPU/GPU/diff/stats/route/diagnostics liés au même scénario ; seuil local à la famille. |
 
 ## Règles de gate
@@ -39,6 +39,28 @@ non prouvée peut être rapporté comme diagnostic, jamais comme performance de
 release. Les promotions GM sont sérialisées par adapter et par commit ; aucun
 seuil global ne masque une différence de coverage, blend/premul, colorspace,
 sampling, filter bounds ou glyph.
+
+## Baseline locale actuelle, non promue
+
+Une baseline a été auditée localement au SHA
+`a1143cee2425e3a818dabe076ac468c551fbae75` : Apple M2 Max natif non-fallback,
+14 rendus, 1 cold + 10 warmups + 90 mesures par scène, 1260 échantillons et une
+plage p95 de 4,30 à 8,40 ms. C'est un contexte reproductible de reporting,
+pas une evidence correctness checked-in, pas une promotion et pas un gate de
+release.
+
+La capture performance nécessite son gate humain propre, distinct de celui de
+la promotion correctness. Les rapports et preuves qui deviendraient partageables
+vivent sous `reports/gpu-renderer/evidence/`; cette correction ne déplace ni ne
+promote la baseline locale.
+
+Stop point performance : avant toute capture, présenter à l'utilisateur le
+catalogue rendu, le HEAD/SHA exact, le root de sortie exact et l'adapter exact,
+puis obtenir son autorisation explicite. Ce consentement ne couvre ni la
+promotion correctness transactionnelle `--all` d'un root generated exact, ni
+une nouvelle vague, `gpu-renderer-scenes` ou une publication. Inversement,
+l'autorisation de la promotion correctness ne couvre pas cette capture
+performance.
 
 ## Dépendances et sortie
 

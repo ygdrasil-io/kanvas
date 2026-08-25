@@ -51,6 +51,21 @@ prérequis pour les captures rendables de path/stroke/clip du lot 20. La sortie
 est une preuve par scénario ou un refus stable, plus des artefacts promus pour
 les scénarios déjà rendables.
 
+Le lot 10 possède la géométrie et l'état du stroke. La preuve actuelle
+`gradient-stroke-refusal` conserve son ID historique mais rend maintenant via
+`Surface` : `drawRect` en style `Stroke`, largeur entière paire 4,
+anti-aliasing désactivé, cap `Butt`, join `Miter`, miter par défaut 4,
+transform identité et dégradé linéaire sRGB `CLAMP` nu et valide. Elle
+n'emploie ni `drawPath`, ni `clipRRect`, ni `clipPath`.
+
+Les variantes suivantes sont refusées par les lowerers actuels : largeur
+hairline/invalide/impaire ou fractionnaire, AA, cap/join différents, miter non
+fini ou sous le minimum, path effect, transform translated ou autre non
+identité pour ce gradient, shader ou tile mode autre que ce `CLAMP`, local
+matrix, mask/image/color filter, blender et generic path gradient stroke. Le
+lot 30 reste propriétaire du matériau/tile mode ; cette liste ne promet aucune
+autre route de stroke.
+
 ## Vérification
 
 ```bash
