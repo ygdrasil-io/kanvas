@@ -21,6 +21,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.Point2F32
@@ -28,7 +29,7 @@ import org.graphiks.math.matrix.Matrix3x3F32
 
 class GpuEvidenceCatalogTest {
     @Test
-    fun `catalog separates sixteen public surface renders from two refusals`() {
+    fun `catalog separates nineteen public surface renders from two refusals`() {
         val cases = GpuEvidenceCatalog.cases
 
         assertEquals(
@@ -44,6 +45,9 @@ class GpuEvidenceCatalogTest {
                 "linear-gradient-three-stops", "sweep-gradient-partial-angle", "affine-solid-rect", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
                 "scaled-solid-rrect",
                 "solid-drrect-hole",
+                "asymmetric-solid-rrect",
+                "ellipse-solid-rrect",
+                "asymmetric-solid-drrect-hole",
                 "custom-runtime-effect-unregistered-refusal",
                 "aggregate-memory-budget-refusal",
             ),
@@ -62,6 +66,9 @@ class GpuEvidenceCatalogTest {
                 "linear-gradient-three-stops", "sweep-gradient-partial-angle", "affine-solid-rect", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
                 "scaled-solid-rrect",
                 "solid-drrect-hole",
+                "asymmetric-solid-rrect",
+                "ellipse-solid-rrect",
+                "asymmetric-solid-drrect-hole",
             ),
             GpuEvidenceCatalog.renderCases.map { it.descriptor.id.value },
         )
@@ -74,7 +81,7 @@ class GpuEvidenceCatalogTest {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            List(16) { "kanvas.surface.render" },
+            List(19) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
@@ -182,6 +189,9 @@ class GpuEvidenceCatalogTest {
             "linear-gradient-three-stops", "sweep-gradient-partial-angle", "affine-solid-rect", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
             "scaled-solid-rrect",
             "solid-drrect-hole",
+            "asymmetric-solid-rrect",
+            "ellipse-solid-rrect",
+            "asymmetric-solid-drrect-hole",
         )
         assertEquals(
             expectedRenderIds.associateWith { "kanvas.surface.render" },
@@ -218,6 +228,9 @@ class GpuEvidenceCatalogTest {
                 "gradient-stroke-refusal" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-linear-clamp-stroke-bands", 1),
                 "scaled-solid-rrect" to OraclePolicy.GeneratedCpu("surface-srgb-rrect-pixel-center", 1),
                 "solid-drrect-hole" to OraclePolicy.GeneratedCpu("surface-srgb-rrect-pixel-center", 1),
+                "asymmetric-solid-rrect" to OraclePolicy.GeneratedCpu("surface-srgb-rrect-pixel-center", 2),
+                "ellipse-solid-rrect" to OraclePolicy.GeneratedCpu("surface-srgb-rrect-pixel-center", 2),
+                "asymmetric-solid-drrect-hole" to OraclePolicy.GeneratedCpu("surface-srgb-rrect-pixel-center", 2),
             ),
             GpuEvidenceCatalog.renderCases.associate { evidenceCase ->
                 evidenceCase.descriptor.id.value to evidenceCase.descriptor.oracle
@@ -241,6 +254,9 @@ class GpuEvidenceCatalogTest {
                 "gradient-stroke-refusal" to ComparisonPolicy(1, 100.0, 1, "Independent four-band coverage with device-coordinate clamp linear-gradient sampling and one-LSB RGBA8 tolerance."),
                 "scaled-solid-rrect" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent analytic pixel-center RRect membership."),
                 "solid-drrect-hole" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent analytic pixel-center RRect membership."),
+                "asymmetric-solid-rrect" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent per-corner analytic pixel-center RRect membership."),
+                "ellipse-solid-rrect" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent per-corner analytic pixel-center RRect membership."),
+                "asymmetric-solid-drrect-hole" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent per-corner analytic pixel-center RRect membership."),
             ),
             GpuEvidenceCatalog.renderCases.associate { evidenceCase ->
                 evidenceCase.descriptor.id.value to evidenceCase.descriptor.comparison
@@ -500,6 +516,53 @@ class GpuEvidenceCatalogTest {
                 ),
             ),
             ops("solid-drrect-hole"),
+        )
+        assertEquals(
+            listOf(
+                DisplayOp.DrawColor(ColorARGB.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f), BlendMode.SRC_OVER, Matrix3x3F32.Identity, ClipStack.WideOpen),
+                DisplayOp.DrawRRect(
+                    RRectF32.of(
+                        RectF32.ofLTRB(8f, 8f, 56f, 56f),
+                        topLeft = CornerRadiiF32.of(4f, 8f), topRight = CornerRadiiF32.of(10f, 4f),
+                        bottomRight = CornerRadiiF32.of(8f, 12f), bottomLeft = CornerRadiiF32.of(6f, 3f),
+                    ),
+                    Paint.fill(orange).copy(antiAlias = false), Matrix3x3F32.Identity, ClipStack.WideOpen,
+                ),
+            ),
+            ops("asymmetric-solid-rrect"),
+        )
+        assertEquals(
+            listOf(
+                DisplayOp.DrawColor(ColorARGB.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f), BlendMode.SRC_OVER, Matrix3x3F32.Identity, ClipStack.WideOpen),
+                DisplayOp.DrawRRect(
+                    RRectF32.of(
+                        RectF32.ofLTRB(12f, 20f, 52f, 44f),
+                        CornerRadiiF32.of(20f, 12f), CornerRadiiF32.of(20f, 12f),
+                        CornerRadiiF32.of(20f, 12f), CornerRadiiF32.of(20f, 12f),
+                    ),
+                    Paint.fill(drrectBlue).copy(antiAlias = false), Matrix3x3F32.Identity, ClipStack.WideOpen,
+                ),
+            ),
+            ops("ellipse-solid-rrect"),
+        )
+        assertEquals(
+            listOf(
+                DisplayOp.DrawColor(ColorARGB.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f), BlendMode.SRC_OVER, Matrix3x3F32.Identity, ClipStack.WideOpen),
+                DisplayOp.DrawDRRect(
+                    RRectF32.of(
+                        RectF32.ofLTRB(6f, 8f, 58f, 56f),
+                        CornerRadiiF32.of(4f, 8f), CornerRadiiF32.of(10f, 4f),
+                        CornerRadiiF32.of(8f, 12f), CornerRadiiF32.of(6f, 3f),
+                    ),
+                    RRectF32.of(
+                        RectF32.ofLTRB(20f, 20f, 44f, 44f),
+                        CornerRadiiF32.of(2f, 4f), CornerRadiiF32.of(6f, 2f),
+                        CornerRadiiF32.of(4f, 6f), CornerRadiiF32.of(3f, 2f),
+                    ),
+                    Paint.fill(drrectBlue).copy(antiAlias = false), Matrix3x3F32.Identity, ClipStack.WideOpen,
+                ),
+            ),
+            ops("asymmetric-solid-drrect-hole"),
         )
     }
 

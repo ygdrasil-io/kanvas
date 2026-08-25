@@ -31,6 +31,9 @@ object GpuEvidenceCatalog {
         gradientStrokeRefusal(),
         scaledSolidRRect(),
         solidDRRectHole(),
+        asymmetricSolidRRect(),
+        ellipseSolidRRect(),
+        asymmetricSolidDRRectHole(),
     )
     val refusalCases: List<EvidenceCase> = listOf(
         unregisteredRuntimeEffectRefusal(),
@@ -327,6 +330,73 @@ object GpuEvidenceCatalog {
             fill = intArrayOf(31, 115, 209, 255),
             outer = SurfaceSrgbRRectCpuOracle.DeviceRRect(8f, 8f, 56f, 56f, 8f, 8f),
             inner = SurfaceSrgbRRectCpuOracle.DeviceRRect(20f, 20f, 44f, 44f, 4f, 4f),
+        ),
+    )
+
+    private fun asymmetricSolidRRect() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("asymmetric-solid-rrect"), "Asymmetric solid rounded rectangle", "Public Kanvas Surface non-AA solid rounded rectangle with independent corner radii.",
+            64, 64, 1L, setOf("solid-rrect", "asymmetric-radii", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-rrect-pixel-center", 2),
+            ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent per-corner analytic pixel-center RRect membership."), emptySet(),
+        ),
+        KanvasScenePrograms.asymmetricSolidRRect(),
+        SurfaceSrgbRRectCpuOracle(
+            background = intArrayOf(13, 20, 33, 255),
+            fill = intArrayOf(242, 135, 46, 255),
+            outer = SurfaceSrgbRRectCpuOracle.DeviceRRect(
+                8f, 8f, 56f, 56f,
+                topLeft = SurfaceSrgbRRectCpuOracle.CornerRadii(4f, 8f),
+                topRight = SurfaceSrgbRRectCpuOracle.CornerRadii(10f, 4f),
+                bottomRight = SurfaceSrgbRRectCpuOracle.CornerRadii(8f, 12f),
+                bottomLeft = SurfaceSrgbRRectCpuOracle.CornerRadii(6f, 3f),
+            ),
+        ),
+    )
+
+    private fun ellipseSolidRRect() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("ellipse-solid-rrect"), "Ellipse solid rounded rectangle", "Public Kanvas Surface non-AA solid rounded rectangle whose radii form an ellipse.",
+            64, 64, 1L, setOf("solid-rrect", "ellipse", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-rrect-pixel-center", 2),
+            ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent per-corner analytic pixel-center RRect membership."), emptySet(),
+        ),
+        KanvasScenePrograms.ellipseSolidRRect(),
+        SurfaceSrgbRRectCpuOracle(
+            background = intArrayOf(13, 20, 33, 255),
+            fill = intArrayOf(31, 115, 209, 255),
+            outer = SurfaceSrgbRRectCpuOracle.DeviceRRect(
+                12f, 20f, 52f, 44f,
+                SurfaceSrgbRRectCpuOracle.CornerRadii(20f, 12f),
+            ),
+        ),
+    )
+
+    private fun asymmetricSolidDRRectHole() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("asymmetric-solid-drrect-hole"), "Asymmetric solid double rounded rectangle hole", "Public Kanvas Surface non-AA asymmetric double rounded rectangle with an asymmetric inner hole.",
+            64, 64, 1L, setOf("solid-drrect", "asymmetric-radii", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-rrect-pixel-center", 2),
+            ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent per-corner analytic pixel-center RRect membership."), emptySet(),
+        ),
+        KanvasScenePrograms.asymmetricSolidDRRectHole(),
+        SurfaceSrgbRRectCpuOracle(
+            background = intArrayOf(13, 20, 33, 255),
+            fill = intArrayOf(31, 115, 209, 255),
+            outer = SurfaceSrgbRRectCpuOracle.DeviceRRect(
+                6f, 8f, 58f, 56f,
+                topLeft = SurfaceSrgbRRectCpuOracle.CornerRadii(4f, 8f),
+                topRight = SurfaceSrgbRRectCpuOracle.CornerRadii(10f, 4f),
+                bottomRight = SurfaceSrgbRRectCpuOracle.CornerRadii(8f, 12f),
+                bottomLeft = SurfaceSrgbRRectCpuOracle.CornerRadii(6f, 3f),
+            ),
+            inner = SurfaceSrgbRRectCpuOracle.DeviceRRect(
+                20f, 20f, 44f, 44f,
+                topLeft = SurfaceSrgbRRectCpuOracle.CornerRadii(2f, 4f),
+                topRight = SurfaceSrgbRRectCpuOracle.CornerRadii(6f, 2f),
+                bottomRight = SurfaceSrgbRRectCpuOracle.CornerRadii(4f, 6f),
+                bottomLeft = SurfaceSrgbRRectCpuOracle.CornerRadii(3f, 2f),
+            ),
         ),
     )
     private fun surfaceRefusal(id: String, title: String, description: String, tags: Set<String>, code: String, program: org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram) = EvidenceCase(
