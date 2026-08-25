@@ -144,6 +144,55 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
+    fun `public drawColor hard path clip renders through one stencil scope`() {
+        requireWebGpu()
+        val surface = Surface(64, 64)
+        surface.canvas {
+            drawColor(ColorARGB.of(255, 13, 20, 33))
+            save()
+            clipPath(
+                Path {
+                    moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close()
+                }.apply { fillType = FillType.WINDING },
+                ClipOp.INTERSECT,
+                antiAlias = false,
+            )
+            drawRect(
+                RectF32.ofLTRB(0f, 0f, 64f, 64f),
+                Paint.fill(ColorARGB.of(242, 135, 46, 255)).copy(antiAlias = false),
+            )
+            restore()
+        }
+
+        val result = surface.render()
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertEquals(1128, result.pixels.asList().chunked(4).count { pixel ->
+            pixel.map { it.toInt() } != listOf(13, 20, 33, 255)
+        })
+    }
+
+    @Test
+    fun `public transformed hard path clip remains refused with capture provenance`() {
+        requireWebGpu()
+        val triangle = Path().apply {
+            moveTo(4f, 4f)
+            lineTo(28f, 4f)
+            lineTo(4f, 28f)
+            close()
+        }
+        val surface = Surface(32, 32)
+        surface.canvas {
+            save()
+            translate(2f, 0f)
+            clipPath(triangle, ClipOp.INTERSECT, antiAlias = false)
+            drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(ColorARGB.Red))
+            restore()
+        }
+
+        assertTerminal("unsupported.clip.path_transform", surface::render)
+    }
+
+    @Test
     fun `adapter backed inverse difference clip preserves fill exterior and AA edge`() {
         requireWebGpu()
         val inverseRect = Path().apply {

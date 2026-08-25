@@ -3218,7 +3218,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             val seal: GPUCorePrimitiveClipStencilPreparedScopeRouteSeal,
         )
 
-        val renderEntries = encoderPlan.scopes.filter {
+        val allRenderEntries = encoderPlan.scopes.filter {
             it.operationKind == GPUEncoderOperationKind.Render
         }.map { scope ->
             val render = framePlan.steps.getOrNull(scope.sourceStepIndex) as?
@@ -3228,18 +3228,24 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             )
             RenderEntry(scope, render, scope.corePrimitiveClipStencilPreparedRouteSeal)
         }
+        val prefixEntries = allRenderEntries.filter { entry ->
+            entry.seal is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Empty &&
+                entry.scope.allowsClipStencilPrefixDepthStencil
+        }
+        val renderEntries = allRenderEntries.filter { entry ->
+            entry.seal is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer ||
+                entry.seal is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Consumer
+        }
         val producerEntries = renderEntries.filter {
             it.seal is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer
         }
         val consumerEntries = renderEntries.filter {
             it.seal is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Consumer
         }
-        if (producerEntries.size != 1 || consumerEntries.isEmpty() ||
+        if (allRenderEntries.size != prefixEntries.size + renderEntries.size ||
+            producerEntries.size != 1 || consumerEntries.isEmpty() ||
             renderEntries.size != 1 + consumerEntries.size ||
-            renderEntries.any {
-                it.seal !is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer &&
-                    it.seal !is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Consumer
-            }
+            prefixEntries.size > 1
         ) {
             return refused(
                 "invalid.native-core-primitive.clip-stencil-scope",
@@ -3308,7 +3314,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 !semantic.hasStructuralIntegrity() ||
                 semantic.payloadRef.commandIdValue != seal.commandId ||
                 routeConsumer.structuralKey != packet.corePrimitivePreparedAuthority?.structuralPipelineKey ||
-                routeConsumer.scissor != semantic.scissorBounds
+                (routeConsumer.scissor ?: semantic.targetBounds) != semantic.scissorBounds
             ) {
                 return refused(
                     "invalid.native-core-primitive.clip-stencil-packet",
@@ -3335,9 +3341,10 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 "Prepared clip-stencil lost its optional readback scope.",
             )
         }
-        if (encoderPlan.scopes != renderEntries.map(RenderEntry::scope) + listOfNotNull(readbackScope) ||
+        if (encoderPlan.scopes != prefixEntries.map(RenderEntry::scope) +
+            renderEntries.map(RenderEntry::scope) + listOfNotNull(readbackScope) ||
             framePlan.steps.count { it.executionKind == GPUFrameStepExecutionKind.Encoder } !=
-            renderEntries.size + (if (readbackStep == null) 0 else 1)
+            prefixEntries.size + renderEntries.size + (if (readbackStep == null) 0 else 1)
         ) {
             return refused(
                 "unsupported.native-core-primitive.clip-stencil-scope-order",
@@ -3415,8 +3422,19 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         val arena = producerSeal.geometryArena
         val slab = producerSeal.slabAuthority
         val uniformSeal = slab.uniformSlabSeal
-        val vertexData = arena.copyVertices()
-        val indexData = arena.copyIndices()
+        val prefixPacket = prefixEntries.singleOrNull()?.render?.drawPackets?.singleOrNull()
+        val prefixSemantic = prefixPacket?.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive
+        val prefixStructuralKey = prefixPacket?.corePrimitivePreparedAuthority?.structuralPipelineKey
+        val prefixRect = prefixSemantic?.geometry as? GPUCorePrimitiveGeometry.Rect
+        val prefixVertices = prefixRect?.let {
+            floatArrayOf(
+                it.left, it.top, it.right, it.top,
+                it.right, it.bottom, it.left, it.bottom,
+            )
+        } ?: FloatArray(0)
+        val prefixIndices = prefixRect?.let { intArrayOf(0, 2, 1, 0, 3, 2) } ?: IntArray(0)
+        val vertexData = prefixVertices + arena.copyVertices()
+        val indexData = prefixIndices + arena.copyIndices()
         val vertexBytes = slab.vertexByteSize
         val indexBytes = slab.indexByteSize
         if (targetBounds.left != 0 || targetBounds.top != 0 ||
@@ -3510,7 +3528,9 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             ) || orderedConsumers.withIndex().any { (index, pair) ->
                 pair.first.render.target != producerEntry.render.target ||
                     pair.first.render.loadStore != org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan(
-                        if (isMsaa4x) "load" else if (index == 0) "clear" else "load",
+                        if (isMsaa4x) "load"
+                        else if (index == 0 && prefixEntries.isEmpty()) "clear"
+                        else "load",
                         GPUStorePlan.Store,
                     ) || pair.first.render.samplePlan != expectedSamplePlan ||
                     pair.first.render.depthStencilLoadStore !=
@@ -3662,7 +3682,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         }
 
         val structuralKeys = listOf(route.producer.structuralKey) +
-            route.consumers.map { it.structuralKey }
+            route.consumers.map { it.structuralKey } + listOfNotNull(prefixStructuralKey)
         val cacheKeys = linkedMapOf<
             GPUCorePrimitiveRenderPipelineStructuralKey,
             GPUWgpu4kCorePrimitivePipelineCacheKey
@@ -3872,6 +3892,24 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     ),
                 ))
             }
+            val clipVertexOffset = prefixVertices.size / 2
+            val clipIndexOffset = prefixIndices.size
+            // Without a direct prefix, retain the established producer/consumer pass layout.
+            // The single physical pass is deliberately narrow: a background must clear color
+            // and stencil before both the producer and its consumers run in-order.
+            val passSegment = prefixEntries.singleOrNull()?.let { prefixEntry ->
+                GPUPreparedNativeScopeOperand.RenderPassSegment(
+                    id = "clip-stencil.${framePlan.frameId.value}.${producerSeal.route.atomicGroup.value}",
+                    firstSourceStepIndex = prefixEntry.scope.sourceStepIndex,
+                    lastSourceStepIndex = orderedConsumers.last().first.scope.sourceStepIndex,
+                )
+            }
+            fun shiftedClipSlice(
+                slice: GPUCorePrimitiveClipStencilPreparedGeometrySlice,
+            ) = slice.copy(
+                firstIndex = slice.firstIndex + clipIndexOffset,
+                baseVertex = slice.baseVertex + clipVertexOffset,
+            )
             val producerOperand = GPUPreparedNativeScopeOperand.Render(
                 sourceStepIndex = producerEntry.scope.sourceStepIndex,
                 pass = GPUPreparedNativeRenderPassConfig(
@@ -3897,11 +3935,12 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 ),
                 commands = geometryCommands(
                     route.producer.structuralKey,
-                    producerSeal.geometrySlice,
-                    requireNotNull(route.producer.scissor),
+                    shiftedClipSlice(producerSeal.geometrySlice),
+                    route.producer.scissor ?: GPUPixelBounds(0, 0, targetBounds.width, targetBounds.height),
                     null,
                 ),
                 operandLayout = GPUPreparedNativeRenderOperandLayout.IndexedCorePrimitive,
+                passSegment = passSegment,
             )
             val consumerOperands = orderedConsumers.mapIndexed { index, (entry, seal) ->
                 val routeConsumer = route.consumers[index]
@@ -3911,13 +3950,13 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                         colorTarget = colorTargetOperand,
                         resolveTarget = canonicalTargetOperand.takeIf { isMsaa4x },
                         depthStencilTarget = clipOperand,
-                        loadOperation = if (!isMsaa4x && index == 0) {
+                        loadOperation = if (!isMsaa4x && index == 0 && prefixEntries.isEmpty()) {
                             GPUPreparedNativeLoadOperation.Clear
                         } else {
                             GPUPreparedNativeLoadOperation.Load
                         },
                         storeOperation = GPUPreparedNativeStoreOperation.Store,
-                        clearColor = if (!isMsaa4x && index == 0) {
+                        clearColor = if (!isMsaa4x && index == 0 && prefixEntries.isEmpty()) {
                             GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)
                         } else {
                             null
@@ -3927,12 +3966,103 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     ),
                     commands = geometryCommands(
                         routeConsumer.structuralKey,
-                        seal.geometrySlice,
-                        requireNotNull(routeConsumer.scissor),
+                        shiftedClipSlice(seal.geometrySlice),
+                        routeConsumer.scissor ?: GPUPixelBounds(0, 0, targetBounds.width, targetBounds.height),
                         seal.uniformSlice.alignedOffset,
                     ),
                     semanticPayloads = listOf(consumerSemantics[index]),
                     operandLayout = GPUPreparedNativeRenderOperandLayout.IndexedCorePrimitive,
+                    passSegment = passSegment,
+                )
+            }
+            val prefixOperand = prefixEntries.singleOrNull()?.let { prefixScopeEntry ->
+                val packet = prefixPacket ?: return refused(
+                    "invalid.native-core-primitive.clip-stencil-prefix",
+                    "Prepared clip-stencil prefix lost its direct CorePrimitive packet.",
+                )
+                val semantic = prefixSemantic ?: return refused(
+                    "invalid.native-core-primitive.clip-stencil-prefix",
+                    "Prepared clip-stencil prefix lost its direct semantic payload.",
+                )
+                val structuralKey = prefixStructuralKey ?: return refused(
+                    "invalid.native-core-primitive.clip-stencil-prefix",
+                    "Prepared clip-stencil prefix lost its structural pipeline authority.",
+                )
+                val uniformSlot = uniformSeal.plan.slots.singleOrNull {
+                    it.slotLabel == "draw-${packet.commandIdValue}"
+                } ?: return refused(
+                    "invalid.native-core-primitive.clip-stencil-prefix",
+                    "Prepared clip-stencil prefix lost its uniform slot authority.",
+                )
+                val prefixRect = semantic.geometry as? GPUCorePrimitiveGeometry.Rect
+                    ?: return refused(
+                        "invalid.native-core-primitive.clip-stencil-prefix",
+                        "Prepared clip-stencil prefix is not direct Rect geometry.",
+                    )
+                val prefixCommands = listOf(
+                    GPUPreparedNativeRenderCommand.SetPipeline(
+                        requireNotNull(pipelineOperands[structuralKey]),
+                    ),
+                    GPUPreparedNativeRenderCommand.SetBindGroup(
+                        0,
+                        bindGroupOperand,
+                        listOf(uniformSlot.alignedOffset),
+                    ),
+                    GPUPreparedNativeRenderCommand.SetVertexBuffer(
+                        0,
+                        vertexOperand,
+                        0L,
+                        vertexBytes,
+                        8L,
+                    ),
+                    GPUPreparedNativeRenderCommand.SetIndexBuffer(
+                        indexOperand,
+                        GPUPreparedNativeIndexFormat.Uint32,
+                        0L,
+                        indexBytes,
+                    ),
+                    GPUPreparedNativeRenderCommand.SetScissor(
+                        semantic.scissorBounds.left,
+                        semantic.scissorBounds.top,
+                        semantic.scissorBounds.width,
+                        semantic.scissorBounds.height,
+                    ),
+                    GPUPreparedNativeRenderCommand.DrawIndexed(
+                        GPUPreparedNativeDrawCall.DrawIndexed(
+                            indexCount = 6,
+                            firstIndex = 0,
+                            baseVertex = 0,
+                            vertexCount = 4,
+                            maxLocalIndex = 3,
+                        ),
+                    ),
+                )
+                GPUPreparedNativeScopeOperand.Render(
+                    sourceStepIndex = prefixScopeEntry.scope.sourceStepIndex,
+                    pass = GPUPreparedNativeRenderPassConfig(
+                        colorTarget = canonicalTargetOperand,
+                        depthStencilTarget = clipOperand,
+                        loadOperation = if (prefixScopeEntry.render.loadStore.loadOp == "clear") {
+                            GPUPreparedNativeLoadOperation.Clear
+                        } else {
+                            GPUPreparedNativeLoadOperation.Load
+                        },
+                        storeOperation = GPUPreparedNativeStoreOperation.Store,
+                        clearColor = if (prefixScopeEntry.render.loadStore.loadOp == "clear") {
+                            GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)
+                        } else {
+                            null
+                        },
+                        depthReadOnly = true,
+                        stencilClearValue = 0u,
+                        stencilLoadOperation = GPUPreparedNativeLoadOperation.Clear,
+                        stencilStoreOperation = GPUPreparedNativeStoreOperation.Store,
+                        stencilReadOnly = false,
+                    ),
+                    commands = prefixCommands,
+                    semanticPayloads = listOf(semantic),
+                    operandLayout = GPUPreparedNativeRenderOperandLayout.CommandOrder,
+                    passSegment = passSegment,
                 )
             }
             val readbackOperand = if (readbackScope != null && output != null && stagingBuffer != null) {
@@ -3963,7 +4093,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             } else {
                 null
             }
-            val operandsByStep = (listOf(producerOperand) + consumerOperands +
+            val operandsByStep = (listOfNotNull(prefixOperand) + listOf(producerOperand) + consumerOperands +
                 listOfNotNull(readbackOperand)).associateBy(GPUPreparedNativeScopeOperand::sourceStepIndex)
             val payload = GPUPreparedNativeFramePayload(
                 identity = GPUPreparedNativeFrameIdentity(
@@ -3987,7 +4117,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 scopeOperandKeys = encoderPlan.scopes.map { it.nativeOperandKeys },
                 leaseLifecycle = GPUWgpu4kCorePrimitivePayloadLeaseLifecycle(pooled),
                 clipDepthStencilViewAuthority =
-                    (listOf(producerOperand) + consumerOperands).associate { render ->
+                    (listOfNotNull(prefixOperand) + listOf(producerOperand) + consumerOperands).associate { render ->
                         render.sourceStepIndex to clipHandles.view
                     },
             )

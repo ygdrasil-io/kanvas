@@ -176,19 +176,70 @@ class GPUWgpu4kClipStencilPreparedFrameSmokeTest {
         assertEquals(1L, targetClosesAfterSessionClose)
     }
 
+    @Test
+    fun `public prepared clip with opaque background encodes one D24 pass`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null, "wgpu4k native adapter unavailable; skipping prepared clip-stencil smoke")
+        backend!!
+        val capabilities = requireNotNull(backend.capabilities)
+        val generation = GPUDeviceGenerationID(capabilities.snapshotId.substringAfterLast('-').toLong())
+        val session = backend.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(TARGET.width, TARGET.height, "rgba8unorm"),
+        )
+        try {
+            val readbackId = GPUReadbackRequestID("readback.clip-stencil.single-pass-background")
+            val output = renderFrame(
+                session = session,
+                taskList = clipStencilTaskList(
+                    frameId = GPUFrameID(12_204L),
+                    capabilities = capabilities,
+                    generation = generation,
+                    scenarioId = "single-pass-background",
+                    readbackId = readbackId,
+                    clipVertices = listOf(2f, 2f, 14f, 2f, 14f, 14f, 2f, 14f),
+                    background = SmokeDraw(GPURect(0f, 0f, 16f, 16f), SmokeColor(5, 10, 15, 255)),
+                    first = SmokeDraw(GPURect(1f, 1f, 10f, 10f), SmokeColor(255, 0, 0, 255)),
+                    second = SmokeDraw(GPURect(6f, 6f, 15f, 15f), SmokeColor(0, 255, 0, 255)),
+                ),
+                readbackId = readbackId,
+                expectedRoles = listOf(
+                    GPUDrawPacketRole.Shading,
+                    GPUDrawPacketRole.StencilProducer,
+                    GPUDrawPacketRole.Shading,
+                    GPUDrawPacketRole.Shading,
+                ),
+                expectedRenderPasses = 1L,
+            )
+
+            assertPixel(output, 0, 0, 5, 10, 15, 255)
+            assertPixel(output, 1, 1, 5, 10, 15, 255)
+            assertPixel(output, 4, 4, 255, 0, 0, 255)
+            assertPixel(output, 8, 8, 0, 255, 0, 255)
+            assertPixel(output, 15, 15, 5, 10, 15, 255)
+        } finally {
+            try {
+                session.close()
+            } finally {
+                GPUBackendRuntimeNativeFactory.dispose()
+            }
+        }
+    }
+
     private fun renderFrame(
         session: GPUPreparedSceneFrameSession,
         taskList: GPUTaskList,
         readbackId: GPUReadbackRequestID,
+        expectedRoles: List<GPUDrawPacketRole> = listOf(
+            GPUDrawPacketRole.StencilProducer,
+            GPUDrawPacketRole.Shading,
+            GPUDrawPacketRole.Shading,
+        ),
+        expectedRenderPasses: Long = expectedRoles.size.toLong(),
     ): ByteArray {
         val renderSteps = GPUFramePlanner.plan(taskList).steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
         assertEquals(
-            listOf(
-                GPUDrawPacketRole.StencilProducer,
-                GPUDrawPacketRole.Shading,
-                GPUDrawPacketRole.Shading,
-            ),
-            renderSteps.map { step -> step.drawPackets.single().role },
+            expectedRoles,
+            renderSteps.flatMap { step -> step.drawPackets }.map(GPUDrawPacket::role),
         )
 
         val nativeBefore = session.nativeCounters()
@@ -211,8 +262,8 @@ class GPUWgpu4kClipStencilPreparedFrameSmokeTest {
         assertEquals(1L, nativeAfter.retentionRegistrations - nativeBefore.retentionRegistrations)
         assertEquals(1L, nativeAfter.retentionCompletions - nativeBefore.retentionCompletions)
         assertEquals(0L, nativeAfter.retentionQuarantines - nativeBefore.retentionQuarantines)
-        assertEquals(3L, renderAfter.renderPasses - renderBefore.renderPasses)
-        assertEquals(3L, renderAfter.drawIndexed - renderBefore.drawIndexed)
+        assertEquals(expectedRenderPasses, renderAfter.renderPasses - renderBefore.renderPasses)
+        assertEquals(expectedRoles.size.toLong(), renderAfter.drawIndexed - renderBefore.drawIndexed)
         assertEquals(0, nativeAfter.activeNativePayloads)
         return assertIs<GPUSceneFrameOutput.ReadbackRgba>(terminal.output).bytes
     }
@@ -228,10 +279,11 @@ class GPUWgpu4kClipStencilPreparedFrameSmokeTest {
         fillRule: GPUClipFillRule = GPUClipFillRule.Winding,
         inverseFill: Boolean = false,
         scissor: GPUPixelBounds = TARGET,
+        background: SmokeDraw? = null,
         first: SmokeDraw,
         second: SmokeDraw,
     ): GPUTaskList {
-        val draws = listOf(first, second)
+        val draws = listOfNotNull(background, first, second)
         val commands = draws.mapIndexed { index, draw ->
             GPUFillRectCommandBuilder.build(
                 commandId = GPUDrawCommandID(1_000 + (frameId.value - 12_200L).toInt() * 10 + index),
@@ -267,9 +319,15 @@ class GPUWgpu4kClipStencilPreparedFrameSmokeTest {
             generation,
         ).apply {
             commands.forEach(::record)
-        }.close().taskList.withClipPlans(commands.associate { command -> command.commandId.value to clipPlan })
+        }.close().taskList.withClipPlans(commands.mapIndexed { index, command ->
+            command.commandId.value to if (background != null && index == 0) {
+                GPUClipExecutionPlan.NoClip
+            } else {
+                clipPlan
+            }
+        }.toMap())
         val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
-        assertEquals(2, packets.size, "Clip-stencil base recording refused: ${base.diagnostics}")
+        assertEquals(draws.size, packets.size, "Clip-stencil base recording refused: ${base.diagnostics}")
         val commandsById = commands.associateBy { command -> command.commandId.value }
         val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
             GPUCorePrimitivePreparedFrameRequest(

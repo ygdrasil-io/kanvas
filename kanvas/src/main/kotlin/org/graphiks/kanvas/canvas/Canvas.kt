@@ -408,18 +408,40 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
         currentTransform.isScaleTranslate() ->
             ClipStackOp.RectOp(currentTransform.mapAxisAlignedRect(rect), op, antiAlias)
         !currentTransform.hasPerspective() ->
-            ClipStackOp.PathOp(Path().addRect(rect).transform(currentTransform), op, antiAlias)
+            ClipStackOp.PathOp(
+                Path().addRect(rect).transform(currentTransform),
+                op,
+                antiAlias,
+                transformClass = currentTransform.captureTransformClass(),
+            )
         else ->
-            ClipStackOp.PathOp(Path().addRect(rect), op, antiAlias, perspectiveCaptureRefusal = true)
+            ClipStackOp.PathOp(
+                Path().addRect(rect),
+                op,
+                antiAlias,
+                perspectiveCaptureRefusal = true,
+                transformClass = "perspective",
+            )
     }
 
     private fun captureClipRRect(rrect: RRectF32, op: ClipOp, antiAlias: Boolean): ClipStackOp = when {
         currentTransform.isScaleTranslate() ->
             ClipStackOp.RRectOp(rrect.mapAxisAligned(currentTransform), op, antiAlias)
         !currentTransform.hasPerspective() ->
-            ClipStackOp.PathOp(Path().addRRect(rrect).transform(currentTransform), op, antiAlias)
+            ClipStackOp.PathOp(
+                Path().addRRect(rrect).transform(currentTransform),
+                op,
+                antiAlias,
+                transformClass = currentTransform.captureTransformClass(),
+            )
         else ->
-            ClipStackOp.PathOp(Path().addRRect(rrect), op, antiAlias, perspectiveCaptureRefusal = true)
+            ClipStackOp.PathOp(
+                Path().addRRect(rrect),
+                op,
+                antiAlias,
+                perspectiveCaptureRefusal = true,
+                transformClass = "perspective",
+            )
     }
 
     private fun captureClipPath(path: Path, op: ClipOp, antiAlias: Boolean): ClipStackOp =
@@ -428,6 +450,7 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
             op,
             antiAlias,
             perspectiveCaptureRefusal = currentTransform.hasPerspective(),
+            transformClass = currentTransform.captureTransformClass(),
         )
 
     private fun appendClip(
@@ -451,4 +474,12 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
         val clip: ClipStack,
         val recordedClip: ClipStack,
     )
+}
+
+private fun Matrix3x3F32.captureTransformClass(): String = when {
+    hasPerspective() -> "perspective"
+    this == Matrix3x3F32.Identity -> "identity"
+    kx == 0f && ky == 0f && sx == 1f && sy == 1f -> "translate"
+    kx == 0f && ky == 0f && tx == 0f && ty == 0f -> "scale"
+    else -> "affine"
 }

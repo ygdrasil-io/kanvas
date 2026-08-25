@@ -66,6 +66,8 @@ sealed interface ClipStackOp {
         val op: ClipOp,
         override val antiAlias: Boolean = true,
         override val perspectiveCaptureRefusal: Boolean = false,
+        /** Capture-time CTM class retained after path coordinates are flattened. */
+        val transformClass: String = "identity",
     ) : ClipStackOp
 }
 

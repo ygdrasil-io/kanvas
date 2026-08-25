@@ -272,7 +272,7 @@ class Picture internal constructor(
 // ---- Binary serialization helpers ------------------------------------------
 
 private val MAGIC = byteArrayOf(0x4B, 0x50, 0x49, 0x43)
-private const val FORMAT_VERSION = 6
+private const val FORMAT_VERSION = 7
 
 // type discriminators
 private const val OP_DRAW_RECT: Byte = 0
@@ -689,7 +689,12 @@ private class Writer {
         when (op) {
             is ClipStackOp.RectOp -> { byte(0); rect(op.rect); clipOp(op.op) }
             is ClipStackOp.RRectOp -> { byte(1); rrect(op.rrect); clipOp(op.op) }
-            is ClipStackOp.PathOp -> { byte(2); path(op.path); clipOp(op.op) }
+            is ClipStackOp.PathOp -> {
+                byte(2)
+                path(op.path)
+                clipOp(op.op)
+                string(op.transformClass)
+            }
         }
     }
 
@@ -1209,7 +1214,12 @@ private class Reader(private val data: ByteArray) {
         return when (byte().toInt()) {
             0 -> ClipStackOp.RectOp(rect(), clipOp(), aa)
             1 -> ClipStackOp.RRectOp(rrect(), clipOp(), aa)
-            2 -> ClipStackOp.PathOp(path(), clipOp(), aa)
+            2 -> ClipStackOp.PathOp(
+                path(),
+                clipOp(),
+                aa,
+                transformClass = if (formatVersion >= 7) string() else "identity",
+            )
             else -> { valid = false; ClipStackOp.RectOp(RectF32.Empty, ClipOp.INTERSECT, aa) }
         }
     }

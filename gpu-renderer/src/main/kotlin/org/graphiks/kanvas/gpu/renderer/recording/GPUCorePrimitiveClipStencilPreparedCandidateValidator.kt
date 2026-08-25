@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.recording
 
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.geometry.corePrimitiveClipStencilEdgeFan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveClipStencilAttachmentAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveClipStencilConsumerInput
@@ -35,6 +36,7 @@ internal fun validateCorePrimitiveClipStencilPreparedCandidate(
     producerPacket: GPUDrawPacket,
     consumerPackets: List<GPUDrawPacket>,
     attachment: GPUCorePrimitiveClipStencilAttachmentAuthority,
+    colorFormat: GPUColorFormat = GPUColorFormat.RGBA8Unorm,
 ): GPUCorePrimitiveClipStencilPreparedCandidateValidation {
     fun refuse(message: String) =
         GPUCorePrimitiveClipStencilPreparedCandidateValidation.Refused(message)
@@ -84,7 +86,8 @@ internal fun validateCorePrimitiveClipStencilPreparedCandidate(
         if (preparedAuthority.structuralPipelineKey != candidateConsumer.structuralKey ||
             packet.renderPipelineKey != candidateConsumer.structuralKey
                 .stableRenderPipelineKey(CORE_PRIMITIVE_RENDER_PIPELINE_KEY) ||
-            semantic.scissorBounds != plan.consumer.scissor
+            (plan.consumer.scissor != null && semantic.scissorBounds != plan.consumer.scissor) ||
+            (plan.consumer.scissor == null && semantic.scissorBounds != semantic.targetBounds)
         ) return refuse("Prepared clip-stencil consumer key or scissor was substituted.")
         val blendPlan = packet.blendPlan
             ?: return refuse("Prepared clip-stencil consumer blend authority is missing.")
@@ -98,7 +101,7 @@ internal fun validateCorePrimitiveClipStencilPreparedCandidate(
             stencilReference = plan.consumer.reference,
             atomicGroup = plan.atomicGroup,
             orderingToken = plan.orderingToken,
-            scissor = semantic.scissorBounds,
+            scissor = plan.consumer.scissor,
             attachment = attachment,
             isLastConsumer = index == consumerPackets.lastIndex,
         )
@@ -115,6 +118,7 @@ internal fun validateCorePrimitiveClipStencilPreparedCandidate(
             producerAttachment = attachment,
             producerAntiAlias = plan.sampleCount == 4,
             expectedLastConsumerCommandId = consumerPackets.last().commandIdValue,
+            colorFormat = colorFormat,
         ),
     )) {
         is GPUCorePrimitiveClipStencilNativeRoute.Accepted -> {

@@ -111,6 +111,7 @@ private fun ClipStackOp.toClipElement(): GPUClipCoverageElement = when (this) {
             antiAlias = antiAlias,
             fillRule = fill.rule,
             inverseFill = fill.inverse,
+            transformClass = transformClass,
         )
     }
 }

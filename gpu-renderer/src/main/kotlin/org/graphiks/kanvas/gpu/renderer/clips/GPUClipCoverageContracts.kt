@@ -43,6 +43,8 @@ class GPUClipCoverageElement(
     val antiAlias: Boolean,
     val fillRule: GPUClipFillRule,
     val inverseFill: Boolean,
+    /** Capture-time CTM class retained through path flattening. */
+    val transformClass: String = "identity",
 ) {
     val values: List<Float> = immutableList(values)
 
@@ -78,10 +80,12 @@ class GPUClipCoverageElement(
             vertexCount == other.vertexCount &&
             antiAlias == other.antiAlias &&
             fillRule == other.fillRule &&
-            inverseFill == other.inverseFill
+            inverseFill == other.inverseFill &&
+            transformClass == other.transformClass
 
     override fun hashCode(): Int =
-        listOf(operation, kind, values, vertexCount, antiAlias, fillRule, inverseFill).hashCode()
+        listOf(operation, kind, values, vertexCount, antiAlias, fillRule, inverseFill, transformClass)
+            .hashCode()
 
     private fun validatePathPayload(values: List<Float>, vertexCount: Int) {
         require(values.isNotEmpty()) { "Path clips require a contour count" }
@@ -144,6 +148,7 @@ class GPUClipCoverageRequest(
             append('|').append(element.antiAlias)
             append('|').append(element.fillRule.name)
             append('|').append(element.inverseFill)
+            append('|').append(element.transformClass)
             element.values.forEach { value ->
                 append('|').append(value.toRawBits().toUInt().toString(16))
             }

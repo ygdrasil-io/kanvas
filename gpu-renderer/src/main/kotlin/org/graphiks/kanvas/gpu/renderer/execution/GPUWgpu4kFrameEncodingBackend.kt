@@ -10,6 +10,7 @@ import io.ygdrasil.webgpu.GPUCommandEncoder
 import io.ygdrasil.webgpu.GPUDevice
 import io.ygdrasil.webgpu.GPULoadOp
 import io.ygdrasil.webgpu.GPUQueue
+import io.ygdrasil.webgpu.GPURenderPassEncoder
 import io.ygdrasil.webgpu.GPUStoreOp
 import io.ygdrasil.webgpu.GPUTextureView
 import io.ygdrasil.webgpu.Origin3D
@@ -358,6 +359,8 @@ internal class GPUWgpu4kFrameEncodingBackend(
         private val native: GPUCommandEncoder,
     ) : GPUFrameCommandEncoder {
         private var finished = false
+        private var activeRenderPass: GPURenderPassEncoder? = null
+        private var activeRenderPassSegment: GPUPreparedNativeScopeOperand.RenderPassSegment? = null
 
         override fun encode(
             scope: GPUCommandEncoderScopePlan,
@@ -369,6 +372,9 @@ internal class GPUWgpu4kFrameEncodingBackend(
             val operand = requireNotNull(nativeOperand) { "Native operand is required" }
             require(operand.sourceStepIndex == scope.sourceStepIndex)
             require(operand.operationKind == scope.operationKind)
+            if (activeRenderPass != null && operand !is GPUPreparedNativeScopeOperand.Render) {
+                error("A native render-pass segment cannot be interrupted by ${operand.operationKind}")
+            }
             when (operand) {
                 is GPUPreparedNativeScopeOperand.Render -> encodeRender(operand)
                 is GPUPreparedNativeScopeOperand.TextureUpload ->
@@ -383,6 +389,9 @@ internal class GPUWgpu4kFrameEncodingBackend(
 
         override fun finish(): GPUFrameCommandBuffer {
             check(!finished) { "GPU frame command encoder may finish only once" }
+            check(activeRenderPass == null) {
+                "GPU frame command encoder cannot finish with an open native render-pass segment"
+            }
             finished = true
             val nativeBuffer = try {
                 native.finish()
@@ -407,29 +416,93 @@ internal class GPUWgpu4kFrameEncodingBackend(
         override fun discard(): GPUFrameDiscardResult {
             if (finished) return GPUFrameDiscardResult.AlreadyReleased
             finished = true
+            val renderPassFailure = closeActiveRenderPass()
             synchronized(this@GPUWgpu4kFrameEncodingBackend) {
                 liveEncoders.remove(id)
             }
-            return closeOrQuarantine(native, quarantinedEncoders)
+            val encoderResult = closeOrQuarantine(native, quarantinedEncoders)
+            return renderPassFailure?.let { failure ->
+                // Preserve a failed render-pass cleanup as the discard result while still
+                // closing/quarantining the encoder above.
+                GPUFrameDiscardResult.Failed(failure::class.simpleName.orEmpty())
+            } ?: encoderResult
+        }
+
+        private fun closeActiveRenderPass(): Throwable? {
+            val passEncoder = activeRenderPass ?: run {
+                activeRenderPassSegment = null
+                return null
+            }
+            return try {
+                passEncoder.end()
+                null
+            } catch (failure: Throwable) {
+                failure
+            } finally {
+                activeRenderPass = null
+                activeRenderPassSegment = null
+            }
         }
 
         private fun encodeRender(render: GPUPreparedNativeScopeOperand.Render) {
-            val pass = render.pass
-            encodeWgpu4kRenderPass(
-                native,
-                render,
-                onRenderPassBegan = {
+            val segment = render.passSegment
+            val passEncoder = if (segment == null) {
+                check(activeRenderPass == null) {
+                    "An ungrouped native render scope cannot follow an open render-pass segment"
+                }
+                native.beginRenderPass(buildWgpu4kRenderPassDescriptor(render.pass)).also {
                     synchronized(this@GPUWgpu4kFrameEncodingBackend) { renderPassCount += 1 }
-                },
-                onDrawEncoded = {
-                    synchronized(this@GPUWgpu4kFrameEncodingBackend) { drawCount += 1 }
-                },
-                onDrawIndexedEncoded = {
-                    synchronized(this@GPUWgpu4kFrameEncodingBackend) { drawIndexedCount += 1 }
-                },
-                onPipelineBound = {
-                    synchronized(this@GPUWgpu4kFrameEncodingBackend) { pipelineBindCount += 1 }
-                },
+                }
+            } else {
+                if (segment.isFirst(render.sourceStepIndex)) {
+                    check(activeRenderPass == null) {
+                        "Native render-pass segment ${segment.id} began while another pass was open"
+                    }
+                    activeRenderPassSegment = segment
+                    activeRenderPass = native.beginRenderPass(
+                        buildWgpu4kRenderPassDescriptor(render.pass),
+                    ).also {
+                        synchronized(this@GPUWgpu4kFrameEncodingBackend) { renderPassCount += 1 }
+                    }
+                } else {
+                    check(activeRenderPassSegment == segment) {
+                        "Native render-pass segment ${segment.id} lost pass continuity"
+                    }
+                    check(activeRenderPass != null) {
+                        "Native render-pass segment ${segment.id} has no active encoder"
+                    }
+                }
+                requireNotNull(activeRenderPass)
+            }
+            encodeWgpu4kRenderCommands(
+                render.commands,
+                GPUWgpu4kRenderCommandActions(
+                    setPipeline = { pipeline ->
+                        passEncoder.setPipeline(pipeline)
+                        synchronized(this@GPUWgpu4kFrameEncodingBackend) { pipelineBindCount += 1 }
+                    },
+                    setStencilReference = { reference -> passEncoder.setStencilReference(reference) },
+                    setBindGroup = { index, bindGroup, dynamicOffsets ->
+                        passEncoder.setBindGroup(index, bindGroup, dynamicOffsets)
+                    },
+                    setVertexBuffer = { slot, buffer, offset, size ->
+                        passEncoder.setVertexBuffer(slot, buffer, offset.toULong(), size.toULong())
+                    },
+                    setIndexBuffer = { buffer, format, offset, size ->
+                        passEncoder.setIndexBuffer(buffer, format, offset.toULong(), size.toULong())
+                    },
+                    setScissor = { x, y, width, height ->
+                        passEncoder.setScissorRect(x, y, width, height)
+                    },
+                    draw = { vertices, instances, firstVertex, firstInstance ->
+                        passEncoder.draw(vertices, instances, firstVertex, firstInstance)
+                        synchronized(this@GPUWgpu4kFrameEncodingBackend) { drawCount += 1 }
+                    },
+                    drawIndexed = { count, instances, firstIndex, baseVertex, firstInstance ->
+                        passEncoder.drawIndexed(count, instances, firstIndex, baseVertex, firstInstance)
+                        synchronized(this@GPUWgpu4kFrameEncodingBackend) { drawIndexedCount += 1 }
+                    },
+                ),
             )
             preparedNativeRenderCommandEvidence(render).forEach { encoded ->
                 synchronized(this@GPUWgpu4kFrameEncodingBackend) {
@@ -449,7 +522,15 @@ internal class GPUWgpu4kFrameEncodingBackend(
                         )
                 }
             }
-            if (pass.resolveTarget != null) {
+            val shouldEnd = segment == null || segment.isLast(render.sourceStepIndex)
+            if (shouldEnd) {
+                passEncoder.end()
+                if (segment != null) {
+                    activeRenderPass = null
+                    activeRenderPassSegment = null
+                }
+            }
+            if (shouldEnd && render.pass.resolveTarget != null) {
                 synchronized(this@GPUWgpu4kFrameEncodingBackend) { msaaResolveCount += 1 }
             }
         }

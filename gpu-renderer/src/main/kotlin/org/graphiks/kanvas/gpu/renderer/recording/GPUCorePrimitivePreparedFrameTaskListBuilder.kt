@@ -1107,13 +1107,19 @@ internal fun validateCorePrimitiveClipProducerAuthority(
                     } else {
                         stencilPlan.sampleCount
                     }
+                    val targetPreparation = preparations.singleOrNull { request ->
+                        request.resource == render.target && request.role == GPUFrameResourceRole.SceneTarget
+                    } ?: return refuse("Stencil producer target is not the canonical scene texture.")
+                    val targetDescriptor = targetPreparation.descriptor as? GPUFrameTextureDescriptor
+                        ?: return refuse("Stencil producer target is not the canonical scene texture.")
+                    val targetFormat = targetDescriptor.format
                     if (stencilAuthority.producer != stencilPlan.producer ||
                         packet.renderStepId.value != "clip.stencil.producer" ||
                         packet.bindingLayoutHash != "layout.clip.stencil.producer.none" ||
                         packet.targetStateHash != if (nativeStencilCandidate == null) {
                             "target.clip.stencil.producer.single-sample"
                         } else {
-                            corePrimitiveTargetStateHash(nativeStencilSampleCount)
+                            corePrimitiveTargetStateHash(nativeStencilSampleCount, targetFormat)
                         }
                     ) return refuse("Stencil producer packet fields contradict the classified plan.")
                     if (nativeStencilCandidate != null &&
@@ -1125,6 +1131,7 @@ internal fun validateCorePrimitiveClipProducerAuthority(
                             corePrimitiveClipStencilProducerRenderPipelineStructuralKey(
                                 stencilPlan.producer.fillRule,
                                 nativeStencilSampleCount,
+                                targetFormat.corePrimitiveStructuralColorFormat(),
                             ))
                     ) return refuse("Native stencil producer candidate contradicts the classified plan.")
                     if (stencilPlan.producer.loadOperation != GPUClipStencilLoadOperation.Clear ||
@@ -1137,13 +1144,14 @@ internal fun validateCorePrimitiveClipProducerAuthority(
                         stencilPlan.consumer.failOperation != org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation.Keep ||
                         stencilPlan.consumer.depthFailOperation != org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation.Keep
                     ) return refuse("Stencil artifact requires Clear(0)+Store and read-only Load+Keep consumers.")
-                    val targetPreparation = preparations.singleOrNull { request ->
-                        request.resource == render.target && request.role == GPUFrameResourceRole.SceneTarget
-                    }
-                    val targetDescriptor = targetPreparation?.descriptor as? GPUFrameTextureDescriptor
-                        ?: return refuse("Stencil producer target is not the canonical scene texture.")
                     val bounds = targetDescriptor.logicalBounds
-                    if (!isCanonicalCorePrimitiveTargetPreparation(targetPreparation, render.target, bounds)) {
+                    if (!isCanonicalCorePrimitiveTargetPreparation(
+                            targetPreparation,
+                            render.target,
+                            bounds,
+                            targetFormat,
+                        )
+                    ) {
                         return refuse("Stencil producer target preparation is not canonical.")
                     }
                     if (stencilPlan.bounds.left < bounds.left || stencilPlan.bounds.top < bounds.top ||
@@ -2077,11 +2085,103 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 nativeClipStencilConsumerGeometryBytesByCommandId.size ==
                 staticNativeClipStencilConsumers.size
         }
-        if (nativeClipStencilPlan != null && staticNativeClipStencilConsumers.size != basePackets.size) {
+        if (nativeClipStencilPlan != null && nativeClipStencilPlan.pathTransformClass != "identity") {
+            return refused(
+                "unsupported.recording.core_primitive_clip_stencil_transform",
+                "Native hard path clips require identity capture-time CTM.",
+            )
+        }
+        if (staticNativeClipStencilPlan != null && staticNativeClipStencilConsumers.any { packet ->
+                packet.blendPlan?.destinationReadRequirement != GPUBlendDestinationReadRequirement.None ||
+                    packet.blendPlan is GPUBlendPlan.LayerCompositeBlend
+            }
+        ) {
+            return refused(
+                "unsupported.recording.core_primitive_clip_stencil_consumer",
+                "Native hard path clips accept only direct non-layer, non-destination-read consumers.",
+            )
+        }
+        val validNativeClipStencilConsumers = nativeClipStencilPlan?.sampleCount == 1 &&
+            staticNativeClipStencilConsumers.size in 1..2 &&
+            staticNativeClipStencilConsumers.all { packet ->
+                val semantic = request.coreSemantics().getValue(packet.commandIdValue)
+                packet.role == GPUDrawPacketRole.Shading &&
+                    packet.renderStepId.value == CORE_PRIMITIVE_FILL_RECT_STEP_IDENTITY &&
+                    semantic.geometry is GPUCorePrimitiveGeometry.Rect &&
+                    semantic.material is GPUCorePrimitiveMaterialPayload.SolidColor &&
+                    semantic.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor
+            }
+        if (nativeClipStencilPlan?.sampleCount == 1 && !validNativeClipStencilConsumers) {
             return refused(
                 "unsupported.recording.core_primitive_clip_stencil_mixed_geometry",
-                "The bounded clip-stencil arena cannot share slabs with foreign geometry.",
+                "The bounded clip-stencil scope accepts only one or two solid FillRect consumers.",
             )
+        }
+        val nativeClipStencilPrefixCommandIds = nativeClipStencilPlan
+            ?.takeIf { plan ->
+                plan.sampleCount == 1 &&
+                    staticNativeClipStencilConsumers.size != basePackets.size
+            }
+            ?.let { plan ->
+                val firstConsumerIndex = basePackets.indexOfFirst { packet ->
+                    packet.clipExecutionPlan?.canonicalIdentity() == plan.canonicalIdentity()
+                }
+                if (firstConsumerIndex > 0) {
+                    basePackets.take(firstConsumerIndex).mapTo(linkedSetOf(), GPUDrawPacket::commandIdValue)
+                } else {
+                    emptySet()
+                }
+            }
+            .orEmpty()
+        if (nativeClipStencilPlan != null && staticNativeClipStencilConsumers.size != basePackets.size) {
+            if (nativeClipStencilPlan.sampleCount != 1) {
+                return refused(
+                    "unsupported.recording.core_primitive_clip_stencil_mixed_geometry",
+                    "The bounded clip-stencil arena cannot share slabs with foreign geometry.",
+                )
+            }
+            val firstConsumerIndex = basePackets.indexOfFirst { packet ->
+                packet.clipExecutionPlan?.canonicalIdentity() == nativeClipStencilPlan.canonicalIdentity()
+            }
+            val prefix = if (firstConsumerIndex < 0) emptyList() else basePackets.take(firstConsumerIndex)
+            val hasForeignSuffix = firstConsumerIndex < 0 ||
+                basePackets.drop(firstConsumerIndex).any { packet ->
+                    packet.clipExecutionPlan?.canonicalIdentity() != nativeClipStencilPlan.canonicalIdentity()
+                }
+            if (prefix.singleOrNull()?.let { packet ->
+                    packet.blendPlan?.destinationReadRequirement != GPUBlendDestinationReadRequirement.None ||
+                        packet.blendPlan is GPUBlendPlan.LayerCompositeBlend
+                } == true
+            ) {
+                return refused(
+                    "unsupported.recording.core_primitive_clip_stencil_prefix",
+                    "The hard path clip background prefix must be direct and non-layer, without destination read.",
+                )
+            }
+            val validDirectPrefix = prefix.all { packet ->
+                val semantic = request.coreSemantics().getValue(packet.commandIdValue)
+                val geometry = semantic.geometry as? GPUCorePrimitiveGeometry.Rect
+                val material = semantic.material as? GPUCorePrimitiveMaterialPayload.SolidColor
+                packet.clipExecutionPlan == GPUClipExecutionPlan.NoClip &&
+                    packet.role == GPUDrawPacketRole.Shading &&
+                    packet.renderStepId.value == CORE_PRIMITIVE_FILL_RECT_STEP_IDENTITY &&
+                    geometry != null &&
+                    geometry.left == request.targetBounds.left.toFloat() &&
+                    geometry.top == request.targetBounds.top.toFloat() &&
+                    geometry.right == request.targetBounds.right.toFloat() &&
+                    geometry.bottom == request.targetBounds.bottom.toFloat() &&
+                    material != null &&
+                    material.premultipliedRgba.getOrNull(3) == 1f &&
+                    packet.blendPlan.isCanonicalSolidRectSrcOver() &&
+                    semantic.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor &&
+                    directCorePrimitiveGeometryBytes(packet, semantic) != null
+            }
+            if (hasForeignSuffix || prefix.size != 1 || !validDirectPrefix) {
+                return refused(
+                    "unsupported.recording.core_primitive_clip_stencil_mixed_geometry",
+                    "The bounded clip-stencil scope accepts only a direct solid FillRect prefix.",
+                )
+            }
         }
         val nativeClipStencilProducerNdcVertices = nativeClipStencilPlan?.let { candidate ->
             val path = requireNotNull(candidate.corePrimitiveClipStencilNativePathOrNull())
@@ -3254,9 +3354,11 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                             nativeClipStencilConsumerGeometryBytesByCommandId,
                         clipStencilCompatible = basePacket.commandIdValue in
                             nativeClipStencilConsumerGeometryBytesByCommandId,
-                        pathDepthStencilCompatible = directPathDepthStencilCompatible &&
-                            basePacket.commandIdValue in directGeometryBytesByCommandId &&
-                            basePacket.commandIdValue in pathRunPacketIds,
+                        pathDepthStencilCompatible = (
+                            directPathDepthStencilCompatible &&
+                                basePacket.commandIdValue in directGeometryBytesByCommandId &&
+                                basePacket.commandIdValue in pathRunPacketIds
+                            ) || basePacket.commandIdValue in nativeClipStencilPrefixCommandIds,
                         uniformSlabSeal = uniformSlabSeal,
                         analyticShape = preparedAnalyticShapesByCommandId[basePacket.commandIdValue],
                         analyticShapeUniformSlabPlansByCommandId = analyticShapeUniformSlabPlanByCommandId,
@@ -3357,7 +3459,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                         ),
                         samplePlan = preparedSamplePlan,
                         resourceUses = resourceUses,
-                        provisionalSegmentKey = if (nativeClipStencilPlan?.sampleCount == 4) {
+                        provisionalSegmentKey = if (nativeClipStencilPlan != null) {
                             GPUProvisionalRenderSegmentKey(
                                 "${baseRender.provisionalSegmentKey.value}.clip-stencil-consumer.${basePacket.commandIdValue}",
                             )
@@ -3571,13 +3673,22 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 } && clipUses.isEmpty() && render.depthStencilLoadStore == null &&
                 render.resourceUses.count { it.role == GPUFrameResourceRole.ClipMask } == 1 &&
                 render.resourceUses.count { it.role == GPUFrameResourceRole.UniformData } == 1
+            val exactClipStencilPrefix = nativeClipStencilPrefixCommandIds.isNotEmpty() &&
+                render.drawPackets.isNotEmpty() &&
+                render.drawPackets.all { packet ->
+                    packet.commandIdValue in nativeClipStencilPrefixCommandIds &&
+                        packet.role == GPUDrawPacketRole.Shading &&
+                        packet.clipExecutionPlan == GPUClipExecutionPlan.NoClip
+                } && pathUses.isEmpty() && clipUses.isEmpty() &&
+                render.depthStencilLoadStore == null
+            val requiresNeutralDepthStencil = exactPathAttachment || exactClipStencilPrefix
             val authorities = render.drawPackets.mapNotNull(GPUDrawPacket::corePrimitivePreparedAuthority)
             authorities.size != render.drawPackets.size ||
                 hasPathAttachmentState != exactPathAttachment ||
                 authorities.any { authority ->
                     val structuralKey = authority.structuralPipelineKey
                     when (structuralKey.role) {
-                        GPUCorePrimitiveRenderPipelineStructuralKey.Role.Shading -> if (exactPathAttachment) {
+                        GPUCorePrimitiveRenderPipelineStructuralKey.Role.Shading -> if (requiresNeutralDepthStencil) {
                             structuralKey.depthStencil != corePrimitiveDirectPathDepthStencilState()
                         } else {
                             structuralKey.depthStencil !=
@@ -3622,8 +3733,20 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 preparations,
             ),
         )
-        tasks += clipTopologies.flatMap(GPUCoreClipArtifactTopology::producerTasks)
-        tasks += preparedRenders
+        if (nativeClipStencilPlan != null) {
+            val nativePlanIdentity = nativeClipStencilPlan.canonicalIdentity()
+            val directPrefixRenders = preparedRenders.takeWhile { render ->
+                render.drawPackets.all { packet ->
+                    packet.clipExecutionPlan?.canonicalIdentity() != nativePlanIdentity
+                }
+            }
+            tasks += directPrefixRenders
+            tasks += clipTopologies.flatMap(GPUCoreClipArtifactTopology::producerTasks)
+            tasks += preparedRenders.drop(directPrefixRenders.size)
+        } else {
+            tasks += clipTopologies.flatMap(GPUCoreClipArtifactTopology::producerTasks)
+            tasks += preparedRenders
+        }
         val baseRenderIds = baseRenders.map(GPUTask.Render::taskId).toSet()
         val baseDependencies = request.baseTaskList.dependencies.filter { dependency ->
             dependency.fromTaskId in baseRenderIds && dependency.toTaskId in baseRenderIds

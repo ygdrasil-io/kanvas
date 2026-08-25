@@ -9,6 +9,7 @@ import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbGradientCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbLinearGradientStrokeBandsCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipRRectCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbPathFillCpuOracle
 import org.graphiks.kanvas.gpu.evidence.programs.KanvasScenePrograms
 import org.graphiks.kanvas.gpu.evidence.programs.RendererRefusalPrograms
@@ -39,6 +40,9 @@ object GpuEvidenceCatalog {
         clipRRectSolid(),
         clipRRectEllipse(),
         clipRRectTwoBands(),
+        clipPathTriangleSolid(),
+        clipPathConcaveSolid(),
+        clipPathTriangleTwoBands(),
         solidTrianglePath(),
         solidConcavePath(),
         evenOddPathHole(),
@@ -459,6 +463,86 @@ object GpuEvidenceCatalog {
                 SurfaceSrgbClipRRectCpuOracle.OpaqueRect(0f, 0f, 64f, 64f, intArrayOf(31, 115, 209, 255)),
                 SurfaceSrgbClipRRectCpuOracle.OpaqueRect(32f, 0f, 64f, 64f, intArrayOf(242, 135, 46, 255)),
             ),
+        ),
+    )
+
+    private fun clipPathTriangleSolid() = clipPathCase(
+        id = "clip-path-triangle-solid",
+        title = "Solid hard triangle path clip",
+        description = "Public Kanvas Surface hard non-AA winding triangle path clip over an opaque rectangle.",
+        program = KanvasScenePrograms.clipPathTriangleSolid(),
+        contours = listOf(
+            listOf(
+                SurfaceSrgbClipPathCpuOracle.Point(8f, 8f),
+                SurfaceSrgbClipPathCpuOracle.Point(56f, 8f),
+                SurfaceSrgbClipPathCpuOracle.Point(8f, 55f),
+            ),
+        ),
+        draws = listOf(
+            SurfaceSrgbClipPathCpuOracle.OpaqueRect(0f, 0f, 64f, 64f, intArrayOf(242, 135, 46, 255)),
+        ),
+    )
+
+    private fun clipPathConcaveSolid() = clipPathCase(
+        id = "clip-path-concave-solid",
+        title = "Solid hard concave path clip",
+        description = "Public Kanvas Surface hard non-AA winding concave path clip with a literal notch.",
+        program = KanvasScenePrograms.clipPathConcaveSolid(),
+        contours = listOf(
+            listOf(
+                SurfaceSrgbClipPathCpuOracle.Point(8f, 8f),
+                SurfaceSrgbClipPathCpuOracle.Point(56f, 8f),
+                SurfaceSrgbClipPathCpuOracle.Point(56f, 24f),
+                SurfaceSrgbClipPathCpuOracle.Point(32f, 24f),
+                SurfaceSrgbClipPathCpuOracle.Point(32f, 40f),
+                SurfaceSrgbClipPathCpuOracle.Point(56f, 40f),
+                SurfaceSrgbClipPathCpuOracle.Point(56f, 56f),
+                SurfaceSrgbClipPathCpuOracle.Point(8f, 56f),
+            ),
+        ),
+        draws = listOf(
+            SurfaceSrgbClipPathCpuOracle.OpaqueRect(0f, 0f, 64f, 64f, intArrayOf(31, 115, 209, 255)),
+        ),
+    )
+
+    private fun clipPathTriangleTwoBands() = clipPathCase(
+        id = "clip-path-triangle-two-bands",
+        title = "Two-band hard triangle path clip",
+        description = "Public Kanvas Surface hard non-AA triangle path clip reused by ordered opaque blue and orange rectangles.",
+        program = KanvasScenePrograms.clipPathTriangleTwoBands(),
+        contours = listOf(
+            listOf(
+                SurfaceSrgbClipPathCpuOracle.Point(8f, 8f),
+                SurfaceSrgbClipPathCpuOracle.Point(56f, 8f),
+                SurfaceSrgbClipPathCpuOracle.Point(8f, 55f),
+            ),
+        ),
+        draws = listOf(
+            SurfaceSrgbClipPathCpuOracle.OpaqueRect(0f, 0f, 64f, 64f, intArrayOf(31, 115, 209, 255)),
+            SurfaceSrgbClipPathCpuOracle.OpaqueRect(32f, 0f, 64f, 64f, intArrayOf(242, 135, 46, 255)),
+        ),
+    )
+
+    private fun clipPathCase(
+        id: String,
+        title: String,
+        description: String,
+        program: org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram,
+        contours: List<List<SurfaceSrgbClipPathCpuOracle.Point>>,
+        draws: List<SurfaceSrgbClipPathCpuOracle.OpaqueRect>,
+    ) = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId(id), title, description, 64, 64, 1L,
+            setOf("clip-path", "solid-rect", "hard-clip", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-clip-path-pixel-center", 1),
+            ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent hard pixel-center winding path clip membership and paint order."),
+            emptySet(),
+        ),
+        program,
+        SurfaceSrgbClipPathCpuOracle(
+            background = intArrayOf(13, 20, 33, 255),
+            contours = contours.map(SurfaceSrgbClipPathCpuOracle::Contour),
+            draws = draws,
         ),
     )
 

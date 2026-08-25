@@ -11,6 +11,7 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilLoadOperation
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilStoreOperation
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
@@ -64,6 +65,7 @@ internal class GPUCorePrimitiveClipStencilNativeRouteRequest(
     val producerAttachment: GPUCorePrimitiveClipStencilAttachmentAuthority,
     val producerAntiAlias: Boolean,
     val expectedLastConsumerCommandId: Int,
+    val colorFormat: GPUColorFormat = GPUColorFormat.RGBA8Unorm,
 ) {
     val clipArtifacts: List<GPUClipExecutionPlan> = immutableList(clipArtifacts)
     val consumers: List<GPUCorePrimitiveClipStencilConsumerInput> = immutableList(consumers)
@@ -207,6 +209,7 @@ internal fun sealGPUCorePrimitiveClipStencilNativeRoute(
     val producerKey = corePrimitiveClipStencilProducerRenderPipelineStructuralKey(
         path.fillRule,
         stencil.sampleCount,
+        request.colorFormat.corePrimitiveStructuralColorFormat(),
     )
     val ndcVertices = corePrimitiveClipStencilNdcVertices(
         request.producerGeometry.vertices,
@@ -241,6 +244,7 @@ internal fun sealGPUCorePrimitiveClipStencilNativeRoute(
             inverseFill = consumer.inverseFill,
             blendPlan = consumer.blendPlan,
             sampleCount = stencil.sampleCount,
+            colorFormat = request.colorFormat.corePrimitiveStructuralColorFormat(),
         )
         if (!consumerKey.blend.isCanonicalPremulSrcOver()) return refused(
             "unsupported.native-core-primitive.clip-stencil.blend",

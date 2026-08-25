@@ -3,19 +3,171 @@ package org.graphiks.kanvas.gpu.renderer.execution
 import io.ygdrasil.webgpu.GPUCommandBuffer
 import io.ygdrasil.webgpu.GPUCommandEncoder
 import io.ygdrasil.webgpu.GPUBuffer
+import io.ygdrasil.webgpu.GPUBindGroup
 import io.ygdrasil.webgpu.GPUDevice
 import io.ygdrasil.webgpu.GPUQueue
+import io.ygdrasil.webgpu.GPURenderPassDescriptor
+import io.ygdrasil.webgpu.GPURenderPassEncoder
+import io.ygdrasil.webgpu.GPURenderPipeline
+import io.ygdrasil.webgpu.GPUTextureView
 import java.lang.reflect.Proxy
+import sun.misc.Unsafe
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertSame
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandStream
 import org.junit.jupiter.api.DynamicTest
 import org.junit.jupiter.api.TestFactory
 
 class GPUWgpu4kFrameEncodingBackendOwnershipTest {
+    @Test
+    fun `discard closes an active segmented render pass before its native encoder`() {
+        val generation = GPUDeviceGenerationID(83)
+        val events = mutableListOf<String>()
+        var renderPassEndCount = 0
+        var failPipeline = false
+        val renderPass = nativeProxy(GPURenderPassEncoder::class.java) { methodName, _, _ ->
+            when {
+                methodName.startsWith("setPipeline") -> {
+                    events += "render-pass.set-pipeline"
+                    if (failPipeline) error("scope command failed")
+                    Unit
+                }
+                methodName.startsWith("draw") -> {
+                    events += "render-pass.draw"
+                    Unit
+                }
+                methodName.startsWith("setBindGroup") -> {
+                    events += "render-pass.set-bind-group"
+                    Unit
+                }
+                methodName == "end" -> {
+                    events += "render-pass.end"
+                    renderPassEndCount += 1
+                    Unit
+                }
+                methodName == "getLabel" -> "segmented-render-pass"
+                methodName == "setLabel" -> Unit
+                methodName == "toString" -> "SegmentedRenderPass"
+                else -> error("Unexpected render-pass call: $methodName")
+            }
+        }
+        val commandEncoder = nativeProxy(GPUCommandEncoder::class.java) { methodName, _, arguments ->
+            when (methodName) {
+                "beginRenderPass" -> {
+                    events += "command-encoder.begin-render-pass"
+                    require(arguments?.singleOrNull() is GPURenderPassDescriptor)
+                    renderPass
+                }
+                "close" -> {
+                    events += "command-encoder.close"
+                    Unit
+                }
+                "getLabel" -> "segmented-command-encoder"
+                "setLabel" -> Unit
+                "toString" -> "SegmentedCommandEncoder"
+                else -> error("Unexpected command-encoder call: $methodName")
+            }
+        }
+        val fixture = SegmentedRenderDiscardFixture(commandEncoder)
+        val backend = GPUWgpu4kFrameEncodingBackend(generation, fixture.device, fixture.queue)
+        val encoder = backend.createCommandEncoder("segmented-discard")
+        val segment = GPUPreparedNativeScopeOperand.RenderPassSegment("segment", 0, 1)
+        val colorTarget = GPUPreparedNativeTextureViewOperand(
+            nativeProxy(GPUTextureView::class.java) { methodName, _, _ ->
+                when (methodName) {
+                    "getLabel" -> "segmented-color"
+                    "setLabel", "close" -> Unit
+                    "toString" -> "SegmentedColor"
+                    else -> error("Unexpected texture-view call: $methodName")
+                }
+            },
+            generation,
+        )
+        val pipeline = GPUPreparedNativeRenderPipelineOperand(
+            nativeProxy(GPURenderPipeline::class.java) { methodName, _, _ ->
+                when (methodName) {
+                    "getLabel" -> "segmented-pipeline"
+                    "setLabel", "close" -> Unit
+                    "toString" -> "SegmentedPipeline"
+                    else -> error("Unexpected pipeline call: $methodName")
+                }
+            },
+            generation,
+        )
+        val bindGroup = GPUPreparedNativeBindGroupOperand(
+            nativeProxy(GPUBindGroup::class.java) { methodName, _, _ ->
+                when (methodName) {
+                    "getLabel" -> "segmented-bind-group"
+                    "setLabel", "close" -> Unit
+                    "toString" -> "SegmentedBindGroup"
+                    else -> error("Unexpected bind-group call: $methodName")
+                }
+            },
+            generation,
+        )
+        val firstRender = GPUPreparedNativeScopeOperand.Render(
+            sourceStepIndex = 0,
+            pass = GPUPreparedNativeRenderPassConfig(colorTarget),
+            commands = listOf(
+                GPUPreparedNativeRenderCommand.SetPipeline(pipeline),
+                GPUPreparedNativeRenderCommand.SetBindGroup(0, bindGroup),
+                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3)),
+            ),
+            passSegment = segment,
+        )
+        val failingRender = GPUPreparedNativeScopeOperand.Render(
+            sourceStepIndex = 1,
+            pass = GPUPreparedNativeRenderPassConfig(colorTarget),
+            commands = listOf(
+                GPUPreparedNativeRenderCommand.SetPipeline(pipeline),
+                GPUPreparedNativeRenderCommand.SetBindGroup(0, bindGroup),
+                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3)),
+            ),
+            passSegment = segment,
+        )
+        val firstScope = segmentedRenderScope(0)
+        val failingScope = segmentedRenderScope(1)
+        val unusedPreparedFrame = uninitialized<PreparedGPUFrame>()
+        val unusedSceneTarget = uninitialized<org.graphiks.kanvas.gpu.renderer.resources.GPUSceneTarget>()
+
+        try {
+            encoder.encode(firstScope, unusedPreparedFrame, unusedSceneTarget, firstRender)
+            failPipeline = true
+            assertFailsWith<IllegalStateException> {
+                encoder.encode(
+                    failingScope,
+                    unusedPreparedFrame,
+                    unusedSceneTarget,
+                    failingRender,
+                )
+            }
+
+            assertEquals(GPUFrameDiscardResult.Discarded, encoder.discard())
+            assertEquals(GPUFrameDiscardResult.AlreadyReleased, encoder.discard())
+            assertEquals(1, renderPassEndCount)
+            assertEquals(
+                listOf(
+                    "command-encoder.begin-render-pass",
+                    "render-pass.set-pipeline",
+                    "render-pass.set-bind-group",
+                    "render-pass.draw",
+                    "render-pass.set-pipeline",
+                    "render-pass.end",
+                    "command-encoder.close",
+                ),
+                events,
+            )
+        } finally {
+            backend.close()
+        }
+    }
+
     @Test
     fun `submission callback records each successful queue submission and not a failed submit`() {
         val fixture = SubmissionCallbackFixture()
@@ -306,6 +458,25 @@ class GPUWgpu4kFrameEncodingBackendOwnershipTest {
         }
     }
 
+    private class SegmentedRenderDiscardFixture(
+        private val commandEncoder: GPUCommandEncoder,
+    ) {
+        val device: GPUDevice = nativeProxy(GPUDevice::class.java) { methodName, _, _ ->
+            when (methodName) {
+                "createCommandEncoder" -> commandEncoder
+                "toString" -> "SegmentedRenderDiscardDevice"
+                else -> error("Unexpected fake device call: $methodName")
+            }
+        }
+
+        val queue: GPUQueue = nativeProxy(GPUQueue::class.java) { methodName, _, _ ->
+            when (methodName) {
+                "toString" -> "SegmentedRenderDiscardQueue"
+                else -> error("Unexpected fake queue call: $methodName")
+            }
+        }
+    }
+
     private fun <T : Any> closeableNative(
         type: Class<T>,
         close: RetryingNativeClose,
@@ -320,6 +491,25 @@ class GPUWgpu4kFrameEncodingBackendOwnershipTest {
     }
 }
 
+private fun segmentedRenderScope(sourceStepIndex: Int) = GPUCommandEncoderScopePlan(
+    sourceStepIndex = sourceStepIndex,
+    operationKind = GPUEncoderOperationKind.Render,
+    sourceTaskIds = listOf(org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID("task.$sourceStepIndex")),
+    facadeOperationClasses = listOf("render"),
+    targetGeneration = 0,
+    resourceGenerationLabels = emptyList(),
+    passCommandStream = GPUPassCommandStream(
+        streamId = "stream.$sourceStepIndex",
+        packetStreamId = "packets.$sourceStepIndex",
+        passId = "pass.$sourceStepIndex",
+        commands = listOf(
+            GPUPassCommand.BeginRenderPass("target", "load-store"),
+            GPUPassCommand.Draw("vertices", GPUDrawPacketID("packet.$sourceStepIndex")),
+            GPUPassCommand.EndRenderPass("pass.$sourceStepIndex"),
+        ),
+    ),
+)
+
 private fun <T : Any> nativeProxy(
     type: Class<T>,
     invocation: (String, Class<*>, Array<out Any?>?) -> Any?,
@@ -332,3 +522,11 @@ private fun <T : Any> nativeProxy(
         }
     },
 )
+
+private inline fun <reified T : Any> uninitialized(): T {
+    val field = Unsafe::class.java.getDeclaredField("theUnsafe")
+    field.isAccessible = true
+    return field.get(null).let { unsafe ->
+        (unsafe as Unsafe).allocateInstance(T::class.java) as T
+    }
+}

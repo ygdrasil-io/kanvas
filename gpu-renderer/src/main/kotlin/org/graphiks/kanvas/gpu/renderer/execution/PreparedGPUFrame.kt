@@ -145,8 +145,13 @@ class GPUCommandEncoderScopePlan internal constructor(
     val resourceGenerationLabels: List<String> = immutableList(resourceGenerationLabels)
     internal var nativeOperandKeys: List<GPUPreparedNativeOperandKey> = emptyList()
         private set
+    internal var allowsClipStencilPrefixDepthStencil: Boolean = false
+        private set
 
-    internal fun attachNativeOperandKeys(keys: List<GPUPreparedNativeOperandKey>): GPUCommandEncoderScopePlan {
+    internal fun attachNativeOperandKeys(
+        keys: List<GPUPreparedNativeOperandKey>,
+        allowsClipStencilPrefixDepthStencil: Boolean = false,
+    ): GPUCommandEncoderScopePlan {
         check(nativeOperandKeys.isEmpty()) { "Native operand keys are already attached" }
         require(keys.isNotEmpty()) { "Native operand keys must not be empty" }
         val pathSealed = corePrimitivePathStencilNativeRouteSeal is
@@ -170,7 +175,7 @@ class GPUCommandEncoderScopePlan internal constructor(
             it.role == GPUPreparedNativeOperandRole.RenderDepthStencilTarget
         }
         require(
-            if (pathSealed || clipStencilSealed) {
+            if (pathSealed || clipStencilSealed || allowsClipStencilPrefixDepthStencil) {
                 depthStencilKeys.size == 1 &&
                     depthStencilKeys.single().kind == GPUPreparedNativeOperandKind.TextureView &&
                     depthStencilKeys.single().ownership == GPUPreparedNativeOperandOwnership.Borrowed
@@ -179,6 +184,11 @@ class GPUCommandEncoderScopePlan internal constructor(
             },
         ) {
             "A sealed stencil route requires exactly one borrowed depth/stencil texture-view operand, and other scopes forbid it"
+        }
+        require(!allowsClipStencilPrefixDepthStencil ||
+            !pathSealed && !clipStencilSealed && !coverageMaskSealed
+        ) {
+            "Only the direct prefix of a clip-stencil route may retain an unsealed D24S8 operand"
         }
         if (coverageMaskSealed && coverageMaskSeal.units().size > 1) {
             val units = coverageMaskSeal.units()
@@ -724,6 +734,7 @@ class GPUCommandEncoderScopePlan internal constructor(
             }
         }
         nativeOperandKeys = immutableList(keys)
+        this.allowsClipStencilPrefixDepthStencil = allowsClipStencilPrefixDepthStencil
         return this
     }
 
@@ -1444,7 +1455,8 @@ internal class PreparedGPUFrame(
                                 depthStencilKeys.single().ownership ==
                                 GPUPreparedNativeOperandOwnership.Borrowed
                             )) &&
-                        (pathSealed || clipStencilSealed || depthStencilKeys.isEmpty()),
+                        (pathSealed || clipStencilSealed ||
+                            scope.allowsClipStencilPrefixDepthStencil || depthStencilKeys.isEmpty()),
                 ) {
                     "Prepared path seal, unified pair, writable attachment use, load/store, and native operand must agree exactly"
                 }
@@ -1945,10 +1957,11 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedFac
                         GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer ||
                         scope.corePrimitiveCoverageMaskPreparedRouteSeal is
                         GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition
+                val clipStencilPrefix = scope.allowsClipStencilPrefixDepthStencil
                 if (packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph ||
                     verticesSemantic != null ||
                     directRoutes?.routesByPacketId?.containsKey(packet.packetId) == true ||
-                    clipStencilSealed || coverageMaskConsumer) {
+                    clipStencilSealed || coverageMaskConsumer || clipStencilPrefix) {
                     add("setVertexBuffer")
                     if (verticesSemantic == null ||
                         verticesSemantic.artifact.indexCount != null
@@ -2000,6 +2013,7 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassS
             GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer ||
             scope.corePrimitiveCoverageMaskPreparedRouteSeal is
             GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition
+    val clipStencilPrefix = scope.allowsClipStencilPrefixDepthStencil
     drawPackets.forEach { packet ->
         add(packet.packetId)
         if (!clipStencilProducer) add(packet.packetId)
@@ -2009,7 +2023,7 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassS
         if (packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph ||
             verticesSemantic != null ||
             directRoutes?.routesByPacketId?.containsKey(packet.packetId) == true ||
-            clipStencilSealed || coverageMaskConsumer) {
+            clipStencilSealed || coverageMaskConsumer || clipStencilPrefix) {
             add(packet.packetId)
             if (verticesSemantic == null || verticesSemantic.artifact.indexCount != null) {
                 add(packet.packetId)

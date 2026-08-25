@@ -162,6 +162,33 @@ class GpuEvidenceCatalogOracleTest {
     }
 
     @Test
+    fun `hard clip path oracles preserve literal winding notch and ordered band counts`() {
+        val background = intArrayOf(13, 20, 33, 255)
+        val blue = intArrayOf(31, 115, 209, 255)
+        val orange = intArrayOf(242, 135, 46, 255)
+        val triangle = oracle("clip-path-triangle-solid")
+        val concave = oracle("clip-path-concave-solid")
+        val bands = oracle("clip-path-triangle-two-bands")
+
+        assertPixel(triangle, 64, 64, 8, 8, orange)
+        assertPixel(triangle, 64, 64, 55, 8, background)
+        assertPixel(triangle, 64, 64, 31, 31, orange)
+        assertPixel(triangle, 64, 64, 32, 31, background)
+        assertEquals(1128, fillPixelCount(triangle, orange))
+
+        assertPixel(concave, 64, 64, 10, 10, blue)
+        assertPixel(concave, 64, 64, 40, 30, background)
+        assertPixel(concave, 64, 64, 40, 44, blue)
+        assertEquals(1920, fillPixelCount(concave, blue))
+
+        assertPixel(bands, 64, 64, 31, 31, blue)
+        assertPixel(bands, 64, 64, 32, 8, orange)
+        assertPixel(bands, 64, 64, 32, 31, background)
+        assertEquals(852, fillPixelCount(bands, blue))
+        assertEquals(276, fillPixelCount(bands, orange))
+    }
+
+    @Test
     fun `path fill oracles preserve literal winding and inverse coverage`() {
         val background = intArrayOf(13, 20, 33, 255)
         val orange = intArrayOf(242, 135, 46, 255)
