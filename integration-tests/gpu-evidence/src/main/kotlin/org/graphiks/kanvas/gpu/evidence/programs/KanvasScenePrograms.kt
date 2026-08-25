@@ -9,6 +9,7 @@ import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.matrix.Matrix3x3F32
 
 /** Rendered evidence scenes expressed solely through the public Kanvas Canvas API. */
@@ -150,6 +151,23 @@ object KanvasScenePrograms {
                 listOf(GradientStop(0f, ColorARGB.of(255, 255, 56, 56)), GradientStop(1f, ColorARGB.of(255, 56, 112, 255))), TileMode.CLAMP,
             ), antiAlias = false,
         ))
+    })
+
+    fun scaledSolidRRect() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        scale(2f, 1f)
+        drawRRect(
+            RRectF32.of(RectF32.ofLTRB(8f, 16f, 24f, 48f), radius = 4f),
+            Paint.fill(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)).copy(antiAlias = false),
+        )
+    })
+
+    fun solidDRRectHole() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        drawDRRect(
+            RRectF32.of(RectF32.ofLTRB(8f, 8f, 56f, 56f), radius = 8f),
+            RRectF32.of(RectF32.ofLTRB(20f, 20f, 44f, 44f), radius = 4f),
+            Paint.fill(ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)).copy(antiAlias = false),
+        )
     })
 
     private val BACKGROUND = ColorARGB.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f, 1f)

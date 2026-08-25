@@ -74,6 +74,30 @@ class GpuEvidenceCatalogOracleTest {
         assertPixel(oracle("scissored-radial-gradient"), 64, 64, 20, 12, intArrayOf(54, 83, 191, 255))
     }
 
+    @Test
+    fun `rrect and drrect oracles preserve literal device coverage and fill counts`() {
+        val background = intArrayOf(13, 20, 33, 255)
+        val orange = intArrayOf(242, 135, 46, 255)
+        val blue = intArrayOf(31, 115, 209, 255)
+        val scaledRRect = oracle("scaled-solid-rrect")
+        val drrect = oracle("solid-drrect-hole")
+
+        assertPixel(scaledRRect, 64, 64, 15, 16, background)
+        assertPixel(scaledRRect, 64, 64, 16, 16, background)
+        assertPixel(scaledRRect, 64, 64, 24, 16, orange)
+        assertPixel(scaledRRect, 64, 64, 32, 32, orange)
+        assertPixel(scaledRRect, 64, 64, 47, 47, background)
+        assertEquals(996, fillPixelCount(scaledRRect, orange))
+
+        assertPixel(drrect, 64, 64, 8, 8, background)
+        assertPixel(drrect, 64, 64, 12, 12, blue)
+        assertPixel(drrect, 64, 64, 20, 20, blue)
+        assertPixel(drrect, 64, 64, 32, 32, background)
+        assertPixel(drrect, 64, 64, 44, 32, blue)
+        assertPixel(drrect, 64, 64, 55, 55, background)
+        assertEquals(1692, fillPixelCount(drrect, blue))
+    }
+
     private fun oracle(id: String): ByteArray = assertNotNull(
         GpuEvidenceCatalog.renderCases.firstOrNull { it.descriptor.id.value == id }?.oracle,
     ).render(64, 64)
@@ -84,4 +108,7 @@ class GpuEvidenceCatalogOracleTest {
         assertEquals(4, expected.size)
         assertContentEquals(expected.map(Int::toByte).toByteArray(), pixels.copyOfRange(offset, offset + 4), "pixel ($x,$y)")
     }
+
+    private fun fillPixelCount(pixels: ByteArray, color: IntArray): Int =
+        pixels.asList().chunked(4).count { pixel -> pixel.map { it.toInt() and 0xff } == color.toList() }
 }

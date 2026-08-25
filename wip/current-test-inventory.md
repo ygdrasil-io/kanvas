@@ -14,9 +14,9 @@ principalement `GpuEvidenceCatalog.kt` et les classes de test sous
 `../integration-tests/gpu-evidence/src/test/kotlin`. Il ne remplace ni les
 preuves générées, ni les artefacts promus.
 
-Le module contient 16 cas de catalogue (14 rendus attendus, 2 refus attendus),
-27 fichiers/classes de test et 212 annotations littérales `@Test`. L'exécution
-rapporte aussi 212 tests / 1 skipped : il n'y a pas de delta à attribuer à la
+Le module contient 18 cas de catalogue (16 rendus attendus, 2 refus attendus),
+28 fichiers/classes de test et 216 annotations littérales `@Test`. L'exécution
+rapporte aussi 216 tests / 1 skipped : il n'y a pas de delta à attribuer à la
 mécanique de test.
 
 ## Cas de catalogue et route réellement exercée
@@ -37,6 +37,8 @@ mécanique de test.
 | `scissored-radial-gradient` | `KanvasSurfaceProgram` | rendu | Dégradé radial `CLAMP` limité par un clip rectangulaire non AA. |
 | `repeat-gradient-refusal` | `KanvasSurfaceProgram` | rendu | Rectangle rempli borné, non filtré, à dégradé linéaire sRGB `REPEAT`, avec anti-aliasing désactivé. |
 | `gradient-stroke-refusal` | `KanvasSurfaceProgram` | rendu | Stroke `drawRect` : largeur entière paire 4, non-AA, cap `Butt`, join `Miter`, miter par défaut 4, transform identité, dégradé linéaire sRGB `CLAMP` valide et nu, sans path effect/local matrix/filters/blender. |
+| `scaled-solid-rrect` | `KanvasSurfaceProgram` | rendu | `drawRRect` solide, non-AA, sous l’unique scale axis-aligned borné `(2,1)`. |
+| `solid-drrect-hole` | `KanvasSurfaceProgram` | rendu | `drawDRRect` solide, non-AA, identité, avec trou intérieur. |
 | `custom-runtime-effect-unregistered-refusal` | `RoutedSceneProgram` interne | refus | Runtime effect custom non enregistré refusé avant toute soumission GPU. |
 | `aggregate-memory-budget-refusal` | `RoutedSceneProgram` interne | refus | Frame dépassant le budget mémoire agrégé refusée pendant l’enregistrement. |
 
@@ -131,13 +133,13 @@ Kanvas comme référence Skia : celui-ci reste un contrôle de cohérence intern
 
 ### Priorité P0 — préserver les routes déjà rendables
 
-Ces contrôles préservent les 14 rendus actuels et les 2 refus contractuels
+Ces contrôles préservent les 16 rendus actuels et les 2 refus contractuels
 avant d'élargir une promesse de support. Ils doivent être des captures hardware
 promouvables, pas seulement des tests unitaires d'oracle.
 
 | Domaine | Cas supplémentaires nécessaires | Vérifications déterminantes |
 | --- | --- | --- |
-| Catalogue courant | Vérifier exactement 14 rendus et 2 refus internes. | Les IDs `repeat-gradient-refusal` et `gradient-stroke-refusal` sont des rendus `Surface`; il n'existe pas de probe de refus `Surface` dans le catalogue courant. |
+| Catalogue courant | Vérifier exactement 16 rendus et 2 refus internes. | Les IDs `repeat-gradient-refusal` et `gradient-stroke-refusal` sont des rendus `Surface`; `scaled-solid-rrect` et `solid-drrect-hole` apportent une preuve `Surface` bornée. Il n'existe pas de probe de refus `Surface` dans le catalogue courant. |
 | Rectangles solides et `SrcOver` | Bords négatifs/hors surface, rectangles vides, coordonnées fractionnaires, ordre de trois draws et alpha 0/1/partiel. | Règle top-left/coverage, clipping de surface, prémultiplication et ordre de composition. |
 | Transformations et pile d'état | `save`/`restore` imbriqués, `restoreToCount`, translation, scale, rotate, skew, `concat`, `setMatrix`, `resetMatrix`. | Matrice courante restaurée exactement ; aucun état, clip ou alpha ne fuit vers le draw suivant. |
 | Clip rectangulaire | Intersection, clip vide, clip hors surface, clip après transformation et plusieurs `save`/`restore`. | Bounds exactes, zéro draw visible pour un clip vide, route scissor ou refus explicite documenté. |
@@ -227,7 +229,7 @@ gate de release.
 
 ## Ordre concret d'ajout
 
-1. Vérifier le catalogue courant à 14 rendus / 2 refus et conserver les
+1. Vérifier le catalogue courant à 16 rendus / 2 refus et conserver les
    artefacts promus alignés. Aucun ajout de catalogue n'est autorisé sans une
    petite vague explicitement approuvée, ses IDs précis et ses preuves
    d'acceptation.
