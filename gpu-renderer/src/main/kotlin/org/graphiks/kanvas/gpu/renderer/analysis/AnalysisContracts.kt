@@ -719,7 +719,7 @@ class GPUFirstRoutePlanner(
             analysisDecision = GPUDrawAnalysisDecision.Candidate(
                 recordId, "native.fill_drrect.solid_analytic_hole", emptyList(), listOf(renderStep),
             ),
-            routeDecision = GPUFirstRouteDecisionBuilder.nativeFillRRect(
+            routeDecision = GPUFirstRouteDecisionBuilder.nativeFillDRRect(
                 commandIdValue = command.commandId.value,
                 pipelinePreimageHash = "pending.pipeline.fill_drrect.solid.${command.layer.target.colorFormat}.src_over",
                 renderStepIdentity = renderStep,

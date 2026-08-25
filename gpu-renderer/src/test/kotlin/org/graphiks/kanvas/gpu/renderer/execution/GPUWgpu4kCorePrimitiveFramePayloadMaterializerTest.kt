@@ -70,6 +70,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFillRectCommandBuilder
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFillRRectCommandBuilder
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
+import org.graphiks.kanvas.gpu.renderer.commands.GPUOrderingFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
 import org.graphiks.kanvas.gpu.renderer.commands.GPURRectCornerRadii
 import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizationResult
@@ -77,6 +78,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizer
 import org.graphiks.kanvas.gpu.renderer.commands.GPURRect
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
+import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
@@ -150,6 +152,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         DirectThenPath,
         MultipleDirects,
         AnalyticSplit,
+        AnalyticDRRectSplit,
         MixedTwoPathPairs,
         TwoPathPairs,
         ClipStencil,
@@ -3568,6 +3571,49 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
     }
 
     @Test
+    fun `analytic rrect and drrect materialize isolated uniform80 and uniform128 slabs`() {
+        val fixture = fixture(routeShape = RouteShape.AnalyticDRRectSplit, useRealPreflight = true)
+        try {
+            assertEquals(2, fixture.plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().size)
+
+            val materialized = fixture.materializeCore()
+            try {
+                val renders = materialized.draft.payload.scopeOperands
+                    .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+                val bindGroups = renders.flatMap { render ->
+                    render.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
+                }
+
+                assertEquals(2, renders.size)
+                assertEquals(listOf(listOf(0L), listOf(256L)), bindGroups.map { it.dynamicOffsets })
+                val seals = fixture.encoderPlan.scopes.map { scope ->
+                    requireNotNull(
+                        assertIs<GPUCorePrimitiveDirectNativeRouteSeal.Routes>(
+                            scope.corePrimitiveDirectNativeRouteSeal,
+                        ).preparedPassSeal,
+                    ).analyticShapeUniformSeals.single()
+                }
+                assertEquals(listOf(80L, 128L), seals.map { seal -> seal.payloadBytesSnapshot().size.toLong() })
+                val packedUniforms = fixture.native.writeBufferCalls.last().snapshot
+                assertEquals(512, packedUniforms.size)
+                assertContentEquals(seals[0].payloadBytesSnapshot(), packedUniforms.copyOfRange(0, 80))
+                assertContentEquals(seals[1].payloadBytesSnapshot(), packedUniforms.copyOfRange(256, 384))
+                assertEquals(
+                    listOf(
+                        "Kanvas.session.corePrimitive.pipeline.AnalyticShapeSrcOver",
+                        "Kanvas.session.corePrimitive.pipeline.AnalyticDRRectSrcOver",
+                    ),
+                    fixture.native.renderPipelineDescriptors.map { it.label },
+                )
+            } finally {
+                assertTrue(materialized.draft.disposeBeforeRegistration())
+            }
+        } finally {
+            fixture.close()
+        }
+    }
+
+    @Test
     fun `typed uniform80 packet seal substitution keeps the generic packet authority diagnostic`() {
         val fixture = fixture(routeShape = RouteShape.AnalyticShape, useRealPreflight = true)
         val render = fixture.plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
@@ -5294,7 +5340,8 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         val generation = GPUDeviceGenerationID(23L)
         val capabilities = capabilities(
             sampleCount,
-            includeRRect = routeShape == RouteShape.AnalyticSplit,
+            includeRRect = routeShape == RouteShape.AnalyticSplit ||
+                routeShape == RouteShape.AnalyticDRRectSplit,
             includeLinearGradient = linearGradient,
             copyBytesPerRowAlignment = copyBytesPerRowAlignment,
             minUniformBufferOffsetAlignment = minUniformBufferOffsetAlignment,
@@ -5315,6 +5362,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             RouteShape.DirectThenPath -> listOf(1, 2)
             RouteShape.MultipleDirects -> listOf(1, 3, 2, 4)
             RouteShape.AnalyticSplit -> listOf(1, 2, 3)
+            RouteShape.AnalyticDRRectSplit -> listOf(1, 2)
             RouteShape.MixedTwoPathPairs -> listOf(1, 2, 3, 4)
             RouteShape.TwoPathPairs -> listOf(2, 3)
             RouteShape.ClipStencil -> listOf(1, 2)
@@ -5334,8 +5382,16 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         }
         val recorded = GPURecorder(GPURecordingID("recording.core.proxy"), frameId, capabilities, generation).apply {
             commandIds.forEachIndexed { order, commandId ->
-                val rrect = if (routeShape == RouteShape.AnalyticSplit && commandId == 3) {
+                val rrect = if (
+                    (routeShape == RouteShape.AnalyticSplit && commandId == 3) ||
+                    (routeShape == RouteShape.AnalyticDRRectSplit && commandId == 1)
+                ) {
                     analyticSplitRRectGeometry()
+                } else {
+                    null
+                }
+                val drrect = if (routeShape == RouteShape.AnalyticDRRectSplit && commandId == 2) {
+                    analyticSplitDRRectGeometry()
                 } else {
                     null
                 }
@@ -5358,6 +5414,8 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                                 GPUFrameProvenance.GmContent,
                             ),
                         )
+                    } ?: drrect?.let { geometry ->
+                        analyticDRRectCommand(commandId, order, geometry, targetFormat)
                     } ?: command(
                         commandId,
                         order,
@@ -5493,6 +5551,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                 coverageMaskTriangleSemantic(packet)
             } else if (routeShape == RouteShape.AnalyticSplit && packet.commandIdValue == 3) {
                 analyticRRectSemantic(packet)
+            } else if (routeShape == RouteShape.AnalyticDRRectSplit && packet.commandIdValue == 1) {
+                analyticRRectSemantic(packet)
+            } else if (routeShape == RouteShape.AnalyticDRRectSplit && packet.commandIdValue == 2) {
+                analyticDRRectSemantic(packet)
             } else {
                 semantic(
                     packet,
@@ -6044,6 +6106,29 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         )
     }
 
+    private fun analyticDRRectSemantic(packet: GPUDrawPacket): GPUDrawSemanticPayload.CorePrimitive {
+        val geometry = analyticSplitDRRectGeometry()
+        fun authority(rrect: GPUCorePrimitiveGeometryInput.RRect) = rrectGeometryAuthority(rrect.toSourceRRect())
+        return GPUCorePrimitivePayloadGatherer().gatherSemantic(
+            GPUCorePrimitivePayloadInput(
+                commandIdValue = packet.commandIdValue,
+                sourceFamily = GPUCorePrimitiveSourceFamily.DRRect,
+                geometry = geometry,
+                premultipliedRgba = listOf(0.5f, 0f, 0f, 1f),
+                targetBounds = TARGET,
+                scissorBounds = TARGET,
+                clipCoveragePlan = GPUClipCoveragePlan.NoClip,
+                blendPlanIdentity = requireNotNull(packet.blendPlan).canonicalIdentity(),
+                frameProvenance = GPUFrameProvenance.GmContent,
+                coverageMode = GPUCorePrimitiveCoverageMode.FullOrScissor,
+                analysisRecordId = "analysis.fill_drrect.${packet.commandIdValue}",
+                analysisCommandFamily = "FillDRRect",
+                drrectOuterGeometryAuthority = authority(geometry.outer),
+                drrectInnerGeometryAuthority = authority(geometry.inner),
+            ),
+        )
+    }
+
     private fun analyticSplitRRectGeometry() = GPUCorePrimitiveGeometryInput.RRect(
         left = 1f,
         top = 1f,
@@ -6051,6 +6136,63 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         bottom = 5f,
         radii = List(8) { 1f },
     )
+
+    private fun analyticSplitDRRectGeometry() = GPUCorePrimitiveGeometryInput.DRRect(
+        outer = GPUCorePrimitiveGeometryInput.RRect(
+            left = 1f,
+            top = 1f,
+            right = 5f,
+            bottom = 5f,
+            radii = List(8) { 1f },
+        ),
+        inner = GPUCorePrimitiveGeometryInput.RRect(
+            left = 2f,
+            top = 2f,
+            right = 4f,
+            bottom = 4f,
+            radii = List(8) { 0.5f },
+        ),
+    )
+
+    private fun analyticDRRectCommand(
+        commandId: Int,
+        paintOrder: Int,
+        geometry: GPUCorePrimitiveGeometryInput.DRRect,
+        targetFormat: GPUColorFormat,
+    ): NormalizedDrawCommand.FillDRRect = NormalizedDrawCommand.FillDRRect(
+        commandId = GPUDrawCommandID(commandId),
+        outer = geometry.outer.toSourceRRect(),
+        inner = geometry.inner.toSourceRRect(),
+        transform = GPUTransformFacts.identity(),
+        clip = GPUClipFacts(
+            kind = GPUClipKind.WideOpen,
+            bounds = GPUCommandBounds(0f, 0f, TARGET.width.toFloat(), TARGET.height.toFloat()),
+            coveragePlan = GPUClipCoveragePlan.NoClip,
+        ),
+        layer = org.graphiks.kanvas.gpu.renderer.commands.GPULayerFacts.root(
+            GPUTargetFacts(TARGET.width, TARGET.height, targetFormat.value),
+        ),
+        material = GPUMaterialDescriptor.SolidColor(0.5f, 0f, 0f, 1f),
+        bounds = GPUCommandBounds(
+            geometry.outer.left,
+            geometry.outer.top,
+            geometry.outer.right,
+            geometry.outer.bottom,
+        ),
+        ordering = GPUOrderingFacts(paintOrder, dependsOnDestination = false, requiresBarrier = false),
+        source = GPUCommandSource("core.proxy", "fillDRRect", GPUFrameProvenance.GmContent),
+        antiAlias = false,
+    )
+
+    private fun rrectGeometryAuthority(
+        rrect: GPURRect,
+    ) = assertIs<GPUCorePrimitiveRRectGeometryAuthorityIssue.Issued>(
+        corePrimitiveRRectGeometryAuthority(
+            rrect,
+            assertIs<GPURRectNormalizationResult.Accepted>(GPURRectNormalizer.normalize(rrect)),
+            GPUTransformFacts.identity(),
+        ),
+    ).authority
 
     private fun GPUCorePrimitiveGeometryInput.RRect.toSourceRRect(): GPURRect = GPURRect(
         rect = GPURect(left, top, right, bottom),

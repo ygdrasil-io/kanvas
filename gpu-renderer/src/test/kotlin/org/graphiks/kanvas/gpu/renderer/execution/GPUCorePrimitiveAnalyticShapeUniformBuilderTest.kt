@@ -155,6 +155,26 @@ class GPUCorePrimitiveAnalyticShapeUniformBuilderTest {
     }
 
     @Test
+    fun `prepared drrect refuses transplanted sealed outer or inner geometry authority`() {
+        val semantic = drrectSemantic()
+        val outerAuthority = requireNotNull(semantic.drrectOuterGeometryAuthority)
+        val innerAuthority = requireNotNull(semantic.drrectInnerGeometryAuthority)
+
+        listOf(
+            semantic.forged(drrectOuterGeometryAuthority = innerAuthority),
+            semantic.forged(drrectInnerGeometryAuthority = outerAuthority),
+        ).forEach { forged ->
+            val refusal = assertIs<GPUCorePrimitiveAnalyticShapeUniformBuildResult.Refused>(
+                buildCorePrimitiveAnalyticShapeUniform(
+                    forged,
+                    GPUCorePrimitivePreparedSemanticAuthority.capture(forged),
+                ),
+            )
+            assertEquals("invalid.native-core-primitive.analytic-drrect.geometry-authority", refusal.code)
+        }
+    }
+
+    @Test
     fun `builder refuses incoherent semantic source and signed geometry authority with stable codes`() {
         val rect = rectSemantic()
         val identicalButDistinctRect = rectSemantic()
@@ -340,6 +360,8 @@ class GPUCorePrimitiveAnalyticShapeUniformBuilderTest {
         coverageMode: GPUCorePrimitiveCoverageMode = this.coverageMode,
         rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority? = this.rectGeometryAuthority,
         rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = this.rrectGeometryAuthority,
+        drrectOuterGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = this.drrectOuterGeometryAuthority,
+        drrectInnerGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = this.drrectInnerGeometryAuthority,
     ): GPUDrawSemanticPayload.CorePrimitive = GPUDrawSemanticPayload.CorePrimitive(
         payloadRef = payloadRef,
         sourceFamily = sourceFamily,
@@ -357,6 +379,8 @@ class GPUCorePrimitiveAnalyticShapeUniformBuilderTest {
         rectRouteAuthority = rectRouteAuthority,
         rectGeometryAuthority = rectGeometryAuthority,
         rrectGeometryAuthority = rrectGeometryAuthority,
+        drrectOuterGeometryAuthority = drrectOuterGeometryAuthority,
+        drrectInnerGeometryAuthority = drrectInnerGeometryAuthority,
     )
 
     private fun ByteBuffer.floatsAt(offset: Int, count: Int): List<Float> =

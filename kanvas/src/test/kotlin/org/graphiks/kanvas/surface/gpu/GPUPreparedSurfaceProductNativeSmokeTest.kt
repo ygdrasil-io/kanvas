@@ -97,6 +97,61 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
     }
 
     @Test
+    fun `public Surface analytic rrect and drrect retain isolated native slabs in one ordered frame`() {
+        val background = ColorARGB.of(alpha = 255, red = 13, green = 20, blue = 33)
+        val rrectFill = ColorARGB.of(alpha = 255, red = 211, green = 73, blue = 52)
+        val drrectFill = ColorARGB.of(alpha = 255, red = 31, green = 115, blue = 209)
+        val surface = Surface(width = 64, height = 64, format = PixelFormat.RGBA8)
+        surface.canvas {
+            drawColor(background)
+            drawRRect(
+                RRectF32.of(RectF32.ofLTRB(4f, 4f, 60f, 60f), radius = 6f),
+                Paint.fill(rrectFill).copy(antiAlias = false),
+            )
+            drawDRRect(
+                RRectF32.of(RectF32.ofLTRB(8f, 8f, 56f, 56f), radius = 8f),
+                RRectF32.of(RectF32.ofLTRB(20f, 20f, 44f, 44f), radius = 4f),
+                Paint.fill(drrectFill).copy(antiAlias = false),
+            )
+        }
+        val decisions = mutableListOf<GPUPreparedSurfaceRouteDecision>()
+
+        val result = GPUPreparedSurfaceProductEntry.render(
+            operations = surface.snapshotOps(),
+            width = surface.width,
+            height = surface.height,
+            format = surface.format,
+            config = surface.config,
+            executionPort = GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceNativeBackendPortFactory),
+            trace = GPUPreparedSurfaceRouteTrace(decisions::add),
+        )
+
+        val evidence = assertIs<GPUPreparedSurfaceRouteDecision.Prepared>(decisions.single()).evidence
+        val pixels = result.pixels.toByteArray()
+        var mismatches = 0
+        for (y in 0 until 64) for (x in 0 until 64) {
+            val rrectContains = rrectContains(x + 0.5, y + 0.5, 4.0, 4.0, 60.0, 60.0, 6.0, 6.0)
+            val drrectContains = rrectContains(x + 0.5, y + 0.5, 8.0, 8.0, 56.0, 56.0, 8.0, 8.0) &&
+                !rrectContains(x + 0.5, y + 0.5, 20.0, 20.0, 44.0, 44.0, 4.0, 4.0)
+            val expected = when {
+                drrectContains -> listOf(31, 115, 209, 255)
+                rrectContains -> listOf(211, 73, 52, 255)
+                else -> listOf(13, 20, 33, 255)
+            }
+            val offset = (y * 64 + x) * 4
+            if ((0..3).map { pixels[offset + it].toInt() and 0xff } != expected) mismatches++
+        }
+
+        assertEquals(0, mismatches)
+        assertEquals(3, result.stats.opsDispatched)
+        assertEquals(0, result.stats.opsRefused)
+        assertTrue(evidence.draws + evidence.drawIndexed >= 2L)
+        assertTrue(evidence.pipelineBinds >= 2L)
+        assertTrue(evidence.submits > 0L)
+        assertTrue(evidence.readbackCopies > 0L)
+    }
+
+    @Test
     fun `public Surface linear gradient submits one real native frame`() {
         val start = ColorARGB.of(alpha = 160, red = 40, green = 120, blue = 208)
         val end = ColorARGB.of(alpha = 96, red = 224, green = 72, blue = 48)

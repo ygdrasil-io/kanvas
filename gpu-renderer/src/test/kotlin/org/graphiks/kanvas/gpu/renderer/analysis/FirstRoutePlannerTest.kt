@@ -29,6 +29,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPULayerFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
+import org.graphiks.kanvas.gpu.renderer.commands.GPUOrderingFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
 import org.graphiks.kanvas.gpu.renderer.commands.GPURRect
 import org.graphiks.kanvas.gpu.renderer.commands.GPURRectCornerRadii
@@ -1135,6 +1136,33 @@ class FirstRoutePlannerTest {
         assertNull(invocation.scissorBoundsHash)
         assertNull(invocation.uniformSlot)
         assertNull(invocation.resourceSlot)
+    }
+
+    @Test
+    fun `solid fill drrect keeps its dedicated route and analytic-hole diagnostic identities`() {
+        val outer = GPURRect(GPURect(2f, 2f, 26f, 22f), radiusX = 4f, radiusY = 4f)
+        val command = NormalizedDrawCommand.FillDRRect(
+            commandId = GPUDrawCommandID(141),
+            outer = outer,
+            inner = GPURRect(GPURect(8f, 8f, 20f, 16f), radiusX = 2f, radiusY = 2f),
+            transform = GPUTransformFacts.identity(),
+            clip = GPUClipFacts.wideOpen(GPUBounds(2f, 2f, 26f, 22f)),
+            layer = GPULayerFacts.root(GPUTargetFacts(32, 24, "rgba8unorm")),
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0.25f, b = 0.5f, a = 1f),
+            bounds = GPUBounds(2f, 2f, 26f, 22f),
+            ordering = GPUOrderingFacts(0, dependsOnDestination = false, requiresBarrier = false),
+            source = GPUCommandSource(adapter = "unit-test", operation = "fillDRRect"),
+            antiAlias = false,
+        )
+
+        val plan = GPUFirstRoutePlanner(capabilities = firstSliceRRectCapabilities()).plan(command)
+        val route = assertIs<GPURouteDecision.Native>(plan.routeDecision).route
+
+        assertEquals("analysis.fill_drrect.141", plan.analysisRecord.recordId)
+        assertEquals("native.fill_drrect.solid_analytic_hole", plan.analysisRecord.routeDecisionLabel)
+        assertEquals("native.fill_drrect.solid_analytic_hole", assertIs<GPUDrawAnalysisDecision.Candidate>(plan.analysisDecision).routeDecisionLabel)
+        assertEquals("route.fill_drrect.141", route.routeId)
+        assertEquals("native.fill_drrect.solid_analytic_hole", route.consumerKind)
     }
 
     @Test

@@ -4186,13 +4186,9 @@ internal class GPUFramePreflighter(
             it.layout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ||
                 it.layout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticDRRectUniform128V1
         }
-        if (analyticShapeSteps.isNotEmpty()) {
-            val analyticLayout = analyticShapeSteps.first().layout
-            if (analyticShapeSteps.any { it.layout != analyticLayout }) {
-                return refuseShape("Analytic shape and DRRect packets require separate uniform slabs.")
-            }
+        analyticShapeSteps.groupBy(StepUniformAuthority::layout).forEach { (analyticLayout, stepsForLayout) ->
             val uniform80AcceptedIndices = layoutAcceptedIndices(analyticLayout)
-            val frame80Plan = analyticShapeSteps.first().uniformPlan
+            val frame80Plan = stepsForLayout.first().uniformPlan
             val analyticUniformBytes = if (
                 analyticLayout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticDRRectUniform128V1
             ) 128L else 80L
@@ -4200,13 +4196,13 @@ internal class GPUFramePreflighter(
                 "core-primitive-analytic-drrect-uniform-pass" else "core-primitive-analytic-shape-uniform-pass"
             if (frame80Plan.sourceLabel != expectedSourceLabel ||
                 frame80Plan.slots.size != uniform80AcceptedIndices.size ||
-                analyticShapeSteps.flatMap { it.analyticShapeSeals }.any { seal -> seal.plan !== frame80Plan }
+                stepsForLayout.flatMap { it.analyticShapeSeals }.any { seal -> seal.plan !== frame80Plan }
             ) {
                 return refuseShape("Analytic shape packets must share one exact uniform80 slab plan.")
             }
             fun GPUPixelBounds.isContainedBy(outer: GPUPixelBounds): Boolean =
                 left >= outer.left && top >= outer.top && right <= outer.right && bottom <= outer.bottom
-            val shapeSeals = analyticShapeSteps.flatMap { it.analyticShapeSeals }
+            val shapeSeals = stepsForLayout.flatMap { it.analyticShapeSeals }
             uniform80AcceptedIndices.forEachIndexed { indexAt, acceptedIndex ->
                 val entry = accepted[acceptedIndex]
                 val seal = shapeSeals[indexAt]
@@ -4559,7 +4555,8 @@ internal class GPUFramePreflighter(
                         stepAuthority.layout !=
                         GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticDRRectUniform128V1 ->
                         emptyList()
-                    analyticShapeSteps.size <= 1 -> stepAuthority.analyticShapeSeals
+                    analyticShapeSteps.count { it.layout == stepAuthority.layout } <= 1 ->
+                        stepAuthority.analyticShapeSeals
                     else -> sliceAnalyticShapeUniformSealsToCommands(
                         stepAuthority.analyticShapeSeals,
                         stepCommandIdsByIndex.getValue(stepIndex),

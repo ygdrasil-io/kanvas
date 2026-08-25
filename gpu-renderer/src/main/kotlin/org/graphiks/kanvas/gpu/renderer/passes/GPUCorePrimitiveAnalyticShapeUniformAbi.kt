@@ -123,17 +123,29 @@ internal fun buildCorePrimitiveAnalyticShapeUniform(
                 "invalid.native-core-primitive.analytic-drrect.source",
                 "Analytic DRRect uniform construction requires typed DRRect device geometry.",
             )
+            val outerAuthority = semantic.drrectOuterGeometryAuthority
+            val innerAuthority = semantic.drrectInnerGeometryAuthority
             if (semantic.analysisRecordId != "analysis.fill_drrect.$commandId" ||
                 semantic.analysisCommandFamily != "FillDRRect" ||
-                semantic.drrectOuterGeometryAuthority == null || semantic.drrectInnerGeometryAuthority == null
+                outerAuthority == null || innerAuthority == null ||
+                !GPUCorePrimitiveRRectGeometryAuthority.hasExactDeviceGeometry(
+                    outerAuthority,
+                    drrect.rrectGeometry(outer = true),
+                ) ||
+                !GPUCorePrimitiveRRectGeometryAuthority.hasExactDeviceGeometry(
+                    innerAuthority,
+                    drrect.rrectGeometry(outer = false),
+                )
             ) return refused(
                 "invalid.native-core-primitive.analytic-drrect.geometry-authority",
                 "Analytic DRRect uniform construction requires both exact signed geometry authorities.",
             )
-            signedBounds = drrect.outerBounds
-            signedRadii = drrect.outerRadii
-            innerBounds = drrect.innerBounds
-            innerRadii = drrect.innerRadii
+            val sealedOuter = outerAuthority.sealedDeviceGeometryInput()
+            val sealedInner = innerAuthority.sealedDeviceGeometryInput()
+            signedBounds = listOf(sealedOuter.left, sealedOuter.top, sealedOuter.right, sealedOuter.bottom)
+            signedRadii = sealedOuter.radii
+            innerBounds = listOf(sealedInner.left, sealedInner.top, sealedInner.right, sealedInner.bottom)
+            innerRadii = sealedInner.radii
         }
         else -> return refused(
             "invalid.native-core-primitive.analytic-shape.source",
@@ -184,6 +196,18 @@ internal fun buildCorePrimitiveAnalyticShapeUniform(
         )
     }
     return GPUCorePrimitiveAnalyticShapeUniformBuildResult.Accepted(bytes)
+}
+
+private fun GPUCorePrimitiveGeometry.DRRect.rrectGeometry(outer: Boolean): GPUCorePrimitiveGeometry.RRect {
+    val bounds = if (outer) outerBounds else innerBounds
+    val radii = if (outer) outerRadii else innerRadii
+    return GPUCorePrimitiveGeometry.RRect(
+        left = bounds[0],
+        top = bounds[1],
+        right = bounds[2],
+        bottom = bounds[3],
+        radii = radii,
+    )
 }
 
 internal sealed interface GPUCorePrimitiveGradientAnalyticShapeUniformBuildResult {
