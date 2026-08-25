@@ -19,15 +19,22 @@ publique native `kanvas.surface.render` et le stencil-cover WebGPU :
 `WINDING`), `even-odd-path-hole` (1776, `EVEN_ODD`), `winding-path-hole`
 (1776, `WINDING` avec contours signés opposés),
 `inverse-winding-triangle-path` (2968, `INVERSE_WINDING`) et
-`inverse-even-odd-path-hole` (2320, `INVERSE_EVEN_ODD`). Les six scènes sont
-64×64, utilisent leurs bounds littéraux documentés et sont exactes à `100.0`
+`inverse-even-odd-path-hole` (2320, `INVERSE_EVEN_ODD`). La même preuve couvre
+désormais `implicit-closure-triangle-path` (1128, `WINDING`, fermeture
+implicite), `translated-triangle-path` (1128, `WINDING`, translation
+positive `(4,5)`) et `uniform-scaled-triangle-path` (1176, `WINDING`, scale
+uniforme positif `(1.5,1.5)`). Les neuf scènes sont 64×64, utilisent leurs
+bounds littéraux documentés, l'oracle CPU `surface-srgb-path-pixel-center`
+version 2 et sont exactes à `100.0`
 de similarité, avec zéro pixel différent et zéro écart de canal.
 
 Cette preuve couvre les quatre fill types uniquement pour ces formes polygonales
-littérales et leurs target bounds respectifs. Ne sont pas revendiqués : l'AA,
-les strokes, les contours curves (quadratiques ou cubiques), les implicit
-closure, les oval/circle et tous les clips (`clipPath`, `clipRRect` ou
-interactions de clip), ni d'autres transforms.
+littérales et leurs target bounds respectifs. Les transforms supplémentaires
+restent limitées à la translation positive et au scale uniforme positif
+explicitement listés ci-dessus. Ne sont pas revendiqués : l'AA, les strokes,
+les contours curves (quadratiques ou cubiques), les oval/circle, les scales
+non uniformes, réfléchis ou composés, et tous les clips (`clipPath`,
+`clipRRect` ou interactions de clip).
 
 ## Code et tests à lire
 
@@ -43,7 +50,7 @@ interactions de clip), ni d'autres transforms.
 
 | Sous-famille | Scènes et oracles | Limites/refus contractuels |
 | --- | --- | --- |
-| Fills path | `solid-triangle-path`, `solid-concave-path`, `even-odd-path-hole`, `winding-path-hole`, `inverse-winding-triangle-path` et `inverse-even-odd-path-hole` : fills solides opaques non-AA, les quatre fill types (`WINDING`, `EVEN_ODD`, `INVERSE_WINDING`, `INVERSE_EVEN_ODD`), contours polygonaux explicitement fermés et oracle pixel-center. | La preuve est limitée à ces six formes littérales et leurs target bounds ; aucun autre contour ou fill path n'est revendiqué, notamment lignes, courbes quadratiques/cubiques, auto-intersection, implicit closure, oval/circle, AA, strokes et transforms supplémentaires. |
+| Fills path | Les neuf scènes `solid-triangle-path`, `solid-concave-path`, `even-odd-path-hole`, `winding-path-hole`, `inverse-winding-triangle-path`, `inverse-even-odd-path-hole`, `implicit-closure-triangle-path`, `translated-triangle-path` et `uniform-scaled-triangle-path` : fills solides opaques non-AA, les quatre fill types (`WINDING`, `EVEN_ODD`, `INVERSE_WINDING`, `INVERSE_EVEN_ODD`), formes polygonales littérales, translation positive et scale uniforme positif, avec oracle pixel-center v2. | La preuve est limitée à ces neuf formes littérales et leurs target bounds ; aucun autre contour ou fill path n'est revendiqué, notamment lignes, courbes quadratiques/cubiques, auto-intersection, oval/circle, AA, strokes, scales non uniformes/réfléchis/composés et autres transforms. |
 | Coverage AA | Aucun cas revendiqué. | Arêtes et positions AA, petites primitives et superpositions restent non revendiquées sans coverage mesurable. |
 | Strokes | Aucun cas revendiqué. | Caps, joins, miter, dash, hairline et path effects restent non revendiqués. |
 | `clipPath` / `clipRRect` | Aucun cas revendiqué. | Intersections, clips imbriqués/AA/transformés, clips vides et clips avec rayons distincts restent non revendiqués. |
