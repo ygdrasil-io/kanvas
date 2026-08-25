@@ -698,7 +698,8 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.supportsFourSampleProgra
         role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer ||
         role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover ||
         role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.ClipStencilProducer ||
-        role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.ClipStencilConsumer
+        (role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.ClipStencilConsumer &&
+            shader == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry)
 
 private fun GPUCorePrimitiveRenderPipelineStructuralKey.Clip.Analytic.nativeAnalyticProgramOrNull():
     GPUWgpu4kCorePrimitivePipelineProgram? = when (geometry) {
@@ -1043,8 +1044,6 @@ private fun GPUWgpu4kCorePrimitivePipelineProgram.supportsFourSamples(): Boolean
     GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilProducerEvenOdd,
     GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerRegular,
     GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerInverse,
-    GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerLinearGradientRegular,
-    GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerLinearGradientInverse,
     GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRectHardRegular,
     GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRectHardInverse,
     GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRectAARegular,

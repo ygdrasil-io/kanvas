@@ -109,6 +109,23 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
     }
 
     @Test
+    fun `seal refuses a clamp direct linear gradient consumer in a four sample hard path clip`() {
+        assertRefused(
+            "unsupported.native-core-primitive.clip-stencil.gradient-msaa",
+            request(
+                sampleCount = 4,
+                producerAntiAlias = true,
+                consumers = mutableListOf(
+                    consumer(
+                        material = linearGradientMaterial(),
+                        attachment = attachment(sampleCount = 4),
+                    ),
+                ),
+            ),
+        )
+    }
+
+    @Test
     fun `seal retains exact attachment atomic ordering reference and structural keys`() {
         val producerScissor = GPUPixelBounds(20, 10, 180, 90)
         val accepted = assertIs<GPUCorePrimitiveClipStencilNativeRoute.Accepted>(

@@ -236,6 +236,13 @@ internal fun sealGPUCorePrimitiveClipStencilNativeRoute(
             "unsupported.native-core-primitive.clip-stencil.consumer-material",
             "Only solid colors and clamp linear gradients are accepted by the bounded clip-stencil route.",
         )
+        if (
+            shader == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient &&
+            stencil.sampleCount != 1
+        ) return refused(
+            "unsupported.native-core-primitive.clip-stencil.gradient-msaa",
+            "Clamp linear-gradient clip-stencil consumers require the exact single-sample route.",
+        )
         if (consumer.inverseFill != path.inverseFill || consumer.scissor != stencil.consumer.scissor) return refused(
             "invalid.native-core-primitive.clip-stencil.consumer-authority",
             "Consumer fill and scissor facts must match the clip plan.",

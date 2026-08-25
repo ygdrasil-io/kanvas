@@ -2107,6 +2107,20 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 "Native hard path clips accept only direct non-layer, non-destination-read consumers.",
             )
         }
+        if (
+            staticNativeClipStencilPlan?.sampleCount != null &&
+            staticNativeClipStencilPlan.sampleCount != 1 &&
+            staticNativeClipStencilConsumers.any { packet ->
+                corePrimitiveClipStencilConsumerShaderOrNull(
+                    request.coreSemantics().getValue(packet.commandIdValue).material,
+                ) == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient
+            }
+        ) {
+            return refused(
+                "unsupported.recording.core_primitive_clip_stencil_gradient_msaa",
+                "Clamp linear-gradient hard path clips require the exact single-sample route.",
+            )
+        }
         val validNativeClipStencilConsumers = nativeClipStencilPlan?.sampleCount == 1 &&
             staticNativeClipStencilConsumers.size in 1..2 &&
             staticNativeClipStencilConsumers.all { packet ->
