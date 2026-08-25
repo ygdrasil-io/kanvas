@@ -50,6 +50,9 @@ object GpuEvidenceCatalog {
         clipPathTriangleLinearGradient(),
         clipPathTranslatedTriangleLinearGradient(),
         clipPathUniformScaledTriangleLinearGradient(),
+        clipPathTriangleDirectTriangleSolid(),
+        clipPathTranslatedTriangleDirectTriangleSolid(),
+        clipPathTriangleDirectTriangleOrder(),
         solidTrianglePath(),
         solidConcavePath(),
         evenOddPathHole(),
@@ -603,6 +606,36 @@ object GpuEvidenceCatalog {
         8f, 4f, 56f, 52f, 14f, 10f, 50f, 10f,
     )
 
+    private fun clipPathTriangleDirectTriangleSolid() = clipPathDirectTriangleCase(
+        id = "clip-path-triangle-direct-triangle-solid",
+        title = "Solid direct triangle inside hard path clip",
+        description = "Public Kanvas Surface hard non-AA path clip with one solid DirectTriangles drawPath consumer.",
+        program = KanvasScenePrograms.clipPathTriangleDirectTriangleSolid(),
+        contour = listOf(clipPoint(8f, 8f), clipPoint(56f, 8f), clipPoint(8f, 55f)),
+        draws = listOf(directTriangle(4f, 4f, 60f, 12f, 12f, 60f, intArrayOf(242, 135, 46, 255))),
+    )
+
+    private fun clipPathTranslatedTriangleDirectTriangleSolid() = clipPathDirectTriangleCase(
+        id = "clip-path-translated-triangle-direct-triangle-solid",
+        title = "Translated solid direct triangle inside hard path clip",
+        description = "Public Kanvas Surface translated hard non-AA path clip with one device-space solid DirectTriangles drawPath consumer.",
+        program = KanvasScenePrograms.clipPathTranslatedTriangleDirectTriangleSolid(),
+        contour = listOf(clipPoint(10f, 8f), clipPoint(58f, 8f), clipPoint(10f, 55f)),
+        draws = listOf(directTriangle(6f, 4f, 62f, 12f, 14f, 60f, intArrayOf(31, 115, 209, 255))),
+    )
+
+    private fun clipPathTriangleDirectTriangleOrder() = clipPathDirectTriangleCase(
+        id = "clip-path-triangle-direct-triangle-order",
+        title = "Ordered direct triangles inside hard path clip",
+        description = "Public Kanvas Surface hard non-AA path clip with two ordered solid DirectTriangles drawPath consumers.",
+        program = KanvasScenePrograms.clipPathTriangleDirectTriangleOrder(),
+        contour = listOf(clipPoint(8f, 8f), clipPoint(56f, 8f), clipPoint(8f, 55f)),
+        draws = listOf(
+            directTriangle(4f, 4f, 60f, 12f, 12f, 60f, intArrayOf(31, 115, 209, 255)),
+            directTriangle(20f, 8f, 56f, 8f, 20f, 44f, intArrayOf(242, 135, 46, 255)),
+        ),
+    )
+
     private fun clipPathLinearGradientCase(
         id: String, title: String, program: org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram,
         contour: List<SurfaceSrgbClipPathCpuOracle.Point>, left: Float, top: Float, right: Float, bottom: Float,
@@ -619,6 +652,45 @@ object GpuEvidenceCatalog {
             SurfaceSrgbGradientCpuOracle.Point(startX, startY), SurfaceSrgbGradientCpuOracle.Point(endX, endY),
             intArrayOf(255, 0, 0, 255), intArrayOf(0, 0, 255, 255),
         ),
+    )
+
+    private fun clipPathDirectTriangleCase(
+        id: String,
+        title: String,
+        description: String,
+        program: org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram,
+        contour: List<SurfaceSrgbClipPathCpuOracle.Point>,
+        draws: List<SurfaceSrgbClipPathCpuOracle.OpaqueTriangle>,
+    ) = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId(id), title, description, 64, 64, 1L,
+            setOf("clip-path", "solid-path", "direct-triangles", "hard-clip", "kanvas-surface"),
+            EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-clip-path-direct-triangle-pixel-center", 1),
+            ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent device-space pixel-center clip and direct-triangle membership."),
+            emptySet(),
+        ),
+        program,
+        SurfaceSrgbClipPathCpuOracle(
+            background = intArrayOf(13, 20, 33, 255),
+            contours = listOf(SurfaceSrgbClipPathCpuOracle.Contour(contour)),
+            draws = draws,
+        ),
+    )
+
+    private fun directTriangle(
+        firstX: Float,
+        firstY: Float,
+        secondX: Float,
+        secondY: Float,
+        thirdX: Float,
+        thirdY: Float,
+        color: IntArray,
+    ) = SurfaceSrgbClipPathCpuOracle.OpaqueTriangle(
+        clipPoint(firstX, firstY),
+        clipPoint(secondX, secondY),
+        clipPoint(thirdX, thirdY),
+        color,
     )
 
     private fun clipPoint(x: Float, y: Float) = SurfaceSrgbClipPathCpuOracle.Point(x, y)

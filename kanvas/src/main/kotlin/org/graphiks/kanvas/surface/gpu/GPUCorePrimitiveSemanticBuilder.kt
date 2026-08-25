@@ -857,6 +857,7 @@ private fun NormalizedDrawCommand.FillPath.pathDeviceGeometry(
         )
     }
     val transformed = tessellatedVertices.chunked(2).map { pair -> transform.map(pair[0], pair[1]) }
+    directTriangleDeviceGeometryOrNull(transformed, targetBounds)?.let { return it }
     val edgeFan = PathTessellator().stencilEdgeFan(
         FlattenedPath(
             points = transformed.map { (x, y) -> GPUPathPoint(x, y) },
@@ -872,6 +873,38 @@ private fun NormalizedDrawCommand.FillPath.pathDeviceGeometry(
         geometryMode = GPUCorePrimitiveGeometryMode.StencilEdgeFan,
         fillRule = pathDescriptor.fillRule.toCoreFillRule(),
         inverseFill = pathDescriptor.inverseFill,
+    )
+}
+
+/**
+ * The hard clip-stencil consumer shares the clip's complete stencil byte and therefore may not
+ * write path coverage itself. A single non-AA winding triangle is the only FillPath shape we
+ * can currently lower to direct indexed geometry without needing a stencil edge fan.
+ */
+private fun NormalizedDrawCommand.FillPath.directTriangleDeviceGeometryOrNull(
+    transformed: List<Pair<Float, Float>>,
+    targetBounds: GPUPixelBounds,
+): GPUCorePrimitiveGeometryInput.TriangulatedPath? {
+    if (!isBoundedDirectTriangleFill()) return null
+    val triangle = when {
+        transformed.size == 4 && transformed.first() == transformed.last() -> transformed.dropLast(1)
+        transformed.size == 3 -> transformed
+        else -> return null
+    }
+    if (triangle.any { (x, y) -> !x.isFinite() || !y.isFinite() }) return null
+    val (first, second, third) = triangle
+    val twiceArea = (second.first - first.first) * (third.second - first.second) -
+        (second.second - first.second) * (third.first - first.first)
+    if (!twiceArea.isFinite() || twiceArea == 0f) return null
+    return GPUCorePrimitiveGeometryInput.TriangulatedPath(
+        vertices = triangle.flatMap { (x, y) -> listOf(x, y) },
+        indices = listOf(0, 1, 2),
+        sourceContourStarts = listOf(0),
+        sourceVertexCount = 3,
+        coverBounds = triangle.toPixelCoverBounds(targetBounds),
+        geometryMode = GPUCorePrimitiveGeometryMode.DirectTriangles,
+        fillRule = GPUCorePrimitiveFillRule.Winding,
+        inverseFill = false,
     )
 }
 

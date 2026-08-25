@@ -207,6 +207,63 @@ object KanvasScenePrograms {
         restore()
     })
 
+    fun clipPathTriangleDirectTriangleSolid() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        save()
+        clipPath(
+            Path { moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close() }
+                .apply { fillType = FillType.WINDING },
+            ClipOp.INTERSECT,
+            antiAlias = false,
+        )
+        drawPath(
+            Path { moveTo(4f, 4f); lineTo(60f, 12f); lineTo(12f, 60f); close() }
+                .apply { fillType = FillType.WINDING },
+            Paint.fill(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)).copy(antiAlias = false),
+        )
+        restore()
+    })
+
+    fun clipPathTranslatedTriangleDirectTriangleSolid() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        save()
+        translate(2f, 0f)
+        clipPath(
+            Path { moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close() }
+                .apply { fillType = FillType.WINDING },
+            ClipOp.INTERSECT,
+            antiAlias = false,
+        )
+        drawPath(
+            Path { moveTo(4f, 4f); lineTo(60f, 12f); lineTo(12f, 60f); close() }
+                .apply { fillType = FillType.WINDING },
+            Paint.fill(ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)).copy(antiAlias = false),
+        )
+        restore()
+    })
+
+    fun clipPathTriangleDirectTriangleOrder() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        save()
+        clipPath(
+            Path { moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close() }
+                .apply { fillType = FillType.WINDING },
+            ClipOp.INTERSECT,
+            antiAlias = false,
+        )
+        drawPath(
+            Path { moveTo(4f, 4f); lineTo(60f, 12f); lineTo(12f, 60f); close() }
+                .apply { fillType = FillType.WINDING },
+            Paint.fill(ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)).copy(antiAlias = false),
+        )
+        drawPath(
+            Path { moveTo(20f, 8f); lineTo(56f, 8f); lineTo(20f, 44f); close() }
+                .apply { fillType = FillType.WINDING },
+            Paint.fill(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)).copy(antiAlias = false),
+        )
+        restore()
+    })
+
     fun clipPathTriangleLinearGradient() = clipPathLinearGradient()
 
     fun clipPathTranslatedTriangleLinearGradient() = clipPathLinearGradient {

@@ -2129,18 +2129,21 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 packet.role == GPUDrawPacketRole.Shading &&
                     when (clipStencilShader) {
                         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry ->
-                            packet.renderStepId.value == CORE_PRIMITIVE_FILL_RECT_STEP_IDENTITY
+                            (packet.renderStepId.value == CORE_PRIMITIVE_FILL_RECT_STEP_IDENTITY &&
+                                semantic.geometry is GPUCorePrimitiveGeometry.Rect) ||
+                                (semantic.sourceFamily == GPUCorePrimitiveSourceFamily.Path &&
+                                    (semantic.geometry as? GPUCorePrimitiveGeometry.TriangulatedPath)
+                                        ?.geometryMode == GPUCorePrimitiveGeometryMode.DirectTriangles)
                         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient ->
                             packet.renderStepId.value == "linear.gradient.fill"
                         else -> false
                     } &&
-                    semantic.geometry is GPUCorePrimitiveGeometry.Rect &&
                     semantic.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor
             }
         if (nativeClipStencilPlan?.sampleCount == 1 && !validNativeClipStencilConsumers) {
             return refused(
                 "unsupported.recording.core_primitive_clip_stencil_mixed_geometry",
-                "The bounded clip-stencil scope accepts only one or two solid or clamp-linear-gradient FillRect consumers.",
+                "The bounded clip-stencil scope accepts only one or two direct solid Path or FillRect consumers, or clamp-linear-gradient FillRect consumers.",
             )
         }
         val nativeClipStencilPrefixCommandIds = nativeClipStencilPlan

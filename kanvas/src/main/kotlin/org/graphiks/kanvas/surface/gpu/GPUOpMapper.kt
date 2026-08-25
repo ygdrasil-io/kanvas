@@ -681,7 +681,6 @@ internal object GPUOpMapper {
             onGeometryRefusal = { refusal -> loweringRefusal = refusal },
         ) ?: return null
         val geometryRefusal = loweringRefusal ?: operation.coreGeometryRefusalOrNull()
-        val coverage = rawNormalized.geometryCoverage()
         val clipPlan = rawNormalized.clip.coverageRequest?.let { request ->
             GPUClipCoveragePlanner.planForFrameRoute(
                 request,
@@ -699,6 +698,7 @@ internal object GPUOpMapper {
             admitAnalyticMultiRect,
         )
         val normalized = rawNormalized.withClipPlans(clipPlan, clipExecutionPlan)
+        val coverage = normalized.geometryCoverage()
         return GPUFramePathVisualCommand(
             normalized = normalized,
             targetSpaceBounds = normalized.bounds,
@@ -1191,7 +1191,11 @@ private fun DisplayOp.DrawPath.toPathCommand(
 }
 
 private fun NormalizedDrawCommand.geometryCoverage(): GPUCoverageConsumption = when (this) {
-    is NormalizedDrawCommand.FillPath -> GPUCoverageConsumption.StencilCoverage1x
+    is NormalizedDrawCommand.FillPath -> if (isBoundedDirectTriangleFill()) {
+        GPUCoverageConsumption.FullOrScissor
+    } else {
+        GPUCoverageConsumption.StencilCoverage1x
+    }
     is NormalizedDrawCommand.FillRRect -> if (antiAlias) {
         GPUCoverageConsumption.ScalarCoverage
     } else {
@@ -1204,6 +1208,38 @@ private fun NormalizedDrawCommand.geometryCoverage(): GPUCoverageConsumption = w
         GPUCoverageConsumption.FullOrScissor
     }
     else -> error("Geometry coverage requested for a non-Slice-12A command")
+}
+
+/**
+ * This is deliberately narrower than general path triangulation: only one finite, non-degenerate
+ * winding triangle can use direct color geometry. Every other FillPath still owns its coverage
+ * through the stencil edge-fan route.
+ */
+internal fun NormalizedDrawCommand.FillPath.isBoundedDirectTriangleFill(): Boolean {
+    if (stroke || antiAlias || pathDescriptor.inverseFill ||
+        pathDescriptor.fillRule !in setOf("NonZero", "winding") || contourStarts != listOf(0)
+    ) return false
+    val nativePathStencil = clip.executionPlan as? GPUClipExecutionPlan.StencilCoverage ?: return false
+    if (nativePathStencil.sampleCount != 1 || nativePathStencil.producer.geometry !is GPUClipExecutionGeometry.Path) {
+        return false
+    }
+    if (transform.type == GPUTransformType.Perspective || transform.type == GPUTransformType.Singular) {
+        return false
+    }
+    val transformDeterminant = transform.scaleX * transform.scaleY - transform.skewX * transform.skewY
+    if (!transformDeterminant.isFinite() || transformDeterminant == 0f) return false
+    val points = tessellatedVertices.chunked(2)
+    if (points.any { it.size != 2 }) return false
+    val triangle = when {
+        points.size == 4 && points.first() == points.last() -> points.dropLast(1)
+        points.size == 3 -> points
+        else -> return false
+    }
+    if (triangle.any { point -> point.any { coordinate -> !coordinate.isFinite() } }) return false
+    val (first, second, third) = triangle
+    val twiceArea = (second[0] - first[0]) * (third[1] - first[1]) -
+        (second[1] - first[1]) * (third[0] - first[0])
+    return twiceArea.isFinite() && twiceArea != 0f
 }
 
 private fun NormalizedDrawCommand.withClipPlans(
