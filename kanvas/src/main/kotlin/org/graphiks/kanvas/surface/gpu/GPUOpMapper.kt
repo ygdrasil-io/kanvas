@@ -1988,23 +1988,24 @@ private fun DisplayOp.DrawDRRect.analyticSolidDRRectMaterialOrNull(): GPUMateria
     }
 }
 
-/** The analytic DRRect consumer accepts identity or positive translation only under one hard winding path clip. */
+/** The analytic DRRect consumer accepts identity or finite non-zero translation under one hard winding path clip. */
 private fun ClipStack.isHardWindingPathClipForAnalyticDRRect(transform: Matrix3x3F32): Boolean {
     val identity = transform == Matrix3x3F32.Identity
-    val positiveTranslation = transform.isExactPositiveTranslation()
-    if (!identity && !positiveTranslation) return false
+    val exactTranslation = transform.isExactNonZeroTranslation()
+    if (!identity && !exactTranslation) return false
     return (this as? ClipStack.Complex)?.ops?.singleOrNull().let { it as? ClipStackOp.PathOp }?.let { path ->
         path.op == org.graphiks.kanvas.pipeline.ClipOp.INTERSECT && !path.antiAlias &&
             !path.perspectiveCaptureRefusal && path.transformClass == "identity" &&
             path.path.fillType in setOf(
                 org.graphiks.kanvas.geometry.FillType.WINDING,
                 org.graphiks.kanvas.geometry.FillType.INVERSE_WINDING,
-            ) && (!positiveTranslation || path.path.fillType == org.graphiks.kanvas.geometry.FillType.WINDING)
+            ) && (!exactTranslation || path.path.fillType == org.graphiks.kanvas.geometry.FillType.WINDING)
     } == true
 }
 
-private fun Matrix3x3F32.isExactPositiveTranslation(): Boolean =
-    sx == 1f && kx == 0f && tx > 0f && ky == 0f && sy == 1f && ty > 0f &&
+private fun Matrix3x3F32.isExactNonZeroTranslation(): Boolean =
+    sx == 1f && kx == 0f && ky == 0f && sy == 1f &&
+        tx.isFinite() && ty.isFinite() && (tx != 0f || ty != 0f) &&
         persp0 == 0f && persp1 == 0f && persp2 == 1f
 
 internal fun DisplayOp.DrawDRRect.toNormalizedCommand(

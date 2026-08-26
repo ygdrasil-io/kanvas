@@ -1080,7 +1080,7 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
-    fun `nonidentity DRRect under one hard winding path clip cannot enter analytic clip admission`() {
+    fun `nonidentity DRRect under one hard winding path clip enters analytic native preparation`() {
         val hardClip = ClipStack.Complex(
             listOf(
                 ClipStackOp.PathOp(
@@ -1101,20 +1101,20 @@ class GPUFramePathApiInventoryTest {
             ),
         )
 
-        assertIs<NormalizedDrawCommand.FillPath>(inventory.normalizedCommands.single())
+        assertIs<NormalizedDrawCommand.FillDRRect>(inventory.normalizedCommands.single())
         val gathered = assertIs<GPUCorePrimitiveSemanticGatherResult.Gathered>(
             GPUFramePathApiInventory.gatherCorePrimitiveSemantics(
                 inventory,
                 GPUPixelBounds(0, 0, 32, 32),
             ),
         )
-        assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(
+        assertIs<GPUCorePrimitiveGeometry.DRRect>(
             assertIs<GPUDrawSemanticPayload.CorePrimitive>(gathered.semantics.values.single()).geometry,
         )
     }
 
     @Test
-    fun `analytic DRRect mapper admits only identity or positive translated hard winding clips`() {
+    fun `analytic DRRect mapper admits identity or every finite non-zero translated hard winding clip`() {
         val outer = RRectF32.of(RectF32.ofLTRB(8f, 8f, 56f, 56f), radius = 8f)
         val inner = RRectF32.of(RectF32.ofLTRB(20f, 20f, 44f, 44f), radius = 4f)
         val paint = Paint.fill(ColorARGB.Blue).copy(antiAlias = false)
@@ -1140,14 +1140,16 @@ class GPUFramePathApiInventoryTest {
             clip,
         )
 
-        assertIs<NormalizedDrawCommand.FillDRRect>(
-            inventoryFor(operation(Matrix3x3F32.translation(4f, 5f), hardClip())).normalizedCommands.single(),
-        )
+        listOf(4f to 0f, 0f to 5f, -4f to 5f, 4f to -5f).forEach { (x, y) ->
+            assertIs<NormalizedDrawCommand.FillDRRect>(
+                inventoryFor(operation(Matrix3x3F32.translation(x, y), hardClip())).normalizedCommands.single(),
+                "translation ($x,$y)",
+            )
+        }
 
         val rejected = listOf(
             "wide-open positive translation" to operation(Matrix3x3F32.translation(4f, 5f), ClipStack.WideOpen),
-            "zero translation" to operation(Matrix3x3F32.translation(0f, 5f), hardClip()),
-            "negative translation" to operation(Matrix3x3F32.translation(-4f, 5f), hardClip()),
+            "non-finite translation" to operation(Matrix3x3F32.translation(Float.NaN, 5f), hardClip()),
             "scale" to operation(Matrix3x3F32.scaling(2f, 2f), hardClip()),
             "affine" to operation(Matrix3x3F32.of(1f, 0.25f, 0f, 0f, 1f, 0f, 0f, 0f, 1f), hardClip()),
             "transformed clip" to operation(Matrix3x3F32.translation(4f, 5f), hardClip(transformClass = "translate")),
@@ -1159,6 +1161,11 @@ class GPUFramePathApiInventoryTest {
         rejected.forEach { (label, draw) ->
             assertIs<NormalizedDrawCommand.FillPath>(inventoryFor(draw).normalizedCommands.single(), label)
         }
+
+        assertIs<NormalizedDrawCommand.FillDRRect>(
+            inventoryFor(operation(Matrix3x3F32.translation(0f, 0f), hardClip())).normalizedCommands.single(),
+            "zero matrix is indistinguishable from identity at the public mapper boundary",
+        )
 
         assertIs<NormalizedDrawCommand.FillDRRect>(
             inventoryFor(operation(Matrix3x3F32.Identity, hardClip(fillType = FillType.INVERSE_WINDING)))

@@ -1647,41 +1647,41 @@ class FirstRoutePlannerTest {
     }
 
     @Test
-    fun `positive translated drrect is the only admitted analytic drrect hard path clip consumer`() {
+    fun `finite non-zero translated drrect is admitted by the analytic hard path clip consumer`() {
         val target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm")
         val identityStencil = hardWindingStencilClip(pathTransformClass = "identity")
-        val translated = analyticDRRectCommand(commandId = 151).copy(
-            transform = GPUTransformFacts.translation(x = 4f, y = 5f),
-            clip = identityStencil,
-            layer = GPULayerFacts.root(target),
+        val translations = listOf(
+            GPUTransformFacts.translation(x = 4f, y = 0f) to listOf(6f, 2f, 30f, 22f, 12f, 8f, 24f, 16f),
+            GPUTransformFacts.translation(x = 0f, y = 5f) to listOf(2f, 7f, 26f, 27f, 8f, 13f, 20f, 21f),
+            GPUTransformFacts.translation(x = -4f, y = 5f) to listOf(-2f, 7f, 22f, 27f, 4f, 13f, 16f, 21f),
+            GPUTransformFacts.translation(x = 4f, y = -5f) to listOf(6f, -3f, 30f, 17f, 12f, 3f, 24f, 11f),
         )
-
-        val accepted = GPUFirstRoutePlanner(firstSliceRRectCapabilities()).plan(translated)
-        assertIs<GPURouteDecision.Native>(accepted.routeDecision)
-        val outer = assertNotNull(accepted.analysisRecord.corePrimitiveDRRectOuterGeometryAuthority)
-            .sealedDeviceGeometryInput()
-        val inner = assertNotNull(accepted.analysisRecord.corePrimitiveDRRectInnerGeometryAuthority)
-            .sealedDeviceGeometryInput()
-        assertEquals(6f, outer.left)
-        assertEquals(7f, outer.top)
-        assertEquals(30f, outer.right)
-        assertEquals(27f, outer.bottom)
-        assertEquals(12f, inner.left)
-        assertEquals(13f, inner.top)
-        assertEquals(24f, inner.right)
-        assertEquals(21f, inner.bottom)
+        translations.forEachIndexed { index, (transform, bounds) ->
+            val accepted = GPUFirstRoutePlanner(firstSliceRRectCapabilities()).plan(
+                analyticDRRectCommand(commandId = 151 + index).copy(
+                    transform = transform, clip = identityStencil, layer = GPULayerFacts.root(target),
+                ),
+            )
+            assertIs<GPURouteDecision.Native>(accepted.routeDecision)
+            val outer = assertNotNull(accepted.analysisRecord.corePrimitiveDRRectOuterGeometryAuthority).sealedDeviceGeometryInput()
+            val inner = assertNotNull(accepted.analysisRecord.corePrimitiveDRRectInnerGeometryAuthority).sealedDeviceGeometryInput()
+            assertEquals(bounds, listOf(outer.left, outer.top, outer.right, outer.bottom, inner.left, inner.top, inner.right, inner.bottom))
+        }
+        val translated = analyticDRRectCommand(commandId = 155).copy(
+            transform = GPUTransformFacts.translation(x = 4f, y = 0f), clip = identityStencil, layer = GPULayerFacts.root(target),
+        )
 
         val transformRefusals = listOf(
-            translated.copy(clip = GPUClipFacts.wideOpen(firstRouteBounds)) to "wide-open positive translation",
-            translated.copy(transform = GPUTransformFacts.translation(x = 0f, y = 5f)) to "zero translation",
-            translated.copy(transform = GPUTransformFacts.translation(x = -4f, y = 5f)) to "negative translation",
-            translated.copy(transform = GPUTransformFacts.scale(x = 2f, y = 2f)) to "scale",
-            translated.copy(transform = GPUTransformFacts.affine(1f, 0.25f, 0f, 1f)) to "affine",
+            Triple(translated.copy(clip = GPUClipFacts.wideOpen(firstRouteBounds)), "wide-open translated", "unsupported.core_primitive.drrect.analytic_transform"),
+            Triple(translated.copy(transform = GPUTransformFacts.translation(x = 0f, y = 0f)), "zero translation", "unsupported.core_primitive.drrect.analytic_transform"),
+            Triple(translated.copy(transform = GPUTransformFacts.translation(x = Float.NaN, y = 5f)), "non-finite translation", "unsupported.transform.non_finite"),
+            Triple(translated.copy(transform = GPUTransformFacts.scale(x = 2f, y = 2f)), "scale", "unsupported.core_primitive.drrect.analytic_transform"),
+            Triple(translated.copy(transform = GPUTransformFacts.affine(1f, 0.25f, 0f, 1f)), "affine", "unsupported.core_primitive.drrect.analytic_transform"),
         )
-        transformRefusals.forEach { (command, label) ->
+        transformRefusals.forEach { (command, label, expectedCode) ->
             val refused = GPUFirstRoutePlanner(firstSliceRRectCapabilities()).plan(command)
             assertEquals(
-                "unsupported.core_primitive.drrect.analytic_transform",
+                expectedCode,
                 assertIs<GPURouteDecision.Refused>(refused.routeDecision, label).diagnostic.code,
             )
         }

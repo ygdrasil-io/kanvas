@@ -75,6 +75,10 @@ object GpuEvidenceCatalog {
         clipPathTranslatedSolidDRRect(),
         clipPathTranslatedAsymmetricSolidDRRect(),
         clipPathTranslatedEllipseSolidDRRect(),
+        clipPathAxisXTranslatedSolidDRRect(),
+        clipPathAxisYTranslatedAsymmetricSolidDRRect(),
+        clipPathNegativeXTranslatedEllipseSolidDRRect(),
+        clipPathNegativeYTranslatedSolidDRRect(),
         solidTrianglePath(),
         solidConcavePath(),
         evenOddPathHole(),
@@ -832,6 +836,34 @@ object GpuEvidenceCatalog {
         SurfaceSrgbClipPathDRRectCpuOracle.RRect(28f, 31f, 44f, 43f, 8f, 6f), intArrayOf(242, 135, 46, 255), translated = true,
     )
 
+    private fun clipPathAxisXTranslatedSolidDRRect() = clipPathDRRectCase(
+        "clip-path-axis-x-translated-solid-drrect", "Exact axis-X translated solid DRRect inside hard path clip",
+        KanvasScenePrograms.clipPathAxisXTranslatedSolidDRRect(),
+        SurfaceSrgbClipPathDRRectCpuOracle.RRect(12f, 8f, 56f, 48f, 10f, 10f),
+        SurfaceSrgbClipPathDRRectCpuOracle.RRect(26f, 20f, 44f, 38f, 4f, 4f), intArrayOf(242, 135, 46, 255), translated = true, exactTranslation = true,
+    )
+
+    private fun clipPathAxisYTranslatedAsymmetricSolidDRRect() = clipPathDRRectCase(
+        "clip-path-axis-y-translated-asymmetric-solid-drrect", "Exact axis-Y translated asymmetric DRRect inside hard path clip",
+        KanvasScenePrograms.clipPathAxisYTranslatedAsymmetricSolidDRRect(),
+        SurfaceSrgbClipPathDRRectCpuOracle.RRect(8f, 13f, 52f, 53f, SurfaceSrgbClipPathDRRectCpuOracle.Radii(4f, 8f), SurfaceSrgbClipPathDRRectCpuOracle.Radii(10f, 4f), SurfaceSrgbClipPathDRRectCpuOracle.Radii(8f, 12f), SurfaceSrgbClipPathDRRectCpuOracle.Radii(6f, 3f)),
+        SurfaceSrgbClipPathDRRectCpuOracle.RRect(20f, 23f, 42f, 44f, SurfaceSrgbClipPathDRRectCpuOracle.Radii(3f, 5f), SurfaceSrgbClipPathDRRectCpuOracle.Radii(6f, 2f), SurfaceSrgbClipPathDRRectCpuOracle.Radii(4f, 7f), SurfaceSrgbClipPathDRRectCpuOracle.Radii(2f, 3f)), intArrayOf(31, 115, 209, 255), translated = true, exactTranslation = true,
+    )
+
+    private fun clipPathNegativeXTranslatedEllipseSolidDRRect() = clipPathDRRectCase(
+        "clip-path-negative-x-translated-ellipse-solid-drrect", "Exact negative-X translated ellipse DRRect inside hard path clip",
+        KanvasScenePrograms.clipPathNegativeXTranslatedEllipseSolidDRRect(),
+        SurfaceSrgbClipPathDRRectCpuOracle.RRect(8f, 25f, 48f, 49f, 20f, 12f),
+        SurfaceSrgbClipPathDRRectCpuOracle.RRect(20f, 31f, 36f, 43f, 8f, 6f), intArrayOf(242, 135, 46, 255), translated = true, exactTranslation = true,
+    )
+
+    private fun clipPathNegativeYTranslatedSolidDRRect() = clipPathDRRectCase(
+        "clip-path-negative-y-translated-solid-drrect", "Exact negative-Y translated solid DRRect inside hard path clip",
+        KanvasScenePrograms.clipPathNegativeYTranslatedSolidDRRect(),
+        SurfaceSrgbClipPathDRRectCpuOracle.RRect(12f, 3f, 56f, 43f, 10f, 10f),
+        SurfaceSrgbClipPathDRRectCpuOracle.RRect(26f, 15f, 44f, 33f, 4f, 4f), intArrayOf(242, 135, 46, 255), translated = true, exactTranslation = true,
+    )
+
     private fun clipPathRRectCase(
         id: String,
         title: String,
@@ -869,10 +901,13 @@ object GpuEvidenceCatalog {
         id: String, title: String, program: org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram,
         outer: SurfaceSrgbClipPathDRRectCpuOracle.RRect, inner: SurfaceSrgbClipPathDRRectCpuOracle.RRect, fill: IntArray,
         translated: Boolean = false,
+        exactTranslation: Boolean = false,
     ) = EvidenceCase(
         EvidenceSceneDescriptor(
             EvidenceSceneId(id), title,
-            if (translated) {
+            if (exactTranslation) {
+                "Public Kanvas Surface exact finite translated analytic DRRect consumer inside an identity-captured hard Winding path clip."
+            } else if (translated) {
                 "Public Kanvas Surface positive translated analytic DRRect consumer inside an identity-captured hard Winding path clip."
             } else {
                 "Public Kanvas Surface hard non-AA winding triangle clip with one opaque identity analytic DRRect consumer."
