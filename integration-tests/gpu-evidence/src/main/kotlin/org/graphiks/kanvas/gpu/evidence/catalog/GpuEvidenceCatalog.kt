@@ -926,7 +926,17 @@ object GpuEvidenceCatalog {
                 if (inverseWinding) setOf("inverse-winding") else emptySet(),
             EvidenceExpectation.ShouldRender,
             OraclePolicy.GeneratedCpu("surface-srgb-clip-path-rrect-pixel-center", 1),
-            ComparisonPolicy(0, 100.0, 1, "Exact RGBA8 output from independent pixel-center inverse triangle membership and analytic RRect membership."), emptySet(),
+            ComparisonPolicy(
+                0,
+                100.0,
+                1,
+                if (inverseWinding) {
+                    "Exact RGBA8 output from independent pixel-center inverse triangle membership and analytic RRect membership."
+                } else {
+                    "Exact RGBA8 output from independent pixel-center winding clip and analytic RRect membership."
+                },
+            ),
+            emptySet(),
         ),
         program,
         SurfaceSrgbClipPathRRectCpuOracle(

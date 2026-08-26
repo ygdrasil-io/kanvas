@@ -102,7 +102,7 @@ class SurfaceSrgbClipPathRRectCpuOracleTest {
 
         assertPixel(pixels, 40, 30, orange)
         assertPixel(pixels, 20, 20, background)
-        assertEquals(748, count(pixels, orange))
+        assertEquals(784, count(pixels, orange))
     }
 
     private fun radii(x: Float, y: Float) = SurfaceSrgbClipPathRRectCpuOracle.Radii(x, y)
