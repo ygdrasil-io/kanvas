@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.evidence.catalog
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 
 class GpuEvidenceCatalogOracleTest {
@@ -213,6 +214,38 @@ class GpuEvidenceCatalogOracleTest {
     }
 
     @Test
+    fun `hard clip direct triangle clamp gradient oracles preserve device geometry and counts`() {
+        val background = intArrayOf(13, 20, 33, 255)
+        val identity = oracle("clip-path-triangle-direct-triangle-linear-gradient")
+        val translated = oracle("clip-path-translated-triangle-direct-triangle-linear-gradient")
+        val scaled = oracle("clip-path-uniform-scaled-triangle-direct-triangle-linear-gradient")
+
+        listOf(20 to 1, 21 to 2, 22 to 3).forEach { (y, channel) ->
+            assertInteriorPixel(identity, 20, y, intArrayOf(channel, channel, channel, 255))
+        }
+        assertPixel(identity, 64, 64, 20, 18, intArrayOf(0, 0, 0, 255))
+        assertPixel(identity, 64, 64, 20, 23, intArrayOf(4, 4, 4, 255))
+        assertPixel(identity, 64, 64, 50, 14, background)
+        assertEquals(1059, paintedPixelCount(identity, background))
+
+        listOf(20 to 1, 21 to 2, 22 to 3).forEach { (y, channel) ->
+            assertInteriorPixel(translated, 22, y, intArrayOf(channel, channel, channel, 255))
+        }
+        assertPixel(translated, 64, 64, 22, 18, intArrayOf(0, 0, 0, 255))
+        assertPixel(translated, 64, 64, 22, 23, intArrayOf(4, 4, 4, 255))
+        assertPixel(translated, 64, 64, 8, 12, background)
+        assertEquals(1059, paintedPixelCount(translated, background))
+
+        listOf(19 to 1, 20 to 2, 21 to 3).forEach { (y, channel) ->
+            assertInteriorPixel(scaled, 22, y, intArrayOf(channel, channel, channel, 255))
+        }
+        assertPixel(scaled, 64, 64, 22, 17, intArrayOf(0, 0, 0, 255))
+        assertPixel(scaled, 64, 64, 22, 22, intArrayOf(4, 4, 4, 255))
+        assertPixel(scaled, 64, 64, 13, 11, background)
+        assertEquals(592, paintedPixelCount(scaled, background))
+    }
+
+    @Test
     fun `path fill oracles preserve literal winding and inverse coverage`() {
         val background = intArrayOf(13, 20, 33, 255)
         val orange = intArrayOf(242, 135, 46, 255)
@@ -287,11 +320,22 @@ class GpuEvidenceCatalogOracleTest {
         GpuEvidenceCatalog.renderCases.firstOrNull { it.descriptor.id.value == id }?.oracle,
     ).render(64, 64)
 
+    private fun paintedPixelCount(pixels: ByteArray, background: IntArray): Int =
+        pixels.asList().chunked(4).count { pixel ->
+            pixel.map { it.toInt() and 0xff } != background.toList()
+        }
+
     private fun assertPixel(pixels: ByteArray, width: Int, height: Int, x: Int, y: Int, expected: IntArray) {
         require(x in 0 until width && y in 0 until height)
         val offset = (y * width + x) * 4
         assertEquals(4, expected.size)
         assertContentEquals(expected.map(Int::toByte).toByteArray(), pixels.copyOfRange(offset, offset + 4), "pixel ($x,$y)")
+    }
+
+    private fun assertInteriorPixel(pixels: ByteArray, x: Int, y: Int, expected: IntArray) {
+        assertPixel(pixels, 64, 64, x, y, expected)
+        assertNotEquals(intArrayOf(0, 0, 0, 255).toList(), expected.toList(), "interior pixel must differ from start")
+        assertNotEquals(intArrayOf(4, 4, 4, 255).toList(), expected.toList(), "interior pixel must differ from end")
     }
 
     private fun fillPixelCount(pixels: ByteArray, color: IntArray): Int =

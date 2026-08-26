@@ -268,6 +268,58 @@ object KanvasScenePrograms {
         restore()
     })
 
+    fun clipPathTriangleDirectTriangleLinearGradient() = clipPathDirectTriangleLinearGradient(
+        Point2F32(20f, 19.3f),
+        Point2F32(20f, 23.3f),
+    )
+
+    fun clipPathTranslatedTriangleDirectTriangleLinearGradient() = clipPathDirectTriangleLinearGradient(
+        Point2F32(20f, 19.3f),
+        Point2F32(20f, 23.3f),
+    ) { translate(2f, 0f) }
+
+    fun clipPathUniformScaledTriangleDirectTriangleLinearGradient() = clipPathDirectTriangleLinearGradient(
+        Point2F32(20f, 19.066666f),
+        Point2F32(20f, 24.4f),
+    ) {
+        translate(8f, 4f)
+        scale(0.75f, 0.75f)
+    }
+
+    private fun clipPathDirectTriangleLinearGradient(
+        start: Point2F32,
+        end: Point2F32,
+        transform: org.graphiks.kanvas.canvas.Canvas.() -> Unit = {},
+    ) =
+        KanvasSurfaceProgram(ROUTE_ID, record = {
+            drawColor(BACKGROUND)
+            save()
+            transform()
+            clipPath(
+                Path { moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close() }
+                    .apply { fillType = FillType.WINDING },
+                ClipOp.INTERSECT,
+                antiAlias = false,
+            )
+            drawPath(
+                Path { moveTo(4f, 4.25f); lineTo(60f, 12f); lineTo(12f, 60f); close() }
+                    .apply { fillType = FillType.WINDING },
+                Paint(
+                    shader = Shader.LinearGradient(
+                        start,
+                        end,
+                        listOf(
+                            GradientStop(0f, ColorARGB.of(255, 0, 0, 0)),
+                            GradientStop(1f, ColorARGB.of(255, 4, 4, 4)),
+                        ),
+                        TileMode.CLAMP,
+                    ),
+                    antiAlias = false,
+                ),
+            )
+            restore()
+        })
+
     fun clipPathTriangleLinearGradient() = clipPathLinearGradient()
 
     fun clipPathTranslatedTriangleLinearGradient() = clipPathLinearGradient {
