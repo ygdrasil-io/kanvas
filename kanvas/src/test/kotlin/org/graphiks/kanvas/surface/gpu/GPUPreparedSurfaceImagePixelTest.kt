@@ -3,6 +3,7 @@ package org.graphiks.kanvas.surface.gpu
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.ClipStack
@@ -30,6 +31,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.surface.RenderConfig
+import org.graphiks.kanvas.surface.Surface
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.math.matrix.Matrix3x3F32
@@ -39,6 +41,57 @@ class GPUPreparedSurfaceImagePixelTest {
     @AfterTest
     fun disposeSharedRuntime() {
         GPUBackendRuntimeFactory.dispose()
+    }
+
+    @Test
+    @OptIn(ExperimentalUnsignedTypes::class)
+    fun `public drawImage nearest sampling reaches native binding and matches the CPU source oracle`() {
+        val image = Image.fromPixels(
+            width = 2,
+            height = 1,
+            pixels = byteArrayOf(
+                0, 0, 0, 255.toByte(),
+                255.toByte(), 255.toByte(), 255.toByte(), 255.toByte(),
+            ),
+            sourceId = "public-nearest-sampling",
+        )
+        val surface = Surface(width = 1, height = 1, format = org.graphiks.kanvas.surface.PixelFormat.RGBA8)
+        surface.canvas {
+            drawImage(
+                image = image,
+                dst = RectF32.ofLTRB(0f, 0f, 1f, 1f),
+                sampling = SamplingOptions.NEAREST,
+            )
+        }
+
+        val result = surface.render()
+        val cpuNearestOracle = image.pixels!!.copyOfRange(4, 8).unsigned()
+
+        assertEquals(1, result.stats.opsDispatched)
+        assertEquals(0, result.stats.opsRefused)
+        assertPixelExact(result.pixels.toByteArray(), width = 1, x = 0, y = 0, expected = cpuNearestOracle)
+    }
+
+    @Test
+    fun `public drawImage cubic sampling remains a terminal explicit refusal`() {
+        val image = Image.fromPixels(
+            width = 1,
+            height = 1,
+            pixels = byteArrayOf(255.toByte(), 255.toByte(), 255.toByte(), 255.toByte()),
+            sourceId = "public-cubic-refusal",
+        )
+        val surface = Surface(width = 1, height = 1)
+        surface.canvas {
+            drawImage(
+                image = image,
+                dst = RectF32.ofLTRB(0f, 0f, 1f, 1f),
+                sampling = SamplingOptions.Cubic.Mitchell,
+            )
+        }
+
+        val error = assertFailsWith<GPUPreparedSurfaceTerminalException> { surface.render() }
+
+        assertEquals("unsupported.image.sampling_cubic", error.diagnostic.code.value)
     }
 
     @Test

@@ -124,6 +124,24 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
     }
 
     /**
+     * Draw an [image] scaled to fill [dst] with an explicit sampling policy.
+     *
+     * The policy is recorded on the image shader so GPU lowering can either
+     * select the matching native sampler or report its stable unsupported
+     * diagnostic.
+     */
+    fun drawImage(
+        image: Image,
+        dst: RectF32,
+        sampling: SamplingOptions,
+        paint: Paint? = null,
+    ) {
+        val src = RectF32.ofLTRB(0f, 0f, image.width.toFloat(), image.height.toFloat())
+        val samplingPaint = (paint ?: Paint()).copy(shader = image.makeShader(sampling = sampling))
+        buffer.append(DisplayOp.DrawImage(image, src, dst, samplingPaint, currentTransform, currentRecordedClip))
+    }
+
+    /**
      * Draw a sub-region [src] of [image] scaled to fill [dst].
      *
      * @param paint Optional [Paint] for alpha modulation or color filtering.
