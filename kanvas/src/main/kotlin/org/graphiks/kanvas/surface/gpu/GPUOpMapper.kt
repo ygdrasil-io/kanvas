@@ -1390,12 +1390,19 @@ private fun GPUClipCoveragePlan.Mask.toMaskExecutionPlan(
         } ?: invalidClipGeometryRefusal(single)
     }
 
-    if (
-        single != null &&
-        single.operation == GPUClipCoverageOperation.Intersect &&
-        single.kind == GPUClipCoverageElementKind.Path &&
-        !single.antiAlias
-    ) {
+    val singleHardPathClip = single?.takeIf {
+        it.kind == GPUClipCoverageElementKind.Path &&
+            !it.antiAlias &&
+            (
+                it.operation == GPUClipCoverageOperation.Intersect ||
+                    (
+                        it.operation == GPUClipCoverageOperation.Difference &&
+                            it.fillRule == GPUClipFillRule.Winding &&
+                            !it.inverseFill
+                    )
+            )
+    }
+    if (singleHardPathClip != null) {
         if (!capabilities.supportsClipCapability(PATH_FILL_STENCIL_COVER)) {
             return clipExecutionRefusal(
                 code = "unsupported.clip.stencil_unavailable",
@@ -1408,14 +1415,14 @@ private fun GPUClipCoveragePlan.Mask.toMaskExecutionPlan(
                 message = "Path clip execution requires bounded clip support.",
             )
         }
-        if (single.transformClass !in HARD_PATH_CLIP_TRANSFORM_CLASSES) {
+        if (singleHardPathClip.transformClass !in HARD_PATH_CLIP_TRANSFORM_CLASSES) {
             return clipExecutionRefusal(
                 code = "unsupported.clip.path_transform",
                 message = "Native hard path clips require identity, translation, or positive uniform scale capture-time CTM.",
             )
         }
-        val geometry = single.executionGeometryOrRefusal() as? GPUClipExecutionGeometry.Path
-            ?: return invalidClipGeometryRefusal(single)
+        val geometry = singleHardPathClip.executionGeometryOrRefusal() as? GPUClipExecutionGeometry.Path
+            ?: return invalidClipGeometryRefusal(singleHardPathClip)
         val targetBounds = GPUPixelBounds(0, 0, target.width, target.height)
         val (frontPassOperation, backPassOperation) = when (geometry.fillRule) {
             org.graphiks.kanvas.gpu.renderer.clips.GPUClipFillRule.Winding ->
@@ -1444,13 +1451,14 @@ private fun GPUClipCoveragePlan.Mask.toMaskExecutionPlan(
             consumer = GPUClipStencilConsumerPlan(
                 scissor = null,
                 reference = 0u,
-                compare = if (geometry.inverseFill) {
+                compare = if (geometry.inverseFill || singleHardPathClip.operation == GPUClipCoverageOperation.Difference) {
                     GPUClipStencilCompare.Equal
                 } else {
                     GPUClipStencilCompare.NotEqual
                 },
             ),
-            pathTransformClass = single.transformClass,
+            consumerInverseFill = singleHardPathClip.operation == GPUClipCoverageOperation.Difference,
+            pathTransformClass = singleHardPathClip.transformClass,
         )
     }
 

@@ -312,6 +312,8 @@ sealed interface GPUClipExecutionPlan {
         val orderingToken: GPUClipOrderingToken,
         val producer: GPUClipStencilProducerPlan,
         val consumer: GPUClipStencilConsumerPlan,
+        /** Additional consumer inversion introduced by an ordered DIFFERENCE clip operation. */
+        val consumerInverseFill: Boolean = false,
         /** Capture-time CTM class for the native path clip; only identity is admitted. */
         val pathTransformClass: String = "identity",
     ) : GPUClipExecutionPlan {
@@ -333,6 +335,7 @@ sealed interface GPUClipExecutionPlan {
             string(orderingToken.value)
             stencilProducer(producer)
             stencilConsumer(consumer)
+            boolean(consumerInverseFill)
             string(pathTransformClass)
         }
     }

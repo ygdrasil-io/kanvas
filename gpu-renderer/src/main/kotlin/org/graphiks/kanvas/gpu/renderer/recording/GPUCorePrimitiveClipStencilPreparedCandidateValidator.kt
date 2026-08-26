@@ -77,6 +77,7 @@ internal fun validateCorePrimitiveClipStencilPreparedCandidate(
     if (consumerPackets.size != candidate.consumers.size) {
         return refuse("Prepared clip-stencil consumer count was substituted.")
     }
+    val consumerInverseFill = path.inverseFill xor plan.consumerInverseFill
     val consumerInputs = consumerPackets.zip(candidate.consumers).mapIndexed {
             index, (packet, candidateConsumer) ->
         val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive
@@ -98,7 +99,7 @@ internal fun validateCorePrimitiveClipStencilPreparedCandidate(
             material = semantic.material,
             coverageMode = semantic.coverageMode,
             blendPlan = blendPlan,
-            inverseFill = path.inverseFill,
+            inverseFill = consumerInverseFill,
             stencilReference = plan.consumer.reference,
             atomicGroup = plan.atomicGroup,
             orderingToken = plan.orderingToken,

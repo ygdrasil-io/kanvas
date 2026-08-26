@@ -174,6 +174,38 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
+    fun `public hard difference path clip renders the complement through one stencil scope`() {
+        requireWebGpu()
+        val background = ColorARGB.of(255, 13, 20, 33)
+        val fill = ColorARGB.of(255, 242, 135, 46)
+        val surface = Surface(64, 64)
+        surface.canvas {
+            drawColor(background)
+            save()
+            clipPath(
+                Path {
+                    moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close()
+                }.apply { fillType = FillType.WINDING },
+                ClipOp.DIFFERENCE,
+                antiAlias = false,
+            )
+            drawRect(
+                RectF32.ofLTRB(0f, 0f, 64f, 64f),
+                Paint.fill(fill).copy(antiAlias = false),
+            )
+            restore()
+        }
+
+        val result = surface.render()
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertEquals(2968, result.pixels.asList().chunked(4).count { pixel ->
+            pixel.map { it.toInt() } == listOf(242, 135, 46, 255)
+        })
+        assertRgbaNear(result.pixels, 64, 12, 12, background)
+        assertRgbaNear(result.pixels, 64, 60, 60, fill)
+    }
+
+    @Test
     fun `public solid triangle drawPath renders inside one hard path clip stencil scope`() {
         requireWebGpu()
         val background = ColorARGB.of(255, 13, 20, 33)

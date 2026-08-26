@@ -19,6 +19,7 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskCombine
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilCompare
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
@@ -2799,6 +2800,41 @@ class GPUFramePathApiInventoryTest {
 
         assertIs<GPUClipExecutionGeometry.Path>(execution.producer.geometry)
         assertEquals(execution.atomicGroup.value, "clip-atomic:${execution.contentKey}")
+        assertClipExecutionPropagation(plan, execution)
+    }
+
+    @Test
+    fun `mapper lowers one hard winding difference path clip to inverted stencil consumer`() {
+        val surface = Surface(32, 32)
+        surface.canvas {
+            clipPath(
+                Path().apply {
+                    moveTo(3f, 3f)
+                    lineTo(26f, 4f)
+                    lineTo(14f, 27f)
+                    close()
+                    fillType = FillType.WINDING
+                },
+                ClipOp.DIFFERENCE,
+                antiAlias = false,
+            )
+            drawRect(RectF32.ofLTRB(0f, 0f, 30f, 30f), Paint.fill(ColorARGB.Red))
+        }
+
+        val plan = GPUFramePathApiInventory.plan(
+            surface.snapshotOps(),
+            target(),
+            RenderConfig.DEFAULT,
+            capabilitiesWith(FILL_RECT_CAPABILITY, PATH_FILL_STENCIL_COVER),
+        )
+        val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(
+            plan.visualCommands.single().clipExecutionPlan,
+        )
+
+        assertTrue(execution.consumerInverseFill)
+        assertEquals(GPUClipStencilCompare.Equal, execution.consumer.compare)
+        assertEquals(GPUClipStencilOperation.IncrementWrap, execution.producer.frontPassOperation)
+        assertEquals(GPUClipStencilOperation.DecrementWrap, execution.producer.backPassOperation)
         assertClipExecutionPropagation(plan, execution)
     }
 
