@@ -1669,6 +1669,29 @@ class FirstRoutePlannerTest {
         assertEquals(24f, inner.right)
         assertEquals(21f, inner.bottom)
 
+        val transformRefusals = listOf(
+            translated.copy(clip = GPUClipFacts.wideOpen(firstRouteBounds)) to "wide-open positive translation",
+            translated.copy(transform = GPUTransformFacts.translation(x = 0f, y = 5f)) to "zero translation",
+            translated.copy(transform = GPUTransformFacts.translation(x = -4f, y = 5f)) to "negative translation",
+            translated.copy(transform = GPUTransformFacts.scale(x = 2f, y = 2f)) to "scale",
+            translated.copy(transform = GPUTransformFacts.affine(1f, 0.25f, 0f, 1f)) to "affine",
+        )
+        transformRefusals.forEach { (command, label) ->
+            val refused = GPUFirstRoutePlanner(firstSliceRRectCapabilities()).plan(command)
+            assertEquals(
+                "unsupported.core_primitive.drrect.analytic_transform",
+                assertIs<GPURouteDecision.Refused>(refused.routeDecision, label).diagnostic.code,
+            )
+        }
+
+        val transformedClip = translated.copy(clip = hardWindingStencilClip(pathTransformClass = "translate"))
+        assertEquals(
+            "unsupported.core_primitive.drrect.analytic_clip",
+            assertIs<GPURouteDecision.Refused>(
+                GPUFirstRoutePlanner(firstSliceRRectCapabilities()).plan(transformedClip).routeDecision,
+            ).diagnostic.code,
+        )
+
         val inverseTranslated = translated.copy(
             clip = hardWindingStencilClip(pathTransformClass = "identity", inverseFill = true),
         )

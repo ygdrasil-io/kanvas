@@ -1114,6 +1114,60 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `analytic DRRect mapper admits only identity or positive translated hard winding clips`() {
+        val outer = RRectF32.of(RectF32.ofLTRB(8f, 8f, 56f, 56f), radius = 8f)
+        val inner = RRectF32.of(RectF32.ofLTRB(20f, 20f, 44f, 44f), radius = 4f)
+        val paint = Paint.fill(ColorARGB.Blue).copy(antiAlias = false)
+        fun hardClip(
+            fillType: FillType = FillType.WINDING,
+            transformClass: String = "identity",
+        ): ClipStack = ClipStack.Complex(
+            listOf(
+                ClipStackOp.PathOp(
+                    Path { moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close() }
+                        .apply { this.fillType = fillType },
+                    ClipOp.INTERSECT,
+                    antiAlias = false,
+                    transformClass = transformClass,
+                ),
+            ),
+        )
+        fun operation(transform: Matrix3x3F32, clip: ClipStack): DisplayOp.DrawDRRect = DisplayOp.DrawDRRect(
+            outer,
+            inner,
+            paint,
+            transform,
+            clip,
+        )
+
+        assertIs<NormalizedDrawCommand.FillDRRect>(
+            inventoryFor(operation(Matrix3x3F32.translation(4f, 5f), hardClip())).normalizedCommands.single(),
+        )
+
+        val rejected = listOf(
+            "wide-open positive translation" to operation(Matrix3x3F32.translation(4f, 5f), ClipStack.WideOpen),
+            "zero translation" to operation(Matrix3x3F32.translation(0f, 5f), hardClip()),
+            "negative translation" to operation(Matrix3x3F32.translation(-4f, 5f), hardClip()),
+            "scale" to operation(Matrix3x3F32.scaling(2f, 2f), hardClip()),
+            "affine" to operation(Matrix3x3F32.of(1f, 0.25f, 0f, 0f, 1f, 0f, 0f, 0f, 1f), hardClip()),
+            "transformed clip" to operation(Matrix3x3F32.translation(4f, 5f), hardClip(transformClass = "translate")),
+            "inverse translated" to operation(
+                Matrix3x3F32.translation(4f, 5f),
+                hardClip(fillType = FillType.INVERSE_WINDING),
+            ),
+        )
+        rejected.forEach { (label, draw) ->
+            assertIs<NormalizedDrawCommand.FillPath>(inventoryFor(draw).normalizedCommands.single(), label)
+        }
+
+        assertIs<NormalizedDrawCommand.FillDRRect>(
+            inventoryFor(operation(Matrix3x3F32.Identity, hardClip(fillType = FillType.INVERSE_WINDING)))
+                .normalizedCommands
+                .single(),
+        )
+    }
+
+    @Test
     fun `drrect paint effects become stable exact semantic refusals`() {
         val outer = RRectF32.of(RectF32.ofLTRB(8f, 8f, 56f, 56f), radius = 8f)
         val inner = RRectF32.of(RectF32.ofLTRB(20f, 20f, 44f, 44f), radius = 4f)

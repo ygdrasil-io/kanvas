@@ -1870,7 +1870,10 @@ class GPUFirstRoutePlanner(
     /** Refuses any FillDRRect fact outside the narrow opaque analytic-hole contract. */
     private fun NormalizedDrawCommand.FillDRRect.refusalCode(): String? =
         coordinateRefusalCode() ?: when {
-            transform.type != GPUTransformType.Identity && !transform.isExactPositiveTranslation() ->
+            clip.kind == GPUClipKind.WideOpen && transform.type != GPUTransformType.Identity ->
+                "unsupported.core_primitive.drrect.analytic_transform"
+            clip.kind != GPUClipKind.WideOpen &&
+                transform.type != GPUTransformType.Identity && !transform.isExactPositiveTranslation() ->
                 "unsupported.core_primitive.drrect.analytic_transform"
             clip.kind != GPUClipKind.WideOpen && !supportsHardPathClipAnalyticDRRect() ->
                 "unsupported.core_primitive.drrect.analytic_clip"
