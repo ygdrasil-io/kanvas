@@ -51,13 +51,43 @@ data class EvidenceEnvironmentIdentity(
 
 object EvidenceBundleVerifier {
     fun verify(directory: Path, expected: EvidenceVerificationExpectation): EvidenceBundleVerification {
-        return verifyInternal(directory, expected.sourceCommit, expected, recordedHistorical = false)
+        return verifyInternal(
+            directory = directory,
+            expectedSourceCommit = expected.sourceCommit,
+            expected = expected,
+            recordedHistorical = false,
+            rootEnvironment = null,
+            expectedSchema = GPU_EVIDENCE_SCHEMA,
+        )
+    }
+
+    internal fun verifyV2(
+        directory: Path,
+        expected: EvidenceVerificationExpectation,
+        rootEnvironment: EvidenceEnvironmentV2,
+        sourceCommit: String,
+    ): EvidenceBundleVerification {
+        return verifyInternal(
+            directory = directory,
+            expectedSourceCommit = sourceCommit,
+            expected = expected,
+            recordedHistorical = false,
+            rootEnvironment = rootEnvironment,
+            expectedSchema = GPU_EVIDENCE_SCENE_SCHEMA_V2,
+        )
     }
 
     internal fun verifyRecorded(directory: Path, sourceCommit: String): EvidenceBundleVerification {
         // Recorded mode authenticates structure and recomputed evidence against the reviewed artifact;
         // catalogue/Git review remains the trust boundary for historical semantic identities.
-        return verifyInternal(directory, sourceCommit, expected = null, recordedHistorical = true)
+        return verifyInternal(
+            directory = directory,
+            expectedSourceCommit = sourceCommit,
+            expected = null,
+            recordedHistorical = true,
+            rootEnvironment = null,
+            expectedSchema = GPU_EVIDENCE_SCHEMA,
+        )
     }
 
     private fun verifyInternal(
@@ -65,6 +95,8 @@ object EvidenceBundleVerifier {
         expectedSourceCommit: String,
         expected: EvidenceVerificationExpectation?,
         recordedHistorical: Boolean,
+        rootEnvironment: EvidenceEnvironmentV2?,
+        expectedSchema: String,
     ): EvidenceBundleVerification {
         var sceneId: String? = directory.fileName?.toString()
         val errors = mutableListOf<String>()
@@ -72,16 +104,20 @@ object EvidenceBundleVerifier {
             require(Files.isDirectory(directory, NOFOLLOW_LINKS)) { "bundle is not a directory" }
             require(!Files.isSymbolicLink(directory)) { "bundle directory cannot be a symlink" }
             val manifest = readObject(directory.resolve("manifest.json"), "manifest")
-            manifest.requireKeys(setOf("schemaVersion", "sceneId", "expectation", "observedOutcome", "sourceCommit", "generatedAtUtc", "oracleKind", "oracleId", "oracleVersion", "oracleProvenance", "oracleSha256", "files"))
+            manifest.requireKeys(manifestKeys(expectedSchema))
             val schema = manifest.requiredString("schemaVersion")
-            require(schema == GPU_EVIDENCE_SCHEMA) { "unsupported schemaVersion: $schema" }
+            require(schema == expectedSchema) { "unsupported schemaVersion: $schema" }
             sceneId = manifest.requiredString("sceneId")
             require(sceneId == directory.fileName.toString()) { "manifest sceneId does not match directory" }
-            val sourceCommit = manifest.requiredString("sourceCommit")
-            require(sourceCommit == expectedSourceCommit) { "sourceCommit mismatch" }
+            val sourceCommit = if (expectedSchema == GPU_EVIDENCE_SCHEMA) {
+                manifest.requiredString("sourceCommit").also { require(it == expectedSourceCommit) { "sourceCommit mismatch" } }
+            } else {
+                require(rootEnvironment != null) { "v2 verification requires a root environment" }
+                expectedSourceCommit
+            }
             val observed = manifest.requiredString("observedOutcome")
             val expectation = manifest.requiredString("expectation")
-            manifest.requiredString("generatedAtUtc")
+            if (expectedSchema == GPU_EVIDENCE_SCHEMA) manifest.requiredString("generatedAtUtc")
             val oracleKind = manifest.requiredString("oracleKind")
             val oracleId = manifest.requiredString("oracleId")
             val oracleVersion = manifest.requiredInt("oracleVersion")
@@ -125,21 +161,27 @@ object EvidenceBundleVerifier {
             require(actualPaths.none { Files.isSymbolicLink(it) }) { "bundle contains symlink" }
             if (recordedHistorical) require(actualPaths.all { Files.isRegularFile(it, NOFOLLOW_LINKS) }) { "historical bundle contains a non-regular file" }
             val actual = actualPaths.map { it.fileName.toString() }.toSet()
-            val expectedFiles = if (observed == "rendered") {
-                if (oracleKind == "checked-in-png") CHECKED_IN_RENDER_FILES else RENDER_FILES
-            } else if (observed == "refused" || observed == "unavailable") REFUSAL_FILES else error("unknown observedOutcome")
-            require(actual == expectedFiles || actual == expectedFiles + "promotion.json") { "file set mismatch: expected=$expectedFiles actual=$actual" }
+            val expectedFiles = expectedFilesFor(observed, oracleKind, expectedSchema == GPU_EVIDENCE_SCENE_SCHEMA_V2)
+            require(actual == expectedFiles || expectedSchema == GPU_EVIDENCE_SCHEMA && actual == expectedFiles + "promotion.json") {
+                "file set mismatch: expected=$expectedFiles actual=$actual"
+            }
             if (recordedHistorical) require("promotion.json" in actual) { "historical bundle requires promotion.json" }
-            if ("promotion.json" in actual) verifyPromotion(directory, sceneId, sourceCommit)
+            if (expectedSchema == GPU_EVIDENCE_SCHEMA && "promotion.json" in actual) verifyPromotion(directory, sceneId, sourceCommit)
             require(hashes.keys == expectedFiles - "manifest.json") { "manifest file hashes are incomplete" }
             hashes.forEach { (name, expectedHash) -> require(expectedHash == sha256(Files.readAllBytes(directory.resolve(name)))) { "hash mismatch for $name" } }
             if (oracleKind == "checked-in-png") {
                 require(oracleSha256 != null) { "checked-in oracle must declare sha256" }
                 require(oracleSha256 == sha256(Files.readAllBytes(directory.resolve("skia.png")))) { "checked-in oracle sha256 mismatch" }
             } else require(oracleSha256 == null) { "generated oracle must not declare checked-in sha256" }
-            val environment = readObject(directory.resolve("environment.json"), "environment")
-            val environmentIdentity = EnvironmentIdentityReader.read(environment)
-            require(manifest.requiredString("sourceCommit") == environmentIdentity.sourceCommit) { "environment sourceCommit mismatch" }
+            val environmentIdentity = if (rootEnvironment == null) {
+                val environment = readObject(directory.resolve("environment.json"), "environment")
+                EnvironmentIdentityReader.read(environment)
+            } else {
+                EnvironmentIdentityReader.read(rootEnvironment, sourceCommit)
+            }
+            if (expectedSchema == GPU_EVIDENCE_SCHEMA) {
+                require(manifest.requiredString("sourceCommit") == environmentIdentity.sourceCommit) { "environment sourceCommit mismatch" }
+            }
             val environmentAvailable = environmentIdentity.available
             require(if (observed == "unavailable") !environmentAvailable else environmentAvailable) { "environment availability contradicts observed outcome" }
             if (environmentAvailable) {
@@ -312,6 +354,23 @@ object EvidenceBundleVerifier {
                 adapterIsFallback = adapterObject?.optionalNullableBoolean("isFallbackAdapter"),
             )
         }
+
+        fun read(environment: EvidenceEnvironmentV2, sourceCommit: String): EvidenceEnvironmentIdentity = EvidenceEnvironmentIdentity(
+            sourceCommit = sourceCommit,
+            osName = environment.osName,
+            osVersion = environment.osVersion,
+            osArchitecture = environment.osArchitecture,
+            javaVersion = environment.javaVersion,
+            deviceGeneration = environment.deviceGeneration,
+            capabilityImplementation = environment.capabilityImplementation,
+            available = environment.available,
+            adapterSummary = environment.adapter?.summary,
+            adapterVendor = environment.adapter?.vendor,
+            adapterDevice = environment.adapter?.device,
+            adapterArchitecture = environment.adapter?.architecture,
+            adapterDescription = environment.adapter?.description,
+            adapterIsFallback = environment.adapter?.isFallbackAdapter,
+        )
     }
 
     private fun JsonObject.requiredString(key: String): String {
@@ -344,6 +403,11 @@ object EvidenceBundleVerifier {
         val value = this[key] ?: error("missing $key")
         if (value is JsonNull) return null
         return value.jsonPrimitive.takeUnless { it.isString }?.longOrNull ?: error("$key must be a long or null")
+    }
+    private fun manifestKeys(schema: String): Set<String> = when (schema) {
+        GPU_EVIDENCE_SCHEMA -> setOf("schemaVersion", "sceneId", "expectation", "observedOutcome", "sourceCommit", "generatedAtUtc", "oracleKind", "oracleId", "oracleVersion", "oracleProvenance", "oracleSha256", "files")
+        GPU_EVIDENCE_SCENE_SCHEMA_V2 -> setOf("schemaVersion", "sceneId", "expectation", "observedOutcome", "oracleKind", "oracleId", "oracleVersion", "oracleProvenance", "oracleSha256", "files")
+        else -> error("unsupported schemaVersion: $schema")
     }
     private fun verifyPromotion(directory: Path, sceneId: String, sourceCommit: String) {
         val promotion = readObject(directory.resolve("promotion.json"), "promotion")
@@ -396,6 +460,12 @@ object EvidenceBundleVerifier {
         is OraclePolicy.CheckedInPng -> sha256
         else -> null
     }
+    private fun expectedFilesFor(observed: String, oracleKind: String, v2: Boolean): Set<String> = when {
+        observed == "rendered" && oracleKind == "checked-in-png" -> if (v2) CHECKED_IN_RENDER_FILES_V2 else CHECKED_IN_RENDER_FILES
+        observed == "rendered" -> if (v2) RENDER_FILES_V2 else RENDER_FILES
+        observed == "refused" || observed == "unavailable" -> if (v2) REFUSAL_FILES_V2 else REFUSAL_FILES
+        else -> error("unknown observedOutcome")
+    }
     private fun isSafeFileName(name: String): Boolean = name.isNotBlank() && !name.startsWith('/') && !name.contains("\\") && !name.split('/').any { it == ".." || it.isBlank() } && name == Path.of(name).fileName.toString()
     private fun sha256(value: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(value).joinToString("") { "%02x".format(it) }
     private fun rejectDuplicateKeys(text: String) {
@@ -428,6 +498,9 @@ object EvidenceBundleVerifier {
     private val RENDER_FILES = setOf("manifest.json", "gpu.png", "cpu.png", "diff.png", "stats.json", "route.json", "diagnostics.json", "environment.json", "verdict.json")
     private val CHECKED_IN_RENDER_FILES = setOf("manifest.json", "gpu.png", "skia.png", "diff.png", "stats.json", "route.json", "diagnostics.json", "environment.json", "verdict.json")
     private val REFUSAL_FILES = setOf("manifest.json", "stats.json", "route.json", "diagnostics.json", "environment.json", "verdict.json")
+    private val RENDER_FILES_V2 = setOf("manifest.json", "gpu.png", "cpu.png", "diff.png", "stats.json", "route.json", "diagnostics.json", "verdict.json")
+    private val CHECKED_IN_RENDER_FILES_V2 = setOf("manifest.json", "gpu.png", "skia.png", "diff.png", "stats.json", "route.json", "diagnostics.json", "verdict.json")
+    private val REFUSAL_FILES_V2 = setOf("manifest.json", "stats.json", "route.json", "diagnostics.json", "verdict.json")
     private val TELEMETRY_FIELDS = setOf("renderPasses", "offscreenPasses", "windowPasses", "submissions", "commandBuffers", "buffersCreated", "texturesCreated", "intermediateTexturesCreated", "coverageMasksDestroyed", "destinationCopies", "destinationReadbackSnapshots", "msaaTargets", "msaaResolves", "bindGroupsCreated", "samplersCreated", "queueWrites", "uniformSlabsCreated", "uniformSlabBytesAllocated", "uniformSlabFallbacks", "passBatchPlans", "passBatchesAccepted", "passBatchCuts", "passBatchPackets")
 }
 
