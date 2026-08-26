@@ -11,6 +11,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -129,9 +130,11 @@ class PromoteEvidenceCliTest {
     @Test
     fun `promotion verifies every current catalog source before replacing destinations`() {
         writeAllBundles(repository, COMMIT)
-        val result = PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial"))
+        val stderr = ByteArrayOutputStream()
+        val result = PromoteEvidenceCliRunner(stderr = PrintStream(stderr)).run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial"))
 
-        assertEquals(0, result)
+        assertEquals(0, result, stderr.toString())
+        assertFalse(stderr.toString().contains("gpu evidence verification arguments rejected"))
         assertEquals(GpuEvidenceCatalog.cases.map { it.descriptor.id.value }.toSet(), sceneDirectories(promotedRoot(repository)))
         val metadata = Files.readString(promotedRoot(repository).resolve("solid-card-stack/promotion.json"))
         val json = EvidenceJson.parseToJsonElement(metadata).jsonObject
@@ -223,8 +226,7 @@ class PromoteEvidenceCliTest {
             expectedRgba = requireNotNull(solidCase.oracle).render(solidCase.descriptor.width, solidCase.descriptor.height),
         )
         val currentVerification = EvidenceBundleVerifier.verify(solid, currentExpected)
-        assertTrue(currentVerification is EvidenceBundleVerification.Invalid)
-        assertTrue((currentVerification as EvidenceBundleVerification.Invalid).errors.any { it.contains("CPU PNG does not match expected oracle pixels") })
+        assertTrue(assertIs<EvidenceBundleVerification.Invalid>(currentVerification).errors.any { it.contains("CPU PNG does not match expected oracle pixels") })
         rewriteHistoricalIdentity(promotedRoot(repository))
 
         writeAllBundles(repository, COMMIT)

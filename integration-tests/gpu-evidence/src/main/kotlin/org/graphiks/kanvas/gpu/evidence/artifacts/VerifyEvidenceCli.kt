@@ -154,12 +154,19 @@ class VerifyEvidenceCliRunner(
             "--allow-historical-commit applies only to v1 historical evidence roots"
         }
         val expectedCases = request.selection.resolve(GpuEvidenceCatalog.cases)
-        val verification = EvidenceCatalogVerifier.verify(
-            root = request.root,
-            selection = request.selection,
-            cases = GpuEvidenceCatalog.cases,
-            expectedSourceCommit = request.sourceCommit,
-        )
+        val verification = try {
+            EvidenceCatalogVerifier.verify(
+                root = request.root,
+                selection = request.selection,
+                cases = GpuEvidenceCatalog.cases,
+                expectedSourceCommit = request.sourceCommit,
+            )
+        } catch (failure: EvidenceCatalogVerificationException) {
+            failure.sceneFailures.forEach { sceneFailure ->
+                stderr.println("${sceneFailure.sceneId}: invalid (${sceneFailure.errors.joinToString("; ")})")
+            }
+            return 1
+        }
         val results = expectedCases.map { evidenceCase ->
             val sceneId = evidenceCase.descriptor.id.value
             val expected = EvidenceVerificationExpectation.fromCase(

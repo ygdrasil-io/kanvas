@@ -23,6 +23,16 @@ data class EvidenceCatalogVerification(
     val environment: EvidenceEnvironmentV2,
 )
 
+data class EvidenceCatalogSceneFailure(
+    val sceneId: String,
+    val errors: List<String>,
+)
+
+class EvidenceCatalogVerificationException(
+    message: String,
+    val sceneFailures: List<EvidenceCatalogSceneFailure>,
+) : IllegalArgumentException(message)
+
 object EvidenceCatalogVerifier {
     private val SOURCE_COMMIT = Regex("[0-9a-f]{40}")
     private val SHA256 = Regex("[0-9a-f]{64}")
@@ -86,14 +96,24 @@ object EvidenceCatalogVerifier {
         }
 
         val sourceCommits = linkedMapOf<String, String>()
+        val sceneFailures = mutableListOf<EvidenceCatalogSceneFailure>()
         entries.forEach { entry ->
             val evidenceCase = requireNotNull(expectedById[entry.sceneId]) { "unknown evidence scene: ${entry.sceneId}" }
-            expectedSourceCommit?.let {
-                require(entry.sourceCommit == it) { "catalog sourceCommit mismatch for ${entry.sceneId}" }
+            expectedSourceCommit?.let { commit ->
+                if (entry.sourceCommit != commit) {
+                    sceneFailures += EvidenceCatalogSceneFailure(entry.sceneId, listOf("catalog sourceCommit mismatch"))
+                    return@forEach
+                }
             }
-            val manifestPath = resolveManifestPath(root, entry)
-            require(entry.manifestSha256 == sha256(Files.readAllBytes(manifestPath))) {
-                "manifest sha256 mismatch for ${entry.sceneId}"
+            val manifestPath = try {
+                resolveManifestPath(root, entry)
+            } catch (failure: IllegalArgumentException) {
+                sceneFailures += EvidenceCatalogSceneFailure(entry.sceneId, listOf(failure.message ?: "invalid manifest path"))
+                return@forEach
+            }
+            if (entry.manifestSha256 != sha256(Files.readAllBytes(manifestPath))) {
+                sceneFailures += EvidenceCatalogSceneFailure(entry.sceneId, listOf("manifest sha256 mismatch"))
+                return@forEach
             }
             val expected = EvidenceVerificationExpectation.fromCase(
                 evidenceCase = evidenceCase,
@@ -101,7 +121,9 @@ object EvidenceCatalogVerifier {
                 expectedRgba = evidenceCase.oracle?.render(evidenceCase.descriptor.width, evidenceCase.descriptor.height),
             )
             when (val result = EvidenceBundleVerifier.verifyV2(root.resolve(entry.sceneId), expected, environment, entry.sourceCommit)) {
-                is EvidenceBundleVerification.Invalid -> throw IllegalArgumentException("${entry.sceneId}: ${result.errors.joinToString("; ")}")
+                is EvidenceBundleVerification.Invalid -> {
+                    sceneFailures += EvidenceCatalogSceneFailure(entry.sceneId, result.errors)
+                }
                 is EvidenceBundleVerification.Verified -> {
                     sourceCommits[entry.sceneId] = entry.sourceCommit
                     if (evidenceCase.descriptor.expectation is EvidenceExpectation.ShouldRender) {
@@ -111,6 +133,12 @@ object EvidenceCatalogVerifier {
                     }
                 }
             }
+        }
+        if (sceneFailures.isNotEmpty()) {
+            throw EvidenceCatalogVerificationException(
+                message = "evidence catalogue contains invalid scenes",
+                sceneFailures = sceneFailures.sortedBy(EvidenceCatalogSceneFailure::sceneId),
+            )
         }
         return EvidenceCatalogVerification(catalogSceneIds, sourceCommits, environment)
     }

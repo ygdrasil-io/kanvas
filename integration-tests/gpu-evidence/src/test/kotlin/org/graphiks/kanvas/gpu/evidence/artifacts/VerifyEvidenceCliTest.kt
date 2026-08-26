@@ -91,6 +91,27 @@ class VerifyEvidenceCliTest {
     }
 
     @Test
+    fun `v2 verifier reports invalid scenes on stderr instead of only a global failure`() {
+        writeSelectedV2(listOf("solid-card-stack", "custom-runtime-effect-unregistered-refusal"))
+        val scene = generatedRoot().resolve("solid-card-stack")
+        replaceAndRefresh(scene, "route.json", "\"routeId\":\"kanvas.surface.render\"", "\"routeId\":\"wrong.route\"")
+        val stderr = ByteArrayOutputStream()
+
+        assertTrue(
+            VerifyEvidenceCliRunner(stderr = PrintStream(stderr)).run(
+                arrayOf(
+                    "--root", generatedRoot().toString(),
+                    "--source-commit", COMMIT,
+                    "--scene", "solid-card-stack",
+                    "--scene", "custom-runtime-effect-unregistered-refusal",
+                ),
+            ) != 0,
+        )
+        assertTrue(stderr.toString().contains("solid-card-stack: invalid"))
+        assertFalse(stderr.toString().contains("gpu evidence verification failed: solid-card-stack"))
+    }
+
+    @Test
     fun `v1 generated roots still verify through the legacy scene path`() {
         writeAll(COMMIT)
 

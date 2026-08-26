@@ -131,7 +131,7 @@ class PromoteEvidenceCliRunner internal constructor(
         require(!Files.isSymbolicLink(roots.generated)) { "generated evidence root cannot be a symlink" }
 
         // Verification happens before any destination mutation, and does not create a GPU runtime.
-        require(VerifyEvidenceCliRunner(stdout, stderr).run(arrayOf("--root", roots.generated.toString(), "--source-commit", request.sourceCommit)) == 0) {
+        require(VerifyEvidenceCliRunner(stdout, stderr).run(arrayOf("--root", roots.generated.toString(), "--source-commit", request.sourceCommit, "--all")) == 0) {
             "generated evidence failed independent verification"
         }
 
@@ -149,7 +149,7 @@ class PromoteEvidenceCliRunner internal constructor(
                 writePromotion(stagedScene, sceneId, request)
             }
             beforeStagedVerification(staged)
-            require(VerifyEvidenceCliRunner(stdout, stderr).run(arrayOf("--root", staged.toString(), "--source-commit", request.sourceCommit)) == 0) {
+            require(VerifyEvidenceCliRunner(stdout, stderr).run(arrayOf("--root", staged.toString(), "--source-commit", request.sourceCommit, "--all")) == 0) {
                 "staged promotion failed independent verification"
             }
             swapCatalogRoot(staged, roots.promoted)
