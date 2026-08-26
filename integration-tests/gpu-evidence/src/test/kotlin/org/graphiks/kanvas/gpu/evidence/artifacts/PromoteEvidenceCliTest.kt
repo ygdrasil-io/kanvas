@@ -179,6 +179,7 @@ class PromoteEvidenceCliTest {
             "clip-path-triangle-direct-triangle-linear-gradient",
             "clip-path-translated-triangle-direct-triangle-linear-gradient",
             "clip-path-uniform-scaled-triangle-direct-triangle-linear-gradient",
+            "clip-path-solid-rrect", "clip-path-asymmetric-solid-rrect", "clip-path-ellipse-solid-rrect",
             "solid-triangle-path", "solid-concave-path", "even-odd-path-hole",
             "winding-path-hole", "inverse-winding-triangle-path", "inverse-even-odd-path-hole",
             "implicit-closure-triangle-path", "translated-triangle-path", "uniform-scaled-triangle-path",

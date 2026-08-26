@@ -194,6 +194,8 @@ internal enum class GPUWgpu4kCorePrimitivePipelineProgram {
     ClipStencilConsumerInverse,
     ClipStencilConsumerLinearGradientRegular,
     ClipStencilConsumerLinearGradientInverse,
+    ClipStencilConsumerAnalyticRRectRegular,
+    ClipStencilConsumerAnalyticRRectInverse,
     CoverageMaskProducerRectIntersect,
     CoverageMaskProducerRectDifference,
     CoverageMaskProducerRRectIntersect,
@@ -539,7 +541,10 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeProgramOrNull():
         }
         GPUCorePrimitiveRenderPipelineStructuralKey.Role.ClipStencilConsumer -> when {
             clip != GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None ||
-                topology != GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList ||
+                (shader != GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRRect &&
+                    topology != GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList) ||
+                (shader == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRRect &&
+                    topology != GPUCorePrimitiveRenderPipelineStructuralKey.Topology.AnalyticRRect) ||
                 !blend.isCanonicalPremulSrcOver() -> null
             clipStencilStructuralProgramOrNull() ==
                 GPUCorePrimitiveClipStencilStructuralProgram.ConsumerRegular -> when (shader) {
@@ -547,6 +552,8 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeProgramOrNull():
                         GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerRegular
                     GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient ->
                         GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerLinearGradientRegular
+                    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRRect ->
+                        GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerAnalyticRRectRegular
                     else -> null
                 }
             clipStencilStructuralProgramOrNull() ==
@@ -555,6 +562,8 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeProgramOrNull():
                         GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerInverse
                     GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient ->
                         GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerLinearGradientInverse
+                    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRRect ->
+                        GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerAnalyticRRectInverse
                     else -> null
                 }
             else -> null
@@ -783,7 +792,9 @@ private fun GPUWgpu4kCorePrimitivePipelineProgram.isAnalyticPathStencilCover(): 
     isPathStencilCover() && !isLegacyPathStencilCover()
 
 internal fun GPUWgpu4kCorePrimitivePipelineProgram.isAnalyticShape(): Boolean =
-    this == GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeSrcOver
+    this == GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeSrcOver ||
+        this == GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerAnalyticRRectRegular ||
+        this == GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerAnalyticRRectInverse
 
 internal fun GPUWgpu4kCorePrimitivePipelineProgram.isAnalyticShapeDstRead(): Boolean =
     this == GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeDstRead
@@ -881,7 +892,9 @@ internal fun corePrimitiveWgpu4kRenderPipelineDescriptor(
         identity.program == GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerRegular ||
         identity.program == GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerInverse ||
         identity.program == GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerLinearGradientRegular ||
-        identity.program == GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerLinearGradientInverse
+        identity.program == GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerLinearGradientInverse ||
+        identity.program == GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerAnalyticRRectRegular ||
+        identity.program == GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerAnalyticRRectInverse
     val producer = identity.program == GPUWgpu4kCorePrimitivePipelineProgram.PathStencilProducerWinding ||
         identity.program == GPUWgpu4kCorePrimitivePipelineProgram.PathStencilProducerEvenOdd ||
         identity.program.isClipStencilProducer()
@@ -1011,6 +1024,8 @@ private fun GPUWgpu4kCorePrimitiveRenderPipelineIdentity.hasCompatibleBlendProgr
             GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeSrcOver,
             GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeDstRead,
             GPUWgpu4kCorePrimitivePipelineProgram.AnalyticDRRectSrcOver,
+            GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerAnalyticRRectRegular,
+            GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerAnalyticRRectInverse,
             GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverDstRead,
             -> blendProgram.mode != null
             else -> blendProgram == program.defaultBlendProgram()
@@ -1088,6 +1103,7 @@ private fun GPUWgpu4kCorePrimitivePipelineProgram.depthStencilState(): DepthSten
             )
         GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerRegular,
         GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerLinearGradientRegular,
+        GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerAnalyticRRectRegular,
         ->
             NativeStencilState(
                 face(compare = GPUCompareFunction.NotEqual, pass = GPUStencilOperation.Keep),
@@ -1097,6 +1113,7 @@ private fun GPUWgpu4kCorePrimitivePipelineProgram.depthStencilState(): DepthSten
             )
         GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerInverse,
         GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerLinearGradientInverse,
+        GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerAnalyticRRectInverse,
         ->
             NativeStencilState(
                 face(compare = GPUCompareFunction.Equal, pass = GPUStencilOperation.Keep),

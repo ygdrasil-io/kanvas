@@ -109,6 +109,26 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
     }
 
     @Test
+    fun `seal accepts an opaque hard analytic rrect consumer without lowering it to triangles`() {
+        val accepted = assertIs<GPUCorePrimitiveClipStencilNativeRoute.Accepted>(
+            sealGPUCorePrimitiveClipStencilNativeRoute(
+                request(consumers = mutableListOf(consumer(geometry = rrectConsumer()))),
+            ),
+        )
+
+        val consumer = accepted.consumers.single()
+        assertTrue(consumer.geometry is GPUCorePrimitiveGeometry.RRect)
+        assertEquals(
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRRect,
+            consumer.structuralKey.shader,
+        )
+        assertEquals(
+            GPUCorePrimitiveRenderPipelineStructuralKey.Topology.AnalyticRRect,
+            consumer.structuralKey.topology,
+        )
+    }
+
+    @Test
     fun `seal refuses a clamp direct linear gradient consumer in a four sample hard path clip`() {
         assertRefused(
             "unsupported.native-core-primitive.clip-stencil.gradient-msaa",
@@ -230,6 +250,20 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
             request(consumers = mutableListOf(consumer(coverageMode = GPUCorePrimitiveCoverageMode.StencilAA))),
         )
         assertRefused("unsupported.native-core-primitive.clip-stencil.msaa", request(sampleCount = 2))
+        assertRefused(
+            "unsupported.native-core-primitive.clip-stencil.consumer-coverage",
+            request(consumers = mutableListOf(consumer(geometry = rrectConsumer(), coverageMode = GPUCorePrimitiveCoverageMode.ScalarAA))),
+        )
+        assertRefused(
+            "unsupported.native-core-primitive.clip-stencil.rrect-msaa",
+            request(sampleCount = 4, producerAntiAlias = true, consumers = mutableListOf(
+                consumer(geometry = rrectConsumer(), attachment = attachment(sampleCount = 4)),
+            )),
+        )
+        assertRefused(
+            "unsupported.native-core-primitive.clip-stencil.consumer-material",
+            request(consumers = mutableListOf(consumer(geometry = rrectConsumer(), material = linearGradientMaterial()))),
+        )
         assertRefused(
             "unsupported.native-core-primitive.clip-stencil.consumer-geometry",
             request(consumers = mutableListOf(consumer(geometry = stencilPathConsumer()))),
@@ -669,6 +703,14 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
         fillRule = GPUCorePrimitiveFillRule.Winding,
         inverseFill = false,
         strokeStyle = null,
+    )
+
+    private fun rrectConsumer() = GPUCorePrimitiveGeometry.RRect(
+        left = 8f,
+        top = 12f,
+        right = 80f,
+        bottom = 68f,
+        radii = listOf(12f, 12f, 8f, 8f, 10f, 10f, 6f, 6f),
     )
 
     private fun srcOverBlendPlan() = GPUBlendPlan.FixedFunctionBlend(

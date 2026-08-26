@@ -69,6 +69,9 @@ class GpuEvidenceCatalogTest {
                 "clip-path-triangle-direct-triangle-linear-gradient",
                 "clip-path-translated-triangle-direct-triangle-linear-gradient",
                 "clip-path-uniform-scaled-triangle-direct-triangle-linear-gradient",
+                "clip-path-solid-rrect",
+                "clip-path-asymmetric-solid-rrect",
+                "clip-path-ellipse-solid-rrect",
                 "solid-triangle-path",
                 "solid-concave-path",
                 "even-odd-path-hole",
@@ -117,6 +120,9 @@ class GpuEvidenceCatalogTest {
                 "clip-path-triangle-direct-triangle-linear-gradient",
                 "clip-path-translated-triangle-direct-triangle-linear-gradient",
                 "clip-path-uniform-scaled-triangle-direct-triangle-linear-gradient",
+                "clip-path-solid-rrect",
+                "clip-path-asymmetric-solid-rrect",
+                "clip-path-ellipse-solid-rrect",
                 "solid-triangle-path",
                 "solid-concave-path",
                 "even-odd-path-hole",
@@ -138,7 +144,7 @@ class GpuEvidenceCatalogTest {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            List(46) { "kanvas.surface.render" },
+            List(49) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
@@ -267,6 +273,9 @@ class GpuEvidenceCatalogTest {
                 "clip-path-triangle-direct-triangle-linear-gradient",
                 "clip-path-translated-triangle-direct-triangle-linear-gradient",
                 "clip-path-uniform-scaled-triangle-direct-triangle-linear-gradient",
+                "clip-path-solid-rrect",
+                "clip-path-asymmetric-solid-rrect",
+                "clip-path-ellipse-solid-rrect",
                 "solid-triangle-path",
             "solid-concave-path",
             "even-odd-path-hole",
@@ -333,6 +342,9 @@ class GpuEvidenceCatalogTest {
                 "clip-path-triangle-direct-triangle-linear-gradient" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-direct-triangle-linear-gradient-device-space", 1),
                 "clip-path-translated-triangle-direct-triangle-linear-gradient" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-direct-triangle-linear-gradient-device-space", 1),
                 "clip-path-uniform-scaled-triangle-direct-triangle-linear-gradient" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-direct-triangle-linear-gradient-device-space", 1),
+                "clip-path-solid-rrect" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-rrect-pixel-center", 1),
+                "clip-path-asymmetric-solid-rrect" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-rrect-pixel-center", 1),
+                "clip-path-ellipse-solid-rrect" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-rrect-pixel-center", 1),
                 "solid-triangle-path" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 2),
                 "solid-concave-path" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 2),
                 "even-odd-path-hole" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 2),
@@ -386,6 +398,9 @@ class GpuEvidenceCatalogTest {
                 "clip-path-triangle-direct-triangle-linear-gradient" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent device-space clip, direct-triangle, and clamp-gradient membership."),
                 "clip-path-translated-triangle-direct-triangle-linear-gradient" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent device-space clip, direct-triangle, and clamp-gradient membership."),
                 "clip-path-uniform-scaled-triangle-direct-triangle-linear-gradient" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent device-space clip, direct-triangle, and clamp-gradient membership."),
+                "clip-path-solid-rrect" to ComparisonPolicy(0, 100.0, 1, "Exact RGBA8 output from independent pixel-center winding clip and analytic RRect membership."),
+                "clip-path-asymmetric-solid-rrect" to ComparisonPolicy(0, 100.0, 1, "Exact RGBA8 output from independent pixel-center winding clip and analytic RRect membership."),
+                "clip-path-ellipse-solid-rrect" to ComparisonPolicy(0, 100.0, 1, "Exact RGBA8 output from independent pixel-center winding clip and analytic RRect membership."),
                 "solid-triangle-path" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent pixel-center winding/even-odd polygon membership."),
                 "solid-concave-path" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent pixel-center winding/even-odd polygon membership."),
                 "even-odd-path-hole" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent pixel-center winding/even-odd polygon membership."),

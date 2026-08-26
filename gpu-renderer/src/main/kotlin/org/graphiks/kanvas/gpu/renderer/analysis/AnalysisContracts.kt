@@ -1827,7 +1827,8 @@ class GPUFirstRoutePlanner(
                 "unsupported.transform.rrect_scale_unproven"
             transform.type == GPUTransformType.Affine -> "unsupported.transform.rrect_affine_unproven"
             transform.type !in acceptedTransformTypes -> "unsupported.transform.class_downgrade"
-            clip.kind == GPUClipKind.ComplexStack -> "unsupported.clip.complex_stack"
+            clip.kind == GPUClipKind.ComplexStack && !supportsHardPathClipAnalyticRRect() ->
+                "unsupported.clip.complex_stack"
             clip.kind !in acceptedClipKinds -> "unsupported.clip.analytic_unsupported"
             clip.kind == GPUClipKind.DeviceRect && !capabilities.hasFact(firstScissorCapabilityName) ->
                 "unsupported.clip.scissor_capability_missing"
@@ -1845,6 +1846,16 @@ class GPUFirstRoutePlanner(
             !capabilities.hasFact(firstRRectRouteCapabilityName) -> "unsupported.pipeline.capability_missing"
             else -> null
         }
+
+    /** One opaque identity non-AA RRect may read exactly one single-sample hard path stencil. */
+    private fun NormalizedDrawCommand.FillRRect.supportsHardPathClipAnalyticRRect(): Boolean {
+        val stencil = clip.executionPlan as? org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan.StencilCoverage
+            ?: return false
+        val solid = material as? GPUMaterialDescriptor.SolidColor ?: return false
+        return !stroke && !antiAlias && maskFilter == null && transform.type == GPUTransformType.Identity &&
+            solid.a == 1f && blend.mode == GPUBlendMode.SRC_OVER && stencil.sampleCount == 1 &&
+            stencil.pathTransformClass == "identity"
+    }
 
     /** Refuses any FillDRRect fact outside the narrow opaque analytic-hole contract. */
     private fun NormalizedDrawCommand.FillDRRect.refusalCode(): String? =

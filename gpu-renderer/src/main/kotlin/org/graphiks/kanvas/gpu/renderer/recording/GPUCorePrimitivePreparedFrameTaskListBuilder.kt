@@ -268,10 +268,18 @@ internal fun classifyCorePrimitiveDirectNativeRoute(
             )
         }
     }
-    val exactClipScissor = (corePrimitiveDirectClipAuthority(
-        clipExecutionPlan,
-        semantic.targetBounds,
-    ) as? GPUCorePrimitiveDirectClipAuthority.Accepted)?.scissor
+    val exactClipScissor = when {
+        clipExecutionPlan is GPUClipExecutionPlan.StencilCoverage &&
+            clipExecutionPlan.sampleCount == 1 &&
+            clipExecutionPlan.pathTransformClass == "identity" &&
+            semantic.geometry is GPUCorePrimitiveGeometry.RRect &&
+            semantic.material is GPUCorePrimitiveMaterialPayload.SolidColor &&
+            semantic.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor -> semantic.targetBounds
+        else -> (corePrimitiveDirectClipAuthority(
+            clipExecutionPlan,
+            semantic.targetBounds,
+        ) as? GPUCorePrimitiveDirectClipAuthority.Accepted)?.scissor
+    }
     return validateCorePrimitiveDirectNativeRoute(
         semantic = semantic,
         exactClipScissor = exactClipScissor,
@@ -848,7 +856,7 @@ private fun directCorePrimitiveGeometryBytes(
     }
     val (vertexCount, indexCount) = when (val geometry = semantic.geometry) {
         is GPUCorePrimitiveGeometry.Rect -> 8 to 6
-        is GPUCorePrimitiveGeometry.RRect -> if (gradientMaterial) 8 to 6 else return null
+        is GPUCorePrimitiveGeometry.RRect -> if (gradientMaterial || acceptedClipStencilPlan != null) 8 to 6 else return null
         is GPUCorePrimitiveGeometry.DRRect -> if (gradientMaterial) 8 to 6 else return null
         is GPUCorePrimitiveGeometry.TriangulatedPath -> {
             if (geometry.geometryMode != GPUCorePrimitiveGeometryMode.DirectTriangles ||
@@ -1809,7 +1817,11 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 if (commandId !in analyticShapeCommandIds) continue
                 val clipExecutionPlan = requireNotNull(packet.clipExecutionPlan)
                 if (clipExecutionPlan != GPUClipExecutionPlan.NoClip &&
-                    clipExecutionPlan !is GPUClipExecutionPlan.ScissorOnly
+                    clipExecutionPlan !is GPUClipExecutionPlan.ScissorOnly &&
+                    !(clipExecutionPlan is GPUClipExecutionPlan.StencilCoverage &&
+                        clipExecutionPlan.sampleCount == 1 &&
+                        clipExecutionPlan.pathTransformClass == "identity" &&
+                        request.coreSemantics().getValue(commandId).geometry is GPUCorePrimitiveGeometry.RRect)
                 ) {
                     return refused(
                         "unsupported.recording.core_primitive_analytic_shape_clip",
@@ -2159,6 +2171,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             staticNativeClipStencilConsumers.any { packet ->
                 corePrimitiveClipStencilConsumerShaderOrNull(
                     request.coreSemantics().getValue(packet.commandIdValue).material,
+                    request.coreSemantics().getValue(packet.commandIdValue).geometry,
                 ) == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient
             }
         ) {
@@ -2171,13 +2184,16 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             staticNativeClipStencilConsumers.size in 1..2 &&
             staticNativeClipStencilConsumers.all { packet ->
                 val semantic = request.coreSemantics().getValue(packet.commandIdValue)
-                val clipStencilShader = corePrimitiveClipStencilConsumerShaderOrNull(semantic.material)
+                val clipStencilShader = corePrimitiveClipStencilConsumerShaderOrNull(semantic.material, semantic.geometry)
                 packet.role == GPUDrawPacketRole.Shading &&
                     when (clipStencilShader) {
                         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry ->
                             (packet.renderStepId.value == CORE_PRIMITIVE_FILL_RECT_STEP_IDENTITY &&
                                 semantic.geometry is GPUCorePrimitiveGeometry.Rect) ||
                                 semantic.hasExactDirectTrianglePathConsumerGeometry()
+                        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRRect ->
+                            packet.renderStepId.value == CORE_PRIMITIVE_FILL_RRECT_STEP_IDENTITY &&
+                                semantic.geometry is GPUCorePrimitiveGeometry.RRect
                         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient ->
                             packet.renderStepId.value == "linear.gradient.fill" ||
                                 semantic.hasExactDirectTrianglePathConsumerGeometry()
@@ -4612,7 +4628,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             corePrimitiveClipStencilConsumerRenderPipelineStructuralKey(
                 inverseFill = path.inverseFill,
                 blendPlan = requireNotNull(basePacket.blendPlan),
-                shader = requireNotNull(corePrimitiveClipStencilConsumerShaderOrNull(preparedSemantic.material)),
+                shader = requireNotNull(corePrimitiveClipStencilConsumerShaderOrNull(preparedSemantic.material, preparedSemantic.geometry)),
                 sampleCount = sampleCount,
                 colorFormat = targetFormat.corePrimitiveStructuralColorFormat(),
             )
