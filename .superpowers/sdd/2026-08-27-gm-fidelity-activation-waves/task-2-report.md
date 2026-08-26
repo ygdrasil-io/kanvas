@@ -4,13 +4,16 @@
 
 - `GPUMaterialDescriptor.ImageDraw` now owns immutable local-matrix facts.
   The direct prepared image route applies accepted matrices while forming image
-  UVs; no unconsumed material ABI/WGSL extension is claimed.
+  UVs; no unconsumed material ABI/WGSL extension is claimed.  The generic
+  material compiler explicitly refuses every non-identity image local matrix,
+  so it cannot silently omit that fact for vertices, text, or other callers.
 - The prepared mapper accepts only finite translation/positive-scale matrices
   inside explicit bounds, and preserves nearest/linear filtering.
 - `DrawimagerectFilterGm` reaches the prepared WebGPU image route for its
   local-matrix shader fill.  No GM source was changed.
 - The frame source inventory recognizes only the axis-aligned rectangle path
-  emitted by `GmCanvas`; arbitrary paths remain outside this task.
+  emitted by `GmCanvas` with an identity operation transform; arbitrary or
+  transformed paths remain outside this task.
 - Paint tint and alpha are propagated to image materials.  An executed native
   nearest + alpha-tint pixel oracle covers the bounded route.
 

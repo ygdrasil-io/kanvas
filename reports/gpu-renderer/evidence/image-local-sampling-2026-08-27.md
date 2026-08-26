@@ -16,7 +16,8 @@ clamp-to-edge.
 This direct image route applies the bounded local transform while preparing
 image UVs.  It does not consume `GPUPreparedMaterialProgram`'s WGSL ABI; the
 unconsumed ABI extension was removed rather than being represented as executed
-native behavior.
+native behavior.  The generic material compiler refuses non-identity image
+local matrices, so this specialized lowerer is the sole accepted route.
 
 ## CPU / GPU / diff / stats
 

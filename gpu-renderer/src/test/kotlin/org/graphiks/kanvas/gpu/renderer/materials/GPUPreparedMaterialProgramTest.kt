@@ -143,6 +143,25 @@ class GPUPreparedMaterialProgramTest {
     }
 
     @Test
+    fun `prepared compiler refuses bounded image local matrix outside the dedicated image route`() {
+        val refused = assertIs<GPUPreparedMaterialProgramResult.Refused>(
+            compiler.compile(
+                supportedImageShaderDescriptor(
+                    localMatrix = listOf(
+                        1f, 0f, 2f,
+                        0f, 1f, 3f,
+                        0f, 0f, 1f,
+                    ),
+                ),
+                1f,
+                context,
+            ),
+        )
+
+        assertEquals("unsupported.material.mapping.local_matrix", refused.code)
+    }
+
+    @Test
     fun `prepared material compiler accepts exactly common proven sources`() {
         val accepted = listOf(
             solidDescriptor(),
@@ -1061,6 +1080,11 @@ class GPUPreparedMaterialProgramTest {
         samplingFilterMode: String = "nearest",
         alphaOnly: Boolean = false,
         tintR: Float = 0.25f,
+        localMatrix: List<Float> = listOf(
+            1f, 0f, 0f,
+            0f, 1f, 0f,
+            0f, 0f, 1f,
+        ),
     ) =
         GPUMaterialDescriptor.ImageDraw(
             imageSourceId = "prepared-material-image",
@@ -1068,6 +1092,7 @@ class GPUPreparedMaterialProgramTest {
             imageHeight = height,
             rgbaPixels = pixels,
             samplingFilterMode = samplingFilterMode,
+            localMatrix = localMatrix,
             alphaOnly = alphaOnly,
             tintR = tintR,
             tintG = 0.5f,

@@ -1101,7 +1101,7 @@ private fun collectPreparedImageVisuals(
                     listOf(PreparedVisualSource.Image(operationIndex, shader.image))
                 } ?: listOf(PreparedVisualSource.Core(operationIndex))
             }
-            is DisplayOp.DrawPath -> if (!operation.paint.isStroke() && operation.path.isRect()) {
+            is DisplayOp.DrawPath -> if (operation.isPreparedImageVisualCandidate()) {
                 operation.paint.shader.findBaseImageShaderOrNull()?.let { shader ->
                     listOf(PreparedVisualSource.Image(operationIndex, shader.image))
                 } ?: listOf(PreparedVisualSource.Core(operationIndex))
@@ -1291,6 +1291,10 @@ private fun DisplayOp.isCorePreparedVisual(): Boolean = when (this) {
     -> true
     else -> false
 }
+
+/** The prepared-image source inventory must mirror the narrow image-path lowerer. */
+internal fun DisplayOp.DrawPath.isPreparedImageVisualCandidate(): Boolean =
+    !paint.isStroke() && transform.isIdentity && path.isRect()
 
 private fun imageCommandSourceDiagnostic(
     message: String,
