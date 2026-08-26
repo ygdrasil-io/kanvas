@@ -2859,6 +2859,42 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
     }
 
     @Test
+    fun `prepared clip stencil materializes solid and clamp gradient consumers through both bind groups`() {
+        val fixture = fixture(
+            routeShape = RouteShape.ClipStencil,
+            useRealPreflight = true,
+            linearGradientCommandIds = setOf(2),
+        )
+
+        val materialized = fixture.materializeCore()
+        val consumerShaders = fixture.plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .flatMap(GPUFrameStep.RenderPassStep::drawPackets)
+            .filter { it.role == GPUDrawPacketRole.Shading }
+            .map { requireNotNull(it.corePrimitivePreparedAuthority).structuralPipelineKey.shader }
+            .toSet()
+        val consumerBindGroups = materialized.draft.payload.scopeOperands
+            .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+            .drop(1)
+            .flatMap { render ->
+                render.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
+            }
+            .map { command -> command.bindGroup.bindGroup }
+
+        assertEquals(
+            setOf(
+                GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry,
+                GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient,
+            ),
+            consumerShaders,
+        )
+        assertEquals(2, distinctIdentityCount(consumerBindGroups))
+        assertEquals(2, fixture.native.bindGroupDescriptors.size)
+
+        assertTrue(materialized.draft.disposeBeforeRegistration())
+        fixture.close()
+    }
+
+    @Test
     fun `clip stencil AA 4x materializes one paired pooled attachment set across producer and consumers`() {
         val fixture = fixture(
             readback = true,
@@ -5324,6 +5360,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         copyBytesPerRowAlignment: Long = 256L,
         minUniformBufferOffsetAlignment: Long = 256L,
         linearGradient: Boolean = false,
+        linearGradientCommandIds: Set<Int> = emptySet(),
         linearGradientTileMode: String = "clamp",
     ): Fixture {
         require(!analyticClip || !analyticIntersection)
@@ -5342,7 +5379,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             sampleCount,
             includeRRect = routeShape == RouteShape.AnalyticSplit ||
                 routeShape == RouteShape.AnalyticDRRectSplit,
-            includeLinearGradient = linearGradient,
+            includeLinearGradient = linearGradient || linearGradientCommandIds.isNotEmpty(),
             copyBytesPerRowAlignment = copyBytesPerRowAlignment,
             minUniformBufferOffsetAlignment = minUniformBufferOffsetAlignment,
         )
@@ -5368,6 +5405,12 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             RouteShape.ClipStencil -> listOf(1, 2)
             RouteShape.CoverageMask -> listOf(1, 2)
         }
+        val resolvedLinearGradientCommandIds = if (linearGradient) {
+            commandIds.toSet()
+        } else {
+            linearGradientCommandIds
+        }
+        require(resolvedLinearGradientCommandIds.all { it in commandIds })
         val pathCommandIds = when (routeShape) {
             RouteShape.PathOnly,
             RouteShape.Mixed,
@@ -5421,7 +5464,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                         order,
                         GPURect(1f + order, 1f, 5f + order, 5f),
                         targetFormat,
-                        material = if (linearGradient) {
+                        material = if (commandId in resolvedLinearGradientCommandIds) {
                             linearGradientDescriptor(tileMode = linearGradientTileMode)
                         } else {
                             GPUMaterialDescriptor.SolidColor(0.5f, 0f, 0f, 0.5f)
@@ -5507,7 +5550,11 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                 taskList
             }
         }.let { taskList ->
-            if (linearGradient) taskList.withPacketRouteIdentity("linear.gradient.fill") else taskList
+            if (resolvedLinearGradientCommandIds.isNotEmpty()) {
+                taskList.withPacketRouteIdentity("linear.gradient.fill", resolvedLinearGradientCommandIds)
+            } else {
+                taskList
+            }
         }
         if (dstRead || multiRenderDstRead || destinationReadCommandIds.isNotEmpty()) {
             // The recorder only plans fixed-function SRC_OVER rects; promote the destination
@@ -5569,7 +5616,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                     } else {
                         TARGET
                     },
-                    material = if (linearGradient) {
+                    material = if (packet.commandIdValue in resolvedLinearGradientCommandIds) {
                         linearGradientMaterial(tileMode = linearGradientTileMode)
                     } else {
                         null
@@ -6632,7 +6679,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         diagnostics,
     )
 
-    private fun GPUTaskList.withPacketRouteIdentity(renderStepIdentity: String): GPUTaskList = GPUTaskList(
+    private fun GPUTaskList.withPacketRouteIdentity(
+        renderStepIdentity: String,
+        commandIds: Set<Int>,
+    ): GPUTaskList = GPUTaskList(
         frameId,
         capabilitySeal,
         recordingSeals,
@@ -6640,7 +6690,11 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         tasks.map { task ->
             if (task !is GPUTask.Render) return@map task
             val packets = task.drawPackets.map { packet ->
-                packet.withRouteIdentity(renderStepIdentity)
+                if (packet.commandIdValue in commandIds) {
+                    packet.withRouteIdentity(renderStepIdentity)
+                } else {
+                    packet
+                }
             }
             GPUTask.Render(
                 task.taskId,

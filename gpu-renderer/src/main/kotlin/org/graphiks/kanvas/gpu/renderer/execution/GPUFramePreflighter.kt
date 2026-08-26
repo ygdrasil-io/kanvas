@@ -1589,6 +1589,10 @@ internal class GPUFramePreflighter(
             ?: return refuse("Prepared clip-stencil requires an observed dynamic-uniform limit.")
         val uniformScopeLocations = prefixLocations + consumerLocations
         val uniformScopeCommandIds = uniformScopeLocations.map { it.packet.commandIdValue }
+        val uniformScopeKeys = uniformScopeLocations.map { location ->
+            location.packet.corePrimitivePreparedAuthority?.structuralPipelineKey
+                ?: return refuse("Prepared clip-stencil uniform structural key is missing.")
+        }
         val uniformScopePayloads = uniformScopeLocations.map { location ->
             (location.packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive)
                 ?.payloadRef?.uniformBlock?.bytes
@@ -1611,8 +1615,13 @@ internal class GPUFramePreflighter(
                 context.deviceGeneration.value,
                 limits.minUniformBufferOffsetAlignment,
                 exactUniformPayloads,
-            ) || uniformSeal.plan.slots.any { slot ->
-                slot.payloadBytes != 32L || slot.alignedOffset > UInt.MAX_VALUE.toLong()
+            ) || uniformSeal.plan.slots.zip(uniformScopeKeys).any { (slot, key) ->
+                val expectedBytes = when (key.uniformLayout) {
+                    GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2 -> 32L
+                    GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientUniform592V1 -> 592L
+                    else -> -1L
+                }
+                slot.payloadBytes != expectedBytes || slot.alignedOffset > UInt.MAX_VALUE.toLong()
             } || uniformSeal.plan.sourceLabel != "core-primitive-uniform-pass" ||
             uniformSeal.plan.deviceGeneration != context.deviceGeneration.value ||
             uniformSeal.plan.alignmentBytes != limits.minUniformBufferOffsetAlignment ||

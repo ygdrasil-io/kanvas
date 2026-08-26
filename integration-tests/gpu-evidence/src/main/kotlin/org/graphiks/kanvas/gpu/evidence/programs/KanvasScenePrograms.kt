@@ -207,6 +207,32 @@ object KanvasScenePrograms {
         restore()
     })
 
+    fun clipPathTriangleLinearGradient() = clipPathLinearGradient()
+
+    fun clipPathTranslatedTriangleLinearGradient() = clipPathLinearGradient {
+        translate(2f, 0f)
+    }
+
+    fun clipPathUniformScaledTriangleLinearGradient() = clipPathLinearGradient {
+        translate(8f, 4f)
+        scale(0.75f, 0.75f)
+    }
+
+    private fun clipPathLinearGradient(transform: org.graphiks.kanvas.canvas.Canvas.() -> Unit = {}) =
+        KanvasSurfaceProgram(ROUTE_ID, record = {
+            drawColor(BACKGROUND)
+            save()
+            transform()
+            clipPath(Path { moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close() }.apply {
+                fillType = FillType.WINDING
+            }, ClipOp.INTERSECT, antiAlias = false)
+            drawRect(RectF32.ofLTRB(0f, 0f, 64f, 64f), Paint(shader = Shader.LinearGradient(
+                Point2F32(8f, 8f), Point2F32(56f, 8f),
+                listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)), TileMode.CLAMP,
+            )).copy(antiAlias = false))
+            restore()
+        })
+
     fun strokeRectOutline() = KanvasSurfaceProgram(ROUTE_ID, record = {
         drawColor(BACKGROUND)
         drawRect(

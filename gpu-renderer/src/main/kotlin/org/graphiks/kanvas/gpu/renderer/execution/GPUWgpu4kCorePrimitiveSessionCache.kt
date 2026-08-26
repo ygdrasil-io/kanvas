@@ -318,7 +318,10 @@ private fun GPUWgpu4kCorePrimitivePipelineCacheKey.hasCompatibleComponentIdentit
     pipelineIdentity.program.isAnalyticDRRect() ->
         componentIdentity == PRODUCTION_CORE_PRIMITIVE_ANALYTIC_DRRECT_COMPONENT_IDENTITY
     pipelineIdentity.program.isGradient() ->
-        componentIdentity.gradientProgramOrNull() == pipelineIdentity.program
+        componentIdentity.gradientProgramOrNull() == pipelineIdentity.program ||
+            pipelineIdentity.program.isClipStencilLinearGradient() &&
+            componentIdentity.gradientShaderVariantOrNull() ==
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient
     pipelineIdentity.program.isClipStencilProducer() ->
         componentIdentity == PRODUCTION_CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_COMPONENT_IDENTITY
     pipelineIdentity.program.isAnalyticIntersection4() ->

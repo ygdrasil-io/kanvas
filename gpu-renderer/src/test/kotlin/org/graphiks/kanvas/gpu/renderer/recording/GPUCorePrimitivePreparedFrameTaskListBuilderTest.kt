@@ -1973,6 +1973,31 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
     }
 
     @Test
+    fun `native path clip AA 4x refuses a clamp gradient before a native candidate is created`() {
+        val commandId = 353
+        val plan = nativePathStencilPlan(GPUClipFillRule.Winding, sampleCount = 4)
+        val base = recording(command(commandId, 7)).taskList.withClipPlans(
+            mapOf(commandId to plan),
+        ).withSamplePlan(GPUSamplePlan.MultisampleFrame(4)).withPacketRouteIdentity(
+            commandId = commandId,
+            analysisRecordId = "analysis.fill_rect.$commandId",
+            renderStepIdentity = "linear.gradient.fill",
+        )
+        val packet = base.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
+
+        val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            request(base, mapOf(commandId to semantic(packet, material = linearMaterial()))).copy(
+                capabilities = msaaCapabilities(),
+            ),
+        )
+
+        assertEquals(
+            "unsupported.recording.core_primitive_clip_stencil_gradient_msaa",
+            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+        )
+    }
+
+    @Test
     fun `native path clip AA 4x refuses foreign base continuation seals before budget planning`() {
         val plan = nativePathStencilPlan(GPUClipFillRule.Winding, sampleCount = 4)
         val base = recording(command(353, 7)).taskList.withClipPlans(

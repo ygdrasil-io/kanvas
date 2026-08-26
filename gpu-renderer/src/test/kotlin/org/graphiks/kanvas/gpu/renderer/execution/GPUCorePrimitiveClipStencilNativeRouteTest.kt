@@ -41,6 +41,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendComponent
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
@@ -91,6 +92,37 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
         assertEquals(-1f, accepted.producer.ndcVertices.first())
         assertEquals(listOf(0, 4), accepted.producer.contourStarts)
         assertEquals(listOf(7, 9), accepted.consumers.map { it.commandId })
+    }
+
+    @Test
+    fun `seal accepts clamp direct linear gradient consumer with its stencil pipeline identity`() {
+        val accepted = assertIs<GPUCorePrimitiveClipStencilNativeRoute.Accepted>(
+            sealGPUCorePrimitiveClipStencilNativeRoute(
+                request(consumers = mutableListOf(consumer(material = linearGradientMaterial()))),
+            ),
+        )
+
+        assertEquals(
+            GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerLinearGradientRegular,
+            mapped(accepted.consumers.single().structuralKey).identity.program,
+        )
+    }
+
+    @Test
+    fun `seal refuses a clamp direct linear gradient consumer in a four sample hard path clip`() {
+        assertRefused(
+            "unsupported.native-core-primitive.clip-stencil.gradient-msaa",
+            request(
+                sampleCount = 4,
+                producerAntiAlias = true,
+                consumers = mutableListOf(
+                    consumer(
+                        material = linearGradientMaterial(),
+                        attachment = attachment(sampleCount = 4),
+                    ),
+                ),
+            ),
+        )
     }
 
     @Test
@@ -491,6 +523,9 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
         reference: UInt = 0u,
         inverse: Boolean = false,
         geometry: GPUCorePrimitiveGeometry = GPUCorePrimitiveGeometry.Rect(0f, 0f, 40f, 20f),
+        material: GPUCorePrimitiveMaterialPayload = GPUCorePrimitiveMaterialPayload.SolidColor(
+            listOf(1f, 0f, 0f, 1f),
+        ),
         coverageMode: GPUCorePrimitiveCoverageMode = GPUCorePrimitiveCoverageMode.FullOrScissor,
         blendPlan: GPUBlendPlan = srcOverBlendPlan(),
         atomicGroup: GPUClipAtomicGroupID = GPUClipAtomicGroupID("atomic-0"),
@@ -500,6 +535,7 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
         commandId = commandId,
         sourceOrder = sourceOrder,
         geometry = geometry,
+        material = material,
         coverageMode = coverageMode,
         blendPlan = blendPlan,
         inverseFill = inverse,
@@ -509,6 +545,18 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
         scissor = scissor,
         attachment = attachment,
         isLastConsumer = last,
+    )
+
+    private fun linearGradientMaterial() = GPUCorePrimitiveMaterialPayload.LinearGradient(
+        startX = 0f,
+        startY = 0f,
+        endX = 40f,
+        endY = 0f,
+        localMatrix = listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f),
+        interpolation = "srgb",
+        tileMode = "clamp",
+        positions = listOf(0f, 1f),
+        colors = listOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
     )
 
     private fun attachment(sampleCount: Int = 1) = GPUCorePrimitiveClipStencilAttachmentAuthority(
