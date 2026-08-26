@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "kanvas-image-local-sampling-diff-v1",
+  "gm": "drawimagerect_filter",
+  "oracle": "Skia CPU reference PNG",
+  "reference": "integration-tests/skia/src/test/resources/reference/drawimagerect_filter.png",
+  "actual": "integration-tests/skia/src/test/resources/generated-renders/image/drawimagerect_filter.png",
+  "algorithm": "ComparisonUtils.compareRgba(tolerance = 0)",
+  "width": 180,
+  "height": 60,
+  "matchingPixels": 3104,
+  "mismatchingPixels": 7696,
+  "totalPixels": 10800,
+  "maxDiff": [255, 255, 255, 0],
+  "meanDiffOnMismatchingPixels": [84.53079521829522, 84.53079521829522, 84.53079521829522, 0.0]
+}

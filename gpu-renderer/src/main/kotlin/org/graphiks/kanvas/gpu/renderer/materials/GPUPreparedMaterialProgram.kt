@@ -11,7 +11,6 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPURuntimeEffectChildDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPURuntimeEffectChildRole
 import org.graphiks.kanvas.gpu.renderer.commands.GPURuntimeEffectUniformValue
 import org.graphiks.kanvas.gpu.renderer.commands.gradientFactsRefusalReasonOrNull
-import org.graphiks.kanvas.gpu.renderer.commands.imageLocalMatrixRefusalReasonOrNull
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialFragment
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialFragmentAdmission
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialProgramAdmission
@@ -285,13 +284,6 @@ object GPUPreparedMaterialProgramCompiler {
         descriptor: GPUMaterialDescriptor.ImageDraw,
         context: GPUMaterialLoweringContext,
     ): PreparedSourceResult {
-        descriptor.imageLocalMatrixRefusalReasonOrNull()?.let { reason ->
-            return refusedSource(
-                code = reason.diagnosticCode,
-                sourceKind = GPUMaterialSourceKind.ImageShader,
-                message = reason.diagnosticMessage,
-            )
-        }
         val sampled = when (val result = sampledResource(descriptor)) {
             is SampledResourceResult.Ready -> result.resource
             is SampledResourceResult.Refused ->
@@ -336,8 +328,7 @@ object GPUPreparedMaterialProgramCompiler {
         val accepted = plan as GPUMaterialSourcePlan.Accepted
         val lowererKey = GPUBitmapShaderMaterialLowering.deriveMaterialKey(accepted, loweringContext)
         val tintAlpha = descriptor.tintA
-        val localMatrix = descriptor.localMatrix
-        val uniforms = ByteBuffer.allocate(64).order(ByteOrder.LITTLE_ENDIAN).apply {
+        val uniforms = ByteBuffer.allocate(32).order(ByteOrder.LITTLE_ENDIAN).apply {
             putFloat(preparedMaterialSrgbToLinear(descriptor.tintR) * tintAlpha)
             putFloat(preparedMaterialSrgbToLinear(descriptor.tintG) * tintAlpha)
             putFloat(preparedMaterialSrgbToLinear(descriptor.tintB) * tintAlpha)
@@ -346,14 +337,6 @@ object GPUPreparedMaterialProgramCompiler {
             putInt(0)
             putInt(0)
             putInt(0)
-            putFloat(localMatrix[0])
-            putFloat(localMatrix[1])
-            putFloat(localMatrix[2])
-            putFloat(0f)
-            putFloat(localMatrix[3])
-            putFloat(localMatrix[4])
-            putFloat(localMatrix[5])
-            putFloat(0f)
         }.array()
 
         return PreparedSourceResult.Ready(
@@ -372,7 +355,6 @@ object GPUPreparedMaterialProgramCompiler {
                     "lowererKey=${lowererKey.value}",
                     "imageAlphaOnly=${descriptor.alphaOnly}",
                     "imageSampling=${descriptor.samplingFilterMode}",
-                    "imageLocalMatrix=translation-scale",
                 ),
             ),
         )
@@ -1286,12 +1268,10 @@ private fun imageAbiExpectation(): PreparedModuleAbiExpectation =
     uniformAbiExpectation(
         group = 1,
         binding = 0,
-        size = 64,
+        size = 32,
         members = listOf(
             vec4Member("tint", 0),
             PreparedAbiMember("flags", "vec4<u32>", 16, 16, 16),
-            vec4Member("localToImageRow0", 32),
-            vec4Member("localToImageRow1", 48),
         ),
         resourceBindings = listOf(
             PreparedAbiBinding(
@@ -1942,21 +1922,10 @@ private fun imageMaterialWgsl(): String = """
     struct PreparedMaterialImageUniforms {
         tint: vec4<f32>,
         flags: vec4<u32>,
-        localToImageRow0: vec4<f32>,
-        localToImageRow1: vec4<f32>,
     }
     @group(1) @binding(0) var<uniform> imageMaterial: PreparedMaterialImageUniforms;
 
     $BitmapShaderWgsl
-
-    fn image_sampling_uv(localPosition: vec2<f32>, imageSize: vec2<f32>) -> vec2<f32> {
-        let homogeneousPosition = vec3f(localPosition, 1.0);
-        let imagePosition = vec2f(
-            dot(imageMaterial.localToImageRow0.xyz, homogeneousPosition),
-            dot(imageMaterial.localToImageRow1.xyz, homogeneousPosition),
-        );
-        return imagePosition / imageSize;
-    }
 
     struct PreparedMaterialVertexOutput {
         @builtin(position) position: vec4<f32>,
@@ -1979,8 +1948,7 @@ private fun imageMaterialWgsl(): String = """
 
     @fragment
     fn fs_main(input: PreparedMaterialVertexOutput) -> @location(0) vec4<f32> {
-        let imageSize = vec2f(textureDimensions(texture_sampled));
-        let sampled = bitmap_shader_clamp(image_sampling_uv(input.uv * imageSize, imageSize));
+        let sampled = bitmap_shader_clamp(input.uv);
         if (imageMaterial.flags.x != 0u) {
             return sampled.a * imageMaterial.tint;
         }
@@ -1996,25 +1964,13 @@ private fun imageComposableDeclarationsWgsl(): String = """
     struct PreparedMaterialImageUniforms {
         tint: vec4<f32>,
         flags: vec4<u32>,
-        localToImageRow0: vec4<f32>,
-        localToImageRow1: vec4<f32>,
     }
     @group(1) @binding(0) var<uniform> imageMaterial: PreparedMaterialImageUniforms;
 
     $BitmapShaderWgsl
 
-    fn image_sampling_uv(localPosition: vec2<f32>, imageSize: vec2<f32>) -> vec2<f32> {
-        let homogeneousPosition = vec3f(localPosition, 1.0);
-        let imagePosition = vec2f(
-            dot(imageMaterial.localToImageRow0.xyz, homogeneousPosition),
-            dot(imageMaterial.localToImageRow1.xyz, homogeneousPosition),
-        );
-        return imagePosition / imageSize;
-    }
-
     fn kanvas_material_source(localPosition: vec2<f32>) -> vec4<f32> {
-        let imageSize = vec2f(textureDimensions(texture_sampled));
-        let sampled = bitmap_shader_clamp(image_sampling_uv(localPosition, imageSize));
+        let sampled = bitmap_shader_clamp(localPosition);
         if (imageMaterial.flags.x != 0u) {
             return sampled.a * imageMaterial.tint;
         }
@@ -2134,6 +2090,6 @@ private fun sha256Hex(bytes: ByteArray): String =
 private const val FINAL_FRAGMENT_ENTRY_POINT = "fs_main"
 private const val MATERIAL_SOURCE_FUNCTION = "kanvas_material_source"
 private const val MATERIAL_EVALUATION_FUNCTION = "kanvas_evaluate_material"
-private const val IMAGE_UNIFORM_LAYOUT_HASH = "layout:prepared-material-image:v2"
+private const val IMAGE_UNIFORM_LAYOUT_HASH = "layout:prepared-material-image:v1"
 private val SUPPORTED_TILE_MODES = setOf("clamp", "repeat", "mirror", "decal")
 private val SUPPORTED_IMAGE_FILTERS = setOf("nearest", "linear")

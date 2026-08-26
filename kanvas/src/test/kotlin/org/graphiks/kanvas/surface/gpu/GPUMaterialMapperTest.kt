@@ -1819,6 +1819,35 @@ class GPUMaterialMapperTest {
         )
     }
 
+    @Test
+    fun `prepared image local matrix contract accepts exact bounds and refuses every boundary escape`() {
+        fun mapped(matrix: Matrix3x3F32) = Paint(
+            shader = Shader.WithLocalMatrix(
+                imageShader(
+                    sourceId = "image-local-boundary-${matrix.hashCode()}",
+                    pixels = byteArrayOf(1, 2, 3, 4),
+                ),
+                matrix,
+            ),
+        ).toPreparedMaterialMapping().descriptor
+
+        assertIs<GPUMaterialDescriptor.ImageDraw>(
+            mapped(Matrix3x3F32.of(4096f, 0f, 16384f, 0f, 4096f, -16384f)),
+        )
+        listOf(
+            Matrix3x3F32.of(Float.NaN, 0f, 0f, 0f, 1f, 0f),
+            Matrix3x3F32.of(Float.POSITIVE_INFINITY, 0f, 0f, 0f, 1f, 0f),
+            Matrix3x3F32.of(1f, 0.25f, 0f, 0f, 1f, 0f),
+            Matrix3x3F32.of(0f, 0f, 0f, 0f, 1f, 0f),
+            Matrix3x3F32.of(-1f, 0f, 0f, 0f, 1f, 0f),
+            Matrix3x3F32.of(4096.01f, 0f, 0f, 0f, 1f, 0f),
+            Matrix3x3F32.of(1f, 0f, 16384.01f, 0f, 1f, 0f),
+        ).forEach { matrix ->
+            val refused = assertIs<GPUMaterialDescriptor.Unsupported>(mapped(matrix))
+            assertEquals(GPUPreparedMaterialUnsupportedReason.IMAGE_LOCAL_MATRIX_AFFINE, refused.reason)
+        }
+    }
+
     private fun imageShader(
         sourceId: String,
         pixels: ByteArray,

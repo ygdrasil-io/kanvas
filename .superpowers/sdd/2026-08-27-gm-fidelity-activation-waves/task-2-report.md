@@ -3,21 +3,24 @@
 ## Delivered
 
 - `GPUMaterialDescriptor.ImageDraw` now owns immutable local-matrix facts.
-  The material ABI packs two affine rows and WGSL evaluates them before image
-  sampling.
+  The direct prepared image route applies accepted matrices while forming image
+  UVs; no unconsumed material ABI/WGSL extension is claimed.
 - The prepared mapper accepts only finite translation/positive-scale matrices
   inside explicit bounds, and preserves nearest/linear filtering.
 - `DrawimagerectFilterGm` reaches the prepared WebGPU image route for its
   local-matrix shader fill.  No GM source was changed.
 - The frame source inventory recognizes only the axis-aligned rectangle path
   emitted by `GmCanvas`; arbitrary paths remain outside this task.
+- Paint tint and alpha are propagated to image materials.  An executed native
+  nearest + alpha-tint pixel oracle covers the bounded route.
 
 ## Evidence
 
 See `reports/gpu-renderer/evidence/image-local-sampling-2026-08-27.md`.
 `drawimagerect_filter` ran natively with four dispatches, zero refusals and an
 empty diagnostic set.  The CPU reference, WebGPU render and `ComparisonUtils`
-diff/stat authority are recorded there.  Its score is
+diff/stat authority are recorded there, with independent `diff.json`,
+`stats.json`, `route.json`, and `diagnostics.json` artifacts.  Its score is
 28.74074074074074% against the unchanged 0.0% GM threshold.
 
 ## Verification
@@ -25,7 +28,9 @@ diff/stat authority are recorded there.  Its score is
 ```sh
 ./gradlew --no-daemon :gpu-renderer:test \
   --tests org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgramTest \
-  :kanvas:test --tests org.graphiks.kanvas.surface.gpu.GPUMaterialMapperTest \
+  :kanvas:test --tests org.graphiks.kanvas.surface.gpu.GPUPreparedDrawImageLowererTest \
+  --tests org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceImagePixelTest \
+  --tests org.graphiks.kanvas.surface.gpu.GPUMaterialMapperTest \
   :integration-tests:skia:test \
   --tests org.graphiks.kanvas.skia.gm.image.DrawimagerectFilterGmTest
 

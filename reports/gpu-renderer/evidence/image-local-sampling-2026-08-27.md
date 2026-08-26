@@ -13,6 +13,11 @@ image-shader implementation.  Its UV source rectangle carries the bounded
 local transform and may extend outside the image only because the sampler is
 clamp-to-edge.
 
+This direct image route applies the bounded local transform while preparing
+image UVs.  It does not consume `GPUPreparedMaterialProgram`'s WGSL ABI; the
+unconsumed ABI extension was removed rather than being represented as executed
+native behavior.
+
 ## CPU / GPU / diff / stats
 
 | Evidence | Location or result |
@@ -20,12 +25,25 @@ clamp-to-edge.
 | CPU/Skia reference | `integration-tests/skia/src/test/resources/reference/drawimagerect_filter.png` |
 | WebGPU generated PNG | `integration-tests/skia/src/test/resources/generated-renders/image/drawimagerect_filter.png` |
 | Diff authority | `ComparisonUtils.compareRgba`, executed by `SkiaGmRunner` with `DebugLevel.PIXEL` |
-| Pixels | 1,552 / 5,400 exact (28.74074074074074% similarity) |
+| Pixels | 3,104 / 10,800 exact (28.74074074074074% similarity) |
 | Native route | 4 dispatches, 0 refusals, empty diagnostics |
 
 The comparison runs with the GM's existing `0.0%` threshold; no threshold was
 changed.  The non-identical diff is retained as a measured fidelity result,
 not promoted to a broader image-shader claim.
+
+Independent machine-readable evidence is checked in beside this report:
+[`diff.json`](image-local-sampling-2026-08-27/diff.json),
+[`stats.json`](image-local-sampling-2026-08-27/stats.json),
+[`route.json`](image-local-sampling-2026-08-27/route.json), and
+[`diagnostics.json`](image-local-sampling-2026-08-27/diagnostics.json).
+
+`GPUPreparedSurfaceImagePixelTest` additionally executes a bounded
+translation + nearest + alpha-tint case against an exact WebGPU readback
+oracle (`[137, 0, 0, 64]` for a half-alpha red paint over a half-alpha A8
+image).  This is the representative nearest/alpha route proof; the existing
+`nearest_half_pixel_image` GM remains out of scope because it includes
+mirror/negative-scale variants.
 
 ## Stable refusals
 

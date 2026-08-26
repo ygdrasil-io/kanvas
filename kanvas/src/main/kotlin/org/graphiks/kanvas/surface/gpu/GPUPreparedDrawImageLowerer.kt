@@ -84,7 +84,11 @@ internal object GPUPreparedDrawImageLowerer {
         config: RenderConfig,
         capabilities: GPUCapabilities,
         preparedArtifact: GPUPreparedImageUploadArtifact? = null,
-        imageMaterial: GPUMaterialDescriptor.ImageDraw? = null,
+        imageLocalMatrix: List<Float> = listOf(
+            1f, 0f, 0f,
+            0f, 1f, 0f,
+            0f, 0f, 1f,
+        ),
         allowShaderSourceOutsideImage: Boolean = false,
         sourceOperation: String = "drawImage",
     ): GPUPreparedDrawImageLowering {
@@ -273,7 +277,7 @@ internal object GPUPreparedDrawImageLowerer {
 
         // Prepared draws retain pixels only in the immutable artifact. The generic material
         // descriptor stays byte-free so an expanded grid cannot retain one full copy per cell.
-        val material = imageMaterial ?: GPUMaterialDescriptor.ImageDraw(
+        val material = GPUMaterialDescriptor.ImageDraw(
             imageSourceId = image.sourceId,
             imageWidth = image.width,
             imageHeight = image.height,
@@ -283,6 +287,7 @@ internal object GPUPreparedDrawImageLowerer {
             tintG = tintG,
             tintB = tintB,
             tintA = tintA,
+            localMatrix = imageLocalMatrix,
         )
 
         val gpuSrc = GPURect(sx0, sy0, sx1, sy1)
@@ -434,7 +439,7 @@ internal object GPUPreparedDrawImageLowerer {
             target = target,
             config = config,
             capabilities = capabilities,
-            imageMaterial = material,
+            imageLocalMatrix = material.localMatrix,
             allowShaderSourceOutsideImage = true,
             sourceOperation = "drawRect.imageShader",
         )

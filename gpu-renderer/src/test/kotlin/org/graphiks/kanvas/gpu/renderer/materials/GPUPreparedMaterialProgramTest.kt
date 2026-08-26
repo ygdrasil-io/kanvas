@@ -443,49 +443,6 @@ class GPUPreparedMaterialProgramTest {
     }
 
     @Test
-    fun `image local sampling packs bounded affine rows for WGSL evaluation`() {
-        val program = ready(
-            supportedImageShaderDescriptor(
-                localMatrix = listOf(
-                    2f, 0f, 0.5f,
-                    0f, 3f, 0.25f,
-                    0f, 0f, 1f,
-                ),
-            ),
-            paintAlpha = 1f,
-        )
-
-        assertFloatPayload(
-            expected = listOf(2f, 0f, 0.5f, 0f, 0f, 3f, 0.25f, 0f),
-            actual = program.uniformBytes.map { it.toInt() and 0xff }
-                .drop(32)
-                .toLittleEndianFloats(),
-        )
-        assertTrue(program.wgslSource.contains("fn image_sampling_uv"))
-        assertTrue(program.wgslSource.contains("imageMaterial.localToImageRow0"))
-        assertTrue(program.wgslSource.contains("imageMaterial.localToImageRow1"))
-    }
-
-    @Test
-    fun `prepared material compiler refuses perspective image local sampling`() {
-        val refused = assertIs<GPUPreparedMaterialProgramResult.Refused>(
-            compiler.compile(
-                supportedImageShaderDescriptor(
-                    localMatrix = listOf(
-                        1f, 0f, 0f,
-                        0f, 1f, 0f,
-                        0.01f, 0f, 1f,
-                    ),
-                ),
-                1f,
-                context,
-            ),
-        )
-
-        assertEquals("unsupported.material.mapping.image_local_matrix_perspective", refused.code)
-    }
-
-    @Test
     fun `image validation refuses invalid dimensions and exact RGBA byte length`() {
         val invalid = listOf(
             supportedImageShaderDescriptor(width = 0),
@@ -632,18 +589,13 @@ class GPUPreparedMaterialProgramTest {
             ),
             ExpectedAbi(
                 supportedImageShaderDescriptor(),
-                64,
+                32,
                 listOf(
                     Triple(1, 0, "uniformBuffer"),
                     Triple(1, 1, "sampledTexture"),
                     Triple(1, 2, "sampler"),
                 ),
-                mapOf(
-                    "tint" to 0,
-                    "flags" to 16,
-                    "localToImageRow0" to 32,
-                    "localToImageRow1" to 48,
-                ),
+                mapOf("tint" to 0, "flags" to 16),
             ),
         )
 
@@ -1107,11 +1059,6 @@ class GPUPreparedMaterialProgramTest {
         width: Int = 1,
         height: Int = 1,
         samplingFilterMode: String = "nearest",
-        localMatrix: List<Float> = listOf(
-            1f, 0f, 0f,
-            0f, 1f, 0f,
-            0f, 0f, 1f,
-        ),
         alphaOnly: Boolean = false,
         tintR: Float = 0.25f,
     ) =
@@ -1121,7 +1068,6 @@ class GPUPreparedMaterialProgramTest {
             imageHeight = height,
             rgbaPixels = pixels,
             samplingFilterMode = samplingFilterMode,
-            localMatrix = localMatrix,
             alphaOnly = alphaOnly,
             tintR = tintR,
             tintG = 0.5f,
