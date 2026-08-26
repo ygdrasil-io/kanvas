@@ -13,6 +13,7 @@ import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathLinearGradientCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathDirectTriangleLinearGradientCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathRRectCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathDRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbPathFillCpuOracle
 import org.graphiks.kanvas.gpu.evidence.programs.KanvasScenePrograms
 import org.graphiks.kanvas.gpu.evidence.programs.RendererRefusalPrograms
@@ -61,6 +62,9 @@ object GpuEvidenceCatalog {
         clipPathSolidRRect(),
         clipPathAsymmetricSolidRRect(),
         clipPathEllipseSolidRRect(),
+        clipPathSolidDRRect(),
+        clipPathAsymmetricSolidDRRect(),
+        clipPathEllipseSolidDRRect(),
         solidTrianglePath(),
         solidConcavePath(),
         evenOddPathHole(),
@@ -707,6 +711,24 @@ object GpuEvidenceCatalog {
         ), intArrayOf(242, 135, 46, 255),
     )
 
+    private fun clipPathSolidDRRect() = clipPathDRRectCase(
+        "clip-path-solid-drrect", "Solid DRRect inside hard path clip", KanvasScenePrograms.clipPathSolidDRRect(),
+        SurfaceSrgbClipPathDRRectCpuOracle.RRect(8f, 8f, 52f, 48f, 10f, 10f),
+        SurfaceSrgbClipPathDRRectCpuOracle.RRect(22f, 20f, 40f, 38f, 4f, 4f), intArrayOf(242, 135, 46, 255),
+    )
+
+    private fun clipPathAsymmetricSolidDRRect() = clipPathDRRectCase(
+        "clip-path-asymmetric-solid-drrect", "Asymmetric DRRect inside hard path clip", KanvasScenePrograms.clipPathAsymmetricSolidDRRect(),
+        SurfaceSrgbClipPathDRRectCpuOracle.RRect(8f, 8f, 52f, 48f, 8f, 8f),
+        SurfaceSrgbClipPathDRRectCpuOracle.RRect(20f, 18f, 42f, 39f, 3f, 3f), intArrayOf(31, 115, 209, 255),
+    )
+
+    private fun clipPathEllipseSolidDRRect() = clipPathDRRectCase(
+        "clip-path-ellipse-solid-drrect", "Ellipse DRRect inside hard path clip", KanvasScenePrograms.clipPathEllipseSolidDRRect(),
+        SurfaceSrgbClipPathDRRectCpuOracle.RRect(12f, 20f, 52f, 44f, 12f, 12f),
+        SurfaceSrgbClipPathDRRectCpuOracle.RRect(24f, 26f, 40f, 38f, 5f, 5f), intArrayOf(242, 135, 46, 255),
+    )
+
     private fun clipPathRRectCase(
         id: String,
         title: String,
@@ -729,6 +751,23 @@ object GpuEvidenceCatalog {
                 SurfaceSrgbClipPathRRectCpuOracle.Point(56f, 8f),
                 SurfaceSrgbClipPathRRectCpuOracle.Point(8f, 55f),
             ), rrect, fill,
+        ),
+    )
+
+    private fun clipPathDRRectCase(
+        id: String, title: String, program: org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram,
+        outer: SurfaceSrgbClipPathDRRectCpuOracle.RRect, inner: SurfaceSrgbClipPathDRRectCpuOracle.RRect, fill: IntArray,
+    ) = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId(id), title,
+            "Public Kanvas Surface hard non-AA winding triangle clip with one opaque identity analytic DRRect consumer.",
+            64, 64, 1L, setOf("clip-path", "solid-drrect", "hard-clip", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-clip-path-drrect-pixel-center", 1),
+            ComparisonPolicy(0, 100.0, 1, "Exact RGBA8 output from independent pixel-center winding clip and analytic DRRect membership."), emptySet(),
+        ), program,
+        SurfaceSrgbClipPathDRRectCpuOracle(
+            listOf(SurfaceSrgbClipPathDRRectCpuOracle.Point(8f, 8f), SurfaceSrgbClipPathDRRectCpuOracle.Point(56f, 8f), SurfaceSrgbClipPathDRRectCpuOracle.Point(8f, 55f)),
+            outer, inner, fill,
         ),
     )
 

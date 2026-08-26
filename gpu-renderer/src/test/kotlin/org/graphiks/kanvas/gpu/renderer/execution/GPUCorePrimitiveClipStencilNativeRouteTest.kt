@@ -129,6 +129,19 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
     }
 
     @Test
+    fun `seal accepts an opaque hard analytic drrect consumer without lowering it to triangles`() {
+        val accepted = assertIs<GPUCorePrimitiveClipStencilNativeRoute.Accepted>(
+            sealGPUCorePrimitiveClipStencilNativeRoute(
+                request(consumers = mutableListOf(consumer(geometry = drrectConsumer()))),
+            ),
+        )
+
+        val consumer = accepted.consumers.single()
+        assertTrue(consumer.geometry is GPUCorePrimitiveGeometry.DRRect)
+        assertEquals("DRRect", consumer.geometry.canonicalType)
+    }
+
+    @Test
     fun `seal accepts an opaque inverse winding analytic rrect consumer`() {
         val accepted = assertIs<GPUCorePrimitiveClipStencilNativeRoute.Accepted>(
             sealGPUCorePrimitiveClipStencilNativeRoute(
@@ -325,8 +338,13 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
             request(consumers = mutableListOf(consumer(geometry = stencilPathConsumer()))),
         )
         assertRefused(
-            "unsupported.native-core-primitive.clip-stencil.consumer-geometry",
-            request(consumers = mutableListOf(consumer(geometry = drrectConsumer()))),
+            "unsupported.native-core-primitive.clip-stencil.rrect-alpha",
+            request(consumers = mutableListOf(consumer(
+                geometry = drrectConsumer(),
+                material = GPUCorePrimitiveMaterialPayload.SolidColor(
+                    listOf(0.5f, 0.25f, 0.125f, 0.5f),
+                ),
+            ))),
         )
         assertRefused(
             "unsupported.native-core-primitive.clip-stencil.mask",
@@ -772,6 +790,7 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
         bottom = 68f,
         radii = listOf(12f, 12f, 8f, 8f, 10f, 10f, 6f, 6f),
     )
+
 
     private fun drrectConsumer() = GPUCorePrimitiveGeometry.DRRect(
         outerBounds = listOf(8f, 12f, 80f, 68f),
