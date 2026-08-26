@@ -1,12 +1,14 @@
 package org.graphiks.kanvas.gpu.evidence.oracle
 
-/** Independent pixel-centre oracle for one hard winding triangle clip and an opaque analytic RRect. */
+/** Independent pixel-centre oracle for one hard triangle clip and an opaque analytic RRect. */
 class SurfaceSrgbClipPathRRectCpuOracle(
     background: IntArray,
     private val triangle: List<Point>,
     private val rrect: DeviceRRect,
     fill: IntArray,
+    private val triangleClip: TriangleClip = TriangleClip.Winding,
 ) : CpuOracle {
+    enum class TriangleClip { Winding, InverseWinding }
     data class Point(val x: Float, val y: Float)
     data class Radii(val x: Float, val y: Float)
     data class DeviceRRect(
@@ -32,7 +34,11 @@ class SurfaceSrgbClipPathRRectCpuOracle(
             for (y in 0 until height) for (x in 0 until width) {
                 val px = x + 0.5
                 val py = y + 0.5
-                val color = if (inTriangle(px, py) && inRRect(px, py)) fill else background
+                val inClip = when (triangleClip) {
+                    TriangleClip.Winding -> inTriangle(px, py)
+                    TriangleClip.InverseWinding -> !inTriangle(px, py)
+                }
+                val color = if (inClip && inRRect(px, py)) fill else background
                 val offset = (y * width + x) * 4
                 color.indices.forEach { channel -> output[offset + channel] = color[channel].toByte() }
             }

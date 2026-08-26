@@ -1605,7 +1605,7 @@ class FirstRoutePlannerTest {
     }
 
     @Test
-    fun `finite pure translated rrects are admitted analytic hard path clip consumers`() {
+    fun `finite pure translated rrects are admitted through winding and inverse winding analytic hard path clip consumers`() {
         val target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm")
         val identityStencil = hardWindingStencilClip(pathTransformClass = "identity")
         val accepted = listOf(
@@ -1625,6 +1625,18 @@ class FirstRoutePlannerTest {
             assertEquals(bounds[3], device.bottom)
         }
 
+        accepted.forEach { (transform, bounds) ->
+            val fixture = firstRRectRouteCommand(
+                target = target,
+                transform = transform,
+                clip = hardWindingStencilClip(pathTransformClass = "identity", inverseFill = true),
+            )
+            val plan = GPUFirstRoutePlanner(fixture.capabilities).plan(fixture.command.copy(antiAlias = false))
+            assertIs<GPURouteDecision.Native>(plan.routeDecision)
+            val device = assertNotNull(plan.analysisRecord.corePrimitiveRRectGeometryAuthority).sealedDeviceGeometryInput()
+            assertEquals(bounds, listOf(device.left, device.top, device.right, device.bottom))
+        }
+
         val refusals = listOf(
             Triple(GPUTransformFacts.translation(x = 0f, y = 0f), identityStencil, "unsupported.clip.complex_stack"),
             Triple(GPUTransformFacts.translation(x = Float.NaN, y = 5f), identityStencil, "unsupported.transform.non_finite"),
@@ -1634,6 +1646,7 @@ class FirstRoutePlannerTest {
             Triple(GPUTransformFacts.translation(x = 4f, y = 0f), hardWindingStencilClip(
                 pathTransformClass = "identity",
                 inverseFill = true,
+                fillRule = GPUClipFillRule.EvenOdd,
             ), "unsupported.clip.complex_stack"),
         )
         refusals.forEach { (transform, clip, expectedCode) ->
@@ -3191,6 +3204,7 @@ class FirstRoutePlannerTest {
     private fun hardWindingStencilClip(
         pathTransformClass: String,
         inverseFill: Boolean = false,
+        fillRule: GPUClipFillRule = GPUClipFillRule.Winding,
     ): GPUClipFacts = GPUClipFacts(
         kind = GPUClipKind.ComplexStack,
         bounds = firstRouteBounds,
@@ -3204,11 +3218,11 @@ class FirstRoutePlannerTest {
                 geometry = GPUClipExecutionGeometry.Path(
                     vertices = listOf(8f, 8f, 56f, 8f, 8f, 55f),
                     contourStarts = listOf(0),
-                    fillRule = GPUClipFillRule.Winding,
+                    fillRule = fillRule,
                     inverseFill = inverseFill,
                 ),
                 scissor = null,
-                fillRule = GPUClipFillRule.Winding,
+                fillRule = fillRule,
                 reference = 0u,
                 compare = GPUClipStencilCompare.Always,
                 frontPassOperation = GPUClipStencilOperation.IncrementWrap,
@@ -3220,7 +3234,7 @@ class FirstRoutePlannerTest {
             consumer = GPUClipStencilConsumerPlan(
                 scissor = null,
                 reference = 0u,
-                compare = GPUClipStencilCompare.NotEqual,
+                compare = if (inverseFill) GPUClipStencilCompare.Equal else GPUClipStencilCompare.NotEqual,
             ),
             pathTransformClass = pathTransformClass,
         ),

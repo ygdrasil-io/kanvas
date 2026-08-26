@@ -183,6 +183,8 @@ class PromoteEvidenceCliTest {
             "clip-path-translated-solid-rrect", "clip-path-translated-asymmetric-solid-rrect", "clip-path-translated-ellipse-solid-rrect",
             "clip-path-axis-x-translated-solid-rrect", "clip-path-axis-y-translated-asymmetric-solid-rrect",
             "clip-path-negative-x-translated-ellipse-solid-rrect", "clip-path-negative-y-translated-solid-rrect",
+            "clip-path-inverse-axis-x-translated-solid-rrect", "clip-path-inverse-axis-y-translated-asymmetric-solid-rrect",
+            "clip-path-inverse-negative-x-translated-ellipse-solid-rrect", "clip-path-inverse-negative-y-translated-solid-rrect",
             "clip-path-solid-drrect", "clip-path-asymmetric-solid-drrect", "clip-path-ellipse-solid-drrect",
             "clip-path-translated-solid-drrect", "clip-path-translated-asymmetric-solid-drrect", "clip-path-translated-ellipse-solid-drrect",
             "clip-path-axis-x-translated-solid-drrect", "clip-path-axis-y-translated-asymmetric-solid-drrect",

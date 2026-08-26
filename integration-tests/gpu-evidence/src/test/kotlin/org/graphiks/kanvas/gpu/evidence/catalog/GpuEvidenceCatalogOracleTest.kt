@@ -316,6 +316,24 @@ class GpuEvidenceCatalogOracleTest {
         assertPixel(scaled, 64, 64, 59, 12, intArrayOf(13, 20, 33, 255))
     }
 
+    @Test
+    fun `inverse translated rrect oracles preserve complement witnesses and counts`() {
+        val orange = intArrayOf(242, 135, 46, 255)
+        val blue = intArrayOf(31, 115, 209, 255)
+        val background = intArrayOf(0, 0, 0, 0)
+        listOf(
+            Triple("clip-path-inverse-axis-x-translated-solid-rrect", orange, Triple(40 to 30, 20 to 20, 748)),
+            Triple("clip-path-inverse-axis-y-translated-asymmetric-solid-rrect", blue, Triple(40 to 32, 20 to 20, 796)),
+            Triple("clip-path-inverse-negative-x-translated-ellipse-solid-rrect", orange, Triple(33 to 37, 20 to 32, 392)),
+            Triple("clip-path-inverse-negative-y-translated-solid-rrect", orange, Triple(45 to 27, 24 to 20, 755)),
+        ).forEach { (id, color, expectation) ->
+            val pixels = oracle(id)
+            assertPixel(pixels, 64, 64, expectation.first.first, expectation.first.second, color)
+            assertPixel(pixels, 64, 64, expectation.second.first, expectation.second.second, background)
+            assertEquals(expectation.third, fillPixelCount(pixels, color), id)
+        }
+    }
+
     private fun oracle(id: String): ByteArray = assertNotNull(
         GpuEvidenceCatalog.renderCases.firstOrNull { it.descriptor.id.value == id }?.oracle,
     ).render(64, 64)

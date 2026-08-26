@@ -1861,7 +1861,7 @@ class GPUFirstRoutePlanner(
             transform.scaleX == 1f && transform.scaleY == 1f &&
             transform.skewX == 0f && transform.skewY == 0f
         return !stroke && !antiAlias && maskFilter == null &&
-            (transform.type == GPUTransformType.Identity || (exactFiniteTranslate && !path.inverseFill)) &&
+            (transform.type == GPUTransformType.Identity || exactFiniteTranslate) &&
             solid.a == 1f && blend.mode == GPUBlendMode.SRC_OVER && stencil.sampleCount == 1 &&
             stencil.pathTransformClass == "identity" &&
             path.fillRule == GPUClipFillRule.Winding &&
