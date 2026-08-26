@@ -164,3 +164,17 @@ pipelines et draw calls, mais pas l'identité exacte du programme stencil-read n
 compteur de fallback CPU. Le test Surface n'invente donc pas ces assertions; les
 tests de route/preflight établissent le pipeline analytic et le hand-off natif,
 pendant que le Surface établit l'absence de diagnostic/refus observable.
+
+## Fix round 2
+
+`GPUCorePrimitiveClipStencilNativeRoute` contrôle désormais les deux autorités de
+fill avant la validation générique du producer : pour tout consommateur `RRect`,
+`path.fillRule` **et** `stencil.producer.fillRule` doivent être `Winding`. Le test
+de route forge le payload dissocié `path=Winding` / `producer=EvenOdd` et exige le
+refus stable `unsupported.native-core-primitive.clip-stencil.rrect-fill-rule`.
+
+TDD : avant ce contrôle, ce test RED échouait avec
+`expected rrect-fill-rule but was invalid.native-core-primitive.clip-stencil.producer-state`;
+après le correctif, `rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*GPUCorePrimitiveClipStencilNativeRouteTest*' --console=plain`
+est `BUILD SUCCESSFUL` (14 tests). La suite `:integration-tests:gpu-evidence:test`
+et `rtk git diff --check` sont exécutés pour ce round avant commit.

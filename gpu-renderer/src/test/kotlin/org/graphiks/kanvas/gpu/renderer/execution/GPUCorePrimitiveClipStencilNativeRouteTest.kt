@@ -281,6 +281,23 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
             ),
         )
         assertRefused(
+            "unsupported.native-core-primitive.clip-stencil.rrect-fill-rule",
+            request(
+                consumers = mutableListOf(consumer(geometry = rrectConsumer())),
+                artifacts = mutableListOf(
+                    stencilPlan(
+                        fillRule = GPUClipFillRule.EvenOdd,
+                        producerGeometry = GPUClipExecutionGeometry.Path(
+                            vertices = listOf(0f, 0f, 200f, 0f, 100f, 100f),
+                            contourStarts = listOf(0),
+                            fillRule = GPUClipFillRule.Winding,
+                            inverseFill = false,
+                        ),
+                    ),
+                ),
+            ),
+        )
+        assertRefused(
             "unsupported.native-core-primitive.clip-stencil.rrect-msaa",
             request(sampleCount = 4, producerAntiAlias = true, consumers = mutableListOf(
                 consumer(geometry = rrectConsumer(), attachment = attachment(sampleCount = 4)),

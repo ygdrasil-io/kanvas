@@ -144,6 +144,13 @@ internal fun sealGPUCorePrimitiveClipStencilNativeRoute(
         "invalid.native-core-primitive.clip-stencil.producer-geometry",
         "The clip-stencil producer requires one validated path geometry.",
     )
+    if (request.consumers.any { it.geometry is GPUCorePrimitiveGeometry.RRect } &&
+        (path.fillRule != GPUClipFillRule.Winding ||
+            stencil.producer.fillRule != GPUClipFillRule.Winding)
+    ) return refused(
+        "unsupported.native-core-primitive.clip-stencil.rrect-fill-rule",
+        "Analytic RRect clip-stencil consumers require an exact winding producer.",
+    )
     if (!stencil.producer.hasExactNativeState(path.fillRule)) return refused(
         "invalid.native-core-primitive.clip-stencil.producer-state",
         "The producer state does not match the real non-AA path mapper authority.",
@@ -237,12 +244,6 @@ internal fun sealGPUCorePrimitiveClipStencilNativeRoute(
         ) return refused(
             "unsupported.native-core-primitive.clip-stencil.consumer-material",
             "Analytic RRect consumers accept only opaque solid colors in the bounded route.",
-        )
-        if (consumer.geometry is GPUCorePrimitiveGeometry.RRect &&
-            path.fillRule != GPUClipFillRule.Winding
-        ) return refused(
-            "unsupported.native-core-primitive.clip-stencil.rrect-fill-rule",
-            "Analytic RRect clip-stencil consumers require an exact winding producer.",
         )
         if (consumer.geometry is GPUCorePrimitiveGeometry.RRect &&
             (consumer.material as GPUCorePrimitiveMaterialPayload.SolidColor)
