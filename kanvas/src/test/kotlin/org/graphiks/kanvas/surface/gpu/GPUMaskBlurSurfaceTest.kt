@@ -62,6 +62,43 @@ class GPUMaskBlurSurfaceTest {
     }
 
     @Test
+    fun `translated rect blur renders at its transformed device bounds`() {
+        requireWebGpu()
+        val pixels = Surface(width = 32, height = 32).run {
+            canvas {
+                translate(4f, 5f)
+                drawRect(RectF32(8f, 8f, 17f, 17f), blurPaint(BlurStyle.NORMAL, 2f))
+            }
+            render().pixels.toUByteArray()
+        }
+        val expected = TopLevelMaskBlurPixelOracle.render(
+            32, 32, rectShape(12f, 13f, 21f, 22f), fullTarget(), BlurStyle.NORMAL, 2f,
+            ColorARGB.Black, BlendMode.SRC_OVER, transparent(),
+        )
+
+        TopLevelMaskBlurPixelOracle.assertPixelsNear(expected, pixels)
+    }
+
+    @Test
+    fun `scaled rect blur remains an explicit bounded-route refusal`() {
+        requireWebGpu()
+        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            Surface(width = 32, height = 32).run {
+                canvas {
+                    scale(1.5f, 1.5f)
+                    drawRect(RectF32(8f, 8f, 17f, 17f), blurPaint(BlurStyle.NORMAL, 2f))
+                }
+                render()
+            }
+        }
+
+        assertEquals(
+            "unsupported.core_primitive.mask_blur.unsupported.mask-filter.blur.transform",
+            failure.diagnostic.code.value,
+        )
+    }
+
+    @Test
     fun `source-composited translucent blur renders prepared over an opaque destination`() {
         val destination = TopLevelMaskBlurPixelOracle.fillRect(32, 32, 0f, 0f, 32f, 32f, ColorARGB.Blue)
 
@@ -597,4 +634,3 @@ class GPUMaskBlurSurfaceTest {
     }
 
 }
-
