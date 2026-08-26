@@ -2563,17 +2563,27 @@ private fun GPUTransformFacts.isAcceptedFillPathTransform(
     GPUTransformType.Translate,
     -> true
     GPUTransformType.Scale ->
-        (scaleAdmitted || uniformScaleTranslateAdmitted) &&
-            scaleX.isFinite() && scaleY.isFinite() && scaleX > 0f && scaleX == scaleY
+        ((scaleAdmitted || uniformScaleTranslateAdmitted) &&
+            scaleX.isFinite() && scaleY.isFinite() && scaleX > 0f && scaleX == scaleY) ||
+            isExactHalfTurnPathRotation()
     GPUTransformType.Affine ->
-        uniformScaleTranslateAdmitted &&
+        (uniformScaleTranslateAdmitted &&
             scaleX.isFinite() && scaleY.isFinite() &&
             scaleX > 0f && scaleX == scaleY &&
-            skewX == 0f && skewY == 0f
+            skewX == 0f && skewY == 0f) ||
+            isExactQuarterTurnPathRotation() || isExactHalfTurnPathRotation()
     GPUTransformType.Perspective,
     GPUTransformType.Singular,
     -> false
 }
+
+private fun GPUTransformFacts.isExactQuarterTurnPathRotation(): Boolean =
+    translateX.isFinite() && translateY.isFinite() &&
+        scaleX == 0f && scaleY == 0f && skewX == -1f && skewY == 1f
+
+private fun GPUTransformFacts.isExactHalfTurnPathRotation(): Boolean =
+    translateX.isFinite() && translateY.isFinite() &&
+        scaleX == -1f && scaleY == -1f && skewX == 0f && skewY == 0f
 
 private fun GPUTransformFacts.isNonAxisAlignedAffine(): Boolean =
     type == GPUTransformType.Affine && (skewX != 0f || skewY != 0f)

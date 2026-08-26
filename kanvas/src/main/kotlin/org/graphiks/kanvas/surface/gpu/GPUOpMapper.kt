@@ -836,7 +836,7 @@ internal object GPUOpMapper {
                 source = source,
                 pathDescriptor = command.pathDescriptor.copy(
                     verbCount = operation.pathVerbCount(),
-                    transformClass = command.transform.type.name.lowercase(),
+                    transformClass = command.transform.pathTransformClass(),
                 ),
             )
             else -> error("Slice 12A mapper produced a non-core command")
@@ -890,7 +890,7 @@ private fun NormalizedDrawCommand.FillPath.toPreparedStrokeFillPath():
             fillRule = "winding",
             inverseFill = false,
             finiteProof = "all_finite",
-            transformClass = transform.type.name.lowercase(),
+            transformClass = transform.pathTransformClass(),
             edgeCount = vertexCount,
         ),
         tessellatedVertices = fill.vertices,
@@ -1854,7 +1854,7 @@ internal fun DisplayOp.DrawPath.toNormalizedCommand(
             inverseFill = pathStencilConfig.inverse,
             finiteProof = if (tessellatedVertices.all(Float::isFinite)) "finite" else "non_finite",
             volatility = "immutable",
-            transformClass = transform.type.name.lowercase(),
+            transformClass = transform.pathTransformClass(),
             edgeCount = edgeCount,
             sourceAuthority = sourceAuthority,
         ),
@@ -2155,6 +2155,24 @@ internal fun Matrix3x3F32.toGPUTransformFacts(): GPUTransformFacts {
         translateY = this.ty,
     )
 }
+
+/**
+ * Canonical transform identity for filled paths. The stencil edge-fan consumer receives
+ * already-mapped device vertices, so only exact quarter/half-turn rotations can share the
+ * bounded path route without weakening the affine refusal boundary.
+ */
+private fun GPUTransformFacts.pathTransformClass(): String =
+    if (isExactRightAnglePathRotation()) "right-angle-rotation" else type.name.lowercase()
+
+private fun GPUTransformFacts.isExactRightAnglePathRotation(): Boolean =
+    translateX.isFinite() && translateY.isFinite() && when (type) {
+        GPUTransformType.Scale ->
+            scaleX == -1f && scaleY == -1f && skewX == 0f && skewY == 0f
+        GPUTransformType.Affine ->
+            (scaleX == 0f && scaleY == 0f && skewX == -1f && skewY == 1f) ||
+                (scaleX == -1f && scaleY == -1f && skewX == 0f && skewY == 0f)
+        else -> false
+    }
 
 internal fun MaskFilter?.toNormalizedMaskFilter(): NormalizedMaskFilter? = when (this) {
     is MaskFilter.Blur -> NormalizedMaskFilter.Blur(
