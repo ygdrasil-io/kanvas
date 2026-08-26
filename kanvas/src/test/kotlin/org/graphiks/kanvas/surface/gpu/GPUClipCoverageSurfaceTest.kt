@@ -240,10 +240,10 @@ class GPUClipCoverageSurfaceTest {
         val background = ColorARGB.Transparent
         val fill = ColorARGB.of(255, 242, 135, 46)
         listOf(
-            floatArrayOf(4f, 0f, 24f, 20f, 10f, 20f, 50f, 14f),
-            floatArrayOf(0f, 5f, 24f, 20f, 24f, 10f, 50f, 14f),
-            floatArrayOf(-4f, 5f, 11f, 32f, 49f, 12f, 45f, 30f),
-            floatArrayOf(4f, -5f, 24f, 20f, 18f, 44f, 50f, 14f),
+            floatArrayOf(4f, 0f, 24f, 20f, 10f, 20f, 50f, 14f, 8f, 8f, 52f, 48f, 10f),
+            floatArrayOf(0f, 5f, 24f, 20f, 24f, 10f, 50f, 14f, 8f, 8f, 52f, 48f, 10f),
+            floatArrayOf(-4f, 5f, 20f, 20f, 33f, 20f, 45f, 30f, 8f, 8f, 35f, 48f, 4f),
+            floatArrayOf(4f, -5f, 24f, 20f, 18f, 44f, 50f, 14f, 8f, 8f, 52f, 48f, 10f),
         ).forEach { samples ->
             val surface = Surface(64, 64)
             surface.canvas {
@@ -256,7 +256,7 @@ class GPUClipCoverageSurfaceTest {
                 )
                 translate(samples[0], samples[1])
                 drawRRect(
-                    RRectF32.of(RectF32.ofLTRB(8f, 8f, 52f, 48f), radius = 10f),
+                    RRectF32.of(RectF32.ofLTRB(samples[8], samples[9], samples[10], samples[11]), radius = samples[12]),
                     Paint.fill(fill).copy(antiAlias = false),
                 )
                 restore()
