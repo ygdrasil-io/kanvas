@@ -64,6 +64,26 @@ class IncrementalPromotionRegressionTest {
         assertTrue(stderr.toString().contains("$UNSELECTED_SCENE/manifest.json"))
     }
 
+    @Test
+    fun `selected promotion rejects unrelated staged root environment changes before swap`() {
+        writePromotedRoot(repository, COMMIT)
+        writeGeneratedRoot(repository, OTHER_COMMIT, listOf(SELECTED_SCENE))
+        val before = snapshot(promotedRoot(repository))
+        val stderr = ByteArrayOutputStream()
+
+        val result = PromoteEvidenceCliRunner(
+            stderr = PrintStream(stderr),
+            beforeStagedVerification = { staged ->
+                val environment = staged.resolve("environment.json")
+                Files.writeString(environment, Files.readString(environment).replace("\"osVersion\":\"1\"", "\"osVersion\":\"2\""))
+            },
+        ).run(args(repository, OTHER_COMMIT, selection = arrayOf("--scene", SELECTED_SCENE)))
+
+        assertTrue(result != 0)
+        assertEquals(before, snapshot(promotedRoot(repository)))
+        assertTrue(stderr.toString().contains("environment.json"))
+    }
+
     private fun args(
         root: Path,
         commit: String,

@@ -37,7 +37,7 @@ class GpuEvidenceArchitectureBoundaryTest {
         assertEquals(3, Regex("\\+ selectionArguments\\(\\)").findAll(build).count(), "correctness generation, generated verification, and promotion must share one selection helper")
         assertEquals(
             normalize("""
-                listOf("--repository-root", rootProject.layout.projectDirectory.asFile.absolutePath, "--source-commit", sourceCommit.get()) + selectionArguments()
+                listOf("--repository-root", rootProject.layout.projectDirectory.asFile.absolutePath, "--source-commit", correctnessSourceCommit.get()) + selectionArguments()
             """),
             normalize(argumentProviderBody(correctnessTask)),
             "correctness generation must append the shared selection arguments",
@@ -72,6 +72,28 @@ class GpuEvidenceArchitectureBoundaryTest {
         assertTrue(build.contains("description = \"Verifies generated GPU correctness evidence for the selected scenes or the full catalogue when no selector is provided.\""))
         assertTrue(build.contains("description = \"Promotes independently verified GPU correctness evidence for the selected scenes or the full catalogue when no selector is provided.\""))
         assertTrue(build.contains("description = \"Alias for generateGpuEvidence.\""))
+    }
+
+    @Test
+    fun `correctness tasks default source commit to current git head while performance stays explicit`() {
+        val build = File("build.gradle.kts").readText()
+        val correctnessTask = build.substringAfter("val generateGpuEvidence")
+            .substringBefore("val warmupFrames")
+        val performanceTask = build.substringAfter("tasks.register<JavaExec>(\"gpuEvidencePerformance\")")
+            .substringBefore("tasks.register(\"generateBootstrapGpuEvidence\")")
+        val generatedVerificationTask = build.substringAfter("tasks.register<JavaExec>(\"verifyGeneratedGpuEvidence\")")
+            .substringBefore("tasks.register<JavaExec>(\"verifyPromotedGpuEvidence\")")
+
+        assertTrue(build.contains("val sourceCommit = providers.gradleProperty(\"sourceCommit\")"))
+        assertTrue(build.contains("commandLine(\"git\", \"rev-parse\", \"HEAD\")"))
+        assertTrue(build.contains("currentGitHeadSourceCommit"))
+        assertTrue(build.contains("correctnessSourceCommit"))
+        assertTrue(correctnessTask.contains("correctnessSourceCommit.get()"), "correctness generation must consume the defaultable source commit provider")
+        assertTrue(generatedVerificationTask.contains("correctnessSourceCommit.get()"), "generated verification must consume the same defaultable source commit provider")
+        assertFalse(correctnessTask.contains("sourceCommit.isPresent"), "correctness generation must not require an explicit -PsourceCommit")
+        assertFalse(generatedVerificationTask.contains("sourceCommit.isPresent"), "generated verification must not require an explicit -PsourceCommit")
+        assertTrue(performanceTask.contains("sourceCommit.isPresent"), "performance must keep requiring an explicit -PsourceCommit")
+        assertTrue(performanceTask.contains("\"--source-commit\", sourceCommit.get()"), "performance must keep forwarding only the explicit sourceCommit property")
     }
 
     private fun argumentProviderBody(task: String): String {

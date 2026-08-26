@@ -5,7 +5,20 @@ plugins {
     id("java-library")
 }
 
+val sourceCommitPattern = Regex("[0-9a-f]{40}")
 val sourceCommit = providers.gradleProperty("sourceCommit")
+val currentGitHeadSourceCommit = providers.exec {
+    commandLine("git", "rev-parse", "HEAD")
+}.standardOutput.asText.map { value ->
+    val normalized = value.trim()
+    require(sourceCommitPattern.matches(normalized)) { "current Git HEAD must resolve to 40 lowercase hex characters" }
+    normalized
+}
+val correctnessSourceCommit = sourceCommit.map { value ->
+    val normalized = value.trim()
+    require(sourceCommitPattern.matches(normalized)) { "-PsourceCommit must be 40 lowercase hexadecimal characters when provided" }
+    normalized
+}.orElse(currentGitHeadSourceCommit)
 val scene = providers.gradleProperty("scene")
 val scenesFile = providers.gradleProperty("scenesFile")
 val all = providers.gradleProperty("all")
@@ -65,10 +78,10 @@ val generateGpuEvidence = tasks.register<JavaExec>("generateGpuEvidence") {
     jvmArgs("--add-opens=java.base/java.lang=ALL-UNNAMED", "--enable-native-access=ALL-UNNAMED")
     if (System.getProperty("os.name").lowercase().contains("mac")) jvmArgs("-XstartOnFirstThread")
     doFirst {
-        require(sourceCommit.isPresent && sourceCommit.get().matches(Regex("[0-9a-f]{40}"))) { "-PsourceCommit=<40 lowercase hex> is required" }
+        correctnessSourceCommit.get()
     }
     argumentProviders.add(org.gradle.process.CommandLineArgumentProvider {
-        listOf("--repository-root", rootProject.layout.projectDirectory.asFile.absolutePath, "--source-commit", sourceCommit.get()) + selectionArguments()
+        listOf("--repository-root", rootProject.layout.projectDirectory.asFile.absolutePath, "--source-commit", correctnessSourceCommit.get()) + selectionArguments()
     })
     outputs.upToDateWhen { false }
 }
@@ -84,7 +97,7 @@ tasks.register<JavaExec>("gpuEvidencePerformance") {
     jvmArgs("--add-opens=java.base/java.lang=ALL-UNNAMED", "--enable-native-access=ALL-UNNAMED")
     if (System.getProperty("os.name").lowercase().contains("mac")) jvmArgs("-XstartOnFirstThread")
     doFirst {
-        require(sourceCommit.isPresent && sourceCommit.get().matches(Regex("[0-9a-f]{40}"))) { "-PsourceCommit=<40 lowercase hex> is required" }
+        require(sourceCommit.isPresent && sourceCommit.get().matches(sourceCommitPattern)) { "-PsourceCommit=<40 lowercase hex> is required" }
         require(warmupFrames.get().toInt() == 10 && measuredFrames.get().toInt() == 90) { "warmupFrames and measuredFrames must be exactly 10 and 90" }
     }
     argumentProviders.add(org.gradle.process.CommandLineArgumentProvider { listOf("--repository-root", rootProject.layout.projectDirectory.asFile.absolutePath, "--source-commit", sourceCommit.get(), "--warmup-frames", warmupFrames.get(), "--measured-frames", measuredFrames.get()) + optionalSceneArgument() })
@@ -105,9 +118,9 @@ tasks.register<JavaExec>("verifyGeneratedGpuEvidence") {
     mainClass.set("org.graphiks.kanvas.gpu.evidence.artifacts.VerifyEvidenceCliKt")
     argumentProviders.add(org.gradle.process.CommandLineArgumentProvider {
         val root = rootProject.layout.projectDirectory
-            .dir("reports/gpu-renderer/evidence/correctness/generated/${sourceCommit.get()}")
+            .dir("reports/gpu-renderer/evidence/correctness/generated/${correctnessSourceCommit.get()}")
             .asFile.absolutePath
-        listOf("--root", root, "--source-commit", sourceCommit.get()) + selectionArguments()
+        listOf("--root", root, "--source-commit", correctnessSourceCommit.get()) + selectionArguments()
     })
 }
 
@@ -171,7 +184,7 @@ tasks.register<JavaExec>("promoteGpuEvidence") {
     val priorComparison = providers.gradleProperty("promotionPriorComparison")
     val newComparison = providers.gradleProperty("promotionNewComparison")
     doFirst {
-        require(sourceCommit.isPresent && sourceCommit.get().matches(Regex("[0-9a-f]{40}"))) { "sourceCommit with 40 hexadecimal characters is required" }
+        require(sourceCommit.isPresent && sourceCommit.get().matches(sourceCommitPattern)) { "sourceCommit with 40 hexadecimal characters is required" }
         require(reviewer.isPresent && reviewer.get().isNotBlank()) { "promotionReviewer is required" }
         require(reason.isPresent && reason.get().isNotBlank()) { "promotionReason is required" }
     }
