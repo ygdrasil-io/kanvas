@@ -8,27 +8,35 @@ import kotlin.test.assertTrue
 
 class GpuEvidenceArchitectureBoundaryTest {
     @Test
-    fun `single scene passthrough is limited to correctness and performance captures`() {
+    fun `selection forwarding is shared across correctness generation verification and promotion while performance stays isolated`() {
         val build = File("build.gradle.kts").readText()
         val correctnessTask = build.substringAfter("val generateGpuEvidence")
             .substringBefore("val warmupFrames")
         val performanceTask = build.substringAfter("tasks.register<JavaExec>(\"gpuEvidencePerformance\")")
             .substringBefore("tasks.register(\"generateBootstrapGpuEvidence\")")
+        val generatedVerificationTask = build.substringAfter("tasks.register<JavaExec>(\"verifyGeneratedGpuEvidence\")")
+            .substringBefore("tasks.register<JavaExec>(\"verifyPromotedGpuEvidence\")")
+        val promotionTask = build.substringAfter("tasks.register<JavaExec>(\"promoteGpuEvidence\")")
 
         assertTrue(build.contains("val scene = providers.gradleProperty(\"scene\")"))
-        assertEquals(
-            "fun optionalSceneArgument(): List<String> = scene.orNull?.let { listOf(\"--scene\", it) }.orEmpty()",
-            build.lineSequence().first { it.startsWith("fun optionalSceneArgument") }.trim(),
-            "scene must be absent or the exact two-argument --scene pair",
-        )
-        assertEquals(1, Regex("--scene").findAll(build).count(), "only the shared CLI argument may mention --scene")
-        assertEquals(2, Regex("\\+ optionalSceneArgument\\(\\)").findAll(build).count(), "only correctness and performance may forward scene")
+        assertTrue(build.contains("val scenesFile = providers.gradleProperty(\"scenesFile\")"))
+        assertTrue(build.contains("val all = providers.gradleProperty(\"all\")"))
+        val helper = build.substringAfter("fun selectionArguments(): List<String> {")
+            .substringBefore("\n}\n\ndependencies {")
+        assertTrue(helper.contains("scene.orNull"))
+        assertTrue(helper.contains("scenesFile.orNull"))
+        assertTrue(helper.contains("all.isPresent"))
+        assertTrue(helper.contains("\"--scene\""))
+        assertTrue(helper.contains("\"--scenes-file\""))
+        assertTrue(helper.contains("\"--all\""))
+        assertTrue(helper.contains("require"))
+        assertEquals(3, Regex("\\+ selectionArguments\\(\\)").findAll(build).count(), "correctness generation, generated verification, and promotion must share one selection helper")
         assertEquals(
             normalize("""
-                listOf("--repository-root", rootProject.layout.projectDirectory.asFile.absolutePath, "--source-commit", sourceCommit.get()) + optionalSceneArgument()
+                listOf("--repository-root", rootProject.layout.projectDirectory.asFile.absolutePath, "--source-commit", sourceCommit.get()) + selectionArguments()
             """),
             normalize(argumentProviderBody(correctnessTask)),
-            "correctness arguments may only append optional scene",
+            "correctness generation must append the shared selection arguments",
         )
         assertEquals(
             normalize("""
@@ -37,11 +45,26 @@ class GpuEvidenceArchitectureBoundaryTest {
             normalize(argumentProviderBody(performanceTask)),
             "performance arguments may only append optional scene",
         )
+        assertTrue(argumentProviderBody(generatedVerificationTask).contains("+ selectionArguments()"), "generated verification must share the explicit selection helper")
+        assertTrue(argumentProviderBody(generatedVerificationTask).contains("--root"), "generated verification must still target the generated correctness root")
+        assertTrue(argumentProviderBody(promotionTask).contains("+ selectionArguments()"), "promotion must share the explicit selection helper")
+        assertTrue(argumentProviderBody(promotionTask).contains("promotionRebaselineArguments"), "promotion must preserve explicit rebaseline metadata forwarding")
         assertFalse(build.contains("gpu-renderer-scenes"), "retired scenes module must remain absent")
         val dependencies = build.substringAfter("dependencies {").substringBefore("\n}")
         assertFalse(dependencies.contains("scene"), "scene must not alter dependencies")
-        assertFalse(outsideArgumentProvider(correctnessTask).contains("scene"), "scene must not alter correctness task configuration")
-        assertFalse(outsideArgumentProvider(performanceTask).contains("scene"), "scene must not alter performance task configuration")
+        assertFalse(outsideArgumentProvider(correctnessTask).contains("--scene"), "scene selection must not alter correctness task configuration outside CLI arguments")
+        assertFalse(outsideArgumentProvider(correctnessTask).contains("--scenes-file"), "scene selection must not alter correctness task configuration outside CLI arguments")
+        assertFalse(outsideArgumentProvider(performanceTask).contains("--scenes-file"), "scene file selection must not alter performance task configuration")
+        assertFalse(outsideArgumentProvider(generatedVerificationTask).contains("--scene"), "scene selection must not alter generated verification task configuration outside CLI arguments")
+        assertFalse(outsideArgumentProvider(generatedVerificationTask).contains("--scenes-file"), "scene selection must not alter generated verification task configuration outside CLI arguments")
+        assertFalse(performanceTask.contains("promotionRebaselineArguments"), "performance must not receive correctness-only promotion flags")
+        assertFalse(performanceTask.contains("--reviewer"), "performance must not receive correctness-only promotion flags")
+        assertFalse(performanceTask.contains("--reason"), "performance must not receive correctness-only promotion flags")
+        assertFalse(performanceTask.contains("--all"), "performance must not silently become a catalogue-wide correctness task")
+        assertTrue(build.contains("description = \"Generates GPU correctness evidence for the selected scenes or the full catalogue when no selector is provided.\""))
+        assertTrue(build.contains("description = \"Verifies generated GPU correctness evidence for the selected scenes or the full catalogue when no selector is provided.\""))
+        assertTrue(build.contains("description = \"Promotes independently verified GPU correctness evidence for the selected scenes or the full catalogue when no selector is provided.\""))
+        assertTrue(build.contains("description = \"Alias for generateGpuEvidence.\""))
     }
 
     private fun argumentProviderBody(task: String): String {

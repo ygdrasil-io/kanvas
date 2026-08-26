@@ -62,6 +62,57 @@ class GpuEvidenceCliTest {
         }
     }
 
+    @Test fun `request parser rejects duplicate selection inputs`() {
+        val root = Files.createTempDirectory("gpu-evidence-cli")
+        val duplicateScenesFile = Files.createTempFile("gpu-evidence-scenes-duplicate", ".txt")
+        Files.writeString(duplicateScenesFile, "custom-runtime-effect-unregistered-refusal\ncustom-runtime-effect-unregistered-refusal\n")
+
+        assertFailsWith<IllegalArgumentException> {
+            GpuEvidenceCliRequest.parse(
+                arrayOf(
+                    "--repository-root", root.toString(),
+                    "--source-commit", "a".repeat(40),
+                    "--scene", "custom-runtime-effect-unregistered-refusal",
+                    "--scene", "custom-runtime-effect-unregistered-refusal",
+                ),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            GpuEvidenceCliRequest.parse(
+                arrayOf(
+                    "--repository-root", root.toString(),
+                    "--source-commit", "a".repeat(40),
+                    "--scene", "custom-runtime-effect-unregistered-refusal",
+                    "--all",
+                ),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            GpuEvidenceCliRequest.parse(
+                arrayOf(
+                    "--repository-root", root.toString(),
+                    "--source-commit", "a".repeat(40),
+                    "--scenes-file", duplicateScenesFile.toString(),
+                ),
+            )
+        }
+    }
+
+    @Test fun `cli rejects an unknown selected scene before opening the runtime`() {
+        val events = mutableListOf<String>()
+
+        val code = runner(FakeRuntime(events)).run(
+            arrayOf(
+                "--repository-root", Files.createTempDirectory("gpu-evidence-cli").toString(),
+                "--source-commit", "a".repeat(40),
+                "--scene", "unknown-scene",
+            ),
+        )
+
+        assertEquals(2, code)
+        assertEquals(emptyList(), events)
+    }
+
     @Test fun `cli disposes a created backend before returning a failing exit code`() {
         val events = mutableListOf<String>()
         val code = runner(FakeRuntime(events)).run(validArgs())

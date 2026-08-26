@@ -12,6 +12,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -109,6 +110,60 @@ class PromoteEvidenceCliTest {
 
         assertTrue(PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "")) != 0)
         assertTrue(PromoteEvidenceCliRunner().run(args(repository, COMMIT, reason = "")) != 0)
+    }
+
+    @Test
+    fun `promotion request parser accepts explicit scene and scenes file selection`() {
+        val scenesFile = Files.createTempFile("promotion-scenes", ".txt")
+        Files.writeString(scenesFile, "custom-runtime-effect-unregistered-refusal\nsolid-card-stack\n")
+
+        val explicit = PromoteEvidenceCliRequest.parse(
+            arrayOf(
+                "--repository-root", repository.toString(),
+                "--source-commit", COMMIT,
+                "--reviewer", "reviewer",
+                "--reason", "reason",
+                "--scene", "solid-card-stack",
+            ),
+        )
+        assertEquals(EvidenceSelection.Explicit(listOf("solid-card-stack")), explicit.selection)
+
+        val fromFile = PromoteEvidenceCliRequest.parse(
+            arrayOf(
+                "--repository-root", repository.toString(),
+                "--source-commit", COMMIT,
+                "--reviewer", "reviewer",
+                "--reason", "reason",
+                "--scenes-file", scenesFile.toString(),
+            ),
+        )
+        assertEquals(
+            EvidenceSelection.Explicit(listOf("custom-runtime-effect-unregistered-refusal", "solid-card-stack")),
+            fromFile.selection,
+        )
+
+        val all = PromoteEvidenceCliRequest.parse(
+            arrayOf(
+                "--repository-root", repository.toString(),
+                "--source-commit", COMMIT,
+                "--reviewer", "reviewer",
+                "--reason", "reason",
+                "--all",
+            ),
+        )
+        assertSame(EvidenceSelection.All, all.selection)
+    }
+
+    @Test
+    fun `promotion publishes only the selected generated scenes`() {
+        writeSelectedBundles(repository, COMMIT, listOf("solid-card-stack"))
+
+        val result = PromoteEvidenceCliRunner().run(
+            args(repository, COMMIT, selection = arrayOf("--scene", "solid-card-stack")),
+        )
+
+        assertEquals(0, result)
+        assertEquals(setOf("solid-card-stack"), sceneDirectories(promotedRoot(repository)))
     }
 
     @Test
@@ -460,10 +515,11 @@ class PromoteEvidenceCliTest {
         reviewer: String = "reviewer",
         reason: String = "reason",
         rebaseline: Boolean = false,
+        selection: Array<String> = arrayOf("--all"),
     ): Array<String> = buildList {
         add("--repository-root"); add(root.toString())
         add("--source-commit"); add(commit)
-        add("--all")
+        addAll(selection.asList())
         add("--reviewer"); add(reviewer)
         add("--reason"); add(reason)
         if (rebaseline) add("--rebaseline")
@@ -471,7 +527,16 @@ class PromoteEvidenceCliTest {
 
     private fun writeAllBundles(root: Path, commit: String) {
         val writer = EvidenceBundleWriter(root, commit)
-        GpuEvidenceCatalog.cases.forEach { evidenceCase ->
+        writeBundles(root, commit, GpuEvidenceCatalog.cases)
+    }
+
+    private fun writeSelectedBundles(root: Path, commit: String, sceneIds: List<String>) {
+        writeBundles(root, commit, sceneIds.map { id -> GpuEvidenceCatalog.cases.first { it.descriptor.id.value == id } })
+    }
+
+    private fun writeBundles(root: Path, commit: String, evidenceCases: List<org.graphiks.kanvas.gpu.evidence.catalog.EvidenceCase>) {
+        val writer = EvidenceBundleWriter(root, commit)
+        evidenceCases.forEach { evidenceCase ->
             val descriptor = evidenceCase.descriptor
             val environment = EvidenceEnvironment(commit, "test", "1", "test", "17", EvidenceAdapter("test-adapter", "test-vendor", "test-device", "test-architecture", "test-description", false), 1L, "native", true)
             val rendered = descriptor.expectation is EvidenceExpectation.ShouldRender

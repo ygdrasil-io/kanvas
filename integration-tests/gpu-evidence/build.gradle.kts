@@ -7,9 +7,35 @@ plugins {
 
 val sourceCommit = providers.gradleProperty("sourceCommit")
 val scene = providers.gradleProperty("scene")
+val scenesFile = providers.gradleProperty("scenesFile")
+val all = providers.gradleProperty("all")
 val sourceSets = the<org.gradle.api.tasks.SourceSetContainer>()
 
 fun optionalSceneArgument(): List<String> = scene.orNull?.let { listOf("--scene", it) }.orEmpty()
+
+fun selectionArguments(): List<String> {
+    val selectedScene = scene.orNull?.trim()?.also { require(it.isNotEmpty()) { "-Pscene must not be blank" } }
+    val selectedScenesFile = scenesFile.orNull?.trim()?.also { require(it.isNotEmpty()) { "-PscenesFile must not be blank" } }
+    val selectAll = if (all.isPresent) {
+        val value = all.orNull.orEmpty()
+        if (value.isBlank()) true else value.toBooleanStrictOrNull()
+            ?: error("-Pall must be true, false, or blank when provided")
+    } else {
+        false
+    }
+    val selectors = listOfNotNull(
+        selectedScene?.let { "scene" },
+        selectedScenesFile?.let { "scenesFile" },
+        selectAll.takeIf { it }?.let { "all" },
+    )
+    require(selectors.size <= 1) { "at most one of -Pscene, -PscenesFile, or -Pall may be supplied" }
+    return when {
+        selectedScene != null -> listOf("--scene", selectedScene)
+        selectedScenesFile != null -> listOf("--scenes-file", selectedScenesFile)
+        selectAll -> listOf("--all")
+        else -> listOf("--all")
+    }
+}
 
 dependencies {
     implementation(kotlin("stdlib"))
@@ -32,7 +58,7 @@ tasks.withType<Test> {
 
 val generateGpuEvidence = tasks.register<JavaExec>("generateGpuEvidence") {
     group = "verification"
-    description = "Generates curated GPU evidence through the canonical prepared-session route."
+    description = "Generates GPU correctness evidence for the selected scenes or the full catalogue when no selector is provided."
     dependsOn(tasks.named("classes"))
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("org.graphiks.kanvas.gpu.evidence.runner.GpuEvidenceCliKt")
@@ -42,7 +68,7 @@ val generateGpuEvidence = tasks.register<JavaExec>("generateGpuEvidence") {
         require(sourceCommit.isPresent && sourceCommit.get().matches(Regex("[0-9a-f]{40}"))) { "-PsourceCommit=<40 lowercase hex> is required" }
     }
     argumentProviders.add(org.gradle.process.CommandLineArgumentProvider {
-        listOf("--repository-root", rootProject.layout.projectDirectory.asFile.absolutePath, "--source-commit", sourceCommit.get()) + optionalSceneArgument()
+        listOf("--repository-root", rootProject.layout.projectDirectory.asFile.absolutePath, "--source-commit", sourceCommit.get()) + selectionArguments()
     })
     outputs.upToDateWhen { false }
 }
@@ -67,13 +93,13 @@ tasks.register<JavaExec>("gpuEvidencePerformance") {
 
 tasks.register("generateBootstrapGpuEvidence") {
     group = "verification"
-    description = "Temporary alias for generateGpuEvidence; removed by Task 8."
+    description = "Alias for generateGpuEvidence."
     dependsOn(generateGpuEvidence)
 }
 
 tasks.register<JavaExec>("verifyGeneratedGpuEvidence") {
     group = "verification"
-    description = "Verifies generated GPU evidence without creating a GPU runtime."
+    description = "Verifies generated GPU correctness evidence for the selected scenes or the full catalogue when no selector is provided."
     dependsOn(generateGpuEvidence, tasks.named("classes"))
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("org.graphiks.kanvas.gpu.evidence.artifacts.VerifyEvidenceCliKt")
@@ -81,7 +107,7 @@ tasks.register<JavaExec>("verifyGeneratedGpuEvidence") {
         val root = rootProject.layout.projectDirectory
             .dir("reports/gpu-renderer/evidence/correctness/generated/${sourceCommit.get()}")
             .asFile.absolutePath
-        listOf("--root", root, "--source-commit", sourceCommit.get())
+        listOf("--root", root, "--source-commit", sourceCommit.get()) + selectionArguments()
     })
 }
 
@@ -102,7 +128,7 @@ tasks.register<JavaExec>("verifyPromotedGpuEvidence") {
 
 tasks.register<JavaExec>("promoteGpuEvidence") {
     group = "verification"
-    description = "Promotes independently verified generated GPU evidence with explicit review metadata."
+    description = "Promotes independently verified GPU correctness evidence for the selected scenes or the full catalogue when no selector is provided."
     dependsOn(tasks.named("classes"))
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("org.graphiks.kanvas.gpu.evidence.artifacts.PromoteEvidenceCliKt")
@@ -119,7 +145,7 @@ tasks.register<JavaExec>("promoteGpuEvidence") {
     argumentProviders.add(org.gradle.process.CommandLineArgumentProvider {
         listOf(
             "--repository-root", rootProject.layout.projectDirectory.asFile.absolutePath,
-            "--source-commit", sourceCommit.get(), "--reviewer", reviewer.get(), "--reason", reason.get(), "--all",
-        ) + promotionRebaselineArguments(rebaseline.orNull, priorComparison.orNull, newComparison.orNull)
+            "--source-commit", sourceCommit.get(), "--reviewer", reviewer.get(), "--reason", reason.get(),
+        ) + promotionRebaselineArguments(rebaseline.orNull, priorComparison.orNull, newComparison.orNull) + selectionArguments()
     })
 }

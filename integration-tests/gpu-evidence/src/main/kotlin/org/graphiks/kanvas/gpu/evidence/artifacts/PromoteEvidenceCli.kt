@@ -22,6 +22,7 @@ fun main(args: Array<String>): Unit = exitProcess(PromoteEvidenceCliRunner().run
 data class PromoteEvidenceCliRequest(
     val repositoryRoot: Path,
     val sourceCommit: String,
+    val selection: EvidenceSelection,
     val reviewer: String,
     val reason: String,
     val rebaseline: Boolean,
@@ -36,6 +37,8 @@ data class PromoteEvidenceCliRequest(
             var sourceCommit: String? = null
             var reviewer: String? = null
             var reason: String? = null
+            val sceneIds = mutableListOf<String>()
+            var scenesFile: Path? = null
             var all = false
             var rebaseline = false
             var prior: String? = null
@@ -47,6 +50,11 @@ data class PromoteEvidenceCliRequest(
                     "--source-commit" -> { require(sourceCommit == null) { "duplicate --source-commit" }; sourceCommit = value(args, ++index, "--source-commit") }
                     "--reviewer" -> { require(reviewer == null) { "duplicate --reviewer" }; reviewer = value(args, ++index, "--reviewer") }
                     "--reason" -> { require(reason == null) { "duplicate --reason" }; reason = value(args, ++index, "--reason") }
+                    "--scene" -> sceneIds += value(args, ++index, "--scene")
+                    "--scenes-file" -> {
+                        require(scenesFile == null) { "duplicate --scenes-file" }
+                        scenesFile = Path.of(value(args, ++index, "--scenes-file")).toAbsolutePath().normalize()
+                    }
                     "--all" -> { require(!all) { "duplicate --all" }; all = true }
                     "--rebaseline" -> { require(!rebaseline) { "duplicate --rebaseline" }; rebaseline = true }
                     "--prior-comparison", "--old-comparison", "--prior-comparison-summary" -> { require(prior == null) { "duplicate prior comparison" }; prior = value(args, ++index, args[index]) }
@@ -55,7 +63,6 @@ data class PromoteEvidenceCliRequest(
                 }
                 index++
             }
-            require(all) { "--all is required; promotion never accepts an arbitrary scene or destination" }
             val root = Path.of(requireNotNull(repositoryRoot) { "--repository-root is required" }).toAbsolutePath().normalize()
             require(root.isAbsolute && Files.isDirectory(root, NOFOLLOW_LINKS)) { "repository root must be an existing directory" }
             require(!Files.isSymbolicLink(root)) { "repository root cannot be a symlink" }
@@ -68,7 +75,9 @@ data class PromoteEvidenceCliRequest(
             require((prior == null) == (next == null)) { "prior and new comparison summaries must be provided together" }
             if (prior != null) require(prior.isNotBlank() && next!!.isNotBlank()) { "comparison summaries must not be blank" }
             if (rebaseline) require(prior != null && next != null) { "--rebaseline requires prior and new comparison summaries" }
-            return PromoteEvidenceCliRequest(root, commit, actualReviewer, actualReason, rebaseline, prior, next)
+            scenesFile?.let { sceneIds += EvidenceSelectionParser.readSceneFile(it) }
+            val selection = EvidenceSelectionParser.from(sceneIds, all)
+            return PromoteEvidenceCliRequest(root, commit, selection, actualReviewer, actualReason, rebaseline, prior, next)
         }
 
         private fun value(args: Array<String>, index: Int, flag: String): String {
@@ -131,12 +140,15 @@ class PromoteEvidenceCliRunner internal constructor(
         require(!Files.isSymbolicLink(roots.generated)) { "generated evidence root cannot be a symlink" }
 
         // Verification happens before any destination mutation, and does not create a GPU runtime.
-        require(VerifyEvidenceCliRunner(stdout, stderr).run(arrayOf("--root", roots.generated.toString(), "--source-commit", request.sourceCommit, "--all")) == 0) {
+        require(VerifyEvidenceCliRunner(stdout, stderr).run(verificationArguments(roots.generated, request.sourceCommit, request.selection)) == 0) {
             "generated evidence failed independent verification"
         }
 
-        val sceneIds = GpuEvidenceCatalog.cases.map { it.descriptor.id.value }
-        preflightPromotedRoot(roots.promoted, request.rebaseline)
+        val sceneIds = when (val selection = request.selection) {
+            EvidenceSelection.All -> GpuEvidenceCatalog.cases.map { it.descriptor.id.value }
+            is EvidenceSelection.Explicit -> selection.sceneIds
+        }
+        preflightPromotedRoot(roots.promoted, request.rebaseline, request.selection)
         Files.createDirectories(roots.promoted.parent)
         val staged = Files.createTempDirectory(roots.promoted.parent, ".promoted.staged-")
         var swapped = false
@@ -149,7 +161,7 @@ class PromoteEvidenceCliRunner internal constructor(
                 writePromotion(stagedScene, sceneId, request)
             }
             beforeStagedVerification(staged)
-            require(VerifyEvidenceCliRunner(stdout, stderr).run(arrayOf("--root", staged.toString(), "--source-commit", request.sourceCommit, "--all")) == 0) {
+            require(VerifyEvidenceCliRunner(stdout, stderr).run(verificationArguments(staged, request.sourceCommit, request.selection)) == 0) {
                 "staged promotion failed independent verification"
             }
             swapCatalogRoot(staged, roots.promoted)
@@ -173,7 +185,7 @@ class PromoteEvidenceCliRunner internal constructor(
         stdout.println("promoted ${sceneIds.size} GPU evidence scenes from ${request.sourceCommit}")
     }
 
-    private fun preflightPromotedRoot(promoted: Path, rebaseline: Boolean) {
+    private fun preflightPromotedRoot(promoted: Path, rebaseline: Boolean, selection: EvidenceSelection) {
         if (!Files.exists(promoted, NOFOLLOW_LINKS)) {
             require(!rebaseline) { "rebaseline requires an existing promoted catalog" }
             return
@@ -186,7 +198,7 @@ class PromoteEvidenceCliRunner internal constructor(
             return
         }
         require(entries.isNotEmpty()) { "rebaseline requires a non-empty promoted catalog" }
-        require(VerifyEvidenceCliRunner(stdout, stderr).verifyHistoricalSubset(promoted) == 0) {
+        require(VerifyEvidenceCliRunner(stdout, stderr).verifyHistoricalSubset(promoted, selection) == 0) {
             "existing promoted evidence is not a verified current-catalog subset"
         }
     }
@@ -213,6 +225,20 @@ class PromoteEvidenceCliRunner internal constructor(
             }
         }
     }
+
+    private fun verificationArguments(root: Path, sourceCommit: String, selection: EvidenceSelection): Array<String> = buildList {
+        add("--root")
+        add(root.toString())
+        add("--source-commit")
+        add(sourceCommit)
+        when (selection) {
+            EvidenceSelection.All -> add("--all")
+            is EvidenceSelection.Explicit -> selection.sceneIds.forEach { sceneId ->
+                add("--scene")
+                add(sceneId)
+            }
+        }
+    }.toTypedArray()
 
     private fun writePromotion(directory: Path, sceneId: String, request: PromoteEvidenceCliRequest) {
         val json = buildJsonObject {
