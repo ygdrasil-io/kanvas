@@ -73,11 +73,13 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUClipProducerAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedPacketAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedSemanticAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticShapeUniformSeal
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticShapeUniformBuildResult
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticClipUniformSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticIntersectionElementSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticIntersectionUniformSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveUniformSlabSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskUniformSlabSeal
+import org.graphiks.kanvas.gpu.renderer.passes.buildCorePrimitiveAnalyticShapeUniform
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPreparedImageClipAuthorityValidation
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchAdjacency
@@ -1089,6 +1091,73 @@ class GPUFramePreflighterTest {
             )
         })
         assertTrue(events.any { it.startsWith("resource:prepare:") })
+    }
+
+    @Test
+    fun `analytic rrect clip stencil uniform80 requires its exact semantic payload and plan`() {
+        val valid = preparedNativeClipStencilFramePlan(rrectConsumer = true)
+        val consumer = valid.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { render ->
+            render.drawPackets.single().role == GPUDrawPacketRole.Shading
+        }.drawPackets.single()
+        val semantic = assertIs<GPUDrawSemanticPayload.CorePrimitive>(consumer.semanticPayload)
+        val seal = requireNotNull(consumer.corePrimitivePreparedAuthority?.analyticShapeUniformSeal)
+        val rebuiltPayload = assertIs<GPUCorePrimitiveAnalyticShapeUniformBuildResult.Accepted>(
+            buildCorePrimitiveAnalyticShapeUniform(
+                semantic,
+                GPUCorePrimitivePreparedSemanticAuthority.capture(semantic),
+            ),
+        ).bytes
+        assertEquals(32L, requireNotNull(semantic.payloadRef.uniformBlock).byteSize)
+        assertEquals(80, rebuiltPayload.size)
+        assertContentEquals(rebuiltPayload, seal.payloadBytesSnapshot())
+        val baselineEvents = mutableListOf<String>()
+        val baseline = preflighter(
+            RecordingResourceProvider(baselineEvents),
+            RecordingCompletionProvider(baselineEvents),
+            RecordingSurfaceProvider(baselineEvents),
+            context = clipPreflightContext(valid),
+            capabilities = pathCapabilities(includeRRect = true),
+        ).preflight(valid)
+        assertIs<GPUFramePreflightResult.Prepared>(
+            baseline,
+            (baseline as? GPUFramePreflightResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}"
+            },
+        )
+        val substitutedSemantic = semantic.withTargetBounds(semantic.targetBounds)
+        val corruptedPayload = seal.payloadBytesSnapshot().also { bytes ->
+            bytes[20] = (bytes[20].toInt() xor 1).toByte()
+        }
+        val reconstructedPlan = seal.plan.copyForTest(planHash = "forged-analytic-rrect-plan")
+        val cases = listOf(
+            "semantic" to seal.copyForTest(substitutedSemantic),
+            "payload" to seal.copyForTest(semantic, payloadBytes = corruptedPayload),
+            "plan" to seal.copyForTest(semantic, plan = reconstructedPlan),
+        )
+
+        cases.forEach { (label, forgedSeal) ->
+            val plan = valid.replacingCorePacket(
+                consumer,
+                cloneCorePacket(consumer, analyticShapeUniformSeal = forgedSeal),
+            )
+            val events = mutableListOf<String>()
+            val resources = RecordingResourceProvider(events)
+            val result = preflighter(
+                resources,
+                RecordingCompletionProvider(events),
+                RecordingSurfaceProvider(events),
+                context = clipPreflightContext(plan),
+                capabilities = pathCapabilities(includeRRect = true),
+            ).preflight(plan)
+
+            assertEquals(
+                "invalid.preflight.core_primitive_clip_stencil_prepared_route",
+                assertIs<GPUFramePreflightResult.Refused>(result, label).diagnostic.code.value,
+                label,
+            )
+            assertEquals(0, resources.beginFramePreparationCount, label)
+            assertTrue(events.isEmpty(), "$label produced preflight side effects: $events")
+        }
     }
 
     @Test
@@ -8234,7 +8303,10 @@ class GPUFramePreflighterTest {
         return GPUFramePlanner.plan(taskList).also { plan -> check(!plan.atomicallyRefused) }
     }
 
-    private fun preparedNativeClipStencilFramePlan(sampleCount: Int = 1): GPUFramePlan {
+    private fun preparedNativeClipStencilFramePlan(
+        sampleCount: Int = 1,
+        rrectConsumer: Boolean = false,
+    ): GPUFramePlan {
         val targetBounds = GPUPixelBounds(0, 0, 4, 4)
         val clipPlan = GPUClipExecutionPlan.StencilCoverage(
             contentKey = "clip.preflight.native.path",
@@ -8266,10 +8338,23 @@ class GPUFramePreflighterTest {
             ),
         )
         return preparedAnalyticFramePlan(
-            mapOf(
+            if (rrectConsumer) mapOf(92 to clipPlan) else mapOf(
                 91 to clipPlan,
                 92 to clipPlan,
             ),
+            geometries = if (rrectConsumer) {
+                mapOf(
+                    92 to GPUCorePrimitiveGeometryInput.RRect(
+                        1f,
+                        1f,
+                        3f,
+                        3f,
+                        List(8) { 0.5f },
+                    ),
+                )
+            } else {
+                emptyMap()
+            },
             samplePlan = if (sampleCount == 4) {
                 GPUSamplePlan.MultisampleFrame(4)
             } else {

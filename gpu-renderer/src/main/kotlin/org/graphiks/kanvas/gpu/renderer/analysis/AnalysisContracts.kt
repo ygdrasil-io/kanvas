@@ -21,6 +21,8 @@ import org.graphiks.kanvas.gpu.renderer.commands.isAffineDeterminantNonFinite
 import org.graphiks.kanvas.gpu.renderer.commands.isAffineDeterminantSingular
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipFillRule
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.filters.NormalizedMaskFilter
 import org.graphiks.kanvas.gpu.renderer.filters.GPUSimpleFilterRenderNodePlanner
@@ -1851,10 +1853,13 @@ class GPUFirstRoutePlanner(
     private fun NormalizedDrawCommand.FillRRect.supportsHardPathClipAnalyticRRect(): Boolean {
         val stencil = clip.executionPlan as? org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan.StencilCoverage
             ?: return false
+        val path = stencil.producer.geometry as? GPUClipExecutionGeometry.Path ?: return false
         val solid = material as? GPUMaterialDescriptor.SolidColor ?: return false
         return !stroke && !antiAlias && maskFilter == null && transform.type == GPUTransformType.Identity &&
             solid.a == 1f && blend.mode == GPUBlendMode.SRC_OVER && stencil.sampleCount == 1 &&
-            stencil.pathTransformClass == "identity"
+            stencil.pathTransformClass == "identity" &&
+            path.fillRule == GPUClipFillRule.Winding &&
+            stencil.producer.fillRule == GPUClipFillRule.Winding
     }
 
     /** Refuses any FillDRRect fact outside the narrow opaque analytic-hole contract. */

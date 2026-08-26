@@ -1620,8 +1620,24 @@ internal class GPUFramePreflighter(
         }
         val analyticUniformValid = analyticShapeUniformSeal?.let { seal ->
             val consumer = consumerLocations.single().packet
+            val semantic = consumer.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive
+            val payload = semantic?.let { preparedSemantic ->
+                when (
+                    val rebuilt = buildCorePrimitiveAnalyticShapeUniform(
+                        preparedSemantic,
+                        GPUCorePrimitivePreparedSemanticAuthority.capture(preparedSemantic),
+                    )
+                ) {
+                    is GPUCorePrimitiveAnalyticShapeUniformBuildResult.Accepted -> rebuilt.bytes
+                    is GPUCorePrimitiveAnalyticShapeUniformBuildResult.Refused -> null
+                }
+            }
             seal.commandId == consumer.commandIdValue &&
                 seal.packetId == consumer.packetId &&
+                semantic != null &&
+                payload != null &&
+                seal.hasExactSemantic(semantic) &&
+                seal.hasExactPayload(payload) &&
                 seal.structuralPipelineKey == consumer.corePrimitivePreparedAuthority?.structuralPipelineKey &&
                 seal.structuralPipelineKey.uniformLayout ==
                 GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 &&
@@ -1629,6 +1645,17 @@ internal class GPUFramePreflighter(
                 seal.plan.deviceGeneration == context.deviceGeneration.value &&
                 seal.plan.alignmentBytes == limits.minUniformBufferOffsetAlignment &&
                 seal.plan.slots.size == 1 && seal.plan.slots.single().payloadBytes == 80L &&
+                seal.plan.hasExactPayloads(
+                    "core-primitive-analytic-shape-uniform-pass",
+                    context.deviceGeneration.value,
+                    limits.minUniformBufferOffsetAlignment,
+                    listOf(
+                        GPUUniformSlabPayload(
+                            "analytic-shape-draw-${consumer.commandIdValue}",
+                            payload,
+                        ),
+                    ),
+                ) &&
                 seal.plan.slots.single().alignedOffset <= UInt.MAX_VALUE.toLong() &&
                 seal.plan.totalBytes <= maxBufferSize && maxDynamicUniformBuffers >= 1L &&
                 uniformPreparation.role == GPUFrameResourceRole.UniformData &&

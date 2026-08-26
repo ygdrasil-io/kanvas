@@ -238,6 +238,19 @@ internal fun sealGPUCorePrimitiveClipStencilNativeRoute(
             "unsupported.native-core-primitive.clip-stencil.consumer-material",
             "Analytic RRect consumers accept only opaque solid colors in the bounded route.",
         )
+        if (consumer.geometry is GPUCorePrimitiveGeometry.RRect &&
+            path.fillRule != GPUClipFillRule.Winding
+        ) return refused(
+            "unsupported.native-core-primitive.clip-stencil.rrect-fill-rule",
+            "Analytic RRect clip-stencil consumers require an exact winding producer.",
+        )
+        if (consumer.geometry is GPUCorePrimitiveGeometry.RRect &&
+            (consumer.material as GPUCorePrimitiveMaterialPayload.SolidColor)
+                .premultipliedRgba.getOrNull(3) != 1f
+        ) return refused(
+            "unsupported.native-core-primitive.clip-stencil.rrect-alpha",
+            "Analytic RRect clip-stencil consumers require exactly opaque premultiplied alpha.",
+        )
         if (consumer.geometry is GPUCorePrimitiveGeometry.RRect && stencil.sampleCount != 1) return refused(
             "unsupported.native-core-primitive.clip-stencil.rrect-msaa",
             "Analytic RRect clip-stencil consumers require the exact single-sample route.",
