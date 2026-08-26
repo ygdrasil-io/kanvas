@@ -1857,6 +1857,7 @@ class GPUFirstRoutePlanner(
         val solid = material as? GPUMaterialDescriptor.SolidColor ?: return false
         val exactFiniteTranslate = transform.type == GPUTransformType.Translate &&
             transform.translateX.isFinite() && transform.translateY.isFinite() &&
+            (transform.translateX != 0f || transform.translateY != 0f) &&
             transform.scaleX == 1f && transform.scaleY == 1f &&
             transform.skewX == 0f && transform.skewY == 0f
         return !stroke && !antiAlias && maskFilter == null &&

@@ -1626,20 +1626,21 @@ class FirstRoutePlannerTest {
         }
 
         val refusals = listOf(
-            GPUTransformFacts.translation(x = Float.NaN, y = 5f) to identityStencil,
-            GPUTransformFacts.scale(x = 2f, y = 2f) to identityStencil,
-            GPUTransformFacts.affine(1f, 0.25f, 0f, 1f) to identityStencil,
-            GPUTransformFacts.translation(x = 4f, y = 0f) to hardWindingStencilClip(pathTransformClass = "translate"),
-            GPUTransformFacts.translation(x = 4f, y = 0f) to hardWindingStencilClip(
+            Triple(GPUTransformFacts.translation(x = 0f, y = 0f), identityStencil, "unsupported.clip.complex_stack"),
+            Triple(GPUTransformFacts.translation(x = Float.NaN, y = 5f), identityStencil, "unsupported.transform.non_finite"),
+            Triple(GPUTransformFacts.scale(x = 2f, y = 2f), identityStencil, "unsupported.clip.complex_stack"),
+            Triple(GPUTransformFacts.affine(1f, 0.25f, 0f, 1f), identityStencil, "unsupported.transform.rrect_affine_unproven"),
+            Triple(GPUTransformFacts.translation(x = 4f, y = 0f), hardWindingStencilClip(pathTransformClass = "translate"), "unsupported.clip.complex_stack"),
+            Triple(GPUTransformFacts.translation(x = 4f, y = 0f), hardWindingStencilClip(
                 pathTransformClass = "identity",
                 inverseFill = true,
-            ),
+            ), "unsupported.clip.complex_stack"),
         )
-        refusals.forEach { (transform, clip) ->
+        refusals.forEach { (transform, clip, expectedCode) ->
             val fixture = firstRRectRouteCommand(target = target, transform = transform, clip = clip)
             val refused = GPUFirstRoutePlanner(fixture.capabilities).plan(fixture.command.copy(antiAlias = false))
             assertEquals(
-                "unsupported.clip.complex_stack",
+                expectedCode,
                 assertIs<GPURouteDecision.Refused>(refused.routeDecision).diagnostic.code,
             )
         }
