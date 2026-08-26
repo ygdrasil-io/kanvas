@@ -1,0 +1,22 @@
+# SDD ledger — plan: docs/superpowers/plans/2026-08-26-hard-clip-rrect-inverse-translate.md
+
+## Preflight
+
+| Task pairing | Producer / consumer | Finding |
+|---|---|---|
+| Task 1 only | Planner and mapper RRect admission, inverse stencil state, public Surface route, complement CPU oracle, catalog, and promotion are delivered together. | No cross-task interface exists. |
+
+| Task | Internal consistency check | Finding |
+|---|---|---|
+| Task 1 | The exact finite non-zero matrix predicate is already identical in the planner and mapper; both will add `InverseWinding` admission while the existing stencil geometry carries `inverseFill` and the oracle independently takes the triangle complement. | Consistent. The wave is RRect-only and preserves the existing DRRect inverse refusal. |
+
+Baseline at stacked parent `e0f1956c4c1659e223118ced977abb62dd2683cb`: focused W13 gate and `verifyPromotedGpuEvidence` passed for 68 cases (66 renders, 2 refusals). The global `check` baseline is independently known red on master in `FontTelemetrySchemaTest` and is outside this plan.
+
+## Task 1 complete
+
+Source/tests commit `4e6ba7d71d812fd88b3b3f6959beaa834641068b` admits only exact finite translated `FillRRect` consumers through inverse-Winding hard path clips. The focused GREEN gate passed; four native bundles are exact (`0` differing pixels, `0` max channel difference, one submission, `HardClipStencilProducer -> AnalyticRRect`), and promoted evidence was rebaselined from 68/66/2 to 72/70/2 with `verifyPromotedGpuEvidence` green. Full command/result trace: `task-1-report.md`.
+
+Task 1: hygiene correction — the ignored SDD report and ledger were explicitly staged into commits `7708e7d37` and `89f69107b`; root cause was staging scratch rather than source/evidence-only paths. Commit `b783ab63b` removes only those two tracked paths while retaining the local ignored scratch. Tree and diff checks pass. Task review pending.
+Task 1: review failed — Important: `clipPathRRectCase` applied inverse-comparison wording to all RRect rows, causing the catalog policy gate to fail. Fix round 1/5 begins; runtime/evidence pixels are otherwise accepted by the review.
+
+Task 1: fix round 1 complete — correction source/tests commit `5e17c488571dbe7ae2999fee4fcd2f5597970377` restores the exact prior Winding rationale and passes `inverseWinding=true` only to the four inverse rows. RED was the existing Winding catalogue mapping at `GpuEvidenceCatalogTest.kt:448`; GREEN includes catalog, catalog-oracle, standalone RRect oracle, the focused W14 gate, generated verification, and promoted verification. The independent oracle reference counts were corrected for the literal triangle oblique edge (`784`, `835`, `413`, `789`). The full root was re-promoted in `6ffdc4d0d17e7acc55d3827a1e80639898a3f82c` at `5e17c488571dbe7ae2999fee4fcd2f5597970377`, retaining 72/70/2; all four bundles are exact with `HardClipStencilProducer -> AnalyticRRect`. Full trace: `task-1-report.md`.
