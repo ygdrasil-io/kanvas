@@ -7,12 +7,21 @@ import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceCase
 sealed interface EvidenceSelection {
     data object All : EvidenceSelection
 
-    data class Explicit(val sceneIds: List<String>) : EvidenceSelection {
-        init {
-            require(sceneIds.isNotEmpty()) { "explicit evidence selection must not be empty" }
-            require(sceneIds == sceneIds.sorted()) { "explicit evidence scene ids must be sorted" }
-            require(sceneIds.distinct().size == sceneIds.size) {
-                "duplicate evidence scene ids: ${sceneIds.groupingBy { it }.eachCount().filterValues { it > 1 }.keys.sorted().joinToString(",")}"
+    class Explicit(sceneIds: List<String>) : EvidenceSelection {
+        val sceneIds: List<String> = normalize(sceneIds)
+
+        override fun equals(other: Any?): Boolean = other is Explicit && sceneIds == other.sceneIds
+
+        override fun hashCode(): Int = sceneIds.hashCode()
+
+        override fun toString(): String = "Explicit(sceneIds=$sceneIds)"
+
+        companion object {
+            private fun normalize(sceneIds: List<String>): List<String> {
+                require(sceneIds.isNotEmpty()) { "explicit evidence selection must not be empty" }
+                val duplicates = sceneIds.groupingBy { it }.eachCount().filterValues { it > 1 }.keys.sorted()
+                require(duplicates.isEmpty()) { "duplicate evidence scene ids: ${duplicates.joinToString(",")}" }
+                return sceneIds.toList().sorted()
             }
         }
     }

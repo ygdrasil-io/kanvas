@@ -31,6 +31,16 @@ class EvidenceSelectionTest {
     }
 
     @Test
+    fun `explicit selection copies and sorts direct construction`() {
+        val ids = mutableListOf("solid-triangle-path", "solid-card-stack")
+
+        val selection = EvidenceSelection.Explicit(ids)
+        ids += "separable-blur-rect"
+
+        assertEquals(listOf("solid-card-stack", "solid-triangle-path"), selection.sceneIds)
+    }
+
+    @Test
     fun `explicit selection rejects duplicate ids`() {
         val failure = assertFailsWith<IllegalArgumentException> {
             EvidenceSelectionParser.from(
@@ -40,6 +50,24 @@ class EvidenceSelectionTest {
         }
 
         assertEquals("duplicate evidence scene ids: solid-card-stack", failure.message)
+    }
+
+    @Test
+    fun `parser rejects all combined with explicit scene ids`() {
+        val failure = assertFailsWith<IllegalArgumentException> {
+            EvidenceSelectionParser.from(listOf("solid-card-stack"), all = true)
+        }
+
+        assertEquals("--all cannot be combined with explicit scene ids", failure.message)
+    }
+
+    @Test
+    fun `parser rejects empty explicit selection`() {
+        val failure = assertFailsWith<IllegalArgumentException> {
+            EvidenceSelectionParser.from(emptyList(), all = false)
+        }
+
+        assertEquals("explicit evidence selection must not be empty", failure.message)
     }
 
     @Test
