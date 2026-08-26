@@ -181,6 +181,8 @@ class PromoteEvidenceCliTest {
             "clip-path-uniform-scaled-triangle-direct-triangle-linear-gradient",
             "clip-path-solid-rrect", "clip-path-asymmetric-solid-rrect", "clip-path-ellipse-solid-rrect",
             "clip-path-translated-solid-rrect", "clip-path-translated-asymmetric-solid-rrect", "clip-path-translated-ellipse-solid-rrect",
+            "clip-path-axis-x-translated-solid-rrect", "clip-path-axis-y-translated-asymmetric-solid-rrect",
+            "clip-path-negative-x-translated-ellipse-solid-rrect", "clip-path-negative-y-translated-solid-rrect",
             "clip-path-solid-drrect", "clip-path-asymmetric-solid-drrect", "clip-path-ellipse-solid-drrect",
             "clip-path-translated-solid-drrect", "clip-path-translated-asymmetric-solid-drrect", "clip-path-translated-ellipse-solid-drrect",
             "solid-triangle-path", "solid-concave-path", "even-odd-path-hole",

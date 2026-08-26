@@ -553,6 +553,26 @@ object KanvasScenePrograms {
         ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f),
     )
 
+    fun clipPathAxisXTranslatedSolidRRect() = clipPathTranslatedRRect(
+        RRectF32.of(RectF32.ofLTRB(8f, 8f, 52f, 48f), radius = 10f),
+        ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f), 4f, 0f,
+    )
+
+    fun clipPathAxisYTranslatedAsymmetricSolidRRect() = clipPathTranslatedRRect(
+        RRectF32.of(RectF32.ofLTRB(8f, 8f, 52f, 48f), CornerRadiiF32.of(4f, 8f), CornerRadiiF32.of(10f, 4f), CornerRadiiF32.of(8f, 12f), CornerRadiiF32.of(6f, 3f)),
+        ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f), 0f, 5f,
+    )
+
+    fun clipPathNegativeXTranslatedEllipseSolidRRect() = clipPathTranslatedRRect(
+        RRectF32.of(RectF32.ofLTRB(12f, 20f, 52f, 44f), CornerRadiiF32.of(20f, 12f), CornerRadiiF32.of(20f, 12f), CornerRadiiF32.of(20f, 12f), CornerRadiiF32.of(20f, 12f)),
+        ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f), -4f, 5f,
+    )
+
+    fun clipPathNegativeYTranslatedSolidRRect() = clipPathTranslatedRRect(
+        RRectF32.of(RectF32.ofLTRB(8f, 8f, 52f, 48f), radius = 10f),
+        ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f), 4f, -5f,
+    )
+
     fun clipPathSolidDRRect() = clipPathDRRect(
         RRectF32.of(RectF32.ofLTRB(8f, 8f, 52f, 48f), radius = 10f),
         RRectF32.of(RectF32.ofLTRB(22f, 20f, 40f, 38f), radius = 4f),
@@ -598,12 +618,12 @@ object KanvasScenePrograms {
         restore()
     })
 
-    private fun clipPathTranslatedRRect(rrect: RRectF32, color: ColorARGB) = KanvasSurfaceProgram(ROUTE_ID, record = {
+    private fun clipPathTranslatedRRect(rrect: RRectF32, color: ColorARGB, translateX: Float = 4f, translateY: Float = 5f) = KanvasSurfaceProgram(ROUTE_ID, record = {
         save()
         clipPath(Path {
             moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close()
         }.apply { fillType = FillType.WINDING }, ClipOp.INTERSECT, antiAlias = false)
-        translate(4f, 5f)
+        translate(translateX, translateY)
         drawRRect(rrect, Paint.fill(color).copy(antiAlias = false))
         restore()
     })

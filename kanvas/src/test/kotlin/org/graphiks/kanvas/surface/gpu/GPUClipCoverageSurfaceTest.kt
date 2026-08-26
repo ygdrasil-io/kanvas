@@ -235,34 +235,40 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `public positive translated rrect renders inside one identity hard path clip stencil scope`() {
+    fun `public finite pure translated rrects render inside one identity hard path clip stencil scope`() {
         requireWebGpu()
         val background = ColorARGB.Transparent
         val fill = ColorARGB.of(255, 242, 135, 46)
-        val surface = Surface(64, 64)
-        surface.canvas {
-            save()
-            clipPath(
-                Path { moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close() }
-                    .apply { fillType = FillType.WINDING },
-                ClipOp.INTERSECT,
-                antiAlias = false,
-            )
-            translate(4f, 5f)
-            drawRRect(
-                RRectF32.of(RectF32.ofLTRB(8f, 8f, 52f, 48f), radius = 10f),
-                Paint.fill(fill).copy(antiAlias = false),
-            )
-            restore()
+        listOf(
+            floatArrayOf(4f, 0f, 24f, 20f, 10f, 20f, 50f, 14f),
+            floatArrayOf(0f, 5f, 24f, 20f, 24f, 10f, 50f, 14f),
+            floatArrayOf(-4f, 5f, 24f, 30f, 50f, 30f, 45f, 30f),
+            floatArrayOf(4f, -5f, 24f, 20f, 20f, 46f, 50f, 14f),
+        ).forEach { samples ->
+            val surface = Surface(64, 64)
+            surface.canvas {
+                save()
+                clipPath(
+                    Path { moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close() }
+                        .apply { fillType = FillType.WINDING },
+                    ClipOp.INTERSECT,
+                    antiAlias = false,
+                )
+                translate(samples[0], samples[1])
+                drawRRect(
+                    RRectF32.of(RectF32.ofLTRB(8f, 8f, 52f, 48f), radius = 10f),
+                    Paint.fill(fill).copy(antiAlias = false),
+                )
+                restore()
+            }
+            val result = surface.render()
+            assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+            assertTrue(result.diagnostics.isEmpty, result.diagnostics.entries.toString())
+            assertEquals(0, result.stats.opsRefused)
+            assertRgbaNear(result.pixels, 64, samples[2].toInt(), samples[3].toInt(), fill)
+            assertRgbaNear(result.pixels, 64, samples[4].toInt(), samples[5].toInt(), background)
+            assertRgbaNear(result.pixels, 64, samples[6].toInt(), samples[7].toInt(), background)
         }
-
-        val result = surface.render()
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
-        assertTrue(result.diagnostics.isEmpty, result.diagnostics.entries.toString())
-        assertEquals(0, result.stats.opsRefused)
-        assertRgbaNear(result.pixels, 64, 24, 20, fill)
-        assertRgbaNear(result.pixels, 64, 10, 12, background)
-        assertRgbaNear(result.pixels, 64, 50, 14, background)
     }
 
     @Test
