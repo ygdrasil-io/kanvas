@@ -4,6 +4,7 @@ import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceCase
 import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceEnvironment
 import org.graphiks.kanvas.gpu.evidence.catalog.RouteEvidence
 import org.graphiks.kanvas.gpu.evidence.catalog.SceneObservation
+import org.graphiks.kanvas.gpu.evidence.catalog.StructuralEventEvidence
 import org.graphiks.kanvas.gpu.evidence.compare.EvidenceComparator
 import org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeTelemetry
@@ -99,7 +100,7 @@ class KanvasSurfaceEvidenceExecutor(
         "Completed",
         "rendered",
         emptyList(),
-        emptyList(),
+        result.structuralSteps.map { StructuralEventEvidence(it, "Completed", null) },
         mapOf(
             "queue.submit" to delta.submissions,
             "render.draw" to result.stats.drawCallCount.toLong(),

@@ -59,6 +59,30 @@ class SurfaceSrgbClipPathRRectCpuOracleTest {
         assertEquals(734, count(pixels, orange))
     }
 
+    @Test
+    fun `hard triangle clip distinguishes each finite pure translated device rrect`() {
+        val orange = intArrayOf(242, 135, 46, 255)
+        val background = intArrayOf(13, 20, 33, 255)
+        val triangle = listOf(
+            SurfaceSrgbClipPathRRectCpuOracle.Point(8f, 8f),
+            SurfaceSrgbClipPathRRectCpuOracle.Point(56f, 8f),
+            SurfaceSrgbClipPathRRectCpuOracle.Point(8f, 55f),
+        )
+        listOf(
+            SurfaceSrgbClipPathRRectCpuOracle.DeviceRRect(12f, 8f, 56f, 48f, radii(10f, 10f), radii(10f, 10f), radii(10f, 10f), radii(10f, 10f)) to listOf(24, 20, 10, 20, 50, 14),
+            SurfaceSrgbClipPathRRectCpuOracle.DeviceRRect(8f, 13f, 52f, 53f, radii(4f, 8f), radii(10f, 4f), radii(8f, 12f), radii(6f, 3f)) to listOf(24, 20, 24, 10, 50, 14),
+            SurfaceSrgbClipPathRRectCpuOracle.DeviceRRect(8f, 25f, 48f, 49f, radii(20f, 12f), radii(20f, 12f), radii(20f, 12f), radii(20f, 12f)) to listOf(11, 32, 49, 12, 45, 30),
+            SurfaceSrgbClipPathRRectCpuOracle.DeviceRRect(12f, 3f, 56f, 43f, radii(10f, 10f), radii(10f, 10f), radii(10f, 10f), radii(10f, 10f)) to listOf(24, 20, 18, 44, 50, 14),
+        ).forEach { (rrect, samples) ->
+            val pixels = SurfaceSrgbClipPathRRectCpuOracle(background, triangle, rrect, orange).render(64, 64)
+            assertPixel(pixels, samples[0], samples[1], orange)
+            assertPixel(pixels, samples[2], samples[3], background)
+            assertPixel(pixels, samples[4], samples[5], background)
+        }
+    }
+
+    private fun radii(x: Float, y: Float) = SurfaceSrgbClipPathRRectCpuOracle.Radii(x, y)
+
     private fun count(pixels: ByteArray, color: IntArray) = pixels.asSequence().chunked(4).count {
         it.map(Byte::toInt).map { channel -> channel and 0xff } == color.toList()
     }

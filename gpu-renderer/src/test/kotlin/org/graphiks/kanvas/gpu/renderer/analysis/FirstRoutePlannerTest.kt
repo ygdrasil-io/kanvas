@@ -1605,40 +1605,42 @@ class FirstRoutePlannerTest {
     }
 
     @Test
-    fun `positive translated rrect is the only admitted analytic rrect hard path clip consumer`() {
+    fun `finite pure translated rrects are admitted analytic hard path clip consumers`() {
         val target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm")
         val identityStencil = hardWindingStencilClip(pathTransformClass = "identity")
-        val translated = firstRRectRouteCommand(
-            target = target,
-            transform = GPUTransformFacts.translation(x = 4f, y = 5f),
-            clip = identityStencil,
+        val accepted = listOf(
+            GPUTransformFacts.translation(x = 4f, y = 0f) to listOf(6f, 3f, 26f, 25f),
+            GPUTransformFacts.translation(x = 0f, y = 5f) to listOf(2f, 8f, 22f, 30f),
+            GPUTransformFacts.translation(x = -4f, y = 5f) to listOf(-2f, 8f, 18f, 30f),
+            GPUTransformFacts.translation(x = 4f, y = -5f) to listOf(6f, -2f, 26f, 20f),
         )
-
-        val accepted = GPUFirstRoutePlanner(translated.capabilities).plan(translated.command.copy(antiAlias = false))
-        assertIs<GPURouteDecision.Native>(accepted.routeDecision)
-        val authority = assertNotNull(accepted.analysisRecord.corePrimitiveRRectGeometryAuthority)
-        val device = authority.sealedDeviceGeometryInput()
-        assertEquals(6f, device.left)
-        assertEquals(8f, device.top)
-        assertEquals(26f, device.right)
-        assertEquals(30f, device.bottom)
+        accepted.forEach { (transform, bounds) ->
+            val fixture = firstRRectRouteCommand(target = target, transform = transform, clip = identityStencil)
+            val plan = GPUFirstRoutePlanner(fixture.capabilities).plan(fixture.command.copy(antiAlias = false))
+            assertIs<GPURouteDecision.Native>(plan.routeDecision)
+            val device = assertNotNull(plan.analysisRecord.corePrimitiveRRectGeometryAuthority).sealedDeviceGeometryInput()
+            assertEquals(bounds[0], device.left)
+            assertEquals(bounds[1], device.top)
+            assertEquals(bounds[2], device.right)
+            assertEquals(bounds[3], device.bottom)
+        }
 
         val refusals = listOf(
-            GPUTransformFacts.translation(x = 0f, y = 5f) to identityStencil,
-            GPUTransformFacts.translation(x = 4f, y = 0f) to identityStencil,
-            GPUTransformFacts.translation(x = -4f, y = 5f) to identityStencil,
-            GPUTransformFacts.scale(x = 2f, y = 2f) to identityStencil,
-            GPUTransformFacts.translation(x = 4f, y = 5f) to hardWindingStencilClip(pathTransformClass = "translate"),
-            GPUTransformFacts.translation(x = 4f, y = 5f) to hardWindingStencilClip(
+            Triple(GPUTransformFacts.translation(x = 0f, y = 0f), identityStencil, "unsupported.clip.complex_stack"),
+            Triple(GPUTransformFacts.translation(x = Float.NaN, y = 5f), identityStencil, "unsupported.transform.non_finite"),
+            Triple(GPUTransformFacts.scale(x = 2f, y = 2f), identityStencil, "unsupported.clip.complex_stack"),
+            Triple(GPUTransformFacts.affine(1f, 0.25f, 0f, 1f), identityStencil, "unsupported.transform.rrect_affine_unproven"),
+            Triple(GPUTransformFacts.translation(x = 4f, y = 0f), hardWindingStencilClip(pathTransformClass = "translate"), "unsupported.clip.complex_stack"),
+            Triple(GPUTransformFacts.translation(x = 4f, y = 0f), hardWindingStencilClip(
                 pathTransformClass = "identity",
                 inverseFill = true,
-            ),
+            ), "unsupported.clip.complex_stack"),
         )
-        refusals.forEach { (transform, clip) ->
+        refusals.forEach { (transform, clip, expectedCode) ->
             val fixture = firstRRectRouteCommand(target = target, transform = transform, clip = clip)
             val refused = GPUFirstRoutePlanner(fixture.capabilities).plan(fixture.command.copy(antiAlias = false))
             assertEquals(
-                "unsupported.clip.complex_stack",
+                expectedCode,
                 assertIs<GPURouteDecision.Refused>(refused.routeDecision).diagnostic.code,
             )
         }
