@@ -208,7 +208,7 @@ internal fun NormalizedDrawCommand.toMaskBlurRequest(
     } as? NormalizedMaskFilter.Blur
         ?: error("Mask blur request requires a normalized blur mask filter")
     return MaskBlurRequest(
-        bounds = bounds,
+        bounds = maskBlurDeviceBounds(),
         clipBounds = clip.maskBlurClipBounds(targetWidth, targetHeight),
         targetWidth = targetWidth,
         targetHeight = targetHeight,
@@ -221,6 +221,10 @@ internal fun NormalizedDrawCommand.toMaskBlurRequest(
 
 internal fun NormalizedDrawCommand.maskBlurPreflightRefusalReasonOrNull(): String? {
     return when (this) {
+        is NormalizedDrawCommand.FillRect -> when (transform.type) {
+            GPUTransformType.Identity, GPUTransformType.Translate -> null
+            else -> "unsupported.mask-filter.blur.transform"
+        }
         is NormalizedDrawCommand.FillPath -> when {
             transform.isAffineDeterminantNonFinite() -> "unsupported.transform.non_finite"
             transform.isAffineDeterminantSingular() -> "unsupported.transform.affine_singular"
@@ -242,11 +246,12 @@ internal fun NormalizedDrawCommand.toLocalMaskCommand(plan: MaskBlurPlan.Ready):
     val white = GPUMaterialDescriptor.SolidColor(1f, 1f, 1f, 1f)
     return when (this) {
         is NormalizedDrawCommand.FillRect -> copy(
-            rect = rect.toLocal(origin, plan.scale),
+            rect = rect.toMaskBlurDeviceRect(transform).toLocal(origin, plan.scale),
+            transform = GPUTransformFacts.identity(),
             clip = localClip,
             material = white,
             blend = GPUBlendFacts.srcOver(),
-            bounds = bounds.toLocal(origin, plan.scale),
+            bounds = maskBlurDeviceBounds().toLocal(origin, plan.scale),
             maskFilter = null,
         )
         is NormalizedDrawCommand.FillPath -> toLocalMaskPathCommand(
@@ -264,6 +269,31 @@ internal fun NormalizedDrawCommand.toLocalMaskCommand(plan: MaskBlurPlan.Ready):
         )
         else -> error("Mask blur supports only fill rect, path, and rrect commands")
     }
+}
+
+/**
+ * The bounded rect mask-blur route executes its local mask in device space.
+ * It therefore admits only identity and translation: those preserve an axis-aligned
+ * rectangle and need no extra intermediate or transformed coverage rasterizer.
+ */
+private fun NormalizedDrawCommand.maskBlurDeviceBounds(): GPUBounds = when (this) {
+    is NormalizedDrawCommand.FillRect -> {
+        val device = rect.toMaskBlurDeviceRect(transform)
+        GPUBounds(device.left, device.top, device.right, device.bottom)
+    }
+    else -> bounds
+}
+
+private fun GPURect.toMaskBlurDeviceRect(transform: GPUTransformFacts): GPURect {
+    require(transform.type == GPUTransformType.Identity || transform.type == GPUTransformType.Translate) {
+        "The bounded rect mask-blur route accepts only identity or translation transforms."
+    }
+    return GPURect(
+        left + transform.translateX,
+        top + transform.translateY,
+        right + transform.translateX,
+        bottom + transform.translateY,
+    )
 }
 
 private fun NormalizedDrawCommand.FillPath.toLocalMaskPathCommand(
