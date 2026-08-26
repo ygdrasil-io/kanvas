@@ -32,10 +32,13 @@ diff/stat authority are recorded there, with independent `diff.json`,
   --tests org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceImagePixelTest \
   --tests org.graphiks.kanvas.surface.gpu.GPUMaterialMapperTest \
   :integration-tests:skia:test \
-  --tests org.graphiks.kanvas.skia.gm.image.DrawimagerectFilterGmTest
+  --tests org.graphiks.kanvas.skia.gm.image.DrawimagerectFilterGmTest \
+  --tests org.graphiks.kanvas.skia.gm.image.NearestHalfPixelImageGmTest
 
 ./gradlew --no-daemon :integration-tests:skia:generateSkiaRendersFor \
   -Pgm.name=drawimagerect_filter
+./gradlew --no-daemon :integration-tests:skia:generateSkiaRendersFor \
+  -Pgm.name=nearest_half_pixel_image
 
 ./gradlew --no-daemon :integration-tests:skia:test \
   --tests org.graphiks.kanvas.skia.SkiaGmRunner \
@@ -47,9 +50,14 @@ All commands passed.
 
 ## Non-claims / concern
 
-No repeat/mirror/decal tile modes, perspective, skew, negative scale,
-mipmapping, anisotropy, cubic sampling, codec fallback, arbitrary-path image
-shader fill, Ganesh, Graphite or dynamic SkSL is implemented.  The attempted
-`nearest_half_pixel_image` regeneration remains outside this bounded contract:
-its mirror/negative-scale variants fail the existing prepared image-lowerer
-authority check, so its generated reference and score were not updated.
+No repeat/mirror/decal tile modes, perspective, skew, or negative image local
+scale, mipmapping, anisotropy, cubic sampling, codec fallback, arbitrary-path
+image shader fill, Ganesh, Graphite or dynamic SkSL is implemented.  The
+`nearest_half_pixel_image` regeneration is valid and checked in: it renders
+with two dispatches, zero refusals, and 73.44938749194068% similarity against
+its unchanged 0.0% threshold.  Its mirror/negative-scale variants are Canvas
+geometry transforms inherited by `Shader.Image`, not negative image local
+matrices.  Consequently this GM does not broaden the bounded local-matrix
+contract; negative image local matrices remain refused.  Its independent
+CPU/GPU diff/stat/route/diagnostic artifacts sit under
+`reports/gpu-renderer/evidence/nearest-half-pixel-image-2026-08-27/`.

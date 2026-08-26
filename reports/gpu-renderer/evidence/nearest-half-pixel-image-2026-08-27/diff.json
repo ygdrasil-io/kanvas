@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "kanvas-image-local-sampling-diff-v1",
+  "gm": "nearest_half_pixel_image",
+  "oracle": "Skia CPU reference PNG",
+  "reference": "integration-tests/skia/src/test/resources/reference/nearest_half_pixel_image.png",
+  "actual": "integration-tests/skia/src/test/resources/generated-renders/image/nearest_half_pixel_image.png",
+  "algorithm": "ComparisonUtils.compareRgba(tolerance = 0)",
+  "width": 264,
+  "height": 235,
+  "matchingPixels": 45568,
+  "mismatchingPixels": 16472,
+  "totalPixels": 62040,
+  "maxDiff": [255, 255, 255, 0],
+  "meanDiffOnMismatchingPixels": [153.28897523069452, 174.97620203982515, 106.67799902865468, 0.0]
+}

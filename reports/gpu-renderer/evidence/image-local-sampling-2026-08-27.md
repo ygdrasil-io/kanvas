@@ -41,9 +41,7 @@ Independent machine-readable evidence is checked in beside this report:
 `GPUPreparedSurfaceImagePixelTest` additionally executes a bounded
 translation + nearest + alpha-tint case against an exact WebGPU readback
 oracle (`[137, 0, 0, 64]` for a half-alpha red paint over a half-alpha A8
-image).  This is the representative nearest/alpha route proof; the existing
-`nearest_half_pixel_image` GM remains out of scope because it includes
-mirror/negative-scale variants.
+image).  This is the representative nearest/alpha route proof.
 
 ## Stable refusals
 
@@ -66,6 +64,13 @@ The mapper/compiler tests retain terminal, typed refusals for:
   -Dkanvas.render.debugLevel=PIXEL
 ```
 
-`nearest_half_pixel_image` was deliberately not regenerated: it exercises
-mirror/negative-scale variants beyond this bounded positive-scale contract and
-currently hits the pre-existing prepared image-lowerer authority invariant.
+`nearest_half_pixel_image` was regenerated and compared independently at
+73.44938749194068% similarity, with two dispatches and zero refusals.  Its
+`mirror` cases are inherited Canvas geometry transforms: the GM constructs
+`Shader.Image` directly, without a `Shader.WithLocalMatrix`.  This successful
+render therefore does not broaden the bounded image local-matrix contract:
+negative *local matrices* remain a stable refusal.  Its independent artifacts
+are [`diff.json`](nearest-half-pixel-image-2026-08-27/diff.json),
+[`stats.json`](nearest-half-pixel-image-2026-08-27/stats.json),
+[`route.json`](nearest-half-pixel-image-2026-08-27/route.json), and
+[`diagnostics.json`](nearest-half-pixel-image-2026-08-27/diagnostics.json).
