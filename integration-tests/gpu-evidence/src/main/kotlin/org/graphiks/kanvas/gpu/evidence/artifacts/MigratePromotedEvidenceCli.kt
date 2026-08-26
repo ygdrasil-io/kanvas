@@ -209,18 +209,11 @@ class MigratePromotedEvidenceCliRunner internal constructor(
         }
         require("environment.json" in files) { "$sceneId: manifest must reference environment.json" }
         val environment = readEnvironment(directory.resolve("environment.json"), sourceCommit)
-        val promotion = readObject(directory.resolve("promotion.json"), "promotion")
-        promotion.requireKeys(setOf("schemaVersion", "sceneId", "sourceCommit", "promotedAtUtc", "reviewer", "reason", "rebaseline", "priorComparison", "newComparison"))
-        require(promotion.requiredString("schemaVersion") == GPU_EVIDENCE_PROMOTION_SCHEMA) { "unsupported promotion schemaVersion" }
-        require(promotion.requiredString("sceneId") == sceneId) { "promotion sceneId mismatch" }
-        require(promotion.requiredString("sourceCommit") == sourceCommit) { "promotion sourceCommit mismatch" }
-        promotion.requiredString("promotedAtUtc")
-        require(promotion.requiredString("reviewer").isNotBlank()) { "promotion reviewer must not be blank" }
-        require(promotion.requiredString("reason").isNotBlank()) { "promotion reason must not be blank" }
-        promotion.requiredBoolean("rebaseline")
-        require((promotion["priorComparison"] is JsonNull) == (promotion["newComparison"] is JsonNull)) {
-            "promotion comparison summaries must be paired"
-        }
+        EvidenceBundleVerifier.verifyHistoricalPromotionRecord(
+            promotion = readObject(directory.resolve("promotion.json"), "promotion"),
+            sceneId = sceneId,
+            sourceCommit = sourceCommit,
+        )
         val imageHashes = files.filterKeys { it in IMAGE_FILES }
         val manifestV2Bytes = EvidenceManifestV2(
             schemaVersion = GPU_EVIDENCE_SCENE_SCHEMA_V2,
@@ -329,16 +322,18 @@ class MigratePromotedEvidenceCliRunner internal constructor(
     private fun swapPromotedRoot(staged: Path, destination: Path) {
         val parent = destination.parent ?: error("promoted root has no parent")
         val backup = Files.createTempDirectory(parent, ".promoted.backup-")
+        val backupDestination = backup.resolve(destination.fileName.toString())
         var restored = false
         var installed = false
         try {
-            moveStrategy(destination, backup.resolve(destination.fileName.toString()), true)
-            moveStrategy(staged, destination, true)
+            moveWithFallback(destination, backupDestination)
+            moveWithFallback(staged, destination)
             installed = true
         } catch (failure: Throwable) {
-            if (!Files.exists(destination, NOFOLLOW_LINKS)) {
+            if (Files.exists(backupDestination, NOFOLLOW_LINKS)) {
                 try {
-                    moveStrategy(backup.resolve(destination.fileName.toString()), destination, true)
+                    if (Files.exists(destination, NOFOLLOW_LINKS)) deleteTree(destination)
+                    moveWithFallback(backupDestination, destination)
                     restored = true
                 } catch (restoreFailure: Throwable) {
                     failure.addSuppressed(restoreFailure)
@@ -354,6 +349,14 @@ class MigratePromotedEvidenceCliRunner internal constructor(
                 runCatching { deleteTree(backup) }
                     .onFailure { cleanupFailure -> stderr.println("migration installed new catalog; backup retained at $backup: ${cleanupFailure.message}") }
             }
+        }
+    }
+
+    private fun moveWithFallback(source: Path, destination: Path) {
+        try {
+            moveStrategy(source, destination, true)
+        } catch (_: AtomicMoveNotSupportedException) {
+            moveStrategy(source, destination, false)
         }
     }
 

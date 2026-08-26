@@ -410,7 +410,18 @@ object EvidenceBundleVerifier {
         else -> error("unsupported schemaVersion: $schema")
     }
     private fun verifyPromotion(directory: Path, sceneId: String, sourceCommit: String) {
-        val promotion = readObject(directory.resolve("promotion.json"), "promotion")
+        verifyHistoricalPromotionRecord(
+            promotion = readObject(directory.resolve("promotion.json"), "promotion"),
+            sceneId = sceneId,
+            sourceCommit = sourceCommit,
+        )
+    }
+
+    internal fun verifyHistoricalPromotionRecord(
+        promotion: JsonObject,
+        sceneId: String,
+        sourceCommit: String,
+    ) {
         promotion.requireKeys(setOf("schemaVersion", "sceneId", "sourceCommit", "promotedAtUtc", "reviewer", "reason", "rebaseline", "priorComparison", "newComparison"))
         require(promotion.requiredString("schemaVersion") == GPU_EVIDENCE_PROMOTION_SCHEMA) { "unsupported promotion schemaVersion" }
         require(promotion.requiredString("sceneId") == sceneId) { "promotion sceneId mismatch" }
@@ -423,8 +434,16 @@ object EvidenceBundleVerifier {
         val next = promotion["newComparison"]
         require((prior is JsonNull) == (next is JsonNull)) { "promotion comparison summaries must be paired" }
         if (rebaseline) require(prior !is JsonNull && next !is JsonNull) { "rebaseline requires old/new comparison summaries" }
-        if (prior != null && prior !is JsonNull) require(prior is JsonPrimitive && prior.isString && prior.content.isNotBlank()) { "priorComparison must be a nonblank string or null" }
-        if (next != null && next !is JsonNull) require(next is JsonPrimitive && next.isString && next.content.isNotBlank()) { "newComparison must be a nonblank string or null" }
+        if (prior != null && prior !is JsonNull) {
+            require(prior is JsonPrimitive && prior.isString && prior.content.isNotBlank()) {
+                "priorComparison must be a nonblank string or null"
+            }
+        }
+        if (next != null && next !is JsonNull) {
+            require(next is JsonPrimitive && next.isString && next.content.isNotBlank()) {
+                "newComparison must be a nonblank string or null"
+            }
+        }
     }
     private fun JsonPrimitive.asString(label: String): String = require(isString && contentOrNull != null) { "$label must be a string" }.let { content }
     private fun decodePng(path: Path, width: Int, height: Int): ByteArray {

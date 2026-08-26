@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.evidence.artifacts
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.PrintStream
+import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.security.MessageDigest
@@ -118,11 +119,53 @@ class MigratePromotedEvidenceCliTest {
     }
 
     @Test
+    fun `migration rejects mixed v1 environments before staging`() {
+        writePromotedV1Root(repository, COMMIT)
+        val root = promotedRoot(repository)
+        val environment = root.resolve("solid-card-stack/environment.json")
+        Files.writeString(environment, Files.readString(environment).replace("\"osVersion\":\"1\"", "\"osVersion\":\"2\""))
+        val before = snapshot(root)
+        var stagedVerificationCalled = false
+
+        val result = MigratePromotedEvidenceCliRunner(
+            beforeStagedVerification = {
+                stagedVerificationCalled = true
+            },
+        ).run(args(repository))
+
+        assertTrue(result != 0)
+        assertFalse(stagedVerificationCalled)
+        assertEquals(before, snapshot(root))
+        assertFalse(Files.exists(root.resolve("catalog.json")))
+    }
+
+    @Test
     fun `migration rejects malformed scene promotion metadata without mutating v1`() {
         writePromotedV1Root(repository, COMMIT)
         val root = promotedRoot(repository)
         val promotion = root.resolve("solid-card-stack/promotion.json")
         Files.writeString(promotion, Files.readString(promotion).replace("\"reason\":\"initial\"", "\"reason\":\"\""))
+        val before = snapshot(root)
+
+        val result = MigratePromotedEvidenceCliRunner().run(args(repository))
+
+        assertTrue(result != 0)
+        assertEquals(before, snapshot(root))
+        assertFalse(Files.exists(root.resolve("environment.json")))
+    }
+
+    @Test
+    fun `migration rejects invalid v1 rebaseline promotion metadata without mutating v1`() {
+        writePromotedV1Root(repository, COMMIT)
+        val root = promotedRoot(repository)
+        val promotion = root.resolve("solid-card-stack/promotion.json")
+        Files.writeString(
+            promotion,
+            Files.readString(promotion)
+                .replace("\"rebaseline\":false", "\"rebaseline\":true")
+                .replace("\"priorComparison\":null", "\"priorComparison\":\"\"")
+                .replace("\"newComparison\":null", "\"newComparison\":\"\""),
+        )
         val before = snapshot(root)
 
         val result = MigratePromotedEvidenceCliRunner().run(args(repository))
@@ -149,6 +192,32 @@ class MigratePromotedEvidenceCliTest {
 
         assertTrue(result != 0)
         assertTrue(moves >= 3)
+        assertEquals(before, snapshot(promotedRoot(repository)))
+    }
+
+    @Test
+    fun `partial non-atomic swap failure restores the original v1 root byte for byte`() {
+        writePromotedV1Root(repository, COMMIT)
+        val before = snapshot(promotedRoot(repository))
+        var fallbackEntered = false
+
+        val result = MigratePromotedEvidenceCliRunner(
+            clock = FIXED_CLOCK,
+            moveStrategy = { source, destination, atomic ->
+                if (source.fileName.toString().startsWith(".promoted.v2-staged-") && atomic) {
+                    throw AtomicMoveNotSupportedException(source.toString(), destination.toString(), "injected fallback")
+                }
+                if (source.fileName.toString().startsWith(".promoted.v2-staged-") && !atomic) {
+                    fallbackEntered = true
+                    copyTree(source, destination)
+                    throw IOException("injected partial non-atomic swap failure")
+                }
+                Files.move(source, destination)
+            },
+        ).run(args(repository))
+
+        assertTrue(result != 0)
+        assertTrue(fallbackEntered)
         assertEquals(before, snapshot(promotedRoot(repository)))
     }
 

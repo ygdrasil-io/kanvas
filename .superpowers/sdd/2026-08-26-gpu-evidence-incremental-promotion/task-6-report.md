@@ -66,3 +66,39 @@ rtk git diff --stat
 ## Concerns
 
 No functional concerns in the implemented scope. The Gradle runs still emit the pre-existing Gradle 10 deprecation warning and restricted native-access warning, but all requested verification commands passed.
+
+## Fix Round 1
+
+Addressed the review follow-ups in the migration rollback and validation path:
+
+- strengthened `swapPromotedRoot` so rollback attempts restoration whenever the backup root exists, even if the failed staged install already left a destination path behind;
+- delete any partial destination before restore, then move the backup back with the same atomic-to-non-atomic fallback helper used for swap;
+- preserved diagnostics when restoration itself fails by suppressing the restore error onto the primary failure and keeping the backup-path stderr message;
+- added the explicitly requested mixed-v1-environments test and asserted the migration rejects before `beforeStagedVerification` runs;
+- removed validation drift by routing migration-side v1 `promotion.json` checks through `EvidenceBundleVerifier.verifyHistoricalPromotionRecord`, which also enforces the same `rebaseline` and nonblank comparison-summary relationships as historical verification.
+
+Fix-round red phase:
+
+```bash
+rtk ./gradlew --no-daemon :integration-tests:gpu-evidence:test --tests '*MigratePromotedEvidenceCliTest.migration rejects mixed v1 environments before staging' --tests '*MigratePromotedEvidenceCliTest.migration rejects invalid v1 rebaseline promotion metadata without mutating v1' --tests '*MigratePromotedEvidenceCliTest.partial non-atomic swap failure restores the original v1 root byte for byte'
+```
+
+Observed before fixes: `3 tests completed, 1 failed`; the new partial/non-atomic swap test failed, demonstrating that rollback skipped restoration when a destination already existed after the failed staged install.
+
+Fix-round green phase:
+
+```bash
+rtk ./gradlew --no-daemon :integration-tests:gpu-evidence:test --tests '*MigratePromotedEvidenceCliTest.migration rejects mixed v1 environments before staging' --tests '*MigratePromotedEvidenceCliTest.migration rejects invalid v1 rebaseline promotion metadata without mutating v1' --tests '*MigratePromotedEvidenceCliTest.partial non-atomic swap failure restores the original v1 root byte for byte'
+rtk ./gradlew --no-daemon :integration-tests:gpu-evidence:test --tests '*MigratePromotedEvidenceCliTest' --tests '*VerifyEvidenceCliTest'
+```
+
+Observed after fixes: both commands returned `BUILD SUCCESSFUL`.
+
+Fix-round self-review:
+
+```bash
+rtk git diff --check
+rtk git diff --stat
+```
+
+`git diff --check` remained clean. The fix-round diff touched only `EvidenceBundleVerifier.kt`, `MigratePromotedEvidenceCli.kt`, `MigratePromotedEvidenceCliTest.kt`, and this report append.
