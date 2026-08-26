@@ -98,6 +98,8 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleStoreAction
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.payloads.PREPARED_VERTICES_RENDER_PIPELINE_KEY
+import org.graphiks.kanvas.gpu.renderer.payloads.PREPARED_VERTICES_RENDER_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
@@ -224,6 +226,62 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class GPUFramePreflighterTest {
+    @Test
+    fun `prepared vertices pipeline may retain the late-bound target generation`() {
+        val packet = packet(
+            id = "packet.prepared-vertices",
+            commandId = 1,
+            pipelineKey = PREPARED_VERTICES_RENDER_PIPELINE_KEY.value,
+            renderStepIdentity = PREPARED_VERTICES_RENDER_STEP_IDENTITY,
+            resourceGeneration = PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION,
+        )
+        val step = GPUFrameStep.RenderPassStep(
+            target = GPUFrameTargetRef("target.scene"),
+            loadStore = GPULoadStorePlan("clear", GPUStorePlan.Store),
+            samplePlan = GPUSamplePlan.SingleSampleFrame,
+            drawPackets = listOf(packet),
+            sourceTaskIds = listOf(GPUTaskID("task.prepared-vertices")),
+            batches = listOf(batch("batch.prepared-vertices", packet, "task.prepared-vertices")),
+        )
+
+        val result = preflighter(
+            RecordingResourceProvider(mutableListOf()),
+            RecordingCompletionProvider(mutableListOf()),
+            RecordingSurfaceProvider(mutableListOf()),
+        ).preflight(framePlan(listOf(step)))
+
+        assertIs<GPUFramePreflightResult.Prepared>(result)
+    }
+
+    @Test
+    fun `pending path route may retain the late-bound target generation`() {
+        val packet = packet(
+            id = "packet.pending-path",
+            commandId = 1,
+            pipelineKey = "pending.pipeline.fill_path.stencil_cover.rgba8unorm.src_over",
+            renderStepIdentity = "path.fill.stencil_cover",
+            resourceGeneration = PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION,
+            bindingLayoutHash = "preflight.pending",
+            vertexSourceLabel = "preflight.pending",
+        )
+        val step = GPUFrameStep.RenderPassStep(
+            target = GPUFrameTargetRef("target.scene"),
+            loadStore = GPULoadStorePlan("clear", GPUStorePlan.Store),
+            samplePlan = GPUSamplePlan.SingleSampleFrame,
+            drawPackets = listOf(packet),
+            sourceTaskIds = listOf(GPUTaskID("task.pending-path")),
+            batches = listOf(batch("batch.pending-path", packet, "task.pending-path")),
+        )
+
+        val result = preflighter(
+            RecordingResourceProvider(mutableListOf()),
+            RecordingCompletionProvider(mutableListOf()),
+            RecordingSurfaceProvider(mutableListOf()),
+        ).preflight(framePlan(listOf(step)))
+
+        assertIs<GPUFramePreflightResult.Prepared>(result)
+    }
+
     @Test
     fun `generic preflight refuses unmaterialized prepared vertices evidence before side effects`() {
         val events = mutableListOf<String>()
@@ -756,6 +814,31 @@ class GPUFramePreflighterTest {
         assertIs<GPUFramePreflightResult.Refused>(
             preflightGradientPlan(forgedPlan, capabilities),
         )
+    }
+
+    @Test
+    fun `mixed legacy uniform layouts with separate seals refuse before side effects`() {
+        val capabilities = gradientCapabilities(radialGradientMaterial())
+        val plan = preparedMixedSolidRadialFramePlan(capabilities)
+        val packets = plan.steps
+            .filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .flatMap(GPUFrameStep.RenderPassStep::drawPackets)
+        val frameSeal = requireNotNull(packets.first().corePrimitivePreparedAuthority?.uniformSlabSeal)
+        val separateSeal = GPUCorePrimitiveUniformSlabSeal(
+            plan = frameSeal.plan,
+            commandIds = frameSeal.commandIds,
+            packedBytes = frameSeal.packedBytesSnapshot(),
+        )
+        val forgedPlan = plan.replacingCorePacket(
+            packets.last(),
+            cloneCorePacket(packets.last(), uniformSlabSeal = separateSeal),
+        )
+
+        val refused = assertIs<GPUFramePreflightResult.Refused>(
+            preflightGradientPlan(forgedPlan, capabilities),
+        ).diagnostic
+
+        assertEquals("unsupported.core_primitive.mixed_legacy_uniform_layouts", refused.code.value)
     }
 
     @Test
@@ -10364,6 +10447,8 @@ class GPUFramePreflighterTest {
         uniformSlot: GPUUniformPayloadSlot? = null,
         targetStateHash: String = "target.state",
         resourceGeneration: Long = 1,
+        bindingLayoutHash: String = "layout.fill",
+        vertexSourceLabel: String = "vertices.$id",
     ): GPUDrawPacket = GPUDrawPacket(
         packetId = GPUDrawPacketID(id),
         commandIdValue = commandId,
@@ -10378,10 +10463,10 @@ class GPUFramePreflighterTest {
         renderStepVersion = 1,
         role = GPUDrawPacketRole.Shading,
         renderPipelineKey = GPURenderPipelineKey(pipelineKey),
-        bindingLayoutHash = "layout.fill",
+        bindingLayoutHash = bindingLayoutHash,
         uniformSlot = uniformSlot,
         semanticPayload = semanticPayload,
-        vertexSourceLabel = "vertices.$id",
+        vertexSourceLabel = vertexSourceLabel,
         targetStateHash = targetStateHash,
         originalPaintOrder = commandId,
         resourceGeneration = resourceGeneration,

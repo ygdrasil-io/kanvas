@@ -31,6 +31,9 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 
+private const val PREPARED_SURFACE_VERTICES_MULTI_RUN_REFUSAL =
+    "unsupported.prepared-surface.vertices-multi-run"
+
 /**
  * The sole owner and assembler for the closed mixed
  * {CorePrimitive, SampledImage, TextA8, ColorGlyph} surface route.
@@ -103,6 +106,15 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
             is GPUPreparedSurfaceNativePreflightResult.Accepted -> result.plan
             is GPUPreparedSurfaceNativePreflightResult.Refused ->
                 return refused(result.code, result.message)
+        }
+        if (accepted.orderedRuns.count {
+                it is GPUPreparedSurfaceNativeRunPlan.Vertices
+            } > 1
+        ) {
+            return refused(
+                PREPARED_SURFACE_VERTICES_MULTI_RUN_REFUSAL,
+                "Prepared-vertices materialization supports one exact render run per frame.",
+            )
         }
 
         var coreLifecycle: GPUPreparedNativeFrameLeaseLifecycle? = null
