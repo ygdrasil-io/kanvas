@@ -1195,6 +1195,16 @@ class GPUFramePreflighterTest {
     }
 
     @Test
+    fun `analytic drrect clip stencil refuses a background prefix before side effects`() {
+        val result = preparedNativeClipStencilFrameResult(drrectConsumer = true, withPrefix = true)
+
+        assertEquals(
+            "unsupported.recording.core_primitive_clip_stencil_mixed_geometry",
+            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+        )
+    }
+
+    @Test
     fun `native path clip stencil AA 4x preflight accepts one exact retained continuation`() {
         val plan = preparedNativeClipStencilFramePlan(sampleCount = 4)
         val events = mutableListOf<String>()
@@ -8277,6 +8287,27 @@ class GPUFramePreflighterTest {
         coverageModes: Map<Int, GPUCorePrimitiveCoverageMode> = emptyMap(),
         samplePlan: GPUSamplePlan = GPUSamplePlan.SingleSampleFrame,
     ): GPUFramePlan {
+        val preparedResult = preparedAnalyticFrameResult(
+            plans,
+            geometries,
+            coverageModes,
+            samplePlan,
+        )
+        val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            preparedResult,
+            (preparedResult as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}"
+            },
+        ).taskList
+        return GPUFramePlanner.plan(taskList).also { plan -> check(!plan.atomicallyRefused) }
+    }
+
+    private fun preparedAnalyticFrameResult(
+        plans: Map<Int, GPUClipExecutionPlan>,
+        geometries: Map<Int, GPUCorePrimitiveGeometryInput> = emptyMap(),
+        coverageModes: Map<Int, GPUCorePrimitiveCoverageMode> = emptyMap(),
+        samplePlan: GPUSamplePlan = GPUSamplePlan.SingleSampleFrame,
+    ): GPUCorePrimitivePreparedFrameResult {
         val analyticCapabilities = if (samplePlan == GPUSamplePlan.MultisampleFrame(4)) {
             pathMsaaCapabilities()
         } else {
@@ -8322,7 +8353,7 @@ class GPUFramePreflighterTest {
                     ?: GPUCorePrimitiveCoverageMode.FullOrScissor,
             )
         }
-        val preparedResult = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+        return GPUCorePrimitivePreparedFrameTaskListBuilder().build(
             GPUCorePrimitivePreparedFrameRequest(
                 baseTaskList = base,
                 capabilities = analyticCapabilities,
@@ -8331,20 +8362,31 @@ class GPUFramePreflighterTest {
                 semanticsByCommandId = semantics,
             ),
         )
-        val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
-            preparedResult,
-            (preparedResult as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
-                "${it.code.value}: ${it.message}"
-            },
-        ).taskList
-        return GPUFramePlanner.plan(taskList).also { plan -> check(!plan.atomicallyRefused) }
     }
 
     private fun preparedNativeClipStencilFramePlan(
         sampleCount: Int = 1,
         rrectConsumer: Boolean = false,
         drrectConsumer: Boolean = false,
+        withPrefix: Boolean = false,
     ): GPUFramePlan {
+        val prepared = preparedNativeClipStencilFrameResult(
+            sampleCount,
+            rrectConsumer,
+            drrectConsumer,
+            withPrefix,
+        )
+        return GPUFramePlanner.plan(
+            assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(prepared).taskList,
+        ).also { plan -> check(!plan.atomicallyRefused) }
+    }
+
+    private fun preparedNativeClipStencilFrameResult(
+        sampleCount: Int = 1,
+        rrectConsumer: Boolean = false,
+        drrectConsumer: Boolean = false,
+        withPrefix: Boolean = false,
+    ): GPUCorePrimitivePreparedFrameResult {
         val targetBounds = GPUPixelBounds(0, 0, 4, 4)
         val clipPlan = GPUClipExecutionPlan.StencilCoverage(
             contentKey = "clip.preflight.native.path",
@@ -8375,8 +8417,8 @@ class GPUFramePreflighterTest {
                 compare = GPUClipStencilCompare.NotEqual,
             ),
         )
-        return preparedAnalyticFramePlan(
-            if (rrectConsumer || drrectConsumer) mapOf(92 to clipPlan) else mapOf(
+        return preparedAnalyticFrameResult(
+            if (withPrefix) mapOf(91 to GPUClipExecutionPlan.NoClip, 92 to clipPlan) else if (rrectConsumer || drrectConsumer) mapOf(92 to clipPlan) else mapOf(
                 91 to clipPlan,
                 92 to clipPlan,
             ),

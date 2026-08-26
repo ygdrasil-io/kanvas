@@ -389,6 +389,14 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
 
     @Test
     fun `seal keeps DRRect outside every non bounded hard clip consumer variant`() {
+        val firstClip = stencilPlan()
+        assertRefused(
+            "unsupported.native-core-primitive.clip-stencil.multiple-artifacts",
+            request(
+                consumers = mutableListOf(consumer(geometry = drrectConsumer())),
+                artifacts = mutableListOf(firstClip, firstClip.copy(contentKey = "clip-1")),
+            ),
+        )
         assertRefused(
             "unsupported.native-core-primitive.clip-stencil.rrect-fill-rule",
             request(
