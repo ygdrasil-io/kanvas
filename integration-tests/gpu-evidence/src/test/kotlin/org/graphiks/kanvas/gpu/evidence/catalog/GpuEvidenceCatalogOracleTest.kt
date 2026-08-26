@@ -199,11 +199,11 @@ class GpuEvidenceCatalogOracleTest {
 
         assertPixel(solid, 64, 64, 12, 12, orange)
         assertPixel(solid, 64, 64, 50, 14, background)
-        assertEquals(1062, fillPixelCount(solid, orange))
+        assertEquals(1059, fillPixelCount(solid, orange))
 
         assertPixel(translated, 64, 64, 14, 12, blue)
         assertPixel(translated, 64, 64, 8, 12, background)
-        assertEquals(1062, fillPixelCount(translated, blue))
+        assertEquals(1059, fillPixelCount(translated, blue))
 
         assertPixel(ordered, 64, 64, 12, 12, blue)
         assertPixel(ordered, 64, 64, 24, 12, orange)

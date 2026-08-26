@@ -217,7 +217,9 @@ object KanvasScenePrograms {
             antiAlias = false,
         )
         drawPath(
-            Path { moveTo(4f, 4f); lineTo(60f, 12f); lineTo(12f, 60f); close() }
+            // Keep each consumer edge away from 1x pixel centers: WebGPU's top-left edge
+            // ownership is otherwise intentionally distinct from the inclusive CPU oracle.
+            Path { moveTo(4f, 4.25f); lineTo(60f, 12f); lineTo(12f, 60f); close() }
                 .apply { fillType = FillType.WINDING },
             Paint.fill(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)).copy(antiAlias = false),
         )
@@ -235,7 +237,8 @@ object KanvasScenePrograms {
             antiAlias = false,
         )
         drawPath(
-            Path { moveTo(4f, 4f); lineTo(60f, 12f); lineTo(12f, 60f); close() }
+            // The same device-space edge placement as the untranslated direct-triangle case.
+            Path { moveTo(4f, 4.25f); lineTo(60f, 12f); lineTo(12f, 60f); close() }
                 .apply { fillType = FillType.WINDING },
             Paint.fill(ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)).copy(antiAlias = false),
         )
@@ -252,7 +255,8 @@ object KanvasScenePrograms {
             antiAlias = false,
         )
         drawPath(
-            Path { moveTo(4f, 4f); lineTo(60f, 12f); lineTo(12f, 60f); close() }
+            // Match the non-ambiguous device-space edge placement of the solid cases.
+            Path { moveTo(4f, 4.25f); lineTo(60f, 12f); lineTo(12f, 60f); close() }
                 .apply { fillType = FillType.WINDING },
             Paint.fill(ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)).copy(antiAlias = false),
         )

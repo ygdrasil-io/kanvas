@@ -612,7 +612,7 @@ object GpuEvidenceCatalog {
         description = "Public Kanvas Surface hard non-AA path clip with one solid DirectTriangles drawPath consumer.",
         program = KanvasScenePrograms.clipPathTriangleDirectTriangleSolid(),
         contour = listOf(clipPoint(8f, 8f), clipPoint(56f, 8f), clipPoint(8f, 55f)),
-        draws = listOf(directTriangle(4f, 4f, 60f, 12f, 12f, 60f, intArrayOf(242, 135, 46, 255))),
+        draws = listOf(directTriangle(4f, 4.25f, 60f, 12f, 12f, 60f, intArrayOf(242, 135, 46, 255))),
     )
 
     private fun clipPathTranslatedTriangleDirectTriangleSolid() = clipPathDirectTriangleCase(
@@ -621,7 +621,7 @@ object GpuEvidenceCatalog {
         description = "Public Kanvas Surface translated hard non-AA path clip with one device-space solid DirectTriangles drawPath consumer.",
         program = KanvasScenePrograms.clipPathTranslatedTriangleDirectTriangleSolid(),
         contour = listOf(clipPoint(10f, 8f), clipPoint(58f, 8f), clipPoint(10f, 55f)),
-        draws = listOf(directTriangle(6f, 4f, 62f, 12f, 14f, 60f, intArrayOf(31, 115, 209, 255))),
+        draws = listOf(directTriangle(6f, 4.25f, 62f, 12f, 14f, 60f, intArrayOf(31, 115, 209, 255))),
     )
 
     private fun clipPathTriangleDirectTriangleOrder() = clipPathDirectTriangleCase(
@@ -631,7 +631,7 @@ object GpuEvidenceCatalog {
         program = KanvasScenePrograms.clipPathTriangleDirectTriangleOrder(),
         contour = listOf(clipPoint(8f, 8f), clipPoint(56f, 8f), clipPoint(8f, 55f)),
         draws = listOf(
-            directTriangle(4f, 4f, 60f, 12f, 12f, 60f, intArrayOf(31, 115, 209, 255)),
+            directTriangle(4f, 4.25f, 60f, 12f, 12f, 60f, intArrayOf(31, 115, 209, 255)),
             directTriangle(20f, 8f, 56f, 8f, 20f, 44f, intArrayOf(242, 135, 46, 255)),
         ),
     )

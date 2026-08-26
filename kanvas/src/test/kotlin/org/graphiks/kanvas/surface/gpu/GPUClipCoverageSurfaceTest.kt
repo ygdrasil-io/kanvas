@@ -204,6 +204,41 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
+    fun `single direct triangle hard clip consumer has exact device-space coverage away from pixel-center edges`() {
+        requireWebGpu()
+        val background = ColorARGB.of(255, 13, 20, 33)
+        val orange = ColorARGB.of(255, 242, 135, 46)
+        val surface = Surface(64, 64)
+        surface.canvas {
+            drawColor(background)
+            save()
+            clipPath(
+                Path {
+                    moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close()
+                }.apply { fillType = FillType.WINDING },
+                ClipOp.INTERSECT,
+                antiAlias = false,
+            )
+            drawPath(
+                Path {
+                    moveTo(4f, 4.25f); lineTo(60f, 12f); lineTo(12f, 60f); close()
+                }.apply { fillType = FillType.WINDING },
+                Paint.fill(orange).copy(antiAlias = false),
+            )
+            restore()
+        }
+
+        val result = surface.render()
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertEquals(
+            1059,
+            result.pixels.asList().chunked(4).count { pixel ->
+                pixel == listOf(orange.red.toUByte(), orange.green.toUByte(), orange.blue.toUByte(), orange.alpha.toUByte())
+            },
+        )
+    }
+
+    @Test
     fun `public translated implicitly closed solid triangle keeps clip and consumer in device space`() {
         requireWebGpu()
         val background = ColorARGB.of(255, 13, 20, 33)

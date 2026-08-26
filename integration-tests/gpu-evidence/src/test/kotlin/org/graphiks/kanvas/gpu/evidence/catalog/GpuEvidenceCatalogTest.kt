@@ -835,6 +835,20 @@ class GpuEvidenceCatalogTest {
         )
     }
 
+    @Test
+    fun `direct triangle evidence consumers avoid 1x pixel center edge ambiguity`() {
+        listOf(
+            "clip-path-triangle-direct-triangle-solid",
+            "clip-path-translated-triangle-direct-triangle-solid",
+            "clip-path-triangle-direct-triangle-order",
+        ).forEach { id ->
+            val firstConsumer = ops(id).filterIsInstance<DisplayOp.DrawPath>().first()
+            assertEquals(4.25f, assertNotNull(firstConsumer.path.computeBounds()).top)
+            assertEquals(FillType.WINDING, firstConsumer.path.fillType)
+            assertFalse(firstConsumer.paint.antiAlias)
+        }
+    }
+
     private fun assertHardClipRRectCase(
         id: String,
         drawCount: Int,
