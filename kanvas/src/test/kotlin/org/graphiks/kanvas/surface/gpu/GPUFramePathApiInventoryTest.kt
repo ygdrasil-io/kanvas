@@ -151,6 +151,60 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `bounded cubic draw path reaches the native stencil cover route`() {
+        val path = Path().apply {
+            moveTo(2f, 2f)
+            cubicTo(8f, 18f, 16f, 18f, 24f, 2f)
+            lineTo(2f, 2f)
+            close()
+        }
+        val plan = GPUFramePathApiInventory.plan(
+            listOf(DisplayOp.DrawPath(path, Paint.fill(ColorARGB.Red).copy(antiAlias = false), Matrix3x3F32.Identity, ClipStack.WideOpen)),
+            target(), RenderConfig.DEFAULT, capabilitiesWith(PATH_FILL_STENCIL_COVER),
+        )
+
+        assertEquals(null, plan.preparedRefusal)
+        assertEquals("native.path_fill.stencil_cover", plan.recording.analysis.records.single().routeDecisionLabel)
+        assertEquals(listOf("route:native.path_fill.stencil_cover"), plan.recording.routeDiagnostics)
+        assertTrue(plan.recording.taskList.tasks.none { it is GPUTask.Refused })
+        val command = assertIs<NormalizedDrawCommand.FillPath>(plan.visualCommands.single().normalized)
+        assertTrue(command.pathKey.startsWith("path:"))
+        assertEquals("finite", command.pathDescriptor.finiteProof)
+        assertEquals("immutable", command.pathDescriptor.volatility)
+        val semantic = assertIs<GPUCorePrimitiveSemanticGatherResult.Gathered>(
+            GPUFramePathApiInventory.gatherCorePrimitiveSemantics(plan, GPUPixelBounds(0, 0, 32, 32)),
+        ).semantics.values.single() as GPUDrawSemanticPayload.CorePrimitive
+        assertEquals(GPUCorePrimitiveCoverageMode.Stencil1x, semantic.coverageMode)
+        assertEquals(
+            GPUCorePrimitiveGeometryMode.StencilEdgeFan,
+            assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry).geometryMode,
+        )
+    }
+
+    @Test
+    fun `identical flattened geometry with distinct fill types retains distinct keys`() {
+        fun path(fillType: FillType) = Path().apply {
+            this.fillType = fillType
+            moveTo(2f, 2f)
+            quadTo(12f, 24f, 24f, 2f)
+            lineTo(2f, 2f)
+            close()
+        }
+
+        val vertices = listOf(2f, 2f, 12f, 8f, 24f, 2f)
+        val keys = listOf(FillType.WINDING, FillType.EVEN_ODD).map { fillType ->
+            DisplayOp.DrawPath(
+                path(fillType), Paint.fill(ColorARGB.Red).copy(antiAlias = false), Matrix3x3F32.Identity, ClipStack.WideOpen,
+            ).toNormalizedCommand(
+                org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID(7),
+                target(), vertices, listOf(0), edgeCount = 3,
+            ).pathKey
+        }
+
+        assertNotEquals(keys.first(), keys.last())
+    }
+
+    @Test
     fun `path budget refusal remains stable with a canonical path key`() {
         val path = Path().apply {
             moveTo(1f, 1f)
