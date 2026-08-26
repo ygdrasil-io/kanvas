@@ -7,8 +7,10 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityDiagnostic
 import org.graphiks.kanvas.gpu.renderer.capabilities.validateTextureRequest
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveStrokeLoweringProof
 
 /** Pure authority for the exact CorePrimitive coverage/sample lanes promoted by the renderer. */
 internal sealed interface GPUCorePrimitiveCoverageSampleAuthority {
@@ -96,7 +98,8 @@ internal fun validateCorePrimitiveCoverageSampleAuthority(
         GPUCorePrimitiveCoverageMode.Stencil1x,
         GPUCorePrimitiveCoverageMode.StencilAA,
         -> geometry is GPUCorePrimitiveGeometry.TriangulatedPath &&
-            geometry.geometryMode == GPUCorePrimitiveGeometryMode.StencilEdgeFan
+            (geometry.geometryMode == GPUCorePrimitiveGeometryMode.StencilEdgeFan ||
+                geometry.isExactSingleSegmentStrokeStencil())
         GPUCorePrimitiveCoverageMode.ScalarAA ->
             geometry is GPUCorePrimitiveGeometry.Rect || geometry is GPUCorePrimitiveGeometry.RRect
     }
@@ -153,6 +156,23 @@ internal fun validateCorePrimitiveCoverageSampleAuthority(
     }
 
     return GPUCorePrimitiveCoverageSampleAuthority.Accepted
+}
+
+private fun GPUCorePrimitiveGeometry.TriangulatedPath.isExactSingleSegmentStrokeStencil(): Boolean {
+    if (geometryMode != GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan ||
+        sourceContourStarts != listOf(0) || sourceVertexCount != 2 ||
+        fillRule != GPUCorePrimitiveFillRule.Winding || inverseFill
+    ) return false
+    val stroke = strokeStyle ?: return false
+    if (!stroke.width.isFinite() || stroke.width !in 0.5f..64f ||
+        stroke.join !in setOf("miter", "bevel") || stroke.dashIntervals.isNotEmpty()
+    ) return false
+    return when (stroke.loweringProof) {
+        GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1 ->
+            stroke.cap == "butt"
+        GPUCorePrimitiveStrokeLoweringProof.SingleSegmentSquareV1 ->
+            stroke.cap == "square"
+    }
 }
 
 private fun capabilityRefusalMessage(

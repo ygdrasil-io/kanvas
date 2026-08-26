@@ -168,6 +168,8 @@ class SimpleStrokePreparedRouteTest {
         val cases = listOf(
             StrokeRefusalCase("unsupported.stroke.width_invalid", stroke = simpleStroke.copy(width = 0f)),
             StrokeRefusalCase("unsupported.stroke.width_invalid", stroke = simpleStroke.copy(finiteWidth = false)),
+            StrokeRefusalCase("unsupported.stroke.width_budget", stroke = simpleStroke.copy(width = 0.25f)),
+            StrokeRefusalCase("unsupported.stroke.width_budget", stroke = simpleStroke.copy(width = 64.5f)),
             StrokeRefusalCase("unsupported.stroke.hairline_policy", stroke = simpleStroke.copy(hairline = true)),
             StrokeRefusalCase("unsupported.stroke.cap", stroke = simpleStroke.copy(cap = "Round")),
             StrokeRefusalCase("unsupported.stroke.join", stroke = simpleStroke.copy(join = "Round")),
