@@ -128,6 +128,7 @@ internal object GPUPreparedSurfaceProductRouter {
                     coverage = if (execution.visualOperationCount == 0) 0f else 1f,
                     coverageMeasured = false,
                 ),
+                structuralSteps = execution.evidence.structuralSteps,
             ),
             evidence = execution.evidence,
         )

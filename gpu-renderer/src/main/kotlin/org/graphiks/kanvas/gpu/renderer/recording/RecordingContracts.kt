@@ -30,6 +30,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUFirstRoutePassBuilder
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchEligibility
 import org.graphiks.kanvas.gpu.renderer.passes.GPUProvisionalRenderSegmentKey
@@ -1144,6 +1145,19 @@ class GPUTaskList(
         tasks.map { task -> task.dumpLine() } +
             dependencies.map { dependency -> dependency.dumpLine() }
 }
+
+/** Returns authenticated prepared packet roles in execution order for evidence consumers. */
+fun GPUTaskList.evidenceStructuralSteps(): List<String> = tasks
+    .filterIsInstance<GPUTask.Render>()
+    .flatMap { it.drawPackets }
+    .mapNotNull { packet ->
+        when {
+            packet.role == GPUDrawPacketRole.StencilProducer -> "HardClipStencilProducer"
+            packet.corePrimitivePreparedAuthority?.structuralPipelineKey?.shader ==
+                GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRRect -> "AnalyticRRect"
+            else -> null
+        }
+    }
 
 /**
  * Dependency between planned tasks.

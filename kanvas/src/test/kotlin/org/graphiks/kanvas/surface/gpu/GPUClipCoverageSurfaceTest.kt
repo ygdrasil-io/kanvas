@@ -242,8 +242,8 @@ class GPUClipCoverageSurfaceTest {
         listOf(
             floatArrayOf(4f, 0f, 24f, 20f, 10f, 20f, 50f, 14f),
             floatArrayOf(0f, 5f, 24f, 20f, 24f, 10f, 50f, 14f),
-            floatArrayOf(-4f, 5f, 24f, 30f, 50f, 30f, 45f, 30f),
-            floatArrayOf(4f, -5f, 24f, 20f, 20f, 46f, 50f, 14f),
+            floatArrayOf(-4f, 5f, 11f, 32f, 49f, 12f, 45f, 30f),
+            floatArrayOf(4f, -5f, 24f, 20f, 18f, 44f, 50f, 14f),
         ).forEach { samples ->
             val surface = Surface(64, 64)
             surface.canvas {
@@ -265,6 +265,10 @@ class GPUClipCoverageSurfaceTest {
             assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
             assertTrue(result.diagnostics.isEmpty, result.diagnostics.entries.toString())
             assertEquals(0, result.stats.opsRefused)
+            assertEquals(
+                listOf("HardClipStencilProducer", "AnalyticRRect"),
+                result.structuralSteps,
+            )
             assertRgbaNear(result.pixels, 64, samples[2].toInt(), samples[3].toInt(), fill)
             assertRgbaNear(result.pixels, 64, samples[4].toInt(), samples[5].toInt(), background)
             assertRgbaNear(result.pixels, 64, samples[6].toInt(), samples[7].toInt(), background)

@@ -25,6 +25,7 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUPreparedTextFrameCounters
 import org.graphiks.kanvas.gpu.renderer.execution.GPUSceneFrameOutput
 import org.graphiks.kanvas.gpu.renderer.execution.GPUSceneFrameOutputRequest
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
+import org.graphiks.kanvas.gpu.renderer.recording.evidenceStructuralSteps
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList
@@ -105,6 +106,7 @@ internal data class GPUPreparedSurfaceExecutionEvidence(
         emptyList(),
     val invariantCounters: GPUPreparedSceneInvariantCounterDeltas =
         GPUPreparedSceneInvariantCounterDeltas(),
+    val structuralSteps: List<String> = emptyList(),
 )
 
 internal sealed interface GPUPreparedSurfaceExecutionResult {
@@ -788,6 +790,7 @@ internal class GPUPreparedSurfaceFrameExecutor(
                 build.pathStrokeCommandIds,
                 build.destinationReadTextCommandIds,
                 build.destinationReadEvidence,
+                build.taskList.evidenceStructuralSteps(),
                 beforeSubmit,
                 afterCompletion,
                 telemetryBefore,
@@ -862,6 +865,7 @@ internal class GPUPreparedSurfaceFrameExecutor(
                     pending.beforeSubmit.distinctRetentionTickets,
                     postFrameCounters.distinctRetentionTickets,
                 ),
+                structuralSteps = pending.structuralSteps,
                 textCounters = GPUPreparedTextFrameCounters(
                     a8Instances = pending.textMetrics.a8InstanceCount,
                     colorGlyphInstances = pending.textMetrics.colorGlyphInstanceCount,
@@ -1055,6 +1059,7 @@ internal class GPUPreparedSurfaceFrameExecutor(
         val pathStrokeCommandIds: Set<Int>,
         val destinationReadTextCommandIds: Set<Int>,
         val destinationReadEvidence: List<GPUPreparedSurfaceDestinationReadEvidence>,
+        val structuralSteps: List<String>,
         val beforeSubmit: GPUPreparedSceneNativeCounters,
         val afterCompletion: GPUPreparedSceneNativeCounters,
         val telemetryBefore: GPUBackendRuntimeTelemetry,
@@ -1076,6 +1081,7 @@ private fun immediateDiagnostic(state: GPUPreparedSurfaceImmediateState): GPUDia
     GPUPreparedSurfaceImmediateState.Submitted -> null
     is GPUPreparedSurfaceImmediateState.FailedAfterSubmit -> state.diagnostic
 }
+
 
 /**
  * Prepared-route residual refusal codes that document shapes the prepared direct lane genuinely

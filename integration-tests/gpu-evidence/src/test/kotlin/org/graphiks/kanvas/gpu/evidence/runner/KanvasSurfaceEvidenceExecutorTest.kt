@@ -40,6 +40,13 @@ class KanvasSurfaceEvidenceExecutorTest {
         assertTrue(surface.comparison.passed)
     }
 
+    @Test fun `surface route preserves the prepared structural sequence`() {
+        val telemetry = FakeTelemetryProbe()
+        val observed = assertIs<SceneObservation.Rendered>(assertIs<EvidenceExecutionResult.Observed>(executor(telemetry).execute(case(telemetry, renderedResult().copy(structuralSteps = listOf("HardClipStencilProducer", "AnalyticRRect"))))).observation)
+
+        assertEquals(listOf("HardClipStencilProducer", "AnalyticRRect"), observed.route.structuralEvents.map { it.kind })
+    }
+
     @Test fun `surface result with zero runtime submissions is an execution failure`() {
         val telemetry = FakeTelemetryProbe(submissionDelta = 0)
         val result = executor(telemetry).execute(case(telemetry, renderedResult()))

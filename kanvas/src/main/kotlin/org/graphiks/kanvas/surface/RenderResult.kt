@@ -26,6 +26,8 @@ data class RenderResult(
     val colorSpace: ColorSpace = ColorSpace.SRGB,
     val diagnostics: Diagnostics,
     val stats: RenderStats,
+    /** Prepared GPU structural steps observed for this completed render. */
+    val structuralSteps: List<String> = emptyList(),
 ) {
     /** True when no diagnostics were recorded during rendering. */
     val isClean: Boolean get() = diagnostics.isEmpty
@@ -43,7 +45,7 @@ data class RenderResult(
         if (this === other) return true
         if (other !is RenderResult) return false
         return pixels.contentEquals(other.pixels) && width == other.width && height == other.height
-            && format == other.format && colorSpace == other.colorSpace && diagnostics == other.diagnostics && stats == other.stats
+            && format == other.format && colorSpace == other.colorSpace && diagnostics == other.diagnostics && stats == other.stats && structuralSteps == other.structuralSteps
     }
-    override fun hashCode(): Int = pixels.contentHashCode() * 31 + width + height + format.hashCode() + colorSpace.hashCode() + diagnostics.hashCode() + stats.hashCode()
+    override fun hashCode(): Int = pixels.contentHashCode() * 31 + width + height + format.hashCode() + colorSpace.hashCode() + diagnostics.hashCode() + stats.hashCode() + structuralSteps.hashCode()
 }
