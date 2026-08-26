@@ -182,6 +182,14 @@ class PromoteEvidenceCliRunner internal constructor(
             require(VerifyEvidenceCliRunner(stdout, stderr).run(verificationArguments(staged, null, EvidenceSelection.All)) == 0) {
                 "staged promotion failed independent verification"
             }
+            existing?.let {
+                verifyNoUnrelatedChanges(
+                    promoted = roots.promoted,
+                    staged = staged,
+                    request = request,
+                    selectedSceneIds = sceneIds,
+                )
+            }
             swapCatalogRoot(staged, roots.promoted)
             swapped = true
         } catch (failure: Throwable) {
@@ -369,6 +377,45 @@ class PromoteEvidenceCliRunner internal constructor(
             }
         }
     }
+
+    private fun verifyNoUnrelatedChanges(
+        promoted: Path,
+        staged: Path,
+        request: PromoteEvidenceCliRequest,
+        selectedSceneIds: List<String>,
+    ) {
+        val allowedRootPaths = buildSet {
+            add("catalog.json")
+            add("promotion.json")
+            if (request.selection == EvidenceSelection.All && request.rebaseline) add("environment.json")
+        }
+        val allowedScenePrefixes = selectedSceneIds.map { "$it/" }
+        val changed = changedRegularFiles(before = promoted, after = staged).filterNot { relativePath ->
+            relativePath in allowedRootPaths || allowedScenePrefixes.any(relativePath::startsWith)
+        }
+        require(changed.isEmpty()) {
+            "staged promotion modified unrelated paths: ${changed.sorted().joinToString(", ")}"
+        }
+    }
+
+    private fun changedRegularFiles(before: Path, after: Path): Set<String> {
+        val beforeFiles = regularFilesByRelativePath(before)
+        val afterFiles = regularFilesByRelativePath(after)
+        return (beforeFiles.keys + afterFiles.keys).filterTo(sortedSetOf()) { relativePath ->
+            val previous = beforeFiles[relativePath]
+            val next = afterFiles[relativePath]
+            previous == null || next == null || !previous.contentEquals(next)
+        }
+    }
+
+    private fun regularFilesByRelativePath(root: Path): Map<String, ByteArray> =
+        Files.walk(root).use { stream ->
+            stream.iterator().asSequence()
+                .filter { Files.isRegularFile(it, NOFOLLOW_LINKS) }
+                .associate { path ->
+                    root.relativize(path).toString().replace('\\', '/') to Files.readAllBytes(path)
+                }
+        }
 
     private fun swapCatalogRoot(staged: Path, destination: Path) {
         val parent = destination.parent ?: error("promoted root has no parent")
