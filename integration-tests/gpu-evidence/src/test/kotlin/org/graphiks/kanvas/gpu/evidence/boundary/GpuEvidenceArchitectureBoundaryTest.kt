@@ -34,6 +34,8 @@ class GpuEvidenceArchitectureBoundaryTest {
         assertTrue(helper.contains("require"))
         assertTrue(helper.contains("selectAll -> listOf(\"--all\")"))
         assertTrue(helper.contains("else -> listOf(\"--all\")"))
+        assertTrue(helper.contains("all.isPresent && !selectAll"))
+        assertTrue(helper.contains("-Pall=false requires an explicit selector"))
         assertEquals(3, Regex("\\+ selectionArguments\\(\\)").findAll(build).count(), "correctness generation, generated verification, and promotion must share one selection helper")
         assertEquals(
             normalize("""

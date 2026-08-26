@@ -42,6 +42,7 @@ object EvidenceCatalogVerifier {
         selection: EvidenceSelection,
         cases: List<EvidenceCase>,
         expectedSourceCommit: String?,
+        requirePromotion: Boolean = false,
     ): EvidenceCatalogVerification {
         require(Files.isDirectory(root, NOFOLLOW_LINKS)) { "evidence root must be an existing directory" }
         require(!Files.isSymbolicLink(root)) { "evidence root cannot be a symlink" }
@@ -60,6 +61,7 @@ object EvidenceCatalogVerifier {
         val environment = readEnvironment(root.resolve("environment.json"))
         val promotionPath = catalog.optionalNullableString("promotion")
         if (promotionPath == null) {
+            require(!requirePromotion) { "promoted v2 evidence root must contain promotion.json" }
             require(!Files.exists(root.resolve("promotion.json"), NOFOLLOW_LINKS)) {
                 "generated v2 evidence root must not contain promotion.json"
             }
@@ -232,7 +234,7 @@ object EvidenceCatalogVerifier {
         promotion.requiredString("promotedAtUtc")
         require(promotion.requiredString("reviewer").isNotBlank()) { "promotion reviewer must not be blank" }
         require(promotion.requiredString("reason").isNotBlank()) { "promotion reason must not be blank" }
-        promotion.requiredBoolean("rebaseline")
+        val rebaseline = promotion.requiredBoolean("rebaseline")
         val sceneIds = promotion["sceneIds"]?.jsonArray?.map { it.jsonPrimitive.asString("promotion sceneId") } ?: error("sceneIds must be an array")
         require(sceneIds.isNotEmpty()) { "promotion sceneIds must not be empty" }
         require(sceneIds.toSet().size == sceneIds.size) { "promotion sceneIds must be unique" }
@@ -240,6 +242,9 @@ object EvidenceCatalogVerifier {
         val prior = promotion["priorComparison"]
         val next = promotion["newComparison"]
         require((prior is JsonNull) == (next is JsonNull)) { "promotion comparison summaries must be paired" }
+        require(rebaseline || (prior is JsonNull && next is JsonNull)) {
+            "promotion comparison summaries require rebaseline=true"
+        }
         if (prior != null && prior !is JsonNull) {
             require(prior is JsonPrimitive && prior.isString && prior.content.isNotBlank()) {
                 "priorComparison must be a nonblank string or null"

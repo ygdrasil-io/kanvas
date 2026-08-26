@@ -74,6 +74,7 @@ data class PromoteEvidenceCliRequest(
             require(actualReason.isNotBlank()) { "--reason must not be blank" }
             require((prior == null) == (next == null)) { "prior and new comparison summaries must be provided together" }
             if (prior != null) require(prior.isNotBlank() && next!!.isNotBlank()) { "comparison summaries must not be blank" }
+            require(rebaseline || (prior == null && next == null)) { "comparison summaries require --rebaseline" }
             if (rebaseline) require(prior != null && next != null) { "--rebaseline requires prior and new comparison summaries" }
             if (rebaseline) require(all) { "--rebaseline requires --all" }
             scenesFile?.let { sceneIds += EvidenceSelectionParser.readSceneFile(it) }
@@ -225,7 +226,7 @@ class PromoteEvidenceCliRunner internal constructor(
             require(request.selection == EvidenceSelection.All) { "selected promotion requires an existing promoted catalog" }
             return null
         }
-        val existing = validateCatalogRoot(promoted, EvidenceSelection.All, null)
+        val existing = validateCatalogRoot(promoted, EvidenceSelection.All, null, requirePromotion = true)
         if (request.selection == EvidenceSelection.All) {
             require(request.rebaseline) { "destination already contains evidence; use --all --rebaseline with old/new comparison summaries" }
         } else {
@@ -277,12 +278,14 @@ class PromoteEvidenceCliRunner internal constructor(
         root: Path,
         selection: EvidenceSelection,
         expectedSourceCommit: String?,
+        requirePromotion: Boolean = false,
     ): ValidatedCatalogRoot {
         val verification = EvidenceCatalogVerifier.verify(
             root = root,
             selection = selection,
             cases = GpuEvidenceCatalog.cases,
             expectedSourceCommit = expectedSourceCommit,
+            requirePromotion = requirePromotion,
         )
         return ValidatedCatalogRoot(
             entriesBySceneId = readCatalogEntries(root).associateBy(EvidenceCatalogEntry::sceneId),

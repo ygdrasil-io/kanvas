@@ -41,6 +41,9 @@ fun selectionArguments(): List<String> {
         selectedScenesFile?.let { "scenesFile" },
         selectAll.takeIf { it }?.let { "all" },
     )
+    require(!(all.isPresent && !selectAll && selectedScene == null && selectedScenesFile == null)) {
+        "-Pall=false requires an explicit selector"
+    }
     require(selectors.size <= 1) { "at most one of -Pscene, -PscenesFile, or -Pall may be supplied" }
     return when {
         selectedScene != null -> listOf("--scene", selectedScene)

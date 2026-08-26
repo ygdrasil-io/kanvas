@@ -147,6 +147,23 @@ class PromoteEvidenceCliTest {
     }
 
     @Test
+    fun `promotion request parser rejects comparison summaries without rebaseline`() {
+        assertFailsWith<IllegalArgumentException> {
+            PromoteEvidenceCliRequest.parse(
+                arrayOf(
+                    "--repository-root", repository.toString(),
+                    "--source-commit", COMMIT,
+                    "--reviewer", "reviewer",
+                    "--reason", "reason",
+                    "--all",
+                    "--prior-comparison", "old",
+                    "--new-comparison", "new",
+                ),
+            )
+        }
+    }
+
+    @Test
     fun `initial promotion requires all and writes one root promotion record`() {
         writeGeneratedRoot(repository, COMMIT, allSceneIds())
 
@@ -199,6 +216,21 @@ class PromoteEvidenceCliTest {
         val rootPromotion = rootPromotion(promotedRoot(repository))
         assertEquals(setOf("solid-card-stack"), promotionSceneIds(rootPromotion))
         assertFalse(Files.exists(promotedRoot(repository).resolve("solid-card-stack/promotion.json")))
+    }
+
+    @Test
+    fun `selected promotion rejects an unpromoted generated root without mutating the destination`() {
+        val unpromoted = writeGeneratedRoot(repository, COMMIT, allSceneIds())
+        copyTree(unpromoted, promotedRoot(repository))
+        writeGeneratedRoot(repository, OTHER_COMMIT, listOf("solid-card-stack"))
+        val before = snapshot(promotedRoot(repository))
+
+        val result = PromoteEvidenceCliRunner().run(
+            args(repository, OTHER_COMMIT, selection = arrayOf("--scene", "solid-card-stack")),
+        )
+
+        assertTrue(result != 0)
+        assertEquals(before, snapshot(promotedRoot(repository)))
     }
 
     @Test
