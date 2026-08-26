@@ -127,6 +127,44 @@ class EvidenceCatalogVerifierTest {
         assertEquals(commits, verification.sourceCommits)
     }
 
+    @Test
+    fun `complete v2 verification accepts promotion metadata for a strict subset of catalog scenes`() {
+        val cases = selectedCases()
+        val root = writeV2Root(
+            cases = cases,
+            sourceCommits = mapOf(cases[0].descriptor.id.value to COMMIT_A, cases[1].descriptor.id.value to COMMIT_A),
+            promotionSceneIds = listOf(cases[0].descriptor.id.value),
+        )
+
+        val verification = EvidenceCatalogVerifier.verify(
+            root = root,
+            selection = EvidenceSelection.All,
+            cases = cases,
+            expectedSourceCommit = COMMIT_A,
+        )
+
+        assertEquals(cases.map { it.descriptor.id.value }.sorted(), verification.sceneIds)
+    }
+
+    @Test
+    fun `v2 verification rejects promotion metadata for an unknown scene`() {
+        val cases = selectedCases()
+        val root = writeV2Root(
+            cases = cases,
+            sourceCommits = mapOf(cases[0].descriptor.id.value to COMMIT_A, cases[1].descriptor.id.value to COMMIT_A),
+            promotionSceneIds = listOf("unknown-scene"),
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            EvidenceCatalogVerifier.verify(
+                root = root,
+                selection = EvidenceSelection.All,
+                cases = cases,
+                expectedSourceCommit = COMMIT_A,
+            )
+        }
+    }
+
     private fun selectedCases(): List<EvidenceCase> = listOf(
         GpuEvidenceCatalog.renderCases.first { it.descriptor.id.value == "solid-card-stack" },
         GpuEvidenceCatalog.refusalCases.first { it.descriptor.id.value == "custom-runtime-effect-unregistered-refusal" },
@@ -135,11 +173,12 @@ class EvidenceCatalogVerifierTest {
     private fun writeV2Root(
         cases: List<EvidenceCase>,
         sourceCommits: Map<String, String>,
+        promotionSceneIds: List<String>? = null,
     ): Path {
         val rootCommit = COMMIT_A
         val generatedRoot = repository.resolve("reports/gpu-renderer/evidence/correctness/generated/$rootCommit")
         if (sourceCommits.values.toSet().size > 1) {
-            return writeMixedCommitRoot(generatedRoot, cases, sourceCommits)
+            return writeMixedCommitRoot(generatedRoot, cases, sourceCommits, promotionSceneIds)
         }
         val writer = EvidenceBundleWriter(repository, rootCommit)
         val observations = linkedMapOf<String, SceneObservation>()
@@ -164,18 +203,21 @@ class EvidenceCatalogVerifierTest {
                 is SceneObservation.Unavailable -> error("unsupported test observation")
             }
         }
-        return EvidenceCatalogWriter(repository).writeGeneratedCatalog(
+        val root = EvidenceCatalogWriter(repository).writeGeneratedCatalog(
             root = generatedRoot,
             selection = EvidenceSelection.Explicit(cases.map { it.descriptor.id.value }),
             observations = observations,
             bundlePaths = bundlePaths,
         )
+        if (promotionSceneIds != null) addPromotion(root, promotionSceneIds)
+        return root
     }
 
     private fun writeMixedCommitRoot(
         root: Path,
         cases: List<EvidenceCase>,
         sourceCommits: Map<String, String>,
+        promotionSceneIds: List<String>? = null,
     ): Path {
         Files.createDirectories(root)
         val observations = linkedMapOf<String, SceneObservation>()
@@ -217,11 +259,29 @@ class EvidenceCatalogVerifierTest {
             EvidenceCatalogV2(
                 schemaVersion = GPU_EVIDENCE_CATALOG_SCHEMA_V2,
                 environment = "environment.json",
-                promotion = null,
+                promotion = if (promotionSceneIds == null) null else "promotion.json",
                 scenes = entries,
             ).toJson().canonicalBytes(),
         )
+        if (promotionSceneIds != null) addPromotion(root, promotionSceneIds)
         return root
+    }
+
+    private fun addPromotion(root: Path, promotionSceneIds: List<String>) {
+        Files.write(
+            root.resolve("promotion.json"),
+            EvidencePromotionV2(
+                schemaVersion = GPU_EVIDENCE_PROMOTION_SCHEMA_V2,
+                promotedAtUtc = "1970-01-01T00:00:00Z",
+                reviewer = "reviewer",
+                reason = "selected",
+                rebaseline = false,
+                sceneIds = promotionSceneIds,
+                priorComparison = null,
+                newComparison = null,
+            ).toJson().canonicalBytes(),
+        )
+        replaceInCatalog(root, "\"promotion\":null", "\"promotion\":\"promotion.json\"")
     }
 
     private fun observation(evidenceCase: EvidenceCase, environment: EvidenceEnvironment): SceneObservation {
