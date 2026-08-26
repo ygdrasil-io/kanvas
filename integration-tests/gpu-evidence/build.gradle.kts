@@ -123,6 +123,7 @@ tasks.register<JavaExec>("verifyPromotedGpuEvidence") {
             .dir("reports/gpu-renderer/evidence/correctness/promoted")
             .asFile.absolutePath,
         "--allow-historical-commit",
+        "--all",
     )
 }
 

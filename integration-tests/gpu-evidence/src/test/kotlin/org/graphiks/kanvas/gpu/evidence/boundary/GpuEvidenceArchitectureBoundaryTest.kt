@@ -16,6 +16,8 @@ class GpuEvidenceArchitectureBoundaryTest {
             .substringBefore("tasks.register(\"generateBootstrapGpuEvidence\")")
         val generatedVerificationTask = build.substringAfter("tasks.register<JavaExec>(\"verifyGeneratedGpuEvidence\")")
             .substringBefore("tasks.register<JavaExec>(\"verifyPromotedGpuEvidence\")")
+        val promotedVerificationTask = build.substringAfter("tasks.register<JavaExec>(\"verifyPromotedGpuEvidence\")")
+            .substringBefore("tasks.register<JavaExec>(\"migratePromotedGpuEvidenceV1ToV2\")")
         val promotionTask = build.substringAfter("tasks.register<JavaExec>(\"promoteGpuEvidence\")")
 
         assertTrue(build.contains("val scene = providers.gradleProperty(\"scene\")"))
@@ -47,6 +49,8 @@ class GpuEvidenceArchitectureBoundaryTest {
         )
         assertTrue(argumentProviderBody(generatedVerificationTask).contains("+ selectionArguments()"), "generated verification must share the explicit selection helper")
         assertTrue(argumentProviderBody(generatedVerificationTask).contains("--root"), "generated verification must still target the generated correctness root")
+        assertTrue(promotedVerificationTask.contains("\"--allow-historical-commit\""), "promoted verification must preserve historical dual-read verification")
+        assertTrue(promotedVerificationTask.contains("\"--all\""), "promoted verification must explicitly verify the full promoted catalogue")
         assertTrue(argumentProviderBody(promotionTask).contains("+ selectionArguments()"), "promotion must share the explicit selection helper")
         assertTrue(argumentProviderBody(promotionTask).contains("promotionRebaselineArguments"), "promotion must preserve explicit rebaseline metadata forwarding")
         assertFalse(build.contains("gpu-renderer-scenes"), "retired scenes module must remain absent")
