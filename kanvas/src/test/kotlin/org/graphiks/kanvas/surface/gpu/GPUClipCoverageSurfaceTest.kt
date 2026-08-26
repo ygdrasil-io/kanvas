@@ -346,8 +346,8 @@ class GPUClipCoverageSurfaceTest {
         val cases = listOf(
             Case(4f, 0f, RectF32.ofLTRB(8f, 8f, 52f, 48f), RectF32.ofLTRB(22f, 20f, 40f, 38f), 20, 20, 32, 30, 10, 20),
             Case(0f, 5f, RectF32.ofLTRB(8f, 8f, 52f, 48f), RectF32.ofLTRB(20f, 18f, 42f, 39f), 16, 20, 28, 28, 16, 10),
-            Case(-4f, 5f, RectF32.ofLTRB(12f, 20f, 52f, 44f), RectF32.ofLTRB(24f, 26f, 40f, 38f), 16, 30, 28, 36, 33, 20),
-            Case(4f, -5f, RectF32.ofLTRB(8f, 8f, 52f, 48f), RectF32.ofLTRB(22f, 20f, 40f, 38f), 20, 20, 32, 25, 20, 47),
+            Case(-4f, 5f, RectF32.ofLTRB(8f, 8f, 35f, 48f), RectF32.ofLTRB(14f, 20f, 26f, 34f), 16, 20, 16, 30, 33, 20),
+            Case(4f, -5f, RectF32.ofLTRB(8f, 8f, 52f, 40f), RectF32.ofLTRB(22f, 16f, 40f, 28f), 20, 20, 32, 17, 20, 37),
         )
         cases.forEach { case ->
             val surface = Surface(64, 64)
