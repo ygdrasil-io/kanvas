@@ -99,6 +99,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryInput
@@ -1195,13 +1196,39 @@ class GPUFramePreflighterTest {
     }
 
     @Test
-    fun `analytic drrect clip stencil refuses a background prefix before side effects`() {
-        val result = preparedNativeClipStencilFrameResult(drrectConsumer = true, withPrefix = true)
+    fun `analytic drrect clip stencil refuses a real full target background prefix before side effects`() {
+        val plan = preparedNativeClipStencilFramePlan(drrectConsumer = true, withPrefix = true)
+        val prefix = plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().first { render ->
+            render.drawPackets.single().commandIdValue == 91
+        }.drawPackets.single()
+        val prefixSemantic = assertIs<GPUDrawSemanticPayload.CorePrimitive>(prefix.semanticPayload)
+        assertEquals(GPUClipExecutionPlan.NoClip, prefix.clipExecutionPlan)
+        val prefixGeometry = assertIs<GPUCorePrimitiveGeometry.Rect>(prefixSemantic.geometry)
+        assertEquals(listOf(0f, 0f, 4f, 4f), listOf(
+            prefixGeometry.left,
+            prefixGeometry.top,
+            prefixGeometry.right,
+            prefixGeometry.bottom,
+        ))
 
+        val events = mutableListOf<String>()
+        val resources = RecordingResourceProvider(events)
+        val result = preflighter(
+            resources,
+            RecordingCompletionProvider(events),
+            RecordingSurfaceProvider(events),
+            context = clipPreflightContext(plan),
+            capabilities = pathCapabilities(includeRRect = true),
+        ).preflight(plan)
+
+        val refusal = assertIs<GPUFramePreflightResult.Refused>(result).diagnostic
+        assertEquals("invalid.preflight.core_primitive_clip_stencil_prepared_route", refusal.code.value)
         assertEquals(
-            "unsupported.recording.core_primitive_clip_stencil_mixed_geometry",
-            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+            "Prepared analytic DRRect clip-stencil accepts exactly one consumer without a prefix.",
+            refusal.message,
         )
+        assertEquals(0, resources.beginFramePreparationCount)
+        assertTrue(events.isEmpty())
     }
 
     @Test
@@ -8331,6 +8358,11 @@ class GPUFramePreflighterTest {
                             rrectBuilderCommand(commandId, paintOrder, geometry)
                         is GPUCorePrimitiveGeometryInput.DRRect ->
                             drrectBuilderCommand(commandId, paintOrder, geometry)
+                        is GPUCorePrimitiveGeometryInput.Rect -> pathBuilderCommand(
+                            commandId,
+                            paintOrder,
+                            rect = GPURect(geometry.left, geometry.top, geometry.right, geometry.bottom),
+                        )
                         else -> pathBuilderCommand(commandId, paintOrder)
                     },
                 )
@@ -8433,10 +8465,13 @@ class GPUFramePreflighterTest {
                     ),
                 )
             } else if (drrectConsumer) {
-                mapOf(92 to GPUCorePrimitiveGeometryInput.DRRect(
-                    GPUCorePrimitiveGeometryInput.RRect(1f, 1f, 3f, 3f, List(8) { 0.5f }),
-                    GPUCorePrimitiveGeometryInput.RRect(1.5f, 1.5f, 2.5f, 2.5f, List(8) { 0.25f }),
-                ))
+                buildMap {
+                    if (withPrefix) put(91, GPUCorePrimitiveGeometryInput.Rect(0f, 0f, 4f, 4f))
+                    put(92, GPUCorePrimitiveGeometryInput.DRRect(
+                        GPUCorePrimitiveGeometryInput.RRect(1f, 1f, 3f, 3f, List(8) { 0.5f }),
+                        GPUCorePrimitiveGeometryInput.RRect(1.5f, 1.5f, 2.5f, 2.5f, List(8) { 0.25f }),
+                    ))
+                }
             } else {
                 emptyMap()
             },
@@ -8497,9 +8532,10 @@ class GPUFramePreflighterTest {
         commandId: Int,
         paintOrder: Int,
         blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
+        rect: GPURect = GPURect(1f, 1f, 3f, 3f),
     ) = GPUFillRectCommandBuilder.build(
         commandId = GPUDrawCommandID(commandId),
-        rect = GPURect(1f, 1f, 3f, 3f),
+        rect = rect,
         target = GPUTargetFacts(4, 4, "rgba8unorm"),
         material = GPUMaterialDescriptor.SolidColor(0.25f, 0.5f, 0.75f, 1f),
         clip = GPUClipFacts(

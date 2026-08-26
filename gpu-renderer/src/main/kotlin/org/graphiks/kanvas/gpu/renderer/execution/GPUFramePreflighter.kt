@@ -1426,6 +1426,15 @@ internal class GPUFramePreflighter(
                 it.packet.clipExecutionPlan?.canonicalIdentity() != candidate.planCanonicalIdentity
             }
         ) return refuse("Prepared clip-stencil content or canonical plan identity was substituted.")
+        if (
+            prefixLocations.isNotEmpty() &&
+            consumerLocations.singleOrNull()?.packet?.corePrimitivePreparedAuthority
+                ?.let { authority ->
+                    authority.analyticShapeUniformSeal != null &&
+                        authority.structuralPipelineKey.shader ==
+                        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticDRRect
+                } == true
+        ) return refuse("Prepared analytic DRRect clip-stencil accepts exactly one consumer without a prefix.")
         val attachmentSampleCount = candidate.attachmentSampleCount
         val expectedSamplePlan = when (attachmentSampleCount) {
             1 -> GPUSamplePlan.SingleSampleFrame
