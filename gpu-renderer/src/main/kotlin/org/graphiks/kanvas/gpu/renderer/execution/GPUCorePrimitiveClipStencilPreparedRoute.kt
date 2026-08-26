@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.execution
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.collections.immutableMap
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveClipStencilNativeRoute
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticShapeUniformSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveUniformSlabSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
@@ -54,7 +55,15 @@ private fun GPUCorePrimitiveClipStencilNativeRoute.ConsumerSeal.geometrySnapshot
             sealedGeometry.vertices.toFloatArray(),
             sealedGeometry.indices.toIntArray(),
         )
-    is GPUCorePrimitiveGeometry.RRect -> error("The pure route rejects RRect consumers")
+    is GPUCorePrimitiveGeometry.RRect -> GPUCorePrimitiveClipStencilGeometrySnapshot(
+        floatArrayOf(
+            sealedGeometry.left, sealedGeometry.top,
+            sealedGeometry.right, sealedGeometry.top,
+            sealedGeometry.right, sealedGeometry.bottom,
+            sealedGeometry.left, sealedGeometry.bottom,
+        ),
+        intArrayOf(0, 2, 1, 0, 3, 2),
+    )
     is GPUCorePrimitiveGeometry.DRRect -> error("The pure route rejects DRRect consumers")
 }
 
@@ -152,15 +161,28 @@ internal class GPUCorePrimitiveClipStencilPreparedSlabAuthority(
     val uniformGeneration: Long,
     val uniformByteSize: Long,
     val uniformAlignmentBytes: Long,
-    val uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal,
+    val uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal?,
+    val analyticShapeUniformSeal: GPUCorePrimitiveAnalyticShapeUniformSeal? = null,
 ) {
+    val uniformPlan get() = uniformSlabSeal?.plan ?: requireNotNull(analyticShapeUniformSeal).plan
+    val uniformCommandIds get() = uniformSlabSeal?.commandIds ?: listOf(
+        requireNotNull(analyticShapeUniformSeal).commandId,
+    )
+
+    fun packedUniformBytesForUpload(): ByteArray = uniformSlabSeal?.packedBytesForUpload()
+        ?: ByteArray(uniformPlan.totalBytes.toInt()).also { bytes ->
+            val seal = requireNotNull(analyticShapeUniformSeal)
+            seal.copyPayloadInto(bytes, uniformPlan.slots.single().alignedOffset.toInt())
+        }
+
     init {
         require(setOf(vertexResource, indexResource, uniformResource).size == 3 &&
             vertexGeneration >= 0L && indexGeneration >= 0L && uniformGeneration >= 0L &&
             vertexByteSize > 0L && vertexByteSize % 4L == 0L &&
             indexByteSize > 0L && indexByteSize % 4L == 0L &&
-            uniformByteSize == uniformSlabSeal.plan.totalBytes &&
-            uniformAlignmentBytes == uniformSlabSeal.plan.alignmentBytes
+            (uniformSlabSeal == null) != (analyticShapeUniformSeal == null) &&
+            uniformByteSize == uniformPlan.totalBytes &&
+            uniformAlignmentBytes == uniformPlan.alignmentBytes
         ) { "Prepared clip-stencil slabs require exact distinct handle-free authorities" }
     }
 }
@@ -186,9 +208,9 @@ internal data class GPUCorePrimitiveClipStencilPreparedUniformSlice(
 ) {
     init {
         require(resourceGeneration >= 0L && commandId >= 0 && alignedOffset >= 0L &&
-            alignedOffset <= UInt.MAX_VALUE.toLong() && payloadBytes in setOf(32L, 592L) &&
+            alignedOffset <= UInt.MAX_VALUE.toLong() && payloadBytes in setOf(32L, 80L, 592L) &&
             allocatedBytes >= payloadBytes
-        ) { "Prepared clip-stencil uniform slice requires one exact dynamic-uniform32 or uniform592 slot" }
+        ) { "Prepared clip-stencil uniform slice requires one exact dynamic-uniform32, uniform80, or uniform592 slot" }
     }
 }
 
@@ -352,7 +374,11 @@ internal fun sealGPUCorePrimitiveClipStencilPreparedFrameRoute(
     require(slabAuthority.vertexByteSize ==
         Math.addExact(Math.multiplyExact(arena.vertexFloatCount.toLong(), 4L), prefixVertexBytes) &&
         slabAuthority.indexByteSize == Math.addExact(Math.multiplyExact(arena.indexCount.toLong(), 4L), prefixIndexBytes) &&
-        slabAuthority.uniformSlabSeal.commandIds == prefixCommandIds + consumers.map { it.commandId } &&
+        slabAuthority.uniformCommandIds == if (slabAuthority.uniformSlabSeal != null) {
+            prefixCommandIds + consumers.map { it.commandId }
+        } else {
+            consumers.map { it.commandId }
+        } &&
         attachmentAuthority.resource.value == route.attachment.logicalReference &&
         attachmentAuthority.resourceGeneration == route.attachment.resourceGeneration
     ) { "Prepared clip-stencil slab sizes and uniform commands must match the exact arena" }
@@ -383,7 +409,9 @@ internal fun sealGPUCorePrimitiveClipStencilPreparedFrameRoute(
             attachmentAuthority,
             // Prefix uniforms occupy the leading slots. Consumers keep their route order,
             // but their dynamic offsets must address the corresponding trailing slab slots.
-            slabAuthority.uniformSlabSeal.plan.slots[prefixCommandIds.size + index].let { slot ->
+            slabAuthority.uniformPlan.slots[
+                if (slabAuthority.uniformSlabSeal != null) prefixCommandIds.size + index else index
+            ].let { slot ->
                 GPUCorePrimitiveClipStencilPreparedUniformSlice(
                     slabAuthority.uniformResource,
                     slabAuthority.uniformGeneration,

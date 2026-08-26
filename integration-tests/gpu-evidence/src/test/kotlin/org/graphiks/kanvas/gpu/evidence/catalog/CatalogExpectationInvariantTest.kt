@@ -37,9 +37,9 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 
 class CatalogExpectationInvariantTest {
     @Test
-    fun `every render case has exactly one oracle and every refusal has none`() {
-        assertEquals(48, GpuEvidenceCatalog.cases.size)
-        assertEquals(46, GpuEvidenceCatalog.renderCases.size)
+    fun `every one of the forty nine render cases has exactly one oracle and every refusal has none`() {
+        assertEquals(51, GpuEvidenceCatalog.cases.size)
+        assertEquals(49, GpuEvidenceCatalog.renderCases.size)
         assertEquals(2, GpuEvidenceCatalog.refusalCases.size)
         GpuEvidenceCatalog.renderCases.forEach { evidenceCase ->
             assertIs<org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram>(evidenceCase.program)

@@ -3421,7 +3421,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         }
         val arena = producerSeal.geometryArena
         val slab = producerSeal.slabAuthority
-        val uniformSeal = slab.uniformSlabSeal
+        val uniformPlan = slab.uniformPlan
         val prefixPacket = prefixEntries.singleOrNull()?.render?.drawPackets?.singleOrNull()
         val prefixSemantic = prefixPacket?.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive
         val prefixStructuralKey = prefixPacket?.corePrimitivePreparedAuthority?.structuralPipelineKey
@@ -3474,15 +3474,15 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 GPUFrameResourceUsage.CopyDestination,
                 GPUFrameResourceUsage.Index,
             ) || indexPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
-            uniformDescriptor.byteSize != uniformSeal.plan.totalBytes ||
-            uniformDescriptor.alignmentBytes != uniformSeal.plan.alignmentBytes ||
-            uniformPreparation.byteSize != uniformSeal.plan.totalBytes ||
+            uniformDescriptor.byteSize != uniformPlan.totalBytes ||
+            uniformDescriptor.alignmentBytes != uniformPlan.alignmentBytes ||
+            uniformPreparation.byteSize != uniformPlan.totalBytes ||
             uniformPreparation.usages != setOf(
                 GPUFrameResourceUsage.CopyDestination,
                 GPUFrameResourceUsage.Uniform,
             ) || uniformPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
-            uniformSeal.plan.deviceGeneration != generationSeal.deviceGeneration.value ||
-            uniformSeal.plan.alignmentBytes != limits.minUniformBufferOffsetAlignment ||
+            uniformPlan.deviceGeneration != generationSeal.deviceGeneration.value ||
+            uniformPlan.alignmentBytes != limits.minUniformBufferOffsetAlignment ||
             vertexBytes != vertexData.size.toLong() * Float.SIZE_BYTES ||
             indexBytes != indexData.size.toLong() * Int.SIZE_BYTES ||
             arena.slices.map { it.packetId } != listOf(producerSeal.packetId) +
@@ -3766,7 +3766,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     deviceGeneration = generationSeal.deviceGeneration,
                     vertexBytes = vertexBytes,
                     indexBytes = indexBytes,
-                    uniformBytes = uniformSeal.plan.totalBytes,
+                    uniformBytes = uniformPlan.totalBytes,
                     componentIdentity = primaryBindGroupComponentIdentity,
                     clipDepthStencil = clipRequirement,
                     sampleCount = sampleCount,
@@ -3805,8 +3805,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             )
             uploadExact(
                 pooled.handles.uniformBuffer,
-                ArrayBuffer.of(uniformSeal.packedBytesForUpload()),
-                uniformSeal.plan.totalBytes,
+                ArrayBuffer.of(slab.packedUniformBytesForUpload()),
+                uniformPlan.totalBytes,
                 pooled.capacities.uniformBytes,
             )
             val stagingBuffer = output?.let { readback ->
@@ -4004,7 +4004,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     "invalid.native-core-primitive.clip-stencil-prefix",
                     "Prepared clip-stencil prefix lost its structural pipeline authority.",
                 )
-                val uniformSlot = uniformSeal.plan.slots.singleOrNull {
+                val uniformSlot = requireNotNull(slab.uniformSlabSeal).plan.slots.singleOrNull {
                     it.slotLabel == "draw-${packet.commandIdValue}"
                 } ?: return refused(
                     "invalid.native-core-primitive.clip-stencil-prefix",

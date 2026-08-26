@@ -1576,11 +1576,27 @@ internal class GPUFramePreflighter(
         } ?: return refuse("Prepared clip-stencil uniform slab preparation is missing.")
         val uniformDescriptor = uniformPreparation.descriptor as? GPUFrameBufferDescriptor
             ?: return refuse("Prepared clip-stencil uniform slab is not a buffer.")
-        val uniformSeals = consumerLocations.map { location ->
-            location.packet.corePrimitivePreparedAuthority?.uniformSlabSeal
-                ?: return refuse("Prepared clip-stencil uniform slab seal is missing.")
+        val analyticShapeUniformSeals = consumerLocations.map { location ->
+            location.packet.corePrimitivePreparedAuthority?.analyticShapeUniformSeal
         }
-        val uniformSeal = uniformSeals.first()
+        val analyticShapeUniformSeal = analyticShapeUniformSeals.firstOrNull()
+        val usesAnalyticRRectUniform = analyticShapeUniformSeal != null
+        if (usesAnalyticRRectUniform &&
+            (prefixLocations.isNotEmpty() || consumerLocations.size != 1 ||
+                analyticShapeUniformSeals.any { it !== analyticShapeUniformSeal } ||
+                consumerLocations.single().packet.corePrimitivePreparedAuthority
+                    ?.structuralPipelineKey?.shader !=
+                GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRRect)
+        ) return refuse("Prepared analytic RRect clip-stencil accepts exactly one consumer without a prefix.")
+        val uniformSeals = if (usesAnalyticRRectUniform) {
+            emptyList()
+        } else {
+            consumerLocations.map { location ->
+                location.packet.corePrimitivePreparedAuthority?.uniformSlabSeal
+                    ?: return refuse("Prepared clip-stencil uniform slab seal is missing.")
+            }
+        }
+        val uniformSeal = uniformSeals.firstOrNull()
         val limits = capabilities.limits
             ?: return refuse("Prepared clip-stencil requires observed device limits.")
         val maxBufferSize = limits.maxBufferSize
@@ -1602,40 +1618,91 @@ internal class GPUFramePreflighter(
                 (commandId, bytes) ->
             GPUUniformSlabPayload("draw-$commandId", bytes.map(Int::toByte).toByteArray())
         }
-        if (uniformSeals.any { it !== uniformSeal } ||
+        val analyticUniformValid = analyticShapeUniformSeal?.let { seal ->
+            val consumer = consumerLocations.single().packet
+            val semantic = consumer.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive
+            val payload = semantic?.let { preparedSemantic ->
+                when (
+                    val rebuilt = buildCorePrimitiveAnalyticShapeUniform(
+                        preparedSemantic,
+                        GPUCorePrimitivePreparedSemanticAuthority.capture(preparedSemantic),
+                    )
+                ) {
+                    is GPUCorePrimitiveAnalyticShapeUniformBuildResult.Accepted -> rebuilt.bytes
+                    is GPUCorePrimitiveAnalyticShapeUniformBuildResult.Refused -> null
+                }
+            }
+            seal.commandId == consumer.commandIdValue &&
+                seal.packetId == consumer.packetId &&
+                semantic != null &&
+                payload != null &&
+                seal.hasExactSemantic(semantic) &&
+                seal.hasExactPayload(payload) &&
+                seal.structuralPipelineKey == consumer.corePrimitivePreparedAuthority?.structuralPipelineKey &&
+                seal.structuralPipelineKey.uniformLayout ==
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 &&
+                seal.plan.sourceLabel == "core-primitive-analytic-shape-uniform-pass" &&
+                seal.plan.deviceGeneration == context.deviceGeneration.value &&
+                seal.plan.alignmentBytes == limits.minUniformBufferOffsetAlignment &&
+                seal.plan.slots.size == 1 && seal.plan.slots.single().payloadBytes == 80L &&
+                seal.plan.hasExactPayloads(
+                    "core-primitive-analytic-shape-uniform-pass",
+                    context.deviceGeneration.value,
+                    limits.minUniformBufferOffsetAlignment,
+                    listOf(
+                        GPUUniformSlabPayload(
+                            "analytic-shape-draw-${consumer.commandIdValue}",
+                            payload,
+                        ),
+                    ),
+                ) &&
+                seal.plan.slots.single().alignedOffset <= UInt.MAX_VALUE.toLong() &&
+                seal.plan.totalBytes <= maxBufferSize && maxDynamicUniformBuffers >= 1L &&
+                uniformPreparation.role == GPUFrameResourceRole.UniformData &&
+                uniformPreparation.usages == setOf(
+                    GPUFrameResourceUsage.CopyDestination,
+                    GPUFrameResourceUsage.Uniform,
+                ) && uniformPreparation.lifetime == GPUFrameResourceLifetime.FrameLocal &&
+                uniformPreparation.byteSize == seal.plan.totalBytes &&
+                uniformDescriptor.byteSize == seal.plan.totalBytes &&
+                uniformDescriptor.alignmentBytes == seal.plan.alignmentBytes
+        } ?: false
+        if ((!usesAnalyticRRectUniform && (uniformSeals.any { it !== uniformSeal } ||
             uniformScopeLocations.any {
                 it.packet.corePrimitivePreparedAuthority?.uniformSlabSeal !== uniformSeal
             } ||
-            uniformSeal.commandIds != uniformScopeCommandIds ||
-            !uniformSeal.hasExactPayloads(
+            requireNotNull(uniformSeal).commandIds != uniformScopeCommandIds ||
+            !requireNotNull(uniformSeal).hasExactPayloads(
                 uniformScopeCommandIds,
                 uniformScopePayloads,
-            ) || !uniformSeal.plan.hasExactPayloads(
+            ) || !requireNotNull(uniformSeal).plan.hasExactPayloads(
                 "core-primitive-uniform-pass",
                 context.deviceGeneration.value,
                 limits.minUniformBufferOffsetAlignment,
                 exactUniformPayloads,
-            ) || uniformSeal.plan.slots.zip(uniformScopeKeys).any { (slot, key) ->
+            ) || requireNotNull(uniformSeal).plan.slots.zip(uniformScopeKeys).any { (slot, key) ->
                 val expectedBytes = when (key.uniformLayout) {
                     GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2 -> 32L
                     GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientUniform592V1 -> 592L
                     else -> -1L
                 }
                 slot.payloadBytes != expectedBytes || slot.alignedOffset > UInt.MAX_VALUE.toLong()
-            } || uniformSeal.plan.sourceLabel != "core-primitive-uniform-pass" ||
-            uniformSeal.plan.deviceGeneration != context.deviceGeneration.value ||
-            uniformSeal.plan.alignmentBytes != limits.minUniformBufferOffsetAlignment ||
-            uniformSeal.plan.totalBytes > maxBufferSize || maxDynamicUniformBuffers < 1L ||
-            uniformSeal.plan.slots.size != uniformScopeLocations.size ||
+            } || requireNotNull(uniformSeal).plan.sourceLabel != "core-primitive-uniform-pass" ||
+            requireNotNull(uniformSeal).plan.deviceGeneration != context.deviceGeneration.value ||
+            requireNotNull(uniformSeal).plan.alignmentBytes != limits.minUniformBufferOffsetAlignment ||
+            requireNotNull(uniformSeal).plan.totalBytes > maxBufferSize || maxDynamicUniformBuffers < 1L ||
+            requireNotNull(uniformSeal).plan.slots.size != uniformScopeLocations.size ||
             uniformPreparation.role != GPUFrameResourceRole.UniformData ||
             uniformPreparation.usages != setOf(
                 GPUFrameResourceUsage.CopyDestination,
                 GPUFrameResourceUsage.Uniform,
             ) || uniformPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
-            uniformPreparation.byteSize != uniformSeal.plan.totalBytes ||
-            uniformDescriptor.byteSize != uniformSeal.plan.totalBytes ||
-            uniformDescriptor.alignmentBytes != uniformSeal.plan.alignmentBytes
-        ) return refuse("Prepared clip-stencil uniform slab authority was substituted.")
+            uniformPreparation.byteSize != requireNotNull(uniformSeal).plan.totalBytes ||
+            uniformDescriptor.byteSize != requireNotNull(uniformSeal).plan.totalBytes ||
+            uniformDescriptor.alignmentBytes != requireNotNull(uniformSeal).plan.alignmentBytes
+        )) || (usesAnalyticRRectUniform && !analyticUniformValid)) {
+            return refuse("Prepared clip-stencil uniform slab authority was substituted.")
+        }
 
         val sealedResources = setOf(
             vertexUse.resource,
@@ -1767,6 +1834,7 @@ internal class GPUFramePreflighter(
                 uniformPreparation.byteSize,
                 uniformDescriptor.alignmentBytes,
                 uniformSeal,
+                analyticShapeUniformSeal,
             )
         } catch (_: IllegalArgumentException) {
             return refuse("Prepared clip-stencil slab authority is invalid.")

@@ -144,6 +144,13 @@ internal fun sealGPUCorePrimitiveClipStencilNativeRoute(
         "invalid.native-core-primitive.clip-stencil.producer-geometry",
         "The clip-stencil producer requires one validated path geometry.",
     )
+    if (request.consumers.any { it.geometry is GPUCorePrimitiveGeometry.RRect } &&
+        (path.fillRule != GPUClipFillRule.Winding ||
+            stencil.producer.fillRule != GPUClipFillRule.Winding)
+    ) return refused(
+        "unsupported.native-core-primitive.clip-stencil.rrect-fill-rule",
+        "Analytic RRect clip-stencil consumers require an exact winding producer.",
+    )
     if (!stencil.producer.hasExactNativeState(path.fillRule)) return refused(
         "invalid.native-core-primitive.clip-stencil.producer-state",
         "The producer state does not match the real non-AA path mapper authority.",
@@ -228,13 +235,30 @@ internal fun sealGPUCorePrimitiveClipStencilNativeRoute(
             "unsupported.native-core-primitive.clip-stencil.consumer-coverage",
             "AA and stencil-AA consumers remain outside the bounded route.",
         )
-        if (!consumer.geometry.isDirectConsumerGeometry()) return refused(
+        if (!consumer.geometry.isDirectConsumerGeometry() && consumer.geometry !is GPUCorePrimitiveGeometry.RRect) return refused(
             "unsupported.native-core-primitive.clip-stencil.consumer-geometry",
-            "Only Rect and DirectTriangles consumers are accepted.",
+            "Only Rect, authenticated DirectTriangles, and analytic RRect consumers are accepted.",
         )
-        val shader = corePrimitiveClipStencilConsumerShaderOrNull(consumer.material) ?: return refused(
+        if (consumer.geometry is GPUCorePrimitiveGeometry.RRect &&
+            consumer.material !is GPUCorePrimitiveMaterialPayload.SolidColor
+        ) return refused(
             "unsupported.native-core-primitive.clip-stencil.consumer-material",
-            "Only solid colors and clamp linear gradients are accepted by the bounded clip-stencil route.",
+            "Analytic RRect consumers accept only opaque solid colors in the bounded route.",
+        )
+        if (consumer.geometry is GPUCorePrimitiveGeometry.RRect &&
+            (consumer.material as GPUCorePrimitiveMaterialPayload.SolidColor)
+                .premultipliedRgba.getOrNull(3) != 1f
+        ) return refused(
+            "unsupported.native-core-primitive.clip-stencil.rrect-alpha",
+            "Analytic RRect clip-stencil consumers require exactly opaque premultiplied alpha.",
+        )
+        if (consumer.geometry is GPUCorePrimitiveGeometry.RRect && stencil.sampleCount != 1) return refused(
+            "unsupported.native-core-primitive.clip-stencil.rrect-msaa",
+            "Analytic RRect clip-stencil consumers require the exact single-sample route.",
+        )
+        val shader = corePrimitiveClipStencilConsumerShaderOrNull(consumer.material, consumer.geometry) ?: return refused(
+            "unsupported.native-core-primitive.clip-stencil.consumer-material",
+            "Only solid colors, analytic RRects, and clamp linear gradients are accepted by the bounded clip-stencil route.",
         )
         if (
             shader == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient &&

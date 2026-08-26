@@ -12,6 +12,7 @@ import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathLinearGradientCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathDirectTriangleLinearGradientCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbPathFillCpuOracle
 import org.graphiks.kanvas.gpu.evidence.programs.KanvasScenePrograms
 import org.graphiks.kanvas.gpu.evidence.programs.RendererRefusalPrograms
@@ -57,6 +58,9 @@ object GpuEvidenceCatalog {
         clipPathTriangleDirectTriangleLinearGradient(),
         clipPathTranslatedTriangleDirectTriangleLinearGradient(),
         clipPathUniformScaledTriangleDirectTriangleLinearGradient(),
+        clipPathSolidRRect(),
+        clipPathAsymmetricSolidRRect(),
+        clipPathEllipseSolidRRect(),
         solidTrianglePath(),
         solidConcavePath(),
         evenOddPathHole(),
@@ -668,6 +672,64 @@ object GpuEvidenceCatalog {
         triangle = directTriangleGradient(11f, 7.1875f, 53f, 13f, 17f, 49f),
         start = SurfaceSrgbGradientCpuOracle.Point(23f, 18.3f),
         end = SurfaceSrgbGradientCpuOracle.Point(23f, 22.3f),
+    )
+
+    private fun clipPathSolidRRect() = clipPathRRectCase(
+        "clip-path-solid-rrect", "Solid RRect inside hard path clip", KanvasScenePrograms.clipPathSolidRRect(),
+        SurfaceSrgbClipPathRRectCpuOracle.DeviceRRect(
+            8f, 8f, 52f, 48f,
+            SurfaceSrgbClipPathRRectCpuOracle.Radii(10f, 10f),
+            SurfaceSrgbClipPathRRectCpuOracle.Radii(10f, 10f),
+            SurfaceSrgbClipPathRRectCpuOracle.Radii(10f, 10f),
+            SurfaceSrgbClipPathRRectCpuOracle.Radii(10f, 10f),
+        ), intArrayOf(242, 135, 46, 255),
+    )
+
+    private fun clipPathAsymmetricSolidRRect() = clipPathRRectCase(
+        "clip-path-asymmetric-solid-rrect", "Asymmetric RRect inside hard path clip", KanvasScenePrograms.clipPathAsymmetricSolidRRect(),
+        SurfaceSrgbClipPathRRectCpuOracle.DeviceRRect(
+            8f, 8f, 52f, 48f,
+            SurfaceSrgbClipPathRRectCpuOracle.Radii(4f, 8f),
+            SurfaceSrgbClipPathRRectCpuOracle.Radii(10f, 4f),
+            SurfaceSrgbClipPathRRectCpuOracle.Radii(8f, 12f),
+            SurfaceSrgbClipPathRRectCpuOracle.Radii(6f, 3f),
+        ), intArrayOf(31, 115, 209, 255),
+    )
+
+    private fun clipPathEllipseSolidRRect() = clipPathRRectCase(
+        "clip-path-ellipse-solid-rrect", "Ellipse RRect inside hard path clip", KanvasScenePrograms.clipPathEllipseSolidRRect(),
+        SurfaceSrgbClipPathRRectCpuOracle.DeviceRRect(
+            12f, 20f, 52f, 44f,
+            SurfaceSrgbClipPathRRectCpuOracle.Radii(20f, 12f),
+            SurfaceSrgbClipPathRRectCpuOracle.Radii(20f, 12f),
+            SurfaceSrgbClipPathRRectCpuOracle.Radii(20f, 12f),
+            SurfaceSrgbClipPathRRectCpuOracle.Radii(20f, 12f),
+        ), intArrayOf(242, 135, 46, 255),
+    )
+
+    private fun clipPathRRectCase(
+        id: String,
+        title: String,
+        program: org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram,
+        rrect: SurfaceSrgbClipPathRRectCpuOracle.DeviceRRect,
+        fill: IntArray,
+    ) = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId(id), title,
+            "Public Kanvas Surface hard non-AA winding triangle clip with one opaque identity analytic RRect consumer.",
+            64, 64, 1L, setOf("clip-path", "solid-rrect", "hard-clip", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-clip-path-rrect-pixel-center", 1),
+            ComparisonPolicy(0, 100.0, 1, "Exact RGBA8 output from independent pixel-center winding clip and analytic RRect membership."), emptySet(),
+        ),
+        program,
+        SurfaceSrgbClipPathRRectCpuOracle(
+            intArrayOf(0, 0, 0, 0),
+            listOf(
+                SurfaceSrgbClipPathRRectCpuOracle.Point(8f, 8f),
+                SurfaceSrgbClipPathRRectCpuOracle.Point(56f, 8f),
+                SurfaceSrgbClipPathRRectCpuOracle.Point(8f, 55f),
+            ), rrect, fill,
+        ),
     )
 
     private fun clipPathLinearGradientCase(

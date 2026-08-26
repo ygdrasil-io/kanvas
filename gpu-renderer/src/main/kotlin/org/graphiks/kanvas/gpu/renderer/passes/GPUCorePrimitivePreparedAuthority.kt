@@ -118,6 +118,8 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
                 UniformLayout.AnalyticShapeUniform80V1
             role == Role.Shading && shader == Shader.AnalyticDRRect ->
                 UniformLayout.AnalyticDRRectUniform128V1
+            role == Role.ClipStencilConsumer && shader == Shader.AnalyticRRect ->
+                UniformLayout.AnalyticShapeUniform80V1
             role in setOf(Role.Shading, Role.ClipStencilConsumer) -> when (shader) {
                 Shader.DirectLinearGradient,
                 Shader.DirectLinearGradientRepeat,
@@ -280,10 +282,10 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
                 }
             }
             Role.ClipStencilConsumer -> {
-                require(shader in setOf(Shader.DirectGeometry, Shader.DirectLinearGradient) &&
+                require(shader in setOf(Shader.DirectGeometry, Shader.DirectLinearGradient, Shader.AnalyticRRect) &&
                     depthStencil is DepthStencil.Stencil
                 ) {
-                    "CorePrimitive clip-stencil consumer requires direct solid or linear-gradient geometry and stencil state"
+                    "CorePrimitive clip-stencil consumer requires direct, analytic-RRect, or linear-gradient geometry and stencil state"
                 }
                 require(clipStencilFillRule == null && clip == Clip.None) {
                     "CorePrimitive clip-stencil consumer keeps fill and dynamic clip facts outside its key"
@@ -617,9 +619,14 @@ internal fun corePrimitiveClipStencilConsumerRenderPipelineStructuralKey(
         require(it in setOf(
             GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry,
             GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient,
-        )) { "Clip-stencil consumers support only direct solid or clamp linear-gradient shaders" }
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRRect,
+        )) { "Clip-stencil consumers support only direct, clamp-linear-gradient, or analytic-RRect shaders" }
     },
-    topology = GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList,
+    topology = if (shader == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRRect) {
+        GPUCorePrimitiveRenderPipelineStructuralKey.Topology.AnalyticRRect
+    } else {
+        GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList
+    },
     blend = blendPlan.corePrimitiveStructuralBlend(),
     clip = GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None,
     role = GPUCorePrimitiveRenderPipelineStructuralKey.Role.ClipStencilConsumer,
@@ -634,9 +641,14 @@ internal fun corePrimitiveClipStencilConsumerRenderPipelineStructuralKey(
 
 internal fun corePrimitiveClipStencilConsumerShaderOrNull(
     material: GPUCorePrimitiveMaterialPayload,
+    geometry: GPUCorePrimitiveGeometry? = null,
 ): GPUCorePrimitiveRenderPipelineStructuralKey.Shader? = when (material) {
     is GPUCorePrimitiveMaterialPayload.SolidColor ->
-        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry
+        if (geometry is GPUCorePrimitiveGeometry.RRect) {
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRRect
+        } else {
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry
+        }
     is GPUCorePrimitiveMaterialPayload.LinearGradient ->
         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient
             .takeIf { material.tileMode == "clamp" }
@@ -1376,10 +1388,12 @@ internal class GPUCorePrimitiveAnalyticShapeUniformSeal(
             else "analytic-shape-draw-$commandId")
         ) { "Analytic shape uniform seal requires its exact pass and slot labels" }
         require(!renderScissor.isEmpty) { "Analytic shape render scissor must not be empty" }
-        require(structuralPipelineKey.role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.Shading &&
+        require((structuralPipelineKey.role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.Shading ||
+            structuralPipelineKey.role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.ClipStencilConsumer) &&
             structuralPipelineKey.shader in setOf(
                 GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticShape,
                 GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticDRRect,
+                GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRRect,
             ) && structuralPipelineKey.uniformLayout == if (isDRRect)
                 GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticDRRectUniform128V1
             else GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1
