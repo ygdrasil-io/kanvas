@@ -1870,7 +1870,11 @@ class GPUFirstRoutePlanner(
     /** Refuses any FillDRRect fact outside the narrow opaque analytic-hole contract. */
     private fun NormalizedDrawCommand.FillDRRect.refusalCode(): String? =
         coordinateRefusalCode() ?: when {
-            transform.type != GPUTransformType.Identity -> "unsupported.core_primitive.drrect.analytic_transform"
+            clip.kind == GPUClipKind.WideOpen && transform.type != GPUTransformType.Identity ->
+                "unsupported.core_primitive.drrect.analytic_transform"
+            clip.kind != GPUClipKind.WideOpen &&
+                transform.type != GPUTransformType.Identity && !transform.isExactPositiveTranslation() ->
+                "unsupported.core_primitive.drrect.analytic_transform"
             clip.kind != GPUClipKind.WideOpen && !supportsHardPathClipAnalyticDRRect() ->
                 "unsupported.core_primitive.drrect.analytic_clip"
             stroke -> "unsupported.core_primitive.drrect.analytic_stroke"
@@ -1887,18 +1891,24 @@ class GPUFirstRoutePlanner(
             else -> null
         }
 
-    /** One opaque identity non-AA DRRect may read exactly one single-sample winding path stencil. */
+    /** One opaque identity or positive translated non-AA DRRect may read exactly one single-sample winding path stencil. */
     private fun NormalizedDrawCommand.FillDRRect.supportsHardPathClipAnalyticDRRect(): Boolean {
         val stencil = clip.executionPlan as? org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan.StencilCoverage
             ?: return false
         val path = stencil.producer.geometry as? GPUClipExecutionGeometry.Path ?: return false
         val solid = material as? GPUMaterialDescriptor.SolidColor ?: return false
-        return !stroke && !antiAlias && maskFilter == null && transform.type == GPUTransformType.Identity &&
+        return !stroke && !antiAlias && maskFilter == null &&
+            (transform.type == GPUTransformType.Identity ||
+                (transform.isExactPositiveTranslation() && !path.inverseFill)) &&
             solid.a == 1f && blend.mode == GPUBlendMode.SRC_OVER && stencil.sampleCount == 1 &&
             stencil.pathTransformClass == "identity" &&
             path.fillRule == GPUClipFillRule.Winding &&
             stencil.producer.fillRule == GPUClipFillRule.Winding
     }
+
+    private fun GPUTransformFacts.isExactPositiveTranslation(): Boolean =
+        type == GPUTransformType.Translate && translateX > 0f && translateY > 0f &&
+            scaleX == 1f && scaleY == 1f && skewX == 0f && skewY == 0f
 
     /** Returns the canonical FillPath refusal code, or null when analysis may keep a candidate. */
     private fun NormalizedDrawCommand.FillPath.refusalCode(): String? =

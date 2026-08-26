@@ -1982,21 +1982,30 @@ private fun DisplayOp.DrawDRRect.analyticSolidDRRectMaterialOrNull(): GPUMateria
         !paint.isStroke() && !paint.antiAlias && paint.colorFilter == null && paint.maskFilter == null &&
             paint.imageFilter == null && paint.pathEffect == null && paint.blender == null &&
             it.a == 1f && paint.blendMode == BlendMode.SRC_OVER &&
-            transform == Matrix3x3F32.Identity && clip.isWideOpenOrHardWindingPathClip() &&
+            ((clip == ClipStack.WideOpen && transform == Matrix3x3F32.Identity) ||
+                clip.isHardWindingPathClipForAnalyticDRRect(transform)) &&
             exactLoweringRefusalOrNull() == null
     }
 }
 
-/** The analytic DRRect consumer owns only the Wave-8 single identity hard winding path clip. */
-private fun ClipStack.isWideOpenOrHardWindingPathClip(): Boolean = this == ClipStack.WideOpen ||
-    (this as? ClipStack.Complex)?.ops?.singleOrNull().let { it as? ClipStackOp.PathOp }?.let { path ->
+/** The analytic DRRect consumer accepts identity or positive translation only under one hard winding path clip. */
+private fun ClipStack.isHardWindingPathClipForAnalyticDRRect(transform: Matrix3x3F32): Boolean {
+    val identity = transform == Matrix3x3F32.Identity
+    val positiveTranslation = transform.isExactPositiveTranslation()
+    if (!identity && !positiveTranslation) return false
+    return (this as? ClipStack.Complex)?.ops?.singleOrNull().let { it as? ClipStackOp.PathOp }?.let { path ->
         path.op == org.graphiks.kanvas.pipeline.ClipOp.INTERSECT && !path.antiAlias &&
             !path.perspectiveCaptureRefusal && path.transformClass == "identity" &&
             path.path.fillType in setOf(
                 org.graphiks.kanvas.geometry.FillType.WINDING,
                 org.graphiks.kanvas.geometry.FillType.INVERSE_WINDING,
-            )
+            ) && (!positiveTranslation || path.path.fillType == org.graphiks.kanvas.geometry.FillType.WINDING)
     } == true
+}
+
+private fun Matrix3x3F32.isExactPositiveTranslation(): Boolean =
+    sx == 1f && kx == 0f && tx > 0f && ky == 0f && sy == 1f && ty > 0f &&
+        persp0 == 0f && persp1 == 0f && persp2 == 1f
 
 internal fun DisplayOp.DrawDRRect.toNormalizedCommand(
     cmdId: GPUDrawCommandID,

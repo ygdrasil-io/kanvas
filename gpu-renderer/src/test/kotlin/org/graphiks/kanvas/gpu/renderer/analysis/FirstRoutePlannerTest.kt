@@ -1644,6 +1644,67 @@ class FirstRoutePlannerTest {
         }
     }
 
+    @Test
+    fun `positive translated drrect is the only admitted analytic drrect hard path clip consumer`() {
+        val target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm")
+        val identityStencil = hardWindingStencilClip(pathTransformClass = "identity")
+        val translated = analyticDRRectCommand(commandId = 151).copy(
+            transform = GPUTransformFacts.translation(x = 4f, y = 5f),
+            clip = identityStencil,
+            layer = GPULayerFacts.root(target),
+        )
+
+        val accepted = GPUFirstRoutePlanner(firstSliceRRectCapabilities()).plan(translated)
+        assertIs<GPURouteDecision.Native>(accepted.routeDecision)
+        val outer = assertNotNull(accepted.analysisRecord.corePrimitiveDRRectOuterGeometryAuthority)
+            .sealedDeviceGeometryInput()
+        val inner = assertNotNull(accepted.analysisRecord.corePrimitiveDRRectInnerGeometryAuthority)
+            .sealedDeviceGeometryInput()
+        assertEquals(6f, outer.left)
+        assertEquals(7f, outer.top)
+        assertEquals(30f, outer.right)
+        assertEquals(27f, outer.bottom)
+        assertEquals(12f, inner.left)
+        assertEquals(13f, inner.top)
+        assertEquals(24f, inner.right)
+        assertEquals(21f, inner.bottom)
+
+        val transformRefusals = listOf(
+            translated.copy(clip = GPUClipFacts.wideOpen(firstRouteBounds)) to "wide-open positive translation",
+            translated.copy(transform = GPUTransformFacts.translation(x = 0f, y = 5f)) to "zero translation",
+            translated.copy(transform = GPUTransformFacts.translation(x = -4f, y = 5f)) to "negative translation",
+            translated.copy(transform = GPUTransformFacts.scale(x = 2f, y = 2f)) to "scale",
+            translated.copy(transform = GPUTransformFacts.affine(1f, 0.25f, 0f, 1f)) to "affine",
+        )
+        transformRefusals.forEach { (command, label) ->
+            val refused = GPUFirstRoutePlanner(firstSliceRRectCapabilities()).plan(command)
+            assertEquals(
+                "unsupported.core_primitive.drrect.analytic_transform",
+                assertIs<GPURouteDecision.Refused>(refused.routeDecision, label).diagnostic.code,
+            )
+        }
+
+        val transformedClip = translated.copy(clip = hardWindingStencilClip(pathTransformClass = "translate"))
+        assertEquals(
+            "unsupported.core_primitive.drrect.analytic_clip",
+            assertIs<GPURouteDecision.Refused>(
+                GPUFirstRoutePlanner(firstSliceRRectCapabilities()).plan(transformedClip).routeDecision,
+            ).diagnostic.code,
+        )
+
+        val inverseTranslated = translated.copy(
+            clip = hardWindingStencilClip(pathTransformClass = "identity", inverseFill = true),
+        )
+        val inverseTranslatedPlan = GPUFirstRoutePlanner(firstSliceRRectCapabilities()).plan(inverseTranslated)
+        assertEquals(
+            "unsupported.core_primitive.drrect.analytic_clip",
+            assertIs<GPURouteDecision.Refused>(inverseTranslatedPlan.routeDecision).diagnostic.code,
+        )
+
+        val identityInverse = inverseTranslated.copy(transform = GPUTransformFacts.identity())
+        assertIs<GPURouteDecision.Native>(GPUFirstRoutePlanner(firstSliceRRectCapabilities()).plan(identityInverse).routeDecision)
+    }
+
     /** Accepted FillRRect with LinearGradient material routes natively with gradient render step. */
     @Test
     fun `linear gradient fill rrect routes natively with gradient step and pipeline key`() {

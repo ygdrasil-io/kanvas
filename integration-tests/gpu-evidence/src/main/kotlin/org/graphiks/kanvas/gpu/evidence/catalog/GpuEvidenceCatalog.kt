@@ -68,6 +68,9 @@ object GpuEvidenceCatalog {
         clipPathSolidDRRect(),
         clipPathAsymmetricSolidDRRect(),
         clipPathEllipseSolidDRRect(),
+        clipPathTranslatedSolidDRRect(),
+        clipPathTranslatedAsymmetricSolidDRRect(),
+        clipPathTranslatedEllipseSolidDRRect(),
         solidTrianglePath(),
         solidConcavePath(),
         evenOddPathHole(),
@@ -770,6 +773,29 @@ object GpuEvidenceCatalog {
         SurfaceSrgbClipPathDRRectCpuOracle.RRect(24f, 26f, 40f, 38f, 8f, 6f), intArrayOf(242, 135, 46, 255),
     )
 
+    private fun clipPathTranslatedSolidDRRect() = clipPathDRRectCase(
+        "clip-path-translated-solid-drrect", "Positive translated solid DRRect inside hard path clip",
+        KanvasScenePrograms.clipPathTranslatedSolidDRRect(),
+        SurfaceSrgbClipPathDRRectCpuOracle.RRect(12f, 13f, 56f, 53f, 10f, 10f),
+        SurfaceSrgbClipPathDRRectCpuOracle.RRect(26f, 25f, 44f, 43f, 4f, 4f), intArrayOf(242, 135, 46, 255), translated = true,
+    )
+
+    private fun clipPathTranslatedAsymmetricSolidDRRect() = clipPathDRRectCase(
+        "clip-path-translated-asymmetric-solid-drrect", "Positive translated asymmetric DRRect inside hard path clip",
+        KanvasScenePrograms.clipPathTranslatedAsymmetricSolidDRRect(),
+        SurfaceSrgbClipPathDRRectCpuOracle.RRect(12f, 13f, 56f, 53f,
+            SurfaceSrgbClipPathDRRectCpuOracle.Radii(4f, 8f), SurfaceSrgbClipPathDRRectCpuOracle.Radii(10f, 4f), SurfaceSrgbClipPathDRRectCpuOracle.Radii(8f, 12f), SurfaceSrgbClipPathDRRectCpuOracle.Radii(6f, 3f)),
+        SurfaceSrgbClipPathDRRectCpuOracle.RRect(24f, 23f, 46f, 44f,
+            SurfaceSrgbClipPathDRRectCpuOracle.Radii(3f, 5f), SurfaceSrgbClipPathDRRectCpuOracle.Radii(6f, 2f), SurfaceSrgbClipPathDRRectCpuOracle.Radii(4f, 7f), SurfaceSrgbClipPathDRRectCpuOracle.Radii(2f, 3f)), intArrayOf(31, 115, 209, 255), translated = true,
+    )
+
+    private fun clipPathTranslatedEllipseSolidDRRect() = clipPathDRRectCase(
+        "clip-path-translated-ellipse-solid-drrect", "Positive translated ellipse DRRect inside hard path clip",
+        KanvasScenePrograms.clipPathTranslatedEllipseSolidDRRect(),
+        SurfaceSrgbClipPathDRRectCpuOracle.RRect(16f, 25f, 56f, 49f, 20f, 12f),
+        SurfaceSrgbClipPathDRRectCpuOracle.RRect(28f, 31f, 44f, 43f, 8f, 6f), intArrayOf(242, 135, 46, 255), translated = true,
+    )
+
     private fun clipPathRRectCase(
         id: String,
         title: String,
@@ -803,10 +829,15 @@ object GpuEvidenceCatalog {
     private fun clipPathDRRectCase(
         id: String, title: String, program: org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram,
         outer: SurfaceSrgbClipPathDRRectCpuOracle.RRect, inner: SurfaceSrgbClipPathDRRectCpuOracle.RRect, fill: IntArray,
+        translated: Boolean = false,
     ) = EvidenceCase(
         EvidenceSceneDescriptor(
             EvidenceSceneId(id), title,
-            "Public Kanvas Surface hard non-AA winding triangle clip with one opaque identity analytic DRRect consumer.",
+            if (translated) {
+                "Public Kanvas Surface positive translated analytic DRRect consumer inside an identity-captured hard Winding path clip."
+            } else {
+                "Public Kanvas Surface hard non-AA winding triangle clip with one opaque identity analytic DRRect consumer."
+            },
             64, 64, 1L, setOf("clip-path", "solid-drrect", "hard-clip", "kanvas-surface"), EvidenceExpectation.ShouldRender,
             OraclePolicy.GeneratedCpu("surface-srgb-clip-path-drrect-pixel-center", 1),
             ComparisonPolicy(0, 100.0, 1, "Exact RGBA8 output from independent pixel-center winding clip and analytic DRRect membership."), emptySet(),
