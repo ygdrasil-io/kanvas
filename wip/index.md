@@ -101,19 +101,31 @@ ni aucune de ces opérations hors portée.
 ```bash
 ./gradlew :integration-tests:gpu-evidence:test
 ./gradlew :integration-tests:gpu-evidence:verifyPromotedGpuEvidence
-./gradlew :integration-tests:gpu-evidence:generateGpuEvidence -PsourceCommit=<sha>
-./gradlew :integration-tests:gpu-evidence:promoteGpuEvidence -PsourceCommit=<sha> -PpromotionReviewer=<reviewer> -PpromotionReason=<reason>
-./gradlew :integration-tests:gpu-evidence:promoteGpuEvidence -PsourceCommit=<sha> -PpromotionReviewer=<reviewer> -PpromotionReason=<reason> -PpromotionRebaseline=true -PpromotionPriorComparison='<comparaison précédente>' -PpromotionNewComparison='<comparaison nouvelle>'
-./gradlew :integration-tests:gpu-evidence:gpuEvidencePerformance -PsourceCommit=<sha>
+./gradlew :integration-tests:gpu-evidence:generateGpuEvidence -PsourceCommit=<sha> -Pscene=solid-card-stack
+./gradlew :integration-tests:gpu-evidence:generateGpuEvidence -PsourceCommit=<sha> -PscenesFile=scenes.txt
+./gradlew :integration-tests:gpu-evidence:verifyGeneratedGpuEvidence -PsourceCommit=<sha> -Pscene=solid-card-stack
+./gradlew :integration-tests:gpu-evidence:verifyGeneratedGpuEvidence -PsourceCommit=<sha> -PscenesFile=scenes.txt
+./gradlew :integration-tests:gpu-evidence:generateGpuEvidence -PsourceCommit=<sha> -Pall
+./gradlew :integration-tests:gpu-evidence:verifyGeneratedGpuEvidence -PsourceCommit=<sha> -Pall
+./gradlew :integration-tests:gpu-evidence:promoteGpuEvidence -PsourceCommit=<sha> -PpromotionReviewer=<reviewer> -PpromotionReason=<reason> -Pall
+./gradlew :integration-tests:gpu-evidence:promoteGpuEvidence -PsourceCommit=<sha> -PpromotionReviewer=<reviewer> -PpromotionReason=<reason> -PpromotionRebaseline=true -PpromotionPriorComparison='<comparaison précédente>' -PpromotionNewComparison='<comparaison nouvelle>' -Pall
+./gradlew :integration-tests:gpu-evidence:gpuEvidencePerformance -PsourceCommit=<sha> -Pscene=solid-card-stack
 ```
 
 Une commande hardware qui ne dispose pas d'un adapter admissible produit une
 observation indisponible ou un refus explicite ; elle ne produit pas une
 promotion par approximation.
 
-`promoteGpuEvidence` impose `--all` : la promotion checked-in est une
-transaction de catalogue complet. Une capture de diagnostic peut cibler une
-scène, mais ne se substitue pas à cette promotion complète.
+Les commandes quotidiennes doivent annoncer explicitement leur sélection
+(`-Pscene=solid-card-stack` ou `-PscenesFile=scenes.txt`). Les gates complets
+doivent annoncer explicitement `-Pall`, que la CLI traduit en `--all`.
+`verifyPromotedGpuEvidence` reste un contrôle headless du root promoted
+checked-in et transmet en interne `--allow-historical-commit --all`, sans
+réintroduire de native windowing.
+
+`promoteGpuEvidence` impose le catalogue complet : la promotion checked-in est
+une transaction `-Pall`. Une capture de diagnostic peut cibler une scène, mais
+ne se substitue pas à cette promotion complète.
 
 La tâche Gradle transmet aussi le rebaseline et les comparaisons prior/nouveau
 via `promotionRebaseline`, `promotionPriorComparison` et
@@ -121,3 +133,7 @@ via `promotionRebaseline`, `promotionPriorComparison` et
 `false` (absent vaut `false`) ; avec `true`, les deux comparaisons non vides
 sont obligatoires. Avec `false` ou absent, une comparaison est rejetée au lieu
 d'être ignorée. Aucun init script caché n'est un workflow valide.
+
+La capture hardware et la vérification correctness headless restent deux
+actions séparées : absence d'adapter admissible, promotion, performance et
+rebaseline gardent des autorisations humaines distinctes.

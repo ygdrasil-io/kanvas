@@ -121,6 +121,11 @@ class VerifyEvidenceCliTest {
     @Test
     fun `v2 promoted roots still verify when historical mode is supplied by the promoted Gradle task`() {
         writePromotedV2()
+        assertTrue(Files.isRegularFile(promotedRoot().resolve("catalog.json")))
+        assertTrue(Files.isRegularFile(promotedRoot().resolve("environment.json")))
+        assertTrue(Files.isRegularFile(promotedRoot().resolve("promotion.json")))
+        assertFalse(Files.exists(promotedRoot().resolve("solid-card-stack/environment.json")))
+        assertFalse(Files.exists(promotedRoot().resolve("solid-card-stack/promotion.json")))
 
         assertEquals(0, VerifyEvidenceCliRunner().run(arrayOf("--root", promotedRoot().toString(), "--allow-historical-commit", "--all")))
     }

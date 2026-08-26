@@ -138,4 +138,23 @@ class GpuEvidenceArchitectureBoundaryTest {
             "Surface sRGB oracles must be independent of product types",
         )
     }
+
+    @Test
+    fun `checked-in promoted evidence uses root v2 metadata and scene bundles stay metadata-light`() {
+        val moduleRoot = File(".").canonicalFile
+        val repositoryRoot = moduleRoot.parentFile.parentFile
+        val promotedRoot = repositoryRoot.resolve("reports/gpu-renderer/evidence/correctness/promoted")
+
+        assertTrue(promotedRoot.resolve("catalog.json").isFile, "promoted v2 root must publish catalog.json")
+        assertTrue(promotedRoot.resolve("environment.json").isFile, "promoted v2 root must publish environment.json")
+        assertTrue(promotedRoot.resolve("promotion.json").isFile, "promoted v2 root must publish promotion.json")
+
+        promotedRoot.listFiles()
+            .orEmpty()
+            .filter(File::isDirectory)
+            .forEach { sceneDir ->
+                assertFalse(sceneDir.resolve("environment.json").exists(), "${sceneDir.name} must not carry scene-local environment.json in v2")
+                assertFalse(sceneDir.resolve("promotion.json").exists(), "${sceneDir.name} must not carry scene-local promotion.json in v2")
+            }
+    }
 }
