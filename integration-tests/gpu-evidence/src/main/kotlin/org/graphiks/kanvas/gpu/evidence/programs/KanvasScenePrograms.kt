@@ -622,14 +622,14 @@ object KanvasScenePrograms {
     )
 
     fun clipPathNegativeXTranslatedEllipseSolidDRRect() = clipPathTranslatedDRRect(
-        RRectF32.of(RectF32.ofLTRB(8f, 8f, 35f, 48f), radius = 4f),
-        RRectF32.of(RectF32.ofLTRB(14f, 20f, 26f, 34f), radius = 3f),
+        RRectF32.of(RectF32.ofLTRB(12f, 20f, 52f, 44f), CornerRadiiF32.of(20f, 12f), CornerRadiiF32.of(20f, 12f), CornerRadiiF32.of(20f, 12f), CornerRadiiF32.of(20f, 12f)),
+        RRectF32.of(RectF32.ofLTRB(24f, 26f, 40f, 38f), CornerRadiiF32.of(8f, 6f), CornerRadiiF32.of(8f, 6f), CornerRadiiF32.of(8f, 6f), CornerRadiiF32.of(8f, 6f)),
         ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f), -4f, 5f,
     )
 
     fun clipPathNegativeYTranslatedSolidDRRect() = clipPathTranslatedDRRect(
-        RRectF32.of(RectF32.ofLTRB(8f, 8f, 52f, 40f), radius = 4f),
-        RRectF32.of(RectF32.ofLTRB(22f, 16f, 40f, 28f), radius = 3f),
+        RRectF32.of(RectF32.ofLTRB(8f, 8f, 52f, 48f), radius = 10f),
+        RRectF32.of(RectF32.ofLTRB(22f, 20f, 40f, 38f), radius = 4f),
         ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f), 4f, -5f,
     )
 

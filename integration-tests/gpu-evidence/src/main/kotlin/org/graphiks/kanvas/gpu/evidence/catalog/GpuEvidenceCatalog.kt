@@ -853,15 +853,15 @@ object GpuEvidenceCatalog {
     private fun clipPathNegativeXTranslatedEllipseSolidDRRect() = clipPathDRRectCase(
         "clip-path-negative-x-translated-ellipse-solid-drrect", "Exact negative-X translated ellipse DRRect inside hard path clip",
         KanvasScenePrograms.clipPathNegativeXTranslatedEllipseSolidDRRect(),
-        SurfaceSrgbClipPathDRRectCpuOracle.RRect(4f, 13f, 31f, 53f, 4f, 4f),
-        SurfaceSrgbClipPathDRRectCpuOracle.RRect(10f, 25f, 22f, 39f, 3f, 3f), intArrayOf(242, 135, 46, 255), translated = true, exactTranslation = true,
+        SurfaceSrgbClipPathDRRectCpuOracle.RRect(8f, 25f, 48f, 49f, 20f, 12f),
+        SurfaceSrgbClipPathDRRectCpuOracle.RRect(20f, 31f, 36f, 43f, 8f, 6f), intArrayOf(242, 135, 46, 255), translated = true, exactTranslation = true,
     )
 
     private fun clipPathNegativeYTranslatedSolidDRRect() = clipPathDRRectCase(
         "clip-path-negative-y-translated-solid-drrect", "Exact negative-Y translated solid DRRect inside hard path clip",
         KanvasScenePrograms.clipPathNegativeYTranslatedSolidDRRect(),
-        SurfaceSrgbClipPathDRRectCpuOracle.RRect(12f, 3f, 56f, 35f, 4f, 4f),
-        SurfaceSrgbClipPathDRRectCpuOracle.RRect(26f, 11f, 44f, 23f, 3f, 3f), intArrayOf(242, 135, 46, 255), translated = true, exactTranslation = true,
+        SurfaceSrgbClipPathDRRectCpuOracle.RRect(12f, 3f, 56f, 43f, 10f, 10f),
+        SurfaceSrgbClipPathDRRectCpuOracle.RRect(26f, 15f, 44f, 33f, 4f, 4f), intArrayOf(242, 135, 46, 255), translated = true, exactTranslation = true,
     )
 
     private fun clipPathRRectCase(

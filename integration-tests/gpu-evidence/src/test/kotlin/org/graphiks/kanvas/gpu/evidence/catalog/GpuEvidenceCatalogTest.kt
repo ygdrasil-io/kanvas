@@ -1025,19 +1025,32 @@ assertEquals(68, GpuEvidenceCatalog.cases.size)
                     CornerRadiiF32.of(8f, 6f), CornerRadiiF32.of(8f, 6f),
                 ),
             ),
+            "clip-path-negative-x-translated-ellipse-solid-drrect" to Pair(
+                RRectF32.of(RectF32.ofLTRB(12f, 20f, 52f, 44f), CornerRadiiF32.of(20f, 12f), CornerRadiiF32.of(20f, 12f), CornerRadiiF32.of(20f, 12f), CornerRadiiF32.of(20f, 12f)),
+                RRectF32.of(RectF32.ofLTRB(24f, 26f, 40f, 38f), CornerRadiiF32.of(8f, 6f), CornerRadiiF32.of(8f, 6f), CornerRadiiF32.of(8f, 6f), CornerRadiiF32.of(8f, 6f)),
+            ),
+            "clip-path-negative-y-translated-solid-drrect" to Pair(
+                RRectF32.of(RectF32.ofLTRB(8f, 8f, 52f, 48f), radius = 10f),
+                RRectF32.of(RectF32.ofLTRB(22f, 20f, 40f, 38f), radius = 4f),
+            ),
         )
         cases.forEach { (id, expected) ->
+            val transform = when (id) {
+                "clip-path-negative-x-translated-ellipse-solid-drrect" -> Matrix3x3F32(tx = -4f, ty = 5f)
+                "clip-path-negative-y-translated-solid-drrect" -> Matrix3x3F32(tx = 4f, ty = -5f)
+                else -> Matrix3x3F32(tx = 4f, ty = 5f)
+            }
             val operations = ops(id)
             val clip = assertIs<ClipStack.Complex>(assertIs<DisplayOp.SetClip>(operations[0]).clip)
             val pathClip = assertIs<org.graphiks.kanvas.canvas.ClipStackOp.PathOp>(clip.ops.single())
             assertEquals("identity", pathClip.transformClass)
             assertEquals(FillType.WINDING, pathClip.path.fillType)
             assertFalse(pathClip.antiAlias)
-            assertEquals(DisplayOp.SetTransform(Matrix3x3F32(tx = 4f, ty = 5f)), operations[1])
+            assertEquals(DisplayOp.SetTransform(transform), operations[1])
             val draw = assertIs<DisplayOp.DrawDRRect>(operations[2])
             assertEquals(expected.first, draw.outer)
             assertEquals(expected.second, draw.inner)
-            assertEquals(Matrix3x3F32(tx = 4f, ty = 5f), draw.transform)
+            assertEquals(transform, draw.transform)
             assertEquals(clip, draw.clip)
             assertFalse(draw.paint.antiAlias)
             assertEquals(1f, draw.paint.color.a)
