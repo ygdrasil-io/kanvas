@@ -17,6 +17,7 @@ import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialProgram
 import org.graphiks.kanvas.gpu.renderer.materials.preparedMaterialSrgbToLinear
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
+import org.graphiks.kanvas.gpu.renderer.state.GPUPathSourceAuthority
 
 /** Opaque payload slot identifier. */
 @JvmInline
@@ -1233,6 +1234,7 @@ sealed interface GPUCorePrimitiveGeometry {
         val fillRule: GPUCorePrimitiveFillRule,
         val inverseFill: Boolean,
         strokeStyle: GPUCorePrimitiveStrokeStyle?,
+        val sourceAuthority: GPUPathSourceAuthority = GPUPathSourceAuthority.Unknown,
     ) : GPUCorePrimitiveGeometry {
         override val canonicalType: String = "TriangulatedPath"
         val vertices: List<Float> = immutableList(vertices)
@@ -1336,6 +1338,7 @@ sealed interface GPUCorePrimitiveGeometryInput {
         val fillRule: GPUCorePrimitiveFillRule = GPUCorePrimitiveFillRule.Winding,
         val inverseFill: Boolean = false,
         val strokeStyle: GPUCorePrimitiveStrokeStyle? = null,
+        val sourceAuthority: GPUPathSourceAuthority = GPUPathSourceAuthority.Unknown,
     ) : GPUCorePrimitiveGeometryInput
 }
 
@@ -2485,6 +2488,7 @@ private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
             fillRule,
             inverseFill,
             stroke,
+            sourceAuthority,
         )
     }
 }
@@ -2533,7 +2537,7 @@ private fun GPUCorePrimitiveGeometry.canonicalPreimage(): String = when (this) {
     is GPUCorePrimitiveGeometry.TriangulatedPath ->
         "$canonicalType:${vertices.joinToString(",")}:${indices.joinToString(",")}:" +
             "${sourceContourStarts.joinToString(",")}:$sourceVertexCount:${coverBounds.canonicalBounds()}:" +
-            "${geometryMode.name}:${fillRule.name}:$inverseFill:" +
+            "${geometryMode.name}:${fillRule.name}:$inverseFill:${sourceAuthority.name}:" +
             strokeStyle.canonicalPreimage()
 }
 

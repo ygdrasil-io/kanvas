@@ -189,6 +189,30 @@ class GpuEvidenceCatalogOracleTest {
     }
 
     @Test
+    fun `hard clip direct triangle oracles preserve device clip translation and paint order`() {
+        val background = intArrayOf(13, 20, 33, 255)
+        val orange = intArrayOf(242, 135, 46, 255)
+        val blue = intArrayOf(31, 115, 209, 255)
+        val solid = oracle("clip-path-triangle-direct-triangle-solid")
+        val translated = oracle("clip-path-translated-triangle-direct-triangle-solid")
+        val ordered = oracle("clip-path-triangle-direct-triangle-order")
+
+        assertPixel(solid, 64, 64, 12, 12, orange)
+        assertPixel(solid, 64, 64, 50, 14, background)
+        assertEquals(1059, fillPixelCount(solid, orange))
+
+        assertPixel(translated, 64, 64, 14, 12, blue)
+        assertPixel(translated, 64, 64, 8, 12, background)
+        assertEquals(1059, fillPixelCount(translated, blue))
+
+        assertPixel(ordered, 64, 64, 12, 12, blue)
+        assertPixel(ordered, 64, 64, 24, 12, orange)
+        assertPixel(ordered, 64, 64, 50, 14, background)
+        assertEquals(465, fillPixelCount(ordered, blue))
+        assertEquals(630, fillPixelCount(ordered, orange))
+    }
+
+    @Test
     fun `path fill oracles preserve literal winding and inverse coverage`() {
         val background = intArrayOf(13, 20, 33, 255)
         val orange = intArrayOf(242, 135, 46, 255)

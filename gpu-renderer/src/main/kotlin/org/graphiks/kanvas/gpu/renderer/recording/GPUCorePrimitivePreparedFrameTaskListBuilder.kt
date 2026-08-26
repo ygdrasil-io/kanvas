@@ -103,6 +103,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_AFFINE_FILL_RECT
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectRouteAuthority
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceFamily
@@ -816,6 +817,9 @@ private fun directCorePrimitiveGeometryBytes(
         packet.blendPlan?.isCorePrimitiveDirectLaneBlend() != true ||
         packet.blendPlan is GPUBlendPlan.NoOp
     ) return null
+    if (acceptedClipStencilPlan != null && semantic.geometry is GPUCorePrimitiveGeometry.TriangulatedPath &&
+        !semantic.hasExactDirectTrianglePathConsumerGeometry()
+    ) return null
     when (packet.clipExecutionPlan) {
         GPUClipExecutionPlan.NoClip,
         is GPUClipExecutionPlan.ScissorOnly,
@@ -847,6 +851,25 @@ private fun directCorePrimitiveGeometryBytes(
         vertexBytes = Math.multiplyExact(vertexCount.toLong(), Float.SIZE_BYTES.toLong()),
         indexBytes = Math.multiplyExact(indexCount.toLong(), Int.SIZE_BYTES.toLong()),
     )
+}
+
+private fun GPUDrawSemanticPayload.CorePrimitive.hasExactDirectTrianglePathConsumerGeometry(): Boolean {
+    val path = geometry as? GPUCorePrimitiveGeometry.TriangulatedPath ?: return false
+    if (sourceFamily != GPUCorePrimitiveSourceFamily.Path ||
+        path.geometryMode != GPUCorePrimitiveGeometryMode.DirectTriangles ||
+        path.vertices.size != 6 || path.indices.size != 3 ||
+        path.indices.toSet() != setOf(0, 1, 2) || path.sourceContourStarts != listOf(0) ||
+        path.sourceVertexCount != 3 || path.fillRule != GPUCorePrimitiveFillRule.Winding ||
+        path.inverseFill || path.strokeStyle != null || !path.sourceAuthority.isExactDirectTriangle
+    ) return false
+    val x0 = path.vertices[0]
+    val y0 = path.vertices[1]
+    val x1 = path.vertices[2]
+    val y1 = path.vertices[3]
+    val x2 = path.vertices[4]
+    val y2 = path.vertices[5]
+    val twiceArea = (x1 - x0) * (y2 - y0) - (y1 - y0) * (x2 - x0)
+    return twiceArea.isFinite() && twiceArea != 0f
 }
 
 private fun pathStencilGeometryBytes(
@@ -2067,6 +2090,17 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 packet.clipExecutionPlan?.canonicalIdentity() == candidate.canonicalIdentity()
             }
         }.orEmpty()
+        if (staticNativeClipStencilPlan?.sampleCount == 1 && staticNativeClipStencilConsumers.any { packet ->
+                val semantic = request.coreSemantics().getValue(packet.commandIdValue)
+                semantic.geometry is GPUCorePrimitiveGeometry.TriangulatedPath &&
+                    !semantic.hasExactDirectTrianglePathConsumerGeometry()
+            }
+        ) {
+            return refused(
+                "unsupported.recording.core_primitive_path_stencil_clip",
+                "Hard path clips reject path geometry that is not an authenticated direct triangle consumer.",
+            )
+        }
         val nativeClipStencilConsumerGeometryBytesByCommandId = try {
             staticNativeClipStencilPlan?.let { candidate ->
                 staticNativeClipStencilConsumers.mapNotNull { packet ->
@@ -2129,18 +2163,19 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 packet.role == GPUDrawPacketRole.Shading &&
                     when (clipStencilShader) {
                         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry ->
-                            packet.renderStepId.value == CORE_PRIMITIVE_FILL_RECT_STEP_IDENTITY
+                            (packet.renderStepId.value == CORE_PRIMITIVE_FILL_RECT_STEP_IDENTITY &&
+                                semantic.geometry is GPUCorePrimitiveGeometry.Rect) ||
+                                semantic.hasExactDirectTrianglePathConsumerGeometry()
                         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient ->
                             packet.renderStepId.value == "linear.gradient.fill"
                         else -> false
                     } &&
-                    semantic.geometry is GPUCorePrimitiveGeometry.Rect &&
                     semantic.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor
             }
         if (nativeClipStencilPlan?.sampleCount == 1 && !validNativeClipStencilConsumers) {
             return refused(
                 "unsupported.recording.core_primitive_clip_stencil_mixed_geometry",
-                "The bounded clip-stencil scope accepts only one or two solid or clamp-linear-gradient FillRect consumers.",
+                "The bounded clip-stencil scope accepts only one or two direct solid Path or FillRect consumers, or clamp-linear-gradient FillRect consumers.",
             )
         }
         val nativeClipStencilPrefixCommandIds = nativeClipStencilPlan

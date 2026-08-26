@@ -100,6 +100,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
+import org.graphiks.kanvas.gpu.renderer.state.GPUPathSourceAuthority
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 
@@ -2130,6 +2131,115 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
         assertEquals(1, taskList.dependencies.count {
             it.fromTaskId == renders[1].taskId && it.toTaskId == renders.last().taskId
         })
+    }
+
+    @Test
+    fun `native path clip accepts a direct triangle path consumer after an opaque background`() {
+        val plan = nativePathStencilPlan(GPUClipFillRule.Winding)
+        val base = recording(command(341, 0, rect = targetRect()), command(340, 7)).taskList.withClipPlans(
+            mapOf(341 to GPUClipExecutionPlan.NoClip, 340 to plan),
+        )
+        val packets = base.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+
+        val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            request(
+                base,
+                packets.associate { packet ->
+                    packet.commandIdValue to if (packet.commandIdValue == 341) {
+                        semantic(packet, geometry = GPUCorePrimitiveGeometryInput.Rect(0f, 0f, 16f, 16f))
+                    } else {
+                        semantic(
+                            packet,
+                            geometry = GPUCorePrimitiveGeometryInput.TriangulatedPath(
+                                vertices = listOf(1f, 1f, 12f, 1f, 1f, 12f),
+                                indices = listOf(0, 2, 1),
+                                sourceContourStarts = listOf(0),
+                                sourceVertexCount = 3,
+                                coverBounds = GPUPixelBounds(1, 1, 12, 12),
+                                geometryMode = GPUCorePrimitiveGeometryMode.DirectTriangles,
+                                sourceAuthority = GPUPathSourceAuthority.DrawPathMoveLineLineExplicitCloseV1,
+                            ),
+                            sourceFamily = GPUCorePrimitiveSourceFamily.Path,
+                        )
+                    }
+                },
+            ),
+        )
+
+        assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(result)
+    }
+
+    @Test
+    fun `native path clip refuses a direct triangles Path consumer that is not one triangle`() {
+        val plan = nativePathStencilPlan(GPUClipFillRule.Winding)
+        val base = recording(command(341, 0, rect = targetRect()), command(340, 7)).taskList.withClipPlans(
+            mapOf(341 to GPUClipExecutionPlan.NoClip, 340 to plan),
+        )
+        val packets = base.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+
+        val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            request(
+                base,
+                packets.associate { packet ->
+                    packet.commandIdValue to if (packet.commandIdValue == 341) {
+                        semantic(packet, geometry = GPUCorePrimitiveGeometryInput.Rect(0f, 0f, 16f, 16f))
+                    } else {
+                        semantic(
+                            packet,
+                            geometry = GPUCorePrimitiveGeometryInput.TriangulatedPath(
+                                vertices = listOf(1f, 1f, 12f, 1f, 12f, 12f, 1f, 12f),
+                                indices = listOf(0, 1, 2, 0, 2, 3),
+                                sourceContourStarts = listOf(0),
+                                sourceVertexCount = 4,
+                                coverBounds = GPUPixelBounds(1, 1, 12, 12),
+                                geometryMode = GPUCorePrimitiveGeometryMode.DirectTriangles,
+                            ),
+                            sourceFamily = GPUCorePrimitiveSourceFamily.Path,
+                        )
+                    }
+                },
+            ),
+        )
+
+        assertEquals(
+            "unsupported.recording.core_primitive_path_stencil_clip",
+            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+        )
+    }
+
+    @Test
+    fun `native path clip keeps stencil edge fan path consumers refused`() {
+        val plan = nativePathStencilPlan(GPUClipFillRule.Winding)
+        val base = recording(command(341, 0, rect = targetRect()), command(340, 7)).taskList.withClipPlans(
+            mapOf(341 to GPUClipExecutionPlan.NoClip, 340 to plan),
+        )
+        val packets = base.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+
+        val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            request(
+                base,
+                packets.associate { packet ->
+                    packet.commandIdValue to if (packet.commandIdValue == 341) {
+                        semantic(packet, geometry = GPUCorePrimitiveGeometryInput.Rect(0f, 0f, 16f, 16f))
+                    } else {
+                        semantic(
+                            packet,
+                            geometry = stencilGeometry(GPUPixelBounds(1, 1, 12, 12)),
+                            coverageMode = GPUCorePrimitiveCoverageMode.Stencil1x,
+                            sourceFamily = GPUCorePrimitiveSourceFamily.Path,
+                        )
+                    }
+                },
+            ),
+        )
+
+        assertEquals(
+            "unsupported.recording.core_primitive_path_stencil_clip",
+            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+        )
     }
 
     @Test

@@ -173,6 +173,229 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
+    fun `public solid triangle drawPath renders inside one hard path clip stencil scope`() {
+        requireWebGpu()
+        val background = ColorARGB.of(255, 13, 20, 33)
+        val fill = ColorARGB.of(255, 242, 135, 46)
+        val surface = Surface(64, 64)
+        surface.canvas {
+            drawColor(background)
+            save()
+            clipPath(
+                Path {
+                    moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close()
+                }.apply { fillType = FillType.WINDING },
+                ClipOp.INTERSECT,
+                antiAlias = false,
+            )
+            drawPath(
+                Path {
+                    moveTo(4f, 4f); lineTo(60f, 12f); lineTo(12f, 60f); close()
+                }.apply { fillType = FillType.WINDING },
+                Paint.fill(fill).copy(antiAlias = false),
+            )
+            restore()
+        }
+
+        val result = surface.render()
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertRgbaNear(result.pixels, 64, 12, 12, fill)
+        assertRgbaNear(result.pixels, 64, 50, 14, background)
+    }
+
+    @Test
+    fun `single direct triangle hard clip consumer has exact device-space coverage away from pixel-center edges`() {
+        requireWebGpu()
+        val background = ColorARGB.of(255, 13, 20, 33)
+        val orange = ColorARGB.of(255, 242, 135, 46)
+        val surface = Surface(64, 64)
+        surface.canvas {
+            drawColor(background)
+            save()
+            clipPath(
+                Path {
+                    moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close()
+                }.apply { fillType = FillType.WINDING },
+                ClipOp.INTERSECT,
+                antiAlias = false,
+            )
+            drawPath(
+                Path {
+                    moveTo(4f, 4.25f); lineTo(60f, 12f); lineTo(12f, 60f); close()
+                }.apply { fillType = FillType.WINDING },
+                Paint.fill(orange).copy(antiAlias = false),
+            )
+            restore()
+        }
+
+        val result = surface.render()
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertEquals(
+            1059,
+            result.pixels.asList().chunked(4).count { pixel ->
+                pixel == listOf(orange.red.toUByte(), orange.green.toUByte(), orange.blue.toUByte(), orange.alpha.toUByte())
+            },
+        )
+    }
+
+    @Test
+    fun `public translated implicitly closed solid triangle keeps clip and consumer in device space`() {
+        requireWebGpu()
+        val background = ColorARGB.of(255, 13, 20, 33)
+        val fill = ColorARGB.of(255, 31, 115, 209)
+        val surface = Surface(64, 64)
+        surface.canvas {
+            drawColor(background)
+            save()
+            translate(2f, 0f)
+            clipPath(
+                Path {
+                    moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close()
+                }.apply { fillType = FillType.WINDING },
+                ClipOp.INTERSECT,
+                antiAlias = false,
+            )
+            drawPath(
+                Path {
+                    moveTo(4f, 4f); lineTo(60f, 12f); lineTo(12f, 60f)
+                }.apply { fillType = FillType.WINDING },
+                Paint.fill(fill).copy(antiAlias = false),
+            )
+            restore()
+        }
+
+        val result = surface.render()
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertRgbaNear(result.pixels, 64, 14, 12, fill)
+        assertRgbaNear(result.pixels, 64, 8, 12, background)
+    }
+
+    @Test
+    fun `public quadratic drawPath remains refused even when flattening forms a triangle`() {
+        requireWebGpu()
+        val surface = Surface(64, 64)
+        surface.canvas {
+            drawColor(ColorARGB.of(255, 13, 20, 33))
+            save()
+            clipPath(
+                Path {
+                    moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close()
+                }.apply { fillType = FillType.WINDING },
+                ClipOp.INTERSECT,
+                antiAlias = false,
+            )
+            drawPath(
+                Path {
+                    moveTo(4f, 4f); quadTo(8f, 4.1f, 12f, 4f); close()
+                }.apply { fillType = FillType.WINDING },
+                Paint.fill(ColorARGB.of(255, 242, 135, 46)).copy(antiAlias = false),
+            )
+            restore()
+        }
+
+        assertTerminal("unsupported.recording.core_primitive_path_stencil_clip", surface::render)
+    }
+
+    @Test
+    fun `public three point polygon remains refused inside a hard path clip`() {
+        requireWebGpu()
+        val surface = Surface(64, 64)
+        surface.canvas {
+            drawColor(ColorARGB.of(255, 13, 20, 33))
+            save()
+            clipPath(
+                Path {
+                    moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close()
+                }.apply { fillType = FillType.WINDING },
+                ClipOp.INTERSECT,
+                antiAlias = false,
+            )
+            drawPoints(
+                PointMode.POLYGON,
+                listOf(Point2F32(4f, 4f), Point2F32(60f, 12f), Point2F32(12f, 60f)),
+                Paint.fill(ColorARGB.of(255, 242, 135, 46)).copy(antiAlias = false),
+            )
+            restore()
+        }
+
+        assertTerminal("unsupported.geometry.path_key_nondeterministic", surface::render)
+    }
+
+    @Test
+    fun `public hairline drawPoint remains refused inside a hard path clip`() {
+        requireWebGpu()
+        val surface = Surface(64, 64)
+        surface.canvas {
+            drawColor(ColorARGB.of(255, 13, 20, 33))
+            save()
+            clipPath(
+                Path {
+                    moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close()
+                }.apply { fillType = FillType.WINDING },
+                ClipOp.INTERSECT,
+                antiAlias = false,
+            )
+            drawPoint(12f, 12f, Paint.fill(ColorARGB.of(255, 242, 135, 46)).copy(antiAlias = false))
+            restore()
+        }
+
+        assertTerminal("unsupported.recording.core_primitive_path_stencil_clip", surface::render)
+    }
+
+    @Test
+    fun `public concave drawPath remains refused inside a hard path clip stencil scope`() {
+        requireWebGpu()
+        val surface = Surface(64, 64)
+        surface.canvas {
+            drawColor(ColorARGB.of(255, 13, 20, 33))
+            save()
+            clipPath(
+                Path {
+                    moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close()
+                }.apply { fillType = FillType.WINDING },
+                ClipOp.INTERSECT,
+                antiAlias = false,
+            )
+            drawPath(
+                Path {
+                    moveTo(8f, 8f); lineTo(56f, 8f); lineTo(56f, 24f); lineTo(32f, 24f)
+                    lineTo(32f, 40f); lineTo(56f, 40f); lineTo(56f, 56f); lineTo(8f, 56f); close()
+                }.apply { fillType = FillType.WINDING },
+                Paint.fill(ColorARGB.of(255, 31, 115, 209)).copy(antiAlias = false),
+            )
+            restore()
+        }
+
+        assertTerminal("unsupported.recording.core_primitive_path_stencil_clip", surface::render)
+    }
+
+    @Test
+    fun `public even odd holed drawPath remains refused inside a hard path clip stencil scope`() {
+        requireWebGpu()
+        val holedPath = Path().apply {
+            fillType = FillType.EVEN_ODD
+            addRect(RectF32.ofLTRB(12f, 12f, 52f, 52f))
+            addRect(RectF32.ofLTRB(24f, 24f, 40f, 40f))
+        }
+        val surface = Surface(64, 64)
+        surface.canvas {
+            drawColor(ColorARGB.of(255, 13, 20, 33))
+            save()
+            clipPath(
+                Path {
+                    moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close()
+                }.apply { fillType = FillType.WINDING },
+                ClipOp.INTERSECT,
+                antiAlias = false,
+            )
+            drawPath(holedPath, Paint.fill(ColorARGB.of(255, 56, 220, 120)).copy(antiAlias = false))
+            restore()
+        }
+
+        assertTerminal("unsupported.recording.core_primitive_path_stencil_clip", surface::render)
+    }
+
+    @Test
     fun `public clamp linear gradient FillRect renders inside one hard path clip stencil scope`() {
         requireWebGpu()
         val background = ColorARGB.of(255, 13, 20, 33)

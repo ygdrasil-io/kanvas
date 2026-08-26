@@ -20,9 +20,13 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialKind
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig
+import org.graphiks.kanvas.gpu.renderer.state.GPUPathSourceAuthority
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
@@ -31,8 +35,43 @@ import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
+import org.graphiks.kanvas.types.PointMode
 
 class GPUCorePrimitiveSemanticBuilderTest {
+    @Test
+    fun `point sources cannot impersonate a public direct triangle drawPath`() {
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPoint(
+                    x = 2f,
+                    y = 2f,
+                    paint = Paint.fill(ColorARGB.Red).copy(antiAlias = false),
+                    transform = Matrix3x3F32.Identity,
+                    clip = ClipStack.WideOpen,
+                ),
+                DisplayOp.DrawPoints(
+                    mode = PointMode.POLYGON,
+                    points = listOf(Point2F32(2f, 2f), Point2F32(20f, 2f), Point2F32(2f, 20f)),
+                    paint = Paint.fill(ColorARGB.Red).copy(antiAlias = false),
+                    transform = Matrix3x3F32.Identity,
+                    clip = ClipStack.WideOpen,
+                ),
+            ),
+            target = GPUTargetFacts(32, 24, "rgba8unorm"),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities(),
+        )
+
+        val paths = inventory.visualCommands.map { command ->
+            assertIs<NormalizedDrawCommand.FillPath>(command.normalized)
+        }
+        assertEquals(listOf("drawPoint", "drawPoints.polygon"), paths.map { it.source.operation })
+        assertEquals(
+            listOf(GPUPathSourceAuthority.Unknown, GPUPathSourceAuthority.Unknown),
+            paths.map { it.pathDescriptor.sourceAuthority },
+        )
+    }
+
     @Test
     fun `production builder and inventory return the exact same representative semantics`() {
         val inventory = inventory()
@@ -304,6 +343,125 @@ class GPUCorePrimitiveSemanticBuilderTest {
         assertEquals(GPUMaterialKind.LinearGradient.name, refusal.facts["materialKind"])
         assertEquals("0", refusal.facts["commandId"])
         assertEquals("drawPath", refusal.facts["source"])
+    }
+
+    @Test
+    fun `non AA winding triangle path outside a hard clip keeps stencil coverage`() {
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    path = Path {
+                        moveTo(2f, 2f); lineTo(20f, 2f); lineTo(2f, 20f); close()
+                    },
+                    paint = Paint.fill(ColorARGB.Red).copy(antiAlias = false),
+                    transform = Matrix3x3F32.Identity,
+                    clip = ClipStack.WideOpen,
+                ),
+            ),
+            target = GPUTargetFacts(32, 24, "rgba8unorm"),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities(),
+        )
+
+        assertEquals(
+            GPUCoverageConsumption.StencilCoverage1x,
+            inventory.visualCommands.single().geometryCoverage,
+        )
+        val gathered = assertIs<GPUCorePrimitiveSemanticGatherResult.Gathered>(
+            GPUCorePrimitiveSemanticBuilder.gather(
+                visualCommands = inventory.visualCommands,
+                recording = inventory.recording,
+                targetBounds = GPUPixelBounds(0, 0, 32, 24),
+                blendAuthorityPolicy = GPUCorePrimitiveBlendAuthorityPolicy.InventoryHarness,
+            ),
+        )
+        val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(
+            assertIs<GPUDrawSemanticPayload.CorePrimitive>(gathered.semantics.getValue(0)).geometry,
+        )
+        assertEquals(GPUCorePrimitiveGeometryMode.StencilEdgeFan, geometry.geometryMode)
+    }
+
+    @Test
+    fun `non AA implicit winding triangle outside a hard clip keeps stencil coverage`() {
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    path = Path {
+                        moveTo(2f, 2f); lineTo(20f, 2f); lineTo(2f, 20f)
+                    },
+                    paint = Paint.fill(ColorARGB.Red).copy(antiAlias = false),
+                    transform = Matrix3x3F32.Identity,
+                    clip = ClipStack.WideOpen,
+                ),
+            ),
+            target = GPUTargetFacts(32, 24, "rgba8unorm"),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities(),
+        )
+
+        assertEquals(
+            GPUCoverageConsumption.StencilCoverage1x,
+            inventory.visualCommands.single().geometryCoverage,
+        )
+        val gathered = assertIs<GPUCorePrimitiveSemanticGatherResult.Gathered>(
+            GPUCorePrimitiveSemanticBuilder.gather(
+                visualCommands = inventory.visualCommands,
+                recording = inventory.recording,
+                targetBounds = GPUPixelBounds(0, 0, 32, 24),
+                blendAuthorityPolicy = GPUCorePrimitiveBlendAuthorityPolicy.InventoryHarness,
+            ),
+        )
+        val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(
+            assertIs<GPUDrawSemanticPayload.CorePrimitive>(gathered.semantics.getValue(0)).geometry,
+        )
+        assertEquals(GPUCorePrimitiveGeometryMode.StencilEdgeFan, geometry.geometryMode)
+    }
+
+    @Test
+    fun `singular winding triangle remains stencil coverage instead of direct geometry`() {
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    path = Path {
+                        moveTo(2f, 2f); lineTo(20f, 2f); lineTo(2f, 20f); close()
+                    },
+                    paint = Paint.fill(ColorARGB.Red).copy(antiAlias = false),
+                    transform = Matrix3x3F32.scaling(0f, 1f),
+                    clip = ClipStack.WideOpen,
+                ),
+            ),
+            target = GPUTargetFacts(32, 24, "rgba8unorm"),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities(),
+        )
+
+        assertEquals(
+            GPUCoverageConsumption.StencilCoverage1x,
+            inventory.visualCommands.single().geometryCoverage,
+        )
+    }
+
+    @Test
+    fun `non drawPath triangle remains stencil coverage instead of direct geometry`() {
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPoints(
+                    mode = PointMode.POLYGON,
+                    points = listOf(Point2F32(2f, 2f), Point2F32(20f, 2f), Point2F32(2f, 20f)),
+                    paint = Paint.fill(ColorARGB.Red).copy(antiAlias = false),
+                    transform = Matrix3x3F32.Identity,
+                    clip = ClipStack.WideOpen,
+                ),
+            ),
+            target = GPUTargetFacts(32, 24, "rgba8unorm"),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities(),
+        )
+
+        assertEquals(
+            GPUCoverageConsumption.StencilCoverage1x,
+            inventory.visualCommands.single().geometryCoverage,
+        )
     }
 
     @Test

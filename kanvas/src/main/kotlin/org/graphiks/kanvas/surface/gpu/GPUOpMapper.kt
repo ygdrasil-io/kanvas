@@ -45,6 +45,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.state.GPUPathSourceAuthority
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextArtifactRef
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration
@@ -88,6 +89,7 @@ import org.graphiks.kanvas.types.PointMode
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.geometry.Path
+import org.graphiks.kanvas.geometry.PathVerb
 import org.graphiks.kanvas.surface.RenderConfig
 
 internal data class GPUOpMapping(
@@ -681,7 +683,6 @@ internal object GPUOpMapper {
             onGeometryRefusal = { refusal -> loweringRefusal = refusal },
         ) ?: return null
         val geometryRefusal = loweringRefusal ?: operation.coreGeometryRefusalOrNull()
-        val coverage = rawNormalized.geometryCoverage()
         val clipPlan = rawNormalized.clip.coverageRequest?.let { request ->
             GPUClipCoveragePlanner.planForFrameRoute(
                 request,
@@ -699,6 +700,7 @@ internal object GPUOpMapper {
             admitAnalyticMultiRect,
         )
         val normalized = rawNormalized.withClipPlans(clipPlan, clipExecutionPlan)
+        val coverage = normalized.geometryCoverage()
         return GPUFramePathVisualCommand(
             normalized = normalized,
             targetSpaceBounds = normalized.bounds,
@@ -737,7 +739,10 @@ internal object GPUOpMapper {
                     points.paint,
                     points.transform,
                     points.clip,
-                ).toPathCommand(commandId, target, config).copy(stroke = false)
+                ).toPathCommand(commandId, target, config).copy(
+                    stroke = false,
+                    source = GPUCommandSource(adapter = "kanvas-surface", operation = "drawPoint"),
+                )
             }
             is DisplayOp.DrawRect -> if (operation.paint.isStroke()) {
                 operation.toStrokePathCommand(commandId, target)
@@ -754,7 +759,12 @@ internal object GPUOpMapper {
             } else {
                 operation.toNormalizedCommand(commandId, target)
             }
-            is DisplayOp.DrawPath -> operation.toPathCommand(commandId, target, config)
+            is DisplayOp.DrawPath -> operation.toPathCommand(
+                commandId,
+                target,
+                config,
+                operation.directTriangleSourceAuthority(),
+            )
             is DisplayOp.DrawPoints -> DisplayOp.DrawPath(
                 operation.toPath(),
                 operation.paint,
@@ -762,6 +772,10 @@ internal object GPUOpMapper {
                 operation.clip,
             ).toPathCommand(commandId, target, config).copy(
                 stroke = operation.mode != PointMode.POINTS,
+                source = GPUCommandSource(
+                    adapter = "kanvas-surface",
+                    operation = "drawPoints.${operation.mode.name.lowercase()}",
+                ),
             )
             is DisplayOp.DrawDRRect -> operation.analyticSolidDRRectMaterialOrNull()?.let { material ->
                 operation.toNormalizedCommand(commandId, target, material)
@@ -1176,6 +1190,7 @@ private fun DisplayOp.DrawPath.toPathCommand(
     commandId: GPUDrawCommandID,
     target: GPUTargetFacts,
     config: RenderConfig,
+    sourceAuthority: GPUPathSourceAuthority = GPUPathSourceAuthority.Unknown,
 ): NormalizedDrawCommand.FillPath {
     val flattened = PathTessellator(
         tolerance = config.curveTolerance,
@@ -1187,11 +1202,27 @@ private fun DisplayOp.DrawPath.toPathCommand(
         flattened.points.flatMap { point -> listOf(point.x, point.y) },
         flattened.contourStarts.ifEmpty { listOf(0) },
         flattened.points.size,
+        sourceAuthority,
     )
 }
 
+private fun DisplayOp.DrawPath.directTriangleSourceAuthority(): GPUPathSourceAuthority {
+    if (sourceOperation != "drawPath") return GPUPathSourceAuthority.Unknown
+    return when (path.commands().map { it.verb }) {
+        listOf(PathVerb.MOVE, PathVerb.LINE, PathVerb.LINE) ->
+            GPUPathSourceAuthority.DrawPathMoveLineLineImplicitCloseV1
+        listOf(PathVerb.MOVE, PathVerb.LINE, PathVerb.LINE, PathVerb.CLOSE) ->
+            GPUPathSourceAuthority.DrawPathMoveLineLineExplicitCloseV1
+        else -> GPUPathSourceAuthority.Unknown
+    }
+}
+
 private fun NormalizedDrawCommand.geometryCoverage(): GPUCoverageConsumption = when (this) {
-    is NormalizedDrawCommand.FillPath -> GPUCoverageConsumption.StencilCoverage1x
+    is NormalizedDrawCommand.FillPath -> if (isBoundedDirectTriangleFill()) {
+        GPUCoverageConsumption.FullOrScissor
+    } else {
+        GPUCoverageConsumption.StencilCoverage1x
+    }
     is NormalizedDrawCommand.FillRRect -> if (antiAlias) {
         GPUCoverageConsumption.ScalarCoverage
     } else {
@@ -1204,6 +1235,39 @@ private fun NormalizedDrawCommand.geometryCoverage(): GPUCoverageConsumption = w
         GPUCoverageConsumption.FullOrScissor
     }
     else -> error("Geometry coverage requested for a non-Slice-12A command")
+}
+
+/**
+ * This is deliberately narrower than general path triangulation: only one finite, non-degenerate
+ * winding triangle can use direct color geometry. Every other FillPath still owns its coverage
+ * through the stencil edge-fan route.
+ */
+internal fun NormalizedDrawCommand.FillPath.isBoundedDirectTriangleFill(): Boolean {
+    if (stroke || antiAlias || pathDescriptor.inverseFill ||
+        pathDescriptor.fillRule !in setOf("NonZero", "winding") ||
+        !pathDescriptor.sourceAuthority.isExactDirectTriangle || contourStarts != listOf(0)
+    ) return false
+    val nativePathStencil = clip.executionPlan as? GPUClipExecutionPlan.StencilCoverage ?: return false
+    if (nativePathStencil.sampleCount != 1 || nativePathStencil.producer.geometry !is GPUClipExecutionGeometry.Path) {
+        return false
+    }
+    if (transform.type == GPUTransformType.Perspective || transform.type == GPUTransformType.Singular) {
+        return false
+    }
+    val transformDeterminant = transform.scaleX * transform.scaleY - transform.skewX * transform.skewY
+    if (!transformDeterminant.isFinite() || transformDeterminant == 0f) return false
+    val points = tessellatedVertices.chunked(2)
+    if (points.any { it.size != 2 }) return false
+    val triangle = when {
+        points.size == 4 && points.first() == points.last() -> points.dropLast(1)
+        points.size == 3 -> points
+        else -> return false
+    }
+    if (triangle.any { point -> point.any { coordinate -> !coordinate.isFinite() } }) return false
+    val (first, second, third) = triangle
+    val twiceArea = (second[0] - first[0]) * (third[1] - first[1]) -
+        (second[1] - first[1]) * (third[0] - first[0])
+    return twiceArea.isFinite() && twiceArea != 0f
 }
 
 private fun NormalizedDrawCommand.withClipPlans(
@@ -1755,6 +1819,7 @@ internal fun DisplayOp.DrawPath.toNormalizedCommand(
     tessellatedVertices: List<Float>,
     contourStarts: List<Int>,
     edgeCount: Int,
+    sourceAuthority: GPUPathSourceAuthority = GPUPathSourceAuthority.Unknown,
 ): NormalizedDrawCommand.FillPath {
     val paint = this.paint
     val material = paint.toMaterial()
@@ -1776,6 +1841,7 @@ internal fun DisplayOp.DrawPath.toNormalizedCommand(
             volatility = "static",
             transformClass = transform.type.name.lowercase(),
             edgeCount = edgeCount,
+            sourceAuthority = sourceAuthority,
         ),
         tessellatedVertices = tessellatedVertices,
         contourStarts = contourStarts,

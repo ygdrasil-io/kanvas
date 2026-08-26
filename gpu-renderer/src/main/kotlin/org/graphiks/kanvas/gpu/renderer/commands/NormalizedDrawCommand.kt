@@ -22,6 +22,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialProgram
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceAlphaClassification
+import org.graphiks.kanvas.gpu.renderer.state.GPUPathSourceAuthority
 
 private val IDENTITY_GRADIENT_LOCAL_MATRIX = listOf(
     1f, 0f, 0f,
@@ -307,6 +308,7 @@ data class GPUPathFacts(
     val volatility: String,
     val transformClass: String,
     val edgeCount: Int,
+    val sourceAuthority: GPUPathSourceAuthority = GPUPathSourceAuthority.Unknown,
 )
 
 /** Captured transform facts owned by commands and consumed by analysis without replaying Canvas state. */

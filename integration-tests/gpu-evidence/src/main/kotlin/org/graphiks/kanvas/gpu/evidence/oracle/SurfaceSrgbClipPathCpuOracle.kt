@@ -1,10 +1,10 @@
 package org.graphiks.kanvas.gpu.evidence.oracle
 
-/** Independent pixel-center oracle for one hard winding polygon clip and ordered opaque rectangles. */
+/** Independent pixel-center oracle for one hard winding polygon clip and ordered opaque primitives. */
 class SurfaceSrgbClipPathCpuOracle(
     background: IntArray,
     contours: List<Contour>,
-    draws: List<OpaqueRect>,
+    draws: List<OpaqueDraw>,
 ) : CpuOracle {
     companion object {
         const val WIDTH = 64
@@ -29,13 +29,21 @@ class SurfaceSrgbClipPathCpuOracle(
         }
     }
 
+    sealed interface OpaqueDraw {
+        val color: IntArray
+
+        fun contains(pointX: Double, pointY: Double): Boolean
+
+        fun copyColor(): OpaqueDraw
+    }
+
     data class OpaqueRect(
         val left: Float,
         val top: Float,
         val right: Float,
         val bottom: Float,
-        val color: IntArray,
-    ) {
+        override val color: IntArray,
+    ) : OpaqueDraw {
         init {
             require(left.isFinite() && top.isFinite() && right.isFinite() && bottom.isFinite()) {
                 "draw bounds must be finite"
@@ -44,12 +52,46 @@ class SurfaceSrgbClipPathCpuOracle(
             require(color.size == 4 && color.all { it in 0..255 }) { "RGBA color must have four byte channels" }
         }
 
-        fun copyColor(): OpaqueRect = copy(color = color.copyOf())
+        override fun contains(pointX: Double, pointY: Double): Boolean =
+            pointX >= left && pointX < right && pointY >= top && pointY < bottom
+
+        override fun copyColor(): OpaqueRect = copy(color = color.copyOf())
+    }
+
+    /** Exact direct-triangle membership is intentionally independent from the renderer lowering. */
+    data class OpaqueTriangle(
+        val first: Point,
+        val second: Point,
+        val third: Point,
+        override val color: IntArray,
+    ) : OpaqueDraw {
+        init {
+            require(setOf(first, second, third).size == 3) { "direct triangles need three distinct points" }
+            require(color.size == 4 && color.all { it in 0..255 }) { "RGBA color must have four byte channels" }
+            require(twiceArea(first, second, third) != 0.0) { "direct triangles must be non-degenerate" }
+        }
+
+        override fun contains(pointX: Double, pointY: Double): Boolean {
+            val firstEdge = edge(first, second, pointX, pointY)
+            val secondEdge = edge(second, third, pointX, pointY)
+            val thirdEdge = edge(third, first, pointX, pointY)
+            return (firstEdge >= -EDGE_EPSILON && secondEdge >= -EDGE_EPSILON && thirdEdge >= -EDGE_EPSILON) ||
+                (firstEdge <= EDGE_EPSILON && secondEdge <= EDGE_EPSILON && thirdEdge <= EDGE_EPSILON)
+        }
+
+        override fun copyColor(): OpaqueTriangle = copy(color = color.copyOf())
+
+        private fun edge(start: Point, end: Point, pointX: Double, pointY: Double): Double =
+            (end.x - start.x).toDouble() * (pointY - start.y) -
+                (end.y - start.y).toDouble() * (pointX - start.x)
+
+        private fun twiceArea(first: Point, second: Point, third: Point): Double =
+            edge(first, second, third.x.toDouble(), third.y.toDouble())
     }
 
     private val background = background.copyOf().also(::requireRgba)
     private val contours = contours.map { Contour(it.points) }
-    private val draws = draws.map(OpaqueRect::copyColor)
+    private val draws = draws.map(OpaqueDraw::copyColor)
 
     init {
         require(this.contours.isNotEmpty()) { "clip path oracle requires at least one contour" }
@@ -65,7 +107,7 @@ class SurfaceSrgbClipPathCpuOracle(
             var color = background
             if (containsClip(px, py)) {
                 draws.forEach { draw ->
-                    if (px >= draw.left && px < draw.right && py >= draw.top && py < draw.bottom) {
+                    if (draw.contains(px, py)) {
                         color = draw.color
                     }
                 }
