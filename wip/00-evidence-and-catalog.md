@@ -48,12 +48,15 @@ des PNG déjà vérifiés.
 
 Une capture de diagnostic, une vérification generated et une promotion
 quotidienne peuvent cibler un sous-ensemble explicite, par exemple avec
-`-Pscene=solid-card-stack` ou `-PscenesFile=scenes.txt`. Quand aucun sélecteur
-n'est fourni aux full correctness gates (`generateGpuEvidence`,
-`verifyGeneratedGpuEvidence`, `promoteGpuEvidence`), le helper Gradle relaie
-`--all`; `-Pall` reste disponible pour annoncer ce choix explicitement. Le gate
-`verifyPromotedGpuEvidence` reste, lui, un contrôle headless complet du root
-promoted checked-in. Les rapports et preuves associés vivent sous
+`-Pscene=solid-card-stack` ou `-PscenesFile=scenes.txt`. Pour les gates
+`generateGpuEvidence` et `verifyGeneratedGpuEvidence`, quand aucun sélecteur
+n'est fourni, le helper Gradle relaie `--all`; `-Pall` reste disponible pour
+annoncer ce choix explicitement. Pour `promoteGpuEvidence`, l'absence de
+sélecteur ou `-Pall` est réservé à l'initialisation d'un catalogue absent ou
+vide ; un root promoted existant exige `--all` avec
+`promotionRebaseline=true` et des comparaisons prior/nouveau non vides. Le
+gate `verifyPromotedGpuEvidence` reste, lui, un contrôle headless complet du
+root promoted checked-in. Les rapports et preuves associés vivent sous
 `reports/gpu-renderer/evidence/`.
 
 Les formulations de ce WIP sont dérivées du code, des tests et des artefacts
@@ -93,5 +96,8 @@ catalogue et des artefacts promus cohérents avec le code de la branche.
 ./gradlew :integration-tests:gpu-evidence:generateGpuEvidence -PsourceCommit=<sha>
 ./gradlew :integration-tests:gpu-evidence:verifyGeneratedGpuEvidence -PsourceCommit=<sha>
 ./gradlew :integration-tests:gpu-evidence:verifyPromotedGpuEvidence
+# Initial catalogue only: the promoted root must be absent or empty.
 ./gradlew :integration-tests:gpu-evidence:promoteGpuEvidence -PsourceCommit=<sha> -PpromotionReviewer=<reviewer> -PpromotionReason=<reason> -Pall
+# Existing full catalogue: rebaseline comparison summaries are mandatory.
+./gradlew :integration-tests:gpu-evidence:promoteGpuEvidence -PsourceCommit=<sha> -PpromotionReviewer=<reviewer> -PpromotionReason=<reason> -PpromotionRebaseline=true -PpromotionPriorComparison='<comparaison précédente>' -PpromotionNewComparison='<comparaison nouvelle>' -Pall
 ```

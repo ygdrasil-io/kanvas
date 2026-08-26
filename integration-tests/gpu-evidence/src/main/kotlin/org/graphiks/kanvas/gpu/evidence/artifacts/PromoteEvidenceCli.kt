@@ -190,7 +190,7 @@ class PromoteEvidenceCliRunner internal constructor(
                     selectedSceneIds = sceneIds,
                 )
             }
-            swapCatalogRoot(staged, roots.promoted)
+            swapCatalogRoot(staged, roots.promoted, request.repositoryRoot)
             swapped = true
         } catch (failure: Throwable) {
             primaryFailure = failure
@@ -417,38 +417,94 @@ class PromoteEvidenceCliRunner internal constructor(
                 }
         }
 
-    private fun swapCatalogRoot(staged: Path, destination: Path) {
+    private fun swapCatalogRoot(staged: Path, destination: Path, repositoryRoot: Path) {
         val parent = destination.parent ?: error("promoted root has no parent")
-        val backup = if (Files.exists(destination, NOFOLLOW_LINKS)) Files.createTempDirectory(parent, ".promoted.backup-") else null
+        val hadDestination = Files.exists(destination, NOFOLLOW_LINKS)
+        var snapshot: Path? = null
+        var snapshotReady = false
+        var backup: Path? = null
+        var destinationMoveAttempted = false
+        var installAttempted = false
         var restored = false
         var installed = false
         try {
-            if (backup != null) moveStrategy(destination, backup.resolve(destination.fileName.toString()), true)
+            if (hadDestination) {
+                val snapshotRoot = Files.createTempDirectory(parent, ".promoted.snapshot-")
+                snapshot = snapshotRoot
+                copyTree(destination, snapshotRoot, repositoryRoot)
+                verifySnapshot(destination, snapshotRoot)
+                snapshotReady = true
+                backup = Files.createTempDirectory(parent, ".promoted.backup-")
+                destinationMoveAttempted = true
+                moveStrategy(destination, backup.resolve(destination.fileName.toString()), true)
+            }
+            installAttempted = true
             moveStrategy(staged, destination, true)
             installed = true
         } catch (failure: Throwable) {
-            val backupDestination = backup?.resolve(destination.fileName.toString())
-            if (backupDestination != null && Files.exists(backupDestination, NOFOLLOW_LINKS)) {
+            if (hadDestination && snapshotReady && destinationMoveAttempted) {
+                val backupDestination = backup?.resolve(destination.fileName.toString())
+                val independentSnapshot = requireNotNull(snapshot)
+                val verifiedBackup = backupDestination?.takeIf { isVerifiedSnapshot(independentSnapshot, it) }
+                if (verifiedBackup != null) {
+                    try {
+                        if (Files.exists(destination, NOFOLLOW_LINKS)) deleteTree(destination)
+                        moveStrategy(verifiedBackup, destination, true)
+                        restored = true
+                    } catch (restoreFailure: Throwable) {
+                        failure.addSuppressed(restoreFailure)
+                        stderr.println("promotion rollback failed; verified backup retained at $backup")
+                    }
+                } else {
+                    try {
+                        if (Files.exists(destination, NOFOLLOW_LINKS)) deleteTree(destination)
+                        copyTree(independentSnapshot, destination, repositoryRoot)
+                        verifySnapshot(independentSnapshot, destination)
+                        restored = true
+                    } catch (restoreFailure: Throwable) {
+                        failure.addSuppressed(restoreFailure)
+                        stderr.println("promotion rollback failed; independent snapshot retained at $snapshot; backup retained at $backup")
+                    }
+                }
+            } else if (!hadDestination && installAttempted) {
                 try {
                     if (Files.exists(destination, NOFOLLOW_LINKS)) deleteTree(destination)
-                    moveStrategy(backupDestination, destination, true)
-                    restored = true
-                } catch (restoreFailure: Throwable) {
-                    failure.addSuppressed(restoreFailure)
-                    stderr.println("promotion rollback failed; backup retained at $backup")
+                } catch (cleanupFailure: Throwable) {
+                    failure.addSuppressed(cleanupFailure)
+                    stderr.println("promotion initial install cleanup failed; incomplete destination retained at $destination")
                 }
             }
             throw failure
         } finally {
-            if (restored) {
+            if (restored || installed) {
                 runCatching { backup?.let(::deleteTree) }
-                    .onFailure { cleanupFailure -> stderr.println("promotion restored old catalog; backup retained at $backup: ${cleanupFailure.message}") }
-            } else if (installed && backup != null) {
-                runCatching { deleteTree(backup) }
-                    .onFailure { cleanupFailure -> stderr.println("promotion installed new catalog; backup retained at $backup: ${cleanupFailure.message}") }
+                    .onFailure { cleanupFailure -> stderr.println("promotion publication succeeded; backup retained at $backup: ${cleanupFailure.message}") }
+                runCatching { snapshot?.let(::deleteTree) }
+                    .onFailure { cleanupFailure -> stderr.println("promotion publication succeeded; snapshot retained at $snapshot: ${cleanupFailure.message}") }
+            } else if (!destinationMoveAttempted && !installAttempted) {
+                runCatching { backup?.let(::deleteTree) }
+                    .onFailure { cleanupFailure -> stderr.println("promotion setup cleanup failed; backup retained at $backup: ${cleanupFailure.message}") }
+                runCatching { snapshot?.let(::deleteTree) }
+                    .onFailure { cleanupFailure -> stderr.println("promotion setup cleanup failed; snapshot retained at $snapshot: ${cleanupFailure.message}") }
             }
         }
     }
+
+    private fun verifySnapshot(expected: Path, actual: Path) {
+        require(Files.isDirectory(actual, NOFOLLOW_LINKS) && !Files.isSymbolicLink(actual)) {
+            "promotion snapshot is not a regular directory: $actual"
+        }
+        require(changedRegularFiles(expected, actual).isEmpty()) {
+            "promotion snapshot does not match the original catalog"
+        }
+    }
+
+    private fun isVerifiedSnapshot(expected: Path, candidate: Path?): Boolean =
+        candidate != null && Files.exists(candidate, NOFOLLOW_LINKS) &&
+            runCatching {
+                verifySnapshot(expected, candidate)
+                true
+            }.getOrDefault(false)
 
     private fun ensureNoSymlinkComponents(root: Path, path: Path) {
         require(path.normalize().startsWith(root.normalize())) { "path escapes repository root" }

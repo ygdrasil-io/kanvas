@@ -395,6 +395,48 @@ class PromoteEvidenceCliTest {
     }
 
     @Test
+    fun `partial first backup move restores the old promoted tree byte for byte`() {
+        writePromotedRoot(repository, COMMIT)
+        val before = snapshot(promotedRoot(repository))
+        writeGeneratedRoot(repository, OTHER_COMMIT, allSceneIds(), environment(OTHER_COMMIT, osVersion = "2"))
+
+        val result = PromoteEvidenceCliRunner(
+            moveStrategy = { source, destination, _ ->
+                if (source == promotedRoot(repository)) {
+                    Files.createDirectories(destination)
+                    Files.copy(source.resolve("catalog.json"), destination.resolve("catalog.json"))
+                    throw IOException("injected partial backup move")
+                }
+                Files.move(source, destination)
+            },
+        ).run(
+            args(repository, OTHER_COMMIT, reviewer = "reviewer", reason = "rebaseline", rebaseline = true) +
+                arrayOf("--prior-comparison", "old", "--new-comparison", "new"),
+        )
+
+        assertTrue(result != 0)
+        assertEquals(before, snapshot(promotedRoot(repository)))
+    }
+
+    @Test
+    fun `partial initial catalog root install removes the incomplete destination`() {
+        writeGeneratedRoot(repository, COMMIT, allSceneIds())
+
+        val result = PromoteEvidenceCliRunner(
+            moveStrategy = { source, destination, _ ->
+                if (source.fileName.toString().startsWith(".promoted.staged-")) {
+                    copyTree(source, destination)
+                    throw IOException("injected partial initial catalog install")
+                }
+                Files.move(source, destination)
+            },
+        ).run(args(repository, COMMIT))
+
+        assertTrue(result != 0)
+        assertFalse(Files.exists(promotedRoot(repository)))
+    }
+
+    @Test
     fun `failed rollback preserves the backup root for recovery`() {
         writePromotedRoot(repository, COMMIT)
         val before = snapshot(promotedRoot(repository))

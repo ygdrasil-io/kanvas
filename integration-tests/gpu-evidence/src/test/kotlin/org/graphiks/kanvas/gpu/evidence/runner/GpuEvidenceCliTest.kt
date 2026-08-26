@@ -452,6 +452,54 @@ class GpuEvidenceCliTest {
         assertEquals(before, snapshotRegularFiles(destination))
     }
 
+    @Test fun `publisher restores the old generated root after a partial first backup move`() {
+        val root = Files.createTempDirectory("gpu-evidence-publisher-first-move")
+        val publisher = GeneratedEvidenceRootPublisher(
+            root,
+            "a".repeat(40),
+            moveStrategy = { source, destination, _ ->
+                if (source == publisherDestination(root)) {
+                    Files.createDirectories(destination)
+                    Files.copy(source.resolve("sentinel.txt"), destination.resolve("sentinel.txt"))
+                    throw IOException("injected partial generated backup move")
+                }
+                Files.move(source, destination)
+            },
+        )
+        val staging = publisher.createStagingRepositoryRoot()
+        val destination = publisher.generatedRoot(root)
+        Files.createDirectories(destination)
+        Files.writeString(destination.resolve("sentinel.txt"), "old")
+        val staged = publisher.generatedRoot(staging)
+        Files.createDirectories(staged)
+        Files.writeString(staged.resolve("sentinel.txt"), "new")
+        val before = snapshotRegularFiles(destination)
+
+        assertFailsWith<IOException> { publisher.publish(staging) }
+
+        assertEquals(before, snapshotRegularFiles(destination))
+    }
+
+    @Test fun `publisher removes an incomplete destination after a partial initial install`() {
+        val root = Files.createTempDirectory("gpu-evidence-publisher-initial")
+        val publisher = GeneratedEvidenceRootPublisher(
+            root,
+            "a".repeat(40),
+            moveStrategy = { source, destination, _ ->
+                copyTree(source, destination)
+                throw IOException("injected partial initial generated install")
+            },
+        )
+        val staging = publisher.createStagingRepositoryRoot()
+        val staged = publisher.generatedRoot(staging)
+        Files.createDirectories(staged)
+        Files.writeString(staged.resolve("sentinel.txt"), "new")
+
+        assertFailsWith<IOException> { publisher.publish(staging) }
+
+        assertFalse(Files.exists(publisher.generatedRoot(root)))
+    }
+
     @Test fun `publisher does not fail after a successful install when backup cleanup fails`() {
         val root = Files.createTempDirectory("gpu-evidence-publisher-cleanup")
         var cleanupAttempts = 0
@@ -499,6 +547,9 @@ class GpuEvidenceCliTest {
             }
         }
     }
+
+    private fun publisherDestination(root: java.nio.file.Path): java.nio.file.Path =
+        root.resolve("reports/gpu-renderer/evidence/correctness/generated/${"a".repeat(40)}")
 
     private fun assertCycleAvoidanceSnapshot(snapshot: Throwable, original: Throwable) {
         val message = assertNotNull(snapshot.message)

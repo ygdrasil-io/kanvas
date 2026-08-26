@@ -141,7 +141,7 @@ class MigratePromotedEvidenceCliRunner internal constructor(
             require(VerifyEvidenceCliRunner(stdout, stderr).run(arrayOf("--root", staged.toString(), "--all")) == 0) {
                 "staged migrated evidence failed independent verification"
             }
-            swapPromotedRoot(staged, promoted)
+            swapPromotedRoot(staged, promoted, request.repositoryRoot)
             swapped = true
         } catch (failure: Throwable) {
             primaryFailure = failure
@@ -319,35 +319,66 @@ class MigratePromotedEvidenceCliRunner internal constructor(
         require(promotion.optionalNullableString("newComparison") == null) { "migration promotion newComparison must be null" }
     }
 
-    private fun swapPromotedRoot(staged: Path, destination: Path) {
+    private fun swapPromotedRoot(staged: Path, destination: Path, repositoryRoot: Path) {
         val parent = destination.parent ?: error("promoted root has no parent")
-        val backup = Files.createTempDirectory(parent, ".promoted.backup-")
-        val backupDestination = backup.resolve(destination.fileName.toString())
+        var snapshot: Path? = null
+        var snapshotReady = false
+        var backup: Path? = null
+        var destinationMoveAttempted = false
+        var installAttempted = false
         var restored = false
         var installed = false
         try {
+            val snapshotRoot = Files.createTempDirectory(parent, ".promoted.snapshot-")
+            snapshot = snapshotRoot
+            copyTree(destination, snapshotRoot, repositoryRoot)
+            verifySnapshot(destination, snapshotRoot)
+            snapshotReady = true
+            backup = Files.createTempDirectory(parent, ".promoted.backup-")
+            val backupDestination = backup.resolve(destination.fileName.toString())
+            destinationMoveAttempted = true
             moveWithFallback(destination, backupDestination)
+            installAttempted = true
             moveWithFallback(staged, destination)
             installed = true
         } catch (failure: Throwable) {
-            if (Files.exists(backupDestination, NOFOLLOW_LINKS)) {
-                try {
-                    if (Files.exists(destination, NOFOLLOW_LINKS)) deleteTree(destination)
-                    moveWithFallback(backupDestination, destination)
-                    restored = true
-                } catch (restoreFailure: Throwable) {
-                    failure.addSuppressed(restoreFailure)
-                    stderr.println("migration rollback failed; backup retained at $backup")
+            if (snapshotReady && destinationMoveAttempted) {
+                val backupDestination = backup?.resolve(destination.fileName.toString())
+                val independentSnapshot = requireNotNull(snapshot)
+                val verifiedBackup = backupDestination?.takeIf { isVerifiedSnapshot(independentSnapshot, it) }
+                if (verifiedBackup != null) {
+                    try {
+                        if (Files.exists(destination, NOFOLLOW_LINKS)) deleteTree(destination)
+                        moveWithFallback(verifiedBackup, destination)
+                        restored = true
+                    } catch (restoreFailure: Throwable) {
+                        failure.addSuppressed(restoreFailure)
+                        stderr.println("migration rollback failed; verified backup retained at $backup")
+                    }
+                } else {
+                    try {
+                        if (Files.exists(destination, NOFOLLOW_LINKS)) deleteTree(destination)
+                        copyTree(independentSnapshot, destination, repositoryRoot)
+                        verifySnapshot(independentSnapshot, destination)
+                        restored = true
+                    } catch (restoreFailure: Throwable) {
+                        failure.addSuppressed(restoreFailure)
+                        stderr.println("migration rollback failed; independent snapshot retained at $snapshot; backup retained at $backup")
+                    }
                 }
             }
             throw failure
         } finally {
-            if (restored) {
-                runCatching { deleteTree(backup) }
-                    .onFailure { cleanupFailure -> stderr.println("migration restored old catalog; backup retained at $backup: ${cleanupFailure.message}") }
-            } else if (installed) {
-                runCatching { deleteTree(backup) }
-                    .onFailure { cleanupFailure -> stderr.println("migration installed new catalog; backup retained at $backup: ${cleanupFailure.message}") }
+            if (restored || installed) {
+                runCatching { backup?.let(::deleteTree) }
+                    .onFailure { cleanupFailure -> stderr.println("migration publication succeeded; backup retained at $backup: ${cleanupFailure.message}") }
+                runCatching { snapshot?.let(::deleteTree) }
+                    .onFailure { cleanupFailure -> stderr.println("migration publication succeeded; snapshot retained at $snapshot: ${cleanupFailure.message}") }
+            } else if (!destinationMoveAttempted && !installAttempted) {
+                runCatching { backup?.let(::deleteTree) }
+                    .onFailure { cleanupFailure -> stderr.println("migration setup cleanup failed; backup retained at $backup: ${cleanupFailure.message}") }
+                runCatching { snapshot?.let(::deleteTree) }
+                    .onFailure { cleanupFailure -> stderr.println("migration setup cleanup failed; snapshot retained at $snapshot: ${cleanupFailure.message}") }
             }
         }
     }
@@ -373,6 +404,31 @@ class MigratePromotedEvidenceCliRunner internal constructor(
             }
         }
     }
+
+    private fun verifySnapshot(expected: Path, actual: Path) {
+        require(Files.isDirectory(actual, NOFOLLOW_LINKS) && !Files.isSymbolicLink(actual)) {
+            "migration snapshot is not a regular directory: $actual"
+        }
+        require(regularFilesByRelativePath(expected) == regularFilesByRelativePath(actual)) {
+            "migration snapshot does not match the original root"
+        }
+    }
+
+    private fun isVerifiedSnapshot(expected: Path, candidate: Path?): Boolean =
+        candidate != null && Files.exists(candidate, NOFOLLOW_LINKS) &&
+            runCatching {
+                verifySnapshot(expected, candidate)
+                true
+            }.getOrDefault(false)
+
+    private fun regularFilesByRelativePath(root: Path): Map<String, List<Byte>> =
+        Files.walk(root).use { stream ->
+            stream.iterator().asSequence()
+                .filter { Files.isRegularFile(it, NOFOLLOW_LINKS) }
+                .associate { path ->
+                    root.relativize(path).toString().replace('\\', '/') to Files.readAllBytes(path).toList()
+                }
+        }
 
     private fun deleteSceneMetadata(path: Path) {
         require(Files.isRegularFile(path, NOFOLLOW_LINKS) && !Files.isSymbolicLink(path)) {

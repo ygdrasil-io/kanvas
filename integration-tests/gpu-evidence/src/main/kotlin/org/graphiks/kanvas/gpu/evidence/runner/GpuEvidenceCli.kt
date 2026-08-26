@@ -250,48 +250,126 @@ internal class GeneratedEvidenceRootPublisher(
 
     private fun swapRoot(staged: Path, destination: Path) {
         require(!Files.isSymbolicLink(destination)) { "generated evidence root cannot be a symlink" }
-        if (Files.exists(destination, NOFOLLOW_LINKS)) {
+        val hadDestination = Files.exists(destination, NOFOLLOW_LINKS)
+        if (hadDestination) {
             require(Files.isDirectory(destination, NOFOLLOW_LINKS)) { "generated evidence root must be a directory" }
         }
         val parent = destination.parent ?: error("generated root has no parent")
-        val backup = if (Files.exists(destination, NOFOLLOW_LINKS)) {
-            Files.createTempDirectory(parent, ".${destination.fileName}.backup-")
-        } else {
-            null
-        }
+        var snapshot: Path? = null
+        var snapshotReady = false
+        var backup: Path? = null
+        var destinationMoveAttempted = false
+        var installAttempted = false
         var restored = false
         var installed = false
         try {
-            if (backup != null) moveStrategy(destination, backup.resolve(destination.fileName.toString()), true)
+            if (hadDestination) {
+                val snapshotRoot = Files.createTempDirectory(parent, ".${destination.fileName}.snapshot-")
+                snapshot = snapshotRoot
+                copyTree(destination, snapshotRoot)
+                verifySnapshot(destination, snapshotRoot)
+                snapshotReady = true
+                backup = Files.createTempDirectory(parent, ".${destination.fileName}.backup-")
+                destinationMoveAttempted = true
+                moveStrategy(destination, backup.resolve(destination.fileName.toString()), true)
+            }
+            installAttempted = true
             moveStrategy(staged, destination, true)
             installed = true
         } catch (failure: Throwable) {
-            val backupDestination = backup?.resolve(destination.fileName.toString())
-            if (backupDestination != null && Files.exists(backupDestination, NOFOLLOW_LINKS)) {
+            if (hadDestination && snapshotReady && destinationMoveAttempted) {
+                val backupDestination = backup?.resolve(destination.fileName.toString())
+                val independentSnapshot = requireNotNull(snapshot)
+                val verifiedBackup = backupDestination?.takeIf { isVerifiedSnapshot(independentSnapshot, it) }
+                if (verifiedBackup != null) {
+                    try {
+                        if (Files.exists(destination, NOFOLLOW_LINKS)) deleteGeneratedPublicationTree(destination)
+                        moveStrategy(verifiedBackup, destination, true)
+                        restored = true
+                    } catch (restoreFailure: Throwable) {
+                        failure.addSuppressed(restoreFailure)
+                        diagnostic("generated evidence rollback failed; verified backup retained at $backup")
+                    }
+                } else {
+                    try {
+                        if (Files.exists(destination, NOFOLLOW_LINKS)) deleteGeneratedPublicationTree(destination)
+                        copyTree(independentSnapshot, destination)
+                        verifySnapshot(independentSnapshot, destination)
+                        restored = true
+                    } catch (restoreFailure: Throwable) {
+                        failure.addSuppressed(restoreFailure)
+                        diagnostic("generated evidence rollback failed; independent snapshot retained at $snapshot; backup retained at $backup")
+                    }
+                }
+            } else if (!hadDestination && installAttempted) {
                 try {
                     if (Files.exists(destination, NOFOLLOW_LINKS)) deleteGeneratedPublicationTree(destination)
-                    moveStrategy(backupDestination, destination, true)
-                    restored = true
-                } catch (restoreFailure: Throwable) {
-                    failure.addSuppressed(restoreFailure)
-                    diagnostic("generated evidence rollback failed; backup retained at $backup")
+                } catch (cleanupFailure: Throwable) {
+                    failure.addSuppressed(cleanupFailure)
+                    diagnostic("generated evidence initial install cleanup failed; incomplete destination retained at $destination")
                 }
             }
             throw failure
         } finally {
-            if (restored && backup != null) {
-                runCatching { cleanupStrategy(backup) }
+            if (restored || installed) {
+                runCatching { backup?.let(cleanupStrategy) }
                     .onFailure { cleanupFailure ->
-                        diagnostic("generated evidence restored old root; backup retained at $backup: ${cleanupFailure.message}")
+                        diagnostic("generated evidence publication succeeded; backup retained at $backup: ${cleanupFailure.message}")
                     }
-            } else if (installed && backup != null) {
-                runCatching { cleanupStrategy(backup) }
+                runCatching { snapshot?.let(::deleteGeneratedPublicationTree) }
                     .onFailure { cleanupFailure ->
-                        diagnostic("generated evidence installed new root; backup retained at $backup: ${cleanupFailure.message}")
+                        diagnostic("generated evidence publication succeeded; snapshot retained at $snapshot: ${cleanupFailure.message}")
                     }
+            } else if (!destinationMoveAttempted && !installAttempted) {
+                runCatching { backup?.let(cleanupStrategy) }
+                    .onFailure { cleanupFailure -> diagnostic("generated evidence setup cleanup failed; backup retained at $backup: ${cleanupFailure.message}") }
+                runCatching { snapshot?.let(cleanupStrategy) }
+                    .onFailure { cleanupFailure -> diagnostic("generated evidence setup cleanup failed; snapshot retained at $snapshot: ${cleanupFailure.message}") }
             }
         }
     }
+
+    private fun copyTree(source: Path, destination: Path) {
+        require(Files.isDirectory(source, NOFOLLOW_LINKS) && !Files.isSymbolicLink(source)) {
+            "generated evidence source is not a regular directory: $source"
+        }
+        require(destination.normalize().startsWith(repositoryRoot)) { "generated evidence path escapes repository root" }
+        Files.walk(source).use { stream ->
+            stream.forEach { current ->
+                require(!Files.isSymbolicLink(current)) { "generated evidence contains a symlink" }
+                val relative = source.relativize(current)
+                val target = destination.resolve(relative).normalize()
+                require(target.startsWith(destination)) { "generated evidence path escapes source root" }
+                if (Files.isDirectory(current, NOFOLLOW_LINKS)) Files.createDirectories(target)
+                else Files.copy(current, target)
+            }
+        }
+    }
+
+    private fun verifySnapshot(expected: Path, actual: Path) {
+        require(Files.isDirectory(actual, NOFOLLOW_LINKS) && !Files.isSymbolicLink(actual)) {
+            "generated evidence snapshot is not a regular directory: $actual"
+        }
+        require(regularFilesByRelativePath(expected) == regularFilesByRelativePath(actual)) {
+            "generated evidence snapshot does not match the original root"
+        }
+    }
+
+    private fun isVerifiedSnapshot(expected: Path, candidate: Path?): Boolean =
+        candidate != null && Files.exists(candidate, NOFOLLOW_LINKS) &&
+            runCatching {
+                verifySnapshot(expected, candidate)
+                true
+            }.getOrDefault(false)
+
+    private fun regularFilesByRelativePath(root: Path): Map<String, List<Byte>> =
+        Files.walk(root).use { stream ->
+            stream.iterator().asSequence()
+                .filter { Files.isRegularFile(it, NOFOLLOW_LINKS) }
+                .associate { path ->
+                    root.relativize(path).toString().replace('\\', '/') to Files.readAllBytes(path).toList()
+                }
+        }
 
     private fun ensureNoSymlinkComponents(path: Path) {
         require(path.startsWith(repositoryRoot)) { "path escapes repository root" }

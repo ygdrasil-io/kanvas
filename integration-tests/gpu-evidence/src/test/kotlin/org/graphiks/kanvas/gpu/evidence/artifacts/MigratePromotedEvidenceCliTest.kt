@@ -222,6 +222,32 @@ class MigratePromotedEvidenceCliTest {
     }
 
     @Test
+    fun `partial first migration backup move restores the original v1 root byte for byte`() {
+        writePromotedV1Root(repository, COMMIT)
+        val before = snapshot(promotedRoot(repository))
+
+        val result = MigratePromotedEvidenceCliRunner(
+            clock = FIXED_CLOCK,
+            moveStrategy = { source, destination, _ ->
+                if (source == promotedRoot(repository)) {
+                    val sourceFile = Files.walk(source).use { stream ->
+                        stream.filter(Files::isRegularFile).findFirst().orElseThrow()
+                    }
+                    val relative = source.relativize(sourceFile)
+                    val partial = destination.resolve(relative)
+                    Files.createDirectories(partial.parent)
+                    Files.copy(sourceFile, partial)
+                    throw IOException("injected partial migration backup move")
+                }
+                Files.move(source, destination)
+            },
+        ).run(args(repository))
+
+        assertTrue(result != 0)
+        assertEquals(before, snapshot(promotedRoot(repository)))
+    }
+
+    @Test
     fun `migration preserves the primary swap failure when staged cleanup also fails`() {
         writePromotedV1Root(repository, COMMIT)
         val stderr = ByteArrayOutputStream()
