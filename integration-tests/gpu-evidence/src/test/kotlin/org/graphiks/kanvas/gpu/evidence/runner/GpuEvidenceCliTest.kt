@@ -19,12 +19,46 @@ import org.graphiks.kanvas.gpu.evidence.catalog.GpuEvidenceCatalog
 import org.graphiks.kanvas.gpu.evidence.catalog.OraclePolicy
 import org.graphiks.kanvas.gpu.evidence.oracle.CpuOracle
 import org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram
+import org.graphiks.kanvas.gpu.evidence.artifacts.EvidenceSelection
 import org.graphiks.kanvas.surface.Diagnostics
 import org.graphiks.kanvas.surface.RenderResult
 import org.graphiks.kanvas.surface.RenderStats
 
 @OptIn(ExperimentalUnsignedTypes::class)
 class GpuEvidenceCliTest {
+    @Test fun `request parser accepts repeated scenes and preserves compatibility accessor semantics`() {
+        val root = Files.createTempDirectory("gpu-evidence-cli")
+
+        val single = GpuEvidenceCliRequest.parse(arrayOf("--repository-root", root.toString(), "--source-commit", "a".repeat(40), "--scene", "custom-runtime-effect-unregistered-refusal"))
+        assertEquals(EvidenceSelection.Explicit(listOf("custom-runtime-effect-unregistered-refusal")), single.selection)
+        assertEquals("custom-runtime-effect-unregistered-refusal", single.sceneId)
+
+        val multiple = GpuEvidenceCliRequest.parse(arrayOf("--repository-root", root.toString(), "--source-commit", "a".repeat(40), "--scene", "aggregate-memory-budget-refusal", "--scene", "custom-runtime-effect-unregistered-refusal"))
+        assertEquals(EvidenceSelection.Explicit(listOf("aggregate-memory-budget-refusal", "custom-runtime-effect-unregistered-refusal")), multiple.selection)
+        assertNull(multiple.sceneId)
+    }
+
+    @Test fun `request parser reads scenes file and supports all selection`() {
+        val root = Files.createTempDirectory("gpu-evidence-cli")
+        val scenesFile = Files.createTempFile("gpu-evidence-scenes", ".txt")
+        Files.writeString(scenesFile, "custom-runtime-effect-unregistered-refusal\naggregate-memory-budget-refusal\n")
+
+        val fromFile = GpuEvidenceCliRequest.parse(arrayOf("--repository-root", root.toString(), "--source-commit", "a".repeat(40), "--scenes-file", scenesFile.toString()))
+        assertEquals(EvidenceSelection.Explicit(listOf("aggregate-memory-budget-refusal", "custom-runtime-effect-unregistered-refusal")), fromFile.selection)
+        assertNull(fromFile.sceneId)
+
+        val all = GpuEvidenceCliRequest.parse(arrayOf("--repository-root", root.toString(), "--source-commit", "a".repeat(40), "--all"))
+        assertSame(EvidenceSelection.All, all.selection)
+        assertNull(all.sceneId)
+    }
+
+    @Test fun `request parser requires an explicit selection`() {
+        val root = Files.createTempDirectory("gpu-evidence-cli")
+        assertFailsWith<IllegalArgumentException> {
+            GpuEvidenceCliRequest.parse(arrayOf("--repository-root", root.toString(), "--source-commit", "a".repeat(40)))
+        }
+    }
+
     @Test fun `cli disposes a created backend before returning a failing exit code`() {
         val events = mutableListOf<String>()
         val code = runner(FakeRuntime(events)).run(validArgs())
@@ -233,9 +267,30 @@ class GpuEvidenceCliTest {
             CpuOracle { _, _ -> byteArrayOf(0, 0, 0, 0) },
         )
 
-        assertEquals(1, GpuEvidenceCliRunner(runtime, cases = listOf(surfaceCase)).run(validArgs(root, "surface-cli")))
+        assertEquals(0, GpuEvidenceCliRunner(runtime, cases = listOf(surfaceCase)).run(validArgs(root, "surface-cli")))
         assertEquals(1, runtime.surfaceRenders)
         assertEquals(0, runtime.prepareCalls)
+        val generatedRoot = root.resolve("reports/gpu-renderer/evidence/correctness/generated/${"a".repeat(40)}")
+        assertTrue(Files.isRegularFile(generatedRoot.resolve("catalog.json")))
+        assertTrue(Files.isRegularFile(generatedRoot.resolve("environment.json")))
+    }
+
+    @Test fun `cli executes only the selected scenes and writes generated root metadata`() {
+        val root = Files.createTempDirectory("gpu-evidence-cli-selection")
+        val runtime = SelectionRuntime()
+        val cases = listOf(refusalCase("selected-scene"), refusalCase("unselected-scene"))
+
+        val code = GpuEvidenceCliRunner(runtime, cases = cases).run(
+            arrayOf("--repository-root", root.toString(), "--source-commit", "a".repeat(40), "--scene", "selected-scene"),
+        )
+
+        assertEquals(0, code)
+        assertEquals(listOf("selected-scene"), runtime.executedSceneIds)
+        val generatedRoot = root.resolve("reports/gpu-renderer/evidence/correctness/generated/${"a".repeat(40)}")
+        assertTrue(Files.isRegularFile(generatedRoot.resolve("catalog.json")))
+        assertTrue(Files.isRegularFile(generatedRoot.resolve("environment.json")))
+        assertTrue(Files.isDirectory(generatedRoot.resolve("selected-scene")))
+        assertFalse(Files.exists(generatedRoot.resolve("unselected-scene")))
     }
 
     private fun assertCycleAvoidanceSnapshot(snapshot: Throwable, original: Throwable) {
@@ -281,6 +336,27 @@ class GpuEvidenceCliTest {
             }
         }),
         CpuOracle { _, _ -> byteArrayOf(0, 0, 0, 0) },
+    )
+
+    private fun refusalCase(sceneId: String) = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId(sceneId),
+            "Refusal $sceneId",
+            "Selection contract test case.",
+            1,
+            1,
+            1L,
+            emptySet(),
+            EvidenceExpectation.ShouldRefuse("unsupported.fake"),
+            OraclePolicy.StableRefusal,
+            null,
+            emptySet(),
+        ),
+        object : RoutedSceneProgram {
+            override val routeId: String = "product.fake"
+            override fun prepare(context: SceneRecordingContext): ScenePreparation = error("unused in selection test")
+        },
+        oracle = null,
     )
 
     private fun validArgs(root: java.nio.file.Path = Files.createTempDirectory("gpu-evidence-cli"), scene: String = "custom-runtime-effect-unregistered-refusal") = arrayOf("--repository-root", root.toString(), "--source-commit", "a".repeat(40), "--scene", scene)
@@ -339,6 +415,22 @@ class GpuEvidenceCliTest {
             override fun telemetry() = GPUBackendRuntimeTelemetry(submissions = submissions)
             override fun prepare(program: SceneProgram, context: EvidenceRecordingRequest): EvidenceProgramPreparation = error("Surface program reached backend preparation")
             override fun prepareSceneFrame(width: Int, height: Int): EvidencePreparedFramePort = error("Surface program reached prepared frame")
+        }
+        override fun close() = Unit
+        override fun dispose() = Unit
+    }
+
+    private class SelectionRuntime : EvidenceRuntimePort {
+        val executedSceneIds = mutableListOf<String>()
+        override fun open(): EvidenceBackendPort = object : EvidenceBackendPort {
+            override val capabilities = EvidenceCapabilities("fake")
+            override val deviceGeneration = 1L
+            override fun telemetry() = GPUBackendRuntimeTelemetry()
+            override fun prepare(program: SceneProgram, context: EvidenceRecordingRequest): EvidenceProgramPreparation {
+                executedSceneIds += context.descriptor.id.value
+                return EvidenceProgramPreparation.Refused("product.fake", "unsupported.fake", "selected refusal", emptyList())
+            }
+            override fun prepareSceneFrame(width: Int, height: Int): EvidencePreparedFramePort = error("unreachable")
         }
         override fun close() = Unit
         override fun dispose() = Unit

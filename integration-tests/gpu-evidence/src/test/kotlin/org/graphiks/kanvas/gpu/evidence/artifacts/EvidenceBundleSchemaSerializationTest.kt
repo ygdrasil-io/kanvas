@@ -126,6 +126,65 @@ class EvidenceBundleSchemaSerializationTest {
         assertEquals("render", verdict.string("expectation")); assertEquals("rendered", verdict.string("observedOutcome")); assertEquals("pass", verdict.string("verdictKind")); assertEquals("rendered image passed comparison", verdict.string("reason"))
     }
 
+    @Test fun `writer serializes every v2 scene field with its complete value`() {
+        val root = Files.createTempDirectory("gpu-evidence")
+        val observation = SceneObservation.Rendered(
+            rgba = PIXELS,
+            route = RouteEvidence(
+                routeId = "route-id",
+                attemptId = "attempt-9",
+                furthestPhase = "Completed",
+                outcome = "rendered",
+                encodedScopeKinds = listOf("clip", "layer"),
+                structuralEvents = listOf(StructuralEventEvidence("draw", "record", "first-draw")),
+                structuralCounters = mapOf("draws" to 3L, "clips" to 2L, "queue.submit" to 1L, "render.draw" to 1L, "render.pipelineBind" to 1L),
+                runtimeTelemetryDelta = GPUBackendRuntimeTelemetry(submissions = 1L),
+            ),
+            diagnostics = listOf("diagnostic-a", "diagnostic-b"),
+            environment = EvidenceEnvironment(
+                sourceCommit = COMMIT,
+                osName = "TestOS",
+                osVersion = "42",
+                osArchitecture = "test-arch",
+                javaVersion = "25",
+                adapter = EvidenceAdapter("adapter summary", "vendor", "device", "architecture", "description", false),
+                deviceGeneration = 77L,
+                capabilityImplementation = "native",
+                available = true,
+            ),
+            comparison = ImageComparison(true, 100.0, 0, 0, 0.0, ByteArray(8), 9),
+        )
+
+        val path = EvidenceBundleWriter(root, COMMIT, FIXED_CLOCK).writeGeneratedV2(
+            descriptor = EvidenceSceneDescriptor(
+                id = EvidenceSceneId("render-scene"), title = "Render", purpose = "Purpose", width = 2, height = 1,
+                seed = 1L, tags = emptySet(), expectation = EvidenceExpectation.ShouldRender,
+                oracle = OraclePolicy.CheckedInPng("reference.png", sha256(ORACLE_PNG), "release-reference"),
+                comparison = ComparisonPolicy(7, 99.0, 9, "test"), requiredCapabilities = emptySet(),
+            ),
+            observation = observation,
+            expectedRgba = PIXELS,
+            attemptId = "attempt-9",
+            checkedInPngBytes = ORACLE_PNG,
+        )
+
+        val manifest = json(path, "manifest.json")
+        assertEquals(setOf("schemaVersion", "sceneId", "expectation", "observedOutcome", "oracleKind", "oracleId", "oracleVersion", "oracleProvenance", "oracleSha256", "files"), manifest.keys)
+        assertEquals(GPU_EVIDENCE_SCENE_SCHEMA_V2, manifest.string("schemaVersion")); assertEquals("render-scene", manifest.string("sceneId"))
+        assertEquals("render", manifest.string("expectation")); assertEquals("rendered", manifest.string("observedOutcome"))
+        assertEquals("checked-in-png", manifest.string("oracleKind")); assertEquals("reference.png", manifest.string("oracleId"))
+        assertEquals(1, manifest.int("oracleVersion")); assertEquals("release-reference", manifest.string("oracleProvenance"))
+        assertEquals(sha256(ORACLE_PNG), manifest.string("oracleSha256"))
+        assertEquals(false, "sourceCommit" in manifest)
+        assertEquals(false, "generatedAtUtc" in manifest)
+
+        val expectedFiles = setOf("gpu.png", "skia.png", "diff.png", "stats.json", "route.json", "diagnostics.json", "verdict.json")
+        val hashes = manifest["files"]!!.jsonObject
+        assertEquals(expectedFiles, hashes.keys)
+        expectedFiles.forEach { name -> assertEquals(sha256(Files.readAllBytes(path.resolve(name))), hashes.string(name), name) }
+        assertEquals(false, Files.exists(path.resolve("environment.json")))
+    }
+
     private fun json(path: Path, name: String) = EvidenceJson.parseToJsonElement(Files.readString(path.resolve(name))).jsonObject
     private fun kotlinx.serialization.json.JsonObject.string(key: String) = this[key]!!.jsonPrimitive.content
     private fun kotlinx.serialization.json.JsonObject.int(key: String) = this[key]!!.jsonPrimitive.int

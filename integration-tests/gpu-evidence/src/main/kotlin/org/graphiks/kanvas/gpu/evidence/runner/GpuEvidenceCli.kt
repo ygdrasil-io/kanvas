@@ -5,7 +5,11 @@ import java.nio.file.Path
 import java.util.Collections
 import java.util.IdentityHashMap
 import kotlin.system.exitProcess
+import org.graphiks.kanvas.gpu.evidence.artifacts.EvidenceCatalogWriter
+import org.graphiks.kanvas.gpu.evidence.artifacts.EvidenceSelection
+import org.graphiks.kanvas.gpu.evidence.artifacts.EvidenceSelectionParser
 import org.graphiks.kanvas.gpu.evidence.artifacts.EvidenceBundleWriter
+import org.graphiks.kanvas.gpu.evidence.artifacts.resolve
 import org.graphiks.kanvas.gpu.evidence.catalog.GpuEvidenceCatalog
 import org.graphiks.kanvas.gpu.evidence.catalog.SceneObservation
 import org.graphiks.kanvas.gpu.evidence.gate.EvidenceExpectationGate
@@ -32,8 +36,10 @@ class GpuEvidenceCliRunner(
             System.err.println("gpu evidence arguments rejected: ${failure.message}")
             return EvidenceCliRunResult(2, null)
         }
-        if (request.sceneId != null && cases.none { it.descriptor.id.value == request.sceneId }) {
-            System.err.println("gpu evidence arguments rejected: unknown scene ${request.sceneId}")
+        val selectedCases = try {
+            request.selection.resolve(cases)
+        } catch (failure: Exception) {
+            System.err.println("gpu evidence arguments rejected: ${failure.message}")
             return EvidenceCliRunResult(2, null)
         }
         val failures = mutableListOf<Throwable>()
@@ -46,8 +52,10 @@ class GpuEvidenceCliRunner(
             } else {
                 val executor = EvidenceCaseExecutor(backend, request.sourceCommit)
                 val writer = EvidenceBundleWriter(request.repositoryRoot, request.sourceCommit)
-                val selected = request.sceneId?.let { id -> cases.filter { it.descriptor.id.value == id } } ?: cases
-                exitCode = selected.fold(0) { code, evidenceCase ->
+                val catalogWriter = EvidenceCatalogWriter(request.repositoryRoot)
+                val observations = linkedMapOf<String, SceneObservation>()
+                val bundlePaths = linkedMapOf<String, Path>()
+                exitCode = selectedCases.fold(0) { code, evidenceCase ->
                     when (val result = executor.execute(evidenceCase)) {
                         is EvidenceExecutionResult.ExecutionFailure -> { System.err.println("gpu evidence ${evidenceCase.descriptor.id.value} execution failed: ${result.stableReasonCode}: ${result.message}"); 1 }
                         is EvidenceExecutionResult.Observed -> when (val observation = result.observation) {
@@ -56,7 +64,9 @@ class GpuEvidenceCliRunner(
                                 when (val verdict = EvidenceExpectationGate.evaluate(evidenceCase.descriptor, observation)) {
                                     is EvidenceVerdict.Pass -> {
                                         val expected = (observation as? SceneObservation.Rendered)?.let { requireNotNull(evidenceCase.oracle).render(evidenceCase.descriptor.width, evidenceCase.descriptor.height) }
-                                        writer.writeGenerated(evidenceCase, observation, expected)
+                                        val bundlePath = writer.writeGeneratedV2(evidenceCase.descriptor, observation, expected)
+                                        observations[evidenceCase.descriptor.id.value] = observation
+                                        bundlePaths[evidenceCase.descriptor.id.value] = bundlePath
                                         code
                                     }
                                     is EvidenceVerdict.Fail -> {
@@ -71,6 +81,10 @@ class GpuEvidenceCliRunner(
                             }
                         }
                     }
+                }
+                if (exitCode == 0) {
+                    val generatedRoot = bundlePaths.values.first().parent
+                    catalogWriter.writeGeneratedCatalog(generatedRoot, request.selection, observations, bundlePaths)
                 }
             }
         } catch (failure: Exception) {
@@ -147,16 +161,59 @@ private class ProductEvidenceRuntimePort : EvidenceRuntimePort {
     override fun dispose() = GPUBackendRuntimeFactory.dispose()
 }
 
-data class GpuEvidenceCliRequest(val repositoryRoot: Path, val sourceCommit: String, val sceneId: String?) {
+data class GpuEvidenceCliRequest(
+    val repositoryRoot: Path,
+    val sourceCommit: String,
+    val selection: EvidenceSelection,
+) {
+    val sceneId: String?
+        get() = (selection as? EvidenceSelection.Explicit)?.sceneIds?.singleOrNull()
+
     companion object {
         private val SHA = Regex("[0-9a-f]{40}")
+
         fun parse(args: Array<String>): GpuEvidenceCliRequest {
-            val values = mutableMapOf<String, String>(); var index = 0
-            while (index < args.size) { val flag = args[index]; require(flag in setOf("--repository-root", "--source-commit", "--scene")); require(index + 1 < args.size && !args[index + 1].startsWith("--")); require(values.put(flag, args[index + 1]) == null); index += 2 }
-            val root = Path.of(requireNotNull(values["--repository-root"])); require(root.isAbsolute && Files.isDirectory(root))
-            val commit = requireNotNull(values["--source-commit"]); require(SHA.matches(commit) && commit.any { it != '0' })
-            val scene = values["--scene"]
-            return GpuEvidenceCliRequest(root.toAbsolutePath().normalize(), commit, scene)
+            var repositoryRoot: String? = null
+            var sourceCommit: String? = null
+            var all = false
+            var scenesFile: Path? = null
+            val sceneIds = mutableListOf<String>()
+            var index = 0
+            while (index < args.size) {
+                when (args[index]) {
+                    "--repository-root" -> {
+                        require(repositoryRoot == null) { "duplicate --repository-root" }
+                        repositoryRoot = value(args, ++index, "--repository-root")
+                    }
+                    "--source-commit" -> {
+                        require(sourceCommit == null) { "duplicate --source-commit" }
+                        sourceCommit = value(args, ++index, "--source-commit")
+                    }
+                    "--scene" -> sceneIds += value(args, ++index, "--scene")
+                    "--scenes-file" -> {
+                        require(scenesFile == null) { "duplicate --scenes-file" }
+                        scenesFile = Path.of(value(args, ++index, "--scenes-file"))
+                    }
+                    "--all" -> {
+                        require(!all) { "duplicate --all" }
+                        all = true
+                    }
+                    else -> error("unknown argument: ${args[index]}")
+                }
+                index++
+            }
+            val root = Path.of(requireNotNull(repositoryRoot) { "--repository-root is required" }).toAbsolutePath().normalize()
+            require(root.isAbsolute && Files.isDirectory(root)) { "repository root must be an existing directory" }
+            val commit = requireNotNull(sourceCommit) { "--source-commit is required" }
+            require(SHA.matches(commit) && commit.any { it != '0' }) { "source commit must be 40 lowercase hexadecimal characters" }
+            scenesFile?.let { sceneIds += EvidenceSelectionParser.readSceneFile(it) }
+            val selection = EvidenceSelectionParser.from(sceneIds, all)
+            return GpuEvidenceCliRequest(root, commit, selection)
+        }
+
+        private fun value(args: Array<String>, index: Int, flag: String): String {
+            require(index < args.size && !args[index].startsWith("--")) { "$flag requires a value" }
+            return args[index]
         }
     }
 }
