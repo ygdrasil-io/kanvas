@@ -1092,14 +1092,19 @@ class GPUFramePathApiInventoryTest {
                 ),
             ),
         )
-        val inventory = inventoryFor(
-            DisplayOp.DrawDRRect(
-                RRectF32.of(RectF32.ofLTRB(8f, 8f, 56f, 56f), radius = 8f),
-                RRectF32.of(RectF32.ofLTRB(20f, 20f, 44f, 44f), radius = 4f),
-                Paint.fill(ColorARGB.Blue).copy(antiAlias = false),
-                Matrix3x3F32.translation(1f, 0f),
-                hardClip,
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawDRRect(
+                    RRectF32.of(RectF32.ofLTRB(8f, 8f, 56f, 56f), radius = 8f),
+                    RRectF32.of(RectF32.ofLTRB(20f, 20f, 44f, 44f), radius = 4f),
+                    Paint.fill(ColorARGB.Blue).copy(antiAlias = false),
+                    Matrix3x3F32.translation(1f, 0f),
+                    hardClip,
+                ),
             ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER),
         )
 
         assertIs<NormalizedDrawCommand.FillDRRect>(inventory.normalizedCommands.single())
