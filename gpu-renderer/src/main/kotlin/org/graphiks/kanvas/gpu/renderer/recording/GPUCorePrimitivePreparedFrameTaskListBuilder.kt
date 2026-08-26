@@ -778,9 +778,12 @@ private fun GPUDrawPacket.hasCorePrimitiveSemanticAuthority(
                 semantic.geometry is GPUCorePrimitiveGeometry.Rect &&
                 semantic.material is GPUCorePrimitiveMaterialPayload.SolidColor
         "linear.gradient.fill" ->
-            semantic.rectRouteAuthority == GPUCorePrimitiveRectRouteAuthority.RectAxisAligned &&
-                semantic.geometry is GPUCorePrimitiveGeometry.Rect &&
-                semantic.material is GPUCorePrimitiveMaterialPayload.LinearGradient
+            semantic.material is GPUCorePrimitiveMaterialPayload.LinearGradient &&
+                (
+                    (semantic.rectRouteAuthority == GPUCorePrimitiveRectRouteAuthority.RectAxisAligned &&
+                        semantic.geometry is GPUCorePrimitiveGeometry.Rect) ||
+                        semantic.hasExactDirectTriangleRectGradientConsumerGeometry()
+                    )
         "radial.gradient.fill" ->
             semantic.rectRouteAuthority == GPUCorePrimitiveRectRouteAuthority.RectAxisAligned &&
                 semantic.geometry is GPUCorePrimitiveGeometry.Rect &&
@@ -812,7 +815,7 @@ private fun GPUDrawPacket.isExactDirectTriangleClampGradientHardPathClipConsumer
     val clip = clipExecutionPlan as? GPUClipExecutionPlan.StencilCoverage ?: return false
     return semantic.material is GPUCorePrimitiveMaterialPayload.LinearGradient &&
         semantic.material.tileMode == "clamp" &&
-        semantic.hasExactDirectTrianglePathConsumerGeometry() &&
+        semantic.hasExactClampGradientHardPathClipConsumerGeometry() &&
         clip.sampleCount == 1 && clip.corePrimitiveClipStencilNativePathOrNull() != null
 }
 
@@ -839,7 +842,7 @@ private fun directCorePrimitiveGeometryBytes(
         packet.blendPlan is GPUBlendPlan.NoOp
     ) return null
     if (acceptedClipStencilPlan != null && semantic.geometry is GPUCorePrimitiveGeometry.TriangulatedPath &&
-        !semantic.hasExactDirectTrianglePathConsumerGeometry()
+        !semantic.hasExactClampGradientHardPathClipConsumerGeometry()
     ) return null
     when (packet.clipExecutionPlan) {
         GPUClipExecutionPlan.NoClip,
@@ -892,6 +895,27 @@ private fun GPUDrawSemanticPayload.CorePrimitive.hasExactDirectTrianglePathConsu
     val twiceArea = (x1 - x0) * (y2 - y0) - (y1 - y0) * (x2 - x0)
     return twiceArea.isFinite() && twiceArea != 0f
 }
+
+private fun GPUDrawSemanticPayload.CorePrimitive.hasExactDirectTriangleRectGradientConsumerGeometry(): Boolean {
+    val rect = geometry as? GPUCorePrimitiveGeometry.TriangulatedPath ?: return false
+    if (sourceFamily != GPUCorePrimitiveSourceFamily.Rect ||
+        rectRouteAuthority != GPUCorePrimitiveRectRouteAuthority.RectAffineDirectTrianglesV1 ||
+        rect.geometryMode != GPUCorePrimitiveGeometryMode.DirectTriangles ||
+        rect.vertices.size != 8 || rect.indices != listOf(0, 1, 2, 0, 2, 3) ||
+        rect.sourceContourStarts != listOf(0) || rect.sourceVertexCount != 4 ||
+        rect.fillRule != GPUCorePrimitiveFillRule.Winding ||
+        rect.inverseFill || rect.strokeStyle != null
+    ) return false
+    val corners = rect.vertices.chunked(2).map { (x, y) -> x to y }
+    val xs = corners.map { it.first }.distinct()
+    val ys = corners.map { it.second }.distinct()
+    return xs.size == 2 && ys.size == 2 && corners.toSet().size == 4 &&
+        corners.all { (x, y) -> x.isFinite() && y.isFinite() }
+}
+
+private fun GPUDrawSemanticPayload.CorePrimitive.hasExactClampGradientHardPathClipConsumerGeometry(): Boolean =
+    hasExactDirectTrianglePathConsumerGeometry() ||
+        hasExactDirectTriangleRectGradientConsumerGeometry()
 
 private fun pathStencilGeometryBytes(
     semantic: GPUDrawSemanticPayload.CorePrimitive,
@@ -2126,7 +2150,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         if (staticNativeClipStencilPlan?.sampleCount == 1 && staticNativeClipStencilConsumers.any { packet ->
                 val semantic = request.coreSemantics().getValue(packet.commandIdValue)
                 semantic.geometry is GPUCorePrimitiveGeometry.TriangulatedPath &&
-                    !semantic.hasExactDirectTrianglePathConsumerGeometry()
+                    !semantic.hasExactClampGradientHardPathClipConsumerGeometry()
             }
         ) {
             return refused(

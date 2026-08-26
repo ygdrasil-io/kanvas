@@ -616,7 +616,9 @@ class GPUClipCoverageSurfaceTest {
             restore()
         }
 
-        assertTerminal("unsupported.geometry.path_key_nondeterministic", surface::render)
+        // W1 canonicalizes the generated polygon path identity, so this reaches the next
+        // explicit unsupported boundary instead of failing on the retired nondeterministic key.
+        assertTerminal("unsupported.stroke.width_invalid", surface::render)
     }
 
     @Test
@@ -894,6 +896,42 @@ class GPUClipCoverageSurfaceTest {
         // interpolation is linear-light before sRGB8 encoding.
         assertRgbaNear(result.pixels, 64, 15, 11, ColorARGB.of(255, 250, 0, 57))
         assertRgbaNear(result.pixels, 64, 13, 11, ColorARGB.of(255, 13, 20, 33))
+    }
+
+    @Test
+    fun `public quarter turn clamp gradient rect renders through a uniformly captured hard path clip`() {
+        requireWebGpu()
+        val background = ColorARGB.of(255, 13, 20, 33)
+        val surface = Surface(64, 64)
+        surface.canvas {
+            drawColor(background)
+            save()
+            scale(0.75f, 0.75f)
+            clipPath(
+                Path { moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close() },
+                ClipOp.INTERSECT,
+                antiAlias = false,
+            )
+            resetMatrix()
+            rotate(90f, 16f, 16f)
+            drawRect(
+                RectF32.ofLTRB(8f, 8f, 32f, 24f),
+                Paint(
+                    shader = Shader.LinearGradient(
+                        Point2F32(8f, 8f),
+                        Point2F32(32f, 8f),
+                        listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                    ),
+                ).copy(antiAlias = false),
+            )
+            restore()
+        }
+
+        val result = surface.render()
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertRgbaNear(result.pixels, 64, 20, 10, ColorARGB.of(255, 243, 0, 91), tolerance = 20)
+        assertRgbaNear(result.pixels, 64, 20, 22, ColorARGB.of(255, 168, 0, 204), tolerance = 20)
+        assertRgbaNear(result.pixels, 64, 30, 10, background, tolerance = 0)
     }
 
     @Test
