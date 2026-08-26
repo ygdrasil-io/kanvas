@@ -81,6 +81,30 @@ class SurfaceSrgbClipPathRRectCpuOracleTest {
         }
     }
 
+    @Test
+    fun `inverse hard triangle clip paints the rrect complement at pixel centres`() {
+        val orange = intArrayOf(242, 135, 46, 255)
+        val background = intArrayOf(13, 20, 33, 255)
+        val pixels = SurfaceSrgbClipPathRRectCpuOracle(
+            background,
+            listOf(
+                SurfaceSrgbClipPathRRectCpuOracle.Point(8f, 8f),
+                SurfaceSrgbClipPathRRectCpuOracle.Point(56f, 8f),
+                SurfaceSrgbClipPathRRectCpuOracle.Point(8f, 55f),
+            ),
+            SurfaceSrgbClipPathRRectCpuOracle.DeviceRRect(
+                12f, 8f, 56f, 48f,
+                radii(10f, 10f), radii(10f, 10f), radii(10f, 10f), radii(10f, 10f),
+            ),
+            orange,
+            SurfaceSrgbClipPathRRectCpuOracle.TriangleClip.InverseWinding,
+        ).render(64, 64)
+
+        assertPixel(pixels, 40, 30, orange)
+        assertPixel(pixels, 20, 20, background)
+        assertEquals(784, count(pixels, orange))
+    }
+
     private fun radii(x: Float, y: Float) = SurfaceSrgbClipPathRRectCpuOracle.Radii(x, y)
 
     private fun count(pixels: ByteArray, color: IntArray) = pixels.asSequence().chunked(4).count {

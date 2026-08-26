@@ -276,6 +276,56 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
+    fun `public finite translated rrects render through an inverse winding hard path clip stencil scope`() {
+        requireWebGpu()
+        val background = ColorARGB.Transparent
+        val fill = ColorARGB.of(255, 242, 135, 46)
+        data class Case(
+            val translateX: Float,
+            val translateY: Float,
+            val rrect: RRectF32,
+            val expectedFillX: Int,
+            val expectedFillY: Int,
+            val expectedBackgroundX: Int,
+            val expectedBackgroundY: Int,
+        )
+        val asymmetric = RRectF32.of(
+            RectF32.ofLTRB(8f, 8f, 52f, 48f),
+            org.graphiks.math.geometry.CornerRadiiF32.of(4f, 8f),
+            org.graphiks.math.geometry.CornerRadiiF32.of(10f, 4f),
+            org.graphiks.math.geometry.CornerRadiiF32.of(8f, 12f),
+            org.graphiks.math.geometry.CornerRadiiF32.of(6f, 3f),
+        )
+        val ellipseRadius = org.graphiks.math.geometry.CornerRadiiF32.of(20f, 12f)
+        listOf(
+            Case(4f, 0f, RRectF32.of(RectF32.ofLTRB(8f, 8f, 52f, 48f), radius = 10f), 40, 30, 20, 20),
+            Case(0f, 5f, asymmetric, 40, 32, 20, 20),
+            Case(-4f, 5f, RRectF32.of(RectF32.ofLTRB(12f, 20f, 52f, 44f), ellipseRadius, ellipseRadius, ellipseRadius, ellipseRadius), 33, 37, 20, 32),
+            Case(4f, -5f, RRectF32.of(RectF32.ofLTRB(8f, 8f, 52f, 48f), radius = 10f), 45, 27, 24, 20),
+        ).forEach { case ->
+            val surface = Surface(64, 64)
+            surface.canvas {
+                save()
+                clipPath(
+                    Path { moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close() }
+                        .apply { fillType = FillType.INVERSE_WINDING },
+                    ClipOp.INTERSECT,
+                    antiAlias = false,
+                )
+                translate(case.translateX, case.translateY)
+                drawRRect(case.rrect, Paint.fill(fill).copy(antiAlias = false))
+                restore()
+            }
+            val result = surface.render()
+            assertTrue(result.diagnostics.isEmpty, result.diagnostics.entries.toString())
+            assertEquals(0, result.stats.opsRefused)
+            assertEquals(listOf("HardClipStencilProducer", "AnalyticRRect"), result.structuralSteps)
+            assertRgbaNear(result.pixels, 64, case.expectedFillX, case.expectedFillY, fill)
+            assertRgbaNear(result.pixels, 64, case.expectedBackgroundX, case.expectedBackgroundY, background)
+        }
+    }
+
+    @Test
     fun `public opaque identity drrect renders inside one hard path clip stencil scope`() {
         requireWebGpu()
         val fill = ColorARGB.of(255, 242, 135, 46)

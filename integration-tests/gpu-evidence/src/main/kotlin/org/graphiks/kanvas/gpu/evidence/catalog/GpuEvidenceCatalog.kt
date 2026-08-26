@@ -69,6 +69,10 @@ object GpuEvidenceCatalog {
         clipPathAxisYTranslatedAsymmetricSolidRRect(),
         clipPathNegativeXTranslatedEllipseSolidRRect(),
         clipPathNegativeYTranslatedSolidRRect(),
+        clipPathInverseAxisXTranslatedSolidRRect(),
+        clipPathInverseAxisYTranslatedAsymmetricSolidRRect(),
+        clipPathInverseNegativeXTranslatedEllipseSolidRRect(),
+        clipPathInverseNegativeYTranslatedSolidRRect(),
         clipPathSolidDRRect(),
         clipPathAsymmetricSolidDRRect(),
         clipPathEllipseSolidDRRect(),
@@ -793,6 +797,38 @@ object GpuEvidenceCatalog {
         intArrayOf(242, 135, 46, 255), translated = true, exactTranslation = true,
     )
 
+    private fun clipPathInverseAxisXTranslatedSolidRRect() = clipPathRRectCase(
+        "clip-path-inverse-axis-x-translated-solid-rrect", "Inverse-winding axis-X translated solid RRect inside hard path clip",
+        KanvasScenePrograms.clipPathInverseAxisXTranslatedSolidRRect(),
+        SurfaceSrgbClipPathRRectCpuOracle.DeviceRRect(12f, 8f, 56f, 48f,
+            SurfaceSrgbClipPathRRectCpuOracle.Radii(10f, 10f), SurfaceSrgbClipPathRRectCpuOracle.Radii(10f, 10f), SurfaceSrgbClipPathRRectCpuOracle.Radii(10f, 10f), SurfaceSrgbClipPathRRectCpuOracle.Radii(10f, 10f)),
+        intArrayOf(242, 135, 46, 255), translated = true, exactTranslation = true, inverseWinding = true,
+    )
+
+    private fun clipPathInverseAxisYTranslatedAsymmetricSolidRRect() = clipPathRRectCase(
+        "clip-path-inverse-axis-y-translated-asymmetric-solid-rrect", "Inverse-winding axis-Y translated asymmetric RRect inside hard path clip",
+        KanvasScenePrograms.clipPathInverseAxisYTranslatedAsymmetricSolidRRect(),
+        SurfaceSrgbClipPathRRectCpuOracle.DeviceRRect(8f, 13f, 52f, 53f,
+            SurfaceSrgbClipPathRRectCpuOracle.Radii(4f, 8f), SurfaceSrgbClipPathRRectCpuOracle.Radii(10f, 4f), SurfaceSrgbClipPathRRectCpuOracle.Radii(8f, 12f), SurfaceSrgbClipPathRRectCpuOracle.Radii(6f, 3f)),
+        intArrayOf(31, 115, 209, 255), translated = true, exactTranslation = true, inverseWinding = true,
+    )
+
+    private fun clipPathInverseNegativeXTranslatedEllipseSolidRRect() = clipPathRRectCase(
+        "clip-path-inverse-negative-x-translated-ellipse-solid-rrect", "Inverse-winding negative-X translated ellipse RRect inside hard path clip",
+        KanvasScenePrograms.clipPathInverseNegativeXTranslatedEllipseSolidRRect(),
+        SurfaceSrgbClipPathRRectCpuOracle.DeviceRRect(8f, 25f, 48f, 49f,
+            SurfaceSrgbClipPathRRectCpuOracle.Radii(20f, 12f), SurfaceSrgbClipPathRRectCpuOracle.Radii(20f, 12f), SurfaceSrgbClipPathRRectCpuOracle.Radii(20f, 12f), SurfaceSrgbClipPathRRectCpuOracle.Radii(20f, 12f)),
+        intArrayOf(242, 135, 46, 255), translated = true, exactTranslation = true, inverseWinding = true,
+    )
+
+    private fun clipPathInverseNegativeYTranslatedSolidRRect() = clipPathRRectCase(
+        "clip-path-inverse-negative-y-translated-solid-rrect", "Inverse-winding negative-Y translated solid RRect inside hard path clip",
+        KanvasScenePrograms.clipPathInverseNegativeYTranslatedSolidRRect(),
+        SurfaceSrgbClipPathRRectCpuOracle.DeviceRRect(12f, 3f, 56f, 43f,
+            SurfaceSrgbClipPathRRectCpuOracle.Radii(10f, 10f), SurfaceSrgbClipPathRRectCpuOracle.Radii(10f, 10f), SurfaceSrgbClipPathRRectCpuOracle.Radii(10f, 10f), SurfaceSrgbClipPathRRectCpuOracle.Radii(10f, 10f)),
+        intArrayOf(242, 135, 46, 255), translated = true, exactTranslation = true, inverseWinding = true,
+    )
+
     private fun clipPathSolidDRRect() = clipPathDRRectCase(
         "clip-path-solid-drrect", "Solid DRRect inside hard path clip", KanvasScenePrograms.clipPathSolidDRRect(),
         SurfaceSrgbClipPathDRRectCpuOracle.RRect(8f, 8f, 52f, 48f, 10f, 10f),
@@ -872,19 +908,35 @@ object GpuEvidenceCatalog {
         fill: IntArray,
         translated: Boolean = false,
         exactTranslation: Boolean = false,
+        inverseWinding: Boolean = false,
     ) = EvidenceCase(
         EvidenceSceneDescriptor(
             EvidenceSceneId(id), title,
-            if (exactTranslation) {
+            if (inverseWinding) {
+                "Public Kanvas Surface exact finite translated analytic RRect consumer inside an identity-captured hard inverse-Winding path clip."
+            } else if (exactTranslation) {
                 "Public Kanvas Surface exact finite translated analytic RRect consumer inside an identity-captured hard Winding path clip."
             } else if (translated) {
                 "Public Kanvas Surface positive translated analytic RRect consumer inside an identity-captured hard Winding path clip."
             } else {
                 "Public Kanvas Surface hard non-AA winding triangle clip with one opaque identity analytic RRect consumer."
             },
-            64, 64, 1L, setOf("clip-path", "solid-rrect", "hard-clip", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            64, 64, 1L,
+            setOf("clip-path", "solid-rrect", "hard-clip", "kanvas-surface") +
+                if (inverseWinding) setOf("inverse-winding") else emptySet(),
+            EvidenceExpectation.ShouldRender,
             OraclePolicy.GeneratedCpu("surface-srgb-clip-path-rrect-pixel-center", 1),
-            ComparisonPolicy(0, 100.0, 1, "Exact RGBA8 output from independent pixel-center winding clip and analytic RRect membership."), emptySet(),
+            ComparisonPolicy(
+                0,
+                100.0,
+                1,
+                if (inverseWinding) {
+                    "Exact RGBA8 output from independent pixel-center inverse triangle membership and analytic RRect membership."
+                } else {
+                    "Exact RGBA8 output from independent pixel-center winding clip and analytic RRect membership."
+                },
+            ),
+            emptySet(),
         ),
         program,
         SurfaceSrgbClipPathRRectCpuOracle(
@@ -894,6 +946,7 @@ object GpuEvidenceCatalog {
                 SurfaceSrgbClipPathRRectCpuOracle.Point(56f, 8f),
                 SurfaceSrgbClipPathRRectCpuOracle.Point(8f, 55f),
             ), rrect, fill,
+            if (inverseWinding) SurfaceSrgbClipPathRRectCpuOracle.TriangleClip.InverseWinding else SurfaceSrgbClipPathRRectCpuOracle.TriangleClip.Winding,
         ),
     )
 
