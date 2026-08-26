@@ -369,6 +369,32 @@ class PromoteEvidenceCliTest {
     }
 
     @Test
+    fun `partial non-atomic catalog root install restores the old promoted tree byte for byte`() {
+        writePromotedRoot(repository, COMMIT)
+        val before = snapshot(promotedRoot(repository))
+        writeGeneratedRoot(repository, OTHER_COMMIT, allSceneIds(), environment(OTHER_COMMIT, osVersion = "2"))
+        var partialInstall = false
+
+        val result = PromoteEvidenceCliRunner(
+            moveStrategy = { source, destination, _ ->
+                if (source.fileName.toString().startsWith(".promoted.staged-")) {
+                    copyTree(source, destination)
+                    partialInstall = true
+                    throw IOException("injected partial non-atomic catalog install")
+                }
+                Files.move(source, destination)
+            },
+        ).run(
+            args(repository, OTHER_COMMIT, reviewer = "reviewer", reason = "rebaseline", rebaseline = true) +
+                arrayOf("--prior-comparison", "old", "--new-comparison", "new"),
+        )
+
+        assertTrue(result != 0)
+        assertTrue(partialInstall)
+        assertEquals(before, snapshot(promotedRoot(repository)))
+    }
+
+    @Test
     fun `failed rollback preserves the backup root for recovery`() {
         writePromotedRoot(repository, COMMIT)
         val before = snapshot(promotedRoot(repository))

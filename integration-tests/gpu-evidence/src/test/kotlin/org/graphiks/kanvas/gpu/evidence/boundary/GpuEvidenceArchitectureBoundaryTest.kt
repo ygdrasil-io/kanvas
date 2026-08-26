@@ -70,7 +70,7 @@ class GpuEvidenceArchitectureBoundaryTest {
         assertFalse(performanceTask.contains("--all"), "performance must not silently become a catalogue-wide correctness task")
         assertTrue(build.contains("description = \"Generates GPU correctness evidence for the selected scenes or the full catalogue when no selector is provided.\""))
         assertTrue(build.contains("description = \"Verifies generated GPU correctness evidence for the selected scenes or the full catalogue when no selector is provided.\""))
-        assertTrue(build.contains("description = \"Promotes independently verified GPU correctness evidence for the selected scenes or the full catalogue when no selector is provided.\""))
+        assertTrue(build.contains("description = \"Promotes selected GPU correctness scenes for the daily workflow; an existing full catalogue requires -Pall=true, -PpromotionRebaseline=true, and prior/new comparison summaries.\""))
         assertTrue(build.contains("description = \"Alias for generateGpuEvidence.\""))
     }
 

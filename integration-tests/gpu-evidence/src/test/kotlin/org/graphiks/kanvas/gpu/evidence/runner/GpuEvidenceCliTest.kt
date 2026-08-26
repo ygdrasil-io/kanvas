@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.evidence.runner
 
+import java.io.IOException
 import java.nio.file.Files
 import java.security.MessageDigest
 import kotlin.test.Test
@@ -420,6 +421,83 @@ class GpuEvidenceCliTest {
         assertEquals("catalog failure", assertNotNull(result.failure).message)
         assertEquals("keep", Files.readString(generatedRoot.resolve("sentinel.txt")))
         assertFalse(Files.exists(generatedRoot.resolve("selected-scene")))
+    }
+
+    @Test fun `publisher restores the old generated root after a partial non-atomic install`() {
+        val root = Files.createTempDirectory("gpu-evidence-publisher-partial")
+        var moves = 0
+        val publisher = GeneratedEvidenceRootPublisher(
+            root,
+            "a".repeat(40),
+            moveStrategy = { source, destination, _ ->
+                moves++
+                if (moves == 2) {
+                    copyTree(source, destination)
+                    throw IOException("injected partial non-atomic generated install")
+                }
+                Files.move(source, destination)
+            },
+        )
+        val staging = publisher.createStagingRepositoryRoot()
+        val destination = publisher.generatedRoot(root)
+        Files.createDirectories(destination)
+        Files.writeString(destination.resolve("sentinel.txt"), "old")
+        val staged = publisher.generatedRoot(staging)
+        Files.createDirectories(staged)
+        Files.writeString(staged.resolve("sentinel.txt"), "new")
+        val before = snapshotRegularFiles(destination)
+
+        assertFailsWith<IOException> { publisher.publish(staging) }
+
+        assertEquals(before, snapshotRegularFiles(destination))
+    }
+
+    @Test fun `publisher does not fail after a successful install when backup cleanup fails`() {
+        val root = Files.createTempDirectory("gpu-evidence-publisher-cleanup")
+        var cleanupAttempts = 0
+        val publisher = GeneratedEvidenceRootPublisher(
+            root,
+            "a".repeat(40),
+            cleanupStrategy = {
+                cleanupAttempts++
+                throw IOException("injected backup cleanup failure")
+            },
+        )
+        val staging = publisher.createStagingRepositoryRoot()
+        val destination = publisher.generatedRoot(root)
+        Files.createDirectories(destination)
+        Files.writeString(destination.resolve("sentinel.txt"), "old")
+        val staged = publisher.generatedRoot(staging)
+        Files.createDirectories(staged)
+        Files.writeString(staged.resolve("sentinel.txt"), "new")
+
+        val published = publisher.publish(staging)
+
+        assertEquals(destination, published)
+        assertEquals("new", Files.readString(destination.resolve("sentinel.txt")))
+        assertEquals(1, cleanupAttempts)
+    }
+
+    private fun snapshotRegularFiles(root: java.nio.file.Path): Map<String, List<Byte>> =
+        Files.walk(root).use { stream ->
+            stream.iterator().asSequence().filter(Files::isRegularFile).associate { path ->
+                root.relativize(path).toString() to Files.readAllBytes(path).toList()
+            }
+        }
+
+    private fun copyTree(source: java.nio.file.Path, destination: java.nio.file.Path) {
+        Files.walk(source).use { stream ->
+            stream.forEach { current ->
+                val relative = source.relativize(current)
+                val target = destination.resolve(relative.toString())
+                if (Files.isDirectory(current)) {
+                    Files.createDirectories(target)
+                } else {
+                    Files.createDirectories(target.parent)
+                    Files.copy(current, target)
+                }
+            }
+        }
     }
 
     private fun assertCycleAvoidanceSnapshot(snapshot: Throwable, original: Throwable) {

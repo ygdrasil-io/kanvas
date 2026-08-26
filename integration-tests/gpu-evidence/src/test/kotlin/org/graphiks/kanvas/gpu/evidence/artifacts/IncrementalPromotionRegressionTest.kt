@@ -33,14 +33,14 @@ class IncrementalPromotionRegressionTest {
     fun `selected promotion leaves every unselected regular file byte-identical`() {
         writePromotedRoot(repository, COMMIT)
         writeGeneratedRoot(repository, OTHER_COMMIT, listOf(SELECTED_SCENE))
-        val before = snapshotRegularFiles(promotedRoot(repository).resolve(UNSELECTED_SCENE))
+        val before = snapshotUnselectedRegularFiles(promotedRoot(repository), setOf(SELECTED_SCENE))
 
         val result = PromoteEvidenceCliRunner().run(
             args(repository, OTHER_COMMIT, selection = arrayOf("--scene", SELECTED_SCENE), reviewer = "reviewer", reason = "selected"),
         )
 
         assertEquals(0, result)
-        assertEquals(before, snapshotRegularFiles(promotedRoot(repository).resolve(UNSELECTED_SCENE)))
+        assertEquals(before, snapshotUnselectedRegularFiles(promotedRoot(repository), setOf(SELECTED_SCENE)))
     }
 
     @Test
@@ -255,6 +255,12 @@ class IncrementalPromotionRegressionTest {
             stream.iterator().asSequence().filter(Files::isRegularFile).associate { path ->
                 root.relativize(path).toString() to Files.readAllBytes(path).toList()
             }
+        }
+
+    private fun snapshotUnselectedRegularFiles(root: Path, selectedSceneIds: Set<String>): Map<String, List<Byte>> =
+        snapshotRegularFiles(root).filterKeys { relativePath ->
+            val topLevel = relativePath.substringBefore('/')
+            topLevel !in selectedSceneIds && topLevel !in setOf("catalog.json", "environment.json", "promotion.json")
         }
 
     private fun snapshot(root: Path): Map<String, List<Byte>> =

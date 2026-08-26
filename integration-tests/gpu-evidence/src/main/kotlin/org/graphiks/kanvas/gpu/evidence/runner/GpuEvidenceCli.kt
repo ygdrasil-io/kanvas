@@ -208,6 +208,7 @@ internal class GeneratedEvidenceRootPublisher(
     private val sourceCommit: String,
     private val moveStrategy: (Path, Path, Boolean) -> Unit = ::defaultGeneratedRootMove,
     private val cleanupStrategy: (Path) -> Unit = ::deleteGeneratedPublicationTree,
+    private val diagnostic: (String) -> Unit = { message -> System.err.println(message) },
 ) {
     private val repositoryRoot = repositoryRoot.toAbsolutePath().normalize()
     private val repositoryRootReal: Path
@@ -265,17 +266,30 @@ internal class GeneratedEvidenceRootPublisher(
             moveStrategy(staged, destination, true)
             installed = true
         } catch (failure: Throwable) {
-            if (backup != null && !Files.exists(destination, NOFOLLOW_LINKS)) {
+            val backupDestination = backup?.resolve(destination.fileName.toString())
+            if (backupDestination != null && Files.exists(backupDestination, NOFOLLOW_LINKS)) {
                 try {
-                    moveStrategy(backup.resolve(destination.fileName.toString()), destination, true)
+                    if (Files.exists(destination, NOFOLLOW_LINKS)) deleteGeneratedPublicationTree(destination)
+                    moveStrategy(backupDestination, destination, true)
                     restored = true
                 } catch (restoreFailure: Throwable) {
                     failure.addSuppressed(restoreFailure)
+                    diagnostic("generated evidence rollback failed; backup retained at $backup")
                 }
             }
             throw failure
         } finally {
-            if ((restored || installed) && backup != null) cleanupStrategy(backup)
+            if (restored && backup != null) {
+                runCatching { cleanupStrategy(backup) }
+                    .onFailure { cleanupFailure ->
+                        diagnostic("generated evidence restored old root; backup retained at $backup: ${cleanupFailure.message}")
+                    }
+            } else if (installed && backup != null) {
+                runCatching { cleanupStrategy(backup) }
+                    .onFailure { cleanupFailure ->
+                        diagnostic("generated evidence installed new root; backup retained at $backup: ${cleanupFailure.message}")
+                    }
+            }
         }
     }
 

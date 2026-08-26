@@ -427,9 +427,11 @@ class PromoteEvidenceCliRunner internal constructor(
             moveStrategy(staged, destination, true)
             installed = true
         } catch (failure: Throwable) {
-            if (backup != null && !Files.exists(destination, NOFOLLOW_LINKS)) {
+            val backupDestination = backup?.resolve(destination.fileName.toString())
+            if (backupDestination != null && Files.exists(backupDestination, NOFOLLOW_LINKS)) {
                 try {
-                    moveStrategy(backup.resolve(destination.fileName.toString()), destination, true)
+                    if (Files.exists(destination, NOFOLLOW_LINKS)) deleteTree(destination)
+                    moveStrategy(backupDestination, destination, true)
                     restored = true
                 } catch (restoreFailure: Throwable) {
                     failure.addSuppressed(restoreFailure)

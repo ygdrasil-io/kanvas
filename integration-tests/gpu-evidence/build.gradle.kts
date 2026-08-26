@@ -174,7 +174,7 @@ tasks.register<JavaExec>("migratePromotedGpuEvidenceV1ToV2") {
 
 tasks.register<JavaExec>("promoteGpuEvidence") {
     group = "verification"
-    description = "Promotes independently verified GPU correctness evidence for the selected scenes or the full catalogue when no selector is provided."
+    description = "Promotes selected GPU correctness scenes for the daily workflow; an existing full catalogue requires -Pall=true, -PpromotionRebaseline=true, and prior/new comparison summaries."
     dependsOn(tasks.named("classes"))
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("org.graphiks.kanvas.gpu.evidence.artifacts.PromoteEvidenceCliKt")

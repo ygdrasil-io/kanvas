@@ -1,7 +1,7 @@
 # GPU Evidence Incremental Promotion
 
-**Status:** Proposed  
-**Date:** 2026-08-26  
+**Status:** Proposed
+**Date:** 2026-08-26
 **Scope:** `integration-tests:gpu-evidence` correctness evidence only
 
 ## Context
@@ -182,6 +182,20 @@ rtk ./gradlew --no-daemon :integration-tests:gpu-evidence:verifyGeneratedGpuEvid
 rtk ./gradlew --no-daemon :integration-tests:gpu-evidence:promoteGpuEvidence \
   -PsourceCommit="$COMMIT_SHA" -Pscene=clip-path-inverse-axis-x-translated-solid-rrect \
   -PpromotionReviewer="$REVIEWER" -PpromotionReason="$PROMOTION_REASON"
+```
+
+Selected promotion is the daily workflow. When a complete promoted catalogue
+already exists, full promotion is an explicit rebaseline and must include
+`--all`, `--rebaseline`, and both comparison summaries; a bare full promotion
+is rejected. The Gradle equivalent is:
+
+```text
+rtk ./gradlew --no-daemon :integration-tests:gpu-evidence:promoteGpuEvidence \
+  -PsourceCommit="$COMMIT_SHA" -Pall=true \
+  -PpromotionReviewer="$REVIEWER" -PpromotionReason="$PROMOTION_REASON" \
+  -PpromotionRebaseline=true \
+  -PpromotionPriorComparison="$PRIOR_COMPARISON" \
+  -PpromotionNewComparison="$NEW_COMPARISON"
 ```
 
 Generation writes only selected bundles below the ignored generated root.

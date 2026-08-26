@@ -23,6 +23,25 @@
 - v1 evidence remains readable during the migration window and is never silently interpreted as v2.
 - Use `rtk` before every shell command and use `apply_patch` for source edits.
 
+### Promotion command policy
+
+Selected scene promotion is the daily workflow. For an existing complete
+promoted catalogue, the full command is an explicit rebaseline and must pass
+`-Pall=true`, `-PpromotionRebaseline=true`, and nonblank prior/new comparison
+summaries (the CLI receives `--all --rebaseline` and both summaries):
+
+```text
+rtk ./gradlew --no-daemon :integration-tests:gpu-evidence:promoteGpuEvidence \
+  -PsourceCommit="$COMMIT_SHA" -Pall=true \
+  -PpromotionReviewer="$REVIEWER" -PpromotionReason="$PROMOTION_REASON" \
+  -PpromotionRebaseline=true \
+  -PpromotionPriorComparison="$PRIOR_COMPARISON" \
+  -PpromotionNewComparison="$NEW_COMPARISON"
+```
+
+Do not use or document a bare full-catalogue promotion against an existing
+destination; implementation rejects it without rebaseline comparison data.
+
 ---
 
 ### Task 1: Add the shared evidence-selection and v2 schema contracts
