@@ -564,7 +564,7 @@ class GPUSaveLayerIsolatedTargetPlanner {
             ),
             blendModeLabel = request.saveRecord.restoreBlendMode,
             destinationReadLabel = null,
-            compositeRoute = "fixed-function-srcOver",
+            compositeRoute = request.saveRecord.restoreBlendMode.fixedFunctionCompositeRoute(),
             destinationReadStrategy = "none",
             parentTargetLabel = request.parentTargetLabel,
             orderingToken = GPULayerOrderingToken("layer-order:${request.saveRecord.scopeId.value}:restore"),
@@ -692,13 +692,26 @@ private fun GPUSaveLayerIsolatedTargetRequest.refusalCode(targetBytes: Long): St
         activeAttachmentSampled -> "unsupported.layer.active_attachment_sampled"
         saveRecord.initWithPrevious -> "unsupported.layer.init_previous_unaccepted"
         saveRecord.sourceFilterCount > 0 -> "unsupported.layer.filter_chain"
-        !saveRecord.restoreBlendMode.equals("srcOver", ignoreCase = true) -> "unsupported.layer.restore_blend"
+        !saveRecord.restoreBlendMode.isBoundedFixedFunctionCompositeBlend() ->
+            "unsupported.layer.restore_blend"
         saveRecord.cpuFallbackRequested -> "unsupported.layer.cpu_fallback_forbidden"
         saveRecord.preserveLCDText -> "unsupported.layer.preserve_lcd_text"
         saveRecord.f16Requested -> "unsupported.layer.f16_unavailable"
         targetBytes > maxTargetBytes -> "unsupported.layer.target_too_large"
         else -> null
     }
+
+/**
+ * Bounded isolated layers may restore with Porter-Duff SrcOver or Src only.
+ *
+ * Both modes map to fixed-function blending and do not read the parent target. All other
+ * restore modes stay refused until their destination-read or distinct native route is proven.
+ */
+private fun String.isBoundedFixedFunctionCompositeBlend(): Boolean =
+    equals("srcOver", ignoreCase = true) || equals("src", ignoreCase = true)
+
+private fun String.fixedFunctionCompositeRoute(): String =
+    if (equals("src", ignoreCase = true)) "fixed-function-src" else "fixed-function-srcOver"
 
 private fun GPULayerBoundsPlan.targetByteEstimate(): Long =
     if (width <= 0 || height <= 0) {

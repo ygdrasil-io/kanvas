@@ -515,9 +515,9 @@ internal class GPUPreparedSurfaceLayerCompositeRunPlan(
             exactScopeKey.sourceStepIndex == sourceStepIndex &&
             exactScopeKey.operationKind == GPUEncoderOperationKind.LayerComposite &&
             step.sourceLabel == layerTarget.targetLabel &&
-            step.blendPlan.mode == GPUBlendMode.SRC_OVER
+            step.blendPlan.mode in preparedLayerCompositeBlendModes
         ) {
-            "A prepared layer composite must retain its exact layer target and the materialized srcOver blend"
+            "A prepared layer composite must retain its exact layer target and one materialized fixed-function blend"
         }
     }
 }
@@ -3858,10 +3858,10 @@ internal class GPUPreparedSurfaceNativePreflight(
         val compositeRuns = framePlan.steps.mapIndexedNotNull { index, step ->
             val composite = step as? GPUFrameStep.LayerCompositeRenderStep
                 ?: return@mapIndexedNotNull null
-            if (composite.blendPlan.mode != GPUBlendMode.SRC_OVER) {
+            if (composite.blendPlan.mode !in preparedLayerCompositeBlendModes) {
                 return refused(
                     "unsupported.prepared-surface.layer-composite-blend",
-                    "Prepared layer composites admit only SRC_OVER until the remaining " +
+                    "Prepared layer composites admit only SRC_OVER or SRC until the remaining " +
                         "atlas source blends are materialized.",
                     mapOf("blendMode" to composite.blendPlan.mode.name),
                 )
@@ -4566,6 +4566,8 @@ internal class GPUPreparedSurfaceNativePreflight(
         }
     }
 }
+
+private val preparedLayerCompositeBlendModes = setOf(GPUBlendMode.SRC_OVER, GPUBlendMode.SRC)
 
 internal object GPUPreparedSurfaceEncoderScopeAuthority {
     fun matches(

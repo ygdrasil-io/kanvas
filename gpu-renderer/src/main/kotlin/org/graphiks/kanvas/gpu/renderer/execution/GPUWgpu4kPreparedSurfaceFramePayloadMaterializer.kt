@@ -26,6 +26,7 @@ import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageBindingLayoutTopology
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImagePipelineKey
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
@@ -408,7 +409,8 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                 val cached = when (
                     val acquired = preparedImageCache.acquire(
                         GPUPreparedImagePipelineKey(
-                            destinationBlendState = "src-over",
+                            destinationBlendState =
+                                run.step.blendPlan.mode.preparedLayerCompositeBlendState(),
                             targetFormat = "RGBA8UnormSrgb",
                             bindingLayoutHash = GPUPreparedImageBindingLayoutTopology.IDENTITY,
                         ),
@@ -1698,3 +1700,9 @@ private data class PreparedColorGlyphDestinationNativeResource(
     val texture: GPUTexture,
     val view: GPUTextureView,
 )
+
+private fun GPUBlendMode.preparedLayerCompositeBlendState(): String = when (this) {
+    GPUBlendMode.SRC_OVER -> "src-over"
+    GPUBlendMode.SRC -> "src"
+    else -> error("Prepared layer composite blend must be preflight-validated: $this")
+}
