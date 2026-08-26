@@ -78,6 +78,101 @@ import org.graphiks.kanvas.types.Vertices
 
 class GPUFramePathApiInventoryTest {
     @Test
+    fun `identical draw paths retain one content key across command ids`() {
+        val path = Path().apply {
+            moveTo(2f, 2f)
+            quadTo(12f, 24f, 24f, 2f)
+            lineTo(2f, 2f)
+            close()
+        }
+        val operations = listOf(
+            DisplayOp.DrawPath(path, Paint.fill(ColorARGB.Red).copy(antiAlias = false), Matrix3x3F32.Identity, ClipStack.WideOpen),
+            DisplayOp.DrawRect(RectF32.ofLTRB(1f, 1f, 3f, 3f), Paint.fill(ColorARGB.Blue), Matrix3x3F32.Identity, ClipStack.WideOpen),
+            DisplayOp.DrawPath(path, Paint.fill(ColorARGB.Red).copy(antiAlias = false), Matrix3x3F32.Identity, ClipStack.WideOpen),
+        )
+
+        val keys = GPUOpMapper.mapOperations(
+            operations, target(), RenderConfig.DEFAULT, capabilitiesWith(PATH_FILL_STENCIL_COVER),
+        ).visualCommands.mapNotNull { command ->
+            (command.normalized as? NormalizedDrawCommand.FillPath)?.pathKey
+        }
+
+        assertEquals(2, keys.size)
+        assertEquals(keys.first(), keys.last())
+        assertTrue(keys.first().startsWith("path:"))
+    }
+
+    @Test
+    fun `distinct cubic draw paths retain distinct canonical keys`() {
+        fun cubic(controlY: Float) = Path().apply {
+            moveTo(2f, 2f)
+            cubicTo(8f, controlY, 16f, controlY, 24f, 2f)
+            lineTo(2f, 2f)
+            close()
+        }
+
+        val keys = GPUOpMapper.mapOperations(
+            listOf(
+                DisplayOp.DrawPath(cubic(18f), Paint.fill(ColorARGB.Red).copy(antiAlias = false), Matrix3x3F32.Identity, ClipStack.WideOpen),
+                DisplayOp.DrawPath(cubic(22f), Paint.fill(ColorARGB.Red).copy(antiAlias = false), Matrix3x3F32.Identity, ClipStack.WideOpen),
+            ),
+            target(), RenderConfig.DEFAULT, capabilitiesWith(PATH_FILL_STENCIL_COVER),
+        ).visualCommands.map { command ->
+            assertIs<NormalizedDrawCommand.FillPath>(command.normalized).pathKey
+        }
+
+        assertNotEquals(keys.first(), keys.last())
+        assertTrue(keys.all { key ->
+            key.startsWith("path:") &&
+                !key.contains("handle", ignoreCase = true) &&
+                !key.contains("pointer", ignoreCase = true) &&
+                !key.contains("0x", ignoreCase = true)
+        })
+    }
+
+    @Test
+    fun `bounded cubic path exposes immutable finite facts to stencil cover`() {
+        val path = Path().apply {
+            moveTo(2f, 2f)
+            cubicTo(8f, 18f, 16f, 18f, 24f, 2f)
+            lineTo(2f, 2f)
+            close()
+        }
+
+        val command = assertIs<NormalizedDrawCommand.FillPath>(
+            GPUOpMapper.mapOperations(
+                listOf(DisplayOp.DrawPath(path, Paint.fill(ColorARGB.Red).copy(antiAlias = false), Matrix3x3F32.Identity, ClipStack.WideOpen)),
+                target(), RenderConfig.DEFAULT, capabilitiesWith(PATH_FILL_STENCIL_COVER),
+            ).visualCommands.single().normalized,
+        )
+
+        assertEquals("finite", command.pathDescriptor.finiteProof)
+        assertEquals("immutable", command.pathDescriptor.volatility)
+    }
+
+    @Test
+    fun `path budget refusal remains stable with a canonical path key`() {
+        val path = Path().apply {
+            moveTo(1f, 1f)
+            lineTo(5f, 1f)
+            lineTo(6f, 3f)
+            lineTo(5f, 6f)
+            lineTo(1f, 6f)
+            close()
+        }
+
+        val refused = gatherRefusal(
+            GPUFramePathApiInventory.plan(
+                listOf(DisplayOp.DrawPath(path, Paint.fill(ColorARGB.Red), Matrix3x3F32.Identity, ClipStack.WideOpen)),
+                target(), RenderConfig(maxPathVertices = 4u), capabilitiesWith(PATH_FILL_STENCIL_COVER),
+            ),
+        )
+
+        assertEquals("unsupported.core_primitive.path_vertex_budget", refused.code)
+        assertEquals("4", refused.facts["maxPathVertices"])
+    }
+
+    @Test
     fun `public stroke rect inventory reports analytic four band fills without a path key`() {
         val inventory = GPUFramePathApiInventory.plan(
             operations = listOf(
