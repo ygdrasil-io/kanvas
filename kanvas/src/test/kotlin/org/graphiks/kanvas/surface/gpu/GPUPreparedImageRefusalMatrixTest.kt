@@ -87,10 +87,10 @@ class GPUPreparedImageRefusalMatrixTest {
                 Image(
                     width = 1,
                     height = 1,
-                    colorType = ColorType.GRAY_8,
+                    colorType = ColorType.RGB_888X,
                     sourceId = "unsupported-format",
-                    pixels = byteArrayOf(127),
-                    alphaType = AlphaType.PREMUL,
+                    pixels = byteArrayOf(127, 127, 127, 0),
+                    alphaType = AlphaType.OPAQUE,
                 ),
                 GPUPreparedImageRefusalCodes.PIXEL_FORMAT,
             ),
