@@ -46,12 +46,15 @@ statistiques présentées comme performance valide. La promotion checked-in
 ajoute les métadonnées de revue au root promoted v2, sans réécrire les bytes
 des PNG déjà vérifiés.
 
-Une capture de diagnostic peut être faite scène par scène avec une sélection
-explicite, par exemple `-Pscene=solid-card-stack` ou
-`-PscenesFile=scenes.txt`. En revanche, la promotion checked-in reste une
-transaction de catalogue complet via `promoteGpuEvidence -Pall` (la CLI reçoit
-alors `--all`), après vérification du catalogue entier. Les rapports et preuves
-associés vivent sous `reports/gpu-renderer/evidence/`.
+Une capture de diagnostic, une vérification generated et une promotion
+quotidienne peuvent cibler un sous-ensemble explicite, par exemple avec
+`-Pscene=solid-card-stack` ou `-PscenesFile=scenes.txt`. Quand aucun sélecteur
+n'est fourni aux full correctness gates (`generateGpuEvidence`,
+`verifyGeneratedGpuEvidence`, `promoteGpuEvidence`), le helper Gradle relaie
+`--all`; `-Pall` reste disponible pour annoncer ce choix explicitement. Le gate
+`verifyPromotedGpuEvidence` reste, lui, un contrôle headless complet du root
+promoted checked-in. Les rapports et preuves associés vivent sous
+`reports/gpu-renderer/evidence/`.
 
 Les formulations de ce WIP sont dérivées du code, des tests et des artefacts
 générés/promus vérifiés ; ces éléments font autorité, pas le Markdown.
@@ -85,8 +88,10 @@ catalogue et des artefacts promus cohérents avec le code de la branche.
 ./gradlew :integration-tests:gpu-evidence:generateGpuEvidence -PsourceCommit=<sha> -PscenesFile=scenes.txt
 ./gradlew :integration-tests:gpu-evidence:verifyGeneratedGpuEvidence -PsourceCommit=<sha> -Pscene=solid-card-stack
 ./gradlew :integration-tests:gpu-evidence:verifyGeneratedGpuEvidence -PsourceCommit=<sha> -PscenesFile=scenes.txt
-./gradlew :integration-tests:gpu-evidence:generateGpuEvidence -PsourceCommit=<sha> -Pall
-./gradlew :integration-tests:gpu-evidence:verifyGeneratedGpuEvidence -PsourceCommit=<sha> -Pall
+./gradlew :integration-tests:gpu-evidence:promoteGpuEvidence -PsourceCommit=<sha> -PpromotionReviewer=<reviewer> -PpromotionReason=<reason> -Pscene=solid-card-stack
+./gradlew :integration-tests:gpu-evidence:promoteGpuEvidence -PsourceCommit=<sha> -PpromotionReviewer=<reviewer> -PpromotionReason=<reason> -PscenesFile=scenes.txt
+./gradlew :integration-tests:gpu-evidence:generateGpuEvidence -PsourceCommit=<sha>
+./gradlew :integration-tests:gpu-evidence:verifyGeneratedGpuEvidence -PsourceCommit=<sha>
 ./gradlew :integration-tests:gpu-evidence:verifyPromotedGpuEvidence
 ./gradlew :integration-tests:gpu-evidence:promoteGpuEvidence -PsourceCommit=<sha> -PpromotionReviewer=<reviewer> -PpromotionReason=<reason> -Pall
 ```

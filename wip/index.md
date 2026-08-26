@@ -55,11 +55,12 @@ le lowerer et l'oracle correspondants.
 
 1. Avant une promotion correctness transactionnelle, arrêter après la
    vérification du catalogue generated complet et obtenir une autorisation
-   utilisateur explicite pour `promoteGpuEvidence --all`, en présentant le SHA
-   exact, le root generated exact et l'adapter de capture exact. La métadonnée
-   `promotionReviewer` ne remplace pas cette autorisation préalable. Cette
-   autorisation ne couvre ni capture performance, ni nouvelle vague,
-   `gpu-renderer-scenes` ou publication.
+   utilisateur explicite pour une promotion correctness complète
+   (`promoteGpuEvidence` sans sélecteur, ou `-Pall` explicitement), en
+   présentant le SHA exact, le root generated exact et l'adapter de capture
+   exact. La métadonnée `promotionReviewer` ne remplace pas cette autorisation
+   préalable. Cette autorisation ne couvre ni capture performance, ni nouvelle
+   vague, `gpu-renderer-scenes` ou publication.
 2. Avant une capture performance, arrêter et obtenir une autorisation
    utilisateur distincte pour le catalogue rendu au HEAD/SHA exact, au root de
    sortie exact et à l'adapter exact. Cette autorisation ne vaut ni promotion
@@ -105,8 +106,11 @@ ni aucune de ces opérations hors portée.
 ./gradlew :integration-tests:gpu-evidence:generateGpuEvidence -PsourceCommit=<sha> -PscenesFile=scenes.txt
 ./gradlew :integration-tests:gpu-evidence:verifyGeneratedGpuEvidence -PsourceCommit=<sha> -Pscene=solid-card-stack
 ./gradlew :integration-tests:gpu-evidence:verifyGeneratedGpuEvidence -PsourceCommit=<sha> -PscenesFile=scenes.txt
-./gradlew :integration-tests:gpu-evidence:generateGpuEvidence -PsourceCommit=<sha> -Pall
-./gradlew :integration-tests:gpu-evidence:verifyGeneratedGpuEvidence -PsourceCommit=<sha> -Pall
+./gradlew :integration-tests:gpu-evidence:promoteGpuEvidence -PsourceCommit=<sha> -PpromotionReviewer=<reviewer> -PpromotionReason=<reason> -Pscene=solid-card-stack
+./gradlew :integration-tests:gpu-evidence:promoteGpuEvidence -PsourceCommit=<sha> -PpromotionReviewer=<reviewer> -PpromotionReason=<reason> -PscenesFile=scenes.txt
+./gradlew :integration-tests:gpu-evidence:generateGpuEvidence -PsourceCommit=<sha>
+./gradlew :integration-tests:gpu-evidence:verifyGeneratedGpuEvidence -PsourceCommit=<sha>
+./gradlew :integration-tests:gpu-evidence:promoteGpuEvidence -PsourceCommit=<sha> -PpromotionReviewer=<reviewer> -PpromotionReason=<reason>
 ./gradlew :integration-tests:gpu-evidence:promoteGpuEvidence -PsourceCommit=<sha> -PpromotionReviewer=<reviewer> -PpromotionReason=<reason> -Pall
 ./gradlew :integration-tests:gpu-evidence:promoteGpuEvidence -PsourceCommit=<sha> -PpromotionReviewer=<reviewer> -PpromotionReason=<reason> -PpromotionRebaseline=true -PpromotionPriorComparison='<comparaison précédente>' -PpromotionNewComparison='<comparaison nouvelle>' -Pall
 ./gradlew :integration-tests:gpu-evidence:gpuEvidencePerformance -PsourceCommit=<sha> -Pscene=solid-card-stack
@@ -116,16 +120,18 @@ Une commande hardware qui ne dispose pas d'un adapter admissible produit une
 observation indisponible ou un refus explicite ; elle ne produit pas une
 promotion par approximation.
 
-Les commandes quotidiennes doivent annoncer explicitement leur sélection
-(`-Pscene=solid-card-stack` ou `-PscenesFile=scenes.txt`). Les gates complets
-doivent annoncer explicitement `-Pall`, que la CLI traduit en `--all`.
-`verifyPromotedGpuEvidence` reste un contrôle headless du root promoted
-checked-in et transmet en interne `--allow-historical-commit --all`, sans
-réintroduire de native windowing.
+Pour le travail quotidien, utiliser une sélection explicite
+(`-Pscene=solid-card-stack` ou `-PscenesFile=scenes.txt`) pour génération,
+vérification generated et promotion. Quand aucun sélecteur n'est fourni à ces
+full correctness gates, la tâche Gradle relaie `--all`; `-Pall` est une forme
+explicite équivalente quand on veut l'annoncer. `verifyPromotedGpuEvidence`
+reste un contrôle headless du root promoted checked-in et transmet en interne
+`--allow-historical-commit --all`, sans réintroduire de native windowing.
 
-`promoteGpuEvidence` impose le catalogue complet : la promotion checked-in est
-une transaction `-Pall`. Une capture de diagnostic peut cibler une scène, mais
-ne se substitue pas à cette promotion complète.
+`promoteGpuEvidence` n'est donc pas full-only : il partage le même helper de
+sélection que `generateGpuEvidence` et `verifyGeneratedGpuEvidence`. Les
+rebaselines, en revanche, restent des opérations catalogue complet et doivent
+être annoncées comme telles.
 
 La tâche Gradle transmet aussi le rebaseline et les comparaisons prior/nouveau
 via `promotionRebaseline`, `promotionPriorComparison` et

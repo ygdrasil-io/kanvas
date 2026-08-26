@@ -32,6 +32,8 @@ class GpuEvidenceArchitectureBoundaryTest {
         assertTrue(helper.contains("\"--scenes-file\""))
         assertTrue(helper.contains("\"--all\""))
         assertTrue(helper.contains("require"))
+        assertTrue(helper.contains("selectAll -> listOf(\"--all\")"))
+        assertTrue(helper.contains("else -> listOf(\"--all\")"))
         assertEquals(3, Regex("\\+ selectionArguments\\(\\)").findAll(build).count(), "correctness generation, generated verification, and promotion must share one selection helper")
         assertEquals(
             normalize("""
@@ -61,6 +63,7 @@ class GpuEvidenceArchitectureBoundaryTest {
         assertFalse(outsideArgumentProvider(performanceTask).contains("--scenes-file"), "scene file selection must not alter performance task configuration")
         assertFalse(outsideArgumentProvider(generatedVerificationTask).contains("--scene"), "scene selection must not alter generated verification task configuration outside CLI arguments")
         assertFalse(outsideArgumentProvider(generatedVerificationTask).contains("--scenes-file"), "scene selection must not alter generated verification task configuration outside CLI arguments")
+        assertFalse(outsideArgumentProvider(promotionTask).contains("--all"), "promotion full selection must come from the shared helper rather than a hard-coded full-only task")
         assertFalse(performanceTask.contains("promotionRebaselineArguments"), "performance must not receive correctness-only promotion flags")
         assertFalse(performanceTask.contains("--reviewer"), "performance must not receive correctness-only promotion flags")
         assertFalse(performanceTask.contains("--reason"), "performance must not receive correctness-only promotion flags")
