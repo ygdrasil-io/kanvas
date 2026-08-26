@@ -1423,8 +1423,8 @@ private fun GPUClipCoveragePlan.Mask.toMaskExecutionPlan(
         }
         val geometry = singleHardPathClip.executionGeometryOrRefusal() as? GPUClipExecutionGeometry.Path
             ?: return invalidClipGeometryRefusal(singleHardPathClip)
-        val consumerInverseFill = geometry.inverseFill xor
-            (singleHardPathClip.operation == GPUClipCoverageOperation.Difference)
+        val consumerInverseFill = singleHardPathClip.operation == GPUClipCoverageOperation.Difference
+        val effectiveConsumerInverseFill = geometry.inverseFill xor consumerInverseFill
         val targetBounds = GPUPixelBounds(0, 0, target.width, target.height)
         val (frontPassOperation, backPassOperation) = when (geometry.fillRule) {
             org.graphiks.kanvas.gpu.renderer.clips.GPUClipFillRule.Winding ->
@@ -1453,7 +1453,7 @@ private fun GPUClipCoveragePlan.Mask.toMaskExecutionPlan(
             consumer = GPUClipStencilConsumerPlan(
                 scissor = null,
                 reference = 0u,
-                compare = if (consumerInverseFill) {
+                compare = if (effectiveConsumerInverseFill) {
                     GPUClipStencilCompare.Equal
                 } else {
                     GPUClipStencilCompare.NotEqual

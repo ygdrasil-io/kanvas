@@ -2839,6 +2839,32 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `mapper keeps inverse intersect path clip inversion native under translation`() {
+        val surface = Surface(32, 32)
+        surface.canvas {
+            translate(4f, 3f)
+            clipPath(
+                triangle().apply { fillType = FillType.INVERSE_WINDING },
+                ClipOp.INTERSECT,
+                antiAlias = false,
+            )
+            drawRect(RectF32.ofLTRB(0f, 0f, 30f, 30f), Paint.fill(ColorARGB.Red))
+        }
+
+        val plan = GPUFramePathApiInventory.plan(
+            surface.snapshotOps(), target(), RenderConfig.DEFAULT,
+            capabilitiesWith(FILL_RECT_CAPABILITY, PATH_FILL_STENCIL_COVER),
+        )
+        val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(
+            plan.visualCommands.single().clipExecutionPlan,
+        )
+
+        assertFalse(execution.consumerInverseFill)
+        assertEquals(GPUClipStencilCompare.Equal, execution.consumer.compare)
+        assertClipExecutionPropagation(plan, execution)
+    }
+
+    @Test
     fun `mapper does not admit even odd difference path clip to the single stencil route`() {
         val surface = Surface(32, 32)
         surface.canvas {
