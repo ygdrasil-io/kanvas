@@ -1629,6 +1629,10 @@ class FirstRoutePlannerTest {
             GPUTransformFacts.translation(x = -4f, y = 5f) to identityStencil,
             GPUTransformFacts.scale(x = 2f, y = 2f) to identityStencil,
             GPUTransformFacts.translation(x = 4f, y = 5f) to hardWindingStencilClip(pathTransformClass = "translate"),
+            GPUTransformFacts.translation(x = 4f, y = 5f) to hardWindingStencilClip(
+                pathTransformClass = "identity",
+                inverseFill = true,
+            ),
         )
         refusals.forEach { (transform, clip) ->
             val fixture = firstRRectRouteCommand(target = target, transform = transform, clip = clip)
@@ -3121,7 +3125,10 @@ class FirstRoutePlannerTest {
             capabilities = capabilities,
         )
 
-    private fun hardWindingStencilClip(pathTransformClass: String): GPUClipFacts = GPUClipFacts(
+    private fun hardWindingStencilClip(
+        pathTransformClass: String,
+        inverseFill: Boolean = false,
+    ): GPUClipFacts = GPUClipFacts(
         kind = GPUClipKind.ComplexStack,
         bounds = firstRouteBounds,
         executionPlan = GPUClipExecutionPlan.StencilCoverage(
@@ -3135,7 +3142,7 @@ class FirstRoutePlannerTest {
                     vertices = listOf(8f, 8f, 56f, 8f, 8f, 55f),
                     contourStarts = listOf(0),
                     fillRule = GPUClipFillRule.Winding,
-                    inverseFill = false,
+                    inverseFill = inverseFill,
                 ),
                 scissor = null,
                 fillRule = GPUClipFillRule.Winding,
