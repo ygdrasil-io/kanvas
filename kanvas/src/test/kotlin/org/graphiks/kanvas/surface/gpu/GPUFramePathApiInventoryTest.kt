@@ -2814,6 +2814,85 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `public exact quarter turn FillPath keeps native stencil cover with device geometry`() {
+        val plan = GPUFramePathApiInventory.plan(
+            listOf(
+                DisplayOp.DrawPath(
+                    path = triangle(),
+                    paint = Paint.fill(ColorARGB.Blue).copy(antiAlias = false),
+                    transform = Matrix3x3F32.rotation(90f, pivotX = 16f, pivotY = 16f),
+                    clip = ClipStack.WideOpen,
+                ),
+            ),
+            target(32, 32),
+            RenderConfig.DEFAULT,
+            capabilitiesWith(PATH_FILL_STENCIL_COVER),
+        )
+
+        assertEquals(null, plan.preparedRefusal)
+        assertEquals("native.path_fill.stencil_cover", plan.recording.analysis.records.single().routeDecisionLabel)
+        val command = assertIs<NormalizedDrawCommand.FillPath>(plan.visualCommands.single().normalized)
+        assertEquals("right-angle-rotation", command.pathDescriptor.transformClass)
+        val semantic = assertIs<GPUCorePrimitiveSemanticGatherResult.Gathered>(
+            GPUFramePathApiInventory.gatherCorePrimitiveSemantics(
+                plan,
+                GPUPixelBounds(0, 0, 32, 32),
+            ),
+        ).semantics.values.single() as GPUDrawSemanticPayload.CorePrimitive
+        val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
+        assertEquals(GPUCorePrimitiveCoverageMode.Stencil1x, semantic.coverageMode)
+        assertTrue(listOf(31f to 1f, 31f to 8f, 24f to 4f).all { it in geometry.vertices.chunked(2).map { it[0] to it[1] } })
+    }
+
+    @Test
+    fun `public exact half turn FillPath keeps native stencil cover`() {
+        val plan = GPUFramePathApiInventory.plan(
+            listOf(
+                DisplayOp.DrawPath(
+                    path = triangle(),
+                    paint = Paint.fill(ColorARGB.Blue).copy(antiAlias = false),
+                    transform = Matrix3x3F32.rotation(180f, pivotX = 16f, pivotY = 16f),
+                    clip = ClipStack.WideOpen,
+                ),
+            ),
+            target(32, 32),
+            RenderConfig.DEFAULT,
+            capabilitiesWith(PATH_FILL_STENCIL_COVER),
+        )
+
+        assertEquals(null, plan.preparedRefusal)
+        assertEquals("native.path_fill.stencil_cover", plan.recording.analysis.records.single().routeDecisionLabel)
+        val command = assertIs<NormalizedDrawCommand.FillPath>(plan.visualCommands.single().normalized)
+        assertEquals("right-angle-rotation", command.pathDescriptor.transformClass)
+    }
+
+    @Test
+    fun `public non right angle affine and perspective FillPaths retain stable route refusals`() {
+        val variants = listOf(
+            Triple("skew", Matrix3x3F32(kx = 0.25f), "refused.unsupported.transform.class_downgrade"),
+            Triple("perspective", Matrix3x3F32(persp0 = 0.25f), "refused.unsupported.transform.perspective"),
+        )
+
+        variants.forEach { (label, transform, expectedRoute) ->
+            val plan = GPUFramePathApiInventory.plan(
+                listOf(
+                    DisplayOp.DrawPath(
+                        path = triangle(),
+                        paint = Paint.fill(ColorARGB.Blue).copy(antiAlias = false),
+                        transform = transform,
+                        clip = ClipStack.WideOpen,
+                    ),
+                ),
+                target(32, 32),
+                RenderConfig.DEFAULT,
+                capabilitiesWith(PATH_FILL_STENCIL_COVER),
+            )
+
+            assertEquals(expectedRoute, plan.recording.analysis.records.single().routeDecisionLabel, label)
+        }
+    }
+
+    @Test
     fun `public scale FillPath is limited to solid non inverse winding without AA`() {
         val gradient = Paint(
             shader = Shader.LinearGradient(

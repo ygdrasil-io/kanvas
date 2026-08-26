@@ -1711,7 +1711,8 @@ private fun GPUPathDescriptor.refusalCode(maxEdges: Int): String? =
         verbCount <= 0 || pointCount <= 0 -> "unsupported.path.empty"
         fillRule !in setOf("NonZero", "EvenOdd", "InverseWinding", "InverseEvenOdd") -> "unsupported.path.fill_rule"
         transformClass == "perspective" -> "unsupported.transform.path_perspective"
-        transformClass !in setOf("identity", "translate") -> "unsupported.transform.path_class"
+        transformClass !in setOf("identity", "translate", "right-angle-rotation") ->
+            "unsupported.transform.path_class"
         edgeCount < 0 || edgeCount > maxEdges -> "unsupported.path.edge_budget"
         finiteProof != "finite" -> "unsupported.bounds.path"
         volatility != "immutable" -> "unsupported.path.volatile"

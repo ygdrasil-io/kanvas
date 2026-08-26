@@ -83,6 +83,18 @@ class BasicPathFillPreparedRouteTest {
     }
 
     @Test
+    fun `exact right angle rotation keeps canonical path fill evidence`() {
+        val plan = GPUBasicPathFillPreparedPlanner().plan(
+            descriptor = triangleShape,
+            path = trianglePath.copy(transformClass = "right-angle-rotation"),
+        )
+
+        val route = assertIs<GPUGeometryRoute.Prepared>(plan.route)
+        assertEquals("coverage-mask.sample.path-fill", route.plan.consumerKind)
+        assertContains(plan.dumpLines().joinToString("\n"), "transform=right-angle-rotation")
+    }
+
+    @Test
     fun `perspective path fill refuses with split-ready diagnostic`() {
         val plan = GPUBasicPathFillPreparedPlanner().plan(
             descriptor = triangleShape,
