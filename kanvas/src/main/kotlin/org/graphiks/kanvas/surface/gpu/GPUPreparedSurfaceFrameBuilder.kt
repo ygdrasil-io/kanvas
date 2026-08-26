@@ -1097,6 +1097,15 @@ private fun collectPreparedImageVisuals(
             is DisplayOp.DrawRect -> if (operation.paint.isStroke()) {
                 List(4) { PreparedVisualSource.Core(operationIndex) }
             } else {
+                operation.paint.shader.findBaseImageShaderOrNull()?.let { shader ->
+                    listOf(PreparedVisualSource.Image(operationIndex, shader.image))
+                } ?: listOf(PreparedVisualSource.Core(operationIndex))
+            }
+            is DisplayOp.DrawPath -> if (!operation.paint.isStroke() && operation.path.isRect()) {
+                operation.paint.shader.findBaseImageShaderOrNull()?.let { shader ->
+                    listOf(PreparedVisualSource.Image(operationIndex, shader.image))
+                } ?: listOf(PreparedVisualSource.Core(operationIndex))
+            } else {
                 listOf(PreparedVisualSource.Core(operationIndex))
             }
             is DisplayOp.DrawText -> {

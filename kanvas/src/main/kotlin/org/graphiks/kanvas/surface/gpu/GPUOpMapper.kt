@@ -167,6 +167,74 @@ internal object GPUOpMapper {
             if (operationIndex in elidedOperationIndices) {
                 return@forEachIndexed
             }
+            if (operation is DisplayOp.DrawRect && !operation.paint.isStroke()) {
+                val commandId = nextCommandId()
+                when (
+                    val lowered = GPUPreparedDrawImageLowerer.lowerImageShaderRect(
+                        operation = operation,
+                        commandId = GPUDrawCommandID(commandId),
+                        paintOrder = commandId,
+                        provenance = provenance,
+                        target = target,
+                        config = config,
+                        capabilities = capabilities,
+                    )
+                ) {
+                    null -> Unit
+                    is GPUPreparedDrawImageLowering.Ready -> {
+                        visual += lowered.command
+                        recordCommandIds(
+                            operationIndex,
+                            setOf(lowered.command.normalized.commandId.value),
+                        )
+                        return@forEachIndexed
+                    }
+                    is GPUPreparedDrawImageLowering.Refused -> return GPUOpMapping(
+                        visualCommands = emptyList(),
+                        stateEvents = stateEvents.toList(),
+                        preparedRefusal = GPUPreparedOperationRefusal(
+                            commandId = commandId,
+                            operationIndex = operationIndex,
+                            code = lowered.code,
+                            facts = lowered.facts,
+                        ),
+                    )
+                }
+            }
+            if (operation is DisplayOp.DrawPath && !operation.paint.isStroke()) {
+                val commandId = nextCommandId()
+                when (
+                    val lowered = GPUPreparedDrawImageLowerer.lowerImageShaderRectPath(
+                        operation = operation,
+                        commandId = GPUDrawCommandID(commandId),
+                        paintOrder = commandId,
+                        provenance = provenance,
+                        target = target,
+                        config = config,
+                        capabilities = capabilities,
+                    )
+                ) {
+                    null -> Unit
+                    is GPUPreparedDrawImageLowering.Ready -> {
+                        visual += lowered.command
+                        recordCommandIds(
+                            operationIndex,
+                            setOf(lowered.command.normalized.commandId.value),
+                        )
+                        return@forEachIndexed
+                    }
+                    is GPUPreparedDrawImageLowering.Refused -> return GPUOpMapping(
+                        visualCommands = emptyList(),
+                        stateEvents = stateEvents.toList(),
+                        preparedRefusal = GPUPreparedOperationRefusal(
+                            commandId = commandId,
+                            operationIndex = operationIndex,
+                            code = lowered.code,
+                            facts = lowered.facts,
+                        ),
+                    )
+                }
+            }
             if (operation is DisplayOp.DrawRect && operation.paint.isStroke()) {
                 val firstCommandId = nextCommandId()
                 when (

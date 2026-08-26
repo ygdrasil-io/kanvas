@@ -11,6 +11,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
+import org.graphiks.kanvas.gpu.renderer.commands.imageLocalMatrixRefusalReasonOrNull
 import org.graphiks.kanvas.gpu.renderer.commands.GPUOrderingFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
@@ -83,6 +84,9 @@ internal object GPUPreparedDrawImageLowerer {
         config: RenderConfig,
         capabilities: GPUCapabilities,
         preparedArtifact: GPUPreparedImageUploadArtifact? = null,
+        imageMaterial: GPUMaterialDescriptor.ImageDraw? = null,
+        allowShaderSourceOutsideImage: Boolean = false,
+        sourceOperation: String = "drawImage",
     ): GPUPreparedDrawImageLowering {
         val image = operation.image
         operation.paint.unsupportedPreparedImagePaintEffectOrNull()?.let { paintField ->
@@ -198,10 +202,10 @@ internal object GPUPreparedDrawImageLowerer {
         val imageW = image.width.toFloat()
         val imageH = image.height.toFloat()
 
-        val sx0 = max(0f, min(src.left, imageW))
-        val sy0 = max(0f, min(src.top, imageH))
-        val sx1 = max(0f, min(src.right, imageW))
-        val sy1 = max(0f, min(src.bottom, imageH))
+        val sx0 = if (allowShaderSourceOutsideImage) src.left else max(0f, min(src.left, imageW))
+        val sy0 = if (allowShaderSourceOutsideImage) src.top else max(0f, min(src.top, imageH))
+        val sx1 = if (allowShaderSourceOutsideImage) src.right else max(0f, min(src.right, imageW))
+        val sy1 = if (allowShaderSourceOutsideImage) src.bottom else max(0f, min(src.bottom, imageH))
 
         val uvs = listOf(
             GPUPreparedImageVertex(0f, 0f, sx0 / imageW, sy0 / imageH),
@@ -269,7 +273,7 @@ internal object GPUPreparedDrawImageLowerer {
 
         // Prepared draws retain pixels only in the immutable artifact. The generic material
         // descriptor stays byte-free so an expanded grid cannot retain one full copy per cell.
-        val material = GPUMaterialDescriptor.ImageDraw(
+        val material = imageMaterial ?: GPUMaterialDescriptor.ImageDraw(
             imageSourceId = image.sourceId,
             imageWidth = image.width,
             imageHeight = image.height,
@@ -330,7 +334,7 @@ internal object GPUPreparedDrawImageLowerer {
             ),
             source = GPUCommandSource(
                 adapter = "kanvas-surface",
-                operation = "drawImage",
+                operation = sourceOperation,
                 frameProvenance = provenance,
             ),
             blend = blendFacts,
@@ -363,6 +367,120 @@ internal object GPUPreparedDrawImageLowerer {
 
         return GPUPreparedDrawImageLowering.Ready(visual)
     }
+
+    /**
+     * Lowers the deliberately small image-shader rectangle subset through the
+     * existing prepared-image route. The bounded local matrix is represented
+     * by the source UV rectangle; texture sampling remains clamp/nearest or
+     * clamp/linear in the native image pipeline.
+     */
+    fun lowerImageShaderRect(
+        operation: DisplayOp.DrawRect,
+        commandId: GPUDrawCommandID,
+        paintOrder: Int,
+        provenance: GPUFrameProvenance,
+        target: GPUTargetFacts,
+        config: RenderConfig,
+        capabilities: GPUCapabilities,
+    ): GPUPreparedDrawImageLowering? {
+        val imageShader = operation.paint.shader.findBaseImageShaderOrNull() ?: return null
+        val mapped = operation.paint.toPreparedMaterialMapping().descriptor
+        val material = mapped as? GPUMaterialDescriptor.ImageDraw ?: return when (mapped) {
+            is GPUMaterialDescriptor.Unsupported -> GPUPreparedDrawImageLowering.Refused(
+                mapped.reason.diagnosticCode,
+                mapOf(
+                    "materialKind" to mapped.originalKind.name,
+                    "reason" to mapped.reason.name,
+                ),
+            )
+            else -> GPUPreparedDrawImageLowering.Refused(
+                "unsupported.material.source_unimplemented",
+                mapOf("materialKind" to mapped.kind.name),
+            )
+        }
+        material.imageLocalMatrixRefusalReasonOrNull()?.let { reason ->
+            return GPUPreparedDrawImageLowering.Refused(
+                reason.diagnosticCode,
+                mapOf("materialKind" to material.kind.name, "reason" to reason.name),
+            )
+        }
+        if (imageShader.image.sourceId != material.imageSourceId) {
+            return GPUPreparedDrawImageLowering.Refused(
+                "invalid.surface.prepared.image-shader-source",
+                mapOf("shaderSourceId" to imageShader.image.sourceId, "materialSourceId" to material.imageSourceId),
+            )
+        }
+        val matrix = material.localMatrix
+        val shaderSrc = GPURect(
+            left = matrix[0] * operation.rect.left + matrix[1] * operation.rect.top + matrix[2],
+            top = matrix[3] * operation.rect.left + matrix[4] * operation.rect.top + matrix[5],
+            right = matrix[0] * operation.rect.right + matrix[1] * operation.rect.bottom + matrix[2],
+            bottom = matrix[3] * operation.rect.right + matrix[4] * operation.rect.bottom + matrix[5],
+        )
+        return lower(
+            operation = DisplayOp.DrawImage(
+                image = imageShader.image,
+                src = org.graphiks.math.geometry.RectF32(
+                    shaderSrc.left, shaderSrc.top, shaderSrc.right, shaderSrc.bottom,
+                ),
+                dst = operation.rect,
+                paint = operation.paint.copy(shader = imageShader),
+                transform = operation.transform,
+                clip = operation.clip,
+            ),
+            commandId = commandId,
+            paintOrder = paintOrder,
+            provenance = provenance,
+            target = target,
+            config = config,
+            capabilities = capabilities,
+            imageMaterial = material,
+            allowShaderSourceOutsideImage = true,
+            sourceOperation = "drawRect.imageShader",
+        )
+    }
+
+    /**
+     * GmCanvas materializes an affine rectangle transform as a four-edge path.
+     * Keep this recognition intentionally narrow: only an identity-transform,
+     * filled axis-aligned rectangle with an image shader is reconstituted.
+     */
+    fun lowerImageShaderRectPath(
+        operation: DisplayOp.DrawPath,
+        commandId: GPUDrawCommandID,
+        paintOrder: Int,
+        provenance: GPUFrameProvenance,
+        target: GPUTargetFacts,
+        config: RenderConfig,
+        capabilities: GPUCapabilities,
+    ): GPUPreparedDrawImageLowering? {
+        if (!operation.transform.isIdentity || operation.paint.isStroke()) return null
+        val deviceRect = org.graphiks.math.geometry.RectF32(0f, 0f, 0f, 0f)
+        if (!operation.path.isRect(deviceRect)) return null
+        val localRect = org.graphiks.math.geometry.RectF32(
+            0f, 0f, deviceRect.width(), deviceRect.height(),
+        )
+        return lowerImageShaderRect(
+            operation = DisplayOp.DrawRect(
+                rect = localRect,
+                paint = operation.paint,
+                transform = Matrix3x3F32.translation(deviceRect.left, deviceRect.top),
+                clip = operation.clip,
+            ),
+            commandId = commandId,
+            paintOrder = paintOrder,
+            provenance = provenance,
+            target = target,
+            config = config,
+            capabilities = capabilities,
+        )
+    }
+}
+
+internal fun Shader?.findBaseImageShaderOrNull(): Shader.Image? = when (this) {
+    is Shader.Image -> this
+    is Shader.WithLocalMatrix -> shader.findBaseImageShaderOrNull()
+    else -> null
 }
 
 internal fun Paint?.unsupportedPreparedImagePaintEffectOrNull(): String? = when {

@@ -30,6 +30,8 @@ private val IDENTITY_GRADIENT_LOCAL_MATRIX = listOf(
     0f, 0f, 1f,
 )
 
+private val IDENTITY_IMAGE_LOCAL_MATRIX = IDENTITY_GRADIENT_LOCAL_MATRIX
+
 /** Canonical command identifier name used by the package layout target. */
 @JvmInline
 value class GPUDrawCommandID(val value: Int) {
@@ -171,6 +173,14 @@ enum class GPUPreparedMaterialUnsupportedReason(
         "unsupported.material.mapping.image_tile_mode",
         "Prepared image mapping only implements clamp/clamp tile modes",
     ),
+    IMAGE_LOCAL_MATRIX_PERSPECTIVE(
+        "unsupported.material.mapping.image_local_matrix_perspective",
+        "Prepared image mapping does not implement perspective image local matrices",
+    ),
+    IMAGE_LOCAL_MATRIX_AFFINE(
+        "unsupported.material.mapping.image_local_matrix_affine",
+        "Prepared image mapping only implements finite bounded translation/scale local matrices",
+    ),
     IMAGE_COLOR_TYPE(
         "unsupported.material.mapping.image_color_type",
         "Prepared image mapping cannot convert this color type exactly",
@@ -257,6 +267,30 @@ fun GPUMaterialDescriptor.gradientFactsRefusalReasonOrNull(): GPUPreparedMateria
         }
         else -> null
     }
+
+/** Returns the closed refusal reason for image local-matrix facts outside the bounded route. */
+fun GPUMaterialDescriptor.ImageDraw.imageLocalMatrixRefusalReasonOrNull(): GPUPreparedMaterialUnsupportedReason? {
+    val matrix = localMatrix
+    if (matrix.size != 9 || matrix.any { !it.isFinite() }) {
+        return GPUPreparedMaterialUnsupportedReason.IMAGE_LOCAL_MATRIX_AFFINE
+    }
+    if (matrix[6] != 0f || matrix[7] != 0f || matrix[8] != 1f) {
+        return GPUPreparedMaterialUnsupportedReason.IMAGE_LOCAL_MATRIX_PERSPECTIVE
+    }
+    if (
+        matrix[1] != 0f || matrix[3] != 0f ||
+        matrix[0] <= 0f || matrix[4] <= 0f ||
+        matrix[0] > MAX_IMAGE_LOCAL_SCALE || matrix[4] > MAX_IMAGE_LOCAL_SCALE ||
+        kotlin.math.abs(matrix[2]) > MAX_IMAGE_LOCAL_TRANSLATION ||
+        kotlin.math.abs(matrix[5]) > MAX_IMAGE_LOCAL_TRANSLATION
+    ) {
+        return GPUPreparedMaterialUnsupportedReason.IMAGE_LOCAL_MATRIX_AFFINE
+    }
+    return null
+}
+
+private const val MAX_IMAGE_LOCAL_SCALE = 4096f
+private const val MAX_IMAGE_LOCAL_TRANSLATION = 16384f
 
 /** Rectangle geometry in local command coordinates. */
 data class GPURect(
@@ -1248,13 +1282,14 @@ sealed interface GPUMaterialDescriptor {
         override val kind: GPUMaterialKind = GPUMaterialKind.TwoPointConical
     }
 
-    /** Placeholder image-draw descriptor — deferred; dispatch refuses via non-SolidColor material. */
+    /** Image shader descriptor with exact pixels and a bounded local sampling transform. */
     data class ImageDraw(
         val imageSourceId: String = "",
         val imageWidth: Int = 0,
         val imageHeight: Int = 0,
         val rgbaPixels: ByteArray = byteArrayOf(),
         val samplingFilterMode: String = "nearest",
+        val localMatrix: List<Float> = IDENTITY_IMAGE_LOCAL_MATRIX,
         val alphaOnly: Boolean = false,
         val tintR: Float = 1f,
         val tintG: Float = 1f,
@@ -2327,7 +2362,10 @@ private class GPUMaterialDescriptorSnapshotter {
                 allStopColors = descriptor.allStopColors?.copyOf(),
             )
             is GPUMaterialDescriptor.ImageDraw ->
-                descriptor.copy(rgbaPixels = descriptor.rgbaPixels.copyOf())
+                descriptor.copy(
+                    rgbaPixels = descriptor.rgbaPixels.copyOf(),
+                    localMatrix = descriptor.localMatrix.toList(),
+                )
             is GPUMaterialDescriptor.RuntimeEffect ->
                 descriptor.snapshotWith(::snapshotRuntimeChildValidated)
             is GPUMaterialDescriptor.BlendShader ->
@@ -2758,6 +2796,7 @@ private class GPUMaterialDescriptorCanonicalizer {
                     "size=${descriptor.imageWidth}x${descriptor.imageHeight}, " +
                     "pixels=${descriptor.rgbaPixels.canonicalValue()}, " +
                     "sampling=${descriptor.samplingFilterMode.canonicalValue()}, " +
+                    "localMatrix=${descriptor.localMatrix.canonicalFloatList()}, " +
                     "alphaOnly=${descriptor.alphaOnly}, " +
                     "tint=(${descriptor.tintR.canonicalValue()}," +
                     "${descriptor.tintG.canonicalValue()}," +
