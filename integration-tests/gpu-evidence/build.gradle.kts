@@ -126,6 +126,38 @@ tasks.register<JavaExec>("verifyPromotedGpuEvidence") {
     )
 }
 
+tasks.register<JavaExec>("migratePromotedGpuEvidenceV1ToV2") {
+    group = "verification"
+    description = "Mechanically migrates checked-in promoted GPU evidence from v1 scene metadata to the v2 root catalogue layout."
+    dependsOn(tasks.named("classes"))
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.graphiks.kanvas.gpu.evidence.artifacts.MigratePromotedEvidenceCliKt")
+    val reviewer = providers.gradleProperty("promotionReviewer")
+    val reason = providers.gradleProperty("promotionReason")
+    doFirst {
+        require(reviewer.isPresent && reviewer.get().isNotBlank()) { "promotionReviewer is required" }
+        require(reason.isPresent && reason.get().isNotBlank()) { "promotionReason is required" }
+    }
+    inputs.dir(
+        rootProject.layout.projectDirectory
+            .dir("reports/gpu-renderer/evidence/correctness/promoted"),
+    )
+    outputs.dir(
+        rootProject.layout.projectDirectory
+            .dir("reports/gpu-renderer/evidence/correctness"),
+    )
+    argumentProviders.add(
+        org.gradle.process.CommandLineArgumentProvider {
+            listOf(
+                "--repository-root", rootProject.layout.projectDirectory.asFile.absolutePath,
+                "--reviewer", reviewer.get(),
+                "--reason", reason.get(),
+            )
+        },
+    )
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<JavaExec>("promoteGpuEvidence") {
     group = "verification"
     description = "Promotes independently verified GPU correctness evidence for the selected scenes or the full catalogue when no selector is provided."

@@ -150,9 +150,6 @@ class VerifyEvidenceCliRunner(
     }
 
     private fun verifyV2(request: VerifyEvidenceCliRequest): Int {
-        require(!request.allowHistoricalCommit) {
-            "--allow-historical-commit applies only to v1 historical evidence roots"
-        }
         val expectedCases = request.selection.resolve(GpuEvidenceCatalog.cases)
         val verification = try {
             EvidenceCatalogVerifier.verify(

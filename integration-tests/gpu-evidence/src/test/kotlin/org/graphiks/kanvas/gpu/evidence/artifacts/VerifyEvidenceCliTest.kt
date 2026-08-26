@@ -119,6 +119,13 @@ class VerifyEvidenceCliTest {
     }
 
     @Test
+    fun `v2 promoted roots still verify when historical mode is supplied by the promoted Gradle task`() {
+        writePromotedV2()
+
+        assertEquals(0, VerifyEvidenceCliRunner().run(arrayOf("--root", promotedRoot().toString(), "--allow-historical-commit", "--all")))
+    }
+
+    @Test
     fun `historical mode rejects a manifest symlink before reading it`() {
         writeAll(COMMIT)
         val manifest = generatedRoot().resolve("solid-card-stack/manifest.json")
@@ -252,9 +259,49 @@ class VerifyEvidenceCliTest {
 
     private fun generatedRoot() = repository.resolve("reports/gpu-renderer/evidence/correctness/generated/$COMMIT")
 
+    private fun promotedRoot() = repository.resolve("reports/gpu-renderer/evidence/correctness/promoted")
+
+    private fun writePromotedV2() {
+        writeSelectedV2(GpuEvidenceCatalog.cases.map { it.descriptor.id.value }.sorted())
+        val generated = generatedRoot()
+        val promoted = promotedRoot()
+        Files.createDirectories(promoted)
+        Files.copy(generated.resolve("environment.json"), promoted.resolve("environment.json"))
+        Files.writeString(
+            promoted.resolve("catalog.json"),
+            Files.readString(generated.resolve("catalog.json")).replace("\"promotion\":null", "\"promotion\":\"promotion.json\""),
+        )
+        Files.write(
+            promoted.resolve("promotion.json"),
+            EvidencePromotionV2(
+                schemaVersion = GPU_EVIDENCE_PROMOTION_SCHEMA_V2,
+                promotedAtUtc = "1970-01-01T00:00:00Z",
+                reviewer = "reviewer",
+                reason = "initial",
+                rebaseline = false,
+                sceneIds = GpuEvidenceCatalog.cases.map { it.descriptor.id.value }.sorted(),
+                priorComparison = null,
+                newComparison = null,
+            ).toJson().canonicalBytes(),
+        )
+        GpuEvidenceCatalog.cases.map { it.descriptor.id.value }.sorted().forEach { sceneId ->
+            copyTree(generated.resolve(sceneId), promoted.resolve(sceneId))
+        }
+    }
+
     private fun deleteTree(path: Path) {
         if (!Files.exists(path)) return
         Files.walk(path).use { stream -> stream.sorted(Comparator.reverseOrder()).forEach(Files::delete) }
+    }
+
+    private fun copyTree(source: Path, destination: Path) {
+        Files.walk(source).use { stream ->
+            stream.forEach { current ->
+                val relative = source.relativize(current)
+                val target = destination.resolve(relative)
+                if (Files.isDirectory(current)) Files.createDirectories(target) else Files.copy(current, target)
+            }
+        }
     }
 
     private fun replaceAndRefresh(scene: Path, file: String, from: String, to: String) {
