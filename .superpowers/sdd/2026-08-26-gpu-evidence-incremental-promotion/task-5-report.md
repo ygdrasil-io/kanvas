@@ -66,3 +66,29 @@ No whitespace/errors from `git diff --check`.
 ## Concerns
 
 No functional concerns found in the implemented scope. The Gradle run still reports pre-existing deprecation warnings about Gradle 10 compatibility, but the targeted suite passed.
+
+## Review Fixes
+
+Follow-up fixes applied after review:
+
+- `PromoteEvidenceCliRequest.parse` now resolves explicit selections against `GpuEvidenceCatalog.cases`, so unknown scene ids fail during argument parsing while `--all` remains unchanged.
+- Staged root validation now checks `promotion.json` against the active request, including `rebaseline`, `sceneIds`, `reviewer`, `reason`, and paired comparison summaries; corrupted `--all --rebaseline` metadata now fails before swap.
+- An existing empty `reports/gpu-renderer/evidence/correctness/promoted` directory is now treated as an empty destination for initial `--all` promotion, while selected promotion and rebaseline still require an existing non-empty valid catalogue.
+
+Review-specific red/green:
+
+```bash
+rtk ./gradlew --no-daemon :integration-tests:gpu-evidence:test --tests '*PromoteEvidenceCliTest.promotion request parser rejects unknown explicit scene ids' --tests '*PromoteEvidenceCliTest.initial all promotion accepts an empty promoted directory' --tests '*PromoteEvidenceCliTest.all rebaseline rejects corrupted root promotion metadata before swap'
+```
+
+Observed before fixes: `3 tests completed, 3 failed`.
+
+Observed after fixes: `BUILD SUCCESSFUL`.
+
+Post-fix regression coverage:
+
+```bash
+rtk ./gradlew --no-daemon :integration-tests:gpu-evidence:test --tests '*PromoteEvidenceCliTest' --tests '*EvidenceBundleWriterContractTest' --tests '*EvidenceCatalogVerifierTest'
+```
+
+Observed after fixes: `BUILD SUCCESSFUL`.

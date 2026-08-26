@@ -9,6 +9,7 @@ import java.security.MessageDigest
 import java.util.Comparator
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -131,6 +132,21 @@ class PromoteEvidenceCliTest {
     }
 
     @Test
+    fun `promotion request parser rejects unknown explicit scene ids`() {
+        assertFailsWith<IllegalStateException> {
+            PromoteEvidenceCliRequest.parse(
+                arrayOf(
+                    "--repository-root", repository.toString(),
+                    "--source-commit", COMMIT,
+                    "--reviewer", "reviewer",
+                    "--reason", "reason",
+                    "--scene", "unknown-scene",
+                ),
+            )
+        }
+    }
+
+    @Test
     fun `initial promotion requires all and writes one root promotion record`() {
         writeGeneratedRoot(repository, COMMIT, allSceneIds())
 
@@ -152,6 +168,17 @@ class PromoteEvidenceCliTest {
         assertEquals(GPU_EVIDENCE_PROMOTION_SCHEMA_V2, promotion["schemaVersion"]!!.jsonPrimitive.content)
         assertEquals(allSceneIds().toSet(), promotionSceneIds(promotion))
         assertEquals(false, promotion["rebaseline"]!!.jsonPrimitive.boolean)
+    }
+
+    @Test
+    fun `initial all promotion accepts an empty promoted directory`() {
+        writeGeneratedRoot(repository, COMMIT, allSceneIds())
+        Files.createDirectories(promotedRoot(repository))
+
+        val result = PromoteEvidenceCliRunner().run(args(repository, COMMIT))
+
+        assertEquals(0, result)
+        assertTrue(Files.isRegularFile(promotedRoot(repository).resolve("catalog.json")))
     }
 
     @Test
@@ -290,6 +317,32 @@ class PromoteEvidenceCliTest {
         assertEquals("new=99.9", promotion["newComparison"]!!.jsonPrimitive.content)
         assertEquals(allSceneIds().toSet(), promotionSceneIds(promotion))
         assertEquals(OTHER_COMMIT, catalogEntry(promotedRoot(repository), "solid-card-stack")["sourceCommit"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `all rebaseline rejects corrupted root promotion metadata before swap`() {
+        writePromotedRoot(repository, COMMIT)
+        writeGeneratedRoot(repository, OTHER_COMMIT, allSceneIds(), environment(OTHER_COMMIT, osVersion = "2"))
+        val before = snapshot(promotedRoot(repository))
+
+        val result = PromoteEvidenceCliRunner(
+            beforeStagedVerification = { staged ->
+                val promotion = staged.resolve("promotion.json")
+                Files.writeString(
+                    promotion,
+                    Files.readString(promotion)
+                        .replace("\"rebaseline\":true", "\"rebaseline\":false")
+                        .replace("\"priorComparison\":\"old=100.0\"", "\"priorComparison\":null")
+                        .replace("\"newComparison\":\"new=99.9\"", "\"newComparison\":null"),
+                )
+            },
+        ).run(
+            args(repository, OTHER_COMMIT, reviewer = "reviewer", reason = "rebaseline", rebaseline = true) +
+                arrayOf("--prior-comparison", "old=100.0", "--new-comparison", "new=99.9"),
+        )
+
+        assertTrue(result != 0)
+        assertEquals(before, snapshot(promotedRoot(repository)))
     }
 
     @Test

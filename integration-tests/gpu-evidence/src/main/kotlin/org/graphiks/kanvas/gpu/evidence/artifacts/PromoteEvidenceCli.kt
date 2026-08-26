@@ -9,6 +9,8 @@ import java.nio.file.StandardCopyOption.ATOMIC_MOVE
 import java.nio.file.StandardCopyOption.REPLACE_EXISTING
 import java.time.Clock
 import kotlin.system.exitProcess
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -76,6 +78,7 @@ data class PromoteEvidenceCliRequest(
             if (rebaseline) require(all) { "--rebaseline requires --all" }
             scenesFile?.let { sceneIds += EvidenceSelectionParser.readSceneFile(it) }
             val selection = EvidenceSelectionParser.from(sceneIds, all)
+            if (selection is EvidenceSelection.Explicit) selection.resolve(GpuEvidenceCatalog.cases)
             return PromoteEvidenceCliRequest(root, commit, selection, actualReviewer, actualReason, rebaseline, prior, next)
         }
 
@@ -175,6 +178,7 @@ class PromoteEvidenceCliRunner internal constructor(
             }
             writeRootMetadata(staged, environmentBytes, catalogEntries, request, sceneIds)
             beforeStagedVerification(staged)
+            verifyStagedPromotionMetadata(staged, request, sceneIds)
             require(VerifyEvidenceCliRunner(stdout, stderr).run(verificationArguments(staged, null, EvidenceSelection.All)) == 0) {
                 "staged promotion failed independent verification"
             }
@@ -207,6 +211,12 @@ class PromoteEvidenceCliRunner internal constructor(
         }
         require(!Files.isSymbolicLink(promoted)) { "promoted evidence root cannot be a symlink" }
         require(Files.isDirectory(promoted, NOFOLLOW_LINKS)) { "promoted evidence root must be a directory" }
+        val entries = Files.list(promoted).use { stream -> stream.iterator().asSequence().toList() }
+        if (entries.isEmpty()) {
+            require(!request.rebaseline) { "rebaseline requires an existing promoted catalog" }
+            require(request.selection == EvidenceSelection.All) { "selected promotion requires an existing promoted catalog" }
+            return null
+        }
         val existing = validateCatalogRoot(promoted, EvidenceSelection.All, null)
         if (request.selection == EvidenceSelection.All) {
             require(request.rebaseline) { "destination already contains evidence; use --all --rebaseline with old/new comparison summaries" }
@@ -334,6 +344,30 @@ class PromoteEvidenceCliRunner internal constructor(
                 newComparison = request.newComparison,
             ).toJson().canonicalBytes(),
         )
+    }
+
+    private fun verifyStagedPromotionMetadata(
+        staged: Path,
+        request: PromoteEvidenceCliRequest,
+        sceneIds: List<String>,
+    ) {
+        val promotion = EvidenceJson.parseToJsonElement(Files.readString(staged.resolve("promotion.json"))).jsonObject
+        val actualSceneIds = promotion["sceneIds"]!!.jsonArray.map { it.jsonPrimitive.content }.sorted()
+        require(actualSceneIds == sceneIds.sorted()) { "promotion sceneIds do not match the requested selection" }
+        require(promotion["reviewer"]!!.jsonPrimitive.content == request.reviewer) { "promotion reviewer does not match the request" }
+        require(promotion["reason"]!!.jsonPrimitive.content == request.reason) { "promotion reason does not match the request" }
+        require(promotion["rebaseline"]!!.jsonPrimitive.boolean == request.rebaseline) {
+            "promotion rebaseline flag does not match the request"
+        }
+        val actualPrior = promotion["priorComparison"]?.jsonPrimitive?.contentOrNull
+        val actualNew = promotion["newComparison"]?.jsonPrimitive?.contentOrNull
+        require(actualPrior == request.priorComparison) { "promotion priorComparison does not match the request" }
+        require(actualNew == request.newComparison) { "promotion newComparison does not match the request" }
+        if (request.rebaseline) {
+            require(!actualPrior.isNullOrBlank() && !actualNew.isNullOrBlank()) {
+                "promotion rebaseline metadata must include nonblank comparison summaries"
+            }
+        }
     }
 
     private fun swapCatalogRoot(staged: Path, destination: Path) {
