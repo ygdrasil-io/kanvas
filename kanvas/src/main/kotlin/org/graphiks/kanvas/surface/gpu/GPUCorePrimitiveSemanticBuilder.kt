@@ -873,6 +873,7 @@ private fun NormalizedDrawCommand.FillPath.pathDeviceGeometry(
         geometryMode = GPUCorePrimitiveGeometryMode.StencilEdgeFan,
         fillRule = pathDescriptor.fillRule.toCoreFillRule(),
         inverseFill = pathDescriptor.inverseFill,
+        sourceAuthority = pathDescriptor.sourceAuthority,
     )
 }
 
@@ -905,6 +906,7 @@ private fun NormalizedDrawCommand.FillPath.directTriangleDeviceGeometryOrNull(
         geometryMode = GPUCorePrimitiveGeometryMode.DirectTriangles,
         fillRule = GPUCorePrimitiveFillRule.Winding,
         inverseFill = false,
+        sourceAuthority = pathDescriptor.sourceAuthority,
     )
 }
 
@@ -966,6 +968,7 @@ private fun NormalizedDrawCommand.FillPath.hairlinePointDeviceGeometry(
             deviceSquares.maxOf { it.bottom },
         ),
         geometryMode = GPUCorePrimitiveGeometryMode.DirectTriangles,
+        sourceAuthority = pathDescriptor.sourceAuthority,
     )
 }
 
@@ -1052,6 +1055,7 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
                 GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1
             },
         ),
+        sourceAuthority = pathDescriptor.sourceAuthority,
     )
 }
 

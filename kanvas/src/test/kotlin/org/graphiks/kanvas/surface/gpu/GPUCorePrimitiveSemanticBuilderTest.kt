@@ -26,6 +26,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig
+import org.graphiks.kanvas.gpu.renderer.state.GPUPathSourceAuthority
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
@@ -37,6 +38,40 @@ import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.types.PointMode
 
 class GPUCorePrimitiveSemanticBuilderTest {
+    @Test
+    fun `point sources cannot impersonate a public direct triangle drawPath`() {
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPoint(
+                    x = 2f,
+                    y = 2f,
+                    paint = Paint.fill(ColorARGB.Red).copy(antiAlias = false),
+                    transform = Matrix3x3F32.Identity,
+                    clip = ClipStack.WideOpen,
+                ),
+                DisplayOp.DrawPoints(
+                    mode = PointMode.POLYGON,
+                    points = listOf(Point2F32(2f, 2f), Point2F32(20f, 2f), Point2F32(2f, 20f)),
+                    paint = Paint.fill(ColorARGB.Red).copy(antiAlias = false),
+                    transform = Matrix3x3F32.Identity,
+                    clip = ClipStack.WideOpen,
+                ),
+            ),
+            target = GPUTargetFacts(32, 24, "rgba8unorm"),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities(),
+        )
+
+        val paths = inventory.visualCommands.map { command ->
+            assertIs<NormalizedDrawCommand.FillPath>(command.normalized)
+        }
+        assertEquals(listOf("drawPoint", "drawPoints.polygon"), paths.map { it.source.operation })
+        assertEquals(
+            listOf(GPUPathSourceAuthority.Unknown, GPUPathSourceAuthority.Unknown),
+            paths.map { it.pathDescriptor.sourceAuthority },
+        )
+    }
+
     @Test
     fun `production builder and inventory return the exact same representative semantics`() {
         val inventory = inventory()

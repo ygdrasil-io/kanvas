@@ -13,6 +13,18 @@ enum class GPUFrameProvenance(val annotationValue: String) {
     }
 }
 
+/** Exact source-verb authority retained before path flattening can erase curve provenance. */
+enum class GPUPathSourceAuthority {
+    Unknown,
+    DrawPathMoveLineLineImplicitCloseV1,
+    DrawPathMoveLineLineExplicitCloseV1,
+    ;
+
+    val isExactDirectTriangle: Boolean
+        get() = this == DrawPathMoveLineLineImplicitCloseV1 ||
+            this == DrawPathMoveLineLineExplicitCloseV1
+}
+
 /** Stable logical target identity; generation remains an explicit key axis. */
 @JvmInline
 value class GPUTargetIdentity(val value: String) {
