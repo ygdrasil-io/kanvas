@@ -35,4 +35,24 @@ class SurfaceSrgbClipPathDRRectCpuOracleTest {
         assertEquals(listOf(0, 0, 0, 0), pixel(50, 14), "outside Winding clip")
         assertEquals(772, bytes.asList().chunked(4).count { it[3].toInt() and 0xff != 0 })
     }
+
+    @Test
+    fun `oracle uses hand derived positive translated DRRect bounds`() {
+        val bytes = SurfaceSrgbClipPathDRRectCpuOracle(
+            listOf(
+                SurfaceSrgbClipPathDRRectCpuOracle.Point(8f, 8f),
+                SurfaceSrgbClipPathDRRectCpuOracle.Point(56f, 8f),
+                SurfaceSrgbClipPathDRRectCpuOracle.Point(8f, 55f),
+            ),
+            SurfaceSrgbClipPathDRRectCpuOracle.RRect(12f, 13f, 56f, 53f, 10f, 10f),
+            SurfaceSrgbClipPathDRRectCpuOracle.RRect(26f, 25f, 44f, 43f, 4f, 4f),
+            intArrayOf(242, 135, 46, 255),
+        ).render(64, 64)
+        fun pixel(x: Int, y: Int) = (0 until 4).map { bytes[(y * 64 + x) * 4 + it].toInt() and 0xff }
+
+        assertEquals(listOf(242, 135, 46, 255), pixel(20, 20), "translated outer fill")
+        assertEquals(listOf(0, 0, 0, 0), pixel(32, 30), "translated inner hole")
+        assertEquals(listOf(0, 0, 0, 0), pixel(50, 14), "outside Winding clip")
+        assertEquals(listOf(242, 135, 46, 255), pixel(12, 20), "translated outer left edge")
+    }
 }

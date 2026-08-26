@@ -571,6 +571,24 @@ object KanvasScenePrograms {
         ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f),
     )
 
+    fun clipPathTranslatedSolidDRRect() = clipPathTranslatedDRRect(
+        RRectF32.of(RectF32.ofLTRB(8f, 8f, 52f, 48f), radius = 10f),
+        RRectF32.of(RectF32.ofLTRB(22f, 20f, 40f, 38f), radius = 4f),
+        ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f),
+    )
+
+    fun clipPathTranslatedAsymmetricSolidDRRect() = clipPathTranslatedDRRect(
+        RRectF32.of(RectF32.ofLTRB(8f, 8f, 52f, 48f), CornerRadiiF32.of(4f, 8f), CornerRadiiF32.of(10f, 4f), CornerRadiiF32.of(8f, 12f), CornerRadiiF32.of(6f, 3f)),
+        RRectF32.of(RectF32.ofLTRB(20f, 18f, 42f, 39f), CornerRadiiF32.of(3f, 5f), CornerRadiiF32.of(6f, 2f), CornerRadiiF32.of(4f, 7f), CornerRadiiF32.of(2f, 3f)),
+        ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f),
+    )
+
+    fun clipPathTranslatedEllipseSolidDRRect() = clipPathTranslatedDRRect(
+        RRectF32.of(RectF32.ofLTRB(12f, 20f, 52f, 44f), CornerRadiiF32.of(20f, 12f), CornerRadiiF32.of(20f, 12f), CornerRadiiF32.of(20f, 12f), CornerRadiiF32.of(20f, 12f)),
+        RRectF32.of(RectF32.ofLTRB(24f, 26f, 40f, 38f), CornerRadiiF32.of(8f, 6f), CornerRadiiF32.of(8f, 6f), CornerRadiiF32.of(8f, 6f), CornerRadiiF32.of(8f, 6f)),
+        ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f),
+    )
+
     private fun clipPathRRect(rrect: RRectF32, color: ColorARGB) = KanvasSurfaceProgram(ROUTE_ID, record = {
         save()
         clipPath(Path {
@@ -594,6 +612,15 @@ object KanvasScenePrograms {
         save()
         clipPath(Path { moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close() }
             .apply { fillType = FillType.WINDING }, ClipOp.INTERSECT, antiAlias = false)
+        drawDRRect(outer, inner, Paint.fill(color).copy(antiAlias = false))
+        restore()
+    })
+
+    private fun clipPathTranslatedDRRect(outer: RRectF32, inner: RRectF32, color: ColorARGB) = KanvasSurfaceProgram(ROUTE_ID, record = {
+        save()
+        clipPath(Path { moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close() }
+            .apply { fillType = FillType.WINDING }, ClipOp.INTERSECT, antiAlias = false)
+        translate(4f, 5f)
         drawDRRect(outer, inner, Paint.fill(color).copy(antiAlias = false))
         restore()
     })
