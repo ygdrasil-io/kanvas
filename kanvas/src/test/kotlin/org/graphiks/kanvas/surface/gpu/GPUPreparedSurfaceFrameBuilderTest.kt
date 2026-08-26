@@ -25,6 +25,8 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
+import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticCode
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticSeverity
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
@@ -1523,7 +1525,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
     }
 
     @Test
-    fun `unexpected construction exception becomes a stable contract refusal without variable detail`() {
+    fun `unexpected construction exception records its class and message in stable contract refusal facts`() {
         val base = request(listOf(rect()))
         val unstableOperations = object : AbstractList<DisplayOp>() {
             override val size: Int = 1
@@ -1540,10 +1542,45 @@ class GPUPreparedSurfaceFrameBuilderTest {
 
         assertEquals("invalid.surface.prepared.frame-build-contract", refused.diagnostic.code.value)
         assertEquals(
-            mapOf("failureClass" to IllegalStateException::class.java.name),
+            mapOf(
+                "failureClass" to IllegalStateException::class.java.name,
+                "failureMessage" to "runtime-specific detail must not escape",
+            ),
             refused.diagnostic.facts,
         )
-        assertTrue("runtime-specific detail" !in refused.diagnostic.message)
+        assertEquals(
+            "Prepared Surface frame construction violated an internal contract.",
+            refused.diagnostic.message,
+        )
+    }
+
+    @Test
+    fun `typed construction failure preserves the original diagnostic`() {
+        val base = request(listOf(rect()))
+        val underlying = GPUDiagnostic(
+            code = GPUDiagnosticCode("invalid.test.prepared-frame-build"),
+            domain = GPUDiagnosticDomain.Pipelines,
+            severity = GPUDiagnosticSeverity.Error,
+            message = "The prepared pipeline key did not match the frame layout.",
+            facts = mapOf(
+                "pipelineKey" to "solid:clip-mask",
+                "layout" to "dynamic-uniforms",
+            ),
+        )
+        val unstableOperations = object : AbstractList<DisplayOp>() {
+            override val size: Int = 1
+
+            override fun get(index: Int): DisplayOp =
+                throw GPUPreparedSurfaceTerminalException(underlying)
+        }
+
+        val refused = assertIs<GPUPreparedSurfaceFrameBuildResult.Refused>(
+            GPUPreparedSurfaceFrameBuilder.build(
+                base.copy(candidate = base.candidate.copy(operations = unstableOperations)),
+            ),
+        )
+
+        assertEquals(underlying, refused.diagnostic)
     }
 
     @Test

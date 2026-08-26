@@ -497,12 +497,17 @@ internal object GPUPreparedSurfaceFrameBuilder {
                 is GPUPreparedSurfaceFrameResult.Refused ->
                     GPUPreparedSurfaceFrameBuildResult.Refused(prepared.diagnostic.atSurfaceBoundary())
             }
+        } catch (failure: GPUPreparedSurfaceTerminalException) {
+            GPUPreparedSurfaceFrameBuildResult.Refused(failure.diagnostic)
         } catch (failure: Exception) {
             GPUPreparedSurfaceFrameBuildResult.Refused(
                 diagnostic(
                     code = "invalid.surface.prepared.frame-build-contract",
                     message = "Prepared Surface frame construction violated an internal contract.",
-                    facts = mapOf("failureClass" to failure.javaClass.name),
+                    facts = mapOf(
+                        "failureClass" to failure.javaClass.name,
+                        "failureMessage" to failure.message.orEmpty(),
+                    ),
                 ),
             )
         }
