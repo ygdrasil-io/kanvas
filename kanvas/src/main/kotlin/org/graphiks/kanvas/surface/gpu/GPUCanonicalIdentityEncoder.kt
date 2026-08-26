@@ -102,3 +102,29 @@ internal fun preparedStrokeGeometryPathKey(
     }
     return "prepared-text-stroke:sha256:${encoder.finishSha256()}"
 }
+
+/**
+ * Stable identity for a captured path fill geometry.
+ *
+ * The mapper has already flattened the source path at this point, so its
+ * vertices and contour starts are an immutable snapshot of the geometry that
+ * will be prepared. Command allocation is deliberately absent: identical
+ * paths must share an identity even when their draw command IDs differ.
+ */
+internal fun canonicalPathFillKey(
+    vertices: List<Float>,
+    contourStarts: List<Int>,
+    fillType: String,
+): String {
+    val encoder = GPUCanonicalIdentityEncoder("path-fill-geometry:v1")
+    encoder.string("fillType", fillType)
+    encoder.int("vertexCount", vertices.size / 2)
+    encoder.int("contourCount", contourStarts.size)
+    contourStarts.forEachIndexed { index, contourStart ->
+        encoder.int("contourStart[$index]", contourStart)
+    }
+    vertices.forEachIndexed { index, coordinate ->
+        encoder.float("coordinate[$index]", coordinate)
+    }
+    return "path:sha256:${encoder.finishSha256()}"
+}

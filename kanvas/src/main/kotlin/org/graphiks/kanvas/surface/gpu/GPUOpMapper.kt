@@ -1838,17 +1838,22 @@ internal fun DisplayOp.DrawPath.toNormalizedCommand(
     val transform = this.transform.toGPUTransformFacts()
     val maskFilter = paint.maskFilter.toNormalizedMaskFilter()
     val pathStencilConfig = stencilConfig(path.fillType)
+    val pathKey = canonicalPathFillKey(
+        vertices = tessellatedVertices,
+        contourStarts = contourStarts,
+        fillType = path.fillType.name,
+    )
     return NormalizedDrawCommand.FillPath(
         commandId = cmdId,
-        pathKey = "path-${cmdId.value}",
+        pathKey = pathKey,
         pathDescriptor = GPUPathFacts(
-            pathKey = "path-${cmdId.value}",
+            pathKey = pathKey,
             verbCount = 0,
             pointCount = tessellatedVertices.size / 2,
             fillRule = pathStencilConfig.fillRule.name,
             inverseFill = pathStencilConfig.inverse,
-            finiteProof = if (tessellatedVertices.all(Float::isFinite)) "all_finite" else "non_finite",
-            volatility = "static",
+            finiteProof = if (tessellatedVertices.all(Float::isFinite)) "finite" else "non_finite",
+            volatility = "immutable",
             transformClass = transform.type.name.lowercase(),
             edgeCount = edgeCount,
             sourceAuthority = sourceAuthority,
