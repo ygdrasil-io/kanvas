@@ -537,14 +537,14 @@ object KanvasScenePrograms {
     )
 
     fun clipPathAsymmetricSolidDRRect() = clipPathDRRect(
-        RRectF32.of(RectF32.ofLTRB(8f, 8f, 52f, 48f), radius = 8f),
-        RRectF32.of(RectF32.ofLTRB(20f, 18f, 42f, 39f), radius = 3f),
+        RRectF32.of(RectF32.ofLTRB(8f, 8f, 52f, 48f), CornerRadiiF32.of(4f, 8f), CornerRadiiF32.of(10f, 4f), CornerRadiiF32.of(8f, 12f), CornerRadiiF32.of(6f, 3f)),
+        RRectF32.of(RectF32.ofLTRB(20f, 18f, 42f, 39f), CornerRadiiF32.of(3f, 5f), CornerRadiiF32.of(6f, 2f), CornerRadiiF32.of(4f, 7f), CornerRadiiF32.of(2f, 3f)),
         ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f),
     )
 
     fun clipPathEllipseSolidDRRect() = clipPathDRRect(
-        RRectF32.of(RectF32.ofLTRB(12f, 20f, 52f, 44f), radius = 12f),
-        RRectF32.of(RectF32.ofLTRB(24f, 26f, 40f, 38f), radius = 5f),
+        RRectF32.of(RectF32.ofLTRB(12f, 20f, 52f, 44f), CornerRadiiF32.of(20f, 12f), CornerRadiiF32.of(20f, 12f), CornerRadiiF32.of(20f, 12f), CornerRadiiF32.of(20f, 12f)),
+        RRectF32.of(RectF32.ofLTRB(24f, 26f, 40f, 38f), CornerRadiiF32.of(8f, 6f), CornerRadiiF32.of(8f, 6f), CornerRadiiF32.of(8f, 6f), CornerRadiiF32.of(8f, 6f)),
         ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f),
     )
 

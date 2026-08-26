@@ -166,6 +166,15 @@ internal fun sealGPUCorePrimitiveClipStencilNativeRoute(
         "invalid.native-core-primitive.clip-stencil.last-consumer",
         "The clip-stencil route requires at least one consumer.",
     )
+    if (
+        request.consumers.any {
+            it.geometry is GPUCorePrimitiveGeometry.RRect ||
+                it.geometry is GPUCorePrimitiveGeometry.DRRect
+        } && request.consumers.size != 1
+    ) return refused(
+        "unsupported.native-core-primitive.clip-stencil.analytic-multiple-consumers",
+        "An analytic RRect or DRRect clip-stencil consumer requires exactly one consumer.",
+    )
     if (request.consumers.any { it.commandId < 0 || it.sourceOrder < 0 } ||
         request.consumers.map { it.commandId }.distinct().size != request.consumers.size ||
         !request.consumers.zipWithNext().all { (left, right) -> left.sourceOrder < right.sourceOrder }

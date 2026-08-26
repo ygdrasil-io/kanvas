@@ -719,14 +719,16 @@ object GpuEvidenceCatalog {
 
     private fun clipPathAsymmetricSolidDRRect() = clipPathDRRectCase(
         "clip-path-asymmetric-solid-drrect", "Asymmetric DRRect inside hard path clip", KanvasScenePrograms.clipPathAsymmetricSolidDRRect(),
-        SurfaceSrgbClipPathDRRectCpuOracle.RRect(8f, 8f, 52f, 48f, 8f, 8f),
-        SurfaceSrgbClipPathDRRectCpuOracle.RRect(20f, 18f, 42f, 39f, 3f, 3f), intArrayOf(31, 115, 209, 255),
+        SurfaceSrgbClipPathDRRectCpuOracle.RRect(8f, 8f, 52f, 48f,
+            SurfaceSrgbClipPathDRRectCpuOracle.Radii(4f, 8f), SurfaceSrgbClipPathDRRectCpuOracle.Radii(10f, 4f), SurfaceSrgbClipPathDRRectCpuOracle.Radii(8f, 12f), SurfaceSrgbClipPathDRRectCpuOracle.Radii(6f, 3f)),
+        SurfaceSrgbClipPathDRRectCpuOracle.RRect(20f, 18f, 42f, 39f,
+            SurfaceSrgbClipPathDRRectCpuOracle.Radii(3f, 5f), SurfaceSrgbClipPathDRRectCpuOracle.Radii(6f, 2f), SurfaceSrgbClipPathDRRectCpuOracle.Radii(4f, 7f), SurfaceSrgbClipPathDRRectCpuOracle.Radii(2f, 3f)), intArrayOf(31, 115, 209, 255),
     )
 
     private fun clipPathEllipseSolidDRRect() = clipPathDRRectCase(
         "clip-path-ellipse-solid-drrect", "Ellipse DRRect inside hard path clip", KanvasScenePrograms.clipPathEllipseSolidDRRect(),
-        SurfaceSrgbClipPathDRRectCpuOracle.RRect(12f, 20f, 52f, 44f, 12f, 12f),
-        SurfaceSrgbClipPathDRRectCpuOracle.RRect(24f, 26f, 40f, 38f, 5f, 5f), intArrayOf(242, 135, 46, 255),
+        SurfaceSrgbClipPathDRRectCpuOracle.RRect(12f, 20f, 52f, 44f, 20f, 12f),
+        SurfaceSrgbClipPathDRRectCpuOracle.RRect(24f, 26f, 40f, 38f, 8f, 6f), intArrayOf(242, 135, 46, 255),
     )
 
     private fun clipPathRRectCase(

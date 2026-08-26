@@ -5,7 +5,14 @@ class SurfaceSrgbClipPathDRRectCpuOracle(
     private val triangle: List<Point>, private val outer: RRect, private val inner: RRect, fill: IntArray,
 ) : CpuOracle {
     data class Point(val x: Float, val y: Float)
-    data class RRect(val left: Float, val top: Float, val right: Float, val bottom: Float, val radiusX: Float, val radiusY: Float)
+    data class Radii(val x: Float, val y: Float)
+    data class RRect(
+        val left: Float, val top: Float, val right: Float, val bottom: Float,
+        val topLeft: Radii, val topRight: Radii, val bottomRight: Radii, val bottomLeft: Radii,
+    ) {
+        constructor(left: Float, top: Float, right: Float, bottom: Float, radiusX: Float, radiusY: Float) :
+            this(left, top, right, bottom, Radii(radiusX, radiusY), Radii(radiusX, radiusY), Radii(radiusX, radiusY), Radii(radiusX, radiusY))
+    }
     private val fill = fill.copyOf().also { require(it.size == 4 && it.all { channel -> channel in 0..255 }) }
 
     override fun render(width: Int, height: Int): ByteArray {
@@ -26,9 +33,14 @@ class SurfaceSrgbClipPathDRRectCpuOracle(
 
     private fun inRRect(x: Double, y: Double, r: RRect): Boolean {
         if (x < r.left || x >= r.right || y < r.top || y >= r.bottom) return false
-        val cx = x.coerceIn((r.left + r.radiusX).toDouble(), (r.right - r.radiusX).toDouble())
-        val cy = y.coerceIn((r.top + r.radiusY).toDouble(), (r.bottom - r.radiusY).toDouble())
-        val dx = (x - cx) / r.radiusX; val dy = (y - cy) / r.radiusY
+        val (radii, cx, cy) = when {
+            x < r.left + r.topLeft.x && y < r.top + r.topLeft.y -> Triple(r.topLeft, r.left + r.topLeft.x, r.top + r.topLeft.y)
+            x >= r.right - r.topRight.x && y < r.top + r.topRight.y -> Triple(r.topRight, r.right - r.topRight.x, r.top + r.topRight.y)
+            x >= r.right - r.bottomRight.x && y >= r.bottom - r.bottomRight.y -> Triple(r.bottomRight, r.right - r.bottomRight.x, r.bottom - r.bottomRight.y)
+            x < r.left + r.bottomLeft.x && y >= r.bottom - r.bottomLeft.y -> Triple(r.bottomLeft, r.left + r.bottomLeft.x, r.bottom - r.bottomLeft.y)
+            else -> return true
+        }
+        val dx = (x - cx) / radii.x; val dy = (y - cy) / radii.y
         return dx * dx + dy * dy <= 1.0
     }
 }

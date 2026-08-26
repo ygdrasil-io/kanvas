@@ -1992,7 +1992,10 @@ private fun ClipStack.isWideOpenOrHardWindingPathClip(): Boolean = this == ClipS
     (this as? ClipStack.Complex)?.ops?.singleOrNull().let { it as? ClipStackOp.PathOp }?.let { path ->
         path.op == org.graphiks.kanvas.pipeline.ClipOp.INTERSECT && !path.antiAlias &&
             !path.perspectiveCaptureRefusal && path.transformClass == "identity" &&
-            path.path.fillType == org.graphiks.kanvas.geometry.FillType.WINDING
+            path.path.fillType in setOf(
+                org.graphiks.kanvas.geometry.FillType.WINDING,
+                org.graphiks.kanvas.geometry.FillType.INVERSE_WINDING,
+            )
     } == true
 
 internal fun DisplayOp.DrawDRRect.toNormalizedCommand(
