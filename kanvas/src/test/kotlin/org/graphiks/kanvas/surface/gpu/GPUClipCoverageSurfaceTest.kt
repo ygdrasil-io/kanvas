@@ -235,6 +235,37 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
+    fun `public positive translated rrect renders inside one identity hard path clip stencil scope`() {
+        requireWebGpu()
+        val background = ColorARGB.Transparent
+        val fill = ColorARGB.of(255, 242, 135, 46)
+        val surface = Surface(64, 64)
+        surface.canvas {
+            save()
+            clipPath(
+                Path { moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close() }
+                    .apply { fillType = FillType.WINDING },
+                ClipOp.INTERSECT,
+                antiAlias = false,
+            )
+            translate(4f, 5f)
+            drawRRect(
+                RRectF32.of(RectF32.ofLTRB(8f, 8f, 52f, 48f), radius = 10f),
+                Paint.fill(fill).copy(antiAlias = false),
+            )
+            restore()
+        }
+
+        val result = surface.render()
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertTrue(result.diagnostics.isEmpty, result.diagnostics.entries.toString())
+        assertEquals(0, result.stats.opsRefused)
+        assertRgbaNear(result.pixels, 64, 24, 20, fill)
+        assertRgbaNear(result.pixels, 64, 10, 12, background)
+        assertRgbaNear(result.pixels, 64, 50, 14, background)
+    }
+
+    @Test
     fun `public opaque identity drrect renders inside one hard path clip stencil scope`() {
         requireWebGpu()
         val fill = ColorARGB.of(255, 242, 135, 46)
