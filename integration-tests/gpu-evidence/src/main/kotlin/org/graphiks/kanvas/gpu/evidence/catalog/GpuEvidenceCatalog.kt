@@ -646,8 +646,8 @@ object GpuEvidenceCatalog {
         program = KanvasScenePrograms.clipPathTriangleDirectTriangleLinearGradient(),
         contour = listOf(clipPoint(8f, 8f), clipPoint(56f, 8f), clipPoint(8f, 55f)),
         triangle = directTriangleGradient(4f, 4.25f, 60f, 12f, 12f, 60f),
-        start = SurfaceSrgbGradientCpuOracle.Point(20.1f, 8f),
-        end = SurfaceSrgbGradientCpuOracle.Point(20.4f, 8f),
+        start = SurfaceSrgbGradientCpuOracle.Point(20f, 19.3f),
+        end = SurfaceSrgbGradientCpuOracle.Point(20f, 23.3f),
     )
 
     private fun clipPathTranslatedTriangleDirectTriangleLinearGradient() = clipPathDirectTriangleLinearGradientCase(
@@ -656,8 +656,8 @@ object GpuEvidenceCatalog {
         program = KanvasScenePrograms.clipPathTranslatedTriangleDirectTriangleLinearGradient(),
         contour = listOf(clipPoint(10f, 8f), clipPoint(58f, 8f), clipPoint(10f, 55f)),
         triangle = directTriangleGradient(6f, 4.25f, 62f, 12f, 14f, 60f),
-        start = SurfaceSrgbGradientCpuOracle.Point(22.1f, 8f),
-        end = SurfaceSrgbGradientCpuOracle.Point(22.4f, 8f),
+        start = SurfaceSrgbGradientCpuOracle.Point(22f, 19.3f),
+        end = SurfaceSrgbGradientCpuOracle.Point(22f, 23.3f),
     )
 
     private fun clipPathUniformScaledTriangleDirectTriangleLinearGradient() = clipPathDirectTriangleLinearGradientCase(
@@ -666,8 +666,8 @@ object GpuEvidenceCatalog {
         program = KanvasScenePrograms.clipPathUniformScaledTriangleDirectTriangleLinearGradient(),
         contour = listOf(clipPoint(14f, 10f), clipPoint(50f, 10f), clipPoint(14f, 45.25f)),
         triangle = directTriangleGradient(11f, 7.1875f, 53f, 13f, 17f, 49f),
-        start = SurfaceSrgbGradientCpuOracle.Point(23.075f, 10f),
-        end = SurfaceSrgbGradientCpuOracle.Point(23.3f, 10f),
+        start = SurfaceSrgbGradientCpuOracle.Point(23f, 18.3f),
+        end = SurfaceSrgbGradientCpuOracle.Point(23f, 22.3f),
     )
 
     private fun clipPathLinearGradientCase(
@@ -738,8 +738,8 @@ object GpuEvidenceCatalog {
             triangle = triangle,
             start = start,
             end = end,
-            startColor = intArrayOf(255, 0, 0, 255),
-            endColor = intArrayOf(0, 0, 255, 255),
+            startColor = intArrayOf(0, 0, 0, 255),
+            endColor = intArrayOf(4, 4, 4, 255),
         ),
     )
 

@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.evidence.catalog
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 
 class GpuEvidenceCatalogOracleTest {
@@ -219,18 +220,27 @@ class GpuEvidenceCatalogOracleTest {
         val translated = oracle("clip-path-translated-triangle-direct-triangle-linear-gradient")
         val scaled = oracle("clip-path-uniform-scaled-triangle-direct-triangle-linear-gradient")
 
-        assertPixel(identity, 64, 64, 19, 12, intArrayOf(255, 0, 0, 255))
-        assertPixel(identity, 64, 64, 20, 12, intArrayOf(0, 0, 255, 255))
+        listOf(20 to 1, 21 to 2, 22 to 3).forEach { (y, channel) ->
+            assertInteriorPixel(identity, 20, y, intArrayOf(channel, channel, channel, 255))
+        }
+        assertPixel(identity, 64, 64, 20, 18, intArrayOf(0, 0, 0, 255))
+        assertPixel(identity, 64, 64, 20, 23, intArrayOf(4, 4, 4, 255))
         assertPixel(identity, 64, 64, 50, 14, background)
         assertEquals(1059, paintedPixelCount(identity, background))
 
-        assertPixel(translated, 64, 64, 21, 12, intArrayOf(255, 0, 0, 255))
-        assertPixel(translated, 64, 64, 22, 12, intArrayOf(0, 0, 255, 255))
+        listOf(20 to 1, 21 to 2, 22 to 3).forEach { (y, channel) ->
+            assertInteriorPixel(translated, 22, y, intArrayOf(channel, channel, channel, 255))
+        }
+        assertPixel(translated, 64, 64, 22, 18, intArrayOf(0, 0, 0, 255))
+        assertPixel(translated, 64, 64, 22, 23, intArrayOf(4, 4, 4, 255))
         assertPixel(translated, 64, 64, 8, 12, background)
         assertEquals(1059, paintedPixelCount(translated, background))
 
-        assertPixel(scaled, 64, 64, 22, 11, intArrayOf(255, 0, 0, 255))
-        assertPixel(scaled, 64, 64, 23, 11, intArrayOf(0, 0, 255, 255))
+        listOf(19 to 1, 20 to 2, 21 to 3).forEach { (y, channel) ->
+            assertInteriorPixel(scaled, 22, y, intArrayOf(channel, channel, channel, 255))
+        }
+        assertPixel(scaled, 64, 64, 22, 17, intArrayOf(0, 0, 0, 255))
+        assertPixel(scaled, 64, 64, 22, 22, intArrayOf(4, 4, 4, 255))
         assertPixel(scaled, 64, 64, 13, 11, background)
         assertEquals(592, paintedPixelCount(scaled, background))
     }
@@ -320,6 +330,12 @@ class GpuEvidenceCatalogOracleTest {
         val offset = (y * width + x) * 4
         assertEquals(4, expected.size)
         assertContentEquals(expected.map(Int::toByte).toByteArray(), pixels.copyOfRange(offset, offset + 4), "pixel ($x,$y)")
+    }
+
+    private fun assertInteriorPixel(pixels: ByteArray, x: Int, y: Int, expected: IntArray) {
+        assertPixel(pixels, 64, 64, x, y, expected)
+        assertNotEquals(intArrayOf(0, 0, 0, 255).toList(), expected.toList(), "interior pixel must differ from start")
+        assertNotEquals(intArrayOf(4, 4, 4, 255).toList(), expected.toList(), "interior pixel must differ from end")
     }
 
     private fun fillPixelCount(pixels: ByteArray, color: IntArray): Int =

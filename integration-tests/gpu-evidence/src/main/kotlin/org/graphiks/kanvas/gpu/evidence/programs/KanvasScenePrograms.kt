@@ -268,18 +268,29 @@ object KanvasScenePrograms {
         restore()
     })
 
-    fun clipPathTriangleDirectTriangleLinearGradient() = clipPathDirectTriangleLinearGradient()
+    fun clipPathTriangleDirectTriangleLinearGradient() = clipPathDirectTriangleLinearGradient(
+        Point2F32(20f, 19.3f),
+        Point2F32(20f, 23.3f),
+    )
 
-    fun clipPathTranslatedTriangleDirectTriangleLinearGradient() = clipPathDirectTriangleLinearGradient {
-        translate(2f, 0f)
-    }
+    fun clipPathTranslatedTriangleDirectTriangleLinearGradient() = clipPathDirectTriangleLinearGradient(
+        Point2F32(20f, 19.3f),
+        Point2F32(20f, 23.3f),
+    ) { translate(2f, 0f) }
 
-    fun clipPathUniformScaledTriangleDirectTriangleLinearGradient() = clipPathDirectTriangleLinearGradient {
+    fun clipPathUniformScaledTriangleDirectTriangleLinearGradient() = clipPathDirectTriangleLinearGradient(
+        Point2F32(20f, 19.066666f),
+        Point2F32(20f, 24.4f),
+    ) {
         translate(8f, 4f)
         scale(0.75f, 0.75f)
     }
 
-    private fun clipPathDirectTriangleLinearGradient(transform: org.graphiks.kanvas.canvas.Canvas.() -> Unit = {}) =
+    private fun clipPathDirectTriangleLinearGradient(
+        start: Point2F32,
+        end: Point2F32,
+        transform: org.graphiks.kanvas.canvas.Canvas.() -> Unit = {},
+    ) =
         KanvasSurfaceProgram(ROUTE_ID, record = {
             drawColor(BACKGROUND)
             save()
@@ -295,9 +306,12 @@ object KanvasScenePrograms {
                     .apply { fillType = FillType.WINDING },
                 Paint(
                     shader = Shader.LinearGradient(
-                        Point2F32(20.1f, 8f),
-                        Point2F32(20.4f, 8f),
-                        listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                        start,
+                        end,
+                        listOf(
+                            GradientStop(0f, ColorARGB.of(255, 0, 0, 0)),
+                            GradientStop(1f, ColorARGB.of(255, 4, 4, 4)),
+                        ),
                         TileMode.CLAMP,
                     ),
                     antiAlias = false,

@@ -452,8 +452,8 @@ class GPUClipCoverageSurfaceTest {
                     .apply { fillType = FillType.WINDING },
                 Paint(
                     shader = Shader.LinearGradient(
-                        Point2F32(8f, 8f), Point2F32(56f, 8f),
-                        listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                        Point2F32(20f, 19.3f), Point2F32(20f, 23.3f),
+                        listOf(GradientStop(0f, ColorARGB.of(255, 0, 0, 0)), GradientStop(1f, ColorARGB.of(255, 4, 4, 4))),
                         TileMode.CLAMP,
                     ),
                     antiAlias = false,
@@ -464,7 +464,7 @@ class GPUClipCoverageSurfaceTest {
 
         val result = surface.render()
         assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
-        assertRgbaNear(result.pixels, 64, 12, 12, ColorARGB.of(255, 244, 0, 86), tolerance = 0)
+        assertRgbaNear(result.pixels, 64, 20, 21, ColorARGB.of(255, 2, 2, 2), tolerance = 0)
         assertRgbaNear(result.pixels, 64, 50, 14, background, tolerance = 0)
         assertEquals(1059, result.pixels.asList().chunked(4).count { pixel ->
             pixel != listOf(background.red.toUByte(), background.green.toUByte(), background.blue.toUByte(), background.alpha.toUByte())
@@ -487,8 +487,8 @@ class GPUClipCoverageSurfaceTest {
                 Path { moveTo(4f, 4.25f); lineTo(60f, 12f); lineTo(12f, 60f); close() }
                     .apply { fillType = FillType.WINDING },
                 Paint(shader = Shader.LinearGradient(
-                    Point2F32(8f, 8f), Point2F32(56f, 8f),
-                    listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)), TileMode.CLAMP,
+                    Point2F32(20f, 19.3f), Point2F32(20f, 23.3f),
+                    listOf(GradientStop(0f, ColorARGB.of(255, 0, 0, 0)), GradientStop(1f, ColorARGB.of(255, 4, 4, 4))), TileMode.CLAMP,
                 ), antiAlias = false),
             )
             restore()
@@ -496,7 +496,7 @@ class GPUClipCoverageSurfaceTest {
 
         val result = surface.render()
         assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
-        assertRgbaNear(result.pixels, 64, 14, 12, ColorARGB.of(255, 244, 0, 86), tolerance = 0)
+        assertRgbaNear(result.pixels, 64, 22, 21, ColorARGB.of(255, 2, 2, 2), tolerance = 0)
         assertRgbaNear(result.pixels, 64, 8, 12, background, tolerance = 0)
     }
 
@@ -516,8 +516,8 @@ class GPUClipCoverageSurfaceTest {
                 Path { moveTo(4f, 4.25f); lineTo(60f, 12f); lineTo(12f, 60f); close() }
                     .apply { fillType = FillType.WINDING },
                 Paint(shader = Shader.LinearGradient(
-                    Point2F32(8f, 8f), Point2F32(56f, 8f),
-                    listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)), TileMode.CLAMP,
+                    Point2F32(20f, 19.066666f), Point2F32(20f, 24.4f),
+                    listOf(GradientStop(0f, ColorARGB.of(255, 0, 0, 0)), GradientStop(1f, ColorARGB.of(255, 4, 4, 4))), TileMode.CLAMP,
                 ), antiAlias = false),
             )
             restore()
@@ -525,7 +525,7 @@ class GPUClipCoverageSurfaceTest {
 
         val result = surface.render()
         assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
-        assertRgbaNear(result.pixels, 64, 16, 11, ColorARGB.of(255, 247, 0, 74), tolerance = 0)
+        assertRgbaNear(result.pixels, 64, 22, 20, ColorARGB.of(255, 2, 2, 2), tolerance = 0)
         assertRgbaNear(result.pixels, 64, 13, 11, background, tolerance = 0)
         assertEquals(592, result.pixels.asList().chunked(4).count { pixel ->
             pixel != listOf(background.red.toUByte(), background.green.toUByte(), background.blue.toUByte(), background.alpha.toUByte())
