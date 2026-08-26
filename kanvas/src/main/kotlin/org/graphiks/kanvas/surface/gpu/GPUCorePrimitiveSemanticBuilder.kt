@@ -723,16 +723,15 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
  * route. Other material classes, tile modes, and transforms retain their existing refusals.
  */
 private fun GPUFramePathVisualCommand.nativeHardPathClipLinearGradientTransformOrNull(): GPUTransformFacts? {
-    val fillRect = normalized as? NormalizedDrawCommand.FillRect ?: return null
-    val gradient = fillRect.material as? GPUMaterialDescriptor.LinearGradient ?: return null
+    val gradient = normalized.material as? GPUMaterialDescriptor.LinearGradient ?: return null
     val stencilClip = clipExecutionPlan as? org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan.StencilCoverage
         ?: return null
-    if (gradient.tileMode != "clamp" || fillRect.antiAlias ||
+    if (gradient.tileMode != "clamp" || normalized.antiAlias() ||
         geometryCoverage != GPUCoverageConsumption.FullOrScissor ||
         stencilClip.sampleCount != 1 ||
         stencilClip.pathTransformClass !in HARD_PATH_CLIP_GRADIENT_TRANSFORM_CLASSES
     ) return null
-    return fillRect.transform.takeIf(GPUTransformFacts::isNativeHardPathClipGradientTransform)
+    return normalized.transform.takeIf(GPUTransformFacts::isNativeHardPathClipGradientTransform)
 }
 
 private fun GPUTransformFacts.isNativeHardPathClipGradientTransform(): Boolean = when (type) {

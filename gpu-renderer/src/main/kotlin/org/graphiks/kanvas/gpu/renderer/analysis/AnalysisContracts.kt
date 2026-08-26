@@ -1926,6 +1926,7 @@ class GPUFirstRoutePlanner(
                     !pathDescriptor.inverseFill &&
                     !stroke &&
                     maskFilter == null,
+                uniformScaleTranslateAdmitted = supportsHardPathClipClampLinearGradientUniformScale(),
             ) -> "unsupported.transform.class_downgrade"
             clip.kind == GPUClipKind.ComplexStack &&
                 (
@@ -1961,6 +1962,42 @@ class GPUFirstRoutePlanner(
                 "unsupported.pipeline.capability_missing"
             else -> null
         }
+
+    /**
+     * The bounded direct-triangle path consumer shares the same device-space gradient lowering
+     * as the already-admitted rect consumer. This remains fenced to one non-AA, winding triangle
+     * under one 1x hard path clip; broader FillPath scale support stays refused.
+     */
+    private fun NormalizedDrawCommand.FillPath.supportsHardPathClipClampLinearGradientUniformScale(): Boolean {
+        val gradient = material as? GPUMaterialDescriptor.LinearGradient ?: return false
+        val stencilClip = clip.executionPlan as? GPUClipExecutionPlan.StencilCoverage ?: return false
+        val points = tessellatedVertices.chunked(2)
+        val triangle = when {
+            points.size == 4 && points.first() == points.last() -> points.dropLast(1)
+            points.size == 3 -> points
+            else -> return false
+        }
+        val twiceArea = with(triangle) {
+            (this[1][0] - this[0][0]) * (this[2][1] - this[0][1]) -
+                (this[1][1] - this[0][1]) * (this[2][0] - this[0][0])
+        }
+        return !antiAlias &&
+            !stroke &&
+            maskFilter == null &&
+            pathDescriptor.fillRule in setOf("NonZero", "winding") &&
+            !pathDescriptor.inverseFill &&
+            pathDescriptor.sourceAuthority.isExactDirectTriangle &&
+            contourStarts == listOf(0) &&
+            triangle.all { point -> point.all(Float::isFinite) } &&
+            twiceArea.isFinite() && twiceArea != 0f &&
+            gradient.tileMode == "clamp" &&
+            stencilClip.sampleCount == 1 &&
+            stencilClip.pathTransformClass == "uniform-positive-scale-translate" &&
+            transform.skewX == 0f &&
+            transform.skewY == 0f &&
+            transform.scaleX > 0f &&
+            transform.scaleX == transform.scaleY
+    }
 
     /** Returns true only for explicit validity-affecting capability facts in the immutable snapshot. */
     private fun GPUCapabilities.hasFact(name: String): Boolean =
@@ -2469,14 +2506,21 @@ private fun GPUTransformFacts.hasNonFiniteFacts(): Boolean =
         !scaleX.isFinite() || !scaleY.isFinite() ||
         !skewX.isFinite() || !skewY.isFinite()
 
-/** Admits only identity, translation, or finite strictly-positive uniform scale for FillPath. */
-private fun GPUTransformFacts.isAcceptedFillPathTransform(scaleAdmitted: Boolean): Boolean = when (type) {
+/** Admits identity/translation, uniform scale, or the explicitly authorized scaled translation for FillPath. */
+private fun GPUTransformFacts.isAcceptedFillPathTransform(
+    scaleAdmitted: Boolean,
+    uniformScaleTranslateAdmitted: Boolean = false,
+): Boolean = when (type) {
     GPUTransformType.Identity,
     GPUTransformType.Translate,
     -> true
     GPUTransformType.Scale ->
         scaleAdmitted && scaleX.isFinite() && scaleY.isFinite() && scaleX > 0f && scaleX == scaleY
-    GPUTransformType.Affine,
+    GPUTransformType.Affine ->
+        uniformScaleTranslateAdmitted &&
+            scaleX.isFinite() && scaleY.isFinite() &&
+            scaleX > 0f && scaleX == scaleY &&
+            skewX == 0f && skewY == 0f
     GPUTransformType.Perspective,
     GPUTransformType.Singular,
     -> false

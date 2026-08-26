@@ -213,6 +213,26 @@ class GpuEvidenceCatalogOracleTest {
     }
 
     @Test
+    fun `hard clip direct triangle clamp gradient oracles preserve device geometry and counts`() {
+        val background = intArrayOf(13, 20, 33, 255)
+        val identity = oracle("clip-path-triangle-direct-triangle-linear-gradient")
+        val translated = oracle("clip-path-translated-triangle-direct-triangle-linear-gradient")
+        val scaled = oracle("clip-path-uniform-scaled-triangle-direct-triangle-linear-gradient")
+
+        assertPixel(identity, 64, 64, 12, 12, intArrayOf(244, 0, 86, 255))
+        assertPixel(identity, 64, 64, 50, 14, background)
+        assertEquals(1059, paintedPixelCount(identity, background))
+
+        assertPixel(translated, 64, 64, 14, 12, intArrayOf(244, 0, 86, 255))
+        assertPixel(translated, 64, 64, 8, 12, background)
+        assertEquals(1059, paintedPixelCount(translated, background))
+
+        assertPixel(scaled, 64, 64, 16, 11, intArrayOf(247, 0, 74, 255))
+        assertPixel(scaled, 64, 64, 13, 11, background)
+        assertEquals(592, paintedPixelCount(scaled, background))
+    }
+
+    @Test
     fun `path fill oracles preserve literal winding and inverse coverage`() {
         val background = intArrayOf(13, 20, 33, 255)
         val orange = intArrayOf(242, 135, 46, 255)
@@ -286,6 +306,11 @@ class GpuEvidenceCatalogOracleTest {
     private fun oracle(id: String): ByteArray = assertNotNull(
         GpuEvidenceCatalog.renderCases.firstOrNull { it.descriptor.id.value == id }?.oracle,
     ).render(64, 64)
+
+    private fun paintedPixelCount(pixels: ByteArray, background: IntArray): Int =
+        pixels.asList().chunked(4).count { pixel ->
+            pixel.map { it.toInt() and 0xff } != background.toList()
+        }
 
     private fun assertPixel(pixels: ByteArray, width: Int, height: Int, x: Int, y: Int, expected: IntArray) {
         require(x in 0 until width && y in 0 until height)

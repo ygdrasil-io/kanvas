@@ -2171,6 +2171,75 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
     }
 
     @Test
+    fun `native path clip admits only the authenticated clamp direct triangle gradient pair`() {
+        fun resultFor(
+            material: GPUCorePrimitiveMaterialPayload.LinearGradient,
+            geometry: GPUCorePrimitiveGeometryInput.TriangulatedPath = directTriangleGeometry(),
+            clipPlan: GPUClipExecutionPlan.StencilCoverage = nativePathStencilPlan(GPUClipFillRule.Winding),
+            samplePlan: GPUSamplePlan = GPUSamplePlan.SingleSampleFrame,
+            coverageMode: GPUCorePrimitiveCoverageMode = GPUCorePrimitiveCoverageMode.FullOrScissor,
+        ): GPUCorePrimitivePreparedFrameResult {
+            val base = recording(command(341, 0, rect = targetRect()), command(340, 7)).taskList
+                .withClipPlans(mapOf(341 to GPUClipExecutionPlan.NoClip, 340 to clipPlan))
+                .withSamplePlan(samplePlan)
+            val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
+            val builtRequest = request(
+                base,
+                packets.associate { packet ->
+                    packet.commandIdValue to if (packet.commandIdValue == 341) {
+                        semantic(packet, geometry = GPUCorePrimitiveGeometryInput.Rect(0f, 0f, 16f, 16f))
+                    } else {
+                        semantic(
+                            packet,
+                            geometry = geometry,
+                            material = material,
+                            sourceFamily = GPUCorePrimitiveSourceFamily.Path,
+                            coverageMode = coverageMode,
+                        )
+                    }
+                },
+            )
+            return GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+                if (samplePlan == GPUSamplePlan.SingleSampleFrame) builtRequest else builtRequest.copy(capabilities = msaaCapabilities()),
+            )
+        }
+
+        assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(resultFor(linearMaterial()))
+        assertEquals(
+            "unsupported.recording.core_primitive_material.non_solid",
+            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(
+                resultFor(linearMaterial(tileMode = "repeat")),
+            ).diagnostic.code.value,
+        )
+        assertEquals(
+            "unsupported.recording.core_primitive_material.non_solid",
+            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(
+                resultFor(
+                    linearMaterial(),
+                    geometry = directTriangleGeometry(sourceAuthority = GPUPathSourceAuthority.Unknown),
+                ),
+            ).diagnostic.code.value,
+        )
+        assertEquals(
+            "unsupported.recording.core_primitive_material.non_solid",
+            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(
+                resultFor(
+                    linearMaterial(),
+                    clipPlan = nativePathStencilPlan(GPUClipFillRule.Winding, sampleCount = 4),
+                    samplePlan = GPUSamplePlan.MultisampleFrame(4),
+                ),
+            ).diagnostic.code.value,
+        )
+        assertEquals(
+            "unsupported.core_primitive.coverage_sample.color_capability",
+            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(
+                resultFor(linearMaterial(), coverageMode = GPUCorePrimitiveCoverageMode.StencilAA),
+            ).diagnostic.code.value,
+        )
+        assertFailsWith<IllegalArgumentException> { linearMaterial(tileMode = "mirror") }
+    }
+
+    @Test
     fun `native path clip refuses a direct triangles Path consumer that is not one triangle`() {
         val plan = nativePathStencilPlan(GPUClipFillRule.Winding)
         val base = recording(command(341, 0, rect = targetRect()), command(340, 7)).taskList.withClipPlans(
@@ -3818,14 +3887,26 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
         colors = listOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
     )
 
-    private fun linearMaterial() = GPUCorePrimitiveMaterialPayload.LinearGradient(
+    private fun directTriangleGeometry(
+        sourceAuthority: GPUPathSourceAuthority = GPUPathSourceAuthority.DrawPathMoveLineLineExplicitCloseV1,
+    ) = GPUCorePrimitiveGeometryInput.TriangulatedPath(
+        vertices = listOf(1f, 1f, 12f, 1f, 1f, 12f),
+        indices = listOf(0, 2, 1),
+        sourceContourStarts = listOf(0),
+        sourceVertexCount = 3,
+        coverBounds = GPUPixelBounds(1, 1, 12, 12),
+        geometryMode = GPUCorePrimitiveGeometryMode.DirectTriangles,
+        sourceAuthority = sourceAuthority,
+    )
+
+    private fun linearMaterial(tileMode: String = "clamp") = GPUCorePrimitiveMaterialPayload.LinearGradient(
         startX = 0f,
         startY = 0f,
         endX = 8f,
         endY = 0f,
         localMatrix = listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f),
         interpolation = "srgb",
-        tileMode = "clamp",
+        tileMode = tileMode,
         positions = listOf(0f, 1f),
         colors = listOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
     )

@@ -268,6 +268,44 @@ object KanvasScenePrograms {
         restore()
     })
 
+    fun clipPathTriangleDirectTriangleLinearGradient() = clipPathDirectTriangleLinearGradient()
+
+    fun clipPathTranslatedTriangleDirectTriangleLinearGradient() = clipPathDirectTriangleLinearGradient {
+        translate(2f, 0f)
+    }
+
+    fun clipPathUniformScaledTriangleDirectTriangleLinearGradient() = clipPathDirectTriangleLinearGradient {
+        translate(8f, 4f)
+        scale(0.75f, 0.75f)
+    }
+
+    private fun clipPathDirectTriangleLinearGradient(transform: org.graphiks.kanvas.canvas.Canvas.() -> Unit = {}) =
+        KanvasSurfaceProgram(ROUTE_ID, record = {
+            drawColor(BACKGROUND)
+            save()
+            transform()
+            clipPath(
+                Path { moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close() }
+                    .apply { fillType = FillType.WINDING },
+                ClipOp.INTERSECT,
+                antiAlias = false,
+            )
+            drawPath(
+                Path { moveTo(4f, 4.25f); lineTo(60f, 12f); lineTo(12f, 60f); close() }
+                    .apply { fillType = FillType.WINDING },
+                Paint(
+                    shader = Shader.LinearGradient(
+                        Point2F32(8f, 8f),
+                        Point2F32(56f, 8f),
+                        listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                        TileMode.CLAMP,
+                    ),
+                    antiAlias = false,
+                ),
+            )
+            restore()
+        })
+
     fun clipPathTriangleLinearGradient() = clipPathLinearGradient()
 
     fun clipPathTranslatedTriangleLinearGradient() = clipPathLinearGradient {

@@ -20,6 +20,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.pipeline.RuntimeEffect
 import org.graphiks.kanvas.pipeline.RuntimeEffectWgsl4kWiring
@@ -430,6 +431,105 @@ class GPUClipCoverageSurfaceTest {
         assertRgbaNear(result.pixels, 64, 9, 9, ColorARGB.of(255, 251, 0, 49))
         assertRgbaNear(result.pixels, 64, 53, 9, ColorARGB.of(255, 65, 0, 249))
         assertRgbaNear(result.pixels, 64, 54, 9, background)
+    }
+
+    @Test
+    fun `public direct triangle clamp gradient renders inside a hard path clip stencil scope`() {
+        requireWebGpu()
+        val background = ColorARGB.of(255, 13, 20, 33)
+        val surface = Surface(64, 64)
+        surface.canvas {
+            drawColor(background)
+            save()
+            clipPath(
+                Path { moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close() }
+                    .apply { fillType = FillType.WINDING },
+                ClipOp.INTERSECT,
+                antiAlias = false,
+            )
+            drawPath(
+                Path { moveTo(4f, 4.25f); lineTo(60f, 12f); lineTo(12f, 60f); close() }
+                    .apply { fillType = FillType.WINDING },
+                Paint(
+                    shader = Shader.LinearGradient(
+                        Point2F32(8f, 8f), Point2F32(56f, 8f),
+                        listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                        TileMode.CLAMP,
+                    ),
+                    antiAlias = false,
+                ),
+            )
+            restore()
+        }
+
+        val result = surface.render()
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertRgbaNear(result.pixels, 64, 12, 12, ColorARGB.of(255, 244, 0, 86), tolerance = 0)
+        assertRgbaNear(result.pixels, 64, 50, 14, background, tolerance = 0)
+        assertEquals(1059, result.pixels.asList().chunked(4).count { pixel ->
+            pixel != listOf(background.red.toUByte(), background.green.toUByte(), background.blue.toUByte(), background.alpha.toUByte())
+        })
+    }
+
+    @Test
+    fun `public translated direct triangle clamp gradient keeps device coordinates inside a hard path clip`() {
+        requireWebGpu()
+        val background = ColorARGB.of(255, 13, 20, 33)
+        val surface = Surface(64, 64)
+        surface.canvas {
+            drawColor(background)
+            save(); translate(2f, 0f)
+            clipPath(
+                Path { moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close() }
+                    .apply { fillType = FillType.WINDING }, ClipOp.INTERSECT, antiAlias = false,
+            )
+            drawPath(
+                Path { moveTo(4f, 4.25f); lineTo(60f, 12f); lineTo(12f, 60f); close() }
+                    .apply { fillType = FillType.WINDING },
+                Paint(shader = Shader.LinearGradient(
+                    Point2F32(8f, 8f), Point2F32(56f, 8f),
+                    listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)), TileMode.CLAMP,
+                ), antiAlias = false),
+            )
+            restore()
+        }
+
+        val result = surface.render()
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertRgbaNear(result.pixels, 64, 14, 12, ColorARGB.of(255, 244, 0, 86), tolerance = 0)
+        assertRgbaNear(result.pixels, 64, 8, 12, background, tolerance = 0)
+    }
+
+    @Test
+    fun `public uniform scaled direct triangle clamp gradient keeps device coordinates inside a hard path clip`() {
+        requireWebGpu()
+        val background = ColorARGB.of(255, 13, 20, 33)
+        val surface = Surface(64, 64)
+        surface.canvas {
+            drawColor(background)
+            save(); translate(8f, 4f); scale(0.75f, 0.75f)
+            clipPath(
+                Path { moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close() }
+                    .apply { fillType = FillType.WINDING }, ClipOp.INTERSECT, antiAlias = false,
+            )
+            drawPath(
+                Path { moveTo(4f, 4.25f); lineTo(60f, 12f); lineTo(12f, 60f); close() }
+                    .apply { fillType = FillType.WINDING },
+                Paint(shader = Shader.LinearGradient(
+                    Point2F32(8f, 8f), Point2F32(56f, 8f),
+                    listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)), TileMode.CLAMP,
+                ), antiAlias = false),
+            )
+            restore()
+        }
+
+        val result = surface.render()
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertRgbaNear(result.pixels, 64, 16, 11, ColorARGB.of(255, 247, 0, 74), tolerance = 0)
+        assertRgbaNear(result.pixels, 64, 13, 11, background, tolerance = 0)
+        assertEquals(592, result.pixels.asList().chunked(4).count { pixel ->
+            pixel != listOf(background.red.toUByte(), background.green.toUByte(), background.blue.toUByte(), background.alpha.toUByte())
+        })
     }
 
     @Test
