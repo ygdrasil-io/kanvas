@@ -1874,7 +1874,7 @@ class GPUFirstRoutePlanner(
             clip.kind == GPUClipKind.WideOpen && transform.type != GPUTransformType.Identity ->
                 "unsupported.core_primitive.drrect.analytic_transform"
             clip.kind != GPUClipKind.WideOpen &&
-                transform.type != GPUTransformType.Identity && !transform.isExactPositiveTranslation() ->
+                transform.type != GPUTransformType.Identity && !transform.isExactNonZeroTranslation() ->
                 "unsupported.core_primitive.drrect.analytic_transform"
             clip.kind != GPUClipKind.WideOpen && !supportsHardPathClipAnalyticDRRect() ->
                 "unsupported.core_primitive.drrect.analytic_clip"
@@ -1892,7 +1892,7 @@ class GPUFirstRoutePlanner(
             else -> null
         }
 
-    /** One opaque identity or positive translated non-AA DRRect may read exactly one single-sample winding path stencil. */
+/** One opaque identity or finite non-zero translated non-AA DRRect may read exactly one single-sample winding path stencil. */
     private fun NormalizedDrawCommand.FillDRRect.supportsHardPathClipAnalyticDRRect(): Boolean {
         val stencil = clip.executionPlan as? org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan.StencilCoverage
             ?: return false
@@ -1900,15 +1900,16 @@ class GPUFirstRoutePlanner(
         val solid = material as? GPUMaterialDescriptor.SolidColor ?: return false
         return !stroke && !antiAlias && maskFilter == null &&
             (transform.type == GPUTransformType.Identity ||
-                (transform.isExactPositiveTranslation() && !path.inverseFill)) &&
+                (transform.isExactNonZeroTranslation() && !path.inverseFill)) &&
             solid.a == 1f && blend.mode == GPUBlendMode.SRC_OVER && stencil.sampleCount == 1 &&
             stencil.pathTransformClass == "identity" &&
             path.fillRule == GPUClipFillRule.Winding &&
             stencil.producer.fillRule == GPUClipFillRule.Winding
     }
 
-    private fun GPUTransformFacts.isExactPositiveTranslation(): Boolean =
-        type == GPUTransformType.Translate && translateX > 0f && translateY > 0f &&
+    private fun GPUTransformFacts.isExactNonZeroTranslation(): Boolean =
+        type == GPUTransformType.Translate && translateX.isFinite() && translateY.isFinite() &&
+            (translateX != 0f || translateY != 0f) &&
             scaleX == 1f && scaleY == 1f && skewX == 0f && skewY == 0f
 
     /** Returns the canonical FillPath refusal code, or null when analysis may keep a candidate. */

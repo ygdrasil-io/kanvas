@@ -32,7 +32,7 @@ import org.graphiks.math.matrix.Matrix3x3F32
 
 class GpuEvidenceCatalogTest {
     @Test
-    fun `catalog separates sixty two public surface renders from two refusals`() {
+fun `catalog separates sixty six public surface renders from two refusals`() {
         val cases = GpuEvidenceCatalog.cases
 
         assertEquals(
@@ -85,6 +85,10 @@ class GpuEvidenceCatalogTest {
                 "clip-path-translated-solid-drrect",
                 "clip-path-translated-asymmetric-solid-drrect",
                 "clip-path-translated-ellipse-solid-drrect",
+                "clip-path-axis-x-translated-solid-drrect",
+                "clip-path-axis-y-translated-asymmetric-solid-drrect",
+                "clip-path-negative-x-translated-ellipse-solid-drrect",
+                "clip-path-negative-y-translated-solid-drrect",
                 "solid-triangle-path",
                 "solid-concave-path",
                 "even-odd-path-hole",
@@ -149,6 +153,10 @@ class GpuEvidenceCatalogTest {
                 "clip-path-translated-solid-drrect",
                 "clip-path-translated-asymmetric-solid-drrect",
                 "clip-path-translated-ellipse-solid-drrect",
+                "clip-path-axis-x-translated-solid-drrect",
+                "clip-path-axis-y-translated-asymmetric-solid-drrect",
+                "clip-path-negative-x-translated-ellipse-solid-drrect",
+                "clip-path-negative-y-translated-solid-drrect",
                 "solid-triangle-path",
                 "solid-concave-path",
                 "even-odd-path-hole",
@@ -170,11 +178,11 @@ class GpuEvidenceCatalogTest {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            List(62) { "kanvas.surface.render" },
+List(66) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
-        assertEquals(62, GpuEvidenceCatalog.renderCases.size)
-        assertEquals(64, GpuEvidenceCatalog.cases.size)
+assertEquals(66, GpuEvidenceCatalog.renderCases.size)
+assertEquals(68, GpuEvidenceCatalog.cases.size)
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
 
         val solid = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "solid-card-stack" })
@@ -317,6 +325,10 @@ class GpuEvidenceCatalogTest {
                 "clip-path-translated-solid-drrect",
                 "clip-path-translated-asymmetric-solid-drrect",
                 "clip-path-translated-ellipse-solid-drrect",
+                "clip-path-axis-x-translated-solid-drrect",
+                "clip-path-axis-y-translated-asymmetric-solid-drrect",
+                "clip-path-negative-x-translated-ellipse-solid-drrect",
+                "clip-path-negative-y-translated-solid-drrect",
                 "solid-triangle-path",
             "solid-concave-path",
             "even-odd-path-hole",
@@ -399,6 +411,10 @@ class GpuEvidenceCatalogTest {
                 "clip-path-translated-solid-drrect" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-drrect-pixel-center", 1),
                 "clip-path-translated-asymmetric-solid-drrect" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-drrect-pixel-center", 1),
                 "clip-path-translated-ellipse-solid-drrect" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-drrect-pixel-center", 1),
+                "clip-path-axis-x-translated-solid-drrect" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-drrect-pixel-center", 1),
+                "clip-path-axis-y-translated-asymmetric-solid-drrect" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-drrect-pixel-center", 1),
+                "clip-path-negative-x-translated-ellipse-solid-drrect" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-drrect-pixel-center", 1),
+                "clip-path-negative-y-translated-solid-drrect" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-drrect-pixel-center", 1),
                 "solid-triangle-path" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 2),
                 "solid-concave-path" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 2),
                 "even-odd-path-hole" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 2),
@@ -468,6 +484,10 @@ class GpuEvidenceCatalogTest {
                 "clip-path-translated-solid-drrect" to ComparisonPolicy(0, 100.0, 1, "Exact RGBA8 output from independent pixel-center winding clip and analytic DRRect membership."),
                 "clip-path-translated-asymmetric-solid-drrect" to ComparisonPolicy(0, 100.0, 1, "Exact RGBA8 output from independent pixel-center winding clip and analytic DRRect membership."),
                 "clip-path-translated-ellipse-solid-drrect" to ComparisonPolicy(0, 100.0, 1, "Exact RGBA8 output from independent pixel-center winding clip and analytic DRRect membership."),
+                "clip-path-axis-x-translated-solid-drrect" to ComparisonPolicy(0, 100.0, 1, "Exact RGBA8 output from independent pixel-center winding clip and analytic DRRect membership."),
+                "clip-path-axis-y-translated-asymmetric-solid-drrect" to ComparisonPolicy(0, 100.0, 1, "Exact RGBA8 output from independent pixel-center winding clip and analytic DRRect membership."),
+                "clip-path-negative-x-translated-ellipse-solid-drrect" to ComparisonPolicy(0, 100.0, 1, "Exact RGBA8 output from independent pixel-center winding clip and analytic DRRect membership."),
+                "clip-path-negative-y-translated-solid-drrect" to ComparisonPolicy(0, 100.0, 1, "Exact RGBA8 output from independent pixel-center winding clip and analytic DRRect membership."),
                 "solid-triangle-path" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent pixel-center winding/even-odd polygon membership."),
                 "solid-concave-path" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent pixel-center winding/even-odd polygon membership."),
                 "even-odd-path-hole" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent pixel-center winding/even-odd polygon membership."),

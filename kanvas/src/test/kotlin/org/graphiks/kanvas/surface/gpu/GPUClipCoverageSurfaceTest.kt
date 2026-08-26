@@ -339,6 +339,36 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
+    fun `public finite non-zero translated drrects preserve ring hole and hard winding clip`() {
+        requireWebGpu()
+        val fill = ColorARGB.of(255, 242, 135, 46)
+        data class Case(val x: Float, val y: Float, val outer: RectF32, val inner: RectF32, val ringX: Int, val ringY: Int, val holeX: Int, val holeY: Int, val originalX: Int, val originalY: Int)
+        val cases = listOf(
+            Case(4f, 0f, RectF32.ofLTRB(8f, 8f, 52f, 48f), RectF32.ofLTRB(22f, 20f, 40f, 38f), 20, 20, 32, 30, 10, 20),
+            Case(0f, 5f, RectF32.ofLTRB(8f, 8f, 52f, 48f), RectF32.ofLTRB(20f, 18f, 42f, 39f), 16, 20, 28, 28, 16, 10),
+            Case(-4f, 5f, RectF32.ofLTRB(12f, 20f, 52f, 44f), RectF32.ofLTRB(24f, 26f, 40f, 38f), 16, 30, 28, 36, 33, 20),
+            Case(4f, -5f, RectF32.ofLTRB(8f, 8f, 52f, 48f), RectF32.ofLTRB(22f, 20f, 40f, 38f), 20, 20, 32, 25, 20, 47),
+        )
+        cases.forEach { case ->
+            val surface = Surface(64, 64)
+            surface.canvas {
+                save(); clipPath(Path { moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close() }.apply { fillType = FillType.WINDING }, ClipOp.INTERSECT, antiAlias = false)
+                translate(case.x, case.y)
+                drawDRRect(RRectF32.of(case.outer, radius = 4f), RRectF32.of(case.inner, radius = 3f), Paint.fill(fill).copy(antiAlias = false))
+                restore()
+            }
+            val result = surface.render()
+            assertTrue(result.diagnostics.isEmpty, result.diagnostics.entries.toString())
+            assertEquals(0, result.stats.opsRefused)
+            assertEquals(listOf("HardClipStencilProducer", "AnalyticDRRect"), result.structuralSteps)
+            assertRgbaNear(result.pixels, 64, case.ringX, case.ringY, fill)
+            assertRgbaNear(result.pixels, 64, case.holeX, case.holeY, ColorARGB.Transparent)
+            assertRgbaNear(result.pixels, 64, case.originalX, case.originalY, ColorARGB.Transparent)
+            assertRgbaNear(result.pixels, 64, 50, 14, ColorARGB.Transparent)
+        }
+    }
+
+    @Test
     fun `public opaque identity drrect reaches the inverse winding hard path clip program`() {
         requireWebGpu()
         val fill = ColorARGB.of(255, 31, 115, 209)

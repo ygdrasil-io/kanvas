@@ -1155,6 +1155,8 @@ fun GPUTaskList.evidenceStructuralSteps(): List<String> = tasks
             packet.role == GPUDrawPacketRole.StencilProducer -> "HardClipStencilProducer"
             packet.corePrimitivePreparedAuthority?.structuralPipelineKey?.shader ==
                 GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRRect -> "AnalyticRRect"
+            packet.corePrimitivePreparedAuthority?.structuralPipelineKey?.shader ==
+                GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticDRRect -> "AnalyticDRRect"
             else -> null
         }
     }

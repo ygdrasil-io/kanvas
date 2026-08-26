@@ -55,4 +55,28 @@ class SurfaceSrgbClipPathDRRectCpuOracleTest {
         assertEquals(listOf(0, 0, 0, 0), pixel(50, 14), "outside Winding clip")
         assertEquals(listOf(242, 135, 46, 255), pixel(12, 20), "translated outer left edge")
     }
+
+    @Test
+    fun `oracle independently distinguishes every finite non-zero translated DRRect`() {
+        val triangle = listOf(
+            SurfaceSrgbClipPathDRRectCpuOracle.Point(8f, 8f),
+            SurfaceSrgbClipPathDRRectCpuOracle.Point(56f, 8f),
+            SurfaceSrgbClipPathDRRectCpuOracle.Point(8f, 55f),
+        )
+        data class Case(val outer: SurfaceSrgbClipPathDRRectCpuOracle.RRect, val inner: SurfaceSrgbClipPathDRRectCpuOracle.RRect, val ring: Pair<Int, Int>, val hole: Pair<Int, Int>, val original: Pair<Int, Int>)
+        val cases = listOf(
+            Case(SurfaceSrgbClipPathDRRectCpuOracle.RRect(12f, 8f, 56f, 48f, 10f, 10f), SurfaceSrgbClipPathDRRectCpuOracle.RRect(26f, 20f, 44f, 38f, 4f, 4f), 20 to 20, 32 to 30, 10 to 20),
+            Case(SurfaceSrgbClipPathDRRectCpuOracle.RRect(8f, 13f, 52f, 53f, 4f, 8f), SurfaceSrgbClipPathDRRectCpuOracle.RRect(20f, 23f, 42f, 44f, 3f, 5f), 16 to 20, 28 to 28, 16 to 10),
+            Case(SurfaceSrgbClipPathDRRectCpuOracle.RRect(8f, 25f, 48f, 49f, 20f, 12f), SurfaceSrgbClipPathDRRectCpuOracle.RRect(20f, 31f, 36f, 43f, 8f, 6f), 16 to 30, 28 to 36, 33 to 20),
+            Case(SurfaceSrgbClipPathDRRectCpuOracle.RRect(12f, 3f, 56f, 43f, 10f, 10f), SurfaceSrgbClipPathDRRectCpuOracle.RRect(26f, 15f, 44f, 33f, 4f, 4f), 20 to 20, 32 to 25, 20 to 47),
+        )
+        cases.forEach { case ->
+            val bytes = SurfaceSrgbClipPathDRRectCpuOracle(triangle, case.outer, case.inner, intArrayOf(242, 135, 46, 255)).render(64, 64)
+            fun pixel(point: Pair<Int, Int>) = (0 until 4).map { bytes[(point.second * 64 + point.first) * 4 + it].toInt() and 0xff }
+            assertEquals(listOf(242, 135, 46, 255), pixel(case.ring))
+            assertEquals(listOf(0, 0, 0, 0), pixel(case.hole))
+            assertEquals(listOf(0, 0, 0, 0), pixel(case.original))
+            assertEquals(listOf(0, 0, 0, 0), pixel(50 to 14))
+        }
+    }
 }
