@@ -1426,6 +1426,15 @@ internal class GPUFramePreflighter(
                 it.packet.clipExecutionPlan?.canonicalIdentity() != candidate.planCanonicalIdentity
             }
         ) return refuse("Prepared clip-stencil content or canonical plan identity was substituted.")
+        if (
+            prefixLocations.isNotEmpty() &&
+            consumerLocations.singleOrNull()?.packet?.corePrimitivePreparedAuthority
+                ?.let { authority ->
+                    authority.analyticShapeUniformSeal != null &&
+                        authority.structuralPipelineKey.shader ==
+                        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticDRRect
+                } == true
+        ) return refuse("Prepared analytic DRRect clip-stencil accepts exactly one consumer without a prefix.")
         val attachmentSampleCount = candidate.attachmentSampleCount
         val expectedSamplePlan = when (attachmentSampleCount) {
             1 -> GPUSamplePlan.SingleSampleFrame
@@ -1580,15 +1589,17 @@ internal class GPUFramePreflighter(
             location.packet.corePrimitivePreparedAuthority?.analyticShapeUniformSeal
         }
         val analyticShapeUniformSeal = analyticShapeUniformSeals.firstOrNull()
-        val usesAnalyticRRectUniform = analyticShapeUniformSeal != null
-        if (usesAnalyticRRectUniform &&
+        val usesAnalyticClipConsumerUniform = analyticShapeUniformSeal != null
+        if (usesAnalyticClipConsumerUniform &&
             (prefixLocations.isNotEmpty() || consumerLocations.size != 1 ||
                 analyticShapeUniformSeals.any { it !== analyticShapeUniformSeal } ||
                 consumerLocations.single().packet.corePrimitivePreparedAuthority
-                    ?.structuralPipelineKey?.shader !=
-                GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRRect)
-        ) return refuse("Prepared analytic RRect clip-stencil accepts exactly one consumer without a prefix.")
-        val uniformSeals = if (usesAnalyticRRectUniform) {
+                    ?.structuralPipelineKey?.shader !in setOf(
+                        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRRect,
+                        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticDRRect,
+                    ))
+        ) return refuse("Prepared analytic shape clip-stencil accepts exactly one consumer without a prefix.")
+        val uniformSeals = if (usesAnalyticClipConsumerUniform) {
             emptyList()
         } else {
             consumerLocations.map { location ->
@@ -1639,19 +1650,27 @@ internal class GPUFramePreflighter(
                 seal.hasExactSemantic(semantic) &&
                 seal.hasExactPayload(payload) &&
                 seal.structuralPipelineKey == consumer.corePrimitivePreparedAuthority?.structuralPipelineKey &&
-                seal.structuralPipelineKey.uniformLayout ==
-                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 &&
-                seal.plan.sourceLabel == "core-primitive-analytic-shape-uniform-pass" &&
+                seal.structuralPipelineKey.uniformLayout in setOf(
+                    GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1,
+                    GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticDRRectUniform128V1,
+                ) &&
+                seal.plan.sourceLabel == (if (semantic.geometry is GPUCorePrimitiveGeometry.DRRect)
+                    "core-primitive-analytic-drrect-uniform-pass" else "core-primitive-analytic-shape-uniform-pass") &&
                 seal.plan.deviceGeneration == context.deviceGeneration.value &&
                 seal.plan.alignmentBytes == limits.minUniformBufferOffsetAlignment &&
-                seal.plan.slots.size == 1 && seal.plan.slots.single().payloadBytes == 80L &&
+                seal.plan.slots.size == 1 && seal.plan.slots.single().payloadBytes ==
+                    (if (semantic.geometry is GPUCorePrimitiveGeometry.DRRect) 128L else 80L) &&
                 seal.plan.hasExactPayloads(
-                    "core-primitive-analytic-shape-uniform-pass",
+                    if (semantic.geometry is GPUCorePrimitiveGeometry.DRRect)
+                        "core-primitive-analytic-drrect-uniform-pass"
+                    else "core-primitive-analytic-shape-uniform-pass",
                     context.deviceGeneration.value,
                     limits.minUniformBufferOffsetAlignment,
                     listOf(
                         GPUUniformSlabPayload(
-                            "analytic-shape-draw-${consumer.commandIdValue}",
+                            if (semantic.geometry is GPUCorePrimitiveGeometry.DRRect)
+                                "analytic-drrect-draw-${consumer.commandIdValue}"
+                            else "analytic-shape-draw-${consumer.commandIdValue}",
                             payload,
                         ),
                     ),
@@ -1667,7 +1686,7 @@ internal class GPUFramePreflighter(
                 uniformDescriptor.byteSize == seal.plan.totalBytes &&
                 uniformDescriptor.alignmentBytes == seal.plan.alignmentBytes
         } ?: false
-        if ((!usesAnalyticRRectUniform && (uniformSeals.any { it !== uniformSeal } ||
+        if ((!usesAnalyticClipConsumerUniform && (uniformSeals.any { it !== uniformSeal } ||
             uniformScopeLocations.any {
                 it.packet.corePrimitivePreparedAuthority?.uniformSlabSeal !== uniformSeal
             } ||
@@ -1700,7 +1719,7 @@ internal class GPUFramePreflighter(
             uniformPreparation.byteSize != requireNotNull(uniformSeal).plan.totalBytes ||
             uniformDescriptor.byteSize != requireNotNull(uniformSeal).plan.totalBytes ||
             uniformDescriptor.alignmentBytes != requireNotNull(uniformSeal).plan.alignmentBytes
-        )) || (usesAnalyticRRectUniform && !analyticUniformValid)) {
+        )) || (usesAnalyticClipConsumerUniform && !analyticUniformValid)) {
             return refuse("Prepared clip-stencil uniform slab authority was substituted.")
         }
 

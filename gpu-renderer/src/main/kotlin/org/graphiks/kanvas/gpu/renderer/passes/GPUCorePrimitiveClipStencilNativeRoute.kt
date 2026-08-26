@@ -144,7 +144,7 @@ internal fun sealGPUCorePrimitiveClipStencilNativeRoute(
         "invalid.native-core-primitive.clip-stencil.producer-geometry",
         "The clip-stencil producer requires one validated path geometry.",
     )
-    if (request.consumers.any { it.geometry is GPUCorePrimitiveGeometry.RRect } &&
+    if (request.consumers.any { it.geometry is GPUCorePrimitiveGeometry.RRect || it.geometry is GPUCorePrimitiveGeometry.DRRect } &&
         (path.fillRule != GPUClipFillRule.Winding ||
             stencil.producer.fillRule != GPUClipFillRule.Winding)
     ) return refused(
@@ -165,6 +165,15 @@ internal fun sealGPUCorePrimitiveClipStencilNativeRoute(
     if (request.consumers.isEmpty()) return refused(
         "invalid.native-core-primitive.clip-stencil.last-consumer",
         "The clip-stencil route requires at least one consumer.",
+    )
+    if (
+        request.consumers.any {
+            it.geometry is GPUCorePrimitiveGeometry.RRect ||
+                it.geometry is GPUCorePrimitiveGeometry.DRRect
+        } && request.consumers.size != 1
+    ) return refused(
+        "unsupported.native-core-primitive.clip-stencil.analytic-multiple-consumers",
+        "An analytic RRect or DRRect clip-stencil consumer requires exactly one consumer.",
     )
     if (request.consumers.any { it.commandId < 0 || it.sourceOrder < 0 } ||
         request.consumers.map { it.commandId }.distinct().size != request.consumers.size ||
@@ -235,24 +244,24 @@ internal fun sealGPUCorePrimitiveClipStencilNativeRoute(
             "unsupported.native-core-primitive.clip-stencil.consumer-coverage",
             "AA and stencil-AA consumers remain outside the bounded route.",
         )
-        if (!consumer.geometry.isDirectConsumerGeometry() && consumer.geometry !is GPUCorePrimitiveGeometry.RRect) return refused(
+        if (!consumer.geometry.isDirectConsumerGeometry() && consumer.geometry !is GPUCorePrimitiveGeometry.RRect && consumer.geometry !is GPUCorePrimitiveGeometry.DRRect) return refused(
             "unsupported.native-core-primitive.clip-stencil.consumer-geometry",
             "Only Rect, authenticated DirectTriangles, and analytic RRect consumers are accepted.",
         )
-        if (consumer.geometry is GPUCorePrimitiveGeometry.RRect &&
+        if ((consumer.geometry is GPUCorePrimitiveGeometry.RRect || consumer.geometry is GPUCorePrimitiveGeometry.DRRect) &&
             consumer.material !is GPUCorePrimitiveMaterialPayload.SolidColor
         ) return refused(
             "unsupported.native-core-primitive.clip-stencil.consumer-material",
             "Analytic RRect consumers accept only opaque solid colors in the bounded route.",
         )
-        if (consumer.geometry is GPUCorePrimitiveGeometry.RRect &&
+        if ((consumer.geometry is GPUCorePrimitiveGeometry.RRect || consumer.geometry is GPUCorePrimitiveGeometry.DRRect) &&
             (consumer.material as GPUCorePrimitiveMaterialPayload.SolidColor)
                 .premultipliedRgba.getOrNull(3) != 1f
         ) return refused(
             "unsupported.native-core-primitive.clip-stencil.rrect-alpha",
             "Analytic RRect clip-stencil consumers require exactly opaque premultiplied alpha.",
         )
-        if (consumer.geometry is GPUCorePrimitiveGeometry.RRect && stencil.sampleCount != 1) return refused(
+        if ((consumer.geometry is GPUCorePrimitiveGeometry.RRect || consumer.geometry is GPUCorePrimitiveGeometry.DRRect) && stencil.sampleCount != 1) return refused(
             "unsupported.native-core-primitive.clip-stencil.rrect-msaa",
             "Analytic RRect clip-stencil consumers require the exact single-sample route.",
         )

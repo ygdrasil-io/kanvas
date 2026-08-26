@@ -85,7 +85,7 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
         CoverageMaskRRectProducer,
         CoverageMaskConsumer,
     }
-    enum class Topology { DirectTriangleList, AnalyticRRect, StencilEdgeFan, StrokeStencilEdgeFan }
+    enum class Topology { DirectTriangleList, AnalyticRRect, AnalyticDRRect, StencilEdgeFan, StrokeStencilEdgeFan }
     enum class FrontFace { Ccw }
     enum class CullMode { None }
     enum class ColorFormat(val stableIdentity: String) {
@@ -120,6 +120,8 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
                 UniformLayout.AnalyticDRRectUniform128V1
             role == Role.ClipStencilConsumer && shader == Shader.AnalyticRRect ->
                 UniformLayout.AnalyticShapeUniform80V1
+            role == Role.ClipStencilConsumer && shader == Shader.AnalyticDRRect ->
+                UniformLayout.AnalyticDRRectUniform128V1
             role in setOf(Role.Shading, Role.ClipStencilConsumer) -> when (shader) {
                 Shader.DirectLinearGradient,
                 Shader.DirectLinearGradientRepeat,
@@ -282,7 +284,7 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
                 }
             }
             Role.ClipStencilConsumer -> {
-                require(shader in setOf(Shader.DirectGeometry, Shader.DirectLinearGradient, Shader.AnalyticRRect) &&
+                require(shader in setOf(Shader.DirectGeometry, Shader.DirectLinearGradient, Shader.AnalyticRRect, Shader.AnalyticDRRect) &&
                     depthStencil is DepthStencil.Stencil
                 ) {
                     "CorePrimitive clip-stencil consumer requires direct, analytic-RRect, or linear-gradient geometry and stencil state"
@@ -620,12 +622,13 @@ internal fun corePrimitiveClipStencilConsumerRenderPipelineStructuralKey(
             GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry,
             GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient,
             GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRRect,
-        )) { "Clip-stencil consumers support only direct, clamp-linear-gradient, or analytic-RRect shaders" }
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticDRRect,
+        )) { "Clip-stencil consumers support only direct, clamp-linear-gradient, analytic-RRect, or analytic-DRRect shaders" }
     },
-    topology = if (shader == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRRect) {
-        GPUCorePrimitiveRenderPipelineStructuralKey.Topology.AnalyticRRect
-    } else {
-        GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList
+    topology = when (shader) {
+        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRRect -> GPUCorePrimitiveRenderPipelineStructuralKey.Topology.AnalyticRRect
+        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticDRRect -> GPUCorePrimitiveRenderPipelineStructuralKey.Topology.AnalyticDRRect
+        else -> GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList
     },
     blend = blendPlan.corePrimitiveStructuralBlend(),
     clip = GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None,
@@ -644,10 +647,10 @@ internal fun corePrimitiveClipStencilConsumerShaderOrNull(
     geometry: GPUCorePrimitiveGeometry? = null,
 ): GPUCorePrimitiveRenderPipelineStructuralKey.Shader? = when (material) {
     is GPUCorePrimitiveMaterialPayload.SolidColor ->
-        if (geometry is GPUCorePrimitiveGeometry.RRect) {
-            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRRect
-        } else {
-            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry
+        when (geometry) {
+            is GPUCorePrimitiveGeometry.RRect -> GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRRect
+            is GPUCorePrimitiveGeometry.DRRect -> GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticDRRect
+            else -> GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry
         }
     is GPUCorePrimitiveMaterialPayload.LinearGradient ->
         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient

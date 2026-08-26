@@ -64,7 +64,15 @@ private fun GPUCorePrimitiveClipStencilNativeRoute.ConsumerSeal.geometrySnapshot
         ),
         intArrayOf(0, 2, 1, 0, 3, 2),
     )
-    is GPUCorePrimitiveGeometry.DRRect -> error("The pure route rejects DRRect consumers")
+    is GPUCorePrimitiveGeometry.DRRect -> GPUCorePrimitiveClipStencilGeometrySnapshot(
+        floatArrayOf(
+            sealedGeometry.outerBounds[0], sealedGeometry.outerBounds[1],
+            sealedGeometry.outerBounds[2], sealedGeometry.outerBounds[1],
+            sealedGeometry.outerBounds[2], sealedGeometry.outerBounds[3],
+            sealedGeometry.outerBounds[0], sealedGeometry.outerBounds[3],
+        ),
+        intArrayOf(0, 2, 1, 0, 3, 2),
+    )
 }
 
 internal data class GPUCorePrimitiveClipStencilPreparedFrameRouteKey(
@@ -208,9 +216,9 @@ internal data class GPUCorePrimitiveClipStencilPreparedUniformSlice(
 ) {
     init {
         require(resourceGeneration >= 0L && commandId >= 0 && alignedOffset >= 0L &&
-            alignedOffset <= UInt.MAX_VALUE.toLong() && payloadBytes in setOf(32L, 80L, 592L) &&
+            alignedOffset <= UInt.MAX_VALUE.toLong() && payloadBytes in setOf(32L, 80L, 128L, 592L) &&
             allocatedBytes >= payloadBytes
-        ) { "Prepared clip-stencil uniform slice requires one exact dynamic-uniform32, uniform80, or uniform592 slot" }
+        ) { "Prepared clip-stencil uniform slice requires one exact dynamic-uniform32, uniform80, uniform128, or uniform592 slot" }
     }
 }
 

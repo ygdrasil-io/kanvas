@@ -129,6 +129,22 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
     }
 
     @Test
+    fun `seal accepts an opaque hard analytic drrect consumer without lowering it to triangles`() {
+        val accepted = assertIs<GPUCorePrimitiveClipStencilNativeRoute.Accepted>(
+            sealGPUCorePrimitiveClipStencilNativeRoute(
+                request(consumers = mutableListOf(consumer(geometry = drrectConsumer()))),
+            ),
+        )
+
+        val consumer = accepted.consumers.single()
+        assertTrue(consumer.geometry is GPUCorePrimitiveGeometry.DRRect)
+        assertEquals(GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticDRRect, consumer.structuralKey.shader)
+        assertEquals(GPUCorePrimitiveRenderPipelineStructuralKey.Topology.AnalyticDRRect, consumer.structuralKey.topology)
+        assertEquals(GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticDRRectUniform128V1, consumer.structuralKey.uniformLayout)
+        assertEquals(GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerAnalyticDRRectRegular, mapped(consumer.structuralKey).identity.program)
+    }
+
+    @Test
     fun `seal accepts an opaque inverse winding analytic rrect consumer`() {
         val accepted = assertIs<GPUCorePrimitiveClipStencilNativeRoute.Accepted>(
             sealGPUCorePrimitiveClipStencilNativeRoute(
@@ -143,6 +159,19 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
 
         assertEquals(
             GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerAnalyticRRectInverse,
+            mapped(accepted.consumers.single().structuralKey).identity.program,
+        )
+    }
+
+    @Test
+    fun `seal selects the inverse program for an opaque inverse winding analytic drrect consumer`() {
+        val accepted = assertIs<GPUCorePrimitiveClipStencilNativeRoute.Accepted>(
+            sealGPUCorePrimitiveClipStencilNativeRoute(
+                request(inverse = true, consumers = mutableListOf(consumer(inverse = true, geometry = drrectConsumer()))),
+            ),
+        )
+        assertEquals(
+            GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerAnalyticDRRectInverse,
             mapped(accepted.consumers.single().structuralKey).identity.program,
         )
     }
@@ -325,8 +354,13 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
             request(consumers = mutableListOf(consumer(geometry = stencilPathConsumer()))),
         )
         assertRefused(
-            "unsupported.native-core-primitive.clip-stencil.consumer-geometry",
-            request(consumers = mutableListOf(consumer(geometry = drrectConsumer()))),
+            "unsupported.native-core-primitive.clip-stencil.rrect-alpha",
+            request(consumers = mutableListOf(consumer(
+                geometry = drrectConsumer(),
+                material = GPUCorePrimitiveMaterialPayload.SolidColor(
+                    listOf(0.5f, 0.25f, 0.125f, 0.5f),
+                ),
+            ))),
         )
         assertRefused(
             "unsupported.native-core-primitive.clip-stencil.mask",
@@ -350,6 +384,88 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
             request(artifacts = mutableListOf(stencilPlan(producerGeometry = GPUClipExecutionGeometry.Rect(
                 GPUBounds(0f, 0f, 10f, 10f),
             ), producerOperation = GPUClipStencilOperation.Replace))),
+        )
+    }
+
+    @Test
+    fun `seal keeps DRRect outside every non bounded hard clip consumer variant`() {
+        val firstClip = stencilPlan()
+        assertRefused(
+            "unsupported.native-core-primitive.clip-stencil.multiple-artifacts",
+            request(
+                consumers = mutableListOf(consumer(geometry = drrectConsumer())),
+                artifacts = mutableListOf(firstClip, firstClip.copy(contentKey = "clip-1")),
+            ),
+        )
+        assertRefused(
+            "unsupported.native-core-primitive.clip-stencil.rrect-fill-rule",
+            request(
+                fillRule = GPUClipFillRule.EvenOdd,
+                consumers = mutableListOf(consumer(geometry = drrectConsumer())),
+            ),
+        )
+        assertRefused(
+            "unsupported.native-core-primitive.clip-stencil.rrect-fill-rule",
+            request(
+                consumers = mutableListOf(consumer(geometry = drrectConsumer())),
+                artifacts = mutableListOf(
+                    stencilPlan(
+                        fillRule = GPUClipFillRule.EvenOdd,
+                        producerGeometry = GPUClipExecutionGeometry.Path(
+                            vertices = listOf(0f, 0f, 200f, 0f, 100f, 100f),
+                            contourStarts = listOf(0),
+                            fillRule = GPUClipFillRule.Winding,
+                            inverseFill = false,
+                        ),
+                    ),
+                ),
+            ),
+        )
+        assertRefused(
+            "unsupported.native-core-primitive.clip-stencil.consumer-coverage",
+            request(
+                consumers = mutableListOf(
+                    consumer(
+                        geometry = drrectConsumer(),
+                        coverageMode = GPUCorePrimitiveCoverageMode.ScalarAA,
+                    ),
+                ),
+            ),
+        )
+        assertRefused(
+            "unsupported.native-core-primitive.clip-stencil.rrect-msaa",
+            request(
+                sampleCount = 4,
+                producerAntiAlias = true,
+                consumers = mutableListOf(
+                    consumer(geometry = drrectConsumer(), attachment = attachment(sampleCount = 4)),
+                ),
+            ),
+        )
+        assertRefused(
+            "unsupported.native-core-primitive.clip-stencil.consumer-material",
+            request(
+                consumers = mutableListOf(
+                    consumer(geometry = drrectConsumer(), material = linearGradientMaterial()),
+                ),
+            ),
+        )
+        assertRefused(
+            "unsupported.native-core-primitive.clip-stencil.destination-read",
+            request(
+                consumers = mutableListOf(
+                    consumer(geometry = drrectConsumer(), blendPlan = destinationReadBlend()),
+                ),
+            ),
+        )
+        assertRefused(
+            "unsupported.native-core-primitive.clip-stencil.analytic-multiple-consumers",
+            request(
+                consumers = mutableListOf(
+                    consumer(commandId = 3, sourceOrder = 0, last = false, geometry = drrectConsumer()),
+                    consumer(commandId = 4, sourceOrder = 1, geometry = drrectConsumer()),
+                ),
+            ),
         )
     }
 
@@ -772,6 +888,7 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
         bottom = 68f,
         radii = listOf(12f, 12f, 8f, 8f, 10f, 10f, 6f, 6f),
     )
+
 
     private fun drrectConsumer() = GPUCorePrimitiveGeometry.DRRect(
         outerBounds = listOf(8f, 12f, 80f, 68f),

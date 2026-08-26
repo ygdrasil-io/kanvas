@@ -99,6 +99,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryInput
@@ -1158,6 +1159,76 @@ class GPUFramePreflighterTest {
             assertEquals(0, resources.beginFramePreparationCount, label)
             assertTrue(events.isEmpty(), "$label produced preflight side effects: $events")
         }
+    }
+
+    @Test
+    fun `analytic drrect clip stencil uniform128 rejects substituted semantic payload and plan before side effects`() {
+        val valid = preparedNativeClipStencilFramePlan(drrectConsumer = true)
+        val consumer = valid.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { render ->
+            render.drawPackets.single().role == GPUDrawPacketRole.Shading
+        }.drawPackets.single()
+        val semantic = assertIs<GPUDrawSemanticPayload.CorePrimitive>(consumer.semanticPayload)
+        val seal = requireNotNull(consumer.corePrimitivePreparedAuthority?.analyticShapeUniformSeal)
+        val rebuilt = assertIs<GPUCorePrimitiveAnalyticShapeUniformBuildResult.Accepted>(
+            buildCorePrimitiveAnalyticShapeUniform(semantic, GPUCorePrimitivePreparedSemanticAuthority.capture(semantic)),
+        ).bytes
+        assertEquals(128, rebuilt.size)
+        assertContentEquals(rebuilt, seal.payloadBytesSnapshot())
+        val baselineEvents = mutableListOf<String>()
+        assertIs<GPUFramePreflightResult.Prepared>(
+            preflighter(RecordingResourceProvider(baselineEvents), RecordingCompletionProvider(baselineEvents), RecordingSurfaceProvider(baselineEvents),
+                context = clipPreflightContext(valid), capabilities = pathCapabilities(includeRRect = true)).preflight(valid),
+        )
+        val forged = listOf(
+            seal.copyForTest(semantic.withTargetBounds(semantic.targetBounds)),
+            seal.copyForTest(semantic, payloadBytes = seal.payloadBytesSnapshot().also { it[20] = (it[20].toInt() xor 1).toByte() }),
+            seal.copyForTest(semantic, plan = seal.plan.copyForTest(planHash = "forged-analytic-drrect-plan")),
+        )
+        forged.forEach { forgedSeal ->
+            val plan = valid.replacingCorePacket(consumer, cloneCorePacket(consumer, analyticShapeUniformSeal = forgedSeal))
+            val events = mutableListOf<String>(); val resources = RecordingResourceProvider(events)
+            val result = preflighter(resources, RecordingCompletionProvider(events), RecordingSurfaceProvider(events),
+                context = clipPreflightContext(plan), capabilities = pathCapabilities(includeRRect = true)).preflight(plan)
+            assertEquals("invalid.preflight.core_primitive_clip_stencil_prepared_route", assertIs<GPUFramePreflightResult.Refused>(result).diagnostic.code.value)
+            assertEquals(0, resources.beginFramePreparationCount)
+            assertTrue(events.isEmpty())
+        }
+    }
+
+    @Test
+    fun `analytic drrect clip stencil refuses a real full target background prefix before side effects`() {
+        val plan = preparedNativeClipStencilFramePlan(drrectConsumer = true, withPrefix = true)
+        val prefix = plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().first { render ->
+            render.drawPackets.single().commandIdValue == 91
+        }.drawPackets.single()
+        val prefixSemantic = assertIs<GPUDrawSemanticPayload.CorePrimitive>(prefix.semanticPayload)
+        assertEquals(GPUClipExecutionPlan.NoClip, prefix.clipExecutionPlan)
+        val prefixGeometry = assertIs<GPUCorePrimitiveGeometry.Rect>(prefixSemantic.geometry)
+        assertEquals(listOf(0f, 0f, 4f, 4f), listOf(
+            prefixGeometry.left,
+            prefixGeometry.top,
+            prefixGeometry.right,
+            prefixGeometry.bottom,
+        ))
+
+        val events = mutableListOf<String>()
+        val resources = RecordingResourceProvider(events)
+        val result = preflighter(
+            resources,
+            RecordingCompletionProvider(events),
+            RecordingSurfaceProvider(events),
+            context = clipPreflightContext(plan),
+            capabilities = pathCapabilities(includeRRect = true),
+        ).preflight(plan)
+
+        val refusal = assertIs<GPUFramePreflightResult.Refused>(result).diagnostic
+        assertEquals("invalid.preflight.core_primitive_clip_stencil_prepared_route", refusal.code.value)
+        assertEquals(
+            "Prepared analytic DRRect clip-stencil accepts exactly one consumer without a prefix.",
+            refusal.message,
+        )
+        assertEquals(0, resources.beginFramePreparationCount)
+        assertTrue(events.isEmpty())
     }
 
     @Test
@@ -8243,11 +8314,35 @@ class GPUFramePreflighterTest {
         coverageModes: Map<Int, GPUCorePrimitiveCoverageMode> = emptyMap(),
         samplePlan: GPUSamplePlan = GPUSamplePlan.SingleSampleFrame,
     ): GPUFramePlan {
+        val preparedResult = preparedAnalyticFrameResult(
+            plans,
+            geometries,
+            coverageModes,
+            samplePlan,
+        )
+        val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            preparedResult,
+            (preparedResult as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}"
+            },
+        ).taskList
+        return GPUFramePlanner.plan(taskList).also { plan -> check(!plan.atomicallyRefused) }
+    }
+
+    private fun preparedAnalyticFrameResult(
+        plans: Map<Int, GPUClipExecutionPlan>,
+        geometries: Map<Int, GPUCorePrimitiveGeometryInput> = emptyMap(),
+        coverageModes: Map<Int, GPUCorePrimitiveCoverageMode> = emptyMap(),
+        samplePlan: GPUSamplePlan = GPUSamplePlan.SingleSampleFrame,
+    ): GPUCorePrimitivePreparedFrameResult {
         val analyticCapabilities = if (samplePlan == GPUSamplePlan.MultisampleFrame(4)) {
             pathMsaaCapabilities()
         } else {
             pathCapabilities(
-                includeRRect = geometries.values.any { it is GPUCorePrimitiveGeometryInput.RRect },
+                includeRRect = geometries.values.any {
+                    it is GPUCorePrimitiveGeometryInput.RRect ||
+                        it is GPUCorePrimitiveGeometryInput.DRRect
+                },
             )
         }
         val commandIds = plans.keys.toList()
@@ -8263,6 +8358,11 @@ class GPUFramePreflighterTest {
                             rrectBuilderCommand(commandId, paintOrder, geometry)
                         is GPUCorePrimitiveGeometryInput.DRRect ->
                             drrectBuilderCommand(commandId, paintOrder, geometry)
+                        is GPUCorePrimitiveGeometryInput.Rect -> pathBuilderCommand(
+                            commandId,
+                            paintOrder,
+                            rect = GPURect(geometry.left, geometry.top, geometry.right, geometry.bottom),
+                        )
                         else -> pathBuilderCommand(commandId, paintOrder)
                     },
                 )
@@ -8285,7 +8385,7 @@ class GPUFramePreflighterTest {
                     ?: GPUCorePrimitiveCoverageMode.FullOrScissor,
             )
         }
-        val preparedResult = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+        return GPUCorePrimitivePreparedFrameTaskListBuilder().build(
             GPUCorePrimitivePreparedFrameRequest(
                 baseTaskList = base,
                 capabilities = analyticCapabilities,
@@ -8294,19 +8394,31 @@ class GPUFramePreflighterTest {
                 semanticsByCommandId = semantics,
             ),
         )
-        val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
-            preparedResult,
-            (preparedResult as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
-                "${it.code.value}: ${it.message}"
-            },
-        ).taskList
-        return GPUFramePlanner.plan(taskList).also { plan -> check(!plan.atomicallyRefused) }
     }
 
     private fun preparedNativeClipStencilFramePlan(
         sampleCount: Int = 1,
         rrectConsumer: Boolean = false,
+        drrectConsumer: Boolean = false,
+        withPrefix: Boolean = false,
     ): GPUFramePlan {
+        val prepared = preparedNativeClipStencilFrameResult(
+            sampleCount,
+            rrectConsumer,
+            drrectConsumer,
+            withPrefix,
+        )
+        return GPUFramePlanner.plan(
+            assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(prepared).taskList,
+        ).also { plan -> check(!plan.atomicallyRefused) }
+    }
+
+    private fun preparedNativeClipStencilFrameResult(
+        sampleCount: Int = 1,
+        rrectConsumer: Boolean = false,
+        drrectConsumer: Boolean = false,
+        withPrefix: Boolean = false,
+    ): GPUCorePrimitivePreparedFrameResult {
         val targetBounds = GPUPixelBounds(0, 0, 4, 4)
         val clipPlan = GPUClipExecutionPlan.StencilCoverage(
             contentKey = "clip.preflight.native.path",
@@ -8337,8 +8449,8 @@ class GPUFramePreflighterTest {
                 compare = GPUClipStencilCompare.NotEqual,
             ),
         )
-        return preparedAnalyticFramePlan(
-            if (rrectConsumer) mapOf(92 to clipPlan) else mapOf(
+        return preparedAnalyticFrameResult(
+            if (withPrefix) mapOf(91 to GPUClipExecutionPlan.NoClip, 92 to clipPlan) else if (rrectConsumer || drrectConsumer) mapOf(92 to clipPlan) else mapOf(
                 91 to clipPlan,
                 92 to clipPlan,
             ),
@@ -8352,6 +8464,14 @@ class GPUFramePreflighterTest {
                         List(8) { 0.5f },
                     ),
                 )
+            } else if (drrectConsumer) {
+                buildMap {
+                    if (withPrefix) put(91, GPUCorePrimitiveGeometryInput.Rect(0f, 0f, 4f, 4f))
+                    put(92, GPUCorePrimitiveGeometryInput.DRRect(
+                        GPUCorePrimitiveGeometryInput.RRect(1f, 1f, 3f, 3f, List(8) { 0.5f }),
+                        GPUCorePrimitiveGeometryInput.RRect(1.5f, 1.5f, 2.5f, 2.5f, List(8) { 0.25f }),
+                    ))
+                }
             } else {
                 emptyMap()
             },
@@ -8412,9 +8532,10 @@ class GPUFramePreflighterTest {
         commandId: Int,
         paintOrder: Int,
         blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
+        rect: GPURect = GPURect(1f, 1f, 3f, 3f),
     ) = GPUFillRectCommandBuilder.build(
         commandId = GPUDrawCommandID(commandId),
-        rect = GPURect(1f, 1f, 3f, 3f),
+        rect = rect,
         target = GPUTargetFacts(4, 4, "rgba8unorm"),
         material = GPUMaterialDescriptor.SolidColor(0.25f, 0.5f, 0.75f, 1f),
         clip = GPUClipFacts(

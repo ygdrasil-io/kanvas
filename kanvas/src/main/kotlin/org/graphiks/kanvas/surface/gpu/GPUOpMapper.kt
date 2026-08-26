@@ -1982,10 +1982,21 @@ private fun DisplayOp.DrawDRRect.analyticSolidDRRectMaterialOrNull(): GPUMateria
         !paint.isStroke() && !paint.antiAlias && paint.colorFilter == null && paint.maskFilter == null &&
             paint.imageFilter == null && paint.pathEffect == null && paint.blender == null &&
             it.a == 1f && paint.blendMode == BlendMode.SRC_OVER &&
-            transform == Matrix3x3F32.Identity && clip == ClipStack.WideOpen &&
+            transform == Matrix3x3F32.Identity && clip.isWideOpenOrHardWindingPathClip() &&
             exactLoweringRefusalOrNull() == null
     }
 }
+
+/** The analytic DRRect consumer owns only the Wave-8 single identity hard winding path clip. */
+private fun ClipStack.isWideOpenOrHardWindingPathClip(): Boolean = this == ClipStack.WideOpen ||
+    (this as? ClipStack.Complex)?.ops?.singleOrNull().let { it as? ClipStackOp.PathOp }?.let { path ->
+        path.op == org.graphiks.kanvas.pipeline.ClipOp.INTERSECT && !path.antiAlias &&
+            !path.perspectiveCaptureRefusal && path.transformClass == "identity" &&
+            path.path.fillType in setOf(
+                org.graphiks.kanvas.geometry.FillType.WINDING,
+                org.graphiks.kanvas.geometry.FillType.INVERSE_WINDING,
+            )
+    } == true
 
 internal fun DisplayOp.DrawDRRect.toNormalizedCommand(
     cmdId: GPUDrawCommandID,

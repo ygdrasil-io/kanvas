@@ -11,6 +11,7 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.canvas.ClipStack
+import org.graphiks.kanvas.canvas.ClipStackOp
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageElementKind
@@ -1076,6 +1077,40 @@ class GPUFramePathApiInventoryTest {
             ClipStack.WideOpen,
         ))
         assertEquals("unsupported.core_primitive.drrect.inner_outside_outer", gatherRefusal(invalid).code)
+    }
+
+    @Test
+    fun `nonidentity DRRect under one hard winding path clip cannot enter analytic clip admission`() {
+        val hardClip = ClipStack.Complex(
+            listOf(
+                ClipStackOp.PathOp(
+                    Path { moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close() }
+                        .apply { fillType = FillType.WINDING },
+                    ClipOp.INTERSECT,
+                    antiAlias = false,
+                ),
+            ),
+        )
+        val inventory = inventoryFor(
+            DisplayOp.DrawDRRect(
+                RRectF32.of(RectF32.ofLTRB(8f, 8f, 56f, 56f), radius = 8f),
+                RRectF32.of(RectF32.ofLTRB(20f, 20f, 44f, 44f), radius = 4f),
+                Paint.fill(ColorARGB.Blue).copy(antiAlias = false),
+                Matrix3x3F32.translation(1f, 0f),
+                hardClip,
+            ),
+        )
+
+        assertIs<NormalizedDrawCommand.FillPath>(inventory.normalizedCommands.single())
+        val gathered = assertIs<GPUCorePrimitiveSemanticGatherResult.Gathered>(
+            GPUFramePathApiInventory.gatherCorePrimitiveSemantics(
+                inventory,
+                GPUPixelBounds(0, 0, 32, 32),
+            ),
+        )
+        assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(
+            assertIs<GPUDrawSemanticPayload.CorePrimitive>(gathered.semantics.values.single()).geometry,
+        )
     }
 
     @Test

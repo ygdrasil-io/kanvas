@@ -1866,7 +1866,8 @@ class GPUFirstRoutePlanner(
     private fun NormalizedDrawCommand.FillDRRect.refusalCode(): String? =
         coordinateRefusalCode() ?: when {
             transform.type != GPUTransformType.Identity -> "unsupported.core_primitive.drrect.analytic_transform"
-            clip.kind != GPUClipKind.WideOpen -> "unsupported.core_primitive.drrect.analytic_clip"
+            clip.kind != GPUClipKind.WideOpen && !supportsHardPathClipAnalyticDRRect() ->
+                "unsupported.core_primitive.drrect.analytic_clip"
             stroke -> "unsupported.core_primitive.drrect.analytic_stroke"
             antiAlias -> "unsupported.core_primitive.drrect.analytic_antialias"
             maskFilter != null -> "unsupported.core_primitive.drrect.analytic_mask_filter"
@@ -1880,6 +1881,19 @@ class GPUFirstRoutePlanner(
             !capabilities.hasFact(firstDRRectRouteCapabilityName) -> "unsupported.pipeline.capability_missing"
             else -> null
         }
+
+    /** One opaque identity non-AA DRRect may read exactly one single-sample winding path stencil. */
+    private fun NormalizedDrawCommand.FillDRRect.supportsHardPathClipAnalyticDRRect(): Boolean {
+        val stencil = clip.executionPlan as? org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan.StencilCoverage
+            ?: return false
+        val path = stencil.producer.geometry as? GPUClipExecutionGeometry.Path ?: return false
+        val solid = material as? GPUMaterialDescriptor.SolidColor ?: return false
+        return !stroke && !antiAlias && maskFilter == null && transform.type == GPUTransformType.Identity &&
+            solid.a == 1f && blend.mode == GPUBlendMode.SRC_OVER && stencil.sampleCount == 1 &&
+            stencil.pathTransformClass == "identity" &&
+            path.fillRule == GPUClipFillRule.Winding &&
+            stencil.producer.fillRule == GPUClipFillRule.Winding
+    }
 
     /** Returns the canonical FillPath refusal code, or null when analysis may keep a candidate. */
     private fun NormalizedDrawCommand.FillPath.refusalCode(): String? =

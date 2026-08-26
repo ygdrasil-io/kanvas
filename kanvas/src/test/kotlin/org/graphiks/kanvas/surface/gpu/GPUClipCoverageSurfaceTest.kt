@@ -235,6 +235,67 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
+    fun `public opaque identity drrect renders inside one hard path clip stencil scope`() {
+        requireWebGpu()
+        val fill = ColorARGB.of(255, 242, 135, 46)
+        val surface = Surface(64, 64)
+        surface.canvas {
+            save()
+            clipPath(
+                Path { moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close() }
+                    .apply { fillType = FillType.WINDING },
+                ClipOp.INTERSECT,
+                antiAlias = false,
+            )
+            drawDRRect(
+                RRectF32.of(RectF32.ofLTRB(8f, 8f, 52f, 48f), radius = 10f),
+                RRectF32.of(RectF32.ofLTRB(22f, 20f, 40f, 38f), radius = 4f),
+                Paint.fill(fill).copy(antiAlias = false),
+            )
+            restore()
+        }
+
+        val result = surface.render()
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertTrue(result.diagnostics.isEmpty, result.diagnostics.entries.toString())
+        assertEquals(0, result.stats.opsRefused)
+        assertTrue(result.stats.pipelineCount > 0)
+        assertTrue(result.stats.drawCallCount > 0)
+        assertRgbaNear(result.pixels, 64, 16, 20, fill)
+        assertRgbaNear(result.pixels, 64, 28, 28, ColorARGB.Transparent)
+        assertRgbaNear(result.pixels, 64, 50, 14, ColorARGB.Transparent)
+    }
+
+    @Test
+    fun `public opaque identity drrect reaches the inverse winding hard path clip program`() {
+        requireWebGpu()
+        val fill = ColorARGB.of(255, 31, 115, 209)
+        val surface = Surface(64, 64)
+        surface.canvas {
+            save()
+            clipPath(
+                Path { moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close() }
+                    .apply { fillType = FillType.INVERSE_WINDING },
+                ClipOp.INTERSECT,
+                antiAlias = false,
+            )
+            drawDRRect(
+                RRectF32.of(RectF32.ofLTRB(8f, 8f, 52f, 48f), radius = 10f),
+                RRectF32.of(RectF32.ofLTRB(22f, 20f, 40f, 38f), radius = 4f),
+                Paint.fill(fill).copy(antiAlias = false),
+            )
+            restore()
+        }
+        val result = surface.render()
+        assertTrue(result.diagnostics.isEmpty, result.diagnostics.entries.toString())
+        assertEquals(0, result.stats.opsRefused)
+        // Outside the triangle (retained by inverse Winding), but safely inside the
+        // rounded outer DRRect.
+        assertRgbaNear(result.pixels, 64, 46, 42, fill)
+        assertRgbaNear(result.pixels, 64, 16, 20, ColorARGB.Transparent)
+    }
+
+    @Test
     fun `public even odd hard path clip rrect remains outside the analytic rrect admission`() {
         requireWebGpu()
         val surface = Surface(64, 64)
