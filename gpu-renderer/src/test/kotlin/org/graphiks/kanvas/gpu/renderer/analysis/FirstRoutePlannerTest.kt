@@ -14,7 +14,17 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipAtomicGroupID
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipFillRule
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipOrderingToken
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilCompare
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilConsumerPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilLoadOperation
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilProducerPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilStoreOperation
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
@@ -27,6 +37,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPULinearGradientCommandBuilder
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawImageRectCommandBuilder
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPUClipKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPULayerFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUOrderingFacts
@@ -1593,6 +1604,42 @@ class FirstRoutePlannerTest {
         )
     }
 
+    @Test
+    fun `positive translated rrect is the only admitted analytic rrect hard path clip consumer`() {
+        val target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm")
+        val identityStencil = hardWindingStencilClip(pathTransformClass = "identity")
+        val translated = firstRRectRouteCommand(
+            target = target,
+            transform = GPUTransformFacts.translation(x = 4f, y = 5f),
+            clip = identityStencil,
+        )
+
+        val accepted = GPUFirstRoutePlanner(translated.capabilities).plan(translated.command.copy(antiAlias = false))
+        assertIs<GPURouteDecision.Native>(accepted.routeDecision)
+        val authority = assertNotNull(accepted.analysisRecord.corePrimitiveRRectGeometryAuthority)
+        val device = authority.sealedDeviceGeometryInput()
+        assertEquals(6f, device.left)
+        assertEquals(8f, device.top)
+        assertEquals(26f, device.right)
+        assertEquals(30f, device.bottom)
+
+        val refusals = listOf(
+            GPUTransformFacts.translation(x = 0f, y = 5f) to identityStencil,
+            GPUTransformFacts.translation(x = 4f, y = 0f) to identityStencil,
+            GPUTransformFacts.translation(x = -4f, y = 5f) to identityStencil,
+            GPUTransformFacts.scale(x = 2f, y = 2f) to identityStencil,
+            GPUTransformFacts.translation(x = 4f, y = 5f) to hardWindingStencilClip(pathTransformClass = "translate"),
+        )
+        refusals.forEach { (transform, clip) ->
+            val fixture = firstRRectRouteCommand(target = target, transform = transform, clip = clip)
+            val refused = GPUFirstRoutePlanner(fixture.capabilities).plan(fixture.command.copy(antiAlias = false))
+            assertEquals(
+                "unsupported.clip.complex_stack",
+                assertIs<GPURouteDecision.Refused>(refused.routeDecision).diagnostic.code,
+            )
+        }
+    }
+
     /** Accepted FillRRect with LinearGradient material routes natively with gradient render step. */
     @Test
     fun `linear gradient fill rrect routes natively with gradient step and pipeline key`() {
@@ -3073,6 +3120,41 @@ class FirstRoutePlannerTest {
             ),
             capabilities = capabilities,
         )
+
+    private fun hardWindingStencilClip(pathTransformClass: String): GPUClipFacts = GPUClipFacts(
+        kind = GPUClipKind.ComplexStack,
+        bounds = firstRouteBounds,
+        executionPlan = GPUClipExecutionPlan.StencilCoverage(
+            contentKey = "clip.hard-winding",
+            bounds = GPUPixelBounds(0, 0, 64, 64),
+            sampleCount = 1,
+            atomicGroup = GPUClipAtomicGroupID("clip.hard-winding.atomic"),
+            orderingToken = GPUClipOrderingToken("clip.hard-winding.order"),
+            producer = GPUClipStencilProducerPlan(
+                geometry = GPUClipExecutionGeometry.Path(
+                    vertices = listOf(8f, 8f, 56f, 8f, 8f, 55f),
+                    contourStarts = listOf(0),
+                    fillRule = GPUClipFillRule.Winding,
+                    inverseFill = false,
+                ),
+                scissor = null,
+                fillRule = GPUClipFillRule.Winding,
+                reference = 0u,
+                compare = GPUClipStencilCompare.Always,
+                frontPassOperation = GPUClipStencilOperation.IncrementWrap,
+                backPassOperation = GPUClipStencilOperation.DecrementWrap,
+                loadOperation = GPUClipStencilLoadOperation.Clear,
+                storeOperation = GPUClipStencilStoreOperation.Store,
+                clearValue = 0u,
+            ),
+            consumer = GPUClipStencilConsumerPlan(
+                scissor = null,
+                reference = 0u,
+                compare = GPUClipStencilCompare.NotEqual,
+            ),
+            pathTransformClass = pathTransformClass,
+        ),
+    )
 
     /** Capability snapshot with no validity facts for missing-capability refusal tests. */
     private fun emptyCapabilities(): GPUCapabilities =

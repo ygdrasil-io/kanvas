@@ -1849,13 +1849,18 @@ class GPUFirstRoutePlanner(
             else -> null
         }
 
-    /** One opaque identity non-AA RRect may read exactly one single-sample hard path stencil. */
+    /** One opaque identity or positive translated non-AA RRect may read exactly one single-sample hard path stencil. */
     private fun NormalizedDrawCommand.FillRRect.supportsHardPathClipAnalyticRRect(): Boolean {
         val stencil = clip.executionPlan as? org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan.StencilCoverage
             ?: return false
         val path = stencil.producer.geometry as? GPUClipExecutionGeometry.Path ?: return false
         val solid = material as? GPUMaterialDescriptor.SolidColor ?: return false
-        return !stroke && !antiAlias && maskFilter == null && transform.type == GPUTransformType.Identity &&
+        val exactPositiveTranslate = transform.type == GPUTransformType.Translate &&
+            transform.translateX > 0f && transform.translateY > 0f &&
+            transform.scaleX == 1f && transform.scaleY == 1f &&
+            transform.skewX == 0f && transform.skewY == 0f
+        return !stroke && !antiAlias && maskFilter == null &&
+            (transform.type == GPUTransformType.Identity || exactPositiveTranslate) &&
             solid.a == 1f && blend.mode == GPUBlendMode.SRC_OVER && stencil.sampleCount == 1 &&
             stencil.pathTransformClass == "identity" &&
             path.fillRule == GPUClipFillRule.Winding &&

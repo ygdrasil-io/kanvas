@@ -32,7 +32,7 @@ import org.graphiks.math.matrix.Matrix3x3F32
 
 class GpuEvidenceCatalogTest {
     @Test
-    fun `catalog separates forty six public surface renders from two refusals`() {
+    fun `catalog separates fifty five public surface renders from two refusals`() {
         val cases = GpuEvidenceCatalog.cases
 
         assertEquals(
@@ -72,6 +72,9 @@ class GpuEvidenceCatalogTest {
                 "clip-path-solid-rrect",
                 "clip-path-asymmetric-solid-rrect",
                 "clip-path-ellipse-solid-rrect",
+                "clip-path-translated-solid-rrect",
+                "clip-path-translated-asymmetric-solid-rrect",
+                "clip-path-translated-ellipse-solid-rrect",
                 "clip-path-solid-drrect",
                 "clip-path-asymmetric-solid-drrect",
                 "clip-path-ellipse-solid-drrect",
@@ -126,6 +129,9 @@ class GpuEvidenceCatalogTest {
                 "clip-path-solid-rrect",
                 "clip-path-asymmetric-solid-rrect",
                 "clip-path-ellipse-solid-rrect",
+                "clip-path-translated-solid-rrect",
+                "clip-path-translated-asymmetric-solid-rrect",
+                "clip-path-translated-ellipse-solid-rrect",
                 "clip-path-solid-drrect",
                 "clip-path-asymmetric-solid-drrect",
                 "clip-path-ellipse-solid-drrect",
@@ -150,7 +156,7 @@ class GpuEvidenceCatalogTest {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            List(52) { "kanvas.surface.render" },
+            List(55) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
@@ -282,6 +288,9 @@ class GpuEvidenceCatalogTest {
                 "clip-path-solid-rrect",
                 "clip-path-asymmetric-solid-rrect",
                 "clip-path-ellipse-solid-rrect",
+                "clip-path-translated-solid-rrect",
+                "clip-path-translated-asymmetric-solid-rrect",
+                "clip-path-translated-ellipse-solid-rrect",
                 "clip-path-solid-drrect",
                 "clip-path-asymmetric-solid-drrect",
                 "clip-path-ellipse-solid-drrect",
@@ -354,6 +363,9 @@ class GpuEvidenceCatalogTest {
                 "clip-path-solid-rrect" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-rrect-pixel-center", 1),
                 "clip-path-asymmetric-solid-rrect" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-rrect-pixel-center", 1),
                 "clip-path-ellipse-solid-rrect" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-rrect-pixel-center", 1),
+                "clip-path-translated-solid-rrect" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-rrect-pixel-center", 1),
+                "clip-path-translated-asymmetric-solid-rrect" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-rrect-pixel-center", 1),
+                "clip-path-translated-ellipse-solid-rrect" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-rrect-pixel-center", 1),
                 "clip-path-solid-drrect" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-drrect-pixel-center", 1),
                 "clip-path-asymmetric-solid-drrect" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-drrect-pixel-center", 1),
                 "clip-path-ellipse-solid-drrect" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-drrect-pixel-center", 1),
@@ -413,6 +425,9 @@ class GpuEvidenceCatalogTest {
                 "clip-path-solid-rrect" to ComparisonPolicy(0, 100.0, 1, "Exact RGBA8 output from independent pixel-center winding clip and analytic RRect membership."),
                 "clip-path-asymmetric-solid-rrect" to ComparisonPolicy(0, 100.0, 1, "Exact RGBA8 output from independent pixel-center winding clip and analytic RRect membership."),
                 "clip-path-ellipse-solid-rrect" to ComparisonPolicy(0, 100.0, 1, "Exact RGBA8 output from independent pixel-center winding clip and analytic RRect membership."),
+                "clip-path-translated-solid-rrect" to ComparisonPolicy(0, 100.0, 1, "Exact RGBA8 output from independent pixel-center winding clip and analytic RRect membership."),
+                "clip-path-translated-asymmetric-solid-rrect" to ComparisonPolicy(0, 100.0, 1, "Exact RGBA8 output from independent pixel-center winding clip and analytic RRect membership."),
+                "clip-path-translated-ellipse-solid-rrect" to ComparisonPolicy(0, 100.0, 1, "Exact RGBA8 output from independent pixel-center winding clip and analytic RRect membership."),
                 "clip-path-solid-drrect" to ComparisonPolicy(0, 100.0, 1, "Exact RGBA8 output from independent pixel-center winding clip and analytic DRRect membership."),
                 "clip-path-asymmetric-solid-drrect" to ComparisonPolicy(0, 100.0, 1, "Exact RGBA8 output from independent pixel-center winding clip and analytic DRRect membership."),
                 "clip-path-ellipse-solid-drrect" to ComparisonPolicy(0, 100.0, 1, "Exact RGBA8 output from independent pixel-center winding clip and analytic DRRect membership."),
@@ -878,6 +893,38 @@ class GpuEvidenceCatalogTest {
                 RectF32.ofLTRB(32f, 0f, 64f, 64f) to orange,
             ),
         )
+    }
+
+    @Test
+    fun `translated hard clip rrect cases retain an identity clip and positive device transform`() {
+        val cases = listOf(
+            "clip-path-translated-solid-rrect" to RRectF32.of(RectF32.ofLTRB(8f, 8f, 52f, 48f), radius = 10f),
+            "clip-path-translated-asymmetric-solid-rrect" to RRectF32.of(
+                RectF32.ofLTRB(8f, 8f, 52f, 48f),
+                CornerRadiiF32.of(4f, 8f), CornerRadiiF32.of(10f, 4f),
+                CornerRadiiF32.of(8f, 12f), CornerRadiiF32.of(6f, 3f),
+            ),
+            "clip-path-translated-ellipse-solid-rrect" to RRectF32.of(
+                RectF32.ofLTRB(12f, 20f, 52f, 44f),
+                CornerRadiiF32.of(20f, 12f), CornerRadiiF32.of(20f, 12f),
+                CornerRadiiF32.of(20f, 12f), CornerRadiiF32.of(20f, 12f),
+            ),
+        )
+        cases.forEach { (id, expectedRRect) ->
+            val operations = ops(id)
+            val clip = assertIs<ClipStack.Complex>(assertIs<DisplayOp.SetClip>(operations[0]).clip)
+            val pathClip = assertIs<org.graphiks.kanvas.canvas.ClipStackOp.PathOp>(clip.ops.single())
+            assertEquals("identity", pathClip.transformClass)
+            assertEquals(FillType.WINDING, pathClip.path.fillType)
+            assertFalse(pathClip.antiAlias)
+            assertEquals(DisplayOp.SetTransform(Matrix3x3F32(tx = 4f, ty = 5f)), operations[1])
+            val draw = assertIs<DisplayOp.DrawRRect>(operations[2])
+            assertEquals(expectedRRect, draw.rrect)
+            assertEquals(Matrix3x3F32(tx = 4f, ty = 5f), draw.transform)
+            assertEquals(clip, draw.clip)
+            assertFalse(draw.paint.antiAlias)
+            assertEquals(1f, draw.paint.color.a)
+        }
     }
 
     @Test
