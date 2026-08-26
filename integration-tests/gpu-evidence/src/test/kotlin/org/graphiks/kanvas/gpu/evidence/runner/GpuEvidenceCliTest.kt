@@ -480,6 +480,39 @@ class GpuEvidenceCliTest {
         assertEquals(before, snapshotRegularFiles(destination))
     }
 
+    @Test fun `publisher reconstructs the old generated root after a partial restore failure`() {
+        val root = Files.createTempDirectory("gpu-evidence-publisher-double-failure")
+        var moves = 0
+        val publisher = GeneratedEvidenceRootPublisher(
+            root,
+            "a".repeat(40),
+            moveStrategy = { source, destination, _ ->
+                moves++
+                if (moves == 2) throw IOException("injected generated install failure")
+                if (moves == 3) {
+                    Files.createDirectories(destination)
+                    Files.copy(source.resolve("sentinel.txt"), destination.resolve("sentinel.txt"))
+                    throw IOException("injected partial generated restore failure")
+                }
+                Files.move(source, destination)
+            },
+        )
+        val staging = publisher.createStagingRepositoryRoot()
+        val destination = publisher.generatedRoot(root)
+        Files.createDirectories(destination)
+        Files.writeString(destination.resolve("sentinel.txt"), "old")
+        Files.writeString(destination.resolve("unchanged.txt"), "also-old")
+        val staged = publisher.generatedRoot(staging)
+        Files.createDirectories(staged)
+        Files.writeString(staged.resolve("sentinel.txt"), "new")
+        Files.writeString(staged.resolve("unchanged.txt"), "also-new")
+        val before = snapshotRegularFiles(destination)
+
+        assertFailsWith<IOException> { publisher.publish(staging) }
+
+        assertEquals(before, snapshotRegularFiles(destination))
+    }
+
     @Test fun `publisher removes an incomplete destination after a partial initial install`() {
         val root = Files.createTempDirectory("gpu-evidence-publisher-initial")
         val publisher = GeneratedEvidenceRootPublisher(

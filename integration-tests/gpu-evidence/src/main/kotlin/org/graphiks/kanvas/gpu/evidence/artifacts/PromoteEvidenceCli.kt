@@ -453,7 +453,21 @@ class PromoteEvidenceCliRunner internal constructor(
                         restored = true
                     } catch (restoreFailure: Throwable) {
                         failure.addSuppressed(restoreFailure)
-                        stderr.println("promotion rollback failed; verified backup retained at $backup")
+                        try {
+                            if (Files.exists(destination, NOFOLLOW_LINKS)) deleteTree(destination)
+                            copyTree(independentSnapshot, destination, repositoryRoot)
+                            verifySnapshot(independentSnapshot, destination)
+                            restored = true
+                            stderr.println("promotion backup restore failed; independent snapshot restored the old catalog")
+                        } catch (snapshotRestoreFailure: Throwable) {
+                            failure.addSuppressed(snapshotRestoreFailure)
+                            try {
+                                if (Files.exists(destination, NOFOLLOW_LINKS)) deleteTree(destination)
+                            } catch (cleanupFailure: Throwable) {
+                                failure.addSuppressed(cleanupFailure)
+                            }
+                            stderr.println("promotion rollback failed; independent snapshot and backup retained at $snapshot and $backup")
+                        }
                     }
                 } else {
                     try {

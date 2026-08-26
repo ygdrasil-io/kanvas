@@ -437,7 +437,7 @@ class PromoteEvidenceCliTest {
     }
 
     @Test
-    fun `failed rollback preserves the backup root for recovery`() {
+    fun `double rollback failure reconstructs the original promoted tree from the snapshot`() {
         writePromotedRoot(repository, COMMIT)
         val before = snapshot(promotedRoot(repository))
         writeGeneratedRoot(repository, OTHER_COMMIT, allSceneIds(), environment(OTHER_COMMIT, osVersion = "2"))
@@ -448,7 +448,12 @@ class PromoteEvidenceCliTest {
             stderr = PrintStream(stderr),
             moveStrategy = { source, destination, _ ->
                 moves++
-                if (moves == 2 || moves == 3) throw IOException("injected swap and restore failure")
+                if (moves == 2) throw IOException("injected swap failure")
+                if (moves == 3) {
+                    Files.createDirectories(destination)
+                    Files.copy(source.resolve("catalog.json"), destination.resolve("catalog.json"))
+                    throw IOException("injected partial restore failure")
+                }
                 Files.move(source, destination)
             },
         ).run(
@@ -457,13 +462,8 @@ class PromoteEvidenceCliTest {
         )
 
         assertTrue(result != 0)
-        assertFalse(Files.exists(promotedRoot(repository)))
-        val backup = Files.list(promotedRoot(repository).parent).use { stream ->
-            stream.iterator().asSequence().firstOrNull { it.fileName.toString().startsWith(".promoted.backup-") }
-        }
-        assertTrue(backup != null)
-        assertEquals(before, snapshot(requireNotNull(backup).resolve("promoted")))
-        assertTrue(stderr.toString().contains(requireNotNull(backup).toString()))
+        assertEquals(before, snapshot(promotedRoot(repository)))
+        assertTrue(stderr.toString().contains("injected partial restore failure"))
     }
 
     @Test

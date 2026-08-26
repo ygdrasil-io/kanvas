@@ -353,7 +353,21 @@ class MigratePromotedEvidenceCliRunner internal constructor(
                         restored = true
                     } catch (restoreFailure: Throwable) {
                         failure.addSuppressed(restoreFailure)
-                        stderr.println("migration rollback failed; verified backup retained at $backup")
+                        try {
+                            if (Files.exists(destination, NOFOLLOW_LINKS)) deleteTree(destination)
+                            copyTree(independentSnapshot, destination, repositoryRoot)
+                            verifySnapshot(independentSnapshot, destination)
+                            restored = true
+                            stderr.println("migration backup restore failed; independent snapshot restored the old root")
+                        } catch (snapshotRestoreFailure: Throwable) {
+                            failure.addSuppressed(snapshotRestoreFailure)
+                            try {
+                                if (Files.exists(destination, NOFOLLOW_LINKS)) deleteTree(destination)
+                            } catch (cleanupFailure: Throwable) {
+                                failure.addSuppressed(cleanupFailure)
+                            }
+                            stderr.println("migration rollback failed; independent snapshot and backup retained at $snapshot and $backup")
+                        }
                     }
                 } else {
                     try {

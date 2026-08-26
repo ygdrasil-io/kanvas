@@ -248,6 +248,35 @@ class MigratePromotedEvidenceCliTest {
     }
 
     @Test
+    fun `double migration rollback failure reconstructs the original v1 root from the snapshot`() {
+        writePromotedV1Root(repository, COMMIT)
+        val before = snapshot(promotedRoot(repository))
+        var moves = 0
+
+        val result = MigratePromotedEvidenceCliRunner(
+            clock = FIXED_CLOCK,
+            moveStrategy = { source, destination, _ ->
+                moves++
+                if (moves == 2) throw IOException("injected migration swap failure")
+                if (moves == 3) {
+                    val sourceFile = Files.walk(source).use { stream ->
+                        stream.filter(Files::isRegularFile).findFirst().orElseThrow()
+                    }
+                    val relative = source.relativize(sourceFile)
+                    val partial = destination.resolve(relative)
+                    Files.createDirectories(partial.parent)
+                    Files.copy(sourceFile, partial)
+                    throw IOException("injected partial migration restore failure")
+                }
+                Files.move(source, destination)
+            },
+        ).run(args(repository))
+
+        assertTrue(result != 0)
+        assertEquals(before, snapshot(promotedRoot(repository)))
+    }
+
+    @Test
     fun `migration preserves the primary swap failure when staged cleanup also fails`() {
         writePromotedV1Root(repository, COMMIT)
         val stderr = ByteArrayOutputStream()
