@@ -2515,7 +2515,8 @@ private fun GPUTransformFacts.isAcceptedFillPathTransform(
     GPUTransformType.Translate,
     -> true
     GPUTransformType.Scale ->
-        scaleAdmitted && scaleX.isFinite() && scaleY.isFinite() && scaleX > 0f && scaleX == scaleY
+        (scaleAdmitted || uniformScaleTranslateAdmitted) &&
+            scaleX.isFinite() && scaleY.isFinite() && scaleX > 0f && scaleX == scaleY
     GPUTransformType.Affine ->
         uniformScaleTranslateAdmitted &&
             scaleX.isFinite() && scaleY.isFinite() &&

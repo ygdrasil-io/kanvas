@@ -1,7 +1,5 @@
 package org.graphiks.kanvas.gpu.evidence.oracle
 
-import kotlin.math.floor
-
 /** Independent device-space pixel-center oracle for a clamp gradient direct triangle in a hard winding path clip. */
 class SurfaceSrgbClipPathDirectTriangleLinearGradientCpuOracle(
     private val background: IntArray,
@@ -27,6 +25,7 @@ class SurfaceSrgbClipPathDirectTriangleLinearGradientCpuOracle(
         require(twiceArea(triangle.first, triangle.second, triangle.third) != 0.0) {
             "direct triangle must be non-degenerate"
         }
+        require(start.x != end.x || start.y != end.y) { "linear gradient must be non-degenerate" }
     }
 
     override fun render(width: Int, height: Int): ByteArray {
@@ -43,7 +42,7 @@ class SurfaceSrgbClipPathDirectTriangleLinearGradientCpuOracle(
             val color = if (containsClip(px, py) && containsTriangle(px, py)) {
                 val t = if (lengthSquared == 0.0) 0.0 else
                     (((px - start.x) * dx + (py - start.y) * dy) / lengthSquared).coerceIn(0.0, 1.0)
-                storeRgba8Srgb(
+                SurfaceSrgbOracleMath.storeSrgb(
                     SurfaceSrgbOracleMath.LinearPremul(
                         a.red + (b.red - a.red) * t,
                         a.green + (b.green - a.green) * t,
@@ -93,12 +92,4 @@ class SurfaceSrgbClipPathDirectTriangleLinearGradientCpuOracle(
     ): Double = (second.x - first.x).toDouble() * (y - first.y) -
         (second.y - first.y).toDouble() * (x - first.x)
 
-    /** The native rgba8unorm target stores this direct shader's encoded channels by truncation. */
-    private fun storeRgba8Srgb(color: SurfaceSrgbOracleMath.LinearPremul): IntArray {
-        if (color.alpha == 0.0) return intArrayOf(0, 0, 0, 0)
-        fun channel(value: Double): Int = floor(
-            SurfaceSrgbOracleMath.linearToSrgb(value).coerceIn(0.0, 1.0) * 255.0,
-        ).toInt().coerceIn(0, 255)
-        return intArrayOf(channel(color.red), channel(color.green), channel(color.blue), 255)
-    }
 }

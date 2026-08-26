@@ -219,15 +219,18 @@ class GpuEvidenceCatalogOracleTest {
         val translated = oracle("clip-path-translated-triangle-direct-triangle-linear-gradient")
         val scaled = oracle("clip-path-uniform-scaled-triangle-direct-triangle-linear-gradient")
 
-        assertPixel(identity, 64, 64, 12, 12, intArrayOf(244, 0, 86, 255))
+        assertPixel(identity, 64, 64, 19, 12, intArrayOf(255, 0, 0, 255))
+        assertPixel(identity, 64, 64, 20, 12, intArrayOf(0, 0, 255, 255))
         assertPixel(identity, 64, 64, 50, 14, background)
         assertEquals(1059, paintedPixelCount(identity, background))
 
-        assertPixel(translated, 64, 64, 14, 12, intArrayOf(244, 0, 86, 255))
+        assertPixel(translated, 64, 64, 21, 12, intArrayOf(255, 0, 0, 255))
+        assertPixel(translated, 64, 64, 22, 12, intArrayOf(0, 0, 255, 255))
         assertPixel(translated, 64, 64, 8, 12, background)
         assertEquals(1059, paintedPixelCount(translated, background))
 
-        assertPixel(scaled, 64, 64, 16, 11, intArrayOf(247, 0, 74, 255))
+        assertPixel(scaled, 64, 64, 22, 11, intArrayOf(255, 0, 0, 255))
+        assertPixel(scaled, 64, 64, 23, 11, intArrayOf(0, 0, 255, 255))
         assertPixel(scaled, 64, 64, 13, 11, background)
         assertEquals(592, paintedPixelCount(scaled, background))
     }

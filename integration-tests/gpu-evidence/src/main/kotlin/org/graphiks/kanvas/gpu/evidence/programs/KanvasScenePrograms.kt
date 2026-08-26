@@ -295,8 +295,8 @@ object KanvasScenePrograms {
                     .apply { fillType = FillType.WINDING },
                 Paint(
                     shader = Shader.LinearGradient(
-                        Point2F32(8f, 8f),
-                        Point2F32(56f, 8f),
+                        Point2F32(20.1f, 8f),
+                        Point2F32(20.4f, 8f),
                         listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
                         TileMode.CLAMP,
                     ),

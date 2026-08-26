@@ -2179,7 +2179,8 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                                 semantic.geometry is GPUCorePrimitiveGeometry.Rect) ||
                                 semantic.hasExactDirectTrianglePathConsumerGeometry()
                         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient ->
-                            semantic.hasExactDirectTrianglePathConsumerGeometry()
+                            packet.renderStepId.value == "linear.gradient.fill" ||
+                                semantic.hasExactDirectTrianglePathConsumerGeometry()
                         else -> false
                     } &&
                     semantic.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor
@@ -2187,7 +2188,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         if (nativeClipStencilPlan?.sampleCount == 1 && !validNativeClipStencilConsumers) {
             return refused(
                 "unsupported.recording.core_primitive_clip_stencil_mixed_geometry",
-                "The bounded clip-stencil scope accepts only one or two direct solid Path or FillRect consumers, or authenticated clamp-linear-gradient direct-triangle Path consumers.",
+                "The bounded clip-stencil scope accepts only one or two direct solid Path or FillRect consumers, clamp-linear-gradient FillRect consumers, or authenticated clamp-linear-gradient direct-triangle Path consumers.",
             )
         }
         val nativeClipStencilPrefixCommandIds = nativeClipStencilPlan

@@ -726,8 +726,13 @@ private fun GPUFramePathVisualCommand.nativeHardPathClipLinearGradientTransformO
     val gradient = normalized.material as? GPUMaterialDescriptor.LinearGradient ?: return null
     val stencilClip = clipExecutionPlan as? org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan.StencilCoverage
         ?: return null
+    val eligibleConsumer = when (normalized) {
+        is NormalizedDrawCommand.FillRect -> true
+        is NormalizedDrawCommand.FillPath -> geometryCoverage == GPUCoverageConsumption.FullOrScissor
+        else -> false
+    }
     if (gradient.tileMode != "clamp" || normalized.antiAlias() ||
-        geometryCoverage != GPUCoverageConsumption.FullOrScissor ||
+        !eligibleConsumer ||
         stencilClip.sampleCount != 1 ||
         stencilClip.pathTransformClass !in HARD_PATH_CLIP_GRADIENT_TRANSFORM_CLASSES
     ) return null

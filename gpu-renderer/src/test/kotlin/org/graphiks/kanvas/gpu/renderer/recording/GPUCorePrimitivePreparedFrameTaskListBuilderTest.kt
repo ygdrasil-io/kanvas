@@ -2240,6 +2240,57 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
     }
 
     @Test
+    fun `native path clip admits legacy FillRect and authenticated direct triangle clamp gradients`() {
+        fun resultFor(
+            command: org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand,
+            geometry: GPUCorePrimitiveGeometryInput,
+            sourceFamily: GPUCorePrimitiveSourceFamily,
+            renderStepIdentity: String? = null,
+        ): GPUCorePrimitivePreparedFrameResult {
+            val clipped = recording(command).taskList.withClipPlans(
+                mapOf(command.commandId.value to nativePathStencilPlan(GPUClipFillRule.Winding)),
+            )
+            val base = renderStepIdentity?.let { step ->
+                clipped.withPacketRouteIdentity(
+                    commandId = command.commandId.value,
+                    analysisRecordId = "analysis.fill_rect.${command.commandId.value}",
+                    renderStepIdentity = step,
+                )
+            } ?: clipped
+            val packet = base.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
+            return GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+                request(
+                    base,
+                    mapOf(
+                        packet.commandIdValue to semantic(
+                            packet,
+                            geometry = geometry,
+                            sourceFamily = sourceFamily,
+                            material = linearMaterial(),
+                        ),
+                    ),
+                ),
+            )
+        }
+
+        assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            resultFor(
+                command(342, 0),
+                GPUCorePrimitiveGeometryInput.Rect(0f, 0f, 16f, 16f),
+                GPUCorePrimitiveSourceFamily.Rect,
+                renderStepIdentity = "linear.gradient.fill",
+            ),
+        )
+        assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            resultFor(
+                command(343, 0),
+                directTriangleGeometry(),
+                GPUCorePrimitiveSourceFamily.Path,
+            ),
+        )
+    }
+
+    @Test
     fun `native path clip refuses a direct triangles Path consumer that is not one triangle`() {
         val plan = nativePathStencilPlan(GPUClipFillRule.Winding)
         val base = recording(command(341, 0, rect = targetRect()), command(340, 7)).taskList.withClipPlans(
