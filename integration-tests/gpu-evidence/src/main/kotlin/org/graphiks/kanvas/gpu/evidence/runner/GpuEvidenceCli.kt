@@ -1,16 +1,21 @@
 package org.graphiks.kanvas.gpu.evidence.runner
 
+import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
+import java.nio.file.LinkOption.NOFOLLOW_LINKS
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption.ATOMIC_MOVE
+import java.nio.file.StandardCopyOption.REPLACE_EXISTING
 import java.util.Collections
 import java.util.IdentityHashMap
 import kotlin.system.exitProcess
+import org.graphiks.kanvas.gpu.evidence.artifacts.EvidenceBundleWriter
 import org.graphiks.kanvas.gpu.evidence.artifacts.EvidenceCatalogWriter
 import org.graphiks.kanvas.gpu.evidence.artifacts.EvidenceSelection
 import org.graphiks.kanvas.gpu.evidence.artifacts.EvidenceSelectionParser
-import org.graphiks.kanvas.gpu.evidence.artifacts.EvidenceBundleWriter
 import org.graphiks.kanvas.gpu.evidence.artifacts.resolve
 import org.graphiks.kanvas.gpu.evidence.catalog.GpuEvidenceCatalog
+import org.graphiks.kanvas.gpu.evidence.catalog.OraclePolicy
 import org.graphiks.kanvas.gpu.evidence.catalog.SceneObservation
 import org.graphiks.kanvas.gpu.evidence.gate.EvidenceExpectationGate
 import org.graphiks.kanvas.gpu.evidence.gate.EvidenceVerdict
@@ -25,6 +30,11 @@ class GpuEvidenceCliRunner(
     private val runtime: EvidenceRuntimePort,
     private val requestParser: (Array<String>) -> GpuEvidenceCliRequest = GpuEvidenceCliRequest::parse,
     private val cases: List<org.graphiks.kanvas.gpu.evidence.catalog.EvidenceCase> = GpuEvidenceCatalog.cases,
+    private val checkedInPngLoader: (String) -> ByteArray = ::loadCheckedInPngBytes,
+    private val writeGeneratedCatalog: (Path, Path, EvidenceSelection, Map<String, SceneObservation>, Map<String, Path>) -> Path =
+        { stagingRepositoryRoot, generatedRoot, selection, observations, bundlePaths ->
+            EvidenceCatalogWriter(stagingRepositoryRoot).writeGeneratedCatalog(generatedRoot, selection, observations, bundlePaths)
+        },
 ) {
     fun run(args: Array<String>): Int = runResult(args).exitCode
 
@@ -50,41 +60,62 @@ class GpuEvidenceCliRunner(
             if (backend == null) {
                 System.err.println("gpu evidence unavailable: unavailable.gpu.backend: GPU backend runtime could not create a session.")
             } else {
-                val executor = EvidenceCaseExecutor(backend, request.sourceCommit)
-                val writer = EvidenceBundleWriter(request.repositoryRoot, request.sourceCommit)
-                val catalogWriter = EvidenceCatalogWriter(request.repositoryRoot)
-                val observations = linkedMapOf<String, SceneObservation>()
-                val bundlePaths = linkedMapOf<String, Path>()
-                exitCode = selectedCases.fold(0) { code, evidenceCase ->
-                    when (val result = executor.execute(evidenceCase)) {
-                        is EvidenceExecutionResult.ExecutionFailure -> { System.err.println("gpu evidence ${evidenceCase.descriptor.id.value} execution failed: ${result.stableReasonCode}: ${result.message}"); 1 }
-                        is EvidenceExecutionResult.Observed -> when (val observation = result.observation) {
-                            is SceneObservation.Unavailable -> { System.err.println("gpu evidence unavailable: ${observation.stableReasonCode}: ${observation.message}"); 1 }
-                            else -> {
-                                when (val verdict = EvidenceExpectationGate.evaluate(evidenceCase.descriptor, observation)) {
-                                    is EvidenceVerdict.Pass -> {
-                                        val expected = (observation as? SceneObservation.Rendered)?.let { requireNotNull(evidenceCase.oracle).render(evidenceCase.descriptor.width, evidenceCase.descriptor.height) }
-                                        val bundlePath = writer.writeGeneratedV2(evidenceCase.descriptor, observation, expected)
-                                        observations[evidenceCase.descriptor.id.value] = observation
-                                        bundlePaths[evidenceCase.descriptor.id.value] = bundlePath
-                                        code
-                                    }
-                                    is EvidenceVerdict.Fail -> {
-                                        System.err.println("gpu evidence ${evidenceCase.descriptor.id.value} failed: ${verdict.reason}")
-                                        1
-                                    }
-                                    is EvidenceVerdict.Unavailable -> {
-                                        System.err.println("gpu evidence unavailable: ${verdict.reason}")
-                                        1
+                val publisher = GeneratedEvidenceRootPublisher(request.repositoryRoot, request.sourceCommit)
+                val stagingRepositoryRoot = publisher.createStagingRepositoryRoot()
+                try {
+                    val executor = EvidenceCaseExecutor(backend, request.sourceCommit)
+                    val writer = EvidenceBundleWriter(stagingRepositoryRoot, request.sourceCommit)
+                    val observations = linkedMapOf<String, SceneObservation>()
+                    val bundlePaths = linkedMapOf<String, Path>()
+                    exitCode = selectedCases.fold(0) { code, evidenceCase ->
+                        when (val result = executor.execute(evidenceCase)) {
+                            is EvidenceExecutionResult.ExecutionFailure -> {
+                                System.err.println("gpu evidence ${evidenceCase.descriptor.id.value} execution failed: ${result.stableReasonCode}: ${result.message}")
+                                1
+                            }
+                            is EvidenceExecutionResult.Observed -> when (val observation = result.observation) {
+                                is SceneObservation.Unavailable -> {
+                                    System.err.println("gpu evidence unavailable: ${observation.stableReasonCode}: ${observation.message}")
+                                    1
+                                }
+                                else -> {
+                                    when (val verdict = EvidenceExpectationGate.evaluate(evidenceCase.descriptor, observation)) {
+                                        is EvidenceVerdict.Pass -> {
+                                            val expected = (observation as? SceneObservation.Rendered)?.let {
+                                                requireNotNull(evidenceCase.oracle).render(evidenceCase.descriptor.width, evidenceCase.descriptor.height)
+                                            }
+                                            val checkedInPngBytes = (evidenceCase.descriptor.oracle as? OraclePolicy.CheckedInPng)
+                                                ?.let { checkedInPngLoader(it.resourcePath) }
+                                            val bundlePath = writer.writeGeneratedV2(
+                                                descriptor = evidenceCase.descriptor,
+                                                observation = observation,
+                                                expectedRgba = expected,
+                                                checkedInPngBytes = checkedInPngBytes,
+                                            )
+                                            observations[evidenceCase.descriptor.id.value] = observation
+                                            bundlePaths[evidenceCase.descriptor.id.value] = bundlePath
+                                            code
+                                        }
+                                        is EvidenceVerdict.Fail -> {
+                                            System.err.println("gpu evidence ${evidenceCase.descriptor.id.value} failed: ${verdict.reason}")
+                                            1
+                                        }
+                                        is EvidenceVerdict.Unavailable -> {
+                                            System.err.println("gpu evidence unavailable: ${verdict.reason}")
+                                            1
+                                        }
                                     }
                                 }
                             }
                         }
                     }
-                }
-                if (exitCode == 0) {
-                    val generatedRoot = bundlePaths.values.first().parent
-                    catalogWriter.writeGeneratedCatalog(generatedRoot, request.selection, observations, bundlePaths)
+                    if (exitCode == 0) {
+                        val generatedRoot = publisher.generatedRoot(stagingRepositoryRoot)
+                        writeGeneratedCatalog(stagingRepositoryRoot, generatedRoot, request.selection, observations, bundlePaths)
+                        publisher.publish(stagingRepositoryRoot)
+                    }
+                } finally {
+                    publisher.cleanupStagingRepositoryRoot(stagingRepositoryRoot)
                 }
             }
         } catch (failure: Exception) {
@@ -159,6 +190,125 @@ private class ProductEvidenceRuntimePort : EvidenceRuntimePort {
     override fun open(): EvidenceBackendPort? = GPUBackendRuntimeFactory.createOrNull()?.also { session = it }?.let(::ProductEvidenceBackendPort)
     override fun close() { session?.close(); session = null }
     override fun dispose() = GPUBackendRuntimeFactory.dispose()
+}
+
+private fun loadCheckedInPngBytes(resourcePath: String): ByteArray {
+    val candidates = listOf(resourcePath, resourcePath.removePrefix("/")).distinct()
+    candidates.forEach { candidate ->
+        Thread.currentThread().contextClassLoader?.getResourceAsStream(candidate)?.use { return it.readBytes() }
+        GpuEvidenceCliRunner::class.java.classLoader.getResourceAsStream(candidate)?.use { return it.readBytes() }
+        val absolute = if (candidate.startsWith('/')) candidate else "/$candidate"
+        GpuEvidenceCliRunner::class.java.getResourceAsStream(absolute)?.use { return it.readBytes() }
+    }
+    error("checked-in PNG resource not found: $resourcePath")
+}
+
+internal class GeneratedEvidenceRootPublisher(
+    repositoryRoot: Path,
+    private val sourceCommit: String,
+    private val moveStrategy: (Path, Path, Boolean) -> Unit = ::defaultGeneratedRootMove,
+    private val cleanupStrategy: (Path) -> Unit = ::deleteGeneratedPublicationTree,
+) {
+    private val repositoryRoot = repositoryRoot.toAbsolutePath().normalize()
+    private val repositoryRootReal: Path
+
+    init {
+        Files.createDirectories(this.repositoryRoot)
+        require(!Files.isSymbolicLink(this.repositoryRoot)) { "repository root cannot be a symlink" }
+        repositoryRootReal = this.repositoryRoot.toRealPath(NOFOLLOW_LINKS)
+    }
+
+    fun createStagingRepositoryRoot(): Path {
+        ensureNoSymlinkComponents(repositoryRoot)
+        return Files.createTempDirectory(repositoryRoot, ".gpu-evidence-stage-")
+    }
+
+    fun generatedRoot(repositoryRoot: Path): Path {
+        val root = repositoryRoot.toAbsolutePath().normalize()
+        val path = root.resolve("reports/gpu-renderer/evidence/correctness/generated").resolve(sourceCommit).normalize()
+        require(path.startsWith(root)) { "generated evidence path escapes repository root" }
+        return path
+    }
+
+    fun publish(stagingRepositoryRoot: Path): Path {
+        val stagedRoot = generatedRoot(stagingRepositoryRoot)
+        require(Files.isDirectory(stagedRoot, NOFOLLOW_LINKS) && !Files.isSymbolicLink(stagedRoot)) {
+            "staged generated root does not exist: $stagedRoot"
+        }
+        val destination = generatedRoot(repositoryRoot)
+        val parent = destination.parent ?: error("generated root has no parent")
+        Files.createDirectories(parent)
+        ensureNoSymlinkComponents(parent)
+        swapRoot(stagedRoot, destination)
+        return destination
+    }
+
+    fun cleanupStagingRepositoryRoot(stagingRepositoryRoot: Path) {
+        if (Files.exists(stagingRepositoryRoot, NOFOLLOW_LINKS)) cleanupStrategy(stagingRepositoryRoot)
+    }
+
+    private fun swapRoot(staged: Path, destination: Path) {
+        require(!Files.isSymbolicLink(destination)) { "generated evidence root cannot be a symlink" }
+        if (Files.exists(destination, NOFOLLOW_LINKS)) {
+            require(Files.isDirectory(destination, NOFOLLOW_LINKS)) { "generated evidence root must be a directory" }
+        }
+        val parent = destination.parent ?: error("generated root has no parent")
+        val backup = if (Files.exists(destination, NOFOLLOW_LINKS)) {
+            Files.createTempDirectory(parent, ".${destination.fileName}.backup-")
+        } else {
+            null
+        }
+        var restored = false
+        var installed = false
+        try {
+            if (backup != null) moveStrategy(destination, backup.resolve(destination.fileName.toString()), true)
+            moveStrategy(staged, destination, true)
+            installed = true
+        } catch (failure: Throwable) {
+            if (backup != null && !Files.exists(destination, NOFOLLOW_LINKS)) {
+                try {
+                    moveStrategy(backup.resolve(destination.fileName.toString()), destination, true)
+                    restored = true
+                } catch (restoreFailure: Throwable) {
+                    failure.addSuppressed(restoreFailure)
+                }
+            }
+            throw failure
+        } finally {
+            if ((restored || installed) && backup != null) cleanupStrategy(backup)
+        }
+    }
+
+    private fun ensureNoSymlinkComponents(path: Path) {
+        require(path.startsWith(repositoryRoot)) { "path escapes repository root" }
+        var current = repositoryRoot
+        val relative = repositoryRoot.relativize(path)
+        for (index in 0 until relative.nameCount) {
+            current = current.resolve(relative.getName(index).toString())
+            require(!Files.isSymbolicLink(current)) { "path contains a symlink" }
+        }
+        if (Files.exists(path, NOFOLLOW_LINKS)) require(path.toRealPath(NOFOLLOW_LINKS).startsWith(repositoryRootReal)) {
+            "path escapes repository root"
+        }
+    }
+}
+
+private fun defaultGeneratedRootMove(source: Path, destination: Path, atomic: Boolean) {
+    if (!atomic) {
+        Files.move(source, destination, REPLACE_EXISTING)
+        return
+    }
+    try {
+        Files.move(source, destination, ATOMIC_MOVE)
+    } catch (_: AtomicMoveNotSupportedException) {
+        Files.move(source, destination, REPLACE_EXISTING)
+    }
+}
+
+private fun deleteGeneratedPublicationTree(path: Path) {
+    if (!Files.exists(path, NOFOLLOW_LINKS)) return
+    if (Files.isDirectory(path, NOFOLLOW_LINKS)) Files.list(path).use { stream -> stream.forEach(::deleteGeneratedPublicationTree) }
+    Files.deleteIfExists(path)
 }
 
 data class GpuEvidenceCliRequest(

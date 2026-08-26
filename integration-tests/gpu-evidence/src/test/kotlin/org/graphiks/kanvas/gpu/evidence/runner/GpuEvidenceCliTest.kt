@@ -1,7 +1,9 @@
 package org.graphiks.kanvas.gpu.evidence.runner
 
 import java.nio.file.Files
+import java.security.MessageDigest
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
@@ -20,6 +22,7 @@ import org.graphiks.kanvas.gpu.evidence.catalog.OraclePolicy
 import org.graphiks.kanvas.gpu.evidence.oracle.CpuOracle
 import org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram
 import org.graphiks.kanvas.gpu.evidence.artifacts.EvidenceSelection
+import org.graphiks.kanvas.test.ComparisonUtils
 import org.graphiks.kanvas.surface.Diagnostics
 import org.graphiks.kanvas.surface.RenderResult
 import org.graphiks.kanvas.surface.RenderStats
@@ -275,6 +278,48 @@ class GpuEvidenceCliTest {
         assertTrue(Files.isRegularFile(generatedRoot.resolve("environment.json")))
     }
 
+    @Test fun `cli preserves original checked in png bytes for rendered scenes`() {
+        val root = Files.createTempDirectory("gpu-evidence-cli-checked-in")
+        val runtime = SurfaceRuntime()
+        val original = pngBytes(byteArrayOf(1, 2, 3, 4), 1, 1)
+        val checkedInCase = EvidenceCase(
+            EvidenceSceneDescriptor(
+                EvidenceSceneId("checked-in-cli"),
+                "Checked in CLI",
+                "Checked-in PNG route contract.",
+                1,
+                1,
+                1L,
+                emptySet(),
+                EvidenceExpectation.ShouldRender,
+                OraclePolicy.CheckedInPng("oracle.png", sha256(original), "checked-in-release"),
+                ComparisonPolicy(0, 100.0, 1, "Exact literal RGBA8 oracle."),
+                emptySet(),
+            ),
+            KanvasSurfaceProgram("kanvas.surface.render", {}, sessionFactory = { _, _, _ ->
+                object : KanvasSurfaceRenderSession {
+                    override fun render(): RenderResult {
+                        runtime.observeSurfaceRender()
+                        return RenderResult(ubyteArrayOf(1u, 2u, 3u, 4u), 1, 1, diagnostics = Diagnostics(), stats = RenderStats(1, 0, 1, 1, 1f))
+                    }
+                }
+            }),
+            CpuOracle { _, _ -> byteArrayOf(1, 2, 3, 4) },
+        )
+
+        assertEquals(
+            0,
+            GpuEvidenceCliRunner(
+                runtime,
+                cases = listOf(checkedInCase),
+                checkedInPngLoader = { path -> assertEquals("oracle.png", path); original },
+            ).run(validArgs(root, "checked-in-cli")),
+        )
+        val generatedRoot = root.resolve("reports/gpu-renderer/evidence/correctness/generated/${"a".repeat(40)}")
+        assertContentEquals(original, Files.readAllBytes(generatedRoot.resolve("checked-in-cli/skia.png")))
+        assertFalse(Files.exists(generatedRoot.resolve("checked-in-cli/cpu.png")))
+    }
+
     @Test fun `cli executes only the selected scenes and writes generated root metadata`() {
         val root = Files.createTempDirectory("gpu-evidence-cli-selection")
         val runtime = SelectionRuntime()
@@ -291,6 +336,39 @@ class GpuEvidenceCliTest {
         assertTrue(Files.isRegularFile(generatedRoot.resolve("environment.json")))
         assertTrue(Files.isDirectory(generatedRoot.resolve("selected-scene")))
         assertFalse(Files.exists(generatedRoot.resolve("unselected-scene")))
+    }
+
+    @Test fun `late scene failure does not publish a partial generated commit root`() {
+        val root = Files.createTempDirectory("gpu-evidence-cli-partial")
+        val runtime = LateFailureRuntime("second-scene")
+        val cases = listOf(refusalCase("first-scene"), refusalCase("second-scene"))
+
+        assertEquals(
+            1,
+            GpuEvidenceCliRunner(runtime, cases = cases).run(
+                arrayOf("--repository-root", root.toString(), "--source-commit", "a".repeat(40), "--scene", "first-scene", "--scene", "second-scene"),
+            ),
+        )
+        val generatedRoot = root.resolve("reports/gpu-renderer/evidence/correctness/generated/${"a".repeat(40)}")
+        assertFalse(Files.exists(generatedRoot))
+    }
+
+    @Test fun `catalog staging failure leaves an existing generated commit root unchanged`() {
+        val root = Files.createTempDirectory("gpu-evidence-cli-catalog-failure")
+        val generatedRoot = root.resolve("reports/gpu-renderer/evidence/correctness/generated/${"a".repeat(40)}")
+        Files.createDirectories(generatedRoot)
+        Files.writeString(generatedRoot.resolve("sentinel.txt"), "keep")
+
+        val result = GpuEvidenceCliRunner(
+            SelectionRuntime(),
+            cases = listOf(refusalCase("selected-scene")),
+            writeGeneratedCatalog = { _, _, _, _, _ -> error("catalog failure") },
+        ).runResult(arrayOf("--repository-root", root.toString(), "--source-commit", "a".repeat(40), "--scene", "selected-scene"))
+
+        assertEquals(1, result.exitCode)
+        assertEquals("catalog failure", assertNotNull(result.failure).message)
+        assertEquals("keep", Files.readString(generatedRoot.resolve("sentinel.txt")))
+        assertFalse(Files.exists(generatedRoot.resolve("selected-scene")))
     }
 
     private fun assertCycleAvoidanceSnapshot(snapshot: Throwable, original: Throwable) {
@@ -360,6 +438,11 @@ class GpuEvidenceCliTest {
     )
 
     private fun validArgs(root: java.nio.file.Path = Files.createTempDirectory("gpu-evidence-cli"), scene: String = "custom-runtime-effect-unregistered-refusal") = arrayOf("--repository-root", root.toString(), "--source-commit", "a".repeat(40), "--scene", scene)
+    private fun sha256(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+    private fun pngBytes(rgba: ByteArray, width: Int, height: Int): ByteArray {
+        val file = Files.createTempFile("gpu-evidence-cli", ".png").toFile()
+        return try { ComparisonUtils.saveRgbaAsPng(rgba, width, height, file); file.readBytes() } finally { file.delete() }
+    }
     private class FakeRuntime(private val events: MutableList<String>, private val returned: Boolean = false, private val closeFails: Boolean = false, private val openFails: Boolean = false, private val executionFails: Boolean = false, private val executionFatal: Boolean = false, private val openFatal: Boolean = false, private val closeFatal: Boolean = false, private val closeFailure: Throwable? = null, private val disposeFailure: Throwable? = null, private val onDisposeFailure: (() -> Unit)? = null) : EvidenceRuntimePort {
         override fun open(): EvidenceBackendPort? { events += "open-session"; if (openFails || openFatal) { events += "runtime-session-created"; if (openFatal) throw LinkageError("fatal open") else error("primary open") }; return if (returned) object : EvidenceBackendPort { override val capabilities: EvidenceCapabilities? = EvidenceCapabilities("fake"); override val deviceGeneration = 1L; override fun telemetry() = org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeTelemetry(); override fun prepare(program: SceneProgram, context: EvidenceRecordingRequest): EvidenceProgramPreparation { events += "execute"; if (executionFatal) throw LinkageError("fatal execution"); if (executionFails) error("primary execution"); return EvidenceProgramPreparation.Refused("product.fake", "unsupported.fake", "fake", emptyList()) }; override fun prepareSceneFrame(width: Int, height: Int): EvidencePreparedFramePort = error("unreachable") } else null }
         override fun close() { events += "close-session"; closeFailure?.let { throw it }; if (closeFatal) throw LinkageError("fatal close"); if (closeFails) error("close") }
@@ -429,6 +512,21 @@ class GpuEvidenceCliTest {
             override fun prepare(program: SceneProgram, context: EvidenceRecordingRequest): EvidenceProgramPreparation {
                 executedSceneIds += context.descriptor.id.value
                 return EvidenceProgramPreparation.Refused("product.fake", "unsupported.fake", "selected refusal", emptyList())
+            }
+            override fun prepareSceneFrame(width: Int, height: Int): EvidencePreparedFramePort = error("unreachable")
+        }
+        override fun close() = Unit
+        override fun dispose() = Unit
+    }
+
+    private class LateFailureRuntime(private val failingSceneId: String) : EvidenceRuntimePort {
+        override fun open(): EvidenceBackendPort = object : EvidenceBackendPort {
+            override val capabilities = EvidenceCapabilities("fake")
+            override val deviceGeneration = 1L
+            override fun telemetry() = GPUBackendRuntimeTelemetry()
+            override fun prepare(program: SceneProgram, context: EvidenceRecordingRequest): EvidenceProgramPreparation {
+                val stableReason = if (context.descriptor.id.value == failingSceneId) "unexpected.fake" else "unsupported.fake"
+                return EvidenceProgramPreparation.Refused("product.fake", stableReason, "selected refusal", emptyList())
             }
             override fun prepareSceneFrame(width: Int, height: Int): EvidencePreparedFramePort = error("unreachable")
         }
