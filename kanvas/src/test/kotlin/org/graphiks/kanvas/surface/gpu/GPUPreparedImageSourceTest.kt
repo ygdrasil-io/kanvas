@@ -2,8 +2,10 @@ package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageArtifactResult
 import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.Bitmap
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
+import org.graphiks.math.color.ColorARGB
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -50,5 +52,40 @@ class GPUPreparedImageSourceTest {
                 GPUPreparedSurfaceImageSource.prepare(image),
             )
         }
+    }
+
+    @Test
+    fun `prepared surface source converts the bitmap formats used by all bitmap configs`() {
+        val images = listOf(
+            Bitmap(1, 1, ColorType.RGB_565).also {
+                it.setPixel(0, 0, ColorARGB.fromRGBA(1f, 0f, 0f, 1f))
+            },
+            Bitmap(1, 1, ColorType.ARGB_4444).also {
+                it.setPixel(0, 0, ColorARGB.fromRGBA(1f, 0.5f, 0.25f, 0.5f))
+            },
+            Bitmap(1, 1, ColorType.RGBA_F16).also {
+                it.setPixel(0, 0, ColorARGB.fromRGBA(0.5f, 0.25f, 0.75f, 0.5f))
+            },
+            Bitmap(1, 1, ColorType.GRAY_8).also {
+                it.setPixel(0, 0, ColorARGB.fromRGBA(0.5f, 0.5f, 0.5f, 1f))
+            },
+        ).map { requireNotNull(it.toImageOrNull()) }
+
+        images.forEach { image ->
+            assertIs<GPUPreparedImageArtifactResult.Ready>(
+                GPUPreparedSurfaceImageSource.prepare(image),
+                image.colorType.name,
+            )
+        }
+    }
+
+    @Test
+    fun `prepared surface source refuses a pixel format outside the bounded contract`() {
+        val result = GPUPreparedSurfaceImageSource.prepare(
+            Image(1, 1, ColorType.RGB_888X, "unsupported", byteArrayOf(1, 2, 3, 4)),
+        )
+
+        val refused = assertIs<GPUPreparedImageArtifactResult.Refused>(result)
+        assertEquals("unsupported.image.pixel.format", refused.code)
     }
 }

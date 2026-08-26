@@ -1008,20 +1008,19 @@ private fun Shader.Image.toPreparedImageMaterial(
                 GPUMaterialKind.ImageDraw,
             )
     }
-    if (
-        image.colorType != ColorType.RGBA_8888 &&
-        image.colorType != ColorType.BGRA_8888 &&
-        image.colorType != ColorType.ALPHA_8
-    ) {
+    if (image.colorType !in PREPARED_IMAGE_COLOR_TYPES) {
         return descriptorAssembly.preparedUnsupported(
             GPUPreparedMaterialUnsupportedReason.IMAGE_COLOR_TYPE,
             GPUMaterialKind.ImageDraw,
         )
     }
-    val alphaTypeUnsupported = if (image.colorType == ColorType.ALPHA_8) {
-        image.alphaType != AlphaType.PREMUL
-    } else {
-        image.alphaType == AlphaType.PREMUL || image.alphaType == AlphaType.UNKNOWN
+    val alphaTypeUnsupported = when (image.colorType) {
+        ColorType.ALPHA_8 -> image.alphaType != AlphaType.PREMUL
+        ColorType.ARGB_4444, ColorType.RGBA_F16 -> image.alphaType != AlphaType.PREMUL
+        ColorType.RGB_565, ColorType.GRAY_8 -> image.alphaType != AlphaType.OPAQUE
+        ColorType.RGBA_8888, ColorType.BGRA_8888 ->
+            image.alphaType == AlphaType.PREMUL || image.alphaType == AlphaType.UNKNOWN
+        else -> true
     }
     if (alphaTypeUnsupported) {
         return descriptorAssembly.preparedUnsupported(
@@ -1741,8 +1740,13 @@ private fun org.graphiks.kanvas.image.Image.expandToPreparedRgba(): ByteArray? {
                 output[outputOffset + 3] = source[index]
             }
         }
+        ColorType.RGB_565,
+        ColorType.ARGB_4444,
+        ColorType.RGBA_F16,
+        ColorType.GRAY_8,
+            -> expandBitmapConfigToPreparedRgba(source, expectedOutputSize)
         else -> return null
-    }
+    } ?: return null
     if (alphaType == AlphaType.OPAQUE) {
         for (offset in 3 until rgba.size step 4) {
             rgba[offset] = 0xff.toByte()
@@ -1750,6 +1754,35 @@ private fun org.graphiks.kanvas.image.Image.expandToPreparedRgba(): ByteArray? {
     }
     return rgba
 }
+
+private fun org.graphiks.kanvas.image.Image.expandBitmapConfigToPreparedRgba(
+    source: ByteArray,
+    expectedOutputSize: Int,
+): ByteArray? = runCatching {
+    val bitmap = org.graphiks.kanvas.image.Bitmap.fromImage(copy(pixels = source))
+    ByteArray(expectedOutputSize).also { output ->
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                val color = bitmap.getPixel(x, y)
+                val offset = (y * width + x) * 4
+                output[offset] = (color.r.coerceIn(0f, 1f) * 255f).toInt().toByte()
+                output[offset + 1] = (color.g.coerceIn(0f, 1f) * 255f).toInt().toByte()
+                output[offset + 2] = (color.b.coerceIn(0f, 1f) * 255f).toInt().toByte()
+                output[offset + 3] = (color.a.coerceIn(0f, 1f) * 255f).toInt().toByte()
+            }
+        }
+    }
+}.getOrNull()
+
+private val PREPARED_IMAGE_COLOR_TYPES = setOf(
+    ColorType.RGBA_8888,
+    ColorType.BGRA_8888,
+    ColorType.ALPHA_8,
+    ColorType.RGB_565,
+    ColorType.ARGB_4444,
+    ColorType.RGBA_F16,
+    ColorType.GRAY_8,
+)
 
 private fun exactImageByteCount(
     width: Int,

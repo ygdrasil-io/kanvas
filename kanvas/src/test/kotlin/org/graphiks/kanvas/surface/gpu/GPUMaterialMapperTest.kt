@@ -23,6 +23,7 @@ import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgramCompiler
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgramResult
 import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.Bitmap
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
@@ -765,30 +766,10 @@ class GPUMaterialMapperTest {
             ) to GPUPreparedMaterialUnsupportedReason.IMAGE_TILE_MODE,
             Paint(
                 shader = imageShader(
-                    sourceId = "gray",
-                    pixels = byteArrayOf(1),
-                    colorType = ColorType.GRAY_8,
-                ),
-            ) to GPUPreparedMaterialUnsupportedReason.IMAGE_COLOR_TYPE,
-            Paint(
-                shader = imageShader(
-                    sourceId = "f16",
-                    pixels = ByteArray(8),
-                    colorType = ColorType.RGBA_F16,
-                ),
-            ) to GPUPreparedMaterialUnsupportedReason.IMAGE_COLOR_TYPE,
-            Paint(
-                shader = imageShader(
-                    sourceId = "565",
-                    pixels = ByteArray(2),
-                    colorType = ColorType.RGB_565,
-                ),
-            ) to GPUPreparedMaterialUnsupportedReason.IMAGE_COLOR_TYPE,
-            Paint(
-                shader = imageShader(
-                    sourceId = "4444",
-                    pixels = ByteArray(2),
-                    colorType = ColorType.ARGB_4444,
+                    sourceId = "unknown-format",
+                    pixels = byteArrayOf(1, 2, 3, 4),
+                    colorType = ColorType.RGB_888X,
+                    alphaType = AlphaType.OPAQUE,
                 ),
             ) to GPUPreparedMaterialUnsupportedReason.IMAGE_COLOR_TYPE,
             Paint(
@@ -1555,6 +1536,56 @@ class GPUMaterialMapperTest {
         assertContentEquals(byteArrayOf(3, 2, 1, 4), bgra.rgbaPixels)
         assertEquals("linear", bgra.samplingFilterMode)
         assertContentEquals(byteArrayOf(1, 2, 3, 0xff.toByte()), opaque.rgbaPixels)
+    }
+
+    @Test
+    fun `prepared image conversion expands bitmap configs to straight RGBA8`() {
+        val rgb565 = assertIs<GPUMaterialDescriptor.ImageDraw>(
+            Paint(
+                shader = imageShader(
+                    sourceId = "rgb565",
+                    pixels = byteArrayOf(0x00, 0xf8.toByte()),
+                    colorType = ColorType.RGB_565,
+                    alphaType = AlphaType.OPAQUE,
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+        val argb4444 = assertIs<GPUMaterialDescriptor.ImageDraw>(
+            Paint(
+                shader = imageShader(
+                    sourceId = "argb4444",
+                    pixels = byteArrayOf(0x21, 0x84.toByte()),
+                    colorType = ColorType.ARGB_4444,
+                    alphaType = AlphaType.PREMUL,
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+        val rgbaF16 = assertIs<GPUMaterialDescriptor.ImageDraw>(
+            Paint(
+                shader = Shader.Image(
+                    requireNotNull(
+                        Bitmap(1, 1, ColorType.RGBA_F16).also {
+                            it.setPixel(0, 0, ColorARGB.fromRGBA(0.5f, 0.25f, 0.75f, 0.5f))
+                        }.toImageOrNull(),
+                    ),
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+        val gray8 = assertIs<GPUMaterialDescriptor.ImageDraw>(
+            Paint(
+                shader = imageShader(
+                    sourceId = "gray8",
+                    pixels = byteArrayOf(0x80.toByte()),
+                    colorType = ColorType.GRAY_8,
+                    alphaType = AlphaType.OPAQUE,
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+
+        assertContentEquals(byteArrayOf(0xff.toByte(), 0, 0, 0xff.toByte()), rgb565.rgbaPixels)
+        assertContentEquals(byteArrayOf(128.toByte(), 64, 32, 136.toByte()), argb4444.rgbaPixels)
+        assertContentEquals(byteArrayOf(128.toByte(), 64, 191.toByte(), 128.toByte()), rgbaF16.rgbaPixels)
+        assertContentEquals(byteArrayOf(0x80.toByte(), 0x80.toByte(), 0x80.toByte(), 0xff.toByte()), gray8.rgbaPixels)
     }
 
     @Test
