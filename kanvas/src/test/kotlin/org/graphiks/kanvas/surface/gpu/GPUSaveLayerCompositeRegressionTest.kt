@@ -499,6 +499,30 @@ class GPUSaveLayerCompositeRegressionTest {
     }
 
     @Test
+    fun `bounded saveLayer restores SRC without a destination read`() {
+        requireWebGpu()
+
+        val surface = Surface(width = 8, height = 8)
+        surface.canvas {
+            drawRect(RectF32(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
+            saveLayer(
+                RectF32(2f, 2f, 6f, 6f),
+                Paint(color = white.toColor(), antiAlias = false, blendMode = BlendMode.SRC),
+            )
+            drawRect(RectF32(2f, 2f, 6f, 6f), Paint(color = translucentRed.toColor(), antiAlias = false))
+            restore()
+        }
+
+        val result = surface.render()
+
+        // CPU Porter-Duff SRC oracle: the isolated layer becomes the result inside its
+        // finite bounds, so the parent white must not participate in this restore.
+        assertPixelNear(result.pixels, x = 1, y = 3, expected = white, tolerance = 0)
+        assertPixelNear(result.pixels, x = 3, y = 3, expected = sourceOnlySrgb(translucentRed), tolerance = 2)
+        assertEquals(0, result.diagnostics.fatalCount)
+    }
+
+    @Test
     fun `empty bounded saveLayer leaves parent untouched`() {
         requireWebGpu()
 
@@ -687,6 +711,19 @@ class GPUSaveLayerCompositeRegressionTest {
             green = composite(source.green, destination.green),
             blue = composite(source.blue, destination.blue),
             alpha = (outputAlpha * 255f + 0.5f).toInt(),
+        )
+    }
+
+    /** Models an isolated premultiplied source restored with Porter-Duff SRC. */
+    private fun sourceOnlySrgb(source: Rgba): Rgba {
+        val sourceAlpha = source.alpha / 255f
+        fun sourceChannel(channel: Int): Int =
+            linearToSrgb(srgbToLinear(channel) * sourceAlpha)
+        return Rgba(
+            red = sourceChannel(source.red),
+            green = sourceChannel(source.green),
+            blue = sourceChannel(source.blue),
+            alpha = source.alpha,
         )
     }
 

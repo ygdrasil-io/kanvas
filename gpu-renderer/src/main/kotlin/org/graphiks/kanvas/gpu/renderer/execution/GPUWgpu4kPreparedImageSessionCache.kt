@@ -338,6 +338,9 @@ internal class GPUWgpu4kPreparedImageSessionCache(
             "srcover",
             PREPARED_IMAGE_CANONICAL_SRC_OVER_BLEND,
             -> preparedImageSrcOverBlendState()
+            "src",
+            PREPARED_IMAGE_CANONICAL_SRC_BLEND,
+            -> preparedImageSrcBlendState()
             else ->
                 return GPUPreparedImagePipelineCanonicalization.Refused(
                     code = GPUPreparedImageRefusalCodes.NATIVE_BINDING,
@@ -349,7 +352,9 @@ internal class GPUWgpu4kPreparedImageSessionCache(
         return GPUPreparedImagePipelineCanonicalization.Ready(
             GPUPreparedImageCanonicalPipelineState(
                 key = GPUPreparedImagePipelineKey(
-                    destinationBlendState = "src-over",
+                    destinationBlendState = if (normalizedBlend == "src" ||
+                        normalizedBlend == PREPARED_IMAGE_CANONICAL_SRC_BLEND
+                    ) "src" else "src-over",
                     targetFormat = "RGBA8UnormSrgb",
                     bindingLayoutHash = bindingLayoutIdentity,
                 ),
@@ -364,6 +369,9 @@ private const val PREPARED_IMAGE_CANONICAL_SRC_OVER_BLEND =
     "fixed:src-over:none:one-isa:one:one-minus-src-alpha:" +
         "add:one:one-minus-src-alpha:add:rgba"
 
+private const val PREPARED_IMAGE_CANONICAL_SRC_BLEND =
+    "fixed:src:none:one:zero:add:one:zero:add:rgba"
+
 private fun preparedImageSrcOverBlendState(): BlendState = BlendState(
     color = BlendComponent(
         GPUBlendOperation.Add,
@@ -374,5 +382,18 @@ private fun preparedImageSrcOverBlendState(): BlendState = BlendState(
         GPUBlendOperation.Add,
         GPUBlendFactor.One,
         GPUBlendFactor.OneMinusSrcAlpha,
+    ),
+)
+
+private fun preparedImageSrcBlendState(): BlendState = BlendState(
+    color = BlendComponent(
+        GPUBlendOperation.Add,
+        GPUBlendFactor.One,
+        GPUBlendFactor.Zero,
+    ),
+    alpha = BlendComponent(
+        GPUBlendOperation.Add,
+        GPUBlendFactor.One,
+        GPUBlendFactor.Zero,
     ),
 )
