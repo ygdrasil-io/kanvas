@@ -57,6 +57,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleResolveAction
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleStoreAction
 import org.graphiks.kanvas.gpu.renderer.passes.fromBatchPlan
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.payloads.PREPARED_VERTICES_RENDER_PIPELINE_KEY
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceFamily
@@ -2158,7 +2159,8 @@ internal class GPUFramePreflighter(
                 is GPUFrameStep.RenderPassStep -> {
                     val expected = context.resourceGenerations[step.target]
                         ?: return diagnostic("stale.preflight.resource_generation_missing", "Render target generation is unavailable.")
-                    if (step.drawPackets.any { packet ->
+                    val staleResourceGenerationPacket = step.drawPackets.firstOrNull(
+                        predicate = { packet ->
                             val preparedLateBound =
                                 packet.semanticPayload is GPUDrawSemanticPayload.SolidRect ||
                                     packet.semanticPayload is GPUDrawSemanticPayload.CorePrimitive ||
@@ -2168,7 +2170,13 @@ internal class GPUFramePreflighter(
                                     packet.semanticPayload is GPUDrawSemanticPayload.Vertices ||
                                     packet.semanticPayload is GPUDrawSemanticPayload.RegisteredUniformRect ||
                                     packet.semanticPayload is GPUDrawSemanticPayload.SeparableBlurRect ||
-                                    packet.semanticPayload is GPUDrawSemanticPayload.MaskBlur
+                                    packet.semanticPayload is GPUDrawSemanticPayload.MaskBlur ||
+                                    packet.renderPipelineKey == PREPARED_VERTICES_RENDER_PIPELINE_KEY ||
+                                    (
+                                        packet.bindingLayoutHash == "preflight.pending" &&
+                                            packet.vertexSourceLabel == "preflight.pending" &&
+                                            packet.renderPipelineKey?.value?.startsWith("pending.pipeline.") == true
+                                    )
                             val acceptedGeneration = when {
                                 (preparedLateBound || packet.packetId in clipProducerValidation.sealedProducerPacketIds) &&
                                     packet.resourceGeneration == PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION ->
@@ -2176,9 +2184,26 @@ internal class GPUFramePreflighter(
                                 else -> expected
                             }
                             packet.resourceGeneration != acceptedGeneration
-                        }
-                    ) {
-                        return diagnostic("stale.preflight.resource_generation", "A render packet resource generation is stale.")
+                        },
+                    )
+                    if (staleResourceGenerationPacket != null) {
+                        return diagnostic(
+                            "stale.preflight.resource_generation",
+                            "A render packet resource generation is stale.",
+                            mapOf(
+                                "packet" to staleResourceGenerationPacket.packetId.value,
+                                "semantic" to staleResourceGenerationPacket.semanticPayload
+                                    ?.let { it::class.simpleName }
+                                    .orEmpty(),
+                                "target" to step.target.value,
+                                "packetGeneration" to staleResourceGenerationPacket.resourceGeneration.toString(),
+                                "targetGeneration" to expected.toString(),
+                                "renderStep" to staleResourceGenerationPacket.renderStepId.value,
+                                "pipeline" to staleResourceGenerationPacket.renderPipelineKey?.value.orEmpty(),
+                                "bindingLayout" to staleResourceGenerationPacket.bindingLayoutHash,
+                                "vertexSource" to staleResourceGenerationPacket.vertexSourceLabel,
+                            ),
+                        )
                     }
                     if (step.drawPackets.any { it.renderPipelineKey == null }) {
                         return diagnostic("invalid.preflight.render_pipeline_key_missing", "Render packets require a pipeline key before materialization.")
@@ -4226,6 +4251,39 @@ internal class GPUFramePreflighter(
         )
         val legacyUniformAcceptedIndices = accepted.indices.filter { acceptedIndex ->
             packetAuthorities[acceptedIndex].structuralPipelineKey.uniformLayout in legacyUniformLayouts
+        }
+        var hasDynamicLegacyUniformLayout = false
+        var hasGradientLegacyUniformLayout = false
+        var missingLegacyUniformSeal = false
+        var firstLegacyUniformSeal: GPUCorePrimitiveUniformSlabSeal? = null
+        var hasMultipleLegacyUniformSeals = false
+        legacyUniformAcceptedIndices.forEach { acceptedIndex ->
+            when (packetAuthorities[acceptedIndex].structuralPipelineKey.uniformLayout) {
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2 ->
+                    hasDynamicLegacyUniformLayout = true
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientUniform592V1 ->
+                    hasGradientLegacyUniformLayout = true
+                else -> Unit
+            }
+            val seal = packetAuthorities[acceptedIndex].uniformSlabSeal
+            if (seal == null) {
+                missingLegacyUniformSeal = true
+            } else if (firstLegacyUniformSeal == null) {
+                firstLegacyUniformSeal = seal
+            } else if (firstLegacyUniformSeal !== seal) {
+                hasMultipleLegacyUniformSeals = true
+            }
+        }
+        if (
+            hasDynamicLegacyUniformLayout &&
+            hasGradientLegacyUniformLayout &&
+            !missingLegacyUniformSeal &&
+            hasMultipleLegacyUniformSeals
+        ) {
+            return diagnostic(
+                "unsupported.core_primitive.mixed_legacy_uniform_layouts",
+                "Mixed legacy uniform layouts must share one exact frame slab seal.",
+            )
         }
         val legacyUniformSlotByAcceptedIndex = IntArray(accepted.size) { -1 }
         val legacyUniformSeal = legacyUniformAcceptedIndices.firstOrNull()?.let { acceptedIndex ->
