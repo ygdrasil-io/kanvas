@@ -1810,7 +1810,8 @@ class GPUFirstRoutePlanner(
             transform.isNonAxisAlignedAffine() && antiAlias ->
                 "unsupported.transform.affine_antialias"
             transform.isNonAxisAlignedAffine() &&
-                !capabilities.hasFact(CORE_PRIMITIVE_AFFINE_FILL_RECT_CAPABILITY) ->
+                !capabilities.hasFact(CORE_PRIMITIVE_AFFINE_FILL_RECT_CAPABILITY) &&
+                !supportsHardPathClipClampLinearGradientUniformScale() ->
                 "unsupported.transform.affine_capability_missing"
             transform.type !in acceptedTransformTypes -> "unsupported.transform.class_downgrade"
             clip.kind == GPUClipKind.ComplexStack &&
@@ -1851,9 +1852,9 @@ class GPUFirstRoutePlanner(
 
     /**
      * The direct clamp-linear-gradient consumer may share a native hard path-clip stencil
-     * scope when its CTM is a positive uniform scale plus translation. The prepared Surface
-     * semantic lowers both the rect and the gradient axis into device space for this exact
-     * branch; every other non-solid affine material remains refused above.
+     * scope when its CTM is a positive uniform scale plus translation or an exact quarter-turn.
+     * The prepared Surface semantic lowers both the rect and the gradient axis into device space
+     * for this exact branch; every other non-solid affine material remains refused above.
      */
     private fun NormalizedDrawCommand.FillRect.supportsHardPathClipClampLinearGradientUniformScale(): Boolean {
         val gradient = material as? GPUMaterialDescriptor.LinearGradient ?: return false
@@ -1863,11 +1864,16 @@ class GPUFirstRoutePlanner(
             gradient.tileMode == "clamp" &&
             stencilClip.sampleCount == 1 &&
             stencilClip.pathTransformClass == "uniform-positive-scale-translate" &&
-            transform.skewX == 0f &&
-            transform.skewY == 0f &&
-            transform.scaleX > 0f &&
-            transform.scaleX == transform.scaleY
+            (
+                (transform.skewX == 0f && transform.skewY == 0f &&
+                    transform.scaleX > 0f && transform.scaleX == transform.scaleY) ||
+                    transform.isExactQuarterTurnGradientRotation()
+                )
     }
+
+private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
+    type == GPUTransformType.Affine &&
+        scaleX == 0f && scaleY == 0f && skewX == -1f && skewY == 1f
 
     /** Returns the canonical first-expansion rrect refusal code, or null when analysis may keep a native candidate. */
     private fun NormalizedDrawCommand.FillRRect.refusalCode(

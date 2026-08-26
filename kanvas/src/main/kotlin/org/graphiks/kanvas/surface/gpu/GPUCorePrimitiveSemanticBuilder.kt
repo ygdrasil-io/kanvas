@@ -745,11 +745,16 @@ private fun GPUTransformFacts.isNativeHardPathClipGradientTransform(): Boolean =
     -> skewX == 0f && skewY == 0f && scaleX == 1f && scaleY == 1f
     GPUTransformType.Scale,
     GPUTransformType.Affine,
-    -> skewX == 0f && skewY == 0f && scaleX > 0f && scaleX == scaleY
+    -> (skewX == 0f && skewY == 0f && scaleX > 0f && scaleX == scaleY) ||
+        isExactQuarterTurnHardPathClipGradientRotation()
     GPUTransformType.Perspective,
     GPUTransformType.Singular,
     -> false
 }
+
+private fun GPUTransformFacts.isExactQuarterTurnHardPathClipGradientRotation(): Boolean =
+    type == GPUTransformType.Affine &&
+        scaleX == 0f && scaleY == 0f && skewX == -1f && skewY == 1f
 
 private val HARD_PATH_CLIP_GRADIENT_TRANSFORM_CLASSES = setOf(
     "identity",

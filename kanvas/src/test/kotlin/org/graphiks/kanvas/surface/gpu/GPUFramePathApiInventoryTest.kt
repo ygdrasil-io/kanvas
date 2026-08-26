@@ -1805,6 +1805,107 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `exact quarter turn clamp linear FillRect enters the native hard path clip route`() {
+        val capabilityFacts = capabilitiesWith(
+            FILL_RECT_CAPABILITY,
+            PATH_FILL_STENCIL_COVER,
+            "first_slice.linear_gradient.native",
+        )
+        val capabilities = GPUCapabilities(
+            implementation = capabilityFacts.implementation,
+            facts = capabilityFacts.facts,
+            knownUnsupportedFacts = capabilityFacts.knownUnsupportedFacts,
+            snapshotId = "${capabilityFacts.snapshotId}:observed-limits",
+            limits = GPULimits(
+                maxTextureDimension2D = 8192,
+                copyBytesPerRowAlignment = 256,
+                minUniformBufferOffsetAlignment = 256,
+                maxBufferSize = 1L shl 30,
+                maxDynamicUniformBuffersPerPipelineLayout = 1,
+            ),
+        )
+        val surface = Surface(64, 64)
+        surface.canvas {
+            scale(0.75f, 0.75f)
+            clipPath(
+                Path { moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close() }
+                    .apply { fillType = FillType.WINDING },
+                ClipOp.INTERSECT,
+                antiAlias = false,
+            )
+            resetMatrix()
+            rotate(90f, 16f, 16f)
+            drawRect(
+                RectF32.ofLTRB(8f, 8f, 32f, 24f),
+                Paint(
+                    shader = Shader.LinearGradient(
+                        Point2F32(8f, 8f),
+                        Point2F32(32f, 8f),
+                        listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                    ),
+                ).copy(antiAlias = false),
+            )
+        }
+        val plan = GPUFramePathApiInventory.plan(
+            operations = surface.snapshotOps(),
+            target = target(64, 64),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+        )
+
+        assertEquals(null, plan.preparedRefusal)
+        assertEquals("native.fill_rect.linear_gradient", plan.recording.analysis.records.single().routeDecisionLabel)
+        val semantic = assertIs<GPUCorePrimitiveSemanticGatherResult.Gathered>(
+            GPUFramePathApiInventory.gatherCorePrimitiveSemantics(plan, GPUPixelBounds(0, 0, 64, 64)),
+        ).semantics.values.single() as GPUDrawSemanticPayload.CorePrimitive
+        assertEquals(GPUCorePrimitiveRectRouteAuthority.RectAffineDirectTrianglesV1, semantic.rectRouteAuthority)
+        assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
+        val prepared = GPUFramePathApiInventory.prepareNativeTaskList(
+            plan,
+            capabilities,
+            GPUPixelBounds(0, 0, 64, 64),
+        )
+        assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(prepared, prepared.toString())
+    }
+
+    @Test
+    fun `non right angle clamp linear FillRect remains refused inside a hard path clip`() {
+        val surface = Surface(64, 64)
+        surface.canvas {
+            scale(0.75f, 0.75f)
+            clipPath(
+                Path { moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close() }
+                    .apply { fillType = FillType.WINDING },
+                ClipOp.INTERSECT,
+                antiAlias = false,
+            )
+            resetMatrix()
+            rotate(45f, 16f, 16f)
+            drawRect(
+                RectF32.ofLTRB(8f, 8f, 32f, 24f),
+                Paint(
+                    shader = Shader.LinearGradient(
+                        Point2F32(8f, 8f),
+                        Point2F32(32f, 8f),
+                        listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                    ),
+                ).copy(antiAlias = false),
+            )
+        }
+        val plan = GPUFramePathApiInventory.plan(
+            operations = surface.snapshotOps(),
+            target = target(64, 64),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilitiesWith(FILL_RECT_CAPABILITY, PATH_FILL_STENCIL_COVER, "first_slice.linear_gradient.native"),
+        )
+
+        assertEquals(
+            listOf("refused:unsupported.transform.affine_material"),
+            plan.recording.routeDiagnostics,
+        )
+    }
+
+    @Test
     fun `removing either gradient fact preserves exact planner refusal and no render packets`() {
         val fixtures = listOf(
             "first_slice.linear_gradient.native" to
