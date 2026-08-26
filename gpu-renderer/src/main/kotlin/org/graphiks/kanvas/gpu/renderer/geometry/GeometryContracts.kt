@@ -1806,9 +1806,10 @@ private fun GPUPathDescriptor.strokeAndFillRefusalCode(
 internal fun GPUStrokeDescriptor.refusalCode(maxEdges: Int): String? =
     when {
         !finiteWidth || !width.isFinite() || width <= 0f -> "unsupported.stroke.width_invalid"
+        width < 0.5f || width > 64f -> "unsupported.stroke.width_budget"
         hairline -> "unsupported.stroke.hairline_policy"
-        cap != "Butt" -> "unsupported.stroke.cap"
-        join != "Miter" -> "unsupported.stroke.join"
+        cap !in setOf("Butt", "Square") -> "unsupported.stroke.cap"
+        join !in setOf("Miter", "Bevel") -> "unsupported.stroke.join"
         miter < 1f -> "unsupported.stroke.miter_limit"
         dashOrPathEffectRef != null -> {
             val ref = dashOrPathEffectRef

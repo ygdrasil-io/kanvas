@@ -853,6 +853,9 @@ class GPUFirstRoutePlanner(
 
         return when {
             command.maskFilter != null -> blurMaskFillPathRouteDecision(command)
+            command.stroke && command.isNativeSimpleStroke() &&
+                capabilities.hasFact(firstStencilCoverCapabilityName) ->
+                nativeSimpleStrokeRouteDecision(command)
             command.stroke -> preparedStrokeRouteDecision(command)
             capabilities.hasFact(firstStencilCoverCapabilityName) ->
                 nativeFillPathRouteDecision(command)
@@ -903,6 +906,59 @@ class GPUFirstRoutePlanner(
             recordId = recordId,
             routeDecisionLabel = "prepared.path_stroke.tessellated",
             resourceDeclarations = listOf("tessellated_vertices:path_stroke.${command.commandId.value}"),
+            renderStepCandidates = listOf(renderStep),
+        )
+        val pass = GPUFirstRoutePassBuilder.acceptedFillPath(
+            commandIdValue = command.commandId.value,
+            analysisRecordId = recordId,
+            sortKey = command.ordering.paintOrder.toLong(),
+            renderStepIdentity = renderStep,
+            pipelineKey = GPURenderPipelineKey(pipelineKey),
+            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
+            boundsHash = command.bounds.stableHash(),
+            scissorBoundsHash = command.scissorBoundsHash(),
+            originalPaintOrder = command.ordering.paintOrder,
+            targetStateHash = command.targetStateHash(),
+            frameProvenance = command.source.frameProvenance,
+            clipCoveragePlan = command.clip.coveragePlan,
+            clipExecutionPlan = command.clip.executionPlan,
+        )
+        return GPUFirstRoutePlan(
+            analysisRecord = analysisRecord,
+            analysisDecision = analysisDecision,
+            routeDecision = routeDecision,
+            pass = pass,
+        )
+    }
+
+    /** Builds the native stencil-cover route for the one bounded exact stroke outline. */
+    private fun nativeSimpleStrokeRouteDecision(command: NormalizedDrawCommand.FillPath): GPUFirstRoutePlan {
+        val recordId = "analysis.fill_path.${command.commandId.value}"
+        val pipelineKey =
+            "pending.pipeline.path_stroke.stencil_cover.${command.layer.target.colorFormat}.src_over"
+        val renderStep = "path.stroke.stencil_cover"
+        val analysisRecord = GPUDrawAnalysisRecord(
+            recordId = recordId,
+            commandIdValue = command.commandId.value,
+            commandFamily = "FillPath",
+            boundsHash = command.bounds.stableHash(),
+            routeDecisionLabel = "native.path_stroke.stencil_cover",
+            materialKeyHash = "pending.material.${command.material.kind.name.lowercase()}",
+            renderStepCandidates = listOf(renderStep),
+            sortKey = SortKey(command.ordering.paintOrder.toLong()),
+            diagnostics = command.transform.analysisDiagnostics(recordId = recordId) +
+                command.pathFactsDiagnostics(recordId = recordId),
+        )
+        val routeDecision = GPUFirstRouteDecisionBuilder.nativeSimpleStroke(
+            commandIdValue = command.commandId.value,
+            pipelinePreimageHash = pipelineKey,
+            renderStepIdentity = renderStep,
+            requirements = listOf(firstStencilCoverCapabilityName),
+        )
+        val analysisDecision = GPUDrawAnalysisDecision.Candidate(
+            recordId = recordId,
+            routeDecisionLabel = "native.path_stroke.stencil_cover",
+            resourceDeclarations = emptyList(),
             renderStepCandidates = listOf(renderStep),
         )
         val pass = GPUFirstRoutePassBuilder.acceptedFillPath(
@@ -1954,7 +2010,8 @@ class GPUFirstRoutePlanner(
                     ?: pathDesc.strokePathRefusalCode()
                     ?: strokeDesc.refusalCode(maxEdges = 128)
                     ?: "unsupported.pipeline.capability_missing".takeUnless {
-                        capabilities.hasFact(firstPreparedPathFillCapabilityName)
+                        capabilities.hasFact(firstPreparedPathFillCapabilityName) ||
+                            (isNativeSimpleStroke() && capabilities.hasFact(firstStencilCoverCapabilityName))
                     }
             }
             pathDescriptor.edgeCount < 0 -> "unsupported.geometry.path_invalid_edges"
@@ -2010,6 +2067,22 @@ class GPUFirstRoutePlanner(
                 "unsupported.pipeline.capability_missing"
             else -> null
         }
+
+    /**
+     * The native path-stencil route is intentionally smaller than generic prepared strokes:
+     * one immutable, open two-point contour, finite bounded width, solid butt/square cap, and
+     * no join work. More than one segment remains on the prepared/refusal path until its
+     * outline topology is independently proven in a native packet.
+     */
+    private fun NormalizedDrawCommand.FillPath.isNativeSimpleStroke(): Boolean =
+        contourStarts == listOf(0) &&
+            tessellatedVertices.size == 4 &&
+            strokeWidth.isFinite() && strokeWidth in 0.5f..64f &&
+            !antiAlias &&
+            (dashIntervals == null || dashIntervals.isEmpty()) &&
+            strokeCap in setOf("butt", "square") &&
+            strokeJoin in setOf("miter", "bevel") &&
+            transform.type in setOf(GPUTransformType.Identity, GPUTransformType.Translate)
 
     /**
      * The bounded direct-triangle path consumer shares the same device-space gradient lowering

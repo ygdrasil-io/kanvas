@@ -1972,6 +1972,72 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `bounded solid square stroke crosses mapper planner and native stencil recording`() {
+        val path = Path().apply {
+            moveTo(4f, 8f)
+            lineTo(24f, 8f)
+        }
+        val baseCapabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER)
+        val capabilities = GPUCapabilities(
+            implementation = baseCapabilities.implementation,
+            facts = baseCapabilities.facts,
+            knownUnsupportedFacts = baseCapabilities.knownUnsupportedFacts,
+            snapshotId = "${baseCapabilities.snapshotId}:observed-limits",
+            limits = GPULimits(
+                maxTextureDimension2D = 8192,
+                copyBytesPerRowAlignment = 256,
+                minUniformBufferOffsetAlignment = 256,
+                maxBufferSize = 1L shl 30,
+                maxDynamicUniformBuffersPerPipelineLayout = 1,
+            ),
+            textureFormatSampleSupport = baseCapabilities.textureFormatSampleSupport,
+            rendererFeatures = baseCapabilities.rendererFeatures,
+            copyAsDrawCapability = baseCapabilities.copyAsDrawCapability,
+        )
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    path,
+                    Paint.stroke(ColorARGB.Red, 4f).copy(
+                        antiAlias = false,
+                        strokeCap = StrokeCap.SQUARE,
+                        strokeJoin = StrokeJoin.BEVEL,
+                    ),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+        )
+
+        val command = assertIs<NormalizedDrawCommand.FillPath>(inventory.visualCommands.single().normalized)
+        assertEquals("square", command.strokeCap)
+        assertEquals("bevel", command.strokeJoin)
+        assertEquals(
+            "native.path_stroke.stencil_cover",
+            inventory.recording.analysis.records.single().routeDecisionLabel,
+        )
+        assertEquals(
+            listOf("route:native.path_stroke.stencil_cover"),
+            inventory.recording.routeDiagnostics,
+        )
+
+        val prepared = GPUFramePathApiInventory.prepareNativeTaskList(
+            inventory,
+            capabilities,
+            GPUPixelBounds(0, 0, 32, 32),
+        )
+        assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            prepared,
+            (prepared as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let { diagnostic ->
+                "${diagnostic.code.value}: ${diagnostic.message}; facts=${diagnostic.facts}"
+            },
+        )
+    }
+
+    @Test
     fun `non text hairline semantic is one device pixel after uniform scale`() {
         val path = Path().apply {
             moveTo(4f, 8f)

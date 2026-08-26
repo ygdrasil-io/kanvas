@@ -718,8 +718,10 @@ private fun GPUDrawSemanticPayload.CorePrimitive.usesAnalyticShapeUniform80(): B
     }
 
 private fun GPUDrawSemanticPayload.CorePrimitive.hasPathStencilCoverGeometry(): Boolean =
-    (geometry as? GPUCorePrimitiveGeometry.TriangulatedPath)?.geometryMode ==
-        GPUCorePrimitiveGeometryMode.StencilEdgeFan
+    (geometry as? GPUCorePrimitiveGeometry.TriangulatedPath)?.geometryMode in setOf(
+        GPUCorePrimitiveGeometryMode.StencilEdgeFan,
+        GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan,
+    )
 
 private data class GPUCorePrimitivePathStencilPacketPlan(
     val semantic: GPUDrawSemanticPayload.CorePrimitive,
@@ -895,7 +897,11 @@ private fun pathStencilGeometryBytes(
     semantic: GPUDrawSemanticPayload.CorePrimitive,
 ): GPUCorePrimitiveDirectGeometryBytes? {
     val geometry = semantic.geometry as? GPUCorePrimitiveGeometry.TriangulatedPath ?: return null
-    if (geometry.geometryMode != GPUCorePrimitiveGeometryMode.StencilEdgeFan) return null
+    if (geometry.geometryMode !in setOf(
+            GPUCorePrimitiveGeometryMode.StencilEdgeFan,
+            GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan,
+        )
+    ) return null
     return GPUCorePrimitiveDirectGeometryBytes(
         vertexBytes = Math.addExact(
             Math.multiplyExact(geometry.vertices.size.toLong(), Float.SIZE_BYTES.toLong()),
@@ -1746,7 +1752,10 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 val analyticPathStencilAa = plan is GPUClipExecutionPlan.AnalyticCoverage &&
                     semantic.coverageMode == GPUCorePrimitiveCoverageMode.StencilAA &&
                     (semantic.geometry as? GPUCorePrimitiveGeometry.TriangulatedPath)
-                        ?.geometryMode == GPUCorePrimitiveGeometryMode.StencilEdgeFan
+                        ?.geometryMode in setOf(
+                        GPUCorePrimitiveGeometryMode.StencilEdgeFan,
+                        GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan,
+                    )
                 plan != GPUClipExecutionPlan.NoClip &&
                     plan !is GPUClipExecutionPlan.ScissorOnly &&
                     !analyticPathStencilAa
@@ -1895,11 +1904,9 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 ?: return@forEach
             when (geometry.geometryMode) {
                 GPUCorePrimitiveGeometryMode.DirectTriangles -> Unit
-                GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan -> return refused(
-                    "unsupported.recording.core_primitive_path_stroke_stencil",
-                    "Prepared path stencil topology does not yet accept stroke edge fans.",
-                )
-                GPUCorePrimitiveGeometryMode.StencilEdgeFan -> {
+                GPUCorePrimitiveGeometryMode.StencilEdgeFan,
+                GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan,
+                -> {
                     val expectedCoverageMode = if (preparedSamplePlan == GPUSamplePlan.MultisampleFrame(4)) {
                         GPUCorePrimitiveCoverageMode.StencilAA
                     } else {

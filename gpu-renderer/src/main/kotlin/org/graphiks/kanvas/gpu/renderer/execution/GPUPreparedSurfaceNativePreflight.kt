@@ -915,6 +915,7 @@ internal class GPUPreparedSurfaceNativePreflight(
                     path != null && path.geometryMode !in setOf(
                             GPUCorePrimitiveGeometryMode.DirectTriangles,
                             GPUCorePrimitiveGeometryMode.StencilEdgeFan,
+                            GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan,
                         )
                 }
         ) {

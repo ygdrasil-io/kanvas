@@ -2460,7 +2460,10 @@ internal class GPUFramePreflighter(
                     (
                 semantic.coverageMode != GPUCorePrimitiveCoverageMode.StencilAA ||
                     (semantic.geometry as? GPUCorePrimitiveGeometry.TriangulatedPath)
-                        ?.geometryMode != GPUCorePrimitiveGeometryMode.StencilEdgeFan
+                        ?.geometryMode !in setOf(
+                        GPUCorePrimitiveGeometryMode.StencilEdgeFan,
+                        GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan,
+                    )
                     )
             }
         ) {
@@ -2998,7 +3001,10 @@ internal class GPUFramePreflighter(
                     }
                     if (semantic.coverageMode != expectedCoverageMode ||
                         coverSemantic.coverageMode != expectedCoverageMode ||
-                        producerGeometry.geometryMode != GPUCorePrimitiveGeometryMode.StencilEdgeFan ||
+                        producerGeometry.geometryMode !in setOf(
+                            GPUCorePrimitiveGeometryMode.StencilEdgeFan,
+                            GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan,
+                        ) ||
                         producerGeometry != coverGeometry ||
                         semantic.targetBounds != coverSemantic.targetBounds ||
                         semantic.scissorBounds != coverSemantic.scissorBounds ||

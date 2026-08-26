@@ -274,6 +274,23 @@ object GPUFirstRouteDecisionBuilder {
             ),
         )
 
+    /** Builds the bounded native single-segment stroke stencil-cover route decision. */
+    fun nativeSimpleStroke(
+        commandIdValue: Int,
+        pipelinePreimageHash: String,
+        renderStepIdentity: String,
+        requirements: List<String>,
+    ): GPURouteDecision.Native =
+        GPURouteDecision.Native(
+            route = GPUNativeRoute(
+                routeId = "route.path_stroke.$commandIdValue",
+                consumerKind = "native.path_stroke.stencil_cover",
+                renderStepIdentity = renderStepIdentity,
+                pipelinePreimageHash = pipelinePreimageHash,
+                requirements = requirements,
+            ),
+        )
+
     /** Builds a prepared FillPath CPUPreparedGPU route decision. */
     fun preparedFillPath(
         commandIdValue: Int,
