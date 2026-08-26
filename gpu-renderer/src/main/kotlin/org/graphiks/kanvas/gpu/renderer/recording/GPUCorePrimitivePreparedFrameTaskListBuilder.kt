@@ -2085,10 +2085,13 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 nativeClipStencilConsumerGeometryBytesByCommandId.size ==
                 staticNativeClipStencilConsumers.size
         }
-        if (nativeClipStencilPlan != null && nativeClipStencilPlan.pathTransformClass != "identity") {
+        if (
+            nativeClipStencilPlan != null &&
+            nativeClipStencilPlan.pathTransformClass !in HARD_PATH_CLIP_TRANSFORM_CLASSES
+        ) {
             return refused(
                 "unsupported.recording.core_primitive_clip_stencil_transform",
-                "Native hard path clips require identity capture-time CTM.",
+                "Native hard path clips require identity, translation, or positive uniform scale capture-time CTM.",
             )
         }
         if (staticNativeClipStencilPlan != null && staticNativeClipStencilConsumers.any { packet ->
@@ -4814,6 +4817,12 @@ private fun corePrimitiveDestinationSnapshotColorInterpretation(
         "Prepared core-primitive destination snapshots require RGBA8Unorm, RGBA8UnormSrgb, or BGRA8Unorm.",
     )
 }
+
+private val HARD_PATH_CLIP_TRANSFORM_CLASSES = setOf(
+    "identity",
+    "translate",
+    "uniform-positive-scale-translate",
+)
 
 /** Typed core-only view used by the direct CorePrimitive assembler (blur packets route elsewhere). */
 private fun GPUCorePrimitivePreparedFrameRequest.coreSemantics():

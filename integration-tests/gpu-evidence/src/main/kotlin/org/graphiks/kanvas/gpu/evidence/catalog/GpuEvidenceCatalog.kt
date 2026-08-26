@@ -43,6 +43,9 @@ object GpuEvidenceCatalog {
         clipPathTriangleSolid(),
         clipPathConcaveSolid(),
         clipPathTriangleTwoBands(),
+        clipPathTranslatedTriangleSolid(),
+        clipPathUniformScaledTriangleSolid(),
+        clipPathUniformScaledTriangleTwoBands(),
         solidTrianglePath(),
         solidConcavePath(),
         evenOddPathHole(),
@@ -520,6 +523,58 @@ object GpuEvidenceCatalog {
         draws = listOf(
             SurfaceSrgbClipPathCpuOracle.OpaqueRect(0f, 0f, 64f, 64f, intArrayOf(31, 115, 209, 255)),
             SurfaceSrgbClipPathCpuOracle.OpaqueRect(32f, 0f, 64f, 64f, intArrayOf(242, 135, 46, 255)),
+        ),
+    )
+
+    private fun clipPathTranslatedTriangleSolid() = clipPathCase(
+        id = "clip-path-translated-triangle-solid",
+        title = "Translated solid hard triangle path clip",
+        description = "Public Kanvas Surface hard non-AA winding triangle path clip captured after translation.",
+        program = KanvasScenePrograms.clipPathTranslatedTriangleSolid(),
+        contours = listOf(
+            listOf(
+                SurfaceSrgbClipPathCpuOracle.Point(10f, 8f),
+                SurfaceSrgbClipPathCpuOracle.Point(58f, 8f),
+                SurfaceSrgbClipPathCpuOracle.Point(10f, 55f),
+            ),
+        ),
+        draws = listOf(
+            SurfaceSrgbClipPathCpuOracle.OpaqueRect(2f, 0f, 66f, 64f, intArrayOf(242, 135, 46, 255)),
+        ),
+    )
+
+    private fun clipPathUniformScaledTriangleSolid() = clipPathCase(
+        id = "clip-path-uniform-scaled-triangle-solid",
+        title = "Uniformly scaled solid hard triangle path clip",
+        description = "Public Kanvas Surface hard non-AA winding triangle path clip captured after positive uniform scaling.",
+        program = KanvasScenePrograms.clipPathUniformScaledTriangleSolid(),
+        contours = listOf(
+            listOf(
+                SurfaceSrgbClipPathCpuOracle.Point(14f, 10f),
+                SurfaceSrgbClipPathCpuOracle.Point(50f, 10f),
+                SurfaceSrgbClipPathCpuOracle.Point(14f, 45.25f),
+            ),
+        ),
+        draws = listOf(
+            SurfaceSrgbClipPathCpuOracle.OpaqueRect(8f, 4f, 56f, 52f, intArrayOf(31, 115, 209, 255)),
+        ),
+    )
+
+    private fun clipPathUniformScaledTriangleTwoBands() = clipPathCase(
+        id = "clip-path-uniform-scaled-triangle-two-bands",
+        title = "Uniformly scaled two-band hard triangle path clip",
+        description = "Public Kanvas Surface hard non-AA uniformly scaled triangle path clip reused by ordered opaque blue and orange rectangles.",
+        program = KanvasScenePrograms.clipPathUniformScaledTriangleTwoBands(),
+        contours = listOf(
+            listOf(
+                SurfaceSrgbClipPathCpuOracle.Point(14f, 10f),
+                SurfaceSrgbClipPathCpuOracle.Point(50f, 10f),
+                SurfaceSrgbClipPathCpuOracle.Point(14f, 45.25f),
+            ),
+        ),
+        draws = listOf(
+            SurfaceSrgbClipPathCpuOracle.OpaqueRect(8f, 4f, 56f, 52f, intArrayOf(31, 115, 209, 255)),
+            SurfaceSrgbClipPathCpuOracle.OpaqueRect(32f, 4f, 56f, 52f, intArrayOf(242, 135, 46, 255)),
         ),
     )
 

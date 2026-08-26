@@ -2229,7 +2229,32 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
     }
 
     @Test
-    fun `native path clip refuses transformed clip provenance`() {
+    fun `native path clip accepts translated capture provenance`() {
+        val plan = nativePathStencilPlan(GPUClipFillRule.Winding, pathTransformClass = "translate")
+        val base = recording(command(341, 0, rect = targetRect()), command(340, 7)).taskList.withClipPlans(
+            mapOf(341 to GPUClipExecutionPlan.NoClip, 340 to plan),
+        )
+        val packets = base.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+
+        val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            request(
+                base,
+                packets.associate { packet ->
+                    packet.commandIdValue to if (packet.commandIdValue == 341) {
+                        semantic(packet, geometry = GPUCorePrimitiveGeometryInput.Rect(0f, 0f, 16f, 16f))
+                    } else {
+                        semantic(packet)
+                    }
+                },
+            ),
+        )
+
+        assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(result)
+    }
+
+    @Test
+    fun `native path clip refuses affine capture provenance`() {
         val plan = nativePathStencilPlan(GPUClipFillRule.Winding, pathTransformClass = "affine")
         val base = recording(command(341, 0), command(340, 7)).taskList.withClipPlans(
             mapOf(341 to GPUClipExecutionPlan.NoClip, 340 to plan),

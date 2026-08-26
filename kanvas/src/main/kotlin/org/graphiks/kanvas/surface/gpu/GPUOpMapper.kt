@@ -1344,10 +1344,10 @@ private fun GPUClipCoveragePlan.Mask.toMaskExecutionPlan(
                 message = "Path clip execution requires bounded clip support.",
             )
         }
-        if (single.transformClass != "identity") {
+        if (single.transformClass !in HARD_PATH_CLIP_TRANSFORM_CLASSES) {
             return clipExecutionRefusal(
                 code = "unsupported.clip.path_transform",
-                message = "Native hard path clips require identity capture-time CTM.",
+                message = "Native hard path clips require identity, translation, or positive uniform scale capture-time CTM.",
             )
         }
         val geometry = single.executionGeometryOrRefusal() as? GPUClipExecutionGeometry.Path
@@ -1436,6 +1436,12 @@ private fun GPUClipCoveragePlan.Mask.toMaskExecutionPlan(
         consumer = GPUClipMaskConsumerPlan(),
     )
 }
+
+private val HARD_PATH_CLIP_TRANSFORM_CLASSES = setOf(
+    "identity",
+    "translate",
+    "uniform-positive-scale-translate",
+)
 
 private fun GPUClipCoverageElement.executionGeometryOrRefusal(): GPUClipExecutionGeometry? = try {
     when (kind) {
