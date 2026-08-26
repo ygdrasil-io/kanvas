@@ -40,4 +40,7 @@ Promotion used reviewer `oracle`, reason `exact-finite-translation-rrect-inverse
 
 ## Commits and concerns
 
-Final evidence commit is recorded after this report. No concern remains: all four native bundles are exact and the scoped focused gate is green.
+- Source/tests: `4e6ba7d71d812fd88b3b3f6959beaa834641068b`.
+- Promoted evidence and this report: `7708e7d3774216c58548eda1b329bd07d5fee3e9`.
+
+No concern remains: all four native bundles are exact and the scoped focused gate is green.
