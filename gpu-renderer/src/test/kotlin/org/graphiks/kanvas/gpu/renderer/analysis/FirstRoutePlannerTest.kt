@@ -1718,6 +1718,16 @@ class FirstRoutePlannerTest {
 
         val identityInverse = inverseTranslated.copy(transform = GPUTransformFacts.identity())
         assertIs<GPURouteDecision.Native>(GPUFirstRoutePlanner(firstSliceRRectCapabilities()).plan(identityInverse).routeDecision)
+
+        val differenceTranslated = translated.copy(
+            clip = hardWindingStencilClip(pathTransformClass = "identity", consumerInverseFill = true),
+        )
+        assertEquals(
+            "unsupported.core_primitive.drrect.analytic_clip",
+            assertIs<GPURouteDecision.Refused>(
+                GPUFirstRoutePlanner(firstSliceRRectCapabilities()).plan(differenceTranslated).routeDecision,
+            ).diagnostic.code,
+        )
     }
 
     /** Accepted FillRRect with LinearGradient material routes natively with gradient render step. */
@@ -3205,6 +3215,7 @@ class FirstRoutePlannerTest {
         pathTransformClass: String,
         inverseFill: Boolean = false,
         fillRule: GPUClipFillRule = GPUClipFillRule.Winding,
+        consumerInverseFill: Boolean = false,
     ): GPUClipFacts = GPUClipFacts(
         kind = GPUClipKind.ComplexStack,
         bounds = firstRouteBounds,
@@ -3234,8 +3245,9 @@ class FirstRoutePlannerTest {
             consumer = GPUClipStencilConsumerPlan(
                 scissor = null,
                 reference = 0u,
-                compare = if (inverseFill) GPUClipStencilCompare.Equal else GPUClipStencilCompare.NotEqual,
+                compare = if (inverseFill xor consumerInverseFill) GPUClipStencilCompare.Equal else GPUClipStencilCompare.NotEqual,
             ),
+            consumerInverseFill = consumerInverseFill,
             pathTransformClass = pathTransformClass,
         ),
     )

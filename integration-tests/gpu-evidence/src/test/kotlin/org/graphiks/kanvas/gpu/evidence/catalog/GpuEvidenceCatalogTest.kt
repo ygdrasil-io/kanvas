@@ -32,7 +32,7 @@ import org.graphiks.math.matrix.Matrix3x3F32
 
 class GpuEvidenceCatalogTest {
     @Test
-fun `catalog separates seventy public surface renders from two refusals`() {
+fun `catalog separates seventy one public surface renders from two refusals`() {
         val cases = GpuEvidenceCatalog.cases
 
         assertEquals(
@@ -55,6 +55,7 @@ fun `catalog separates seventy public surface renders from two refusals`() {
                 "clip-rrect-ellipse",
                 "clip-rrect-two-bands",
                 "clip-path-triangle-solid",
+                "clip-path-triangle-difference-solid",
                 "clip-path-concave-solid",
                 "clip-path-triangle-two-bands",
                 "clip-path-translated-triangle-solid",
@@ -127,6 +128,7 @@ fun `catalog separates seventy public surface renders from two refusals`() {
                 "clip-rrect-ellipse",
                 "clip-rrect-two-bands",
                 "clip-path-triangle-solid",
+                "clip-path-triangle-difference-solid",
                 "clip-path-concave-solid",
                 "clip-path-triangle-two-bands",
                 "clip-path-translated-triangle-solid",
@@ -186,11 +188,11 @@ fun `catalog separates seventy public surface renders from two refusals`() {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-List(70) { "kanvas.surface.render" },
+            List(71) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
-assertEquals(70, GpuEvidenceCatalog.renderCases.size)
-assertEquals(72, GpuEvidenceCatalog.cases.size)
+        assertEquals(71, GpuEvidenceCatalog.renderCases.size)
+        assertEquals(73, GpuEvidenceCatalog.cases.size)
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
 
         val solid = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "solid-card-stack" })
@@ -303,6 +305,7 @@ assertEquals(72, GpuEvidenceCatalog.cases.size)
                 "clip-rrect-ellipse",
                 "clip-rrect-two-bands",
                 "clip-path-triangle-solid",
+                "clip-path-triangle-difference-solid",
                 "clip-path-concave-solid",
                 "clip-path-triangle-two-bands",
                 "clip-path-translated-triangle-solid",
@@ -393,6 +396,7 @@ assertEquals(72, GpuEvidenceCatalog.cases.size)
                 "clip-rrect-ellipse" to OraclePolicy.GeneratedCpu("surface-srgb-clip-rrect-pixel-center", 1),
                 "clip-rrect-two-bands" to OraclePolicy.GeneratedCpu("surface-srgb-clip-rrect-pixel-center", 1),
                 "clip-path-triangle-solid" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-pixel-center", 1),
+                "clip-path-triangle-difference-solid" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-pixel-center", 1),
                 "clip-path-concave-solid" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-pixel-center", 1),
                 "clip-path-triangle-two-bands" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-pixel-center", 1),
                 "clip-path-translated-triangle-solid" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-pixel-center", 1),
@@ -470,6 +474,7 @@ assertEquals(72, GpuEvidenceCatalog.cases.size)
                 "clip-rrect-ellipse" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent hard pixel-center RRect clip membership."),
                 "clip-rrect-two-bands" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent hard pixel-center RRect clip membership and paint order."),
                 "clip-path-triangle-solid" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent hard pixel-center winding path clip membership and paint order."),
+                "clip-path-triangle-difference-solid" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent hard pixel-center winding path difference membership and paint order."),
                 "clip-path-concave-solid" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent hard pixel-center winding path clip membership and paint order."),
                 "clip-path-triangle-two-bands" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent hard pixel-center winding path clip membership and paint order."),
                 "clip-path-translated-triangle-solid" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent hard pixel-center winding path clip membership and paint order."),
@@ -955,6 +960,13 @@ assertEquals(72, GpuEvidenceCatalog.cases.size)
             listOf(RectF32.ofLTRB(0f, 0f, 64f, 64f) to orange),
         )
         assertHardClipPathCase(
+            "clip-path-triangle-difference-solid", 1,
+            listOf(Point2F32(8f, 8f), Point2F32(56f, 8f), Point2F32(8f, 55f)),
+            listOf(RectF32.ofLTRB(0f, 0f, 64f, 64f) to orange),
+            clipOperation = ClipOp.DIFFERENCE,
+            comparisonRationale = "Exact opaque RGBA8 output from independent hard pixel-center winding path difference membership and paint order.",
+        )
+        assertHardClipPathCase(
             "clip-path-concave-solid", 1,
             listOf(
                 Point2F32(8f, 8f), Point2F32(56f, 8f), Point2F32(56f, 24f), Point2F32(32f, 24f),
@@ -1185,12 +1197,14 @@ assertEquals(72, GpuEvidenceCatalog.cases.size)
         drawCount: Int,
         expectedPoints: List<Point2F32>,
         expectedDraws: List<Pair<RectF32, ColorARGB>>,
+        clipOperation: ClipOp = ClipOp.INTERSECT,
+        comparisonRationale: String = "Exact opaque RGBA8 output from independent hard pixel-center winding path clip membership and paint order.",
     ) {
         val evidenceCase = assertNotNull(GpuEvidenceCatalog.renderCases.firstOrNull { it.descriptor.id.value == id })
         assertIs<EvidenceExpectation.ShouldRender>(evidenceCase.descriptor.expectation)
         assertEquals(OraclePolicy.GeneratedCpu("surface-srgb-clip-path-pixel-center", 1), evidenceCase.descriptor.oracle)
         assertEquals(
-            ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent hard pixel-center winding path clip membership and paint order."),
+            ComparisonPolicy(0, 100.0, 1, comparisonRationale),
             evidenceCase.descriptor.comparison,
         )
         assertIs<KanvasSurfaceProgram>(evidenceCase.program)
@@ -1221,7 +1235,7 @@ assertEquals(72, GpuEvidenceCatalog.cases.size)
         )
         assertTrue(PathMeasure(pathOp.path).isClosed)
         assertEquals(FillType.WINDING, pathOp.path.fillType)
-        assertEquals(ClipOp.INTERSECT, pathOp.op)
+        assertEquals(clipOperation, pathOp.op)
         assertFalse(pathOp.antiAlias)
         assertEquals("identity", pathOp.transformClass)
         assertEquals(drawCount, expectedDraws.size)

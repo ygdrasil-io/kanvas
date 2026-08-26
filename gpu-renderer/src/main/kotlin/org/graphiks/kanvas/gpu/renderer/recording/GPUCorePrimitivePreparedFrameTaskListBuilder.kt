@@ -4630,8 +4630,9 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 (clipExecutionPlan as? GPUClipExecutionPlan.StencilCoverage)
                     ?.corePrimitiveClipStencilNativePathOrNull(),
             )
+            val stencilPlan = clipExecutionPlan as GPUClipExecutionPlan.StencilCoverage
             corePrimitiveClipStencilConsumerRenderPipelineStructuralKey(
-                inverseFill = path.inverseFill,
+                inverseFill = path.inverseFill xor stencilPlan.consumerInverseFill,
                 blendPlan = requireNotNull(basePacket.blendPlan),
                 shader = requireNotNull(corePrimitiveClipStencilConsumerShaderOrNull(preparedSemantic.material, preparedSemantic.geometry)),
                 sampleCount = sampleCount,

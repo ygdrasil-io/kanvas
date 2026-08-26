@@ -108,6 +108,23 @@ object KanvasScenePrograms {
         restore()
     })
 
+    fun clipPathTriangleDifferenceSolid() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        save()
+        clipPath(
+            Path {
+                moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close()
+            }.apply { fillType = FillType.WINDING },
+            ClipOp.DIFFERENCE,
+            antiAlias = false,
+        )
+        drawRect(
+            RectF32.ofLTRB(0f, 0f, 64f, 64f),
+            Paint.fill(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)).copy(antiAlias = false),
+        )
+        restore()
+    })
+
     fun clipPathConcaveSolid() = KanvasSurfaceProgram(ROUTE_ID, record = {
         drawColor(BACKGROUND)
         save()

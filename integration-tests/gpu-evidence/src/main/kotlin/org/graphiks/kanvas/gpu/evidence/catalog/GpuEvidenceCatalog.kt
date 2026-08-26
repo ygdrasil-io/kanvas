@@ -45,6 +45,7 @@ object GpuEvidenceCatalog {
         clipRRectEllipse(),
         clipRRectTwoBands(),
         clipPathTriangleSolid(),
+        clipPathTriangleDifferenceSolid(),
         clipPathConcaveSolid(),
         clipPathTriangleTwoBands(),
         clipPathTranslatedTriangleSolid(),
@@ -521,6 +522,26 @@ object GpuEvidenceCatalog {
         draws = listOf(
             SurfaceSrgbClipPathCpuOracle.OpaqueRect(0f, 0f, 64f, 64f, intArrayOf(242, 135, 46, 255)),
         ),
+    )
+
+    private fun clipPathTriangleDifferenceSolid() = clipPathCase(
+        id = "clip-path-triangle-difference-solid",
+        title = "Solid hard triangle path difference clip",
+        description = "Public Kanvas Surface hard non-AA winding triangle path difference leaves the complement for an opaque rectangle.",
+        program = KanvasScenePrograms.clipPathTriangleDifferenceSolid(),
+        contours = listOf(
+            listOf(
+                SurfaceSrgbClipPathCpuOracle.Point(8f, 8f),
+                SurfaceSrgbClipPathCpuOracle.Point(56f, 8f),
+                SurfaceSrgbClipPathCpuOracle.Point(8f, 55f),
+            ),
+        ),
+        draws = listOf(
+            SurfaceSrgbClipPathCpuOracle.OpaqueRect(0f, 0f, 64f, 64f, intArrayOf(242, 135, 46, 255)),
+        ),
+        clipInverted = true,
+        extraTags = setOf("difference"),
+        comparisonRationale = "Exact opaque RGBA8 output from independent hard pixel-center winding path difference membership and paint order.",
     )
 
     private fun clipPathConcaveSolid() = clipPathCase(
@@ -1085,12 +1106,15 @@ object GpuEvidenceCatalog {
         program: org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram,
         contours: List<List<SurfaceSrgbClipPathCpuOracle.Point>>,
         draws: List<SurfaceSrgbClipPathCpuOracle.OpaqueRect>,
+        clipInverted: Boolean = false,
+        extraTags: Set<String> = emptySet(),
+        comparisonRationale: String = "Exact opaque RGBA8 output from independent hard pixel-center winding path clip membership and paint order.",
     ) = EvidenceCase(
         EvidenceSceneDescriptor(
             EvidenceSceneId(id), title, description, 64, 64, 1L,
-            setOf("clip-path", "solid-rect", "hard-clip", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            setOf("clip-path", "solid-rect", "hard-clip", "kanvas-surface") + extraTags, EvidenceExpectation.ShouldRender,
             OraclePolicy.GeneratedCpu("surface-srgb-clip-path-pixel-center", 1),
-            ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent hard pixel-center winding path clip membership and paint order."),
+            ComparisonPolicy(0, 100.0, 1, comparisonRationale),
             emptySet(),
         ),
         program,
@@ -1098,6 +1122,7 @@ object GpuEvidenceCatalog {
             background = intArrayOf(13, 20, 33, 255),
             contours = contours.map(SurfaceSrgbClipPathCpuOracle::Contour),
             draws = draws,
+            clipInverted = clipInverted,
         ),
     )
 

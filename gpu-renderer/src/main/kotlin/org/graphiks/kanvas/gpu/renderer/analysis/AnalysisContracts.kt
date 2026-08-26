@@ -1898,9 +1898,10 @@ class GPUFirstRoutePlanner(
             ?: return false
         val path = stencil.producer.geometry as? GPUClipExecutionGeometry.Path ?: return false
         val solid = material as? GPUMaterialDescriptor.SolidColor ?: return false
+        val effectiveInverseFill = path.inverseFill xor stencil.consumerInverseFill
         return !stroke && !antiAlias && maskFilter == null &&
             (transform.type == GPUTransformType.Identity ||
-                (transform.isExactNonZeroTranslation() && !path.inverseFill)) &&
+                (transform.isExactNonZeroTranslation() && !effectiveInverseFill)) &&
             solid.a == 1f && blend.mode == GPUBlendMode.SRC_OVER && stencil.sampleCount == 1 &&
             stencil.pathTransformClass == "identity" &&
             path.fillRule == GPUClipFillRule.Winding &&

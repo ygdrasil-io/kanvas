@@ -220,7 +220,8 @@ internal fun sealGPUCorePrimitiveClipStencilNativeRoute(
         "invalid.native-core-primitive.clip-stencil.reference-authority",
         "Winding and even-odd clip stencil require the exact zero comparison reference.",
     )
-    if (!stencil.consumer.hasExactNativeState(path.inverseFill)) return refused(
+    val consumerInverseFill = path.inverseFill xor stencil.consumerInverseFill
+    if (!stencil.consumer.hasExactNativeState(consumerInverseFill)) return refused(
         "invalid.native-core-primitive.clip-stencil.consumer-state",
         "The consumer state must be read-only NotEqual/Equal with Keep operations.",
     )
@@ -276,7 +277,7 @@ internal fun sealGPUCorePrimitiveClipStencilNativeRoute(
             "unsupported.native-core-primitive.clip-stencil.gradient-msaa",
             "Clamp linear-gradient clip-stencil consumers require the exact single-sample route.",
         )
-        if (consumer.inverseFill != path.inverseFill || consumer.scissor != stencil.consumer.scissor) return refused(
+        if (consumer.inverseFill != consumerInverseFill || consumer.scissor != stencil.consumer.scissor) return refused(
             "invalid.native-core-primitive.clip-stencil.consumer-authority",
             "Consumer fill and scissor facts must match the clip plan.",
         )
@@ -329,8 +330,9 @@ internal fun GPUClipExecutionPlan.StencilCoverage.corePrimitiveClipStencilNative
     GPUClipExecutionGeometry.Path? {
     if (sampleCount !in setOf(1, 4)) return null
     val path = producer.geometry as? GPUClipExecutionGeometry.Path ?: return null
+    val effectiveConsumerInverseFill = path.inverseFill xor this.consumerInverseFill
     if (!producer.hasExactNativeState(path.fillRule) ||
-        !consumer.hasExactNativeState(path.inverseFill) || producer.reference != 0u ||
+        !consumer.hasExactNativeState(effectiveConsumerInverseFill) || producer.reference != 0u ||
         consumer.reference != 0u || !path.hasTriangleContours()
     ) return null
     return path

@@ -19,6 +19,7 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskCombine
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilCompare
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
@@ -1091,14 +1092,19 @@ class GPUFramePathApiInventoryTest {
                 ),
             ),
         )
-        val inventory = inventoryFor(
-            DisplayOp.DrawDRRect(
-                RRectF32.of(RectF32.ofLTRB(8f, 8f, 56f, 56f), radius = 8f),
-                RRectF32.of(RectF32.ofLTRB(20f, 20f, 44f, 44f), radius = 4f),
-                Paint.fill(ColorARGB.Blue).copy(antiAlias = false),
-                Matrix3x3F32.translation(1f, 0f),
-                hardClip,
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawDRRect(
+                    RRectF32.of(RectF32.ofLTRB(8f, 8f, 56f, 56f), radius = 8f),
+                    RRectF32.of(RectF32.ofLTRB(20f, 20f, 44f, 44f), radius = 4f),
+                    Paint.fill(ColorARGB.Blue).copy(antiAlias = false),
+                    Matrix3x3F32.translation(1f, 0f),
+                    hardClip,
+                ),
             ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER),
         )
 
         assertIs<NormalizedDrawCommand.FillDRRect>(inventory.normalizedCommands.single())
@@ -2800,6 +2806,142 @@ class GPUFramePathApiInventoryTest {
         assertIs<GPUClipExecutionGeometry.Path>(execution.producer.geometry)
         assertEquals(execution.atomicGroup.value, "clip-atomic:${execution.contentKey}")
         assertClipExecutionPropagation(plan, execution)
+    }
+
+    @Test
+    fun `mapper lowers one hard winding difference path clip to inverted stencil consumer`() {
+        val surface = Surface(32, 32)
+        surface.canvas {
+            clipPath(
+                Path().apply {
+                    moveTo(3f, 3f)
+                    lineTo(26f, 4f)
+                    lineTo(14f, 27f)
+                    close()
+                    fillType = FillType.WINDING
+                },
+                ClipOp.DIFFERENCE,
+                antiAlias = false,
+            )
+            drawRect(RectF32.ofLTRB(0f, 0f, 30f, 30f), Paint.fill(ColorARGB.Red))
+        }
+
+        val plan = GPUFramePathApiInventory.plan(
+            surface.snapshotOps(),
+            target(),
+            RenderConfig.DEFAULT,
+            capabilitiesWith(FILL_RECT_CAPABILITY, PATH_FILL_STENCIL_COVER),
+        )
+        val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(
+            plan.visualCommands.single().clipExecutionPlan,
+        )
+
+        assertTrue(execution.consumerInverseFill)
+        assertEquals(GPUClipStencilCompare.Equal, execution.consumer.compare)
+        assertEquals(GPUClipStencilOperation.IncrementWrap, execution.producer.frontPassOperation)
+        assertEquals(GPUClipStencilOperation.DecrementWrap, execution.producer.backPassOperation)
+        assertClipExecutionPropagation(plan, execution)
+    }
+
+    @Test
+    fun `mapper keeps inverse intersect path clip inversion native under translation`() {
+        val surface = Surface(32, 32)
+        surface.canvas {
+            translate(4f, 3f)
+            clipPath(
+                triangle().apply { fillType = FillType.INVERSE_WINDING },
+                ClipOp.INTERSECT,
+                antiAlias = false,
+            )
+            drawRect(RectF32.ofLTRB(0f, 0f, 30f, 30f), Paint.fill(ColorARGB.Red))
+        }
+
+        val plan = GPUFramePathApiInventory.plan(
+            surface.snapshotOps(), target(), RenderConfig.DEFAULT,
+            capabilitiesWith(FILL_RECT_CAPABILITY, PATH_FILL_STENCIL_COVER),
+        )
+        val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(
+            plan.visualCommands.single().clipExecutionPlan,
+        )
+
+        assertFalse(execution.consumerInverseFill)
+        assertEquals(GPUClipStencilCompare.Equal, execution.consumer.compare)
+        assertClipExecutionPropagation(plan, execution)
+    }
+
+    @Test
+    fun `mapper does not admit even odd difference path clip to the single stencil route`() {
+        val surface = Surface(32, 32)
+        surface.canvas {
+            clipPath(triangle().apply { fillType = FillType.EVEN_ODD }, ClipOp.DIFFERENCE, antiAlias = false)
+            drawRect(RectF32.ofLTRB(0f, 0f, 30f, 30f), Paint.fill(ColorARGB.Red))
+        }
+
+        val plan = GPUFramePathApiInventory.plan(
+            surface.snapshotOps(), target(), RenderConfig.DEFAULT,
+            capabilitiesWith(FILL_RECT_CAPABILITY, PATH_FILL_STENCIL_COVER),
+        )
+
+        assertFalse(plan.visualCommands.single().clipExecutionPlan is GPUClipExecutionPlan.StencilCoverage)
+    }
+
+    @Test
+    fun `mapper does not admit inverse winding difference path clip to the single stencil route`() {
+        val surface = Surface(32, 32)
+        surface.canvas {
+            clipPath(triangle().apply { fillType = FillType.INVERSE_WINDING }, ClipOp.DIFFERENCE, antiAlias = false)
+            drawRect(RectF32.ofLTRB(0f, 0f, 30f, 30f), Paint.fill(ColorARGB.Red))
+        }
+
+        val plan = GPUFramePathApiInventory.plan(
+            surface.snapshotOps(), target(), RenderConfig.DEFAULT,
+            capabilitiesWith(FILL_RECT_CAPABILITY, PATH_FILL_STENCIL_COVER),
+        )
+
+        assertFalse(plan.visualCommands.single().clipExecutionPlan is GPUClipExecutionPlan.StencilCoverage)
+    }
+
+    @Test
+    fun `mapper does not admit antialiased difference path clip to the single stencil route`() {
+        val surface = Surface(32, 32)
+        surface.canvas {
+            clipPath(triangle(), ClipOp.DIFFERENCE, antiAlias = true)
+            drawRect(RectF32.ofLTRB(0f, 0f, 30f, 30f), Paint.fill(ColorARGB.Red))
+        }
+
+        val plan = GPUFramePathApiInventory.plan(
+            surface.snapshotOps(), target(), RenderConfig.DEFAULT,
+            capabilitiesWith(FILL_RECT_CAPABILITY, PATH_FILL_STENCIL_COVER),
+        )
+
+        assertFalse(plan.visualCommands.single().clipExecutionPlan is GPUClipExecutionPlan.StencilCoverage)
+    }
+
+    @Test
+    fun `mapper does not admit a multiple path clip stack to the single stencil route`() {
+        val surface = Surface(32, 32)
+        surface.canvas {
+            clipPath(triangle(), ClipOp.INTERSECT, antiAlias = false)
+            clipPath(
+                Path().apply {
+                    moveTo(6f, 6f)
+                    lineTo(28f, 6f)
+                    lineTo(18f, 28f)
+                    close()
+                    fillType = FillType.WINDING
+                },
+                ClipOp.DIFFERENCE,
+                antiAlias = false,
+            )
+            drawRect(RectF32.ofLTRB(0f, 0f, 30f, 30f), Paint.fill(ColorARGB.Red))
+        }
+
+        val plan = GPUFramePathApiInventory.plan(
+            surface.snapshotOps(), target(), RenderConfig.DEFAULT,
+            capabilitiesWith(FILL_RECT_CAPABILITY, PATH_FILL_STENCIL_COVER),
+        )
+
+        assertFalse(plan.visualCommands.single().clipExecutionPlan is GPUClipExecutionPlan.StencilCoverage)
     }
 
     @Test
