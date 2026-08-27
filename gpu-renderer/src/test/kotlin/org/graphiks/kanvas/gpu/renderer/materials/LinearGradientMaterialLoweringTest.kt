@@ -84,6 +84,44 @@ class LinearGradientMaterialLoweringTest {
         assertTrue(
             accepted.diagnostics.any { it.code == "accepted.material_source.linear_gradient" },
         )
+        assertEquals("fs_main", accepted.entryPoint)
+        assertEquals(
+            "payload:GradientBlock.v2.start-end-local-matrix-stop-data@group1.binding0",
+            accepted.payloadPlanHash,
+        )
+    }
+
+    @Test
+    fun `prepared v2 refuses repeat at its separate material boundary`() {
+        val repeat = GPUMaterialSourceDescriptor.Gradient(
+            plan = GPUGradientPlan(
+                geometry = GPUGradientGeometryPlan(
+                    kind = GPUGradientKind.Linear,
+                    controlPoints = listOf(0f, 0f, 100f, 0f),
+                ),
+                stops = listOf(
+                    GPUGradientStopPlan(offset = 0f, colorLabel = "red"),
+                    GPUGradientStopPlan(offset = 1f, colorLabel = "blue"),
+                ),
+                stopStore = GPUGradientStopStorePlan(
+                    stopCount = 2,
+                    storageKind = "uniform",
+                    payloadHash = "legacy-linear-repeat-core-abi-v1",
+                ),
+                tileMode = GPUMaterialTileMode.Repeat,
+            ),
+        )
+        val context = GPUMaterialLoweringContext(
+            capabilityClass = "test-capability",
+            targetFormatClass = "rgba8unorm",
+            dictionaryVersion = GPULinearGradientMaterialDictionary.DictionaryVersion,
+        )
+
+        val refused = assertIs<GPUMaterialSourcePlan.Refused>(
+            GPULinearGradientMaterialLowering.planSource(repeat, context),
+        )
+
+        assertEquals("unsupported.material.gradient_tile_mode", refused.diagnostic.code)
     }
 
     @Test

@@ -390,6 +390,15 @@ class GPUPreparedMaterialProgramTest {
     }
 
     @Test
+    fun `prepared v2 gradient compiler keeps legacy repeat outside its 576 byte ABI`() {
+        val refused = assertIs<GPUPreparedMaterialProgramResult.Refused>(
+            compiler.compile(linearGradientDescriptor().copy(tileMode = "repeat"), 1f, context),
+        )
+
+        assertEquals("unsupported.material.mapping.linear_gradient_tile_mode", refused.code)
+    }
+
+    @Test
     fun `prepared assembly aliasing preserves material keys and abi`() {
         val sharedSession = GPUMaterialDescriptorAssemblySession()
         val sharedChild = solidDescriptor()

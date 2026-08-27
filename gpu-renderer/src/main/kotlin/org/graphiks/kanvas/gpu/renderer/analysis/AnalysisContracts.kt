@@ -2144,7 +2144,14 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
     /** Returns typed material refusal evidence before kind and capability admission checks. */
     private fun GPUMaterialDescriptor.analysisRefusalCodeOrNull(): String? =
         (this as? GPUMaterialDescriptor.Unsupported)?.reason?.diagnosticCode
-            ?: gradientFactsRefusalReasonOrNull()?.diagnosticCode
+            // CorePrimitive owns the legacy linear-gradient ABI, including repeat. Do not apply
+            // the newer clamp-only prepared-material v2 admission here; FillRect.refusalCode()
+            // performs route-specific validation and preserves its own diagnostics.
+            ?: if (this is GPUMaterialDescriptor.LinearGradient) {
+                null
+            } else {
+                gradientFactsRefusalReasonOrNull()?.diagnosticCode
+            }
 
     /**
      * A bounded image-shader local transform samples through a clamp sampler,
