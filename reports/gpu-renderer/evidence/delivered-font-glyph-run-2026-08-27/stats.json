@@ -1,0 +1,11 @@
+{
+  "schema": "org.graphiks.kanvas.gpu.delivered-font-glyph-run.stats.v1",
+  "selectedRows": 3,
+  "selectedGlyphs": 10,
+  "cpuOutlineRows": 3,
+  "gpuReadbackRows": 3,
+  "gpuRefusalRows": 0,
+  "gmPromotionRows": 0,
+  "thresholdChanges": 0,
+  "budgetChanges": 0
+}

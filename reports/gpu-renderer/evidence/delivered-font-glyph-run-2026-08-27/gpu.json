@@ -1,0 +1,11 @@
+{
+  "schema": "org.graphiks.kanvas.gpu.delivered-font-glyph-run.gpu.v1",
+  "runtime": "WebGPU headless/offscreen",
+  "route": "prepared.surface.direct / prepared TextA8",
+  "target": { "width": 96, "height": 48, "format": "RGBA8" },
+  "rows": [
+    { "id": "gradtext.glyph-run.linear-clamp.v1", "a8Instances": 4, "submits": 1, "readbackCopies": 1, "blank": false },
+    { "id": "text-scale-skew.glyph-run.affine.v1", "a8Instances": 4, "submits": 1, "readbackCopies": 1, "blank": false },
+    { "id": "fontscaler.glyph-run.size-18.v1", "a8Instances": 2, "submits": 1, "readbackCopies": 1, "blank": false }
+  ]
+}

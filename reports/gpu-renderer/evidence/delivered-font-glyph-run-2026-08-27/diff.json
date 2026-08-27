@@ -1,0 +1,9 @@
+{
+  "schema": "org.graphiks.kanvas.gpu.delivered-font-glyph-run.diff.v1",
+  "oracle": "GPUPreparedTextPixelOracle.a8SourceOver(white, paintAlpha=1, coverage=255)",
+  "scope": "Only opaque A8 texels in the two white bounded rows; no broad text-image similarity claim.",
+  "rows": [
+    { "id": "text-scale-skew.glyph-run.affine.v1", "expectedOpaqueTexel": [255, 255, 255, 255], "verified": true },
+    { "id": "fontscaler.glyph-run.size-18.v1", "expectedOpaqueTexel": [255, 255, 255, 255], "verified": true }
+  ]
+}
