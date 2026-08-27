@@ -127,7 +127,18 @@ class VerifyEvidenceCliTest {
         assertFalse(Files.exists(promotedRoot().resolve("solid-card-stack/environment.json")))
         assertFalse(Files.exists(promotedRoot().resolve("solid-card-stack/promotion.json")))
 
-        assertEquals(0, VerifyEvidenceCliRunner().run(arrayOf("--root", promotedRoot().toString(), "--allow-historical-commit", "--all")))
+        assertEquals(0, VerifyEvidenceCliRunner().run(arrayOf("--root", promotedRoot().toString(), "--allow-historical-commit", "--require-promotion", "--all")))
+    }
+
+    @Test
+    fun `promoted verification rejects a generated v2 root without promotion metadata`() {
+        writeSelectedV2(GpuEvidenceCatalog.cases.map { it.descriptor.id.value }.sorted())
+
+        assertTrue(
+            VerifyEvidenceCliRunner().run(
+                arrayOf("--root", generatedRoot().toString(), "--allow-historical-commit", "--require-promotion", "--all"),
+            ) != 0,
+        )
     }
 
     @Test

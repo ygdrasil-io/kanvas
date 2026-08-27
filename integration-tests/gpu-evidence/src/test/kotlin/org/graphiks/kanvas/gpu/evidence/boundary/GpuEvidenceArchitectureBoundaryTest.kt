@@ -54,6 +54,7 @@ class GpuEvidenceArchitectureBoundaryTest {
         assertTrue(argumentProviderBody(generatedVerificationTask).contains("+ selectionArguments()"), "generated verification must share the explicit selection helper")
         assertTrue(argumentProviderBody(generatedVerificationTask).contains("--root"), "generated verification must still target the generated correctness root")
         assertTrue(promotedVerificationTask.contains("\"--allow-historical-commit\""), "promoted verification must preserve historical dual-read verification")
+        assertTrue(promotedVerificationTask.contains("\"--require-promotion\""), "promoted verification must require root promotion metadata")
         assertTrue(promotedVerificationTask.contains("\"--all\""), "promoted verification must explicitly verify the full promoted catalogue")
         assertTrue(argumentProviderBody(promotionTask).contains("+ selectionArguments()"), "promotion must share the explicit selection helper")
         assertTrue(argumentProviderBody(promotionTask).contains("promotionRebaselineArguments"), "promotion must preserve explicit rebaseline metadata forwarding")

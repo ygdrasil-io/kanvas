@@ -300,7 +300,7 @@ class MigratePromotedEvidenceCliRunner internal constructor(
                 promotedAtUtc = clock.instant().toString(),
                 reviewer = request.reviewer,
                 reason = request.reason,
-                rebaseline = true,
+                rebaseline = false,
                 sceneIds = validated.sceneIds,
                 priorComparison = null,
                 newComparison = null,
@@ -312,7 +312,7 @@ class MigratePromotedEvidenceCliRunner internal constructor(
         val promotion = readObject(staged.resolve("promotion.json"), "promotion")
         require(promotion.requiredString("reviewer") == request.reviewer) { "promotion reviewer does not match the request" }
         require(promotion.requiredString("reason") == request.reason) { "promotion reason does not match the request" }
-        require(promotion.requiredBoolean("rebaseline")) { "migration promotion must be rebaseline=true" }
+        require(!promotion.requiredBoolean("rebaseline")) { "migration promotion must be rebaseline=false" }
         val actualSceneIds = promotion["sceneIds"]?.jsonArray?.map { it.jsonPrimitive.content } ?: error("promotion sceneIds must be an array")
         require(actualSceneIds == sceneIds) { "promotion sceneIds do not match the migrated catalogue" }
         require(promotion.optionalNullableString("priorComparison") == null) { "migration promotion priorComparison must be null" }

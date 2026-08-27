@@ -129,7 +129,7 @@ tasks.register<JavaExec>("verifyGeneratedGpuEvidence") {
 
 tasks.register<JavaExec>("verifyPromotedGpuEvidence") {
     group = "verification"
-    description = "Verifies checked-in promoted GPU evidence headlessly."
+    description = "Verifies checked-in promoted GPU evidence headlessly and requires root promotion metadata."
     dependsOn(tasks.named("classes"))
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("org.graphiks.kanvas.gpu.evidence.artifacts.VerifyEvidenceCliKt")
@@ -139,6 +139,7 @@ tasks.register<JavaExec>("verifyPromotedGpuEvidence") {
             .dir("reports/gpu-renderer/evidence/correctness/promoted")
             .asFile.absolutePath,
         "--allow-historical-commit",
+        "--require-promotion",
         "--all",
     )
 }

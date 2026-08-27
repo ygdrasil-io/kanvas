@@ -433,15 +433,16 @@ object EvidenceBundleVerifier {
         val prior = promotion["priorComparison"]
         val next = promotion["newComparison"]
         require((prior is JsonNull) == (next is JsonNull)) { "promotion comparison summaries must be paired" }
-        if (rebaseline) require(prior !is JsonNull && next !is JsonNull) { "rebaseline requires old/new comparison summaries" }
-        if (prior != null && prior !is JsonNull) {
+        if (rebaseline) {
             require(prior is JsonPrimitive && prior.isString && prior.content.isNotBlank()) {
-                "priorComparison must be a nonblank string or null"
+                "rebaseline requires a nonblank prior comparison summary"
             }
-        }
-        if (next != null && next !is JsonNull) {
             require(next is JsonPrimitive && next.isString && next.content.isNotBlank()) {
-                "newComparison must be a nonblank string or null"
+                "rebaseline requires a nonblank new comparison summary"
+            }
+        } else {
+            require(prior is JsonNull && next is JsonNull) {
+                "promotion comparison summaries require rebaseline=true"
             }
         }
     }

@@ -19,6 +19,7 @@ data class VerifyEvidenceCliRequest(
     val root: Path,
     val sourceCommit: String?,
     val allowHistoricalCommit: Boolean,
+    val requirePromotion: Boolean,
     val selection: EvidenceSelection,
 ) {
     companion object {
@@ -28,6 +29,7 @@ data class VerifyEvidenceCliRequest(
             var root: String? = null
             var sourceCommit: String? = null
             var historical = false
+            var requirePromotion = false
             val sceneIds = mutableListOf<String>()
             var scenesFile: Path? = null
             var all = false
@@ -47,6 +49,10 @@ data class VerifyEvidenceCliRequest(
                     "--allow-historical-commit" -> {
                         require(!historical) { "duplicate --allow-historical-commit" }
                         historical = true
+                    }
+                    "--require-promotion" -> {
+                        require(!requirePromotion) { "duplicate --require-promotion" }
+                        requirePromotion = true
                     }
                     "--scene" -> {
                         require(index + 1 < args.size && !args[index + 1].startsWith("--")) { "--scene requires an id" }
@@ -72,7 +78,7 @@ data class VerifyEvidenceCliRequest(
             sourceCommit?.let { require(SOURCE_COMMIT.matches(it)) { "source commit must be 40 lowercase hexadecimal characters" } }
             scenesFile?.let { sceneIds += EvidenceSelectionParser.readSceneFile(it) }
             val selection = EvidenceSelectionParser.from(sceneIds, all)
-            return VerifyEvidenceCliRequest(path, sourceCommit, historical, selection)
+            return VerifyEvidenceCliRequest(path, sourceCommit, historical, requirePromotion, selection)
         }
     }
 }
@@ -98,7 +104,10 @@ class VerifyEvidenceCliRunner(
 
     private fun verify(request: VerifyEvidenceCliRequest): Int {
         return when (detectLayout(request.root)) {
-            EvidenceRootLayout.V1 -> verifyV1(request)
+            EvidenceRootLayout.V1 -> {
+                require(!request.requirePromotion) { "--require-promotion requires a v2 promoted root" }
+                verifyV1(request)
+            }
             EvidenceRootLayout.V2 -> verifyV2(request)
         }
     }
@@ -157,6 +166,7 @@ class VerifyEvidenceCliRunner(
                 selection = request.selection,
                 cases = GpuEvidenceCatalog.cases,
                 expectedSourceCommit = request.sourceCommit,
+                requirePromotion = request.requirePromotion,
             )
         } catch (failure: EvidenceCatalogVerificationException) {
             failure.sceneFailures.forEach { sceneFailure ->

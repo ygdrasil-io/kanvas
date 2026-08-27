@@ -81,9 +81,9 @@ class EvidenceV2SchemaSerializationTest {
             promotedAtUtc = "2026-08-26T15:55:32Z",
             reviewer = "reviewer",
             reason = "reason",
-            rebaseline = false,
+            rebaseline = true,
             sceneIds = listOf("solid-triangle-path", "solid-card-stack"),
-            priorComparison = null,
+            priorComparison = "old=100.0",
             newComparison = "new=100.0",
         )
 
@@ -96,7 +96,7 @@ class EvidenceV2SchemaSerializationTest {
             environment.toJson().canonicalBytes().decodeToString(),
         )
         assertEquals(
-            """{"schemaVersion":"gpu-evidence-promotion-v2","promotedAtUtc":"2026-08-26T15:55:32Z","reviewer":"reviewer","reason":"reason","rebaseline":false,"sceneIds":["solid-card-stack","solid-triangle-path"],"priorComparison":null,"newComparison":"new=100.0"}""",
+            """{"schemaVersion":"gpu-evidence-promotion-v2","promotedAtUtc":"2026-08-26T15:55:32Z","reviewer":"reviewer","reason":"reason","rebaseline":true,"sceneIds":["solid-card-stack","solid-triangle-path"],"priorComparison":"old=100.0","newComparison":"new=100.0"}""",
             promotion.toJson().canonicalBytes().decodeToString(),
         )
 

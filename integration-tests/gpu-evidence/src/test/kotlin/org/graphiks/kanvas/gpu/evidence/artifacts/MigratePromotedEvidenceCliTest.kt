@@ -71,12 +71,12 @@ class MigratePromotedEvidenceCliTest {
         assertEquals(GPU_EVIDENCE_PROMOTION_SCHEMA_V2, promotion["schemaVersion"]!!.jsonPrimitive.content)
         assertEquals("reviewer", promotion["reviewer"]!!.jsonPrimitive.content)
         assertEquals("reason", promotion["reason"]!!.jsonPrimitive.content)
-        assertEquals(true, promotion["rebaseline"]!!.jsonPrimitive.boolean)
+        assertEquals(false, promotion["rebaseline"]!!.jsonPrimitive.boolean)
         assertEquals(FIXED_CLOCK.instant().toString(), promotion["promotedAtUtc"]!!.jsonPrimitive.content)
         assertEquals(allSceneIds(), promotion["sceneIds"]!!.jsonArray.map { it.jsonPrimitive.content })
         assertTrue(promotion["priorComparison"] is JsonNull)
         assertTrue(promotion["newComparison"] is JsonNull)
-        assertEquals(0, VerifyEvidenceCliRunner().run(arrayOf("--root", root.toString(), "--all")))
+        assertEquals(0, VerifyEvidenceCliRunner().run(arrayOf("--root", root.toString(), "--allow-historical-commit", "--require-promotion", "--all")))
     }
 
     @Test

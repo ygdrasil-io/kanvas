@@ -173,6 +173,45 @@ class EvidenceCatalogVerifierTest {
     }
 
     @Test
+    fun `v2 rebaseline promotion requires paired nonblank comparison summaries`() {
+        val cases = selectedCases()
+        val root = writeV2Root(
+            cases = cases,
+            sourceCommits = mapOf(cases[0].descriptor.id.value to COMMIT_A, cases[1].descriptor.id.value to COMMIT_A),
+            promotionSceneIds = listOf(cases.first().descriptor.id.value),
+        )
+        val promotion = root.resolve("promotion.json")
+        Files.writeString(
+            promotion,
+            Files.readString(promotion).replace("\"rebaseline\":false", "\"rebaseline\":true"),
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            EvidenceCatalogVerifier.verify(
+                root = root,
+                selection = EvidenceSelection.All,
+                cases = cases,
+                expectedSourceCommit = COMMIT_A,
+            )
+        }
+
+        Files.writeString(
+            promotion,
+            Files.readString(promotion)
+                .replace("\"priorComparison\":null", "\"priorComparison\":\"\"")
+                .replace("\"newComparison\":null", "\"newComparison\":\"new\""),
+        )
+        assertFailsWith<IllegalArgumentException> {
+            EvidenceCatalogVerifier.verify(
+                root = root,
+                selection = EvidenceSelection.All,
+                cases = cases,
+                expectedSourceCommit = COMMIT_A,
+            )
+        }
+    }
+
+    @Test
     fun `v2 verification rejects promotion metadata for an unknown scene`() {
         val cases = selectedCases()
         val root = writeV2Root(
