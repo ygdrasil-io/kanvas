@@ -11,11 +11,16 @@ différence, delta maximal 0. Les deux pixels touchés sont `[0,99,0,32]` après
 le store sRGB. Les compteurs de submission/readback sont descriptifs et ne
 changent aucun gate de performance ou de similarité.
 
-`thinrects` entier n'est pas promu: il contient volontairement des rects de
-largeur nulle et conserve le refus terminal stable
-`unsupported.core_primitive.geometry.invalid`. `thinroundrects` et
-`rrect_clip_aa` restent hors du sous-ensemble. Aucun GM n'a été modifié ni
-régénéré.
+Les trois GMs requis sont exécutés par `SkiaGmRenderer.renderTerminalAttempt`,
+sans modification ni régénération de GM : `thinrects` refuse
+`unsupported.core_primitive.geometry.invalid` à l'opération 338,
+`thinroundrects` le même diagnostic à 338, et `rrect_clip_aa` refuse
+`unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted` à 45.
+
+La fixture WebGPU `DIFFERENCE` force un `ShaderBlendWithDstRead`, crée une
+destination snapshot et compare les 64 canaux du readback avec
+`GPUBlendOracle`: zéro différence, un snapshot, une submission et une copie
+de readback.
 
 Les détails CPU, GPU, diff, route, statistiques et refus se trouvent dans les
-JSON voisins.
+JSON voisins, dont `destination-read.json`.

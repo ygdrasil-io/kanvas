@@ -2,13 +2,13 @@ package org.graphiks.kanvas.skia.gm.path
 
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.skia.SkiaGmRenderer
+import org.graphiks.kanvas.skia.gm.clip.RRectClipAaGm
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.test.GpuAvailability
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
@@ -17,6 +17,11 @@ import kotlin.math.roundToInt
 
 @OptIn(ExperimentalUnsignedTypes::class)
 class ThinRectsGpuCoverageTest {
+    private data class ExpectedTerminalRefusal(
+        val diagnostic: String,
+        val operationCount: Int,
+    )
+
     @Test
     fun `native thinrect fixture preserves exact one eighth pixel coverage`() {
         GpuAvailability.requireWebGpu()
@@ -53,12 +58,34 @@ class ThinRectsGpuCoverageTest {
     }
 
     @Test
-    fun `full thinrects GM remains refused for its degenerate rect variants`() {
+    fun `full thin geometry GMs expose exact terminal route refusals`() {
         GpuAvailability.requireWebGpu()
 
-        val attempt = requireNotNull(SkiaGmRenderer.renderTerminalAttempt(ThinRectsGm()))
-
-        assertTrue(attempt.diagnostic.contains("unsupported.core_primitive.geometry.invalid"))
+        val expected = mapOf(
+            "thinrects" to ExpectedTerminalRefusal(
+                diagnostic = "unsupported.core_primitive.geometry.invalid",
+                operationCount = 338,
+            ),
+            "thinroundrects" to ExpectedTerminalRefusal(
+                diagnostic = "unsupported.core_primitive.geometry.invalid",
+                operationCount = 338,
+            ),
+            "rrect_clip_aa" to ExpectedTerminalRefusal(
+                diagnostic = "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted",
+                operationCount = 45,
+            ),
+        )
+        listOf(ThinRectsGm(), ThinRoundRectsGm(), RRectClipAaGm()).forEach { gm ->
+            val attempt = requireNotNull(SkiaGmRenderer.renderTerminalAttempt(gm))
+            val refusal = requireNotNull(expected[gm.name])
+            val diagnostic = attempt.diagnostic.substringBefore(":")
+            assertEquals(refusal.diagnostic, diagnostic, gm.name)
+            assertEquals(refusal.operationCount, attempt.operationCount, gm.name)
+            println(
+                "task5.gm-refusal gm=${gm.name} operations=${attempt.operationCount} " +
+                    "diagnostic=$diagnostic",
+            )
+        }
     }
 
     companion object {
