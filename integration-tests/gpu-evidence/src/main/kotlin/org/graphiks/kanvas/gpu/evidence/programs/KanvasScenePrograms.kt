@@ -36,9 +36,8 @@ object KanvasScenePrograms {
         )
     })
 
-    fun basicPrimitivesEmptyAndOutOfBounds() = KanvasSurfaceProgram(ROUTE_ID, record = {
+    fun basicPrimitivesOutOfBounds() = KanvasSurfaceProgram(ROUTE_ID, record = {
         drawColor(BACKGROUND)
-        drawRect(RectF32.ofLTRB(12f, 12f, 12f, 32f), Paint.fill(ColorARGB.Red).copy(antiAlias = false))
         drawRRect(
             RRectF32.of(RectF32.ofLTRB(-32f, -32f, -8f, -8f), radius = 4f),
             Paint.fill(ColorARGB.Red).copy(antiAlias = false),
@@ -49,6 +48,10 @@ object KanvasScenePrograms {
             Paint.fill(ColorARGB.Red).copy(antiAlias = false),
         )
         drawRect(RectF32.ofLTRB(-8f, -8f, 4f, 4f), Paint.fill(ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)).copy(antiAlias = false))
+    })
+
+    fun basicPrimitivesEmptyRectRefusal() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawRect(RectF32.ofLTRB(12f, 12f, 12f, 32f), Paint.fill(ColorARGB.Red).copy(antiAlias = false))
     })
 
     fun basicPrimitivesPoints() = KanvasSurfaceProgram(ROUTE_ID, record = {
