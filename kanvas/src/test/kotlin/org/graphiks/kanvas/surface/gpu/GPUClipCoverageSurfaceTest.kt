@@ -206,6 +206,71 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
+    fun `bounded cubic clip preserves intersect and difference for winding and even odd fills`() {
+        requireWebGpu()
+        val background = ColorARGB.of(255, 13, 20, 33)
+        val fill = ColorARGB.of(255, 242, 135, 46)
+        val variants = listOf(
+            FillType.WINDING to ClipOp.INTERSECT,
+            FillType.EVEN_ODD to ClipOp.INTERSECT,
+            FillType.WINDING to ClipOp.DIFFERENCE,
+            FillType.EVEN_ODD to ClipOp.DIFFERENCE,
+        )
+
+        variants.forEach { (fillType, operation) ->
+            val surface = Surface(64, 64)
+            surface.canvas {
+                drawColor(background)
+                save()
+                clipPath(
+                    Path {
+                        moveTo(8f, 8f)
+                        cubicTo(8f, 44f, 56f, 44f, 56f, 8f)
+                        close()
+                    }.apply { this.fillType = fillType },
+                    operation,
+                    antiAlias = false,
+                )
+                drawRect(
+                    RectF32.ofLTRB(0f, 0f, 64f, 64f),
+                    Paint.fill(fill).copy(antiAlias = false),
+                )
+                restore()
+            }
+
+            val result = surface.render()
+            assertEquals(0, result.diagnostics.fatalCount, "$fillType/$operation: ${result.diagnostics.entries}")
+            val inside = if (operation == ClipOp.INTERSECT) fill else background
+            val outside = if (operation == ClipOp.INTERSECT) background else fill
+            assertRgbaNear(result.pixels, 64, 32, 24, inside)
+            assertRgbaNear(result.pixels, 64, 32, 4, outside)
+        }
+    }
+
+    @Test
+    fun `inverse cubic clip remains a terminal refusal`() {
+        requireWebGpu()
+        val surface = Surface(64, 64)
+        surface.canvas {
+            clipPath(
+                Path {
+                    moveTo(8f, 8f)
+                    cubicTo(8f, 44f, 56f, 44f, 56f, 8f)
+                    close()
+                }.apply { fillType = FillType.INVERSE_EVEN_ODD },
+                ClipOp.INTERSECT,
+                antiAlias = false,
+            )
+            drawRect(
+                RectF32.ofLTRB(0f, 0f, 64f, 64f),
+                Paint.fill(ColorARGB.Red).copy(antiAlias = false),
+            )
+        }
+
+        assertTerminal("unsupported.clip.inverse_cubic", surface::render)
+    }
+
+    @Test
     fun `public solid triangle drawPath renders inside one hard path clip stencil scope`() {
         requireWebGpu()
         val background = ColorARGB.of(255, 13, 20, 33)

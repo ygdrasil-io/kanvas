@@ -45,6 +45,8 @@ class GPUClipCoverageElement(
     val inverseFill: Boolean,
     /** Capture-time CTM class retained through path flattening. */
     val transformClass: String = "identity",
+    /** True when the source path contained a cubic segment before bounded flattening. */
+    val hasCubicSegments: Boolean = false,
 ) {
     val values: List<Float> = immutableList(values)
 
@@ -81,10 +83,11 @@ class GPUClipCoverageElement(
             antiAlias == other.antiAlias &&
             fillRule == other.fillRule &&
             inverseFill == other.inverseFill &&
-            transformClass == other.transformClass
+            transformClass == other.transformClass &&
+            hasCubicSegments == other.hasCubicSegments
 
     override fun hashCode(): Int =
-        listOf(operation, kind, values, vertexCount, antiAlias, fillRule, inverseFill, transformClass)
+        listOf(operation, kind, values, vertexCount, antiAlias, fillRule, inverseFill, transformClass, hasCubicSegments)
             .hashCode()
 
     private fun validatePathPayload(values: List<Float>, vertexCount: Int) {
@@ -149,6 +152,7 @@ class GPUClipCoverageRequest(
             append('|').append(element.fillRule.name)
             append('|').append(element.inverseFill)
             append('|').append(element.transformClass)
+            append('|').append(element.hasCubicSegments)
             element.values.forEach { value ->
                 append('|').append(value.toRawBits().toUInt().toString(16))
             }

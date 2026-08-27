@@ -1,0 +1,13 @@
+{
+  "fixture": "bounded-cubic-clip-v1",
+  "oracle": "independent CPU cubic point oracle; Bernstein P(0.5) = (32,35), with closing segment y=8",
+  "extent": [64, 64],
+  "samples": {
+    "inside": [32, 24],
+    "outside": [32, 4],
+    "intersect": { "inside": "fill", "outside": "background" },
+    "difference": { "inside": "background", "outside": "fill" }
+  },
+  "variants": ["Winding/Intersect", "EvenOdd/Intersect", "Winding/Difference", "EvenOdd/Difference"],
+  "channelCount": 32
+}

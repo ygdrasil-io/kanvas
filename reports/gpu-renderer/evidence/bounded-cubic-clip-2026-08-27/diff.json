@@ -1,0 +1,10 @@
+{
+  "fixture": "bounded-cubic-clip-v1",
+  "comparison": "independent CPU point oracle vs WebGPU RGBA8 readback",
+  "channelsCompared": 32,
+  "differentChannels": 0,
+  "maxAbsoluteChannelDelta": 0,
+  "similarity": 1.0,
+  "thresholdChanged": false,
+  "scope": "two interior/exterior pixels per each of four operation/fill-rule variants; edge pixels are intentionally outside this non-AA fixture"
+}

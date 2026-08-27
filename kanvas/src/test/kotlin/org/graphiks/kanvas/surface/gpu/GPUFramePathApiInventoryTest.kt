@@ -3421,7 +3421,7 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
-    fun `mapper does not admit even odd difference path clip to the single stencil route`() {
+    fun `mapper admits bounded even odd difference path clip to the single stencil route`() {
         val surface = Surface(32, 32)
         surface.canvas {
             clipPath(triangle().apply { fillType = FillType.EVEN_ODD }, ClipOp.DIFFERENCE, antiAlias = false)
@@ -3433,7 +3433,12 @@ class GPUFramePathApiInventoryTest {
             capabilitiesWith(FILL_RECT_CAPABILITY, PATH_FILL_STENCIL_COVER),
         )
 
-        assertFalse(plan.visualCommands.single().clipExecutionPlan is GPUClipExecutionPlan.StencilCoverage)
+        val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(
+            plan.visualCommands.single().clipExecutionPlan,
+        )
+        assertEquals(GPUClipStencilOperation.Invert, execution.producer.frontPassOperation)
+        assertEquals(GPUClipStencilOperation.Invert, execution.producer.backPassOperation)
+        assertEquals(GPUClipStencilCompare.Equal, execution.consumer.compare)
     }
 
     @Test

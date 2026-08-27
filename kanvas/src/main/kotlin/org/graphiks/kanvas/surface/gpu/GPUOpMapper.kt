@@ -1437,6 +1437,12 @@ private fun GPUClipCoveragePlan.Mask.toMaskExecutionPlan(
     admitAnalyticMultiRect: Boolean,
 ): GPUClipExecutionPlan {
     val single = elements.singleOrNull()
+    if (single?.kind == GPUClipCoverageElementKind.Path && single.hasCubicSegments && single.inverseFill) {
+        return clipExecutionRefusal(
+            code = "unsupported.clip.inverse_cubic",
+            message = "Inverse cubic path clips are outside the bounded stencil-cover contract.",
+        )
+    }
     if (
         single != null &&
         single.operation == GPUClipCoverageOperation.Intersect &&
@@ -1465,7 +1471,6 @@ private fun GPUClipCoveragePlan.Mask.toMaskExecutionPlan(
                 it.operation == GPUClipCoverageOperation.Intersect ||
                     (
                         it.operation == GPUClipCoverageOperation.Difference &&
-                            it.fillRule == GPUClipFillRule.Winding &&
                             !it.inverseFill
                     )
             )

@@ -1,0 +1,14 @@
+{
+  "fixture": "bounded-cubic-clip-v1",
+  "variantsExecuted": 4,
+  "surfaceRenders": 4,
+  "targetPixelsPerRender": 4096,
+  "rgbaChannelsCompared": 32,
+  "maxPathVertices": 256,
+  "budgetIncreased": false,
+  "thresholdPolicy": {
+    "similarityThresholdChanged": false,
+    "performanceIsGating": false,
+    "note": "submission/readback counts are descriptive evidence only"
+  }
+}
