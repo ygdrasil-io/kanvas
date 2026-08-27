@@ -26,7 +26,7 @@ val sourceSets = the<org.gradle.api.tasks.SourceSetContainer>()
 
 fun optionalSceneArgument(): List<String> = scene.orNull?.let { listOf("--scene", it) }.orEmpty()
 
-fun selectionArguments(): List<String> {
+fun selectionArguments(requireExplicitAllForPromotion: Boolean = false): List<String> {
     val selectedScene = scene.orNull?.trim()?.also { require(it.isNotEmpty()) { "-Pscene must not be blank" } }
     val selectedScenesFile = scenesFile.orNull?.trim()?.also { require(it.isNotEmpty()) { "-PscenesFile must not be blank" } }
     val selectAll = if (all.isPresent) {
@@ -43,6 +43,11 @@ fun selectionArguments(): List<String> {
     )
     require(!(all.isPresent && !selectAll && selectedScene == null && selectedScenesFile == null)) {
         "-Pall=false requires an explicit selector"
+    }
+    if (requireExplicitAllForPromotion && selectedScene == null && selectedScenesFile == null) {
+        require(all.isPresent && all.orNull == "true") {
+            "-Pall=true is required for a full promotion"
+        }
     }
     require(selectors.size <= 1) { "at most one of -Pscene, -PscenesFile, or -Pall may be supplied" }
     return when {
@@ -196,6 +201,6 @@ tasks.register<JavaExec>("promoteGpuEvidence") {
         listOf(
             "--repository-root", rootProject.layout.projectDirectory.asFile.absolutePath,
             "--source-commit", sourceCommit.get(), "--reviewer", reviewer.get(), "--reason", reason.get(),
-        ) + promotionRebaselineArguments(rebaseline.orNull, priorComparison.orNull, newComparison.orNull) + selectionArguments()
+        ) + promotionRebaselineArguments(rebaseline.orNull, priorComparison.orNull, newComparison.orNull) + selectionArguments(requireExplicitAllForPromotion = true)
     })
 }

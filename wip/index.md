@@ -56,7 +56,7 @@ le lowerer et l'oracle correspondants.
 1. Avant une promotion correctness transactionnelle, arrêter après la
    vérification du catalogue generated complet et obtenir une autorisation
    utilisateur explicite pour une promotion correctness complète
-   (`promoteGpuEvidence` sans sélecteur, ou `-Pall` explicitement) pour un
+   (`promoteGpuEvidence` avec `-Pall=true` explicite) pour un
    initial catalog, ou avec `promotionRebaseline=true` et les deux résumés de
    comparaison pour un root existant, en présentant le SHA exact, le root
    generated exact et l'adapter de capture exact. La métadonnée
@@ -113,11 +113,11 @@ ni aucune de ces opérations hors portée.
 ./gradlew :integration-tests:gpu-evidence:generateGpuEvidence -PsourceCommit=<sha>
 ./gradlew :integration-tests:gpu-evidence:verifyGeneratedGpuEvidence -PsourceCommit=<sha>
 # Initial catalogue only: the promoted root must be absent or empty.
-./gradlew :integration-tests:gpu-evidence:promoteGpuEvidence -PsourceCommit=<sha> -PpromotionReviewer=<reviewer> -PpromotionReason=<reason>
+./gradlew :integration-tests:gpu-evidence:promoteGpuEvidence -PsourceCommit=<sha> -PpromotionReviewer=<reviewer> -PpromotionReason=<reason> -Pall=true
 # Initial catalogue only: the promoted root must be absent or empty.
-./gradlew :integration-tests:gpu-evidence:promoteGpuEvidence -PsourceCommit=<sha> -PpromotionReviewer=<reviewer> -PpromotionReason=<reason> -Pall
+./gradlew :integration-tests:gpu-evidence:promoteGpuEvidence -PsourceCommit=<sha> -PpromotionReviewer=<reviewer> -PpromotionReason=<reason> -Pall=true
 # Existing full catalogue: rebaseline comparison summaries are mandatory.
-./gradlew :integration-tests:gpu-evidence:promoteGpuEvidence -PsourceCommit=<sha> -PpromotionReviewer=<reviewer> -PpromotionReason=<reason> -PpromotionRebaseline=true -PpromotionPriorComparison='<comparaison précédente>' -PpromotionNewComparison='<comparaison nouvelle>' -Pall
+./gradlew :integration-tests:gpu-evidence:promoteGpuEvidence -PsourceCommit=<sha> -PpromotionReviewer=<reviewer> -PpromotionReason=<reason> -PpromotionRebaseline=true -PpromotionPriorComparison='<comparaison précédente>' -PpromotionNewComparison='<comparaison nouvelle>' -Pall=true
 ./gradlew :integration-tests:gpu-evidence:gpuEvidencePerformance -PsourceCommit=<sha> -Pscene=solid-card-stack
 ```
 
@@ -138,9 +138,10 @@ checked-in et transmet en interne `--allow-historical-commit --all`, sans
 réintroduire de native windowing.
 
 `promoteGpuEvidence` n'est donc pas full-only : il partage le même helper de
-sélection que `generateGpuEvidence` et `verifyGeneratedGpuEvidence`. Les
-rebaselines, en revanche, restent des opérations catalogue complet et doivent
-être annoncées comme telles.
+sélection que `generateGpuEvidence` et `verifyGeneratedGpuEvidence`, tout en
+exigeant une sélection explicite ou `-Pall=true`. Les rebaselines, en revanche,
+restent des opérations catalogue complet et doivent être annoncées comme
+telles.
 
 La tâche Gradle transmet aussi le rebaseline et les comparaisons prior/nouveau
 via `promotionRebaseline`, `promotionPriorComparison` et
