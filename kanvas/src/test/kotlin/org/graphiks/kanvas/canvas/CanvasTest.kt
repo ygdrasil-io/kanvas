@@ -168,16 +168,18 @@ class CanvasTest {
     }
 
     @Test
-    fun `restoring an empty save stack is a stable no op`() {
+    fun `negative restore count is a stable no op even with saved state`() {
         val buffer = TestBuffer()
         val canvas = Canvas(buffer)
 
-        canvas.restore()
+        canvas.save()
+        canvas.translate(7f, 11f)
         canvas.restoreToCount(-1)
 
-        assertEquals(0, canvas.saveCount)
-        assertEquals(Matrix3x3F32.Identity, canvas.matrix)
-        assertTrue(buffer.ops().isEmpty())
+        assertEquals(1, canvas.saveCount)
+        assertEquals(7f, canvas.matrix.tx)
+        assertEquals(11f, canvas.matrix.ty)
+        assertEquals(1, buffer.ops().filterIsInstance<DisplayOp.SetTransform>().size)
     }
 
     @Test fun `Canvas resetMatrix`() { val b = TestBuffer(); val c = Canvas(b); c.translate(100f, 200f); c.resetMatrix(); assertEquals(Matrix3x3F32.Identity, c.matrix) }

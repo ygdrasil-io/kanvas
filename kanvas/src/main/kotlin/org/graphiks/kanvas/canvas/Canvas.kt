@@ -346,9 +346,12 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
     /**
      * Repeatedly [restore] until the save stack depth reaches [count].
      *
-     * Has no effect if [count] is greater than or equal to [saveCount].
+     * Has no effect if [count] is negative or greater than or equal to
+     * [saveCount]. A negative count is invalid for this public Canvas API and
+     * is deliberately ignored before any state or GPU-recording work occurs.
      */
     fun restoreToCount(count: Int) {
+        if (count < 0) return
         while (saveStack.size > count) restore()
     }
 

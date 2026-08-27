@@ -26,6 +26,7 @@ object GpuEvidenceCatalog {
         separableBlurRect(),
         translucentCardOverlap(),
         scissorOverlay(),
+        canvasStateRestoreToCount(),
         strokeRectOutline(),
         linearGradientLanes(),
         radialSwatch(),
@@ -184,6 +185,24 @@ object GpuEvidenceCatalog {
                 fillRect(0, 0, width, height, intArrayOf(13, 20, 33, 255))
                 fillRect(16, 16, 40, 40, intArrayOf(31, 115, 209, 255))
                 fillRect(24, 24, 48, 48, intArrayOf(242, 135, 46, 255))
+            }.rgba() },
+        )
+    }
+
+    private fun canvasStateRestoreToCount(): EvidenceCase {
+        return EvidenceCase(
+            descriptor = EvidenceSceneDescriptor(
+                EvidenceSceneId("canvas-state-restore-to-count"), "Canvas state restoreToCount", "Public Surface save/clip nesting restores the parent clip before an outer post-restore sentinel.",
+                64, 64, 1L, setOf("solid-rect", "scissor", "canvas-state", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+                OraclePolicy.GeneratedCpu("reference-raster-canvas-state-restore-to-count", 1),
+                ComparisonPolicy(0, 100.0, 1, "Exact integer RGBA8 output from literal parent/child scissor state and post-restore sentinels."), emptySet(),
+            ),
+            program = KanvasScenePrograms.canvasStateRestoreToCount(),
+            oracle = CpuOracle { width, height -> ReferenceRaster(width, height).apply {
+                fillRect(0, 0, width, height, intArrayOf(13, 20, 33, 255))
+                fillRect(8, 8, 40, 40, intArrayOf(31, 115, 209, 255))
+                fillRect(8, 8, 20, 40, intArrayOf(242, 135, 46, 255))
+                fillRect(44, 8, 56, 20, intArrayOf(255, 255, 255, 255))
             }.rgba() },
         )
     }

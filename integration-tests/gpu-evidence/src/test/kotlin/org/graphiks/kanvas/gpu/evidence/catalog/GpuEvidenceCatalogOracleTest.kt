@@ -27,6 +27,17 @@ class GpuEvidenceCatalogOracleTest {
     }
 
     @Test
+    fun `restore to count oracle preserves parent child and post restore sentinels`() {
+        val pixels = oracle("canvas-state-restore-to-count")
+
+        assertPixel(pixels, 64, 64, 30, 9, intArrayOf(31, 115, 209, 255))
+        assertPixel(pixels, 64, 64, 15, 21, intArrayOf(242, 135, 46, 255))
+        assertPixel(pixels, 64, 64, 21, 21, intArrayOf(31, 115, 209, 255))
+        assertPixel(pixels, 64, 64, 45, 9, intArrayOf(255, 255, 255, 255))
+        assertPixel(pixels, 64, 64, 7, 9, intArrayOf(13, 20, 33, 255))
+    }
+
+    @Test
     fun `stroke oracle paints only the four literal coverage bands`() {
         val pixels = oracle("stroke-rect-outline")
         val background = intArrayOf(13, 20, 33, 255)
