@@ -1,9 +1,10 @@
 {
-  "schema": "org.graphiks.kanvas.gpu.delivered-font-glyph-run.route.v1",
+  "schema": "org.graphiks.kanvas.gpu.delivered-font-glyph-run.route.v2",
   "fontLoading": "test classpath resource -> FontTypeface exact source bytes",
   "glyphRunMapping": "Font.toTextBlob produces one KanvasGlyphRun with nonzero mapped glyph IDs",
-  "cpu": "FontTypeface.getGlyphPath for every selected glyph",
-  "gpu": "FontTypeface.preparedTextOutline -> prepared TextA8 -> GPUPreparedSurfaceFrameExecutor -> headless/offscreen ReadbackRgba",
+  "cpuOutlineOracle": "FontTypeface.getGlyphPath for every selected glyph",
+  "cpuA8Oracle": "sealed CPU-prepared TextA8 atlas -> CPU nearest UV sampler/device-quad rasterizer -> material-uniform source-over -> complete sRGB RGBA8 buffer for every row",
+  "gpu": "FontTypeface.preparedTextOutline -> TextA8 -> WebGPU headless/offscreen ReadbackRgba",
   "fallbackReason": "none for selected rows",
   "nonClaims": [
     "No general font support",

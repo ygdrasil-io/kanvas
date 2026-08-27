@@ -14,15 +14,17 @@ strictement l’oracle CPU d’outline du test.
 `GPUDeliveredFontGlyphRunEvidenceTest` borne trois rows à cette unique police :
 
 - `gradtext.glyph-run.linear-clamp.v1` : `Skia`, 24 px, gradient 2 stops,
-  `CLAMP` ; quatre glyphes A8.
+  `CLAMP` ; quatre glyphes A8 et oracle buffer complet.
 - `text-scale-skew.glyph-run.affine.v1` : `Skia`, 24 px, affine
-  `sx=1.15,kx=0.18` ; quatre glyphes A8 et oracle CPU opaque
-  `[255,255,255,255]`.
+  `sx=1.15,kx=0.18` ; quatre glyphes A8 et oracle CPU buffer complet.
 - `fontscaler.glyph-run.size-18.v1` : `Aa`, 18 px ; deux glyphes A8 et le
-  même oracle CPU.
+  même oracle CPU buffer complet.
 
-Chaque row crée une soumission et une copie de readback, sans refus GPU. Les
-preuves JSON sont dans
+Chaque row crée une soumission et une copie de readback, sans refus GPU. Le
+test interprète côté CPU l’atlas A8 préparé, les quads/UV et le material scellés
+puis compare les 18 432 bytes RGBA8 au readback. Les hashes/deltas exacts,
+dont les neuf différences UNORM à un LSB du gradient, sont documentés dans
+`glyph-evidence-fix-report.md`. Les preuves JSON sont dans
 `reports/gpu-renderer/evidence/delivered-font-glyph-run-2026-08-27/`.
 
 ## GMs non promus
