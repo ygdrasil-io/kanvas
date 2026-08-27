@@ -1,0 +1,9 @@
+{
+  "fixture": "thinrect-analytic-aa-v1",
+  "backend": "WebGPU/wgpu4k headless offscreen",
+  "target": "RGBA8_UNORM_SRGB 4x4 single sample",
+  "readback": "RGBA8; byte-exact against the CPU oracle in ThinRectsGpuCoverageTest",
+  "route": "CorePrimitive -> AnalyticShape uniform80 -> direct triangle list -> wgpu4k submit/readback",
+  "fanStencil": false,
+  "implicitScalarPromotion": false
+}

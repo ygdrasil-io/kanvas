@@ -1,0 +1,30 @@
+{
+  "execution": {
+    "runner": "SkiaGmRenderer.renderTerminalAttempt",
+    "test": "ThinRectsGpuCoverageTest.full thin geometry GMs expose exact terminal route refusals",
+    "backend": "WebGPU/wgpu4k headless offscreen",
+    "result": "passed"
+  },
+  "supported": "axis-aligned, finite, non-empty zero-radius FillRect with explicit ScalarAA and one sample",
+  "terminalRefusals": {
+    "thinrects": {
+      "status": "terminal-refusal",
+      "diagnostic": "unsupported.core_primitive.geometry.invalid",
+      "operationCount": 338,
+      "reason": "the GM intentionally includes zero-width rect variants outside the non-empty native fixture contract"
+    },
+    "thinroundrects": {
+      "status": "terminal-refusal",
+      "diagnostic": "unsupported.core_primitive.geometry.invalid",
+      "operationCount": 338,
+      "reason": "nonzero/asymmetric rrect geometry is outside the exact zero-radius rectangle fixture"
+    },
+    "rrect_clip_aa": {
+      "status": "terminal-refusal",
+      "diagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted",
+      "operationCount": 45,
+      "reason": "scalar-AA clip coverage is intentionally not promoted by the bounded direct rectangle route"
+    }
+  },
+  "invariants": ["no fan stencil", "no implicit promotion from a non-AA geometry route", "no budget or threshold relaxation", "no GM source modification"]
+}

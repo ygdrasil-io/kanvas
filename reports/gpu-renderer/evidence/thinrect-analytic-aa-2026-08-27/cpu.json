@@ -1,0 +1,8 @@
+{
+  "fixture": "thinrect-analytic-aa-v1",
+  "oracle": "deterministic rectangle/pixel intersection with linear-to-sRGB RGBA8 store",
+  "extent": [4, 4],
+  "input": { "rect": [1.125, 1.0, 1.25, 3.0], "color": "opaque-green", "antiAlias": true },
+  "coverage": { "formula": "max(0, min(pixelMax, rectMax) - max(pixelMin, rectMin)) per axis; x*y", "touchedPixels": [[1, 1], [1, 2]], "exactArea": 0.125 },
+  "rgba8": { "touchedPixel": [0, 99, 0, 32], "allOtherPixels": [0, 0, 0, 0], "channelCount": 64 }
+}

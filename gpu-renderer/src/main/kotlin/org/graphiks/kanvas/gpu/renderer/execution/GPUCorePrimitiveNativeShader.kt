@@ -776,9 +776,23 @@ internal fun corePrimitiveAnalyticShapeDstReadNativeWgsl(formulaWgsl: String): S
         return distance;
     }
 
+    fn analytic_rect_pixel_coverage(position: vec2<f32>) -> f32 {
+        let pixel_min = position - vec2<f32>(0.5);
+        let pixel_max = position + vec2<f32>(0.5);
+        let overlap_min = max(pixel_min, analytic.device_bounds.xy);
+        let overlap_max = min(pixel_max, analytic.device_bounds.zw);
+        let overlap = max(overlap_max - overlap_min, vec2<f32>(0.0));
+        return overlap.x * overlap.y;
+    }
+
     fn analytic_shape_coverage(position: vec2<f32>) -> f32 {
         let distance = analytic_shape_distance(position);
         let hard = select(0.0, 1.0, distance >= 0.0);
+        let zero_radius_rect =
+            all(analytic.radii0 == vec4<f32>(0.0)) && all(analytic.radii1 == vec4<f32>(0.0));
+        if (zero_radius_rect) {
+            return select(hard, analytic_rect_pixel_coverage(position), analytic.anti_alias != 0u);
+        }
         let shape_size = max(analytic.device_bounds.zw - analytic.device_bounds.xy, vec2<f32>(0.0));
         let scale = clamp(min(shape_size.x, shape_size.y), 0.0, 1.0);
         let bias = 1.0 - 0.5 * scale;
@@ -966,9 +980,23 @@ internal val CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_WGSL = """
         return distance;
     }
 
+    fn analytic_rect_pixel_coverage(position: vec2<f32>) -> f32 {
+        let pixel_min = position - vec2<f32>(0.5);
+        let pixel_max = position + vec2<f32>(0.5);
+        let overlap_min = max(pixel_min, analytic.device_bounds.xy);
+        let overlap_max = min(pixel_max, analytic.device_bounds.zw);
+        let overlap = max(overlap_max - overlap_min, vec2<f32>(0.0));
+        return overlap.x * overlap.y;
+    }
+
     fn analytic_shape_coverage(position: vec2<f32>) -> f32 {
         let distance = analytic_shape_distance(position);
         let hard = select(0.0, 1.0, distance >= 0.0);
+        let zero_radius_rect =
+            all(analytic.radii0 == vec4<f32>(0.0)) && all(analytic.radii1 == vec4<f32>(0.0));
+        if (zero_radius_rect) {
+            return select(hard, analytic_rect_pixel_coverage(position), analytic.anti_alias != 0u);
+        }
         let shape_size = max(analytic.device_bounds.zw - analytic.device_bounds.xy, vec2<f32>(0.0));
         let scale = clamp(min(shape_size.x, shape_size.y), 0.0, 1.0);
         let bias = 1.0 - 0.5 * scale;

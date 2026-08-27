@@ -1,0 +1,9 @@
+{
+  "fixture": "thinrect-analytic-aa-v1",
+  "comparison": "deterministic CPU RGBA8 oracle vs WebGPU offscreen readback",
+  "channelsCompared": 64,
+  "differentChannels": 0,
+  "maxAbsoluteChannelDelta": 0,
+  "similarity": 1.0,
+  "thresholdChanged": false
+}

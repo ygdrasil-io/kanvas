@@ -1,0 +1,16 @@
+{
+  "fixture": "thinrect-analytic-aa-v1",
+  "submissions": 1,
+  "readbackCopies": 1,
+  "targetPixels": 16,
+  "rgbaChannelsCompared": 64,
+  "executedGmTerminalAttempts": 3,
+  "destinationReadFixture": {
+    "executed": true,
+    "channelsCompared": 64,
+    "differentChannels": 0,
+    "destinationSnapshotCreations": 1
+  },
+  "budgetIncreased": false,
+  "thresholdPolicy": { "similarityThresholdChanged": false, "performanceIsGating": false, "note": "Submission/readback counters are descriptive evidence only; no performance threshold or gate was changed." }
+}
