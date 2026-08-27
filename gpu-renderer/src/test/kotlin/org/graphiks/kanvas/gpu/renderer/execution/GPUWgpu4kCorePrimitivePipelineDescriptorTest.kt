@@ -448,7 +448,7 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
     }
 
     @Test
-    fun `analytic shape has one unique uniform80 src over descriptor and forty two total programs`() {
+    fun `analytic shape has one unique uniform80 src over descriptor and forty six total programs`() {
         val key = analyticShapeKey()
         val mapped = assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>(
             mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(key),
@@ -465,7 +465,7 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1,
             key.uniformLayout,
         )
-        assertEquals(42, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
+        assertEquals(46, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
         assertTrue(CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES >= GPUWgpu4kCorePrimitivePipelineProgram.entries.size + 1)
         assertEquals(CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_VERTEX_ENTRY_POINT, descriptor.vertex.entryPoint)
         assertEquals(1, descriptor.vertex.buffers.size)
@@ -586,6 +586,33 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
     }
 
     @Test
+    fun `analytic shape AA source revision keeps direct and destination read cache keys distinct`() {
+        val direct = assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>(
+            mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(analyticShapeKey()),
+        )
+        val destinationRead = assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>(
+            mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(
+                analyticShapeKey().copy(
+                    blend = GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination(
+                        GPUBlendMode.DARKEN,
+                        "darken@v1",
+                        GPUSourceCoverageEncoding.None,
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals("core-primitive-analytic-shape-device-geometry-wgsl-v2", direct.componentIdentity.shaderIdentity)
+        assertEquals(
+            "core-primitive-analytic-shape-dst-read-device-geometry-wgsl-v2:darken",
+            destinationRead.componentIdentity.shaderIdentity,
+        )
+        assertNotEquals(direct.componentIdentity, destinationRead.componentIdentity)
+        assertEquals(GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeSrcOver, direct.identity.program)
+        assertEquals(GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeDstRead, destinationRead.identity.program)
+    }
+
+    @Test
     fun `analytic shape explicitly refuses analytic stencil and mask clips`() {
         val incompatibleClips = listOf(
             GPUCorePrimitiveRenderPipelineStructuralKey.Clip.Analytic(
@@ -671,7 +698,7 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
                 mapped.componentIdentity,
             )
         }
-        assertEquals(42, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
+        assertEquals(46, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
         assertTrue(CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES >= GPUWgpu4kCorePrimitivePipelineProgram.entries.size + 1)
     }
 
@@ -829,7 +856,7 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
                 assertEquals(GPUWgpu4kCorePrimitiveBindingPolicy.DynamicUniformRequired, mapped.componentIdentity.bindingPolicy)
             }
         }
-        assertEquals(42, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
+        assertEquals(46, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
         assertTrue(CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES >= GPUWgpu4kCorePrimitivePipelineProgram.entries.size + 1)
     }
 
