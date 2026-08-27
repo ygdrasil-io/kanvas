@@ -1153,6 +1153,33 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `valid rrect and drrect fully outside the target are stable no ops before native routing`() {
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawRRect(
+                    RRectF32.of(RectF32.ofLTRB(-32f, -32f, -8f, -8f), radius = 4f),
+                    Paint.fill(ColorARGB.Red).copy(antiAlias = false),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+                DisplayOp.DrawDRRect(
+                    RRectF32.of(RectF32.ofLTRB(72f, 72f, 104f, 104f), radius = 6f),
+                    RRectF32.of(RectF32.ofLTRB(80f, 80f, 96f, 96f), radius = 3f),
+                    Paint.fill(ColorARGB.Blue).copy(antiAlias = false),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+        )
+
+        assertEquals(emptyList(), inventory.visualCommands)
+        assertEquals(null, inventory.preparedRefusal)
+        assertTrue(inventory.recording.taskList.tasks.none { it is GPUTask.Refused })
+    }
+
+    @Test
     fun `drrect analytic route remains closed to aa non solid filters transforms clips and invalid containment`() {
         val outer = RRectF32.of(RectF32.ofLTRB(8f, 8f, 56f, 56f), radius = 8f)
         val inner = RRectF32.of(RectF32.ofLTRB(20f, 20f, 44f, 44f), radius = 4f)

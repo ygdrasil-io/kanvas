@@ -751,6 +751,11 @@ internal object GPUOpMapper {
             onGeometryRefusal = { refusal -> loweringRefusal = refusal },
         ) ?: return null
         val geometryRefusal = loweringRefusal ?: operation.coreGeometryRefusalOrNull()
+        // A valid finite primitive with no target-space pixels is a Canvas no-op.
+        // Do this before native-route preparation: analytic routes deliberately
+        // refuse an empty *clip* scissor, but must never turn an off-target draw
+        // into a terminal frame failure.
+        if (geometryRefusal == null && operation.isFullyOutsideTarget(rawNormalized)) return null
         val clipPlan = rawNormalized.clip.coverageRequest?.let { request ->
             GPUClipCoveragePlanner.planForFrameRoute(
                 request,
@@ -1855,6 +1860,14 @@ private fun GPUBounds.clampedTo(target: GPUTargetFacts): GPUBounds = GPUBounds(
     right = ceil(right).coerceIn(0f, target.width.toFloat()),
     bottom = ceil(bottom).coerceIn(0f, target.height.toFloat()),
 )
+
+private fun DisplayOp.isFullyOutsideTarget(command: NormalizedDrawCommand): Boolean = when (this) {
+    is DisplayOp.DrawRect,
+    is DisplayOp.DrawRRect,
+    is DisplayOp.DrawDRRect,
+    -> command.bounds.left >= command.bounds.right || command.bounds.top >= command.bounds.bottom
+    else -> false
+}
 
 private fun DisplayOp.transformOrIdentity(): Matrix3x3F32 = when (this) {
     is DisplayOp.DrawColor -> Matrix3x3F32.Identity
