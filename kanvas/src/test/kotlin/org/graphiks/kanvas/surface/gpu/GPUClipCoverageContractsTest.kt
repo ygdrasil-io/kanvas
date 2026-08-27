@@ -502,10 +502,10 @@ class GPUClipCoverageContractsTest {
     }
 
     @Test
-    fun `clip path defers over budget vertices to planner`() {
+    fun `cubic clip defers over budget edges to planner`() {
         val path = Path().apply {
             moveTo(0f, 0f)
-            repeat(300) { index -> lineTo(index + 1f, if (index % 2 == 0) 1f else -1f) }
+            cubicTo(0f, 80f, 80f, 80f, 80f, 0f)
             close()
         }
         val request = requireNotNull(
@@ -520,6 +520,27 @@ class GPUClipCoverageContractsTest {
             assertIs<GPUClipCoveragePlan.Refused>(
                 GPUClipCoveragePlanner.plan(request, RenderConfig(maxPathVertices = 256u), maxTextureDimension2D = 4096),
             ).code,
+        )
+    }
+
+    @Test
+    fun `positive cubic clip remains inside the explicit 256 edge budget`() {
+        val path = Path().apply {
+            moveTo(8f, 8f)
+            cubicTo(8f, 28f, 24f, 28f, 24f, 8f)
+            close()
+        }
+        val request = requireNotNull(
+            ClipStack.Complex(listOf(ClipStackOp.PathOp(path, ClipOp.INTERSECT, antiAlias = false)))
+                .toGPUClipFacts(target())
+                .coverageRequest,
+        )
+        val element = request.elements.single()
+
+        assertTrue(element.hasCubicSegments)
+        assertTrue(element.vertexCount in 3..256, "vertexCount=${element.vertexCount}")
+        assertIs<GPUClipCoveragePlan.Mask>(
+            GPUClipCoveragePlanner.plan(request, RenderConfig(maxPathVertices = 256u), maxTextureDimension2D = 4096),
         )
     }
 

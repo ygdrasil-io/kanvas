@@ -112,6 +112,7 @@ private fun ClipStackOp.toClipElement(): GPUClipCoverageElement = when (this) {
             fillRule = fill.rule,
             inverseFill = fill.inverse,
             transformClass = transformClass,
+            hasCubicSegments = path.commands().any { command -> command is PathCommand.Cubic },
         )
     }
 }
