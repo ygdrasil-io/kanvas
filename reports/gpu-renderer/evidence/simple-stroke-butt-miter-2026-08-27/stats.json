@@ -5,5 +5,10 @@
   "targetPixels": 1024,
   "rgbaChannelsCompared": 4096,
   "strokeWidthRange": [0.5, 64.0],
-  "budgetIncreased": false
+  "budgetIncreased": false,
+  "thresholdPolicy": {
+    "similarityThresholdChanged": false,
+    "performanceIsGating": false,
+    "note": "Submission/readback counters are descriptive evidence only; no performance threshold or gate was added or relaxed."
+  }
 }

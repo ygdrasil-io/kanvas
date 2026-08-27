@@ -990,7 +990,8 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
         !strokeWidth.isFinite() -> "unsupported.core_primitive.stroke.width_nonfinite"
         strokeWidth == 0f -> "unsupported.core_primitive.stroke.hairline_exact_lowering"
         strokeWidth < 0.5f || strokeWidth > 64f -> "unsupported.core_primitive.stroke.width_budget"
-        dashIntervals?.isNotEmpty() == true -> "unsupported.core_primitive.stroke.dash_exact_lowering"
+        pathEffectKind == "Dash" || dashIntervals?.isNotEmpty() == true ->
+            "unsupported.core_primitive.stroke.dash_exact_lowering"
         pathEffectKind != null -> "unsupported.core_primitive.stroke.path_effect_exact_lowering"
         strokeCap !in setOf("butt", "square") -> "unsupported.core_primitive.stroke.cap_exact_lowering"
         strokeJoin != "miter" -> "unsupported.core_primitive.stroke.join_exact_lowering"

@@ -2192,6 +2192,39 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `public Surface empty dash preserves its identity and refuses before native preparation`() {
+        val surface = Surface(32, 32)
+        surface.canvas {
+            drawPath(
+                Path().apply {
+                    moveTo(4f, 8f)
+                    lineTo(24f, 8f)
+                },
+                Paint.stroke(ColorARGB.Red, 4f).copy(
+                    antiAlias = false,
+                    pathEffect = PathEffect.Dash(floatArrayOf()),
+                ),
+            )
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = surface.snapshotOps(),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+        )
+
+        val command = assertIs<NormalizedDrawCommand.FillPath>(inventory.visualCommands.single().normalized)
+        assertEquals("Dash", command.pathEffectKind)
+        assertTrue(
+            inventory.recording.analysis.diagnostics.any { it.code == "unsupported.stroke.dash_empty" },
+        )
+        val refused = gatherRefusal(inventory)
+
+        assertEquals("unsupported.core_primitive.stroke.dash_exact_lowering", refused.code)
+        assertEquals("Dash", refused.facts["pathEffect"])
+        assertEquals("", refused.facts["dashIntervals"])
+    }
+
+    @Test
     fun `single segment hairline refuses before native preparation`() {
         val path = Path().apply {
             moveTo(4f, 8f)
@@ -2255,6 +2288,37 @@ class GPUFramePathApiInventoryTest {
             "unsupported.core_primitive.stroke.width_budget",
             gatherRefusal(overBudgetInventory).code,
         )
+    }
+
+    @Test
+    fun `single segment invalid miter limits refuse before native preparation`() {
+        val path = Path().apply {
+            moveTo(4f, 8f)
+            lineTo(24f, 8f)
+        }
+        listOf(0f, Float.NaN, Float.POSITIVE_INFINITY).forEach { miterLimit ->
+            val inventory = GPUFramePathApiInventory.plan(
+                operations = listOf(
+                    DisplayOp.DrawPath(
+                        path,
+                        Paint.stroke(ColorARGB.Red, 4f).copy(
+                            antiAlias = false,
+                            strokeMiter = miterLimit,
+                        ),
+                        Matrix3x3F32.Identity,
+                        ClipStack.WideOpen,
+                    ),
+                ),
+                target = target(),
+                config = RenderConfig.DEFAULT,
+            )
+
+            assertEquals(
+                "unsupported.core_primitive.stroke.miter_exact_lowering",
+                gatherRefusal(inventory).code,
+                "miterLimit=$miterLimit",
+            )
+        }
     }
 
     @Test

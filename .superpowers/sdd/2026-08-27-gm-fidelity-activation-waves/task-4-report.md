@@ -22,6 +22,13 @@ largeur hors `0.5..64`, dash, `PathEffect` non supporté, cap round, join
 round/bevel, limite de miter invalide et contour qui n’est pas un seul segment.
 Le budget maximal n’a pas changé.
 
+Un `PathEffect.Dash` vide est maintenant conservé comme `pathEffectKind=Dash`
+et refusé comme dash, y compris depuis l’API publique `Surface`. Le contrat de
+limite de miter est uniforme: valeur finie `>= 1`; `0`, `NaN` et `Infinity`
+sont refusés par la route, la validation de couverture et le plan de refus.
+`GPUStrokeDescriptor` reçoit aussi l’identité de path effect afin qu’un Dash
+vide n’apparaisse jamais comme candidat native solide.
+
 ## GMs
 
 Aucun GM n’est promu et aucun GM n’a été modifié. Les routes terminales sont
@@ -56,10 +63,23 @@ Le test GM de refus est exécuté séparément; il exige WebGPU et stabilise les
 trois diagnostics terminales ci-dessus. Aucun Ganesh, Graphite, SkSL dynamique
 ni scène interactive n’est utilisé.
 
-La vérification élargie `:gpu-renderer:check` reste en échec sur trois tests
-déjà contradictoires avec `codex/gm-activation-wave-3`, hors des fichiers de
-cette tâche: les deux attentes de gradient repeat attendent l’ancien code
-`unsupported.material.gradient_tile_mode_unsupported` alors que le code parent
-émet déjà `unsupported.material.mapping.linear_gradient_tile_mode`, et le
-guard de cycles de packages signale des cycles existants. Les tests stroke,
-native WebGPU et GM ciblés ci-dessus passent.
+Commandes de reproduction:
+
+```text
+./gradlew --no-daemon :kanvas:test --tests GPUFramePathApiInventoryTest \\
+  --tests GPUFramePathApiInventoryNativeSmokeTest :gpu-renderer:test \\
+  --tests SimpleStrokePreparedRouteTest \\
+  --tests GPUCorePrimitiveCoverageSampleAuthorityTest
+./gradlew --no-daemon :integration-tests:skia:test \\
+  --tests SimpleStrokeGmSurfaceRefusalEvidenceTest
+./gradlew --no-daemon :gpu-renderer:check
+```
+
+La vérification élargie `:gpu-renderer:check` reste en échec sur sept tests
+déjà présents dans le baseline de vague 3, hors des fichiers de cette tâche:
+un guard de cycles de packages, deux attentes de gradient repeat restées sur
+l’ancien diagnostic, un test de payload materializer et trois compteurs de
+pipeline. Les tests stroke, native WebGPU et GM ciblés ci-dessus passent.
+
+Les compteurs de performance sont descriptifs et non-gating; aucune politique
+de seuil de similarité ou de performance n’a été ajoutée, abaissée ou relâchée.

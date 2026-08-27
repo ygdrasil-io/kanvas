@@ -165,6 +165,7 @@ private fun GPUCorePrimitiveGeometry.TriangulatedPath.isExactSingleSegmentStroke
     ) return false
     val stroke = strokeStyle ?: return false
     if (!stroke.width.isFinite() || stroke.width !in 0.5f..64f ||
+        !stroke.miterLimit.isFinite() || stroke.miterLimit < 1f ||
         stroke.join != "miter" || stroke.dashIntervals.isNotEmpty()
     ) return false
     return when (stroke.loweringProof) {

@@ -1796,7 +1796,7 @@ private fun GPUPathDescriptor.strokeAndFillRefusalCode(
         stroke.hairline -> "unsupported.stroke.hairline_policy"
         stroke.cap !in setOf("Butt", "Round", "Square") -> "unsupported.stroke.cap"
         stroke.join !in setOf("Miter", "Round", "Bevel") -> "unsupported.stroke.join"
-        stroke.miter < 1f -> "unsupported.stroke.miter_limit"
+        !stroke.miter.isFinite() || stroke.miter < 1f -> "unsupported.stroke.miter_limit"
         stroke.dashOrPathEffectRef != null -> "unsupported.stroke_and_fill.path_effect"
         edgeCount < 0 || stroke.edgeCount < 0 || edgeCount + stroke.edgeCount > maxCombinedEdges ->
             "unsupported.stroke_and_fill.expansion_budget_exceeded"
@@ -1810,13 +1810,16 @@ internal fun GPUStrokeDescriptor.refusalCode(maxEdges: Int): String? =
         hairline -> "unsupported.stroke.hairline_policy"
         cap !in setOf("Butt", "Square") -> "unsupported.stroke.cap"
         join != "Miter" -> "unsupported.stroke.join"
-        miter < 1f -> "unsupported.stroke.miter_limit"
+        !miter.isFinite() || miter < 1f -> "unsupported.stroke.miter_limit"
         dashOrPathEffectRef != null -> {
             val ref = dashOrPathEffectRef
             if (ref.startsWith("dash:")) {
                 val elementCount = ref.removePrefix("dash:").count { it == ',' } + 1
-                if (elementCount > 4) "unsupported.stroke.dash_complex"
-                else null
+                when {
+                    ref == "dash:" -> "unsupported.stroke.dash_empty"
+                    elementCount > 4 -> "unsupported.stroke.dash_complex"
+                    else -> null
+                }
             } else "unsupported.stroke.path_effect_unregistered"
         }
         transformClass == "nonuniform" -> "unsupported.stroke.nonuniform_transform"
