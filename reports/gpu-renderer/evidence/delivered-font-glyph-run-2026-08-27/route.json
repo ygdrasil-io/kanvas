@@ -1,0 +1,14 @@
+{
+  "schema": "org.graphiks.kanvas.gpu.delivered-font-glyph-run.route.v1",
+  "fontLoading": "test classpath resource -> FontTypeface exact source bytes",
+  "glyphRunMapping": "Font.toTextBlob produces one KanvasGlyphRun with nonzero mapped glyph IDs",
+  "cpu": "FontTypeface.getGlyphPath for every selected glyph",
+  "gpu": "FontTypeface.preparedTextOutline -> prepared TextA8 -> GPUPreparedSurfaceFrameExecutor -> headless/offscreen ReadbackRgba",
+  "fallbackReason": "none for selected rows",
+  "nonClaims": [
+    "No general font support",
+    "No shaping, fallback, RTL/BiDi, ligatures, emoji/color fonts, SDF, LCD, hinting, or broad transform claim",
+    "No native interactive windowing",
+    "No Ganesh, Graphite, or dynamic SkSL"
+  ]
+}
