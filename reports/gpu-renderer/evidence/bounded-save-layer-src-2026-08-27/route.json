@@ -1,0 +1,24 @@
+{
+  "fixture": "bounded-save-layer-src-opacity-isolation-v1",
+  "admission": {
+    "finiteBounds": true,
+    "nesting": "single root child layer",
+    "restoreBlend": "SRC",
+    "alpha": 0.5,
+    "clip": "none"
+  },
+  "resource": {
+    "isolatedTarget": true,
+    "clear": "transparent-black",
+    "usage": ["render_attachment", "texture_binding"],
+    "lifetime": "frame-local"
+  },
+  "composite": {
+    "route": "fixed-function-src",
+    "destinationRead": "none",
+    "parentAttachmentSampled": false,
+    "source": "premultiplied isolated layer texture",
+    "opacityApplication": "sampled premultiplied source before fixed-function SRC"
+  },
+  "ordering": "scene-parent -> isolated-layer-child -> layer-SRC-composite -> readback"
+}

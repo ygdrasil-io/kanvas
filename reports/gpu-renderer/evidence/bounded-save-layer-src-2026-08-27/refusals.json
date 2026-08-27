@@ -1,0 +1,25 @@
+{
+  "gms": [
+    {
+      "name": "srcmode",
+      "terminalDiagnostic": "invalid.preflight.text.blend",
+      "reason": "the GM reaches a text operation with a blend outside the prepared text contract before it can evidence the bounded layer subset"
+    },
+    {
+      "name": "rasterallocator",
+      "terminalDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted",
+      "reason": "the AA oval precedes its bounded layer and remains outside the selected analytic-AA contract"
+    }
+  ],
+  "layerGate": [
+    "unsupported.layer.restore_blend for modes other than SRC_OVER and SRC",
+    "unsupported.layer.bounds_unbounded for non-finite layer bounds",
+    "unsupported.layer.active_attachment_sampled and unsupported.layer.parent_read_aliasing for aliasing",
+    "unsupported.prepared-surface.layer-nesting for nested layers"
+  ],
+  "nonClaims": [
+    "No GM is promoted by this fixture.",
+    "AA, arbitrary blend modes, destination reads, filters, backdrop initialization, F16, and nested layers remain outside this subset.",
+    "No budget or similarity threshold was changed."
+  ]
+}

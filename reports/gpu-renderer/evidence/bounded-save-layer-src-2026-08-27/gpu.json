@@ -1,0 +1,12 @@
+{
+  "fixture": "bounded-save-layer-src-opacity-isolation-v1",
+  "backend": "WebGPU headless/offscreen",
+  "dimensions": { "width": 4, "height": 4, "channels": 64, "format": "RGBA8 sRGB" },
+  "logicalOperations": 2,
+  "renderPasses": 3,
+  "passOrder": ["scene-parent", "isolated-layer-child", "layer-SRC-composite"],
+  "submits": 1,
+  "readbackCopies": 1,
+  "opsRefused": 0,
+  "sha256": "7b8a10f512a72f3430e3e89e975556ba0b5d29246cbe9db8ddd5955652aa275c"
+}

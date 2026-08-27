@@ -1,0 +1,12 @@
+{
+  "fixture": "bounded-save-layer-src-opacity-isolation-v1",
+  "dimensions": { "width": 4, "height": 4, "targetPixels": 16, "channelsCompared": 64 },
+  "logicalOperations": 2,
+  "renderPasses": 3,
+  "submits": 1,
+  "readbackCopies": 1,
+  "differentChannels": 0,
+  "maxDelta": 0,
+  "meanDelta": 0.0,
+  "performanceGate": "non-gating"
+}

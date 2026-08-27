@@ -186,6 +186,65 @@ class GPUWgpu4kLayerTargetCompositeSmokeTest {
     }
 
     @Test
+    fun `translucent SRC layer replaces only its bounded isolated target`() {
+        val backendSession = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backendSession != null)
+        backendSession!!
+        val runtimeCapabilities = requireNotNull(backendSession.capabilities)
+        val generation = backendSession.deviceGeneration
+        val requestId = GPUReadbackRequestID("readback.prepared.layer-src")
+        val session = backendSession.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(
+                4,
+                4,
+                GPUColorFormat.RGBA8UnormSrgb,
+                GPUColorInterpretation.LinearPremul,
+            ),
+        )
+        try {
+            val terminal = session.renderFrame(
+                layerCompositeTaskList(
+                    generation = generation,
+                    capabilities = runtimeCapabilities,
+                    frameId = GPUFrameID(10_764),
+                    readbackRequestId = requestId,
+                    alpha = 0.5f,
+                    blendMode = GPUBlendMode.SRC,
+                ),
+                GPUSceneFrameOutputRequest.ReadbackRgba(requestId),
+            ).completion.toCompletableFuture().get(10, TimeUnit.SECONDS)
+
+            assertEquals(
+                GPUFrameStructuralOutcome.Succeeded,
+                terminal.outcome,
+                "${terminal.diagnostic?.code?.value}: ${terminal.diagnostic?.message} " +
+                    "facts=${terminal.diagnostic?.facts}",
+            )
+            val expected = expectedTranslucentSrcPixels()
+            val actual = assertIs<GPUSceneFrameOutput.ReadbackRgba>(terminal.output).bytes
+            val difference = rgbaDifferenceStats(expected, actual)
+            assertTrue(
+                difference.maxDelta <= 2,
+                "translucent SRC layer composite maxDelta=${difference.maxDelta}",
+            )
+            println(
+                "task8.native-src-layer channels=${difference.channels} " +
+                    "differentChannels=${difference.differentChannels} maxDelta=${difference.maxDelta} " +
+                    "meanDelta=${difference.meanDelta}",
+            )
+            val counters = session.nativeCounters()
+            assertEquals(1L, counters.submits)
+            assertEquals(1L, counters.readbackCopies)
+        } finally {
+            try {
+                session.close()
+            } finally {
+                GPUBackendRuntimeNativeFactory.dispose()
+            }
+        }
+    }
+
+    @Test
     fun `prepared scene session plans one layer triplet between scene render and readback`() {
         val backendSession = GPUBackendRuntimeNativeFactory.createOrNull()
         assumeTrue(backendSession != null)
@@ -971,6 +1030,21 @@ class GPUWgpu4kLayerTargetCompositeSmokeTest {
         }
     }
 
+    private fun expectedTranslucentSrcPixels(): ByteArray = ByteArray(64).also { bytes ->
+        for (y in 0 until 4) for (x in 0 until 4) {
+            val offset = (y * 4 + x) * 4
+            if (x in 1 until 3 && y in 1 until 3) {
+                // SRC replaces only the isolated target's bounded quad. The layer alpha is
+                // applied to the premultiplied source before the fixed-function SRC write.
+                bytes[offset] = 188.toByte()
+                bytes[offset + 3] = 128.toByte()
+            } else {
+                bytes[offset + 2] = 255.toByte()
+                bytes[offset + 3] = 255.toByte()
+            }
+        }
+    }
+
     private fun assertRgbaNear(
         expected: ByteArray,
         actual: ByteArray,
@@ -985,6 +1059,34 @@ class GPUWgpu4kLayerTargetCompositeSmokeTest {
             assertTrue(delta <= tolerance, "$label byte[$index] delta=$delta")
         }
     }
+
+    private fun rgbaDifferenceStats(expected: ByteArray, actual: ByteArray): RgbaDifferenceStats {
+        assertEquals(expected.size, actual.size)
+        var differentChannels = 0
+        var maxDelta = 0
+        var totalDelta = 0L
+        expected.indices.forEach { index ->
+            val delta = kotlin.math.abs(
+                (expected[index].toInt() and 0xff) - (actual[index].toInt() and 0xff),
+            )
+            if (delta != 0) differentChannels += 1
+            maxDelta = maxOf(maxDelta, delta)
+            totalDelta += delta
+        }
+        return RgbaDifferenceStats(
+            channels = expected.size,
+            differentChannels = differentChannels,
+            maxDelta = maxDelta,
+            meanDelta = totalDelta.toDouble() / expected.size,
+        )
+    }
+
+    private data class RgbaDifferenceStats(
+        val channels: Int,
+        val differentChannels: Int,
+        val maxDelta: Int,
+        val meanDelta: Double,
+    )
 
     private fun layerCompositeTaskList(
         generation: GPUDeviceGenerationID,
@@ -1154,7 +1256,11 @@ class GPUWgpu4kLayerTargetCompositeSmokeTest {
                 GPUPassCommand.CompositeLayer(
                     sourceLabel = LAYER_TARGET.value,
                     parentTargetLabel = TARGET.value,
-                    blendModeLabel = if (blendMode == GPUBlendMode.SRC_OVER) "srcOver" else "multiply",
+                    blendModeLabel = when (blendMode) {
+                        GPUBlendMode.SRC_OVER -> "srcOver"
+                        GPUBlendMode.SRC -> "src"
+                        else -> "multiply"
+                    },
                     blendPlan = GPUBlendPlan.NoOp(blendMode, "test"),
                     routeLabel = "native.draw_layer.isolated_target",
                     tokenLabel = "token:layer",
