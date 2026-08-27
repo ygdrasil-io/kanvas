@@ -32,7 +32,7 @@ import org.graphiks.math.matrix.Matrix3x3F32
 
 class GpuEvidenceCatalogTest {
     @Test
-fun `catalog separates seventy one public surface renders from two refusals`() {
+    fun `catalog separates seventy public surface renders from three refusals`() {
         val cases = GpuEvidenceCatalog.cases
 
         assertEquals(
@@ -45,7 +45,7 @@ fun `catalog separates seventy one public surface renders from two refusals`() {
                 "linear-gradient-lanes",
                 "radial-swatch",
                 "sweep-disk",
-                "linear-gradient-three-stops", "sweep-gradient-partial-angle", "affine-solid-rect", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
+                "sweep-gradient-partial-angle", "affine-solid-rect", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
                 "scaled-solid-rrect",
                 "solid-drrect-hole",
                 "asymmetric-solid-rrect",
@@ -103,6 +103,7 @@ fun `catalog separates seventy one public surface renders from two refusals`() {
                 "implicit-closure-triangle-path",
                 "translated-triangle-path",
                 "uniform-scaled-triangle-path",
+                "linear-gradient-three-stops",
                 "custom-runtime-effect-unregistered-refusal",
                 "aggregate-memory-budget-refusal",
             ),
@@ -118,7 +119,7 @@ fun `catalog separates seventy one public surface renders from two refusals`() {
                 "linear-gradient-lanes",
                 "radial-swatch",
                 "sweep-disk",
-                "linear-gradient-three-stops", "sweep-gradient-partial-angle", "affine-solid-rect", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
+                "sweep-gradient-partial-angle", "affine-solid-rect", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
                 "scaled-solid-rrect",
                 "solid-drrect-hole",
                 "asymmetric-solid-rrect",
@@ -180,7 +181,7 @@ fun `catalog separates seventy one public surface renders from two refusals`() {
             GpuEvidenceCatalog.renderCases.map { it.descriptor.id.value },
         )
         assertEquals(
-            listOf("custom-runtime-effect-unregistered-refusal", "aggregate-memory-budget-refusal"),
+            listOf("linear-gradient-three-stops", "custom-runtime-effect-unregistered-refusal", "aggregate-memory-budget-refusal"),
             GpuEvidenceCatalog.refusalCases.map { it.descriptor.id.value },
         )
         assertTrue(GpuEvidenceCatalog.renderCases.all { it.program is KanvasSurfaceProgram })
@@ -188,10 +189,10 @@ fun `catalog separates seventy one public surface renders from two refusals`() {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            List(71) { "kanvas.surface.render" },
+            List(70) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
-        assertEquals(71, GpuEvidenceCatalog.renderCases.size)
+        assertEquals(70, GpuEvidenceCatalog.renderCases.size)
         assertEquals(73, GpuEvidenceCatalog.cases.size)
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
 
@@ -243,7 +244,7 @@ fun `catalog separates seventy one public surface renders from two refusals`() {
         assertIs<KanvasSurfaceProgram>(strokeRect.program)
         assertEquals("kanvas.surface.render", assertIs<KanvasSurfaceProgram>(strokeRect.program).routeId)
 
-        listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk", "linear-gradient-three-stops", "sweep-gradient-partial-angle", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal").forEach { id ->
+        listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk", "sweep-gradient-partial-angle", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal").forEach { id ->
             val evidenceCase = assertNotNull(cases.firstOrNull { it.descriptor.id.value == id })
             assertEquals(64, evidenceCase.descriptor.width)
             assertEquals(64, evidenceCase.descriptor.height)
@@ -260,17 +261,16 @@ fun `catalog separates seventy one public surface renders from two refusals`() {
                 "linear-gradient-lanes" to "surface-srgb-gradient-linear-clamp",
                 "radial-swatch" to "surface-srgb-gradient-radial-clamp",
                 "sweep-disk" to "surface-srgb-gradient-sweep-clamp",
-                "linear-gradient-three-stops" to "surface-srgb-gradient-linear-clamp",
                 "sweep-gradient-partial-angle" to "surface-srgb-gradient-sweep-clamp",
                 "scissored-radial-gradient" to "surface-srgb-gradient-radial-clamp",
                 "repeat-gradient-refusal" to "surface-srgb-gradient-linear-repeat",
                 "gradient-stroke-refusal" to "surface-srgb-gradient-linear-clamp-stroke-bands",
             ),
-            listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk", "linear-gradient-three-stops", "sweep-gradient-partial-angle", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal").associateWith { id ->
+            listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk", "sweep-gradient-partial-angle", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal").associateWith { id ->
                 (cases.first { it.descriptor.id.value == id }.descriptor.oracle as OraclePolicy.GeneratedCpu).oracleId
             },
         )
-        listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk", "linear-gradient-three-stops", "sweep-gradient-partial-angle", "scissored-radial-gradient", "repeat-gradient-refusal").forEach { id ->
+        listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk", "sweep-gradient-partial-angle", "scissored-radial-gradient", "repeat-gradient-refusal").forEach { id ->
             val oracle = cases.first { it.descriptor.id.value == id }.descriptor.oracle as OraclePolicy.GeneratedCpu
             assertEquals(2, oracle.version)
             assertEquals(
@@ -285,6 +285,25 @@ fun `catalog separates seventy one public surface renders from two refusals`() {
     }
 
     @Test
+    fun `three stop linear gradient records the v2 terminal refusal instead of a pixel claim`() {
+        val evidenceCase = assertNotNull(
+            GpuEvidenceCatalog.cases.firstOrNull {
+                it.descriptor.id.value == "linear-gradient-three-stops"
+            },
+        )
+
+        assertEquals(
+            "unsupported.material.mapping.linear_gradient_stop_count",
+            assertIs<EvidenceExpectation.ShouldRefuse>(evidenceCase.descriptor.expectation)
+                .stableReasonCode,
+        )
+        assertEquals(OraclePolicy.StableRefusal, evidenceCase.descriptor.oracle)
+        assertEquals(null, evidenceCase.descriptor.comparison)
+        assertEquals(null, evidenceCase.oracle)
+        assertIs<KanvasSurfaceProgram>(evidenceCase.program)
+    }
+
+    @Test
     fun `catalog locks exact product routes policies and oracle identities`() {
         val expectedRenderIds = listOf(
             "solid-card-stack",
@@ -295,7 +314,7 @@ fun `catalog separates seventy one public surface renders from two refusals`() {
             "linear-gradient-lanes",
             "radial-swatch",
             "sweep-disk",
-            "linear-gradient-three-stops", "sweep-gradient-partial-angle", "affine-solid-rect", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
+            "sweep-gradient-partial-angle", "affine-solid-rect", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
             "scaled-solid-rrect",
             "solid-drrect-hole",
             "asymmetric-solid-rrect",
@@ -369,7 +388,12 @@ fun `catalog separates seventy one public surface renders from two refusals`() {
                 evidenceCase.descriptor.id.value to assertIs<RoutedSceneProgram>(evidenceCase.program).routeId
             },
         )
-        assertTrue(GpuEvidenceCatalog.refusalCases.none { it.program is KanvasSurfaceProgram })
+        assertEquals(
+            mapOf("linear-gradient-three-stops" to "kanvas.surface.render"),
+            GpuEvidenceCatalog.refusalCases.filter { it.program is KanvasSurfaceProgram }.associate { evidenceCase ->
+                evidenceCase.descriptor.id.value to assertIs<KanvasSurfaceProgram>(evidenceCase.program).routeId
+            },
+        )
 
         assertEquals(
             mapOf(
@@ -381,7 +405,6 @@ fun `catalog separates seventy one public surface renders from two refusals`() {
                 "linear-gradient-lanes" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-linear-clamp", 2),
                 "radial-swatch" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-radial-clamp", 2),
                 "sweep-disk" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-sweep-clamp", 2),
-                "linear-gradient-three-stops" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-linear-clamp", 2),
                 "sweep-gradient-partial-angle" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-sweep-clamp", 2),
                 "affine-solid-rect" to OraclePolicy.GeneratedCpu("reference-raster-affine-solid-rect", 1),
                 "scissored-radial-gradient" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-radial-clamp", 2),
@@ -459,7 +482,6 @@ fun `catalog separates seventy one public surface renders from two refusals`() {
                 "linear-gradient-lanes" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
                 "radial-swatch" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
                 "sweep-disk" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
-                "linear-gradient-three-stops" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
                 "sweep-gradient-partial-angle" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
                 "affine-solid-rect" to ComparisonPolicy(0, 100.0, 1, "Exact RGBA8 output from hand-derived inverse affine pixel-center membership."),
                 "scissored-radial-gradient" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
@@ -1291,7 +1313,7 @@ fun `catalog separates seventy one public surface renders from two refusals`() {
     }
 
     private fun ops(id: String): List<DisplayOp> {
-        val program = assertIs<KanvasSurfaceProgram>(GpuEvidenceCatalog.renderCases.first { it.descriptor.id.value == id }.program)
+        val program = assertIs<KanvasSurfaceProgram>(GpuEvidenceCatalog.cases.first { it.descriptor.id.value == id }.program)
         val session = assertIs<KanvasSurfaceRecordedSession>(program.openSession(64, 64))
         return session.snapshotOps()
     }
