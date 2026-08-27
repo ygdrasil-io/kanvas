@@ -41,7 +41,8 @@
 
 - [ ] Repartir du SHA final de toutes les routes correctness intégrées.
 - [ ] Régénérer les rendus des seuls GMs enregistrés.
-- [ ] Régénérer les scores sans conserver de ligne orpheline.
+- [ ] Régénérer les scores, publier l'audit des lignes orphelines et ne les
+      nettoyer que dans un rebaseline séparé explicitement vérifié.
 - [ ] Vérifier provenance et nombre des références/rendus.
 - [ ] Régénérer le dashboard à partir de ces artefacts vérifiés.
 
