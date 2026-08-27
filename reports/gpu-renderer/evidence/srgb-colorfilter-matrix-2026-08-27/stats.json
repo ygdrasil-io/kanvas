@@ -1,0 +1,14 @@
+{
+  "fixture": "srgb-colorfilter-matrix-v1",
+  "channels": 64,
+  "pixels": 16,
+  "differentChannels": 0,
+  "maxDelta": 0,
+  "meanDelta": 0.0,
+  "performance": {
+    "submits": 1,
+    "readbackCopies": 1,
+    "gating": false,
+    "reason": "correctness fixture; no frame-time claim"
+  }
+}

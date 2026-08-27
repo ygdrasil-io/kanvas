@@ -1,0 +1,8 @@
+{
+  "fixture": "srgb-colorfilter-matrix-v1",
+  "oracle": "independent hand-derived RGBA8 [46,32,96,128] repeated over 4x4",
+  "differentChannels": 0,
+  "maxDelta": 0,
+  "meanDelta": 0.0,
+  "acceptedMaxDelta": 1
+}

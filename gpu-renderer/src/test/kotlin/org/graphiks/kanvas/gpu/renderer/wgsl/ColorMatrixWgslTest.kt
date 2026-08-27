@@ -2,20 +2,41 @@ package org.graphiks.kanvas.gpu.renderer.wgsl
 
 import kotlin.test.Test
 import kotlin.test.assertContains
+import kotlin.test.assertIs
+import kotlin.test.assertTrue
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorWgslValidation
+import org.graphiks.kanvas.gpu.renderer.color.validateColorWgsl
+import org.graphiks.wgsl.parser.parseWgslResult
 
 class ColorMatrixWgslTest {
     @Test
-    fun `color matrix applies four row-major rows and translation`() {
-        assertContains(ColorMatrixWgsl, "dot(uniforms.m0, c)")
-        assertContains(ColorMatrixWgsl, "dot(uniforms.m1, c)")
-        assertContains(ColorMatrixWgsl, "dot(uniforms.m2, c)")
-        assertContains(ColorMatrixWgsl, "dot(uniforms.m3, c)")
+    fun `color matrix applies four row-major linear rows and translation`() {
+        assertContains(ColorMatrixWgsl, "dot(uniforms.m0, linear)")
+        assertContains(ColorMatrixWgsl, "dot(uniforms.m1, linear)")
+        assertContains(ColorMatrixWgsl, "dot(uniforms.m2, linear)")
+        assertContains(ColorMatrixWgsl, "dot(uniforms.m3, linear)")
         assertContains(ColorMatrixWgsl, "+ uniforms.m4")
     }
 
     @Test
-    fun `color matrix clamps then returns premultiplied rgba`() {
+    fun `color matrix explicitly converts sRGB then returns premultiplied rgba`() {
+        assertContains(ColorMatrixWgsl, "fn srgb_to_linear")
+        assertContains(ColorMatrixWgsl, "fn linear_to_srgb")
+        assertContains(ColorMatrixWgsl, "srgb_to_linear(c.r)")
+        assertContains(ColorMatrixWgsl, "linear_to_srgb(filtered.r)")
         assertContains(ColorMatrixWgsl, "clamp(")
-        assertContains(ColorMatrixWgsl, "filtered.rgb * filtered.a")
+        assertContains(ColorMatrixWgsl, "encoded * filtered.a")
+    }
+
+    @Test
+    fun `color matrix WGSL parses and reflects through wgsl4k`() {
+        val result = validateColorWgsl("srgb-colorfilter-matrix-v1", ColorMatrixWgsl)
+
+        val validated = assertIs<GPUColorWgslValidation.Validated>(result)
+        val reflection = requireNotNull(validated.reflection)
+        assertTrue(reflection.validated)
+        assertTrue(reflection.report.entryPoints.any { it.name == "fs_main" })
+        val parsed = parseWgslResult(ColorMatrixWgsl)
+        assertTrue(parsed.isSuccess, "wgsl4k rejected ColorMatrixWgsl: ${parsed.errors.joinToString { it.message }}")
     }
 }

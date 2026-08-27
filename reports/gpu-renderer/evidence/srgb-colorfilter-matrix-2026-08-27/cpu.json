@@ -1,0 +1,9 @@
+{
+  "fixture": "srgb-colorfilter-matrix-v1",
+  "oracle": "SrgbMatrixColorFilter.applyEncodedStraightRgba",
+  "inputEncodedStraightRgba": [0.5, 0.25, 0.75, 0.5],
+  "matrixRowMajor4x5": [0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+  "colorPolicy": "encoded-srgb -> straight-linear-srgb matrix -> encoded-srgb-premul",
+  "expectedPixelRgba8": [46, 32, 96, 128],
+  "extent": [4, 4]
+}
