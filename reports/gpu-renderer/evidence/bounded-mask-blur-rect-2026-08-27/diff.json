@@ -1,8 +1,12 @@
 {
   "fixture": "bounded-mask-blur-rect-v1",
-  "comparison": "TopLevelMaskBlurPixelOracle versus native WebGPU readback",
-  "channels": 4096,
-  "tolerancePerChannel": 24,
-  "result": "pass",
-  "thresholdPolicy": "existing mask-blur oracle tolerance; unchanged by Task 7"
+  "comparison": "BoundedMaskBlurRectCpuOracle versus native WebGPU readback",
+  "dimensions": { "width": 32, "height": 32, "channels": 4096 },
+  "command": "drawRect(8,8,17,17, MaskFilter.Blur(NORMAL, sigma=2))",
+  "cpuSha256": "9735248adde7e8e966a03d90fe43ea70c468be2ddd748384985c2b9706dd1bae",
+  "gpuSha256": "9735248adde7e8e966a03d90fe43ea70c468be2ddd748384985c2b9706dd1bae",
+  "differentChannels": 0,
+  "maxDelta": 0,
+  "meanDelta": 0.0,
+  "comparisonPolicy": "byte-exact"
 }

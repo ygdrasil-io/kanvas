@@ -9,5 +9,6 @@
   ],
   "ordering": "mask -> blur-h -> blur-v -> style -> composite",
   "sourceDependency": "local FillRect mask only",
-  "quickReject": "non-rect/hairline/stroke/image-source paths are not admitted by this fixture route"
+  "quickReject": "non-rect/hairline/stroke/image-source paths and sigma > 12 are refused before native materialization",
+  "admission": { "maxSigma": 12.0, "maxKernelTaps": 25, "scale": 1.0 }
 }

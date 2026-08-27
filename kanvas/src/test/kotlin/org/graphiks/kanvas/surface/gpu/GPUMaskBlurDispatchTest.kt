@@ -381,7 +381,7 @@ class GPUMaskBlurDispatchTest {
             clip = GPUClipFacts.deviceRect(deviceDomain),
             maskFilter = NormalizedMaskFilter.Blur(
                 NormalizedBlurStyle.NORMAL,
-                sigma = 24f,
+                sigma = 12f,
             ),
         )
         val plan = MaskBlurPlanner.plan(
@@ -390,9 +390,9 @@ class GPUMaskBlurDispatchTest {
         assertTrue(plan is MaskBlurPlan.Ready)
         plan as MaskBlurPlan.Ready
         assertEquals(deviceDomain, plan.deviceBounds)
-        assertEquals(0.5f, plan.scale)
-        assertEquals(24, plan.localWidth)
-        assertEquals(24, plan.localHeight)
+        assertEquals(1f, plan.scale)
+        assertEquals(48, plan.localWidth)
+        assertEquals(48, plan.localHeight)
 
         val local = command.toLocalMaskCommand(plan)
         assertTrue(local is NormalizedDrawCommand.FillPath)
@@ -400,13 +400,13 @@ class GPUMaskBlurDispatchTest {
         assertTrue(local.pathDescriptor.inverseFill)
         assertFloatListEquals(
             listOf(
-                6f, 6f,
-                16f, 6f,
-                6f, 16f,
+                12f, 12f,
+                32f, 12f,
+                12f, 32f,
             ),
             local.tessellatedVertices,
         )
-        assertBoundsEquals(GPUBounds(0f, 0f, 24f, 24f), local.bounds)
+        assertBoundsEquals(GPUBounds(0f, 0f, 48f, 48f), local.bounds)
 
         val target = CapturingMaskBlurTarget()
         val diagnostics = Diagnostics()
@@ -422,7 +422,7 @@ class GPUMaskBlurDispatchTest {
 
         assertTrue(result.rendered)
         assertEquals(0, diagnostics.fatalCount)
-        assertEquals(listOf(0, 0, 24, 24), target.maskScissor)
+        assertEquals(listOf(0, 0, 48, 48), target.maskScissor)
     }
 
     @Test

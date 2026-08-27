@@ -7,6 +7,7 @@
   "nonClaims": [
     "No GM is promoted by this fixture.",
     "blurquickreject remains refused because its preceding hairline stroke is outside the bounded stroke contract.",
-    "Offset image-filter graphs remain refused until a prepared image binding and complete native route exist."
+    "Offset image-filter graphs remain refused until a prepared image binding and complete native route exist.",
+    "Mask blur sigma values that are NaN, infinite, negative, or greater than 12 refuse as unsupported.mask-filter.blur.sigma before intermediate allocation."
   ]
 }

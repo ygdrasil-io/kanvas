@@ -1,10 +1,11 @@
 {
   "fixture": "bounded-mask-blur-rect-v1",
-  "oracle": "TopLevelMaskBlurPixelOracle",
-  "independence": "CPU oracle evaluates the mask, Gaussian kernel, style and SrcOver composite without WebGPU handles",
-  "target": "32x32 RGBA8",
+  "oracle": "BoundedMaskBlurRectCpuOracle",
+  "independence": "fixture-specific CPU implementation; no MaskBlurPlanner, blurKernelUniform, payload, or WebGPU dependency",
+  "dimensions": { "width": 32, "height": 32, "channels": 4096, "format": "RGBA8" },
+  "command": "drawRect(8,8,17,17, MaskFilter.Blur(NORMAL, sigma=2))",
   "source": "opaque black FillRect(8,8,17,17)",
   "filter": "MaskFilter.Blur(NORMAL, sigma=2)",
   "kernel": { "sigma": 2.0, "tapCount": 5, "weightsPaddedTo": 25 },
-  "channels": 4096
+  "sha256": "9735248adde7e8e966a03d90fe43ea70c468be2ddd748384985c2b9706dd1bae"
 }

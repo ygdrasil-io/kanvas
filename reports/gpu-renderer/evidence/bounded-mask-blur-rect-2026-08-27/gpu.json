@@ -1,10 +1,14 @@
 {
   "fixture": "bounded-mask-blur-rect-v1",
   "backend": "WebGPU headless/offscreen",
-  "opsDispatched": 1,
+  "dimensions": { "width": 32, "height": 32, "channels": 4096, "format": "RGBA8" },
+  "command": "drawRect(8,8,17,17, MaskFilter.Blur(NORMAL, sigma=2))",
+  "logicalOperations": 1,
+  "passes": 5,
+  "passOrder": ["mask", "blur-h", "blur-v", "style", "composite"],
   "opsRefused": 0,
   "nativeRoute": "MaskBlur",
-  "passes": ["mask", "blur-h", "blur-v", "style", "composite"],
   "intermediateTargets": 4,
-  "kernel": { "tapCount": 5, "uniformWeightCapacity": 25 }
+  "kernel": { "tapCount": 5, "uniformWeightCapacity": 25 },
+  "sha256": "9735248adde7e8e966a03d90fe43ea70c468be2ddd748384985c2b9706dd1bae"
 }

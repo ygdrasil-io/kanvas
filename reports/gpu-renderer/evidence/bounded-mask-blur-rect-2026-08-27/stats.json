@@ -1,9 +1,13 @@
 {
   "fixture": "bounded-mask-blur-rect-v1",
-  "targetPixels": 1024,
-  "channelsCompared": 4096,
-  "renderPasses": 5,
+  "dimensions": { "width": 32, "height": 32, "targetPixels": 1024, "channelsCompared": 4096 },
+  "command": "drawRect(8,8,17,17, MaskFilter.Blur(NORMAL, sigma=2))",
+  "logicalOperations": 1,
+  "passes": 5,
   "filterIntermediates": 4,
   "tapCount": 5,
+  "differentChannels": 0,
+  "maxDelta": 0,
+  "meanDelta": 0.0,
   "performanceGate": "non-gating"
 }
