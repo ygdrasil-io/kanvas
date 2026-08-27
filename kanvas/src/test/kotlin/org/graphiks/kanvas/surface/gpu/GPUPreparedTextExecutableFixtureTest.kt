@@ -203,18 +203,18 @@ class GPUPreparedTextExecutableFixtureTest {
                 preCoverageSourceAlpha = GPUSourceAlphaClassification.Translucent,
                 materialKey =
                         "material:prepared:gradient:" +
-                        "7d48819c0799accb64a68c6e57d5fe994649a7f968add2d7e35e65628495debf",
+                        "f88b947b0c830fdbddc3fcf74d08b0d602e99cf5504dd71a613a381c46f51888",
                 abiHash =
-                    "sha256:fbe672e92ca68cfc96c0b7c609f4ff7534dbf1113715093fb02e6302131b28be",
+                    "sha256:8c0525af5e614a655a424831b140a019dc8df5793a9ae8c8513137ae07639493",
                 wgslSha256 =
-                    "3135797b82879597ea6bea1c3a583180ef37efc82d29fd16aaed5b5a9269cc77",
+                    "d9c9430596c0c79e00d43c10990d1bb8fa4419384b416627f5cf3f465ebd5f81",
                 fragmentHash =
-                    "cad682f065b1247bfe8f7cfd234ab424ac54a28779ca0be6a691aebccf94bcfe",
+                    "123543a888223fd436bdd6d4f95acdd70bc4852d6d0b2a40bb7fcdea5a80aa89",
                 fragmentAbiHash =
-                    "sha256:082ec8a902a93d4e99874345f38a3c2b8a066179fddbdb91e0bd7112f0057b7c",
+                    "sha256:2d87fd75d2247952759c7ff1c979c276f25e42bf544696faf6323c7b6e545432",
                 finalSourceMarker = "let lenSq = dot(dir, dir);",
                 composableSourceMarker = "let lenSq = dot(dir, dir);",
-                uniformByteCount = 544,
+                uniformByteCount = 576,
                 sampledResourceCount = 0,
             ),
             "radial" to MaterialExpectation(
