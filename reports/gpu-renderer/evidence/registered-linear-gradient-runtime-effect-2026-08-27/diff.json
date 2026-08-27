@@ -4,5 +4,5 @@
   "differentChannels": 0,
   "maxDelta": 0,
   "meanDelta": 0.0,
-  "policy": "byte exact; no similarity threshold was changed"
+  "policy": "byte exact; no similarity threshold or budget was changed"
 }

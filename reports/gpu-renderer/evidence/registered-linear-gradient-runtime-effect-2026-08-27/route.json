@@ -3,8 +3,9 @@
   "descriptor": "LinearGradientRTDescriptor@1",
   "registry": "KanvasRuntimeEffectRegistry",
   "cpu": "LinearGradientRTCPUOracle",
-  "wgsl": {"source": "LinearGradientRTWgsl", "entryPoint": "linear_gradient_rt_source", "validation": "parseWgslResult + Lowerer + reflected ABI", "binding": "descriptor group=1,binding=0; native frame wrapper rebinding group=0,binding=0"},
-  "native": "GPURegisteredUniformProgram.LinearGradient wraps the descriptor WGSL and renders headless/offscreen",
+  "wgsl": {"source": "LinearGradientRTWgsl", "entryPoint": "linear_gradient_rt_source", "validation": "parseWgslResult + Lowerer + reflected ABI", "binding": "descriptor group=1,binding=0; prepared-vertices materializer preserves this canonical binding"},
+  "native": "GPUMaterialDescriptor.RuntimeEffect(runtime.linear_gradient_rt@1) -> KanvasPreparedRuntimeEffectResolver -> GPUPreparedMaterialProgramCompiler -> GPUPreparedSurfaceFrameTaskListBuilder -> prepared-vertices native materializer -> WebGPU headless/offscreen readback",
+  "legacyDirectGradientRoute": "GPURegisteredUniformProgram.LinearGradient remains a separate legacy gradient route and is not used as runtime-effect evidence",
   "dynamicSkSL": false,
   "dynamicWGSL": false,
   "children": false
