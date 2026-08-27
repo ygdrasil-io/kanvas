@@ -51,6 +51,35 @@ class EvidenceBundleWriter internal constructor(
         attemptId: String = observation.routeAttemptId() ?: "attempt-1",
         checkedInPngBytes: ByteArray? = null,
         expectedRouteId: String,
+    ): Path = writeGeneratedBundle(descriptor, observation, expectedRgba, attemptId, checkedInPngBytes) { temp ->
+        writeBundleV1(temp, descriptor, observation, expectedRgba, attemptId, checkedInPngBytes)
+        val verification = EvidenceBundleVerifier.verify(
+            temp,
+            EvidenceVerificationExpectation(sourceCommit, descriptor, expectedRgba, checkedInPngBytes, expectedRouteId),
+        )
+        require(verification is EvidenceBundleVerification.Verified) {
+            val errors = (verification as EvidenceBundleVerification.Invalid).errors.joinToString("; ")
+            "generated evidence bundle failed independent verification: $errors"
+        }
+    }
+
+    fun writeGeneratedV2(
+        descriptor: EvidenceSceneDescriptor,
+        observation: SceneObservation,
+        expectedRgba: ByteArray? = null,
+        attemptId: String = observation.routeAttemptId() ?: "attempt-1",
+        checkedInPngBytes: ByteArray? = null,
+    ): Path = writeGeneratedBundle(descriptor, observation, expectedRgba, attemptId, checkedInPngBytes) { temp ->
+        writeBundleV2(temp, descriptor, observation, expectedRgba, attemptId, checkedInPngBytes)
+    }
+
+    private fun writeGeneratedBundle(
+        descriptor: EvidenceSceneDescriptor,
+        observation: SceneObservation,
+        expectedRgba: ByteArray?,
+        attemptId: String,
+        checkedInPngBytes: ByteArray?,
+        writeStagingBundle: (Path) -> Unit,
     ): Path {
         require(SAFE_COMPONENT.matches(attemptId)) { "attempt id must be a single safe path component" }
         require(observation !is SceneObservation.Unavailable) { "unavailable observations cannot produce bundles" }
@@ -62,15 +91,7 @@ class EvidenceBundleWriter internal constructor(
             stagingRoot = siblingTemp(destination)
             val temp = stagingRoot.resolve(destination.fileName)
             Files.createDirectory(temp)
-            writeBundle(temp, descriptor, observation, expectedRgba, attemptId, checkedInPngBytes)
-            val verification = EvidenceBundleVerifier.verify(
-                temp,
-                EvidenceVerificationExpectation(sourceCommit, descriptor, expectedRgba, checkedInPngBytes, expectedRouteId),
-            )
-            require(verification is EvidenceBundleVerification.Verified) {
-                val errors = (verification as EvidenceBundleVerification.Invalid).errors.joinToString("; ")
-                "generated evidence bundle failed independent verification: $errors"
-            }
+            writeStagingBundle(temp)
             moveIntoPlace(temp, destination)
             destination
         } catch (failure: Throwable) {
@@ -119,7 +140,7 @@ class EvidenceBundleWriter internal constructor(
         return path
     }
 
-    private fun writeBundle(
+    private fun writeBundleV1(
         directory: Path,
         descriptor: EvidenceSceneDescriptor,
         observation: SceneObservation,
@@ -127,9 +148,76 @@ class EvidenceBundleWriter internal constructor(
         attemptId: String,
         checkedInPngBytes: ByteArray?,
     ) {
+        writeBundle(
+            directory = directory,
+            descriptor = descriptor,
+            observation = observation,
+            expectedRgba = expectedRgba,
+            attemptId = attemptId,
+            checkedInPngBytes = checkedInPngBytes,
+            includeEnvironment = true,
+        ) { expectation, observed, hashes ->
+            EvidenceManifest(
+                GPU_EVIDENCE_SCHEMA,
+                descriptor.id.value,
+                expectation,
+                observed,
+                sourceCommit,
+                clock.instant().toString(),
+                oracleKind(descriptor.oracle),
+                oracleId(descriptor.oracle),
+                oracleVersion(descriptor.oracle),
+                hashes,
+                oracleProvenance(descriptor.oracle),
+                oracleSha256(descriptor.oracle),
+            ).toJson().canonicalBytes()
+        }
+    }
+
+    private fun writeBundleV2(
+        directory: Path,
+        descriptor: EvidenceSceneDescriptor,
+        observation: SceneObservation,
+        expectedRgba: ByteArray?,
+        attemptId: String,
+        checkedInPngBytes: ByteArray?,
+    ) {
+        writeBundle(
+            directory = directory,
+            descriptor = descriptor,
+            observation = observation,
+            expectedRgba = expectedRgba,
+            attemptId = attemptId,
+            checkedInPngBytes = checkedInPngBytes,
+            includeEnvironment = false,
+        ) { expectation, observed, hashes ->
+            EvidenceManifestV2(
+                GPU_EVIDENCE_SCENE_SCHEMA_V2,
+                descriptor.id.value,
+                expectation,
+                observed,
+                oracleKind(descriptor.oracle),
+                oracleId(descriptor.oracle),
+                oracleVersion(descriptor.oracle),
+                hashes,
+                oracleProvenance(descriptor.oracle),
+                oracleSha256(descriptor.oracle),
+            ).toJson().canonicalBytes()
+        }
+    }
+
+    private fun writeBundle(
+        directory: Path,
+        descriptor: EvidenceSceneDescriptor,
+        observation: SceneObservation,
+        expectedRgba: ByteArray?,
+        attemptId: String,
+        checkedInPngBytes: ByteArray?,
+        includeEnvironment: Boolean,
+        manifestBytes: (expectation: String, observed: String, hashes: Map<String, String>) -> ByteArray,
+    ) {
         val files = linkedMapOf<String, ByteArray>()
         val rendered = observation as? SceneObservation.Rendered
-        val refused = observation as? SceneObservation.Refused
         val observed = if (rendered != null) "rendered" else "refused"
         val expectation = when (val e = descriptor.expectation) {
             EvidenceExpectation.ShouldRender -> "render"
@@ -145,7 +233,7 @@ class EvidenceBundleWriter internal constructor(
             val oracleIsCheckedIn = descriptor.oracle is OraclePolicy.CheckedInPng
             val skiaBytes = if (oracleIsCheckedIn) {
                 val original = requireNotNull(checkedInPngBytes) { "CheckedInPng requires original PNG bytes" }
-                require(sha256(original) == descriptor.oracle.sha256) { "checked-in PNG bytes do not match oracle sha256" }
+                require(sha256Hex(original) == descriptor.oracle.sha256) { "checked-in PNG bytes do not match oracle sha256" }
                 original.copyOf()
             } else null
             files[if (oracleIsCheckedIn) "skia.png" else "cpu.png"] = skiaBytes ?: cpuPng
@@ -168,14 +256,11 @@ class EvidenceBundleWriter internal constructor(
         }
         files["route.json"] = routeJson(observation.route(), attemptId)
         files["diagnostics.json"] = diagnosticsJson(observation, attemptId)
-        files["environment.json"] = environmentJson(observation.environment)
+        if (includeEnvironment) files["environment.json"] = environmentJson(observation.environment)
         val verdict = EvidenceExpectationGate.evaluate(descriptor, observation)
         files["verdict.json"] = EvidenceVerdictRecord(expectation, observed, verdict.kind(), verdict.reason()).toJson().canonicalBytes()
-        val hashes = files.mapValues { sha256(it.value) }
-        files["manifest.json"] = EvidenceManifest(
-            GPU_EVIDENCE_SCHEMA, descriptor.id.value, expectation, observed, sourceCommit,
-            clock.instant().toString(), oracleKind(descriptor.oracle), oracleId(descriptor.oracle), oracleVersion(descriptor.oracle), hashes, oracleProvenance(descriptor.oracle), oracleSha256(descriptor.oracle),
-        ).toJson().canonicalBytes()
+        val hashes = files.mapValues { sha256Hex(it.value) }
+        files["manifest.json"] = manifestBytes(expectation, observed, hashes)
         files.toSortedMap().forEach { (name, bytes) ->
             val target = directory.resolve(name)
             Files.write(target, bytes)
@@ -276,7 +361,7 @@ class EvidenceBundleWriter internal constructor(
         if (extra != null) put("writeFailure", extra)
     }.canonicalBytes()
 
-    private fun environmentJson(e: EvidenceEnvironment): ByteArray = buildJsonObject {
+    internal fun environmentJson(e: EvidenceEnvironment): ByteArray = buildJsonObject {
         put("sourceCommit", e.sourceCommit); put("osName", e.osName); put("osVersion", e.osVersion); put("osArchitecture", e.osArchitecture); put("javaVersion", e.javaVersion); put("deviceGeneration", e.deviceGeneration); put("capabilityImplementation", e.capabilityImplementation); put("available", e.available)
         put("adapter", e.adapter?.let { buildJsonObject { put("summary", it.summary); put("vendor", it.vendor); put("device", it.device); put("architecture", it.architecture); put("description", it.description); put("isFallbackAdapter", it.isFallbackAdapter) } } ?: JsonNull)
     }.canonicalBytes()
@@ -286,7 +371,6 @@ class EvidenceBundleWriter internal constructor(
     private fun oracleVersion(o: OraclePolicy) = when (o) { is OraclePolicy.GeneratedCpu -> o.version; else -> 1 }
     private fun oracleProvenance(o: OraclePolicy) = when (o) { is OraclePolicy.CheckedInPng -> o.provenance; is OraclePolicy.GeneratedCpu -> "generated-cpu"; OraclePolicy.StableRefusal -> "stable-refusal" }
     private fun oracleSha256(o: OraclePolicy) = (o as? OraclePolicy.CheckedInPng)?.sha256
-    private fun sha256(value: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(value).joinToString("") { "%02x".format(it) }
     private fun SceneObservation.route() = when (this) { is SceneObservation.Rendered -> route; is SceneObservation.Refused -> route; is SceneObservation.Unavailable -> error("unavailable") }
     private fun SceneObservation.routeAttemptId() = route().attemptId
     private fun SceneObservation.diagnostics() = when (this) { is SceneObservation.Rendered -> diagnostics; is SceneObservation.Refused -> diagnostics; is SceneObservation.Unavailable -> emptyList() }
@@ -297,6 +381,20 @@ class EvidenceBundleWriter internal constructor(
         private val SAFE_COMPONENT = Regex("[A-Za-z0-9][A-Za-z0-9._-]*")
     }
 }
+
+internal fun environmentJsonV2(e: EvidenceEnvironment): ByteArray = EvidenceEnvironmentV2(
+    schemaVersion = GPU_EVIDENCE_CATALOG_SCHEMA_V2,
+    osName = e.osName,
+    osVersion = e.osVersion,
+    osArchitecture = e.osArchitecture,
+    javaVersion = e.javaVersion,
+    deviceGeneration = e.deviceGeneration,
+    capabilityImplementation = e.capabilityImplementation,
+    available = e.available,
+    adapter = e.adapter,
+).toJson().canonicalBytes()
+
+internal fun sha256Hex(value: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(value).joinToString("") { "%02x".format(it) }
 
 private fun deleteEvidenceTree(path: Path) {
     if (!Files.exists(path, NOFOLLOW_LINKS)) return

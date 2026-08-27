@@ -4,6 +4,7 @@ import java.io.ByteArrayOutputStream
 import java.io.PrintStream
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.test.assertSame
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -44,8 +45,100 @@ class VerifyEvidenceCliTest {
     @Test
     fun `historical mode is explicit and accepts one internally consistent source commit`() {
         writeAll(COMMIT)
-        assertTrue(VerifyEvidenceCliRunner().run(arrayOf("--root", generatedRoot().toString())) != 0)
-        assertEquals(0, VerifyEvidenceCliRunner().run(arrayOf("--root", generatedRoot().toString(), "--allow-historical-commit")))
+        assertTrue(VerifyEvidenceCliRunner().run(arrayOf("--root", generatedRoot().toString(), "--all")) != 0)
+        assertEquals(0, VerifyEvidenceCliRunner().run(arrayOf("--root", generatedRoot().toString(), "--allow-historical-commit", "--all")))
+    }
+
+    @Test
+    fun `request parser captures explicit selection and all mode`() {
+        val explicit = VerifyEvidenceCliRequest.parse(
+            arrayOf(
+                "--root", repository.toString(),
+                "--source-commit", COMMIT,
+                "--scene", "solid-card-stack",
+                "--scene", "custom-runtime-effect-unregistered-refusal",
+            ),
+        )
+        assertEquals(
+            EvidenceSelection.Explicit(listOf("custom-runtime-effect-unregistered-refusal", "solid-card-stack")),
+            explicit.selection,
+        )
+
+        val all = VerifyEvidenceCliRequest.parse(arrayOf("--root", repository.toString(), "--source-commit", COMMIT, "--all"))
+        assertSame(EvidenceSelection.All, all.selection)
+    }
+
+    @Test
+    fun `v2 verifier accepts selected generated roots and all still requires the complete catalogue`() {
+        writeSelectedV2(listOf("solid-card-stack", "custom-runtime-effect-unregistered-refusal"))
+
+        assertEquals(
+            0,
+            VerifyEvidenceCliRunner().run(
+                arrayOf(
+                    "--root", generatedRoot().toString(),
+                    "--source-commit", COMMIT,
+                    "--scene", "solid-card-stack",
+                    "--scene", "custom-runtime-effect-unregistered-refusal",
+                ),
+            ),
+        )
+        assertTrue(
+            VerifyEvidenceCliRunner().run(
+                arrayOf("--root", generatedRoot().toString(), "--source-commit", COMMIT, "--all"),
+            ) != 0,
+        )
+    }
+
+    @Test
+    fun `v2 verifier reports invalid scenes on stderr instead of only a global failure`() {
+        writeSelectedV2(listOf("solid-card-stack", "custom-runtime-effect-unregistered-refusal"))
+        val scene = generatedRoot().resolve("solid-card-stack")
+        replaceAndRefresh(scene, "route.json", "\"routeId\":\"kanvas.surface.render\"", "\"routeId\":\"wrong.route\"")
+        val stderr = ByteArrayOutputStream()
+
+        assertTrue(
+            VerifyEvidenceCliRunner(stderr = PrintStream(stderr)).run(
+                arrayOf(
+                    "--root", generatedRoot().toString(),
+                    "--source-commit", COMMIT,
+                    "--scene", "solid-card-stack",
+                    "--scene", "custom-runtime-effect-unregistered-refusal",
+                ),
+            ) != 0,
+        )
+        assertTrue(stderr.toString().contains("solid-card-stack: invalid"))
+        assertFalse(stderr.toString().contains("gpu evidence verification failed: solid-card-stack"))
+    }
+
+    @Test
+    fun `v1 generated roots still verify through the legacy scene path`() {
+        writeAll(COMMIT)
+
+        assertEquals(0, VerifyEvidenceCliRunner().run(arrayOf("--root", generatedRoot().toString(), "--source-commit", COMMIT, "--all")))
+    }
+
+    @Test
+    fun `v2 promoted roots still verify when historical mode is supplied by the promoted Gradle task`() {
+        writePromotedV2()
+        assertTrue(Files.isRegularFile(promotedRoot().resolve("catalog.json")))
+        assertTrue(Files.isRegularFile(promotedRoot().resolve("environment.json")))
+        assertTrue(Files.isRegularFile(promotedRoot().resolve("promotion.json")))
+        assertFalse(Files.exists(promotedRoot().resolve("solid-card-stack/environment.json")))
+        assertFalse(Files.exists(promotedRoot().resolve("solid-card-stack/promotion.json")))
+
+        assertEquals(0, VerifyEvidenceCliRunner().run(arrayOf("--root", promotedRoot().toString(), "--allow-historical-commit", "--require-promotion", "--all")))
+    }
+
+    @Test
+    fun `promoted verification rejects a generated v2 root without promotion metadata`() {
+        writeSelectedV2(GpuEvidenceCatalog.cases.map { it.descriptor.id.value }.sorted())
+
+        assertTrue(
+            VerifyEvidenceCliRunner().run(
+                arrayOf("--root", generatedRoot().toString(), "--allow-historical-commit", "--require-promotion", "--all"),
+            ) != 0,
+        )
     }
 
     @Test
@@ -57,7 +150,7 @@ class VerifyEvidenceCliTest {
         Files.createSymbolicLink(manifest, backup)
 
         val stderr = ByteArrayOutputStream()
-        assertTrue(VerifyEvidenceCliRunner(stderr = PrintStream(stderr)).run(arrayOf("--root", generatedRoot().toString(), "--allow-historical-commit")) != 0)
+        assertTrue(VerifyEvidenceCliRunner(stderr = PrintStream(stderr)).run(arrayOf("--root", generatedRoot().toString(), "--allow-historical-commit", "--all")) != 0)
         assertTrue(stderr.toString().contains("manifest must be a regular non-symlink file"))
     }
 
@@ -104,7 +197,7 @@ class VerifyEvidenceCliTest {
         val stdout = ByteArrayOutputStream()
         val stderr = ByteArrayOutputStream()
 
-        assertTrue(VerifyEvidenceCliRunner(PrintStream(stdout), PrintStream(stderr)).run(arrayOf("--root", generatedRoot().toString(), "--source-commit", COMMIT)) != 0)
+        assertTrue(VerifyEvidenceCliRunner(PrintStream(stdout), PrintStream(stderr)).run(arrayOf("--root", generatedRoot().toString(), "--source-commit", COMMIT, "--all")) != 0)
         assertTrue(stdout.toString().contains("custom-runtime-effect-unregistered-refusal: unavailable"))
         assertFalse(stderr.toString().contains("invalid JSON"))
     }
@@ -118,7 +211,7 @@ class VerifyEvidenceCliTest {
         assertTrue(verify(COMMIT) != 0)
     }
 
-    private fun verify(commit: String) = VerifyEvidenceCliRunner().run(arrayOf("--root", generatedRoot().toString(), "--source-commit", commit))
+    private fun verify(commit: String) = VerifyEvidenceCliRunner().run(arrayOf("--root", generatedRoot().toString(), "--source-commit", commit, "--all"))
 
     private fun writeAll(commit: String) {
         val writer = EvidenceBundleWriter(repository, commit)
@@ -140,6 +233,40 @@ class VerifyEvidenceCliTest {
         }
     }
 
+    private fun writeSelectedV2(sceneIds: List<String>) {
+        val selectedCases = sceneIds.map { id -> GpuEvidenceCatalog.cases.first { it.descriptor.id.value == id } }
+        val writer = EvidenceBundleWriter(repository, COMMIT)
+        val observations = linkedMapOf<String, SceneObservation>()
+        val bundlePaths = linkedMapOf<String, Path>()
+        selectedCases.forEach { evidenceCase ->
+            val descriptor = evidenceCase.descriptor
+            val environment = EvidenceEnvironment(COMMIT, "test", "1", "test", "17", EvidenceAdapter("test-adapter", "test-vendor", "test-device", "test-architecture", "test-description", false), 1L, "native", true)
+            val rendered = descriptor.expectation is EvidenceExpectation.ShouldRender
+            val routeId = routeId(evidenceCase.program)
+            val route = RouteEvidence(routeId, "attempt", if (rendered) "Completed" else null, if (rendered) "rendered" else "refused", emptyList(), emptyList(), if (rendered) mapOf("queue.submit" to 1L, "render.draw" to 1L, "render.pipelineBind" to 1L) else emptyMap(), GPUBackendRuntimeTelemetry(submissions = if (rendered) 1L else 0L))
+            val observation = if (rendered) {
+                val pixels = requireNotNull(evidenceCase.oracle).render(descriptor.width, descriptor.height)
+                val comparison = EvidenceComparator().compare(pixels, pixels, descriptor.width, descriptor.height, requireNotNull(descriptor.comparison))
+                SceneObservation.Rendered(pixels, route, emptyList(), environment, comparison)
+            } else {
+                val reason = (descriptor.expectation as EvidenceExpectation.ShouldRefuse).stableReasonCode
+                SceneObservation.Refused(reason, "test", 0, route, emptyList(), environment)
+            }
+            observations[descriptor.id.value] = observation
+            bundlePaths[descriptor.id.value] = if (observation is SceneObservation.Rendered) {
+                writer.writeGeneratedV2(descriptor, observation, observation.rgba, "attempt-${descriptor.id.value}")
+            } else {
+                writer.writeGeneratedV2(descriptor, observation as SceneObservation.Refused, attemptId = "attempt-${descriptor.id.value}")
+            }
+        }
+        EvidenceCatalogWriter(repository).writeGeneratedCatalog(
+            root = generatedRoot(),
+            selection = EvidenceSelection.Explicit(sceneIds),
+            observations = observations,
+            bundlePaths = bundlePaths,
+        )
+    }
+
     private fun routeId(program: org.graphiks.kanvas.gpu.evidence.runner.EvidenceProgram): String = when (program) {
         is KanvasSurfaceProgram -> program.routeId
         is RoutedSceneProgram -> program.routeId
@@ -148,9 +275,49 @@ class VerifyEvidenceCliTest {
 
     private fun generatedRoot() = repository.resolve("reports/gpu-renderer/evidence/correctness/generated/$COMMIT")
 
+    private fun promotedRoot() = repository.resolve("reports/gpu-renderer/evidence/correctness/promoted")
+
+    private fun writePromotedV2() {
+        writeSelectedV2(GpuEvidenceCatalog.cases.map { it.descriptor.id.value }.sorted())
+        val generated = generatedRoot()
+        val promoted = promotedRoot()
+        Files.createDirectories(promoted)
+        Files.copy(generated.resolve("environment.json"), promoted.resolve("environment.json"))
+        Files.writeString(
+            promoted.resolve("catalog.json"),
+            Files.readString(generated.resolve("catalog.json")).replace("\"promotion\":null", "\"promotion\":\"promotion.json\""),
+        )
+        Files.write(
+            promoted.resolve("promotion.json"),
+            EvidencePromotionV2(
+                schemaVersion = GPU_EVIDENCE_PROMOTION_SCHEMA_V2,
+                promotedAtUtc = "1970-01-01T00:00:00Z",
+                reviewer = "reviewer",
+                reason = "initial",
+                rebaseline = false,
+                sceneIds = GpuEvidenceCatalog.cases.map { it.descriptor.id.value }.sorted(),
+                priorComparison = null,
+                newComparison = null,
+            ).toJson().canonicalBytes(),
+        )
+        GpuEvidenceCatalog.cases.map { it.descriptor.id.value }.sorted().forEach { sceneId ->
+            copyTree(generated.resolve(sceneId), promoted.resolve(sceneId))
+        }
+    }
+
     private fun deleteTree(path: Path) {
         if (!Files.exists(path)) return
         Files.walk(path).use { stream -> stream.sorted(Comparator.reverseOrder()).forEach(Files::delete) }
+    }
+
+    private fun copyTree(source: Path, destination: Path) {
+        Files.walk(source).use { stream ->
+            stream.forEach { current ->
+                val relative = source.relativize(current)
+                val target = destination.resolve(relative)
+                if (Files.isDirectory(current)) Files.createDirectories(target) else Files.copy(current, target)
+            }
+        }
     }
 
     private fun replaceAndRefresh(scene: Path, file: String, from: String, to: String) {

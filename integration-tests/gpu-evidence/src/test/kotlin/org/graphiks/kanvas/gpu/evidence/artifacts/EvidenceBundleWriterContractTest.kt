@@ -8,6 +8,7 @@ import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertContentEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
@@ -69,6 +70,38 @@ class EvidenceBundleWriterContractTest {
         val observation = SceneObservation.Rendered(PIXEL, route("rendered", 1), emptyList(), environment(), ImageComparison(true, 100.0, 0, 0, 0.0, ByteArray(4), 1))
         val path = EvidenceBundleWriter(root, COMMIT, FIXED_CLOCK).writeGenerated(renderDescriptor(), observation, PIXEL, "attempt")
         assertIs<EvidenceBundleVerification.Verified>(verifyFixtureIntegrity(path, COMMIT))
+    }
+
+    @Test fun `v2 scene writer omits environment and promotion metadata`() {
+        val root = Files.createTempDirectory("gpu-evidence")
+        val observation = SceneObservation.Rendered(PIXEL, route("rendered", 1), emptyList(), environment(), ImageComparison(true, 100.0, 0, 0, 0.0, ByteArray(4), 1))
+
+        val path = EvidenceBundleWriter(root, COMMIT, FIXED_CLOCK).writeGeneratedV2(renderDescriptor(), observation, PIXEL, "attempt")
+
+        assertEquals(
+            setOf("manifest.json", "gpu.png", "cpu.png", "diff.png", "stats.json", "route.json", "diagnostics.json", "verdict.json"),
+            Files.list(path).use { stream -> stream.iterator().asSequence().map { p -> p.fileName.toString() }.toSet() },
+        )
+        assertFalse(Files.exists(path.resolve("environment.json")))
+        assertFalse(Files.exists(path.resolve("promotion.json")))
+        assertIs<EvidenceBundleVerification.Verified>(
+            EvidenceBundleVerifier.verifyV2(
+                path,
+                EvidenceVerificationExpectation(COMMIT, renderDescriptor(), PIXEL, null, "route"),
+                EvidenceEnvironmentV2(
+                    schemaVersion = GPU_EVIDENCE_CATALOG_SCHEMA_V2,
+                    osName = "test",
+                    osVersion = "1",
+                    osArchitecture = "x86_64",
+                    javaVersion = "17",
+                    deviceGeneration = 1L,
+                    capabilityImplementation = "native",
+                    available = true,
+                    adapter = EvidenceAdapter("test-adapter", "test-vendor", "test-device", "test-architecture", "test-description", false),
+                ),
+                COMMIT,
+            ),
+        )
     }
 
     @Test fun `descriptor writer requires an external render oracle`() {

@@ -8,12 +8,12 @@ import java.nio.file.Path
 import java.nio.file.StandardCopyOption.ATOMIC_MOVE
 import java.nio.file.StandardCopyOption.REPLACE_EXISTING
 import java.time.Clock
-import java.time.Instant
 import kotlin.system.exitProcess
-import kotlinx.serialization.json.JsonNull
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.graphiks.kanvas.gpu.evidence.catalog.GpuEvidenceCatalog
 
 /** Explicit, review-gated promotion of independently verified GPU evidence. */
@@ -22,6 +22,7 @@ fun main(args: Array<String>): Unit = exitProcess(PromoteEvidenceCliRunner().run
 data class PromoteEvidenceCliRequest(
     val repositoryRoot: Path,
     val sourceCommit: String,
+    val selection: EvidenceSelection,
     val reviewer: String,
     val reason: String,
     val rebaseline: Boolean,
@@ -36,6 +37,8 @@ data class PromoteEvidenceCliRequest(
             var sourceCommit: String? = null
             var reviewer: String? = null
             var reason: String? = null
+            val sceneIds = mutableListOf<String>()
+            var scenesFile: Path? = null
             var all = false
             var rebaseline = false
             var prior: String? = null
@@ -47,6 +50,11 @@ data class PromoteEvidenceCliRequest(
                     "--source-commit" -> { require(sourceCommit == null) { "duplicate --source-commit" }; sourceCommit = value(args, ++index, "--source-commit") }
                     "--reviewer" -> { require(reviewer == null) { "duplicate --reviewer" }; reviewer = value(args, ++index, "--reviewer") }
                     "--reason" -> { require(reason == null) { "duplicate --reason" }; reason = value(args, ++index, "--reason") }
+                    "--scene" -> sceneIds += value(args, ++index, "--scene")
+                    "--scenes-file" -> {
+                        require(scenesFile == null) { "duplicate --scenes-file" }
+                        scenesFile = Path.of(value(args, ++index, "--scenes-file")).toAbsolutePath().normalize()
+                    }
                     "--all" -> { require(!all) { "duplicate --all" }; all = true }
                     "--rebaseline" -> { require(!rebaseline) { "duplicate --rebaseline" }; rebaseline = true }
                     "--prior-comparison", "--old-comparison", "--prior-comparison-summary" -> { require(prior == null) { "duplicate prior comparison" }; prior = value(args, ++index, args[index]) }
@@ -55,7 +63,6 @@ data class PromoteEvidenceCliRequest(
                 }
                 index++
             }
-            require(all) { "--all is required; promotion never accepts an arbitrary scene or destination" }
             val root = Path.of(requireNotNull(repositoryRoot) { "--repository-root is required" }).toAbsolutePath().normalize()
             require(root.isAbsolute && Files.isDirectory(root, NOFOLLOW_LINKS)) { "repository root must be an existing directory" }
             require(!Files.isSymbolicLink(root)) { "repository root cannot be a symlink" }
@@ -67,8 +74,13 @@ data class PromoteEvidenceCliRequest(
             require(actualReason.isNotBlank()) { "--reason must not be blank" }
             require((prior == null) == (next == null)) { "prior and new comparison summaries must be provided together" }
             if (prior != null) require(prior.isNotBlank() && next!!.isNotBlank()) { "comparison summaries must not be blank" }
+            require(rebaseline || (prior == null && next == null)) { "comparison summaries require --rebaseline" }
             if (rebaseline) require(prior != null && next != null) { "--rebaseline requires prior and new comparison summaries" }
-            return PromoteEvidenceCliRequest(root, commit, actualReviewer, actualReason, rebaseline, prior, next)
+            if (rebaseline) require(all) { "--rebaseline requires --all" }
+            scenesFile?.let { sceneIds += EvidenceSelectionParser.readSceneFile(it) }
+            val selection = EvidenceSelectionParser.from(sceneIds, all)
+            if (selection is EvidenceSelection.Explicit) selection.resolve(GpuEvidenceCatalog.cases)
+            return PromoteEvidenceCliRequest(root, commit, selection, actualReviewer, actualReason, rebaseline, prior, next)
         }
 
         private fun value(args: Array<String>, index: Int, flag: String): String {
@@ -112,7 +124,7 @@ class PromoteEvidenceCliRunner internal constructor(
             return 2
         }
         return try {
-            promote(request)
+            promoteSelected(request)
             0
         } catch (failure: Exception) {
             stderr.println("gpu evidence promotion rejected: ${failure.message}")
@@ -123,7 +135,7 @@ class PromoteEvidenceCliRunner internal constructor(
         }
     }
 
-    private fun promote(request: PromoteEvidenceCliRequest) {
+    internal fun promoteSelected(request: PromoteEvidenceCliRequest) {
         val roots = canonicalRoots(request.repositoryRoot, request.sourceCommit)
         ensureNoSymlinkComponents(request.repositoryRoot, roots.generated)
         ensureNoSymlinkComponents(request.repositoryRoot, roots.promoted.parent)
@@ -131,28 +143,55 @@ class PromoteEvidenceCliRunner internal constructor(
         require(!Files.isSymbolicLink(roots.generated)) { "generated evidence root cannot be a symlink" }
 
         // Verification happens before any destination mutation, and does not create a GPU runtime.
-        require(VerifyEvidenceCliRunner(stdout, stderr).run(arrayOf("--root", roots.generated.toString(), "--source-commit", request.sourceCommit)) == 0) {
+        require(VerifyEvidenceCliRunner(stdout, stderr).run(verificationArguments(roots.generated, request.sourceCommit, request.selection)) == 0) {
             "generated evidence failed independent verification"
         }
-
-        val sceneIds = GpuEvidenceCatalog.cases.map { it.descriptor.id.value }
-        preflightPromotedRoot(roots.promoted, request.rebaseline)
+        val generated = validateCatalogRoot(roots.generated, request.selection, request.sourceCommit)
+        val existing = preflightPromotedRoot(roots.promoted, request)
+        val sceneIds = selectedSceneIds(request.selection)
+        val environmentBytes = when {
+            existing == null -> generated.environmentBytes
+            request.selection is EvidenceSelection.Explicit -> {
+                require(existing.environmentBytes.contentEquals(generated.environmentBytes)) {
+                    EvidenceCatalogVerifier.ENVIRONMENT_MISMATCH_REQUIRES_REBASELINE
+                }
+                existing.environmentBytes
+            }
+            else -> generated.environmentBytes
+        }
+        val catalogEntries = when (existing) {
+            null -> generated.entriesBySceneId.values.sortedBy(EvidenceCatalogEntry::sceneId)
+            else -> mergeEntries(existing, generated, sceneIds)
+        }
         Files.createDirectories(roots.promoted.parent)
         val staged = Files.createTempDirectory(roots.promoted.parent, ".promoted.staged-")
         var swapped = false
         var primaryFailure: Throwable? = null
         try {
+            if (existing != null) {
+                copyTree(roots.promoted, staged, request.repositoryRoot)
+            }
             sceneIds.forEach { sceneId ->
                 val source = roots.generated.resolve(sceneId)
                 val stagedScene = staged.resolve(sceneId)
+                deleteTree(stagedScene)
                 copyTree(source, stagedScene, request.repositoryRoot)
-                writePromotion(stagedScene, sceneId, request)
             }
+            writeRootMetadata(staged, environmentBytes, catalogEntries, request, sceneIds)
             beforeStagedVerification(staged)
-            require(VerifyEvidenceCliRunner(stdout, stderr).run(arrayOf("--root", staged.toString(), "--source-commit", request.sourceCommit)) == 0) {
+            verifyStagedPromotionMetadata(staged, request, sceneIds)
+            require(VerifyEvidenceCliRunner(stdout, stderr).run(verificationArguments(staged, null, EvidenceSelection.All)) == 0) {
                 "staged promotion failed independent verification"
             }
-            swapCatalogRoot(staged, roots.promoted)
+            existing?.let {
+                verifyNoUnrelatedChanges(
+                    promoted = roots.promoted,
+                    staged = staged,
+                    request = request,
+                    selectedSceneIds = sceneIds,
+                )
+            }
+            swapCatalogRoot(staged, roots.promoted, request.repositoryRoot)
             swapped = true
         } catch (failure: Throwable) {
             primaryFailure = failure
@@ -173,22 +212,27 @@ class PromoteEvidenceCliRunner internal constructor(
         stdout.println("promoted ${sceneIds.size} GPU evidence scenes from ${request.sourceCommit}")
     }
 
-    private fun preflightPromotedRoot(promoted: Path, rebaseline: Boolean) {
+    private fun preflightPromotedRoot(promoted: Path, request: PromoteEvidenceCliRequest): ValidatedCatalogRoot? {
         if (!Files.exists(promoted, NOFOLLOW_LINKS)) {
-            require(!rebaseline) { "rebaseline requires an existing promoted catalog" }
-            return
+            require(!request.rebaseline) { "rebaseline requires an existing promoted catalog" }
+            require(request.selection == EvidenceSelection.All) { "selected promotion requires an existing promoted catalog" }
+            return null
         }
         require(!Files.isSymbolicLink(promoted)) { "promoted evidence root cannot be a symlink" }
         require(Files.isDirectory(promoted, NOFOLLOW_LINKS)) { "promoted evidence root must be a directory" }
         val entries = Files.list(promoted).use { stream -> stream.iterator().asSequence().toList() }
-        if (!rebaseline) {
-            require(entries.isEmpty()) { "destination already contains evidence; use --rebaseline with old/new comparison summaries" }
-            return
+        if (entries.isEmpty()) {
+            require(!request.rebaseline) { "rebaseline requires an existing promoted catalog" }
+            require(request.selection == EvidenceSelection.All) { "selected promotion requires an existing promoted catalog" }
+            return null
         }
-        require(entries.isNotEmpty()) { "rebaseline requires a non-empty promoted catalog" }
-        require(VerifyEvidenceCliRunner(stdout, stderr).verifyHistoricalSubset(promoted) == 0) {
-            "existing promoted evidence is not a verified current-catalog subset"
+        val existing = validateCatalogRoot(promoted, EvidenceSelection.All, null, requirePromotion = true)
+        if (request.selection == EvidenceSelection.All) {
+            require(request.rebaseline) { "destination already contains evidence; use --all --rebaseline with old/new comparison summaries" }
+        } else {
+            require(!request.rebaseline) { "--rebaseline requires --all" }
         }
+        return existing
     }
 
     private fun canonicalRoots(repositoryRoot: Path, sourceCommit: String): PromotionRoots {
@@ -214,51 +258,270 @@ class PromoteEvidenceCliRunner internal constructor(
         }
     }
 
-    private fun writePromotion(directory: Path, sceneId: String, request: PromoteEvidenceCliRequest) {
-        val json = buildJsonObject {
-            put("schemaVersion", GPU_EVIDENCE_PROMOTION_SCHEMA)
-            put("sceneId", sceneId)
-            put("sourceCommit", request.sourceCommit)
-            put("promotedAtUtc", clock.instant().toString())
-            put("reviewer", request.reviewer)
-            put("reason", request.reason)
-            put("rebaseline", request.rebaseline)
-            put("priorComparison", request.priorComparison?.let(::JsonPrimitive) ?: JsonNull)
-            put("newComparison", request.newComparison?.let(::JsonPrimitive) ?: JsonNull)
+    private fun verificationArguments(root: Path, sourceCommit: String?, selection: EvidenceSelection): Array<String> = buildList {
+        add("--root")
+        add(root.toString())
+        if (sourceCommit != null) {
+            add("--source-commit")
+            add(sourceCommit)
         }
-        Files.writeString(directory.resolve("promotion.json"), json.toString())
+        when (selection) {
+            EvidenceSelection.All -> add("--all")
+            is EvidenceSelection.Explicit -> selection.sceneIds.forEach { sceneId ->
+                add("--scene")
+                add(sceneId)
+            }
+        }
+    }.toTypedArray()
+
+    private fun validateCatalogRoot(
+        root: Path,
+        selection: EvidenceSelection,
+        expectedSourceCommit: String?,
+        requirePromotion: Boolean = false,
+    ): ValidatedCatalogRoot {
+        val verification = EvidenceCatalogVerifier.verify(
+            root = root,
+            selection = selection,
+            cases = GpuEvidenceCatalog.cases,
+            expectedSourceCommit = expectedSourceCommit,
+            requirePromotion = requirePromotion,
+        )
+        return ValidatedCatalogRoot(
+            entriesBySceneId = readCatalogEntries(root).associateBy(EvidenceCatalogEntry::sceneId),
+            environmentBytes = verification.environment.toJson().canonicalBytes(),
+        )
     }
 
-    private fun swapCatalogRoot(staged: Path, destination: Path) {
+    private fun readCatalogEntries(root: Path): List<EvidenceCatalogEntry> {
+        val catalog = EvidenceJson.parseToJsonElement(Files.readString(root.resolve("catalog.json"))).jsonObject
+        return catalog["scenes"]!!.jsonArray.map { entry ->
+            val scene = entry.jsonObject
+            EvidenceCatalogEntry(
+                sceneId = scene["sceneId"]!!.jsonPrimitive.content,
+                sourceCommit = scene["sourceCommit"]!!.jsonPrimitive.content,
+                manifest = scene["manifest"]!!.jsonPrimitive.content,
+                manifestSha256 = scene["manifestSha256"]!!.jsonPrimitive.content,
+            )
+        }.sortedBy(EvidenceCatalogEntry::sceneId)
+    }
+
+    private fun selectedSceneIds(selection: EvidenceSelection): List<String> = when (selection) {
+        EvidenceSelection.All -> GpuEvidenceCatalog.cases.map { it.descriptor.id.value }.sorted()
+        is EvidenceSelection.Explicit -> selection.sceneIds
+    }
+
+    private fun mergeEntries(
+        existing: ValidatedCatalogRoot,
+        generated: ValidatedCatalogRoot,
+        sceneIds: List<String>,
+    ): List<EvidenceCatalogEntry> {
+        return GpuEvidenceCatalog.cases.map { it.descriptor.id.value }.sorted().map { sceneId ->
+            if (sceneId in sceneIds) {
+                generated.entriesBySceneId.getValue(sceneId)
+            } else {
+                existing.entriesBySceneId.getValue(sceneId)
+            }
+        }
+    }
+
+    private fun writeRootMetadata(
+        staged: Path,
+        environmentBytes: ByteArray,
+        entries: List<EvidenceCatalogEntry>,
+        request: PromoteEvidenceCliRequest,
+        sceneIds: List<String>,
+    ) {
+        Files.write(staged.resolve("environment.json"), environmentBytes)
+        Files.write(
+            staged.resolve("catalog.json"),
+            EvidenceCatalogV2(
+                schemaVersion = GPU_EVIDENCE_CATALOG_SCHEMA_V2,
+                environment = "environment.json",
+                promotion = "promotion.json",
+                scenes = entries,
+            ).toJson().canonicalBytes(),
+        )
+        Files.write(
+            staged.resolve("promotion.json"),
+            EvidencePromotionV2(
+                schemaVersion = GPU_EVIDENCE_PROMOTION_SCHEMA_V2,
+                promotedAtUtc = clock.instant().toString(),
+                reviewer = request.reviewer,
+                reason = request.reason,
+                rebaseline = request.rebaseline,
+                sceneIds = sceneIds,
+                priorComparison = request.priorComparison,
+                newComparison = request.newComparison,
+            ).toJson().canonicalBytes(),
+        )
+    }
+
+    private fun verifyStagedPromotionMetadata(
+        staged: Path,
+        request: PromoteEvidenceCliRequest,
+        sceneIds: List<String>,
+    ) {
+        val promotion = EvidenceJson.parseToJsonElement(Files.readString(staged.resolve("promotion.json"))).jsonObject
+        val actualSceneIds = promotion["sceneIds"]!!.jsonArray.map { it.jsonPrimitive.content }.sorted()
+        require(actualSceneIds == sceneIds.sorted()) { "promotion sceneIds do not match the requested selection" }
+        require(promotion["reviewer"]!!.jsonPrimitive.content == request.reviewer) { "promotion reviewer does not match the request" }
+        require(promotion["reason"]!!.jsonPrimitive.content == request.reason) { "promotion reason does not match the request" }
+        require(promotion["rebaseline"]!!.jsonPrimitive.boolean == request.rebaseline) {
+            "promotion rebaseline flag does not match the request"
+        }
+        val actualPrior = promotion["priorComparison"]?.jsonPrimitive?.contentOrNull
+        val actualNew = promotion["newComparison"]?.jsonPrimitive?.contentOrNull
+        require(actualPrior == request.priorComparison) { "promotion priorComparison does not match the request" }
+        require(actualNew == request.newComparison) { "promotion newComparison does not match the request" }
+        if (request.rebaseline) {
+            require(!actualPrior.isNullOrBlank() && !actualNew.isNullOrBlank()) {
+                "promotion rebaseline metadata must include nonblank comparison summaries"
+            }
+        }
+    }
+
+    private fun verifyNoUnrelatedChanges(
+        promoted: Path,
+        staged: Path,
+        request: PromoteEvidenceCliRequest,
+        selectedSceneIds: List<String>,
+    ) {
+        val allowedRootPaths = buildSet {
+            add("catalog.json")
+            add("promotion.json")
+            if (request.selection == EvidenceSelection.All && request.rebaseline) add("environment.json")
+        }
+        val allowedScenePrefixes = selectedSceneIds.map { "$it/" }
+        val changed = changedRegularFiles(before = promoted, after = staged).filterNot { relativePath ->
+            relativePath in allowedRootPaths || allowedScenePrefixes.any(relativePath::startsWith)
+        }
+        require(changed.isEmpty()) {
+            "staged promotion modified unrelated paths: ${changed.sorted().joinToString(", ")}"
+        }
+    }
+
+    private fun changedRegularFiles(before: Path, after: Path): Set<String> {
+        val beforeFiles = regularFilesByRelativePath(before)
+        val afterFiles = regularFilesByRelativePath(after)
+        return (beforeFiles.keys + afterFiles.keys).filterTo(sortedSetOf()) { relativePath ->
+            val previous = beforeFiles[relativePath]
+            val next = afterFiles[relativePath]
+            previous == null || next == null || !previous.contentEquals(next)
+        }
+    }
+
+    private fun regularFilesByRelativePath(root: Path): Map<String, ByteArray> =
+        Files.walk(root).use { stream ->
+            stream.iterator().asSequence()
+                .filter { Files.isRegularFile(it, NOFOLLOW_LINKS) }
+                .associate { path ->
+                    root.relativize(path).toString().replace('\\', '/') to Files.readAllBytes(path)
+                }
+        }
+
+    private fun swapCatalogRoot(staged: Path, destination: Path, repositoryRoot: Path) {
         val parent = destination.parent ?: error("promoted root has no parent")
-        val backup = if (Files.exists(destination, NOFOLLOW_LINKS)) Files.createTempDirectory(parent, ".promoted.backup-") else null
+        val hadDestination = Files.exists(destination, NOFOLLOW_LINKS)
+        var snapshot: Path? = null
+        var snapshotReady = false
+        var backup: Path? = null
+        var destinationMoveAttempted = false
+        var installAttempted = false
         var restored = false
         var installed = false
         try {
-            if (backup != null) moveStrategy(destination, backup.resolve(destination.fileName.toString()), true)
+            if (hadDestination) {
+                val snapshotRoot = Files.createTempDirectory(parent, ".promoted.snapshot-")
+                snapshot = snapshotRoot
+                copyTree(destination, snapshotRoot, repositoryRoot)
+                verifySnapshot(destination, snapshotRoot)
+                snapshotReady = true
+                backup = Files.createTempDirectory(parent, ".promoted.backup-")
+                destinationMoveAttempted = true
+                moveStrategy(destination, backup.resolve(destination.fileName.toString()), true)
+            }
+            installAttempted = true
             moveStrategy(staged, destination, true)
             installed = true
         } catch (failure: Throwable) {
-            if (backup != null && !Files.exists(destination, NOFOLLOW_LINKS)) {
+            if (hadDestination && snapshotReady && destinationMoveAttempted) {
+                val backupDestination = backup?.resolve(destination.fileName.toString())
+                val independentSnapshot = requireNotNull(snapshot)
+                val verifiedBackup = backupDestination?.takeIf { isVerifiedSnapshot(independentSnapshot, it) }
+                if (verifiedBackup != null) {
+                    try {
+                        if (Files.exists(destination, NOFOLLOW_LINKS)) deleteTree(destination)
+                        moveStrategy(verifiedBackup, destination, true)
+                        restored = true
+                    } catch (restoreFailure: Throwable) {
+                        failure.addSuppressed(restoreFailure)
+                        try {
+                            if (Files.exists(destination, NOFOLLOW_LINKS)) deleteTree(destination)
+                            copyTree(independentSnapshot, destination, repositoryRoot)
+                            verifySnapshot(independentSnapshot, destination)
+                            restored = true
+                            stderr.println("promotion backup restore failed; independent snapshot restored the old catalog")
+                        } catch (snapshotRestoreFailure: Throwable) {
+                            failure.addSuppressed(snapshotRestoreFailure)
+                            try {
+                                if (Files.exists(destination, NOFOLLOW_LINKS)) deleteTree(destination)
+                            } catch (cleanupFailure: Throwable) {
+                                failure.addSuppressed(cleanupFailure)
+                            }
+                            stderr.println("promotion rollback failed; independent snapshot and backup retained at $snapshot and $backup")
+                        }
+                    }
+                } else {
+                    try {
+                        if (Files.exists(destination, NOFOLLOW_LINKS)) deleteTree(destination)
+                        copyTree(independentSnapshot, destination, repositoryRoot)
+                        verifySnapshot(independentSnapshot, destination)
+                        restored = true
+                    } catch (restoreFailure: Throwable) {
+                        failure.addSuppressed(restoreFailure)
+                        stderr.println("promotion rollback failed; independent snapshot retained at $snapshot; backup retained at $backup")
+                    }
+                }
+            } else if (!hadDestination && installAttempted) {
                 try {
-                    moveStrategy(backup.resolve(destination.fileName.toString()), destination, true)
-                    restored = true
-                } catch (restoreFailure: Throwable) {
-                    failure.addSuppressed(restoreFailure)
-                    stderr.println("promotion rollback failed; backup retained at $backup")
+                    if (Files.exists(destination, NOFOLLOW_LINKS)) deleteTree(destination)
+                } catch (cleanupFailure: Throwable) {
+                    failure.addSuppressed(cleanupFailure)
+                    stderr.println("promotion initial install cleanup failed; incomplete destination retained at $destination")
                 }
             }
             throw failure
         } finally {
-            if (restored) {
+            if (restored || installed) {
                 runCatching { backup?.let(::deleteTree) }
-                    .onFailure { cleanupFailure -> stderr.println("promotion restored old catalog; backup retained at $backup: ${cleanupFailure.message}") }
-            } else if (installed && backup != null) {
-                runCatching { deleteTree(backup) }
-                    .onFailure { cleanupFailure -> stderr.println("promotion installed new catalog; backup retained at $backup: ${cleanupFailure.message}") }
+                    .onFailure { cleanupFailure -> stderr.println("promotion publication succeeded; backup retained at $backup: ${cleanupFailure.message}") }
+                runCatching { snapshot?.let(::deleteTree) }
+                    .onFailure { cleanupFailure -> stderr.println("promotion publication succeeded; snapshot retained at $snapshot: ${cleanupFailure.message}") }
+            } else if (!destinationMoveAttempted && !installAttempted) {
+                runCatching { backup?.let(::deleteTree) }
+                    .onFailure { cleanupFailure -> stderr.println("promotion setup cleanup failed; backup retained at $backup: ${cleanupFailure.message}") }
+                runCatching { snapshot?.let(::deleteTree) }
+                    .onFailure { cleanupFailure -> stderr.println("promotion setup cleanup failed; snapshot retained at $snapshot: ${cleanupFailure.message}") }
             }
         }
     }
+
+    private fun verifySnapshot(expected: Path, actual: Path) {
+        require(Files.isDirectory(actual, NOFOLLOW_LINKS) && !Files.isSymbolicLink(actual)) {
+            "promotion snapshot is not a regular directory: $actual"
+        }
+        require(changedRegularFiles(expected, actual).isEmpty()) {
+            "promotion snapshot does not match the original catalog"
+        }
+    }
+
+    private fun isVerifiedSnapshot(expected: Path, candidate: Path?): Boolean =
+        candidate != null && Files.exists(candidate, NOFOLLOW_LINKS) &&
+            runCatching {
+                verifySnapshot(expected, candidate)
+                true
+            }.getOrDefault(false)
 
     private fun ensureNoSymlinkComponents(root: Path, path: Path) {
         require(path.normalize().startsWith(root.normalize())) { "path escapes repository root" }
@@ -277,4 +540,9 @@ class PromoteEvidenceCliRunner internal constructor(
     }
 
     private data class PromotionRoots(val generated: Path, val promoted: Path)
+
+    private data class ValidatedCatalogRoot(
+        val entriesBySceneId: Map<String, EvidenceCatalogEntry>,
+        val environmentBytes: ByteArray,
+    )
 }

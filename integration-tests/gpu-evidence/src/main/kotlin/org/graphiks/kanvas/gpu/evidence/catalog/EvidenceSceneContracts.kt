@@ -161,6 +161,28 @@ data class EvidenceEnvironment(
     val available: Boolean,
 )
 
+data class EvidenceEnvironmentRootIdentity(
+    val osName: String,
+    val osVersion: String,
+    val osArchitecture: String,
+    val javaVersion: String,
+    val adapter: EvidenceAdapter?,
+    val deviceGeneration: Long?,
+    val capabilityImplementation: String?,
+    val available: Boolean,
+)
+
+fun EvidenceEnvironment.rootIdentity(): EvidenceEnvironmentRootIdentity = EvidenceEnvironmentRootIdentity(
+    osName = osName,
+    osVersion = osVersion,
+    osArchitecture = osArchitecture,
+    javaVersion = javaVersion,
+    adapter = adapter,
+    deviceGeneration = deviceGeneration,
+    capabilityImplementation = capabilityImplementation,
+    available = available,
+)
+
 data class StructuralEventEvidence(
     val kind: String,
     val phase: String,

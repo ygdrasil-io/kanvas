@@ -1,35 +1,35 @@
 package org.graphiks.kanvas.gpu.evidence.artifacts
 
 import java.io.ByteArrayOutputStream
+import java.io.IOException
 import java.io.PrintStream
 import java.nio.file.Files
 import java.nio.file.Path
-import java.io.IOException
 import java.security.MessageDigest
 import java.util.Comparator
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.boolean
-import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceEnvironment
 import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceAdapter
+import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceCase
+import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceEnvironment
 import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceExpectation
-import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceSceneDescriptor
-import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceSceneId
-import org.graphiks.kanvas.gpu.evidence.catalog.ImageComparison
-import org.graphiks.kanvas.gpu.evidence.catalog.OraclePolicy
+import org.graphiks.kanvas.gpu.evidence.catalog.GpuEvidenceCatalog
 import org.graphiks.kanvas.gpu.evidence.catalog.RouteEvidence
 import org.graphiks.kanvas.gpu.evidence.catalog.SceneObservation
-import org.graphiks.kanvas.gpu.evidence.catalog.GpuEvidenceCatalog
 import org.graphiks.kanvas.gpu.evidence.compare.EvidenceComparator
 import org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram
+import org.graphiks.kanvas.gpu.evidence.runner.EvidenceProgram
 import org.graphiks.kanvas.gpu.evidence.runner.RoutedSceneProgram
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeTelemetry
-import org.graphiks.kanvas.test.ComparisonUtils
 import org.junit.jupiter.api.io.TempDir
 
 class PromoteEvidenceCliTest {
@@ -38,315 +38,362 @@ class PromoteEvidenceCliTest {
 
     @Test
     fun `promotion rejects a generated root that is not independently verified`() {
-        val commit = COMMIT
-        val generated = repository.resolve("reports/gpu-renderer/evidence/correctness/generated/$commit")
+        val generated = generatedRoot(repository, COMMIT)
         Files.createDirectories(generated.resolve("solid-card-stack"))
 
-        val result = PromoteEvidenceCliRunner().run(args(repository, commit))
-
-        assertTrue(result != 0)
-        assertFalse(Files.exists(promotedRoot(repository).resolve("solid-card-stack")))
-    }
-
-    @Test
-    fun `promotion rejects source commit mismatch and failed or unavailable bundles`() {
-        writeAllBundles(repository, COMMIT)
-        val mismatch = PromoteEvidenceCliRunner().run(args(repository, OTHER_COMMIT))
-        assertTrue(mismatch != 0)
-        assertFalse(Files.exists(promotedRoot(repository).resolve("solid-card-stack")))
-
-        val failedManifest = generatedRoot(repository).resolve("solid-card-stack/manifest.json")
-        Files.writeString(failedManifest, Files.readString(failedManifest).replace("\"observedOutcome\":\"rendered\"", "\"observedOutcome\":\"unavailable\""))
-        val failed = PromoteEvidenceCliRunner().run(args(repository, COMMIT))
-        assertTrue(failed != 0)
-        assertFalse(Files.exists(promotedRoot(repository).resolve("solid-card-stack")))
-    }
-
-    @Test
-    fun `promotion rejects a coherent fail bundle without mutating the destination`() {
-        writeAllBundles(repository, COMMIT)
-        val descriptor = GpuEvidenceCatalog.renderCases.first { it.descriptor.id.value == "solid-card-stack" }.descriptor
-        val environment = EvidenceEnvironment(COMMIT, "test", "1", "test", "17", EvidenceAdapter("test-adapter", "test-vendor", "test-device", "test-architecture", "test-description", false), 1L, "native", true)
-        val route = RouteEvidence("fail-route", "attempt", "Completed", "rendered", emptyList(), emptyList(), mapOf("queue.submit" to 1L, "render.draw" to 1L, "render.pipelineBind" to 1L), GPUBackendRuntimeTelemetry(submissions = 1L))
-        val pixels = ByteArray(descriptor.width * descriptor.height * 4)
-        val oracle = requireNotNull(GpuEvidenceCatalog.renderCases.first { it.descriptor.id.value == "solid-card-stack" }.oracle).render(descriptor.width, descriptor.height)
-        val comparison = EvidenceComparator().compare(pixels, oracle, descriptor.width, descriptor.height, requireNotNull(descriptor.comparison))
-        EvidenceBundleWriter(repository, COMMIT).writeGenerated(
-            descriptor,
-            SceneObservation.Rendered(
-                pixels,
-                route,
-                emptyList(),
-                environment,
-                comparison,
-            ),
-            oracle,
-        )
-        val stderr = ByteArrayOutputStream()
-
-        val result = PromoteEvidenceCliRunner(stderr = PrintStream(stderr)).run(args(repository, COMMIT))
+        val result = PromoteEvidenceCliRunner().run(args(repository, COMMIT))
 
         assertTrue(result != 0)
         assertFalse(Files.exists(promotedRoot(repository)))
-        assertTrue(stderr.toString().contains("generated evidence failed independent verification"))
     }
 
     @Test
-    fun `promotion preflight rejects hardened environment tampering without mutation`() {
-        writeAllBundles(repository, COMMIT)
-        val scene = generatedRoot(repository).resolve("solid-card-stack")
-        Files.writeString(scene.resolve("environment.json"), Files.readString(scene.resolve("environment.json")).replace("\"capabilityImplementation\":\"native\"", "\"capabilityImplementation\":\"software\""))
-        refreshHash(scene, "environment.json")
+    fun `promotion rejects source commit mismatch and failed bundles`() {
+        writeGeneratedRoot(repository, COMMIT, allSceneIds())
 
-        assertTrue(PromoteEvidenceCliRunner().run(args(repository, COMMIT)) != 0)
+        val mismatch = PromoteEvidenceCliRunner().run(args(repository, OTHER_COMMIT))
+        assertTrue(mismatch != 0)
+        assertFalse(Files.exists(promotedRoot(repository)))
+
+        val manifest = generatedRoot(repository, COMMIT).resolve("solid-card-stack/manifest.json")
+        Files.writeString(
+            manifest,
+            Files.readString(manifest).replace("\"observedOutcome\":\"rendered\"", "\"observedOutcome\":\"refused\""),
+        )
+
+        val failed = PromoteEvidenceCliRunner().run(args(repository, COMMIT))
+        assertTrue(failed != 0)
+        assertFalse(Files.exists(promotedRoot(repository)))
+    }
+
+    @Test
+    fun `promotion rejects tampered generated root environment without mutation`() {
+        writeGeneratedRoot(repository, COMMIT, allSceneIds())
+        val environment = generatedRoot(repository, COMMIT).resolve("environment.json")
+        Files.writeString(
+            environment,
+            Files.readString(environment).replace("\"capabilityImplementation\":\"native\"", "\"capabilityImplementation\":\"software\""),
+        )
+
+        val result = PromoteEvidenceCliRunner().run(args(repository, COMMIT))
+
+        assertTrue(result != 0)
         assertFalse(Files.exists(promotedRoot(repository)))
     }
 
     @Test
     fun `promotion requires reviewer and reason metadata`() {
-        writeAllBundles(repository, COMMIT)
+        writeGeneratedRoot(repository, COMMIT, allSceneIds())
 
         assertTrue(PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "")) != 0)
         assertTrue(PromoteEvidenceCliRunner().run(args(repository, COMMIT, reason = "")) != 0)
     }
 
     @Test
-    fun `promotion rejects existing destination without rebaseline and requires comparison metrics`() {
-        writeAllBundles(repository, COMMIT)
-        val destination = promotedRoot(repository).resolve("solid-card-stack")
-        Files.createDirectories(destination)
-        Files.writeString(destination.resolve("sentinel"), "keep")
+    fun `promotion request parser accepts explicit scene and scenes file selection`() {
+        val scenesFile = Files.createTempFile("promotion-scenes", ".txt")
+        Files.writeString(scenesFile, "custom-runtime-effect-unregistered-refusal\nsolid-card-stack\n")
 
-        val withoutRebaseline = PromoteEvidenceCliRunner().run(args(repository, COMMIT))
-        assertTrue(withoutRebaseline != 0)
-        assertTrue(Files.exists(destination.resolve("sentinel")))
+        val explicit = PromoteEvidenceCliRequest.parse(
+            arrayOf(
+                "--repository-root", repository.toString(),
+                "--source-commit", COMMIT,
+                "--reviewer", "reviewer",
+                "--reason", "reason",
+                "--scene", "solid-card-stack",
+            ),
+        )
+        assertEquals(EvidenceSelection.Explicit(listOf("solid-card-stack")), explicit.selection)
 
-        val withoutMetrics = PromoteEvidenceCliRunner().run(args(repository, COMMIT, rebaseline = true))
-        assertTrue(withoutMetrics != 0)
-        assertTrue(Files.exists(destination.resolve("sentinel")))
+        val fromFile = PromoteEvidenceCliRequest.parse(
+            arrayOf(
+                "--repository-root", repository.toString(),
+                "--source-commit", COMMIT,
+                "--reviewer", "reviewer",
+                "--reason", "reason",
+                "--scenes-file", scenesFile.toString(),
+            ),
+        )
+        assertEquals(
+            EvidenceSelection.Explicit(listOf("custom-runtime-effect-unregistered-refusal", "solid-card-stack")),
+            fromFile.selection,
+        )
+
+        val all = PromoteEvidenceCliRequest.parse(
+            arrayOf(
+                "--repository-root", repository.toString(),
+                "--source-commit", COMMIT,
+                "--reviewer", "reviewer",
+                "--reason", "reason",
+                "--all",
+            ),
+        )
+        assertSame(EvidenceSelection.All, all.selection)
     }
 
     @Test
-    fun `promotion verifies every current catalog source before replacing destinations`() {
-        writeAllBundles(repository, COMMIT)
+    fun `promotion request parser rejects unknown explicit scene ids`() {
+        assertFailsWith<IllegalStateException> {
+            PromoteEvidenceCliRequest.parse(
+                arrayOf(
+                    "--repository-root", repository.toString(),
+                    "--source-commit", COMMIT,
+                    "--reviewer", "reviewer",
+                    "--reason", "reason",
+                    "--scene", "unknown-scene",
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun `promotion request parser rejects comparison summaries without rebaseline`() {
+        assertFailsWith<IllegalArgumentException> {
+            PromoteEvidenceCliRequest.parse(
+                arrayOf(
+                    "--repository-root", repository.toString(),
+                    "--source-commit", COMMIT,
+                    "--reviewer", "reviewer",
+                    "--reason", "reason",
+                    "--all",
+                    "--prior-comparison", "old",
+                    "--new-comparison", "new",
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun `initial promotion requires all and writes one root promotion record`() {
+        writeGeneratedRoot(repository, COMMIT, allSceneIds())
+
+        val selected = PromoteEvidenceCliRunner().run(
+            args(repository, COMMIT, selection = arrayOf("--scene", "solid-card-stack")),
+        )
+        assertTrue(selected != 0)
+        assertFalse(Files.exists(promotedRoot(repository)))
+
         val result = PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial"))
 
         assertEquals(0, result)
-        assertEquals(GpuEvidenceCatalog.cases.map { it.descriptor.id.value }.toSet(), sceneDirectories(promotedRoot(repository)))
-        val metadata = Files.readString(promotedRoot(repository).resolve("solid-card-stack/promotion.json"))
-        val json = EvidenceJson.parseToJsonElement(metadata).jsonObject
-        assertEquals("gpu-evidence-promotion-v1", json["schemaVersion"]!!.jsonPrimitive.content)
-        assertEquals(COMMIT, json["sourceCommit"]!!.jsonPrimitive.content)
-        assertEquals("reviewer", json["reviewer"]!!.jsonPrimitive.content)
-        assertEquals("initial", json["reason"]!!.jsonPrimitive.content)
-        assertEquals(false, json["rebaseline"]!!.jsonPrimitive.boolean)
+        assertEquals(allSceneIds().toSet(), sceneDirectories(promotedRoot(repository)))
+        assertTrue(Files.isRegularFile(promotedRoot(repository).resolve("catalog.json")))
+        assertTrue(Files.isRegularFile(promotedRoot(repository).resolve("environment.json")))
+        assertTrue(Files.isRegularFile(promotedRoot(repository).resolve("promotion.json")))
+        assertTrue(allSceneIds().all { !Files.exists(promotedRoot(repository).resolve(it).resolve("promotion.json")) })
+        val promotion = rootPromotion(promotedRoot(repository))
+        assertEquals(GPU_EVIDENCE_PROMOTION_SCHEMA_V2, promotion["schemaVersion"]!!.jsonPrimitive.content)
+        assertEquals(allSceneIds().toSet(), promotionSceneIds(promotion))
+        assertEquals(false, promotion["rebaseline"]!!.jsonPrimitive.boolean)
     }
 
     @Test
-    fun `rebaseline replaces existing scenes only with old and new comparison summaries`() {
-        writeAllBundles(repository, COMMIT)
-        assertEquals(0, PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial")))
+    fun `initial all promotion accepts an empty promoted directory`() {
+        writeGeneratedRoot(repository, COMMIT, allSceneIds())
+        Files.createDirectories(promotedRoot(repository))
 
-        writeAllBundles(repository, COMMIT)
+        val result = PromoteEvidenceCliRunner().run(args(repository, COMMIT))
+
+        assertEquals(0, result)
+        assertTrue(Files.isRegularFile(promotedRoot(repository).resolve("catalog.json")))
+    }
+
+    @Test
+    fun `selected promotion keeps unselected bytes unchanged and updates catalog metadata`() {
+        writePromotedRoot(repository, COMMIT)
+        writeGeneratedRoot(repository, OTHER_COMMIT, listOf("solid-card-stack"))
+        val beforeUnselectedBytes = snapshot(promotedRoot(repository).resolve("custom-runtime-effect-unregistered-refusal"))
+
         val result = PromoteEvidenceCliRunner().run(
-            args(repository, COMMIT, reviewer = "reviewer", reason = "reviewed rebaseline", rebaseline = true)
-                .toList().toTypedArray() + arrayOf("--prior-comparison", "old=100.0", "--new-comparison", "new=99.9"),
+            args(repository, OTHER_COMMIT, selection = arrayOf("--scene", "solid-card-stack"), reviewer = "reviewer", reason = "selected"),
         )
 
         assertEquals(0, result)
-        val json = EvidenceJson.parseToJsonElement(Files.readString(promotedRoot(repository).resolve("solid-card-stack/promotion.json"))).jsonObject
-        assertEquals(true, json["rebaseline"]!!.jsonPrimitive.boolean)
-        assertEquals("old=100.0", json["priorComparison"]!!.jsonPrimitive.content)
-        assertEquals("new=99.9", json["newComparison"]!!.jsonPrimitive.content)
+        val afterUnselectedBytes = snapshot(promotedRoot(repository).resolve("custom-runtime-effect-unregistered-refusal"))
+        assertEquals(beforeUnselectedBytes, afterUnselectedBytes)
+        val changedEntry = catalogEntry(promotedRoot(repository), "solid-card-stack")
+        assertEquals(OTHER_COMMIT, changedEntry["sourceCommit"]!!.jsonPrimitive.content)
+        val rootPromotion = rootPromotion(promotedRoot(repository))
+        assertEquals(setOf("solid-card-stack"), promotionSceneIds(rootPromotion))
+        assertFalse(Files.exists(promotedRoot(repository).resolve("solid-card-stack/promotion.json")))
     }
 
     @Test
-    fun `rebaseline promotes an explicit historical seven scene subset to the current catalog`() {
-        writeAllBundles(repository, COMMIT)
-        assertEquals(0, PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial")))
-        val historicalRenderIds = setOf(
-            "solid-card-stack",
-            "separable-blur-rect",
-            "translucent-card-overlap",
-            "scissor-overlay",
-            "stroke-rect-outline",
-        )
-        val historicalSceneIds = historicalRenderIds + setOf(
-            "custom-runtime-effect-unregistered-refusal",
-            "aggregate-memory-budget-refusal",
-        )
-        GpuEvidenceCatalog.cases
-            .map { it.descriptor.id.value }
-            .filterNot(historicalSceneIds::contains)
-            .forEach { removeScene(promotedRoot(repository), it) }
-        assertEquals(historicalSceneIds, sceneDirectories(promotedRoot(repository)))
+    fun `selected promotion rejects an unpromoted generated root without mutating the destination`() {
+        val unpromoted = writeGeneratedRoot(repository, COMMIT, allSceneIds())
+        copyTree(unpromoted, promotedRoot(repository))
+        writeGeneratedRoot(repository, OTHER_COMMIT, listOf("solid-card-stack"))
+        val before = snapshot(promotedRoot(repository))
 
-        writeAllBundles(repository, COMMIT)
         val result = PromoteEvidenceCliRunner().run(
-            args(repository, COMMIT, reviewer = "reviewer", reason = "reviewed rebaseline", rebaseline = true)
-                .toList().toTypedArray() + arrayOf("--prior-comparison", "old=100.0", "--new-comparison", "new=100.0"),
+            args(repository, OTHER_COMMIT, selection = arrayOf("--scene", "solid-card-stack")),
         )
 
-        assertEquals(0, result)
-        assertEquals(GpuEvidenceCatalog.cases.map { it.descriptor.id.value }.toSet(), sceneDirectories(promotedRoot(repository)))
+        assertTrue(result != 0)
+        assertEquals(before, snapshot(promotedRoot(repository)))
     }
 
     @Test
-    fun `rebaseline accepts coherent historical route and oracle identities`() {
-        writeAllBundles(repository, COMMIT)
-        assertEquals(0, PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial")))
-        listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk").forEach { removeScene(promotedRoot(repository), it) }
-        val solid = promotedRoot(repository).resolve("solid-card-stack")
-        val solidCase = GpuEvidenceCatalog.cases.first { it.descriptor.id.value == "solid-card-stack" }
-        val historicalPixels = ByteArray(solidCase.descriptor.width * solidCase.descriptor.height * 4) { index -> (index * 17 + 3).toByte() }
-        writePng(solid.resolve("cpu.png"), historicalPixels, solidCase.descriptor.width, solidCase.descriptor.height)
-        writePng(solid.resolve("gpu.png"), historicalPixels, solidCase.descriptor.width, solidCase.descriptor.height)
-        refreshHash(solid, "cpu.png")
-        refreshHash(solid, "gpu.png")
-        val currentExpected = EvidenceVerificationExpectation.fromCase(
-            solidCase,
-            COMMIT,
-            expectedRgba = requireNotNull(solidCase.oracle).render(solidCase.descriptor.width, solidCase.descriptor.height),
-        )
-        val currentVerification = EvidenceBundleVerifier.verify(solid, currentExpected)
-        assertTrue(currentVerification is EvidenceBundleVerification.Invalid)
-        assertTrue((currentVerification as EvidenceBundleVerification.Invalid).errors.any { it.contains("CPU PNG does not match expected oracle pixels") })
-        rewriteHistoricalIdentity(promotedRoot(repository))
+    fun `selected promotion rejects an absent destination`() {
+        writeGeneratedRoot(repository, COMMIT, listOf("solid-card-stack"))
 
-        writeAllBundles(repository, COMMIT)
+        val result = PromoteEvidenceCliRunner().run(
+            args(repository, COMMIT, selection = arrayOf("--scene", "solid-card-stack")),
+        )
+
+        assertTrue(result != 0)
+        assertFalse(Files.exists(promotedRoot(repository)))
+    }
+
+    @Test
+    fun `selected promotion rejects an absent selected generated bundle`() {
+        writePromotedRoot(repository, COMMIT)
+        writeGeneratedRoot(repository, OTHER_COMMIT, listOf("solid-card-stack"))
+        deleteTree(generatedRoot(repository, OTHER_COMMIT).resolve("solid-card-stack"))
+        val before = snapshot(promotedRoot(repository))
+
+        val result = PromoteEvidenceCliRunner().run(
+            args(repository, OTHER_COMMIT, selection = arrayOf("--scene", "solid-card-stack")),
+        )
+
+        assertTrue(result != 0)
+        assertEquals(before, snapshot(promotedRoot(repository)))
+    }
+
+    @Test
+    fun `selected promotion rejects an unknown generated scene`() {
+        writePromotedRoot(repository, COMMIT)
+        val generated = writeGeneratedRoot(repository, OTHER_COMMIT, listOf("solid-card-stack"))
+        copyTree(generated.resolve("solid-card-stack"), generated.resolve("unknown-scene"))
+        val before = snapshot(promotedRoot(repository))
+
+        val result = PromoteEvidenceCliRunner().run(
+            args(repository, OTHER_COMMIT, selection = arrayOf("--scene", "solid-card-stack")),
+        )
+
+        assertTrue(result != 0)
+        assertEquals(before, snapshot(promotedRoot(repository)))
+    }
+
+    @Test
+    fun `selected promotion rejects a different environment and requires rebaseline`() {
+        writePromotedRoot(repository, COMMIT)
+        writeGeneratedRoot(
+            repository,
+            OTHER_COMMIT,
+            listOf("solid-card-stack"),
+            environment = environment(OTHER_COMMIT, osVersion = "2"),
+        )
         val stderr = ByteArrayOutputStream()
+        val before = snapshot(promotedRoot(repository))
+
         val result = PromoteEvidenceCliRunner(stderr = PrintStream(stderr)).run(
-            args(repository, COMMIT, reviewer = "reviewer", reason = "reviewed rebaseline", rebaseline = true)
-                .toList().toTypedArray() + arrayOf("--prior-comparison", "old=7", "--new-comparison", "new=10"),
+            args(repository, OTHER_COMMIT, selection = arrayOf("--scene", "solid-card-stack")),
         )
 
-        assertEquals(0, result, "historical route/oracle identities must not be compared to current catalog semantics: ${stderr}")
-        assertEquals(GpuEvidenceCatalog.cases.map { it.descriptor.id.value }.toSet(), sceneDirectories(promotedRoot(repository)))
+        assertTrue(result != 0)
+        assertEquals(before, snapshot(promotedRoot(repository)))
+        assertTrue(stderr.toString().contains(EvidenceCatalogVerifier.ENVIRONMENT_MISMATCH_REQUIRES_REBASELINE))
     }
 
     @Test
-    fun `rebaseline rejects an unknown historical oracle kind before mutation`() {
-        writeAllBundles(repository, COMMIT)
-        assertEquals(0, PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial")))
-        listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk").forEach { removeScene(promotedRoot(repository), it) }
-        rewriteHistoricalIdentity(promotedRoot(repository))
-        val manifest = promotedRoot(repository).resolve("solid-card-stack/manifest.json")
-        Files.writeString(manifest, Files.readString(manifest).replaceFirst("\"oracleKind\":\"generated-cpu\"", "\"oracleKind\":\"unknown\""))
+    fun `selected promotion rejects a changed unselected staged scene without mutating the destination`() {
+        writePromotedRoot(repository, COMMIT)
+        writeGeneratedRoot(repository, OTHER_COMMIT, listOf("solid-card-stack"))
         val before = snapshot(promotedRoot(repository))
 
-        writeAllBundles(repository, COMMIT)
-        val result = PromoteEvidenceCliRunner().run(
-            args(repository, COMMIT, reviewer = "reviewer", reason = "reviewed rebaseline", rebaseline = true)
-                .toList().toTypedArray() + arrayOf("--prior-comparison", "old=7", "--new-comparison", "new=10"),
-        )
+        val result = PromoteEvidenceCliRunner(
+            beforeStagedVerification = { staged ->
+                val route = staged.resolve("custom-runtime-effect-unregistered-refusal/route.json")
+                Files.writeString(route, Files.readString(route).replace("\"routeId\":\"", "\"routeId\":\"tampered-"))
+            },
+        ).run(args(repository, OTHER_COMMIT, selection = arrayOf("--scene", "solid-card-stack")))
 
         assertTrue(result != 0)
         assertEquals(before, snapshot(promotedRoot(repository)))
     }
 
     @Test
-    fun `rebaseline rejects a refusal with an image oracle before mutation`() {
-        writeAllBundles(repository, COMMIT)
-        assertEquals(0, PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial")))
-        listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk").forEach { removeScene(promotedRoot(repository), it) }
-        val manifest = promotedRoot(repository).resolve("aggregate-memory-budget-refusal/manifest.json")
-        Files.writeString(
-            manifest,
-            Files.readString(manifest)
-                .replaceFirst("\"oracleKind\":\"stable-refusal\"", "\"oracleKind\":\"generated-cpu\"")
-                .replaceFirst("\"oracleId\":\"stable-refusal\"", "\"oracleId\":\"historical-refusal-cpu\"")
-                .replaceFirst("\"oracleProvenance\":\"stable-refusal\"", "\"oracleProvenance\":\"generated-cpu\""),
-        )
+    fun `selected promotion rejects a failed staged verification without mutating the destination`() {
+        writePromotedRoot(repository, COMMIT)
+        writeGeneratedRoot(repository, OTHER_COMMIT, listOf("solid-card-stack"))
         val before = snapshot(promotedRoot(repository))
 
-        writeAllBundles(repository, COMMIT)
-        val result = PromoteEvidenceCliRunner().run(
-            args(repository, COMMIT, reviewer = "reviewer", reason = "reviewed rebaseline", rebaseline = true)
-                .toList().toTypedArray() + arrayOf("--prior-comparison", "old=7", "--new-comparison", "new=10"),
-        )
+        val result = PromoteEvidenceCliRunner(
+            beforeStagedVerification = { staged ->
+                val promotion = staged.resolve("promotion.json")
+                Files.writeString(promotion, Files.readString(promotion).replace("\"reason\":\"reason\"", "\"reason\":\"\""))
+            },
+        ).run(args(repository, OTHER_COMMIT, selection = arrayOf("--scene", "solid-card-stack")))
 
         assertTrue(result != 0)
         assertEquals(before, snapshot(promotedRoot(repository)))
     }
 
     @Test
-    fun `rebaseline rejects refusal structural submission without runtime submission before mutation`() {
-        writeAllBundles(repository, COMMIT)
-        assertEquals(0, PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial")))
-        listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk").forEach { removeScene(promotedRoot(repository), it) }
-        val directory = promotedRoot(repository).resolve("aggregate-memory-budget-refusal")
-        val route = directory.resolve("route.json")
-        Files.writeString(route, Files.readString(route).replaceFirst("\"structuralCounters\":{}", "\"structuralCounters\":{\"queue.submit\":1}"))
-        refreshHash(directory, "route.json")
-        val before = snapshot(promotedRoot(repository))
+    fun `all rebaseline accepts comparison summaries and a changed environment`() {
+        writePromotedRoot(repository, COMMIT)
+        val changedEnvironment = environment(OTHER_COMMIT, osVersion = "2")
+        writeGeneratedRoot(repository, OTHER_COMMIT, allSceneIds(), changedEnvironment)
 
-        writeAllBundles(repository, COMMIT)
         val result = PromoteEvidenceCliRunner().run(
-            args(repository, COMMIT, reviewer = "reviewer", reason = "reviewed rebaseline", rebaseline = true)
-                .toList().toTypedArray() + arrayOf("--prior-comparison", "old=7", "--new-comparison", "new=10"),
+            args(repository, OTHER_COMMIT, reviewer = "reviewer", reason = "rebaseline", rebaseline = true) +
+                arrayOf("--prior-comparison", "old=100.0", "--new-comparison", "new=99.9"),
         )
 
-        assertTrue(result != 0)
-        assertEquals(before, snapshot(promotedRoot(repository)))
+        assertEquals(0, result)
+        assertEquals(String(environmentJsonV2(changedEnvironment)), Files.readString(promotedRoot(repository).resolve("environment.json")))
+        val promotion = rootPromotion(promotedRoot(repository))
+        assertEquals(true, promotion["rebaseline"]!!.jsonPrimitive.boolean)
+        assertEquals("old=100.0", promotion["priorComparison"]!!.jsonPrimitive.content)
+        assertEquals("new=99.9", promotion["newComparison"]!!.jsonPrimitive.content)
+        assertEquals(allSceneIds().toSet(), promotionSceneIds(promotion))
+        assertEquals(OTHER_COMMIT, catalogEntry(promotedRoot(repository), "solid-card-stack")["sourceCommit"]!!.jsonPrimitive.content)
     }
 
     @Test
-    fun `rebaseline rejects a tampered known scene in a historical subset before mutation`() {
-        writeAllBundles(repository, COMMIT)
-        assertEquals(0, PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial")))
-        listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk").forEach { removeScene(promotedRoot(repository), it) }
-        val gpu = promotedRoot(repository).resolve("solid-card-stack/gpu.png")
-        val tampered = Files.readAllBytes(gpu)
-        tampered[0] = (tampered[0].toInt() xor 0x01).toByte()
-        Files.write(gpu, tampered)
+    fun `all rebaseline rejects corrupted root promotion metadata before swap`() {
+        writePromotedRoot(repository, COMMIT)
+        writeGeneratedRoot(repository, OTHER_COMMIT, allSceneIds(), environment(OTHER_COMMIT, osVersion = "2"))
         val before = snapshot(promotedRoot(repository))
 
-        writeAllBundles(repository, COMMIT)
-        val result = PromoteEvidenceCliRunner().run(
-            args(repository, COMMIT, reviewer = "reviewer", reason = "reviewed rebaseline", rebaseline = true)
-                .toList().toTypedArray() + arrayOf("--prior-comparison", "old=100.0", "--new-comparison", "new=100.0"),
+        val result = PromoteEvidenceCliRunner(
+            beforeStagedVerification = { staged ->
+                val promotion = staged.resolve("promotion.json")
+                Files.writeString(
+                    promotion,
+                    Files.readString(promotion)
+                        .replace("\"rebaseline\":true", "\"rebaseline\":false")
+                        .replace("\"priorComparison\":\"old=100.0\"", "\"priorComparison\":null")
+                        .replace("\"newComparison\":\"new=99.9\"", "\"newComparison\":null"),
+                )
+            },
+        ).run(
+            args(repository, OTHER_COMMIT, reviewer = "reviewer", reason = "rebaseline", rebaseline = true) +
+                arrayOf("--prior-comparison", "old=100.0", "--new-comparison", "new=99.9"),
         )
 
         assertTrue(result != 0)
         assertEquals(before, snapshot(promotedRoot(repository)))
-    }
-
-    @Test
-    fun `rebaseline rejects a historical subset missing promotion metadata before mutation`() {
-        writeAllBundles(repository, COMMIT)
-        assertEquals(0, PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial")))
-        listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk").forEach { removeScene(promotedRoot(repository), it) }
-        Files.delete(promotedRoot(repository).resolve("solid-card-stack/promotion.json"))
-        val before = snapshot(promotedRoot(repository))
-
-        writeAllBundles(repository, COMMIT)
-        val result = PromoteEvidenceCliRunner().run(
-            args(repository, COMMIT, reviewer = "reviewer", reason = "reviewed rebaseline", rebaseline = true)
-                .toList().toTypedArray() + arrayOf("--prior-comparison", "old=100.0", "--new-comparison", "new=100.0"),
-        )
-
-        assertTrue(result != 0)
-        assertEquals(before, snapshot(promotedRoot(repository)))
-        val leftovers = Files.list(promotedRoot(repository).parent).use { stream ->
-            stream.iterator().asSequence().filter { it.fileName.toString().startsWith(".promoted.staged-") }.toList()
-        }
-        assertTrue(leftovers.isEmpty())
     }
 
     @Test
     fun `late catalog root swap failure restores the old promoted tree byte for byte`() {
-        writeAllBundles(repository, COMMIT)
-        assertEquals(0, PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial")))
+        writePromotedRoot(repository, COMMIT)
         val before = snapshot(promotedRoot(repository))
-        writeAllBundles(repository, COMMIT)
+        writeGeneratedRoot(repository, OTHER_COMMIT, allSceneIds(), environment(OTHER_COMMIT, osVersion = "2"))
         var moves = 0
+
         val result = PromoteEvidenceCliRunner(
             moveStrategy = { source, destination, _ ->
                 moves++
                 if (moves == 2) throw IOException("injected late swap failure")
                 Files.move(source, destination)
             },
-        ).run(args(repository, COMMIT, reviewer = "reviewer", reason = "rebaseline", rebaseline = true).toList().toTypedArray() + arrayOf("--prior-comparison", "old", "--new-comparison", "new"))
+        ).run(
+            args(repository, OTHER_COMMIT, reviewer = "reviewer", reason = "rebaseline", rebaseline = true) +
+                arrayOf("--prior-comparison", "old", "--new-comparison", "new"),
+        )
 
         assertTrue(result != 0)
         assertTrue(moves >= 3)
@@ -354,35 +401,106 @@ class PromoteEvidenceCliTest {
     }
 
     @Test
-    fun `failed rollback preserves the backup root for recovery`() {
-        writeAllBundles(repository, COMMIT)
-        assertEquals(0, PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial")))
+    fun `partial non-atomic catalog root install restores the old promoted tree byte for byte`() {
+        writePromotedRoot(repository, COMMIT)
         val before = snapshot(promotedRoot(repository))
-        writeAllBundles(repository, COMMIT)
+        writeGeneratedRoot(repository, OTHER_COMMIT, allSceneIds(), environment(OTHER_COMMIT, osVersion = "2"))
+        var partialInstall = false
+
+        val result = PromoteEvidenceCliRunner(
+            moveStrategy = { source, destination, _ ->
+                if (source.fileName.toString().startsWith(".promoted.staged-")) {
+                    copyTree(source, destination)
+                    partialInstall = true
+                    throw IOException("injected partial non-atomic catalog install")
+                }
+                Files.move(source, destination)
+            },
+        ).run(
+            args(repository, OTHER_COMMIT, reviewer = "reviewer", reason = "rebaseline", rebaseline = true) +
+                arrayOf("--prior-comparison", "old", "--new-comparison", "new"),
+        )
+
+        assertTrue(result != 0)
+        assertTrue(partialInstall)
+        assertEquals(before, snapshot(promotedRoot(repository)))
+    }
+
+    @Test
+    fun `partial first backup move restores the old promoted tree byte for byte`() {
+        writePromotedRoot(repository, COMMIT)
+        val before = snapshot(promotedRoot(repository))
+        writeGeneratedRoot(repository, OTHER_COMMIT, allSceneIds(), environment(OTHER_COMMIT, osVersion = "2"))
+
+        val result = PromoteEvidenceCliRunner(
+            moveStrategy = { source, destination, _ ->
+                if (source == promotedRoot(repository)) {
+                    Files.createDirectories(destination)
+                    Files.copy(source.resolve("catalog.json"), destination.resolve("catalog.json"))
+                    throw IOException("injected partial backup move")
+                }
+                Files.move(source, destination)
+            },
+        ).run(
+            args(repository, OTHER_COMMIT, reviewer = "reviewer", reason = "rebaseline", rebaseline = true) +
+                arrayOf("--prior-comparison", "old", "--new-comparison", "new"),
+        )
+
+        assertTrue(result != 0)
+        assertEquals(before, snapshot(promotedRoot(repository)))
+    }
+
+    @Test
+    fun `partial initial catalog root install removes the incomplete destination`() {
+        writeGeneratedRoot(repository, COMMIT, allSceneIds())
+
+        val result = PromoteEvidenceCliRunner(
+            moveStrategy = { source, destination, _ ->
+                if (source.fileName.toString().startsWith(".promoted.staged-")) {
+                    copyTree(source, destination)
+                    throw IOException("injected partial initial catalog install")
+                }
+                Files.move(source, destination)
+            },
+        ).run(args(repository, COMMIT))
+
+        assertTrue(result != 0)
+        assertFalse(Files.exists(promotedRoot(repository)))
+    }
+
+    @Test
+    fun `double rollback failure reconstructs the original promoted tree from the snapshot`() {
+        writePromotedRoot(repository, COMMIT)
+        val before = snapshot(promotedRoot(repository))
+        writeGeneratedRoot(repository, OTHER_COMMIT, allSceneIds(), environment(OTHER_COMMIT, osVersion = "2"))
         var moves = 0
         val stderr = ByteArrayOutputStream()
+
         val result = PromoteEvidenceCliRunner(
             stderr = PrintStream(stderr),
             moveStrategy = { source, destination, _ ->
                 moves++
-                if (moves == 2 || moves == 3) throw IOException("injected swap and restore failure")
+                if (moves == 2) throw IOException("injected swap failure")
+                if (moves == 3) {
+                    Files.createDirectories(destination)
+                    Files.copy(source.resolve("catalog.json"), destination.resolve("catalog.json"))
+                    throw IOException("injected partial restore failure")
+                }
                 Files.move(source, destination)
             },
-        ).run(args(repository, COMMIT, reviewer = "reviewer", reason = "rebaseline", rebaseline = true).toList().toTypedArray() + arrayOf("--prior-comparison", "old", "--new-comparison", "new"))
+        ).run(
+            args(repository, OTHER_COMMIT, reviewer = "reviewer", reason = "rebaseline", rebaseline = true) +
+                arrayOf("--prior-comparison", "old", "--new-comparison", "new"),
+        )
 
         assertTrue(result != 0)
-        assertFalse(Files.exists(promotedRoot(repository)))
-        val backup = Files.list(promotedRoot(repository).parent).use { stream ->
-            stream.iterator().asSequence().firstOrNull { it.fileName.toString().startsWith(".promoted.backup-") }
-        }
-        assertTrue(backup != null)
-        assertEquals(before, snapshot(requireNotNull(backup).resolve("promoted")))
-        assertTrue(stderr.toString().contains(requireNotNull(backup).toString()))
+        assertEquals(before, snapshot(promotedRoot(repository)))
+        assertTrue(stderr.toString().contains("injected partial restore failure"))
     }
 
     @Test
     fun `promotion preserves the primary swap failure when staged cleanup also fails`() {
-        writeAllBundles(repository, COMMIT)
+        writeGeneratedRoot(repository, COMMIT, allSceneIds())
         val stderr = ByteArrayOutputStream()
 
         val result = PromoteEvidenceCliRunner(
@@ -396,145 +514,218 @@ class PromoteEvidenceCliTest {
         assertTrue(stderr.toString().contains("staged cleanup failure"))
     }
 
-    @Test
-    fun `rebaseline preflight rejects an extra promoted entry before staging`() {
-        writeAllBundles(repository, COMMIT)
-        assertEquals(0, PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial")))
-        Files.createDirectory(promotedRoot(repository).resolve("unexpected-scene"))
-        writeAllBundles(repository, COMMIT)
-
-        val result = PromoteEvidenceCliRunner().run(args(repository, COMMIT, rebaseline = true).toList().toTypedArray() + arrayOf("--prior-comparison", "old", "--new-comparison", "new"))
-
-        assertTrue(result != 0)
-        assertTrue(Files.isDirectory(promotedRoot(repository).resolve("unexpected-scene")))
-    }
-
-    @Test
-    fun `blank rebaseline summaries are rejected`() {
-        writeAllBundles(repository, COMMIT)
-        val result = PromoteEvidenceCliRunner().run(args(repository, COMMIT, rebaseline = true).toList().toTypedArray() + arrayOf("--prior-comparison", " ", "--new-comparison", "new"))
-        assertTrue(result != 0)
-    }
-
-    @Test
-    fun `tampered staged promotion metadata is rejected before swap`() {
-        writeAllBundles(repository, COMMIT)
-        val result = PromoteEvidenceCliRunner(
-            beforeStagedVerification = { staged ->
-                val metadata = staged.resolve("solid-card-stack/promotion.json")
-                Files.writeString(metadata, Files.readString(metadata).replace("\"reason\":\"reason\"", "\"reason\":\"\""))
-            },
-        ).run(args(repository, COMMIT))
-
-        assertTrue(result != 0)
-        assertFalse(Files.exists(promotedRoot(repository)))
-    }
-
-    @Test
-    fun `generation writer cannot write into canonical promoted tree`() {
-        val promoted = promotedRoot(repository)
-        assertFailsWith<IllegalArgumentException> {
-            writeAllBundles(promoted, COMMIT)
-        }
-    }
-
     private fun args(
         root: Path,
         commit: String,
         reviewer: String = "reviewer",
         reason: String = "reason",
         rebaseline: Boolean = false,
+        selection: Array<String> = arrayOf("--all"),
     ): Array<String> = buildList {
         add("--repository-root"); add(root.toString())
         add("--source-commit"); add(commit)
-        add("--all")
+        addAll(selection.asList())
         add("--reviewer"); add(reviewer)
         add("--reason"); add(reason)
         if (rebaseline) add("--rebaseline")
     }.toTypedArray()
 
-    private fun writeAllBundles(root: Path, commit: String) {
+    private fun writeGeneratedRoot(
+        root: Path,
+        commit: String,
+        sceneIds: List<String>,
+        environment: EvidenceEnvironment = environment(commit),
+    ): Path {
         val writer = EvidenceBundleWriter(root, commit)
-        GpuEvidenceCatalog.cases.forEach { evidenceCase ->
-            val descriptor = evidenceCase.descriptor
-            val environment = EvidenceEnvironment(commit, "test", "1", "test", "17", EvidenceAdapter("test-adapter", "test-vendor", "test-device", "test-architecture", "test-description", false), 1L, "native", true)
-            val rendered = descriptor.expectation is EvidenceExpectation.ShouldRender
-            val route = RouteEvidence(routeId(evidenceCase.program), "attempt", if (rendered) "Completed" else null, if (rendered) "rendered" else "refused", emptyList(), emptyList(), if (rendered) mapOf("queue.submit" to 1L, "render.draw" to 1L, "render.pipelineBind" to 1L) else emptyMap(), GPUBackendRuntimeTelemetry(submissions = if (rendered) 1L else 0L))
-            val observation = when (descriptor.expectation) {
-                EvidenceExpectation.ShouldRender -> {
-                    val pixels = requireNotNull(evidenceCase.oracle).render(descriptor.width, descriptor.height)
-                    SceneObservation.Rendered(pixels, route, emptyList(), environment, EvidenceComparator().compare(pixels, pixels, descriptor.width, descriptor.height, requireNotNull(descriptor.comparison)))
-                }
-                is EvidenceExpectation.ShouldRefuse -> SceneObservation.Refused(descriptor.expectation.stableReasonCode, "test refusal", 0, route, emptyList(), environment)
+        val observations = linkedMapOf<String, SceneObservation>()
+        val bundles = linkedMapOf<String, Path>()
+        selectedCases(sceneIds).forEach { evidenceCase ->
+            val sceneId = evidenceCase.descriptor.id.value
+            val observation = observation(evidenceCase, environment.copy(sourceCommit = commit))
+            observations[sceneId] = observation
+            bundles[sceneId] = when (observation) {
+                is SceneObservation.Rendered -> writer.writeGeneratedV2(
+                    evidenceCase.descriptor,
+                    observation,
+                    requireNotNull(evidenceCase.oracle).render(evidenceCase.descriptor.width, evidenceCase.descriptor.height),
+                    "attempt-$sceneId",
+                )
+                is SceneObservation.Refused -> writer.writeGeneratedV2(
+                    evidenceCase.descriptor,
+                    observation,
+                    attemptId = "attempt-$sceneId",
+                )
+                is SceneObservation.Unavailable -> error("unsupported observation")
             }
-            writer.writeGenerated(descriptor, observation, if (observation is SceneObservation.Rendered) observation.rgba else null)
+        }
+        return EvidenceCatalogWriter(root).writeGeneratedCatalog(
+            root = generatedRoot(root, commit),
+            selection = EvidenceSelection.Explicit(sceneIds),
+            observations = observations,
+            bundlePaths = bundles,
+        )
+    }
+
+    private fun writePromotedRoot(
+        root: Path,
+        commit: String,
+        environment: EvidenceEnvironment = environment(commit),
+        promotedSceneIds: List<String> = allSceneIds(),
+    ): Path {
+        val generated = writeGeneratedRoot(root, commit, allSceneIds(), environment)
+        val promoted = promotedRoot(root)
+        Files.createDirectories(promoted)
+        allSceneIds().forEach { sceneId ->
+            copyTree(generated.resolve(sceneId), promoted.resolve(sceneId))
+        }
+        Files.write(promoted.resolve("environment.json"), environmentJsonV2(environment))
+        Files.write(
+            promoted.resolve("catalog.json"),
+            EvidenceCatalogV2(
+                schemaVersion = GPU_EVIDENCE_CATALOG_SCHEMA_V2,
+                environment = "environment.json",
+                promotion = "promotion.json",
+                scenes = allSceneIds().map { sceneId ->
+                    EvidenceCatalogEntry(
+                        sceneId = sceneId,
+                        sourceCommit = commit,
+                        manifest = "$sceneId/manifest.json",
+                        manifestSha256 = sha256(Files.readAllBytes(promoted.resolve(sceneId).resolve("manifest.json"))),
+                    )
+                },
+            ).toJson().canonicalBytes(),
+        )
+        Files.write(
+            promoted.resolve("promotion.json"),
+            EvidencePromotionV2(
+                schemaVersion = GPU_EVIDENCE_PROMOTION_SCHEMA_V2,
+                promotedAtUtc = "1970-01-01T00:00:00Z",
+                reviewer = "reviewer",
+                reason = "initial",
+                rebaseline = false,
+                sceneIds = promotedSceneIds,
+                priorComparison = null,
+                newComparison = null,
+            ).toJson().canonicalBytes(),
+        )
+        return promoted
+    }
+
+    private fun allSceneIds(): List<String> = GpuEvidenceCatalog.cases.map { it.descriptor.id.value }.sorted()
+
+    private fun selectedCases(sceneIds: List<String>): List<EvidenceCase> =
+        sceneIds.map { sceneId -> GpuEvidenceCatalog.cases.first { it.descriptor.id.value == sceneId } }
+
+    private fun observation(evidenceCase: EvidenceCase, environment: EvidenceEnvironment): SceneObservation {
+        val descriptor = evidenceCase.descriptor
+        val rendered = descriptor.expectation is EvidenceExpectation.ShouldRender
+        val route = RouteEvidence(
+            routeId = routeId(evidenceCase.program),
+            attemptId = "attempt",
+            furthestPhase = if (rendered) "Completed" else null,
+            outcome = if (rendered) "rendered" else "refused",
+            encodedScopeKinds = emptyList(),
+            structuralEvents = emptyList(),
+            structuralCounters = if (rendered) {
+                mapOf("queue.submit" to 1L, "render.draw" to 1L, "render.pipelineBind" to 1L)
+            } else {
+                emptyMap()
+            },
+            runtimeTelemetryDelta = GPUBackendRuntimeTelemetry(submissions = if (rendered) 1L else 0L),
+        )
+        return when (val expectation = descriptor.expectation) {
+            EvidenceExpectation.ShouldRender -> {
+                val pixels = requireNotNull(evidenceCase.oracle).render(descriptor.width, descriptor.height)
+                val comparison = EvidenceComparator().compare(pixels, pixels, descriptor.width, descriptor.height, requireNotNull(descriptor.comparison))
+                SceneObservation.Rendered(pixels, route, emptyList(), environment, comparison)
+            }
+            is EvidenceExpectation.ShouldRefuse -> {
+                SceneObservation.Refused(expectation.stableReasonCode, "test refusal", 0L, route, emptyList(), environment)
+            }
         }
     }
 
-    private fun routeId(program: org.graphiks.kanvas.gpu.evidence.runner.EvidenceProgram): String = when (program) {
+    private fun routeId(program: EvidenceProgram): String = when (program) {
         is KanvasSurfaceProgram -> program.routeId
         is RoutedSceneProgram -> program.routeId
         else -> error("unsupported evidence program: ${program::class.qualifiedName}")
     }
 
-    private fun generatedRoot(root: Path) = root.resolve("reports/gpu-renderer/evidence/correctness/generated/$COMMIT")
-    private fun promotedRoot(root: Path) = root.resolve("reports/gpu-renderer/evidence/correctness/promoted")
-    private fun sceneDirectories(root: Path): Set<String> = if (!Files.exists(root)) emptySet() else Files.list(root).use { it.filter(Files::isDirectory).map { path -> path.fileName.toString() }.toList().toSet() }
-    private fun snapshot(root: Path): Map<String, List<Byte>> = if (!Files.exists(root)) emptyMap() else Files.walk(root).use { stream ->
-        stream.iterator().asSequence().filter(Files::isRegularFile).associate { root.relativize(it).toString() to Files.readAllBytes(it).toList() }
-    }
+    private fun generatedRoot(root: Path, commit: String): Path =
+        root.resolve("reports/gpu-renderer/evidence/correctness/generated/$commit")
 
-    private fun removeScene(root: Path, sceneId: String) {
-        Files.walk(root.resolve(sceneId)).sorted(Comparator.reverseOrder()).forEach(Files::delete)
-    }
+    private fun promotedRoot(root: Path): Path =
+        root.resolve("reports/gpu-renderer/evidence/correctness/promoted")
 
-    private fun rewriteHistoricalIdentity(root: Path) {
-        mapOf(
-            "solid-card-stack" to "product.solid-rect",
-            "translucent-card-overlap" to "product.solid-rect",
-            "scissor-overlay" to "product.solid-rect",
-            "stroke-rect-outline" to "product.stroke-rect",
-            "separable-blur-rect" to "product.separable-blur-rect",
-        ).forEach { (sceneId, routeId) ->
-            val directory = root.resolve(sceneId)
-            val route = directory.resolve("route.json")
-            Files.writeString(route, Files.readString(route).replaceFirst(Regex("\\\"routeId\\\":\\\"[^\\\"]+\\\""), "\\\"routeId\\\":\\\"$routeId\\\""))
-            refreshHash(directory, "route.json")
+    private fun sceneDirectories(root: Path): Set<String> =
+        if (!Files.exists(root)) {
+            emptySet()
+        } else {
+            Files.list(root).use { stream ->
+                stream.iterator().asSequence().filter(Files::isDirectory).map { it.fileName.toString() }.toSet()
+            }
         }
-        mapOf(
-            "translucent-card-overlap" to ("reference-raster-translucent-src-over" to 1),
-            "separable-blur-rect" to ("separable-blur-transparent-decal" to 1),
-        ).forEach { (sceneId, oracle) ->
-            val manifest = root.resolve(sceneId).resolve("manifest.json")
-            val text = Files.readString(manifest)
-                .replaceFirst(Regex("\\\"oracleId\\\":\\\"[^\\\"]+\\\""), "\\\"oracleId\\\":\\\"${oracle.first}\\\"")
-                .replaceFirst(Regex("\\\"oracleVersion\\\":\\d+"), "\\\"oracleVersion\\\":${oracle.second}")
-            Files.writeString(manifest, text)
+
+    private fun rootPromotion(root: Path): JsonObject =
+        EvidenceJson.parseToJsonElement(Files.readString(root.resolve("promotion.json"))).jsonObject
+
+    private fun promotionSceneIds(promotion: JsonObject): Set<String> =
+        promotion["sceneIds"]!!.jsonArray.map { it.jsonPrimitive.content }.toSet()
+
+    private fun catalogEntry(root: Path, sceneId: String): JsonObject {
+        val catalog = EvidenceJson.parseToJsonElement(Files.readString(root.resolve("catalog.json"))).jsonObject
+        return catalog["scenes"]!!.jsonArray.map { it.jsonObject }.first { entry ->
+            entry["sceneId"]!!.jsonPrimitive.content == sceneId
         }
     }
 
-    private fun refreshHash(directory: Path, name: String) {
-        val manifest = directory.resolve("manifest.json")
-        val hash = sha256(Files.readAllBytes(directory.resolve(name)))
-        val text = Files.readString(manifest)
-        val key = "\"$name\":\""
-        val start = text.indexOf(key) + key.length
-        require(start >= key.length)
-        val end = text.indexOf('"', start)
-        Files.writeString(manifest, text.substring(0, start) + hash + text.substring(end))
-    }
+    private fun snapshot(root: Path): Map<String, List<Byte>> =
+        if (!Files.exists(root)) {
+            emptyMap()
+        } else {
+            Files.walk(root).use { stream ->
+                stream.iterator().asSequence().filter(Files::isRegularFile).associate { path ->
+                    root.relativize(path).toString() to Files.readAllBytes(path).toList()
+                }
+            }
+        }
 
-    private fun writePng(path: Path, rgba: ByteArray, width: Int, height: Int) {
-        val temporary = Files.createTempFile("historical-pixels-", ".png")
-        try {
-            ComparisonUtils.saveRgbaAsPng(rgba, width, height, temporary.toFile())
-            Files.move(temporary, path, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
-        } finally {
-            Files.deleteIfExists(temporary)
+    private fun copyTree(source: Path, destination: Path) {
+        Files.walk(source).use { stream ->
+            stream.forEach { current ->
+                val relative = source.relativize(current)
+                val target = destination.resolve(relative.toString())
+                when {
+                    Files.isDirectory(current) -> Files.createDirectories(target)
+                    else -> {
+                        Files.createDirectories(target.parent)
+                        Files.copy(current, target)
+                    }
+                }
+            }
         }
     }
 
-    private fun sha256(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+    private fun deleteTree(path: Path) {
+        if (!Files.exists(path)) return
+        Files.walk(path).sorted(Comparator.reverseOrder()).forEach(Files::delete)
+    }
+
+    private fun environment(sourceCommit: String, osVersion: String = "1"): EvidenceEnvironment =
+        EvidenceEnvironment(
+            sourceCommit = sourceCommit,
+            osName = "test",
+            osVersion = osVersion,
+            osArchitecture = "x86_64",
+            javaVersion = "17",
+            adapter = EvidenceAdapter("test-adapter", "test-vendor", "test-device", "test-architecture", "test-description", false),
+            deviceGeneration = 1L,
+            capabilityImplementation = "native",
+            available = true,
+        )
+
+    private fun sha256(bytes: ByteArray): String =
+        MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
     companion object {
         private const val COMMIT = "0123456789abcdef0123456789abcdef01234567"

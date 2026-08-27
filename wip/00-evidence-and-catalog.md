@@ -33,17 +33,31 @@ harness commun ; les familles graphiques sont détaillées dans les autres brief
 
 ## Artefacts requis et promotion
 
-Un bundle généré de rendu contient CPU/reference, GPU, diff, stats, route,
-diagnostics, environnement, manifest et verdict. Un bundle généré de refus
-contient route, diagnostics, environnement, manifest et verdict ; il n'a ni
-PNG de succès ni statistiques présentées comme performance valide. Les bundles
-générés ne contiennent pas `promotion.json`; les bundles promus y ajoutent ces
-métadonnées.
+Le root v2 de correctness vit sous
+`reports/gpu-renderer/evidence/correctness/<generated|promoted>/` et porte le
+catalogue et les métadonnées partagées : `catalog.json`, `environment.json` et,
+pour le root promoted checked-in, `promotion.json`. Les bundles de scène ne
+dupliquent plus `environment.json` ni `promotion.json`.
 
-Une capture de diagnostic peut être faite scène par scène. En revanche, la
-promotion checked-in est une transaction de catalogue complet via
-`promoteGpuEvidence` (avec `--all` imposé), après vérification du catalogue
-entier. Les rapports et preuves associés vivent sous
+Un bundle de scène généré de rendu contient CPU/reference, GPU, diff, stats,
+route, diagnostics, manifest et verdict. Un bundle généré de refus contient
+route, diagnostics, stats, manifest et verdict ; il n'a ni PNG de succès ni
+statistiques présentées comme performance valide. La promotion checked-in
+ajoute les métadonnées de revue au root promoted v2, sans réécrire les bytes
+des PNG déjà vérifiés.
+
+Une capture de diagnostic, une vérification generated et une promotion
+quotidienne peuvent cibler un sous-ensemble explicite, par exemple avec
+`-Pscene=solid-card-stack` ou `-PscenesFile=scenes.txt`. Pour les gates
+`generateGpuEvidence` et `verifyGeneratedGpuEvidence`, quand aucun sélecteur
+n'est fourni, le helper Gradle relaie `--all`; `-Pall=true` reste disponible
+pour annoncer ce choix explicitement. Pour `promoteGpuEvidence`, une sélection
+explicite ou `-Pall=true` est obligatoire ; `-Pall=true` est réservé à
+l'initialisation d'un catalogue absent ou vide, ou à un rebaseline full ; un
+root promoted existant exige `--all` avec
+`promotionRebaseline=true` et des comparaisons prior/nouveau non vides. Le
+gate `verifyPromotedGpuEvidence` reste, lui, un contrôle headless complet du
+root promoted checked-in. Les rapports et preuves associés vivent sous
 `reports/gpu-renderer/evidence/`.
 
 Les formulations de ce WIP sont dérivées du code, des tests et des artefacts
@@ -74,5 +88,17 @@ catalogue et des artefacts promus cohérents avec le code de la branche.
 
 ```bash
 ./gradlew :integration-tests:gpu-evidence:test
+./gradlew :integration-tests:gpu-evidence:generateGpuEvidence -PsourceCommit=<sha> -Pscene=solid-card-stack
+./gradlew :integration-tests:gpu-evidence:generateGpuEvidence -PsourceCommit=<sha> -PscenesFile=scenes.txt
+./gradlew :integration-tests:gpu-evidence:verifyGeneratedGpuEvidence -PsourceCommit=<sha> -Pscene=solid-card-stack
+./gradlew :integration-tests:gpu-evidence:verifyGeneratedGpuEvidence -PsourceCommit=<sha> -PscenesFile=scenes.txt
+./gradlew :integration-tests:gpu-evidence:promoteGpuEvidence -PsourceCommit=<sha> -PpromotionReviewer=<reviewer> -PpromotionReason=<reason> -Pscene=solid-card-stack
+./gradlew :integration-tests:gpu-evidence:promoteGpuEvidence -PsourceCommit=<sha> -PpromotionReviewer=<reviewer> -PpromotionReason=<reason> -PscenesFile=scenes.txt
+./gradlew :integration-tests:gpu-evidence:generateGpuEvidence -PsourceCommit=<sha>
+./gradlew :integration-tests:gpu-evidence:verifyGeneratedGpuEvidence -PsourceCommit=<sha>
 ./gradlew :integration-tests:gpu-evidence:verifyPromotedGpuEvidence
+# Initial catalogue only: the promoted root must be absent or empty.
+./gradlew :integration-tests:gpu-evidence:promoteGpuEvidence -PsourceCommit=<sha> -PpromotionReviewer=<reviewer> -PpromotionReason=<reason> -Pall=true
+# Existing full catalogue: rebaseline comparison summaries are mandatory.
+./gradlew :integration-tests:gpu-evidence:promoteGpuEvidence -PsourceCommit=<sha> -PpromotionReviewer=<reviewer> -PpromotionReason=<reason> -PpromotionRebaseline=true -PpromotionPriorComparison='<comparaison précédente>' -PpromotionNewComparison='<comparaison nouvelle>' -Pall=true
 ```

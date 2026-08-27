@@ -9,14 +9,45 @@ import java.security.MessageDigest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.graphiks.kanvas.gpu.evidence.catalog.*
 import org.graphiks.kanvas.gpu.evidence.gate.EvidenceVerdict
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeTelemetry
 import org.graphiks.kanvas.test.ComparisonUtils
 
 class EvidenceBundleVerifierStrictnessTest {
+    @Test fun `v1 promotion rejects comparison summaries when not rebaseline`() {
+        assertFailsWith<IllegalArgumentException> {
+            EvidenceBundleVerifier.verifyHistoricalPromotionRecord(
+                promotion = historicalPromotion(rebaseline = false, prior = "old", next = "new"),
+                sceneId = "render-scene",
+                sourceCommit = COMMIT,
+            )
+        }
+    }
+
+    @Test fun `v1 rebaseline promotion requires paired nonblank comparison summaries`() {
+        listOf(
+            null to null,
+            "" to "new",
+            "old" to "",
+        ).forEach { (prior, next) ->
+            assertFailsWith<IllegalArgumentException> {
+                EvidenceBundleVerifier.verifyHistoricalPromotionRecord(
+                    promotion = historicalPromotion(rebaseline = true, prior = prior, next = next),
+                    sceneId = "render-scene",
+                    sourceCommit = COMMIT,
+                )
+            }
+        }
+    }
+
     @Test fun `verifier reproduces render expectation refusal reason`() {
         val path = bundle(renderDescriptor(), refusedObservation())
         val verified = assertIs<EvidenceBundleVerification.Verified>(strict(path, renderDescriptor()))
@@ -258,6 +289,17 @@ class EvidenceBundleVerifierStrictnessTest {
         path,
         EvidenceVerificationExpectation(COMMIT, descriptor, expected, checkedIn, "route"),
     )
+    private fun historicalPromotion(rebaseline: Boolean, prior: String?, next: String?) = buildJsonObject {
+        put("schemaVersion", GPU_EVIDENCE_PROMOTION_SCHEMA)
+        put("sceneId", "render-scene")
+        put("sourceCommit", COMMIT)
+        put("promotedAtUtc", "1970-01-01T00:00:00Z")
+        put("reviewer", "reviewer")
+        put("reason", "reason")
+        put("rebaseline", rebaseline)
+        put("priorComparison", prior?.let(::JsonPrimitive) ?: JsonNull)
+        put("newComparison", next?.let(::JsonPrimitive) ?: JsonNull)
+    }
     private fun renderDescriptor(oracle: OraclePolicy = OraclePolicy.GeneratedCpu("oracle", 1)) = EvidenceSceneDescriptor(EvidenceSceneId("render-scene"), "Render", "Purpose", 1, 1, 1, emptySet(), EvidenceExpectation.ShouldRender, oracle, ComparisonPolicy(1, 100.0, 1, "test"), emptySet())
     private fun refusalDescriptor() = EvidenceSceneDescriptor(EvidenceSceneId("refusal-scene"), "Refusal", "Purpose", 1, 1, 1, emptySet(), EvidenceExpectation.ShouldRefuse("unsupported.example"), OraclePolicy.StableRefusal, null, emptySet())
     private fun renderedObservation() = SceneObservation.Rendered(PIXEL, route("rendered", 1), emptyList(), environment(), ImageComparison(true, 100.0, 0, 0, 0.0, ByteArray(4), 1))
