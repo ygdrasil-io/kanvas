@@ -172,7 +172,16 @@ class GPUPreparedMaterialProgramTest {
 
     @Test
     fun `two stop linear CPU reference clamps affine coordinates and interpolates premultiplied colors`() {
-        val descriptor = linearGradientDescriptor().withGradientFacts(
+        val descriptor = GPUMaterialDescriptor.LinearGradient(
+            startX = 0f, startY = 0f, endX = 32f, endY = 0f,
+            startR = 0.25f, startG = 0.5f, startB = 0.75f, startA = 0.4f,
+            endR = 0.9f, endG = 0.1f, endB = 0.4f, endA = 0.7f,
+            allStopPositions = floatArrayOf(0f, 1f),
+            allStopColors = floatArrayOf(
+                0.25f, 0.5f, 0.75f, 0.4f,
+                0.9f, 0.1f, 0.4f, 0.7f,
+            ),
+        ).withGradientFacts(
             GPUMaterialDescriptor.GradientFacts(
                 localMatrix = listOf(
                     1f, 0f, 3f,
@@ -183,12 +192,32 @@ class GPUPreparedMaterialProgramTest {
         )
 
         val sample = boundedLinearGradientCpuReference(descriptor, x = 13f, y = 0f)
-        floatArrayOf(0.125f, 0f, 0.375f, 0.5f).forEachIndexed { index, expected ->
+        floatArrayOf(0.28576952f, 0.046316218f, 0.15100822f, 0.55f).forEachIndexed { index, expected ->
             assertEquals(expected, sample[index], 0.0001f)
         }
         val program = ready(descriptor, 1f)
         assertTrue("pow((*colors)" !in program.wgslSource)
         assertTrue("return (1.0 - u) * (*colors)[lo] + u * (*colors)[hi];" in program.wgslSource)
+    }
+
+    @Test
+    fun `two stop linear CPU reference matches WGSL degenerate axis clamp`() {
+        val descriptor = linearGradientDescriptor().copy(
+            endX = 5e-7f,
+            endY = 5e-7f,
+        )
+
+        val sample = boundedLinearGradientCpuReference(descriptor, x = 100f, y = -100f)
+
+        val alpha = 0.25f
+        floatArrayOf(
+            preparedMaterialSrgbToLinear(1f) * alpha,
+            0f,
+            0f,
+            alpha,
+        ).forEachIndexed { index, expected ->
+            assertEquals(expected, sample[index], 0.0001f)
+        }
     }
 
     @Test
@@ -1054,15 +1083,19 @@ class GPUPreparedMaterialProgramTest {
         val localY = matrix[3] * x + matrix[4] * y + matrix[5]
         val dx = descriptor.endX - descriptor.startX
         val dy = descriptor.endY - descriptor.startY
-        val t = ((localX - descriptor.startX) * dx + (localY - descriptor.startY) * dy) /
-            (dx * dx + dy * dy)
-        val clamped = t.coerceIn(0f, 1f)
+        val lenSq = dx * dx + dy * dy
+        val clamped = if (lenSq < 1.0e-12f) {
+            0f
+        } else {
+            (((localX - descriptor.startX) * dx + (localY - descriptor.startY) * dy) / lenSq)
+                .coerceIn(0f, 1f)
+        }
         val stops = requireNotNull(descriptor.allStopColors)
         val startAlpha = stops[3]
         val endAlpha = stops[7]
         return FloatArray(4) { index ->
-            val start = if (index == 3) startAlpha else stops[index] * startAlpha
-            val end = if (index == 3) endAlpha else stops[index + 4] * endAlpha
+            val start = if (index == 3) startAlpha else preparedMaterialSrgbToLinear(stops[index]) * startAlpha
+            val end = if (index == 3) endAlpha else preparedMaterialSrgbToLinear(stops[index + 4]) * endAlpha
             start + (end - start) * clamped
         }
     }

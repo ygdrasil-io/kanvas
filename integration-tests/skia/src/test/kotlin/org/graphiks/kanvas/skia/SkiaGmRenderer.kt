@@ -42,6 +42,38 @@ object SkiaGmRenderer {
             pipelineTracer = tracer,
         )
     }
+
+    /**
+     * Records a GM exactly as [render] does, but returns the terminal Surface diagnostic instead
+     * of discarding its operation count behind the exception boundary. This is test-only evidence
+     * for deliberately unsupported GM families; production rendering still fails closed.
+     */
+    fun renderTerminalAttempt(
+        gm: SkiaGm,
+        width: Int = gm.width,
+        height: Int = gm.height,
+        config: RenderConfig = RenderConfig.DEFAULT,
+    ): SkiaRenderTerminalAttempt? {
+        val surface = Surface(width = width, height = height, config = config)
+        val canvas = surface.canvas()
+        canvas.drawRect(
+            RectF32(0f, 0f, width.toFloat(), height.toFloat()),
+            Paint(color = ColorARGB.fromRGBA(1f, 1f, 1f, 1f), antiAlias = false),
+        )
+        val gmCanvas = GmCanvas(canvas, width, height)
+        gm.onOnceBeforeDraw(gmCanvas)
+        gm.draw(gmCanvas, width, height)
+        val operationCount = surface.snapshotOps().size
+        return try {
+            surface.render()
+            null
+        } catch (failure: IllegalStateException) {
+            SkiaRenderTerminalAttempt(
+                operationCount = operationCount,
+                diagnostic = failure.message.orEmpty(),
+            )
+        }
+    }
 }
 
 data class SkiaRenderResult(
@@ -53,4 +85,9 @@ data class SkiaRenderResult(
     val diagnostics: List<String> = emptyList(),
     val ops: List<DisplayOp> = emptyList(),
     val pipelineTracer: PipelineTracer? = null,
+)
+
+data class SkiaRenderTerminalAttempt(
+    val operationCount: Int,
+    val diagnostic: String,
 )

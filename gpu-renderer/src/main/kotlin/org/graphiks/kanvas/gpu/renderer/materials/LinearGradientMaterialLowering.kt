@@ -1,16 +1,17 @@
 package org.graphiks.kanvas.gpu.renderer.materials
 
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
-import org.graphiks.kanvas.gpu.renderer.wgsl.LinearGradientDecalEntryPoint
-import org.graphiks.kanvas.gpu.renderer.wgsl.LinearGradientEntryPoint
-import org.graphiks.kanvas.gpu.renderer.wgsl.LinearGradientMirrorEntryPoint
-import org.graphiks.kanvas.gpu.renderer.wgsl.LinearGradientRepeatEntryPoint
-import org.graphiks.kanvas.gpu.renderer.wgsl.LinearGradientSnippetSourceHash
+
+/** Identity of the bounded prepared-material WGSL emitted by [GradientWgslShaderProvider]. */
+private const val LinearGradientMaterialV2SourceHash = "fragment:prepared_material_linear_gradient:v2"
+private const val LinearGradientMaterialV2EntryPoint = "fs_main"
+private const val LinearGradientMaterialV2PayloadShape =
+    "payload:GradientBlock.v2.start-end-local-matrix-stop-data@group1.binding0"
 
 object GPULinearGradientMaterialDictionary {
     const val DictionaryVersion: String = "material-dictionary:linear-gradient:v2"
 
-    val LinearGradientSnippetID: WGSLSnippetID = WGSLSnippetID("material.linear_gradient.v1")
+    val LinearGradientSnippetID: WGSLSnippetID = WGSLSnippetID("material.linear_gradient.v2")
 
     const val LinearGradientMaterialLayoutHash: String = "layout:linear-gradient-material-block:v2"
 
@@ -84,11 +85,11 @@ object GPULinearGradientMaterialDictionary {
     private fun linearGradientSnippet(): WGSLSnippet =
         WGSLSnippet(
             snippetId = LinearGradientSnippetID,
-            sourceHash = LinearGradientSnippetSourceHash,
-            entryPoint = LinearGradientEntryPoint,
-            requiredBindings = listOf("group1.binding0.LinearGradientMaterialBlock"),
+            sourceHash = LinearGradientMaterialV2SourceHash,
+            entryPoint = LinearGradientMaterialV2EntryPoint,
+            requiredBindings = listOf("group1.binding0.GradientBlock"),
             category = "material-source",
-            version = "v1",
+            version = "v2",
             uniformLayoutHashes = listOf(LinearGradientMaterialLayoutHash),
             requiredFeatures = emptyList(),
         )
@@ -97,7 +98,7 @@ object GPULinearGradientMaterialDictionary {
         GPUMaterialRootSet(
             rootSetId = "sourceRoot:linear-gradient",
             snippetIds = listOf(LinearGradientSnippetID),
-            payloadShapeHash = "payload:LinearGradientMaterialBlock.startEnd.vec4f32@group1.binding0",
+            payloadShapeHash = LinearGradientMaterialV2PayloadShape,
         )
 }
 
@@ -165,19 +166,32 @@ object GPULinearGradientMaterialLowering {
             )
         }
 
-        val entryPoint = when (plan.tileMode) {
-            GPUMaterialTileMode.Clamp -> LinearGradientEntryPoint
-            GPUMaterialTileMode.Repeat -> LinearGradientRepeatEntryPoint
-            GPUMaterialTileMode.Mirror -> LinearGradientMirrorEntryPoint
-            GPUMaterialTileMode.Decal -> LinearGradientDecalEntryPoint
+        if (plan.geometry.kind != GPUGradientKind.Linear) {
+            return GPUMaterialSourcePlan.Refused(
+                GPUMaterialSourceDiagnostic(
+                    code = "unsupported.material.gradient_geometry",
+                    sourceKind = GPUMaterialSourceKind.Gradient,
+                    message = "Prepared linear gradient material only accepts linear geometry",
+                    terminal = true,
+                ),
+            )
         }
-
-        if (plan.stops.size > 16) {
+        if (plan.tileMode != GPUMaterialTileMode.Clamp) {
+            return GPUMaterialSourcePlan.Refused(
+                GPUMaterialSourceDiagnostic(
+                    code = "unsupported.material.gradient_tile_mode",
+                    sourceKind = GPUMaterialSourceKind.Gradient,
+                    message = "Prepared linear gradient material only accepts clamp tile mode",
+                    terminal = true,
+                ),
+            )
+        }
+        if (plan.stops.size != 2) {
             return GPUMaterialSourcePlan.Refused(
                 GPUMaterialSourceDiagnostic(
                     code = "unsupported.material.gradient_stop_count_exceeded",
                     sourceKind = GPUMaterialSourceKind.Gradient,
-                    message = "M13 linear gradient WGSL supports at most 16 stops (got ${plan.stops.size})",
+                    message = "Prepared linear gradient material requires exactly two stops (got ${plan.stops.size})",
                     terminal = true,
                 ),
             )
@@ -186,8 +200,8 @@ object GPULinearGradientMaterialLowering {
         return GPUMaterialSourcePlan.Accepted(
             source = this,
             snippetId = GPULinearGradientMaterialDictionary.LinearGradientSnippetID,
-            payloadPlanHash = "payload:LinearGradientMaterialBlock.startEnd.vec4f32@group1.binding0",
-            entryPoint = entryPoint,
+            payloadPlanHash = LinearGradientMaterialV2PayloadShape,
+            entryPoint = LinearGradientMaterialV2EntryPoint,
             diagnostics = listOf(
                 GPUMaterialSourceDiagnostic(
                     code = "accepted.material_source.linear_gradient",
@@ -208,13 +222,20 @@ private fun linearGradientMaterialKeyPreimage(
         snippetId = GPULinearGradientMaterialDictionary.LinearGradientSnippetID,
         dictionaryVersion = context.dictionaryVersion,
         uniformLayoutHash = GPULinearGradientMaterialDictionary.LinearGradientMaterialLayoutHash,
-        uniformLayoutLabel = "LinearGradientMaterialBlock(startEnd:vec4<f32>,colors:vec4<f32>x2)",
-        payloadFields = listOf("startEnd@group1.binding0.offset0.vec4<f32>"),
-        codeShapeFacts = listOf(
-            "sourceFunction=linear_gradient_source",
-            "payloadBlock=LinearGradientMaterialBlock",
+        uniformLayoutLabel = "GradientBlock.v2(start:vec2<f32>,end:vec2<f32>,localMatrix0:vec4<f32>,localMatrix1:vec4<f32>,count:u32,stopData:array<vec4<f32>,32>)",
+        payloadFields = listOf(
+            "start@group1.binding0.offset0.vec2<f32>",
+            "end@group1.binding0.offset8.vec2<f32>",
+            "localMatrix0@group1.binding0.offset16.vec4<f32>",
+            "localMatrix1@group1.binding0.offset32.vec4<f32>",
+            "count@group1.binding0.offset48.u32",
+            "stopData@group1.binding0.offset64.vec4<f32>x32",
         ),
-        featureFlags = listOf("linear-gradient-material-abi-v1"),
+        codeShapeFacts = listOf(
+            "sourceFunction=fs_main",
+            "payloadBlock=GradientBlock.v2",
+        ),
+        featureFlags = listOf("linear-gradient-material-abi-v2"),
     )
 
 private fun String.stableHash(): String {

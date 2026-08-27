@@ -1,6 +1,13 @@
 {
   "route": "webgpu.prepared-material.linear-gradient-2stop-clamp-v2",
-  "status": "validated-by-CPU-and-WGSL-contract-tests",
+  "status": "validated-by-CPU-WGSL-contract-tests-and-native-headless-WebGPU",
+  "nativeFixture": {
+    "name": "two-stop-linear-gradient-v2",
+    "entry": "GPUPreparedMaterialProgram -> prepared vertices task list -> wgpu4k offscreen RGBA8UnormSrgb -> readback",
+    "excludes": "CorePrimitive gradient ABI (592 bytes)",
+    "materialAbi": "layout:linear-gradient-material-block:v2 (576 bytes)",
+    "shaderEvidence": ["gradient.localMatrix0", "gradient.localMatrix1", "fs_main"]
+  },
   "accepted": { "kind": "LinearGradient", "stopCount": 2, "tileMode": "clamp", "interpolation": "srgb", "localMatrix": "finite bounded affine" },
   "refused": ["repeat/mirror/decal tile modes", "stop counts other than two", "non-finite geometry, stops, colors, or local matrix", "perspective local matrix", "affine matrix outside 4096 linear or 16384 translation bounds"]
 }

@@ -1,4 +1,13 @@
 {
-  "status": "not-produced",
-  "reason": "No selected GM has a native WebGPU render under this bounded route, so a reference/GPU pixel diff would be misleading."
+  "nativeFixture": "two-stop-linear-gradient-v2",
+  "status": "produced-and-passing",
+  "oracle": "CPU mirror of WGSL: affine local position -> lenSq < 1e-12 => t=0 -> clamp -> sRGB-to-linear -> premultiply -> interpolate -> sRGB target store",
+  "oracleRgba": [155, 104, 165, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  "gpuRgba": [155, 104, 165, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  "maxChannelDelta": 0,
+  "differingChannels": 0,
+  "gmDiff": {
+    "status": "not-produced",
+    "reason": "No selected GM is wholly representable by the bounded two-stop linear route, so a GM reference/GPU pixel diff would be misleading."
+  }
 }
