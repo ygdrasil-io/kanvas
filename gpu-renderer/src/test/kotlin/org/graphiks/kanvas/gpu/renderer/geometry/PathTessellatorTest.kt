@@ -325,6 +325,97 @@ class PathTessellatorTest {
     }
 
     @Test
+    fun `rational conic flattens to its exact endpoint within the bounded curve route`() {
+        val tessellator = PathTessellator(tolerance = 1f)
+        val path = PathData(
+            verbs = listOf(
+                PathVerb.MoveTo(Point(0f, 0f)),
+                PathVerb.ConicTo(
+                    c = Point(50f, 100f),
+                    p = Point(100f, 0f),
+                    weight = 0.70710677f,
+                ),
+                PathVerb.Close,
+            ),
+            points = emptyList(),
+        )
+
+        val flattened = tessellator.flattenWithContours(path)
+
+        assertEquals(Point(0f, 0f), flattened.points.first())
+        assertEquals(Point(100f, 0f), flattened.points[flattened.points.lastIndex - 1])
+        assertEquals(Point(0f, 0f), flattened.points.last())
+        assertEquals(listOf(0), flattened.contourStarts)
+    }
+
+    @Test
+    fun `non-positive conic weight is a stable lowering refusal`() {
+        val failure = assertFailsWith<PathTessellationRefusal> {
+            PathTessellator().flatten(
+                PathData(
+                    verbs = listOf(
+                        PathVerb.MoveTo(Point(0f, 0f)),
+                        PathVerb.ConicTo(Point(5f, 10f), Point(10f, 0f), weight = 0f),
+                    ),
+                    points = emptyList(),
+                ),
+            )
+        }
+
+        assertEquals("geometry.path.invalid_conic", failure.code)
+    }
+
+    @Test
+    fun `curve fan budget refuses before geometry allocation`() {
+        val tessellator = PathTessellator(
+            tolerance = 10f,
+            maxVertices = 16,
+            maxFanTriangles = 2,
+        )
+        val path = PathData(
+            verbs = listOf(
+                PathVerb.MoveTo(Point(0f, 0f)),
+                PathVerb.LineTo(Point(10f, 0f)),
+                PathVerb.LineTo(Point(10f, 10f)),
+                PathVerb.LineTo(Point(0f, 10f)),
+                PathVerb.Close,
+            ),
+            points = emptyList(),
+        )
+
+        val failure = assertFailsWith<PathTessellationBudgetExceeded> {
+            tessellator.stencilEdgeFan(tessellator.flattenWithContours(path))
+        }
+
+        assertEquals("geometry.path.fan_budget_exceeded", failure.code)
+    }
+
+    @Test
+    fun `curve geometry memory budget refuses before fan buffers are allocated`() {
+        val tessellator = PathTessellator(
+            tolerance = 10f,
+            maxVertices = 16,
+            maxFanTriangles = 4,
+            maxGeometryBytes = 143,
+        )
+        val path = PathData(
+            verbs = listOf(
+                PathVerb.MoveTo(Point(0f, 0f)),
+                PathVerb.LineTo(Point(10f, 0f)),
+                PathVerb.LineTo(Point(0f, 10f)),
+                PathVerb.Close,
+            ),
+            points = emptyList(),
+        )
+
+        val failure = assertFailsWith<PathTessellationBudgetExceeded> {
+            tessellator.stencilEdgeFan(tessellator.flattenWithContours(path))
+        }
+
+        assertEquals("geometry.path.memory_budget_exceeded", failure.code)
+    }
+
+    @Test
     fun `triangle produces single triangle via fan`() {
         val tessellator = PathTessellator()
         val points = listOf(Point(0f, 0f), Point(10f, 0f), Point(5f, 10f))

@@ -182,6 +182,34 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `oval and circle cubic paths reach the bounded native stencil route`() {
+        val paths = listOf(
+            Path().addOval(RectF32.ofLTRB(2f, 4f, 26f, 20f)),
+            Path().addCircle(16f, 16f, 12f),
+        )
+
+        paths.forEach { path ->
+            val plan = GPUFramePathApiInventory.plan(
+                listOf(
+                    DisplayOp.DrawPath(
+                        path,
+                        Paint.fill(ColorARGB.Red).copy(antiAlias = false),
+                        Matrix3x3F32.Identity,
+                        ClipStack.WideOpen,
+                    ),
+                ),
+                target(),
+                RenderConfig.DEFAULT,
+                capabilitiesWith(PATH_FILL_STENCIL_COVER),
+            )
+
+            assertEquals(null, plan.preparedRefusal)
+            assertEquals("native.path_fill.stencil_cover", plan.recording.analysis.records.single().routeDecisionLabel)
+            assertTrue(plan.recording.taskList.tasks.none { it is GPUTask.Refused })
+        }
+    }
+
+    @Test
     fun `identical flattened geometry with distinct fill types retains distinct keys`() {
         fun path(fillType: FillType) = Path().apply {
             this.fillType = fillType
