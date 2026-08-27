@@ -2,7 +2,6 @@ package org.graphiks.kanvas.skia
 
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.AfterEach
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.test.GpuAvailability
@@ -13,6 +12,11 @@ import org.graphiks.kanvas.test.GpuAvailability
  * relabelling the refusal from source inspection.
  */
 class LinearGradientGmSurfaceRefusalEvidenceTest {
+    private data class ExpectedSurfaceRefusal(
+        val diagnostic: String,
+        val operationCount: Int,
+    )
+
     @AfterEach
     fun disposeSharedBackend() {
         GPUBackendRuntimeFactory.dispose()
@@ -21,19 +25,28 @@ class LinearGradientGmSurfaceRefusalEvidenceTest {
     @Test
     fun `targeted gradient GMs retain their actual Surface terminal diagnostic`() {
         GpuAvailability.requireWebGpu()
-        val expectedCodes = mapOf(
-            "linear_gradient" to "unsupported.material.mapping.linear_gradient_stop_count",
-            "fillrect_gradient" to "unsupported.material.source_unimplemented",
-            "gradient_matrix" to "unsupported.material.source_unimplemented",
+        val expectedRefusals = mapOf(
+            "linear_gradient" to ExpectedSurfaceRefusal(
+                diagnostic = "unsupported.material.mapping.linear_gradient_stop_count",
+                operationCount = 101,
+            ),
+            "fillrect_gradient" to ExpectedSurfaceRefusal(
+                diagnostic = "unsupported.material.source_unimplemented",
+                operationCount = 19,
+            ),
+            "gradient_matrix" to ExpectedSurfaceRefusal(
+                diagnostic = "unsupported.material.source_unimplemented",
+                operationCount = 18,
+            ),
         )
-        expectedCodes.forEach { (name, expectedCode) ->
+        expectedRefusals.forEach { (name, expected) ->
             val gm = requireNotNull(SkiaGmRegistry.all().singleOrNull { it.name == name })
             val attempt = requireNotNull(SkiaGmRenderer.renderTerminalAttempt(gm)) {
                 "$name unexpectedly rendered instead of refusing at the Surface boundary"
             }
             val code = attempt.diagnostic.substringBefore(":")
-            assertEquals(expectedCode, code)
-            assertTrue(attempt.operationCount > 0, "$name must record operations before refusal")
+            assertEquals(expected.diagnostic, code)
+            assertEquals(expected.operationCount, attempt.operationCount)
             println(
                 "task3.gm-refusal gm=$name operations=${attempt.operationCount} " +
                     "diagnostic=$code message=${attempt.diagnostic.substringAfter(": ")}",
