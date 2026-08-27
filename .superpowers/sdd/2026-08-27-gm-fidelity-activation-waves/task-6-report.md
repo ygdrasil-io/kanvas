@@ -27,32 +27,43 @@ headless/offscreen existant, sans Ganesh, Graphite, SkSL dynamique ni
 ## Preuves
 
 - Fixture WebGPU : les quatre variantes cubic `Winding/EvenOdd ×
-  Intersect/Difference` rendent correctement les échantillons intérieur et
-  extérieur contre un oracle CPU indépendant (32 canaux RGBA, diff 0).
-- Les états stencil sont contrôlés directement dans l’inventaire de route.
+  Intersect/Difference` rendent un buffer 32×32 complet contre un oracle CPU
+  réellement exécuté et indépendant (16 384 canaux RGBA, diff 0,
+  `tolerance = 0`). Les pixels adjacents aux arêtes cubic et le centre du trou
+  sont contrôlés explicitement.
+- Deux contours cubic de même orientation distinguent les règles : `Winding`
+  conserve le centre, `EvenOdd` le retire. Les quatre états stencil sont
+  contrôlés directement dans l’inventaire de route.
+- La fixture positive est à 190 vertices après flattening et utilise
+  explicitement `RenderConfig(maxPathVertices = 256u)`; le refus de budget est
+  maintenant lui aussi déclenché par un cubic surdimensionné.
 - Fixture de refus WebGPU : cubic inverse →
   `unsupported.clip.inverse_cubic`.
 - Artefacts complets :
   `reports/gpu-renderer/evidence/bounded-cubic-clip-2026-08-27.md` et JSON
   voisins (`cpu`, `gpu`, `diff`, `stats`, `route`, `refusals`).
-- Aucun GM n’a été modifié ou promu; `clipcubic`/`clippedcubic` restent hors de
-  ce contrat mono-clip non-AA et conservent leur statut de refus.
+- Aucun GM n’a été modifié ou promu. Le runner frais fige `clipcubic` à 17
+  opérations / `unsupported.stroke.width_invalid` et `clippedcubic` à 19 /
+  `unsupported.core_primitive.stencil_edge_fan_budget`.
 
 ## Vérification
 
 ```text
-rtk ./gradlew --no-daemon :kanvas:test \
+rtk ./gradlew --no-daemon --rerun-tasks :kanvas:test \
   --tests org.graphiks.kanvas.surface.gpu.GPUClipCoverageSurfaceTest \
   --tests org.graphiks.kanvas.surface.gpu.GPUClipCoverageContractsTest \
   --tests org.graphiks.kanvas.surface.gpu.GPUFramePathApiInventoryTest
+
+rtk ./gradlew --no-daemon --rerun-tasks :integration-tests:skia:test \
+  --tests org.graphiks.kanvas.skia.CurvedClipGmSurfaceRefusalEvidenceTest
 ```
 
-Résultat : succès (les trois classes complètes ont passé).
+Résultat : succès (75 + 23 + 108 tests Kanvas, puis 1 test runner GM).
 
 ## Concerns
 
-- L’oracle de la fixture ne compare intentionnellement que des échantillons
-  éloignés des arêtes ; il ne revendique pas la fidélité AA des bords cubiques.
+- L’oracle compare le buffer entier, y compris les pixels adjacents aux arêtes,
+  mais ne revendique pas la fidélité AA : le contrat reste strictement non-AA.
 - Les clips inverses cubic, perspective, multi-éléments, AA et hors budget
   restent hors périmètre. Aucune solution de contournement CPU/masque n’a été
   ajoutée pour les promouvoir.

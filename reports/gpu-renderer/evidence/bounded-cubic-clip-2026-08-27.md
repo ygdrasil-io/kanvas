@@ -1,24 +1,29 @@
 # Clip path cubique borné — WebGPU (2026-08-27)
 
-La fixture `bounded-cubic-clip-v1` dessine un `FillRect` opaque 64×64 sous un
-unique clip fermé composé d’un cubic `(8,8) → (8,44) → (56,44) → (56,8)`.
-Elle couvre les quatre combinaisons bornées : `Intersect`/`Difference` et
-`Winding`/`EvenOdd`, sans AA. Le lowering conserve l’information qu’un cubic
-était présent avant la flattening bornée afin que les clips inverse cubic restent
+La fixture `bounded-cubic-clip-v1` dessine un `FillRect` opaque 32×32 sous un
+unique clip fermé de deux anneaux cubiques de même orientation. Elle couvre les
+quatre combinaisons bornées : `Intersect`/`Difference` et
+`Winding`/`EvenOdd`, sans AA. Les deux contours distinguent réellement les
+fill rules : `Winding` conserve le centre (winding = 2) alors que `EvenOdd`
+le transforme en trou. Le lowering conserve l’information qu’un cubic était
+présent avant la flattening bornée afin que les clips inverse cubic restent
 refusés explicitement.
 
 Le stencil-cover WebGPU existant est la preuve native : le producteur emploie
 `IncrementWrap`/`DecrementWrap` pour `Winding` et `Invert`/`Invert` pour
 `EvenOdd`; le consommateur teste `NotEqual` pour `Intersect` et `Equal` pour
-`Difference`. L’oracle CPU indépendant ne sonde que les pixels éloignés des
-arêtes : le point `(32,24)` est dans le lobe cubique et `(32,4)` est hors de la
-forme. Les 32 canaux RGBA de ces huit échantillons (2 par variante) sont
-byte-exact entre l’oracle et le readback WebGPU.
+`Difference`. L’oracle CPU indépendant produit le buffer RGBA complet à partir
+de `Path.contains` (linéarisation CPU à 16 pas, distincte du flattening GPU
+adaptatif). Les 4 096 canaux de chaque variante, soit 16 384 canaux, sont
+byte-exact (`tolerance = 0`) contre les readbacks WebGPU. Les pixels adjacents
+aux arêtes cubiques extérieure et intérieure sont aussi nommés dans le test.
 
-La voie reste headless/offscreen. Aucun GM n’a été modifié, aucune limite
-d’arêtes ni seuil de similarité/performance n’a été relâché. `clipcubic` et
-`clippedcubic` ne sont pas promus par cette fixture : ils restent des GMs hors
-de ce contrat monopath non-AA, avec leurs refus existants conservés.
+La voie reste headless/offscreen. La fixture a exactement 190 vertices après
+flattening, sous `RenderConfig.maxPathVertices = 256`. Aucun GM n’a été
+modifié, aucune limite d’arêtes ni seuil de similarité/performance n’a été
+relâché. Un runner frais fixe les refus exacts : `clipcubic` (17 opérations,
+`unsupported.stroke.width_invalid`) et `clippedcubic` (19 opérations,
+`unsupported.core_primitive.stencil_edge_fan_budget`).
 
 Les refus restent explicites : `unsupported.clip.inverse_cubic`,
 `unsupported_transform:Perspective` et `unsupported.clip.vertex_budget`.

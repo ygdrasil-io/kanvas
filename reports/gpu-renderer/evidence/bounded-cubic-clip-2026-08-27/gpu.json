@@ -1,9 +1,9 @@
 {
   "fixture": "bounded-cubic-clip-v1",
   "backend": "WebGPU/wgpu4k headless offscreen",
-  "target": "RGBA8 64x64 single sample",
+  "target": "RGBA8 32x32 single sample",
   "readback": "RGBA8 from four independent Surface renders",
-  "nativeEvidence": "GPUClipCoverageSurfaceTest.bounded cubic clip preserves intersect and difference for winding and even odd fills",
+  "nativeEvidence": "GPUClipCoverageSurfaceTest.bounded cubic clip matches the independent CPU buffer for both fill rules and operations",
   "stencilCover": true,
   "scalarAAPromoted": false
 }

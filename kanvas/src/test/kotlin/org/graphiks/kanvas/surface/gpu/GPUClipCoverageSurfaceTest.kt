@@ -44,6 +44,7 @@ import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -206,7 +207,7 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `bounded cubic clip preserves intersect and difference for winding and even odd fills`() {
+    fun `bounded cubic clip matches the independent CPU buffer for both fill rules and operations`() {
         requireWebGpu()
         val background = ColorARGB.of(255, 13, 20, 33)
         val fill = ColorARGB.of(255, 242, 135, 46)
@@ -218,21 +219,18 @@ class GPUClipCoverageSurfaceTest {
         )
 
         variants.forEach { (fillType, operation) ->
-            val surface = Surface(64, 64)
+            val path = boundedCubicHolePath(fillType)
+            val surface = Surface(32, 32, config = RenderConfig(maxPathVertices = 256u))
             surface.canvas {
                 drawColor(background)
                 save()
                 clipPath(
-                    Path {
-                        moveTo(8f, 8f)
-                        cubicTo(8f, 44f, 56f, 44f, 56f, 8f)
-                        close()
-                    }.apply { this.fillType = fillType },
+                    path,
                     operation,
                     antiAlias = false,
                 )
                 drawRect(
-                    RectF32.ofLTRB(0f, 0f, 64f, 64f),
+                    RectF32.ofLTRB(0f, 0f, 32f, 32f),
                     Paint.fill(fill).copy(antiAlias = false),
                 )
                 restore()
@@ -240,10 +238,20 @@ class GPUClipCoverageSurfaceTest {
 
             val result = surface.render()
             assertEquals(0, result.diagnostics.fatalCount, "$fillType/$operation: ${result.diagnostics.entries}")
-            val inside = if (operation == ClipOp.INTERSECT) fill else background
-            val outside = if (operation == ClipOp.INTERSECT) background else fill
-            assertRgbaNear(result.pixels, 64, 32, 24, inside)
-            assertRgbaNear(result.pixels, 64, 32, 4, outside)
+            val cpu = cubicClipCpuOracle(path, operation, background, fill, width = 32, height = 32)
+            assertArrayEquals(cpu, result.pixels.toByteArray(), "$fillType/$operation CPU/GPU byte diff")
+
+            // Adjacent outer-curve samples plus the inner-contour pair prove that the
+            // buffer comparison is exercising cubic edges and the fill-rule hole.
+            assertPixelEquals(cpu, 32, 20, 16, result.pixels, "$fillType/$operation outer-inside")
+            assertPixelEquals(cpu, 32, 21, 16, result.pixels, "$fillType/$operation outer-outside")
+            assertPixelEquals(cpu, 32, 17, 16, result.pixels, "$fillType/$operation hole-left")
+            assertPixelEquals(cpu, 32, 18, 16, result.pixels, "$fillType/$operation shell-right")
+            val expectedHole = if (
+                (fillType == FillType.WINDING && operation == ClipOp.INTERSECT) ||
+                (fillType == FillType.EVEN_ODD && operation == ClipOp.DIFFERENCE)
+            ) fill else background
+            assertRgbaNear(result.pixels, 32, 17, 16, expectedHole, tolerance = 0)
         }
     }
 
@@ -2552,6 +2560,67 @@ class GPUClipCoverageSurfaceTest {
         PixelFormat.RGBA8,
         RenderConfig.DEFAULT,
     )
+
+    /**
+     * Two same-direction cubic rings: Winding keeps the centre, while EvenOdd
+     * punches it out. Their 190 flattened edges remain below the explicit
+     * 256-edge fixture budget without sharing the GPU flattening implementation.
+     */
+    private fun boundedCubicHolePath(fillType: FillType): Path = Path().apply {
+        appendCubicRing(this, centerX = 16f, centerY = 16f, radius = 5f)
+        appendCubicRing(this, centerX = 16f, centerY = 16f, radius = 2f)
+        this.fillType = fillType
+    }
+
+    /** CPU pixel-centre oracle using Path's independent 16-step geometry implementation. */
+    private fun cubicClipCpuOracle(
+        path: Path,
+        operation: ClipOp,
+        background: ColorARGB,
+        fill: ColorARGB,
+        width: Int,
+        height: Int,
+    ): ByteArray = ByteArray(width * height * 4).also { pixels ->
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                val covered = path.contains(Point2F32(x + 0.5f, y + 0.5f))
+                val paintApplies = when (operation) {
+                    ClipOp.INTERSECT -> covered
+                    ClipOp.DIFFERENCE -> !covered
+                }
+                val color = if (paintApplies) fill else background
+                val offset = (y * width + x) * 4
+                pixels[offset] = color.red.toByte()
+                pixels[offset + 1] = color.green.toByte()
+                pixels[offset + 2] = color.blue.toByte()
+                pixels[offset + 3] = color.alpha.toByte()
+            }
+        }
+    }
+
+    private fun assertPixelEquals(
+        expected: ByteArray,
+        width: Int,
+        x: Int,
+        y: Int,
+        actual: UByteArray,
+        label: String,
+    ) {
+        val offset = (y * width + x) * 4
+        repeat(4) { channel ->
+            assertEquals(expected[offset + channel].toUByte(), actual[offset + channel], "$label channel=$channel")
+        }
+    }
+
+    private fun appendCubicRing(path: Path, centerX: Float, centerY: Float, radius: Float) {
+        val kappa = 0.55228475f * radius
+        path.moveTo(centerX + radius, centerY)
+        path.cubicTo(centerX + radius, centerY + kappa, centerX + kappa, centerY + radius, centerX, centerY + radius)
+        path.cubicTo(centerX - kappa, centerY + radius, centerX - radius, centerY + kappa, centerX - radius, centerY)
+        path.cubicTo(centerX - radius, centerY - kappa, centerX - kappa, centerY - radius, centerX, centerY - radius)
+        path.cubicTo(centerX + kappa, centerY - radius, centerX + radius, centerY - kappa, centerX + radius, centerY)
+        path.close()
+    }
 
     private class StaticDisplayListBuffer(
         private val operations: List<DisplayOp>,

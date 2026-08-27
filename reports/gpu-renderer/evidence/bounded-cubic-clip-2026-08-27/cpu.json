@@ -1,13 +1,10 @@
 {
   "fixture": "bounded-cubic-clip-v1",
-  "oracle": "independent CPU cubic point oracle; Bernstein P(0.5) = (32,35), with closing segment y=8",
-  "extent": [64, 64],
-  "samples": {
-    "inside": [32, 24],
-    "outside": [32, 4],
-    "intersect": { "inside": "fill", "outside": "background" },
-    "difference": { "inside": "background", "outside": "fill" }
-  },
+  "oracle": "executed full CPU RGBA buffer using Path.contains with its independent fixed 16-step cubic linearization",
+  "extent": [32, 32],
+  "contours": "two same-direction cubic rings; Winding retains the centre and EvenOdd creates a hole",
+  "adjacentCubicEdgePixels": [[20, 16], [21, 16], [17, 16], [18, 16]],
   "variants": ["Winding/Intersect", "EvenOdd/Intersect", "Winding/Difference", "EvenOdd/Difference"],
-  "channelCount": 32
+  "channelCountPerVariant": 4096,
+  "channelCount": 16384
 }

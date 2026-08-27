@@ -1,11 +1,12 @@
 {
   "fixture": "bounded-cubic-clip-v1",
   "surface": "headless/offscreen WebGPU",
-  "input": { "clip": "one finite closed cubic path", "antiAlias": false, "edgeBudget": 256 },
+  "input": { "clip": "one finite closed path with two same-direction cubic rings", "antiAlias": false, "edgeBudget": 256, "flattenedVertices": 190 },
   "route": ["ClipStack", "GPUClipMapper", "GPUClipCoveragePlanner", "GPUClipExecutionPlan.StencilCoverage", "GPUCorePrimitivePreparedFrameTaskListBuilder", "wgpu4k submit/readback"],
   "stencilState": {
     "Winding": { "producer": ["IncrementWrap", "DecrementWrap"], "IntersectConsumer": "NotEqual", "DifferenceConsumer": "Equal" },
     "EvenOdd": { "producer": ["Invert", "Invert"], "IntersectConsumer": "NotEqual", "DifferenceConsumer": "Equal" }
   },
-  "identity": "hasCubicSegments is included in the canonical clip content key"
+  "identity": "hasCubicSegments is included in the canonical clip content key",
+  "routeEvidence": "GPUFramePathApiInventoryTest.bounded cubic hole selects exact stencil state for every fill rule and operation"
 }

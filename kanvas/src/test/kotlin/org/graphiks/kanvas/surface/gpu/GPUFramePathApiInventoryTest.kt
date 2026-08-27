@@ -3442,6 +3442,64 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `bounded cubic hole selects exact stencil state for every fill rule and operation`() {
+        val variants = listOf(
+            CubicClipStencilExpectation(
+                FillType.WINDING,
+                ClipOp.INTERSECT,
+                GPUClipStencilOperation.IncrementWrap,
+                GPUClipStencilOperation.DecrementWrap,
+                GPUClipStencilCompare.NotEqual,
+            ),
+            CubicClipStencilExpectation(
+                FillType.EVEN_ODD,
+                ClipOp.INTERSECT,
+                GPUClipStencilOperation.Invert,
+                GPUClipStencilOperation.Invert,
+                GPUClipStencilCompare.NotEqual,
+            ),
+            CubicClipStencilExpectation(
+                FillType.WINDING,
+                ClipOp.DIFFERENCE,
+                GPUClipStencilOperation.IncrementWrap,
+                GPUClipStencilOperation.DecrementWrap,
+                GPUClipStencilCompare.Equal,
+            ),
+            CubicClipStencilExpectation(
+                FillType.EVEN_ODD,
+                ClipOp.DIFFERENCE,
+                GPUClipStencilOperation.Invert,
+                GPUClipStencilOperation.Invert,
+                GPUClipStencilCompare.Equal,
+            ),
+        )
+
+        variants.forEach { expected ->
+            val surface = Surface(32, 32)
+            surface.canvas {
+                clipPath(cubicHolePath(expected.fillType), expected.operation, antiAlias = false)
+                drawRect(RectF32.ofLTRB(0f, 0f, 32f, 32f), Paint.fill(ColorARGB.Red).copy(antiAlias = false))
+            }
+            val plan = GPUFramePathApiInventory.plan(
+                surface.snapshotOps(),
+                target(),
+                RenderConfig(maxPathVertices = 256u),
+                capabilitiesWith(FILL_RECT_CAPABILITY, PATH_FILL_STENCIL_COVER),
+            )
+            val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(
+                plan.visualCommands.single().clipExecutionPlan,
+                "${expected.fillType}/${expected.operation}",
+            )
+            val geometry = assertIs<GPUClipExecutionGeometry.Path>(execution.producer.geometry)
+
+            assertEquals(190, geometry.vertices.size / 2)
+            assertEquals(expected.front, execution.producer.frontPassOperation)
+            assertEquals(expected.back, execution.producer.backPassOperation)
+            assertEquals(expected.consumer, execution.consumer.compare)
+        }
+    }
+
+    @Test
     fun `mapper does not admit inverse winding difference path clip to the single stencil route`() {
         val surface = Surface(32, 32)
         surface.canvas {
@@ -3874,4 +3932,29 @@ class GPUFramePathApiInventoryTest {
         lineTo(8f, 40f)
         close()
     }
+
+    private fun cubicHolePath(fillType: FillType): Path = Path().apply {
+        appendCubicRing(this, radius = 5f)
+        appendCubicRing(this, radius = 2f)
+        this.fillType = fillType
+    }
+
+    private fun appendCubicRing(path: Path, radius: Float) {
+        val center = 16f
+        val kappa = 0.55228475f * radius
+        path.moveTo(center + radius, center)
+        path.cubicTo(center + radius, center + kappa, center + kappa, center + radius, center, center + radius)
+        path.cubicTo(center - kappa, center + radius, center - radius, center + kappa, center - radius, center)
+        path.cubicTo(center - radius, center - kappa, center - kappa, center - radius, center, center - radius)
+        path.cubicTo(center + kappa, center - radius, center + radius, center - kappa, center + radius, center)
+        path.close()
+    }
+
+    private data class CubicClipStencilExpectation(
+        val fillType: FillType,
+        val operation: ClipOp,
+        val front: GPUClipStencilOperation,
+        val back: GPUClipStencilOperation,
+        val consumer: GPUClipStencilCompare,
+    )
 }
