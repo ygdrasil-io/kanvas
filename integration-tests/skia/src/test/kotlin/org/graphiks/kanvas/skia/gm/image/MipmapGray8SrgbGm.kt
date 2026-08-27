@@ -50,7 +50,7 @@ class MipmapGray8SrgbGm : SkiaGm {
         var x = 0f
         while (w > 5f) {
             val dst = RectF32.ofOriginSize(x, 0f, w, h)
-            canvas.drawImageRect(img, /*src=*/ dst, /*dst=*/ dst)
+            canvas.drawImage(img, dst)
             x += w + 10f
             w /= 2f
             h /= 2f

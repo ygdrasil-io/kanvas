@@ -1437,10 +1437,10 @@ class GPUPreparedSurfaceFrameBuilderTest {
             Image(
                 1,
                 1,
-                ColorType.GRAY_8,
+                ColorType.RGB_888X,
                 "unsupported-format",
-                byteArrayOf(1),
-                alphaType = AlphaType.PREMUL,
+                byteArrayOf(1, 1, 1, 0),
+                alphaType = AlphaType.OPAQUE,
             ) to GPUPreparedImageRefusalCodes.PIXEL_FORMAT,
         )
 

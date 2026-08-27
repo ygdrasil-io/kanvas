@@ -170,6 +170,47 @@ class PreparedImageContractsTest {
     }
 
     @Test
+    fun `factory normalizes all bitmap config source formats to bounded straight RGBA8`() {
+        val rgb565 = ready(
+            input(
+                format = GPUPreparedImageSourceFormat.Rgb565,
+                alpha = AlphaType.OPAQUE,
+                sourceRowBytes = 2,
+                bytes = byteArrayOf(0, 0xf8.toByte()),
+            ),
+        )
+        val argb4444 = ready(
+            input(
+                format = GPUPreparedImageSourceFormat.Argb4444,
+                sourceRowBytes = 2,
+                bytes = byteArrayOf(0x21, 0x84.toByte()),
+            ),
+        )
+        val rgbaF16 = ready(
+            input(
+                format = GPUPreparedImageSourceFormat.RgbaF16,
+                sourceRowBytes = 8,
+                bytes = byteArrayOf(0, 0x34, 0, 0x30, 0, 0x36, 0, 0x38),
+            ),
+        )
+        val gray8 = ready(
+            input(
+                format = GPUPreparedImageSourceFormat.Gray8,
+                alpha = AlphaType.OPAQUE,
+                sourceRowBytes = 1,
+                bytes = byteArrayOf(0x80.toByte()),
+            ),
+        )
+
+        assertContentEquals(byteArrayOf(0xff.toByte(), 0, 0, 0xff.toByte()), rgb565.tightRgba8BytesForUpload())
+        assertContentEquals(byteArrayOf(128.toByte(), 64, 32, 136.toByte()), argb4444.tightRgba8BytesForUpload())
+        assertContentEquals(byteArrayOf(128.toByte(), 64, 191.toByte(), 128.toByte()), rgbaF16.tightRgba8BytesForUpload())
+        assertContentEquals(byteArrayOf(0x80.toByte(), 0x80.toByte(), 0x80.toByte(), 0xff.toByte()), gray8.tightRgba8BytesForUpload())
+        assertTrue(argb4444.key.value.contains(GPUPreparedImageSourceFormat.Argb4444.name))
+        assertTrue(rgbaF16.contentHash.isNotBlank())
+    }
+
+    @Test
     fun `factory emits canonical FP04 refusals for unsupported source authorities`() {
         assertRefusal(input(bytes = null), CanonicalRefusalCodes.PIXELS_MISSING)
         assertRefusal(

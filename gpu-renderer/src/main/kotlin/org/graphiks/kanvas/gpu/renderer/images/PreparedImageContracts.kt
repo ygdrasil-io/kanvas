@@ -10,7 +10,7 @@ import java.security.MessageDigest
 
 enum class AlphaType { OPAQUE, PREMUL, UNPREMUL, UNKNOWN }
 enum class GPUPreparedImageSourceClass { DecodedCpu, Encoded, Animated, Yuv, Hdr, Imported }
-enum class GPUPreparedImageSourceFormat { Rgba8, Bgra8, A8, Unsupported }
+enum class GPUPreparedImageSourceFormat { Rgba8, Bgra8, A8, Rgb565, Argb4444, RgbaF16, Gray8, Unsupported }
 enum class GPUPreparedImageProfile { Srgb, Other, Unresolved }
 enum class GPUPreparedImageOrientation { AppliedIdentity, Unresolved }
 enum class GPUPreparedImageProvenance { CallerPixels, SurfaceReadback, RegisteredDecode }
@@ -102,6 +102,26 @@ object GPUPreparedImageArtifactFactory {
                 "alphaType" to input.alphaType,
             )
         }
+        if (input.sourceFormat in setOf(
+                GPUPreparedImageSourceFormat.Rgb565,
+                GPUPreparedImageSourceFormat.Gray8,
+            ) && input.alphaType != AlphaType.OPAQUE
+        ) {
+            return refuse(
+                CanonicalRefusalCodes.ALPHA_INTERPRETATION,
+                "alphaType" to input.alphaType,
+            )
+        }
+        if (input.sourceFormat in setOf(
+                GPUPreparedImageSourceFormat.Argb4444,
+                GPUPreparedImageSourceFormat.RgbaF16,
+            ) && input.alphaType != AlphaType.PREMUL
+        ) {
+            return refuse(
+                CanonicalRefusalCodes.ALPHA_INTERPRETATION,
+                "alphaType" to input.alphaType,
+            )
+        }
         if (input.width <= 0 || input.height <= 0) {
             return refuse(
                 CanonicalRefusalCodes.DIMENSIONS,
@@ -118,7 +138,9 @@ object GPUPreparedImageArtifactFactory {
 
         val bytesPerPixel = when (input.sourceFormat) {
             GPUPreparedImageSourceFormat.Rgba8, GPUPreparedImageSourceFormat.Bgra8 -> 4L
-            GPUPreparedImageSourceFormat.A8 -> 1L
+            GPUPreparedImageSourceFormat.A8, GPUPreparedImageSourceFormat.Gray8 -> 1L
+            GPUPreparedImageSourceFormat.Rgb565, GPUPreparedImageSourceFormat.Argb4444 -> 2L
+            GPUPreparedImageSourceFormat.RgbaF16 -> 8L
             GPUPreparedImageSourceFormat.Unsupported -> error("classified above")
         }
         val sourceTightRowBytes = try { Math.multiplyExact(input.width.toLong(), bytesPerPixel) } catch (_: ArithmeticException) {
@@ -164,13 +186,6 @@ object GPUPreparedImageArtifactFactory {
                 "maxUploadBytes" to maxUploadBytes,
             )
         }
-        if (input.alphaType == AlphaType.OPAQUE && !opaqueAlphaBytes(input, bytes)) {
-            return refuse(
-                CanonicalRefusalCodes.ALPHA_INTERPRETATION,
-                "alphaType" to input.alphaType,
-            )
-        }
-
         val normalized = ByteArray(normalizedLength.toInt())
         for (row in 0 until input.height) {
             val sourceOffset = Math.multiplyExact(row.toLong(), input.sourceRowBytes).toInt()
@@ -193,12 +208,49 @@ object GPUPreparedImageArtifactFactory {
                         normalized[target + 2] = alpha
                         normalized[target + 3] = alpha
                     }
+                    GPUPreparedImageSourceFormat.Rgb565 -> {
+                        val packed = unsignedShortLe(bytes, source)
+                        normalized[target] = ((packed ushr 11 and 0x1f) * 255 / 31).toByte()
+                        normalized[target + 1] = ((packed ushr 5 and 0x3f) * 255 / 63).toByte()
+                        normalized[target + 2] = ((packed and 0x1f) * 255 / 31).toByte()
+                        normalized[target + 3] = 0xff.toByte()
+                    }
+                    GPUPreparedImageSourceFormat.Argb4444 -> {
+                        val packed = unsignedShortLe(bytes, source)
+                        val alpha = (packed ushr 12 and 0x0f) / 15f
+                        normalized[target + 3] = unitFloatToByte(alpha)
+                        if (alpha > 0f) {
+                            normalized[target] = unitFloatToByte((packed ushr 8 and 0x0f) / 15f / alpha)
+                            normalized[target + 1] = unitFloatToByte((packed ushr 4 and 0x0f) / 15f / alpha)
+                            normalized[target + 2] = unitFloatToByte((packed and 0x0f) / 15f / alpha)
+                        }
+                    }
+                    GPUPreparedImageSourceFormat.RgbaF16 -> {
+                        val alpha = halfToUnitFloat(unsignedShortLe(bytes, source + 6))
+                        normalized[target + 3] = unitFloatToByte(alpha)
+                        if (alpha > 0f) {
+                            normalized[target] = unitFloatToByte(halfToUnitFloat(unsignedShortLe(bytes, source)) / alpha)
+                            normalized[target + 1] = unitFloatToByte(halfToUnitFloat(unsignedShortLe(bytes, source + 2)) / alpha)
+                            normalized[target + 2] = unitFloatToByte(halfToUnitFloat(unsignedShortLe(bytes, source + 4)) / alpha)
+                        }
+                    }
+                    GPUPreparedImageSourceFormat.Gray8 -> {
+                        val gray = bytes[source]
+                        normalized[target] = gray
+                        normalized[target + 1] = gray
+                        normalized[target + 2] = gray
+                        normalized[target + 3] = 0xff.toByte()
+                    }
                     GPUPreparedImageSourceFormat.Unsupported -> error("classified above")
                 }
             }
         }
         val alphaOnly = input.sourceFormat == GPUPreparedImageSourceFormat.A8
-        if (input.alphaType == AlphaType.PREMUL && !alphaOnly) {
+        val decodedStraight = input.sourceFormat in setOf(
+            GPUPreparedImageSourceFormat.Argb4444,
+            GPUPreparedImageSourceFormat.RgbaF16,
+        )
+        if (input.alphaType == AlphaType.PREMUL && !alphaOnly && !decodedStraight) {
             for (pixelOffset in normalized.indices step 4) {
                 val alpha = normalized[pixelOffset + 3].toInt() and 0xFF
                 for (channel in 0..2) {
@@ -211,6 +263,12 @@ object GPUPreparedImageArtifactFactory {
                     }
                 }
             }
+        }
+        if (input.alphaType == AlphaType.OPAQUE && !opaqueAlphaBytes(normalized)) {
+            return refuse(
+                CanonicalRefusalCodes.ALPHA_INTERPRETATION,
+                "alphaType" to input.alphaType,
+            )
         }
         val contract = artifactSdrColorContract()
         val uploadEncoding = if (alphaOnly) null else contract.colorUploadEncoding
@@ -255,12 +313,24 @@ object GPUPreparedImageArtifactFactory {
         )
     }
 
-    private fun opaqueAlphaBytes(input: GPUPreparedImageSourceInput, bytes: ByteArray): Boolean {
-        if (input.sourceFormat == GPUPreparedImageSourceFormat.A8) return false
-        for (row in 0 until input.height) {
-            val rowStart = Math.multiplyExact(row.toLong(), input.sourceRowBytes).toInt()
-            for (column in 0 until input.width) if ((bytes[rowStart + column * 4 + 3].toInt() and 0xFF) != 255) return false
+    private fun opaqueAlphaBytes(rgba: ByteArray): Boolean =
+        (3 until rgba.size step 4).all { (rgba[it].toInt() and 0xFF) == 255 }
+
+    private fun unsignedShortLe(bytes: ByteArray, offset: Int): Int =
+        (bytes[offset].toInt() and 0xff) or ((bytes[offset + 1].toInt() and 0xff) shl 8)
+
+    private fun unitFloatToByte(value: Float): Byte =
+        (value.coerceIn(0f, 1f) * 255f + 0.5f).toInt().toByte()
+
+    private fun halfToUnitFloat(bits: Int): Float {
+        val sign = bits ushr 15
+        val exponent = bits ushr 10 and 0x1f
+        val fraction = bits and 0x03ff
+        val value = when (exponent) {
+            0 -> fraction * 5.9604645e-8f
+            31 -> if (fraction == 0) Float.POSITIVE_INFINITY else Float.NaN
+            else -> Math.scalb(1f + fraction / 1024f, exponent - 15)
         }
-        return true
+        return if (sign == 0) value else -value
     }
 }

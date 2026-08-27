@@ -19,6 +19,10 @@ object GPUPreparedSurfaceImageSource {
             ColorType.RGBA_8888 -> GPUPreparedImageSourceFormat.Rgba8
             ColorType.BGRA_8888 -> GPUPreparedImageSourceFormat.Bgra8
             ColorType.ALPHA_8 -> GPUPreparedImageSourceFormat.A8
+            ColorType.RGB_565 -> GPUPreparedImageSourceFormat.Rgb565
+            ColorType.ARGB_4444 -> GPUPreparedImageSourceFormat.Argb4444
+            ColorType.RGBA_F16 -> GPUPreparedImageSourceFormat.RgbaF16
+            ColorType.GRAY_8 -> GPUPreparedImageSourceFormat.Gray8
             else -> GPUPreparedImageSourceFormat.Unsupported
         }
         val sourceRowBytes = image.width.toLong() * image.colorType.bytesPerPixel
