@@ -1868,12 +1868,14 @@ private fun GPUBounds.clampedTo(target: GPUTargetFacts): GPUBounds = GPUBounds(
 )
 
 private fun DisplayOp.isFullyOutsideTarget(command: NormalizedDrawCommand): Boolean = when (this) {
-    is DisplayOp.DrawRect,
-    is DisplayOp.DrawRRect,
-    is DisplayOp.DrawDRRect,
-    -> command.bounds.left >= command.bounds.right || command.bounds.top >= command.bounds.bottom
+    is DisplayOp.DrawRect -> !rect.isEmpty && command.bounds.isEmpty
+    is DisplayOp.DrawRRect -> !rrect.rect.isEmpty && command.bounds.isEmpty
+    is DisplayOp.DrawDRRect -> !outer.rect.isEmpty && !inner.rect.isEmpty && command.bounds.isEmpty
     else -> false
 }
+
+private val GPUBounds.isEmpty: Boolean
+    get() = left >= right || top >= bottom
 
 private fun DisplayOp.transformOrIdentity(): Matrix3x3F32 = when (this) {
     is DisplayOp.DrawColor -> Matrix3x3F32.Identity
