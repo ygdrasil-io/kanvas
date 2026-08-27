@@ -37,6 +37,25 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 
 class CatalogExpectationInvariantTest {
     @Test
+    fun `catalogue makes public Surface claims distinct from historical standalone refusals`() {
+        val publicCases = GpuEvidenceCatalog.cases.filter {
+            it.executionBoundary == EvidenceExecutionBoundary.PublicSurface
+        }
+        val historicalRefusals = GpuEvidenceCatalog.cases.filter {
+            it.executionBoundary == EvidenceExecutionBoundary.HistoricalStandaloneRefusal
+        }
+
+        assertEquals(GpuEvidenceCatalog.cases.size, publicCases.size + historicalRefusals.size)
+        assertTrue(publicCases.all { it.program is org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram })
+        assertTrue(historicalRefusals.all { it.program is RoutedSceneProgram })
+        assertTrue(historicalRefusals.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse && it.oracle == null })
+        assertEquals(
+            setOf("aggregate-memory-budget-refusal", "custom-runtime-effect-unregistered-refusal"),
+            historicalRefusals.map { it.descriptor.id.value }.toSet(),
+        )
+    }
+
+    @Test
     fun `every one of the seventy render cases has exactly one oracle and every refusal has none`() {
         assertEquals(73, GpuEvidenceCatalog.cases.size)
         assertEquals(70, GpuEvidenceCatalog.renderCases.size)

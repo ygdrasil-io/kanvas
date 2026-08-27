@@ -38,6 +38,19 @@ class KanvasSurfaceEvidenceExecutor(
             val delta = backend.telemetry() - before
             val refusalCode = terminalRefusalCode(failure.message)
             if (refusalCode != null && delta.submissions == 0L) {
+                val expectation = evidenceCase.descriptor.expectation
+                if (expectation !is org.graphiks.kanvas.gpu.evidence.catalog.EvidenceExpectation.ShouldRefuse) {
+                    return failure(program.routeId, null, "Surface refused a render expectation with $refusalCode.", delta, environment, failure)
+                }
+                if (expectation.stableReasonCode != refusalCode) {
+                    return EvidenceExecutionResult.ExecutionFailure(
+                        "failed.evidence.refusal_mismatch",
+                        "Surface refusal $refusalCode did not match expected ${expectation.stableReasonCode}.",
+                        RouteEvidence(program.routeId, null, null, "failed", emptyList(), emptyList(), mapOf("queue.submit" to delta.submissions), delta),
+                        listOf("diagnostic.code=$refusalCode"),
+                        environment,
+                    )
+                }
                 return EvidenceExecutionResult.Observed(SceneObservation.Refused(
                     refusalCode, failure.message.orEmpty(), delta.submissions,
                     RouteEvidence(program.routeId, null, null, "refused", emptyList(), emptyList(), mapOf("queue.submit" to delta.submissions), delta),
@@ -49,6 +62,15 @@ class KanvasSurfaceEvidenceExecutor(
         val delta = backend.telemetry() - before
         val route = route(program.routeId, result, delta)
         val descriptor = evidenceCase.descriptor
+        if (descriptor.expectation is org.graphiks.kanvas.gpu.evidence.catalog.EvidenceExpectation.ShouldRefuse) {
+            return EvidenceExecutionResult.ExecutionFailure(
+                "failed.evidence.refusal_mismatch",
+                "Surface rendered a refusal expectation ${descriptor.expectation.stableReasonCode}.",
+                route.copy(outcome = "failed"),
+                result.diagnostics.entries.map { it.code },
+                environment,
+            )
+        }
         if (result.width != descriptor.width || result.height != descriptor.height ||
             result.pixels.size != descriptor.width * descriptor.height * 4 ||
             result.stats.drawCallCount <= 0 || result.stats.pipelineCount <= 0 || delta.submissions != 1L
