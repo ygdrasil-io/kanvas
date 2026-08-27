@@ -114,8 +114,6 @@ ni aucune de ces opérations hors portée.
 ./gradlew :integration-tests:gpu-evidence:verifyGeneratedGpuEvidence -PsourceCommit=<sha>
 # Initial catalogue only: the promoted root must be absent or empty.
 ./gradlew :integration-tests:gpu-evidence:promoteGpuEvidence -PsourceCommit=<sha> -PpromotionReviewer=<reviewer> -PpromotionReason=<reason> -Pall=true
-# Initial catalogue only: the promoted root must be absent or empty.
-./gradlew :integration-tests:gpu-evidence:promoteGpuEvidence -PsourceCommit=<sha> -PpromotionReviewer=<reviewer> -PpromotionReason=<reason> -Pall=true
 # Existing full catalogue: rebaseline comparison summaries are mandatory.
 ./gradlew :integration-tests:gpu-evidence:promoteGpuEvidence -PsourceCommit=<sha> -PpromotionReviewer=<reviewer> -PpromotionReason=<reason> -PpromotionRebaseline=true -PpromotionPriorComparison='<comparaison précédente>' -PpromotionNewComparison='<comparaison nouvelle>' -Pall=true
 ./gradlew :integration-tests:gpu-evidence:gpuEvidencePerformance -PsourceCommit=<sha> -Pscene=solid-card-stack
@@ -129,8 +127,8 @@ Pour le travail quotidien, utiliser une sélection explicite
 (`-Pscene=solid-card-stack` ou `-PscenesFile=scenes.txt`) pour génération,
 vérification generated et promotion. Quand aucun sélecteur n'est fourni aux
 gates de génération et de vérification generated, la tâche Gradle relaie
-`--all`; `-Pall` est une forme explicite équivalente quand on veut l'annoncer.
-Pour une promotion full d'un root existant, `-Pall` doit être accompagné de
+`--all`; `-Pall=true` est une forme explicite équivalente quand on veut
+l'annoncer. Pour une promotion full d'un root existant, `-Pall=true` doit être accompagné de
 `promotionRebaseline=true` et de comparaisons prior/nouveau non vides ; sans
 root ou avec un root vide, il s'agit seulement de l'initial catalogue. Le gate
 `verifyPromotedGpuEvidence` reste un contrôle headless du root promoted
