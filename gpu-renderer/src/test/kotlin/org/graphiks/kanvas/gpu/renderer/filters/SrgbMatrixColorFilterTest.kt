@@ -1,8 +1,9 @@
 package org.graphiks.kanvas.gpu.renderer.filters
 
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 class SrgbMatrixColorFilterTest {
     @Test
@@ -37,12 +38,25 @@ class SrgbMatrixColorFilterTest {
     }
 
     @Test
-    fun `descriptor packs the exact native ColorMatrix uniform ABI`() {
-        val descriptor = SrgbMatrixColorFilterDescriptor(ColorMatrix.identity())
+    fun `descriptor packs every ColorMatrix uniform row translation and alpha at exact ABI offsets`() {
+        val matrix = FloatArray(20) { index -> (index + 1) / 10f }
+        val descriptor = SrgbMatrixColorFilterDescriptor(matrix)
 
-        val bytes = descriptor.packNativeUniform(0.5f, 0.25f, 0.75f, 0.5f)
+        val bytes = descriptor.packNativeUniform(0.11f, 0.22f, 0.33f, 0.44f)
+        val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
 
         assertEquals(96, bytes.size)
-        assertTrue(bytes.any { it.toInt() != 0 })
+        assertEquals(0.11f, buffer.getFloat(0), 0f)
+        assertEquals(0.22f, buffer.getFloat(4), 0f)
+        assertEquals(0.33f, buffer.getFloat(8), 0f)
+        assertEquals(0.44f, buffer.getFloat(12), 0f)
+        assertEquals(listOf(0.1f, 0.2f, 0.3f, 0.4f), floatsAt(buffer, 16, 4))
+        assertEquals(listOf(0.6f, 0.7f, 0.8f, 0.9f), floatsAt(buffer, 32, 4))
+        assertEquals(listOf(1.1f, 1.2f, 1.3f, 1.4f), floatsAt(buffer, 48, 4))
+        assertEquals(listOf(1.6f, 1.7f, 1.8f, 1.9f), floatsAt(buffer, 64, 4))
+        assertEquals(listOf(0.5f, 1.0f, 1.5f, 2.0f), floatsAt(buffer, 80, 4))
     }
 }
+
+private fun floatsAt(buffer: ByteBuffer, offset: Int, count: Int): List<Float> =
+    List(count) { index -> buffer.getFloat(offset + index * 4) }

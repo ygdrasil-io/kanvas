@@ -182,6 +182,13 @@ data class OffsetParams(
 class ColorFilterParams(matrix: FloatArray) : GPUPreparedFilterParameters {
 
     private val _matrix: FloatArray = matrix.copyOf()
+    /**
+     * Single color-matrix authority for the CPU oracle and native uniform ABI.
+     *
+     * The descriptor owns the sRGB-to-linear conversion contract; callers must
+     * not reimplement the raw row-major arithmetic at a route boundary.
+     */
+    val descriptor: SrgbMatrixColorFilterDescriptor = SrgbMatrixColorFilterDescriptor(_matrix)
 
     val matrix: FloatArray get() = _matrix.copyOf()
 

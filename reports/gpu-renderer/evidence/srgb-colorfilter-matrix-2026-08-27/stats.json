@@ -5,6 +5,8 @@
   "differentChannels": 0,
   "maxDelta": 0,
   "meanDelta": 0.0,
+  "cpuSha256": "67abf2afb66ca583f2f898cc06fa462823dec3b77486d06545a15b381372301a",
+  "gpuSha256": "67abf2afb66ca583f2f898cc06fa462823dec3b77486d06545a15b381372301a",
   "performance": {
     "submits": 1,
     "readbackCopies": 1,

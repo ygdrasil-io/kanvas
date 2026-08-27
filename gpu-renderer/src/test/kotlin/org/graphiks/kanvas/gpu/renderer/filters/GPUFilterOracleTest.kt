@@ -153,12 +153,15 @@ class GPUFilterOracleTest {
             provenance = "test/cf-row-major",
         )
         val out = GPUFilterOracle.apply(source, node, emptyMap())
-        assertEquals(0.6f, out.pixels[0], 1e-4f)   // R' = 0.2 + 0.5*0.8
-        assertEquals(0.8f, out.pixels[1], 1e-4f)   // G' unchanged
+        val expected = SrgbMatrixColorFilter((node.parameters as ColorFilterParams).descriptor)
+            .applyEncodedStraightRgba(0.2f, 0.8f, 0f, 1f)
+        expected.forEachIndexed { channel, value ->
+            assertEquals(value, out.pixels[channel], 1e-6f, "channel=$channel")
+        }
     }
 
     @Test
-    fun `colorFilter identity matrix is a no-op`() {
+    fun `colorFilter identity returns the descriptor encoded premultiplied contract`() {
         val source = solidBitmap(4, 4, 1f, 0f, 0f, 0.5f)
         // Row-major 4x5 identity: 1s on the diagonal at m0, m6, m12, m18
         val identity = floatArrayOf(
@@ -175,9 +178,11 @@ class GPUFilterOracleTest {
             provenance = "test/cf2",
         )
         val result = GPUFilterOracle.apply(source, node, emptyMap())
-        for (i in source.pixels.indices) {
-            assertEquals(source.pixels[i], result.pixels[i], 0f,
-                "pixel[$i] expected ${source.pixels[i]} got ${result.pixels[i]}")
+        for (i in result.pixels.indices step 4) {
+            assertEquals(0.5f, result.pixels[i], 1e-6f)
+            assertEquals(0f, result.pixels[i + 1], 1e-6f)
+            assertEquals(0f, result.pixels[i + 2], 1e-6f)
+            assertEquals(0.5f, result.pixels[i + 3], 1e-6f)
         }
     }
 

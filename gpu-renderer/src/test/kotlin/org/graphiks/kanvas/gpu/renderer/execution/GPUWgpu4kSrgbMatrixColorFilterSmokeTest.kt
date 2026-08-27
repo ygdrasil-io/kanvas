@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
+import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -63,20 +65,22 @@ class GPUWgpu4kSrgbMatrixColorFilterSmokeTest {
                 "${terminal.diagnostic?.code?.value}: ${terminal.diagnostic?.message}",
             )
             val actual = assertIs<GPUSceneFrameOutput.ReadbackRgba>(terminal.output).bytes
-            val expectedPixel = byteArrayOf(46, 32, 96, 128.toByte())
-            val expected = ByteArray(4 * 4 * 4) { expectedPixel[it % 4] }
+            val cpuPixel = SrgbMatrixColorFilter(descriptor)
+                .applyEncodedStraightRgba(0.5f, 0.25f, 0.75f, 0.5f)
+            val expected = ByteArray(4 * 4 * 4) { channel ->
+                (cpuPixel[channel % 4].coerceIn(0f, 1f) * 255f).roundToInt().toByte()
+            }
             val stats = byteDifferenceStats(expected, actual)
             println(
                 "task9.srgb-colorfilter channels=${actual.size} differentChannels=${stats.differentChannels} " +
-                    "maxDelta=${stats.maxDelta} meanDelta=${stats.meanDelta}",
+                    "maxDelta=${stats.maxDelta} meanDelta=${stats.meanDelta} " +
+                    "cpuSha256=${sha256(expected)} gpuSha256=${sha256(actual)}",
             )
+            assertEquals(expected.size, actual.size)
             assertTrue(stats.maxDelta <= 1, "sRGB matrix maxDelta=${stats.maxDelta} stats=$stats")
             assertEquals(1L, session.nativeCounters().submits)
             assertEquals(1L, session.nativeCounters().readbackCopies)
 
-            // The CPU descriptor is checked separately from the bytes hand-derived above.
-            val cpu = SrgbMatrixColorFilter(descriptor).applyEncodedStraightRgba(0.5f, 0.25f, 0.75f, 0.5f)
-            assertTrue(cpu[0] > 0.17f && cpu[0] < 0.19f)
         } finally {
             try {
                 session.close()
@@ -86,6 +90,10 @@ class GPUWgpu4kSrgbMatrixColorFilterSmokeTest {
         }
     }
 }
+
+private fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
+    .digest(bytes)
+    .joinToString(separator = "") { byte -> "%02x".format(byte.toInt() and 0xff) }
 
 private fun halfRedMatrix(): FloatArray = floatArrayOf(
     0.5f, 0f, 0f, 0f, 0f,

@@ -1,10 +1,12 @@
 {
   "fixture": "srgb-colorfilter-matrix-v1",
-  "route": "GPURegisteredUniformRectFrameRecorder -> GPUWgpu4kRegisteredUniformRectFramePayloadMaterializer",
+  "route": "SrgbMatrixColorFilterDescriptor.packNativeUniform -> GPURegisteredUniformRectFrameRecorder -> GPUWgpu4kRegisteredUniformRectFramePayloadMaterializer",
   "target": "4x4 rgba8unorm headless/offscreen",
   "material": "GPURegisteredUniformProgram.ColorMatrix",
   "uniformAbiBytes": 96,
+  "uniformAuthority": "SrgbMatrixColorFilterDescriptor; direct bounded native fixture only",
   "colorPolicy": "encoded-srgb -> straight-linear-srgb matrix -> encoded-srgb-premul",
   "destinationRead": "none",
-  "codec": "none"
+  "codec": "none",
+  "excludedRoute": "historical scene adapter is outside this slice; no support claim"
 }

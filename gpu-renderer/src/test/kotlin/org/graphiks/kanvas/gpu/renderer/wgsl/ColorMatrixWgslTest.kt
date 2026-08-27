@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.wgsl
 
 import kotlin.test.Test
 import kotlin.test.assertContains
+import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorWgslValidation
@@ -36,6 +37,20 @@ class ColorMatrixWgslTest {
         val reflection = requireNotNull(validated.reflection)
         assertTrue(reflection.validated)
         assertTrue(reflection.report.entryPoints.any { it.name == "fs_main" })
+        val uniforms = reflection.report.layouts.single { it.structName == "ColorMatrixUniforms" }
+        assertEquals("uniform", uniforms.addressSpace)
+        assertEquals(96, uniforms.size)
+        assertEquals(
+            listOf(
+                "color" to (0 to 16),
+                "m0" to (16 to 16),
+                "m1" to (32 to 16),
+                "m2" to (48 to 16),
+                "m3" to (64 to 16),
+                "m4" to (80 to 16),
+            ),
+            uniforms.members.map { it.name to (it.offset to it.size) },
+        )
         val parsed = parseWgslResult(ColorMatrixWgsl)
         assertTrue(parsed.isSuccess, "wgsl4k rejected ColorMatrixWgsl: ${parsed.errors.joinToString { it.message }}")
     }
