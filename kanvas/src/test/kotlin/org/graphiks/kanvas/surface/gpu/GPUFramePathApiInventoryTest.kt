@@ -603,7 +603,8 @@ class GPUFramePathApiInventoryTest {
         )
         val cases = listOf(
             Matrix3x3F32.rotation(45f) to GPUCorePrimitiveRectRouteAuthority.RectAffineDirectTrianglesV1,
-            Matrix3x3F32.scaling(-1f, 1f) to GPUCorePrimitiveRectRouteAuthority.RectAxisAligned,
+            Matrix3x3F32.translation(16f, 0f) * Matrix3x3F32.scaling(-1f, 1f) to
+                GPUCorePrimitiveRectRouteAuthority.RectAxisAligned,
             Matrix3x3F32.skewing(0.25f, 0.125f) to
                 GPUCorePrimitiveRectRouteAuthority.RectAffineDirectTrianglesV1,
         )
