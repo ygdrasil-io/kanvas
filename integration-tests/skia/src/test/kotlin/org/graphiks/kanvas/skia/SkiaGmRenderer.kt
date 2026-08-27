@@ -74,6 +74,25 @@ object SkiaGmRenderer {
             )
         }
     }
+
+    /** Captures the existing public Surface attempt for inventory evidence only. */
+    fun inventoryEvidence(gm: SkiaGm, config: RenderConfig = RenderConfig.DEFAULT): InventoryRenderEvidence {
+        return try {
+            val result = render(gm, config = config)
+            InventoryRenderEvidence(
+                operationCount = result.ops.size,
+                diagnostics = result.diagnostics,
+                route = "gpu",
+            )
+        } catch (failure: Exception) {
+            val attempt = try { renderTerminalAttempt(gm, config = config) } catch (_: Exception) { null }
+            InventoryRenderEvidence(
+                operationCount = attempt?.operationCount ?: 0,
+                diagnostics = listOf(attempt?.diagnostic ?: failure.message.orEmpty()),
+                route = "failure",
+            )
+        }
+    }
 }
 
 data class SkiaRenderResult(
