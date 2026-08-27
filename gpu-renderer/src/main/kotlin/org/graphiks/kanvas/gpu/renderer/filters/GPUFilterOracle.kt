@@ -50,7 +50,7 @@ object GPUFilterOracle {
             }
             GPUPreparedFilterKind.ColorFilter -> {
                 val params = filter.parameters as ColorFilterParams
-                applyColorFilter(source, params.matrix)
+                applyColorFilter(source, params.descriptor)
             }
             GPUPreparedFilterKind.Offset -> {
                 val params = filter.parameters as OffsetParams
@@ -179,26 +179,24 @@ object GPUFilterOracle {
     // --- ColorFilter ---
 
     /**
-     * Applies a 4x5 color matrix in row-major layout: output row 0 = R' uses matrix[0..3]·rgba + matrix[4],
-     * row 1 = G' uses matrix[5..9], row 2 = B' uses matrix[10..14], row 3 = A' uses matrix[15..19].
-     * Convention matches ColorMatrixSnippet WGSL and GPUPreparedFilterNormalizer.composeColorMatrices.
+     * Applies the same bounded descriptor contract as the registered native
+     * ColorMatrix route: straight encoded sRGB -> linear matrix -> encoded
+     * premultiplied attachment pixels. No direct-matrix oracle is retained.
      */
-    private fun applyColorFilter(source: Rgba8Bitmap, matrix: FloatArray): Rgba8Bitmap {
-        require(matrix.size == 20) { "ColorFilter matrix must have 20 entries" }
+    private fun applyColorFilter(
+        source: Rgba8Bitmap,
+        descriptor: SrgbMatrixColorFilterDescriptor,
+    ): Rgba8Bitmap {
+        val filter = SrgbMatrixColorFilter(descriptor)
         val dst = Rgba8Bitmap(source.width, source.height, FloatArray(source.width * source.height * 4))
         for (i in source.pixels.indices step 4) {
-            val r = source.pixels[i]
-            val g = source.pixels[i + 1]
-            val b = source.pixels[i + 2]
-            val a = source.pixels[i + 3]
-            dst.pixels[i] = (matrix[0] * r + matrix[1] * g + matrix[2] * b + matrix[3] * a + matrix[4]).coerceIn(
-                0f, 1f)
-            dst.pixels[i + 1] = (matrix[5] * r + matrix[6] * g + matrix[7] * b + matrix[8] * a + matrix[9]).coerceIn(
-                0f, 1f)
-            dst.pixels[i + 2] = (matrix[10] * r + matrix[11] * g + matrix[12] * b + matrix[13] * a + matrix[14]).coerceIn(
-                0f, 1f)
-            dst.pixels[i + 3] = (matrix[15] * r + matrix[16] * g + matrix[17] * b + matrix[18] * a + matrix[19]).coerceIn(
-                0f, 1f)
+            val filtered = filter.applyEncodedStraightRgba(
+                source.pixels[i],
+                source.pixels[i + 1],
+                source.pixels[i + 2],
+                source.pixels[i + 3],
+            )
+            filtered.copyInto(dst.pixels, destinationOffset = i)
         }
         return dst
     }

@@ -1,0 +1,19 @@
+{
+  "fixture": "GM refusal capture, 2026-08-27",
+  "refusals": [
+    {
+      "gm": "colorfilterimagefilter",
+      "operationCount": 53,
+      "terminalCode": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted",
+      "message": "ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.",
+      "command": "./gradlew --no-daemon :integration-tests:skia:test --tests org.graphiks.kanvas.skia.SkiaGmRunner -Dkanvas.gm.name=colorfilterimagefilter -Dkanvas.render.debugLevel=PIXEL"
+    },
+    {
+      "gm": "srgb_colorfilter",
+      "operationCount": 7,
+      "terminalCode": "unsupported.image.native_binding",
+      "message": "Prepared Surface operation could not be lowered.",
+      "command": "./gradlew --no-daemon :integration-tests:skia:test --tests org.graphiks.kanvas.skia.SkiaGmRunner -Dkanvas.gm.name=srgb_colorfilter -Dkanvas.render.debugLevel=PIXEL"
+    }
+  ]
+}
