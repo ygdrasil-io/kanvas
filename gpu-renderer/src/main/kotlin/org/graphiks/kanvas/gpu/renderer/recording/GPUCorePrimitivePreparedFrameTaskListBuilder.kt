@@ -2185,7 +2185,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         ) {
             return refused(
                 "unsupported.recording.core_primitive_clip_stencil_transform",
-                "Native hard path clips require identity, translation, or positive uniform scale capture-time CTM.",
+                "Native hard path clips require identity, translation, positive uniform scale, or finite non-singular axis scale capture-time CTM.",
             )
         }
         if (staticNativeClipStencilPlan != null && staticNativeClipStencilConsumers.any { packet ->

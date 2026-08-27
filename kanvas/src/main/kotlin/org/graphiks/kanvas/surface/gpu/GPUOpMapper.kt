@@ -1491,7 +1491,7 @@ private fun GPUClipCoveragePlan.Mask.toMaskExecutionPlan(
         if (singleHardPathClip.transformClass !in HARD_PATH_CLIP_TRANSFORM_CLASSES) {
             return clipExecutionRefusal(
                 code = "unsupported.clip.path_transform",
-                message = "Native hard path clips require a finite non-singular affine capture-time CTM.",
+                message = "Native hard path clips require identity, translation, or finite non-singular axis scale capture-time CTM.",
             )
         }
         val geometry = singleHardPathClip.executionGeometryOrRefusal() as? GPUClipExecutionGeometry.Path
