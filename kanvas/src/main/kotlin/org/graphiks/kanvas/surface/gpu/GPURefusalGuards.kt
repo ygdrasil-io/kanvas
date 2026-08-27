@@ -110,7 +110,13 @@ internal fun NormalizedDrawCommand.fillGuardRefusalReasonOrNull(): String? {
     if (layer.scopeKind != GPULayerScopeKind.Root) {
         return "unsupported_layer:${layer.scopeKind.name}"
     }
-    material.gradientFactsRefusalReasonOrNull()?.let { return it.diagnosticCode }
+    // The CorePrimitive FillRect route owns legacy linear-gradient validation and ABI, including
+    // repeat. The prepared v2 validator is clamp-only, so applying it at this shared guard would
+    // make valid legacy material terminal before route-specific diagnostics can be emitted.
+    if (!(this is NormalizedDrawCommand.FillRect &&
+            material is GPUMaterialDescriptor.LinearGradient)) {
+        material.gradientFactsRefusalReasonOrNull()?.let { return it.diagnosticCode }
+    }
     return null
 }
 

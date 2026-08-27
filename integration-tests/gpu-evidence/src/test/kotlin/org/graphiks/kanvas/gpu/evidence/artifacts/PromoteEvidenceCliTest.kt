@@ -161,39 +161,25 @@ class PromoteEvidenceCliTest {
     }
 
     @Test
-    fun `rebaseline promotes a verified historical seven scene subset to the current forty eight scene catalog`() {
+    fun `rebaseline promotes an explicit historical seven scene subset to the current catalog`() {
         writeAllBundles(repository, COMMIT)
         assertEquals(0, PromoteEvidenceCliRunner().run(args(repository, COMMIT, reviewer = "reviewer", reason = "initial")))
-        listOf(
-            "linear-gradient-lanes", "radial-swatch", "sweep-disk",
-            "linear-gradient-three-stops", "sweep-gradient-partial-angle", "affine-solid-rect", "scissored-radial-gradient",
-            "repeat-gradient-refusal", "gradient-stroke-refusal", "scaled-solid-rrect", "solid-drrect-hole",
-            "asymmetric-solid-rrect", "ellipse-solid-rrect", "asymmetric-solid-drrect-hole",
-            "clip-rrect-solid", "clip-rrect-ellipse", "clip-rrect-two-bands",
-            "clip-path-triangle-solid", "clip-path-concave-solid", "clip-path-triangle-two-bands",
-            "clip-path-translated-triangle-solid", "clip-path-uniform-scaled-triangle-solid", "clip-path-uniform-scaled-triangle-two-bands",
-            "clip-path-triangle-linear-gradient", "clip-path-translated-triangle-linear-gradient",
-            "clip-path-uniform-scaled-triangle-linear-gradient",
-            "clip-path-triangle-direct-triangle-solid", "clip-path-translated-triangle-direct-triangle-solid",
-            "clip-path-triangle-direct-triangle-order",
-            "clip-path-triangle-direct-triangle-linear-gradient",
-            "clip-path-translated-triangle-direct-triangle-linear-gradient",
-            "clip-path-uniform-scaled-triangle-direct-triangle-linear-gradient",
-            "clip-path-solid-rrect", "clip-path-asymmetric-solid-rrect", "clip-path-ellipse-solid-rrect",
-            "clip-path-translated-solid-rrect", "clip-path-translated-asymmetric-solid-rrect", "clip-path-translated-ellipse-solid-rrect",
-            "clip-path-axis-x-translated-solid-rrect", "clip-path-axis-y-translated-asymmetric-solid-rrect",
-            "clip-path-negative-x-translated-ellipse-solid-rrect", "clip-path-negative-y-translated-solid-rrect",
-            "clip-path-inverse-axis-x-translated-solid-rrect", "clip-path-inverse-axis-y-translated-asymmetric-solid-rrect",
-            "clip-path-inverse-negative-x-translated-ellipse-solid-rrect", "clip-path-inverse-negative-y-translated-solid-rrect",
-            "clip-path-solid-drrect", "clip-path-asymmetric-solid-drrect", "clip-path-ellipse-solid-drrect",
-            "clip-path-translated-solid-drrect", "clip-path-translated-asymmetric-solid-drrect", "clip-path-translated-ellipse-solid-drrect",
-            "clip-path-axis-x-translated-solid-drrect", "clip-path-axis-y-translated-asymmetric-solid-drrect",
-            "clip-path-negative-x-translated-ellipse-solid-drrect", "clip-path-negative-y-translated-solid-drrect",
-            "solid-triangle-path", "solid-concave-path", "even-odd-path-hole",
-            "winding-path-hole", "inverse-winding-triangle-path", "inverse-even-odd-path-hole",
-            "implicit-closure-triangle-path", "translated-triangle-path", "uniform-scaled-triangle-path",
-        ).filter { Files.exists(promotedRoot(repository).resolve(it)) }.forEach { removeScene(promotedRoot(repository), it) }
-        assertEquals(7, sceneDirectories(promotedRoot(repository)).size)
+        val historicalRenderIds = setOf(
+            "solid-card-stack",
+            "separable-blur-rect",
+            "translucent-card-overlap",
+            "scissor-overlay",
+            "stroke-rect-outline",
+        )
+        val historicalSceneIds = historicalRenderIds + setOf(
+            "custom-runtime-effect-unregistered-refusal",
+            "aggregate-memory-budget-refusal",
+        )
+        GpuEvidenceCatalog.cases
+            .map { it.descriptor.id.value }
+            .filterNot(historicalSceneIds::contains)
+            .forEach { removeScene(promotedRoot(repository), it) }
+        assertEquals(historicalSceneIds, sceneDirectories(promotedRoot(repository)))
 
         writeAllBundles(repository, COMMIT)
         val result = PromoteEvidenceCliRunner().run(

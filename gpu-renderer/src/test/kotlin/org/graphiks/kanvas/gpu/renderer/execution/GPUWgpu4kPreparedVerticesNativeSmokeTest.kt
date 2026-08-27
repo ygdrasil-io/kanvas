@@ -23,6 +23,7 @@ import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgramCompiler
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgramResult
 import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialLoweringContext
+import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUMaterialSourceKind
 import org.graphiks.kanvas.gpu.renderer.materials.stubPreparedMaterialProgram
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
@@ -64,6 +65,10 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskPhase
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
+import org.graphiks.kanvas.gpu.renderer.runtimeeffects.GPURuntimeEffectMaterialEvaluationInput
+import org.graphiks.kanvas.gpu.renderer.runtimeeffects.GPURuntimeEffectMaterialEvaluationResult
+import org.graphiks.kanvas.gpu.renderer.runtimeeffects.LinearGradientRTCPUOracle
+import org.graphiks.kanvas.gpu.renderer.runtimeeffects.LinearGradientRTDescriptor
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
@@ -207,6 +212,48 @@ class GPUWgpu4kPreparedVerticesNativeSmokeTest {
             fixture = GPUPreparedVerticesTestFixtures.barycentricColorTriangle(),
             indexed = false,
             material = material,
+        )
+    }
+
+    @Test
+    fun `registered linear gradient runtime effect materializes through the prepared WebGPU route`() {
+        // This must traverse GPUMaterialDescriptor.RuntimeEffect ->
+        // KanvasPreparedRuntimeEffectResolver -> GPUPreparedMaterialProgramCompiler ->
+        // prepared-vertices native materializer.  The generic registered-uniform rectangle
+        // cache is intentionally not involved: it is a separate legacy gradient route.
+        val uniforms = mapOf(
+            "start" to GPURuntimeEffectUniformValue.Float4(0f, 0f, 0f, 0f),
+            "end" to GPURuntimeEffectUniformValue.Float4(0f, 4f, 0f, 0f),
+            "startColor" to GPURuntimeEffectUniformValue.Float4(1f, 0f, 0f, 1f),
+            "endColor" to GPURuntimeEffectUniformValue.Float4(0f, 0f, 1f, 1f),
+        )
+        val material = compiledPreparedVerticesMaterial(
+            GPUMaterialDescriptor.RuntimeEffect(
+                effectId = LinearGradientRTDescriptor.effectId.value,
+                descriptorVersion = LinearGradientRTDescriptor.descriptorVersion.value,
+                uniforms = uniforms,
+            ),
+        )
+        assertEquals(GPUMaterialSourceKind.RuntimeEffect, material.sourceKind)
+        assertEquals(64, material.uniformBytes.size)
+        val fixture = GPUPreparedVerticesTestFixture.create(
+            positions = floatArrayOf(
+                0f, 0f, 4f, 0f, 0f, 4f,
+                4f, 0f, 4f, 4f, 0f, 4f,
+            ),
+            topology = GPUPreparedVerticesTopology.TRIANGLES,
+            pixelWidth = 4,
+            pixelHeight = 4,
+        )
+        nativeSmoke(
+            name = "registered-linear-gradient-runtime-effect",
+            fixture = fixture,
+            indexed = false,
+            material = material,
+            expected = registeredLinearGradientRuntimeEffectCpuOracle(
+                fixture,
+                material.uniformBytes.map(Int::toByte).toByteArray(),
+            ),
         )
     }
 
@@ -410,6 +457,14 @@ class GPUWgpu4kPreparedVerticesNativeSmokeTest {
                         rgba.joinToString(",") { byte -> (byte.toInt() and 0xff).toString() },
                 )
             }
+            if (name == "registered-linear-gradient-runtime-effect") {
+                println(
+                    "task11.runtime-effect oracleRgba=" +
+                        expected.joinToString(",") { byte -> (byte.toInt() and 0xff).toString() } +
+                        " actualRgba=" +
+                        rgba.joinToString(",") { byte -> (byte.toInt() and 0xff).toString() },
+                )
+            }
         } finally {
             runCatching { session.close() }
             GPUBackendRuntimeNativeFactory.dispose()
@@ -447,6 +502,38 @@ class GPUWgpu4kPreparedVerticesNativeSmokeTest {
                             .roundToInt().coerceIn(0, 255).toByte()
                     }
                     output[pixel + 3] = 255.toByte()
+                }
+            }
+        }
+    }
+
+    /** Independent CPU oracle for the registered runtime-effect descriptor, not its WGSL. */
+    private fun registeredLinearGradientRuntimeEffectCpuOracle(
+        fixture: GPUPreparedVerticesTestFixture,
+        uniformBytes: ByteArray,
+    ): ByteArray {
+        val coverage = GPUPreparedVerticesCpuOracle.renderVertices(fixture)
+        return coverage.copyOf().also { output ->
+            for (y in 0 until fixture.pixelHeight) {
+                for (x in 0 until fixture.pixelWidth) {
+                    val pixel = (y * fixture.pixelWidth + x) * 4
+                    if ((coverage[pixel + 3].toInt() and 0xff) == 0) continue
+                    val color = assertIs<GPURuntimeEffectMaterialEvaluationResult.Color>(
+                        LinearGradientRTCPUOracle.evaluateMaterial(
+                            GPURuntimeEffectMaterialEvaluationInput(
+                                uniformBytes = uniformBytes,
+                                localPositionX = x + 0.5f,
+                                localPositionY = y + 0.5f,
+                            ),
+                        ),
+                    )
+                    output[pixel] = (linearToSrgb(color.r) * 255f)
+                        .roundToInt().coerceIn(0, 255).toByte()
+                    output[pixel + 1] = (linearToSrgb(color.g) * 255f)
+                        .roundToInt().coerceIn(0, 255).toByte()
+                    output[pixel + 2] = (linearToSrgb(color.b) * 255f)
+                        .roundToInt().coerceIn(0, 255).toByte()
+                    output[pixel + 3] = (color.a * 255f).roundToInt().coerceIn(0, 255).toByte()
                 }
             }
         }

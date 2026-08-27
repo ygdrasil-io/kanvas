@@ -421,12 +421,10 @@ fn sample_stops_at(t: f32, count: u32, positions: ptr<function, array<vec4<f32>,
     ${if (linearPremultipliedStops) {
         "return (1.0 - u) * (*colors)[lo] + u * (*colors)[hi];"
     } else {
-        """
-        let c_lo_srgb = vec4f(pow((*colors)[lo].rgb, vec3f(1.0 / 2.2)), (*colors)[lo].a);
-        let c_hi_srgb = vec4f(pow((*colors)[hi].rgb, vec3f(1.0 / 2.2)), (*colors)[hi].a);
-        let mixed_srgb = (1.0 - u) * c_lo_srgb + u * c_hi_srgb;
-        return vec4f(pow(mixed_srgb.rgb, vec3f(2.2)), mixed_srgb.a);
-        """.trimIndent()
+        "let c_lo_srgb = vec4f(pow((*colors)[lo].rgb, vec3f(1.0 / 2.2)), (*colors)[lo].a);\n" +
+            "    let c_hi_srgb = vec4f(pow((*colors)[hi].rgb, vec3f(1.0 / 2.2)), (*colors)[hi].a);\n" +
+            "    let mixed_srgb = (1.0 - u) * c_lo_srgb + u * c_hi_srgb;\n" +
+            "    return vec4f(pow(mixed_srgb.rgb, vec3f(2.2)), mixed_srgb.a);"
     }}
 }
 """.trimIndent()

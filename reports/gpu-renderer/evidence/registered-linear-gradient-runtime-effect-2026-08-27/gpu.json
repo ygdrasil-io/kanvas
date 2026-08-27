@@ -1,0 +1,12 @@
+{
+  "effectId": "runtime.linear_gradient_rt",
+  "descriptorVersion": 2,
+  "backend": "WebGPU headless/offscreen",
+  "target": "rgba8unorm-srgb 4x4 (LinearPremul)",
+  "readback": "RGBA",
+  "submits": 1,
+  "readbackCopies": 1,
+  "rgba8Rows": [[240, 0, 99, 255], [207, 0, 165, 255], [165, 0, 207, 255], [99, 0, 240, 255]],
+  "executionTest": "GPUWgpu4kPreparedVerticesNativeSmokeTest.registered linear gradient runtime effect materializes through the prepared WebGPU route",
+  "adapter": "Apple M2 Max"
+}

@@ -48,7 +48,7 @@ internal data class GPUCorePrimitiveNativeCacheCounters(
 )
 
 /**
- * Ceiling for live session pipelines. The key space is closed: the 30-program universe plus the
+ * Ceiling for live session pipelines. The key space is closed: the 46-program fixed universe plus the
  * per-mode dst-read component identities (16 direct-uniform32 + 16 analytic-shape-uniform80
  * modes), the analytic shape/clip/intersection components, the coverage-mask and clip-stencil
  * producer/consumer lanes, and the path-stencil pair stay well under 128; the dst-copy

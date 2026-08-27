@@ -876,7 +876,11 @@ private fun Shader.toPreparedMaterial(
                 )
             } else {
                 val descriptor = toMaterial() as GPUMaterialDescriptor.LinearGradient
-                descriptor.gradientFactsRefusalReasonOrNull()?.let { reason ->
+                // Repeat is owned by the legacy CorePrimitive linear-gradient route. The
+                // prepared-material v2 route below is intentionally clamp-only, but it must
+                // not rewrite an otherwise representable legacy repeat descriptor into an
+                // Unsupported material before that route can see it.
+                descriptor.preparedV2LinearGradientRefusalReasonOrNull()?.let { reason ->
                     mapper.descriptorAssembly.preparedUnsupported(
                         reason = reason,
                         originalKind = GPUMaterialKind.LinearGradient,
@@ -964,7 +968,7 @@ private fun Shader.toPreparedMaterial(
                             localMatrix = composed,
                         ),
                     )
-                    mapped.gradientFactsRefusalReasonOrNull()?.let { reason ->
+                    mapped.preparedV2LinearGradientRefusalReasonOrNull()?.let { reason ->
                         mapper.descriptorAssembly.preparedUnsupported(
                             reason = reason,
                             originalKind = GPUMaterialKind.LinearGradient,
@@ -1041,6 +1045,10 @@ private fun Shader.toPreparedMaterial(
         )
     }
 }
+
+/** V2 validation applies only to its clamp-only prepared-material sub-route. */
+private fun GPUMaterialDescriptor.LinearGradient.preparedV2LinearGradientRefusalReasonOrNull() =
+    if (tileMode == "repeat") null else gradientFactsRefusalReasonOrNull()
 
 private fun Shader.Image.toPreparedImageMaterial(
     descriptorAssembly: GPUMaterialDescriptorAssemblySession,

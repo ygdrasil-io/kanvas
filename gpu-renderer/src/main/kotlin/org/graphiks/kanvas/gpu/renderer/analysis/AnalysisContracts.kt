@@ -2144,7 +2144,12 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
     /** Returns typed material refusal evidence before kind and capability admission checks. */
     private fun GPUMaterialDescriptor.analysisRefusalCodeOrNull(): String? =
         (this as? GPUMaterialDescriptor.Unsupported)?.reason?.diagnosticCode
-            ?: gradientFactsRefusalReasonOrNull()?.diagnosticCode
+            // CorePrimitive owns the legacy linear-gradient tile-mode ABI, including repeat.
+            // Defer only that route-specific validation; other prepared-material facts remain
+            // terminal before route selection.
+            ?: gradientFactsRefusalReasonOrNull(
+                deferLinearGradientTileModeToRoute = this is GPUMaterialDescriptor.LinearGradient,
+            )?.diagnosticCode
 
     /**
      * A bounded image-shader local transform samples through a clamp sampler,

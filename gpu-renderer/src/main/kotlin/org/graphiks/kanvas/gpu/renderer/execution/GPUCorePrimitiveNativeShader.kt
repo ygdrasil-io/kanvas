@@ -848,7 +848,7 @@ internal const val CORE_PRIMITIVE_DST_READ_NATIVE_SHADER_IDENTITY =
 internal const val CORE_PRIMITIVE_DST_READ_NATIVE_BINDING_LAYOUT_IDENTITY =
     "vertex-fragment-dynamic-uniform32-dst-read-v1"
 internal const val CORE_PRIMITIVE_ANALYTIC_SHAPE_DST_READ_NATIVE_SHADER_IDENTITY =
-    "core-primitive-analytic-shape-dst-read-device-geometry-wgsl-v1"
+    "core-primitive-analytic-shape-dst-read-device-geometry-wgsl-v2"
 internal const val CORE_PRIMITIVE_ANALYTIC_SHAPE_DST_READ_NATIVE_BINDING_LAYOUT_IDENTITY =
     "dynamic-uniform80-analytic-shape-dst-read-v1"
 internal const val CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY = "float32x2-uint32-triangle-list-v1"
@@ -856,7 +856,7 @@ internal const val CORE_PRIMITIVE_NATIVE_VERTEX_ENTRY_POINT = "vs_main"
 internal const val CORE_PRIMITIVE_NATIVE_COLOR_FRAGMENT_ENTRY_POINT = "fs_main"
 internal const val CORE_PRIMITIVE_NATIVE_STENCIL_FRAGMENT_ENTRY_POINT = "fs_stencil"
 internal const val CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_SHADER_IDENTITY =
-    "core-primitive-analytic-shape-device-geometry-wgsl-v1"
+    "core-primitive-analytic-shape-device-geometry-wgsl-v2"
 internal const val CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_BINDING_LAYOUT_IDENTITY =
     "dynamic-uniform80-analytic-shape-v1"
 internal const val CORE_PRIMITIVE_ANALYTIC_DRRECT_NATIVE_SHADER_IDENTITY =

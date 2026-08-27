@@ -146,15 +146,31 @@ class GPUMaterialMapperTest {
     }
 
     @Test
-    fun `prepared linear gradient refuses tile modes and stop counts outside the bounded route`() {
+    fun `legacy repeat is retained while prepared v2 refuses other tile modes and stop counts`() {
         val twoStops = listOf(
             GradientStop(0f, ColorARGB.Red),
             GradientStop(1f, ColorARGB.Blue),
         )
+        val legacyRepeat = assertIs<GPUMaterialDescriptor.LinearGradient>(
+            Paint(
+                shader = Shader.LinearGradient(
+                    start = Point2F32(0f, 0f), end = Point2F32(8f, 0f),
+                    stops = listOf(
+                        twoStops.first(),
+                        GradientStop(0.5f, ColorARGB.White),
+                        twoStops.last(),
+                    ),
+                    tileMode = TileMode.REPEAT,
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+        assertEquals("repeat", legacyRepeat.tileMode)
+        assertEquals(listOf(0f, 0.5f, 1f), legacyRepeat.allStopPositions?.toList())
+
         listOf(
             Shader.LinearGradient(
                 start = Point2F32(0f, 0f), end = Point2F32(8f, 0f),
-                stops = twoStops, tileMode = TileMode.REPEAT,
+                stops = twoStops, tileMode = TileMode.MIRROR,
             ) to "unsupported.material.mapping.linear_gradient_tile_mode",
             Shader.LinearGradient(
                 start = Point2F32(0f, 0f), end = Point2F32(8f, 0f),

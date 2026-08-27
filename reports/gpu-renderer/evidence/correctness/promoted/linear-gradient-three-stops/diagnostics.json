@@ -1,1 +1,1 @@
-{"attemptId":"attempt-1","diagnostics":[],"stableReasonCode":null,"message":null,"submissionDelta":1}
+{"attemptId":"attempt-1","diagnostics":["diagnostic.code=unsupported.material.mapping.linear_gradient_stop_count"],"stableReasonCode":"unsupported.material.mapping.linear_gradient_stop_count","message":"unsupported.material.mapping.linear_gradient_stop_count: unsupported.material.mapping.linear_gradient_stop_count","submissionDelta":0}

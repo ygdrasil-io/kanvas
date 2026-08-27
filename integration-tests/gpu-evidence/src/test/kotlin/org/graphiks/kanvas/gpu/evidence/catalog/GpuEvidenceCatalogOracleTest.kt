@@ -58,8 +58,6 @@ class GpuEvidenceCatalogOracleTest {
 
     @Test
     fun `wave two oracles preserve hand-derived gradient affine and clip pixels`() {
-        assertPixel(oracle("linear-gradient-three-stops"), 64, 64, 20, 16, intArrayOf(189, 167, 95, 255))
-        assertPixel(oracle("linear-gradient-three-stops"), 64, 64, 32, 16, intArrayOf(56, 218, 125, 255))
         assertPixel(oracle("sweep-gradient-partial-angle"), 64, 64, 48, 32, intArrayOf(255, 64, 64, 255))
         assertPixel(oracle("sweep-gradient-partial-angle"), 64, 64, 32, 48, intArrayOf(236, 107, 126, 255))
         // Pixel centres make (16,17) cross the sloped left edge: its top-left

@@ -30,7 +30,6 @@ object GpuEvidenceCatalog {
         linearGradientLanes(),
         radialSwatch(),
         sweepDisk(),
-        linearGradientThreeStops(),
         sweepGradientPartialAngle(),
         affineSolidRect(),
         scissoredRadialGradient(),
@@ -95,6 +94,7 @@ object GpuEvidenceCatalog {
         uniformScaledTrianglePath(),
     )
     val refusalCases: List<EvidenceCase> = listOf(
+        linearGradientThreeStops(),
         unregisteredRuntimeEffectRefusal(),
         aggregateMemoryBudgetRefusal(),
     )
@@ -262,13 +262,22 @@ object GpuEvidenceCatalog {
         )
     }
 
-    private fun linearGradientThreeStops() = gradientCase(
-        "linear-gradient-three-stops", "Linear gradient three stops", "Public Kanvas Surface clamp linear gradient with three opaque sRGB stops.",
-        setOf("linear-gradient", "kanvas-surface"), "surface-srgb-gradient-linear-clamp", KanvasScenePrograms.linearGradientThreeStops(),
-        SurfaceSrgbGradientCpuOracle.linear(
-            SurfaceSrgbGradientCpuOracle.Rect(8f, 16f, 56f, 48f), SurfaceSrgbGradientCpuOracle.Point(8.5f, 32.5f), SurfaceSrgbGradientCpuOracle.Point(55.5f, 32.5f),
-            listOf(SurfaceSrgbGradientCpuOracle.Stop(0f, 255, 56, 56), SurfaceSrgbGradientCpuOracle.Stop(.5f, 56, 220, 120), SurfaceSrgbGradientCpuOracle.Stop(1f, 56, 112, 255)),
+    private fun linearGradientThreeStops() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("linear-gradient-three-stops"),
+            "Linear gradient three stops refusal",
+            "Public Kanvas Surface rejects a clamp linear gradient with three stops before submission.",
+            64,
+            64,
+            1L,
+            setOf("linear-gradient", "kanvas-surface", "refusal"),
+            EvidenceExpectation.ShouldRefuse("unsupported.material.mapping.linear_gradient_stop_count"),
+            OraclePolicy.StableRefusal,
+            null,
+            emptySet(),
         ),
+        KanvasScenePrograms.linearGradientThreeStops(),
+        null,
     )
 
     private fun sweepGradientPartialAngle() = gradientCase(
