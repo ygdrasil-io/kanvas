@@ -9,6 +9,18 @@ rendus dans cette texture, puis le restore emploie un blend WebGPU fixed-functio
 premultiplied échantillonnée avant le blend. Le restore ne lit jamais la cible
 parente (`destinationRead=none`) et n’échantillonne jamais son attachment actif.
 
+Le materializer natif conserve volontairement les coordonnées enfant dans
+l’espace de la scène. La texture de backing est donc dimensionnée à la scène,
+et non au seul rectangle composite. Ce coût est maintenant explicite dans le
+contrat : `PrepareLayerTarget.byteEstimate`, le plan natif et la texture créée
+utilisent tous le même extent scène. Avant toute création de texture, le
+preflight ajoute chaque backing de layer au budget agrégé configuré du frame.
+Le test `1×1` dans une scène `4096×4096` le démontre : bounds logiques
+`[17,29)-[18,30)`, backing de `67 108 864` octets, total de `134 217 728`
+octets pour un budget local de test de `100 663 296`; refus stable
+`unsupported.prepared-surface.layer-target-budget`. Ce budget de test est local
+à la preuve, sans modification de seuil ni de budget global.
+
 La nouvelle fixture `bounded-save-layer-src-opacity-isolation-v1` verrouille le
 cas `SRC` réellement matérialisé : cible 4×4 headless/offscreen, parent bleu
 opaque, enfant rouge dans la région bornée `[1,1)-[3,3)`, alpha de layer 0,5.
@@ -44,6 +56,7 @@ Les artefacts CPU/GPU/diff/stats/route/refus sont sous
 ```text
 rtk ./gradlew --no-daemon --rerun-tasks :gpu-renderer:test \
   --tests org.graphiks.kanvas.gpu.renderer.execution.GPUWgpu4kLayerTargetCompositeSmokeTest \
+  --tests org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedSaveLayerFrameHandlingTest \
   --tests org.graphiks.kanvas.gpu.renderer.layers.SaveLayerIsolatedTargetGateTest \
   --tests org.graphiks.kanvas.gpu.renderer.layers.SaveLayerLiveMaterializationTest
 

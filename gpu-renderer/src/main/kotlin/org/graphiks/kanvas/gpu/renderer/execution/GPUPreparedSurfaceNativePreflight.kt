@@ -486,6 +486,12 @@ internal class GPUPreparedSurfaceLayerTargetPlan(
     val childrenRenderStepIndex: Int,
     val compositeStepIndex: Int,
     val bounds: GPUPixelBounds,
+    /**
+     * Backing extent actually allocated by the native materializer. Layer children use
+     * scene-space coordinates, so this intentionally differs from [bounds].
+     */
+    val allocationBounds: GPUPixelBounds,
+    val allocationByteEstimate: Long,
 ) {
     init {
         require(targetLabel.isNotBlank() &&
@@ -493,7 +499,9 @@ internal class GPUPreparedSurfaceLayerTargetPlan(
             childrenRenderStepIndex >= 0 &&
             compositeStepIndex >= 0 &&
             childrenRenderStepIndex < compositeStepIndex &&
-            !bounds.isEmpty
+            !bounds.isEmpty &&
+            !allocationBounds.isEmpty &&
+            allocationByteEstimate >= 0L
         ) {
             "A prepared layer target must precede its children render and composite steps"
         }
@@ -3841,12 +3849,36 @@ internal class GPUPreparedSurfaceNativePreflight(
                     "Prepared layer children must resolve to one exact non-empty device bounds union.",
                     mapOf("targetLabel" to prepare.targetLabel),
                 )
+            val allocationBounds = preparedSurfaceSceneTargetAllocationBounds(framePlan)
+                ?: return refused(
+                    "invalid.prepared-surface.scene-target-descriptor",
+                    "Prepared layer targets require one exact scene texture allocation extent.",
+                )
+            val allocationByteEstimate = preparedSurfaceTextureByteEstimate(allocationBounds)
+                ?: return refused(
+                    "invalid.prepared-surface.layer-target-budget",
+                    "Prepared layer target backing allocation byte accounting overflowed.",
+                    mapOf("targetLabel" to prepare.targetLabel),
+                )
+            if (prepare.byteEstimate != allocationByteEstimate) {
+                return refused(
+                    "invalid.prepared-surface.layer-target-byte-estimate",
+                    "Prepared layer target byte estimate must match its scene-sized backing allocation.",
+                    mapOf(
+                        "targetLabel" to prepare.targetLabel,
+                        "declaredBytes" to prepare.byteEstimate.toString(),
+                        "allocationBytes" to allocationByteEstimate.toString(),
+                    ),
+                )
+            }
             GPUPreparedSurfaceLayerTargetPlan(
                 targetLabel = prepare.targetLabel,
                 prepareStepIndex = index,
                 childrenRenderStepIndex = childrenRenderIndex,
                 compositeStepIndex = compositeIndex,
                 bounds = bounds,
+                allocationBounds = allocationBounds,
+                allocationByteEstimate = allocationByteEstimate,
             )
         }
         if (layerTargets.map { it.targetLabel }.distinct().size != layerTargets.size) {
@@ -3855,6 +3887,10 @@ internal class GPUPreparedSurfaceNativePreflight(
                 "Prepared layer targets must remain distinct.",
             )
         }
+        validatePreparedSurfaceSceneSizedLayerTargetBudget(
+            frameBudget = framePlan.memoryBudget,
+            layerTargets = layerTargets,
+        )?.let { return it }
         val compositeRuns = framePlan.steps.mapIndexedNotNull { index, step ->
             val composite = step as? GPUFrameStep.LayerCompositeRenderStep
                 ?: return@mapIndexedNotNull null
@@ -5531,6 +5567,91 @@ private fun preparedSurfaceLayerChildrenBounds(
     }
     return union
 }
+
+/**
+ * The closed native saveLayer route currently retains scene-space child coordinates. Its backing
+ * texture is therefore scene-sized even when the composite quad is tightly bounded. Keep this
+ * accounting beside preflight so materialization cannot allocate more than the frame admitted.
+ */
+internal fun validatePreparedSurfaceSceneSizedLayerTargetBudget(
+    frameBudget: org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlan,
+    layerTargets: List<GPUPreparedSurfaceLayerTargetPlan>,
+): GPUPreparedSurfaceNativePreflightResult.Refused? {
+    if (layerTargets.isEmpty()) return null
+    if (frameBudget.configuredAggregateBudgetBytes <= 0L ||
+        !GPUFrameMemoryBudgetPlanner.hasExactLimitIndependentFacts(frameBudget)
+    ) {
+        return GPUPreparedSurfaceNativePreflightResult.Refused(
+            code = "invalid.prepared-surface.layer-target-budget",
+            message = "Prepared layer targets require exact positive aggregate frame budget facts.",
+        )
+    }
+    val layerAllocationBytes = try {
+        layerTargets.fold(0L) { total, layer ->
+            val expectedBytes = preparedSurfaceTextureByteEstimate(layer.allocationBounds)
+                ?: throw ArithmeticException("layer target byte estimate overflow")
+            if (layer.allocationByteEstimate != expectedBytes) {
+                throw IllegalArgumentException("layer target byte estimate mismatch")
+            }
+            Math.addExact(total, expectedBytes)
+        }
+    } catch (_: ArithmeticException) {
+        return GPUPreparedSurfaceNativePreflightResult.Refused(
+            code = "invalid.prepared-surface.layer-target-budget",
+            message = "Prepared layer target backing allocation byte accounting overflowed.",
+        )
+    } catch (_: IllegalArgumentException) {
+        return GPUPreparedSurfaceNativePreflightResult.Refused(
+            code = "invalid.prepared-surface.layer-target-budget",
+            message = "Prepared layer target backing allocation bytes must match the allocation extent.",
+        )
+    }
+    val aggregateBytes = try {
+        Math.addExact(
+            Math.addExact(frameBudget.targetResidentBytes, frameBudget.peakFrameTransientBytes),
+            layerAllocationBytes,
+        )
+    } catch (_: ArithmeticException) {
+        return GPUPreparedSurfaceNativePreflightResult.Refused(
+            code = "invalid.prepared-surface.layer-target-budget",
+            message = "Prepared layer target aggregate byte accounting overflowed.",
+        )
+    }
+    if (aggregateBytes <= frameBudget.configuredAggregateBudgetBytes) return null
+
+    val firstLayer = layerTargets.first()
+    return GPUPreparedSurfaceNativePreflightResult.Refused(
+        code = "unsupported.prepared-surface.layer-target-budget",
+        message = "Scene-sized prepared layer target allocation exceeds the configured aggregate frame budget.",
+        facts = mapOf(
+            "layerAllocationBytes" to firstLayer.allocationByteEstimate.toString(),
+            "layerAllocationTotalBytes" to layerAllocationBytes.toString(),
+            "aggregateBytes" to aggregateBytes.toString(),
+            "configuredAggregateBudgetBytes" to frameBudget.configuredAggregateBudgetBytes.toString(),
+            "layerBounds" to firstLayer.bounds.preparedSurfaceBoundsLabel(),
+            "allocationBounds" to firstLayer.allocationBounds.preparedSurfaceBoundsLabel(),
+        ),
+    )
+}
+
+private fun preparedSurfaceSceneTargetAllocationBounds(framePlan: GPUFramePlan): GPUPixelBounds? =
+    framePlan.steps
+        .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+        .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+        .singleOrNull { request -> request.role == GPUFrameResourceRole.SceneTarget }
+        ?.descriptor
+        ?.let { descriptor -> descriptor as? GPUFrameTextureDescriptor }
+        ?.logicalBounds
+
+private fun preparedSurfaceTextureByteEstimate(bounds: GPUPixelBounds): Long? =
+    try {
+        bounds.checkedByteSize(bytesPerPixel = 4, sampleCount = 1)
+    } catch (_: ArithmeticException) {
+        null
+    }
+
+private fun GPUPixelBounds.preparedSurfaceBoundsLabel(): String =
+    "$left,$top,$right,$bottom"
 
 private fun preparedSurfaceSha256(bytes: ByteArray): String =
     MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { byte ->

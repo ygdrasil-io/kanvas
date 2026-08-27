@@ -66,6 +66,11 @@ import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_RENDER_PIPELINE
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveTargetStateHash
 import org.graphiks.kanvas.gpu.renderer.recording.PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION
 import org.graphiks.kanvas.gpu.renderer.resources.GPUConcreteResourceProvider
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryAllocation
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlanner
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetRequest
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryResourceKind
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
@@ -609,6 +614,49 @@ class GPUWgpu4kLayerTargetCompositeSmokeTest {
     }
 
     @Test
+    fun `native preflight budgets the scene-sized backing allocation of a 1x1 layer in a 4096 scene`() {
+        val sceneBounds = GPUPixelBounds(0, 0, 4_096, 4_096)
+        val sceneBytes = 4_096L * 4_096L * 4L
+        val frameBudget = GPUFrameMemoryBudgetPlanner.plan(
+            GPUFrameMemoryBudgetRequest(
+                allocations = listOf(
+                    GPUFrameMemoryAllocation(
+                        label = "prepared-surface.scene-target",
+                        category = GPUFrameMemoryCategory.CanonicalTarget,
+                        bytes = sceneBytes,
+                        resourceKind = GPUFrameMemoryResourceKind.Texture2D,
+                        extent = sceneBounds,
+                    ),
+                ),
+                configuredAggregateBudgetBytes = 96L * 1024L * 1024L,
+                deviceLimits = GPULimits(8_192, 256, 256, maxBufferSize = 1L shl 30),
+            ),
+        )
+        val result = validatePreparedSurfaceSceneSizedLayerTargetBudget(
+            frameBudget = frameBudget,
+            layerTargets = listOf(
+                GPUPreparedSurfaceLayerTargetPlan(
+                    targetLabel = "layer-target:one-pixel",
+                    prepareStepIndex = 1,
+                    childrenRenderStepIndex = 2,
+                    compositeStepIndex = 3,
+                    bounds = GPUPixelBounds(17, 29, 18, 30),
+                    allocationBounds = sceneBounds,
+                    allocationByteEstimate = sceneBytes,
+                ),
+            ),
+        )
+
+        val refused = assertIs<GPUPreparedSurfaceNativePreflightResult.Refused>(result)
+        assertEquals("unsupported.prepared-surface.layer-target-budget", refused.code)
+        assertEquals("67108864", refused.facts["layerAllocationBytes"])
+        assertEquals("134217728", refused.facts["aggregateBytes"])
+        assertEquals("100663296", refused.facts["configuredAggregateBudgetBytes"])
+        assertEquals("17,29,18,30", refused.facts["layerBounds"])
+        assertEquals("0,0,4096,4096", refused.facts["allocationBounds"])
+    }
+
+    @Test
     fun `bounded layer composite with multiply blend is refused with the stable blend code`() {
         val backendSession = GPUBackendRuntimeNativeFactory.createOrNull()
         assumeTrue(backendSession != null)
@@ -780,7 +828,7 @@ class GPUWgpu4kLayerTargetCompositeSmokeTest {
                     targetLabel = LAYER_TARGET.value,
                     descriptorHash = "sha256:layer-test",
                     usageLabel = "render_attachment,texture_binding",
-                    byteEstimate = 16384L,
+                    byteEstimate = 64L,
                 ),
                 GPUPassCommand.RenderLayerChildren(
                     scopeLabel = "layer:test",
@@ -802,7 +850,7 @@ class GPUWgpu4kLayerTargetCompositeSmokeTest {
                     targetLabel = SECOND_LAYER_TARGET.value,
                     descriptorHash = "sha256:layer-second",
                     usageLabel = "render_attachment,texture_binding",
-                    byteEstimate = 16384L,
+                    byteEstimate = 64L,
                 ),
                 GPUPassCommand.RenderLayerChildren(
                     scopeLabel = "layer:second",
@@ -1245,7 +1293,7 @@ class GPUWgpu4kLayerTargetCompositeSmokeTest {
                     targetLabel = LAYER_TARGET.value,
                     descriptorHash = "sha256:layer-test",
                     usageLabel = "render_attachment,texture_binding",
-                    byteEstimate = 16384L,
+                    byteEstimate = 64L,
                 ),
                 GPUPassCommand.RenderLayerChildren(
                     scopeLabel = "layer:test",

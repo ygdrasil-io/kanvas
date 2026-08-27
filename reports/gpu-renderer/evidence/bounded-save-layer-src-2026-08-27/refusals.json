@@ -17,6 +17,15 @@
     "unsupported.layer.active_attachment_sampled and unsupported.layer.parent_read_aliasing for aliasing",
     "unsupported.prepared-surface.layer-nesting for nested layers"
   ],
+  "allocationBudget": {
+    "fixture": "1x1 layer bounds [17,29)-[18,30) in a 4096x4096 scene",
+    "sceneTargetBytes": 67108864,
+    "sceneSizedLayerBackingBytes": 67108864,
+    "aggregateBytes": 134217728,
+    "configuredAggregateBudgetBytes": 100663296,
+    "terminalDiagnostic": "unsupported.prepared-surface.layer-target-budget",
+    "reason": "the native materializer allocates scene-sized backing storage; preflight refuses before texture creation when that real allocation would exceed the frame budget"
+  },
   "nonClaims": [
     "No GM is promoted by this fixture.",
     "AA, arbitrary blend modes, destination reads, filters, backdrop initialization, F16, and nested layers remain outside this subset.",

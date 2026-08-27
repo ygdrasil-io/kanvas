@@ -273,14 +273,13 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                 String,
                 MaterializedLayerTarget
                 >()
-            val sceneLayerBounds = preparedSurfaceSceneTargetBounds(framePlan)
             accepted.layerTargets.forEach { layer ->
                 val texture = setupLedger.track(
                     device.createTexture(
                         TextureDescriptor(
                             size = Extent3D(
-                                sceneLayerBounds.width.toUInt(),
-                                sceneLayerBounds.height.toUInt(),
+                                layer.allocationBounds.width.toUInt(),
+                                layer.allocationBounds.height.toUInt(),
                                 1u,
                             ),
                             format = GPUTextureFormat.RGBA8Unorm,

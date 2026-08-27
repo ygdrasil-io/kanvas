@@ -5,6 +5,14 @@
   "logicalOperations": 2,
   "renderPasses": 3,
   "passOrder": ["scene-parent", "isolated-layer-child", "layer-SRC-composite"],
+  "layerAllocation": {
+    "logicalCompositeBounds": [1, 1, 3, 3],
+    "logicalBytes": 16,
+    "backingExtent": [4, 4],
+    "backingBytes": 64,
+    "prepareLayerTargetByteEstimate": 64,
+    "accounting": "scene-sized backing allocation is declared before native texture creation"
+  },
   "submits": 1,
   "readbackCopies": 1,
   "opsRefused": 0,
