@@ -1476,6 +1476,16 @@ private fun GPUClipCoveragePlan.Mask.toMaskExecutionPlan(
             )
     }
     if (singleHardPathClip != null) {
+        when (singleHardPathClip.transformClass) {
+            "non-finite" -> return clipExecutionRefusal(
+                code = "unsupported.transform.non_finite",
+                message = "Path clip capture-time CTM must be finite.",
+            )
+            "singular-affine" -> return clipExecutionRefusal(
+                code = "unsupported.transform.affine_singular",
+                message = "Path clip capture-time affine CTM must be non-singular.",
+            )
+        }
         if (!capabilities.supportsClipCapability(PATH_FILL_STENCIL_COVER)) {
             return clipExecutionRefusal(
                 code = "unsupported.clip.stencil_unavailable",

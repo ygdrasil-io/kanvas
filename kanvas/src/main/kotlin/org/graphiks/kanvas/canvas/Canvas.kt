@@ -474,14 +474,17 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
             )
     }
 
-    private fun captureClipPath(path: Path, op: ClipOp, antiAlias: Boolean): ClipStackOp =
-        ClipStackOp.PathOp(
-            if (!currentTransform.hasPerspective()) path.transform(currentTransform) else path,
+    private fun captureClipPath(path: Path, op: ClipOp, antiAlias: Boolean): ClipStackOp {
+        val transformClass = currentTransform.captureTransformClass()
+        val terminalCapture = transformClass in setOf("non-finite", "singular-affine", "perspective")
+        return ClipStackOp.PathOp(
+            if (terminalCapture) path else path.transform(currentTransform),
             op,
             antiAlias,
-            perspectiveCaptureRefusal = currentTransform.hasPerspective(),
-            transformClass = currentTransform.captureTransformClass(),
+            perspectiveCaptureRefusal = transformClass == "perspective",
+            transformClass = transformClass,
         )
+    }
 
     private fun appendClip(
         previous: ClipStack,
@@ -507,10 +510,14 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
 }
 
 private fun Matrix3x3F32.captureTransformClass(): String = when {
+    !floatValues().all(Float::isFinite) -> "non-finite"
     hasPerspective() -> "perspective"
+    sx * sy - kx * ky == 0f -> "singular-affine"
     this == Matrix3x3F32.Identity -> "identity"
     kx == 0f && ky == 0f && sx == 1f && sy == 1f -> "translate"
     kx == 0f && ky == 0f && sx == sy && sx > 0f -> "uniform-positive-scale-translate"
     kx == 0f && ky == 0f && tx == 0f && ty == 0f -> "scale"
     else -> "affine"
 }
+
+private fun Matrix3x3F32.floatValues(): FloatArray = floatArrayOf(sx, kx, tx, ky, sy, ty, persp0, persp1, persp2)

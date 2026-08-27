@@ -1133,6 +1133,35 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
+    fun `public singular and non finite hard path clip transforms refuse before submission`() {
+        requireWebGpu()
+        val session = requireNotNull(GPUBackendRuntimeFactory.createOrNull())
+        val submissionsBefore = session.runtimeTelemetry.submissions
+        val cases = listOf(
+            "singular" to 0f to "unsupported.transform.affine_singular",
+            "nan" to Float.NaN to "unsupported.transform.non_finite",
+            "infinity" to Float.POSITIVE_INFINITY to "unsupported.transform.non_finite",
+        )
+
+        cases.forEach { (labelAndScale, expectedCode) ->
+            val (label, scaleX) = labelAndScale
+            val surface = Surface(32, 32)
+            surface.canvas {
+                save()
+                scale(scaleX, 1f)
+                clipPath(Path().apply { addRect(RectF32(4f, 4f, 28f, 28f)) }, ClipOp.INTERSECT, antiAlias = false)
+                resetMatrix()
+                drawColor(ColorARGB.Red)
+                restore()
+            }
+
+            val failure = assertFailsWith<GPUPreparedSurfaceTerminalException>(label) { surface.render() }
+            assertEquals(expectedCode, failure.diagnostic.code.value, label)
+            assertEquals(submissionsBefore, session.runtimeTelemetry.submissions, label)
+        }
+    }
+
+    @Test
     fun `adapter backed inverse difference clip preserves fill exterior and AA edge`() {
         requireWebGpu()
         val inverseRect = Path().apply {

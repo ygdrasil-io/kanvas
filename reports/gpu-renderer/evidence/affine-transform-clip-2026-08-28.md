@@ -18,6 +18,8 @@ RGBA8 exact et les artefacts générés incluent capture, diff, stats et route.
 Les matrices non finies, singulières et avec perspective refusent avant toute
 soumission avec respectivement `unsupported.transform.non_finite`,
 `unsupported.transform.affine_singular` et `unsupported.transform.perspective`.
+Les tests publics de clip couvrent `scale(0f, 1f)`, `scale(NaN, 1f)` et
+`scale(+Inf, 1f)` suivis de `clipPath(...)`, `resetMatrix()` et `drawColor`.
 
 Le clip hard à skew, rotation ou concat générale reste explicitement hors de
 cette promotion: `unsupported.clip.path_transform`, avant toute soumission.
