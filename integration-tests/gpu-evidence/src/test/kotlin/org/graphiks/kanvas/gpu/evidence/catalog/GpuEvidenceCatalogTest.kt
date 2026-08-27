@@ -32,7 +32,7 @@ import org.graphiks.math.matrix.Matrix3x3F32
 
 class GpuEvidenceCatalogTest {
     @Test
-    fun `catalog separates seventy-two public surface renders from four refusals`() {
+    fun `catalog separates seventy-five public surface renders from four refusals`() {
         val cases = GpuEvidenceCatalog.cases
 
         assertEquals(
@@ -46,7 +46,7 @@ class GpuEvidenceCatalogTest {
                 "linear-gradient-lanes",
                 "radial-swatch",
                 "sweep-disk",
-                "sweep-gradient-partial-angle", "affine-solid-rect", "affine-path-clip-color", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
+                "sweep-gradient-partial-angle", "affine-solid-rect", "basic-primitives-valid-alpha", "basic-primitives-empty-and-out-of-bounds", "basic-primitives-points", "affine-path-clip-color", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
                 "scaled-solid-rrect",
                 "solid-drrect-hole",
                 "asymmetric-solid-rrect",
@@ -122,7 +122,7 @@ class GpuEvidenceCatalogTest {
                 "linear-gradient-lanes",
                 "radial-swatch",
                 "sweep-disk",
-                "sweep-gradient-partial-angle", "affine-solid-rect", "affine-path-clip-color", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
+                "sweep-gradient-partial-angle", "affine-solid-rect", "basic-primitives-valid-alpha", "basic-primitives-empty-and-out-of-bounds", "basic-primitives-points", "affine-path-clip-color", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
                 "scaled-solid-rrect",
                 "solid-drrect-hole",
                 "asymmetric-solid-rrect",
@@ -192,11 +192,11 @@ class GpuEvidenceCatalogTest {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            List(72) { "kanvas.surface.render" },
+            List(75) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
-        assertEquals(72, GpuEvidenceCatalog.renderCases.size)
-        assertEquals(76, GpuEvidenceCatalog.cases.size)
+        assertEquals(75, GpuEvidenceCatalog.renderCases.size)
+        assertEquals(79, GpuEvidenceCatalog.cases.size)
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
 
         val solid = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "solid-card-stack" })
@@ -318,7 +318,7 @@ class GpuEvidenceCatalogTest {
             "linear-gradient-lanes",
             "radial-swatch",
             "sweep-disk",
-            "sweep-gradient-partial-angle", "affine-solid-rect", "affine-path-clip-color", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
+            "sweep-gradient-partial-angle", "affine-solid-rect", "basic-primitives-valid-alpha", "basic-primitives-empty-and-out-of-bounds", "basic-primitives-points", "affine-path-clip-color", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
             "scaled-solid-rrect",
             "solid-drrect-hole",
             "asymmetric-solid-rrect",
@@ -415,6 +415,9 @@ class GpuEvidenceCatalogTest {
                 "sweep-disk" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-sweep-clamp", 2),
                 "sweep-gradient-partial-angle" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-sweep-clamp", 2),
                 "affine-solid-rect" to OraclePolicy.GeneratedCpu("reference-raster-affine-solid-rect", 1),
+                "basic-primitives-valid-alpha" to OraclePolicy.GeneratedCpu("surface-srgb-basic-primitives-alpha", 1),
+                "basic-primitives-empty-and-out-of-bounds" to OraclePolicy.GeneratedCpu("reference-raster-basic-primitive-bounds", 1),
+                "basic-primitives-points" to OraclePolicy.GeneratedCpu("reference-raster-draw-points-squares", 1),
                 "affine-path-clip-color" to OraclePolicy.GeneratedCpu("surface-srgb-affine-path-clip-pixel-center", 1),
                 "scissored-radial-gradient" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-radial-clamp", 2),
                 "repeat-gradient-refusal" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-linear-repeat", 2),
@@ -494,6 +497,9 @@ class GpuEvidenceCatalogTest {
                 "sweep-disk" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
                 "sweep-gradient-partial-angle" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
                 "affine-solid-rect" to ComparisonPolicy(0, 100.0, 1, "Exact RGBA8 output from hand-derived inverse affine pixel-center membership."),
+                "basic-primitives-valid-alpha" to ComparisonPolicy(1, 99.0, 1, "Independent straight-sRGB premultiplied SrcOver oracle; one RGBA8 rounding unit is tolerated."),
+                "basic-primitives-empty-and-out-of-bounds" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 target clipping and no-op semantics."),
+                "basic-primitives-points" to ComparisonPolicy(0, 100.0, 1, "Exact opaque four-pixel-wide point footprints after target clipping."),
                 "affine-path-clip-color" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent device-space affine rectangle clip membership."),
                 "scissored-radial-gradient" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
                 "repeat-gradient-refusal" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),

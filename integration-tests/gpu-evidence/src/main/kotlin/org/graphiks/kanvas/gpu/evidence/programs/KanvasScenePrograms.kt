@@ -7,6 +7,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.pipeline.ClipOp
+import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.math.color.ColorARGB
@@ -24,6 +25,39 @@ object KanvasScenePrograms {
         drawColor(BACKGROUND)
         drawRect(RectF32.ofLTRB(8f, 10f, 56f, 34f), Paint.fill(ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)))
         drawRect(RectF32.ofLTRB(14f, 38f, 50f, 54f), Paint.fill(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)))
+    })
+
+    fun basicPrimitivesValidAlpha() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        clear(ColorARGB.Transparent)
+        drawColor(ColorARGB.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f, .5f))
+        drawRect(
+            RectF32.ofLTRB(8f, 12f, 56f, 52f),
+            Paint.fill(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f, .5f)).copy(antiAlias = false),
+        )
+    })
+
+    fun basicPrimitivesEmptyAndOutOfBounds() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        drawRect(RectF32.ofLTRB(12f, 12f, 12f, 32f), Paint.fill(ColorARGB.Red).copy(antiAlias = false))
+        drawRRect(
+            RRectF32.of(RectF32.ofLTRB(-32f, -32f, -8f, -8f), radius = 4f),
+            Paint.fill(ColorARGB.Red).copy(antiAlias = false),
+        )
+        drawDRRect(
+            RRectF32.of(RectF32.ofLTRB(72f, 72f, 104f, 104f), radius = 6f),
+            RRectF32.of(RectF32.ofLTRB(80f, 80f, 96f, 96f), radius = 3f),
+            Paint.fill(ColorARGB.Red).copy(antiAlias = false),
+        )
+        drawRect(RectF32.ofLTRB(-8f, -8f, 4f, 4f), Paint.fill(ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)).copy(antiAlias = false))
+    })
+
+    fun basicPrimitivesPoints() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        drawPoints(
+            PointMode.POINTS,
+            listOf(Point2F32(10f, 12f), Point2F32(30f, 32f), Point2F32(62f, 62f), Point2F32(-6f, -6f)),
+            Paint.stroke(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f), 4f).copy(antiAlias = false),
+        )
     })
 
     fun separableBlurRect() = KanvasSurfaceProgram(ROUTE_ID, record = {
