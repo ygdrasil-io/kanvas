@@ -24,7 +24,7 @@ class MaskBlurPlanTest {
 
     @Test
     fun `negative and non-finite sigma refuse stably`() {
-        listOf(-0.1f, Float.NaN, Float.POSITIVE_INFINITY).forEach { sigma ->
+        listOf(-0.1f, Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY).forEach { sigma ->
             assertEquals(
                 "unsupported.mask-filter.blur.sigma",
                 assertIs<MaskBlurPlan.Refused>(plan(sigma = sigma)).code,
@@ -42,19 +42,22 @@ class MaskBlurPlanTest {
     }
 
     @Test
-    fun `large blur reduces until direct sigma limit`() {
-        val result = assertIs<MaskBlurPlan.Ready>(plan(sigma = 48f))
+    fun `maximum admitted sigma uses the complete bounded kernel`() {
+        val result = assertIs<MaskBlurPlan.Ready>(plan(sigma = MAX_MASK_BLUR_SIGMA))
 
-        assertEquals(0.25f, result.scale)
+        assertEquals(1f, result.scale)
         assertEquals(12f, result.effectiveSigma)
+        assertEquals(MAX_MASK_BLUR_TAPS, blurKernelUniform(result).tapCount)
     }
 
     @Test
-    fun `large API value clamps to Skia compatible sigma`() {
-        val result = assertIs<MaskBlurPlan.Ready>(plan(sigma = 200f))
-
-        assertEquals(135f, result.normalizedSigma)
-        assertTrue(result.diagnostics.any { it.code == "mask-filter.blur.sigma-clamped" })
+    fun `sigma beyond the bounded kernel refuses before intermediate planning`() {
+        listOf(12.01f, 48f, 200f).forEach { sigma ->
+            assertEquals(
+                "unsupported.mask-filter.blur.sigma",
+                assertIs<MaskBlurPlan.Refused>(plan(sigma = sigma)).code,
+            )
+        }
     }
 
     @Test
