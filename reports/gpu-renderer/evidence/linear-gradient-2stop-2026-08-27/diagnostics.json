@@ -1,0 +1,5 @@
+{
+  "accepted": "layout:linear-gradient-material-block:v2",
+  "refusalCodes": ["unsupported.material.mapping.linear_gradient_tile_mode", "unsupported.material.mapping.linear_gradient_stop_count", "unsupported.material.mapping.linear_gradient_non_finite", "unsupported.material.mapping.linear_gradient_local_matrix_perspective", "unsupported.material.mapping.linear_gradient_local_matrix_affine"],
+  "gmRunnerTerminalDiagnostic": "unsupported.material.source_unimplemented"
+}

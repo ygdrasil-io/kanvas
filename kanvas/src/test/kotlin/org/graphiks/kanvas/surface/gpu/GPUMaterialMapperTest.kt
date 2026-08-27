@@ -115,6 +115,83 @@ class GPUMaterialMapperTest {
     }
 
     @Test
+    fun `prepared linear gradient admits the bounded two stop clamp local matrix route`() {
+        val matrix = Matrix3x3F32.of(
+            1f, 0f, 3f,
+            0f, 1f, 4f,
+            0f, 0f, 1f,
+        )
+        val descriptor = assertIs<GPUMaterialDescriptor.LinearGradient>(
+            Paint(
+                shader = Shader.WithLocalMatrix(
+                    Shader.LinearGradient(
+                        start = Point2F32(0f, 0f),
+                        end = Point2F32(16f, 0f),
+                        stops = listOf(
+                            GradientStop(0f, ColorARGB.fromRGBA(1f, 0f, 0f, 0.25f)),
+                            GradientStop(1f, ColorARGB.fromRGBA(0f, 0f, 1f, 0.75f)),
+                        ),
+                        tileMode = TileMode.CLAMP,
+                    ),
+                    matrix,
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+
+        assertEquals(listOf(0f, 1f), descriptor.allStopPositions?.toList())
+        assertEquals(
+            listOf(1f, 0f, 3f, 0f, 1f, 4f, 0f, 0f, 1f),
+            descriptor.localMatrix,
+        )
+    }
+
+    @Test
+    fun `prepared linear gradient refuses tile modes and stop counts outside the bounded route`() {
+        val twoStops = listOf(
+            GradientStop(0f, ColorARGB.Red),
+            GradientStop(1f, ColorARGB.Blue),
+        )
+        listOf(
+            Shader.LinearGradient(
+                start = Point2F32(0f, 0f), end = Point2F32(8f, 0f),
+                stops = twoStops, tileMode = TileMode.REPEAT,
+            ) to "unsupported.material.mapping.linear_gradient_tile_mode",
+            Shader.LinearGradient(
+                start = Point2F32(0f, 0f), end = Point2F32(8f, 0f),
+                stops = listOf(*twoStops.toTypedArray(), GradientStop(0.5f, ColorARGB.White)),
+            ) to "unsupported.material.mapping.linear_gradient_stop_count",
+        ).forEach { (shader, reason) ->
+            val refused = assertIs<GPUMaterialDescriptor.Unsupported>(
+                Paint(shader = shader).toPreparedMaterialMapping().descriptor,
+            )
+            assertEquals(reason, refused.reason.diagnosticCode)
+        }
+    }
+
+    @Test
+    fun `prepared linear gradient refuses perspective non finite and out of budget local matrices`() {
+        val gradient = Shader.LinearGradient(
+            start = Point2F32(0f, 0f),
+            end = Point2F32(8f, 0f),
+            stops = listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+        )
+        listOf(
+            Matrix3x3F32.of(1f, 0f, 0f, 0f, 1f, 0f, 0.1f, 0f, 1f) to
+                "unsupported.material.mapping.linear_gradient_local_matrix_perspective",
+            Matrix3x3F32.of(1f, 0f, Float.NaN, 0f, 1f, 0f, 0f, 0f, 1f) to
+                "unsupported.material.mapping.linear_gradient_local_matrix_affine",
+            Matrix3x3F32.of(1f, 0f, 16385f, 0f, 1f, 0f, 0f, 0f, 1f) to
+                "unsupported.material.mapping.linear_gradient_local_matrix_affine",
+        ).forEach { (matrix, code) ->
+            val refused = assertIs<GPUMaterialDescriptor.Unsupported>(
+                Paint(shader = Shader.WithLocalMatrix(gradient, matrix))
+                    .toPreparedMaterialMapping().descriptor,
+            )
+            assertEquals(code, refused.reason.diagnosticCode)
+        }
+    }
+
+    @Test
     fun `linear descriptor snapshots gradient facts without mutable escape`() {
         val positions = floatArrayOf(0f, 1f)
         val colors = floatArrayOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f)
@@ -197,8 +274,8 @@ class GPUMaterialMapperTest {
         assertEquals(GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX, preparedMatrix.reason)
         assertEquals(GPUMaterialKind.LinearGradient, preparedMatrix.originalKind)
         assertEquals(
-            listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f),
-            assertIs<GPUMaterialDescriptor.LinearGradient>(preparedMatrix.source).localMatrix,
+            GPUPreparedMaterialUnsupportedReason.LINEAR_GRADIENT_STOP_COUNT,
+            assertIs<GPUMaterialDescriptor.Unsupported>(preparedMatrix.source).reason,
         )
 
         val legacyWorkingSpace = assertIs<GPUMaterialDescriptor.LinearGradient>(
@@ -224,7 +301,10 @@ class GPUMaterialMapperTest {
         )
         assertEquals(GPUPreparedMaterialUnsupportedReason.WORKING_COLOR_SPACE, preparedWorkingSpace.reason)
         assertEquals(GPUMaterialKind.LinearGradient, preparedWorkingSpace.originalKind)
-        assertEquals(legacyWorkingSpace, preparedWorkingSpace.source)
+        assertEquals(
+            GPUPreparedMaterialUnsupportedReason.LINEAR_GRADIENT_STOP_COUNT,
+            assertIs<GPUMaterialDescriptor.Unsupported>(preparedWorkingSpace.source).reason,
+        )
     }
 
     @Test

@@ -1,0 +1,6 @@
+{
+  "route": "webgpu.prepared-material.linear-gradient-2stop-clamp-v2",
+  "status": "validated-by-CPU-and-WGSL-contract-tests",
+  "accepted": { "kind": "LinearGradient", "stopCount": 2, "tileMode": "clamp", "interpolation": "srgb", "localMatrix": "finite bounded affine" },
+  "refused": ["repeat/mirror/decal tile modes", "stop counts other than two", "non-finite geometry, stops, colors, or local matrix", "perspective local matrix", "affine matrix outside 4096 linear or 16384 translation bounds"]
+}

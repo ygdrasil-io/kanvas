@@ -1,0 +1,6 @@
+{
+  "uniformByteCount": 576,
+  "stopCount": 2,
+  "gpuGMRender": "not-promoted",
+  "reason": "No selected GM is wholly representable by the bounded two-stop linear route."
+}

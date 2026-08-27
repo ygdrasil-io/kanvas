@@ -8,13 +8,13 @@ import org.graphiks.kanvas.gpu.renderer.wgsl.LinearGradientRepeatEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.LinearGradientSnippetSourceHash
 
 object GPULinearGradientMaterialDictionary {
-    const val DictionaryVersion: String = "material-dictionary:linear-gradient:v1"
+    const val DictionaryVersion: String = "material-dictionary:linear-gradient:v2"
 
     val LinearGradientSnippetID: WGSLSnippetID = WGSLSnippetID("material.linear_gradient.v1")
 
-    const val LinearGradientMaterialLayoutHash: String = "layout:linear-gradient-material-block:v1"
+    const val LinearGradientMaterialLayoutHash: String = "layout:linear-gradient-material-block:v2"
 
-    const val LinearGradientMaterialModuleSalt: String = "kanvas-gpu-renderer:linear-gradient-material:v1"
+    const val LinearGradientMaterialModuleSalt: String = "kanvas-gpu-renderer:linear-gradient-material:v2"
 
     /** Creates a linear gradient material dictionary. */
     fun create(): GPUMaterialDictionary =

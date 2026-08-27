@@ -1223,9 +1223,9 @@ private fun gradientAbiExpectation(
         type = "array<vec4<f32>, 32>",
         offset = when (descriptor) {
             is GPUMaterialDescriptor.RadialGradient -> 16
-            is GPUMaterialDescriptor.LinearGradient,
             is GPUMaterialDescriptor.SweepGradient,
             -> 32
+            is GPUMaterialDescriptor.LinearGradient -> 64
             is GPUMaterialDescriptor.ConicalGradient -> 48
             else -> error("Not a gradient descriptor")
         },
@@ -1237,7 +1237,9 @@ private fun gradientAbiExpectation(
         is GPUMaterialDescriptor.LinearGradient -> listOf(
             vec2Member("start", 0),
             vec2Member("end", 8),
-            u32Member("count", 16),
+            vec4Member("localMatrix0", 16),
+            vec4Member("localMatrix1", 32),
+            u32Member("count", 48),
             stopData,
         )
         is GPUMaterialDescriptor.RadialGradient -> listOf(

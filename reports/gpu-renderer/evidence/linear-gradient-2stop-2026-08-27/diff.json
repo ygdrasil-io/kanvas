@@ -1,0 +1,4 @@
+{
+  "status": "not-produced",
+  "reason": "No selected GM has a native WebGPU render under this bounded route, so a reference/GPU pixel diff would be misleading."
+}
