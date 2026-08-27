@@ -1,6 +1,6 @@
 # Correctif de régression Repeat — vague 3
 
-Date : 2026-08-27  
+Date : 2026-08-27
 Branche : `codex/gm-activation-wave-11`
 
 ## Cause
