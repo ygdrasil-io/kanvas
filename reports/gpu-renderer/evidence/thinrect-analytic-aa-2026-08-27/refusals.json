@@ -1,0 +1,9 @@
+{
+  "supported": "axis-aligned, finite, non-empty zero-radius FillRect with explicit ScalarAA and one sample",
+  "unpromotedGms": {
+    "thinrects": { "status": "terminal-refusal", "diagnostic": "unsupported.core_primitive.geometry.invalid", "reason": "the GM intentionally includes zero-width rect variants outside the non-empty native fixture contract" },
+    "thinroundrects": { "status": "not-promoted", "reason": "nonzero asymmetric radii are not claimed by this exact rectangle/pixel-area fixture" },
+    "rrect_clip_aa": { "status": "not-promoted", "reason": "multi-draw clip breadth is outside the direct single-rect fixture" }
+  },
+  "invariants": ["no fan stencil", "no implicit promotion from a non-AA geometry route", "no budget or threshold relaxation", "no GM source modification"]
+}
