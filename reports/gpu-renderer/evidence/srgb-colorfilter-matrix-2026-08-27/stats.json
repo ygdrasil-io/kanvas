@@ -1,0 +1,16 @@
+{
+  "fixture": "srgb-colorfilter-matrix-v1",
+  "channels": 64,
+  "pixels": 16,
+  "differentChannels": 0,
+  "maxDelta": 0,
+  "meanDelta": 0.0,
+  "cpuSha256": "67abf2afb66ca583f2f898cc06fa462823dec3b77486d06545a15b381372301a",
+  "gpuSha256": "67abf2afb66ca583f2f898cc06fa462823dec3b77486d06545a15b381372301a",
+  "performance": {
+    "submits": 1,
+    "readbackCopies": 1,
+    "gating": false,
+    "reason": "correctness fixture; no frame-time claim"
+  }
+}

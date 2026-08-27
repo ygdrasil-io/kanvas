@@ -93,6 +93,32 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
     }
 
     @Test
+    fun `multiple vertices runs refuse before native materialization`() {
+        val fixture = fixture(
+            shape = PreparedSurfaceFixtureShape.ImageOnly,
+            inputOverride = verticesCapturedPreparedSurfaceInputs(commandCount = 2),
+        )
+        try {
+            val eventsBefore = fixture.native.events.toList()
+
+            val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
+                fixture.materialize(),
+            )
+
+            assertEquals(
+                "unsupported.prepared-surface.vertices-multi-run",
+                refused.code,
+            )
+            assertEquals(eventsBefore, fixture.native.events)
+            assertEquals(null, refused.retainedDraft)
+            assertEquals(null, refused.retainedPreRegistrationLedger)
+            assertEquals(null, refused.retainedCloseOwner)
+        } finally {
+            fixture.close()
+        }
+    }
+
+    @Test
     fun `vertices render operands stay open through submit and close once on completion`() {
         val flow = verticesPayloadFlowFixture()
         val backend = GPUWgpu4kFrameEncodingBackend(
@@ -2918,8 +2944,10 @@ private fun GPUFramePlan.withReversedPreparedImageBindings(): GPUFramePlan {
  * The preflighter refuses vertices semantics before encoder planning, so the encoder plan,
  * resources, and generation seal are derived here from the same sealed frame authority.
  */
-internal fun verticesCapturedPreparedSurfaceInputs(): CapturedPreparedSurfaceInputs {
-    val fixture = verticesPreflightFixture()
+internal fun verticesCapturedPreparedSurfaceInputs(
+    commandCount: Int = 1,
+): CapturedPreparedSurfaceInputs {
+    val fixture = verticesPreflightFixture(commandCount = commandCount)
     val framePlan = fixture.framePlan
     val context = fixture.context
     val sceneTarget = framePlan.steps

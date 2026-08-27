@@ -497,12 +497,17 @@ internal object GPUPreparedSurfaceFrameBuilder {
                 is GPUPreparedSurfaceFrameResult.Refused ->
                     GPUPreparedSurfaceFrameBuildResult.Refused(prepared.diagnostic.atSurfaceBoundary())
             }
+        } catch (failure: GPUPreparedSurfaceTerminalException) {
+            GPUPreparedSurfaceFrameBuildResult.Refused(failure.diagnostic)
         } catch (failure: Exception) {
             GPUPreparedSurfaceFrameBuildResult.Refused(
                 diagnostic(
                     code = "invalid.surface.prepared.frame-build-contract",
                     message = "Prepared Surface frame construction violated an internal contract.",
-                    facts = mapOf("failureClass" to failure.javaClass.name),
+                    facts = mapOf(
+                        "failureClass" to failure.javaClass.name,
+                        "failureMessage" to failure.message.orEmpty(),
+                    ),
                 ),
             )
         }
@@ -1092,6 +1097,15 @@ private fun collectPreparedImageVisuals(
             is DisplayOp.DrawRect -> if (operation.paint.isStroke()) {
                 List(4) { PreparedVisualSource.Core(operationIndex) }
             } else {
+                operation.paint.shader.findBaseImageShaderOrNull()?.let { shader ->
+                    listOf(PreparedVisualSource.Image(operationIndex, shader.image))
+                } ?: listOf(PreparedVisualSource.Core(operationIndex))
+            }
+            is DisplayOp.DrawPath -> if (operation.isPreparedImageVisualCandidate()) {
+                operation.paint.shader.findBaseImageShaderOrNull()?.let { shader ->
+                    listOf(PreparedVisualSource.Image(operationIndex, shader.image))
+                } ?: listOf(PreparedVisualSource.Core(operationIndex))
+            } else {
                 listOf(PreparedVisualSource.Core(operationIndex))
             }
             is DisplayOp.DrawText -> {
@@ -1277,6 +1291,10 @@ private fun DisplayOp.isCorePreparedVisual(): Boolean = when (this) {
     -> true
     else -> false
 }
+
+/** The prepared-image source inventory must mirror the narrow image-path lowerer. */
+internal fun DisplayOp.DrawPath.isPreparedImageVisualCandidate(): Boolean =
+    !paint.isStroke() && transform.isIdentity && path.isRect()
 
 private fun imageCommandSourceDiagnostic(
     message: String,

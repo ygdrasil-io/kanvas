@@ -1,0 +1,11 @@
+{
+  "fixture": "srgb-colorfilter-matrix-v1",
+  "backend": "WebGPU headless/offscreen",
+  "program": "color-matrix-v1",
+  "wgslValidation": "parser-backed:wgsl4k",
+  "actualPixelRgba8": [46, 32, 96, 128],
+  "extent": [4, 4],
+  "submits": 1,
+  "readbackCopies": 1,
+  "sha256": "67abf2afb66ca583f2f898cc06fa462823dec3b77486d06545a15b381372301a"
+}

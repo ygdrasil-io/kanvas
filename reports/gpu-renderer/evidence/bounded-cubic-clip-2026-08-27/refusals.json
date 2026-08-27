@@ -1,0 +1,22 @@
+{
+  "fixture": "bounded-cubic-clip-v1",
+  "nativeSubset": {
+    "clipStack": "exactly one path element",
+    "operations": ["Intersect", "Difference"],
+    "fillRules": ["Winding", "EvenOdd"],
+    "antiAlias": false,
+    "transform": ["identity", "translate", "uniform-positive-scale-translate"],
+    "edgeBudget": "190 flattened vertices <= RenderConfig.maxPathVertices (256)"
+  },
+  "terminalRefusals": {
+    "inverseCubic": { "diagnostic": "unsupported.clip.inverse_cubic", "test": "GPUClipCoverageSurfaceTest.inverse cubic clip remains a terminal refusal" },
+    "perspective": { "diagnostic": "unsupported_transform:Perspective", "test": "GPUClipCoverageContractsTest.perspective clip remains refused after reset matrix" },
+    "edgeBudget": { "diagnostic": "unsupported.clip.vertex_budget", "test": "GPUClipCoverageContractsTest.cubic clip defers over budget edges to planner" },
+    "antialias": { "diagnostic": "coverage-mask route; not promoted by this stencil-cover fixture", "test": "GPUFramePathApiInventoryTest.mapper routes an antialiased path clip through a coverage mask even when stencil is available" }
+  },
+  "gmTerminalAttempts": {
+    "clipcubic": { "operations": 17, "diagnostic": "unsupported.stroke.width_invalid" },
+    "clippedcubic": { "operations": 19, "diagnostic": "unsupported.core_primitive.stencil_edge_fan_budget" }
+  },
+  "nonClaims": ["no arbitrary clip stack", "no inverse cubic clip", "no perspective", "no ScalarAA cubic clip", "no GM promotion or GM source change", "no budget or threshold relaxation"]
+}

@@ -1,0 +1,27 @@
+{
+  "accepted": "layout:linear-gradient-material-block:v2",
+  "refusalCodes": ["unsupported.material.mapping.linear_gradient_tile_mode", "unsupported.material.mapping.linear_gradient_stop_count", "unsupported.material.mapping.linear_gradient_non_finite", "unsupported.material.mapping.linear_gradient_local_matrix_perspective", "unsupported.material.mapping.linear_gradient_local_matrix_affine"],
+  "gmSurfaceRefusals": [
+    {
+      "gm": "linear_gradient",
+      "command": "./gradlew --no-daemon :integration-tests:skia:test --tests org.graphiks.kanvas.skia.LinearGradientGmSurfaceRefusalEvidenceTest",
+      "operationCount": 101,
+      "diagnostic": "unsupported.material.mapping.linear_gradient_stop_count",
+      "output": "unsupported.material.mapping.linear_gradient_stop_count"
+    },
+    {
+      "gm": "fillrect_gradient",
+      "command": "./gradlew --no-daemon :integration-tests:skia:test --tests org.graphiks.kanvas.skia.LinearGradientGmSurfaceRefusalEvidenceTest",
+      "operationCount": 19,
+      "diagnostic": "unsupported.material.source_unimplemented",
+      "output": "unsupported.material.source_unimplemented"
+    },
+    {
+      "gm": "gradient_matrix",
+      "command": "./gradlew --no-daemon :integration-tests:skia:test --tests org.graphiks.kanvas.skia.LinearGradientGmSurfaceRefusalEvidenceTest",
+      "operationCount": 18,
+      "diagnostic": "unsupported.material.source_unimplemented",
+      "output": "unsupported.material.source_unimplemented"
+    }
+  ]
+}

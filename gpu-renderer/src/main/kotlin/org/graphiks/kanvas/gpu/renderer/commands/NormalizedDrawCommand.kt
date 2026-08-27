@@ -30,6 +30,8 @@ private val IDENTITY_GRADIENT_LOCAL_MATRIX = listOf(
     0f, 0f, 1f,
 )
 
+private val IDENTITY_IMAGE_LOCAL_MATRIX = IDENTITY_GRADIENT_LOCAL_MATRIX
+
 /** Canonical command identifier name used by the package layout target. */
 @JvmInline
 value class GPUDrawCommandID(val value: Int) {
@@ -171,6 +173,14 @@ enum class GPUPreparedMaterialUnsupportedReason(
         "unsupported.material.mapping.image_tile_mode",
         "Prepared image mapping only implements clamp/clamp tile modes",
     ),
+    IMAGE_LOCAL_MATRIX_PERSPECTIVE(
+        "unsupported.material.mapping.image_local_matrix_perspective",
+        "Prepared image mapping does not implement perspective image local matrices",
+    ),
+    IMAGE_LOCAL_MATRIX_AFFINE(
+        "unsupported.material.mapping.image_local_matrix_affine",
+        "Prepared image mapping only implements finite bounded translation/scale local matrices",
+    ),
     IMAGE_COLOR_TYPE(
         "unsupported.material.mapping.image_color_type",
         "Prepared image mapping cannot convert this color type exactly",
@@ -194,6 +204,26 @@ enum class GPUPreparedMaterialUnsupportedReason(
     GRADIENT_STOP_COUNT(
         "unsupported.material.mapping.gradient_stop_count",
         "Prepared gradient mapping requires at least one stop",
+    ),
+    LINEAR_GRADIENT_TILE_MODE(
+        "unsupported.material.mapping.linear_gradient_tile_mode",
+        "Prepared linear gradient mapping only implements clamp tile mode",
+    ),
+    LINEAR_GRADIENT_STOP_COUNT(
+        "unsupported.material.mapping.linear_gradient_stop_count",
+        "Prepared linear gradient mapping requires exactly two stops",
+    ),
+    LINEAR_GRADIENT_NON_FINITE(
+        "unsupported.material.mapping.linear_gradient_non_finite",
+        "Prepared linear gradient mapping requires finite geometry, stops, and colors",
+    ),
+    LINEAR_GRADIENT_LOCAL_MATRIX_PERSPECTIVE(
+        "unsupported.material.mapping.linear_gradient_local_matrix_perspective",
+        "Prepared linear gradient mapping does not implement perspective local matrices",
+    ),
+    LINEAR_GRADIENT_LOCAL_MATRIX_AFFINE(
+        "unsupported.material.mapping.linear_gradient_local_matrix_affine",
+        "Prepared linear gradient mapping requires a finite bounded affine local matrix",
     ),
     RUNTIME_COLOR_FILTER_PLACEMENT(
         "unsupported.material.mapping.runtime_color_filter_placement",
@@ -237,13 +267,25 @@ enum class GPUPreparedMaterialUnsupportedReason(
     ),
 }
 
-/** Returns the prepared-material refusal reason for gradient facts not consumed by dispatch. */
-fun GPUMaterialDescriptor.gradientFactsRefusalReasonOrNull(): GPUPreparedMaterialUnsupportedReason? =
+/**
+ * Returns the prepared-material refusal reason for gradient facts not consumed by dispatch.
+ *
+ * CorePrimitive owns the legacy linear-gradient tile-mode ABI. Route analysis may therefore
+ * defer only that validation to its concrete route, while all other prepared-material facts
+ * remain closed.
+ */
+fun GPUMaterialDescriptor.gradientFactsRefusalReasonOrNull(
+    deferLinearGradientTileModeToRoute: Boolean = false,
+): GPUPreparedMaterialUnsupportedReason? =
     when (this) {
         is GPUMaterialDescriptor.LinearGradient -> when {
+            tileMode != "clamp" && !deferLinearGradientTileModeToRoute ->
+                GPUPreparedMaterialUnsupportedReason.LINEAR_GRADIENT_TILE_MODE
+            (allStopPositions?.size ?: 2) != 2 -> GPUPreparedMaterialUnsupportedReason.LINEAR_GRADIENT_STOP_COUNT
+            !linearGradientFactsAreFinite() -> GPUPreparedMaterialUnsupportedReason.LINEAR_GRADIENT_NON_FINITE
             interpolation != "srgb" -> GPUPreparedMaterialUnsupportedReason.GRADIENT_INTERPOLATION
-            localMatrix != IDENTITY_GRADIENT_LOCAL_MATRIX -> GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX
-            else -> null
+            else -> localMatrix.boundedAffineLocalMatrixRefusalOrNull(allowFullAffine = true)
+                ?.toLinearGradientReason()
         }
         is GPUMaterialDescriptor.RadialGradient -> when {
             interpolation != "srgb" -> GPUPreparedMaterialUnsupportedReason.GRADIENT_INTERPOLATION
@@ -257,6 +299,61 @@ fun GPUMaterialDescriptor.gradientFactsRefusalReasonOrNull(): GPUPreparedMateria
         }
         else -> null
     }
+
+/** Returns the closed refusal reason for image local-matrix facts outside the bounded route. */
+fun GPUMaterialDescriptor.ImageDraw.imageLocalMatrixRefusalReasonOrNull(): GPUPreparedMaterialUnsupportedReason? {
+    return when (localMatrix.boundedAffineLocalMatrixRefusalOrNull()) {
+        null -> null
+        BoundedAffineLocalMatrixRefusal.Perspective ->
+            GPUPreparedMaterialUnsupportedReason.IMAGE_LOCAL_MATRIX_PERSPECTIVE
+        BoundedAffineLocalMatrixRefusal.Affine ->
+            GPUPreparedMaterialUnsupportedReason.IMAGE_LOCAL_MATRIX_AFFINE
+    }
+}
+
+private enum class BoundedAffineLocalMatrixRefusal { Perspective, Affine }
+
+private fun List<Float>.boundedAffineLocalMatrixRefusalOrNull(
+    allowFullAffine: Boolean = false,
+): BoundedAffineLocalMatrixRefusal? {
+    if (size != 9 || any { !it.isFinite() }) return BoundedAffineLocalMatrixRefusal.Affine
+    if (this[6] != 0f || this[7] != 0f || this[8] != 1f) {
+        return BoundedAffineLocalMatrixRefusal.Perspective
+    }
+    if (
+        kotlin.math.abs(this[0]) > MAX_BOUNDED_AFFINE_LINEAR ||
+        kotlin.math.abs(this[1]) > MAX_BOUNDED_AFFINE_LINEAR ||
+        kotlin.math.abs(this[3]) > MAX_BOUNDED_AFFINE_LINEAR ||
+        kotlin.math.abs(this[4]) > MAX_BOUNDED_AFFINE_LINEAR ||
+        kotlin.math.abs(this[2]) > MAX_BOUNDED_AFFINE_TRANSLATION ||
+        kotlin.math.abs(this[5]) > MAX_BOUNDED_AFFINE_TRANSLATION
+    ) return BoundedAffineLocalMatrixRefusal.Affine
+    if (
+        !allowFullAffine &&
+        (this[1] != 0f || this[3] != 0f || this[0] <= 0f || this[4] <= 0f)
+    ) return BoundedAffineLocalMatrixRefusal.Affine
+    return null
+}
+
+private fun BoundedAffineLocalMatrixRefusal.toLinearGradientReason(): GPUPreparedMaterialUnsupportedReason =
+    when (this) {
+        BoundedAffineLocalMatrixRefusal.Perspective ->
+            GPUPreparedMaterialUnsupportedReason.LINEAR_GRADIENT_LOCAL_MATRIX_PERSPECTIVE
+        BoundedAffineLocalMatrixRefusal.Affine ->
+            GPUPreparedMaterialUnsupportedReason.LINEAR_GRADIENT_LOCAL_MATRIX_AFFINE
+    }
+
+private fun GPUMaterialDescriptor.LinearGradient.linearGradientFactsAreFinite(): Boolean =
+    listOf(
+        startX, startY, endX, endY,
+        startR, startG, startB, startA,
+        endR, endG, endB, endA,
+    ).all(Float::isFinite) &&
+        (allStopPositions?.all(Float::isFinite) ?: true) &&
+        (allStopColors?.all(Float::isFinite) ?: true)
+
+private const val MAX_BOUNDED_AFFINE_LINEAR = 4096f
+private const val MAX_BOUNDED_AFFINE_TRANSLATION = 16384f
 
 /** Rectangle geometry in local command coordinates. */
 data class GPURect(
@@ -1248,13 +1345,14 @@ sealed interface GPUMaterialDescriptor {
         override val kind: GPUMaterialKind = GPUMaterialKind.TwoPointConical
     }
 
-    /** Placeholder image-draw descriptor — deferred; dispatch refuses via non-SolidColor material. */
+    /** Image shader descriptor with exact pixels and a bounded local sampling transform. */
     data class ImageDraw(
         val imageSourceId: String = "",
         val imageWidth: Int = 0,
         val imageHeight: Int = 0,
         val rgbaPixels: ByteArray = byteArrayOf(),
         val samplingFilterMode: String = "nearest",
+        val localMatrix: List<Float> = IDENTITY_IMAGE_LOCAL_MATRIX,
         val alphaOnly: Boolean = false,
         val tintR: Float = 1f,
         val tintG: Float = 1f,
@@ -2327,7 +2425,10 @@ private class GPUMaterialDescriptorSnapshotter {
                 allStopColors = descriptor.allStopColors?.copyOf(),
             )
             is GPUMaterialDescriptor.ImageDraw ->
-                descriptor.copy(rgbaPixels = descriptor.rgbaPixels.copyOf())
+                descriptor.copy(
+                    rgbaPixels = descriptor.rgbaPixels.copyOf(),
+                    localMatrix = descriptor.localMatrix.toList(),
+                )
             is GPUMaterialDescriptor.RuntimeEffect ->
                 descriptor.snapshotWith(::snapshotRuntimeChildValidated)
             is GPUMaterialDescriptor.BlendShader ->
@@ -2758,6 +2859,7 @@ private class GPUMaterialDescriptorCanonicalizer {
                     "size=${descriptor.imageWidth}x${descriptor.imageHeight}, " +
                     "pixels=${descriptor.rgbaPixels.canonicalValue()}, " +
                     "sampling=${descriptor.samplingFilterMode.canonicalValue()}, " +
+                    "localMatrix=${descriptor.localMatrix.canonicalFloatList()}, " +
                     "alphaOnly=${descriptor.alphaOnly}, " +
                     "tint=(${descriptor.tintR.canonicalValue()}," +
                     "${descriptor.tintG.canonicalValue()}," +
@@ -3609,6 +3711,8 @@ sealed interface NormalizedDrawCommand {
         val dashIntervals: FloatArray? = null,
         /** Dash phase offset. */
         val dashPhase: Float = 0f,
+        /** Original non-dash path effect retained so bounded stroke lowering can refuse it. */
+        val pathEffectKind: String? = null,
         /** Stroke cap style: "butt", "round", "square". */
         val strokeCap: String = "butt",
         /** Stroke join style: "miter", "round", "bevel". */

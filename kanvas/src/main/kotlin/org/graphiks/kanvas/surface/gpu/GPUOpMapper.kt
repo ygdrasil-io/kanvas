@@ -167,6 +167,74 @@ internal object GPUOpMapper {
             if (operationIndex in elidedOperationIndices) {
                 return@forEachIndexed
             }
+            if (operation is DisplayOp.DrawRect && !operation.paint.isStroke()) {
+                val commandId = nextCommandId()
+                when (
+                    val lowered = GPUPreparedDrawImageLowerer.lowerImageShaderRect(
+                        operation = operation,
+                        commandId = GPUDrawCommandID(commandId),
+                        paintOrder = commandId,
+                        provenance = provenance,
+                        target = target,
+                        config = config,
+                        capabilities = capabilities,
+                    )
+                ) {
+                    null -> Unit
+                    is GPUPreparedDrawImageLowering.Ready -> {
+                        visual += lowered.command
+                        recordCommandIds(
+                            operationIndex,
+                            setOf(lowered.command.normalized.commandId.value),
+                        )
+                        return@forEachIndexed
+                    }
+                    is GPUPreparedDrawImageLowering.Refused -> return GPUOpMapping(
+                        visualCommands = emptyList(),
+                        stateEvents = stateEvents.toList(),
+                        preparedRefusal = GPUPreparedOperationRefusal(
+                            commandId = commandId,
+                            operationIndex = operationIndex,
+                            code = lowered.code,
+                            facts = lowered.facts,
+                        ),
+                    )
+                }
+            }
+            if (operation is DisplayOp.DrawPath && !operation.paint.isStroke()) {
+                val commandId = nextCommandId()
+                when (
+                    val lowered = GPUPreparedDrawImageLowerer.lowerImageShaderRectPath(
+                        operation = operation,
+                        commandId = GPUDrawCommandID(commandId),
+                        paintOrder = commandId,
+                        provenance = provenance,
+                        target = target,
+                        config = config,
+                        capabilities = capabilities,
+                    )
+                ) {
+                    null -> Unit
+                    is GPUPreparedDrawImageLowering.Ready -> {
+                        visual += lowered.command
+                        recordCommandIds(
+                            operationIndex,
+                            setOf(lowered.command.normalized.commandId.value),
+                        )
+                        return@forEachIndexed
+                    }
+                    is GPUPreparedDrawImageLowering.Refused -> return GPUOpMapping(
+                        visualCommands = emptyList(),
+                        stateEvents = stateEvents.toList(),
+                        preparedRefusal = GPUPreparedOperationRefusal(
+                            commandId = commandId,
+                            operationIndex = operationIndex,
+                            code = lowered.code,
+                            facts = lowered.facts,
+                        ),
+                    )
+                }
+            }
             if (operation is DisplayOp.DrawRect && operation.paint.isStroke()) {
                 val firstCommandId = nextCommandId()
                 when (
@@ -836,7 +904,7 @@ internal object GPUOpMapper {
                 source = source,
                 pathDescriptor = command.pathDescriptor.copy(
                     verbCount = operation.pathVerbCount(),
-                    transformClass = command.transform.type.name.lowercase(),
+                    transformClass = command.transform.pathTransformClass(),
                 ),
             )
             else -> error("Slice 12A mapper produced a non-core command")
@@ -890,7 +958,7 @@ private fun NormalizedDrawCommand.FillPath.toPreparedStrokeFillPath():
             fillRule = "winding",
             inverseFill = false,
             finiteProof = "all_finite",
-            transformClass = transform.type.name.lowercase(),
+            transformClass = transform.pathTransformClass(),
             edgeCount = vertexCount,
         ),
         tessellatedVertices = fill.vertices,
@@ -1369,6 +1437,12 @@ private fun GPUClipCoveragePlan.Mask.toMaskExecutionPlan(
     admitAnalyticMultiRect: Boolean,
 ): GPUClipExecutionPlan {
     val single = elements.singleOrNull()
+    if (single?.kind == GPUClipCoverageElementKind.Path && single.hasCubicSegments && single.inverseFill) {
+        return clipExecutionRefusal(
+            code = "unsupported.clip.inverse_cubic",
+            message = "Inverse cubic path clips are outside the bounded stencil-cover contract.",
+        )
+    }
     if (
         single != null &&
         single.operation == GPUClipCoverageOperation.Intersect &&
@@ -1390,12 +1464,18 @@ private fun GPUClipCoveragePlan.Mask.toMaskExecutionPlan(
         } ?: invalidClipGeometryRefusal(single)
     }
 
-    if (
-        single != null &&
-        single.operation == GPUClipCoverageOperation.Intersect &&
-        single.kind == GPUClipCoverageElementKind.Path &&
-        !single.antiAlias
-    ) {
+    val singleHardPathClip = single?.takeIf {
+        it.kind == GPUClipCoverageElementKind.Path &&
+            !it.antiAlias &&
+            (
+                it.operation == GPUClipCoverageOperation.Intersect ||
+                    (
+                        it.operation == GPUClipCoverageOperation.Difference &&
+                            !it.inverseFill
+                    )
+            )
+    }
+    if (singleHardPathClip != null) {
         if (!capabilities.supportsClipCapability(PATH_FILL_STENCIL_COVER)) {
             return clipExecutionRefusal(
                 code = "unsupported.clip.stencil_unavailable",
@@ -1408,14 +1488,16 @@ private fun GPUClipCoveragePlan.Mask.toMaskExecutionPlan(
                 message = "Path clip execution requires bounded clip support.",
             )
         }
-        if (single.transformClass !in HARD_PATH_CLIP_TRANSFORM_CLASSES) {
+        if (singleHardPathClip.transformClass !in HARD_PATH_CLIP_TRANSFORM_CLASSES) {
             return clipExecutionRefusal(
                 code = "unsupported.clip.path_transform",
                 message = "Native hard path clips require identity, translation, or positive uniform scale capture-time CTM.",
             )
         }
-        val geometry = single.executionGeometryOrRefusal() as? GPUClipExecutionGeometry.Path
-            ?: return invalidClipGeometryRefusal(single)
+        val geometry = singleHardPathClip.executionGeometryOrRefusal() as? GPUClipExecutionGeometry.Path
+            ?: return invalidClipGeometryRefusal(singleHardPathClip)
+        val consumerInverseFill = singleHardPathClip.operation == GPUClipCoverageOperation.Difference
+        val effectiveConsumerInverseFill = geometry.inverseFill xor consumerInverseFill
         val targetBounds = GPUPixelBounds(0, 0, target.width, target.height)
         val (frontPassOperation, backPassOperation) = when (geometry.fillRule) {
             org.graphiks.kanvas.gpu.renderer.clips.GPUClipFillRule.Winding ->
@@ -1444,13 +1526,14 @@ private fun GPUClipCoveragePlan.Mask.toMaskExecutionPlan(
             consumer = GPUClipStencilConsumerPlan(
                 scissor = null,
                 reference = 0u,
-                compare = if (geometry.inverseFill) {
+                compare = if (effectiveConsumerInverseFill) {
                     GPUClipStencilCompare.Equal
                 } else {
                     GPUClipStencilCompare.NotEqual
                 },
             ),
-            pathTransformClass = single.transformClass,
+            consumerInverseFill = consumerInverseFill,
+            pathTransformClass = singleHardPathClip.transformClass,
         )
     }
 
@@ -1782,6 +1865,14 @@ private fun DisplayOp.pathVerbCount(): Int = when (this) {
     else -> 0
 }
 
+/** Preserves every public PathEffect identity, including a Dash with no intervals. */
+private fun PathEffect?.toExactPathEffectKind(): String? = when (this) {
+    null -> null
+    is PathEffect.Dash -> "Dash"
+    is PathEffect.Corner -> "Corner"
+    else -> this::class.simpleName ?: "unknown"
+}
+
 internal fun DisplayOp.DrawRect.toNormalizedCommand(
     cmdId: GPUDrawCommandID,
     target: GPUTargetFacts,
@@ -1828,18 +1919,23 @@ internal fun DisplayOp.DrawPath.toNormalizedCommand(
     val transform = this.transform.toGPUTransformFacts()
     val maskFilter = paint.maskFilter.toNormalizedMaskFilter()
     val pathStencilConfig = stencilConfig(path.fillType)
+    val pathKey = canonicalPathFillKey(
+        vertices = tessellatedVertices,
+        contourStarts = contourStarts,
+        fillType = path.fillType.name,
+    )
     return NormalizedDrawCommand.FillPath(
         commandId = cmdId,
-        pathKey = "path-${cmdId.value}",
+        pathKey = pathKey,
         pathDescriptor = GPUPathFacts(
-            pathKey = "path-${cmdId.value}",
+            pathKey = pathKey,
             verbCount = 0,
             pointCount = tessellatedVertices.size / 2,
             fillRule = pathStencilConfig.fillRule.name,
             inverseFill = pathStencilConfig.inverse,
-            finiteProof = if (tessellatedVertices.all(Float::isFinite)) "all_finite" else "non_finite",
-            volatility = "static",
-            transformClass = transform.type.name.lowercase(),
+            finiteProof = if (tessellatedVertices.all(Float::isFinite)) "finite" else "non_finite",
+            volatility = "immutable",
+            transformClass = transform.pathTransformClass(),
             edgeCount = edgeCount,
             sourceAuthority = sourceAuthority,
         ),
@@ -1862,6 +1958,7 @@ internal fun DisplayOp.DrawPath.toNormalizedCommand(
         strokeWidth = paint.strokeWidth,
         dashIntervals = (paint.pathEffect as? PathEffect.Dash)?.intervals,
         dashPhase = (paint.pathEffect as? PathEffect.Dash)?.phase ?: 0f,
+        pathEffectKind = paint.pathEffect.toExactPathEffectKind(),
         strokeCap = paint.strokeCap.name.lowercase(),
         strokeJoin = paint.strokeJoin.name.lowercase(),
         strokeMiterLimit = paint.strokeMiter,
@@ -1923,6 +2020,7 @@ internal fun DisplayOp.DrawRect.toStrokePathCommand(
         strokeWidth = paint.strokeWidth,
         dashIntervals = (paint.pathEffect as? PathEffect.Dash)?.intervals,
         dashPhase = (paint.pathEffect as? PathEffect.Dash)?.phase ?: 0f,
+        pathEffectKind = paint.pathEffect.toExactPathEffectKind(),
         strokeCap = paint.strokeCap.name.lowercase(),
         strokeJoin = paint.strokeJoin.name.lowercase(),
         strokeMiterLimit = paint.strokeMiter,
@@ -2140,6 +2238,24 @@ internal fun Matrix3x3F32.toGPUTransformFacts(): GPUTransformFacts {
         translateY = this.ty,
     )
 }
+
+/**
+ * Canonical transform identity for filled paths. The stencil edge-fan consumer receives
+ * already-mapped device vertices, so only exact quarter/half-turn rotations can share the
+ * bounded path route without weakening the affine refusal boundary.
+ */
+private fun GPUTransformFacts.pathTransformClass(): String =
+    if (isExactRightAnglePathRotation()) "right-angle-rotation" else type.name.lowercase()
+
+private fun GPUTransformFacts.isExactRightAnglePathRotation(): Boolean =
+    translateX.isFinite() && translateY.isFinite() && when (type) {
+        GPUTransformType.Scale ->
+            scaleX == -1f && scaleY == -1f && skewX == 0f && skewY == 0f
+        GPUTransformType.Affine ->
+            (scaleX == 0f && scaleY == 0f && skewX == -1f && skewY == 1f) ||
+                (scaleX == -1f && scaleY == -1f && skewX == 0f && skewY == 0f)
+        else -> false
+    }
 
 internal fun MaskFilter?.toNormalizedMaskFilter(): NormalizedMaskFilter? = when (this) {
     is MaskFilter.Blur -> NormalizedMaskFilter.Blur(

@@ -26,10 +26,14 @@ import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageBindingLayoutTopology
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImagePipelineKey
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
+
+private const val PREPARED_SURFACE_VERTICES_MULTI_RUN_REFUSAL =
+    "unsupported.prepared-surface.vertices-multi-run"
 
 /**
  * The sole owner and assembler for the closed mixed
@@ -103,6 +107,15 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
             is GPUPreparedSurfaceNativePreflightResult.Accepted -> result.plan
             is GPUPreparedSurfaceNativePreflightResult.Refused ->
                 return refused(result.code, result.message)
+        }
+        if (accepted.orderedRuns.count {
+                it is GPUPreparedSurfaceNativeRunPlan.Vertices
+            } > 1
+        ) {
+            return refused(
+                PREPARED_SURFACE_VERTICES_MULTI_RUN_REFUSAL,
+                "Prepared-vertices materialization supports one exact render run per frame.",
+            )
         }
 
         var coreLifecycle: GPUPreparedNativeFrameLeaseLifecycle? = null
@@ -260,14 +273,13 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                 String,
                 MaterializedLayerTarget
                 >()
-            val sceneLayerBounds = preparedSurfaceSceneTargetBounds(framePlan)
             accepted.layerTargets.forEach { layer ->
                 val texture = setupLedger.track(
                     device.createTexture(
                         TextureDescriptor(
                             size = Extent3D(
-                                sceneLayerBounds.width.toUInt(),
-                                sceneLayerBounds.height.toUInt(),
+                                layer.allocationBounds.width.toUInt(),
+                                layer.allocationBounds.height.toUInt(),
                                 1u,
                             ),
                             format = GPUTextureFormat.RGBA8Unorm,
@@ -396,7 +408,8 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                 val cached = when (
                     val acquired = preparedImageCache.acquire(
                         GPUPreparedImagePipelineKey(
-                            destinationBlendState = "src-over",
+                            destinationBlendState =
+                                run.step.blendPlan.mode.preparedLayerCompositeBlendState(),
                             targetFormat = "RGBA8UnormSrgb",
                             bindingLayoutHash = GPUPreparedImageBindingLayoutTopology.IDENTITY,
                         ),
@@ -1686,3 +1699,9 @@ private data class PreparedColorGlyphDestinationNativeResource(
     val texture: GPUTexture,
     val view: GPUTextureView,
 )
+
+private fun GPUBlendMode.preparedLayerCompositeBlendState(): String = when (this) {
+    GPUBlendMode.SRC_OVER -> "src-over"
+    GPUBlendMode.SRC -> "src"
+    else -> error("Prepared layer composite blend must be preflight-validated: $this")
+}

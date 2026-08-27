@@ -5,6 +5,7 @@ class SurfaceSrgbClipPathCpuOracle(
     background: IntArray,
     contours: List<Contour>,
     draws: List<OpaqueDraw>,
+    clipInverted: Boolean = false,
 ) : CpuOracle {
     companion object {
         const val WIDTH = 64
@@ -92,6 +93,7 @@ class SurfaceSrgbClipPathCpuOracle(
     private val background = background.copyOf().also(::requireRgba)
     private val contours = contours.map { Contour(it.points) }
     private val draws = draws.map(OpaqueDraw::copyColor)
+    private val clipInverted = clipInverted
 
     init {
         require(this.contours.isNotEmpty()) { "clip path oracle requires at least one contour" }
@@ -142,7 +144,8 @@ class SurfaceSrgbClipPathCpuOracle(
                 }
             }
         }
-        return onEdge || winding != 0
+        val inside = onEdge || winding != 0
+        return if (clipInverted) !inside else inside
     }
 
     private fun pointOnSegment(

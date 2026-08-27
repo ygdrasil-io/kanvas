@@ -168,10 +168,16 @@ class SimpleStrokePreparedRouteTest {
         val cases = listOf(
             StrokeRefusalCase("unsupported.stroke.width_invalid", stroke = simpleStroke.copy(width = 0f)),
             StrokeRefusalCase("unsupported.stroke.width_invalid", stroke = simpleStroke.copy(finiteWidth = false)),
+            StrokeRefusalCase("unsupported.stroke.width_budget", stroke = simpleStroke.copy(width = 0.25f)),
+            StrokeRefusalCase("unsupported.stroke.width_budget", stroke = simpleStroke.copy(width = 64.5f)),
             StrokeRefusalCase("unsupported.stroke.hairline_policy", stroke = simpleStroke.copy(hairline = true)),
             StrokeRefusalCase("unsupported.stroke.cap", stroke = simpleStroke.copy(cap = "Round")),
             StrokeRefusalCase("unsupported.stroke.join", stroke = simpleStroke.copy(join = "Round")),
             StrokeRefusalCase("unsupported.stroke.miter_limit", stroke = simpleStroke.copy(miter = 0.5f)),
+            StrokeRefusalCase("unsupported.stroke.miter_limit", stroke = simpleStroke.copy(miter = 0f)),
+            StrokeRefusalCase("unsupported.stroke.miter_limit", stroke = simpleStroke.copy(miter = Float.NaN)),
+            StrokeRefusalCase("unsupported.stroke.miter_limit", stroke = simpleStroke.copy(miter = Float.POSITIVE_INFINITY)),
+            StrokeRefusalCase("unsupported.stroke.dash_empty", stroke = simpleStroke.copy(dashOrPathEffectRef = "dash:")),
             StrokeRefusalCase("unsupported.stroke.dash_complex", stroke = simpleStroke.copy(dashOrPathEffectRef = "dash:1,2,3,4,5")),
             StrokeRefusalCase(
                 "unsupported.stroke.path_effect_unregistered",

@@ -1,0 +1,12 @@
+{
+  "schema": "org.graphiks.kanvas.gpu.delivered-font-glyph-run.gpu.v2",
+  "runtime": "WebGPU headless/offscreen",
+  "route": "FontTypeface.preparedTextOutline -> TextA8 -> WebGPU headless/offscreen ReadbackRgba",
+  "target": { "width": 96, "height": 48, "format": "RGBA8", "bytes": 18432 },
+  "comparison": "Every 18432-byte RGBA8 readback is compared pixel-by-pixel and channel-by-channel with the CPU A8 oracle in diff.json.",
+  "rows": [
+    { "id": "gradtext.glyph-run.linear-clamp.v1", "a8Instances": 4, "submits": 1, "readbackCopies": 1, "blank": false, "readbackSha256": "3e82d101c0a894f7a06da71e24a397841903ddca083053aff58e50ffc21db24a" },
+    { "id": "text-scale-skew.glyph-run.affine.v1", "a8Instances": 4, "submits": 1, "readbackCopies": 1, "blank": false, "readbackSha256": "6ea03c02678f30606226c83d7f263404d82e31c49c856935775c916b977cb0ae" },
+    { "id": "fontscaler.glyph-run.size-18.v1", "a8Instances": 2, "submits": 1, "readbackCopies": 1, "blank": false, "readbackSha256": "16cf0ecf39f03cb3d0f8eaf22387d350cfd26f649c2fd7b1deefd2075e9de7d6" }
+  ]
+}

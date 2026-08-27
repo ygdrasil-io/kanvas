@@ -14,6 +14,8 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUPreparedMaterialUnsupportedR
 import org.graphiks.kanvas.gpu.renderer.commands.GPURuntimeEffectChildDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPURuntimeEffectUniformValue
 import org.graphiks.kanvas.gpu.renderer.commands.containsUnsupportedMaterial
+import org.graphiks.kanvas.gpu.renderer.commands.gradientFactsRefusalReasonOrNull
+import org.graphiks.kanvas.gpu.renderer.commands.imageLocalMatrixRefusalReasonOrNull
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes
 import org.graphiks.kanvas.image.AlphaType
@@ -727,6 +729,13 @@ private fun List<Float>.composeGradientLocalMatrix(matrix: Matrix3x3F32): List<F
     }
 }
 
+private fun List<Float>.composeImageLocalMatrix(matrix: Matrix3x3F32): List<Float>? {
+    if (size != 9 || any { !it.isFinite() } || !matrix.hasFiniteValues()) return null
+    return (toMatrix33() * matrix).toDescriptorValues().takeIf { values ->
+        values.all(Float::isFinite)
+    }
+}
+
 private fun GPUMaterialDescriptor.invalidGradientLocalMatrix(): GPUMaterialDescriptor.Unsupported =
     GPUMaterialDescriptor.Unsupported(
         reason = GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX,
@@ -860,13 +869,24 @@ private fun Shader.toPreparedMaterial(
     return when (this) {
         is Shader.SolidColor -> toMaterial()
         is Shader.LinearGradient ->
-            if (interpolation == ColorSpaceInterpolation.SRGB) {
-                toMaterial()
-            } else {
+            if (interpolation != ColorSpaceInterpolation.SRGB) {
                 mapper.descriptorAssembly.preparedUnsupported(
                     GPUPreparedMaterialUnsupportedReason.GRADIENT_INTERPOLATION,
                     GPUMaterialKind.LinearGradient,
                 )
+            } else {
+                val descriptor = toMaterial() as GPUMaterialDescriptor.LinearGradient
+                // Repeat is owned by the legacy CorePrimitive linear-gradient route. The
+                // prepared-material v2 route below is intentionally clamp-only, but it must
+                // not rewrite an otherwise representable legacy repeat descriptor into an
+                // Unsupported material before that route can see it.
+                descriptor.preparedV2LinearGradientRefusalReasonOrNull()?.let { reason ->
+                    mapper.descriptorAssembly.preparedUnsupported(
+                        reason = reason,
+                        originalKind = GPUMaterialKind.LinearGradient,
+                        source = descriptor,
+                    )
+                } ?: descriptor
             }
         is Shader.RadialGradient ->
             if (interpolation == ColorSpaceInterpolation.SRGB) {
@@ -919,11 +939,50 @@ private fun Shader.toPreparedMaterial(
         is Shader.WithLocalMatrix -> {
             val source = mapper.map(shader)
             source.preparedGraphTraversalRefusalOrNull()?.let { return it }
-            mapper.descriptorAssembly.preparedUnsupported(
-                reason = GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX,
-                originalKind = shader.materialKind(),
-                source = source,
-            )
+            if (source is GPUMaterialDescriptor.ImageDraw) {
+                val mapped = source.localMatrix.composeImageLocalMatrix(matrix)?.let { composed ->
+                    source.copy(localMatrix = composed)
+                }
+                val refusal = mapped?.imageLocalMatrixRefusalReasonOrNull()
+                if (mapped != null && refusal == null) {
+                    mapped
+                } else {
+                    mapper.descriptorAssembly.preparedUnsupported(
+                        reason = refusal ?: GPUPreparedMaterialUnsupportedReason.IMAGE_LOCAL_MATRIX_AFFINE,
+                        originalKind = shader.materialKind(),
+                        source = source,
+                    )
+                }
+            } else if (source is GPUMaterialDescriptor.LinearGradient) {
+                val composed = source.localMatrix.composeGradientLocalMatrix(matrix)
+                if (composed == null) {
+                    mapper.descriptorAssembly.preparedUnsupported(
+                        reason = GPUPreparedMaterialUnsupportedReason.LINEAR_GRADIENT_LOCAL_MATRIX_AFFINE,
+                        originalKind = GPUMaterialKind.LinearGradient,
+                        source = source,
+                    )
+                } else {
+                    val mapped = source.copy().withGradientFacts(
+                        GPUMaterialDescriptor.GradientFacts(
+                            interpolation = source.interpolation,
+                            localMatrix = composed,
+                        ),
+                    )
+                    mapped.preparedV2LinearGradientRefusalReasonOrNull()?.let { reason ->
+                        mapper.descriptorAssembly.preparedUnsupported(
+                            reason = reason,
+                            originalKind = GPUMaterialKind.LinearGradient,
+                            source = source,
+                        )
+                    } ?: mapped
+                }
+            } else {
+                mapper.descriptorAssembly.preparedUnsupported(
+                    reason = GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX,
+                    originalKind = shader.materialKind(),
+                    source = source,
+                )
+            }
         }
         is Shader.WithColorFilter -> {
             val source = mapper.map(shader)
@@ -987,6 +1046,10 @@ private fun Shader.toPreparedMaterial(
     }
 }
 
+/** V2 validation applies only to its clamp-only prepared-material sub-route. */
+private fun GPUMaterialDescriptor.LinearGradient.preparedV2LinearGradientRefusalReasonOrNull() =
+    if (tileMode == "repeat") null else gradientFactsRefusalReasonOrNull()
+
 private fun Shader.Image.toPreparedImageMaterial(
     descriptorAssembly: GPUMaterialDescriptorAssemblySession,
 ): GPUMaterialDescriptor {
@@ -1008,20 +1071,19 @@ private fun Shader.Image.toPreparedImageMaterial(
                 GPUMaterialKind.ImageDraw,
             )
     }
-    if (
-        image.colorType != ColorType.RGBA_8888 &&
-        image.colorType != ColorType.BGRA_8888 &&
-        image.colorType != ColorType.ALPHA_8
-    ) {
+    if (image.colorType !in PREPARED_IMAGE_COLOR_TYPES) {
         return descriptorAssembly.preparedUnsupported(
             GPUPreparedMaterialUnsupportedReason.IMAGE_COLOR_TYPE,
             GPUMaterialKind.ImageDraw,
         )
     }
-    val alphaTypeUnsupported = if (image.colorType == ColorType.ALPHA_8) {
-        image.alphaType != AlphaType.PREMUL
-    } else {
-        image.alphaType == AlphaType.PREMUL || image.alphaType == AlphaType.UNKNOWN
+    val alphaTypeUnsupported = when (image.colorType) {
+        ColorType.ALPHA_8 -> image.alphaType != AlphaType.PREMUL
+        ColorType.ARGB_4444, ColorType.RGBA_F16 -> image.alphaType != AlphaType.PREMUL
+        ColorType.RGB_565, ColorType.GRAY_8 -> image.alphaType != AlphaType.OPAQUE
+        ColorType.RGBA_8888, ColorType.BGRA_8888 ->
+            image.alphaType == AlphaType.PREMUL || image.alphaType == AlphaType.UNKNOWN
+        else -> true
     }
     if (alphaTypeUnsupported) {
         return descriptorAssembly.preparedUnsupported(
@@ -1741,8 +1803,13 @@ private fun org.graphiks.kanvas.image.Image.expandToPreparedRgba(): ByteArray? {
                 output[outputOffset + 3] = source[index]
             }
         }
+        ColorType.RGB_565,
+        ColorType.ARGB_4444,
+        ColorType.RGBA_F16,
+        ColorType.GRAY_8,
+            -> expandBitmapConfigToPreparedRgba(source, expectedOutputSize)
         else -> return null
-    }
+    } ?: return null
     if (alphaType == AlphaType.OPAQUE) {
         for (offset in 3 until rgba.size step 4) {
             rgba[offset] = 0xff.toByte()
@@ -1750,6 +1817,35 @@ private fun org.graphiks.kanvas.image.Image.expandToPreparedRgba(): ByteArray? {
     }
     return rgba
 }
+
+private fun org.graphiks.kanvas.image.Image.expandBitmapConfigToPreparedRgba(
+    source: ByteArray,
+    expectedOutputSize: Int,
+): ByteArray? = runCatching {
+    val bitmap = org.graphiks.kanvas.image.Bitmap.fromImage(copy(pixels = source))
+    ByteArray(expectedOutputSize).also { output ->
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                val color = bitmap.getPixel(x, y)
+                val offset = (y * width + x) * 4
+                output[offset] = (color.r.coerceIn(0f, 1f) * 255f).toInt().toByte()
+                output[offset + 1] = (color.g.coerceIn(0f, 1f) * 255f).toInt().toByte()
+                output[offset + 2] = (color.b.coerceIn(0f, 1f) * 255f).toInt().toByte()
+                output[offset + 3] = (color.a.coerceIn(0f, 1f) * 255f).toInt().toByte()
+            }
+        }
+    }
+}.getOrNull()
+
+private val PREPARED_IMAGE_COLOR_TYPES = setOf(
+    ColorType.RGBA_8888,
+    ColorType.BGRA_8888,
+    ColorType.ALPHA_8,
+    ColorType.RGB_565,
+    ColorType.ARGB_4444,
+    ColorType.RGBA_F16,
+    ColorType.GRAY_8,
+)
 
 private fun exactImageByteCount(
     width: Int,

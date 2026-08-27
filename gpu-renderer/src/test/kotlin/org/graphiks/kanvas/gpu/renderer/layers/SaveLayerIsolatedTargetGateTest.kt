@@ -55,6 +55,19 @@ class SaveLayerIsolatedTargetGateTest {
     }
 
     @Test
+    fun boundedSrcRestoreUsesFixedFunctionRouteWithoutDestinationRead() {
+        val plan = GPUSaveLayerIsolatedTargetPlanner().plan(
+            saveLayerRequest(saveRecord = saveRecord(restoreBlendMode = "src")),
+        )
+
+        val execution = assertIs<GPULayerExecutionPlan.IsolatedTarget>(plan.layerPlan.execution)
+        assertEquals("src", execution.composite.blendModeLabel)
+        assertEquals("fixed-function-src", execution.composite.compositeRoute)
+        assertEquals("none", execution.composite.destinationReadStrategy)
+        assertTrue(plan.diagnostics.isEmpty())
+    }
+
+    @Test
     fun targetDescriptorHashIsStableAcrossChildAndGenerationChanges() {
         val base = GPUSaveLayerIsolatedTargetPlanner().plan(saveLayerRequest())
         val changed = GPUSaveLayerIsolatedTargetPlanner().plan(

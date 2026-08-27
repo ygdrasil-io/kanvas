@@ -446,6 +446,16 @@ class GPUCorePrimitiveNativeShaderTest {
         assertEquals(0f, analyticCoverage(0.5f, 3f, rectBounds, squareRadii, antiAlias = true))
         assertEquals(0f, analyticCoverage(1f, 3f, rectBounds, squareRadii, antiAlias = false))
 
+        // `thinrects`: a 1/8-pixel vertical rect must retain its exact area in the
+        // one touched pixel. A signed-distance ramp undercounts this at the pixel
+        // centre, so the rect branch is deliberately pixel-overlap coverage.
+        val thinRect = listOf(1.125f, 2f, 1.25f, 3f)
+        assertEquals(
+            0.125f,
+            analyticCoverage(1.5f, 2.5f, thinRect, squareRadii, antiAlias = true),
+            1e-6f,
+        )
+
         val rrectBounds = listOf(0f, 0f, 10f, 10f)
         val topLeftEllipse = listOf(4f, 4f, 0f, 0f, 0f, 0f, 0f, 0f)
         val diagonalBoundary = 4f - 4f / sqrt(2f)
@@ -465,6 +475,24 @@ class GPUCorePrimitiveNativeShaderTest {
 
         val oneZeroComponent = listOf(0f, 4f, 0f, 0f, 0f, 0f, 0f, 0f)
         assertEquals(0.75f, analyticCoverage(0.25f, 0.25f, rrectBounds, oneZeroComponent, true), 1e-6f)
+    }
+
+    @Test
+    fun `analytic shape WGSL uses exact pixel overlap for zero radius thin rect AA`() {
+        val source = assertIs<GPUCorePrimitiveNativeShaderResult.Ready>(
+            buildCorePrimitiveAnalyticShapeNativeShader(),
+        ).plan.wgslSource
+
+        assertContains(source, "fn analytic_rect_pixel_coverage(position: vec2<f32>) -> f32")
+        assertContains(source, "let overlap = max(overlap_max - overlap_min, vec2<f32>(0.0));")
+        assertContains(source, "return overlap.x * overlap.y;")
+        assertContains(source, "all(analytic.radii0 == vec4<f32>(0.0))")
+
+        val dstReadSource = corePrimitiveAnalyticShapeDstReadNativeWgsl(
+            "fn kanvasBlendPremul(src: vec4<f32>, dst: vec4<f32>) -> vec4<f32> { return src; }",
+        )
+        assertContains(dstReadSource, "fn analytic_rect_pixel_coverage(position: vec2<f32>) -> f32")
+        assertContains(dstReadSource, "return overlap.x * overlap.y;")
     }
 
     @Test
@@ -878,6 +906,11 @@ class GPUCorePrimitiveNativeShaderTest {
         radii: List<Float>,
         antiAlias: Boolean,
     ): Float {
+        if (radii.all { it == 0f } && antiAlias) {
+            val overlapX = (minOf(x + 0.5f, bounds[2]) - maxOf(x - 0.5f, bounds[0])).coerceIn(0f, 1f)
+            val overlapY = (minOf(y + 0.5f, bounds[3]) - maxOf(y - 0.5f, bounds[1])).coerceIn(0f, 1f)
+            return overlapX * overlapY
+        }
         val distance = graphiteLikeRRectDistance(x, y, bounds, radii)
         if (!antiAlias) return if (distance >= 0f) 1f else 0f
         val scale = minOf(bounds[2] - bounds[0], bounds[3] - bounds[1]).coerceIn(0f, 1f)

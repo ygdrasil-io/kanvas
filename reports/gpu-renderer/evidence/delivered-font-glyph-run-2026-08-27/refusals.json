@@ -1,0 +1,27 @@
+{
+  "schema": "org.graphiks.kanvas.gpu.delivered-font-glyph-run.refusals.v1",
+  "policy": "The selected glyph-run evidence does not promote the enclosing GMs.",
+  "rows": [
+    {
+      "gm": "gradtext",
+      "command": "rtk ./gradlew --no-daemon :integration-tests:skia:test --rerun-tasks --tests org.graphiks.kanvas.skia.SkiaGmRunner -Dkanvas.gm.name=gradtext -Dkanvas.render.debugLevel=PIXEL",
+      "result": "expected-unsupported",
+      "reasonCode": "unsupported.material.mapping.linear_gradient_tile_mode",
+      "detail": "The GM requires MIRROR tile mode; the selected row is only a CLAMP two-stop glyph run."
+    },
+    {
+      "gm": "text_scale_skew",
+      "command": "rtk ./gradlew --no-daemon :integration-tests:skia:test --rerun-tasks --tests org.graphiks.kanvas.skia.SkiaGmRunner -Dkanvas.gm.name=text_scale_skew -Dkanvas.render.debugLevel=PIXEL",
+      "result": "expected-nonpromotion",
+      "reasonCode": "similarity.below-existing-threshold",
+      "detail": "GPU dispatches 16 text operations with zero refusals but reaches 77.75%, below the unchanged 80.0% threshold."
+    },
+    {
+      "gm": "fontscaler",
+      "command": "rtk ./gradlew --no-daemon :integration-tests:skia:test --rerun-tasks --tests org.graphiks.kanvas.skia.SkiaGmRunner -Dkanvas.gm.name=fontscaler -Dkanvas.render.debugLevel=PIXEL",
+      "result": "expected-unsupported",
+      "reasonCode": "invalid.surface.prepared.text-command",
+      "detail": "The broad sweep exceeds the prepared-text admission boundary; only the single size-18 glyph run is evidenced."
+    }
+  ]
+}

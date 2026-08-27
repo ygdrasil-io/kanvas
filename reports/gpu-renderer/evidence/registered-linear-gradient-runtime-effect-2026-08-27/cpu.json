@@ -1,0 +1,9 @@
+{
+  "effectId": "runtime.linear_gradient_rt",
+  "descriptorVersion": 2,
+  "oracle": "LinearGradientRTCPUOracle",
+  "uniformLayout": {"bytes": 64, "fields": ["start@0:16", "end@16:16", "startColor@32:16", "endColor@48:16"]},
+  "fixture": {"target": "4x4", "geometry": "two opaque triangles covering the target", "start": [0, 0], "end": [0, 4], "startColor": [1, 0, 0, 1], "endColor": [0, 0, 1, 1]},
+  "rgba8Rows": [[240, 0, 99, 255], [207, 0, 165, 255], [165, 0, 207, 255], [99, 0, 240, 255]],
+  "semantics": "LinearGradientRTCPUOracle evaluates packed Kotlin uniforms at local pixel centers; linear RGB is encoded for the sRGB target. Each listed color is repeated across its row."
+}

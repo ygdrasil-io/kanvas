@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "kanvas-image-local-sampling-diagnostics-v1",
+  "gm": "nearest_half_pixel_image",
+  "nativeDiagnostics": [],
+  "nativeRefusalCount": 0,
+  "localMatrixContract": {
+    "negativeImageLocalMatrix": "unsupported.material.mapping.image_local_matrix_affine",
+    "note": "not exercised by this GM because its shader has no local matrix"
+  }
+}

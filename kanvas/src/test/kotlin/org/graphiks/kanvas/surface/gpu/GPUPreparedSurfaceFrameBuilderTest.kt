@@ -25,6 +25,8 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
+import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticCode
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticSeverity
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
@@ -866,6 +868,20 @@ class GPUPreparedSurfaceFrameBuilderTest {
         assertTrue(packets.isNotEmpty())
     }
 
+    @Test
+    fun `image path inventory candidate requires identity transform`() {
+        val image = atlasImage("transformed-image-path")
+        val operation = DisplayOp.DrawPath(
+            Path().addRect(RectF32.ofLTRB(1f, 1f, 3f, 3f)),
+            Paint(shader = Shader.Image(image)).copy(antiAlias = false),
+            Matrix3x3F32.translation(4f, 2f),
+            ClipStack.WideOpen,
+        )
+
+        assertFalse(operation.isPreparedImageVisualCandidate())
+        assertTrue(operation.copy(transform = Matrix3x3F32.Identity).isPreparedImageVisualCandidate())
+    }
+
     private fun srgbToLinear(encoded: Float): Float = if (encoded <= 0.04045f) {
         encoded / 12.92f
     } else {
@@ -1435,10 +1451,10 @@ class GPUPreparedSurfaceFrameBuilderTest {
             Image(
                 1,
                 1,
-                ColorType.GRAY_8,
+                ColorType.RGB_888X,
                 "unsupported-format",
-                byteArrayOf(1),
-                alphaType = AlphaType.PREMUL,
+                byteArrayOf(1, 1, 1, 0),
+                alphaType = AlphaType.OPAQUE,
             ) to GPUPreparedImageRefusalCodes.PIXEL_FORMAT,
         )
 
@@ -1523,7 +1539,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
     }
 
     @Test
-    fun `unexpected construction exception becomes a stable contract refusal without variable detail`() {
+    fun `unexpected construction exception records its class and message in stable contract refusal facts`() {
         val base = request(listOf(rect()))
         val unstableOperations = object : AbstractList<DisplayOp>() {
             override val size: Int = 1
@@ -1540,10 +1556,45 @@ class GPUPreparedSurfaceFrameBuilderTest {
 
         assertEquals("invalid.surface.prepared.frame-build-contract", refused.diagnostic.code.value)
         assertEquals(
-            mapOf("failureClass" to IllegalStateException::class.java.name),
+            mapOf(
+                "failureClass" to IllegalStateException::class.java.name,
+                "failureMessage" to "runtime-specific detail must not escape",
+            ),
             refused.diagnostic.facts,
         )
-        assertTrue("runtime-specific detail" !in refused.diagnostic.message)
+        assertEquals(
+            "Prepared Surface frame construction violated an internal contract.",
+            refused.diagnostic.message,
+        )
+    }
+
+    @Test
+    fun `typed construction failure preserves the original diagnostic`() {
+        val base = request(listOf(rect()))
+        val underlying = GPUDiagnostic(
+            code = GPUDiagnosticCode("invalid.test.prepared-frame-build"),
+            domain = GPUDiagnosticDomain.Pipelines,
+            severity = GPUDiagnosticSeverity.Error,
+            message = "The prepared pipeline key did not match the frame layout.",
+            facts = mapOf(
+                "pipelineKey" to "solid:clip-mask",
+                "layout" to "dynamic-uniforms",
+            ),
+        )
+        val unstableOperations = object : AbstractList<DisplayOp>() {
+            override val size: Int = 1
+
+            override fun get(index: Int): DisplayOp =
+                throw GPUPreparedSurfaceTerminalException(underlying)
+        }
+
+        val refused = assertIs<GPUPreparedSurfaceFrameBuildResult.Refused>(
+            GPUPreparedSurfaceFrameBuilder.build(
+                base.copy(candidate = base.candidate.copy(operations = unstableOperations)),
+            ),
+        )
+
+        assertEquals(underlying, refused.diagnostic)
     }
 
     @Test

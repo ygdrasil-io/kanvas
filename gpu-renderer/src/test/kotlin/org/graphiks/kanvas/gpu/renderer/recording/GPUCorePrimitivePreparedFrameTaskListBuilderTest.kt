@@ -2951,7 +2951,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
             ).copy(configuredAggregateBudgetBytes = 1),
         )
         assertEquals(
-            "invalid.core_primitive.coverage_sample.geometry_coverage",
+            "unsupported.uniform_slab_budget_exceeded",
             assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(unsupportedStroke).diagnostic.code.value,
         )
     }

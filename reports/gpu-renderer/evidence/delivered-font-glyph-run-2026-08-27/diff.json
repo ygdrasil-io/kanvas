@@ -1,0 +1,38 @@
+{
+  "schema": "org.graphiks.kanvas.gpu.delivered-font-glyph-run.diff.v2",
+  "oracle": "Test-only CPU interpreter of the sealed CPU-prepared TextA8 atlas, device quads, nearest UV sampling, admitted material uniforms, source-over blend, and sRGB RGBA8 encoding.",
+  "comparison": "Pixel-by-pixel over every RGBA channel: 96 x 48 x 4 = 18432 bytes per row. CPU and GPU SHA-256 identify the complete buffers.",
+  "rows": [
+    {
+      "id": "gradtext.glyph-run.linear-clamp.v1",
+      "cpuSha256": "9666e292ad51f7754d2fb0ccebb6c557988dc36f0edb89a32d0c2897e106c354",
+      "gpuSha256": "3e82d101c0a894f7a06da71e24a397841903ddca083053aff58e50ffc21db24a",
+      "comparedBytes": 18432,
+      "differentBytes": 9,
+      "differentPixels": 9,
+      "maxChannelDelta": 1,
+      "totalAbsoluteDelta": 9,
+      "classification": "sealed baseline: final UNORM quantization differs by one LSB at nine red/blue samples"
+    },
+    {
+      "id": "text-scale-skew.glyph-run.affine.v1",
+      "cpuSha256": "6ea03c02678f30606226c83d7f263404d82e31c49c856935775c916b977cb0ae",
+      "gpuSha256": "6ea03c02678f30606226c83d7f263404d82e31c49c856935775c916b977cb0ae",
+      "comparedBytes": 18432,
+      "differentBytes": 0,
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "totalAbsoluteDelta": 0
+    },
+    {
+      "id": "fontscaler.glyph-run.size-18.v1",
+      "cpuSha256": "16cf0ecf39f03cb3d0f8eaf22387d350cfd26f649c2fd7b1deefd2075e9de7d6",
+      "gpuSha256": "16cf0ecf39f03cb3d0f8eaf22387d350cfd26f649c2fd7b1deefd2075e9de7d6",
+      "comparedBytes": 18432,
+      "differentBytes": 0,
+      "differentPixels": 0,
+      "maxChannelDelta": 0,
+      "totalAbsoluteDelta": 0
+    }
+  ]
+}

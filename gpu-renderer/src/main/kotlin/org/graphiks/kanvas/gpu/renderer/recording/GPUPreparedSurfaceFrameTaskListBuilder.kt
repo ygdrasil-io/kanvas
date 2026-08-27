@@ -3072,8 +3072,26 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
     fun mergeCompositeCommands(
         taskList: GPUTaskList,
         commands: List<GPUPassCommand>,
-    ): GPUTaskList =
-        taskList.withCompositeCommands(commands)
+    ): GPUTaskList {
+        // The closed native route keeps layer-child coordinates in scene space. Its backing
+        // attachments are therefore scene-sized; rewrite the contract before linearization so
+        // `PrepareLayerTarget.byteEstimate` cannot understate what materialization allocates.
+        val sceneTargetBytes = taskList.tasks
+            .filterIsInstance<GPUTask.PrepareResources>()
+            .flatMap(GPUTask.PrepareResources::requests)
+            .singleOrNull { request -> request.role == GPUFrameResourceRole.SceneTarget }
+            ?.byteSize
+            ?: return taskList.withCompositeCommands(commands)
+        return taskList.withCompositeCommands(
+            commands.map { command ->
+                when (command) {
+                    is GPUPassCommand.PrepareLayerTarget ->
+                        command.copy(byteEstimate = sceneTargetBytes)
+                    else -> command
+                }
+            },
+        )
+    }
 
     /**
      * Splits a merged prepared-surface frame's flat render into one scene render plus one

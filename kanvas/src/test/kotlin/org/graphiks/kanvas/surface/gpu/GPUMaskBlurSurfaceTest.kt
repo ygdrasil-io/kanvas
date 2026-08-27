@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertFailsWith
 
 /**
@@ -46,19 +47,65 @@ class GPUMaskBlurSurfaceTest {
     @Test
     fun `normal rect blur renders prepared with blurred coverage pixels`() {
         val pixels = renderRectPixels(BlurStyle.NORMAL, 2f)
-        val expected = TopLevelMaskBlurPixelOracle.render(
-            targetWidth = 32,
-            targetHeight = 32,
-            shape = rectShape(8f, 8f, 17f, 17f),
-            clipBounds = fullTarget(),
-            style = BlurStyle.NORMAL,
-            sigma = 2f,
-            source = ColorARGB.Black,
-            blendMode = BlendMode.SRC_OVER,
-            destinationEncoded = transparent(),
+        val expected = BoundedMaskBlurRectCpuOracle.render()
+        val evidence = BoundedMaskBlurRectCpuOracle.compare(expected, pixels)
+
+        assertEquals(
+            "cpuSha256=9735248adde7e8e966a03d90fe43ea70c468be2ddd748384985c2b9706dd1bae," +
+                "gpuSha256=9735248adde7e8e966a03d90fe43ea70c468be2ddd748384985c2b9706dd1bae," +
+                "differentChannels=0,maxDelta=0,meanDelta=0.0,dimensions=32x32," +
+                "command=drawRect(8,8,17,17, MaskFilter.Blur(NORMAL, sigma=2))",
+            evidence.canonicalString(),
         )
-        TopLevelMaskBlurPixelOracle.assertPixelsNear(expected, pixels)
+        assertContentEquals(expected, pixels)
         assertCenterCoverage(pixels, 12, 12)
+    }
+
+    @Test
+    fun `bounded rect blur reports one logical operation with no refusal`() {
+        val result = renderRectResult(BlurStyle.NORMAL, 2f)
+
+        // The RenderStats counter counts the one input operation. Its prepared
+        // native lowering remains the separately asserted five-pass chain.
+        assertEquals(1, result.stats.opsDispatched)
+        assertEquals(0, result.stats.opsRefused)
+    }
+
+    @Test
+    fun `translated rect blur renders at its transformed device bounds`() {
+        requireWebGpu()
+        val pixels = Surface(width = 32, height = 32).run {
+            canvas {
+                translate(4f, 5f)
+                drawRect(RectF32(8f, 8f, 17f, 17f), blurPaint(BlurStyle.NORMAL, 2f))
+            }
+            render().pixels.toUByteArray()
+        }
+        val expected = TopLevelMaskBlurPixelOracle.render(
+            32, 32, rectShape(12f, 13f, 21f, 22f), fullTarget(), BlurStyle.NORMAL, 2f,
+            ColorARGB.Black, BlendMode.SRC_OVER, transparent(),
+        )
+
+        TopLevelMaskBlurPixelOracle.assertPixelsNear(expected, pixels)
+    }
+
+    @Test
+    fun `scaled rect blur remains an explicit bounded-route refusal`() {
+        requireWebGpu()
+        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            Surface(width = 32, height = 32).run {
+                canvas {
+                    scale(1.5f, 1.5f)
+                    drawRect(RectF32(8f, 8f, 17f, 17f), blurPaint(BlurStyle.NORMAL, 2f))
+                }
+                render()
+            }
+        }
+
+        assertEquals(
+            "unsupported.core_primitive.mask_blur.unsupported.mask-filter.blur.transform",
+            failure.diagnostic.code.value,
+        )
     }
 
     @Test
@@ -167,15 +214,16 @@ class GPUMaskBlurSurfaceTest {
     }
 
     @Test
-    fun `sigma forty eight rect blur renders prepared at reduced resolution`() {
-        val pixels = renderRectPixels(BlurStyle.NORMAL, 48f)
-        val expected = TopLevelMaskBlurPixelOracle.render(
-            32, 32, rectShape(8f, 8f, 17f, 17f), fullTarget(), BlurStyle.NORMAL, 48f,
-            ColorARGB.Black, BlendMode.SRC_OVER, transparent(),
+    fun `sigma beyond the bounded kernel refuses before native materialization`() {
+        requireWebGpu()
+        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            renderRectResult(BlurStyle.NORMAL, 200f)
+        }
+
+        assertEquals(
+            "unsupported.mask-filter.blur.sigma",
+            failure.diagnostic.code.value,
         )
-        TopLevelMaskBlurPixelOracle.assertPixelsNear(expected, pixels)
-        // The wide halo must reach well beyond the shape bounds.
-        assertTrue(pixels[(2 * 32 + 2) * 4 + 3].toInt() > 0)
     }
 
     @Test
@@ -597,4 +645,3 @@ class GPUMaskBlurSurfaceTest {
     }
 
 }
-

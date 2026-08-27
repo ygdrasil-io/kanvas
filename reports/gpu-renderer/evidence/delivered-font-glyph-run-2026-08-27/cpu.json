@@ -1,0 +1,16 @@
+{
+  "schema": "org.graphiks.kanvas.gpu.delivered-font-glyph-run.cpu.v2",
+  "font": {
+    "path": "kanvas/src/test/resources/fonts/liberation/LiberationSans-Regular.ttf",
+    "sha256": "76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8",
+    "bytes": 410712
+  },
+  "outlineOracle": "FontTypeface.getGlyphPath for every selected glyph",
+  "a8Oracle": "CPU interpreter of the immutable TextA8 payload: CPU-prepared atlas bytes, device quad/UV nearest sampling, material uniforms, source-over composition, and sRGB RGBA8 encoding for the complete 18432-byte buffer of every row",
+  "target": { "width": 96, "height": 48, "format": "RGBA8", "bytes": 18432 },
+  "rows": [
+    { "id": "gradtext.glyph-run.linear-clamp.v1", "text": "Skia", "glyphCount": 4, "size": 24.0, "outlinePaths": "all-present", "paint": "two-stop CLAMP linear gradient" },
+    { "id": "text-scale-skew.glyph-run.affine.v1", "text": "Skia", "glyphCount": 4, "size": 24.0, "outlinePaths": "all-present", "paint": "opaque white", "transform": "sx=1.15,kx=0.18" },
+    { "id": "fontscaler.glyph-run.size-18.v1", "text": "Aa", "glyphCount": 2, "size": 18.0, "outlinePaths": "all-present", "paint": "opaque white" }
+  ]
+}

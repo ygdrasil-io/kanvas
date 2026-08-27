@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "kanvas-image-local-sampling-route-v1",
+  "gm": "drawimagerect_filter",
+  "backend": "WebGPU headless/offscreen",
+  "sourceOperation": "drawRect.imageShader",
+  "shapeRecognition": "exact axis-aligned rectangle path emitted by GmCanvas",
+  "imagePreparation": "prepared RGBA8 artifact",
+  "sampling": ["clamp-to-edge nearest", "clamp-to-edge linear"],
+  "localMatrixExecution": "finite bounded positive-scale translation is lowered into prepared image UVs",
+  "preparedMaterialProgramAbi": "not used by this direct image route"
+}

@@ -1,0 +1,8 @@
+{
+  "fixture": "bounded-save-layer-src-opacity-isolation-v1",
+  "oracle": "explicit 4x4 premultiplied RGBA8 SRC fixture expectation",
+  "independence": "test-local expected pixels; no layer planner, materializer, native handle, or WebGPU dependency",
+  "dimensions": { "width": 4, "height": 4, "channels": 64, "format": "RGBA8 sRGB" },
+  "scene": "opaque blue parent; bounded [1,1)-[3,3) isolated red child; layer alpha=0.5; restore=SRC",
+  "sha256": "7b8a10f512a72f3430e3e89e975556ba0b5d29246cbe9db8ddd5955652aa275c"
+}

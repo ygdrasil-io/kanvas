@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.materials
 
 import java.io.File
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -140,6 +142,101 @@ class GPUPreparedMaterialProgramTest {
             )
             assertEquals("unsupported.material.mapping.local_matrix", refused.code)
         }
+    }
+
+    @Test
+    fun `prepared compiler packs the bounded linear local affine matrix for WGSL evaluation`() {
+        val descriptor = linearGradientDescriptor().withGradientFacts(
+            GPUMaterialDescriptor.GradientFacts(
+                localMatrix = listOf(
+                    1f, 0f, 3f,
+                    0f, 1f, 4f,
+                    0f, 0f, 1f,
+                ),
+            ),
+        )
+
+        val program = ready(descriptor, 1f)
+        val floats = ByteBuffer.wrap(program.uniformBytes.map(Int::toByte).toByteArray())
+            .order(ByteOrder.LITTLE_ENDIAN)
+            .asFloatBuffer()
+
+        assertEquals(576, program.uniformBytes.size)
+        assertEquals(1f, floats.get(4))
+        assertEquals(3f, floats.get(6))
+        assertEquals(1f, floats.get(9))
+        assertEquals(4f, floats.get(10))
+        assertTrue("gradient.localMatrix0" in program.wgslSource)
+        assertTrue("gradient.localMatrix1" in program.wgslSource)
+    }
+
+    @Test
+    fun `two stop linear CPU reference clamps affine coordinates and interpolates premultiplied colors`() {
+        val descriptor = GPUMaterialDescriptor.LinearGradient(
+            startX = 0f, startY = 0f, endX = 32f, endY = 0f,
+            startR = 0.25f, startG = 0.5f, startB = 0.75f, startA = 0.4f,
+            endR = 0.9f, endG = 0.1f, endB = 0.4f, endA = 0.7f,
+            allStopPositions = floatArrayOf(0f, 1f),
+            allStopColors = floatArrayOf(
+                0.25f, 0.5f, 0.75f, 0.4f,
+                0.9f, 0.1f, 0.4f, 0.7f,
+            ),
+        ).withGradientFacts(
+            GPUMaterialDescriptor.GradientFacts(
+                localMatrix = listOf(
+                    1f, 0f, 3f,
+                    0f, 1f, 4f,
+                    0f, 0f, 1f,
+                ),
+            ),
+        )
+
+        val sample = boundedLinearGradientCpuReference(descriptor, x = 13f, y = 0f)
+        floatArrayOf(0.28576952f, 0.046316218f, 0.15100822f, 0.55f).forEachIndexed { index, expected ->
+            assertEquals(expected, sample[index], 0.0001f)
+        }
+        val program = ready(descriptor, 1f)
+        assertTrue("pow((*colors)" !in program.wgslSource)
+        assertTrue("return (1.0 - u) * (*colors)[lo] + u * (*colors)[hi];" in program.wgslSource)
+    }
+
+    @Test
+    fun `two stop linear CPU reference matches WGSL degenerate axis clamp`() {
+        val descriptor = linearGradientDescriptor().copy(
+            endX = 5e-7f,
+            endY = 5e-7f,
+        )
+
+        val sample = boundedLinearGradientCpuReference(descriptor, x = 100f, y = -100f)
+
+        val alpha = 0.25f
+        floatArrayOf(
+            preparedMaterialSrgbToLinear(1f) * alpha,
+            0f,
+            0f,
+            alpha,
+        ).forEachIndexed { index, expected ->
+            assertEquals(expected, sample[index], 0.0001f)
+        }
+    }
+
+    @Test
+    fun `prepared compiler refuses bounded image local matrix outside the dedicated image route`() {
+        val refused = assertIs<GPUPreparedMaterialProgramResult.Refused>(
+            compiler.compile(
+                supportedImageShaderDescriptor(
+                    localMatrix = listOf(
+                        1f, 0f, 2f,
+                        0f, 1f, 3f,
+                        0f, 0f, 1f,
+                    ),
+                ),
+                1f,
+                context,
+            ),
+        )
+
+        assertEquals("unsupported.material.mapping.local_matrix", refused.code)
     }
 
     @Test
@@ -290,6 +387,15 @@ class GPUPreparedMaterialProgramTest {
             )
             assertEquals("unsupported.material.blend_shader", refused.code)
         }
+    }
+
+    @Test
+    fun `prepared v2 gradient compiler keeps legacy repeat outside its 576 byte ABI`() {
+        val refused = assertIs<GPUPreparedMaterialProgramResult.Refused>(
+            compiler.compile(linearGradientDescriptor().copy(tileMode = "repeat"), 1f, context),
+        )
+
+        assertEquals("unsupported.material.mapping.linear_gradient_tile_mode", refused.code)
     }
 
     @Test
@@ -530,9 +636,16 @@ class GPUPreparedMaterialProgramTest {
             ),
             ExpectedAbi(
                 linearGradientDescriptor(),
-                544,
+                576,
                 listOf(Triple(0, 0, "uniformBuffer")),
-                mapOf("start" to 0, "end" to 8, "count" to 16, "stopData" to 32),
+                mapOf(
+                    "start" to 0,
+                    "end" to 8,
+                    "localMatrix0" to 16,
+                    "localMatrix1" to 32,
+                    "count" to 48,
+                    "stopData" to 64,
+                ),
             ),
             ExpectedAbi(
                 radialGradientDescriptor(),
@@ -969,6 +1082,33 @@ class GPUPreparedMaterialProgramTest {
             allStopColors = floatArrayOf(1f, 0f, 0f, 0.25f, 0f, 0f, 1f, 0.75f),
         )
 
+    private fun boundedLinearGradientCpuReference(
+        descriptor: GPUMaterialDescriptor.LinearGradient,
+        x: Float,
+        y: Float,
+    ): FloatArray {
+        val matrix = descriptor.localMatrix
+        val localX = matrix[0] * x + matrix[1] * y + matrix[2]
+        val localY = matrix[3] * x + matrix[4] * y + matrix[5]
+        val dx = descriptor.endX - descriptor.startX
+        val dy = descriptor.endY - descriptor.startY
+        val lenSq = dx * dx + dy * dy
+        val clamped = if (lenSq < 1.0e-12f) {
+            0f
+        } else {
+            (((localX - descriptor.startX) * dx + (localY - descriptor.startY) * dy) / lenSq)
+                .coerceIn(0f, 1f)
+        }
+        val stops = requireNotNull(descriptor.allStopColors)
+        val startAlpha = stops[3]
+        val endAlpha = stops[7]
+        return FloatArray(4) { index ->
+            val start = if (index == 3) startAlpha else preparedMaterialSrgbToLinear(stops[index]) * startAlpha
+            val end = if (index == 3) endAlpha else preparedMaterialSrgbToLinear(stops[index + 4]) * endAlpha
+            start + (end - start) * clamped
+        }
+    }
+
     private fun radialGradientDescriptor() =
         GPUMaterialDescriptor.RadialGradient(
             centerX = 8f,
@@ -1061,6 +1201,11 @@ class GPUPreparedMaterialProgramTest {
         samplingFilterMode: String = "nearest",
         alphaOnly: Boolean = false,
         tintR: Float = 0.25f,
+        localMatrix: List<Float> = listOf(
+            1f, 0f, 0f,
+            0f, 1f, 0f,
+            0f, 0f, 1f,
+        ),
     ) =
         GPUMaterialDescriptor.ImageDraw(
             imageSourceId = "prepared-material-image",
@@ -1068,6 +1213,7 @@ class GPUPreparedMaterialProgramTest {
             imageHeight = height,
             rgbaPixels = pixels,
             samplingFilterMode = samplingFilterMode,
+            localMatrix = localMatrix,
             alphaOnly = alphaOnly,
             tintR = tintR,
             tintG = 0.5f,

@@ -1,0 +1,14 @@
+{
+  "fixture": "bounded-mask-blur-rect-v1",
+  "dag": [
+    { "node": "mask", "writes": "mask" },
+    { "node": "blur-h", "reads": ["mask"], "writes": "blur-h", "kernelTapCount": 5 },
+    { "node": "blur-v", "reads": ["blur-h"], "writes": "blur-v", "kernelTapCount": 5 },
+    { "node": "style", "reads": ["blur-v", "mask"], "writes": "styled" },
+    { "node": "composite", "reads": ["styled"], "writes": "scene" }
+  ],
+  "ordering": "mask -> blur-h -> blur-v -> style -> composite",
+  "sourceDependency": "local FillRect mask only",
+  "quickReject": "non-rect/hairline/stroke/image-source paths and sigma > 12 are refused before native materialization",
+  "admission": { "maxSigma": 12.0, "maxKernelTaps": 25, "scale": 1.0 }
+}

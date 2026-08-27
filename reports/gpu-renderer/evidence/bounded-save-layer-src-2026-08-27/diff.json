@@ -1,0 +1,11 @@
+{
+  "fixture": "bounded-save-layer-src-opacity-isolation-v1",
+  "comparison": "test-local CPU oracle versus native WebGPU readback",
+  "dimensions": { "width": 4, "height": 4, "channels": 64 },
+  "cpuSha256": "7b8a10f512a72f3430e3e89e975556ba0b5d29246cbe9db8ddd5955652aa275c",
+  "gpuSha256": "7b8a10f512a72f3430e3e89e975556ba0b5d29246cbe9db8ddd5955652aa275c",
+  "differentChannels": 0,
+  "maxDelta": 0,
+  "meanDelta": 0.0,
+  "comparisonPolicy": "byte-exact observed; test guard permits at most 2 only for cross-adapter sRGB quantization"
+}

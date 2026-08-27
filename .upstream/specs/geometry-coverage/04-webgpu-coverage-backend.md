@@ -49,6 +49,20 @@ Related resources:
 | `AlphaMask` | Texture mask sampled as coverage. |
 | `PathCoverage` | Convex fan, stencil-cover, or mask/atlas strategy selected by path facts. |
 | `CoverageAtlas` | Profile-driven mask atlas, not default. |
+
+### Bounded thin `AnalyticRect` AA
+
+For a finite, non-empty, axis-aligned zero-radius `AnalyticRect` with AA in a
+single-sample target, the WebGPU analytic lane may compute coverage as the
+exact area of intersection between the device rect and the current pixel box.
+This is the `thinrect-analytic-aa-v1` contract: the CPU oracle uses the same
+per-axis overlap product, and the GPU route remains an explicit
+`AnalyticShape` direct triangle-list draw with the analytic-shape uniform ABI.
+
+This bounded case does not select a fan or stencil-cover path and must not be
+silently relabelled from a hard-coverage draw. Empty/degenerate rects, rotated
+or skewed rects, nonzero-radius rrects, ovals, and multi-shape clip workloads
+remain on their independently validated routes or emit their stable refusal.
 | `Unsupported` | Stable diagnostic; no silent scissor-only approximation. |
 
 ## Strategy Selection

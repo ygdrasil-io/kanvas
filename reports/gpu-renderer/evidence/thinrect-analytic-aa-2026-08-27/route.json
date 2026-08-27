@@ -1,0 +1,7 @@
+{
+  "fixture": "thinrect-analytic-aa-v1",
+  "input": { "geometry": "axis-aligned FillRect", "radii": [0, 0, 0, 0, 0, 0, 0, 0], "antiAlias": true, "samplePlan": "single-sample" },
+  "coveragePlan": { "kind": "analytic-rect-pixel-overlap", "explicitMode": "ScalarAA", "shaderFunction": "analytic_rect_pixel_coverage" },
+  "nativeLane": { "lane": "AnalyticShape", "topology": "DirectTriangleList", "uniform": "AnalyticShapeUniform80V1", "fanStencil": false },
+  "scope": "only zero-radius, axis-aligned rects use exact pixel overlap; nonzero-radii RRects retain their existing signed-distance branch and route contract"
+}

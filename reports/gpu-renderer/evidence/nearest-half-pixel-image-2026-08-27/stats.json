@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "kanvas-image-local-sampling-stats-v1",
+  "gm": "nearest_half_pixel_image",
+  "similarityPercent": 73.44938749194068,
+  "ssim": 0.4371369865048657,
+  "meanChannelError": 0.11321576212690106,
+  "thresholdPercent": 0.0,
+  "thresholdChanged": false,
+  "nativeDispatchCount": 2,
+  "nativeRefusalCount": 0
+}

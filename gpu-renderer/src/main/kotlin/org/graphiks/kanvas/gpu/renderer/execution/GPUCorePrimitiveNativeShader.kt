@@ -776,9 +776,23 @@ internal fun corePrimitiveAnalyticShapeDstReadNativeWgsl(formulaWgsl: String): S
         return distance;
     }
 
+    fn analytic_rect_pixel_coverage(position: vec2<f32>) -> f32 {
+        let pixel_min = position - vec2<f32>(0.5);
+        let pixel_max = position + vec2<f32>(0.5);
+        let overlap_min = max(pixel_min, analytic.device_bounds.xy);
+        let overlap_max = min(pixel_max, analytic.device_bounds.zw);
+        let overlap = max(overlap_max - overlap_min, vec2<f32>(0.0));
+        return overlap.x * overlap.y;
+    }
+
     fn analytic_shape_coverage(position: vec2<f32>) -> f32 {
         let distance = analytic_shape_distance(position);
         let hard = select(0.0, 1.0, distance >= 0.0);
+        let zero_radius_rect =
+            all(analytic.radii0 == vec4<f32>(0.0)) && all(analytic.radii1 == vec4<f32>(0.0));
+        if (zero_radius_rect) {
+            return select(hard, analytic_rect_pixel_coverage(position), analytic.anti_alias != 0u);
+        }
         let shape_size = max(analytic.device_bounds.zw - analytic.device_bounds.xy, vec2<f32>(0.0));
         let scale = clamp(min(shape_size.x, shape_size.y), 0.0, 1.0);
         let bias = 1.0 - 0.5 * scale;
@@ -834,7 +848,7 @@ internal const val CORE_PRIMITIVE_DST_READ_NATIVE_SHADER_IDENTITY =
 internal const val CORE_PRIMITIVE_DST_READ_NATIVE_BINDING_LAYOUT_IDENTITY =
     "vertex-fragment-dynamic-uniform32-dst-read-v1"
 internal const val CORE_PRIMITIVE_ANALYTIC_SHAPE_DST_READ_NATIVE_SHADER_IDENTITY =
-    "core-primitive-analytic-shape-dst-read-device-geometry-wgsl-v1"
+    "core-primitive-analytic-shape-dst-read-device-geometry-wgsl-v2"
 internal const val CORE_PRIMITIVE_ANALYTIC_SHAPE_DST_READ_NATIVE_BINDING_LAYOUT_IDENTITY =
     "dynamic-uniform80-analytic-shape-dst-read-v1"
 internal const val CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY = "float32x2-uint32-triangle-list-v1"
@@ -842,7 +856,7 @@ internal const val CORE_PRIMITIVE_NATIVE_VERTEX_ENTRY_POINT = "vs_main"
 internal const val CORE_PRIMITIVE_NATIVE_COLOR_FRAGMENT_ENTRY_POINT = "fs_main"
 internal const val CORE_PRIMITIVE_NATIVE_STENCIL_FRAGMENT_ENTRY_POINT = "fs_stencil"
 internal const val CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_SHADER_IDENTITY =
-    "core-primitive-analytic-shape-device-geometry-wgsl-v1"
+    "core-primitive-analytic-shape-device-geometry-wgsl-v2"
 internal const val CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_BINDING_LAYOUT_IDENTITY =
     "dynamic-uniform80-analytic-shape-v1"
 internal const val CORE_PRIMITIVE_ANALYTIC_DRRECT_NATIVE_SHADER_IDENTITY =
@@ -966,9 +980,23 @@ internal val CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_WGSL = """
         return distance;
     }
 
+    fn analytic_rect_pixel_coverage(position: vec2<f32>) -> f32 {
+        let pixel_min = position - vec2<f32>(0.5);
+        let pixel_max = position + vec2<f32>(0.5);
+        let overlap_min = max(pixel_min, analytic.device_bounds.xy);
+        let overlap_max = min(pixel_max, analytic.device_bounds.zw);
+        let overlap = max(overlap_max - overlap_min, vec2<f32>(0.0));
+        return overlap.x * overlap.y;
+    }
+
     fn analytic_shape_coverage(position: vec2<f32>) -> f32 {
         let distance = analytic_shape_distance(position);
         let hard = select(0.0, 1.0, distance >= 0.0);
+        let zero_radius_rect =
+            all(analytic.radii0 == vec4<f32>(0.0)) && all(analytic.radii1 == vec4<f32>(0.0));
+        if (zero_radius_rect) {
+            return select(hard, analytic_rect_pixel_coverage(position), analytic.anti_alias != 0u);
+        }
         let shape_size = max(analytic.device_bounds.zw - analytic.device_bounds.xy, vec2<f32>(0.0));
         let scale = clamp(min(shape_size.x, shape_size.y), 0.0, 1.0);
         let bias = 1.0 - 0.5 * scale;

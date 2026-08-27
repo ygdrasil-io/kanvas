@@ -718,8 +718,10 @@ private fun GPUDrawSemanticPayload.CorePrimitive.usesAnalyticShapeUniform80(): B
     }
 
 private fun GPUDrawSemanticPayload.CorePrimitive.hasPathStencilCoverGeometry(): Boolean =
-    (geometry as? GPUCorePrimitiveGeometry.TriangulatedPath)?.geometryMode ==
-        GPUCorePrimitiveGeometryMode.StencilEdgeFan
+    (geometry as? GPUCorePrimitiveGeometry.TriangulatedPath)?.geometryMode in setOf(
+        GPUCorePrimitiveGeometryMode.StencilEdgeFan,
+        GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan,
+    )
 
 private data class GPUCorePrimitivePathStencilPacketPlan(
     val semantic: GPUDrawSemanticPayload.CorePrimitive,
@@ -776,9 +778,12 @@ private fun GPUDrawPacket.hasCorePrimitiveSemanticAuthority(
                 semantic.geometry is GPUCorePrimitiveGeometry.Rect &&
                 semantic.material is GPUCorePrimitiveMaterialPayload.SolidColor
         "linear.gradient.fill" ->
-            semantic.rectRouteAuthority == GPUCorePrimitiveRectRouteAuthority.RectAxisAligned &&
-                semantic.geometry is GPUCorePrimitiveGeometry.Rect &&
-                semantic.material is GPUCorePrimitiveMaterialPayload.LinearGradient
+            semantic.material is GPUCorePrimitiveMaterialPayload.LinearGradient &&
+                (
+                    (semantic.rectRouteAuthority == GPUCorePrimitiveRectRouteAuthority.RectAxisAligned &&
+                        semantic.geometry is GPUCorePrimitiveGeometry.Rect) ||
+                        semantic.hasExactDirectTriangleRectGradientConsumerGeometry()
+                    )
         "radial.gradient.fill" ->
             semantic.rectRouteAuthority == GPUCorePrimitiveRectRouteAuthority.RectAxisAligned &&
                 semantic.geometry is GPUCorePrimitiveGeometry.Rect &&
@@ -810,7 +815,7 @@ private fun GPUDrawPacket.isExactDirectTriangleClampGradientHardPathClipConsumer
     val clip = clipExecutionPlan as? GPUClipExecutionPlan.StencilCoverage ?: return false
     return semantic.material is GPUCorePrimitiveMaterialPayload.LinearGradient &&
         semantic.material.tileMode == "clamp" &&
-        semantic.hasExactDirectTrianglePathConsumerGeometry() &&
+        semantic.hasExactClampGradientHardPathClipConsumerGeometry() &&
         clip.sampleCount == 1 && clip.corePrimitiveClipStencilNativePathOrNull() != null
 }
 
@@ -837,7 +842,7 @@ private fun directCorePrimitiveGeometryBytes(
         packet.blendPlan is GPUBlendPlan.NoOp
     ) return null
     if (acceptedClipStencilPlan != null && semantic.geometry is GPUCorePrimitiveGeometry.TriangulatedPath &&
-        !semantic.hasExactDirectTrianglePathConsumerGeometry()
+        !semantic.hasExactClampGradientHardPathClipConsumerGeometry()
     ) return null
     when (packet.clipExecutionPlan) {
         GPUClipExecutionPlan.NoClip,
@@ -891,11 +896,36 @@ private fun GPUDrawSemanticPayload.CorePrimitive.hasExactDirectTrianglePathConsu
     return twiceArea.isFinite() && twiceArea != 0f
 }
 
+private fun GPUDrawSemanticPayload.CorePrimitive.hasExactDirectTriangleRectGradientConsumerGeometry(): Boolean {
+    val rect = geometry as? GPUCorePrimitiveGeometry.TriangulatedPath ?: return false
+    if (sourceFamily != GPUCorePrimitiveSourceFamily.Rect ||
+        rectRouteAuthority != GPUCorePrimitiveRectRouteAuthority.RectAffineDirectTrianglesV1 ||
+        rect.geometryMode != GPUCorePrimitiveGeometryMode.DirectTriangles ||
+        rect.vertices.size != 8 || rect.indices != listOf(0, 1, 2, 0, 2, 3) ||
+        rect.sourceContourStarts != listOf(0) || rect.sourceVertexCount != 4 ||
+        rect.fillRule != GPUCorePrimitiveFillRule.Winding ||
+        rect.inverseFill || rect.strokeStyle != null
+    ) return false
+    val corners = rect.vertices.chunked(2).map { (x, y) -> x to y }
+    val xs = corners.map { it.first }.distinct()
+    val ys = corners.map { it.second }.distinct()
+    return xs.size == 2 && ys.size == 2 && corners.toSet().size == 4 &&
+        corners.all { (x, y) -> x.isFinite() && y.isFinite() }
+}
+
+private fun GPUDrawSemanticPayload.CorePrimitive.hasExactClampGradientHardPathClipConsumerGeometry(): Boolean =
+    hasExactDirectTrianglePathConsumerGeometry() ||
+        hasExactDirectTriangleRectGradientConsumerGeometry()
+
 private fun pathStencilGeometryBytes(
     semantic: GPUDrawSemanticPayload.CorePrimitive,
 ): GPUCorePrimitiveDirectGeometryBytes? {
     val geometry = semantic.geometry as? GPUCorePrimitiveGeometry.TriangulatedPath ?: return null
-    if (geometry.geometryMode != GPUCorePrimitiveGeometryMode.StencilEdgeFan) return null
+    if (geometry.geometryMode !in setOf(
+            GPUCorePrimitiveGeometryMode.StencilEdgeFan,
+            GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan,
+        )
+    ) return null
     return GPUCorePrimitiveDirectGeometryBytes(
         vertexBytes = Math.addExact(
             Math.multiplyExact(geometry.vertices.size.toLong(), Float.SIZE_BYTES.toLong()),
@@ -1746,7 +1776,10 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 val analyticPathStencilAa = plan is GPUClipExecutionPlan.AnalyticCoverage &&
                     semantic.coverageMode == GPUCorePrimitiveCoverageMode.StencilAA &&
                     (semantic.geometry as? GPUCorePrimitiveGeometry.TriangulatedPath)
-                        ?.geometryMode == GPUCorePrimitiveGeometryMode.StencilEdgeFan
+                        ?.geometryMode in setOf(
+                        GPUCorePrimitiveGeometryMode.StencilEdgeFan,
+                        GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan,
+                    )
                 plan != GPUClipExecutionPlan.NoClip &&
                     plan !is GPUClipExecutionPlan.ScissorOnly &&
                     !analyticPathStencilAa
@@ -1895,11 +1928,9 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 ?: return@forEach
             when (geometry.geometryMode) {
                 GPUCorePrimitiveGeometryMode.DirectTriangles -> Unit
-                GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan -> return refused(
-                    "unsupported.recording.core_primitive_path_stroke_stencil",
-                    "Prepared path stencil topology does not yet accept stroke edge fans.",
-                )
-                GPUCorePrimitiveGeometryMode.StencilEdgeFan -> {
+                GPUCorePrimitiveGeometryMode.StencilEdgeFan,
+                GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan,
+                -> {
                     val expectedCoverageMode = if (preparedSamplePlan == GPUSamplePlan.MultisampleFrame(4)) {
                         GPUCorePrimitiveCoverageMode.StencilAA
                     } else {
@@ -2119,7 +2150,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         if (staticNativeClipStencilPlan?.sampleCount == 1 && staticNativeClipStencilConsumers.any { packet ->
                 val semantic = request.coreSemantics().getValue(packet.commandIdValue)
                 semantic.geometry is GPUCorePrimitiveGeometry.TriangulatedPath &&
-                    !semantic.hasExactDirectTrianglePathConsumerGeometry()
+                    !semantic.hasExactClampGradientHardPathClipConsumerGeometry()
             }
         ) {
             return refused(
@@ -4630,8 +4661,9 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 (clipExecutionPlan as? GPUClipExecutionPlan.StencilCoverage)
                     ?.corePrimitiveClipStencilNativePathOrNull(),
             )
+            val stencilPlan = clipExecutionPlan as GPUClipExecutionPlan.StencilCoverage
             corePrimitiveClipStencilConsumerRenderPipelineStructuralKey(
-                inverseFill = path.inverseFill,
+                inverseFill = path.inverseFill xor stencilPlan.consumerInverseFill,
                 blendPlan = requireNotNull(basePacket.blendPlan),
                 shader = requireNotNull(corePrimitiveClipStencilConsumerShaderOrNull(preparedSemantic.material, preparedSemantic.geometry)),
                 sampleCount = sampleCount,

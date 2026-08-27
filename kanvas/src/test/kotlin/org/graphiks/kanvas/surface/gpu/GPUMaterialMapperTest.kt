@@ -23,6 +23,7 @@ import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgramCompiler
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgramResult
 import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.Bitmap
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
@@ -114,6 +115,99 @@ class GPUMaterialMapperTest {
     }
 
     @Test
+    fun `prepared linear gradient admits the bounded two stop clamp local matrix route`() {
+        val matrix = Matrix3x3F32.of(
+            1f, 0f, 3f,
+            0f, 1f, 4f,
+            0f, 0f, 1f,
+        )
+        val descriptor = assertIs<GPUMaterialDescriptor.LinearGradient>(
+            Paint(
+                shader = Shader.WithLocalMatrix(
+                    Shader.LinearGradient(
+                        start = Point2F32(0f, 0f),
+                        end = Point2F32(16f, 0f),
+                        stops = listOf(
+                            GradientStop(0f, ColorARGB.fromRGBA(1f, 0f, 0f, 0.25f)),
+                            GradientStop(1f, ColorARGB.fromRGBA(0f, 0f, 1f, 0.75f)),
+                        ),
+                        tileMode = TileMode.CLAMP,
+                    ),
+                    matrix,
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+
+        assertEquals(listOf(0f, 1f), descriptor.allStopPositions?.toList())
+        assertEquals(
+            listOf(1f, 0f, 3f, 0f, 1f, 4f, 0f, 0f, 1f),
+            descriptor.localMatrix,
+        )
+    }
+
+    @Test
+    fun `legacy repeat is retained while prepared v2 refuses other tile modes and stop counts`() {
+        val twoStops = listOf(
+            GradientStop(0f, ColorARGB.Red),
+            GradientStop(1f, ColorARGB.Blue),
+        )
+        val legacyRepeat = assertIs<GPUMaterialDescriptor.LinearGradient>(
+            Paint(
+                shader = Shader.LinearGradient(
+                    start = Point2F32(0f, 0f), end = Point2F32(8f, 0f),
+                    stops = listOf(
+                        twoStops.first(),
+                        GradientStop(0.5f, ColorARGB.White),
+                        twoStops.last(),
+                    ),
+                    tileMode = TileMode.REPEAT,
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+        assertEquals("repeat", legacyRepeat.tileMode)
+        assertEquals(listOf(0f, 0.5f, 1f), legacyRepeat.allStopPositions?.toList())
+
+        listOf(
+            Shader.LinearGradient(
+                start = Point2F32(0f, 0f), end = Point2F32(8f, 0f),
+                stops = twoStops, tileMode = TileMode.MIRROR,
+            ) to "unsupported.material.mapping.linear_gradient_tile_mode",
+            Shader.LinearGradient(
+                start = Point2F32(0f, 0f), end = Point2F32(8f, 0f),
+                stops = listOf(*twoStops.toTypedArray(), GradientStop(0.5f, ColorARGB.White)),
+            ) to "unsupported.material.mapping.linear_gradient_stop_count",
+        ).forEach { (shader, reason) ->
+            val refused = assertIs<GPUMaterialDescriptor.Unsupported>(
+                Paint(shader = shader).toPreparedMaterialMapping().descriptor,
+            )
+            assertEquals(reason, refused.reason.diagnosticCode)
+        }
+    }
+
+    @Test
+    fun `prepared linear gradient refuses perspective non finite and out of budget local matrices`() {
+        val gradient = Shader.LinearGradient(
+            start = Point2F32(0f, 0f),
+            end = Point2F32(8f, 0f),
+            stops = listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+        )
+        listOf(
+            Matrix3x3F32.of(1f, 0f, 0f, 0f, 1f, 0f, 0.1f, 0f, 1f) to
+                "unsupported.material.mapping.linear_gradient_local_matrix_perspective",
+            Matrix3x3F32.of(1f, 0f, Float.NaN, 0f, 1f, 0f, 0f, 0f, 1f) to
+                "unsupported.material.mapping.linear_gradient_local_matrix_affine",
+            Matrix3x3F32.of(1f, 0f, 16385f, 0f, 1f, 0f, 0f, 0f, 1f) to
+                "unsupported.material.mapping.linear_gradient_local_matrix_affine",
+        ).forEach { (matrix, code) ->
+            val refused = assertIs<GPUMaterialDescriptor.Unsupported>(
+                Paint(shader = Shader.WithLocalMatrix(gradient, matrix))
+                    .toPreparedMaterialMapping().descriptor,
+            )
+            assertEquals(code, refused.reason.diagnosticCode)
+        }
+    }
+
+    @Test
     fun `linear descriptor snapshots gradient facts without mutable escape`() {
         val positions = floatArrayOf(0f, 1f)
         val colors = floatArrayOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f)
@@ -196,8 +290,8 @@ class GPUMaterialMapperTest {
         assertEquals(GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX, preparedMatrix.reason)
         assertEquals(GPUMaterialKind.LinearGradient, preparedMatrix.originalKind)
         assertEquals(
-            listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f),
-            assertIs<GPUMaterialDescriptor.LinearGradient>(preparedMatrix.source).localMatrix,
+            GPUPreparedMaterialUnsupportedReason.LINEAR_GRADIENT_STOP_COUNT,
+            assertIs<GPUMaterialDescriptor.Unsupported>(preparedMatrix.source).reason,
         )
 
         val legacyWorkingSpace = assertIs<GPUMaterialDescriptor.LinearGradient>(
@@ -223,7 +317,10 @@ class GPUMaterialMapperTest {
         )
         assertEquals(GPUPreparedMaterialUnsupportedReason.WORKING_COLOR_SPACE, preparedWorkingSpace.reason)
         assertEquals(GPUMaterialKind.LinearGradient, preparedWorkingSpace.originalKind)
-        assertEquals(legacyWorkingSpace, preparedWorkingSpace.source)
+        assertEquals(
+            GPUPreparedMaterialUnsupportedReason.LINEAR_GRADIENT_STOP_COUNT,
+            assertIs<GPUMaterialDescriptor.Unsupported>(preparedWorkingSpace.source).reason,
+        )
     }
 
     @Test
@@ -765,30 +862,10 @@ class GPUMaterialMapperTest {
             ) to GPUPreparedMaterialUnsupportedReason.IMAGE_TILE_MODE,
             Paint(
                 shader = imageShader(
-                    sourceId = "gray",
-                    pixels = byteArrayOf(1),
-                    colorType = ColorType.GRAY_8,
-                ),
-            ) to GPUPreparedMaterialUnsupportedReason.IMAGE_COLOR_TYPE,
-            Paint(
-                shader = imageShader(
-                    sourceId = "f16",
-                    pixels = ByteArray(8),
-                    colorType = ColorType.RGBA_F16,
-                ),
-            ) to GPUPreparedMaterialUnsupportedReason.IMAGE_COLOR_TYPE,
-            Paint(
-                shader = imageShader(
-                    sourceId = "565",
-                    pixels = ByteArray(2),
-                    colorType = ColorType.RGB_565,
-                ),
-            ) to GPUPreparedMaterialUnsupportedReason.IMAGE_COLOR_TYPE,
-            Paint(
-                shader = imageShader(
-                    sourceId = "4444",
-                    pixels = ByteArray(2),
-                    colorType = ColorType.ARGB_4444,
+                    sourceId = "unknown-format",
+                    pixels = byteArrayOf(1, 2, 3, 4),
+                    colorType = ColorType.RGB_888X,
+                    alphaType = AlphaType.OPAQUE,
                 ),
             ) to GPUPreparedMaterialUnsupportedReason.IMAGE_COLOR_TYPE,
             Paint(
@@ -1558,6 +1635,56 @@ class GPUMaterialMapperTest {
     }
 
     @Test
+    fun `prepared image conversion expands bitmap configs to straight RGBA8`() {
+        val rgb565 = assertIs<GPUMaterialDescriptor.ImageDraw>(
+            Paint(
+                shader = imageShader(
+                    sourceId = "rgb565",
+                    pixels = byteArrayOf(0x00, 0xf8.toByte()),
+                    colorType = ColorType.RGB_565,
+                    alphaType = AlphaType.OPAQUE,
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+        val argb4444 = assertIs<GPUMaterialDescriptor.ImageDraw>(
+            Paint(
+                shader = imageShader(
+                    sourceId = "argb4444",
+                    pixels = byteArrayOf(0x21, 0x84.toByte()),
+                    colorType = ColorType.ARGB_4444,
+                    alphaType = AlphaType.PREMUL,
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+        val rgbaF16 = assertIs<GPUMaterialDescriptor.ImageDraw>(
+            Paint(
+                shader = Shader.Image(
+                    requireNotNull(
+                        Bitmap(1, 1, ColorType.RGBA_F16).also {
+                            it.setPixel(0, 0, ColorARGB.fromRGBA(0.5f, 0.25f, 0.75f, 0.5f))
+                        }.toImageOrNull(),
+                    ),
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+        val gray8 = assertIs<GPUMaterialDescriptor.ImageDraw>(
+            Paint(
+                shader = imageShader(
+                    sourceId = "gray8",
+                    pixels = byteArrayOf(0x80.toByte()),
+                    colorType = ColorType.GRAY_8,
+                    alphaType = AlphaType.OPAQUE,
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+
+        assertContentEquals(byteArrayOf(0xff.toByte(), 0, 0, 0xff.toByte()), rgb565.rgbaPixels)
+        assertContentEquals(byteArrayOf(128.toByte(), 64, 32, 136.toByte()), argb4444.rgbaPixels)
+        assertContentEquals(byteArrayOf(128.toByte(), 64, 191.toByte(), 128.toByte()), rgbaF16.rgbaPixels)
+        assertContentEquals(byteArrayOf(0x80.toByte(), 0x80.toByte(), 0x80.toByte(), 0xff.toByte()), gray8.rgbaPixels)
+    }
+
+    @Test
     fun `prepared image mapping snapshots caller pixels before descriptor escape`() {
         val pixels = byteArrayOf(1, 2, 3, 4)
         val image = Image(
@@ -1707,6 +1834,114 @@ class GPUMaterialMapperTest {
         )
         assertEquals(ColorARGB.Red.r, legacyWrapped.r)
         assertEquals(0f, legacyNoise.a)
+    }
+
+    @Test
+    fun `prepared image mapping preserves a half pixel local translation`() {
+        val descriptor = assertIs<GPUMaterialDescriptor.ImageDraw>(
+            Paint(
+                shader = Shader.WithLocalMatrix(
+                    imageShader(
+                        sourceId = "image-half-pixel-translation",
+                        pixels = byteArrayOf(1, 2, 3, 4),
+                    ),
+                    Matrix3x3F32.translation(0.5f, 0.5f),
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+
+        assertEquals(
+            listOf(1f, 0f, 0.5f, 0f, 1f, 0.5f, 0f, 0f, 1f),
+            descriptor.localMatrix,
+        )
+    }
+
+    @Test
+    fun `prepared image mapping carries bounded uniform scale and the requested filter`() {
+        listOf(SamplingOptions.NEAREST to "nearest", SamplingOptions.LINEAR to "linear").forEach {
+                (sampling, filterMode) ->
+            val descriptor = assertIs<GPUMaterialDescriptor.ImageDraw>(
+                Paint(
+                    shader = Shader.WithLocalMatrix(
+                        imageShader(
+                            sourceId = "image-scale-$filterMode",
+                            pixels = byteArrayOf(1, 2, 3, 4),
+                            sampling = sampling,
+                        ),
+                        Matrix3x3F32.scaling(2f, 2f),
+                    ),
+                ).toPreparedMaterialMapping().descriptor,
+            )
+
+            assertEquals(filterMode, descriptor.samplingFilterMode)
+            assertEquals(
+                listOf(2f, 0f, 0f, 0f, 2f, 0f, 0f, 0f, 1f),
+                descriptor.localMatrix,
+            )
+        }
+    }
+
+    @Test
+    fun `prepared image mapping keeps tile and perspective refusals distinct`() {
+        val repeat = assertIs<GPUMaterialDescriptor.Unsupported>(
+            Paint(
+                shader = imageShader(
+                    sourceId = "image-repeat-refusal",
+                    pixels = byteArrayOf(1, 2, 3, 4),
+                    tileModeX = TileMode.REPEAT,
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+        val perspective = assertIs<GPUMaterialDescriptor.Unsupported>(
+            Paint(
+                shader = Shader.WithLocalMatrix(
+                    imageShader(
+                        sourceId = "image-perspective-refusal",
+                        pixels = byteArrayOf(1, 2, 3, 4),
+                    ),
+                    Matrix3x3F32.of(
+                        1f, 0f, 0f,
+                        0f, 1f, 0f,
+                        0.01f, 0f, 1f,
+                    ),
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+
+        assertEquals(GPUPreparedMaterialUnsupportedReason.IMAGE_TILE_MODE, repeat.reason)
+        assertEquals(
+            GPUPreparedMaterialUnsupportedReason.IMAGE_LOCAL_MATRIX_PERSPECTIVE,
+            perspective.reason,
+        )
+    }
+
+    @Test
+    fun `prepared image local matrix contract accepts exact bounds and refuses every boundary escape`() {
+        fun mapped(matrix: Matrix3x3F32) = Paint(
+            shader = Shader.WithLocalMatrix(
+                imageShader(
+                    sourceId = "image-local-boundary-${matrix.hashCode()}",
+                    pixels = byteArrayOf(1, 2, 3, 4),
+                ),
+                matrix,
+            ),
+        ).toPreparedMaterialMapping().descriptor
+
+        assertIs<GPUMaterialDescriptor.ImageDraw>(
+            mapped(Matrix3x3F32.of(4096f, 0f, 16384f, 0f, 4096f, -16384f)),
+        )
+        listOf(
+            Matrix3x3F32.of(Float.NaN, 0f, 0f, 0f, 1f, 0f),
+            Matrix3x3F32.of(Float.POSITIVE_INFINITY, 0f, 0f, 0f, 1f, 0f),
+            Matrix3x3F32.of(1f, 0.25f, 0f, 0f, 1f, 0f),
+            Matrix3x3F32.of(0f, 0f, 0f, 0f, 1f, 0f),
+            Matrix3x3F32.of(-1f, 0f, 0f, 0f, 1f, 0f),
+            Matrix3x3F32.of(4096.01f, 0f, 0f, 0f, 1f, 0f),
+            Matrix3x3F32.of(1f, 0f, 16384.01f, 0f, 1f, 0f),
+        ).forEach { matrix ->
+            val refused = assertIs<GPUMaterialDescriptor.Unsupported>(mapped(matrix))
+            assertEquals(GPUPreparedMaterialUnsupportedReason.IMAGE_LOCAL_MATRIX_AFFINE, refused.reason)
+        }
     }
 
     private fun imageShader(

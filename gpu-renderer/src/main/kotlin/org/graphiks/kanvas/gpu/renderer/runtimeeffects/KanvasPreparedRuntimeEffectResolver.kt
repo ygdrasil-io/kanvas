@@ -16,6 +16,9 @@ import org.graphiks.kanvas.gpu.renderer.materials.preparedRuntimeEffectChildAbiH
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTSourceHash
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTUniformBlockSizeBytes
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTWgsl
+import org.graphiks.kanvas.gpu.renderer.wgsl.LinearGradientRTSourceHash
+import org.graphiks.kanvas.gpu.renderer.wgsl.LinearGradientRTUniformBlockSizeBytes
+import org.graphiks.kanvas.gpu.renderer.wgsl.LinearGradientRTWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.hasMaterialColorFunctionSignature
 import org.graphiks.kanvas.gpu.renderer.wgsl.reflectionFactsHash
 import org.graphiks.kanvas.gpu.renderer.wgsl.reflectWgslModule
@@ -100,6 +103,11 @@ internal class KanvasPreparedRuntimeEffectProgramAuthority {
         requireNotNull(simpleRTDescriptor.sourceColorContract) {
             "SimpleRT descriptor must register a prepared source color contract"
         }
+    private val linearGradientRTDescriptor = LinearGradientRTDescriptor.createDescriptor()
+    private val linearGradientRTSourceColorContract =
+        requireNotNull(linearGradientRTDescriptor.sourceColorContract) {
+            "LinearGradientRT descriptor must register a prepared source color contract"
+        }
 
     private val candidates = mapOf(
         RuntimeEffectProgramKey(
@@ -153,6 +161,55 @@ internal class KanvasPreparedRuntimeEffectProgramAuthority {
                 childSlots = emptyList(),
             ),
             cpuOracle = SimpleRTCPUOracle,
+        ),
+        RuntimeEffectProgramKey(
+            id = linearGradientRTDescriptor.id,
+            version = linearGradientRTDescriptor.version,
+        ) to KanvasPreparedRuntimeEffectProgramCandidate(
+            program = GPUPreparedRuntimeEffectProgram(
+                effectId = linearGradientRTDescriptor.id.value,
+                descriptorVersion = linearGradientRTDescriptor.version.value,
+                wgslSource = LinearGradientRTWgsl,
+                sourceFunction = linearGradientRTDescriptor.wgslPlan.entryPoint,
+                sourceColorContract = linearGradientRTSourceColorContract,
+                sourceHash = LinearGradientRTSourceHash,
+                moduleHash = preparedRuntimeEffectModuleContractHash(
+                    wgslModuleHash = linearGradientRTDescriptor.wgslPlan.moduleHash,
+                    sourceColorContract = linearGradientRTSourceColorContract,
+                    childSlots = emptyList(),
+                ),
+                reflectionHash = preparedRuntimeEffectReflectionContractHash(
+                    reflectedAbiHash = linearGradientRTDescriptor.wgslPlan.reflectionHash,
+                    childSlots = emptyList(),
+                ),
+                uniformSchemaHash = linearGradientRTDescriptor.uniformSchema.schemaHash,
+                uniformBlockSizeBytes = LinearGradientRTUniformBlockSizeBytes,
+                uniformFields = listOf(
+                    runtimeUniformField("start", 0),
+                    runtimeUniformField("end", 16),
+                    runtimeUniformField("startColor", 32),
+                    runtimeUniformField("endColor", 48),
+                ),
+                bindings = listOf(
+                    GPUPreparedRuntimeEffectBinding(
+                        group = 1,
+                        binding = 0,
+                        resourceKind = "uniformBuffer",
+                        minBindingSizeBytes = LinearGradientRTUniformBlockSizeBytes,
+                    ),
+                ),
+                bindingPlanHash = preparedRuntimeEffectBindingContractHash(
+                    descriptorBindingPlanHash = linearGradientRTDescriptor.resources.bindingPlanHash,
+                    sourceColorContract = linearGradientRTSourceColorContract,
+                    childSlots = emptyList(),
+                ),
+                routeContractHash = preparedRuntimeEffectRouteContractHash(
+                    descriptor = linearGradientRTDescriptor,
+                    sourceColorContract = linearGradientRTSourceColorContract,
+                ),
+                childSlots = emptyList(),
+            ),
+            cpuOracle = LinearGradientRTCPUOracle,
         ),
     )
 
@@ -299,24 +356,47 @@ private fun validateMaterialCPUBehavior(
     descriptor: GPURuntimeEffectDescriptor,
     cpuOracle: GPURuntimeEffectCPUOracle,
 ): String? {
-    if (descriptor.id != SimpleRTDescriptor.effectId) {
-        return "Runtime-effect CPU behavior has no registered validation fixtures"
+    val fixtures = when (descriptor.id) {
+        SimpleRTDescriptor.effectId -> listOf(
+            MaterialBehaviorFixture(
+                uniformValues = listOf(0.125f, 0.375f, 0.625f, 0.875f),
+                localPositionX = 0.25f,
+                localPositionY = 0.75f,
+                expectedColor = listOf(0.125f, 0.375f, 0.625f, 0.875f),
+            ),
+            MaterialBehaviorFixture(
+                uniformValues = listOf(0.9f, 0.7f, 0.3f, 0.1f),
+                localPositionX = 0.25f,
+                localPositionY = 0.75f,
+                expectedColor = listOf(0.9f, 0.7f, 0.3f, 0.1f),
+            ),
+        )
+        LinearGradientRTDescriptor.effectId -> listOf(
+            MaterialBehaviorFixture(
+                uniformValues = listOf(
+                    0f, 0f, 0f, 0f,
+                    0f, 1f, 0f, 0f,
+                    1f, 0f, 0f, 1f,
+                    0f, 0f, 1f, 1f,
+                ),
+                localPositionX = 0.5f,
+                localPositionY = 0.25f,
+                expectedColor = listOf(0.75f, 0f, 0.25f, 1f),
+            ),
+        )
+        else -> return "Runtime-effect CPU behavior has no registered validation fixtures"
     }
-    val fixtures = listOf(
-        listOf(0.125f, 0.375f, 0.625f, 0.875f),
-        listOf(0.9f, 0.7f, 0.3f, 0.1f),
-    )
     for (fixture in fixtures) {
-        val uniformBytes = ByteBuffer.allocate(SimpleRTUniformBlockSizeBytes)
+        val uniformBytes = ByteBuffer.allocate(fixture.uniformValues.size * Float.SIZE_BYTES)
             .order(ByteOrder.LITTLE_ENDIAN)
-            .apply { fixture.forEach { value -> putFloat(value) } }
+            .apply { fixture.uniformValues.forEach(::putFloat) }
             .array()
         val result = runCatching {
             cpuOracle.evaluateMaterial(
                 GPURuntimeEffectMaterialEvaluationInput(
                     uniformBytes = uniformBytes,
-                    localPositionX = 0.25f,
-                    localPositionY = 0.75f,
+                    localPositionX = fixture.localPositionX,
+                    localPositionY = fixture.localPositionY,
                 ),
             )
         }.getOrElse { failure ->
@@ -326,7 +406,7 @@ private fun validateMaterialCPUBehavior(
             ?: return "Runtime-effect material CPU behavior is unavailable"
         if (
             listOf(color.r, color.g, color.b, color.a).map(Float::toRawBits) !=
-            fixture.map(Float::toRawBits)
+            fixture.expectedColor.map(Float::toRawBits)
         ) {
             return "Runtime-effect material CPU behavior does not match registered fixtures"
         }
@@ -336,6 +416,22 @@ private fun validateMaterialCPUBehavior(
     }
     return null
 }
+
+private data class MaterialBehaviorFixture(
+    val uniformValues: List<Float>,
+    val localPositionX: Float,
+    val localPositionY: Float,
+    val expectedColor: List<Float>,
+)
+
+private fun runtimeUniformField(name: String, offsetBytes: Int): GPUPreparedRuntimeEffectUniformField =
+    GPUPreparedRuntimeEffectUniformField(
+        name = name,
+        type = GPUPreparedRuntimeEffectUniformType.Float4,
+        offsetBytes = offsetBytes,
+        sizeBytes = 16,
+        alignmentBytes = 16,
+    )
 
 private fun descriptorProgramMismatch(
     program: GPUPreparedRuntimeEffectProgram,

@@ -3,6 +3,9 @@ package org.graphiks.kanvas.gpu.renderer.filters
 import kotlin.math.ceil
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 
+/** Largest API sigma admitted by the static 25-tap WebGPU blur route. */
+const val MAX_MASK_BLUR_SIGMA = 12f
+
 sealed interface MaskBlurPlan {
     data object Identity : MaskBlurPlan
 
@@ -43,14 +46,20 @@ object MaskBlurPlanner {
             return MaskBlurPlan.Refused("unsupported.mask-filter.blur.sigma")
         }
         if (request.sigma == 0f) return MaskBlurPlan.Identity
+        // This route has one static kernel ABI (25 taps) and does not rescale
+        // intermediates.  Reject excess sigma before deriving bounds or texture
+        // sizes so callers never observe a silently reduced approximation.
+        if (request.sigma > MAX_MASK_BLUR_SIGMA) {
+            return MaskBlurPlan.Refused("unsupported.mask-filter.blur.sigma")
+        }
 
-        val normalized = request.sigma.coerceIn(0.5f, 135f)
+        val normalized = request.sigma.coerceAtLeast(0.5f)
         val halo = ceil(3f * normalized).toInt()
         val left = maxOf(0f, request.bounds.left - halo, request.clipBounds.left)
         val top = maxOf(0f, request.bounds.top - halo, request.clipBounds.top)
         val right = minOf(request.targetWidth.toFloat(), request.bounds.right + halo, request.clipBounds.right)
         val bottom = minOf(request.targetHeight.toFloat(), request.bounds.bottom + halo, request.clipBounds.bottom)
-        val scale = minOf(1f, 12f / normalized)
+        val scale = 1f
         val width = ceil((right - left) * scale).toInt().coerceAtLeast(1)
         val height = ceil((bottom - top) * scale).toInt().coerceAtLeast(1)
         val bytesPerTexture = width.toLong() * height.toLong() * 4L
@@ -71,12 +80,6 @@ object MaskBlurPlanner {
                 bytesPerTexture,
                 requiredBytes,
                 buildList {
-                    if (normalized != request.sigma) {
-                        add(MaskBlurDiagnostic("mask-filter.blur.sigma-clamped", "execution sigma was clamped"))
-                    }
-                    if (scale != 1f) {
-                        add(MaskBlurDiagnostic("mask-filter.blur.reduced-resolution", "reduced route selected"))
-                    }
                 },
             )
         }

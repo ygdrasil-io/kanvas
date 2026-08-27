@@ -217,7 +217,7 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
     }
 
     @Test
-    fun `prepared scene session dispatches destination copy on its canonical target`() {
+    fun `native WebGPU destination snapshot blends against the CPU oracle`() {
         val backendSession = GPUBackendRuntimeNativeFactory.createOrNull()
         assumeTrue(backendSession != null)
         backendSession!!
@@ -248,13 +248,15 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
             )
             val readback = assertIs<GPUSceneFrameOutput.ReadbackRgba>(terminal.output)
             assertEquals(requestId, readback.requestId)
-            assertContentEquals(expectedDifferencePixels(), readback.bytes)
+            assertContentEquals(destinationBlendCpuOracle(GPUBlendMode.DIFFERENCE), readback.bytes)
             val counters = session.nativeCounters()
             assertEquals(1L, counters.targetCreations)
             assertEquals(0L, counters.targetCloses)
             assertEquals(1L, counters.targetNativeUses)
             assertEquals(1L, counters.submits)
             assertEquals(1L, counters.readbackCopies)
+            assertEquals(1L, counters.destinationSnapshotCreations)
+            assertEquals(0L, counters.destinationSnapshotReuses)
             assertEquals(0, counters.activeNativePayloads)
         } finally {
             try {
@@ -350,7 +352,7 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
             val terminal = handle.completion.toCompletableFuture().get(10, TimeUnit.SECONDS)
 
             assertEquals(GPUFrameStructuralOutcome.Succeeded, terminal.outcome)
-            assertContentEquals(expectedDifferencePixels(), requireNotNull(terminal.readback).bytes)
+            assertContentEquals(destinationBlendCpuOracle(GPUBlendMode.DIFFERENCE), requireNotNull(terminal.readback).bytes)
             val counters = backend.counters()
             assertEquals(1, counters.encoders)
             assertEquals(2, counters.renderPasses)
@@ -1104,16 +1106,22 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
         sourceIntermediate = null,
     )
 
-    private fun expectedDifferencePixels(): ByteArray = ByteArray(64).also { bytes ->
-        for (y in 0 until 4) for (x in 0 until 4) {
-            val offset = (y * 4 + x) * 4
-            if (x in 1 until 3 && y in 1 until 3) {
-                bytes[offset] = 255.toByte()
-                bytes[offset + 2] = 255.toByte()
-            } else {
-                bytes[offset + 2] = 255.toByte()
+    private fun destinationBlendCpuOracle(mode: GPUBlendMode): ByteArray {
+        val destination = BlendPremulColor(0f, 0f, 1f, 1f)
+        val source = BlendPremulColor(1f, 0f, 0f, 1f)
+        val blended = GPUBlendOracle.blendAtFullCoverage(mode, source, destination)
+        val destinationBytes = destination.toArray().map { channel ->
+            (channel.coerceIn(0f, 1f) * 255f).roundToInt().toByte()
+        }
+        val blendedBytes = blended.toArray().map { channel ->
+            (channel.coerceIn(0f, 1f) * 255f).roundToInt().toByte()
+        }
+        return ByteArray(64).also { bytes ->
+            for (y in 0 until 4) for (x in 0 until 4) {
+                val color = if (x in 1 until 3 && y in 1 until 3) blendedBytes else destinationBytes
+                val offset = (y * 4 + x) * 4
+                color.forEachIndexed { channel, value -> bytes[offset + channel] = value }
             }
-            bytes[offset + 3] = 255.toByte()
         }
     }
 

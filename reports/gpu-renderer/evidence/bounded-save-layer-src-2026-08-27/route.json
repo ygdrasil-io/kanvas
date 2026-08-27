@@ -1,0 +1,30 @@
+{
+  "fixture": "bounded-save-layer-src-opacity-isolation-v1",
+  "admission": {
+    "finiteBounds": true,
+    "nesting": "single root child layer",
+    "restoreBlend": "SRC",
+    "alpha": 0.5,
+    "clip": "none"
+  },
+  "resource": {
+    "isolatedTarget": true,
+    "clear": "transparent-black",
+    "usage": ["render_attachment", "texture_binding"],
+    "lifetime": "frame-local",
+    "coordinateModel": "scene-space child coordinates require a scene-sized backing texture",
+    "logicalCompositeBounds": "1,1,3,3",
+    "backingExtent": "0,0,4,4",
+    "backingBytes": 64,
+    "prepareLayerTargetByteEstimate": 64,
+    "budgetPolicy": "native preflight adds every scene-sized layer backing allocation to the configured aggregate frame budget before materialization"
+  },
+  "composite": {
+    "route": "fixed-function-src",
+    "destinationRead": "none",
+    "parentAttachmentSampled": false,
+    "source": "premultiplied isolated layer texture",
+    "opacityApplication": "sampled premultiplied source before fixed-function SRC"
+  },
+  "ordering": "scene-parent -> isolated-layer-child -> layer-SRC-composite -> readback"
+}

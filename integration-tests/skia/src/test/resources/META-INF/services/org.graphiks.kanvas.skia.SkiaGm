@@ -434,6 +434,7 @@ org.graphiks.kanvas.skia.gm.path.BezierQuadEffectsGm
 org.graphiks.kanvas.skia.gm.path.Bug41422450Gm
 org.graphiks.kanvas.skia.gm.path.CTMPathEffectGm
 org.graphiks.kanvas.skia.gm.path.CircleSizesGm
+org.graphiks.kanvas.skia.gm.path.ClippedCubicGm
 org.graphiks.kanvas.skia.gm.path.ClockwiseGm
 org.graphiks.kanvas.skia.gm.path.ConcavePathsGm
 org.graphiks.kanvas.skia.gm.path.ConicPathsGm

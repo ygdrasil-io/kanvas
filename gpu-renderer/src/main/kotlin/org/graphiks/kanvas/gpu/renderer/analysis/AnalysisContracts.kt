@@ -17,6 +17,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.commands.gradientFactsRefusalReasonOrNull
+import org.graphiks.kanvas.gpu.renderer.commands.imageLocalMatrixRefusalReasonOrNull
 import org.graphiks.kanvas.gpu.renderer.commands.isAffineDeterminantNonFinite
 import org.graphiks.kanvas.gpu.renderer.commands.isAffineDeterminantSingular
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
@@ -853,6 +854,9 @@ class GPUFirstRoutePlanner(
 
         return when {
             command.maskFilter != null -> blurMaskFillPathRouteDecision(command)
+            command.stroke && command.isNativeSimpleStroke() &&
+                capabilities.hasFact(firstStencilCoverCapabilityName) ->
+                nativeSimpleStrokeRouteDecision(command)
             command.stroke -> preparedStrokeRouteDecision(command)
             capabilities.hasFact(firstStencilCoverCapabilityName) ->
                 nativeFillPathRouteDecision(command)
@@ -903,6 +907,59 @@ class GPUFirstRoutePlanner(
             recordId = recordId,
             routeDecisionLabel = "prepared.path_stroke.tessellated",
             resourceDeclarations = listOf("tessellated_vertices:path_stroke.${command.commandId.value}"),
+            renderStepCandidates = listOf(renderStep),
+        )
+        val pass = GPUFirstRoutePassBuilder.acceptedFillPath(
+            commandIdValue = command.commandId.value,
+            analysisRecordId = recordId,
+            sortKey = command.ordering.paintOrder.toLong(),
+            renderStepIdentity = renderStep,
+            pipelineKey = GPURenderPipelineKey(pipelineKey),
+            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
+            boundsHash = command.bounds.stableHash(),
+            scissorBoundsHash = command.scissorBoundsHash(),
+            originalPaintOrder = command.ordering.paintOrder,
+            targetStateHash = command.targetStateHash(),
+            frameProvenance = command.source.frameProvenance,
+            clipCoveragePlan = command.clip.coveragePlan,
+            clipExecutionPlan = command.clip.executionPlan,
+        )
+        return GPUFirstRoutePlan(
+            analysisRecord = analysisRecord,
+            analysisDecision = analysisDecision,
+            routeDecision = routeDecision,
+            pass = pass,
+        )
+    }
+
+    /** Builds the native stencil-cover route for the one bounded exact stroke outline. */
+    private fun nativeSimpleStrokeRouteDecision(command: NormalizedDrawCommand.FillPath): GPUFirstRoutePlan {
+        val recordId = "analysis.fill_path.${command.commandId.value}"
+        val pipelineKey =
+            "pending.pipeline.path_stroke.stencil_cover.${command.layer.target.colorFormat}.src_over"
+        val renderStep = "path.stroke.stencil_cover"
+        val analysisRecord = GPUDrawAnalysisRecord(
+            recordId = recordId,
+            commandIdValue = command.commandId.value,
+            commandFamily = "FillPath",
+            boundsHash = command.bounds.stableHash(),
+            routeDecisionLabel = "native.path_stroke.stencil_cover",
+            materialKeyHash = "pending.material.${command.material.kind.name.lowercase()}",
+            renderStepCandidates = listOf(renderStep),
+            sortKey = SortKey(command.ordering.paintOrder.toLong()),
+            diagnostics = command.transform.analysisDiagnostics(recordId = recordId) +
+                command.pathFactsDiagnostics(recordId = recordId),
+        )
+        val routeDecision = GPUFirstRouteDecisionBuilder.nativeSimpleStroke(
+            commandIdValue = command.commandId.value,
+            pipelinePreimageHash = pipelineKey,
+            renderStepIdentity = renderStep,
+            requirements = listOf(firstStencilCoverCapabilityName),
+        )
+        val analysisDecision = GPUDrawAnalysisDecision.Candidate(
+            recordId = recordId,
+            routeDecisionLabel = "native.path_stroke.stencil_cover",
+            resourceDeclarations = emptyList(),
             renderStepCandidates = listOf(renderStep),
         )
         val pass = GPUFirstRoutePassBuilder.acceptedFillPath(
@@ -1334,8 +1391,10 @@ class GPUFirstRoutePlanner(
             pixelsContentHash.isBlank() || pixelsProvenance.isBlank() ->
                 GPUPreparedImageRefusalCodes.PIXELS_MISSING
             pixelsGeneration < 0L -> GPUPreparedImageRefusalCodes.NATIVE_GENERATION
-            src.left < 0f || src.top < 0f || src.right <= src.left || src.bottom <= src.top ||
-                src.right > pixelsWidth.toFloat() || src.bottom > pixelsHeight.toFloat() -> "unsupported.image.src_bounds"
+            src.right <= src.left || src.bottom <= src.top -> "unsupported.image.src_bounds"
+            (src.left < 0f || src.top < 0f ||
+                src.right > pixelsWidth.toFloat() || src.bottom > pixelsHeight.toFloat()) &&
+                !material.allowsClampImageShaderSourceOverflow() -> "unsupported.image.src_bounds"
             dst.right <= dst.left || dst.bottom <= dst.top -> "unsupported.image.dst_bounds"
             material.kind != GPUMaterialKind.ImageDraw -> "unsupported.material.source_unimplemented"
             transform.type == GPUTransformType.Perspective -> "unsupported.transform.perspective"
@@ -1754,7 +1813,8 @@ class GPUFirstRoutePlanner(
             transform.isNonAxisAlignedAffine() && antiAlias ->
                 "unsupported.transform.affine_antialias"
             transform.isNonAxisAlignedAffine() &&
-                !capabilities.hasFact(CORE_PRIMITIVE_AFFINE_FILL_RECT_CAPABILITY) ->
+                !capabilities.hasFact(CORE_PRIMITIVE_AFFINE_FILL_RECT_CAPABILITY) &&
+                !supportsHardPathClipClampLinearGradientUniformScale() ->
                 "unsupported.transform.affine_capability_missing"
             transform.type !in acceptedTransformTypes -> "unsupported.transform.class_downgrade"
             clip.kind == GPUClipKind.ComplexStack &&
@@ -1795,9 +1855,9 @@ class GPUFirstRoutePlanner(
 
     /**
      * The direct clamp-linear-gradient consumer may share a native hard path-clip stencil
-     * scope when its CTM is a positive uniform scale plus translation. The prepared Surface
-     * semantic lowers both the rect and the gradient axis into device space for this exact
-     * branch; every other non-solid affine material remains refused above.
+     * scope when its CTM is a positive uniform scale plus translation or an exact quarter-turn.
+     * The prepared Surface semantic lowers both the rect and the gradient axis into device space
+     * for this exact branch; every other non-solid affine material remains refused above.
      */
     private fun NormalizedDrawCommand.FillRect.supportsHardPathClipClampLinearGradientUniformScale(): Boolean {
         val gradient = material as? GPUMaterialDescriptor.LinearGradient ?: return false
@@ -1807,11 +1867,16 @@ class GPUFirstRoutePlanner(
             gradient.tileMode == "clamp" &&
             stencilClip.sampleCount == 1 &&
             stencilClip.pathTransformClass == "uniform-positive-scale-translate" &&
-            transform.skewX == 0f &&
-            transform.skewY == 0f &&
-            transform.scaleX > 0f &&
-            transform.scaleX == transform.scaleY
+            (
+                (transform.skewX == 0f && transform.skewY == 0f &&
+                    transform.scaleX > 0f && transform.scaleX == transform.scaleY) ||
+                    transform.isExactQuarterTurnGradientRotation()
+                )
     }
+
+private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
+    type == GPUTransformType.Affine &&
+        scaleX == 0f && scaleY == 0f && skewX == -1f && skewY == 1f
 
     /** Returns the canonical first-expansion rrect refusal code, or null when analysis may keep a native candidate. */
     private fun NormalizedDrawCommand.FillRRect.refusalCode(
@@ -1898,9 +1963,10 @@ class GPUFirstRoutePlanner(
             ?: return false
         val path = stencil.producer.geometry as? GPUClipExecutionGeometry.Path ?: return false
         val solid = material as? GPUMaterialDescriptor.SolidColor ?: return false
+        val effectiveInverseFill = path.inverseFill xor stencil.consumerInverseFill
         return !stroke && !antiAlias && maskFilter == null &&
             (transform.type == GPUTransformType.Identity ||
-                (transform.isExactNonZeroTranslation() && !path.inverseFill)) &&
+                (transform.isExactNonZeroTranslation() && !effectiveInverseFill)) &&
             solid.a == 1f && blend.mode == GPUBlendMode.SRC_OVER && stencil.sampleCount == 1 &&
             stencil.pathTransformClass == "identity" &&
             path.fillRule == GPUClipFillRule.Winding &&
@@ -1943,7 +2009,11 @@ class GPUFirstRoutePlanner(
                     cap = strokeCap.replaceFirstChar { it.uppercaseChar() },
                     join = strokeJoin.replaceFirstChar { it.uppercaseChar() },
                     miter = strokeMiterLimit,
-                    dashOrPathEffectRef = dashIntervals?.let { "dash:${it.joinToString(",")}" },
+                    dashOrPathEffectRef = when (pathEffectKind) {
+                        "Dash" -> "dash:${dashIntervals?.joinToString(",").orEmpty()}"
+                        null -> dashIntervals?.let { "dash:${it.joinToString(",")}" }
+                        else -> "path-effect:$pathEffectKind"
+                    },
                     transformClass = transform.type.name.lowercase(),
                     finiteWidth = strokeWidth > 0f && strokeWidth.isFinite(),
                     hairline = strokeWidth <= 0f,
@@ -1953,7 +2023,8 @@ class GPUFirstRoutePlanner(
                     ?: pathDesc.strokePathRefusalCode()
                     ?: strokeDesc.refusalCode(maxEdges = 128)
                     ?: "unsupported.pipeline.capability_missing".takeUnless {
-                        capabilities.hasFact(firstPreparedPathFillCapabilityName)
+                        capabilities.hasFact(firstPreparedPathFillCapabilityName) ||
+                            (isNativeSimpleStroke() && capabilities.hasFact(firstStencilCoverCapabilityName))
                     }
             }
             pathDescriptor.edgeCount < 0 -> "unsupported.geometry.path_invalid_edges"
@@ -2011,6 +2082,24 @@ class GPUFirstRoutePlanner(
         }
 
     /**
+     * The native path-stencil route is intentionally smaller than generic prepared strokes:
+     * one immutable, open two-point contour, finite bounded width, solid butt/square cap, and
+     * no join work. More than one segment remains on the prepared/refusal path until its
+     * outline topology is independently proven in a native packet.
+     */
+    private fun NormalizedDrawCommand.FillPath.isNativeSimpleStroke(): Boolean =
+        contourStarts == listOf(0) &&
+            tessellatedVertices.size == 4 &&
+            strokeWidth.isFinite() && strokeWidth in 0.5f..64f &&
+            !antiAlias &&
+            (dashIntervals == null || dashIntervals.isEmpty()) &&
+            pathEffectKind == null &&
+            strokeCap in setOf("butt", "square") &&
+            strokeJoin == "miter" &&
+            strokeMiterLimit.isFinite() && strokeMiterLimit >= 1f &&
+            transform.type in setOf(GPUTransformType.Identity, GPUTransformType.Translate)
+
+    /**
      * The bounded direct-triangle path consumer shares the same device-space gradient lowering
      * as the already-admitted rect consumer. This remains fenced to one non-AA, winding triangle
      * under one 1x hard path clip; broader FillPath scale support stays refused.
@@ -2055,7 +2144,23 @@ class GPUFirstRoutePlanner(
     /** Returns typed material refusal evidence before kind and capability admission checks. */
     private fun GPUMaterialDescriptor.analysisRefusalCodeOrNull(): String? =
         (this as? GPUMaterialDescriptor.Unsupported)?.reason?.diagnosticCode
-            ?: gradientFactsRefusalReasonOrNull()?.diagnosticCode
+            // CorePrimitive owns the legacy linear-gradient tile-mode ABI, including repeat.
+            // Defer only that route-specific validation; other prepared-material facts remain
+            // terminal before route selection.
+            ?: gradientFactsRefusalReasonOrNull(
+                deferLinearGradientTileModeToRoute = this is GPUMaterialDescriptor.LinearGradient,
+            )?.diagnosticCode
+
+    /**
+     * A bounded image-shader local transform samples through a clamp sampler,
+     * so UVs may extend just beyond the decoded image. Direct drawImageRect
+     * commands retain their historical in-bounds source contract.
+     */
+    private fun GPUMaterialDescriptor.allowsClampImageShaderSourceOverflow(): Boolean =
+        (this as? GPUMaterialDescriptor.ImageDraw)?.let { image ->
+            image.localMatrix != listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f) &&
+                image.imageLocalMatrixRefusalReasonOrNull() == null
+        } == true
 
     /** Returns a terminal gradient refusal code, or null when gradient facts are accepted. */
     private fun GPUMaterialDescriptor.LinearGradient.refusalCode(allowRepeat: Boolean = false): String? =
@@ -2562,17 +2667,27 @@ private fun GPUTransformFacts.isAcceptedFillPathTransform(
     GPUTransformType.Translate,
     -> true
     GPUTransformType.Scale ->
-        (scaleAdmitted || uniformScaleTranslateAdmitted) &&
-            scaleX.isFinite() && scaleY.isFinite() && scaleX > 0f && scaleX == scaleY
+        ((scaleAdmitted || uniformScaleTranslateAdmitted) &&
+            scaleX.isFinite() && scaleY.isFinite() && scaleX > 0f && scaleX == scaleY) ||
+            isExactHalfTurnPathRotation()
     GPUTransformType.Affine ->
-        uniformScaleTranslateAdmitted &&
+        (uniformScaleTranslateAdmitted &&
             scaleX.isFinite() && scaleY.isFinite() &&
             scaleX > 0f && scaleX == scaleY &&
-            skewX == 0f && skewY == 0f
+            skewX == 0f && skewY == 0f) ||
+            isExactQuarterTurnPathRotation() || isExactHalfTurnPathRotation()
     GPUTransformType.Perspective,
     GPUTransformType.Singular,
     -> false
 }
+
+private fun GPUTransformFacts.isExactQuarterTurnPathRotation(): Boolean =
+    translateX.isFinite() && translateY.isFinite() &&
+        scaleX == 0f && scaleY == 0f && skewX == -1f && skewY == 1f
+
+private fun GPUTransformFacts.isExactHalfTurnPathRotation(): Boolean =
+    translateX.isFinite() && translateY.isFinite() &&
+        scaleX == -1f && scaleY == -1f && skewX == 0f && skewY == 0f
 
 private fun GPUTransformFacts.isNonAxisAlignedAffine(): Boolean =
     type == GPUTransformType.Affine && (skewX != 0f || skewY != 0f)

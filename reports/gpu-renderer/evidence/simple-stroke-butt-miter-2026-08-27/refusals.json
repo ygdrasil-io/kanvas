@@ -1,0 +1,38 @@
+{
+  "nativeSubset": {
+    "path": "one open contour with exactly two finite points",
+    "width": "finite, 0.5 <= width <= 64",
+    "cap": ["butt", "square"],
+    "join": "miter",
+    "dash": "none",
+    "pathEffect": "none",
+    "coverage": "Stencil1x or independently validated stencil coverage; never ScalarAA"
+  },
+  "closedCases": [
+    "unsupported.core_primitive.stroke.width_nonfinite",
+    "unsupported.core_primitive.stroke.hairline_exact_lowering",
+    "unsupported.core_primitive.stroke.width_budget",
+    "unsupported.core_primitive.stroke.dash_exact_lowering",
+    "unsupported.core_primitive.stroke.path_effect_exact_lowering",
+    "unsupported.core_primitive.stroke.cap_exact_lowering",
+    "unsupported.core_primitive.stroke.join_exact_lowering",
+    "unsupported.core_primitive.stroke.miter_exact_lowering",
+    "unsupported.core_primitive.stroke.complex_exact_lowering"
+  ],
+  "dashEmpty": {
+    "normalizedPathEffectKind": "Dash",
+    "analysisDiagnostic": "unsupported.stroke.dash_empty",
+    "terminalDiagnostic": "unsupported.core_primitive.stroke.dash_exact_lowering",
+    "publicSurfaceTest": "GPUFramePathApiInventoryTest.public Surface empty dash preserves its identity and refuses before native preparation"
+  },
+  "miterLimitExactContract": {
+    "accepted": "finite and >= 1",
+    "refused": [0.0, "NaN", "Infinity"],
+    "terminalDiagnostic": "unsupported.core_primitive.stroke.miter_exact_lowering"
+  },
+  "unpromotedGms": {
+    "strokedline_caps": { "operations": 13, "terminalDiagnostic": "unsupported.material.mapping.linear_gradient_stop_count" },
+    "strokes_round": { "operations": 401, "terminalDiagnostic": "unsupported.stroke.expansion_budget_exceeded" },
+    "dashcircle": { "operations": 25, "terminalDiagnostic": "unsupported.pipeline.capability_missing" }
+  }
+}

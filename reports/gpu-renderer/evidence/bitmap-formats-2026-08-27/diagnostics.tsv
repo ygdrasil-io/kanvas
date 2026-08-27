@@ -1,0 +1,6 @@
+scope	name	code_or_result	dispatch	refusals
+native-gm	all_bitmap_configs	native-rendered	1662	0
+native-gm	copyTo4444	native-rendered	3	0
+native-gm	format4444	native-rendered	5	0
+native-gm	mipmap_gray8_srgb	native-rendered	10	0
+negative-format	RGB_888X	unsupported.image.pixel.format	0	1

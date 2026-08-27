@@ -1,0 +1,27 @@
+{
+  "fixture": "native-webgpu-destination-snapshot-cpu-oracle-v1",
+  "test": "GPUWgpu4kDestinationCopyFrameSmokeTest.native WebGPU destination snapshot blends against the CPU oracle",
+  "backend": "WebGPU/wgpu4k headless offscreen",
+  "target": { "extent": [4, 4], "format": "RGBA8_UNORM", "sampleCount": 1 },
+  "scene": {
+    "destination": "opaque blue full target",
+    "source": "opaque red rect [1,1,3,3]",
+    "blendMode": "DIFFERENCE",
+    "destinationRead": "ShaderBlendWithDstRead"
+  },
+  "cpuOracle": {
+    "implementation": "GPUBlendOracle.blendAtFullCoverage",
+    "outsideSourceRectRgba8": [0, 0, 255, 255],
+    "insideSourceRectRgba8": [255, 0, 255, 255],
+    "channelCount": 64
+  },
+  "gpuReadback": {
+    "comparison": "byte-exact",
+    "differentChannels": 0,
+    "maxAbsoluteChannelDelta": 0,
+    "submits": 1,
+    "readbackCopies": 1,
+    "destinationSnapshotCreations": 1,
+    "destinationSnapshotReuses": 0
+  }
+}

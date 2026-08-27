@@ -30,7 +30,6 @@ object GpuEvidenceCatalog {
         linearGradientLanes(),
         radialSwatch(),
         sweepDisk(),
-        linearGradientThreeStops(),
         sweepGradientPartialAngle(),
         affineSolidRect(),
         scissoredRadialGradient(),
@@ -45,6 +44,7 @@ object GpuEvidenceCatalog {
         clipRRectEllipse(),
         clipRRectTwoBands(),
         clipPathTriangleSolid(),
+        clipPathTriangleDifferenceSolid(),
         clipPathConcaveSolid(),
         clipPathTriangleTwoBands(),
         clipPathTranslatedTriangleSolid(),
@@ -94,6 +94,7 @@ object GpuEvidenceCatalog {
         uniformScaledTrianglePath(),
     )
     val refusalCases: List<EvidenceCase> = listOf(
+        linearGradientThreeStops(),
         unregisteredRuntimeEffectRefusal(),
         aggregateMemoryBudgetRefusal(),
     )
@@ -261,13 +262,22 @@ object GpuEvidenceCatalog {
         )
     }
 
-    private fun linearGradientThreeStops() = gradientCase(
-        "linear-gradient-three-stops", "Linear gradient three stops", "Public Kanvas Surface clamp linear gradient with three opaque sRGB stops.",
-        setOf("linear-gradient", "kanvas-surface"), "surface-srgb-gradient-linear-clamp", KanvasScenePrograms.linearGradientThreeStops(),
-        SurfaceSrgbGradientCpuOracle.linear(
-            SurfaceSrgbGradientCpuOracle.Rect(8f, 16f, 56f, 48f), SurfaceSrgbGradientCpuOracle.Point(8.5f, 32.5f), SurfaceSrgbGradientCpuOracle.Point(55.5f, 32.5f),
-            listOf(SurfaceSrgbGradientCpuOracle.Stop(0f, 255, 56, 56), SurfaceSrgbGradientCpuOracle.Stop(.5f, 56, 220, 120), SurfaceSrgbGradientCpuOracle.Stop(1f, 56, 112, 255)),
+    private fun linearGradientThreeStops() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("linear-gradient-three-stops"),
+            "Linear gradient three stops refusal",
+            "Public Kanvas Surface rejects a clamp linear gradient with three stops before submission.",
+            64,
+            64,
+            1L,
+            setOf("linear-gradient", "kanvas-surface", "refusal"),
+            EvidenceExpectation.ShouldRefuse("unsupported.material.mapping.linear_gradient_stop_count"),
+            OraclePolicy.StableRefusal,
+            null,
+            emptySet(),
         ),
+        KanvasScenePrograms.linearGradientThreeStops(),
+        null,
     )
 
     private fun sweepGradientPartialAngle() = gradientCase(
@@ -521,6 +531,26 @@ object GpuEvidenceCatalog {
         draws = listOf(
             SurfaceSrgbClipPathCpuOracle.OpaqueRect(0f, 0f, 64f, 64f, intArrayOf(242, 135, 46, 255)),
         ),
+    )
+
+    private fun clipPathTriangleDifferenceSolid() = clipPathCase(
+        id = "clip-path-triangle-difference-solid",
+        title = "Solid hard triangle path difference clip",
+        description = "Public Kanvas Surface hard non-AA winding triangle path difference leaves the complement for an opaque rectangle.",
+        program = KanvasScenePrograms.clipPathTriangleDifferenceSolid(),
+        contours = listOf(
+            listOf(
+                SurfaceSrgbClipPathCpuOracle.Point(8f, 8f),
+                SurfaceSrgbClipPathCpuOracle.Point(56f, 8f),
+                SurfaceSrgbClipPathCpuOracle.Point(8f, 55f),
+            ),
+        ),
+        draws = listOf(
+            SurfaceSrgbClipPathCpuOracle.OpaqueRect(0f, 0f, 64f, 64f, intArrayOf(242, 135, 46, 255)),
+        ),
+        clipInverted = true,
+        extraTags = setOf("difference"),
+        comparisonRationale = "Exact opaque RGBA8 output from independent hard pixel-center winding path difference membership and paint order.",
     )
 
     private fun clipPathConcaveSolid() = clipPathCase(
@@ -1085,12 +1115,15 @@ object GpuEvidenceCatalog {
         program: org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram,
         contours: List<List<SurfaceSrgbClipPathCpuOracle.Point>>,
         draws: List<SurfaceSrgbClipPathCpuOracle.OpaqueRect>,
+        clipInverted: Boolean = false,
+        extraTags: Set<String> = emptySet(),
+        comparisonRationale: String = "Exact opaque RGBA8 output from independent hard pixel-center winding path clip membership and paint order.",
     ) = EvidenceCase(
         EvidenceSceneDescriptor(
             EvidenceSceneId(id), title, description, 64, 64, 1L,
-            setOf("clip-path", "solid-rect", "hard-clip", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            setOf("clip-path", "solid-rect", "hard-clip", "kanvas-surface") + extraTags, EvidenceExpectation.ShouldRender,
             OraclePolicy.GeneratedCpu("surface-srgb-clip-path-pixel-center", 1),
-            ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent hard pixel-center winding path clip membership and paint order."),
+            ComparisonPolicy(0, 100.0, 1, comparisonRationale),
             emptySet(),
         ),
         program,
@@ -1098,6 +1131,7 @@ object GpuEvidenceCatalog {
             background = intArrayOf(13, 20, 33, 255),
             contours = contours.map(SurfaceSrgbClipPathCpuOracle::Contour),
             draws = draws,
+            clipInverted = clipInverted,
         ),
     )
 
