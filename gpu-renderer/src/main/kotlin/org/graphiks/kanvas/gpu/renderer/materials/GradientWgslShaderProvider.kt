@@ -34,7 +34,7 @@ object GradientWgslShaderProvider {
 
     fun uniformLayoutHashFor(descriptor: GPUMaterialDescriptor): String? {
         return when (descriptor) {
-            is GPUMaterialDescriptor.LinearGradient -> "layout:linear-gradient-material-block:v1"
+            is GPUMaterialDescriptor.LinearGradient -> "layout:linear-gradient-material-block:v2"
             is GPUMaterialDescriptor.RadialGradient -> "layout:radial-gradient-material-block:v1"
             is GPUMaterialDescriptor.SweepGradient -> "layout:sweep-gradient-material-block:v1"
             is GPUMaterialDescriptor.ConicalGradient -> "layout:conical-gradient-material-block:v1"
@@ -58,7 +58,7 @@ object GradientWgslShaderProvider {
         return GradientWgslShader(
             wgslSource = buildLinearWgsl(n, desc.tileMode),
             composableDeclarationsWgsl = buildLinearWgsl(n, desc.tileMode, composable = true),
-            uniformLayoutHash = "layout:linear-gradient-material-block:v1",
+            uniformLayoutHash = "layout:linear-gradient-material-block:v2",
         )
     }
 
@@ -88,13 +88,17 @@ object GradientWgslShaderProvider {
         val (tileFn, decalSuffix) = tileFnForMode(tileMode)
         return buildGradientWgsl(
             preamble = """
+                let localPos = vec2<f32>(
+                    dot(gradient.localMatrix0.xyz, vec3<f32>(pos.xy, 1.0)),
+                    dot(gradient.localMatrix1.xyz, vec3<f32>(pos.xy, 1.0)),
+                );
                 let dir = gradient.end - gradient.start;
                 let lenSq = dot(dir, dir);
                 var t_raw: f32;
                 if (lenSq < 1.0e-12) {
                     t_raw = -1.0e30;
                 } else {
-                    t_raw = dot(pos.xy - gradient.start, dir) / lenSq;
+                    t_raw = dot(localPos - gradient.start, dir) / lenSq;
                 }
             """.trimIndent(),
             stopCount = stopCount,
@@ -102,9 +106,12 @@ object GradientWgslShaderProvider {
             structFields = """
                     start: vec2<f32>,
                     end: vec2<f32>,
+                    localMatrix0: vec4<f32>,
+                    localMatrix1: vec4<f32>,
             """.trimIndent(),
             tileFn = tileFn,
             decalSuffix = decalSuffix,
+            linearPremultipliedStops = true,
             composable = composable,
         )
     }
@@ -349,6 +356,7 @@ fn sample_stops_at(t: f32, count: u32, positions: ptr<function, array<vec4<f32>,
         structFields: String,
         tileFn: String,
         decalSuffix: String = "",
+        linearPremultipliedStops: Boolean = false,
         composable: Boolean = false,
     ): String {
         val bindingGroup = if (composable) 1 else 0
@@ -410,10 +418,16 @@ fn sample_stops_at(t: f32, count: u32, positions: ptr<function, array<vec4<f32>,
     let t1 = (*positions)[hi].x;
     let span = t1 - t0;
     let u = select((t - t0) / span, 0.0, span <= 0.0);
-    let c_lo_srgb = vec4f(pow((*colors)[lo].rgb, vec3f(1.0 / 2.2)), (*colors)[lo].a);
-    let c_hi_srgb = vec4f(pow((*colors)[hi].rgb, vec3f(1.0 / 2.2)), (*colors)[hi].a);
-    let mixed_srgb = (1.0 - u) * c_lo_srgb + u * c_hi_srgb;
-    return vec4f(pow(mixed_srgb.rgb, vec3f(2.2)), mixed_srgb.a);
+    ${if (linearPremultipliedStops) {
+        "return (1.0 - u) * (*colors)[lo] + u * (*colors)[hi];"
+    } else {
+        """
+        let c_lo_srgb = vec4f(pow((*colors)[lo].rgb, vec3f(1.0 / 2.2)), (*colors)[lo].a);
+        let c_hi_srgb = vec4f(pow((*colors)[hi].rgb, vec3f(1.0 / 2.2)), (*colors)[hi].a);
+        let mixed_srgb = (1.0 - u) * c_lo_srgb + u * c_hi_srgb;
+        return vec4f(pow(mixed_srgb.rgb, vec3f(2.2)), mixed_srgb.a);
+        """.trimIndent()
+    }}
 }
 """.trimIndent()
     }
@@ -427,12 +441,16 @@ fn sample_stops_at(t: f32, count: u32, positions: ptr<function, array<vec4<f32>,
             geometryPacker = { bb ->
                 bb.putFloat(desc.startX); bb.putFloat(desc.startY)
                 bb.putFloat(desc.endX); bb.putFloat(desc.endY)
+                val matrix = desc.localMatrix
+                bb.putFloat(matrix[0]); bb.putFloat(matrix[1]); bb.putFloat(matrix[2]); bb.putFloat(0f)
+                bb.putFloat(matrix[3]); bb.putFloat(matrix[4]); bb.putFloat(matrix[5]); bb.putFloat(0f)
                 val n = stopPositions?.size ?: 2
                 bb.putInt(n)
-                bb.putInt(0); bb.putInt(0); bb.putInt(0) // pad to 32
+                bb.putInt(0); bb.putInt(0); bb.putInt(0) // pad to 64
             },
             allStopPositions = stopPositions,
             allStopColors = stopColors,
+            headerSize = 64,
         )
     }
 

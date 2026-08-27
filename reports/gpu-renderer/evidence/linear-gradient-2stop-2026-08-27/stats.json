@@ -1,0 +1,16 @@
+{
+  "uniformByteCount": 576,
+  "stopCount": 2,
+  "nativeHeadlessWebGpu": {
+    "adapter": "Apple M2 Max",
+    "target": "RGBA8UnormSrgb",
+    "submits": 1,
+    "readbacks": 1,
+    "comparedChannels": 36,
+    "maxChannelDelta": 0,
+    "differingChannels": 0,
+    "threshold": "maxChannelDelta <= 1"
+  },
+  "gpuGMRender": "not-promoted",
+  "reason": "No selected GM is wholly representable by the bounded two-stop linear route."
+}

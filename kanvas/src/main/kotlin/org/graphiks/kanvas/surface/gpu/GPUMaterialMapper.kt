@@ -14,6 +14,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUPreparedMaterialUnsupportedR
 import org.graphiks.kanvas.gpu.renderer.commands.GPURuntimeEffectChildDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPURuntimeEffectUniformValue
 import org.graphiks.kanvas.gpu.renderer.commands.containsUnsupportedMaterial
+import org.graphiks.kanvas.gpu.renderer.commands.gradientFactsRefusalReasonOrNull
 import org.graphiks.kanvas.gpu.renderer.commands.imageLocalMatrixRefusalReasonOrNull
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes
@@ -868,13 +869,20 @@ private fun Shader.toPreparedMaterial(
     return when (this) {
         is Shader.SolidColor -> toMaterial()
         is Shader.LinearGradient ->
-            if (interpolation == ColorSpaceInterpolation.SRGB) {
-                toMaterial()
-            } else {
+            if (interpolation != ColorSpaceInterpolation.SRGB) {
                 mapper.descriptorAssembly.preparedUnsupported(
                     GPUPreparedMaterialUnsupportedReason.GRADIENT_INTERPOLATION,
                     GPUMaterialKind.LinearGradient,
                 )
+            } else {
+                val descriptor = toMaterial() as GPUMaterialDescriptor.LinearGradient
+                descriptor.gradientFactsRefusalReasonOrNull()?.let { reason ->
+                    mapper.descriptorAssembly.preparedUnsupported(
+                        reason = reason,
+                        originalKind = GPUMaterialKind.LinearGradient,
+                        source = descriptor,
+                    )
+                } ?: descriptor
             }
         is Shader.RadialGradient ->
             if (interpolation == ColorSpaceInterpolation.SRGB) {
@@ -940,6 +948,29 @@ private fun Shader.toPreparedMaterial(
                         originalKind = shader.materialKind(),
                         source = source,
                     )
+                }
+            } else if (source is GPUMaterialDescriptor.LinearGradient) {
+                val composed = source.localMatrix.composeGradientLocalMatrix(matrix)
+                if (composed == null) {
+                    mapper.descriptorAssembly.preparedUnsupported(
+                        reason = GPUPreparedMaterialUnsupportedReason.LINEAR_GRADIENT_LOCAL_MATRIX_AFFINE,
+                        originalKind = GPUMaterialKind.LinearGradient,
+                        source = source,
+                    )
+                } else {
+                    val mapped = source.copy().withGradientFacts(
+                        GPUMaterialDescriptor.GradientFacts(
+                            interpolation = source.interpolation,
+                            localMatrix = composed,
+                        ),
+                    )
+                    mapped.gradientFactsRefusalReasonOrNull()?.let { reason ->
+                        mapper.descriptorAssembly.preparedUnsupported(
+                            reason = reason,
+                            originalKind = GPUMaterialKind.LinearGradient,
+                            source = source,
+                        )
+                    } ?: mapped
                 }
             } else {
                 mapper.descriptorAssembly.preparedUnsupported(

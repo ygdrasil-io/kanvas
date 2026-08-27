@@ -205,6 +205,26 @@ enum class GPUPreparedMaterialUnsupportedReason(
         "unsupported.material.mapping.gradient_stop_count",
         "Prepared gradient mapping requires at least one stop",
     ),
+    LINEAR_GRADIENT_TILE_MODE(
+        "unsupported.material.mapping.linear_gradient_tile_mode",
+        "Prepared linear gradient mapping only implements clamp tile mode",
+    ),
+    LINEAR_GRADIENT_STOP_COUNT(
+        "unsupported.material.mapping.linear_gradient_stop_count",
+        "Prepared linear gradient mapping requires exactly two stops",
+    ),
+    LINEAR_GRADIENT_NON_FINITE(
+        "unsupported.material.mapping.linear_gradient_non_finite",
+        "Prepared linear gradient mapping requires finite geometry, stops, and colors",
+    ),
+    LINEAR_GRADIENT_LOCAL_MATRIX_PERSPECTIVE(
+        "unsupported.material.mapping.linear_gradient_local_matrix_perspective",
+        "Prepared linear gradient mapping does not implement perspective local matrices",
+    ),
+    LINEAR_GRADIENT_LOCAL_MATRIX_AFFINE(
+        "unsupported.material.mapping.linear_gradient_local_matrix_affine",
+        "Prepared linear gradient mapping requires a finite bounded affine local matrix",
+    ),
     RUNTIME_COLOR_FILTER_PLACEMENT(
         "unsupported.material.mapping.runtime_color_filter_placement",
         "Prepared mapping does not implement runtime-effect color-filter placement",
@@ -251,9 +271,12 @@ enum class GPUPreparedMaterialUnsupportedReason(
 fun GPUMaterialDescriptor.gradientFactsRefusalReasonOrNull(): GPUPreparedMaterialUnsupportedReason? =
     when (this) {
         is GPUMaterialDescriptor.LinearGradient -> when {
+            tileMode != "clamp" -> GPUPreparedMaterialUnsupportedReason.LINEAR_GRADIENT_TILE_MODE
+            (allStopPositions?.size ?: 2) != 2 -> GPUPreparedMaterialUnsupportedReason.LINEAR_GRADIENT_STOP_COUNT
+            !linearGradientFactsAreFinite() -> GPUPreparedMaterialUnsupportedReason.LINEAR_GRADIENT_NON_FINITE
             interpolation != "srgb" -> GPUPreparedMaterialUnsupportedReason.GRADIENT_INTERPOLATION
-            localMatrix != IDENTITY_GRADIENT_LOCAL_MATRIX -> GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX
-            else -> null
+            else -> localMatrix.boundedAffineLocalMatrixRefusalOrNull(allowFullAffine = true)
+                ?.toLinearGradientReason()
         }
         is GPUMaterialDescriptor.RadialGradient -> when {
             interpolation != "srgb" -> GPUPreparedMaterialUnsupportedReason.GRADIENT_INTERPOLATION
@@ -270,27 +293,58 @@ fun GPUMaterialDescriptor.gradientFactsRefusalReasonOrNull(): GPUPreparedMateria
 
 /** Returns the closed refusal reason for image local-matrix facts outside the bounded route. */
 fun GPUMaterialDescriptor.ImageDraw.imageLocalMatrixRefusalReasonOrNull(): GPUPreparedMaterialUnsupportedReason? {
-    val matrix = localMatrix
-    if (matrix.size != 9 || matrix.any { !it.isFinite() }) {
-        return GPUPreparedMaterialUnsupportedReason.IMAGE_LOCAL_MATRIX_AFFINE
+    return when (localMatrix.boundedAffineLocalMatrixRefusalOrNull()) {
+        null -> null
+        BoundedAffineLocalMatrixRefusal.Perspective ->
+            GPUPreparedMaterialUnsupportedReason.IMAGE_LOCAL_MATRIX_PERSPECTIVE
+        BoundedAffineLocalMatrixRefusal.Affine ->
+            GPUPreparedMaterialUnsupportedReason.IMAGE_LOCAL_MATRIX_AFFINE
     }
-    if (matrix[6] != 0f || matrix[7] != 0f || matrix[8] != 1f) {
-        return GPUPreparedMaterialUnsupportedReason.IMAGE_LOCAL_MATRIX_PERSPECTIVE
+}
+
+private enum class BoundedAffineLocalMatrixRefusal { Perspective, Affine }
+
+private fun List<Float>.boundedAffineLocalMatrixRefusalOrNull(
+    allowFullAffine: Boolean = false,
+): BoundedAffineLocalMatrixRefusal? {
+    if (size != 9 || any { !it.isFinite() }) return BoundedAffineLocalMatrixRefusal.Affine
+    if (this[6] != 0f || this[7] != 0f || this[8] != 1f) {
+        return BoundedAffineLocalMatrixRefusal.Perspective
     }
     if (
-        matrix[1] != 0f || matrix[3] != 0f ||
-        matrix[0] <= 0f || matrix[4] <= 0f ||
-        matrix[0] > MAX_IMAGE_LOCAL_SCALE || matrix[4] > MAX_IMAGE_LOCAL_SCALE ||
-        kotlin.math.abs(matrix[2]) > MAX_IMAGE_LOCAL_TRANSLATION ||
-        kotlin.math.abs(matrix[5]) > MAX_IMAGE_LOCAL_TRANSLATION
-    ) {
-        return GPUPreparedMaterialUnsupportedReason.IMAGE_LOCAL_MATRIX_AFFINE
-    }
+        kotlin.math.abs(this[0]) > MAX_BOUNDED_AFFINE_LINEAR ||
+        kotlin.math.abs(this[1]) > MAX_BOUNDED_AFFINE_LINEAR ||
+        kotlin.math.abs(this[3]) > MAX_BOUNDED_AFFINE_LINEAR ||
+        kotlin.math.abs(this[4]) > MAX_BOUNDED_AFFINE_LINEAR ||
+        kotlin.math.abs(this[2]) > MAX_BOUNDED_AFFINE_TRANSLATION ||
+        kotlin.math.abs(this[5]) > MAX_BOUNDED_AFFINE_TRANSLATION
+    ) return BoundedAffineLocalMatrixRefusal.Affine
+    if (
+        !allowFullAffine &&
+        (this[1] != 0f || this[3] != 0f || this[0] <= 0f || this[4] <= 0f)
+    ) return BoundedAffineLocalMatrixRefusal.Affine
     return null
 }
 
-private const val MAX_IMAGE_LOCAL_SCALE = 4096f
-private const val MAX_IMAGE_LOCAL_TRANSLATION = 16384f
+private fun BoundedAffineLocalMatrixRefusal.toLinearGradientReason(): GPUPreparedMaterialUnsupportedReason =
+    when (this) {
+        BoundedAffineLocalMatrixRefusal.Perspective ->
+            GPUPreparedMaterialUnsupportedReason.LINEAR_GRADIENT_LOCAL_MATRIX_PERSPECTIVE
+        BoundedAffineLocalMatrixRefusal.Affine ->
+            GPUPreparedMaterialUnsupportedReason.LINEAR_GRADIENT_LOCAL_MATRIX_AFFINE
+    }
+
+private fun GPUMaterialDescriptor.LinearGradient.linearGradientFactsAreFinite(): Boolean =
+    listOf(
+        startX, startY, endX, endY,
+        startR, startG, startB, startA,
+        endR, endG, endB, endA,
+    ).all(Float::isFinite) &&
+        (allStopPositions?.all(Float::isFinite) ?: true) &&
+        (allStopColors?.all(Float::isFinite) ?: true)
+
+private const val MAX_BOUNDED_AFFINE_LINEAR = 4096f
+private const val MAX_BOUNDED_AFFINE_TRANSLATION = 16384f
 
 /** Rectangle geometry in local command coordinates. */
 data class GPURect(
