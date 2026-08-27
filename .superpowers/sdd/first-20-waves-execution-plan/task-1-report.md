@@ -129,3 +129,64 @@ Vérifications round 4 :
   puis reformaté mécaniquement selon le sérialiseur stable, contient 8 616
   lignes et les 7 lignes `provider-unloadable` avec
   `terminalFailure=false`.
+
+## Round 5 — fermeture des findings setup JSON et invariants attempted
+
+Le JSON machine-readable expose maintenant aussi `setupState` et
+`setupDiagnostic` pour chaque row. Les providers non chargeables publient donc
+leur état setup explicite (`FAILED`) et leur diagnostic de chargement dans le
+même contrat JSON que les setup failures GM.
+
+L’invariant render-attempt est appliqué à deux niveaux : une
+`InventoryRenderEvidence` avec `attempted=true` doit avoir exactement un état
+vrai entre `renderSucceeded` et `terminalFailure`, et une
+`SkiaGmInventoryRow` tentée doit avoir exactement un état vrai entre
+`renderAvailable` et `terminalFailure`. Les exclusions et setup failures non
+tentées conservent `attempted=false`, `terminalFailure=false` et
+`renderAvailable=false`.
+
+Le test de frontière setup couvre maintenant un échec pendant `draw`, après la
+création de `Surface` et après l'ajout du fond. Il vérifie `attempted=false`,
+`setupState=FAILED`, `terminalFailure=false`, `setupDiagnostic` et
+`operationCount=1`.
+
+La formulation WIP restante « retirer les lignes de scores sans GM enregistré »
+a été remplacée par la politique active : audit explicite des scores orphelins
+et refus en mode strict, sans suppression silencieuse.
+
+Vérifications round 5 :
+
+- RED ciblé :
+  `./gradlew --no-daemon :integration-tests:skia:test --tests org.graphiks.kanvas.skia.SkiaGmInventoryTest`
+  — **FAILED** comme attendu avant correction : 14 tests exécutés, 2 échecs
+  (`attempted render must either succeed or terminally fail`, `json export
+  includes setup state and diagnostic for setup failures`).
+- GREEN ciblé :
+  `./gradlew --no-daemon :integration-tests:skia:test --tests org.graphiks.kanvas.skia.SkiaGmInventoryTest --tests org.graphiks.kanvas.skia.SkiaGmRegistryTest`
+  — **BUILD SUCCESSFUL in 9s**; 15 tests d’inventaire et 5 tests de registry
+  passés.
+- Suite Skia complète :
+  `./gradlew --no-daemon :integration-tests:skia:test`
+  — **FAILED** en 2m43 : 722 tests exécutés, 452 failed, 40 skipped; le process
+  Gradle Test Executor a terminé avec `non-zero exit value 133`. Les nouveaux
+  tests `SkiaGmInventoryTest` et `SkiaGmRegistryTest` sont passés dans cette
+  exécution; les failures restantes reproduisent les refus GPU et écarts GM
+  larges déjà hors périmètre W00 (`GPUPreparedSurfaceTerminalException`,
+  assertions de similarité et quelques exceptions de fixture).
+- Première génération bornée :
+  `perl -e 'alarm 90; exec @ARGV' ./gradlew --no-daemon :integration-tests:skia:generateSkiaGmInventory -Pgm.inventoryOutput=/Users/chaos/.codex/worktrees/1540/kanvas/reports/gpu-renderer/evidence/gm-inventory/source-inventory.json`
+  — processus terminé par signal 14 avant réécriture visible; le fichier
+  contrôlé ensuite contenait encore 8 616 lignes et 0 provider vérifiant les
+  nouveaux champs setup JSON.
+- Génération Gradle réelle :
+  `perl -e 'alarm 240; exec @ARGV' ./gradlew --no-daemon :integration-tests:skia:generateSkiaGmInventory -Pgm.inventoryOutput=/Users/chaos/.codex/worktrees/1540/kanvas/reports/gpu-renderer/evidence/gm-inventory/source-inventory.json`
+  — **BUILD SUCCESSFUL in 1m 35s**.
+- Contrôles artefact :
+  `wc -l reports/gpu-renderer/evidence/gm-inventory/source-inventory.json` —
+  `9846`;
+  `jq '.rows | length' reports/gpu-renderer/evidence/gm-inventory/source-inventory.json`
+  — `615`;
+  `jq '[.rows[] | select(.route == "provider-unloadable" and .attempted == false and .terminalFailure == false and .setupState == "FAILED" and (.setupDiagnostic != null))] | length' reports/gpu-renderer/evidence/gm-inventory/source-inventory.json`
+  — `7`;
+  `jq '[.rows[] | select(.attempted == true and ((.renderAvailable == true) == (.terminalFailure == true)))] | length' reports/gpu-renderer/evidence/gm-inventory/source-inventory.json`
+  — `0`.

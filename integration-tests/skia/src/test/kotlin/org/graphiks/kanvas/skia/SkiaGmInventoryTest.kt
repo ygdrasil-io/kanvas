@@ -34,6 +34,62 @@ class SkiaGmInventoryTest {
     }
 
     @Test
+    fun `attempted render must either succeed or terminally fail`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            InventoryRenderEvidence(
+                attempted = true,
+                renderSucceeded = false,
+                terminalFailure = false,
+                operationCount = 1,
+            )
+        }
+        InventoryRenderEvidence(
+            attempted = false,
+            renderSucceeded = false,
+            terminalFailure = false,
+            operationCount = 0,
+            route = "excluded:text-dependency-gated",
+            setupState = InventorySetupState.NOT_ATTEMPTED,
+        )
+    }
+
+    @Test
+    fun `attempted inventory row must either render or terminally fail`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            SkiaGmInventoryRow(
+                name = "bad-attempt",
+                family = "PATH",
+                referenceName = "bad-attempt",
+                referenceAvailable = false,
+                renderAvailable = false,
+                attempted = true,
+                terminalFailure = false,
+                score = null,
+                operationCount = 1,
+                route = "gpu",
+                firstDiagnostic = null,
+                referenceStatus = "missing",
+                setupState = InventorySetupState.SUCCEEDED,
+            )
+        }
+        SkiaGmInventoryRow(
+            name = "excluded",
+            family = "TEXT",
+            referenceName = "excluded",
+            referenceAvailable = false,
+            renderAvailable = false,
+            attempted = false,
+            terminalFailure = false,
+            score = null,
+            operationCount = 0,
+            route = "excluded:text-dependency-gated",
+            firstDiagnostic = "excluded:text-dependency-gated",
+            referenceStatus = "missing",
+            setupState = InventorySetupState.NOT_ATTEMPTED,
+        )
+    }
+
+    @Test
     fun `inventory is deterministic and maps source metadata`() {
         val root = Files.createTempDirectory("gm-inventory").toFile()
         root.resolve("reference/a.png").apply { parentFile.mkdirs(); writeBytes(byteArrayOf(1)) }
@@ -69,7 +125,21 @@ class SkiaGmInventoryTest {
 
     @Test
     fun `json export is byte stable and escapes control characters`() {
-        val row = SkiaGmInventoryRow("a\u0000", "PATH", "a", false, false, true, true, null, 0, "failure\n", "bad\t", "missing")
+        val row = SkiaGmInventoryRow(
+            "a\u0000",
+            "PATH",
+            "a",
+            false,
+            false,
+            true,
+            true,
+            null,
+            0,
+            "failure\n",
+            "bad\t",
+            "missing",
+            setupState = InventorySetupState.SUCCEEDED,
+        )
         val json = renderSkiaGmInventoryJson(listOf(row))
         assertEquals(json, renderSkiaGmInventoryJson(listOf(row)))
         assertTrue("\\u0000" in json && "\\n" in json && "\\t" in json)
@@ -83,6 +153,49 @@ class SkiaGmInventoryTest {
         assertEquals(Files.readAllBytes(first.toPath()).toList(), Files.readAllBytes(second.toPath()).toList())
         assertEquals(json + "\n", first.readText())
         root.deleteRecursively()
+    }
+
+    @Test
+    fun `json export includes setup state and diagnostic for setup failures`() {
+        val providerRow = SkiaGmInventoryRow(
+            name = "missing.inventory.Provider",
+            family = "UNKNOWN",
+            referenceName = "missing.inventory.Provider",
+            referenceAvailable = false,
+            renderAvailable = false,
+            attempted = false,
+            terminalFailure = false,
+            score = null,
+            operationCount = 0,
+            route = "provider-unloadable",
+            firstDiagnostic = "ClassNotFoundException: fixture",
+            referenceStatus = "missing",
+            setupState = InventorySetupState.FAILED,
+            setupDiagnostic = "ClassNotFoundException: fixture",
+        )
+        val setupFailureRow = SkiaGmInventoryRow(
+            name = "setup-failing-gm",
+            family = "PATH",
+            referenceName = "setup-failing-gm",
+            referenceAvailable = false,
+            renderAvailable = false,
+            attempted = false,
+            terminalFailure = false,
+            score = null,
+            operationCount = 1,
+            route = "setup-failure",
+            firstDiagnostic = "gm-draw-failed-after-background",
+            referenceStatus = "missing",
+            setupState = InventorySetupState.FAILED,
+            setupDiagnostic = "gm-draw-failed-after-background",
+        )
+
+        val json = renderSkiaGmInventoryJson(listOf(providerRow, setupFailureRow))
+
+        assertTrue("\"setupState\": \"FAILED\"" in json)
+        assertTrue("\"setupDiagnostic\": \"ClassNotFoundException: fixture\"" in json)
+        assertTrue("\"route\": \"setup-failure\"" in json)
+        assertTrue("\"setupDiagnostic\": \"gm-draw-failed-after-background\"" in json)
     }
 
     @Test
@@ -155,6 +268,19 @@ class SkiaGmInventoryTest {
     }
 
     @Test
+    fun `draw setup failure after surface creation keeps operation count and never attempts render`() {
+        val evidence = captureInventoryEvidence(ThrowingDrawInventoryProbeGm()) { FailingRenderInventorySurface() }
+
+        assertFalse(evidence.attempted)
+        assertFalse(evidence.renderSucceeded)
+        assertFalse(evidence.terminalFailure)
+        assertEquals(InventorySetupState.FAILED, evidence.setupState)
+        assertEquals("gm-draw-failed-after-background", evidence.setupDiagnostic)
+        assertEquals("setup-failure", evidence.route)
+        assertEquals(1, evidence.operationCount)
+    }
+
+    @Test
     fun `one failing Surface render is terminal and is never retried`() {
         val surface = FailingRenderInventorySurface()
         val evidence = captureInventoryEvidence(InventoryProbeGm()) { surface }
@@ -197,6 +323,12 @@ private class UnsupportedStrokeInventoryProbeGm : SkiaGm by InventoryProbeGm() {
             RectF32(1f, 1f, 4f, 4f),
             Paint.stroke(ColorARGB.Black, 1f),
         )
+    }
+}
+
+private class ThrowingDrawInventoryProbeGm : SkiaGm by InventoryProbeGm() {
+    override fun draw(canvas: GmCanvas, width: Int, height: Int) {
+        throw IllegalStateException("gm-draw-failed-after-background")
     }
 }
 

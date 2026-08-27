@@ -32,7 +32,8 @@ signal d'entrée de `W00`; il doit être recalculé depuis le code à l'exécuti
       rendu disponible, score, nombre d'opérations, première route ou premier
       diagnostic terminal.
 - [ ] Rejouer le registre complet au SHA de la branche.
-- [ ] Retirer les lignes de scores sans GM enregistré.
+- [ ] Auditer explicitement les lignes de scores sans GM enregistré et les
+      refuser en mode strict, sans suppression silencieuse.
 - [ ] Refuser une référence ou un rendu dont le nom ne peut pas être relié à un
       GM enregistré.
 - [ ] Écrire le rapport machine-readable et son résumé humain sous

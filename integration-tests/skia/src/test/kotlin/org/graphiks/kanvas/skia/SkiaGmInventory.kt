@@ -26,6 +26,9 @@ data class InventoryRenderEvidence(
             }
             InventorySetupState.SUCCEEDED -> {
                 require(attempted) { "A successful setup must reach Surface.render()" }
+                require(renderSucceeded.xor(terminalFailure)) {
+                    "A render attempt must either succeed or terminally fail"
+                }
                 require(setupDiagnostic == null) { "A successful setup cannot have a setup diagnostic" }
             }
             InventorySetupState.FAILED -> require(!attempted && !renderSucceeded && !terminalFailure) {
@@ -53,7 +56,22 @@ data class SkiaGmInventoryRow(
     val referenceStatus: String,
     val setupState: InventorySetupState = InventorySetupState.NOT_ATTEMPTED,
     val setupDiagnostic: String? = null,
-)
+) {
+    init {
+        operationCount?.let { require(it >= 0) { "operationCount must be non-negative" } }
+        if (attempted) {
+            require(renderAvailable.xor(terminalFailure)) {
+                "An attempted inventory row must either render or terminally fail"
+            }
+            require(setupState == InventorySetupState.SUCCEEDED) {
+                "An attempted inventory row requires successful setup"
+            }
+        }
+        require(!terminalFailure || attempted && !renderAvailable) {
+            "terminalFailure is reserved for a failed render attempt"
+        }
+    }
+}
 
 data class SkiaGmScoreAudit(val orphanRows: List<String>, val strict: Boolean)
 
@@ -144,7 +162,9 @@ fun renderSkiaGmInventoryJson(rows: List<SkiaGmInventoryRow>, scoreAudit: SkiaGm
         appendLine("      \"score\": $score,")
         appendLine("      \"operationCount\": $operationCount,")
         appendLine("      \"route\": \"${inventoryJsonEscape(row.route)}\",")
-        appendLine("      \"firstDiagnostic\": $firstDiagnostic")
+        appendLine("      \"firstDiagnostic\": $firstDiagnostic,")
+        appendLine("      \"setupState\": \"${row.setupState.name}\",")
+        appendLine("      \"setupDiagnostic\": ${row.setupDiagnostic?.let { "\"${inventoryJsonEscape(it)}\"" } ?: "null"}")
         appendLine("    }$comma")
     }
     appendLine("  ]")
