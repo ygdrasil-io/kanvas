@@ -62,3 +62,22 @@ Vérifications du round :
 
 - `./gradlew --no-daemon :integration-tests:skia:test --tests org.graphiks.kanvas.skia.SkiaGmInventoryTest --tests org.graphiks.kanvas.skia.SkiaGmRegistryTest` — **SUCCESSFUL**.
 - `./gradlew --no-daemon :integration-tests:skia:generateSkiaGmInventory -Pgm.inventoryOutput=/Users/chaos/.codex/worktrees/1540/kanvas/reports/gpu-renderer/evidence/gm-inventory/source-inventory.json` — **SUCCESSFUL**, artefact 615 lignes.
+
+## Round 2 — corrections de re-review
+
+L’artefact expose maintenant `scoreAudit` avec `orphanCount=136` et la liste
+triée des lignes orphelines (dont `CubicStroke`), tout en conservant le
+parsing strict qui échoue sur ces lignes hors mode d’audit. Les références ont
+un statut explicite `trusted`, `missing` ou `untrustable`.
+
+La capture d’inventaire effectue une seule construction/tentative `Surface`;
+les compteurs `attempted`, `renderSucceeded`, `terminalFailure` et
+`renderAvailable` sont distincts. Les exclusions sont non tentées et publient
+leur diagnostic stable dans `firstDiagnostic`. Les providers non chargeables
+restent des lignes `provider-unloadable`, sans être confondus avec des GMs.
+
+Tests round 2 :
+
+- `./gradlew --no-daemon :integration-tests:skia:test --tests org.graphiks.kanvas.skia.SkiaGmInventoryTest --tests org.graphiks.kanvas.skia.SkiaGmRegistryTest` — **SUCCESSFUL**.
+- Génération réelle Gradle — **SUCCESSFUL**, 615 lignes totales (608 GMs
+  instanciables + 7 providers non chargeables), audit de 136 scores orphelins.

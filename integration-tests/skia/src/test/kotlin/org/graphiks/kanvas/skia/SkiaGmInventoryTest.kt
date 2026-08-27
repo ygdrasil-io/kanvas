@@ -43,7 +43,7 @@ class SkiaGmInventoryTest {
 
     @Test
     fun `json export is byte stable and escapes control characters`() {
-        val row = SkiaGmInventoryRow("a\u0000", "PATH", "a", false, false, true, true, null, 0, "failure\n", "bad\t")
+        val row = SkiaGmInventoryRow("a\u0000", "PATH", "a", false, false, true, true, null, 0, "failure\n", "bad\t", "missing")
         val json = renderSkiaGmInventoryJson(listOf(row))
         assertEquals(json, renderSkiaGmInventoryJson(listOf(row)))
         assertEquals(true, "\\u0000" in json && "\\n" in json && "\\t" in json)

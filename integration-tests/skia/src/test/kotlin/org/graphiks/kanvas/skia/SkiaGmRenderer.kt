@@ -77,24 +77,30 @@ object SkiaGmRenderer {
 
     /** Captures the existing public Surface attempt for inventory evidence only. */
     fun inventoryEvidence(gm: SkiaGm, config: RenderConfig = RenderConfig.DEFAULT): InventoryRenderEvidence {
+        val surface = Surface(width = gm.width, height = gm.height, config = config)
         return try {
-            val result = render(gm, config = config)
+            val canvas = surface.canvas()
+            canvas.drawRect(RectF32(0f, 0f, gm.width.toFloat(), gm.height.toFloat()),
+                Paint(color = ColorARGB.fromRGBA(1f, 1f, 1f, 1f), antiAlias = false))
+            val gmCanvas = GmCanvas(canvas, gm.width, gm.height)
+            gm.onOnceBeforeDraw(gmCanvas)
+            gm.draw(gmCanvas, gm.width, gm.height)
+            val result = surface.render()
             InventoryRenderEvidence(
                 attempted = true,
                 renderSucceeded = true,
                 terminalFailure = false,
-                operationCount = result.ops.size,
-                diagnostics = result.diagnostics,
+                operationCount = surface.snapshotOps().size,
+                diagnostics = result.diagnostics.entries.map { "${it.code}: ${it.reason}" },
                 route = "gpu",
             )
         } catch (failure: Exception) {
-            val attempt = try { renderTerminalAttempt(gm, config = config) } catch (_: Exception) { null }
             InventoryRenderEvidence(
                 attempted = true,
                 renderSucceeded = false,
                 terminalFailure = true,
-                operationCount = attempt?.operationCount ?: 0,
-                diagnostics = listOf(attempt?.diagnostic ?: failure.message.orEmpty()),
+                operationCount = surface.snapshotOps().size,
+                diagnostics = listOf(failure.message.orEmpty()),
                 route = "failure",
             )
         }

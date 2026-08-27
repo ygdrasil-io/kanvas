@@ -29,7 +29,10 @@ data class SkiaGmInventoryRow(
     val operationCount: Int?,
     val route: String,
     val firstDiagnostic: String?,
+    val referenceStatus: String,
 )
+
+data class SkiaGmScoreAudit(val orphanRows: List<String>, val strict: Boolean)
 
 internal fun loadSkiaGmScores(file: File, registeredNames: Set<String>, allowOrphans: Boolean = false): Map<String, Double> {
     require(file.exists()) { "Scores file not found: ${file.path}" }
@@ -48,6 +51,15 @@ internal fun loadSkiaGmScores(file: File, registeredNames: Set<String>, allowOrp
         scores[name] = value
     }
     return scores
+}
+
+internal fun auditSkiaGmScores(file: File, registeredNames: Set<String>): SkiaGmScoreAudit {
+    require(file.exists()) { "Scores file not found: ${file.path}" }
+    val orphans = file.readLines().asSequence().map { it.trim() }
+        .filter { it.isNotEmpty() && !it.startsWith("#") }
+        .mapNotNull { it.substringBefore('=', "").trim().takeIf(String::isNotEmpty) }
+        .filter { it !in registeredNames }.distinct().sorted().toList()
+    return SkiaGmScoreAudit(orphans, strict = orphans.isEmpty())
 }
 
 fun buildSkiaGmInventory(
@@ -75,13 +87,20 @@ fun buildSkiaGmInventory(
             operationCount = evidence?.operationCount,
             route = evidence?.route ?: "unobserved",
             firstDiagnostic = evidence?.diagnostics?.firstOrNull(),
+            referenceStatus = when {
+                !referenceDir.resolve("${gm.referenceName}.png").isFile -> "missing"
+                gm.referenceStatus.untrustable -> "untrustable"
+                else -> "trusted"
+            },
         )
     }
 }
 
-fun renderSkiaGmInventoryJson(rows: List<SkiaGmInventoryRow>): String = buildString {
+fun renderSkiaGmInventoryJson(rows: List<SkiaGmInventoryRow>, scoreAudit: SkiaGmScoreAudit = SkiaGmScoreAudit(emptyList(), true)): String = buildString {
+    val orphanRows = scoreAudit.orphanRows.joinToString(",") { "\"${inventoryJsonEscape(it)}\"" }
     appendLine("{")
     appendLine("  \"schemaVersion\": \"gpu-gm-inventory-v2\",")
+    appendLine("  \"scoreAudit\": {\"strict\": ${scoreAudit.strict}, \"orphanCount\": ${scoreAudit.orphanRows.size}, \"orphanRows\": [$orphanRows]},")
     appendLine("  \"rows\": [")
     rows.forEachIndexed { index, row ->
         val comma = if (index + 1 == rows.size) "" else ","
@@ -92,6 +111,7 @@ fun renderSkiaGmInventoryJson(rows: List<SkiaGmInventoryRow>): String = buildStr
         appendLine("      \"name\": \"${inventoryJsonEscape(row.name)}\",")
         appendLine("      \"family\": \"${row.family}\",")
         appendLine("      \"referenceName\": \"${inventoryJsonEscape(row.referenceName)}\",")
+        appendLine("      \"referenceStatus\": \"${row.referenceStatus}\",")
         appendLine("      \"referenceAvailable\": ${row.referenceAvailable},")
         appendLine("      \"renderAvailable\": ${row.renderAvailable},")
         appendLine("      \"attempted\": ${row.attempted},")
@@ -113,12 +133,13 @@ fun main(args: Array<String>) {
       val entries = SkiaGmRegistry.entries()
     val rows = entries.mapNotNull { it.gm }
     val evidence = rows.associate { gm ->
-        gm.name to when {
-            gm.renderFamily == RenderFamily.TEXT -> InventoryRenderEvidence(true, false, false, 0, route = "excluded:text-dependency-gated")
-            gm.renderCost == RenderCost.BLOCKING -> InventoryRenderEvidence(true, false, false, 0, route = "excluded:blocking-by-policy")
+            gm.name to when {
+            gm.renderFamily == RenderFamily.TEXT -> InventoryRenderEvidence(false, false, false, 0, listOf("excluded:text-dependency-gated"), "excluded:text-dependency-gated")
+            gm.renderCost == RenderCost.BLOCKING -> InventoryRenderEvidence(false, false, false, 0, listOf("excluded:blocking-by-policy"), "excluded:blocking-by-policy")
             else -> SkiaGmRenderer.inventoryEvidence(gm)
         }
     }
+    val scoreAudit = auditSkiaGmScores(File("test-similarity-scores.properties"), rows.map { it.name }.toSet())
     val inventory = buildSkiaGmInventory(
         rows,
         File("src/test/resources/reference"),
@@ -128,9 +149,9 @@ fun main(args: Array<String>) {
     )
     val failedProviders = entries.filter { it.gm == null }
     val allRows = inventory + failedProviders.map { entry ->
-        SkiaGmInventoryRow(entry.provider, "UNKNOWN", entry.provider, false, false, false, true, null, 0, "provider-unloadable", entry.diagnostic)
+        SkiaGmInventoryRow(entry.provider, "UNKNOWN", entry.provider, false, false, false, true, null, 0, "provider-unloadable", entry.diagnostic, "missing")
     }
-      File(args[0]).apply { parentFile?.mkdirs(); writeText(renderSkiaGmInventoryJson(allRows) + "\n") }
+      File(args[0]).apply { parentFile?.mkdirs(); writeText(renderSkiaGmInventoryJson(allRows, scoreAudit) + "\n") }
     } finally {
       GPUBackendRuntimeFactory.dispose()
     }
