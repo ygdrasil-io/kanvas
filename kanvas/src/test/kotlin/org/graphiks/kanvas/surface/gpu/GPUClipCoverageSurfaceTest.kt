@@ -1162,6 +1162,42 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
+    fun `public singular and non finite rect rrect and path clips refuse before submission`() {
+        requireWebGpu()
+        val session = requireNotNull(GPUBackendRuntimeFactory.createOrNull())
+        val submissionsBefore = session.runtimeTelemetry.submissions
+        val scales = listOf(
+            "singular" to 0f to "unsupported.transform.affine_singular",
+            "nan" to Float.NaN to "unsupported.transform.non_finite",
+            "infinity" to Float.POSITIVE_INFINITY to "unsupported.transform.non_finite",
+        )
+        val clipKinds = listOf("rect", "rrect", "path")
+
+        clipKinds.forEach { kind ->
+            scales.forEach { (labelAndScale, expectedCode) ->
+                val (label, scaleX) = labelAndScale
+                val surface = Surface(32, 32)
+                surface.canvas {
+                    save()
+                    scale(scaleX, 1f)
+                    when (kind) {
+                        "rect" -> clipRect(RectF32(4f, 4f, 28f, 28f), ClipOp.INTERSECT, antiAlias = false)
+                        "rrect" -> clipRRect(RRectF32.of(RectF32(4f, 4f, 28f, 28f), radius = 4f), ClipOp.INTERSECT, antiAlias = false)
+                        else -> clipPath(Path().apply { addRect(RectF32(4f, 4f, 28f, 28f)) }, ClipOp.INTERSECT, antiAlias = false)
+                    }
+                    resetMatrix()
+                    drawColor(ColorARGB.Red)
+                    restore()
+                }
+
+                val failure = assertFailsWith<GPUPreparedSurfaceTerminalException>("$kind-$label") { surface.render() }
+                assertEquals(expectedCode, failure.diagnostic.code.value, "$kind-$label")
+                assertEquals(submissionsBefore, session.runtimeTelemetry.submissions, "$kind-$label")
+            }
+        }
+    }
+
+    @Test
     fun `adapter backed inverse difference clip preserves fill exterior and AA edge`() {
         requireWebGpu()
         val inverseRect = Path().apply {

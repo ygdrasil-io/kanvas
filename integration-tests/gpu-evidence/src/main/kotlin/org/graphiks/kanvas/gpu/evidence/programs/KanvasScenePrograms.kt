@@ -450,7 +450,7 @@ object KanvasScenePrograms {
     fun affinePathClipColor() = KanvasSurfaceProgram(ROUTE_ID, record = {
         drawColor(BACKGROUND)
         save()
-        setMatrix(Matrix3x3F32(sx = .75f, sy = .5f))
+        setMatrix(Matrix3x3F32(sx = .75f, tx = 2f, sy = .5f, ty = 1f))
         clipPath(Path {
             moveTo(8f, 8f)
             lineTo(56f, 8f)

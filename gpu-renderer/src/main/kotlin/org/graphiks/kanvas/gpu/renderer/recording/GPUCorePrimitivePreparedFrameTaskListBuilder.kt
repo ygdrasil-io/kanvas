@@ -2185,7 +2185,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         ) {
             return refused(
                 "unsupported.recording.core_primitive_clip_stencil_transform",
-                "Native hard path clips require identity, translation, positive uniform scale, or finite non-singular axis scale capture-time CTM.",
+                "Native hard path clips require identity, translation, positive uniform scale, or finite non-singular axis scale with optional translation capture-time CTM.",
             )
         }
         if (staticNativeClipStencilPlan != null && staticNativeClipStencilConsumers.any { packet ->
@@ -4948,6 +4948,7 @@ private val HARD_PATH_CLIP_TRANSFORM_CLASSES = setOf(
     "translate",
     "uniform-positive-scale-translate",
     "scale",
+    "scale-translate",
 )
 
 /** Typed core-only view used by the direct CorePrimitive assembler (blur packets route elsewhere). */
