@@ -48,14 +48,19 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
     /**
      * The local clip bounds, expressed in the current coordinate system.
      *
-     * Returns [RectF32.Empty] when the clip is wide-open, the device rect when
-     * clipping to a single axis-aligned rectangle, or [RectF32.Empty] for complex
-     * clip stacks.
+     * Returns the single device-rect clip mapped back through an invertible
+     * scale/translate CTM. Returns [RectF32.Empty] when the clip is wide-open,
+     * complex, or cannot be represented conservatively as a local axis-aligned
+     * rectangle.
      */
     val localClipBounds: RectF32
         get() = when (val clip = currentClip) {
             ClipStack.WideOpen -> RectF32.Empty
-            is ClipStack.DeviceRect -> clip.rect
+            is ClipStack.DeviceRect -> currentTransform
+                .takeIf(Matrix3x3F32::isScaleTranslate)
+                ?.invert()
+                ?.mapAxisAlignedRect(clip.rect)
+                ?: RectF32.Empty
             is ClipStack.Complex -> RectF32.Empty
         }
 
@@ -67,8 +72,12 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
         if (currentClip is ClipStack.WideOpen) return false
         if (currentClip is ClipStack.DeviceRect) {
             val c = (currentClip as ClipStack.DeviceRect).rect
-            return rect.right <= c.left || rect.left >= c.right ||
-                   rect.bottom <= c.top || rect.top >= c.bottom
+            val deviceRect = currentTransform
+                .takeIf(Matrix3x3F32::isScaleTranslate)
+                ?.mapAxisAlignedRect(rect)
+                ?: return false
+            return deviceRect.right <= c.left || deviceRect.left >= c.right ||
+                   deviceRect.bottom <= c.top || deviceRect.top >= c.bottom
         }
         return false
     }
