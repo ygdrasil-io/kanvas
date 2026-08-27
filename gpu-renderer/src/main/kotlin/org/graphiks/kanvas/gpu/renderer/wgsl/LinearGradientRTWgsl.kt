@@ -8,7 +8,9 @@ package org.graphiks.kanvas.gpu.renderer.wgsl
  * provide the closed 64-byte uniform block.
  */
 internal const val LinearGradientRTEffectId: String = "runtime.linear_gradient_rt"
-internal const val LinearGradientRTDescriptorVersion: Int = 1
+// Version 1 was a placeholder route with a different ABI contract.  This
+// executable four-vec4 material source is therefore published only as v2.
+internal const val LinearGradientRTDescriptorVersion: Int = 2
 internal const val LinearGradientRTUniformSchemaHash: String = "schema:linear_gradient_rt:v2"
 internal const val LinearGradientRTUniformBlockSizeBytes: Int = 64
 internal const val LinearGradientRTBindingPlanHash: String = "binding:linear_gradient_rt:v2"

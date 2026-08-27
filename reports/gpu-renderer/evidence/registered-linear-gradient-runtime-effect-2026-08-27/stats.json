@@ -1,5 +1,6 @@
 {
   "effectId": "runtime.linear_gradient_rt",
+  "descriptorVersion": 2,
   "uniformBytes": 64,
   "draws": 1,
   "submits": 1,

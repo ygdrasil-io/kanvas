@@ -1,6 +1,6 @@
 {
   "effectId": "runtime.linear_gradient_rt",
-  "descriptorVersion": 1,
+  "descriptorVersion": 2,
   "oracle": "LinearGradientRTCPUOracle",
   "uniformLayout": {"bytes": 64, "fields": ["start@0:16", "end@16:16", "startColor@32:16", "endColor@48:16"]},
   "fixture": {"target": "4x4", "geometry": "two opaque triangles covering the target", "start": [0, 0], "end": [0, 4], "startColor": [1, 0, 0, 1], "endColor": [0, 0, 1, 1]},

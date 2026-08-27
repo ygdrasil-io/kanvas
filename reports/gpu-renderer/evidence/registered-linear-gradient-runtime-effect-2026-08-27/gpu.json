@@ -1,5 +1,6 @@
 {
   "effectId": "runtime.linear_gradient_rt",
+  "descriptorVersion": 2,
   "backend": "WebGPU headless/offscreen",
   "target": "rgba8unorm-srgb 4x4 (LinearPremul)",
   "readback": "RGBA",

@@ -27,15 +27,27 @@ class KanvasPreparedRuntimeEffectResolverTest {
     private val descriptor = SimpleRTDescriptor.createDescriptor()
 
     @Test
-    fun `registered linear gradient exposes parser validated executable program`() {
+    fun `registered linear gradient v2 exposes parser validated executable program`() {
+        val resolved = KanvasPreparedRuntimeEffectResolver().resolve(
+            effectId = "runtime.linear_gradient_rt",
+            descriptorVersion = 2,
+        )
+
+        val ready = assertIs<GPUPreparedRuntimeEffectResolution.Ready>(resolved)
+        assertEquals("runtime.linear_gradient_rt", ready.program.effectId)
+        assertEquals(2, ready.program.descriptorVersion)
+        assertEquals(64, ready.program.uniformBlockSizeBytes)
+    }
+
+    @Test
+    fun `obsolete linear gradient v1 is refused rather than reinterpreted as v2`() {
         val resolved = KanvasPreparedRuntimeEffectResolver().resolve(
             effectId = "runtime.linear_gradient_rt",
             descriptorVersion = 1,
         )
 
-        val ready = assertIs<GPUPreparedRuntimeEffectResolution.Ready>(resolved)
-        assertEquals("runtime.linear_gradient_rt", ready.program.effectId)
-        assertEquals(64, ready.program.uniformBlockSizeBytes)
+        val unavailable = assertIs<GPUPreparedRuntimeEffectResolution.DescriptorUnavailable>(resolved)
+        assertEquals("Runtime-effect descriptor version does not match the registry", unavailable.message)
     }
 
     @Test

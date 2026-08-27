@@ -16,8 +16,8 @@ class LinearGradientRTDescriptorTest {
     }
 
     @Test
-    fun `LinearGradientRTDescriptor has version 1`() {
-        assertEquals(GPURuntimeEffectDescriptorVersion(1), LinearGradientRTDescriptor.descriptorVersion)
+    fun `LinearGradientRTDescriptor has executable version 2`() {
+        assertEquals(GPURuntimeEffectDescriptorVersion(2), LinearGradientRTDescriptor.descriptorVersion)
     }
 
     @Test

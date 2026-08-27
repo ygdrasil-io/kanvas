@@ -1,10 +1,11 @@
 {
   "effectId": "runtime.linear_gradient_rt",
-  "descriptor": "LinearGradientRTDescriptor@1",
+  "descriptor": "LinearGradientRTDescriptor@2",
   "registry": "KanvasRuntimeEffectRegistry",
   "cpu": "LinearGradientRTCPUOracle",
   "wgsl": {"source": "LinearGradientRTWgsl", "entryPoint": "linear_gradient_rt_source", "validation": "parseWgslResult + Lowerer + reflected ABI", "binding": "descriptor group=1,binding=0; prepared-vertices materializer preserves this canonical binding"},
-  "native": "GPUMaterialDescriptor.RuntimeEffect(runtime.linear_gradient_rt@1) -> KanvasPreparedRuntimeEffectResolver -> GPUPreparedMaterialProgramCompiler -> GPUPreparedSurfaceFrameTaskListBuilder -> prepared-vertices native materializer -> WebGPU headless/offscreen readback",
+  "native": "GPUMaterialDescriptor.RuntimeEffect(runtime.linear_gradient_rt@2) -> KanvasPreparedRuntimeEffectResolver -> GPUPreparedMaterialProgramCompiler -> GPUPreparedSurfaceFrameTaskListBuilder -> prepared-vertices native materializer -> WebGPU headless/offscreen readback",
+  "obsoleteVersion": {"version": 1, "result": "refused", "reason": "Runtime-effect descriptor version does not match the registry"},
   "legacyDirectGradientRoute": "GPURegisteredUniformProgram.LinearGradient remains a separate legacy gradient route and is not used as runtime-effect evidence",
   "dynamicSkSL": false,
   "dynamicWGSL": false,

@@ -2,7 +2,7 @@
 
 ## Résultat
 
-`runtime.linear_gradient_rt@1` est maintenant un runtime effect Kanvas fermé
+`runtime.linear_gradient_rt@2` est maintenant un runtime effect Kanvas fermé
 et réellement consommé par la voie WebGPU headless/offscreen :
 
 - `LinearGradientRTDescriptor` enregistre l’ABI uniforme de 64 octets
@@ -20,6 +20,11 @@ et réellement consommé par la voie WebGPU headless/offscreen :
   `GPURegisteredUniformProgram.LinearGradient` reste un chemin gradient legacy
   distinct et n’est pas employée comme preuve.
 
+La version `@1` reste obsolète et est refusée avec
+`Runtime-effect descriptor version does not match the registry`. Elle n’est
+jamais réinterprétée comme l’ABI exécutable `@2`, dont le layout et le contrat
+de route sont distincts du placeholder historique.
+
 Le smoke `GPUWgpu4kPreparedVerticesNativeSmokeTest` rend deux triangles couvrant
 4×4 en `rgba8unorm-srgb` (LinearPremul). L’oracle CPU et le readback GPU ont
 64 canaux, zéro différence,
@@ -32,7 +37,7 @@ statistiques, route et refus sont sous
 - `lineargradientrt` ne peut pas être promu : sa référence
   `/reference/lineargradientrt.png` est absente. De plus, `LinearGradientRTGm`
   dessine des rectangles et ne construit pas `RuntimeEffect` ; aucun lien
-  factice avec `runtime.linear_gradient_rt@1` n’est revendiqué. Aucun golden
+  factice avec `runtime.linear_gradient_rt@2` n’est revendiqué. Aucun golden
   n’a été inventé.
 - `runtimecolorfilter` reste refusé par
   `unsupported.core_primitive.material.non_solid`. Il utilise des effets de
@@ -60,8 +65,9 @@ rtk ./gradlew --no-daemon :integration-tests:skia:test --rerun-tasks \
   -Dkanvas.gm.name=runtimecolorfilter -Dkanvas.render.debugLevel=PIXEL
 ```
 
-Le premier groupe est vert sans `--rerun-tasks` : les 24 tests ciblés, dont le
-smoke natif, passent sur Apple M2 Max. La tentative exacte avec
+Le premier groupe est vert sans `--rerun-tasks` : les 25 tests ciblés, dont le
+smoke natif, passent sur Apple M2 Max, avec le refus explicite de `@1` et
+l’exécution de `@2`. La tentative exacte avec
 `--rerun-tasks` a été arrêtée par la limite d’exécution de 30 s de l’hôte
 pendant la recompilation forcée des dépendances `font`; elle n’est pas
 présentée comme verte. Les deux commandes GM échouent volontairement avec les
