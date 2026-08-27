@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "kanvas-image-local-sampling-route-v1",
+  "gm": "nearest_half_pixel_image",
+  "backend": "WebGPU headless/offscreen",
+  "nativeDispatchCount": 2,
+  "nativeRefusalCount": 0,
+  "oracle": "Skia CPU reference comparison",
+  "shaderLocalMatrix": "none; Shader.Image is constructed without Shader.WithLocalMatrix",
+  "inheritedGeometryTransforms": "the GM applies positive and negative Canvas scale/translation before the draw; these are geometry transforms, not image-shader local matrices",
+  "contractImpact": "zero refusals here does not admit negative image local matrices"
+}

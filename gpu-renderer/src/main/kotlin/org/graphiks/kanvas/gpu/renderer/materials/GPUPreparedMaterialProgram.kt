@@ -284,6 +284,13 @@ object GPUPreparedMaterialProgramCompiler {
         descriptor: GPUMaterialDescriptor.ImageDraw,
         context: GPUMaterialLoweringContext,
     ): PreparedSourceResult {
+        if (descriptor.localMatrix != IDENTITY_IMAGE_LOCAL_MATRIX) {
+            return refusedSource(
+                code = "unsupported.material.mapping.local_matrix",
+                sourceKind = GPUMaterialSourceKind.ImageShader,
+                message = "Generic prepared image material does not consume image local matrices; use the bounded image lowerer route.",
+            )
+        }
         val sampled = when (val result = sampledResource(descriptor)) {
             is SampledResourceResult.Ready -> result.resource
             is SampledResourceResult.Refused ->
@@ -2091,5 +2098,10 @@ private const val FINAL_FRAGMENT_ENTRY_POINT = "fs_main"
 private const val MATERIAL_SOURCE_FUNCTION = "kanvas_material_source"
 private const val MATERIAL_EVALUATION_FUNCTION = "kanvas_evaluate_material"
 private const val IMAGE_UNIFORM_LAYOUT_HASH = "layout:prepared-material-image:v1"
+private val IDENTITY_IMAGE_LOCAL_MATRIX = listOf(
+    1f, 0f, 0f,
+    0f, 1f, 0f,
+    0f, 0f, 1f,
+)
 private val SUPPORTED_TILE_MODES = setOf("clamp", "repeat", "mirror", "decal")
 private val SUPPORTED_IMAGE_FILTERS = setOf("nearest", "linear")

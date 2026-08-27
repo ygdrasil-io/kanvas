@@ -1740,6 +1740,114 @@ class GPUMaterialMapperTest {
         assertEquals(0f, legacyNoise.a)
     }
 
+    @Test
+    fun `prepared image mapping preserves a half pixel local translation`() {
+        val descriptor = assertIs<GPUMaterialDescriptor.ImageDraw>(
+            Paint(
+                shader = Shader.WithLocalMatrix(
+                    imageShader(
+                        sourceId = "image-half-pixel-translation",
+                        pixels = byteArrayOf(1, 2, 3, 4),
+                    ),
+                    Matrix3x3F32.translation(0.5f, 0.5f),
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+
+        assertEquals(
+            listOf(1f, 0f, 0.5f, 0f, 1f, 0.5f, 0f, 0f, 1f),
+            descriptor.localMatrix,
+        )
+    }
+
+    @Test
+    fun `prepared image mapping carries bounded uniform scale and the requested filter`() {
+        listOf(SamplingOptions.NEAREST to "nearest", SamplingOptions.LINEAR to "linear").forEach {
+                (sampling, filterMode) ->
+            val descriptor = assertIs<GPUMaterialDescriptor.ImageDraw>(
+                Paint(
+                    shader = Shader.WithLocalMatrix(
+                        imageShader(
+                            sourceId = "image-scale-$filterMode",
+                            pixels = byteArrayOf(1, 2, 3, 4),
+                            sampling = sampling,
+                        ),
+                        Matrix3x3F32.scaling(2f, 2f),
+                    ),
+                ).toPreparedMaterialMapping().descriptor,
+            )
+
+            assertEquals(filterMode, descriptor.samplingFilterMode)
+            assertEquals(
+                listOf(2f, 0f, 0f, 0f, 2f, 0f, 0f, 0f, 1f),
+                descriptor.localMatrix,
+            )
+        }
+    }
+
+    @Test
+    fun `prepared image mapping keeps tile and perspective refusals distinct`() {
+        val repeat = assertIs<GPUMaterialDescriptor.Unsupported>(
+            Paint(
+                shader = imageShader(
+                    sourceId = "image-repeat-refusal",
+                    pixels = byteArrayOf(1, 2, 3, 4),
+                    tileModeX = TileMode.REPEAT,
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+        val perspective = assertIs<GPUMaterialDescriptor.Unsupported>(
+            Paint(
+                shader = Shader.WithLocalMatrix(
+                    imageShader(
+                        sourceId = "image-perspective-refusal",
+                        pixels = byteArrayOf(1, 2, 3, 4),
+                    ),
+                    Matrix3x3F32.of(
+                        1f, 0f, 0f,
+                        0f, 1f, 0f,
+                        0.01f, 0f, 1f,
+                    ),
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+
+        assertEquals(GPUPreparedMaterialUnsupportedReason.IMAGE_TILE_MODE, repeat.reason)
+        assertEquals(
+            GPUPreparedMaterialUnsupportedReason.IMAGE_LOCAL_MATRIX_PERSPECTIVE,
+            perspective.reason,
+        )
+    }
+
+    @Test
+    fun `prepared image local matrix contract accepts exact bounds and refuses every boundary escape`() {
+        fun mapped(matrix: Matrix3x3F32) = Paint(
+            shader = Shader.WithLocalMatrix(
+                imageShader(
+                    sourceId = "image-local-boundary-${matrix.hashCode()}",
+                    pixels = byteArrayOf(1, 2, 3, 4),
+                ),
+                matrix,
+            ),
+        ).toPreparedMaterialMapping().descriptor
+
+        assertIs<GPUMaterialDescriptor.ImageDraw>(
+            mapped(Matrix3x3F32.of(4096f, 0f, 16384f, 0f, 4096f, -16384f)),
+        )
+        listOf(
+            Matrix3x3F32.of(Float.NaN, 0f, 0f, 0f, 1f, 0f),
+            Matrix3x3F32.of(Float.POSITIVE_INFINITY, 0f, 0f, 0f, 1f, 0f),
+            Matrix3x3F32.of(1f, 0.25f, 0f, 0f, 1f, 0f),
+            Matrix3x3F32.of(0f, 0f, 0f, 0f, 1f, 0f),
+            Matrix3x3F32.of(-1f, 0f, 0f, 0f, 1f, 0f),
+            Matrix3x3F32.of(4096.01f, 0f, 0f, 0f, 1f, 0f),
+            Matrix3x3F32.of(1f, 0f, 16384.01f, 0f, 1f, 0f),
+        ).forEach { matrix ->
+            val refused = assertIs<GPUMaterialDescriptor.Unsupported>(mapped(matrix))
+            assertEquals(GPUPreparedMaterialUnsupportedReason.IMAGE_LOCAL_MATRIX_AFFINE, refused.reason)
+        }
+    }
+
     private fun imageShader(
         sourceId: String,
         pixels: ByteArray,

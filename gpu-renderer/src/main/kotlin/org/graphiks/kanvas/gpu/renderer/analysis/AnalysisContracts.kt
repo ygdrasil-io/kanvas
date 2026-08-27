@@ -17,6 +17,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.commands.gradientFactsRefusalReasonOrNull
+import org.graphiks.kanvas.gpu.renderer.commands.imageLocalMatrixRefusalReasonOrNull
 import org.graphiks.kanvas.gpu.renderer.commands.isAffineDeterminantNonFinite
 import org.graphiks.kanvas.gpu.renderer.commands.isAffineDeterminantSingular
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
@@ -1390,8 +1391,10 @@ class GPUFirstRoutePlanner(
             pixelsContentHash.isBlank() || pixelsProvenance.isBlank() ->
                 GPUPreparedImageRefusalCodes.PIXELS_MISSING
             pixelsGeneration < 0L -> GPUPreparedImageRefusalCodes.NATIVE_GENERATION
-            src.left < 0f || src.top < 0f || src.right <= src.left || src.bottom <= src.top ||
-                src.right > pixelsWidth.toFloat() || src.bottom > pixelsHeight.toFloat() -> "unsupported.image.src_bounds"
+            src.right <= src.left || src.bottom <= src.top -> "unsupported.image.src_bounds"
+            (src.left < 0f || src.top < 0f ||
+                src.right > pixelsWidth.toFloat() || src.bottom > pixelsHeight.toFloat()) &&
+                !material.allowsClampImageShaderSourceOverflow() -> "unsupported.image.src_bounds"
             dst.right <= dst.left || dst.bottom <= dst.top -> "unsupported.image.dst_bounds"
             material.kind != GPUMaterialKind.ImageDraw -> "unsupported.material.source_unimplemented"
             transform.type == GPUTransformType.Perspective -> "unsupported.transform.perspective"
@@ -2136,6 +2139,17 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
     private fun GPUMaterialDescriptor.analysisRefusalCodeOrNull(): String? =
         (this as? GPUMaterialDescriptor.Unsupported)?.reason?.diagnosticCode
             ?: gradientFactsRefusalReasonOrNull()?.diagnosticCode
+
+    /**
+     * A bounded image-shader local transform samples through a clamp sampler,
+     * so UVs may extend just beyond the decoded image. Direct drawImageRect
+     * commands retain their historical in-bounds source contract.
+     */
+    private fun GPUMaterialDescriptor.allowsClampImageShaderSourceOverflow(): Boolean =
+        (this as? GPUMaterialDescriptor.ImageDraw)?.let { image ->
+            image.localMatrix != listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f) &&
+                image.imageLocalMatrixRefusalReasonOrNull() == null
+        } == true
 
     /** Returns a terminal gradient refusal code, or null when gradient facts are accepted. */
     private fun GPUMaterialDescriptor.LinearGradient.refusalCode(allowRepeat: Boolean = false): String? =

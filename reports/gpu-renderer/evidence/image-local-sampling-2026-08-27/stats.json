@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "kanvas-image-local-sampling-stats-v1",
+  "gm": "drawimagerect_filter",
+  "similarityPercent": 28.74074074074074,
+  "ssim": 0.5766025363789481,
+  "meanChannelError": 0.1771647603485839,
+  "thresholdPercent": 0.0,
+  "thresholdChanged": false,
+  "nativeDispatchCount": 4,
+  "nativeRefusalCount": 0
+}

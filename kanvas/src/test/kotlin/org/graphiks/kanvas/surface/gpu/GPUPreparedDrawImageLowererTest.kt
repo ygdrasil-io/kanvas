@@ -17,6 +17,7 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
+import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
@@ -571,6 +572,40 @@ class GPUPreparedDrawImageLowererTest {
             ),
         )
         assertEquals(GPUPreparedImageSampling.Linear, result.command.preparedImage!!.sampling)
+    }
+
+    @Test
+    fun `image shader rect preserves nearest alpha tint in normalized and native facts`() {
+        val image = commonA8Image()
+        val paint = Paint(
+            color = ColorARGB.fromRGBA(1f, 0f, 0f, 0.5f),
+            shader = Shader.WithLocalMatrix(
+                Shader.Image(image, sampling = SamplingOptions.NEAREST),
+                Matrix3x3F32.translation(0.5f, 0f),
+            ),
+        )
+        val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
+            GPUPreparedDrawImageLowerer.lowerImageShaderRect(
+                operation = DisplayOp.DrawRect(
+                    rect = RectF32(0f, 0f, 2f, 1f),
+                    paint = paint,
+                    transform = Matrix3x3F32.Identity,
+                    clip = ClipStack.WideOpen,
+                ),
+                commandId = GPUDrawCommandID(0),
+                paintOrder = 0,
+                provenance = GPUFrameProvenance.None,
+                target = target(),
+                config = RenderConfig.DEFAULT,
+                capabilities = capabilities(),
+            ),
+        )
+
+        val material = assertIs<GPUMaterialDescriptor.ImageDraw>(result.command.normalized.material)
+        val quantizedHalfAlpha = 128f / 255f
+        assertEquals(quantizedHalfAlpha, material.tintA)
+        assertEquals(quantizedHalfAlpha, result.command.preparedImage!!.tintPremultipliedRgba[3])
+        assertEquals(GPUPreparedImageSampling.Nearest, result.command.preparedImage!!.sampling)
     }
 
     @Test

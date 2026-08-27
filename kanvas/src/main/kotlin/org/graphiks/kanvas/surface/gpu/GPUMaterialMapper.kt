@@ -14,6 +14,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUPreparedMaterialUnsupportedR
 import org.graphiks.kanvas.gpu.renderer.commands.GPURuntimeEffectChildDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPURuntimeEffectUniformValue
 import org.graphiks.kanvas.gpu.renderer.commands.containsUnsupportedMaterial
+import org.graphiks.kanvas.gpu.renderer.commands.imageLocalMatrixRefusalReasonOrNull
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes
 import org.graphiks.kanvas.image.AlphaType
@@ -727,6 +728,13 @@ private fun List<Float>.composeGradientLocalMatrix(matrix: Matrix3x3F32): List<F
     }
 }
 
+private fun List<Float>.composeImageLocalMatrix(matrix: Matrix3x3F32): List<Float>? {
+    if (size != 9 || any { !it.isFinite() } || !matrix.hasFiniteValues()) return null
+    return (toMatrix33() * matrix).toDescriptorValues().takeIf { values ->
+        values.all(Float::isFinite)
+    }
+}
+
 private fun GPUMaterialDescriptor.invalidGradientLocalMatrix(): GPUMaterialDescriptor.Unsupported =
     GPUMaterialDescriptor.Unsupported(
         reason = GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX,
@@ -919,11 +927,27 @@ private fun Shader.toPreparedMaterial(
         is Shader.WithLocalMatrix -> {
             val source = mapper.map(shader)
             source.preparedGraphTraversalRefusalOrNull()?.let { return it }
-            mapper.descriptorAssembly.preparedUnsupported(
-                reason = GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX,
-                originalKind = shader.materialKind(),
-                source = source,
-            )
+            if (source is GPUMaterialDescriptor.ImageDraw) {
+                val mapped = source.localMatrix.composeImageLocalMatrix(matrix)?.let { composed ->
+                    source.copy(localMatrix = composed)
+                }
+                val refusal = mapped?.imageLocalMatrixRefusalReasonOrNull()
+                if (mapped != null && refusal == null) {
+                    mapped
+                } else {
+                    mapper.descriptorAssembly.preparedUnsupported(
+                        reason = refusal ?: GPUPreparedMaterialUnsupportedReason.IMAGE_LOCAL_MATRIX_AFFINE,
+                        originalKind = shader.materialKind(),
+                        source = source,
+                    )
+                }
+            } else {
+                mapper.descriptorAssembly.preparedUnsupported(
+                    reason = GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX,
+                    originalKind = shader.materialKind(),
+                    source = source,
+                )
+            }
         }
         is Shader.WithColorFilter -> {
             val source = mapper.map(shader)

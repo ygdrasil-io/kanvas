@@ -95,6 +95,38 @@ class GPUPreparedSurfaceImagePixelTest {
     }
 
     @Test
+    @OptIn(ExperimentalUnsignedTypes::class)
+    fun `bounded image shader rect executes nearest alpha tint with a local translation`() {
+        val alphaMask = Image.fromPixels(
+            width = 1,
+            height = 1,
+            pixels = byteArrayOf(0x80.toByte()),
+            colorType = ColorType.ALPHA_8,
+            sourceId = "bounded-nearest-alpha-mask",
+        )
+        val surface = Surface(width = 1, height = 1, format = org.graphiks.kanvas.surface.PixelFormat.RGBA8)
+        surface.canvas {
+            drawRect(
+                RectF32.ofLTRB(0f, 0f, 1f, 1f),
+                Paint(
+                    color = ColorARGB.fromRGBA(1f, 0f, 0f, 0.5f),
+                    shader = Shader.WithLocalMatrix(
+                        Shader.Image(alphaMask, sampling = SamplingOptions.NEAREST),
+                        Matrix3x3F32.translation(0.25f, 0f),
+                    ),
+                    antiAlias = false,
+                ),
+            )
+        }
+
+        val result = surface.render()
+
+        assertEquals(1, result.stats.opsDispatched)
+        assertEquals(0, result.stats.opsRefused)
+        assertPixelExact(result.pixels.toByteArray(), width = 1, x = 0, y = 0, expected = listOf(137, 0, 0, 64))
+    }
+
+    @Test
     fun `all image families retain the direct prepared route and native pixel contract`() {
         val rgba = fixtureImage(
             "pixel-rgba",

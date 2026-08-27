@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "kanvas-image-local-sampling-diagnostics-v1",
+  "gm": "drawimagerect_filter",
+  "nativeDiagnostics": [],
+  "nativeRefusalCount": 0,
+  "stableRefusals": {
+    "tileMode": "unsupported.material.mapping.image_tile_mode",
+    "perspective": "unsupported.material.mapping.image_local_matrix_perspective",
+    "nonFiniteSkewOrOutOfBoundsAffine": "unsupported.material.mapping.image_local_matrix_affine",
+    "samplingOrCodecOutsideContract": ["cubic", "mipmap", "anisotropic", "unregistered codec/image format"]
+  }
+}

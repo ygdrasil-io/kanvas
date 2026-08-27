@@ -868,6 +868,20 @@ class GPUPreparedSurfaceFrameBuilderTest {
         assertTrue(packets.isNotEmpty())
     }
 
+    @Test
+    fun `image path inventory candidate requires identity transform`() {
+        val image = atlasImage("transformed-image-path")
+        val operation = DisplayOp.DrawPath(
+            Path().addRect(RectF32.ofLTRB(1f, 1f, 3f, 3f)),
+            Paint(shader = Shader.Image(image)).copy(antiAlias = false),
+            Matrix3x3F32.translation(4f, 2f),
+            ClipStack.WideOpen,
+        )
+
+        assertFalse(operation.isPreparedImageVisualCandidate())
+        assertTrue(operation.copy(transform = Matrix3x3F32.Identity).isPreparedImageVisualCandidate())
+    }
+
     private fun srgbToLinear(encoded: Float): Float = if (encoded <= 0.04045f) {
         encoded / 12.92f
     } else {
