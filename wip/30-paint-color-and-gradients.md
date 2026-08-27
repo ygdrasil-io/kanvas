@@ -1,81 +1,78 @@
-# WIP 30 — Paint, couleur, blend et gradients
+# WIP 30 — paint, gradients, blend et couleur
 
-> Document temporaire. Les seuils de pixels sont propres à chaque famille et
-> ne doivent jamais être élargis globalement pour absorber une régression.
+> Brief d'exécution de `W30` à `W35`. Une combinaison de paint n'hérite jamais
+> automatiquement du support séparé de ses composants.
 
-## Objectif du groupe
+## Fichiers propriétaires
 
-Vérifier les sémantiques paint qui rendent les erreurs visuelles les plus
-subtiles : alpha prémultiplié, couleur, blend et paramétrage des gradients.
-Chaque combinaison sans route WebGPU explicite reste un refus, pas une
-approximation par le renderer CPU.
-
-## Code et tests à lire
-
-| Zone | Fichiers principaux |
+| Zone | Fichiers |
 | --- | --- |
-| Gradients | `../gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/materials/GradientWgslShaderProvider.kt` |
-| Blend/couleur | `.../materials/BlendWgslBuilder.kt`, `.../color/GPUColorWgsl.kt` |
-| Contrats pipeline | `.../pipelines/PipelineContracts.kt`, `.../execution/GPUWgpu4kCorePrimitivePipelineDescriptor.kt` |
-| Oracles existants | `integration-tests/gpu-evidence/.../oracle/SurfaceSrgbGradientCpuOracle.kt`, `SurfaceSrgbOracleMath.kt`, `SurfaceSrgbSrcOverCpuOracle.kt` |
-| API source | `../kanvas/src/main/kotlin/org/graphiks/kanvas/paint` et `.../canvas/Canvas.kt` |
+| API Paint | `../kanvas/src/main/kotlin/org/graphiks/kanvas/paint/Paint.kt`, `../kanvas/src/main/kotlin/org/graphiks/kanvas/paint/Shader.kt`, `../kanvas/src/main/kotlin/org/graphiks/kanvas/paint/ColorFilter.kt` |
+| Surface mapping | `../kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceColorMapping.kt`, `../kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUGradientColorFilter.kt` |
+| Materials | `../gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/materials/` |
+| WGSL paint | `../gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/wgsl/` |
+| Oracle | `../integration-tests/gpu-evidence/src/main/kotlin/org/graphiks/kanvas/gpu/evidence/oracle/SurfaceSrgbGradientCpuOracle.kt`, `../integration-tests/gpu-evidence/src/main/kotlin/org/graphiks/kanvas/gpu/evidence/oracle/SurfaceSrgbSrcOverCpuOracle.kt` |
 
-## Matrice de scénarios
+## W30 — gradient stops et tile modes
 
-| Sous-famille | Scènes rendables à viser | Limites/refus à fixer |
-| --- | --- | --- |
-| Composition | Tous les Porter-Duff exposés avec source/destination opaques, alpha partiel et destination non opaque. | Modes avancés sans route fixed-function/layer, destination read indisponible et combinaisons paint incompatibles. |
-| sRGB/premul | Alpha 0/1/intermédiaire, transparent coloré, unpremul→premul, clamp et arrondi RGBA8. | Couleurs/matrices non finies et format destination non compatible. |
-| Gradients linéaires | Deux/trois/multi-stops, stops coïncidents, transparence, coordonnées négatives, géométrie dégénérée et local matrix. | Positions invalides, stop count hors contrat et tile mode sans implémentation. |
-| Radial/sweep | Centre focal/décalé, rayon nul, angle partiel, passage 0/360°, transform et clipping. | Domaines/angles incompatibles et transform non admis par le shader. |
-| Tile modes | `CLAMP`, `REPEAT`, `MIRROR`, `DECAL` selon ce que le code expose. | Chaque tile mode absent a un refus distinct ; `REPEAT` inclut les périodes négatives et éloignées. |
-| Color filters | Identité, alpha-only, matrice complète, valeurs hors [0,1], blend color filter et composition. | Matrice malformée, ordre de composition non pris en charge, child/resource absent. |
+- [ ] Tester 1, 2, 3, 4 et 8 stops, positions implicites/explicites et hard stops.
+- [ ] Tester `CLAMP`, `REPEAT`, `MIRROR` et `DECAL` aux bords et hors domaine.
+- [ ] Tester stops non finis, non monotones, dupliqués et dépassement de budget.
+- [ ] Unifier l'oracle de tile/interpolation pour les familles de gradient.
+- [ ] Conserver un refus stable au-delà du budget validé.
 
-## Assertions de route et de cache
+## W31 — familles de gradient
 
-Vérifier la correspondance CPU/GPU au pixel, l'absence de halo au bord et le
-sens exact du local matrix. Deux scènes dont seules les valeurs d'uniforms
-changent doivent réutiliser le même pipeline ; un changement de tile mode,
-shader ou blend state peut former une nouvelle clé. Capturer draw count,
-pipeline creations/hits et fallback reason.
+- [ ] Prouver linear, radial, sweep et conical à stops équivalents.
+- [ ] Tester centres/rayons dégénérés, angles enveloppés et deux centres.
+- [ ] Tester alpha, prémultiplication et interpolation sRGB/linear annoncée.
+- [ ] Vérifier snippets WGSL, uniform layouts et cache keys par famille.
 
-## Carte Paint / produit croisé observée
+## W32 — gradients composés
 
-Cette carte décrit les bornes effectivement exercées ; elle n'autorise pas à
-élargir le support. Le lot 30 possède le matériau gradient et le comportement
-tile mode, tandis que le lot 10 possède la géométrie et l'état du stroke.
+- [ ] Tester CTM affine et local matrix séparément puis ensemble.
+- [ ] Tester gradient sur rect, RRect, path, stroke et sous clip.
+- [ ] Tester color space/interpolation options réellement exposées.
+- [ ] Refuser les matrices singulières et les combinaisons sans route native.
 
-| Axe Paint | `repeat-gradient-refusal` (ID historique, rendu actuel) | `gradient-stroke-refusal` (ID historique, rendu actuel) | Hors borne actuelle |
-| --- | --- | --- | --- |
-| Style | `Fill` sur `drawRect` borné | `Stroke` sur `drawRect` | Le renderer refuse le gradient `REPEAT` sur `FillRRect` et `FillPath`; le generic gradient `drawPath` stroke est également refusé. |
-| Largeur de stroke | Sans objet | 4, largeur entière paire | Hairline, largeur nulle/non finie, impaire ou fractionnaire sont refusées. |
-| Anti-aliasing | Probe non-AA | Non-AA | Le stroke AA est refusé. Le probe `REPEAT` non-AA ne prouve pas un refus renderer du `REPEAT` AA. |
-| Cap / join / miter | Sans objet | `Butt` / `Miter` / 4 (défaut) | Les autres caps/joins, miter non fini ou sous le minimum sont refusés. |
-| Shader / tile mode | Dégradé linéaire sRGB `REPEAT` | Dégradé linéaire sRGB `CLAMP` nu, valide | `MIRROR`, `DECAL`, radial/sweep `REPEAT` sont refusés; le stroke refuse autre shader, tile mode ou local matrix. |
-| Transform | Identité dans le probe | Identité | Le stroke gradient refuse translate et tout transform non identité; le probe `REPEAT` n'élargit pas la frontière transform. |
-| Mask/path/color filters | Aucun filtre | Aucun filtre ni path effect/local matrix/blender | Le renderer refuse `FillRect` `REPEAT` mask-filtered; le stroke refuse mask/image/color filter, path effect et blender. |
+## W33 — blend
 
-`repeat-gradient-refusal` est le probe catalogue : rectangle rempli `Surface`
-borné, linéaire sRGB `REPEAT`, sans filtre, à transform identité et non-AA. La
-frontière renderer est plus précise : l'exception `REPEAT` est seulement le
-FillRect linéaire non mask-filtered; RRect, Path, FillRect mask-filtered,
-radial/sweep `REPEAT`, `MIRROR` et `DECAL` sont actuellement refusés. L'absence
-d'un probe AA ne transforme pas le non-AA de ce probe en refus renderer.
+- [ ] Prouver tous les modes Porter-Duff avec source/destination opaques puis
+      translucides.
+- [ ] Ajouter les modes avancés par familles mathématiques avec oracle CPU.
+- [ ] Tester destination read, MSAA, layer et formats color compatibles.
+- [ ] Tester `Blender.Mode` et `Blender.Arithmetic` avec coefficients valides et
+      invalides.
+- [ ] Refuser avant draw une combinaison dont l'exactness n'est pas garantie.
 
-`gradient-stroke-refusal` est le probe exact du stroke rectangle décrit dans
-la table; il ne teste pas `drawPath`, `clipRRect` ou `clipPath`. Un tile mode
-ou un refus dit « distinct » désigne ici un comportement explicitement testé,
-pas nécessairement un code d'erreur de production unique.
+## W34 — color filters
 
-## Dépendances et sortie
+- [ ] Prouver Matrix, Blend, Compose, Table, Lighting, SRGBToLinear,
+      LinearToSRGB, HSLAMatrix, Lerp, HighContrast, Luma et Overdraw.
+- [ ] Tester composition, ordre, alpha prémultiplié et espaces colorimétriques.
+- [ ] Tester filtre sur couleur solide, gradient, image et layer.
+- [ ] Vérifier layout 4x5, valeurs non finies et depth budget.
 
-Peut commencer après le lot 00 et se développer en parallèle avec 10, 40, 50
-et 60. La promotion de chaque sous-famille nécessite une référence Skia ou une
-étiquette explicite « cohérence interne », jamais une confusion des deux.
+## W35 — composition de shaders
+
+- [ ] Prouver `Shader.Blend`, `WithLocalMatrix`, `WithColorFilter`,
+      `WithWorkingColorSpace` et `CoordClamp`.
+- [ ] Ajouter PerlinNoise et FractalNoise avec seed, octaves, tile size et oracle
+      déterministes.
+- [ ] Tester profondeur de composition et cache key complète.
+- [ ] Refuser cycles, child manquant et profondeur hors budget.
+
+## Sortie
+
+La fermeture exige une matrice positive et négative par variante publique,
+pas seulement une preuve du shader nu. Chaque nouveau paint supporté est testé
+sur au moins une primitive et une interaction clip/layer pertinente.
 
 ## Vérification
 
 ```bash
-./gradlew :integration-tests:gpu-evidence:test --tests '*Gradient*' --tests '*SrcOver*' --tests '*OracleMath*'
-./gradlew :integration-tests:gpu-evidence:test
+./gradlew :kanvas:test
+./gradlew :gpu-renderer:test
+./gradlew :integration-tests:gpu-evidence:test --tests '*Gradient*' --tests '*Blend*' --tests '*ColorFilter*' --tests '*Shader*'
+./gradlew :integration-tests:skia:test --tests '*Gradient*' --tests '*Color*' --tests '*Composite*'
 ```

@@ -1,10 +1,15 @@
 package org.graphiks.kanvas.skia
 
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
+import org.graphiks.kanvas.pipeline.RuntimeEffectWgsl4kWiring
 import java.io.File
 import java.util.Locale
 
 /** Renderer observations supplied by the inventory replay; deliberately has no fallback semantics. */
 data class InventoryRenderEvidence(
+    val attempted: Boolean,
+    val renderSucceeded: Boolean,
+    val terminalFailure: Boolean,
     val operationCount: Int,
     val diagnostics: List<String> = emptyList(),
     val route: String = "gpu",
@@ -18,14 +23,16 @@ data class SkiaGmInventoryRow(
     val referenceName: String,
     val referenceAvailable: Boolean,
     val renderAvailable: Boolean,
+    val attempted: Boolean,
+    val terminalFailure: Boolean,
     val score: Double?,
     val operationCount: Int?,
     val route: String,
     val firstDiagnostic: String?,
 )
 
-internal fun loadSkiaGmScores(file: File, registeredNames: Set<String>): Map<String, Double> {
-    if (!file.exists()) return emptyMap()
+internal fun loadSkiaGmScores(file: File, registeredNames: Set<String>, allowOrphans: Boolean = false): Map<String, Double> {
+    require(file.exists()) { "Scores file not found: ${file.path}" }
     val scores = linkedMapOf<String, Double>()
     file.forEachLine { raw ->
         val line = raw.trim()
@@ -35,7 +42,7 @@ internal fun loadSkiaGmScores(file: File, registeredNames: Set<String>): Map<Str
         val name = line.substring(0, separator).trim()
         require(name.isNotEmpty()) { "Empty score name" }
         require(name !in scores) { "Duplicate score row: $name" }
-        require(name in registeredNames) { "Orphan score row: $name" }
+        if (!allowOrphans) require(name in registeredNames) { "Orphan score row: $name" }
         val value = line.substring(separator + 1).trim().toDoubleOrNull()
         require(value != null && value.isFinite()) { "Invalid score for $name" }
         scores[name] = value
@@ -48,19 +55,22 @@ fun buildSkiaGmInventory(
     referenceDir: File,
     scoresFile: File,
     renderEvidence: Map<String, InventoryRenderEvidence> = emptyMap(),
+    allowOrphanScores: Boolean = false,
 ): List<SkiaGmInventoryRow> {
     val names = gms.map { it.name }
     require(names.size == names.toSet().size) { "Duplicate registered GM names" }
     require(renderEvidence.keys.all { it in names }) { "Orphan render evidence rows" }
-    val scores = loadSkiaGmScores(scoresFile, names.toSet())
+    val scores = loadSkiaGmScores(scoresFile, names.toSet(), allowOrphanScores)
     return gms.map { gm ->
         val evidence = renderEvidence[gm.name]
         SkiaGmInventoryRow(
             name = gm.name,
             family = gm.renderFamily.name,
             referenceName = gm.referenceName,
-            referenceAvailable = referenceDir.resolve("${gm.referenceName}.png").isFile,
-            renderAvailable = evidence != null,
+            referenceAvailable = referenceDir.resolve("${gm.referenceName}.png").isFile && !gm.referenceStatus.untrustable,
+            renderAvailable = evidence?.renderSucceeded == true,
+            attempted = evidence?.attempted == true,
+            terminalFailure = evidence?.terminalFailure == true,
             score = scores[gm.name],
             operationCount = evidence?.operationCount,
             route = evidence?.route ?: "unobserved",
@@ -84,6 +94,8 @@ fun renderSkiaGmInventoryJson(rows: List<SkiaGmInventoryRow>): String = buildStr
         appendLine("      \"referenceName\": \"${inventoryJsonEscape(row.referenceName)}\",")
         appendLine("      \"referenceAvailable\": ${row.referenceAvailable},")
         appendLine("      \"renderAvailable\": ${row.renderAvailable},")
+        appendLine("      \"attempted\": ${row.attempted},")
+        appendLine("      \"terminalFailure\": ${row.terminalFailure},")
         appendLine("      \"score\": $score,")
         appendLine("      \"operationCount\": $operationCount,")
         appendLine("      \"route\": \"${inventoryJsonEscape(row.route)}\",")
@@ -96,17 +108,32 @@ fun renderSkiaGmInventoryJson(rows: List<SkiaGmInventoryRow>): String = buildStr
 
 fun main(args: Array<String>) {
     require(args.size == 1) { "Usage: SkiaGmInventory <output.json>" }
-    val rows = SkiaGmRegistry.all()
-    val evidence = rows
-        .filter { it.renderFamily != RenderFamily.TEXT && it.renderCost != RenderCost.BLOCKING }
-        .associate { gm -> gm.name to SkiaGmRenderer.inventoryEvidence(gm) }
+    RuntimeEffectWgsl4kWiring.install()
+    try {
+      val entries = SkiaGmRegistry.entries()
+    val rows = entries.mapNotNull { it.gm }
+    val evidence = rows.associate { gm ->
+        gm.name to when {
+            gm.renderFamily == RenderFamily.TEXT -> InventoryRenderEvidence(true, false, false, 0, route = "excluded:text-dependency-gated")
+            gm.renderCost == RenderCost.BLOCKING -> InventoryRenderEvidence(true, false, false, 0, route = "excluded:blocking-by-policy")
+            else -> SkiaGmRenderer.inventoryEvidence(gm)
+        }
+    }
     val inventory = buildSkiaGmInventory(
         rows,
         File("src/test/resources/reference"),
         File("test-similarity-scores.properties"),
         evidence,
+        allowOrphanScores = true,
     )
-    File(args[0]).apply { parentFile?.mkdirs(); writeText(renderSkiaGmInventoryJson(inventory) + "\n") }
+    val failedProviders = entries.filter { it.gm == null }
+    val allRows = inventory + failedProviders.map { entry ->
+        SkiaGmInventoryRow(entry.provider, "UNKNOWN", entry.provider, false, false, false, true, null, 0, "provider-unloadable", entry.diagnostic)
+    }
+      File(args[0]).apply { parentFile?.mkdirs(); writeText(renderSkiaGmInventoryJson(allRows) + "\n") }
+    } finally {
+      GPUBackendRuntimeFactory.dispose()
+    }
 }
 
 private fun inventoryJsonEscape(value: String): String = buildString {
@@ -117,6 +144,7 @@ private fun inventoryJsonEscape(value: String): String = buildString {
             '\n' -> append("\\n")
             '\r' -> append("\\r")
             '\t' -> append("\\t")
+            in '\u0000'..'\u001f' -> append("\\u%04x".format(char.code))
             else -> append(char)
         }
     }

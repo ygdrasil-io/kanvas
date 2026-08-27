@@ -42,3 +42,23 @@ L’artefact historique de référence reste sous
 `reports/gpu-renderer/evidence/gm-inventory/`; le nouveau générateur écrit par
 défaut `source-inventory.json` dans ce même répertoire quand le contrat de
 scores est satisfait.
+
+## Round 1 — corrections de review
+
+- `SkiaGmRegistry.entries()` conserve chaque provider et son diagnostic de
+  chargement/instanciation; les providers non chargeables deviennent des lignes
+  `provider-unloadable` dans l’artefact.
+- La commande nominale réconcilie les scores orphelins en mode d’audit explicite
+  et produit désormais `source-inventory.json` (615 lignes). Le parsing strict
+  reste disponible pour les tests de contrat.
+- Une tentative Surface unique distingue `attempted`, `renderSucceeded`,
+  `terminalFailure` et `renderAvailable`; TEXT/BLOCKING portent des diagnostics
+  de policy stables. L’initialisation runtime-effect et le `finally` de dispose
+  sont alignés sur le runner.
+- `referenceAvailable` reste basé sur le fichier; les statuts untrustable sont
+  conservés par la source GM et signalés comme réserve de validation visuelle.
+
+Vérifications du round :
+
+- `./gradlew --no-daemon :integration-tests:skia:test --tests org.graphiks.kanvas.skia.SkiaGmInventoryTest --tests org.graphiks.kanvas.skia.SkiaGmRegistryTest` — **SUCCESSFUL**.
+- `./gradlew --no-daemon :integration-tests:skia:generateSkiaGmInventory -Pgm.inventoryOutput=/Users/chaos/.codex/worktrees/1540/kanvas/reports/gpu-renderer/evidence/gm-inventory/source-inventory.json` — **SUCCESSFUL**, artefact 615 lignes.

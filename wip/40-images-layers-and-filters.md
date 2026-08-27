@@ -1,56 +1,95 @@
-# WIP 40 — Images, layers et image filters
+# WIP 40 — images, layers et filtres
 
-> Document temporaire. Les codecs, fontes ou formats qui ne sont pas réellement
-> livrés restent dependency-gated ; ce lot n'ajoute pas de substitut court terme.
+> Brief d'exécution de `W40` à `W48`. Les images déjà matérialisées sont dans le
+> scope; un codec absent reste dependency-gated.
 
-## Objectif du groupe
+## Fichiers propriétaires
 
-Tester les routes qui consomment des textures ou créent des surfaces
-intermédiaires : sampling image, grilles, sprites, `saveLayer` et image filters.
-La qualité dépend autant des pixels que des bounds, allocations et durées de
-vie des intermédiaires. Ce lot est l'unique propriétaire de `drawAtlas` : il
-couvre le sampling, les instances et les artefacts image de cette API.
-
-## Code et tests à lire
-
-| Zone | Fichiers principaux |
+| Zone | Fichiers |
 | --- | --- |
-| Images | `../gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/images/ImageContracts.kt`, `ImageUploadMaterializer.kt`, `GPUPreparedImageRefusalCodes.kt`, `KanvasImageCodecRegistry.kt` |
-| Layers | `.../layers/LayerContracts.kt`, `FirstRouteDrawLayerPlanner.kt`, `GPUSaveLayerNativeExecutor.kt` |
-| Filtres | `.../filters/GPUPreparedFilterDAGPlanner.kt`, `GPUFilterDAGExecutor.kt`, `GPUPreparedFilterRefusalCodes.kt`, `ColorMatrixFilter.kt`, `BlurFilter.kt` |
-| Ressources | `.../resources/GPUScratchTexturePool.kt`, `GPUTextureFrameResourcePlan.kt`, `.../execution/GPUWgpu4kSurfaceBlitSessionCache.kt` |
-| API | `../kanvas/src/main/kotlin/org/graphiks/kanvas/canvas/Canvas.kt` (images, atlas, `saveLayer`) |
+| API | `../kanvas/src/main/kotlin/org/graphiks/kanvas/canvas/Canvas.kt`, `../kanvas/src/main/kotlin/org/graphiks/kanvas/paint/SamplingOptions.kt`, `../kanvas/src/main/kotlin/org/graphiks/kanvas/paint/ImageFilter.kt`, `../kanvas/src/main/kotlin/org/graphiks/kanvas/paint/MaskFilter.kt` |
+| Surface GPU | `../kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUImageFilterDispatch.kt`, `../kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceProductRouter.kt`, `../kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceFrameExecution.kt` |
+| Image routes | `../gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUPreparedImageClipAuthority.kt`, `../gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/materials/BitmapShaderMaterialLowering.kt` |
+| Evidence | `../integration-tests/gpu-evidence/src/main/kotlin/org/graphiks/kanvas/gpu/evidence/programs/KanvasSurfaceProgram.kt`, `../reports/gpu-renderer/evidence/` |
 
-## Matrice de scénarios
+## W40 — sampling
 
-| Sous-famille | Scènes rendables à viser | Limites/refus à fixer |
-| --- | --- | --- |
-| `drawImage` | Image opaque/translucide, nearest/bilinear, source entière, alpha paint, translation/scale/rotation et bord hors surface. | Image nulle/vide, format ou codec absent, dimensions texture hors limite et sampling non pris en charge. |
-| `drawImageRect` | Crop interne, crop à cheval, src/dst inversé, dst fractionnaire, couleur/filter paint et destination non opaque. | Src invalide, sampling/tile mode absent, transform/perspective rejeté avant upload coûteux. |
-| `drawImageNine` / lattice | Coins fixes, centre étiré, cellules transparentes, lattice tronquée, bounds petites et grandes. | Découpage invalide, seams, grille trop grande et mode de sampling non routable. |
-| `drawAtlas` | Plusieurs sprites, transforms indépendantes, tex rects, couleurs par sprite, blend et paint. | Longueurs de listes incohérentes, budget d'instances, texture absente et blend non admis. Ce lot possède les IDs de scène et les oracles atlas. |
-| `saveLayer` | Bounds nulles/explicites, alpha, clip parent, layer vide, layers imbriquées et composite avec paint. | Bounds non finies, profondeur/allocation au-delà du budget et destination read indisponible. |
-| Blur/filters | Blur sigma 0/borne, offset, crop, color matrix, affine, blend deux enfants, DAG 2–4 nœuds. | Tile mode, transform, DAG/cycle, taille d'intermédiaire, child absent et budget hors contrat. |
+- [ ] Prouver NEAREST et LINEAR aux centres, demi-pixels et bords.
+- [ ] Implémenter le cubic borné avec coefficients et oracle explicites.
+- [ ] Tester crop source/destination, scale up/down, rotation et clip.
+- [ ] Définir mipmap policy et refus quand le mipmap requis n'existe pas.
+- [ ] Vérifier alpha, premul et color space au readback.
 
-## Assertions spécifiques
+## W41 — formats et uploads
 
-Pour chaque scène, attester origine et sampling, clamping, alpha/premul,
-bounds calculées, ordre des passes, nombre de textures intermédiaires, bytes,
-ownership/release et absence de fuite après frame. Une couche ou un filtre
-supporté doit exposer sa route native ; une route absente ne doit pas faire de
-fallback CPU silencieux.
+- [ ] Prouver chaque format raw exposé et réellement matérialisable.
+- [ ] Tester row stride, padding, sub-rect upload et layout invalides.
+- [ ] Tester conversion color type/alpha type/color space supportée.
+- [ ] Vérifier identité d'artefact, génération device et ownership.
+- [ ] Garder les formats dépendant d'un codec absent en `DEPENDENCY_GATED`.
 
-## Dépendances et sortie
+## W42 — image shaders
 
-Peut avancer après le lot 00 en parallèle avec 10, 30, 50 et les refus du lot
-60. Les captures qui utilisent des images encodées ou des assets de texte sont
-attendues jusqu'à ce que la dépendance réelle soit présente. La sortie associe
-chaque render à un oracle/référence et chaque dépassement à un code de refus.
+- [ ] Tester tile X/Y, sampling et local matrix.
+- [ ] Tester image shader avec color filter, blend, clip et transform.
+- [ ] Vérifier coordonnées hors texture et politique `DECAL`.
+- [ ] Fixer profondeur de wrappers, texture binding et budget sampler.
+
+## W43 — nine, lattice et atlas
+
+- [ ] Tester `drawImageNine` avec centre étirable et dimensions limites.
+- [ ] Tester lattice valide, cellules transparentes et divs invalides.
+- [ ] Tester atlas avec transforms, rects, colors, blend et ordre des sprites.
+- [ ] Vérifier clipping, batches, budgets vertices/indices et bounds.
+
+## W44 — saveLayer
+
+- [ ] Tester bounds explicites/implicites, alpha et paint.
+- [ ] Tester SRC, SRC_OVER et modes déjà validés par `W33`.
+- [ ] Tester deux layers imbriqués, init previous, restore et draw sentinelle.
+- [ ] Définir backdrop/filter chain supportés et les refus correspondants.
+- [ ] Vérifier textures intermédiaires, destination read et libération.
+
+## W45 — filtres fondamentaux
+
+- [ ] Prouver Crop, Blur, DropShadow, Offset, Tile et ColorFilter.
+- [ ] Tester chacun sur image, primitive et saveLayer quand sémantiquement valide.
+- [ ] Vérifier expansion/crop de bounds, sigma/radius et bords.
+- [ ] Refuser paramètres non finis, négatifs et surfaces hors budget.
+
+## W46 — graphes de filtres
+
+- [ ] Prouver Compose, Blend et Merge avec deux puis trois enfants.
+- [ ] Vérifier ordre, bounds, color space et alpha.
+- [ ] Détecter cycle, enfant manquant, depth et intermediate budget.
+- [ ] Vérifier réutilisation sûre des intermédiaires et aucune fuite de layer.
+
+## W47 — filtres avancés
+
+- [ ] Prouver Dilate, Erode, DisplacementMap et MatrixConvolution.
+- [ ] Prouver Picture et Magnifier avec bounds et sampling déterministes.
+- [ ] Prouver les variantes distant/point/spot diffuse et specular.
+- [ ] Ajouter un oracle CPU par famille mathématique et un budget de kernel.
+- [ ] Refuser toute variante qui dépasserait le plan mémoire validé.
+
+## W48 — mask filters
+
+- [ ] Étendre Blur à ses styles et qualités exposés.
+- [ ] Prouver Shader et Table sur rect, RRect et path.
+- [ ] Tester interaction avec stroke, clip, transform et saveLayer.
+- [ ] Vérifier coverage, intermediate texture, sigma et cache key.
+
+## Sortie
+
+Chaque route image/filter doit distinguer absence de dépendance, entrée invalide,
+budget dépassé et capacité GPU manquante. Un rendu noir ou transparent n'est
+jamais considéré comme un fallback valide.
 
 ## Vérification
 
 ```bash
+./gradlew :kanvas:test
 ./gradlew :gpu-renderer:test
-./gradlew :integration-tests:gpu-evidence:test --tests '*Image*' --tests '*Layer*' --tests '*Filter*'
-./gradlew :integration-tests:gpu-evidence:test
+./gradlew :integration-tests:gpu-evidence:test --tests '*Image*' --tests '*Layer*' --tests '*Filter*' --tests '*Sampling*'
+./gradlew :integration-tests:skia:test --tests '*Image*' --tests '*Blur*' --tests '*Composite*'
 ```

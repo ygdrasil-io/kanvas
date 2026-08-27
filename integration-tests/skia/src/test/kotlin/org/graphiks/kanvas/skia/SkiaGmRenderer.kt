@@ -80,6 +80,9 @@ object SkiaGmRenderer {
         return try {
             val result = render(gm, config = config)
             InventoryRenderEvidence(
+                attempted = true,
+                renderSucceeded = true,
+                terminalFailure = false,
                 operationCount = result.ops.size,
                 diagnostics = result.diagnostics,
                 route = "gpu",
@@ -87,6 +90,9 @@ object SkiaGmRenderer {
         } catch (failure: Exception) {
             val attempt = try { renderTerminalAttempt(gm, config = config) } catch (_: Exception) { null }
             InventoryRenderEvidence(
+                attempted = true,
+                renderSucceeded = false,
+                terminalFailure = true,
                 operationCount = attempt?.operationCount ?: 0,
                 diagnostics = listOf(attempt?.diagnostic ?: failure.message.orEmpty()),
                 route = "failure",

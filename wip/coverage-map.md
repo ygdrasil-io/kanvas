@@ -1,77 +1,117 @@
 # Carte de couverture dérivée du code
 
-Ce document est temporaire. Il est dérivé des API publiques actuelles et des types scellés dans le code Kotlin; il ne déclare pas une feature comme supportée. Il donne à chaque surface un lot propriétaire et un verdict/probe à produire avant la suppression de `wip/`.
+Ce document affecte un owner de vague à chaque surface publique. Il ne porte
+pas le statut réel : le statut est calculé depuis le code, les tests exécutés,
+les diagnostics et les artefacts vérifiés produits par `W00`/`W01`.
 
-## Légende
+## Verdicts autorisés
 
-| Statut | Signification |
-|---|---|
-| `R` | Preuve catalogue actuelle rendue par `KanvasSurfaceProgram`. |
-| `FS` | Refus actuel exercé par `KanvasSurfaceProgram`. |
-| `FI` | Refus interne `RoutedSceneProgram`; diagnostic utile, pas une preuve Surface. |
-| `N` | Aucune preuve catalogue actuelle; le lot doit ajouter un probe puis classifier rendu, refus stable ou dependency gate. |
-| `DG` | Dependency gate (bloqué par une dépendance réelle), sans substitut temporaire. |
+| Verdict | Condition |
+| --- | --- |
+| `SUPPORTED` | Preuve publique CPU/GPU promue et fallback policy vérifiée. |
+| `STABLE_REFUSAL` | Diagnostic public stable avant exécution partielle. |
+| `DEPENDENCY_GATED` | Dépendance réelle absente, sans substitut. |
+| `OUT_OF_SCOPE` | Décision architecturale explicite. |
 
-Les sources de vérité sont le code, les tests et les artefacts
-générés/promus vérifiés, notamment [`Canvas.kt`](../kanvas/src/main/kotlin/org/graphiks/kanvas/canvas/Canvas.kt), les types scellés de `kanvas`, et le catalogue [`GpuEvidenceCatalog.kt`](../integration-tests/gpu-evidence/src/main/kotlin/org/graphiks/kanvas/gpu/evidence/catalog/GpuEvidenceCatalog.kt). Cette carte est une vue dérivée et ne fait pas autorité.
+## Canvas et état
 
-## Canvas public
+| Surface publique | Owner |
+| --- | --- |
+| `matrix`, `saveCount`, `localClipBounds`, `quickReject`, `isClipEmpty`, `isClipRect` | `W10` |
+| `save`, `restore`, `restoreToCount` | `W10` |
+| `translate`, `scale`, `rotate`, `skew`, `concat`, `setMatrix`, `resetMatrix` | `W11` |
+| `drawColor`, `clear`, `drawPoint`, `drawPoints`, `drawRect`, `drawRRect`, `drawDRRect` | `W12` |
+| `PointMode.POINTS`, `LINES`, `POLYGON` | `W12` |
+| `drawAnnotation`, `flushAndSnapshot` | `W12` |
+| `drawPath` fills/curves/topology | `W20`, `W21`, `W22` |
+| `clipRect`, `clipRRect`, `clipPath` | `W10`, `W23`, `W24` |
+| Stroke de rect/RRect/path | `W25` |
+| `saveLayer` | `W44` |
+| `drawImage`, `drawImageRect` | `W40`, `W41` |
+| `drawImageNine`, `drawImageLattice`, `drawAtlas` | `W43` |
+| `LatticeFlags.DEFAULT`, `TRANSPARENT`, `FIXED_COLOR` | `W43` |
+| `drawVertices`, `drawMesh`, `drawPicture` | `W60`, `W61`, `W62` |
+| `VertexMode.TRIANGLES`, `TRIANGLE_STRIP`, `TRIANGLE_FAN` | `W60` |
+| `drawString`, `drawText`, `measureText` | `W63`, `W64`, `W65` |
 
-| Surface source | Lot propriétaire unique | Statut actuel / probe requis |
-|---|---:|---|
-| `matrix`, `saveCount`, `localClipBounds`, `quickReject(RectF32)`, `quickReject(Path)`, `isClipEmpty`, `isClipRect` | 10 | `N` — probes de contrat d'état, clip et rejet. |
-| `drawColor`, `clear`, `drawPoint`, `drawPoints`, `drawRect`, `drawRRect`, `drawDRRect` | 10 | `R` pour `drawRect` solide, le `drawRRect` solide uniforme non-AA sous scale `(2,1)`, le `drawRRect` solide asymétrique par coin, le `drawRRect` elliptique à rayons égaux aux demi-dimensions, le `drawDRRect` solide uniforme non-AA identité avec trou et le `drawDRRect` solide à trou asymétrique par coin; `N` pour les autres primitives et `clear`. |
-| `save`, `saveLayer`, `restore`, `restoreToCount`, `flushAndSnapshot` | 10 | `N` — probes d'empilement, isolation de layer et snapshot. |
-| `translate`, `scale`, `rotate`, `skew`, `concat`, `setMatrix`, `resetMatrix` | 10 | `R` pour la transform affine de rect, la translation positive `(4,5)` d'un path et le scale uniforme positif `(1.5,1.5)` d'un path, ainsi que le seul scale `(2,1)` du `drawRRect` solide non-AA; `N` pour les autres combinaisons. |
-| `clipRect` | 10 | `R` pour le scissor rectangulaire; `N` pour les autres opérations de clip. |
-| `drawPath` | 20 | `R` uniquement pour neuf fills solides opaques non-AA prouvés par artefacts natifs : `solid-triangle-path`, `solid-concave-path`, `even-odd-path-hole`, `winding-path-hole`, `inverse-winding-triangle-path`, `inverse-even-odd-path-hole`, `implicit-closure-triangle-path`, `translated-triangle-path` et `uniform-scaled-triangle-path`. Les quatre fill types sont couverts seulement par ces formes littérales et leurs target bounds; les deux transforms positives sont limitées à la translation et au scale uniforme listés. Les courbes, strokes, oval/circle, AA, scales non uniformes/réfléchis/composés et toute autre géométrie restent `N`/non revendiqués. |
-| `clipRRect`, `clipPath` | 20 | `R` uniquement pour `clip-rrect-solid`, `clip-rrect-ellipse` et `clip-rrect-two-bands` : une seule intersection hard non-AA à identité, avec `DrawRect` opaques non-AA comme consommateurs. `N` pour `clipPath` et les variantes AA, `DIFFERENCE`, multiples/imbriquées, transformées, à rayons distincts ou avec un `drawRRect` consommateur. |
-| `drawImage`, `drawImageRect`, `drawImageNine`, `drawImageLattice`, `drawAtlas` | 40 | `N` — images, sampling, 9-patch, lattice et sprites. Le lot 40 est l'unique propriétaire de `drawAtlas`. |
-| `drawString`, `drawText`, `measureText` | 60 | `DG` / `N` — probes texte et métriques; conserver un dependency gate si les fonts/codecs requis ne sont pas livrés. |
-| `drawVertices`, `drawMesh`, `drawPicture` | 60 | `N` — probes vertices, mesh et picture. |
-| `drawAnnotation` | 10 | `N` — probe de métadonnée sans effet pixel inattendu. |
+## Paint et shaders
 
-## `Shader`
+| Variante publique | Owner |
+| --- | --- |
+| `Shader.SolidColor` | `W12`, `W33` |
+| `LinearGradient`, `RadialGradient`, `SweepGradient`, `ConicalGradient` | `W30`, `W31`, `W32` |
+| `ColorSpaceInterpolation.SRGB`, `LINEAR`, `OKLAB`, `HSL`, `OKLCH` | `W31`, `W32` |
+| `TileMode.CLAMP`, `REPEAT`, `MIRROR`, `DECAL` | `W30`, `W42`, `W45` |
+| `Shader.Image` | `W40`, `W42` |
+| `Shader.Blend` | `W33`, `W35` |
+| `Shader.RuntimeEffect` | `W50`, `W53` |
+| `WithLocalMatrix`, `WithColorFilter`, `WithWorkingColorSpace`, `CoordClamp` | `W35` |
+| `PerlinNoise`, `FractalNoise` | `W35` |
+| `Paint.style`, strokeWidth/cap/join/miter, `antiAlias` | `W22`, `W25` |
+| `Paint.blendMode`, `Paint.blender` | `W33` |
+| `Paint.colorFilter` | `W34` |
+| `Paint.maskFilter`, `Paint.imageFilter` | `W45` à `W48` |
+| `Paint.pathEffect` | `W26` |
 
-| Variante source | Lot propriétaire unique | Statut actuel / probe requis |
-|---|---:|---|
-| `SolidColor` | 30 | `R` — `solid-card-stack` et `affine-solid-rect`. |
-| `LinearGradient`, `RadialGradient`, `SweepGradient` | 30 | `R` pour les formes `CLAMP` du catalogue et le `LinearGradient` `REPEAT` borné/non mask-filtered sur `drawRect`. Le probe est non-AA et identité sans conclure au refus AA. Le renderer refuse `REPEAT` sur rrect/path ou `drawRect` mask-filtered, radial/sweep `REPEAT`, ainsi que `MIRROR` et `DECAL`; `N` pour les autres variantes. |
-| `ConicalGradient` | 30 | `N` — probe radial à deux points ou refus stable. |
-| `Image` | 40 | `N` — owner image/sampling. |
-| `Blend` | 30 | `N` — probe composition de shaders. |
-| `RuntimeEffect` | 50 | `N` — voir la frontière built-in/custom du lot 50. |
-| `WithLocalMatrix`, `WithColorFilter`, `WithWorkingColorSpace`, `CoordClamp` | 30 | `N` — probes des wrappers et de leurs diagnostics. |
-| `PerlinNoise`, `FractalNoise` | 30 | `N` — probes déterministes ou refus stable. |
+## ColorFilter, Blender et PathEffect
 
-## `ColorFilter` et `Blender`
+| Variantes publiques | Owner |
+| --- | --- |
+| Matrix, Blend, Compose, Table, Lighting | `W34` |
+| SRGBToLinear, LinearToSRGB, HSLAMatrix, Lerp | `W34` |
+| HighContrast, Luma, Overdraw | `W34` |
+| `ColorFilter.RuntimeEffect` | `W50`, `W53` |
+| `Blender.Mode`, `Blender.Arithmetic` | `W33` |
+| Dash, Corner, Discrete, Path1D, Path2D, Trim | `W26` |
+| `Path1DStyle.TRANSLATE`, `ROTATE`, `MORPH` | `W26` |
 
-| Variante source | Lot propriétaire unique | Statut actuel / probe requis |
-|---|---:|---|
-| `ColorFilter.Matrix`, `Blend`, `Compose`, `Table`, `Lighting`, `SRGBToLinear`, `LinearToSRGB`, `HSLAMatrix`, `Lerp`, `HighContrast`, `Luma`, `Overdraw` | 30 | `N` — probes de pixels et de composition. |
-| `ColorFilter.RuntimeEffect` | 50 | `N` — descriptif registered avec sémantique Kotlin/CPU + WGSL validé, ou refus stable. |
-| `Blender.Mode`, `Blender.Arithmetic` | 30 | `N` — probes de blend et d'arithmetic. |
+## Images, sampling et filtres
 
-## `ImageFilter` et `MaskFilter`
+| Variantes publiques | Owner |
+| --- | --- |
+| NEAREST, LINEAR, Cubic | `W40` |
+| `Cubic.Mitchell`, `Cubic.CatmullRom` et coefficients B/C explicites | `W40` |
+| Formats/upload/color conversion | `W41` |
+| Image shader/tile/local matrix | `W42` |
+| Nine, Lattice, Atlas | `W43` |
+| Crop, Blur, DropShadow, Offset, Tile, ColorFilter | `W45` |
+| Compose, Blend, Merge | `W46` |
+| Dilate, Erode, DisplacementMap, MatrixConvolution | `W47` |
+| `ColorChannel.R`, `G`, `B`, `A` | `W47` |
+| Picture, Magnifier | `W47` |
+| `DistantLitDiffuse`, `PointLitDiffuse`, `SpotLitDiffuse` | `W47` |
+| `DistantLitSpecular`, `PointLitSpecular`, `SpotLitSpecular` | `W47` |
+| `ImageFilter.RuntimeEffect` | `W50`, `W53` |
+| `MaskFilter.Blur`, Shader, Table | `W48` |
+| `BlurStyle.NORMAL`, `SOLID`, `OUTER`, `INNER` | `W48` |
 
-| Variante source | Lot propriétaire unique | Statut actuel / probe requis |
-|---|---:|---|
-| `ImageFilter.Crop`, `Blur`, `DropShadow`, `Offset`, `Tile` | 40 | `N` — le blur actuel est un `MaskFilter.Blur`, pas un `ImageFilter.Blur`. |
-| `ImageFilter.ColorFilter`, `Compose`, `Blend`, `Merge` | 40 | `N` — probes de composition. |
-| `ImageFilter.Dilate`, `Erode`, `DisplacementMap`, `MatrixConvolution` | 40 | `N` — probes morphologie, displacement et convolution. |
-| `ImageFilter.DistantLitDiffuse`, `PointLitDiffuse`, `SpotLitDiffuse`, `DistantLitSpecular`, `PointLitSpecular`, `SpotLitSpecular` | 40 | `N` — probes lighting ou refus stable. |
-| `ImageFilter.Picture`, `Magnifier` | 40 | `N` — probes picture-filter et magnifier. |
-| `ImageFilter.RuntimeEffect` | 50 | `N` — même contrat registered Kotlin/CPU + WGSL que les runtime effects. |
-| `MaskFilter.Blur`, `Shader`, `Table` | 40 | `R` pour le `MaskFilter.Blur` normal du catalogue; `N` pour ses variantes et les autres mask filters. |
+## Runtime, mesh et ressources
 
-## `PathEffect`, sampling et mesh
+| Surface publique | Owner |
+| --- | --- |
+| Runtime descriptors et uniforms | `W50` |
+| Shader/ColorFilter/Blender children | `W51` |
+| WGSL ABI/reflection/layout/cache keys | `W52` |
+| Runtime shader/filter/blender/image-filter boundaries | `W53` |
+| Vertices et indices | `W60` |
+| MeshProgram, MeshChildren et interpolation | `W61` |
+| Picture record/replay | `W62` |
+| Device, queue, textures, buffers, readback et dispose | `W70` |
+| Caches, budgets et déterminisme | `W71` |
 
-| Variante source | Lot propriétaire unique | Statut actuel / probe requis |
-|---|---:|---|
-| `PathEffect.Dash`, `Corner`, `Discrete`, `Path1D`, `Path2D`, `Trim` | 20 | `N` — probe par effet ou refus stable. |
-| `SamplingOptions.NEAREST`, `LINEAR`, `Cubic` | 40 | `N` — oracle image/sampling, y compris le comportement aux bords. |
-| `MeshProgram`, `MeshChildren`, `ShaderChild`, `ColorFilterChild`, `BlenderChild` | 60 | `N` — probes mesh et children; `MeshProgram.effect` doit utiliser un descriptor registered avec sémantique Kotlin/CPU + WGSL, selon le lot 50. |
+## Dependency gates et hors scope
 
-## Conditions de sortie
+| Surface | Verdict attendu tant que la décision ne change pas | Owner |
+| --- | --- | --- |
+| Shaping, fallback, variable/color fonts, emoji | `DEPENDENCY_GATED` | `W64` |
+| Codecs non livrés | `DEPENDENCY_GATED` | `W41` |
+| Perspective générale | `OUT_OF_SCOPE` | `W11` |
+| SkSL dynamique | `OUT_OF_SCOPE` | `W53` |
+| Windowing natif | `OUT_OF_SCOPE` | `W70` |
 
-Une ligne `N` doit devenir une preuve `R`, un refus `FS` avec code stable, ou `DG` documenté par une dépendance réelle. Les `FI` peuvent compléter un diagnostic, mais ne satisfont jamais seuls une couverture de route publique `Surface`. Le dossier `wip/` ne peut être supprimé qu'après résolution de toutes les lignes ci-dessus et archivage des preuves dans `reports/gpu-renderer/evidence/`.
+## Condition de sortie
+
+`W75` compare cette liste aux types publics réellement présents. Toute variante
+ajoutée au code sans owner ou tout verdict `UNCLASSIFIED` fait échouer la
+fermeture. Le dossier `wip/` est supprimé lorsque ces contrôles sont absorbés
+par des tests et rapports générés.

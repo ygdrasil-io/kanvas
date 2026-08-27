@@ -16,12 +16,12 @@ class SkiaGmInventoryTest {
 
         val rows = buildSkiaGmInventory(
             listOf(gm), root.resolve("reference"), root.resolve("scores.properties"),
-            mapOf("a" to InventoryRenderEvidence(3, listOf("route.ok"))),
+            mapOf("a" to InventoryRenderEvidence(true, true, false, 3, listOf("route.ok"))),
         )
 
         assertEquals(rows, buildSkiaGmInventory(
             listOf(gm), root.resolve("reference"), root.resolve("scores.properties"),
-            mapOf("a" to InventoryRenderEvidence(3, listOf("route.ok"))),
+            mapOf("a" to InventoryRenderEvidence(true, true, false, 3, listOf("route.ok"))),
         ))
         assertEquals("a", rows.single().name)
         assertEquals("PATH", rows.single().family)
@@ -39,6 +39,14 @@ class SkiaGmInventoryTest {
         val orphan = root.resolve("orphan.properties").apply { writeText("other=1\n") }
         assertThrows(IllegalArgumentException::class.java) { loadSkiaGmScores(orphan, setOf("a")) }
         root.deleteRecursively()
+    }
+
+    @Test
+    fun `json export is byte stable and escapes control characters`() {
+        val row = SkiaGmInventoryRow("a\u0000", "PATH", "a", false, false, true, true, null, 0, "failure\n", "bad\t")
+        val json = renderSkiaGmInventoryJson(listOf(row))
+        assertEquals(json, renderSkiaGmInventoryJson(listOf(row)))
+        assertEquals(true, "\\u0000" in json && "\\n" in json && "\\t" in json)
     }
 }
 
