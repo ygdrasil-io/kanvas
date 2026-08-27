@@ -1,0 +1,8 @@
+{
+  "fixture": "simple-stroke-butt-miter-v1",
+  "backend": "WebGPU/wgpu4k headless offscreen",
+  "extent": [32, 32],
+  "readback": "RGBA8",
+  "channelCount": 4096,
+  "sha256": "ac7ef8017f5d894bc87ae030e2a19eb0cb9fff3cf96d4f1edeb7f9845a46a63f"
+}

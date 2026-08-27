@@ -2009,7 +2009,11 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
                     cap = strokeCap.replaceFirstChar { it.uppercaseChar() },
                     join = strokeJoin.replaceFirstChar { it.uppercaseChar() },
                     miter = strokeMiterLimit,
-                    dashOrPathEffectRef = dashIntervals?.let { "dash:${it.joinToString(",")}" },
+                    dashOrPathEffectRef = when (pathEffectKind) {
+                        "Dash" -> "dash:${dashIntervals?.joinToString(",").orEmpty()}"
+                        null -> dashIntervals?.let { "dash:${it.joinToString(",")}" }
+                        else -> "path-effect:$pathEffectKind"
+                    },
                     transformClass = transform.type.name.lowercase(),
                     finiteWidth = strokeWidth > 0f && strokeWidth.isFinite(),
                     hairline = strokeWidth <= 0f,
@@ -2089,8 +2093,10 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
             strokeWidth.isFinite() && strokeWidth in 0.5f..64f &&
             !antiAlias &&
             (dashIntervals == null || dashIntervals.isEmpty()) &&
+            pathEffectKind == null &&
             strokeCap in setOf("butt", "square") &&
-            strokeJoin in setOf("miter", "bevel") &&
+            strokeJoin == "miter" &&
+            strokeMiterLimit.isFinite() && strokeMiterLimit >= 1f &&
             transform.type in setOf(GPUTransformType.Identity, GPUTransformType.Translate)
 
     /**

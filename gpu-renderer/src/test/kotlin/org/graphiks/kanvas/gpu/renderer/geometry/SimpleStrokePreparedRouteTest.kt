@@ -174,6 +174,10 @@ class SimpleStrokePreparedRouteTest {
             StrokeRefusalCase("unsupported.stroke.cap", stroke = simpleStroke.copy(cap = "Round")),
             StrokeRefusalCase("unsupported.stroke.join", stroke = simpleStroke.copy(join = "Round")),
             StrokeRefusalCase("unsupported.stroke.miter_limit", stroke = simpleStroke.copy(miter = 0.5f)),
+            StrokeRefusalCase("unsupported.stroke.miter_limit", stroke = simpleStroke.copy(miter = 0f)),
+            StrokeRefusalCase("unsupported.stroke.miter_limit", stroke = simpleStroke.copy(miter = Float.NaN)),
+            StrokeRefusalCase("unsupported.stroke.miter_limit", stroke = simpleStroke.copy(miter = Float.POSITIVE_INFINITY)),
+            StrokeRefusalCase("unsupported.stroke.dash_empty", stroke = simpleStroke.copy(dashOrPathEffectRef = "dash:")),
             StrokeRefusalCase("unsupported.stroke.dash_complex", stroke = simpleStroke.copy(dashOrPathEffectRef = "dash:1,2,3,4,5")),
             StrokeRefusalCase(
                 "unsupported.stroke.path_effect_unregistered",

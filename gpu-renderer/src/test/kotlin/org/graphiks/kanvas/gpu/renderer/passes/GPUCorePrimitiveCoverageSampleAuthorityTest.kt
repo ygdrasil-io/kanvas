@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.passes
 import io.ygdrasil.webgpu.GPUTextureFormat
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
@@ -15,6 +16,8 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveStrokeLoweringProof
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveStrokeStyle
 
 class GPUCorePrimitiveCoverageSampleAuthorityTest {
     @Test
@@ -22,6 +25,7 @@ class GPUCorePrimitiveCoverageSampleAuthorityTest {
         assertNull(code(rect, GPUCorePrimitiveCoverageMode.FullOrScissor, GPUSamplePlan.SingleSampleFrame))
         assertNull(code(directTriangles, GPUCorePrimitiveCoverageMode.FullOrScissor, GPUSamplePlan.SingleSampleFrame))
         assertNull(code(stencilEdgeFan, GPUCorePrimitiveCoverageMode.Stencil1x, GPUSamplePlan.SingleSampleFrame))
+        assertNull(code(exactStrokeStencilEdgeFan, GPUCorePrimitiveCoverageMode.Stencil1x, GPUSamplePlan.SingleSampleFrame))
         assertNull(code(rect, GPUCorePrimitiveCoverageMode.ScalarAA, GPUSamplePlan.SingleSampleFrame))
         assertNull(code(rrect, GPUCorePrimitiveCoverageMode.FullOrScissor, GPUSamplePlan.SingleSampleFrame))
         assertNull(code(rrect, GPUCorePrimitiveCoverageMode.ScalarAA, GPUSamplePlan.SingleSampleFrame))
@@ -38,6 +42,7 @@ class GPUCorePrimitiveCoverageSampleAuthorityTest {
             directTriangles to GPUCorePrimitiveCoverageMode.ScalarAA,
             stencilEdgeFan to GPUCorePrimitiveCoverageMode.FullOrScissor,
             strokeStencilEdgeFan to GPUCorePrimitiveCoverageMode.Stencil1x,
+            strokeStencilEdgeFan to GPUCorePrimitiveCoverageMode.ScalarAA,
         ).forEach { (geometry, coverageMode) ->
             assertEquals(
                 "invalid.core_primitive.coverage_sample.geometry_coverage",
@@ -166,6 +171,31 @@ class GPUCorePrimitiveCoverageSampleAuthorityTest {
     }
 
     @Test
+    fun `stroke coverage rejects the subminimum exact miter limit`() {
+        assertEquals(
+            "invalid.core_primitive.coverage_sample.geometry_coverage",
+            code(
+                path(
+                    GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan,
+                    exactStrokeStyle.copy(miterLimit = 0f),
+                    sourceVertexCount = 2,
+                ),
+                GPUCorePrimitiveCoverageMode.Stencil1x,
+                GPUSamplePlan.SingleSampleFrame,
+            ),
+        )
+    }
+
+    @Test
+    fun `stroke coverage input rejects nonfinite miter limits`() {
+        listOf(Float.NaN, Float.POSITIVE_INFINITY).forEach { miterLimit ->
+            assertFailsWith<IllegalArgumentException>("miterLimit=$miterLimit") {
+                exactStrokeStyle.copy(miterLimit = miterLimit)
+            }
+        }
+    }
+
+    @Test
     fun `empty forged target refuses instead of throwing during capability validation`() {
         assertEquals(
             "invalid.core_primitive.coverage_sample.target_bounds",
@@ -238,19 +268,37 @@ class GPUCorePrimitiveCoverageSampleAuthorityTest {
         )
         val directTriangles = path(GPUCorePrimitiveGeometryMode.DirectTriangles)
         val stencilEdgeFan = path(GPUCorePrimitiveGeometryMode.StencilEdgeFan)
+        val exactStrokeStyle = GPUCorePrimitiveStrokeStyle(
+            width = 2f,
+            cap = "butt",
+            join = "miter",
+            miterLimit = 4f,
+            dashIntervals = emptyList(),
+            dashPhase = 0f,
+            loweringProof = GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1,
+        )
         val strokeStencilEdgeFan = path(GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan)
+        val exactStrokeStencilEdgeFan = path(
+            GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan,
+            exactStrokeStyle,
+            sourceVertexCount = 2,
+        )
 
-        private fun path(mode: GPUCorePrimitiveGeometryMode) =
+        private fun path(
+            mode: GPUCorePrimitiveGeometryMode,
+            strokeStyle: GPUCorePrimitiveStrokeStyle? = null,
+            sourceVertexCount: Int = 3,
+        ) =
             GPUCorePrimitiveGeometry.TriangulatedPath(
                 vertices = listOf(1f, 1f, 8f, 1f, 4f, 8f),
                 indices = listOf(0, 1, 2),
                 sourceContourStarts = listOf(0),
-                sourceVertexCount = 3,
+                sourceVertexCount = sourceVertexCount,
                 coverBounds = targetBounds,
                 geometryMode = mode,
                 fillRule = GPUCorePrimitiveFillRule.Winding,
                 inverseFill = false,
-                strokeStyle = null,
+                strokeStyle = strokeStyle,
             )
     }
 }

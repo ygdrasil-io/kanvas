@@ -1,0 +1,9 @@
+{
+  "fixture": "simple-stroke-butt-miter-v1",
+  "comparison": "CPU oracle vs WebGPU RGBA8 readback",
+  "channelsCompared": 4096,
+  "differentChannels": 0,
+  "maxAbsoluteChannelDelta": 0,
+  "similarity": 1.0,
+  "thresholdChanged": false
+}

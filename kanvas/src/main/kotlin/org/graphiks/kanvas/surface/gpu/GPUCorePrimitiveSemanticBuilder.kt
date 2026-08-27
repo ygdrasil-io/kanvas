@@ -987,8 +987,16 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
     val pointCount = tessellatedVertices.size / 2
     val exactSingleSegment = contourStarts == listOf(0) && pointCount == 2
     val refusalCode = when {
-        dashIntervals?.isNotEmpty() == true -> "unsupported.core_primitive.stroke.dash_exact_lowering"
-        strokeCap == "round" -> "unsupported.core_primitive.stroke.round_cap_exact_lowering"
+        !strokeWidth.isFinite() -> "unsupported.core_primitive.stroke.width_nonfinite"
+        strokeWidth == 0f -> "unsupported.core_primitive.stroke.hairline_exact_lowering"
+        strokeWidth < 0.5f || strokeWidth > 64f -> "unsupported.core_primitive.stroke.width_budget"
+        pathEffectKind == "Dash" || dashIntervals?.isNotEmpty() == true ->
+            "unsupported.core_primitive.stroke.dash_exact_lowering"
+        pathEffectKind != null -> "unsupported.core_primitive.stroke.path_effect_exact_lowering"
+        strokeCap !in setOf("butt", "square") -> "unsupported.core_primitive.stroke.cap_exact_lowering"
+        strokeJoin != "miter" -> "unsupported.core_primitive.stroke.join_exact_lowering"
+        !strokeMiterLimit.isFinite() || strokeMiterLimit < 1f ->
+            "unsupported.core_primitive.stroke.miter_exact_lowering"
         !exactSingleSegment -> "unsupported.core_primitive.stroke.complex_exact_lowering"
         else -> null
     }
@@ -1002,6 +1010,7 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
                 "miterLimit" to strokeMiterLimit.toString(),
                 "dashIntervals" to dashIntervals?.joinToString(",").orEmpty(),
                 "dashPhase" to dashPhase.toString(),
+                "pathEffect" to pathEffectKind.orEmpty(),
                 "contourCount" to contourStarts.size.toString(),
                 "pointCount" to pointCount.toString(),
             ),
