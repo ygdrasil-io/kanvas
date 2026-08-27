@@ -130,30 +130,25 @@ fun main(args: Array<String>) {
     require(args.size == 1) { "Usage: SkiaGmInventory <output.json>" }
     RuntimeEffectWgsl4kWiring.install()
     try {
-      val entries = SkiaGmRegistry.entries()
-    val rows = entries.mapNotNull { it.gm }
-    val evidence = rows.associate { gm ->
+        val entries = SkiaGmRegistry.entries()
+        val rows = entries.mapNotNull { it.gm }
+        val evidence = rows.associate { gm ->
             gm.name to when {
-            gm.renderFamily == RenderFamily.TEXT -> InventoryRenderEvidence(false, false, false, 0, listOf("excluded:text-dependency-gated"), "excluded:text-dependency-gated")
-            gm.renderCost == RenderCost.BLOCKING -> InventoryRenderEvidence(false, false, false, 0, listOf("excluded:blocking-by-policy"), "excluded:blocking-by-policy")
-            else -> SkiaGmRenderer.inventoryEvidence(gm)
+                gm.renderFamily == RenderFamily.TEXT -> InventoryRenderEvidence(false, false, false, 0, listOf("excluded:text-dependency-gated"), "excluded:text-dependency-gated")
+                gm.renderCost == RenderCost.BLOCKING -> InventoryRenderEvidence(false, false, false, 0, listOf("excluded:blocking-by-policy"), "excluded:blocking-by-policy")
+                else -> SkiaGmRenderer.inventoryEvidence(gm)
+            }
         }
-    }
-    val scoreAudit = auditSkiaGmScores(File("test-similarity-scores.properties"), rows.map { it.name }.toSet())
-    val inventory = buildSkiaGmInventory(
-        rows,
-        File("src/test/resources/reference"),
-        File("test-similarity-scores.properties"),
-        evidence,
-        allowOrphanScores = true,
-    )
-    val failedProviders = entries.filter { it.gm == null }
-    val allRows = inventory + failedProviders.map { entry ->
-        SkiaGmInventoryRow(entry.provider, "UNKNOWN", entry.provider, false, false, false, true, null, 0, "provider-unloadable", entry.diagnostic, "missing")
-    }
-      File(args[0]).apply { parentFile?.mkdirs(); writeText(renderSkiaGmInventoryJson(allRows, scoreAudit) + "\n") }
+        val scoreFile = File("test-similarity-scores.properties")
+        val scoreAudit = auditSkiaGmScores(scoreFile, rows.map { it.name }.toSet())
+        val inventory = buildSkiaGmInventory(rows, File("src/test/resources/reference"), scoreFile, evidence, allowOrphanScores = true)
+        val failedProviders = entries.filter { it.gm == null }
+        val allRows = inventory + failedProviders.map { entry ->
+            SkiaGmInventoryRow(entry.provider, "UNKNOWN", entry.provider, false, false, false, true, null, 0, "provider-unloadable", entry.diagnostic, "missing")
+        }
+        File(args[0]).apply { parentFile?.mkdirs(); writeText(renderSkiaGmInventoryJson(allRows, scoreAudit) + "\n") }
     } finally {
-      GPUBackendRuntimeFactory.dispose()
+        GPUBackendRuntimeFactory.dispose()
     }
 }
 

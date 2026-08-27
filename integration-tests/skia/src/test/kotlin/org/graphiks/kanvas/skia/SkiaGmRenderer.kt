@@ -78,13 +78,18 @@ object SkiaGmRenderer {
     /** Captures the existing public Surface attempt for inventory evidence only. */
     fun inventoryEvidence(gm: SkiaGm, config: RenderConfig = RenderConfig.DEFAULT): InventoryRenderEvidence {
         val surface = Surface(width = gm.width, height = gm.height, config = config)
-        return try {
+        try {
             val canvas = surface.canvas()
             canvas.drawRect(RectF32(0f, 0f, gm.width.toFloat(), gm.height.toFloat()),
                 Paint(color = ColorARGB.fromRGBA(1f, 1f, 1f, 1f), antiAlias = false))
             val gmCanvas = GmCanvas(canvas, gm.width, gm.height)
             gm.onOnceBeforeDraw(gmCanvas)
             gm.draw(gmCanvas, gm.width, gm.height)
+        } catch (failure: Exception) {
+            return InventoryRenderEvidence(true, false, false, surface.snapshotOps().size,
+                listOf(failure.message.orEmpty()), "setup-failure")
+        }
+        return try {
             val result = surface.render()
             InventoryRenderEvidence(
                 attempted = true,

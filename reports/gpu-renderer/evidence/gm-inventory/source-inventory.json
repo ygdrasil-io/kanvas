@@ -934,10 +934,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 4.7151979566,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.material.gradient_tile_mode_unsupported: unsupported.material.gradient_tile_mode_unsupported"
     },
     {
@@ -962,10 +962,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 82.2500000000,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.stroke.rect_anti_alias: Prepared Surface operation could not be lowered."
     },
     {
@@ -1382,10 +1382,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 43.4603024575,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.material.mapping.linear_gradient_stop_count: unsupported.material.mapping.linear_gradient_stop_count"
     },
     {
@@ -1970,10 +1970,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 0.0000000000,
       "operationCount": 114,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid"
     },
     {
@@ -2138,10 +2138,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 74.2448571429,
       "operationCount": 55,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -2278,10 +2278,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 23.0766666667,
       "operationCount": 2,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.material.mapping.linear_gradient_tile_mode: Prepared Surface operation could not be lowered."
     },
     {
@@ -2306,10 +2306,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 60.7990722656,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -2600,10 +2600,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 29.7323791785,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "invalid.surface.prepared.empty-frame-accounting: A prepared no-op frame requires every text operation to have exact elided or culled authority."
     },
     {
@@ -2754,10 +2754,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 74.6620065789,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "invalid.preflight.text.blend: Prepared Surface operation could not be lowered."
     },
     {
@@ -2782,10 +2782,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 44.0748917749,
       "operationCount": 2,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.material.mapping.linear_gradient_stop_count: unsupported.material.mapping.linear_gradient_stop_count"
     },
     {
@@ -3734,10 +3734,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 49.6581208349,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid"
     },
     {
@@ -3748,10 +3748,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 49.6581208349,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid"
     },
     {
@@ -3762,10 +3762,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 39.6677589910,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid"
     },
     {
@@ -3832,10 +3832,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 75.9666666667,
       "operationCount": 2,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid"
     },
     {
@@ -4154,10 +4154,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 0.2310937500,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.material.gradient_tile_mode_unsupported: unsupported.material.gradient_tile_mode_unsupported"
     },
     {
@@ -4196,10 +4196,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 67.5810546875,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.core_primitive.material.path_stencil: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -4210,10 +4210,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 67.5810546875,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.core_primitive.material.path_stencil: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -4252,10 +4252,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 66.9082641602,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.material.gradient_tile_mode_unsupported: unsupported.material.gradient_tile_mode_unsupported"
     },
     {
@@ -4420,10 +4420,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 76.9596354167,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing"
     },
     {
@@ -4434,10 +4434,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 86.4453125000,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing"
     },
     {
@@ -4448,10 +4448,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 77.5003255208,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing"
     },
     {
@@ -4462,10 +4462,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 87.0052083333,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing"
     },
     {
@@ -4476,10 +4476,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 59.9391276042,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing"
     },
     {
@@ -4490,10 +4490,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 65.6640625000,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing"
     },
     {
@@ -4504,10 +4504,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 61.3251953125,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing"
     },
     {
@@ -4518,10 +4518,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 66.8489583333,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing"
     },
     {
@@ -4532,10 +4532,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 60.0950520833,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing"
     },
     {
@@ -4546,10 +4546,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 65.0390625000,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing"
     },
     {
@@ -4560,10 +4560,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 61.4863281250,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing"
     },
     {
@@ -4574,10 +4574,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 67.0052083333,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing"
     },
     {
@@ -4616,10 +4616,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 59.6451388889,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.stroke.rect_anti_alias: Prepared Surface operation could not be lowered."
     },
     {
@@ -4686,10 +4686,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 91.3968750000,
       "operationCount": 21,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.stroke.expansion_budget_exceeded: unsupported.stroke.expansion_budget_exceeded"
     },
     {
@@ -4784,10 +4784,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 58.8091503268,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.stroke.rect_anti_alias: Prepared Surface operation could not be lowered."
     },
     {
@@ -4812,10 +4812,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 92.4203921569,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.stroke.rect_anti_alias: Prepared Surface operation could not be lowered."
     },
     {
@@ -4840,10 +4840,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 94.1064049587,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -4924,10 +4924,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 58.8150000000,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing"
     },
     {
@@ -5050,10 +5050,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 55.5212355212,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.material.mapping.local_matrix: Prepared Surface operation could not be lowered."
     },
     {
@@ -5106,10 +5106,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 71.3378906250,
       "operationCount": 257,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -5190,10 +5190,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 30.8374384236,
       "operationCount": 3,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -5204,10 +5204,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 95.9200000000,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -5218,10 +5218,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 35.8000985222,
       "operationCount": 3,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -5232,10 +5232,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 35.8000985222,
       "operationCount": 3,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -5246,10 +5246,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 46.6469344609,
       "operationCount": 6,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -5260,10 +5260,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 79.0175000000,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.stroke.rect_anti_alias: Prepared Surface operation could not be lowered."
     },
     {
@@ -5316,10 +5316,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 24.9023437500,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.stroke.expansion_budget_exceeded: unsupported.stroke.expansion_budget_exceeded"
     },
     {
@@ -5386,10 +5386,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 34.8146279950,
       "operationCount": 2,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.material.mapping.linear_gradient_stop_count: unsupported.material.mapping.linear_gradient_stop_count"
     },
     {
@@ -5442,10 +5442,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 98.8821138211,
       "operationCount": 2,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.material.mapping.linear_gradient_stop_count: unsupported.material.mapping.linear_gradient_stop_count"
     },
     {
@@ -5512,10 +5512,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 35.3118896484,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.image.native_binding: Prepared Surface operation could not be lowered."
     },
     {
@@ -5554,10 +5554,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 0.0000000000,
       "operationCount": 4,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing"
     },
     {
@@ -5568,10 +5568,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 75.2938375601,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -5610,10 +5610,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 69.4066558442,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.material.mapping.linear_gradient_stop_count: unsupported.material.mapping.linear_gradient_stop_count"
     },
     {
@@ -5624,10 +5624,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 52.3697351828,
       "operationCount": 7,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.material.mapping.linear_gradient_stop_count: unsupported.material.mapping.linear_gradient_stop_count"
     },
     {
@@ -6338,10 +6338,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 78.7210648148,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route."
     },
     {
@@ -6632,10 +6632,10 @@
       "referenceAvailable": true,
       "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 84.9600000000,
       "operationCount": 1,
-      "route": "failure",
+      "route": "setup-failure",
       "firstDiagnostic": "unsupported.geometry.perspective_path: unsupported.geometry.perspective_path"
     },
     {

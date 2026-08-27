@@ -48,6 +48,29 @@ class SkiaGmInventoryTest {
         assertEquals(json, renderSkiaGmInventoryJson(listOf(row)))
         assertEquals(true, "\\u0000" in json && "\\n" in json && "\\t" in json)
     }
+
+    @Test
+    fun `missing scores file is rejected and audit lists sorted orphans`() {
+        val root = Files.createTempDirectory("gm-audit").toFile()
+        assertThrows(IllegalArgumentException::class.java) { loadSkiaGmScores(root.resolve("missing"), setOf("a")) }
+        root.resolve("scores").writeText("z=1\na=2\n")
+        val audit = auditSkiaGmScores(root.resolve("scores"), setOf("a"))
+        assertEquals(listOf("z"), audit.orphanRows)
+        assertEquals(false, audit.strict)
+        root.deleteRecursively()
+    }
+
+    @Test
+    fun `reference status distinguishes missing and untrustable`() {
+        val root = Files.createTempDirectory("gm-reference").toFile()
+        root.resolve("reference/a.png").apply { parentFile.mkdirs(); writeBytes(byteArrayOf(1)) }
+        root.resolve("scores").writeText("a=1\n")
+        val untrustable = InventoryProbeGm().withStatus(ReferenceStatusEntry("untrustable", "fixture"))
+        val row = buildSkiaGmInventory(listOf(untrustable), root.resolve("reference"), root.resolve("scores")).single()
+        assertEquals("untrustable", row.referenceStatus)
+        assertEquals(false, row.referenceAvailable)
+        root.deleteRecursively()
+    }
 }
 
 private class InventoryProbeGm : SkiaGm {
@@ -56,4 +79,8 @@ private class InventoryProbeGm : SkiaGm {
     override val renderCost = RenderCost.FAST
     override val minSimilarity = 90.0
     override fun draw(canvas: GmCanvas, width: Int, height: Int) = Unit
+
+    fun withStatus(status: ReferenceStatusEntry) = object : SkiaGm by this {
+        override val referenceStatus = status
+    }
 }

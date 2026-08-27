@@ -81,3 +81,15 @@ Tests round 2 :
 - `./gradlew --no-daemon :integration-tests:skia:test --tests org.graphiks.kanvas.skia.SkiaGmInventoryTest --tests org.graphiks.kanvas.skia.SkiaGmRegistryTest` — **SUCCESSFUL**.
 - Génération réelle Gradle — **SUCCESSFUL**, 615 lignes totales (608 GMs
   instanciables + 7 providers non chargeables), audit de 136 scores orphelins.
+
+## Round 3 — corrections de re-review
+
+La capture borne désormais explicitement la phase de construction GM et la
+phase `Surface.render()` : `terminalFailure` n’est vrai que pour la seconde,
+tandis qu’un échec de setup est `route=setup-failure`. Les tests couvrent les
+scores absents, l’audit trié, les statuts de référence et l’export déterministe
+avec caractères de contrôle. Les WIP décrivent l’audit/rebaseline séparé des
+scores orphelins sans suppression silencieuse.
+
+Vérifications : tests ciblés **SUCCESSFUL**; génération Gradle réelle
+**SUCCESSFUL**, artefact 615 lignes, 136 scores orphelins audités.

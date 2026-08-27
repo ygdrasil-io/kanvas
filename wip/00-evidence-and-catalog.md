@@ -58,7 +58,7 @@ signal d'entrée de `W00`; il doit être recalculé depuis le code à l'exécuti
 ## Sortie
 
 `W00` et `W01` sont terminées quand les comptages sont dérivés automatiquement,
-qu'aucun score n'est orphelin, que chaque scène a un verdict unique et que le
+que les scores orphelins sont explicitement audités (le mode strict les refuse), que chaque scène a un verdict unique et que le
 catalogue promoted complet est vérifiable headless.
 
 ## Vérification

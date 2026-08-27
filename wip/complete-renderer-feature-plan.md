@@ -160,7 +160,7 @@ restent séquentielles.
 
 | Vague | Route propriétaire | Livraison testable |
 | --- | --- | --- |
-| `W00` | Inventaire GM | Énumérer le registre courant, rejouer les GMs, retirer les scores orphelins et produire une table machine-readable `GM -> famille -> première route/refus -> score -> référence`. |
+| `W00` | Inventaire GM | Énumérer le registre courant, rejouer les GMs, conserver les scores orphelins dans un audit explicite (le mode strict échoue) et produire une table machine-readable `GM -> famille -> première route/refus -> score -> référence`. |
 | `W01` | Evidence v2 | Réconcilier catalogue, bundles historiques de vagues et preuves promues; chaque scène possède un propriétaire, un verdict et une provenance. |
 
 Sortie : aucun nombre copié dans le Markdown n'est requis par les gates; les
@@ -238,7 +238,7 @@ comptages sont recalculés depuis le registre, le catalogue et les bundles.
 | `W70` | Resource lifecycle | Device/queue generation, upload/readback ownership, dispose/close, device loss et absence de use-after-free. |
 | `W71` | Cache/determinism | Cache keys complets, eviction, budgets mémoire, replay déterministe et aucune réutilisation inter-device. |
 | `W72` | Performance tiers | Benchmarks froid/chaud, frame time, allocations, pipeline builds, uploads et readbacks par famille correctness fermée. |
-| `W73` | GM regeneration | Régénération complète du registre au SHA final, scores sans orphelins et dashboard cohérent. |
+| `W73` | GM regeneration | Régénération complète du registre au SHA final, nettoyage/rebaseline séparé des scores orphelins et dashboard cohérent. |
 | `W74` | GM burn-down | Clustering des échecs résiduels par première cause; nouvelles micro-vagues jusqu'à disparition de `UNCLASSIFIED`. |
 | `W75` | Support closure | Matrice générée finale, vérification de toutes les preuves, archive des rapports et suppression du dossier `wip/`. |
 
