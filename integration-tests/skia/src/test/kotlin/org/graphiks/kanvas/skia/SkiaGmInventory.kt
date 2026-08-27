@@ -5,6 +5,8 @@ import org.graphiks.kanvas.pipeline.RuntimeEffectWgsl4kWiring
 import java.io.File
 import java.util.Locale
 
+enum class InventorySetupState { NOT_ATTEMPTED, SUCCEEDED, FAILED }
+
 /** Renderer observations supplied by the inventory replay; deliberately has no fallback semantics. */
 data class InventoryRenderEvidence(
     val attempted: Boolean,
@@ -13,8 +15,27 @@ data class InventoryRenderEvidence(
     val operationCount: Int,
     val diagnostics: List<String> = emptyList(),
     val route: String = "gpu",
+    val setupState: InventorySetupState = InventorySetupState.SUCCEEDED,
+    val setupDiagnostic: String? = null,
 ) {
-    init { require(operationCount >= 0) { "operationCount must be non-negative" } }
+    init {
+        require(operationCount >= 0) { "operationCount must be non-negative" }
+        when (setupState) {
+            InventorySetupState.NOT_ATTEMPTED -> require(!attempted && !renderSucceeded && !terminalFailure) {
+                "A non-attempted setup cannot have render evidence"
+            }
+            InventorySetupState.SUCCEEDED -> {
+                require(attempted) { "A successful setup must reach Surface.render()" }
+                require(setupDiagnostic == null) { "A successful setup cannot have a setup diagnostic" }
+            }
+            InventorySetupState.FAILED -> require(!attempted && !renderSucceeded && !terminalFailure) {
+                "A setup failure cannot be a Surface.render failure"
+            }
+        }
+        require(!terminalFailure || attempted && !renderSucceeded && setupState == InventorySetupState.SUCCEEDED) {
+            "terminalFailure is reserved for a failed Surface.render() attempt"
+        }
+    }
 }
 
 data class SkiaGmInventoryRow(
@@ -30,6 +51,8 @@ data class SkiaGmInventoryRow(
     val route: String,
     val firstDiagnostic: String?,
     val referenceStatus: String,
+    val setupState: InventorySetupState = InventorySetupState.NOT_ATTEMPTED,
+    val setupDiagnostic: String? = null,
 )
 
 data class SkiaGmScoreAudit(val orphanRows: List<String>, val strict: Boolean)
@@ -86,12 +109,14 @@ fun buildSkiaGmInventory(
             score = scores[gm.name],
             operationCount = evidence?.operationCount,
             route = evidence?.route ?: "unobserved",
-            firstDiagnostic = evidence?.diagnostics?.firstOrNull(),
+            firstDiagnostic = evidence?.setupDiagnostic ?: evidence?.diagnostics?.firstOrNull(),
             referenceStatus = when {
                 !referenceDir.resolve("${gm.referenceName}.png").isFile -> "missing"
                 gm.referenceStatus.untrustable -> "untrustable"
                 else -> "trusted"
             },
+            setupState = evidence?.setupState ?: InventorySetupState.NOT_ATTEMPTED,
+            setupDiagnostic = evidence?.setupDiagnostic,
         )
     }
 }
@@ -134,8 +159,24 @@ fun main(args: Array<String>) {
         val rows = entries.mapNotNull { it.gm }
         val evidence = rows.associate { gm ->
             gm.name to when {
-                gm.renderFamily == RenderFamily.TEXT -> InventoryRenderEvidence(false, false, false, 0, listOf("excluded:text-dependency-gated"), "excluded:text-dependency-gated")
-                gm.renderCost == RenderCost.BLOCKING -> InventoryRenderEvidence(false, false, false, 0, listOf("excluded:blocking-by-policy"), "excluded:blocking-by-policy")
+                gm.renderFamily == RenderFamily.TEXT -> InventoryRenderEvidence(
+                    attempted = false,
+                    renderSucceeded = false,
+                    terminalFailure = false,
+                    operationCount = 0,
+                    diagnostics = listOf("excluded:text-dependency-gated"),
+                    route = "excluded:text-dependency-gated",
+                    setupState = InventorySetupState.NOT_ATTEMPTED,
+                )
+                gm.renderCost == RenderCost.BLOCKING -> InventoryRenderEvidence(
+                    attempted = false,
+                    renderSucceeded = false,
+                    terminalFailure = false,
+                    operationCount = 0,
+                    diagnostics = listOf("excluded:blocking-by-policy"),
+                    route = "excluded:blocking-by-policy",
+                    setupState = InventorySetupState.NOT_ATTEMPTED,
+                )
                 else -> SkiaGmRenderer.inventoryEvidence(gm)
             }
         }
@@ -143,13 +184,40 @@ fun main(args: Array<String>) {
         val scoreAudit = auditSkiaGmScores(scoreFile, rows.map { it.name }.toSet())
         val inventory = buildSkiaGmInventory(rows, File("src/test/resources/reference"), scoreFile, evidence, allowOrphanScores = true)
         val failedProviders = entries.filter { it.gm == null }
-        val allRows = inventory + failedProviders.map { entry ->
-            SkiaGmInventoryRow(entry.provider, "UNKNOWN", entry.provider, false, false, false, true, null, 0, "provider-unloadable", entry.diagnostic, "missing")
-        }
-        File(args[0]).apply { parentFile?.mkdirs(); writeText(renderSkiaGmInventoryJson(allRows, scoreAudit) + "\n") }
+        val allRows = inventory + failedProviders.map(::providerUnloadableInventoryRow)
+        writeSkiaGmInventoryJson(File(args[0]), allRows, scoreAudit)
     } finally {
         GPUBackendRuntimeFactory.dispose()
     }
+}
+
+internal fun writeSkiaGmInventoryJson(
+    output: File,
+    rows: List<SkiaGmInventoryRow>,
+    scoreAudit: SkiaGmScoreAudit = SkiaGmScoreAudit(emptyList(), true),
+) {
+    output.parentFile?.mkdirs()
+    output.writeText(renderSkiaGmInventoryJson(rows, scoreAudit) + "\n")
+}
+
+internal fun providerUnloadableInventoryRow(entry: SkiaGmRegistry.Entry): SkiaGmInventoryRow {
+    require(entry.gm == null) { "Provider ${entry.provider} is loadable" }
+    return SkiaGmInventoryRow(
+        name = entry.provider,
+        family = "UNKNOWN",
+        referenceName = entry.provider,
+        referenceAvailable = false,
+        renderAvailable = false,
+        attempted = false,
+        terminalFailure = false,
+        score = null,
+        operationCount = 0,
+        route = "provider-unloadable",
+        firstDiagnostic = entry.diagnostic,
+        referenceStatus = "missing",
+        setupState = InventorySetupState.FAILED,
+        setupDiagnostic = entry.diagnostic,
+    )
 }
 
 private fun inventoryJsonEscape(value: String): String = buildString {

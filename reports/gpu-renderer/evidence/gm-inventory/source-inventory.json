@@ -27,7 +27,7 @@
       "terminalFailure": true,
       "score": 38.5162353516,
       "operationCount": 122,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.rect_anti_alias: Prepared Surface operation could not be lowered."
     },
     {
@@ -55,7 +55,7 @@
       "terminalFailure": true,
       "score": 95.0837142857,
       "operationCount": 4,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.native-mask-blur.mixed-local-sizes: The top-level mask blur lane serializes one local mask size per frame."
     },
     {
@@ -83,7 +83,7 @@
       "terminalFailure": true,
       "score": 55.2604769153,
       "operationCount": 55,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "invalid.surface.prepared.frame-build-contract: Prepared Surface frame construction violated an internal contract."
     },
     {
@@ -97,7 +97,7 @@
       "terminalFailure": true,
       "score": 86.2423268698,
       "operationCount": 17,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "invalid.surface.prepared.frame-build-contract: Prepared Surface frame construction violated an internal contract."
     },
     {
@@ -111,7 +111,7 @@
       "terminalFailure": true,
       "score": 70.7519531250,
       "operationCount": 3,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.image.native_binding: Prepared Surface operation could not be lowered."
     },
     {
@@ -125,7 +125,7 @@
       "terminalFailure": true,
       "score": 74.0710175439,
       "operationCount": 23,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -139,7 +139,7 @@
       "terminalFailure": true,
       "score": 72.3896140351,
       "operationCount": 23,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.mask-filter.blur.sigma: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -153,7 +153,7 @@
       "terminalFailure": true,
       "score": 71.3077894737,
       "operationCount": 23,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.mask-filter.blur.sigma: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -167,7 +167,7 @@
       "terminalFailure": true,
       "score": 83.3652000000,
       "operationCount": 3,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.image.native_binding: Prepared Surface operation could not be lowered."
     },
     {
@@ -181,7 +181,7 @@
       "terminalFailure": true,
       "score": 91.6507580011,
       "operationCount": 31,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.native-mask-blur.mixed-local-sizes: The top-level mask blur lane serializes one local mask size per frame."
     },
     {
@@ -195,7 +195,7 @@
       "terminalFailure": true,
       "score": 97.5454166667,
       "operationCount": 19,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.rect_anti_alias: Prepared Surface operation could not be lowered."
     },
     {
@@ -209,7 +209,7 @@
       "terminalFailure": true,
       "score": 97.3766666667,
       "operationCount": 19,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid"
     },
     {
@@ -251,7 +251,7 @@
       "terminalFailure": true,
       "score": 58.9133579126,
       "operationCount": 145,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.source_unimplemented: unsupported.material.source_unimplemented"
     },
     {
@@ -279,7 +279,7 @@
       "terminalFailure": true,
       "score": 71.3287657146,
       "operationCount": 6,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "invalid.surface.prepared.frame-build-contract: Prepared Surface frame construction violated an internal contract."
     },
     {
@@ -307,7 +307,7 @@
       "terminalFailure": true,
       "score": 55.4541666667,
       "operationCount": 7,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.expansion_budget_exceeded: unsupported.stroke.expansion_budget_exceeded"
     },
     {
@@ -321,7 +321,7 @@
       "terminalFailure": true,
       "score": 75.2643229167,
       "operationCount": 89,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "invalid.surface.prepared.frame-build-contract: Prepared Surface frame construction violated an internal contract."
     },
     {
@@ -335,7 +335,7 @@
       "terminalFailure": true,
       "score": 42.0223325062,
       "operationCount": 21,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.image.native_binding: Prepared Surface operation could not be lowered."
     },
     {
@@ -377,7 +377,7 @@
       "terminalFailure": true,
       "score": 78.5514066496,
       "operationCount": 38,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -405,7 +405,7 @@
       "terminalFailure": true,
       "score": 40.6649616368,
       "operationCount": 146,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route."
     },
     {
@@ -419,7 +419,7 @@
       "terminalFailure": true,
       "score": 0.2319335938,
       "operationCount": 263,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.image.native_binding: Prepared Surface operation could not be lowered."
     },
     {
@@ -433,7 +433,7 @@
       "terminalFailure": true,
       "score": 13.1490071615,
       "operationCount": 10,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.rect_anti_alias: Prepared Surface operation could not be lowered."
     },
     {
@@ -447,7 +447,7 @@
       "terminalFailure": true,
       "score": 51.9023437500,
       "operationCount": 14,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.geometry.path_empty_inverse_unbounded: unsupported.geometry.path_empty_inverse_unbounded"
     },
     {
@@ -531,7 +531,7 @@
       "terminalFailure": true,
       "score": 0.0000000000,
       "operationCount": 7,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -545,7 +545,7 @@
       "terminalFailure": true,
       "score": 54.1758333333,
       "operationCount": 14,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing"
     },
     {
@@ -559,7 +559,7 @@
       "terminalFailure": true,
       "score": 69.3190000000,
       "operationCount": 33,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.source_unimplemented: unsupported.material.source_unimplemented"
     },
     {
@@ -601,7 +601,7 @@
       "terminalFailure": true,
       "score": 0.0000000000,
       "operationCount": 37,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.composite.paint: Prepared Surface composite could not be lowered."
     },
     {
@@ -615,7 +615,7 @@
       "terminalFailure": true,
       "score": 97.0000000000,
       "operationCount": 61,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "invalid.preflight.core_primitive_path_stencil_msaa_authority: Path stencil MSAA authority requires one unique path-bearing render scope."
     },
     {
@@ -643,7 +643,7 @@
       "terminalFailure": true,
       "score": 32.7156250000,
       "operationCount": 28,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route."
     },
     {
@@ -657,7 +657,7 @@
       "terminalFailure": true,
       "score": 76.1835365854,
       "operationCount": 17,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid"
     },
     {
@@ -685,7 +685,7 @@
       "terminalFailure": true,
       "score": 52.7343750000,
       "operationCount": 2,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid"
     },
     {
@@ -699,7 +699,7 @@
       "terminalFailure": true,
       "score": 100.0000000000,
       "operationCount": 7,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.composite.clip: Prepared Surface composite could not be lowered."
     },
     {
@@ -713,7 +713,7 @@
       "terminalFailure": true,
       "score": 67.5418178664,
       "operationCount": 824,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.composite.clip: Prepared Surface composite could not be lowered."
     },
     {
@@ -727,7 +727,7 @@
       "terminalFailure": true,
       "score": 99.2612500000,
       "operationCount": 7,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.rect_anti_alias: Prepared Surface operation could not be lowered."
     },
     {
@@ -741,7 +741,7 @@
       "terminalFailure": true,
       "score": null,
       "operationCount": 6,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -755,7 +755,7 @@
       "terminalFailure": true,
       "score": 90.7002631579,
       "operationCount": 162,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route."
     },
     {
@@ -769,7 +769,7 @@
       "terminalFailure": true,
       "score": 89.9907894737,
       "operationCount": 162,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route."
     },
     {
@@ -783,7 +783,7 @@
       "terminalFailure": true,
       "score": 82.6638910917,
       "operationCount": 18,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route."
     },
     {
@@ -797,7 +797,7 @@
       "terminalFailure": true,
       "score": 82.7815226011,
       "operationCount": 18,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route."
     },
     {
@@ -811,7 +811,7 @@
       "terminalFailure": true,
       "score": 82.5181734073,
       "operationCount": 98,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid"
     },
     {
@@ -825,7 +825,7 @@
       "terminalFailure": true,
       "score": 39.2268041237,
       "operationCount": 106,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.geometry.path_empty_inverse_unbounded: unsupported.geometry.path_empty_inverse_unbounded"
     },
     {
@@ -839,7 +839,7 @@
       "terminalFailure": true,
       "score": 88.2011630981,
       "operationCount": 157,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.composite.clip: Prepared Surface composite could not be lowered."
     },
     {
@@ -853,7 +853,7 @@
       "terminalFailure": true,
       "score": 72.3628733809,
       "operationCount": 157,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.composite.clip: Prepared Surface composite could not be lowered."
     },
     {
@@ -867,7 +867,7 @@
       "terminalFailure": true,
       "score": 0.3963470459,
       "operationCount": 66,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.composite.paint: Prepared Surface composite could not be lowered."
     },
     {
@@ -881,7 +881,7 @@
       "terminalFailure": true,
       "score": 82.8799894264,
       "operationCount": 98,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid"
     },
     {
@@ -895,7 +895,7 @@
       "terminalFailure": true,
       "score": 39.2542294475,
       "operationCount": 106,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.geometry.path_empty_inverse_unbounded: unsupported.geometry.path_empty_inverse_unbounded"
     },
     {
@@ -909,7 +909,7 @@
       "terminalFailure": true,
       "score": 88.2166931007,
       "operationCount": 157,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.composite.clip: Prepared Surface composite could not be lowered."
     },
     {
@@ -923,7 +923,7 @@
       "terminalFailure": true,
       "score": 72.3817076394,
       "operationCount": 157,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.composite.clip: Prepared Surface composite could not be lowered."
     },
     {
@@ -933,7 +933,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 4.7151979566,
       "operationCount": 1,
@@ -951,7 +951,7 @@
       "terminalFailure": true,
       "score": 12.6022338867,
       "operationCount": 4,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.rect_anti_alias: Prepared Surface operation could not be lowered."
     },
     {
@@ -961,7 +961,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 82.2500000000,
       "operationCount": 1,
@@ -1021,7 +1021,7 @@
       "terminalFailure": true,
       "score": 27.5487500000,
       "operationCount": 5,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -1035,7 +1035,7 @@
       "terminalFailure": true,
       "score": 26.0559082031,
       "operationCount": 7,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -1049,7 +1049,7 @@
       "terminalFailure": true,
       "score": 26.0559082031,
       "operationCount": 7,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -1063,7 +1063,7 @@
       "terminalFailure": true,
       "score": 100.0000000000,
       "operationCount": 3,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "invalid.surface.prepared.frame-build-contract: Prepared Surface frame construction violated an internal contract."
     },
     {
@@ -1077,7 +1077,7 @@
       "terminalFailure": true,
       "score": 67.2982812500,
       "operationCount": 3,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -1091,7 +1091,7 @@
       "terminalFailure": true,
       "score": 52.5016276042,
       "operationCount": 45,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route."
     },
     {
@@ -1105,7 +1105,7 @@
       "terminalFailure": true,
       "score": 52.7669270833,
       "operationCount": 45,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route."
     },
     {
@@ -1119,7 +1119,7 @@
       "terminalFailure": true,
       "score": 67.7703857422,
       "operationCount": 17,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.composite.clip: Prepared Surface composite could not be lowered."
     },
     {
@@ -1133,7 +1133,7 @@
       "terminalFailure": true,
       "score": 95.3658333333,
       "operationCount": 15,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.rect_anti_alias: Prepared Surface operation could not be lowered."
     },
     {
@@ -1147,7 +1147,7 @@
       "terminalFailure": true,
       "score": 95.3650000000,
       "operationCount": 15,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.rect_anti_alias: Prepared Surface operation could not be lowered."
     },
     {
@@ -1161,7 +1161,7 @@
       "terminalFailure": true,
       "score": 93.8333333333,
       "operationCount": 4,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "invalid.surface.prepared.frame-build-contract: Prepared Surface frame construction violated an internal contract."
     },
     {
@@ -1175,7 +1175,7 @@
       "terminalFailure": true,
       "score": 91.7587280273,
       "operationCount": 5,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "invalid.preflight.core_primitive_clip_producer_authority: Resource-backed clip consumer is missing its sealed producer topology."
     },
     {
@@ -1245,7 +1245,7 @@
       "terminalFailure": true,
       "score": 41.8300000000,
       "operationCount": 583,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.recording.core_primitive_analytic_shape_clip: Prepared analytic shapes currently require NoClip or ScissorOnly execution."
     },
     {
@@ -1301,7 +1301,7 @@
       "terminalFailure": true,
       "score": 88.2472222222,
       "operationCount": 4,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -1343,7 +1343,7 @@
       "terminalFailure": true,
       "score": null,
       "operationCount": 5,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "invalid.preflight.core_primitive_direct_geometry_resources: Direct CorePrimitive builder uniform slab seal contradicts current packet or limit authority."
     },
     {
@@ -1357,7 +1357,7 @@
       "terminalFailure": true,
       "score": 65.0084552846,
       "operationCount": 30471,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.composite.picture.budget: Prepared Surface composite could not be lowered."
     },
     {
@@ -1371,7 +1371,7 @@
       "terminalFailure": true,
       "score": 43.8121744792,
       "operationCount": 1921,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.composite.preflight: Prepared Surface composite could not be lowered."
     },
     {
@@ -1381,7 +1381,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 43.4603024575,
       "operationCount": 1,
@@ -1399,7 +1399,7 @@
       "terminalFailure": true,
       "score": 43.7007904053,
       "operationCount": 29,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.composite.paint: Prepared Surface composite could not be lowered."
     },
     {
@@ -1413,7 +1413,7 @@
       "terminalFailure": true,
       "score": 87.6666666667,
       "operationCount": 13,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.composite.paint: Prepared Surface composite could not be lowered."
     },
     {
@@ -1427,7 +1427,7 @@
       "terminalFailure": true,
       "score": 36.0000000000,
       "operationCount": 3,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.mapping.image_local_matrix_affine: Prepared Surface operation could not be lowered."
     },
     {
@@ -1455,7 +1455,7 @@
       "terminalFailure": true,
       "score": 0.1562500000,
       "operationCount": 17,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.composite.paint: Prepared Surface composite could not be lowered."
     },
     {
@@ -1483,7 +1483,7 @@
       "terminalFailure": true,
       "score": 0.0045776367,
       "operationCount": 19,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.composite.paint: Prepared Surface composite could not be lowered."
     },
     {
@@ -1553,7 +1553,7 @@
       "terminalFailure": true,
       "score": 70.3141762452,
       "operationCount": 53,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route."
     },
     {
@@ -1567,7 +1567,7 @@
       "terminalFailure": true,
       "score": 0.0000000000,
       "operationCount": 4,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.composite.paint: Prepared Surface composite could not be lowered."
     },
     {
@@ -1581,7 +1581,7 @@
       "terminalFailure": true,
       "score": 49.8382155335,
       "operationCount": 13,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.mapping.linear_gradient_stop_count: unsupported.material.mapping.linear_gradient_stop_count"
     },
     {
@@ -1595,7 +1595,7 @@
       "terminalFailure": true,
       "score": 66.9032258065,
       "operationCount": 8,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.mapping.linear_gradient_stop_count: unsupported.material.mapping.linear_gradient_stop_count"
     },
     {
@@ -1605,12 +1605,12 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
-      "terminalFailure": true,
+      "attempted": false,
+      "terminalFailure": false,
       "score": 38.5850000000,
-      "operationCount": 14,
-      "route": "failure",
-      "firstDiagnostic": "unsupported.image.native_binding: Prepared Surface operation could not be lowered."
+      "operationCount": 2,
+      "route": "setup-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "colorcomposefilter_alpha",
@@ -1623,7 +1623,7 @@
       "terminalFailure": true,
       "score": 32.3025156225,
       "operationCount": 171,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route."
     },
     {
@@ -1637,7 +1637,7 @@
       "terminalFailure": true,
       "score": 34.5175452652,
       "operationCount": 171,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route."
     },
     {
@@ -1651,7 +1651,7 @@
       "terminalFailure": true,
       "score": 0.0103785104,
       "operationCount": 18,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.image.native_binding: Prepared Surface operation could not be lowered."
     },
     {
@@ -1665,7 +1665,7 @@
       "terminalFailure": true,
       "score": 15.1515151515,
       "operationCount": 29,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.source_unimplemented: unsupported.material.source_unimplemented"
     },
     {
@@ -1679,7 +1679,7 @@
       "terminalFailure": true,
       "score": 37.1428571429,
       "operationCount": 15,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.source_unimplemented: unsupported.material.source_unimplemented"
     },
     {
@@ -1693,7 +1693,7 @@
       "terminalFailure": true,
       "score": 37.1428571429,
       "operationCount": 15,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.source_unimplemented: unsupported.material.source_unimplemented"
     },
     {
@@ -1707,7 +1707,7 @@
       "terminalFailure": true,
       "score": 30.5555555556,
       "operationCount": 3,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.source_unimplemented: unsupported.material.source_unimplemented"
     },
     {
@@ -1721,7 +1721,7 @@
       "terminalFailure": true,
       "score": 24.7747851975,
       "operationCount": 177,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.composite.paint: Prepared Surface composite could not be lowered."
     },
     {
@@ -1735,7 +1735,7 @@
       "terminalFailure": true,
       "score": 22.9503311258,
       "operationCount": 7,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route."
     },
     {
@@ -1749,7 +1749,7 @@
       "terminalFailure": true,
       "score": 92.5273679200,
       "operationCount": 133,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid"
     },
     {
@@ -1763,7 +1763,7 @@
       "terminalFailure": true,
       "score": 98.6411290323,
       "operationCount": 8,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -1772,13 +1772,13 @@
       "referenceName": "crbug_1167277",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 94.4157608696,
       "operationCount": 16,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "crbug_1174186",
@@ -1791,7 +1791,7 @@
       "terminalFailure": true,
       "score": 99.9988888889,
       "operationCount": 151,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -1805,7 +1805,7 @@
       "terminalFailure": true,
       "score": 99.8462500000,
       "operationCount": 5,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route."
     },
     {
@@ -1819,7 +1819,7 @@
       "terminalFailure": true,
       "score": 0.0000000000,
       "operationCount": 9,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.composite.paint: Prepared Surface composite could not be lowered."
     },
     {
@@ -1833,7 +1833,7 @@
       "terminalFailure": true,
       "score": 35.5241699219,
       "operationCount": 2,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -1842,13 +1842,13 @@
       "referenceName": "discard",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
-      "attempted": true,
+      "renderAvailable": false,
+      "attempted": false,
       "terminalFailure": false,
       "score": 0.0000000000,
-      "operationCount": 102,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "operationCount": 2,
+      "route": "setup-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "displacement",
@@ -1857,12 +1857,12 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
-      "terminalFailure": true,
+      "attempted": false,
+      "terminalFailure": false,
       "score": 90.5330000000,
-      "operationCount": 34,
-      "route": "failure",
-      "firstDiagnostic": "unsupported.image.native_binding: Prepared Surface operation could not be lowered."
+      "operationCount": 1,
+      "route": "setup-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "draw-atlas-colors",
@@ -1875,7 +1875,7 @@
       "terminalFailure": true,
       "score": 17.8268251273,
       "operationCount": 88,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.image.atlas.source_blend: Prepared Surface operation could not be lowered."
     },
     {
@@ -1889,7 +1889,7 @@
       "terminalFailure": true,
       "score": 89.6634114583,
       "operationCount": 3,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.image.atlas.source_blend: Prepared Surface operation could not be lowered."
     },
     {
@@ -1898,13 +1898,13 @@
       "referenceName": "draw_image_set_alpha_only",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 0.0000000000,
       "operationCount": 161,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "draw_image_set",
@@ -1917,7 +1917,7 @@
       "terminalFailure": true,
       "score": 72.9751724138,
       "operationCount": 141,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.image.native_binding: Prepared Surface operation could not be lowered."
     },
     {
@@ -1926,13 +1926,13 @@
       "referenceName": "draw_image_set_rect_to_rect",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 0.0507294118,
       "operationCount": 506,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "draw_quad_set",
@@ -1945,7 +1945,7 @@
       "terminalFailure": true,
       "score": 85.8278125000,
       "operationCount": 359,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid"
     },
     {
@@ -1959,7 +1959,7 @@
       "terminalFailure": true,
       "score": 0.4828303850,
       "operationCount": 6,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.composite.paint: Prepared Surface composite could not be lowered."
     },
     {
@@ -1969,7 +1969,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 0.0000000000,
       "operationCount": 114,
@@ -1982,13 +1982,13 @@
       "referenceName": "ducky_yuv_blend",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 6.6194690265,
       "operationCount": 1,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "encode",
@@ -2001,8 +2001,8 @@
       "terminalFailure": true,
       "score": 14.6643880208,
       "operationCount": 4,
-      "route": "failure",
-      "firstDiagnostic": "invalid.preflight.text.dependency: Prepared-surface upload and render steps must retain one exact task identity."
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "fadefilter",
@@ -2010,13 +2010,13 @@
       "referenceName": "fadefilter",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 100.0000000000,
       "operationCount": 2,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "filterfastbounds",
@@ -2029,7 +2029,7 @@
       "terminalFailure": true,
       "score": 0.0492063492,
       "operationCount": 75,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.composite.paint: Prepared Surface composite could not be lowered."
     },
     {
@@ -2043,7 +2043,7 @@
       "terminalFailure": true,
       "score": 32.9228354978,
       "operationCount": 65,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.source_unimplemented: unsupported.material.source_unimplemented"
     },
     {
@@ -2057,7 +2057,7 @@
       "terminalFailure": true,
       "score": 62.5647786458,
       "operationCount": 7009,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid"
     },
     {
@@ -2071,7 +2071,7 @@
       "terminalFailure": true,
       "score": 45.2776785714,
       "operationCount": 97,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.composite.paint: Prepared Surface composite could not be lowered."
     },
     {
@@ -2085,7 +2085,7 @@
       "terminalFailure": true,
       "score": 80.6000000000,
       "operationCount": 29,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -2094,13 +2094,13 @@
       "referenceName": "HSL_duck",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 23.2647486196,
       "operationCount": 1,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "imagefilter_composed_transform",
@@ -2108,13 +2108,13 @@
       "referenceName": "imagefilter_composed_transform",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 74.5727539063,
       "operationCount": 1,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "imagefilter_convolve_subset",
@@ -2122,13 +2122,13 @@
       "referenceName": "imagefilter_convolve_subset",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 32.1770833333,
       "operationCount": 1,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "imagefiltersbase",
@@ -2137,7 +2137,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 74.2448571429,
       "operationCount": 55,
@@ -2155,7 +2155,7 @@
       "terminalFailure": true,
       "score": 80.2048837209,
       "operationCount": 74,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -2169,7 +2169,7 @@
       "terminalFailure": true,
       "score": 29.9080729167,
       "operationCount": 3916,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -2178,13 +2178,13 @@
       "referenceName": "imagefilters_effect_order",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 1.0192871094,
       "operationCount": 1,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "imagefiltersstroked",
@@ -2197,7 +2197,7 @@
       "terminalFailure": true,
       "score": 91.0358139535,
       "operationCount": 14,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing"
     },
     {
@@ -2206,13 +2206,13 @@
       "referenceName": "imagefilter_matrix_localmatrix",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 74.7669219971,
       "operationCount": 1,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "imagefilterstransformed",
@@ -2225,7 +2225,7 @@
       "terminalFailure": true,
       "score": 2.9990079365,
       "operationCount": 16,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -2234,13 +2234,13 @@
       "referenceName": "imagefiltersunpremul",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 0.0000000000,
       "operationCount": 3,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "imagefilters_xfermodes",
@@ -2253,7 +2253,7 @@
       "terminalFailure": true,
       "score": 41.8667534722,
       "operationCount": 33,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.composite.paint: Prepared Surface composite could not be lowered."
     },
     {
@@ -2267,7 +2267,7 @@
       "terminalFailure": true,
       "score": 99.7337142857,
       "operationCount": 8,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route."
     },
     {
@@ -2277,7 +2277,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 23.0766666667,
       "operationCount": 2,
@@ -2291,12 +2291,12 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
-      "terminalFailure": true,
+      "attempted": false,
+      "terminalFailure": false,
       "score": 38.1949035813,
-      "operationCount": 3554,
-      "route": "failure",
-      "firstDiagnostic": "unsupported.image.native_binding: Prepared Surface operation could not be lowered."
+      "operationCount": 1,
+      "route": "setup-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "localmatriximagefilter",
@@ -2305,7 +2305,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 60.7990722656,
       "operationCount": 1,
@@ -2323,7 +2323,7 @@
       "terminalFailure": true,
       "score": 96.8750000000,
       "operationCount": 81,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route."
     },
     {
@@ -2332,13 +2332,13 @@
       "referenceName": "matriximagefilter",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
-      "attempted": true,
+      "renderAvailable": false,
+      "attempted": false,
       "terminalFailure": false,
       "score": 7.8500000000,
-      "operationCount": 3,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "operationCount": 1,
+      "route": "setup-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "mixerCF",
@@ -2351,7 +2351,7 @@
       "terminalFailure": true,
       "score": 30.7081481481,
       "operationCount": 16,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.source_unimplemented: unsupported.material.source_unimplemented"
     },
     {
@@ -2360,13 +2360,13 @@
       "referenceName": "modecolorfilters",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 27.0629882813,
       "operationCount": 2382,
-      "route": "gpu",
-      "firstDiagnostic": "route:destination-read:DrawRect:2: gpu-copy-then-formula"
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "offsetimagefilter",
@@ -2375,12 +2375,12 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
-      "terminalFailure": true,
+      "attempted": false,
+      "terminalFailure": false,
       "score": 79.6633333333,
-      "operationCount": 17,
-      "route": "failure",
-      "firstDiagnostic": "unsupported.image.native_binding: Prepared Surface operation could not be lowered."
+      "operationCount": 2,
+      "route": "setup-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "overdraw_canvas",
@@ -2393,7 +2393,7 @@
       "terminalFailure": true,
       "score": 85.0500000000,
       "operationCount": 8,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.image.native_binding: Prepared Surface operation could not be lowered."
     },
     {
@@ -2407,7 +2407,7 @@
       "terminalFailure": true,
       "score": 12.5000000000,
       "operationCount": 8,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.image.native_binding: Prepared Surface operation could not be lowered."
     },
     {
@@ -2421,7 +2421,7 @@
       "terminalFailure": true,
       "score": 70.6506666667,
       "operationCount": 13,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.vertices.material: Prepared Surface operation could not be lowered."
     },
     {
@@ -2435,7 +2435,7 @@
       "terminalFailure": true,
       "score": 41.8116363636,
       "operationCount": 3,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -2463,7 +2463,7 @@
       "terminalFailure": true,
       "score": 70.6857575758,
       "operationCount": 13,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.vertices.material: Prepared Surface operation could not be lowered."
     },
     {
@@ -2477,7 +2477,7 @@
       "terminalFailure": true,
       "score": 71.1322424242,
       "operationCount": 13,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.vertices.material: Prepared Surface operation could not be lowered."
     },
     {
@@ -2491,7 +2491,7 @@
       "terminalFailure": true,
       "score": 48.7228739003,
       "operationCount": 25,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route."
     },
     {
@@ -2505,7 +2505,7 @@
       "terminalFailure": true,
       "score": 0.0000000000,
       "operationCount": 7,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.composite.paint: Prepared Surface composite could not be lowered."
     },
     {
@@ -2514,13 +2514,13 @@
       "referenceName": "perlinnoise_localmatrix",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 62.5000000000,
       "operationCount": 7,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "perlinnoise_rotated",
@@ -2533,7 +2533,7 @@
       "terminalFailure": true,
       "score": 68.1093750000,
       "operationCount": 25,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing"
     },
     {
@@ -2547,7 +2547,7 @@
       "terminalFailure": true,
       "score": 69.4824218750,
       "operationCount": 9,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.layer.bounds_unbounded: Prepared Surface composite could not be lowered."
     },
     {
@@ -2561,7 +2561,7 @@
       "terminalFailure": true,
       "score": 27.2822222222,
       "operationCount": 12,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route."
     },
     {
@@ -2571,12 +2571,12 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
-      "terminalFailure": true,
+      "attempted": false,
+      "terminalFailure": false,
       "score": 0.0000000000,
-      "operationCount": 67,
-      "route": "failure",
-      "firstDiagnostic": "unsupported.composite.operation: Prepared Surface composite could not be lowered."
+      "operationCount": 6,
+      "route": "setup-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "rotate_imagefilter",
@@ -2589,7 +2589,7 @@
       "terminalFailure": true,
       "score": 61.8420000000,
       "operationCount": 10,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "invalid.core_primitive.coverage_sample.stencil_1x_requires_single_sample: Stencil1x requires a single-sample frame and cannot be relabeled as multisample coverage."
     },
     {
@@ -2599,7 +2599,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 29.7323791785,
       "operationCount": 1,
@@ -2617,7 +2617,7 @@
       "terminalFailure": true,
       "score": 99.6002604167,
       "operationCount": 4,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.mapping.image_tile_mode: Prepared Surface operation could not be lowered."
     },
     {
@@ -2626,13 +2626,13 @@
       "referenceName": "save_behind",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 7.9302283762,
       "operationCount": 1,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "savelayer_f16",
@@ -2645,7 +2645,7 @@
       "terminalFailure": true,
       "score": 21.0511111111,
       "operationCount": 36,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.composite.paint: Prepared Surface composite could not be lowered."
     },
     {
@@ -2654,13 +2654,13 @@
       "referenceName": "savelayer_initfromprev",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 12.2665405273,
       "operationCount": 1,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "shadermaskfilter_gradient",
@@ -2673,7 +2673,7 @@
       "terminalFailure": true,
       "score": 81.6238403320,
       "operationCount": 2,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -2687,7 +2687,7 @@
       "terminalFailure": true,
       "score": 77.9166666667,
       "operationCount": 7,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -2701,7 +2701,7 @@
       "terminalFailure": true,
       "score": 68.5195312500,
       "operationCount": 7,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -2715,7 +2715,7 @@
       "terminalFailure": true,
       "score": 84.6015625000,
       "operationCount": 19,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid"
     },
     {
@@ -2729,7 +2729,7 @@
       "terminalFailure": true,
       "score": 52.2855555556,
       "operationCount": 3,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.surface.prepared.mixed-composite-topology: Prepared Surface composite frames cannot cover the picture topology."
     },
     {
@@ -2738,13 +2738,13 @@
       "referenceName": "skbug_14554",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 41.7562724014,
       "operationCount": 1,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "srcmode",
@@ -2753,7 +2753,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 74.6620065789,
       "operationCount": 1,
@@ -2771,7 +2771,7 @@
       "terminalFailure": true,
       "score": 0.0493367513,
       "operationCount": 7,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.image.native_binding: Prepared Surface operation could not be lowered."
     },
     {
@@ -2781,7 +2781,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 44.0748917749,
       "operationCount": 2,
@@ -2883,7 +2883,7 @@
       "terminalFailure": true,
       "score": 51.0371154016,
       "operationCount": 545,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid"
     },
     {
@@ -2897,7 +2897,7 @@
       "terminalFailure": true,
       "score": 41.0078125000,
       "operationCount": 49,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid"
     },
     {
@@ -2911,7 +2911,7 @@
       "terminalFailure": true,
       "score": 59.4543457031,
       "operationCount": 33,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.mapping.linear_gradient_stop_count: unsupported.material.mapping.linear_gradient_stop_count"
     },
     {
@@ -2925,7 +2925,7 @@
       "terminalFailure": true,
       "score": 1.4750000000,
       "operationCount": 3,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.gradient_antialias: unsupported.material.gradient_antialias"
     },
     {
@@ -2939,7 +2939,7 @@
       "terminalFailure": true,
       "score": 93.8952205882,
       "operationCount": 3,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.source_unimplemented: unsupported.material.source_unimplemented"
     },
     {
@@ -2953,7 +2953,7 @@
       "terminalFailure": true,
       "score": 78.1126205083,
       "operationCount": 30,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.source_unimplemented: unsupported.material.source_unimplemented"
     },
     {
@@ -2967,7 +2967,7 @@
       "terminalFailure": true,
       "score": 74.5067192521,
       "operationCount": 22,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.source_unimplemented: unsupported.material.source_unimplemented"
     },
     {
@@ -2981,7 +2981,7 @@
       "terminalFailure": true,
       "score": 93.4000000000,
       "operationCount": 5,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.mapping.linear_gradient_stop_count: unsupported.material.mapping.linear_gradient_stop_count"
     },
     {
@@ -2995,7 +2995,7 @@
       "terminalFailure": true,
       "score": 64.2707812500,
       "operationCount": 45,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.mapping.linear_gradient_stop_count: unsupported.material.mapping.linear_gradient_stop_count"
     },
     {
@@ -3009,7 +3009,7 @@
       "terminalFailure": true,
       "score": 60.7599431818,
       "operationCount": 12,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.rect_anti_alias: Prepared Surface operation could not be lowered."
     },
     {
@@ -3023,7 +3023,7 @@
       "terminalFailure": true,
       "score": 65.0956790123,
       "operationCount": 19,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.source_unimplemented: unsupported.material.source_unimplemented"
     },
     {
@@ -3037,7 +3037,7 @@
       "terminalFailure": true,
       "score": 92.9245426829,
       "operationCount": 5,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.mapping.linear_gradient_stop_count: unsupported.material.mapping.linear_gradient_stop_count"
     },
     {
@@ -3051,7 +3051,7 @@
       "terminalFailure": true,
       "score": 51.6676136364,
       "operationCount": 18,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.mapping.linear_gradient_stop_count: unsupported.material.mapping.linear_gradient_stop_count"
     },
     {
@@ -3065,7 +3065,7 @@
       "terminalFailure": true,
       "score": 38.2688000000,
       "operationCount": 2,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.mapping.linear_gradient_stop_count: unsupported.material.mapping.linear_gradient_stop_count"
     },
     {
@@ -3079,7 +3079,7 @@
       "terminalFailure": true,
       "score": 22.1832000000,
       "operationCount": 2,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.mapping.linear_gradient_stop_count: unsupported.material.mapping.linear_gradient_stop_count"
     },
     {
@@ -3093,7 +3093,7 @@
       "terminalFailure": true,
       "score": 70.7790625000,
       "operationCount": 18,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.source_unimplemented: unsupported.material.source_unimplemented"
     },
     {
@@ -3107,7 +3107,7 @@
       "terminalFailure": true,
       "score": 18.0000000000,
       "operationCount": 3,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.mapping.linear_gradient_stop_count: unsupported.material.mapping.linear_gradient_stop_count"
     },
     {
@@ -3121,7 +3121,7 @@
       "terminalFailure": true,
       "score": 0.6303481265,
       "operationCount": 12,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -3135,7 +3135,7 @@
       "terminalFailure": true,
       "score": 0.0000000000,
       "operationCount": 3,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.mapping.linear_gradient_stop_count: unsupported.material.mapping.linear_gradient_stop_count"
     },
     {
@@ -3149,7 +3149,7 @@
       "terminalFailure": true,
       "score": 51.9047619048,
       "operationCount": 6,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.mapping.gradient_interpolation: unsupported.material.mapping.gradient_interpolation"
     },
     {
@@ -3163,7 +3163,7 @@
       "terminalFailure": true,
       "score": 99.8369140625,
       "operationCount": 3,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.source_unimplemented: unsupported.material.source_unimplemented"
     },
     {
@@ -3177,7 +3177,7 @@
       "terminalFailure": true,
       "score": 51.7649903288,
       "operationCount": 21,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.mapping.linear_gradient_stop_count: unsupported.material.mapping.linear_gradient_stop_count"
     },
     {
@@ -3191,7 +3191,7 @@
       "terminalFailure": true,
       "score": 65.6855097867,
       "operationCount": 32,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.source_unimplemented: unsupported.material.source_unimplemented"
     },
     {
@@ -3205,7 +3205,7 @@
       "terminalFailure": true,
       "score": 3.2190152801,
       "operationCount": 7,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.mapping.linear_gradient_stop_count: unsupported.material.mapping.linear_gradient_stop_count"
     },
     {
@@ -3219,7 +3219,7 @@
       "terminalFailure": true,
       "score": 22.6578125000,
       "operationCount": 19,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.gradient_tile_mode_unsupported: unsupported.material.gradient_tile_mode_unsupported"
     },
     {
@@ -3233,7 +3233,7 @@
       "terminalFailure": true,
       "score": 13.8637160386,
       "operationCount": 31,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.mapping.linear_gradient_local_matrix_perspective: unsupported.material.mapping.linear_gradient_local_matrix_perspective"
     },
     {
@@ -3247,7 +3247,7 @@
       "terminalFailure": true,
       "score": 79.4781504065,
       "operationCount": 22,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.mapping.linear_gradient_stop_count: unsupported.material.mapping.linear_gradient_stop_count"
     },
     {
@@ -3256,13 +3256,13 @@
       "referenceName": "gradients_powerless_hue",
       "referenceStatus": "missing",
       "referenceAvailable": false,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": null,
       "operationCount": 27,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "gradients_view_perspective",
@@ -3275,7 +3275,7 @@
       "terminalFailure": true,
       "score": 36.2940476190,
       "operationCount": 32,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.source_unimplemented: unsupported.material.source_unimplemented"
     },
     {
@@ -3289,7 +3289,7 @@
       "terminalFailure": true,
       "score": 13.7016296387,
       "operationCount": 25,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.gradient_tile_mode_unsupported: unsupported.material.gradient_tile_mode_unsupported"
     },
     {
@@ -3303,7 +3303,7 @@
       "terminalFailure": true,
       "score": 10.8319500000,
       "operationCount": 101,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.mapping.linear_gradient_stop_count: unsupported.material.mapping.linear_gradient_stop_count"
     },
     {
@@ -3317,7 +3317,7 @@
       "terminalFailure": true,
       "score": 9.9948000000,
       "operationCount": 101,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.mapping.linear_gradient_stop_count: unsupported.material.mapping.linear_gradient_stop_count"
     },
     {
@@ -3331,7 +3331,7 @@
       "terminalFailure": true,
       "score": 14.6117040854,
       "operationCount": 4,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.material.path_stencil: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -3345,7 +3345,7 @@
       "terminalFailure": true,
       "score": 97.3333333333,
       "operationCount": 13,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.mapping.linear_gradient_stop_count: unsupported.material.mapping.linear_gradient_stop_count"
     },
     {
@@ -3359,7 +3359,7 @@
       "terminalFailure": true,
       "score": 1.9960000000,
       "operationCount": 31,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.source_unimplemented: unsupported.material.source_unimplemented"
     },
     {
@@ -3373,7 +3373,7 @@
       "terminalFailure": true,
       "score": 1.8733333333,
       "operationCount": 31,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.source_unimplemented: unsupported.material.source_unimplemented"
     },
     {
@@ -3387,7 +3387,7 @@
       "terminalFailure": true,
       "score": 55.0175000000,
       "operationCount": 7,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.source_unimplemented: unsupported.material.source_unimplemented"
     },
     {
@@ -3401,7 +3401,7 @@
       "terminalFailure": true,
       "score": 100.0000000000,
       "operationCount": 2,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.gradient_antialias: unsupported.material.gradient_antialias"
     },
     {
@@ -3415,7 +3415,7 @@
       "terminalFailure": true,
       "score": 100.0000000000,
       "operationCount": 2,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.gradient_antialias: unsupported.material.gradient_antialias"
     },
     {
@@ -3429,7 +3429,7 @@
       "terminalFailure": true,
       "score": 100.0000000000,
       "operationCount": 2,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.gradient_antialias: unsupported.material.gradient_antialias"
     },
     {
@@ -3443,7 +3443,7 @@
       "terminalFailure": true,
       "score": 100.0000000000,
       "operationCount": 2,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.gradient_antialias: unsupported.material.gradient_antialias"
     },
     {
@@ -3457,7 +3457,7 @@
       "terminalFailure": true,
       "score": 34.8735351563,
       "operationCount": 3,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.gradient_antialias: unsupported.material.gradient_antialias"
     },
     {
@@ -3471,7 +3471,7 @@
       "terminalFailure": true,
       "score": 76.7250000000,
       "operationCount": 2,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.gradient_tile_mode_unsupported: unsupported.material.gradient_tile_mode_unsupported"
     },
     {
@@ -3485,7 +3485,7 @@
       "terminalFailure": true,
       "score": 60.3667087011,
       "operationCount": 10,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.gradient_tile_mode_unsupported: unsupported.material.gradient_tile_mode_unsupported"
     },
     {
@@ -3499,7 +3499,7 @@
       "terminalFailure": true,
       "score": 100.0000000000,
       "operationCount": 2,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.source_unimplemented: unsupported.material.source_unimplemented"
     },
     {
@@ -3513,7 +3513,7 @@
       "terminalFailure": true,
       "score": 100.0000000000,
       "operationCount": 2,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.source_unimplemented: unsupported.material.source_unimplemented"
     },
     {
@@ -3527,8 +3527,8 @@
       "terminalFailure": true,
       "score": 100.0000000000,
       "operationCount": 2,
-      "route": "failure",
-      "firstDiagnostic": "invalid.preflight.core_primitive_direct_geometry_resources: Direct CorePrimitive builder uniform slab seal contradicts current packet or limit authority."
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "shallow_gradient_linear_nodither",
@@ -3541,8 +3541,8 @@
       "terminalFailure": true,
       "score": 100.0000000000,
       "operationCount": 2,
-      "route": "failure",
-      "firstDiagnostic": "invalid.preflight.core_primitive_direct_geometry_resources: Direct CorePrimitive builder uniform slab seal contradicts current packet or limit authority."
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "shallow_gradient_radial",
@@ -3555,7 +3555,7 @@
       "terminalFailure": true,
       "score": 100.0000000000,
       "operationCount": 2,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.gradient_antialias: unsupported.material.gradient_antialias"
     },
     {
@@ -3569,7 +3569,7 @@
       "terminalFailure": true,
       "score": 100.0000000000,
       "operationCount": 2,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.gradient_antialias: unsupported.material.gradient_antialias"
     },
     {
@@ -3583,7 +3583,7 @@
       "terminalFailure": true,
       "score": 100.0000000000,
       "operationCount": 2,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.gradient_antialias: unsupported.material.gradient_antialias"
     },
     {
@@ -3597,7 +3597,7 @@
       "terminalFailure": true,
       "score": 100.0000000000,
       "operationCount": 2,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.gradient_antialias: unsupported.material.gradient_antialias"
     },
     {
@@ -3611,7 +3611,7 @@
       "terminalFailure": true,
       "score": 100.0000000000,
       "operationCount": 3,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.source_unimplemented: unsupported.material.source_unimplemented"
     },
     {
@@ -3625,7 +3625,7 @@
       "terminalFailure": true,
       "score": 43.0553668478,
       "operationCount": 13,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.gradient_antialias: unsupported.material.gradient_antialias"
     },
     {
@@ -3639,7 +3639,7 @@
       "terminalFailure": true,
       "score": 98.6851562500,
       "operationCount": 6,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing"
     },
     {
@@ -3648,13 +3648,13 @@
       "referenceName": "all_bitmap_configs",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 62.4521891276,
       "operationCount": 1667,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "all_variants_8888",
@@ -3662,13 +3662,13 @@
       "referenceName": "all_variants_8888",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 8.9122714535,
       "operationCount": 2317,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "alpha_image_alpha_tint",
@@ -3676,13 +3676,13 @@
       "referenceName": "alpha_image_alpha_tint",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 38.9473684211,
       "operationCount": 4,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "alpha_image_shader_rt",
@@ -3695,7 +3695,7 @@
       "terminalFailure": true,
       "score": 21.0057142857,
       "operationCount": 8,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -3704,13 +3704,13 @@
       "referenceName": "animatedGif",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 37.5015902270,
       "operationCount": 1,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "anisomips",
@@ -3719,12 +3719,12 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
-      "terminalFailure": true,
+      "attempted": false,
+      "terminalFailure": false,
       "score": 33.0717455621,
-      "operationCount": 33,
-      "route": "failure",
-      "firstDiagnostic": "unsupported.material.mapping.image_alpha_type: Prepared Surface operation could not be lowered."
+      "operationCount": 1,
+      "route": "setup-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "anisotropic_image_scale_aniso",
@@ -3733,7 +3733,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 49.6581208349,
       "operationCount": 1,
@@ -3747,7 +3747,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 49.6581208349,
       "operationCount": 1,
@@ -3761,7 +3761,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 39.6677589910,
       "operationCount": 1,
@@ -3774,13 +3774,13 @@
       "referenceName": "async_rescale_and_read_alpha_type",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
-      "attempted": true,
+      "renderAvailable": false,
+      "attempted": false,
       "terminalFailure": false,
       "score": 0.0000000000,
-      "operationCount": 3,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "operationCount": 1,
+      "route": "setup-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "async_rescale_and_read_rose",
@@ -3788,13 +3788,13 @@
       "referenceName": "async_rescale_and_read_rose",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
-      "attempted": true,
+      "renderAvailable": false,
+      "attempted": false,
       "terminalFailure": false,
       "score": 0.0000000000,
-      "operationCount": 7,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "operationCount": 1,
+      "route": "setup-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "async_rescale_and_read_no_bleed",
@@ -3802,13 +3802,13 @@
       "referenceName": "async_rescale_and_read_no_bleed",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
-      "attempted": true,
+      "renderAvailable": false,
+      "attempted": false,
       "terminalFailure": false,
       "score": 20.1666666667,
-      "operationCount": 2,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "operationCount": 1,
+      "route": "setup-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "async_yuv_no_scale",
@@ -3816,13 +3816,13 @@
       "referenceName": "async_yuv_no_scale",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
-      "attempted": true,
+      "renderAvailable": false,
+      "attempted": false,
       "terminalFailure": false,
       "score": 56.6666666667,
-      "operationCount": 2,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "operationCount": 1,
+      "route": "setup-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "bicubic",
@@ -3831,7 +3831,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 75.9666666667,
       "operationCount": 2,
@@ -3849,7 +3849,7 @@
       "terminalFailure": true,
       "score": 7.9600000000,
       "operationCount": 5,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.source_unimplemented: unsupported.material.source_unimplemented"
     },
     {
@@ -3858,13 +3858,13 @@
       "referenceName": "bitmapcopy",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 95.4781144781,
       "operationCount": 11,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "bitmapfilters",
@@ -3877,8 +3877,8 @@
       "terminalFailure": true,
       "score": 48.1874074074,
       "operationCount": 14,
-      "route": "failure",
-      "firstDiagnostic": "invalid.preflight.text.dependency: Prepared-surface upload and render steps must retain one exact task identity."
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "bitmap-image-srgb-legacy",
@@ -3886,13 +3886,13 @@
       "referenceName": "bitmap-image-srgb-legacy",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
-      "attempted": true,
+      "renderAvailable": false,
+      "attempted": false,
       "terminalFailure": false,
       "score": 99.9435424805,
-      "operationCount": 3,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "operationCount": 1,
+      "route": "setup-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "bitmap_premul",
@@ -3900,13 +3900,13 @@
       "referenceName": "bitmap_premul",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 100.0000000000,
       "operationCount": 5,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "bitmaprect_rounding",
@@ -3919,8 +3919,8 @@
       "terminalFailure": true,
       "score": 99.8688151042,
       "operationCount": 3,
-      "route": "failure",
-      "firstDiagnostic": "unsupported.prepared-surface.sample-plan: The mixed prepared route admits only single-sample render runs without continuation."
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "bitmapshaders",
@@ -3933,7 +3933,7 @@
       "terminalFailure": true,
       "score": 16.9066666667,
       "operationCount": 18,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.mapping.image_tile_mode: Prepared Surface operation could not be lowered."
     },
     {
@@ -3947,7 +3947,7 @@
       "terminalFailure": true,
       "score": 48.4878540039,
       "operationCount": 4,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.mapping.local_matrix: Prepared Surface operation could not be lowered."
     },
     {
@@ -3956,13 +3956,13 @@
       "referenceName": "bleed_downscale",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
-      "attempted": true,
+      "renderAvailable": false,
+      "attempted": false,
       "terminalFailure": false,
       "score": 30.5613425926,
-      "operationCount": 7,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "operationCount": 1,
+      "route": "setup-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "bmp_filter_quality_repeat",
@@ -3975,7 +3975,7 @@
       "terminalFailure": true,
       "score": 0.2530000000,
       "operationCount": 25,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.mapping.local_matrix: Prepared Surface operation could not be lowered."
     },
     {
@@ -3985,12 +3985,12 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
-      "terminalFailure": true,
+      "attempted": false,
+      "terminalFailure": false,
       "score": 49.9252000000,
-      "operationCount": 2,
-      "route": "failure",
-      "firstDiagnostic": "unsupported.material.mapping.local_matrix: Prepared Surface operation could not be lowered."
+      "operationCount": 1,
+      "route": "setup-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "cgimage",
@@ -3998,13 +3998,13 @@
       "referenceName": "cgimage",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
-      "attempted": true,
+      "renderAvailable": false,
+      "attempted": false,
       "terminalFailure": false,
       "score": 18.3615000000,
-      "operationCount": 4,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "operationCount": 1,
+      "route": "setup-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "child_sampling_rt",
@@ -4017,7 +4017,7 @@
       "terminalFailure": true,
       "score": 0.0000000000,
       "operationCount": 4,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route."
     },
     {
@@ -4026,13 +4026,13 @@
       "referenceName": "clippedbitmapshaders",
       "referenceStatus": "missing",
       "referenceAvailable": false,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": null,
       "operationCount": 10,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "color_cube_cf_rt",
@@ -4040,13 +4040,13 @@
       "referenceName": "color_cube_cf_rt",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 0.0003814697,
       "operationCount": 5,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "colorwheel_alphatypes",
@@ -4054,13 +4054,13 @@
       "referenceName": "colorwheel_alphatypes",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 30.0964355469,
       "operationCount": 4,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "colorwheel",
@@ -4068,13 +4068,13 @@
       "referenceName": "colorwheel",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 50.1871744792,
       "operationCount": 1539,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "colorspace2",
@@ -4087,7 +4087,7 @@
       "terminalFailure": true,
       "score": 0.0000000000,
       "operationCount": 106,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route."
     },
     {
@@ -4101,7 +4101,7 @@
       "terminalFailure": true,
       "score": 0.0000000000,
       "operationCount": 106,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route."
     },
     {
@@ -4110,13 +4110,13 @@
       "referenceName": "compositor_quads_image",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 70.0051681909,
       "operationCount": 1,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "coordclampshader",
@@ -4124,13 +4124,13 @@
       "referenceName": "coordclampshader",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 38.8355995924,
       "operationCount": 1,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "copyTo4444",
@@ -4138,13 +4138,13 @@
       "referenceName": "copyTo4444",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 57.3734567901,
       "operationCount": 3,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "crbug_224618",
@@ -4153,7 +4153,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 0.2310937500,
       "operationCount": 1,
@@ -4185,7 +4185,7 @@
       "terminalFailure": true,
       "score": 0.0000000000,
       "operationCount": 4,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -4195,7 +4195,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 67.5810546875,
       "operationCount": 1,
@@ -4209,7 +4209,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 67.5810546875,
       "operationCount": 1,
@@ -4222,13 +4222,13 @@
       "referenceName": "3x3bitmaprect",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 0.0009765625,
       "operationCount": 2,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "draw_bitmap_rect_skbug4734",
@@ -4236,13 +4236,13 @@
       "referenceName": "draw_bitmap_rect_skbug4734",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 45.3125000000,
       "operationCount": 2,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "drawminibitmaprect",
@@ -4251,7 +4251,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 66.9082641602,
       "operationCount": 1,
@@ -4278,13 +4278,13 @@
       "referenceName": "drawimagerect_filter",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 28.7407407407,
       "operationCount": 4,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "encode-alpha-jpeg",
@@ -4292,13 +4292,13 @@
       "referenceName": "encode-alpha-jpeg",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 0.0000000000,
       "operationCount": 1,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "encode-color-types-webp-lossless",
@@ -4306,13 +4306,13 @@
       "referenceName": "encode-color-types-webp-lossless",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 45.0195312500,
       "operationCount": 7,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "encode-platform",
@@ -4320,13 +4320,13 @@
       "referenceName": "encode-platform",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 14.0183512370,
       "operationCount": 1,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "encode-srgb-png",
@@ -4334,13 +4334,13 @@
       "referenceName": "encode-srgb-png",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 43.7683105469,
       "operationCount": 19,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "filterbug",
@@ -4349,12 +4349,12 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
-      "terminalFailure": true,
+      "attempted": false,
+      "terminalFailure": false,
       "score": 93.1111111111,
-      "operationCount": 5,
-      "route": "failure",
-      "firstDiagnostic": "unsupported.material.mapping.local_matrix: Prepared Surface operation could not be lowered."
+      "operationCount": 2,
+      "route": "setup-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "filterindiabox",
@@ -4362,13 +4362,13 @@
       "referenceName": "filterindiabox",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 96.4728506787,
       "operationCount": 1,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "flight_animated_image",
@@ -4381,7 +4381,7 @@
       "terminalFailure": true,
       "score": null,
       "operationCount": 25,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.surface.prepared.mixed-composite-topology: Prepared Surface composite frames cannot cover the picture topology."
     },
     {
@@ -4391,12 +4391,12 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
-      "terminalFailure": true,
+      "attempted": false,
+      "terminalFailure": false,
       "score": 44.1588225188,
-      "operationCount": 131,
-      "route": "failure",
-      "firstDiagnostic": "unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route."
+      "operationCount": 1,
+      "route": "setup-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "format4444",
@@ -4404,13 +4404,13 @@
       "referenceName": "format4444",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 100.0000000000,
       "operationCount": 5,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "giantbitmap_clamp_bilerp_rotate",
@@ -4419,7 +4419,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 76.9596354167,
       "operationCount": 1,
@@ -4433,7 +4433,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 86.4453125000,
       "operationCount": 1,
@@ -4447,7 +4447,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 77.5003255208,
       "operationCount": 1,
@@ -4461,7 +4461,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 87.0052083333,
       "operationCount": 1,
@@ -4475,7 +4475,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 59.9391276042,
       "operationCount": 1,
@@ -4489,7 +4489,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 65.6640625000,
       "operationCount": 1,
@@ -4503,7 +4503,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 61.3251953125,
       "operationCount": 1,
@@ -4517,7 +4517,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 66.8489583333,
       "operationCount": 1,
@@ -4531,7 +4531,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 60.0950520833,
       "operationCount": 1,
@@ -4545,7 +4545,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 65.0390625000,
       "operationCount": 1,
@@ -4559,7 +4559,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 61.4863281250,
       "operationCount": 1,
@@ -4573,7 +4573,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 67.0052083333,
       "operationCount": 1,
@@ -4586,13 +4586,13 @@
       "referenceName": "grayscalejpg",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 0.0000000000,
       "operationCount": 1,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "hugebitmapshader",
@@ -4605,7 +4605,7 @@
       "terminalFailure": true,
       "score": 21.1500000000,
       "operationCount": 2,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.source_unimplemented: unsupported.material.source_unimplemented"
     },
     {
@@ -4615,7 +4615,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 59.6451388889,
       "operationCount": 1,
@@ -4629,12 +4629,12 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
-      "terminalFailure": true,
+      "attempted": false,
+      "terminalFailure": false,
       "score": 18.2823529412,
-      "operationCount": 5,
-      "route": "failure",
-      "firstDiagnostic": "unsupported.material.mapping.image_alpha_type: Prepared Surface operation could not be lowered."
+      "operationCount": 1,
+      "route": "setup-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "imagefilter_transformed_image",
@@ -4647,7 +4647,7 @@
       "terminalFailure": true,
       "score": 74.2050170898,
       "operationCount": 10,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.surface.prepared.image-clip: Prepared Surface operation could not be lowered."
     },
     {
@@ -4657,12 +4657,12 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
-      "terminalFailure": true,
+      "attempted": false,
+      "terminalFailure": false,
       "score": 69.1774499473,
-      "operationCount": 257,
-      "route": "failure",
-      "firstDiagnostic": "unsupported.composite.paint: Prepared Surface composite could not be lowered."
+      "operationCount": 1,
+      "route": "setup-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "imagefiltersgraph",
@@ -4671,12 +4671,12 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
-      "terminalFailure": true,
+      "attempted": false,
+      "terminalFailure": false,
       "score": 77.2888888889,
-      "operationCount": 9,
-      "route": "failure",
-      "firstDiagnostic": "unsupported.image.native_binding: Prepared Surface operation could not be lowered."
+      "operationCount": 2,
+      "route": "setup-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "image-surface",
@@ -4685,7 +4685,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 91.3968750000,
       "operationCount": 21,
@@ -4703,7 +4703,7 @@
       "terminalFailure": true,
       "score": 48.0295817057,
       "operationCount": 5975,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.composite.operation: Prepared Surface composite could not be lowered."
     },
     {
@@ -4713,12 +4713,12 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
-      "terminalFailure": true,
+      "attempted": false,
+      "terminalFailure": false,
       "score": 90.5639648438,
-      "operationCount": 5,
-      "route": "failure",
-      "firstDiagnostic": "unsupported.composite.paint: Prepared Surface composite could not be lowered."
+      "operationCount": 2,
+      "route": "setup-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "imagemagnifier",
@@ -4731,7 +4731,7 @@
       "terminalFailure": true,
       "score": 61.8012000000,
       "operationCount": 29,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.composite.paint: Prepared Surface composite could not be lowered."
     },
     {
@@ -4740,13 +4740,13 @@
       "referenceName": "imagemakewithfilter",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
-      "attempted": true,
+      "renderAvailable": false,
+      "attempted": false,
       "terminalFailure": false,
       "score": 49.8010616785,
-      "operationCount": 79,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "operationCount": 1,
+      "route": "setup-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "imagemasksubset",
@@ -4754,13 +4754,13 @@
       "referenceName": "imagemasksubset",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 73.9583333333,
       "operationCount": 7,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "image_out_of_gamut",
@@ -4768,13 +4768,13 @@
       "referenceName": "image_out_of_gamut",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 0.0000000000,
       "operationCount": 4,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "image-picture",
@@ -4783,7 +4783,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 58.8091503268,
       "operationCount": 1,
@@ -4801,7 +4801,7 @@
       "terminalFailure": true,
       "score": 81.8945312500,
       "operationCount": 491,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.composite.operation: Prepared Surface composite could not be lowered."
     },
     {
@@ -4811,7 +4811,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 92.4203921569,
       "operationCount": 1,
@@ -4824,13 +4824,13 @@
       "referenceName": "imagesource",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
-      "attempted": true,
+      "renderAvailable": false,
+      "attempted": false,
       "terminalFailure": false,
       "score": 92.9693333333,
-      "operationCount": 10,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "operationCount": 2,
+      "route": "setup-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "image_subset",
@@ -4839,7 +4839,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 94.1064049587,
       "operationCount": 1,
@@ -4852,13 +4852,13 @@
       "referenceName": "imageshader_tinyscale",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 0.0000000000,
       "operationCount": 1,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "jpg-color-cube",
@@ -4923,7 +4923,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 58.8150000000,
       "operationCount": 1,
@@ -4955,7 +4955,7 @@
       "terminalFailure": true,
       "score": 0.0030517578,
       "operationCount": 5,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.mapping.image_local_matrix_affine: Prepared Surface operation could not be lowered."
     },
     {
@@ -4969,7 +4969,7 @@
       "terminalFailure": true,
       "score": 0.0000000000,
       "operationCount": 3,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.source_unimplemented: unsupported.material.source_unimplemented"
     },
     {
@@ -4983,7 +4983,7 @@
       "terminalFailure": true,
       "score": 36.2096150716,
       "operationCount": 13,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.color.gamut_transform: Prepared Surface operation could not be lowered."
     },
     {
@@ -4992,13 +4992,13 @@
       "referenceName": "makecolortypeandspace",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 0.0000000000,
       "operationCount": 13,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "makeRasterImage",
@@ -5006,13 +5006,13 @@
       "referenceName": "makeRasterImage",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 83.6608886719,
       "operationCount": 2,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "mipmap_gray8_srgb",
@@ -5020,13 +5020,13 @@
       "referenceName": "mipmap_gray8_srgb",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 88.6337792642,
       "operationCount": 10,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "mipmap_srgb",
@@ -5039,7 +5039,7 @@
       "terminalFailure": true,
       "score": 88.9464882943,
       "operationCount": 12,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.image.src_bounds: unsupported.image.src_bounds"
     },
     {
@@ -5049,7 +5049,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 55.5212355212,
       "operationCount": 1,
@@ -5062,13 +5062,13 @@
       "referenceName": "nearest_half_pixel_image",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
-      "attempted": true,
+      "renderAvailable": false,
+      "attempted": false,
       "terminalFailure": false,
       "score": 73.4493874919,
-      "operationCount": 2,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "operationCount": 1,
+      "route": "setup-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "new_texture_image",
@@ -5076,13 +5076,13 @@
       "referenceName": "new_texture_image",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 22.3602484472,
       "operationCount": 1,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "ninepatch-stretch",
@@ -5091,12 +5091,12 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
-      "terminalFailure": true,
+      "attempted": false,
+      "terminalFailure": false,
       "score": 78.4870065789,
-      "operationCount": 10,
-      "route": "failure",
-      "firstDiagnostic": "unsupported.image.nine_geometry: Prepared Surface operation could not be lowered."
+      "operationCount": 1,
+      "route": "setup-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "not_native32_bitmap_config",
@@ -5105,7 +5105,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 71.3378906250,
       "operationCount": 257,
@@ -5123,7 +5123,7 @@
       "terminalFailure": true,
       "score": 7.8400000000,
       "operationCount": 7,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -5137,7 +5137,7 @@
       "terminalFailure": true,
       "score": 87.9791452991,
       "operationCount": 12,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.mapping.linear_gradient_stop_count: unsupported.material.mapping.linear_gradient_stop_count"
     },
     {
@@ -5146,13 +5146,13 @@
       "referenceName": "persp_images",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 68.5478260870,
       "operationCount": 9,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "pictureimagefilter",
@@ -5165,7 +5165,7 @@
       "terminalFailure": true,
       "score": 0.0733333333,
       "operationCount": 17,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.composite.paint: Prepared Surface composite could not be lowered."
     },
     {
@@ -5189,7 +5189,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 30.8374384236,
       "operationCount": 3,
@@ -5203,7 +5203,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 95.9200000000,
       "operationCount": 1,
@@ -5217,7 +5217,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 35.8000985222,
       "operationCount": 3,
@@ -5231,7 +5231,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 35.8000985222,
       "operationCount": 3,
@@ -5245,7 +5245,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 46.6469344609,
       "operationCount": 6,
@@ -5259,7 +5259,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 79.0175000000,
       "operationCount": 1,
@@ -5272,13 +5272,13 @@
       "referenceName": "poster_circle",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 36.9651851852,
       "operationCount": 1,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "raw_image_shader_normals_rt",
@@ -5286,13 +5286,13 @@
       "referenceName": "raw_image_shader_normals_rt",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 20.3971862793,
       "operationCount": 8,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "readpixelscodec",
@@ -5305,7 +5305,7 @@
       "terminalFailure": true,
       "score": 0.0000000000,
       "operationCount": 37,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route."
     },
     {
@@ -5315,7 +5315,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 24.9023437500,
       "operationCount": 1,
@@ -5333,7 +5333,7 @@
       "terminalFailure": true,
       "score": 75.5452473958,
       "operationCount": 10,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.color.gamut_transform: Prepared Surface operation could not be lowered."
     },
     {
@@ -5347,7 +5347,7 @@
       "terminalFailure": true,
       "score": 4.5600043403,
       "operationCount": 2337,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -5361,7 +5361,7 @@
       "terminalFailure": true,
       "score": 8.9373553241,
       "operationCount": 2337,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -5370,13 +5370,13 @@
       "referenceName": "scale-pixels",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": null,
       "operationCount": 1,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "scaled_tilemode_bitmap",
@@ -5385,7 +5385,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 34.8146279950,
       "operationCount": 2,
@@ -5398,13 +5398,13 @@
       "referenceName": "scaled_tilemodes",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 51.7445764463,
       "operationCount": 1,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "scaled_tilemodes_npot",
@@ -5412,13 +5412,13 @@
       "referenceName": "scaled_tilemodes_npot",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 72.5710227273,
       "operationCount": 1,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "scalepixels_unpremul",
@@ -5426,13 +5426,13 @@
       "referenceName": "scalepixels_unpremul",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 15.0873015873,
       "operationCount": 5,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "shaderpath",
@@ -5441,7 +5441,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 98.8821138211,
       "operationCount": 2,
@@ -5454,13 +5454,13 @@
       "referenceName": "showmiplevels_explicit",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 13.8788431712,
       "operationCount": 2,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "skbug_8664",
@@ -5473,7 +5473,7 @@
       "terminalFailure": true,
       "score": 17.9366922234,
       "operationCount": 14,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route."
     },
     {
@@ -5487,7 +5487,7 @@
       "terminalFailure": true,
       "score": 44.2474365234,
       "operationCount": 13,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.composite.operation: Prepared Surface composite could not be lowered."
     },
     {
@@ -5501,7 +5501,7 @@
       "terminalFailure": true,
       "score": 77.0050640582,
       "operationCount": 25,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.surface.prepared.mixed-composite-topology: Prepared Surface composite frames cannot cover the picture topology."
     },
     {
@@ -5511,12 +5511,12 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 35.3118896484,
       "operationCount": 1,
       "route": "setup-failure",
-      "firstDiagnostic": "unsupported.image.native_binding: Prepared Surface operation could not be lowered."
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "texture",
@@ -5529,7 +5529,7 @@
       "terminalFailure": true,
       "score": null,
       "operationCount": 103,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.rect_anti_alias: Prepared Surface operation could not be lowered."
     },
     {
@@ -5543,7 +5543,7 @@
       "terminalFailure": true,
       "score": 100.0000000000,
       "operationCount": 5,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.image.src_bounds: unsupported.image.src_bounds"
     },
     {
@@ -5553,7 +5553,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 0.0000000000,
       "operationCount": 4,
@@ -5567,7 +5567,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 75.2938375601,
       "operationCount": 1,
@@ -5585,7 +5585,7 @@
       "terminalFailure": true,
       "score": 25.5907828283,
       "operationCount": 41,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.source_unimplemented: unsupported.material.source_unimplemented"
     },
     {
@@ -5599,7 +5599,7 @@
       "terminalFailure": true,
       "score": 19.6090698242,
       "operationCount": 17,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.mapping.local_matrix: Prepared Surface operation could not be lowered."
     },
     {
@@ -5609,7 +5609,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 69.4066558442,
       "operationCount": 1,
@@ -5623,7 +5623,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 52.3697351828,
       "operationCount": 7,
@@ -5641,7 +5641,7 @@
       "terminalFailure": true,
       "score": 60.2527112232,
       "operationCount": 22,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.gradient_tile_mode_unsupported: unsupported.material.gradient_tile_mode_unsupported"
     },
     {
@@ -5655,7 +5655,7 @@
       "terminalFailure": true,
       "score": 0.0000000000,
       "operationCount": 3,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.mapping.image_tile_mode: Prepared Surface operation could not be lowered."
     },
     {
@@ -5669,7 +5669,7 @@
       "terminalFailure": true,
       "score": 40.5750000000,
       "operationCount": 13,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.composite.operation: Prepared Surface composite could not be lowered."
     },
     {
@@ -5706,13 +5706,13 @@
       "referenceName": "wacky_yuv_formats",
       "referenceStatus": "missing",
       "referenceAvailable": false,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": null,
       "operationCount": 1,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "yuv420_odd_dim",
@@ -5720,13 +5720,13 @@
       "referenceName": "yuv420_odd_dim",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 0.0000000000,
       "operationCount": 1,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "yuv420_odd_dim_repeat",
@@ -5734,13 +5734,13 @@
       "referenceName": "yuv420_odd_dim_repeat",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 0.0000000000,
       "operationCount": 1,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "custommesh_cs",
@@ -5753,7 +5753,7 @@
       "terminalFailure": true,
       "score": 83.2703902471,
       "operationCount": 9,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.vertices.material: Prepared Surface operation could not be lowered."
     },
     {
@@ -5767,8 +5767,8 @@
       "terminalFailure": true,
       "score": 64.0000000000,
       "operationCount": 19,
-      "route": "failure",
-      "firstDiagnostic": "unsupported.prepared-surface.vertices-multi-run: Prepared-vertices materialization supports one exact render run per frame."
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "custommesh",
@@ -5781,8 +5781,8 @@
       "terminalFailure": true,
       "score": 84.3304110657,
       "operationCount": 25,
-      "route": "failure",
-      "firstDiagnostic": "invalid.frame_plan.destination_read_unbound: Destination-reading packet has no exact Task 5 copy or refusal association"
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "custommesh_uniforms",
@@ -5790,13 +5790,13 @@
       "referenceName": "custommesh_uniforms",
       "referenceStatus": "untrustable",
       "referenceAvailable": false,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 100.0000000000,
       "operationCount": 2,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "mesh_updates",
@@ -5809,8 +5809,8 @@
       "terminalFailure": true,
       "score": 0.0000000000,
       "operationCount": 4,
-      "route": "failure",
-      "firstDiagnostic": "unsupported.prepared-surface.vertices-multi-run: Prepared-vertices materialization supports one exact render run per frame."
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "mesh_with_effects",
@@ -5893,7 +5893,7 @@
       "terminalFailure": true,
       "score": 90.9800569801,
       "operationCount": 9,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.composite.operation: Prepared Surface composite could not be lowered."
     },
     {
@@ -5907,7 +5907,7 @@
       "terminalFailure": true,
       "score": 0.0000000000,
       "operationCount": 2,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.vertices.material: Prepared Surface operation could not be lowered."
     },
     {
@@ -5921,7 +5921,7 @@
       "terminalFailure": true,
       "score": 66.2080000000,
       "operationCount": 25,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.vertices.topology: Prepared Surface operation could not be lowered."
     },
     {
@@ -5930,13 +5930,13 @@
       "referenceName": "vertices_collapsed",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 36.0000000000,
       "operationCount": 3,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "vertices",
@@ -5949,7 +5949,7 @@
       "terminalFailure": true,
       "score": 58.4515002728,
       "operationCount": 697,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.vertices.material: Prepared Surface operation could not be lowered."
     },
     {
@@ -5977,7 +5977,7 @@
       "terminalFailure": true,
       "score": null,
       "operationCount": 20,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.rect_anti_alias: Prepared Surface operation could not be lowered."
     },
     {
@@ -5991,7 +5991,7 @@
       "terminalFailure": true,
       "score": null,
       "operationCount": 20,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.rect_anti_alias: Prepared Surface operation could not be lowered."
     },
     {
@@ -6005,7 +6005,7 @@
       "terminalFailure": true,
       "score": 100.0000000000,
       "operationCount": 2,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing"
     },
     {
@@ -6019,7 +6019,7 @@
       "terminalFailure": true,
       "score": 99.5387500000,
       "operationCount": 5,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing"
     },
     {
@@ -6033,7 +6033,7 @@
       "terminalFailure": true,
       "score": 92.0715332031,
       "operationCount": 17,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -6061,7 +6061,7 @@
       "terminalFailure": true,
       "score": 58.3333333333,
       "operationCount": 14,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route."
     },
     {
@@ -6075,7 +6075,7 @@
       "terminalFailure": true,
       "score": 98.6133333333,
       "operationCount": 30,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -6089,7 +6089,7 @@
       "terminalFailure": true,
       "score": 94.4009284420,
       "operationCount": 73,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid"
     },
     {
@@ -6103,7 +6103,7 @@
       "terminalFailure": true,
       "score": null,
       "operationCount": 145,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -6117,7 +6117,7 @@
       "terminalFailure": true,
       "score": null,
       "operationCount": 145,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -6131,7 +6131,7 @@
       "terminalFailure": true,
       "score": 96.4859848485,
       "operationCount": 40,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -6154,13 +6154,13 @@
       "referenceName": "crbug_640176",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 99.6832000000,
       "operationCount": 2,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "crbug_691386",
@@ -6173,7 +6173,7 @@
       "terminalFailure": true,
       "score": 98.4939575195,
       "operationCount": 2,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.width_budget: unsupported.stroke.width_budget"
     },
     {
@@ -6187,7 +6187,7 @@
       "terminalFailure": true,
       "score": 82.1598428453,
       "operationCount": 109,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid"
     },
     {
@@ -6201,7 +6201,7 @@
       "terminalFailure": true,
       "score": 82.9086021505,
       "operationCount": 109,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid"
     },
     {
@@ -6215,7 +6215,7 @@
       "terminalFailure": true,
       "score": 81.0760959471,
       "operationCount": 2,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.mapping.linear_gradient_stop_count: unsupported.material.mapping.linear_gradient_stop_count"
     },
     {
@@ -6229,7 +6229,7 @@
       "terminalFailure": true,
       "score": 81.3872222222,
       "operationCount": 25,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing"
     },
     {
@@ -6243,7 +6243,7 @@
       "terminalFailure": true,
       "score": 91.1941528320,
       "operationCount": 2,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.cap: unsupported.stroke.cap"
     },
     {
@@ -6257,7 +6257,7 @@
       "terminalFailure": true,
       "score": 0.0000000000,
       "operationCount": 61,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing"
     },
     {
@@ -6271,7 +6271,7 @@
       "terminalFailure": true,
       "score": 96.6305147059,
       "operationCount": 17,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid"
     },
     {
@@ -6285,7 +6285,7 @@
       "terminalFailure": true,
       "score": 54.9012000000,
       "operationCount": 39,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.gradient_antialias: unsupported.material.gradient_antialias"
     },
     {
@@ -6294,13 +6294,13 @@
       "referenceName": "drawregion",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 100.0000000000,
       "operationCount": 10002,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "drawregionmodes",
@@ -6313,7 +6313,7 @@
       "terminalFailure": true,
       "score": 87.0970666667,
       "operationCount": 7,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid"
     },
     {
@@ -6337,7 +6337,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 78.7210648148,
       "operationCount": 1,
@@ -6355,7 +6355,7 @@
       "terminalFailure": true,
       "score": 12.0575990875,
       "operationCount": 66,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.source_unimplemented: unsupported.material.source_unimplemented"
     },
     {
@@ -6369,7 +6369,7 @@
       "terminalFailure": true,
       "score": 94.7125714286,
       "operationCount": 17,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.width_budget: unsupported.stroke.width_budget"
     },
     {
@@ -6397,7 +6397,7 @@
       "terminalFailure": true,
       "score": 81.2783291977,
       "operationCount": 326,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid"
     },
     {
@@ -6411,7 +6411,7 @@
       "terminalFailure": true,
       "score": 80.8608354012,
       "operationCount": 55,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing"
     },
     {
@@ -6439,7 +6439,7 @@
       "terminalFailure": true,
       "score": 91.9345864662,
       "operationCount": 6,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -6453,7 +6453,7 @@
       "terminalFailure": true,
       "score": 20.5175000000,
       "operationCount": 10001,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -6467,7 +6467,7 @@
       "terminalFailure": true,
       "score": null,
       "operationCount": 3,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -6481,7 +6481,7 @@
       "terminalFailure": true,
       "score": null,
       "operationCount": 397,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -6495,7 +6495,7 @@
       "terminalFailure": true,
       "score": 89.1897199454,
       "operationCount": 220,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid"
     },
     {
@@ -6509,7 +6509,7 @@
       "terminalFailure": true,
       "score": 48.5520000000,
       "operationCount": 241,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing"
     },
     {
@@ -6523,7 +6523,7 @@
       "terminalFailure": true,
       "score": 38.5096000000,
       "operationCount": 151,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -6565,7 +6565,7 @@
       "terminalFailure": true,
       "score": 84.7214574899,
       "operationCount": 13,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -6607,7 +6607,7 @@
       "terminalFailure": true,
       "score": 97.1679687500,
       "operationCount": 4,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid"
     },
     {
@@ -6621,7 +6621,7 @@
       "terminalFailure": true,
       "score": 97.7626953125,
       "operationCount": 17,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid"
     },
     {
@@ -6631,7 +6631,7 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": true,
+      "attempted": false,
       "terminalFailure": false,
       "score": 84.9600000000,
       "operationCount": 1,
@@ -6649,7 +6649,7 @@
       "terminalFailure": true,
       "score": 52.5239158163,
       "operationCount": 5,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing"
     },
     {
@@ -6663,7 +6663,7 @@
       "terminalFailure": true,
       "score": 97.9786142002,
       "operationCount": 21,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing"
     },
     {
@@ -6677,7 +6677,7 @@
       "terminalFailure": true,
       "score": 73.8932748538,
       "operationCount": 89,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid"
     },
     {
@@ -6691,7 +6691,7 @@
       "terminalFailure": true,
       "score": 88.7156250000,
       "operationCount": 6,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route."
     },
     {
@@ -6705,7 +6705,7 @@
       "terminalFailure": true,
       "score": 75.8750000000,
       "operationCount": 6,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route."
     },
     {
@@ -6719,7 +6719,7 @@
       "terminalFailure": true,
       "score": 81.7998345740,
       "operationCount": 109,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid"
     },
     {
@@ -6733,7 +6733,7 @@
       "terminalFailure": true,
       "score": 82.1174524400,
       "operationCount": 109,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid"
     },
     {
@@ -6747,7 +6747,7 @@
       "terminalFailure": true,
       "score": 0.3134259259,
       "operationCount": 127,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid"
     },
     {
@@ -6756,13 +6756,13 @@
       "referenceName": "shadow_utils_directional",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 77.2918701172,
       "operationCount": 13,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "sharedcorners",
@@ -6775,7 +6775,7 @@
       "terminalFailure": true,
       "score": null,
       "operationCount": 50,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid"
     },
     {
@@ -6789,8 +6789,8 @@
       "terminalFailure": true,
       "score": 65.5736000000,
       "operationCount": 11,
-      "route": "failure",
-      "firstDiagnostic": "invalid.preflight.core_primitive_path_stencil: Path stencil CorePrimitive requires exactly one prepared render pass."
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "simpleshapes",
@@ -6803,7 +6803,7 @@
       "terminalFailure": true,
       "score": 64.9508000000,
       "operationCount": 11,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route."
     },
     {
@@ -6817,7 +6817,7 @@
       "terminalFailure": true,
       "score": 94.1055297852,
       "operationCount": 7,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid"
     },
     {
@@ -6831,7 +6831,7 @@
       "terminalFailure": true,
       "score": 84.1792270531,
       "operationCount": 11,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.join: unsupported.stroke.join"
     },
     {
@@ -6845,7 +6845,7 @@
       "terminalFailure": true,
       "score": 94.6795366795,
       "operationCount": 13,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.mapping.linear_gradient_stop_count: unsupported.material.mapping.linear_gradient_stop_count"
     },
     {
@@ -6859,7 +6859,7 @@
       "terminalFailure": true,
       "score": 61.4169333333,
       "operationCount": 157,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid"
     },
     {
@@ -6873,7 +6873,7 @@
       "terminalFailure": true,
       "score": 78.9075000000,
       "operationCount": 401,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.expansion_budget_exceeded: unsupported.stroke.expansion_budget_exceeded"
     },
     {
@@ -6887,7 +6887,7 @@
       "terminalFailure": true,
       "score": 98.3656250000,
       "operationCount": 11,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.width_budget: unsupported.stroke.width_budget"
     },
     {
@@ -6901,7 +6901,7 @@
       "terminalFailure": true,
       "score": 79.8677685950,
       "operationCount": 49,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.width_budget: unsupported.stroke.width_budget"
     },
     {
@@ -6910,13 +6910,13 @@
       "referenceName": "thinconcavepaths",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 97.9972727273,
       "operationCount": 85,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "thinrects",
@@ -6929,7 +6929,7 @@
       "terminalFailure": true,
       "score": 100.0000000000,
       "operationCount": 338,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -6943,7 +6943,7 @@
       "terminalFailure": true,
       "score": 90.8411458333,
       "operationCount": 338,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -6957,7 +6957,7 @@
       "terminalFailure": true,
       "score": 89.9257812500,
       "operationCount": 114,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing"
     },
     {
@@ -6971,7 +6971,7 @@
       "terminalFailure": true,
       "score": 99.9022482893,
       "operationCount": 3,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid"
     },
     {
@@ -6985,7 +6985,7 @@
       "terminalFailure": true,
       "score": 85.1043701172,
       "operationCount": 2,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.width_budget: unsupported.stroke.width_budget"
     },
     {
@@ -6999,7 +6999,7 @@
       "terminalFailure": true,
       "score": 92.1461428571,
       "operationCount": 55,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.cap: unsupported.stroke.cap"
     },
     {
@@ -7013,7 +7013,7 @@
       "terminalFailure": true,
       "score": 25.9150000000,
       "operationCount": 19,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.width_budget: unsupported.stroke.width_budget"
     },
     {
@@ -7027,7 +7027,7 @@
       "terminalFailure": true,
       "score": 99.5000000000,
       "operationCount": 7,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.expansion_budget_exceeded: unsupported.stroke.expansion_budget_exceeded"
     },
     {
@@ -7041,7 +7041,7 @@
       "terminalFailure": true,
       "score": 97.6046875000,
       "operationCount": 21,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.cap: unsupported.stroke.cap"
     },
     {
@@ -7111,7 +7111,7 @@
       "terminalFailure": true,
       "score": 99.9862670898,
       "operationCount": 3,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.cap: unsupported.stroke.cap"
     },
     {
@@ -7125,7 +7125,7 @@
       "terminalFailure": true,
       "score": 97.4722222222,
       "operationCount": 4,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.stroke.cap: unsupported.stroke.cap"
     },
     {
@@ -7139,7 +7139,7 @@
       "terminalFailure": true,
       "score": 0.0000000000,
       "operationCount": 2,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -7153,7 +7153,7 @@
       "terminalFailure": true,
       "score": 67.7974759615,
       "operationCount": 4,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -7167,7 +7167,7 @@
       "terminalFailure": true,
       "score": 0.0000000000,
       "operationCount": 2,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -7181,7 +7181,7 @@
       "terminalFailure": true,
       "score": 0.0000000000,
       "operationCount": 5,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.material.gradient_antialias: unsupported.material.gradient_antialias"
     },
     {
@@ -7195,7 +7195,7 @@
       "terminalFailure": true,
       "score": 40.6226529376,
       "operationCount": 14,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -7209,7 +7209,7 @@
       "terminalFailure": true,
       "score": 22.7522583125,
       "operationCount": 8,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -7223,7 +7223,7 @@
       "terminalFailure": true,
       "score": 32.8731161886,
       "operationCount": 8,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -7237,7 +7237,7 @@
       "terminalFailure": true,
       "score": 23.5854591837,
       "operationCount": 4,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -7251,7 +7251,7 @@
       "terminalFailure": true,
       "score": 39.5469371197,
       "operationCount": 9,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -7265,7 +7265,7 @@
       "terminalFailure": true,
       "score": 37.4080578512,
       "operationCount": 10,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -7279,7 +7279,7 @@
       "terminalFailure": true,
       "score": 76.6666666667,
       "operationCount": 8,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.composite.paint: Prepared Surface composite could not be lowered."
     },
     {
@@ -7288,13 +7288,13 @@
       "referenceName": "lineargradientrt",
       "referenceStatus": "missing",
       "referenceAvailable": false,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": null,
       "operationCount": 18,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "lumafilter",
@@ -7307,7 +7307,7 @@
       "terminalFailure": true,
       "score": 38.8230158730,
       "operationCount": 10,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -7321,7 +7321,7 @@
       "terminalFailure": true,
       "score": 0.0000000000,
       "operationCount": 2,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -7335,7 +7335,7 @@
       "terminalFailure": true,
       "score": 0.0000000000,
       "operationCount": 438,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.composite.paint: Prepared Surface composite could not be lowered."
     },
     {
@@ -7349,7 +7349,7 @@
       "terminalFailure": true,
       "score": 1.1116027832,
       "operationCount": 5,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.composite.operation: Prepared Surface composite could not be lowered."
     },
     {
@@ -7363,7 +7363,7 @@
       "terminalFailure": true,
       "score": 16.6666666667,
       "operationCount": 7,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -7377,7 +7377,7 @@
       "terminalFailure": true,
       "score": 10.2157592773,
       "operationCount": 2,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -7391,7 +7391,7 @@
       "terminalFailure": true,
       "score": 50.0000000000,
       "operationCount": 2,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -7405,7 +7405,7 @@
       "terminalFailure": true,
       "score": 0.0000000000,
       "operationCount": 2,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -7419,7 +7419,7 @@
       "terminalFailure": true,
       "score": 0.0061035156,
       "operationCount": 5,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -7433,7 +7433,7 @@
       "terminalFailure": true,
       "score": 1.0070800781,
       "operationCount": 3,
-      "route": "failure",
+      "route": "render-failure",
       "firstDiagnostic": "unsupported.core_primitive.material.non_solid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
@@ -7442,13 +7442,13 @@
       "referenceName": "workingspace",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
+      "renderAvailable": false,
       "attempted": true,
-      "terminalFailure": false,
+      "terminalFailure": true,
       "score": 54.6428571429,
       "operationCount": 30,
-      "route": "gpu",
-      "firstDiagnostic": null
+      "route": "render-failure",
+      "firstDiagnostic": "failed.surface.prepared.session-prepare: The prepared Surface session could not be created."
     },
     {
       "name": "annotated_text",
@@ -8522,7 +8522,7 @@
       "referenceAvailable": false,
       "renderAvailable": false,
       "attempted": false,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": null,
       "operationCount": 0,
       "route": "provider-unloadable",
@@ -8536,7 +8536,7 @@
       "referenceAvailable": false,
       "renderAvailable": false,
       "attempted": false,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": null,
       "operationCount": 0,
       "route": "provider-unloadable",
@@ -8550,7 +8550,7 @@
       "referenceAvailable": false,
       "renderAvailable": false,
       "attempted": false,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": null,
       "operationCount": 0,
       "route": "provider-unloadable",
@@ -8564,7 +8564,7 @@
       "referenceAvailable": false,
       "renderAvailable": false,
       "attempted": false,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": null,
       "operationCount": 0,
       "route": "provider-unloadable",
@@ -8578,7 +8578,7 @@
       "referenceAvailable": false,
       "renderAvailable": false,
       "attempted": false,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": null,
       "operationCount": 0,
       "route": "provider-unloadable",
@@ -8592,7 +8592,7 @@
       "referenceAvailable": false,
       "renderAvailable": false,
       "attempted": false,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": null,
       "operationCount": 0,
       "route": "provider-unloadable",
@@ -8606,7 +8606,7 @@
       "referenceAvailable": false,
       "renderAvailable": false,
       "attempted": false,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": null,
       "operationCount": 0,
       "route": "provider-unloadable",

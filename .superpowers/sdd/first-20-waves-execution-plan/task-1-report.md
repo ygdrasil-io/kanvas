@@ -49,7 +49,8 @@ scores est satisfait.
   chargement/instanciation; les providers non chargeables deviennent des lignes
   `provider-unloadable` dans l’artefact.
 - La commande nominale réconcilie les scores orphelins en mode d’audit explicite
-  et produit désormais `source-inventory.json` (615 lignes). Le parsing strict
+  et produit désormais `source-inventory.json` (615 entrées : 608 GMs
+  instanciables et 7 providers non chargeables; 8 616 lignes JSON). Le parsing strict
   reste disponible pour les tests de contrat.
 - Une tentative Surface unique distingue `attempted`, `renderSucceeded`,
   `terminalFailure` et `renderAvailable`; TEXT/BLOCKING portent des diagnostics
@@ -61,7 +62,7 @@ scores est satisfait.
 Vérifications du round :
 
 - `./gradlew --no-daemon :integration-tests:skia:test --tests org.graphiks.kanvas.skia.SkiaGmInventoryTest --tests org.graphiks.kanvas.skia.SkiaGmRegistryTest` — **SUCCESSFUL**.
-- `./gradlew --no-daemon :integration-tests:skia:generateSkiaGmInventory -Pgm.inventoryOutput=/Users/chaos/.codex/worktrees/1540/kanvas/reports/gpu-renderer/evidence/gm-inventory/source-inventory.json` — **SUCCESSFUL**, artefact 615 lignes.
+- `./gradlew --no-daemon :integration-tests:skia:generateSkiaGmInventory -Pgm.inventoryOutput=/Users/chaos/.codex/worktrees/1540/kanvas/reports/gpu-renderer/evidence/gm-inventory/source-inventory.json` — **SUCCESSFUL**, artefact de 615 entrées (8 616 lignes JSON).
 
 ## Round 2 — corrections de re-review
 
@@ -79,8 +80,9 @@ restent des lignes `provider-unloadable`, sans être confondus avec des GMs.
 Tests round 2 :
 
 - `./gradlew --no-daemon :integration-tests:skia:test --tests org.graphiks.kanvas.skia.SkiaGmInventoryTest --tests org.graphiks.kanvas.skia.SkiaGmRegistryTest` — **SUCCESSFUL**.
-- Génération réelle Gradle — **SUCCESSFUL**, 615 lignes totales (608 GMs
-  instanciables + 7 providers non chargeables), audit de 136 scores orphelins.
+- Génération réelle Gradle — **SUCCESSFUL**, 615 entrées totales (608 GMs
+  instanciables + 7 providers non chargeables), 8 616 lignes JSON et audit de
+  136 scores orphelins.
 
 ## Round 3 — corrections de re-review
 
@@ -92,4 +94,38 @@ avec caractères de contrôle. Les WIP décrivent l’audit/rebaseline séparé 
 scores orphelins sans suppression silencieuse.
 
 Vérifications : tests ciblés **SUCCESSFUL**; génération Gradle réelle
-**SUCCESSFUL**, artefact 615 lignes, 136 scores orphelins audités.
+**SUCCESSFUL**, artefact de 615 entrées (8 616 lignes JSON), 136 scores
+orphelins audités.
+
+## Round 4 — invariants terminal/setup et tests de frontière
+
+`terminalFailure` est maintenant un invariant réservé au seul échec de
+`Surface.render()`: il exige une setup phase réussie et une tentative de rendu
+unique. Les providers non chargeables sont des échecs de setup explicites
+(`setupState=FAILED` dans le modèle), `attempted=false`,
+`terminalFailure=false`, avec `route=provider-unloadable` et le premier
+diagnostic de chargement. Dans le JSON, la route et `firstDiagnostic` restent
+le contrat machine-readable stable; l’artefact contient donc 615 entrées et
+8 616 lignes JSON, sans ambiguïté avec un nombre de lignes.
+
+La capture borne toute la setup phase — construction `Surface`, canvas,
+callback `onOnceBeforeDraw` et `draw` — avant l’unique appel à
+`Surface.render()`. Un échec setup conserve la ligne avec
+`route=setup-failure`, le diagnostic setup et sans tentative de rendu; un
+échec `Surface.render()` utilise `route=render-failure` et le seul état
+terminal.
+
+Les tests couvrent les défaillances constructeur et provider, le refus réel
+`Surface.render()` avant hardware, l’absence de second appel render, les
+références `trusted`/`missing`/`untrustable`, l’audit de plusieurs orphelins
+triés et le cas strict, ainsi que l’export JSON byte-for-byte.
+
+Vérifications round 4 :
+
+- `./gradlew --no-daemon :integration-tests:skia:test --tests org.graphiks.kanvas.skia.SkiaGmInventoryTest --tests org.graphiks.kanvas.skia.SkiaGmRegistryTest` — **SUCCESSFUL**, 11 tests d’inventaire et 5 tests de registry.
+- La tâche Gradle réelle `generateSkiaGmInventory` a atteint l’écriture de
+  l’artefact sans besoin de hardware; dans cette session, sa fermeture native
+  est restée pendante après l’écriture et a été bornée. L’artefact régénéré,
+  puis reformaté mécaniquement selon le sérialiseur stable, contient 8 616
+  lignes et les 7 lignes `provider-unloadable` avec
+  `terminalFailure=false`.
