@@ -15,6 +15,7 @@ import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.FontTypeface
+import org.graphiks.kanvas.text.PreparedTextOutline
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.matrix.Matrix3x3F32
@@ -77,7 +78,13 @@ class GPUDeliveredFontGlyphRunEvidenceTest {
             assertTrue(glyphRun.glyphs.all { glyph -> glyph.toInt() != 0 }, "${row.id}: missing glyph mapping")
             assertTrue(
                 glyphRun.glyphs.all { glyph -> typeface.getGlyphPath(glyph.toInt(), row.size) != null },
-                "${row.id}: CPU outline path is unavailable",
+                "${row.id}: CPU getGlyphPath oracle is unavailable",
+            )
+            assertTrue(
+                glyphRun.glyphs.all { glyph ->
+                    typeface.preparedTextOutline(glyph.toInt(), row.size) is PreparedTextOutline.ProvenNonEmpty
+                },
+                "${row.id}: preparedTextOutline cannot supply the GPU TextA8 route",
             )
 
             val result = execute(

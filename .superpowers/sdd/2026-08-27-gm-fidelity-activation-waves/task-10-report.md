@@ -6,9 +6,10 @@ La police réellement livrée `LiberationSans-Regular.ttf` est exploitable :
 `kanvas/src/test/resources/fonts/liberation/LiberationSans-Regular.ttf`
 (410&nbsp;712 octets, SHA-256
 `76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8`).
-Le chemin utilisé est intégral et ne comporte aucun substitut :
-`Font -> TextBlob -> KanvasGlyphRun -> FontTypeface.getGlyphPath -> prepared
-TextA8 -> WebGPU headless/offscreen ReadbackRgba`.
+Le chemin GPU utilisé est intégral et ne comporte aucun substitut :
+`Font -> TextBlob -> KanvasGlyphRun -> FontTypeface.preparedTextOutline ->
+TextA8 -> WebGPU headless/offscreen ReadbackRgba`. `getGlyphPath` reste
+strictement l’oracle CPU d’outline du test.
 
 `GPUDeliveredFontGlyphRunEvidenceTest` borne trois rows à cette unique police :
 
