@@ -365,7 +365,7 @@ Verify the existing promoted root with the v1 historical verifier, read every sc
 
 - [ ] **Step 4: Implement v2 conversion without rendering.**
 
-Copy all scene-specific evidence bytes, remove v1 run-level JSON files, rewrite only v2 scene manifests, create one root environment record, and create one root promotion record with `rebaseline: true`, the supplied reviewer/reason, and all migrated scene IDs sorted. Do not decode/re-encode PNGs; compare their hashes before writing the staged root.
+Copy all scene-specific evidence bytes, remove v1 run-level JSON files, rewrite only v2 scene manifests, create one root environment record, and create one root promotion record with `rebaseline: false`, null comparison summaries, the supplied reviewer/reason, and all migrated scene IDs sorted. Do not decode/re-encode PNGs; compare their hashes before writing the staged root.
 
 - [ ] **Step 5: Add the Gradle task and run the migration tests.**
 
