@@ -1,0 +1,9 @@
+{
+  "effectId": "runtime.linear_gradient_rt",
+  "descriptorVersion": 1,
+  "oracle": "LinearGradientRTCPUOracle",
+  "uniformLayout": {"bytes": 64, "fields": ["start@0:16", "end@16:16", "startColor@32:16", "endColor@48:16"]},
+  "fixture": {"target": "4x4", "start": [0, 0], "end": [0, 4], "startColor": [1, 0, 0, 1], "endColor": [0, 0, 1, 1]},
+  "rgba8Rows": [[223, 0, 32, 255], [159, 0, 96, 255], [96, 0, 159, 255], [32, 0, 223, 255]],
+  "semantics": "Kotlin CPU clamp interpolation at pixel centers; each listed color is repeated across its row."
+}

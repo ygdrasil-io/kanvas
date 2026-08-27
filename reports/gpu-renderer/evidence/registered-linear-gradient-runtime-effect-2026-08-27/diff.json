@@ -1,0 +1,8 @@
+{
+  "comparison": "CPU oracle vs native WebGPU readback",
+  "channels": 64,
+  "differentChannels": 0,
+  "maxDelta": 0,
+  "meanDelta": 0.0,
+  "policy": "byte exact; no similarity threshold was changed"
+}

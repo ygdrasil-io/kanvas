@@ -1,0 +1,9 @@
+{
+  "effectId": "runtime.linear_gradient_rt",
+  "uniformBytes": 64,
+  "draws": 1,
+  "submits": 1,
+  "readbackCopies": 1,
+  "cpuGpuDifferentChannels": 0,
+  "cpuGpuMaxDelta": 0
+}

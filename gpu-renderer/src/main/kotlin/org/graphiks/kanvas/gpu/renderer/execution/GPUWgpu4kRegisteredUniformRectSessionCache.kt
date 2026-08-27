@@ -25,8 +25,8 @@ import io.ygdrasil.webgpu.ShaderModuleDescriptor
 import io.ygdrasil.webgpu.VertexState
 import org.graphiks.kanvas.gpu.renderer.payloads.GPURegisteredUniformProgram
 import org.graphiks.kanvas.gpu.renderer.wgsl.ColorMatrixWgsl
-import org.graphiks.kanvas.gpu.renderer.wgsl.LinearGradientEntryPoint
-import org.graphiks.kanvas.gpu.renderer.wgsl.LinearGradientWgsl
+import org.graphiks.kanvas.gpu.renderer.wgsl.LinearGradientRTEntryPoint
+import org.graphiks.kanvas.gpu.renderer.wgsl.LinearGradientRTWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.RadialGradientEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.RadialGradientWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.SweepGradientEntryPoint
@@ -256,29 +256,13 @@ fn fs_main() -> @location(0) vec4f {
 """.trimIndent()
 
 private val REGISTERED_UNIFORM_LINEAR_GRADIENT_WGSL = """
-struct Uniforms { start: vec4f, end: vec4f, startColor: vec4f, endColor: vec4f }
-@group(0) @binding(0) var<uniform> uniforms: Uniforms;
+${LinearGradientRTWgsl.replace("@group(1)", "@group(0)")}
 
 $REGISTERED_UNIFORM_VERTEX_WGSL
 
-$LinearGradientWgsl
-
 @fragment
 fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
-    var positions: array<vec4f, 16>;
-    var colors: array<vec4f, 16>;
-    positions[0] = vec4f(0.0, 0.0, 0.0, 0.0);
-    positions[1] = vec4f(1.0, 0.0, 0.0, 0.0);
-    colors[0] = uniforms.startColor;
-    colors[1] = uniforms.endColor;
-    let color = $LinearGradientEntryPoint(
-        pos,
-        uniforms.start.xy,
-        uniforms.end.xy,
-        2u,
-        &positions,
-        &colors,
-    );
+    let color = $LinearGradientRTEntryPoint(pos.xy);
     return vec4f(color.rgb * color.a, color.a);
 }
 """.trimIndent()

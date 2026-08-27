@@ -1,0 +1,10 @@
+{
+  "effectId": "runtime.linear_gradient_rt",
+  "backend": "WebGPU headless/offscreen",
+  "target": "rgba8unorm 4x4",
+  "readback": "RGBA",
+  "submits": 1,
+  "readbackCopies": 1,
+  "rgba8Rows": [[223, 0, 32, 255], [159, 0, 96, 255], [96, 0, 159, 255], [32, 0, 223, 255]],
+  "executionTest": "GPUWgpu4kRegisteredLinearGradientRTSmokeTest"
+}

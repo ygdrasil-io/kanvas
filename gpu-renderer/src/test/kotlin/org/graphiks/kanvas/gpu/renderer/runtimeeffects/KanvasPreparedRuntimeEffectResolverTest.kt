@@ -7,6 +7,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectBinding
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectResolution
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectChildRole
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectChildSlot
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectProgram
@@ -24,6 +25,29 @@ import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTWgsl
 
 class KanvasPreparedRuntimeEffectResolverTest {
     private val descriptor = SimpleRTDescriptor.createDescriptor()
+
+    @Test
+    fun `registered linear gradient exposes parser validated executable program`() {
+        val resolved = KanvasPreparedRuntimeEffectResolver().resolve(
+            effectId = "runtime.linear_gradient_rt",
+            descriptorVersion = 1,
+        )
+
+        val ready = assertIs<GPUPreparedRuntimeEffectResolution.Ready>(resolved)
+        assertEquals("runtime.linear_gradient_rt", ready.program.effectId)
+        assertEquals(64, ready.program.uniformBlockSizeBytes)
+    }
+
+    @Test
+    fun `unregistered runtime color filter cannot enter the registered WGSL lane`() {
+        val resolved = KanvasPreparedRuntimeEffectResolver().resolve(
+            effectId = "runtime.runtimecolorfilter",
+            descriptorVersion = 1,
+        )
+
+        val unavailable = assertIs<GPUPreparedRuntimeEffectResolution.DescriptorUnavailable>(resolved)
+        assertEquals("Runtime-effect descriptor is not registered", unavailable.message)
+    }
 
     @Test
     fun `simple runtime CPU behavior decodes two nontrivial little endian colors`() {

@@ -1,0 +1,8 @@
+{
+  "registeredLane": [{"effectId": "runtime.runtimecolorfilter", "reason": "Runtime-effect descriptor is not registered"}],
+  "gm": [
+    {"name": "lineargradientrt", "result": "not-promoted", "reason": "Reference PNG not found at /reference/lineargradientrt.png"},
+    {"name": "runtimecolorfilter", "result": "refused", "reason": "unsupported.core_primitive.material.non_solid", "detail": "The GM supplies dynamic runtime color filters; Task 11 does not compile arbitrary source."}
+  ],
+  "nonClaims": ["No dynamic SkSL compilation", "No dynamic arbitrary WGSL runtime effect", "No child runtime effects", "No broad runtimecolorfilter support"]
+}
