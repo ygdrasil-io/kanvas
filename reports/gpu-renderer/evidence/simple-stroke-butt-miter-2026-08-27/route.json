@@ -1,0 +1,7 @@
+{
+  "fixture": "simple-stroke-butt-miter-v1",
+  "surface": "headless/offscreen WebGPU",
+  "input": { "target": [32, 32], "path": [[4, 16], [28, 16]], "strokeWidth": 4, "cap": "butt", "join": "miter", "miterLimit": 4, "antiAlias": false, "dash": null, "pathEffect": null },
+  "route": ["CorePrimitive", "native.path_stroke.stencil_cover", "StrokeStencilEdgeFan", "Stencil1x", "GPUCorePrimitivePreparedFrameTaskListBuilder", "wgpu4k offscreen submit/readback"],
+  "coverage": { "mode": "Stencil1x", "scalarAAPromoted": false }
+}

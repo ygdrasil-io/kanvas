@@ -2089,8 +2089,9 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
             strokeWidth.isFinite() && strokeWidth in 0.5f..64f &&
             !antiAlias &&
             (dashIntervals == null || dashIntervals.isEmpty()) &&
+            pathEffectKind == null &&
             strokeCap in setOf("butt", "square") &&
-            strokeJoin in setOf("miter", "bevel") &&
+            strokeJoin == "miter" &&
             transform.type in setOf(GPUTransformType.Identity, GPUTransformType.Translate)
 
     /**

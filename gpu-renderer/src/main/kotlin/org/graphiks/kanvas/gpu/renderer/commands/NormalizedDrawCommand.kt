@@ -3702,6 +3702,8 @@ sealed interface NormalizedDrawCommand {
         val dashIntervals: FloatArray? = null,
         /** Dash phase offset. */
         val dashPhase: Float = 0f,
+        /** Original non-dash path effect retained so bounded stroke lowering can refuse it. */
+        val pathEffectKind: String? = null,
         /** Stroke cap style: "butt", "round", "square". */
         val strokeCap: String = "butt",
         /** Stroke join style: "miter", "round", "bevel". */

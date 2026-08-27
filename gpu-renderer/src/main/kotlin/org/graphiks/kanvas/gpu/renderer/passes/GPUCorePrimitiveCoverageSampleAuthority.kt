@@ -165,7 +165,7 @@ private fun GPUCorePrimitiveGeometry.TriangulatedPath.isExactSingleSegmentStroke
     ) return false
     val stroke = strokeStyle ?: return false
     if (!stroke.width.isFinite() || stroke.width !in 0.5f..64f ||
-        stroke.join !in setOf("miter", "bevel") || stroke.dashIntervals.isNotEmpty()
+        stroke.join != "miter" || stroke.dashIntervals.isNotEmpty()
     ) return false
     return when (stroke.loweringProof) {
         GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1 ->

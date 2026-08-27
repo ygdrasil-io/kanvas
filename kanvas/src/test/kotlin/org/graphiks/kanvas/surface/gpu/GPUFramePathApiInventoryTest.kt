@@ -2051,7 +2051,7 @@ class GPUFramePathApiInventoryTest {
             listOf(Point2F32(4f, 8f), Point2F32(24f, 8f)),
             Paint.stroke(ColorARGB.Red, 4f).copy(
                 strokeCap = StrokeCap.SQUARE,
-                strokeJoin = StrokeJoin.BEVEL,
+                strokeJoin = StrokeJoin.MITER,
                 strokeMiter = 3f,
                 antiAlias = true,
             ),
@@ -2064,7 +2064,7 @@ class GPUFramePathApiInventoryTest {
         assertEquals(GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan, geometry.geometryMode)
         assertEquals(4f, stroke.width)
         assertEquals("square", stroke.cap)
-        assertEquals("bevel", stroke.join)
+        assertEquals("miter", stroke.join)
         assertEquals(3f, stroke.miterLimit)
         assertEquals(emptyList(), stroke.dashIntervals)
         assertEquals(0f, stroke.dashPhase)
@@ -2073,7 +2073,7 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
-    fun `bounded solid square stroke crosses mapper planner and native stencil recording`() {
+    fun `bounded solid square miter stroke crosses mapper planner and native stencil recording`() {
         val path = Path().apply {
             moveTo(4f, 8f)
             lineTo(24f, 8f)
@@ -2102,7 +2102,7 @@ class GPUFramePathApiInventoryTest {
                     Paint.stroke(ColorARGB.Red, 4f).copy(
                         antiAlias = false,
                         strokeCap = StrokeCap.SQUARE,
-                        strokeJoin = StrokeJoin.BEVEL,
+                        strokeJoin = StrokeJoin.MITER,
                     ),
                     Matrix3x3F32.Identity,
                     ClipStack.WideOpen,
@@ -2115,7 +2115,7 @@ class GPUFramePathApiInventoryTest {
 
         val command = assertIs<NormalizedDrawCommand.FillPath>(inventory.visualCommands.single().normalized)
         assertEquals("square", command.strokeCap)
-        assertEquals("bevel", command.strokeJoin)
+        assertEquals("miter", command.strokeJoin)
         assertEquals(
             "native.path_stroke.stencil_cover",
             inventory.recording.analysis.records.single().routeDecisionLabel,
@@ -2139,30 +2139,122 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
-    fun `non text hairline semantic is one device pixel after uniform scale`() {
+    fun `single segment stroke refuses non miter joins before native preparation`() {
+        val path = Path().apply {
+            moveTo(4f, 8f)
+            lineTo(24f, 8f)
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    path,
+                    Paint.stroke(ColorARGB.Red, 4f).copy(
+                        antiAlias = false,
+                        strokeCap = StrokeCap.SQUARE,
+                        strokeJoin = StrokeJoin.BEVEL,
+                    ),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+        )
+
+        val refused = gatherRefusal(inventory)
+
+        assertEquals("unsupported.core_primitive.stroke.join_exact_lowering", refused.code)
+        assertEquals("bevel", refused.facts["join"])
+    }
+
+    @Test
+    fun `single segment stroke refuses an unregistered path effect before native preparation`() {
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(4f, 8f)
+                        lineTo(24f, 8f)
+                    },
+                    Paint.stroke(ColorARGB.Red, 4f).copy(pathEffect = PathEffect.Corner(2f)),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+        )
+
+        val refused = gatherRefusal(inventory)
+
+        assertEquals("unsupported.core_primitive.stroke.path_effect_exact_lowering", refused.code)
+        assertEquals("Corner", refused.facts["pathEffect"])
+    }
+
+    @Test
+    fun `single segment hairline refuses before native preparation`() {
         val path = Path().apply {
             moveTo(4f, 8f)
             lineTo(14f, 8f)
         }
-        val semantic = semanticFor(
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
             DisplayOp.DrawPath(
                 path,
                 Paint.stroke(ColorARGB.Red, 0f).copy(antiAlias = false),
                 Matrix3x3F32.scaling(2f, 2f),
                 org.graphiks.kanvas.canvas.ClipStack.WideOpen,
             ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
         )
-        val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
-        val outlinePoints = geometry.vertices.chunked(2)
-            .filterNot { point -> point[0] == -1f && point[1] == -1f }
-        val xs = outlinePoints.map { point -> point[0] }
-        val ys = outlinePoints.map { point -> point[1] }
 
-        assertEquals(8f, xs.min(), 1e-6f)
-        assertEquals(28f, xs.max(), 1e-6f)
-        assertEquals(15.5f, ys.min(), 1e-6f)
-        assertEquals(16.5f, ys.max(), 1e-6f)
-        assertEquals(GPUPixelBounds(8, 15, 28, 17), geometry.coverBounds)
+        val refused = gatherRefusal(inventory)
+
+        assertEquals("unsupported.core_primitive.stroke.hairline_exact_lowering", refused.code)
+        assertEquals("0.0", refused.facts["width"])
+    }
+
+    @Test
+    fun `single segment round joins and widths outside the fixed budget refuse`() {
+        val path = Path().apply {
+            moveTo(4f, 8f)
+            lineTo(24f, 8f)
+        }
+        val roundJoinInventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    path,
+                    Paint.stroke(ColorARGB.Red, 4f).copy(strokeJoin = StrokeJoin.ROUND),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+        )
+        val overBudgetInventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    path,
+                    Paint.stroke(ColorARGB.Red, 65f),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+        )
+
+        assertEquals(
+            "unsupported.core_primitive.stroke.join_exact_lowering",
+            gatherRefusal(roundJoinInventory).code,
+        )
+        assertEquals(
+            "unsupported.core_primitive.stroke.width_budget",
+            gatherRefusal(overBudgetInventory).code,
+        )
     }
 
     @Test

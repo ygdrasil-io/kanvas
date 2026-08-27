@@ -1809,7 +1809,7 @@ internal fun GPUStrokeDescriptor.refusalCode(maxEdges: Int): String? =
         width < 0.5f || width > 64f -> "unsupported.stroke.width_budget"
         hairline -> "unsupported.stroke.hairline_policy"
         cap !in setOf("Butt", "Square") -> "unsupported.stroke.cap"
-        join !in setOf("Miter", "Bevel") -> "unsupported.stroke.join"
+        join != "Miter" -> "unsupported.stroke.join"
         miter < 1f -> "unsupported.stroke.miter_limit"
         dashOrPathEffectRef != null -> {
             val ref = dashOrPathEffectRef

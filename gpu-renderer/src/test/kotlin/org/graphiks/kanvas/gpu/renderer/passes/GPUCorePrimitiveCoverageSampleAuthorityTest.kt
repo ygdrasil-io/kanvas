@@ -38,6 +38,7 @@ class GPUCorePrimitiveCoverageSampleAuthorityTest {
             directTriangles to GPUCorePrimitiveCoverageMode.ScalarAA,
             stencilEdgeFan to GPUCorePrimitiveCoverageMode.FullOrScissor,
             strokeStencilEdgeFan to GPUCorePrimitiveCoverageMode.Stencil1x,
+            strokeStencilEdgeFan to GPUCorePrimitiveCoverageMode.ScalarAA,
         ).forEach { (geometry, coverageMode) ->
             assertEquals(
                 "invalid.core_primitive.coverage_sample.geometry_coverage",

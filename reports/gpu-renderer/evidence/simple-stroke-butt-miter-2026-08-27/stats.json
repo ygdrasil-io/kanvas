@@ -1,0 +1,9 @@
+{
+  "fixture": "simple-stroke-butt-miter-v1",
+  "submissions": 1,
+  "readbackCopies": 1,
+  "targetPixels": 1024,
+  "rgbaChannelsCompared": 4096,
+  "strokeWidthRange": [0.5, 64.0],
+  "budgetIncreased": false
+}

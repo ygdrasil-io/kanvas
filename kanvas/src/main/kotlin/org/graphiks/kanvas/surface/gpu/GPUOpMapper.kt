@@ -1945,6 +1945,9 @@ internal fun DisplayOp.DrawPath.toNormalizedCommand(
         strokeWidth = paint.strokeWidth,
         dashIntervals = (paint.pathEffect as? PathEffect.Dash)?.intervals,
         dashPhase = (paint.pathEffect as? PathEffect.Dash)?.phase ?: 0f,
+        pathEffectKind = paint.pathEffect?.let { effect ->
+            effect::class.simpleName?.takeUnless { it == "Dash" } ?: "unknown"
+        },
         strokeCap = paint.strokeCap.name.lowercase(),
         strokeJoin = paint.strokeJoin.name.lowercase(),
         strokeMiterLimit = paint.strokeMiter,
@@ -2006,6 +2009,9 @@ internal fun DisplayOp.DrawRect.toStrokePathCommand(
         strokeWidth = paint.strokeWidth,
         dashIntervals = (paint.pathEffect as? PathEffect.Dash)?.intervals,
         dashPhase = (paint.pathEffect as? PathEffect.Dash)?.phase ?: 0f,
+        pathEffectKind = paint.pathEffect?.let { effect ->
+            effect::class.simpleName?.takeUnless { it == "Dash" } ?: "unknown"
+        },
         strokeCap = paint.strokeCap.name.lowercase(),
         strokeJoin = paint.strokeJoin.name.lowercase(),
         strokeMiterLimit = paint.strokeMiter,

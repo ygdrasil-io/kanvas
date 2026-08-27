@@ -3,12 +3,14 @@ package org.graphiks.kanvas.surface.gpu
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeNativeFactory
 import org.graphiks.kanvas.gpu.renderer.execution.GPUOffscreenTargetRequest
@@ -31,6 +33,67 @@ import org.graphiks.math.matrix.Matrix3x3F32
 
 @OptIn(ExperimentalUnsignedTypes::class)
 class GPUFramePathApiInventoryNativeSmokeTest {
+    @Test
+    fun `single segment butt miter stroke matches the deterministic CPU pixel oracle natively`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        val capabilities = requireNotNull(backend.capabilities)
+        val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(
+            RenderConfig.DEFAULT.mapPreparedGpuColorConfig(),
+        )
+        val targetBounds = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, 32, 32)
+        val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.stroke-butt-miter")
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(4f, 16f)
+                        lineTo(28f, 16f)
+                    },
+                    Paint.stroke(ColorARGB.Red, 4f).copy(antiAlias = false),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+            deviceGeneration = backend.deviceGeneration,
+        )
+        val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            GPUFramePathApiInventory.prepareNativeTaskList(
+                inventory = inventory,
+                capabilities = capabilities,
+                targetBounds = targetBounds,
+                readbackRequestId = readbackId,
+            ),
+        ).taskList
+        val session = backend.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(
+                width = 32,
+                height = 32,
+                colorFormat = colorMapping.physicalFormat,
+                colorInterpretation = colorMapping.interpretation,
+            ),
+        )
+        try {
+            val completed = session.renderFrame(
+                prepared,
+                GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
+            ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+            assertEquals(GPUFrameStructuralOutcome.Succeeded, completed.outcome)
+            val gpu = assertIs<GPUSceneFrameOutput.ReadbackRgba>(completed.output).bytes
+
+            assertContentEquals(deterministicButtMiterStrokeOracle(), gpu)
+            assertEquals(1L, session.nativeCounters().submits)
+            assertEquals(1L, session.nativeCounters().readbackCopies)
+        } finally {
+            session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
     @Test
     fun `public Surface render expands one bounded stroke rect in one native frame`() {
         val backend = GPUBackendRuntimeNativeFactory.createOrNull()
@@ -224,6 +287,16 @@ class GPUFramePathApiInventoryNativeSmokeTest {
         val offset = (y * 32 + x) * 4
         val actual = (0..3).map { bytes[offset + it].toInt() and 0xff }
         assertEquals(expected, actual, "pixel ($x,$y)")
+    }
+
+    private fun deterministicButtMiterStrokeOracle(): ByteArray = ByteArray(32 * 32 * 4).also { rgba ->
+        for (y in 14 until 18) {
+            for (x in 4 until 28) {
+                val offset = (y * 32 + x) * 4
+                rgba[offset] = 0xff.toByte()
+                rgba[offset + 3] = 0xff.toByte()
+            }
+        }
     }
 
     private fun rgba(bytes: UByteArray, x: Int, y: Int, width: Int): List<Int> {

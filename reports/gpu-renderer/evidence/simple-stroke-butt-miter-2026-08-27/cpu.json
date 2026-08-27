@@ -1,0 +1,8 @@
+{
+  "fixture": "simple-stroke-butt-miter-v1",
+  "oracle": "deterministic RGBA8 CPU raster",
+  "extent": [32, 32],
+  "encoding": "row-major; pixels x=4..27 and y=14..17 are [255,0,0,255]; every other pixel is [0,0,0,0]",
+  "channelCount": 4096,
+  "sha256": "ac7ef8017f5d894bc87ae030e2a19eb0cb9fff3cf96d4f1edeb7f9845a46a63f"
+}
