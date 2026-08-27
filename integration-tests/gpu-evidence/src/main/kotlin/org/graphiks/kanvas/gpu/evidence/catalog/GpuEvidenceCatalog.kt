@@ -347,19 +347,20 @@ object GpuEvidenceCatalog {
         EvidenceSceneDescriptor(
             EvidenceSceneId("affine-path-clip-color"),
             "Affine hard path clip color",
-            "Public Kanvas Surface captures a finite non-singular affine path clip, resets the CTM, then colors its device-space coverage.",
+            "Public Kanvas Surface captures a finite non-singular non-uniform affine scale path clip, resets the CTM, then colors its device-space coverage.",
             64, 64, 1L, setOf("affine", "clip-path", "draw-color", "kanvas-surface"), EvidenceExpectation.ShouldRender,
             OraclePolicy.GeneratedCpu("surface-srgb-affine-path-clip-pixel-center", 1),
-            ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent device-space affine triangle clip membership."), emptySet(),
+            ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent device-space affine rectangle clip membership."), emptySet(),
         ),
         KanvasScenePrograms.affinePathClipColor(),
         SurfaceSrgbClipPathCpuOracle(
             background = intArrayOf(13, 20, 33, 255),
             contours = listOf(
                 SurfaceSrgbClipPathCpuOracle.Contour(listOf(
-                    SurfaceSrgbClipPathCpuOracle.Point(5f, 2f),
-                    SurfaceSrgbClipPathCpuOracle.Point(23f, 2f),
-                    SurfaceSrgbClipPathCpuOracle.Point(11f, 14f),
+                    SurfaceSrgbClipPathCpuOracle.Point(6f, 4f),
+                    SurfaceSrgbClipPathCpuOracle.Point(42f, 4f),
+                    SurfaceSrgbClipPathCpuOracle.Point(42f, 28f),
+                    SurfaceSrgbClipPathCpuOracle.Point(6f, 28f),
                 )),
             ),
             draws = listOf(

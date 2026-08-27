@@ -1589,7 +1589,6 @@ private val HARD_PATH_CLIP_TRANSFORM_CLASSES = setOf(
     "translate",
     "uniform-positive-scale-translate",
     "scale",
-    "affine",
 )
 
 private fun GPUClipCoverageElement.executionGeometryOrRefusal(): GPUClipExecutionGeometry? = try {

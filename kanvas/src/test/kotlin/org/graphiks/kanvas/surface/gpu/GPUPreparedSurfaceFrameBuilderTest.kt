@@ -305,7 +305,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
         )
 
         val refused = assertIs<GPUPreparedSurfaceFrameBuildResult.Refused>(result)
-        assertEquals("unsupported.geometry.path_key_nondeterministic", refused.diagnostic.code.value)
+        assertEquals("unsupported.core_primitive.material.path_stencil", refused.diagnostic.code.value)
     }
 
     @Test
@@ -1080,14 +1080,16 @@ class GPUPreparedSurfaceFrameBuilderTest {
             linearMaterial,
         )
 
-        val cases = listOf(
-            request(listOf(DisplayOp.DrawPoints(
+        val squareLine = request(listOf(DisplayOp.DrawPoints(
                 PointMode.LINES,
                 listOf(Point2F32(2f, 2f), Point2F32(12f, 2f)),
                 Paint.stroke(ColorARGB.Red, 2f).copy(strokeCap = StrokeCap.SQUARE, antiAlias = false),
                 Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
-            ))) to "unsupported.geometry.path_key_nondeterministic",
+            )))
+        assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(GPUPreparedSurfaceFrameBuilder.build(squareLine))
+
+        val cases = listOf(
             request(listOf(rect().copy(clip = complexClip)), capabilities = capabilities(boundedClip = false)) to
                 "unsupported.clip.mask_unavailable",
             request(listOf(rect()), capabilities = capabilities(fillRect = false)) to

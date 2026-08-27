@@ -4948,7 +4948,6 @@ private val HARD_PATH_CLIP_TRANSFORM_CLASSES = setOf(
     "translate",
     "uniform-positive-scale-translate",
     "scale",
-    "affine",
 )
 
 /** Typed core-only view used by the direct CorePrimitive assembler (blur packets route elsewhere). */

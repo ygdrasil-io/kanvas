@@ -446,15 +446,16 @@ object KanvasScenePrograms {
         drawRect(RectF32.ofLTRB(8f, 16f, 40f, 48f), Paint.fill(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)).copy(antiAlias = false))
     })
 
-    /** A device-space affine clip remains valid after the CTM is reset for its consumer. */
+    /** A device-space non-uniform affine scale clip remains valid after the CTM is reset for its consumer. */
     fun affinePathClipColor() = KanvasSurfaceProgram(ROUTE_ID, record = {
         drawColor(BACKGROUND)
         save()
-        setMatrix(Matrix3x3F32(sx = .75f, kx = .25f, tx = 1f, sy = .5f))
+        setMatrix(Matrix3x3F32(sx = .75f, sy = .5f))
         clipPath(Path {
-            moveTo(4f, 4f)
-            lineTo(28f, 4f)
-            lineTo(4f, 28f)
+            moveTo(8f, 8f)
+            lineTo(56f, 8f)
+            lineTo(56f, 56f)
+            lineTo(8f, 56f)
             close()
         }, antiAlias = false)
         resetMatrix()

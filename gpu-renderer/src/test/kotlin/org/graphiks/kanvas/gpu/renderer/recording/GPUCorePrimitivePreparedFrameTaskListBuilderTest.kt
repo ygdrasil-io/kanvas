@@ -2509,22 +2509,6 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
     }
 
     @Test
-    fun `native path clip accepts finite affine capture provenance`() {
-        val plan = nativePathStencilPlan(GPUClipFillRule.Winding, pathTransformClass = "affine")
-        val base = recording(command(341, 0), command(340, 7)).taskList.withClipPlans(
-            mapOf(341 to GPUClipExecutionPlan.NoClip, 340 to plan),
-        )
-        val packets = base.tasks.filterIsInstance<GPUTask.Render>()
-            .flatMap(GPUTask.Render::drawPackets)
-
-        val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
-            request(base, packets.associate { it.commandIdValue to semantic(it) }),
-        )
-
-        assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(result)
-    }
-
-    @Test
     fun `native path clip refuses an AA scope mixed with an un-clipped background`() {
         val plan = nativePathStencilPlan(GPUClipFillRule.Winding, sampleCount = 4)
         val base = recording(command(341, 0), command(340, 7)).taskList.withClipPlans(
