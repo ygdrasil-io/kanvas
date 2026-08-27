@@ -226,16 +226,14 @@ class PromoteEvidenceCliRunner internal constructor(
             require(request.selection == EvidenceSelection.All) { "selected promotion requires an existing promoted catalog" }
             return null
         }
-        // A catalogue may legitimately predate a newly added scene. Validate every
-        // scene it declares before staging the full rebaseline, rather than asking
-        // the old root to already contain the scene being promoted.
+        // Selected artifacts may be stale precisely because this operation replaces
+        // them. Read the existing catalogue and environment without validating those
+        // entries; the fully staged root is independently verified after replacement.
         val existingSceneIds = readCatalogEntries(promoted).map(EvidenceCatalogEntry::sceneId)
         require(existingSceneIds.isNotEmpty()) { "promoted catalog contains no scenes" }
-        val existing = validateCatalogRoot(
-            promoted,
-            EvidenceSelection.Explicit(existingSceneIds),
-            null,
-            requirePromotion = true,
+        val existing = ValidatedCatalogRoot(
+            entriesBySceneId = readCatalogEntries(promoted).associateBy(EvidenceCatalogEntry::sceneId),
+            environmentBytes = Files.readAllBytes(promoted.resolve("environment.json")),
         )
         if (request.selection == EvidenceSelection.All) {
             require(request.rebaseline) { "destination already contains evidence; use --all --rebaseline with old/new comparison summaries" }
