@@ -97,6 +97,7 @@ internal data class GPUOpMapping(
     val stateEvents: List<GPUFramePathStateEvent>,
     val preparedRefusal: GPUPreparedOperationRefusal? = null,
     val culledTextOperationIndices: Set<Int> = emptySet(),
+    val culledCoreOperationIndices: Set<Int> = emptySet(),
     val preparedVerticesInventory: PreparedVerticesFrameInventory? = null,
     val allocatedCommandIds: Set<Int> = emptySet(),
     val commandIdsByOperationIndex: Map<Int, Set<Int>> = emptyMap(),
@@ -129,6 +130,7 @@ internal object GPUOpMapper {
         val visual = mutableListOf<GPUFramePathVisualCommand>()
         val stateEvents = mutableListOf<GPUFramePathStateEvent>()
         val culledTextOperationIndices = linkedSetOf<Int>()
+        val culledCoreOperationIndices = linkedSetOf<Int>()
         val preparedVerticesProvenance = linkedMapOf<Int, GPUFrameProvenance>()
         val preparedVerticesCommandIds = linkedMapOf<Int, Int>()
         val commandIdsByOperationIndex = mutableMapOf<Int, MutableSet<Int>>()
@@ -607,6 +609,7 @@ internal object GPUOpMapper {
                         ),
                     )
                     if (lowered == null) {
+                        culledCoreOperationIndices += operationIndex
                         return@forEachIndexed
                     }
                     visual += lowered
@@ -636,6 +639,7 @@ internal object GPUOpMapper {
                     facts = binding.facts,
                 ),
                 culledTextOperationIndices = culledTextOperationIndices.toSet(),
+                culledCoreOperationIndices = culledCoreOperationIndices.toSet(),
             )
         }
         val allocatedCommandIds = when (
@@ -651,12 +655,14 @@ internal object GPUOpMapper {
                 stateEvents = stateEvents.toList(),
                 preparedRefusal = authenticated.refusal,
                 culledTextOperationIndices = culledTextOperationIndices.toSet(),
+                culledCoreOperationIndices = culledCoreOperationIndices.toSet(),
             )
         }
         return GPUOpMapping(
             visualCommands = visual.toList(),
             stateEvents = stateEvents.toList(),
             culledTextOperationIndices = culledTextOperationIndices.toSet(),
+            culledCoreOperationIndices = culledCoreOperationIndices.toSet(),
             preparedVerticesInventory = mappedVerticesInventory,
             allocatedCommandIds = allocatedCommandIds,
             commandIdsByOperationIndex = commandIdsByOperationIndex
