@@ -21,6 +21,8 @@ soumission avec respectivement `unsupported.transform.non_finite`,
 
 Le clip hard à skew, rotation ou concat générale reste explicitement hors de
 cette promotion: `unsupported.clip.path_transform`, avant toute soumission.
+Les tests publics `skew(...)` et `rotate(...)` capturent ce refus après
+`clipPath(...)` et `resetMatrix()`.
 Un essai triangulaire skewé a produit 12 pixels de bord différents de l'oracle
 CPU (similarité 99.70703125 %); il n'est ni publié ni promu. Ceci évite de
 confondre une route native active avec une compatibilité de convention de

@@ -1116,6 +1116,23 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
+    fun `public rotated hard path clip refuses before submission`() {
+        requireWebGpu()
+        val surface = Surface(32, 32)
+        surface.canvas {
+            save()
+            rotate(15f)
+            clipPath(Path().apply { addRect(RectF32(4f, 4f, 28f, 28f)) }, ClipOp.INTERSECT, antiAlias = false)
+            resetMatrix()
+            drawColor(ColorARGB.Red)
+            restore()
+        }
+
+        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> { surface.render() }
+        assertEquals("unsupported.clip.path_transform", failure.diagnostic.code.value)
+    }
+
+    @Test
     fun `adapter backed inverse difference clip preserves fill exterior and AA edge`() {
         requireWebGpu()
         val inverseRect = Path().apply {
