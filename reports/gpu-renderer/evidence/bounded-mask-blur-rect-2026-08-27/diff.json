@@ -1,0 +1,8 @@
+{
+  "fixture": "bounded-mask-blur-rect-v1",
+  "comparison": "TopLevelMaskBlurPixelOracle versus native WebGPU readback",
+  "channels": 4096,
+  "tolerancePerChannel": 24,
+  "result": "pass",
+  "thresholdPolicy": "existing mask-blur oracle tolerance; unchanged by Task 7"
+}

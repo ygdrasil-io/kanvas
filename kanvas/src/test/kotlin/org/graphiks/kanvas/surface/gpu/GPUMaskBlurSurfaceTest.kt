@@ -62,6 +62,14 @@ class GPUMaskBlurSurfaceTest {
     }
 
     @Test
+    fun `bounded rect blur exposes one native draw with no refusal`() {
+        val result = renderRectResult(BlurStyle.NORMAL, 2f)
+
+        assertEquals(1, result.stats.opsDispatched)
+        assertEquals(0, result.stats.opsRefused)
+    }
+
+    @Test
     fun `translated rect blur renders at its transformed device bounds`() {
         requireWebGpu()
         val pixels = Surface(width = 32, height = 32).run {

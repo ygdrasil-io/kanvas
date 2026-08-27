@@ -1,0 +1,10 @@
+{
+  "fixture": "bounded-mask-blur-rect-v1",
+  "backend": "WebGPU headless/offscreen",
+  "opsDispatched": 1,
+  "opsRefused": 0,
+  "nativeRoute": "MaskBlur",
+  "passes": ["mask", "blur-h", "blur-v", "style", "composite"],
+  "intermediateTargets": 4,
+  "kernel": { "tapCount": 5, "uniformWeightCapacity": 25 }
+}

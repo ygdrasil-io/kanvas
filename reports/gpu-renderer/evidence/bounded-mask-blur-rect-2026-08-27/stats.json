@@ -1,0 +1,9 @@
+{
+  "fixture": "bounded-mask-blur-rect-v1",
+  "targetPixels": 1024,
+  "channelsCompared": 4096,
+  "renderPasses": 5,
+  "filterIntermediates": 4,
+  "tapCount": 5,
+  "performanceGate": "non-gating"
+}

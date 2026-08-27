@@ -1,0 +1,12 @@
+{
+  "gms": [
+    { "name": "blurrects", "operationCount": 145, "terminalDiagnostic": "unsupported.material.source_unimplemented" },
+    { "name": "offsetimagefilter", "operationCount": 17, "terminalDiagnostic": "unsupported.image.native_binding" },
+    { "name": "blurquickreject", "operationCount": 19, "terminalDiagnostic": "unsupported.stroke.width_invalid" }
+  ],
+  "nonClaims": [
+    "No GM is promoted by this fixture.",
+    "blurquickreject remains refused because its preceding hairline stroke is outside the bounded stroke contract.",
+    "Offset image-filter graphs remain refused until a prepared image binding and complete native route exist."
+  ]
+}
