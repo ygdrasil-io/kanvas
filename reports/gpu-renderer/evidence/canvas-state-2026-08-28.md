@@ -15,19 +15,24 @@ and empty-stack no-ops.
 - `CanvasTest.restore to count restores parent clip for the post restore sentinel`
   checks that a nested clip is removed, the saved parent clip is restored, and
   the final sentinel is recorded wide-open after the outer restore.
-- `CanvasTest.restoring an empty save stack is a stable no op` keeps baseline
-  `restore` and negative `restoreToCount` deterministic and submission-free.
+- `CanvasTest.negative restore count is a stable no op even with saved state`
+  locks the public `restoreToCount(-1)` contract: it is invalid input and a
+  deterministic no-op, leaving the saved CTM and recording state untouched.
 
 ## Render evidence and oracle
 
-The promoted public `scissor-overlay` bundle remains the native GPU evidence
-for the production `save` / `clipRect` / `restore` route.  Its independent
-`reference-raster-scissor-intersections` CPU oracle and zero-tolerance diff
-remain authoritative; this wave does not promote a synthetic parallel route.
+`canvas-state-restore-to-count` is a promoted public Surface bundle in
+`reports/gpu-renderer/evidence/correctness/promoted/`.  It records an outer
+parent clip, a nested child clip, `restoreToCount(1)`, then an orange sentinel
+that deliberately extends beyond the parent clip.  The independent CPU oracle
+requires the pixels outside that parent clip to remain background; the final
+white sentinel is drawn only after the outer `restore`.
 
-`restoreToCount` itself is a Canvas recording-state operation.  Its observable
-rendering effect is the clip carried by the next public draw, asserted above
-through the exact `DisplayOp` snapshots consumed by the existing Surface path.
+The native GPU capture passed the exact RGBA8 comparison: 64×64 pixels,
+0 differing pixels, maximum channel difference 0, similarity 100%.  The
+bundle contains the CPU and GPU PNGs, diff/statistics, manifest hashes,
+route diagnostics and verdict.  Its route is `kanvas.surface.render`, with
+one native submission and four recorded draws.
 
 ## Validation
 
@@ -36,6 +41,9 @@ through the exact `DisplayOp` snapshots consumed by the existing Surface path.
 BUILD SUCCESSFUL
 
 ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.canvas.CanvasTest.restore to count restores parent clip for the post restore sentinel'
+BUILD SUCCESSFUL
+
+./gradlew :integration-tests:gpu-evidence:verifyPromotedGpuEvidence
 BUILD SUCCESSFUL
 ```
 
