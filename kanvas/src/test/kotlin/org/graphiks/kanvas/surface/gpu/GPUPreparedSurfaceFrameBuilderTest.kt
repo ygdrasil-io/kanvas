@@ -112,6 +112,26 @@ class GPUPreparedSurfaceFrameBuilderTest {
     }
 
     @Test
+    fun `public non finite singular and perspective transforms refuse before frame task assembly`() {
+        val cases = listOf(
+            "non-finite" to Matrix3x3F32(tx = Float.NaN) to "unsupported.transform.non_finite",
+            "singular" to Matrix3x3F32(sx = 0f, sy = 1f) to "unsupported.transform.affine_singular",
+            "perspective" to Matrix3x3F32(persp0 = .1f) to "unsupported.transform.perspective",
+        )
+
+        cases.forEach { (labelAndMatrix, expectedCode) ->
+            val (label, matrix) = labelAndMatrix
+            val refused = assertIs<GPUPreparedSurfaceFrameBuildResult.Refused>(
+                GPUPreparedSurfaceFrameBuilder.build(
+                    request(listOf(rect().copy(transform = matrix))),
+                ),
+                label,
+            )
+            assertEquals(expectedCode, refused.diagnostic.code.value, label)
+        }
+    }
+
+    @Test
     fun `public axis scaled solid DrawRRect records sealed device geometry`() {
         val result = GPUPreparedSurfaceFrameBuilder.build(
             request(

@@ -32,7 +32,7 @@ import org.graphiks.math.matrix.Matrix3x3F32
 
 class GpuEvidenceCatalogTest {
     @Test
-    fun `catalog separates seventy public surface renders from three refusals`() {
+    fun `catalog separates seventy-two public surface renders from four refusals`() {
         val cases = GpuEvidenceCatalog.cases
 
         assertEquals(
@@ -46,7 +46,7 @@ class GpuEvidenceCatalogTest {
                 "linear-gradient-lanes",
                 "radial-swatch",
                 "sweep-disk",
-                "sweep-gradient-partial-angle", "affine-solid-rect", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
+                "sweep-gradient-partial-angle", "affine-solid-rect", "affine-path-clip-color", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
                 "scaled-solid-rrect",
                 "solid-drrect-hole",
                 "asymmetric-solid-rrect",
@@ -105,6 +105,7 @@ class GpuEvidenceCatalogTest {
                 "translated-triangle-path",
                 "uniform-scaled-triangle-path",
                 "linear-gradient-three-stops",
+                "perspective-transform-refusal",
                 "custom-runtime-effect-unregistered-refusal",
                 "aggregate-memory-budget-refusal",
             ),
@@ -121,7 +122,7 @@ class GpuEvidenceCatalogTest {
                 "linear-gradient-lanes",
                 "radial-swatch",
                 "sweep-disk",
-                "sweep-gradient-partial-angle", "affine-solid-rect", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
+                "sweep-gradient-partial-angle", "affine-solid-rect", "affine-path-clip-color", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
                 "scaled-solid-rrect",
                 "solid-drrect-hole",
                 "asymmetric-solid-rrect",
@@ -183,7 +184,7 @@ class GpuEvidenceCatalogTest {
             GpuEvidenceCatalog.renderCases.map { it.descriptor.id.value },
         )
         assertEquals(
-            listOf("linear-gradient-three-stops", "custom-runtime-effect-unregistered-refusal", "aggregate-memory-budget-refusal"),
+            listOf("linear-gradient-three-stops", "perspective-transform-refusal", "custom-runtime-effect-unregistered-refusal", "aggregate-memory-budget-refusal"),
             GpuEvidenceCatalog.refusalCases.map { it.descriptor.id.value },
         )
         assertTrue(GpuEvidenceCatalog.renderCases.all { it.program is KanvasSurfaceProgram })
@@ -191,11 +192,11 @@ class GpuEvidenceCatalogTest {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            List(71) { "kanvas.surface.render" },
+            List(72) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
-        assertEquals(71, GpuEvidenceCatalog.renderCases.size)
-        assertEquals(74, GpuEvidenceCatalog.cases.size)
+        assertEquals(72, GpuEvidenceCatalog.renderCases.size)
+        assertEquals(76, GpuEvidenceCatalog.cases.size)
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
 
         val solid = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "solid-card-stack" })
@@ -317,7 +318,7 @@ class GpuEvidenceCatalogTest {
             "linear-gradient-lanes",
             "radial-swatch",
             "sweep-disk",
-            "sweep-gradient-partial-angle", "affine-solid-rect", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
+            "sweep-gradient-partial-angle", "affine-solid-rect", "affine-path-clip-color", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
             "scaled-solid-rrect",
             "solid-drrect-hole",
             "asymmetric-solid-rrect",
@@ -392,7 +393,10 @@ class GpuEvidenceCatalogTest {
             },
         )
         assertEquals(
-            mapOf("linear-gradient-three-stops" to "kanvas.surface.render"),
+            mapOf(
+                "linear-gradient-three-stops" to "kanvas.surface.render",
+                "perspective-transform-refusal" to "kanvas.surface.render",
+            ),
             GpuEvidenceCatalog.refusalCases.filter { it.program is KanvasSurfaceProgram }.associate { evidenceCase ->
                 evidenceCase.descriptor.id.value to assertIs<KanvasSurfaceProgram>(evidenceCase.program).routeId
             },
@@ -411,6 +415,7 @@ class GpuEvidenceCatalogTest {
                 "sweep-disk" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-sweep-clamp", 2),
                 "sweep-gradient-partial-angle" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-sweep-clamp", 2),
                 "affine-solid-rect" to OraclePolicy.GeneratedCpu("reference-raster-affine-solid-rect", 1),
+                "affine-path-clip-color" to OraclePolicy.GeneratedCpu("surface-srgb-affine-path-clip-pixel-center", 1),
                 "scissored-radial-gradient" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-radial-clamp", 2),
                 "repeat-gradient-refusal" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-linear-repeat", 2),
                 "gradient-stroke-refusal" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-linear-clamp-stroke-bands", 1),
@@ -489,6 +494,7 @@ class GpuEvidenceCatalogTest {
                 "sweep-disk" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
                 "sweep-gradient-partial-angle" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
                 "affine-solid-rect" to ComparisonPolicy(0, 100.0, 1, "Exact RGBA8 output from hand-derived inverse affine pixel-center membership."),
+                "affine-path-clip-color" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent device-space affine triangle clip membership."),
                 "scissored-radial-gradient" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
                 "repeat-gradient-refusal" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
                 "gradient-stroke-refusal" to ComparisonPolicy(1, 100.0, 1, "Independent four-band coverage with device-coordinate clamp linear-gradient sampling and one-LSB RGBA8 tolerance."),

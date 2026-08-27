@@ -33,6 +33,7 @@ object GpuEvidenceCatalog {
         sweepDisk(),
         sweepGradientPartialAngle(),
         affineSolidRect(),
+        affinePathClipColor(),
         scissoredRadialGradient(),
         repeatGradientRendered(),
         gradientStrokeRefusal(),
@@ -96,6 +97,7 @@ object GpuEvidenceCatalog {
     )
     val refusalCases: List<EvidenceCase> = listOf(
         linearGradientThreeStops(),
+        perspectiveTransformRefusal(),
         unregisteredRuntimeEffectRefusal(),
         aggregateMemoryBudgetRefusal(),
     )
@@ -339,6 +341,43 @@ object GpuEvidenceCatalog {
                 }
             }
         } },
+    )
+
+    private fun affinePathClipColor() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("affine-path-clip-color"),
+            "Affine hard path clip color",
+            "Public Kanvas Surface captures a finite non-singular affine path clip, resets the CTM, then colors its device-space coverage.",
+            64, 64, 1L, setOf("affine", "clip-path", "draw-color", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-affine-path-clip-pixel-center", 1),
+            ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent device-space affine triangle clip membership."), emptySet(),
+        ),
+        KanvasScenePrograms.affinePathClipColor(),
+        SurfaceSrgbClipPathCpuOracle(
+            background = intArrayOf(13, 20, 33, 255),
+            contours = listOf(
+                SurfaceSrgbClipPathCpuOracle.Contour(listOf(
+                    SurfaceSrgbClipPathCpuOracle.Point(5f, 2f),
+                    SurfaceSrgbClipPathCpuOracle.Point(23f, 2f),
+                    SurfaceSrgbClipPathCpuOracle.Point(11f, 14f),
+                )),
+            ),
+            draws = listOf(
+                SurfaceSrgbClipPathCpuOracle.OpaqueRect(0f, 0f, 64f, 64f, intArrayOf(242, 135, 46, 255)),
+            ),
+        ),
+    )
+
+    private fun perspectiveTransformRefusal() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("perspective-transform-refusal"),
+            "Perspective transform refusal",
+            "Public Kanvas Surface refuses a general perspective matrix before native frame submission.",
+            64, 64, 1L, setOf("transform", "perspective", "kanvas-surface", "refusal"),
+            EvidenceExpectation.ShouldRefuse("unsupported.transform.perspective"), OraclePolicy.StableRefusal, null, emptySet(),
+        ),
+        KanvasScenePrograms.perspectiveTransformRefusal(),
+        null,
     )
 
     private fun scissoredRadialGradient() = gradientCase(

@@ -1065,7 +1065,7 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `public non uniform scaled hard path clip remains refused with capture provenance`() {
+    fun `public non uniform scaled hard path clip renders at its captured device-space coordinates`() {
         requireWebGpu()
         val triangle = Path().apply {
             moveTo(4f, 4f)
@@ -1078,11 +1078,24 @@ class GPUClipCoverageSurfaceTest {
             save()
             scale(0.75f, 0.5f)
             clipPath(triangle, ClipOp.INTERSECT, antiAlias = false)
-            drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(ColorARGB.Red))
+            resetMatrix()
+            drawPath(
+                Path().apply {
+                    moveTo(0f, 0f)
+                    lineTo(32f, 0f)
+                    lineTo(0f, 32f)
+                    close()
+                },
+                Paint.fill(ColorARGB.Red).copy(antiAlias = false),
+            )
             restore()
         }
 
-        assertTerminal("unsupported.clip.path_transform", surface::render)
+        val result = surface.render()
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertRgbaNear(result.pixels, 32, 4, 3, ColorARGB.Red)
+        assertRgbaNear(result.pixels, 32, 22, 3, ColorARGB.Transparent)
+        assertRgbaNear(result.pixels, 32, 4, 16, ColorARGB.Transparent)
     }
 
     @Test

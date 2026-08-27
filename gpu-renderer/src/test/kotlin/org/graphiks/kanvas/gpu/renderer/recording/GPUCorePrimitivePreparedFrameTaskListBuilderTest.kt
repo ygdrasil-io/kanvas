@@ -2509,7 +2509,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
     }
 
     @Test
-    fun `native path clip refuses affine capture provenance`() {
+    fun `native path clip accepts finite affine capture provenance`() {
         val plan = nativePathStencilPlan(GPUClipFillRule.Winding, pathTransformClass = "affine")
         val base = recording(command(341, 0), command(340, 7)).taskList.withClipPlans(
             mapOf(341 to GPUClipExecutionPlan.NoClip, 340 to plan),
@@ -2521,10 +2521,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
             request(base, packets.associate { it.commandIdValue to semantic(it) }),
         )
 
-        assertEquals(
-            "unsupported.recording.core_primitive_clip_stencil_transform",
-            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
-        )
+        assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(result)
     }
 
     @Test
