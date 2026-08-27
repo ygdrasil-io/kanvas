@@ -267,11 +267,20 @@ enum class GPUPreparedMaterialUnsupportedReason(
     ),
 }
 
-/** Returns the prepared-material refusal reason for gradient facts not consumed by dispatch. */
-fun GPUMaterialDescriptor.gradientFactsRefusalReasonOrNull(): GPUPreparedMaterialUnsupportedReason? =
+/**
+ * Returns the prepared-material refusal reason for gradient facts not consumed by dispatch.
+ *
+ * CorePrimitive owns the legacy linear-gradient tile-mode ABI. Route analysis may therefore
+ * defer only that validation to its concrete route, while all other prepared-material facts
+ * remain closed.
+ */
+fun GPUMaterialDescriptor.gradientFactsRefusalReasonOrNull(
+    deferLinearGradientTileModeToRoute: Boolean = false,
+): GPUPreparedMaterialUnsupportedReason? =
     when (this) {
         is GPUMaterialDescriptor.LinearGradient -> when {
-            tileMode != "clamp" -> GPUPreparedMaterialUnsupportedReason.LINEAR_GRADIENT_TILE_MODE
+            tileMode != "clamp" && !deferLinearGradientTileModeToRoute ->
+                GPUPreparedMaterialUnsupportedReason.LINEAR_GRADIENT_TILE_MODE
             (allStopPositions?.size ?: 2) != 2 -> GPUPreparedMaterialUnsupportedReason.LINEAR_GRADIENT_STOP_COUNT
             !linearGradientFactsAreFinite() -> GPUPreparedMaterialUnsupportedReason.LINEAR_GRADIENT_NON_FINITE
             interpolation != "srgb" -> GPUPreparedMaterialUnsupportedReason.GRADIENT_INTERPOLATION
