@@ -288,6 +288,8 @@ data class GPUProductFlagConfig(
         const val LinearGradientDisableProperty: String = "kanvas.gpu.renderer.product.linearGradient.disable"
         const val StrokeRectLinearGradientThreeStopDisableProperty: String =
             "kanvas.gpu.renderer.product.strokeRectLinearGradientThreeStop.disable"
+        const val StrokeRectRadialGradientTwoStopDisableProperty: String =
+            "kanvas.gpu.renderer.product.strokeRectRadialGradientTwoStop.disable"
         const val ScissorProperty: String = "kanvas.gpu.renderer.product.scissor"
         const val ScissorDisableProperty: String = "kanvas.gpu.renderer.product.scissor.disable"
         const val RadialGradientProperty: String = "kanvas.gpu.renderer.product.radialGradient"
@@ -344,6 +346,8 @@ data class GPUProductFlagConfig(
             val linearGradientDisabled = propertyReader(LinearGradientDisableProperty).toBoolean()
             val strokeRectLinearGradientThreeStopDisabled =
                 propertyReader(StrokeRectLinearGradientThreeStopDisableProperty).toBoolean()
+            val strokeRectRadialGradientTwoStopDisabled =
+                propertyReader(StrokeRectRadialGradientTwoStopDisableProperty).toBoolean()
             val scissorDisabled = propertyReader(ScissorDisableProperty).toBoolean()
             val radialGradientDisabled = propertyReader(RadialGradientDisableProperty).toBoolean()
             val sweepGradientDisabled = propertyReader(SweepGradientDisableProperty).toBoolean()
@@ -367,6 +371,7 @@ data class GPUProductFlagConfig(
                 fillRRectEnabled = !fillRRectDisabled,
                 linearGradientEnabled = !linearGradientDisabled,
                 strokeRectLinearGradientThreeStopEnabled = !strokeRectLinearGradientThreeStopDisabled,
+                strokeRectRadialGradientTwoStopEnabled = !strokeRectRadialGradientTwoStopDisabled,
                 scissorEnabled = !scissorDisabled,
                 radialGradientEnabled = !radialGradientDisabled,
                 sweepGradientEnabled = !sweepGradientDisabled,
