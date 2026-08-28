@@ -9,6 +9,7 @@ import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbBitmapNearestCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbSaveLayerSrcOverOpacityCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbGradientCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbLinearGradientStrokeBandsCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbTranslatedTwoStopLinearGradientStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbTwoStopRadialGradientStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbThreeStopRadialGradientStrokeCpuOracle
@@ -59,6 +60,7 @@ object GpuEvidenceCatalog {
         repeatGradientRendered(),
         gradientStrokeRefusal(),
         linearGradientThreeStopStrokeRect(),
+        linearGradientTwoStopTranslatedStrokeRect(),
         radialGradientTwoStopStrokeRect(),
         radialGradientThreeStopStrokeRect(),
         sweepGradientTwoStopStrokeRect(),
@@ -816,6 +818,30 @@ object GpuEvidenceCatalog {
                 SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle.Stop(.5, 56, 220, 120),
                 SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle.Stop(1.0, 56, 112, 255),
             ),
+        ),
+    )
+
+    private fun linearGradientTwoStopTranslatedStrokeRect() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("linear-gradient-two-stop-translated-stroke-rect"), "Translated linear gradient two-stop stroke rectangle",
+            "Public Kanvas Surface translates a bounded non-AA CLAMP two-stop LinearGradient rectangle stroke by integral device pixels.",
+            64, 64, 1L, setOf("stroke-rect", "linear-gradient", "two-stops", "translation", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-gradient-linear-clamp-two-stop-translated-stroke-bands", 1),
+            ComparisonPolicy(1, 100.0, 1, "Independent four-band device coverage and separately translated two-stop sRGB linear-gradient axis."), emptySet(),
+        ),
+        KanvasScenePrograms.linearGradientTwoStopTranslatedStrokeRect(),
+        SurfaceSrgbTranslatedTwoStopLinearGradientStrokeCpuOracle(
+            listOf(
+                SurfaceSrgbTranslatedTwoStopLinearGradientStrokeCpuOracle.Rect(8, 17, 60, 21),
+                SurfaceSrgbTranslatedTwoStopLinearGradientStrokeCpuOracle.Rect(8, 49, 60, 53),
+                SurfaceSrgbTranslatedTwoStopLinearGradientStrokeCpuOracle.Rect(8, 21, 12, 49),
+                SurfaceSrgbTranslatedTwoStopLinearGradientStrokeCpuOracle.Rect(56, 21, 60, 49),
+            ),
+            SurfaceSrgbTranslatedTwoStopLinearGradientStrokeCpuOracle.Point(8.5, 32.5),
+            SurfaceSrgbTranslatedTwoStopLinearGradientStrokeCpuOracle.Point(55.5, 32.5),
+            SurfaceSrgbTranslatedTwoStopLinearGradientStrokeCpuOracle.Vector(2.0, 3.0),
+            SurfaceSrgbTranslatedTwoStopLinearGradientStrokeCpuOracle.Stop(255, 56, 56),
+            SurfaceSrgbTranslatedTwoStopLinearGradientStrokeCpuOracle.Stop(56, 112, 255),
         ),
     )
 

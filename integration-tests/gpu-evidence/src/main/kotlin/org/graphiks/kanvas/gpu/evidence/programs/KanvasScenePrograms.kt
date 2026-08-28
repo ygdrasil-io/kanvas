@@ -771,6 +771,21 @@ object KanvasScenePrograms {
         ))
     })
 
+    fun linearGradientTwoStopTranslatedStrokeRect() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        translate(2f, 3f)
+        drawRect(RectF32.ofLTRB(8f, 16f, 56f, 48f), Paint.stroke(ColorARGB.Transparent, 4f).copy(
+            shader = Shader.LinearGradient(
+                Point2F32(8.5f, 32.5f), Point2F32(55.5f, 32.5f),
+                listOf(
+                    GradientStop(0f, ColorARGB.of(255, 255, 56, 56)),
+                    GradientStop(1f, ColorARGB.of(255, 56, 112, 255)),
+                ),
+                TileMode.CLAMP,
+            ),
+            antiAlias = false,
+        ))
+    })
+
     fun radialGradientTwoStopStrokeRect() = KanvasSurfaceProgram(ROUTE_ID, record = {
         drawRect(RectF32.ofLTRB(8f, 16f, 56f, 48f), Paint.stroke(ColorARGB.Transparent, 4f).copy(
             shader = Shader.RadialGradient(
