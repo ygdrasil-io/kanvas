@@ -13,7 +13,7 @@ width `2`, butt cap, miter join, disabled anti-aliasing, and the affine
 transform `translation(2,3) * scaling(2,2)`. The device segment is
 `(10.25,11.25) → (26.25,20.25)`. It verifies the
 `native.path_stroke.stencil_cover` route, `StrokeStencilEdgeFan` geometry, and
-cover bounds `(8,7)-(29,24)`.
+cover bounds `(9,9)-(28,22)`.
 
 The native offscreen smoke test compares the complete RGBA readback with an
 independent device-space pixel-center distance oracle and checks `Succeeded`,
