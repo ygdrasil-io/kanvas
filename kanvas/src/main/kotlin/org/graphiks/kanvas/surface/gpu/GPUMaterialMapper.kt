@@ -1047,11 +1047,22 @@ private fun Shader.toPreparedMaterial(
 }
 
 /**
- * Preserve the bounded three-stop descriptor for the native CorePrimitive FillRect route.
- * Other prepared routes retain their own two-stop admission at analysis/lowering time.
+ * Preserve historical repeat descriptors, but admit three stops only for the bounded CLAMP
+ * identity-local-matrix CorePrimitive FillRect route. Analysis applies the remaining public
+ * route conditions (non-AA and identity CTM) before native lowering.
  */
-private fun GPUMaterialDescriptor.LinearGradient.preparedV2LinearGradientRefusalReasonOrNull() =
-    if (tileMode == "repeat") null else gradientFactsRefusalReasonOrNull(allowThreeStopLinearGradient = true)
+private fun GPUMaterialDescriptor.LinearGradient.preparedV2LinearGradientRefusalReasonOrNull(): GPUPreparedMaterialUnsupportedReason? {
+    val stopCount = allStopPositions?.size ?: 2
+    if (stopCount == 3 && tileMode != "clamp") {
+        return GPUPreparedMaterialUnsupportedReason.LINEAR_GRADIENT_STOP_COUNT
+    }
+    if (tileMode == "repeat") return null
+
+    return gradientFactsRefusalReasonOrNull(
+        allowThreeStopLinearGradient =
+            stopCount == 3 && localMatrix == listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f),
+    )
+}
 
 private fun Shader.Image.toPreparedImageMaterial(
     descriptorAssembly: GPUMaterialDescriptorAssemblySession,

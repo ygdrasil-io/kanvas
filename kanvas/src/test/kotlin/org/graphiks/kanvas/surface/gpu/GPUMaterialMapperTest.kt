@@ -146,12 +146,23 @@ class GPUMaterialMapperTest {
     }
 
     @Test
-    fun `legacy repeat is retained while the bounded native FillRect route admits three clamp stops`() {
+    fun `three stop admission keeps repeat refused while retaining two stop repeat and clamp`() {
         val twoStops = listOf(
             GradientStop(0f, ColorARGB.Red),
             GradientStop(1f, ColorARGB.Blue),
         )
         val legacyRepeat = assertIs<GPUMaterialDescriptor.LinearGradient>(
+            Paint(
+                shader = Shader.LinearGradient(
+                    start = Point2F32(0f, 0f), end = Point2F32(8f, 0f),
+                    stops = twoStops,
+                    tileMode = TileMode.REPEAT,
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+        assertEquals("repeat", legacyRepeat.tileMode)
+
+        val refusedThreeStopRepeat = assertIs<GPUMaterialDescriptor.Unsupported>(
             Paint(
                 shader = Shader.LinearGradient(
                     start = Point2F32(0f, 0f), end = Point2F32(8f, 0f),
@@ -164,8 +175,10 @@ class GPUMaterialMapperTest {
                 ),
             ).toPreparedMaterialMapping().descriptor,
         )
-        assertEquals("repeat", legacyRepeat.tileMode)
-        assertEquals(listOf(0f, 0.5f, 1f), legacyRepeat.allStopPositions?.toList())
+        assertEquals(
+            "unsupported.material.mapping.linear_gradient_stop_count",
+            refusedThreeStopRepeat.reason.diagnosticCode,
+        )
 
         val threeStopClamp = assertIs<GPUMaterialDescriptor.LinearGradient>(
             Paint(
@@ -303,11 +316,16 @@ class GPUMaterialMapperTest {
             legacyMatrix.localMatrix,
         )
         assertEquals("srgb", legacyMatrix.interpolation)
-        val preparedMatrix = assertIs<GPUMaterialDescriptor.LinearGradient>(
+        val preparedMatrix = assertIs<GPUMaterialDescriptor.Unsupported>(
             Paint(shader = Shader.WithLocalMatrix(gradient, localMatrix))
                 .toPreparedMaterialMapping().descriptor,
         )
-        assertEquals(legacyMatrix.localMatrix, preparedMatrix.localMatrix)
+        assertEquals(
+            "unsupported.material.mapping.linear_gradient_stop_count",
+            preparedMatrix.reason.diagnosticCode,
+        )
+        assertEquals(GPUMaterialKind.LinearGradient, preparedMatrix.originalKind)
+        assertIs<GPUMaterialDescriptor.LinearGradient>(preparedMatrix.source)
 
         val legacyWorkingSpace = assertIs<GPUMaterialDescriptor.LinearGradient>(
             Paint(

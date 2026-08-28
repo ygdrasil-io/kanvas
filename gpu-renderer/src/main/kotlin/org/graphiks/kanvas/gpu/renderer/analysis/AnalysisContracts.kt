@@ -1802,7 +1802,9 @@ class GPUFirstRoutePlanner(
             when (mf) {
                 is NormalizedMaskFilter.Blur -> mf.refusalCode()
             }
-        } ?: material.analysisRefusalCodeOrNull(allowThreeStopLinearGradient = true) ?: when {
+        } ?: material.analysisRefusalCodeOrNull(
+            allowThreeStopLinearGradient = supportsBoundedThreeStopLinearGradient(),
+        ) ?: when {
             transform.type == GPUTransformType.Perspective -> "unsupported.transform.perspective"
             transform.type == GPUTransformType.Singular -> "unsupported.transform.singular"
             transform.isAffineDeterminantNonFinite() -> "unsupported.transform.non_finite"
@@ -1852,6 +1854,20 @@ class GPUFirstRoutePlanner(
             layer.target.colorFormat !in firstRouteTargetFormats -> "unsupported.target.format_blend_incompatible"
             !capabilities.hasFact(firstRouteCapabilityName) -> "unsupported.pipeline.capability_missing"
             else -> null
+    }
+
+    /**
+     * Three-stop linear gradients are deliberately narrower than the native payload ABI: only
+     * the public, non-AA identity FillRect route with an identity local matrix is proven.
+     * Every other draw falls back to the established two-stop admission in material analysis.
+     */
+    private fun NormalizedDrawCommand.FillRect.supportsBoundedThreeStopLinearGradient(): Boolean {
+        val gradient = material as? GPUMaterialDescriptor.LinearGradient ?: return false
+        return !antiAlias &&
+            transform.type == GPUTransformType.Identity &&
+            gradient.tileMode == "clamp" &&
+            gradient.allStopPositions?.size == 3 &&
+            gradient.localMatrix == listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f)
     }
 
     /**
