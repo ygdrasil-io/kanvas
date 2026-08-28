@@ -1939,7 +1939,7 @@ class GPUFramePathApiInventoryTest {
                     ClipStack.WideOpen,
                 ),
             ),
-            target(),
+            target(colorFormat = "rgba8unorm-srgb"),
             RenderConfig.DEFAULT,
             capabilitiesWith(FILL_RECT_CAPABILITY, "first_slice.sweep_gradient.native"),
         )
@@ -2022,11 +2022,11 @@ class GPUFramePathApiInventoryTest {
         )
         val shader = Shader.SweepGradient(Point2F32(16f, 16f), stops = stops, tileMode = TileMode.CLAMP)
         val cases = listOf(
-            Triple("rgba8unorm-srgb", ClipStack.WideOpen, "unsupported.material.sweep_gradient_stop_count"),
+            Triple("rgba8unorm", ClipStack.WideOpen, "unsupported.material.sweep_gradient_stop_count"),
             Triple("bgra8unorm", ClipStack.WideOpen, "unsupported.material.sweep_gradient_stop_count"),
-            Triple("rgba8unorm", ClipStack.DeviceRect(RectF32.ofLTRB(4f, 4f, 28f, 28f), false), "unsupported.material.sweep_gradient_stop_count"),
+            Triple("rgba8unorm-srgb", ClipStack.DeviceRect(RectF32.ofLTRB(4f, 4f, 28f, 28f), false), "unsupported.material.sweep_gradient_stop_count"),
             Triple(
-                "rgba8unorm",
+                "rgba8unorm-srgb",
                 ClipStack.Complex(listOf(org.graphiks.kanvas.canvas.ClipStackOp.RectOp(
                     RectF32.ofLTRB(4f, 4f, 28f, 28f), ClipOp.INTERSECT, false,
                 ))),
@@ -4322,8 +4322,8 @@ class GPUFramePathApiInventoryTest {
         }
     }
 
-    private fun target(width: Int = 32, height: Int = 32) =
-        org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts(width, height, "rgba8unorm")
+    private fun target(width: Int = 32, height: Int = 32, colorFormat: String = "rgba8unorm") =
+        org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts(width, height, colorFormat)
 
     private fun semanticFor(operation: DisplayOp): GPUDrawSemanticPayload.CorePrimitive {
         val inventory = inventoryFor(operation)
