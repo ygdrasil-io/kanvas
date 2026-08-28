@@ -73,7 +73,7 @@ class GpuEvidenceCatalogTest {
     }
 
     @Test
-    fun `catalog separates eighty nine public surface renders from nine refusals`() {
+    fun `catalog separates ninety public surface renders from nine refusals`() {
         val cases = GpuEvidenceCatalog.cases
 
         assertEquals(
@@ -86,6 +86,7 @@ class GpuEvidenceCatalogTest {
                 "canvas-state-restore-to-count",
                 "bounded-save-layer-src-over-opacity",
                 "stroke-rect-outline",
+                "translated-stroke-rect-outline",
                 "round-cap-stroke",
                 "linear-gradient-lanes",
                 "linear-gradient-three-stops",
@@ -180,6 +181,7 @@ class GpuEvidenceCatalogTest {
                 "canvas-state-restore-to-count",
                 "bounded-save-layer-src-over-opacity",
                 "stroke-rect-outline",
+                "translated-stroke-rect-outline",
                 "round-cap-stroke",
                 "linear-gradient-lanes",
                 "linear-gradient-three-stops",
@@ -264,11 +266,11 @@ class GpuEvidenceCatalogTest {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            List(89) { "kanvas.surface.render" },
+            List(90) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
-        assertEquals(89, GpuEvidenceCatalog.renderCases.size)
-        assertEquals(98, GpuEvidenceCatalog.cases.size)
+        assertEquals(90, GpuEvidenceCatalog.renderCases.size)
+        assertEquals(99, GpuEvidenceCatalog.cases.size)
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
 
         val solid = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "solid-card-stack" })
@@ -299,7 +301,7 @@ class GpuEvidenceCatalogTest {
         assertEquals("surface-srgb-mask-blur-normal-decal", (blur.descriptor.oracle as OraclePolicy.GeneratedCpu).oracleId)
         assertEquals(2, (blur.descriptor.oracle as OraclePolicy.GeneratedCpu).version)
 
-        listOf("translucent-card-overlap", "scissor-overlay", "stroke-rect-outline").forEach { id ->
+        listOf("translucent-card-overlap", "scissor-overlay", "stroke-rect-outline", "translated-stroke-rect-outline").forEach { id ->
             val evidenceCase = assertNotNull(cases.firstOrNull { it.descriptor.id.value == id })
             assertEquals(64, evidenceCase.descriptor.width)
             assertEquals(64, evidenceCase.descriptor.height)
@@ -401,6 +403,7 @@ class GpuEvidenceCatalogTest {
             "canvas-state-restore-to-count",
             "bounded-save-layer-src-over-opacity",
             "stroke-rect-outline",
+            "translated-stroke-rect-outline",
             "round-cap-stroke",
             "linear-gradient-lanes",
             "linear-gradient-three-stops",
@@ -514,6 +517,7 @@ class GpuEvidenceCatalogTest {
                 "canvas-state-restore-to-count" to OraclePolicy.GeneratedCpu("reference-raster-canvas-state-restore-to-count", 1),
                 "bounded-save-layer-src-over-opacity" to OraclePolicy.GeneratedCpu("surface-srgb-save-layer-src-over-opacity", 2),
                 "stroke-rect-outline" to OraclePolicy.GeneratedCpu("reference-raster-stroke-rect-bands", 1),
+                "translated-stroke-rect-outline" to OraclePolicy.GeneratedCpu("reference-raster-stroke-rect-bands", 2),
                 "round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke", 2),
                 "linear-gradient-lanes" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-linear-clamp", 2),
                 "linear-gradient-three-stops" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-linear-clamp", 2),
@@ -610,6 +614,7 @@ class GpuEvidenceCatalogTest {
                 "canvas-state-restore-to-count" to ComparisonPolicy(0, 100.0, 1, "Exact integer RGBA8 output from literal parent/child scissor state and post-restore sentinels."),
                 "bounded-save-layer-src-over-opacity" to ComparisonPolicy(2, 100.0, 1, "Independent linear-premultiplied CPU layer oracle; two LSBs cover bounded RGBA8 offscreen and composite quantization."),
                 "stroke-rect-outline" to ComparisonPolicy(0, 100.0, 1, "Exact integer RGBA8 output from four literal analytic coverage bands."),
+                "translated-stroke-rect-outline" to ComparisonPolicy(0, 100.0, 1, "Exact integer RGBA8 output from four translated analytic coverage bands."),
                 "round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Independent pixel-center disk oracle for W25's integral-grid radius-two horizontal contract."),
                 "linear-gradient-lanes" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
                 "linear-gradient-three-stops" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
@@ -738,6 +743,28 @@ class GpuEvidenceCatalogTest {
 
         assertTrue(comparator.compare(deltaOne, oracle, 64, 64, policy).passed)
         assertFalse(comparator.compare(deltaTwo, oracle, 64, 64, policy).passed)
+    }
+
+    @Test
+    fun `translated stroke rect keeps its integer translation and independent four band oracle`() {
+        val evidenceCase = assertNotNull(
+            GpuEvidenceCatalog.renderCases.firstOrNull { it.descriptor.id.value == "translated-stroke-rect-outline" },
+        )
+        assertEquals(64, evidenceCase.descriptor.width)
+        assertEquals(64, evidenceCase.descriptor.height)
+        assertEquals(
+            OraclePolicy.GeneratedCpu("reference-raster-stroke-rect-bands", 2),
+            evidenceCase.descriptor.oracle,
+        )
+        assertEquals(
+            ComparisonPolicy(0, 100.0, 1, "Exact integer RGBA8 output from four translated analytic coverage bands."),
+            evidenceCase.descriptor.comparison,
+        )
+        val draw = assertIs<DisplayOp.DrawRect>(ops("translated-stroke-rect-outline").last())
+        assertEquals(Matrix3x3F32.translation(5f, 7f), draw.transform)
+        assertEquals(RectF32.ofLTRB(16f, 16f, 48f, 48f), draw.rect)
+        assertEquals(6f, draw.paint.strokeWidth)
+        assertFalse(draw.paint.antiAlias)
     }
 
     @Test

@@ -35,6 +35,7 @@ object GpuEvidenceCatalog {
         canvasStateRestoreToCount(),
         boundedSaveLayerSrcOverOpacity(),
         strokeRectOutline(),
+        translatedStrokeRectOutline(),
         roundCapStroke(),
         linearGradientLanes(),
         linearGradientThreeStops(),
@@ -431,6 +432,29 @@ object GpuEvidenceCatalog {
                 fillRect(13, 45, 51, 51, stroke)
                 fillRect(13, 19, 19, 45, stroke)
                 fillRect(45, 19, 51, 45, stroke)
+            }.rgba() },
+        )
+    }
+
+    private fun translatedStrokeRectOutline(): EvidenceCase {
+        val clear = intArrayOf(13, 20, 33, 255)
+        val stroke = intArrayOf(242, 135, 46, 255)
+        return EvidenceCase(
+            descriptor = EvidenceSceneDescriptor(
+                EvidenceSceneId("translated-stroke-rect-outline"), "Translated stroke rectangle outline",
+                "A public Kanvas Paint stroke records one non-AA rectangle under an integral translation.",
+                64, 64, 1L, setOf("solid-rect", "stroke-rect", "integer-translation", "kanvas-surface"),
+                EvidenceExpectation.ShouldRender,
+                OraclePolicy.GeneratedCpu("reference-raster-stroke-rect-bands", 2),
+                ComparisonPolicy(0, 100.0, 1, "Exact integer RGBA8 output from four translated analytic coverage bands."), emptySet(),
+            ),
+            program = KanvasScenePrograms.translatedStrokeRectOutline(),
+            oracle = CpuOracle { width, height -> ReferenceRaster(width, height).apply {
+                fillRect(0, 0, width, height, clear)
+                fillRect(18, 20, 56, 26, stroke)
+                fillRect(18, 52, 56, 58, stroke)
+                fillRect(18, 26, 24, 52, stroke)
+                fillRect(50, 26, 56, 52, stroke)
             }.rgba() },
         )
     }
