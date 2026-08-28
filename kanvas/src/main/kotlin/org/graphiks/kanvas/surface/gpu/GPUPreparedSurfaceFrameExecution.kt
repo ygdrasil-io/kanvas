@@ -111,6 +111,7 @@ internal data class GPUPreparedSurfaceExecutionEvidence(
     val preparedImageFrameSamplerCreations: Long = 0L,
     val preparedImageFrameBindGroupCreations: Long = 0L,
     val preparedImageFrameTextureWriteTextureCalls: Long = 0L,
+    val preparedImageFrameTextureUploadScopesEncoded: Long = 0L,
 )
 
 internal sealed interface GPUPreparedSurfaceExecutionResult {
@@ -885,6 +886,10 @@ internal class GPUPreparedSurfaceFrameExecutor(
                 preparedImageFrameTextureWriteTextureCalls = delta(
                     pending.beforeSubmit.preparedImageFrameTextureWriteTextureCalls,
                     pending.afterCompletion.preparedImageFrameTextureWriteTextureCalls,
+                ),
+                preparedImageFrameTextureUploadScopesEncoded = delta(
+                    pending.beforeSubmit.preparedImageFrameTextureUploadScopesEncoded,
+                    pending.afterCompletion.preparedImageFrameTextureUploadScopesEncoded,
                 ),
                 textCounters = GPUPreparedTextFrameCounters(
                     a8Instances = pending.textMetrics.a8InstanceCount,

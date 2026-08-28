@@ -121,7 +121,7 @@ class KanvasSurfaceEvidenceExecutor(
         null,
         "Completed",
         "rendered",
-        emptyList(),
+        result.nativeEvidenceScopeKinds,
         result.structuralSteps.map { StructuralEventEvidence(it, "Completed", null) },
         mapOf(
             "queue.submit" to delta.submissions,

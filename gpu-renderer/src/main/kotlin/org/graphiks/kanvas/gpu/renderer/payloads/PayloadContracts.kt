@@ -1690,6 +1690,7 @@ sealed interface GPUDrawSemanticPayload {
         val artifact = snapshot.artifact
         val geometry = snapshot.geometry
         val sampling = snapshot.sampling
+        val routeCapability = snapshot.routeCapability
         val tintPremultipliedRgba: List<Float> = snapshot.tintPremultipliedRgba
         val atlasColorPremultipliedRgba: List<Float>? = snapshot.atlasColorPremultipliedRgba
         val atlasSourceBlend = snapshot.atlasSourceBlend

@@ -4,6 +4,7 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageRouteCapability
 import org.graphiks.kanvas.gpu.renderer.collections.immutableMap
 import org.graphiks.kanvas.gpu.renderer.collections.immutableSet
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
@@ -321,6 +322,8 @@ data class GPUSamplerDescriptor(
     val compareMode: String = "none",
     val maxAnisotropy: Int = 1,
     val capabilityRequirements: Set<String> = emptySet(),
+    val preparedImageRouteCapability: GPUPreparedImageRouteCapability =
+        GPUPreparedImageRouteCapability.GenericNative,
 )
 
 /**

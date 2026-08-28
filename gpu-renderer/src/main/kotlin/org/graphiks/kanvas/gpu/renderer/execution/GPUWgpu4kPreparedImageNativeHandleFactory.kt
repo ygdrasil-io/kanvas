@@ -24,6 +24,7 @@ import io.ygdrasil.webgpu.SamplerDescriptor
 import io.ygdrasil.webgpu.TextureDescriptor
 import io.ygdrasil.webgpu.TextureViewDescriptor
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageBindingLayoutTopology
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageRouteCapability
 import org.graphiks.kanvas.gpu.renderer.resources.GPUImageBindingRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUImageFrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUSamplerDescriptor
@@ -101,7 +102,9 @@ internal class GPUWgpu4kPreparedImageNativeHandleFactory(
                 descriptor.lodMaxClamp == "0" &&
                 descriptor.compareMode == "none" &&
                 descriptor.maxAnisotropy == 1 &&
-                descriptor.capabilityRequirements.isEmpty()
+                descriptor.capabilityRequirements.isEmpty() &&
+                (descriptor.preparedImageRouteCapability != GPUPreparedImageRouteCapability.BoundedNearest1To1 ||
+                    (descriptor.magFilter == "nearest" && descriptor.minFilter == "nearest"))
         ) {
             "Unsupported prepared-image sampler descriptor"
         }

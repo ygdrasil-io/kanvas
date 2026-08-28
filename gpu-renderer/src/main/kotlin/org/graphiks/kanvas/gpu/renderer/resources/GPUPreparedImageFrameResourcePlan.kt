@@ -12,6 +12,9 @@ import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageRouteCapability
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometry
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometryClass
 
 class GPUPreparedImageUploadLayout internal constructor(
     val logicalBytesPerRow: Long,
@@ -116,6 +119,8 @@ data class GPUPreparedImageUniformAllocation(
 data class GPUImageBindingInput(
     val packetId: String,
     val sampling: GPUPreparedImageSampling,
+    val routeCapability: GPUPreparedImageRouteCapability = GPUPreparedImageRouteCapability.GenericNative,
+    val boundedGeometry: GPUPreparedImageGeometry? = null,
 )
 
 data class GPUImageBindingRequest(
@@ -126,6 +131,8 @@ data class GPUImageBindingRequest(
     val sampler: GPUSamplerDescriptor,
     val bindingLayoutHash: String,
     val uniformAllocation: GPUPreparedImageUniformAllocation,
+    val routeCapability: GPUPreparedImageRouteCapability = GPUPreparedImageRouteCapability.GenericNative,
+    val boundedGeometry: GPUPreparedImageGeometry? = null,
 )
 
 internal const val GPU_PREPARED_IMAGE_UNIFORM_ALLOCATION_SIZE_BYTES = 112L
@@ -317,6 +324,10 @@ internal fun buildImageFrameResourcePlanFromBindings(
     require(artifact.colorInterpretation == GPUColorInterpretation.EncodedPremulSrgb.value) {
         "Prepared images must retain EncodedPremulSrgb interpretation"
     }
+    require(bindingInputs.all { input -> input.isValidForRouteCapability(artifact) }) {
+        "${org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes.RECT_GEOMETRY}: " +
+            "BoundedNearest1To1 requires nearest whole-image integer 1:1 geometry"
+    }
     val colorContract = preparedSdrColorContract()
     if (artifact.alphaOnly) {
         require(artifact.colorUploadEncoding == null &&
@@ -409,6 +420,7 @@ internal fun buildImageFrameResourcePlanFromBindings(
                 magFilter = filter,
                 minFilter = filter,
                 mipmapFilter = "none",
+                preparedImageRouteCapability = bindingInput.routeCapability,
             ),
             bindingLayoutHash = bindingLayoutHash,
             uniformAllocation = GPUPreparedImageUniformAllocation(
@@ -416,6 +428,8 @@ internal fun buildImageFrameResourcePlanFromBindings(
                 offset = Math.multiplyExact(index.toLong(), uniformStride),
                 size = uniformSize,
             ),
+            routeCapability = bindingInput.routeCapability,
+            boundedGeometry = bindingInput.boundedGeometry,
         )
     }
     val frameResourceIdentity = "$frameIdentity|${artifact.key.value}".encodeToByteArray().sha256()
@@ -521,6 +535,45 @@ internal fun buildImageFrameResourcePlanFromBindings(
             ),
         ),
     )
+}
+
+internal fun GPUImageBindingInput.isValidForRouteCapability(
+    artifact: GPUPreparedImageUploadArtifact,
+): Boolean = when (routeCapability) {
+    GPUPreparedImageRouteCapability.GenericNative -> true
+    GPUPreparedImageRouteCapability.BoundedNearest1To1 ->
+        sampling == GPUPreparedImageSampling.Nearest && boundedGeometry.isBoundedNativeImageGeometry(artifact)
+}
+
+internal fun GPUImageBindingRequest.isValidForRouteCapability(
+    artifactWidth: Int,
+    artifactHeight: Int,
+): Boolean = when (routeCapability) {
+    GPUPreparedImageRouteCapability.GenericNative -> sampler.preparedImageRouteCapability == routeCapability
+    GPUPreparedImageRouteCapability.BoundedNearest1To1 ->
+        sampler.preparedImageRouteCapability == routeCapability &&
+            sampler.magFilter == "nearest" && sampler.minFilter == "nearest" &&
+            boundedGeometry.isBoundedNativeImageGeometry(artifactWidth, artifactHeight)
+}
+
+internal fun GPUPreparedImageGeometry?.isBoundedNativeImageGeometry(
+    artifact: GPUPreparedImageUploadArtifact,
+): Boolean = isBoundedNativeImageGeometry(artifact.width, artifact.height)
+
+private fun GPUPreparedImageGeometry?.isBoundedNativeImageGeometry(
+    artifactWidth: Int,
+    artifactHeight: Int,
+): Boolean {
+    val geometry = this ?: return false
+    if (geometry.geometryClass != GPUPreparedImageGeometryClass.Rect || geometry.vertices.size != 4) return false
+    val vertices = geometry.vertices
+    val left = vertices[0].x
+    val top = vertices[0].y
+    val right = vertices[2].x
+    val bottom = vertices[2].y
+    return listOf(left, top, right, bottom).all { value -> value.isFinite() && value == value.toInt().toFloat() } &&
+        right - left == artifactWidth.toFloat() && bottom - top == artifactHeight.toFloat() &&
+        vertices.map { it.u to it.v } == listOf(0f to 0f, 1f to 0f, 1f to 1f, 0f to 1f)
 }
 
 internal fun buildPreparedImageFrameResourcePlan(

@@ -398,7 +398,7 @@ class GPUPreparedDrawImageLowererTest {
                 0,
                 GPUFrameProvenance.None,
                 target(),
-                RenderConfig.DEFAULT,
+                boundedW28Config,
                 capabilities(),
             ),
         )
@@ -417,7 +417,7 @@ class GPUPreparedDrawImageLowererTest {
                 0,
                 GPUFrameProvenance.None,
                 target(),
-                RenderConfig.DEFAULT,
+                boundedW28Config,
                 capabilities(),
             ),
         )
@@ -436,7 +436,7 @@ class GPUPreparedDrawImageLowererTest {
                 0,
                 GPUFrameProvenance.None,
                 target(),
-                RenderConfig.DEFAULT,
+                boundedW28Config,
                 capabilities(),
             ),
         )
@@ -455,7 +455,7 @@ class GPUPreparedDrawImageLowererTest {
                 0,
                 GPUFrameProvenance.None,
                 target(),
-                RenderConfig.DEFAULT,
+                boundedW28Config,
                 capabilities(),
             ),
         )
@@ -475,7 +475,7 @@ class GPUPreparedDrawImageLowererTest {
                 0,
                 GPUFrameProvenance.None,
                 target(),
-                RenderConfig.DEFAULT,
+                boundedW28Config,
                 capabilities(),
             ),
         )
@@ -1023,7 +1023,7 @@ class GPUPreparedDrawImageLowererTest {
                 0,
                 GPUFrameProvenance.None,
                 target(),
-                RenderConfig.DEFAULT,
+                boundedW28Config,
                 capabilities(),
             ),
         )

@@ -131,7 +131,7 @@ internal object GPUPreparedSurfaceProductRouter {
                 structuralSteps = execution.evidence.structuralSteps,
                 nativeEvidenceCounters = mapOf(
                     "preparedImage.textureUploadScope" to
-                        execution.evidence.preparedImageFrameTextureWriteTextureCalls,
+                        execution.evidence.preparedImageFrameTextureUploadScopesEncoded,
                     "preparedImage.frameTextureCreations" to
                         execution.evidence.preparedImageFrameTextureCreations,
                     "preparedImage.frameSamplerCreations" to
@@ -141,6 +141,9 @@ internal object GPUPreparedSurfaceProductRouter {
                     "preparedImage.queueWriteTextureCalls" to
                         execution.evidence.preparedImageFrameTextureWriteTextureCalls,
                 ),
+                nativeEvidenceScopeKinds = if (
+                    execution.evidence.preparedImageFrameTextureUploadScopesEncoded > 0L
+                ) listOf("Upload") else emptyList(),
             ),
             evidence = execution.evidence,
         )

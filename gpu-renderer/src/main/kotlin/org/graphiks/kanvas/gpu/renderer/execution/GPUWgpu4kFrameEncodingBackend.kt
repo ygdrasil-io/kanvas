@@ -212,6 +212,7 @@ internal class GPUWgpu4kFrameEncodingBackend(
     private val onDestinationCopyEncoded: () -> Unit = {},
     private val onSubmission: () -> Unit = {},
     private val onPreparedImageTextureWriteTexture: () -> Unit = {},
+    private val onPreparedImageTextureUploadScopeEncoded: () -> Unit = {},
 ) : GPUFrameEncodingBackend, AutoCloseable {
     override val encodingMode: GPUFrameEncodingMode = GPUFrameEncodingMode.NativeOperandsRequired
 
@@ -387,7 +388,11 @@ internal class GPUWgpu4kFrameEncodingBackend(
                         } else {
                             {}
                         },
-                    )
+                    ).also {
+                        if (operand.uploadRole == "prepared-image") {
+                            onPreparedImageTextureUploadScopeEncoded()
+                        }
+                    }
                 is GPUPreparedNativeScopeOperand.BufferUpload -> Unit
                 is GPUPreparedNativeScopeOperand.Copy -> encodeCopy(operand)
                 is GPUPreparedNativeScopeOperand.Readback -> encodeReadback(operand)

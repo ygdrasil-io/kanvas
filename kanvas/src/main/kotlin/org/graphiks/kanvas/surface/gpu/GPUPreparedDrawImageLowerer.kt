@@ -63,6 +63,7 @@ import kotlin.math.min
 data class GPUPreparedImageDrawFacts(
     val artifact: GPUPreparedImageUploadArtifact,
     val sampling: GPUPreparedImageSampling,
+    val routeCapability: GPUPreparedImageRouteCapability = GPUPreparedImageRouteCapability.GenericNative,
     val geometry: GPUPreparedImageGeometry,
     val tintPremultipliedRgba: List<Float>,
     val atlasColorPremultipliedRgba: List<Float>? = null,
@@ -200,7 +201,7 @@ internal object GPUPreparedDrawImageLowerer {
                 transform.tx.isFinite() && transform.ty.isFinite() &&
                 transform.tx == transform.tx.toInt().toFloat() &&
                 transform.ty == transform.ty.toInt().toFloat()
-        if (!integerTranslation) {
+        if (boundedW28 && !integerTranslation) {
             return GPUPreparedDrawImageLowering.Refused(
                 GPUPreparedImageRefusalCodes.AFFINE_SAMPLING,
                 mapOf(
@@ -422,6 +423,7 @@ internal object GPUPreparedDrawImageLowerer {
             preparedImage = GPUPreparedImageDrawFacts(
                 artifact = artifact,
                 sampling = sampling,
+                routeCapability = config.preparedImageRouteCapability,
                 geometry = geometry,
                 tintPremultipliedRgba = tintPremultipliedRgba,
             ),

@@ -66,6 +66,7 @@ data class GPUPreparedImagePayloadInput(
     val artifact: GPUPreparedImageUploadArtifact,
     val geometry: GPUPreparedImageGeometry,
     val sampling: GPUPreparedImageSampling,
+    val routeCapability: GPUPreparedImageRouteCapability = GPUPreparedImageRouteCapability.GenericNative,
     val tintPremultipliedRgba: List<Float>,
     val atlasColorPremultipliedRgba: List<Float>?,
     val atlasSourceBlend: GPUPreparedAtlasSourceBlend?,
@@ -81,6 +82,7 @@ internal class GPUPreparedImagePayloadSnapshot(input: GPUPreparedImagePayloadInp
     val artifact: GPUPreparedImageUploadArtifact = input.artifact
     val geometry: GPUPreparedImageGeometry = input.geometry
     val sampling: GPUPreparedImageSampling = input.sampling
+    val routeCapability: GPUPreparedImageRouteCapability = input.routeCapability
     val tintPremultipliedRgba: List<Float> = immutableList(input.tintPremultipliedRgba)
     val atlasColorPremultipliedRgba: List<Float>? = input.atlasColorPremultipliedRgba?.let(::immutableList)
     val atlasSourceBlend: GPUPreparedAtlasSourceBlend? = input.atlasSourceBlend
@@ -99,6 +101,7 @@ internal class GPUPreparedImagePayloadSnapshot(input: GPUPreparedImagePayloadInp
         artifact = artifact,
         geometry = geometry,
         sampling = sampling,
+        routeCapability = routeCapability,
         tintPremultipliedRgba = tintPremultipliedRgba,
         atlasColorPremultipliedRgba = atlasColorPremultipliedRgba,
         atlasSourceBlend = atlasSourceBlend,
