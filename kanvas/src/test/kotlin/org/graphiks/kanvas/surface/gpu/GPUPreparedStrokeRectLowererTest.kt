@@ -198,6 +198,48 @@ class GPUPreparedStrokeRectLowererTest {
     }
 
     @Test
+    fun `two stop sweep gradient stroke refuses every bounded-contract escape before bands`() {
+        fun sweep(
+            stops: List<org.graphiks.kanvas.paint.GradientStop> = listOf(
+                org.graphiks.kanvas.paint.GradientStop(0f, ColorARGB.Red),
+                org.graphiks.kanvas.paint.GradientStop(1f, ColorARGB.Blue),
+            ),
+            tileMode: org.graphiks.kanvas.paint.TileMode = org.graphiks.kanvas.paint.TileMode.CLAMP,
+            startAngle: Float = 0f,
+            endAngle: Float = 360f,
+        ) = Shader.SweepGradient(Point2F32(32.5f, 32.5f), startAngle, endAngle, stops, tileMode)
+        fun operation(shader: Shader, antiAlias: Boolean = false, transform: Matrix3x3F32 = Matrix3x3F32.Identity, colorFilter: ColorFilter? = null) =
+            strokeRect(
+                bounds = RectF32.ofLTRB(8f, 16f, 56f, 48f),
+                paint = Paint.stroke(ColorARGB.Transparent, 4f).copy(shader = shader, antiAlias = antiAlias, colorFilter = colorFilter),
+                transform = transform,
+            )
+        val cases = listOf(
+            Triple(operation(sweep(listOf(org.graphiks.kanvas.paint.GradientStop(0f, ColorARGB.Red)))), target(), "unsupported.stroke.rect_gradient_stop_count"),
+            Triple(operation(sweep(listOf(org.graphiks.kanvas.paint.GradientStop(0f, ColorARGB.Red), org.graphiks.kanvas.paint.GradientStop(.5f, ColorARGB.Green), org.graphiks.kanvas.paint.GradientStop(1f, ColorARGB.Blue)))), target(), "unsupported.stroke.rect_gradient_stop_count"),
+            Triple(operation(sweep(tileMode = org.graphiks.kanvas.paint.TileMode.REPEAT)), target(), "unsupported.stroke.rect_gradient_tile_mode"),
+            Triple(operation(sweep(tileMode = org.graphiks.kanvas.paint.TileMode.MIRROR)), target(), "unsupported.stroke.rect_gradient_tile_mode"),
+            Triple(operation(sweep(tileMode = org.graphiks.kanvas.paint.TileMode.DECAL)), target(), "unsupported.stroke.rect_gradient_tile_mode"),
+            Triple(operation(sweep(startAngle = 45f, endAngle = 315f)), target(), "unsupported.stroke.rect_gradient_angles"),
+            Triple(operation(sweep()), target("rgba8unorm"), "unsupported.stroke.rect_gradient_target"),
+            Triple(operation(sweep()), target("bgra8unorm"), "unsupported.stroke.rect_gradient_target"),
+            Triple(operation(sweep(), antiAlias = true), target(), "unsupported.stroke.rect_anti_alias"),
+            Triple(operation(sweep(), transform = Matrix3x3F32.translation(1f, 0f)), target(), "unsupported.stroke.rect_transform"),
+            Triple(operation(Shader.WithLocalMatrix(sweep(), Matrix3x3F32.translation(1f, 0f))), target(), "unsupported.stroke.rect_material"),
+            Triple(operation(sweep(), colorFilter = ColorFilter.HighContrast), target(), "unsupported.stroke.rect_material"),
+        )
+        cases.forEach { (operation, target, expectedCode) ->
+            val refused = assertIs<GPUPreparedStrokeRectLowering.Refused>(
+                GPUPreparedStrokeRectLowerer.lower(
+                    operation, GPUDrawCommandID(0), 0, GPUFrameProvenance.None, target,
+                    RenderConfig.DEFAULT, capabilities(withTwoStopStrokeSweepGradient = true),
+                ),
+            )
+            assertEquals(expectedCode, refused.code)
+        }
+    }
+
+    @Test
     fun `two stop radial gradient stroke refuses every bounded-contract escape before bands`() {
         fun radial(tileMode: org.graphiks.kanvas.paint.TileMode = org.graphiks.kanvas.paint.TileMode.CLAMP) =
             Shader.RadialGradient(

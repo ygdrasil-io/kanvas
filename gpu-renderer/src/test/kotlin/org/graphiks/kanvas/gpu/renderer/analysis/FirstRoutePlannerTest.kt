@@ -202,6 +202,7 @@ class FirstRoutePlannerTest {
         assertEquals("native.stroke_rect.sweep_gradient_two_stop", typed.analysisRecord.routeDecisionLabel)
         assertEquals(listOf(GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE), assertIs<GPURouteDecision.Native>(typed.routeDecision).route.requirements)
         assertEquals("native.fill_rect.sweep_gradient", GPUFirstRoutePlanner(capabilities).plan(command(GPUCommandSourceKind.PublicFillRect)).analysisRecord.routeDecisionLabel)
+        assertEquals("native.fill_rect.sweep_gradient", GPUFirstRoutePlanner(capabilities).plan(command(GPUCommandSourceKind.Generic)).analysisRecord.routeDecisionLabel)
         assertEquals("unsupported.stroke.rect_sweep_gradient_two_stop_capability", assertIs<GPURouteDecision.Refused>(GPUFirstRoutePlanner(capabilities.copy(facts = capabilities.facts.filterNot { it.name == GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE })).plan(command(GPUCommandSourceKind.AnalyticStrokeRectBand)).routeDecision).diagnostic.code)
     }
 

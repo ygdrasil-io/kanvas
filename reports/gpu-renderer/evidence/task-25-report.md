@@ -19,7 +19,7 @@ pixel-validée à 100 % (0 pixel divergent, delta maximal 0, tolérance 1 LSB).
 Les artefacts sont sous
 `reports/gpu-renderer/evidence/correctness/promoted/sweep-gradient-two-stop-stroke-rect/`.
 
-Les limites restent explicites : trois stops ou plus, un tile mode autre que
+Les limites restent explicites : un nombre de stops différent de deux, un tile mode autre que
 `CLAMP`, des angles partiels, une cible non-sRGB, l'anti-aliasing, une
 transformation, une matrice locale ou un color filter refusent avant la
 production des packets.
