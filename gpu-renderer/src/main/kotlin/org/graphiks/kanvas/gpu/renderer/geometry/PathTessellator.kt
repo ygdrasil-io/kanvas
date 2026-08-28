@@ -88,8 +88,8 @@ class PathTessellationBudgetExceeded(
 class PathTessellator(
     private val tolerance: Float = 0.25f,
     private val maxVertices: Int = 256,
-    private val maxFanTriangles: Int = Int.MAX_VALUE,
-    private val maxGeometryBytes: Int = maxFanTriangles.coerceAtMost(Int.MAX_VALUE / 36) * 36,
+    private val maxFanTriangles: Int = GPUPathEdgeFanPayloadContract.MAX_TRIANGLES.toInt(),
+    private val maxGeometryBytes: Int = GPUPathEdgeFanPayloadContract.MAX_GEOMETRY_BYTES.toInt(),
 ) {
     init {
         require(tolerance.isFinite() && tolerance > 0f) { "Path tolerance must be finite and positive" }

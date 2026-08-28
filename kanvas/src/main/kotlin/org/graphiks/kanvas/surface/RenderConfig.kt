@@ -21,6 +21,8 @@ data class RenderConfig(
      * convert unsigned limits to backend `Int` values or allocate geometry.
      */
     internal fun pathEdgeFanBudgetRefusalCodeOrNull(): String? = when {
+        maxPathVertices > Int.MAX_VALUE.toUInt() ->
+            "unsupported.core_primitive.path_vertex_budget_config_out_of_int_range"
         maxPathFanTriangles > Int.MAX_VALUE.toUInt() ->
             "geometry.path.fan_budget_config_out_of_int_range"
         maxPathGeometryBytes > Int.MAX_VALUE.toUInt() ->

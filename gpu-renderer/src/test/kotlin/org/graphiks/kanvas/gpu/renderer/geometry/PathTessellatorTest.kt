@@ -391,6 +391,22 @@ class PathTessellatorTest {
     }
 
     @Test
+    fun `default edge fan contract refuses over 1024 triangles before allocation`() {
+        val flattened = FlattenedPath(
+            points = List(GPUPathEdgeFanPayloadContract.MAX_TRIANGLES.toInt() + 1) { index ->
+                Point(index.toFloat(), (index % 2).toFloat())
+            },
+            contourStarts = listOf(0),
+        )
+
+        val failure = assertFailsWith<PathTessellationBudgetExceeded> {
+            PathTessellator().stencilEdgeFan(flattened)
+        }
+
+        assertEquals("geometry.path.fan_budget_exceeded", failure.code)
+    }
+
+    @Test
     fun `curve geometry memory budget refuses before fan buffers are allocated`() {
         val tessellator = PathTessellator(
             tolerance = 10f,

@@ -2118,6 +2118,8 @@ class GPUFramePathApiInventoryTest {
                 "geometry.path.fan_budget_config_out_of_int_range",
             RenderConfig(maxPathVertices = 16u, maxPathGeometryBytes = UInt.MAX_VALUE) to
                 "geometry.path.memory_budget_config_out_of_int_range",
+            RenderConfig(maxPathVertices = UInt.MAX_VALUE) to
+                "unsupported.core_primitive.path_vertex_budget_config_out_of_int_range",
         )
 
         cases.forEach { (config, expectedCode) ->
