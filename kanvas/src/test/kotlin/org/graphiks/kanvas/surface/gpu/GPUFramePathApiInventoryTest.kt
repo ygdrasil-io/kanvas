@@ -2308,6 +2308,37 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `round cap remains bounded to one open segment before native preparation`() {
+        val path = Path().apply {
+            moveTo(4f, 8f)
+            lineTo(16f, 8f)
+            lineTo(16f, 20f)
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    path,
+                    Paint.stroke(ColorARGB.Red, 4f).copy(
+                        antiAlias = false,
+                        strokeCap = StrokeCap.ROUND,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+        )
+
+        val refused = gatherRefusal(inventory)
+
+        assertEquals("unsupported.core_primitive.stroke.complex_exact_lowering", refused.code)
+        assertEquals("3", refused.facts["pointCount"])
+        assertEquals("round", refused.facts["cap"])
+    }
+
+    @Test
     fun `single segment stroke refuses an unregistered path effect before native preparation`() {
         val inventory = GPUFramePathApiInventory.plan(
             operations = listOf(

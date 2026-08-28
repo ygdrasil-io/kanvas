@@ -24,6 +24,7 @@ import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralOutcome
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.math.color.ColorARGB
@@ -95,6 +96,74 @@ class GPUFramePathApiInventoryNativeSmokeTest {
     }
 
     @Test
+    fun `single segment round cap stroke matches the independent CPU pixel oracle natively`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        val capabilities = requireNotNull(backend.capabilities)
+        val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(
+            RenderConfig.DEFAULT.mapPreparedGpuColorConfig(),
+        )
+        val targetBounds = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, 32, 32)
+        val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.stroke-round-cap")
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(6f, 16f)
+                        lineTo(26f, 16f)
+                    },
+                    Paint.stroke(ColorARGB.Red, 4f).copy(
+                        antiAlias = false,
+                        strokeCap = StrokeCap.ROUND,
+                    ),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+            deviceGeneration = backend.deviceGeneration,
+        )
+        val preparation = GPUFramePathApiInventory.prepareNativeTaskList(
+            inventory = inventory,
+            capabilities = capabilities,
+            targetBounds = targetBounds,
+            readbackRequestId = readbackId,
+        )
+        val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            preparation,
+            (preparation as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let { diagnostic ->
+                "${diagnostic.code.value}: ${diagnostic.message}; facts=${diagnostic.facts}"
+            },
+        )
+        val session = backend.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(
+                width = 32,
+                height = 32,
+                colorFormat = colorMapping.physicalFormat,
+                colorInterpretation = colorMapping.interpretation,
+            ),
+        )
+        try {
+            val completed = session.renderFrame(
+                prepared.taskList,
+                GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
+            ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+            assertEquals(GPUFrameStructuralOutcome.Succeeded, completed.outcome)
+            val gpu = assertIs<GPUSceneFrameOutput.ReadbackRgba>(completed.output).bytes
+
+            assertContentEquals(deterministicRoundCapStrokeOracle(), gpu)
+            assertEquals(1L, session.nativeCounters().submits)
+            assertEquals(1L, session.nativeCounters().readbackCopies)
+        } finally {
+            session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
     fun `public Surface render expands one bounded stroke rect in one native frame`() {
         val backend = GPUBackendRuntimeNativeFactory.createOrNull()
         assumeTrue(backend != null)
@@ -120,6 +189,37 @@ class GPUFramePathApiInventoryNativeSmokeTest {
             assertEquals(listOf(255, 0, 0, 255), rgba(result.pixels, 47, 32, 64))
             assertEquals(listOf(0, 0, 0, 0), rgba(result.pixels, 32, 32, 64))
             assertEquals(listOf(0, 0, 0, 0), rgba(result.pixels, 8, 8, 64))
+        } finally {
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
+    fun `public Surface render submits a bounded round cap path stroke with the CPU oracle`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        GPUBackendRuntimeNativeFactory.dispose()
+        val surface = Surface(width = 32, height = 32)
+        surface.canvas {
+            drawPath(
+                Path().apply {
+                    moveTo(6f, 16f)
+                    lineTo(26f, 16f)
+                },
+                Paint.stroke(ColorARGB.Red, 4f).copy(
+                    antiAlias = false,
+                    strokeCap = StrokeCap.ROUND,
+                ),
+            )
+        }
+
+        try {
+            val result = surface.render()
+
+            assertEquals(1, result.stats.opsDispatched)
+            assertEquals(0, result.stats.opsRefused)
+            assertContentEquals(deterministicRoundCapStrokeOracle().asUByteArray(), result.pixels)
+            assertEquals(1L, requireNotNull(GPUBackendRuntimeNativeFactory.createOrNull()).runtimeTelemetry.submissions)
         } finally {
             GPUBackendRuntimeNativeFactory.dispose()
         }
@@ -295,6 +395,27 @@ class GPUFramePathApiInventoryNativeSmokeTest {
                 val offset = (y * 32 + x) * 4
                 rgba[offset] = 0xff.toByte()
                 rgba[offset + 3] = 0xff.toByte()
+            }
+        }
+    }
+
+    /**
+     * Independent analytic oracle: the round-capped segment is the union of its
+     * central rectangle and two radius-two disks evaluated at pixel centers.
+     */
+    private fun deterministicRoundCapStrokeOracle(): ByteArray = ByteArray(32 * 32 * 4).also { rgba ->
+        for (y in 0 until 32) {
+            for (x in 0 until 32) {
+                val sampleX = x + 0.5f
+                val sampleY = y + 0.5f
+                val inBody = sampleX in 6f..26f && sampleY in 14f..18f
+                val inStartCap = (sampleX - 6f) * (sampleX - 6f) + (sampleY - 16f) * (sampleY - 16f) <= 4f
+                val inEndCap = (sampleX - 26f) * (sampleX - 26f) + (sampleY - 16f) * (sampleY - 16f) <= 4f
+                if (inBody || inStartCap || inEndCap) {
+                    val offset = (y * 32 + x) * 4
+                    rgba[offset] = 0xff.toByte()
+                    rgba[offset + 3] = 0xff.toByte()
+                }
             }
         }
     }

@@ -993,7 +993,7 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
         pathEffectKind == "Dash" || dashIntervals?.isNotEmpty() == true ->
             "unsupported.core_primitive.stroke.dash_exact_lowering"
         pathEffectKind != null -> "unsupported.core_primitive.stroke.path_effect_exact_lowering"
-        strokeCap !in setOf("butt", "square") -> "unsupported.core_primitive.stroke.cap_exact_lowering"
+        strokeCap !in setOf("butt", "square", "round") -> "unsupported.core_primitive.stroke.cap_exact_lowering"
         strokeJoin != "miter" -> "unsupported.core_primitive.stroke.join_exact_lowering"
         !strokeMiterLimit.isFinite() || strokeMiterLimit < 1f ->
             "unsupported.core_primitive.stroke.miter_exact_lowering"
@@ -1067,10 +1067,10 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
             miterLimit = strokeMiterLimit,
             dashIntervals = dashIntervals?.toList().orEmpty(),
             dashPhase = dashPhase,
-            loweringProof = if (strokeCap == "square") {
-                GPUCorePrimitiveStrokeLoweringProof.SingleSegmentSquareV1
-            } else {
-                GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1
+            loweringProof = when (strokeCap) {
+                "square" -> GPUCorePrimitiveStrokeLoweringProof.SingleSegmentSquareV1
+                "round" -> GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundV1
+                else -> GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1
             },
         ),
         sourceAuthority = pathDescriptor.sourceAuthority,

@@ -2083,7 +2083,7 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
 
     /**
      * The native path-stencil route is intentionally smaller than generic prepared strokes:
-     * one immutable, open two-point contour, finite bounded width, solid butt/square cap, and
+     * one immutable, open two-point contour, finite bounded width, solid butt/square/round cap, and
      * no join work. More than one segment remains on the prepared/refusal path until its
      * outline topology is independently proven in a native packet.
      */
@@ -2094,7 +2094,7 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
             !antiAlias &&
             (dashIntervals == null || dashIntervals.isEmpty()) &&
             pathEffectKind == null &&
-            strokeCap in setOf("butt", "square") &&
+            strokeCap in setOf("butt", "square", "round") &&
             strokeJoin == "miter" &&
             strokeMiterLimit.isFinite() && strokeMiterLimit >= 1f &&
             transform.type in setOf(GPUTransformType.Identity, GPUTransformType.Translate)

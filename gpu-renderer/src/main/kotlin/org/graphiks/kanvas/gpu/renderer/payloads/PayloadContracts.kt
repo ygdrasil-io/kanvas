@@ -1164,6 +1164,7 @@ enum class GPUCorePrimitiveCoverageMode {
 enum class GPUCorePrimitiveStrokeLoweringProof {
     SingleSegmentButtV1,
     SingleSegmentSquareV1,
+    SingleSegmentRoundV1,
 }
 
 /** Exact source stroke facts plus the named lowering implementation that consumed them. */
@@ -2473,6 +2474,7 @@ private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
                     when (stroke.loweringProof) {
                         GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1 -> stroke.cap == "butt"
                         GPUCorePrimitiveStrokeLoweringProof.SingleSegmentSquareV1 -> stroke.cap == "square"
+                        GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundV1 -> stroke.cap == "round"
                     },
                 ) {
                     "Core single-segment stroke cap must match its closed lowering proof"

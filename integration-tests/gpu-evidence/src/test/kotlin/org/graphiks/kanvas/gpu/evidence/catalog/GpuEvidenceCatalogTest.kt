@@ -20,6 +20,7 @@ import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.pipeline.ClipOp
@@ -32,7 +33,7 @@ import org.graphiks.math.matrix.Matrix3x3F32
 
 class GpuEvidenceCatalogTest {
     @Test
-    fun `catalog separates eighty two public surface renders from six refusals`() {
+    fun `catalog separates eighty three public surface renders from six refusals`() {
         val cases = GpuEvidenceCatalog.cases
 
         assertEquals(
@@ -43,6 +44,7 @@ class GpuEvidenceCatalogTest {
                 "scissor-overlay",
                 "canvas-state-restore-to-count",
                 "stroke-rect-outline",
+                "round-cap-stroke",
                 "linear-gradient-lanes",
                 "radial-swatch",
                 "sweep-disk",
@@ -127,6 +129,7 @@ class GpuEvidenceCatalogTest {
                 "scissor-overlay",
                 "canvas-state-restore-to-count",
                 "stroke-rect-outline",
+                "round-cap-stroke",
                 "linear-gradient-lanes",
                 "radial-swatch",
                 "sweep-disk",
@@ -206,11 +209,11 @@ class GpuEvidenceCatalogTest {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            List(82) { "kanvas.surface.render" },
+            List(83) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
-        assertEquals(82, GpuEvidenceCatalog.renderCases.size)
-        assertEquals(88, GpuEvidenceCatalog.cases.size)
+        assertEquals(83, GpuEvidenceCatalog.renderCases.size)
+        assertEquals(89, GpuEvidenceCatalog.cases.size)
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
 
         val solid = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "solid-card-stack" })
@@ -260,6 +263,13 @@ class GpuEvidenceCatalogTest {
         assertEquals(0, strokeRect.descriptor.comparison?.perChannelTolerance)
         assertIs<KanvasSurfaceProgram>(strokeRect.program)
         assertEquals("kanvas.surface.render", assertIs<KanvasSurfaceProgram>(strokeRect.program).routeId)
+
+        val roundCapStroke = cases.first { it.descriptor.id.value == "round-cap-stroke" }
+        assertEquals(32, roundCapStroke.descriptor.width)
+        assertEquals(32, roundCapStroke.descriptor.height)
+        assertEquals(0, roundCapStroke.descriptor.comparison?.perChannelTolerance)
+        assertEquals(100.0, roundCapStroke.descriptor.comparison?.minimumSimilarityPercent)
+        assertIs<KanvasSurfaceProgram>(roundCapStroke.program)
 
         listOf("linear-gradient-lanes", "radial-swatch", "sweep-disk", "sweep-gradient-partial-angle", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal").forEach { id ->
             val evidenceCase = assertNotNull(cases.firstOrNull { it.descriptor.id.value == id })
@@ -329,6 +339,7 @@ class GpuEvidenceCatalogTest {
             "scissor-overlay",
             "canvas-state-restore-to-count",
             "stroke-rect-outline",
+            "round-cap-stroke",
             "linear-gradient-lanes",
             "radial-swatch",
             "sweep-disk",
@@ -432,6 +443,7 @@ class GpuEvidenceCatalogTest {
                 "scissor-overlay" to OraclePolicy.GeneratedCpu("reference-raster-scissor-intersections", 1),
                 "canvas-state-restore-to-count" to OraclePolicy.GeneratedCpu("reference-raster-canvas-state-restore-to-count", 1),
                 "stroke-rect-outline" to OraclePolicy.GeneratedCpu("reference-raster-stroke-rect-bands", 1),
+                "round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke", 1),
                 "linear-gradient-lanes" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-linear-clamp", 2),
                 "radial-swatch" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-radial-clamp", 2),
                 "sweep-disk" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-sweep-clamp", 2),
@@ -521,6 +533,7 @@ class GpuEvidenceCatalogTest {
                 "scissor-overlay" to ComparisonPolicy(0, 100.0, 1, "Exact integer RGBA8 output from literal scissor intersections."),
                 "canvas-state-restore-to-count" to ComparisonPolicy(0, 100.0, 1, "Exact integer RGBA8 output from literal parent/child scissor state and post-restore sentinels."),
                 "stroke-rect-outline" to ComparisonPolicy(0, 100.0, 1, "Exact integer RGBA8 output from four literal analytic coverage bands."),
+                "round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Independent pixel-center union of a rectangle and two radius-two disks."),
                 "linear-gradient-lanes" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
                 "radial-swatch" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
                 "sweep-disk" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
@@ -692,6 +705,15 @@ class GpuEvidenceCatalogTest {
             ),
             ops("stroke-rect-outline"),
         )
+        val roundCapStroke = assertIs<DisplayOp.DrawPath>(ops("round-cap-stroke").single())
+        assertEquals(RectF32.ofLTRB(6f, 16f, 26f, 16f), roundCapStroke.path.computeBounds())
+        assertFalse(PathMeasure(roundCapStroke.path).isClosed)
+        assertEquals(
+            Paint.stroke(ColorARGB.Red, 4f).copy(antiAlias = false, strokeCap = StrokeCap.ROUND),
+            roundCapStroke.paint,
+        )
+        assertEquals(Matrix3x3F32.Identity, roundCapStroke.transform)
+        assertEquals(ClipStack.WideOpen, roundCapStroke.clip)
         assertEquals(
             listOf(
                 DisplayOp.DrawRect(
