@@ -1871,9 +1871,15 @@ class GPUFirstRoutePlanner(
             gradient.localMatrix == listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f)
     }
 
-    /** The native ABI is larger, but only this FillRect route may consume a third radial stop. */
-    private fun NormalizedDrawCommand.FillRect.hasThreeStopRadialGradient(): Boolean =
-        (material as? GPUMaterialDescriptor.RadialGradient)?.allStopPositions?.size == 3
+    /** The native ABI is larger, but only this proven FillRect route may consume a third radial stop. */
+    private fun NormalizedDrawCommand.FillRect.hasThreeStopRadialGradient(): Boolean {
+        val gradient = material as? GPUMaterialDescriptor.RadialGradient ?: return false
+        return !antiAlias &&
+            transform.type == GPUTransformType.Identity &&
+            gradient.tileMode == "clamp" &&
+            gradient.localMatrix == listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f) &&
+            gradient.allStopPositions?.size == 3
+    }
 
     /**
      * The direct clamp-linear-gradient consumer may share a native hard path-clip stencil

@@ -1863,12 +1863,12 @@ class GPUFramePathApiInventoryTest {
             Triple(
                 Shader.RadialGradient(Point2F32(16f, 16f), 16f, threeStops, TileMode.REPEAT),
                 false,
-                "unsupported.material.gradient_tile_mode_unsupported",
+                "unsupported.material.radial_gradient_stop_count",
             ),
             Triple(
                 Shader.RadialGradient(Point2F32(16f, 16f), 16f, threeStops, TileMode.CLAMP),
                 true,
-                "unsupported.material.gradient_antialias",
+                "unsupported.material.radial_gradient_stop_count",
             ),
             Triple(
                 Shader.WithLocalMatrix(
@@ -1899,6 +1899,26 @@ class GPUFramePathApiInventoryTest {
             assertTrue(inventory.recording.taskList.tasks.filterIsInstance<GPUTask.Render>()
                 .flatMap(GPUTask.Render::drawPackets).isEmpty())
         }
+
+        val translated = GPUFramePathApiInventory.plan(
+            listOf(
+                DisplayOp.DrawRect(
+                    RectF32.ofLTRB(2f, 2f, 30f, 30f),
+                    Paint(shader = Shader.RadialGradient(
+                        Point2F32(16f, 16f), 16f, threeStops, TileMode.CLAMP,
+                    )).copy(antiAlias = false),
+                    Matrix3x3F32.translation(1f, 0f),
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target(),
+            RenderConfig.DEFAULT,
+            capabilitiesWith(FILL_RECT_CAPABILITY, "first_slice.radial_gradient.native"),
+        )
+        assertEquals(
+            listOf("refused:unsupported.material.radial_gradient_stop_count"),
+            translated.recording.routeDiagnostics,
+        )
     }
 
     @Test
