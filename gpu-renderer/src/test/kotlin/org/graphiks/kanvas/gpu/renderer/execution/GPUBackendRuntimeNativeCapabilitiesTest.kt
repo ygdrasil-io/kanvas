@@ -35,5 +35,18 @@ class GPUBackendRuntimeNativeCapabilitiesTest {
         assertEquals("supported", threeStopStroke.value)
         assertEquals(true, threeStopStroke.affectsValidity)
         assertEquals("core-primitive-gradient-linear-stroke-3stop-native", threeStopStroke.evidenceLabel)
+
+        listOf(
+            GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_NATIVE to
+                "core-primitive-gradient-radial-stroke-2stop-native",
+            GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE to
+                "core-primitive-gradient-sweep-stroke-2stop-native",
+        ).forEach { (name, label) ->
+            val fact = assertNotNull(facts[name])
+            assertEquals("runtime", fact.source)
+            assertEquals("supported", fact.value)
+            assertEquals(true, fact.affectsValidity)
+            assertEquals(label, fact.evidenceLabel)
+        }
     }
 }
