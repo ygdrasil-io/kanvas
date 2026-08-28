@@ -249,6 +249,16 @@ class GPUPreparedStrokeRectLowererTest {
     }
 
     @Test
+    fun `three stop full sweep gradient stroke requires its dedicated capability`() {
+        val shader = Shader.SweepGradient(Point2F32(32f,32f),0f,360f,listOf(
+            org.graphiks.kanvas.paint.GradientStop(0f,ColorARGB.Red), org.graphiks.kanvas.paint.GradientStop(.5f,ColorARGB.Green), org.graphiks.kanvas.paint.GradientStop(1f,ColorARGB.Blue),
+        ))
+        fun lower(cap: Boolean) = GPUPreparedStrokeRectLowerer.lower(strokeRect(paint=Paint.stroke(ColorARGB.Transparent,4f).copy(shader=shader,antiAlias=false)),GPUDrawCommandID(0),0,GPUFrameProvenance.None,target(),RenderConfig.DEFAULT,capabilities(withThreeStopStrokeSweepGradient=cap))
+        assertEquals("unsupported.stroke.rect_sweep_gradient_three_stop_capability",assertIs<GPUPreparedStrokeRectLowering.Refused>(lower(false)).code)
+        assertEquals(4,assertIs<GPUPreparedStrokeRectLowering.Ready>(lower(true)).commands.size)
+    }
+
+    @Test
     fun `two stop sweep gradient stroke refuses every bounded-contract escape before bands`() {
         fun sweep(
             stops: List<org.graphiks.kanvas.paint.GradientStop> = listOf(
@@ -810,6 +820,7 @@ class GPUPreparedStrokeRectLowererTest {
         withTwoStopStrokeRadialGradient: Boolean = false,
         withTwoStopStrokeSweepGradient: Boolean = false,
         withThreeStopStrokeRadialGradient: Boolean = false,
+        withThreeStopStrokeSweepGradient: Boolean = false,
     ) = GPUCapabilities(
         implementation = GPUImplementationIdentity(
             facadeName = "test", implementationName = "fake", adapterName = "mock", deviceName = "mock",
@@ -850,6 +861,10 @@ class GPUPreparedStrokeRectLowererTest {
             if (withThreeStopStrokeRadialGradient) add(GPUCapabilityFact(
                 GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_NATIVE, "test", "supported", true,
                 "test:stroke-rect-radial-gradient-three-stop",
+            ))
+            if (withThreeStopStrokeSweepGradient) add(GPUCapabilityFact(
+                GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_THREE_STOP_NATIVE, "test", "supported", true,
+                "test:stroke-rect-sweep-gradient-three-stop",
             ))
         },
         knownUnsupportedFacts = emptyList(),
