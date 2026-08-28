@@ -217,6 +217,10 @@ enum class GPUPreparedMaterialUnsupportedReason(
         "unsupported.material.radial_gradient_stop_count",
         "Prepared radial gradient mapping exceeds the bounded route stop count",
     ),
+    SWEEP_GRADIENT_STOP_COUNT(
+        "unsupported.material.sweep_gradient_stop_count",
+        "Prepared sweep gradient mapping exceeds the bounded route stop count",
+    ),
     LINEAR_GRADIENT_NON_FINITE(
         "unsupported.material.mapping.linear_gradient_non_finite",
         "Prepared linear gradient mapping requires finite geometry, stops, and colors",
@@ -282,6 +286,7 @@ fun GPUMaterialDescriptor.gradientFactsRefusalReasonOrNull(
     deferLinearGradientTileModeToRoute: Boolean = false,
     allowThreeStopLinearGradient: Boolean = false,
     allowThreeStopRadialGradient: Boolean = false,
+    allowThreeStopSweepGradient: Boolean = false,
 ): GPUPreparedMaterialUnsupportedReason? =
     when (this) {
         is GPUMaterialDescriptor.LinearGradient -> when {
@@ -305,6 +310,9 @@ fun GPUMaterialDescriptor.gradientFactsRefusalReasonOrNull(
         is GPUMaterialDescriptor.SweepGradient -> when {
             interpolation != "srgb" -> GPUPreparedMaterialUnsupportedReason.GRADIENT_INTERPOLATION
             localMatrix != IDENTITY_GRADIENT_LOCAL_MATRIX -> GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX
+            (allStopPositions?.size ?: 2) !in
+                (if (allowThreeStopSweepGradient) 1..3 else 1..2) ->
+                GPUPreparedMaterialUnsupportedReason.SWEEP_GRADIENT_STOP_COUNT
             else -> null
         }
         else -> null

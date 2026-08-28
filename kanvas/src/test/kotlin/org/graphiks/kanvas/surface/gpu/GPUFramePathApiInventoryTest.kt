@@ -1922,6 +1922,98 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `three stop sweep FillRect keeps the bounded public refusal policy`() {
+        val threeStops = listOf(
+            GradientStop(0f, ColorARGB.Red),
+            GradientStop(0.5f, ColorARGB.Green),
+            GradientStop(1f, ColorARGB.Blue),
+        )
+        val accepted = GPUFramePathApiInventory.plan(
+            listOf(
+                DisplayOp.DrawRect(
+                    RectF32.ofLTRB(2f, 2f, 30f, 30f),
+                    Paint(shader = Shader.SweepGradient(
+                        Point2F32(16f, 16f), stops = threeStops, tileMode = TileMode.CLAMP,
+                    )).copy(antiAlias = false),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target(),
+            RenderConfig.DEFAULT,
+            capabilitiesWith(FILL_RECT_CAPABILITY, "first_slice.sweep_gradient.native"),
+        )
+        assertTrue(accepted.recording.routeDiagnostics.none { it.startsWith("refused:") })
+
+        val cases = listOf(
+            Triple(
+                Shader.SweepGradient(
+                    Point2F32(16f, 16f),
+                    stops = threeStops + GradientStop(1f, ColorARGB.White), tileMode = TileMode.CLAMP,
+                ),
+                false,
+                "unsupported.material.sweep_gradient_stop_count",
+            ),
+            Triple(
+                Shader.SweepGradient(Point2F32(16f, 16f), stops = threeStops, tileMode = TileMode.REPEAT),
+                false,
+                "unsupported.material.sweep_gradient_stop_count",
+            ),
+            Triple(
+                Shader.SweepGradient(Point2F32(16f, 16f), stops = threeStops, tileMode = TileMode.CLAMP),
+                true,
+                "unsupported.material.sweep_gradient_stop_count",
+            ),
+            Triple(
+                Shader.WithLocalMatrix(
+                    Shader.SweepGradient(Point2F32(16f, 16f), stops = threeStops, tileMode = TileMode.CLAMP),
+                    Matrix3x3F32.translation(1f, 0f),
+                ),
+                false,
+                "unsupported.material.mapping.local_matrix",
+            ),
+        )
+        cases.forEach { (shader, antiAlias, expectedCode) ->
+            val inventory = GPUFramePathApiInventory.plan(
+                listOf(
+                    DisplayOp.DrawRect(
+                        RectF32.ofLTRB(2f, 2f, 30f, 30f),
+                        Paint(shader = shader).copy(antiAlias = antiAlias),
+                        Matrix3x3F32.Identity,
+                        ClipStack.WideOpen,
+                    ),
+                ),
+                target(),
+                RenderConfig.DEFAULT,
+                capabilitiesWith(FILL_RECT_CAPABILITY, "first_slice.sweep_gradient.native"),
+            )
+            assertEquals(listOf("refused:$expectedCode"), inventory.recording.routeDiagnostics)
+            assertTrue(inventory.recording.taskList.tasks.filterIsInstance<GPUTask.Render>()
+                .flatMap(GPUTask.Render::drawPackets).isEmpty())
+        }
+
+        val translated = GPUFramePathApiInventory.plan(
+            listOf(
+                DisplayOp.DrawRect(
+                    RectF32.ofLTRB(2f, 2f, 30f, 30f),
+                    Paint(shader = Shader.SweepGradient(
+                        Point2F32(16f, 16f), stops = threeStops, tileMode = TileMode.CLAMP,
+                    )).copy(antiAlias = false),
+                    Matrix3x3F32.translation(1f, 0f),
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target(),
+            RenderConfig.DEFAULT,
+            capabilitiesWith(FILL_RECT_CAPABILITY, "first_slice.sweep_gradient.native"),
+        )
+        assertEquals(
+            listOf("refused:unsupported.material.sweep_gradient_stop_count"),
+            translated.recording.routeDiagnostics,
+        )
+    }
+
+    @Test
     fun `antialiased bounded linear public material reaches analytic core primitive semantics with injected fact`() {
         val inventory = GPUFramePathApiInventory.plan(
             listOf(
