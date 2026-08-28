@@ -18,6 +18,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizer
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.commands.isBoundedNativePathHairline
 import org.graphiks.kanvas.gpu.renderer.commands.gradientFactsRefusalReasonOrNull
 import org.graphiks.kanvas.gpu.renderer.commands.imageLocalMatrixRefusalReasonOrNull
 import org.graphiks.kanvas.gpu.renderer.commands.isAffineDeterminantNonFinite
@@ -913,7 +914,7 @@ class GPUFirstRoutePlanner(
 
         return when {
             command.maskFilter != null -> blurMaskFillPathRouteDecision(command)
-            command.stroke && command.isNativeSimpleHairline() &&
+            command.stroke && command.isBoundedNativePathHairline() &&
                 capabilities.hasFact(firstPathHairlineDirectCapabilityName) ->
                 nativeHairlineRouteDecision(command)
             command.stroke && command.isNativeSimpleStroke() &&
@@ -2458,7 +2459,7 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
                 )
                 shapeDesc.strokeRefusalCode()
                     ?: pathDesc.strokePathRefusalCode()
-                    ?: if (isNativeSimpleHairline()) {
+                    ?: if (isBoundedNativePathHairline()) {
                         null
                     } else {
                         strokeDesc.refusalCode(
@@ -2469,7 +2470,8 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
                     ?: "unsupported.pipeline.capability_missing".takeUnless {
                         capabilities.hasFact(firstPreparedPathFillCapabilityName) ||
                             (isNativeSimpleStroke() && capabilities.hasFact(firstStencilCoverCapabilityName)) ||
-                            (isNativeSimpleHairline() && capabilities.hasFact(firstPathHairlineDirectCapabilityName))
+                            (isBoundedNativePathHairline() &&
+                                capabilities.hasFact(firstPathHairlineDirectCapabilityName))
                     }
             }
             pathDescriptor.edgeCount < 0 -> "unsupported.geometry.path_invalid_edges"
@@ -2548,31 +2550,6 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
             strokeJoin == "miter" &&
             strokeMiterLimit.isFinite() && strokeMiterLimit >= 1f &&
             transform.type in setOf(GPUTransformType.Identity, GPUTransformType.Translate)
-
-    /** One non-AA butt/miter segment whose zero width is resolved as a device hairline. */
-    private fun NormalizedDrawCommand.FillPath.isNativeSimpleHairline(): Boolean =
-        contourStarts == listOf(0) &&
-            tessellatedVertices.size == 4 &&
-            strokeWidth == 0f &&
-            !antiAlias &&
-            (dashIntervals == null || dashIntervals.isEmpty()) &&
-            pathEffectKind == null &&
-            strokeCap == "butt" &&
-            strokeJoin == "miter" &&
-            strokeMiterLimit.isFinite() && strokeMiterLimit >= 1f &&
-            transform.type in setOf(GPUTransformType.Identity, GPUTransformType.Translate) &&
-            commandClipAllowsDirectGeometry() &&
-            material is GPUMaterialDescriptor.SolidColor &&
-            blend.mode == GPUBlendMode.SRC_OVER &&
-            layer.scopeKind == GPULayerScopeKind.Root &&
-            tessellatedVertices.all(Float::isFinite) &&
-            transform.translateX.isFinite() && transform.translateY.isFinite() &&
-            (tessellatedVertices[0] == tessellatedVertices[2] ||
-                tessellatedVertices[1] == tessellatedVertices[3])
-
-    private fun NormalizedDrawCommand.FillPath.commandClipAllowsDirectGeometry(): Boolean =
-        clip.executionPlan == GPUClipExecutionPlan.NoClip ||
-            clip.executionPlan is GPUClipExecutionPlan.ScissorOnly
 
     private fun NormalizedDrawCommand.FillPath.matchesPixelExactRoundCapR2HorizontalV1(): Boolean {
         if (strokeWidth != 4f || tessellatedVertices.size != 4) return false
