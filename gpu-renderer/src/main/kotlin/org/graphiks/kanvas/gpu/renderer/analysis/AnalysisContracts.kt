@@ -289,6 +289,7 @@ class GPUFirstRoutePlanner(
         val isRadialGradient = command.material is GPUMaterialDescriptor.RadialGradient
         val isSweepGradient = command.material is GPUMaterialDescriptor.SweepGradient
         val isSimpleGradient = isLinearGradient || isRadialGradient || isSweepGradient
+        val isThreeStopStrokeLinearGradient = command.supportsThreeStopLinearGradientStroke()
         val rectGeometryAuthority =
             corePrimitiveRectGeometryAuthority(command.rect, command.transform)
         val rectRouteAuthority = when (command.material) {
@@ -322,9 +323,17 @@ class GPUFirstRoutePlanner(
                     pipelineKey =
                         "pending.pipeline.fill_rect.linear_gradient$tileModeSuffix.${command.layer.target.colorFormat}.src_over"
                     renderStep = linearGradientRenderStep
-                    routeLabel = "native.fill_rect.linear_gradient"
+                    routeLabel = if (isThreeStopStrokeLinearGradient) {
+                        "native.stroke_rect.linear_gradient_three_stop"
+                    } else {
+                        "native.fill_rect.linear_gradient"
+                    }
                     materialKeyHash = "pending.material.linear_gradient"
-                    capabilityName = firstLinearGradientCapabilityName
+                    capabilityName = if (isThreeStopStrokeLinearGradient) {
+                        GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_NATIVE
+                    } else {
+                        firstLinearGradientCapabilityName
+                    }
                 }
 
                 is GPUMaterialDescriptor.RadialGradient -> {
