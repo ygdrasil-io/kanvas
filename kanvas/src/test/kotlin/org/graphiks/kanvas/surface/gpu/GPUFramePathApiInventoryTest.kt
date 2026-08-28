@@ -2699,7 +2699,38 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
-    fun `single segment hairline refuses before native preparation`() {
+    fun `single axis aligned hairline lowers to direct device quad`() {
+        val path = Path().apply {
+            moveTo(4f, 8f)
+            lineTo(14f, 8f)
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    path,
+                    Paint.stroke(ColorARGB.Red, 0f).copy(antiAlias = false),
+                    Matrix3x3F32.Identity,
+                    org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER),
+        )
+
+        val semantic = assertIs<GPUCorePrimitiveSemanticGatherResult.Gathered>(
+            GPUFramePathApiInventory.gatherCorePrimitiveSemantics(inventory, GPUPixelBounds(0, 0, 32, 32)),
+        ).semantics.values.single() as GPUDrawSemanticPayload.CorePrimitive
+        val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
+
+        assertEquals(GPUCorePrimitiveGeometryMode.DirectTriangles, geometry.geometryMode)
+        assertEquals(listOf(0, 1, 2, 0, 2, 3), geometry.indices)
+        assertEquals(2, geometry.sourceVertexCount)
+        assertEquals(GPUPixelBounds(4, 7, 14, 9), geometry.coverBounds)
+    }
+
+    @Test
+    fun `single segment hairline with scale remains refused before native preparation`() {
         val path = Path().apply {
             moveTo(4f, 8f)
             lineTo(14f, 8f)

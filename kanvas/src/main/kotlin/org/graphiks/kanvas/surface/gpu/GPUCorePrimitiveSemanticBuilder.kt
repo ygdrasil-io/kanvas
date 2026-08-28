@@ -7,6 +7,7 @@ import org.graphiks.kanvas.gpu.renderer.analysis.GPUDrawAnalysisRecord
 import org.graphiks.kanvas.gpu.renderer.analysis.matchesCorePrimitiveRectGeometry
 import org.graphiks.kanvas.gpu.renderer.analysis.matchesCorePrimitiveRRectGeometry
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
@@ -16,6 +17,7 @@ import org.graphiks.kanvas.gpu.renderer.geometry.FlattenedPath
 import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellator
 import org.graphiks.kanvas.gpu.renderer.geometry.Point as GPUPathPoint
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.filters.MaskBlurPlan
 import org.graphiks.kanvas.gpu.renderer.filters.MaskBlurPlanner
@@ -37,6 +39,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceFamily
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveStrokeLoweringProof
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveStrokeStyle
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.commands.GPULayerScopeKind
 import org.graphiks.kanvas.gpu.renderer.payloads.sealedDeviceGeometryInput
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecording
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
@@ -986,6 +989,34 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
 ): GPUCorePrimitiveGeometryInput {
     val pointCount = tessellatedVertices.size / 2
     val exactSingleSegment = contourStarts == listOf(0) && pointCount == 2
+    if (strokeWidth == 0f && isNativeSimpleHairline()) {
+        val start = transform.map(tessellatedVertices[0], tessellatedVertices[1])
+        val end = transform.map(tessellatedVertices[2], tessellatedVertices[3])
+        val horizontal = start.second == end.second
+        val (lo, hi) = if (horizontal) {
+            minOf(start.first, end.first) to maxOf(start.first, end.first)
+        } else {
+            minOf(start.second, end.second) to maxOf(start.second, end.second)
+        }
+        val vertices = if (horizontal) {
+            listOf(lo, start.second - 0.5f, hi, start.second - 0.5f,
+                hi, start.second + 0.5f, lo, start.second + 0.5f)
+        } else {
+            listOf(start.first - 0.5f, lo, start.first + 0.5f, lo,
+                start.first + 0.5f, hi, start.first - 0.5f, hi)
+        }
+        return GPUCorePrimitiveGeometryInput.TriangulatedPath(
+            vertices = vertices,
+            indices = listOf(0, 1, 2, 0, 2, 3),
+            sourceContourStarts = listOf(0),
+            sourceVertexCount = 2,
+            coverBounds = vertices.chunked(2).map { it[0] to it[1] }.toPixelCoverBounds(targetBounds),
+            geometryMode = GPUCorePrimitiveGeometryMode.DirectTriangles,
+            fillRule = GPUCorePrimitiveFillRule.Winding,
+            inverseFill = false,
+            sourceAuthority = pathDescriptor.sourceAuthority,
+        )
+    }
     val refusalCode = when {
         !strokeWidth.isFinite() -> "unsupported.core_primitive.stroke.width_nonfinite"
         strokeWidth == 0f -> "unsupported.core_primitive.stroke.hairline_exact_lowering"
@@ -1077,6 +1108,23 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
         ),
         sourceAuthority = pathDescriptor.sourceAuthority,
     )
+}
+
+private fun NormalizedDrawCommand.FillPath.isNativeSimpleHairline(): Boolean {
+    if (contourStarts != listOf(0) || tessellatedVertices.size != 4 || strokeWidth != 0f ||
+        antiAlias || (dashIntervals?.isNotEmpty() == true) || pathEffectKind != null ||
+        strokeCap != "butt" || strokeJoin != "miter" || !strokeMiterLimit.isFinite() ||
+        strokeMiterLimit < 1f || transform.type !in setOf(GPUTransformType.Identity, GPUTransformType.Translate) ||
+        (clip.executionPlan != GPUClipExecutionPlan.NoClip &&
+            clip.executionPlan !is GPUClipExecutionPlan.ScissorOnly) ||
+        material !is GPUMaterialDescriptor.SolidColor ||
+        blend.mode != GPUBlendMode.SRC_OVER ||
+        layer.scopeKind != GPULayerScopeKind.Root
+    ) return false
+    val start = transform.map(tessellatedVertices[0], tessellatedVertices[1])
+    val end = transform.map(tessellatedVertices[2], tessellatedVertices[3])
+    return start.first.isFinite() && start.second.isFinite() && end.first.isFinite() && end.second.isFinite() &&
+        (start.first == end.first || start.second == end.second)
 }
 
 /**

@@ -2788,6 +2788,62 @@ class FirstRoutePlannerTest {
         assertEquals(emptyList(), plan.pass.diagnostics)
     }
 
+    @Test
+    fun `fill path single segment hairline builds native direct route`() {
+        val command = GPUFillPathCommandBuilder.build(
+            commandId = GPUDrawCommandID(128),
+            pathKey = "path:hairline-segment:v1",
+            pathDescriptor = GPUPathFacts(
+                pathKey = "path:hairline-segment:v1",
+                verbCount = 2,
+                pointCount = 2,
+                fillRule = "NonZero",
+                inverseFill = false,
+                finiteProof = "finite",
+                volatility = "immutable",
+                transformClass = "identity",
+                edgeCount = 1,
+            ),
+            tessellatedVertices = listOf(6f, 16f, 26f, 16f),
+            contourStarts = listOf(0),
+            edgeCount = 1,
+            target = GPUTargetFacts(width = 32, height = 32, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0f, b = 0f, a = 1f),
+            stroke = true,
+            strokeWidth = 0f,
+            strokeCap = "butt",
+            strokeJoin = "miter",
+            antiAlias = false,
+        )
+
+        val plan = GPUFirstRoutePlanner(firstSlicePathFillStencilCoverCapabilities()).plan(command)
+
+        assertEquals("native.path_hairline.direct", plan.analysisRecord.routeDecisionLabel)
+        assertEquals("route.path_hairline.128", assertIs<GPURouteDecision.Native>(plan.routeDecision).route.routeId)
+        assertEquals(emptyList(), plan.pass.diagnostics)
+    }
+
+    @Test
+    fun `fill path hairline with AA remains refused`() {
+        val command = GPUFillPathCommandBuilder.build(
+            commandId = GPUDrawCommandID(129),
+            pathKey = "path:hairline-aa:v1",
+            pathDescriptor = GPUPathFacts(
+                pathKey = "path:hairline-aa:v1", verbCount = 2, pointCount = 2,
+                fillRule = "NonZero", inverseFill = false, finiteProof = "finite",
+                volatility = "immutable", transformClass = "identity", edgeCount = 1,
+            ),
+            tessellatedVertices = listOf(6f, 16f, 26f, 16f), contourStarts = listOf(0), edgeCount = 1,
+            target = GPUTargetFacts(width = 32, height = 32, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0f, b = 0f, a = 1f),
+            stroke = true, strokeWidth = 0f, strokeCap = "butt", strokeJoin = "miter", antiAlias = true,
+        )
+
+        val plan = GPUFirstRoutePlanner(firstSlicePathFillStencilCoverCapabilities()).plan(command)
+
+        assertEquals("unsupported.stroke.width_invalid", assertIs<GPURouteDecision.Refused>(plan.routeDecision).diagnostic.code)
+    }
+
     /** FillPath stroke analysis consumes the captured miter limit instead of a hard-coded default. */
     @Test
     fun `fill path stroke refuses the captured subminimum miter limit`() {

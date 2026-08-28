@@ -37,6 +37,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceAlphaClassification
 import org.graphiks.kanvas.gpu.renderer.commands.GPULayerFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPULayerScopeKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUOrderingFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUPathFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
@@ -1352,7 +1353,7 @@ private fun DisplayOp.DrawPath.directTriangleSourceAuthority(): GPUPathSourceAut
 }
 
 private fun NormalizedDrawCommand.geometryCoverage(): GPUCoverageConsumption = when (this) {
-    is NormalizedDrawCommand.FillPath -> if (isBoundedDirectTriangleFill()) {
+    is NormalizedDrawCommand.FillPath -> if (isBoundedDirectTriangleFill() || isBoundedHairline()) {
         GPUCoverageConsumption.FullOrScissor
     } else {
         GPUCoverageConsumption.StencilCoverage1x
@@ -1369,6 +1370,24 @@ private fun NormalizedDrawCommand.geometryCoverage(): GPUCoverageConsumption = w
         GPUCoverageConsumption.FullOrScissor
     }
     else -> error("Geometry coverage requested for a non-Slice-12A command")
+}
+
+/** The hairline lowering is a direct one-pixel device quad, so it has no stencil coverage pass. */
+private fun NormalizedDrawCommand.FillPath.isBoundedHairline(): Boolean {
+    if (!stroke || strokeWidth != 0f || antiAlias || contourStarts != listOf(0) ||
+        tessellatedVertices.size != 4 || strokeCap != "butt" || strokeJoin != "miter" ||
+        pathEffectKind != null || dashIntervals?.isNotEmpty() == true ||
+        transform.type !in setOf(GPUTransformType.Identity, GPUTransformType.Translate) ||
+        (clip.executionPlan != GPUClipExecutionPlan.NoClip &&
+            clip.executionPlan !is GPUClipExecutionPlan.ScissorOnly) ||
+        material !is GPUMaterialDescriptor.SolidColor ||
+        blend.mode != GPUBlendMode.SRC_OVER ||
+        layer.scopeKind != GPULayerScopeKind.Root
+    ) return false
+    val start = tessellatedVertices[0] + transform.translateX to tessellatedVertices[1] + transform.translateY
+    val end = tessellatedVertices[2] + transform.translateX to tessellatedVertices[3] + transform.translateY
+    return (start.first == end.first || start.second == end.second) &&
+        start.first.isFinite() && start.second.isFinite() && end.first.isFinite() && end.second.isFinite()
 }
 
 /**
