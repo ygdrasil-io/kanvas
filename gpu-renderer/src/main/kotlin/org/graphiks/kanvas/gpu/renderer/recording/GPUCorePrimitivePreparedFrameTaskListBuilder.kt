@@ -45,6 +45,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.passes.isCorePrimitiveDirectLaneBlend
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedPacketAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedSemanticAuthority
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveStrokeLoweringProof
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticShapeUniformSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskAttachmentAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskAttachmentFormat
@@ -273,7 +274,8 @@ internal fun classifyCorePrimitiveDirectNativeRoute(
             clipExecutionPlan.sampleCount == 1 &&
             clipExecutionPlan.pathTransformClass == "identity" &&
             (semantic.geometry is GPUCorePrimitiveGeometry.RRect ||
-                semantic.geometry is GPUCorePrimitiveGeometry.DRRect) &&
+                semantic.geometry is GPUCorePrimitiveGeometry.DRRect ||
+                semantic.hasExactDirectStrokePathConsumerGeometry()) &&
             semantic.material is GPUCorePrimitiveMaterialPayload.SolidColor &&
             semantic.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor -> semantic.targetBounds
         else -> (corePrimitiveDirectClipAuthority(
@@ -842,7 +844,7 @@ private fun directCorePrimitiveGeometryBytes(
         packet.blendPlan is GPUBlendPlan.NoOp
     ) return null
     if (acceptedClipStencilPlan != null && semantic.geometry is GPUCorePrimitiveGeometry.TriangulatedPath &&
-        !semantic.hasExactClampGradientHardPathClipConsumerGeometry()
+        !semantic.hasExactHardPathClipConsumerGeometry()
     ) return null
     when (packet.clipExecutionPlan) {
         GPUClipExecutionPlan.NoClip,
@@ -866,7 +868,13 @@ private fun directCorePrimitiveGeometryBytes(
         is GPUCorePrimitiveGeometry.DRRect -> if (gradientMaterial || acceptedClipStencilPlan != null) 8 to 6 else return null
         is GPUCorePrimitiveGeometry.TriangulatedPath -> {
             if (geometry.geometryMode != GPUCorePrimitiveGeometryMode.DirectTriangles ||
-                geometry.inverseFill || geometry.strokeStyle != null
+                geometry.inverseFill ||
+                (geometry.strokeStyle != null &&
+                    !(
+                        acceptedClipStencilPlan != null &&
+                            semantic.hasExactDirectStrokePathConsumerGeometry()
+                        )
+                    )
             ) return null
             geometry.vertices.size to geometry.indices.size
         }
@@ -912,6 +920,26 @@ private fun GPUDrawSemanticPayload.CorePrimitive.hasExactDirectTriangleRectGradi
     return xs.size == 2 && ys.size == 2 && corners.toSet().size == 4 &&
         corners.all { (x, y) -> x.isFinite() && y.isFinite() }
 }
+
+private fun GPUDrawSemanticPayload.CorePrimitive.hasExactDirectStrokePathConsumerGeometry(): Boolean {
+    val path = geometry as? GPUCorePrimitiveGeometry.TriangulatedPath ?: return false
+    val style = path.strokeStyle ?: return false
+    return sourceFamily == GPUCorePrimitiveSourceFamily.Path &&
+        path.geometryMode == GPUCorePrimitiveGeometryMode.DirectTriangles &&
+        path.vertices.size == 8 &&
+        path.indices == listOf(0, 1, 2, 0, 2, 3) &&
+        path.sourceContourStarts == listOf(0) &&
+        path.sourceVertexCount == 2 &&
+        path.fillRule == GPUCorePrimitiveFillRule.Winding &&
+        !path.inverseFill &&
+        style.cap == "butt" &&
+        style.join == "miter" &&
+        style.loweringProof == GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1
+}
+
+private fun GPUDrawSemanticPayload.CorePrimitive.hasExactHardPathClipConsumerGeometry(): Boolean =
+    hasExactClampGradientHardPathClipConsumerGeometry() ||
+        hasExactDirectStrokePathConsumerGeometry()
 
 private fun GPUDrawSemanticPayload.CorePrimitive.hasExactClampGradientHardPathClipConsumerGeometry(): Boolean =
     hasExactDirectTrianglePathConsumerGeometry() ||
@@ -2150,7 +2178,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         if (staticNativeClipStencilPlan?.sampleCount == 1 && staticNativeClipStencilConsumers.any { packet ->
                 val semantic = request.coreSemantics().getValue(packet.commandIdValue)
                 semantic.geometry is GPUCorePrimitiveGeometry.TriangulatedPath &&
-                    !semantic.hasExactClampGradientHardPathClipConsumerGeometry()
+                    !semantic.hasExactHardPathClipConsumerGeometry()
             }
         ) {
             return refused(
@@ -2226,7 +2254,8 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry ->
                             (packet.renderStepId.value == CORE_PRIMITIVE_FILL_RECT_STEP_IDENTITY &&
                                 semantic.geometry is GPUCorePrimitiveGeometry.Rect) ||
-                                semantic.hasExactDirectTrianglePathConsumerGeometry()
+                                semantic.hasExactDirectTrianglePathConsumerGeometry() ||
+                                semantic.hasExactDirectStrokePathConsumerGeometry()
                         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRRect ->
                             packet.renderStepId.value == CORE_PRIMITIVE_FILL_RRECT_STEP_IDENTITY &&
                                 semantic.geometry is GPUCorePrimitiveGeometry.RRect
@@ -2245,7 +2274,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         if (nativeClipStencilPlan?.sampleCount == 1 && !validNativeClipStencilConsumers) {
             return refused(
                 "unsupported.recording.core_primitive_clip_stencil_mixed_geometry",
-                "The bounded clip-stencil scope accepts only one or two direct solid Path or FillRect consumers, clamp-linear-gradient FillRect consumers, clamp-radial-gradient FillRect consumers, or authenticated clamp-linear-gradient direct-triangle Path consumers.",
+                "The bounded clip-stencil scope accepts only one or two direct solid Path or FillRect consumers, the exact single-segment butt/miter stroke consumer, clamp-linear-gradient FillRect consumers, clamp-radial-gradient FillRect consumers, or authenticated clamp-linear-gradient direct-triangle Path consumers.",
             )
         }
         val nativeClipStencilPrefixCommandIds = nativeClipStencilPlan

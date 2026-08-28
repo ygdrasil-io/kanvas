@@ -7,6 +7,7 @@ import org.graphiks.kanvas.gpu.renderer.analysis.GPUDrawAnalysisRecord
 import org.graphiks.kanvas.gpu.renderer.analysis.matchesCorePrimitiveRectGeometry
 import org.graphiks.kanvas.gpu.renderer.analysis.matchesCorePrimitiveRRectGeometry
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
@@ -682,6 +683,19 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
         nonScissorClipRetainedSeparately = true,
     )
         ?: refuseGeometry("unsupported.core_primitive.clip.scissor_empty", emptyMap())
+    val directStrokeUnderHardPathClip = clipExecutionPlan is GPUClipExecutionPlan.StencilCoverage &&
+        geometry is GPUCorePrimitiveGeometryInput.TriangulatedPath &&
+        geometry.geometryMode == GPUCorePrimitiveGeometryMode.DirectTriangles &&
+        geometry.vertices.size == 8 &&
+        geometry.indices == listOf(0, 1, 2, 0, 2, 3) &&
+        geometry.sourceContourStarts == listOf(0) &&
+        geometry.sourceVertexCount == 2 &&
+        geometry.fillRule == GPUCorePrimitiveFillRule.Winding &&
+        !geometry.inverseFill &&
+        geometry.strokeStyle?.let { style ->
+            style.cap == "butt" && style.join == "miter" &&
+                style.loweringProof == GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1
+        } == true
     return GPUCorePrimitivePayloadInput(
         commandIdValue = normalized.commandId.value,
         sourceFamily = sourceFamily,
@@ -696,7 +710,9 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
         // The canonical hairline point square is hard DirectTriangles geometry, so its
         // coverage is full-or-scissor even though the FillPath command derives stencil
         // coverage for general path fills.
-        coverageMode = if (normalized is NormalizedDrawCommand.FillPath && normalized.isHairlinePointCommand()) {
+        coverageMode = if (directStrokeUnderHardPathClip ||
+            normalized is NormalizedDrawCommand.FillPath && normalized.isHairlinePointCommand()
+        ) {
             GPUCorePrimitiveCoverageMode.FullOrScissor
         } else {
             coverageMode()
@@ -1071,6 +1087,35 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
     check(outline.coordinateSpace == StrokeGeometryCoordinateSpace.DEVICE)
     val devicePoints = outline.vertices.chunked(2).map { pair ->
         pair[0] to pair[1]
+    }
+    if (
+        clip.executionPlan is GPUClipExecutionPlan.StencilCoverage &&
+            exactSingleSegment &&
+            strokeCap == "butt" &&
+            strokeJoin == "miter" &&
+            outline.vertices.size == 8 &&
+            outline.contourStarts == listOf(0, 4)
+    ) {
+        return GPUCorePrimitiveGeometryInput.TriangulatedPath(
+            vertices = outline.vertices,
+            indices = listOf(0, 1, 2, 0, 2, 3),
+            sourceContourStarts = listOf(0),
+            sourceVertexCount = 2,
+            coverBounds = devicePoints.toPixelCoverBounds(targetBounds),
+            geometryMode = GPUCorePrimitiveGeometryMode.DirectTriangles,
+            fillRule = GPUCorePrimitiveFillRule.Winding,
+            inverseFill = false,
+            strokeStyle = GPUCorePrimitiveStrokeStyle(
+                width = strokeWidth,
+                cap = strokeCap,
+                join = strokeJoin,
+                miterLimit = strokeMiterLimit,
+                dashIntervals = dashIntervals?.toList().orEmpty(),
+                dashPhase = dashPhase,
+                loweringProof = GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1,
+            ),
+            sourceAuthority = pathDescriptor.sourceAuthority,
+        )
     }
     val transformedContourStarts = outline.contourStarts
         .filter { it < devicePoints.size }

@@ -159,9 +159,15 @@ internal fun validateCorePrimitiveCoverageSampleAuthority(
 }
 
 private fun GPUCorePrimitiveGeometry.TriangulatedPath.isExactSingleSegmentStrokeStencil(): Boolean {
-    if (geometryMode != GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan ||
+    if (geometryMode !in setOf(
+            GPUCorePrimitiveGeometryMode.DirectTriangles,
+            GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan,
+        ) ||
         sourceContourStarts != listOf(0) || sourceVertexCount != 2 ||
         fillRule != GPUCorePrimitiveFillRule.Winding || inverseFill
+    ) return false
+    if (geometryMode == GPUCorePrimitiveGeometryMode.DirectTriangles &&
+        (vertices.size != 8 || indices != listOf(0, 1, 2, 0, 2, 3))
     ) return false
     val stroke = strokeStyle ?: return false
     if (!stroke.width.isFinite() || stroke.width !in 0.5f..64f ||
