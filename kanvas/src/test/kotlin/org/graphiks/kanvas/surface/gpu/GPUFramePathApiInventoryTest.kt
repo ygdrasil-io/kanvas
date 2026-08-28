@@ -3028,6 +3028,75 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `diagonal round cap refuses before native preparation`() {
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(5.25f, 8.25f)
+                        lineTo(21.25f, 20.25f)
+                    },
+                    Paint.stroke(ColorARGB.Red, 4f).copy(
+                        antiAlias = false,
+                        strokeCap = StrokeCap.ROUND,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+        )
+
+        val refused = gatherRefusal(inventory)
+
+        assertEquals("unsupported.core_primitive.stroke.round_cap_pixel_exact_lowering", refused.code)
+        assertEquals("4.0", refused.facts["width"])
+        assertEquals("round", refused.facts["cap"])
+        assertTrue(
+            inventory.recording.analysis.records.single().routeDecisionLabel !=
+                "native.path_stroke.stencil_cover",
+        )
+    }
+
+    @Test
+    fun `simple stroke with nonuniform scale refuses before native preparation`() {
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(5.25f, 8.25f)
+                        lineTo(21.25f, 20.25f)
+                    },
+                    Paint.stroke(ColorARGB.Red, 4f).copy(
+                        antiAlias = false,
+                        strokeCap = StrokeCap.BUTT,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.scaling(2f, 1f),
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+        )
+
+        assertEquals(
+            "refused.unsupported.geometry.perspective_path",
+            inventory.recording.analysis.records.single().routeDecisionLabel,
+        )
+        assertTrue(inventory.recording.taskList.tasks.none { it is GPUTask.Render })
+        val prepared = GPUFramePathApiInventory.prepareNativeTaskList(
+            inventory = inventory,
+            capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER),
+            targetBounds = GPUPixelBounds(0, 0, 32, 32),
+        )
+        val refusal = assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(prepared)
+        assertEquals("unsupported.geometry.perspective_path", refusal.diagnostic.code.value)
+    }
+
+    @Test
     fun `single segment round joins and widths outside the fixed budget refuse`() {
         val path = Path().apply {
             moveTo(4f, 8f)
