@@ -283,6 +283,57 @@ class GPUFramePathApiInventoryNativeSmokeTest {
     }
 
     @Test
+    fun `single horizontal square miter stroke renders natively`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        val capabilities = requireNotNull(backend.capabilities)
+        val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(RenderConfig.DEFAULT.mapPreparedGpuColorConfig())
+        val targetBounds = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, 32, 32)
+        val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.stroke-square")
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply { moveTo(8f, 16f); lineTo(24f, 16f) },
+                    Paint.stroke(ColorARGB.Red, 4f).copy(
+                        antiAlias = false,
+                        strokeCap = StrokeCap.SQUARE,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+            deviceGeneration = backend.deviceGeneration,
+        )
+        val preparation = GPUFramePathApiInventory.prepareNativeTaskList(inventory, capabilities, targetBounds, readbackId)
+        val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            preparation,
+            (preparation as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}"
+            },
+        ).taskList
+        val session = backend.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(32, 32, colorMapping.physicalFormat, colorMapping.interpretation),
+        )
+        try {
+            val completed = session.renderFrame(prepared, GPUSceneFrameOutputRequest.ReadbackRgba(readbackId))
+                .completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+            assertEquals(GPUFrameStructuralOutcome.Succeeded, completed.outcome)
+            val gpu = assertIs<GPUSceneFrameOutput.ReadbackRgba>(completed.output).bytes
+            assertContentEquals(deterministicSquareButtMiterStrokeOracle(), gpu)
+            assertEquals(1L, session.nativeCounters().submits)
+            assertEquals(1L, session.nativeCounters().readbackCopies)
+        } finally {
+            session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
     fun `single segment butt miter stroke matches the deterministic CPU pixel oracle natively`() {
         val backend = GPUBackendRuntimeNativeFactory.createOrNull()
         assumeTrue(backend != null)
@@ -686,6 +737,16 @@ class GPUFramePathApiInventoryNativeSmokeTest {
     private fun deterministicVerticalButtMiterStrokeOracle(): ByteArray = ByteArray(32 * 32 * 4).also { rgba ->
         for (y in 4 until 28) {
             for (x in 14 until 18) {
+                val offset = (y * 32 + x) * 4
+                rgba[offset] = 0xff.toByte()
+                rgba[offset + 3] = 0xff.toByte()
+            }
+        }
+    }
+
+    private fun deterministicSquareButtMiterStrokeOracle(): ByteArray = ByteArray(32 * 32 * 4).also { rgba ->
+        for (y in 14 until 18) {
+            for (x in 6 until 26) {
                 val offset = (y * 32 + x) * 4
                 rgba[offset] = 0xff.toByte()
                 rgba[offset + 3] = 0xff.toByte()
