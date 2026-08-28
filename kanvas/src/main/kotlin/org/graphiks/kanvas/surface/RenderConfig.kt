@@ -3,6 +3,10 @@ package org.graphiks.kanvas.surface
 data class RenderConfig(
     val gpuColorFormat: GPUColorFormat = GPUColorFormat.RGBA8_UNORM_SRGB,
     val maxPathVertices: UInt = 131072u,
+    /** Maximum stencil edge-fan triangles admitted by the public Surface path route. */
+    val maxPathFanTriangles: UInt = 512u,
+    /** Maximum bytes for the public Surface path edge-fan position/index buffers. */
+    val maxPathGeometryBytes: UInt = 18_432u,
     val curveTolerance: Float = 0.25f,
     val maxImagePixels: UInt = 67_108_864u,
     val maxMaskBlurIntermediateBytes: UInt = 67_108_864u,
@@ -21,6 +25,10 @@ data class RenderConfig(
                     ?: DEFAULT.gpuColorFormat,
                 maxPathVertices = p.getProperty("kanvas.render.maxPathVertices")
                     ?.toUIntOrNull() ?: DEFAULT.maxPathVertices,
+                maxPathFanTriangles = p.getProperty("kanvas.render.maxPathFanTriangles")
+                    ?.toUIntOrNull() ?: DEFAULT.maxPathFanTriangles,
+                maxPathGeometryBytes = p.getProperty("kanvas.render.maxPathGeometryBytes")
+                    ?.toUIntOrNull() ?: DEFAULT.maxPathGeometryBytes,
                 curveTolerance = p.getProperty("kanvas.render.curveTolerance")
                     ?.toFloatOrNull() ?: DEFAULT.curveTolerance,
                 maxImagePixels = p.getProperty("kanvas.render.maxImagePixels")

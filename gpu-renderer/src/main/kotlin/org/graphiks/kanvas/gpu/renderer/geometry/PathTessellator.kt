@@ -267,21 +267,15 @@ class PathTessellator(
     }
 
     /**
-     * Produces one triangle from an exterior anchor to each contour edge for a
-     * stencil write pass. Unlike [triangulate], contour boundaries are retained.
+     * Checks the stencil edge-fan route before it allocates its expanded vertex
+     * and index buffers. Surface adapters must call this during mapping.
      */
-    fun stencilEdgeFan(flattened: FlattenedPath): GeometryTriangleData {
+    fun validateStencilEdgeFanBudget(flattened: FlattenedPath) {
         if (flattened.points.isEmpty()) {
             require(flattened.contourStarts.isEmpty() || flattened.contourStarts == listOf(0)) {
                 "Empty FlattenedPath contour starts must point to zero exactly once"
             }
-            // The GPU triangle contracts intentionally reject empty buffers. A
-            // zero-area triangle preserves that invariant while rasterizing no
-            // fragments, which is the correct result for an empty path/stroke.
-            return GeometryTriangleData(
-                vertices = FloatArray(6),
-                indices = intArrayOf(0, 1, 2),
-            )
+            return
         }
         val triangleCount = flattened.contourStarts.indices.sumOf { contourIndex ->
             val start = flattened.contourStarts[contourIndex]
@@ -304,6 +298,26 @@ class PathTessellator(
                 message = "Path edge fan requires $geometryBytes bytes, exceeds budget of $maxGeometryBytes",
             )
         }
+    }
+
+    /**
+     * Produces one triangle from an exterior anchor to each contour edge for a
+     * stencil write pass. Unlike [triangulate], contour boundaries are retained.
+     */
+    fun stencilEdgeFan(flattened: FlattenedPath): GeometryTriangleData {
+        if (flattened.points.isEmpty()) {
+            require(flattened.contourStarts.isEmpty() || flattened.contourStarts == listOf(0)) {
+                "Empty FlattenedPath contour starts must point to zero exactly once"
+            }
+            // The GPU triangle contracts intentionally reject empty buffers. A
+            // zero-area triangle preserves that invariant while rasterizing no
+            // fragments, which is the correct result for an empty path/stroke.
+            return GeometryTriangleData(
+                vertices = FloatArray(6),
+                indices = intArrayOf(0, 1, 2),
+            )
+        }
+        validateStencilEdgeFanBudget(flattened)
         val anchor = Point(
             minOf(-1f, flattened.points.minOf { it.x } - 1f),
             minOf(-1f, flattened.points.minOf { it.y } - 1f),

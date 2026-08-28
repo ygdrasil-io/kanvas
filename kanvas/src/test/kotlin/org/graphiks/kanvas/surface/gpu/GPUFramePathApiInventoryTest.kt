@@ -2052,6 +2052,44 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `public path fan budget refuses before recording any submission`() {
+        val inventory = pathBudgetInventory(
+            RenderConfig(maxPathVertices = 16u, maxPathFanTriangles = 3u),
+        )
+
+        val refused = assertNotNull(inventory.preparedRefusal)
+
+        assertEquals("geometry.path.fan_budget_exceeded", refused.code)
+        assertTrue(
+            inventory.recording.taskList.tasks
+                .filterIsInstance<GPUTask.Render>()
+                .flatMap { it.drawPackets }
+                .isEmpty(),
+        )
+    }
+
+    @Test
+    fun `public path geometry memory budget refuses before recording any submission`() {
+        val inventory = pathBudgetInventory(
+            RenderConfig(
+                maxPathVertices = 16u,
+                maxPathFanTriangles = 4u,
+                maxPathGeometryBytes = 143u,
+            ),
+        )
+
+        val refused = assertNotNull(inventory.preparedRefusal)
+
+        assertEquals("geometry.path.memory_budget_exceeded", refused.code)
+        assertTrue(
+            inventory.recording.taskList.tasks
+                .filterIsInstance<GPUTask.Render>()
+                .flatMap { it.drawPackets }
+                .isEmpty(),
+        )
+    }
+
+    @Test
     fun `stencil edge fan over 256 source vertices preserves its budget diagnostic`() {
         val path = Path().apply {
             moveTo(1f, 1f)
@@ -2071,12 +2109,12 @@ class GPUFramePathApiInventoryTest {
                 org.graphiks.kanvas.canvas.ClipStack.WideOpen,
             )),
             target(),
-            RenderConfig(maxPathVertices = 512u),
+            RenderConfig(maxPathVertices = 512u, maxPathFanTriangles = 256u),
         )
 
-        val refused = gatherRefusal(inventory)
+        val refused = assertNotNull(inventory.preparedRefusal)
 
-        assertEquals("unsupported.core_primitive.stencil_edge_fan_budget", refused.code)
+        assertEquals("geometry.path.fan_budget_exceeded", refused.code)
     }
 
     @Test
@@ -3871,6 +3909,25 @@ class GPUFramePathApiInventoryTest {
 
     private fun inventoryFor(operation: DisplayOp): GPUFramePathInventoryPlan =
         GPUFramePathApiInventory.plan(listOf(operation), target(), RenderConfig.DEFAULT)
+
+    private fun pathBudgetInventory(config: RenderConfig): GPUFramePathInventoryPlan =
+        GPUFramePathApiInventory.plan(
+            listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(1f, 1f)
+                        lineTo(9f, 1f)
+                        lineTo(1f, 9f)
+                        close()
+                    },
+                    Paint.fill(ColorARGB.Red),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target(),
+            config,
+        )
 
     private fun gatherRefusal(
         inventory: GPUFramePathInventoryPlan,
