@@ -20,7 +20,11 @@ fun NormalizedDrawCommand.FillPath.isBoundedNativePathHairline(): Boolean =
         strokeCap == "butt" &&
         strokeJoin == "miter" &&
         strokeMiterLimit.isFinite() && strokeMiterLimit >= 1f &&
-        transform.type in setOf(GPUTransformType.Identity, GPUTransformType.Translate) &&
+        (transform.type == GPUTransformType.Identity ||
+            transform.type == GPUTransformType.Translate ||
+            (transform.type == GPUTransformType.Scale &&
+                transform.scaleX.isFinite() && transform.scaleY.isFinite() &&
+                transform.scaleX > 0f && transform.scaleX == transform.scaleY)) &&
         (clip.executionPlan == GPUClipExecutionPlan.NoClip ||
             clip.executionPlan is GPUClipExecutionPlan.ScissorOnly) &&
         material is GPUMaterialDescriptor.SolidColor &&
