@@ -10,8 +10,9 @@ folded into the normalized destination rectangle, so native image dispatch
 receives an identity transform.
 
 It does not claim a codec path, generic image fallback, linear/cubic/mipmap or
-anisotropic filtering, non-integer/affine transforms, MSAA, destination reads,
-or broad image shader support.
+anisotropic filtering, non-integer/scaled/affine transforms for this bounded
+route, MSAA, destination reads, or broad image shader support. Existing
+GenericNative image routes retain their separately tested capabilities.
 
 ## Evidence
 
@@ -30,14 +31,15 @@ copies/readback snapshots:
 or destination reads. The same lowerer rejects unsupported affine transforms
 with `unsupported.image.affine_sampling` before native image submission.
 
-Both bundles were promoted from source commit
-`1d2c1d1d718c95e8f685d89d271c1ee23015caa6`.
+Both current bundles were generated from source commit
+`ea74ef949f49ec57ac995229a272b36677fa3afe` and promoted in evidence commit
+`f0b630520`.
 
 ## Reproduction
 
 ```text
 ./gradlew --no-daemon :integration-tests:gpu-evidence:generateGpuEvidence \
-  -PsourceCommit=1d2c1d1d718c95e8f685d89d271c1ee23015caa6 \
+  -PsourceCommit=ea74ef949f49ec57ac995229a272b36677fa3afe \
   -PscenesFile=/absolute/path/to/task-14-scenes.txt
 ./gradlew --no-daemon :integration-tests:gpu-evidence:verifyPromotedGpuEvidence
 ```
