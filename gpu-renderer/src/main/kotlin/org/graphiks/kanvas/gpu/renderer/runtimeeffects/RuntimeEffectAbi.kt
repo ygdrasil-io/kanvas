@@ -61,8 +61,12 @@ sealed interface RuntimeEffectAbiValidation {
 }
 object RuntimeEffectAbiValidator {
     fun validateBinding(expectedGroup: Int, expectedBinding: Int, actualGroup: Int, actualBinding: Int): RuntimeEffectAbiValidation =
-        if (expectedGroup == actualGroup && expectedBinding == actualBinding) RuntimeEffectAbiValidation.Accepted
-        else RuntimeEffectAbiValidation.Refused("unsupported.runtime_effect.binding_layout_mismatch")
+        when {
+            expectedGroup < 0 || expectedBinding < 0 || actualGroup < 0 || actualBinding < 0 ->
+                RuntimeEffectAbiValidation.Refused("unsupported.runtime_effect.binding_index_invalid")
+            expectedGroup == actualGroup && expectedBinding == actualBinding -> RuntimeEffectAbiValidation.Accepted
+            else -> RuntimeEffectAbiValidation.Refused("unsupported.runtime_effect.binding_layout_mismatch")
+        }
 }
 
 fun runtimeEffectMaterialCacheKey(id: String, version: Int, uniforms: ByteArray, children: List<String>): String {

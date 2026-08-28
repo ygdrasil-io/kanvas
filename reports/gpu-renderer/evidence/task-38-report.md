@@ -7,6 +7,8 @@ dimensions, and array counts are validated before a slab can be used.
 
 Binding group/index mismatches return
 `unsupported.runtime_effect.binding_layout_mismatch`, before pipeline creation.
+Negative group/index values return
+`unsupported.runtime_effect.binding_index_invalid` before pipeline creation.
 Material cache identity includes length-delimited descriptor ID/version, uniform
 slab bytes, and ordered child identities. WGSL acceptance remains exclusively
 through the registered descriptor registry's parser-backed validation; no
@@ -15,6 +17,6 @@ arbitrary source is admitted.
 Uniform slabs are explicitly zero-initialized and expose defensive byte
 snapshots, so padding cannot leak uninitialized data into evidence dumps.
 
-Verification: `:gpu-renderer:test --tests '*RuntimeEffectAbiW52Test'` — 6 tests
+Verification: `:gpu-renderer:test --tests '*RuntimeEffectAbiW52Test'` — 7 tests
 passed. No native pixel capability is claimed; `gpu-renderer-scenes` was not
 modified.

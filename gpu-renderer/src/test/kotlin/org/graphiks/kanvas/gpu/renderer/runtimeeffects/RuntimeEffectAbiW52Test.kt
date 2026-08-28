@@ -34,6 +34,15 @@ class RuntimeEffectAbiW52Test {
     }
 
     @Test
+    fun `negative binding indices are refused before pipeline creation`() {
+        val result = RuntimeEffectAbiValidator.validateBinding(
+            expectedGroup = -1, expectedBinding = 0, actualGroup = -1, actualBinding = 0,
+        )
+        assertIs<RuntimeEffectAbiValidation.Refused>(result)
+        assertEquals("unsupported.runtime_effect.binding_index_invalid", result.code)
+    }
+
+    @Test
     fun `material cache key includes descriptor version uniform slab and children`() {
         val a = runtimeEffectMaterialCacheKey("runtime.x", 1, byteArrayOf(1, 2), listOf("child:a"))
         val b = runtimeEffectMaterialCacheKey("runtime.x", 2, byteArrayOf(1, 2), listOf("child:a"))
