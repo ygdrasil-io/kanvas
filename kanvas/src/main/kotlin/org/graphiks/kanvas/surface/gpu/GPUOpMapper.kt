@@ -620,7 +620,8 @@ internal object GPUOpMapper {
                                 refusal.code == "geometry.path.fan_budget_config_exceeded" ||
                                 refusal.code == "geometry.path.memory_budget_config_exceeded" ||
                                 refusal.code == "geometry.path.fan_budget_config_out_of_int_range" ||
-                                refusal.code == "geometry.path.memory_budget_config_out_of_int_range"
+                                refusal.code == "geometry.path.memory_budget_config_out_of_int_range" ||
+                                refusal.code == "unsupported.core_primitive.path_vertex_budget_config_out_of_int_range"
                         }
                         ?.let { refusal ->
                         return GPUOpMapping(
@@ -900,6 +901,7 @@ internal object GPUOpMapper {
                 "geometry.path.memory_budget_config_exceeded",
                 "geometry.path.fan_budget_config_out_of_int_range",
                 "geometry.path.memory_budget_config_out_of_int_range",
+                "unsupported.core_primitive.path_vertex_budget_config_out_of_int_range",
                 -> tessellationBudget.code
                 else -> "unsupported.core_primitive.path_vertex_budget"
             }
