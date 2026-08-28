@@ -12,6 +12,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipAtomicGroupID
@@ -27,6 +28,7 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilProducerPlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilStoreOperation
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource
+import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSourceKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUApplyFilterCommandBuilder
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawLayerCommandBuilder
@@ -73,6 +75,56 @@ import org.graphiks.kanvas.gpu.renderer.routing.GPURouteDecision
 
 /** Verifies the first native FillRect analysis, route, and pass builder. */
 class FirstRoutePlannerTest {
+    @Test
+    fun `three stop linear gradient requires the typed stroke source and its distinct capability`() {
+        val material = GPUMaterialDescriptor.LinearGradient(
+            startX = 8.5f, startY = 32.5f, endX = 55.5f, endY = 32.5f,
+            startR = 1f, startG = 0f, startB = 0f, startA = 1f,
+            endR = 0f, endG = 0f, endB = 1f, endA = 1f,
+            allStopPositions = floatArrayOf(0f, .5f, 1f),
+            allStopColors = floatArrayOf(1f, 0f, 0f, 1f, 0f, 1f, 0f, 1f, 0f, 0f, 1f, 1f),
+        )
+        fun command(sourceKind: GPUCommandSourceKind) = GPUFillRectCommandBuilder.build(
+            commandId = GPUDrawCommandID(37),
+            rect = GPURect(6f, 14f, 58f, 18f),
+            target = GPUTargetFacts(64, 64, "rgba8unorm-srgb"),
+            material = material,
+            source = GPUCommandSource("unit-test", "stroke-band", kind = sourceKind),
+        ).copy(antiAlias = false)
+        val capabilities = firstSliceWithLinearGradientCapabilities().copy(
+            facts = firstSliceWithLinearGradientCapabilities().facts + GPUCapabilityFact(
+                name = GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_NATIVE,
+                source = "unit-test",
+                value = "supported",
+                affectsValidity = true,
+                evidenceLabel = "three-stop-stroke-fixture",
+            ),
+        )
+
+        val typedDecision = GPUFirstRoutePlanner(capabilities).plan(
+            command(GPUCommandSourceKind.AnalyticStrokeRectBand),
+        ).routeDecision
+        assertTrue(typedDecision is GPURouteDecision.Native, typedDecision.toString())
+        assertEquals(
+            "unsupported.material.mapping.linear_gradient_stop_count",
+            assertIs<GPURouteDecision.Refused>(
+                GPUFirstRoutePlanner(capabilities).plan(command(GPUCommandSourceKind.Generic)).routeDecision,
+            ).diagnostic.code,
+        )
+        assertEquals(
+            "unsupported.material.mapping.linear_gradient_stop_count",
+            assertIs<GPURouteDecision.Refused>(
+                GPUFirstRoutePlanner(
+                    capabilities.copy(
+                        facts = capabilities.facts.filterNot {
+                            it.name == GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_NATIVE
+                        },
+                    ),
+                ).plan(command(GPUCommandSourceKind.AnalyticStrokeRectBand)).routeDecision,
+            ).diagnostic.code,
+        )
+    }
+
     @Test
     fun `native FillRect route builder retains its four argument JVM descriptor`() {
         val methods = GPUFirstRouteDecisionBuilder::class.java.methods.filter { method ->

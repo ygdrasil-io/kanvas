@@ -31,6 +31,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource
+import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSourceKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
@@ -943,6 +944,11 @@ internal object GPUOpMapper {
             adapter = "kanvas-surface",
             operation = operation.coreSourceOperation(),
             frameProvenance = provenance,
+            kind = if (operation is DisplayOp.DrawRect && !operation.paint.isStroke()) {
+                GPUCommandSourceKind.PublicFillRect
+            } else {
+                GPUCommandSourceKind.Generic
+            },
         )
         return when (command) {
             is NormalizedDrawCommand.FillRect -> command.copy(bounds = targetBounds, ordering = ordering, source = source)

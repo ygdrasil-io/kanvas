@@ -9,6 +9,7 @@ import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
@@ -138,6 +139,131 @@ class GPUPreparedStrokeRectLowererTest {
         assertEquals(55.5f, materials.first().endX)
         assertEquals(32.5f, materials.first().endY)
         assertEquals("clamp", materials.first().tileMode)
+    }
+
+    @Test
+    fun `three stop gradient stroke refuses before bands when its dedicated capability is absent`() {
+        val lowered = assertIs<GPUPreparedStrokeRectLowering.Refused>(
+            GPUPreparedStrokeRectLowerer.lower(
+                operation = strokeRect(
+                    bounds = RectF32.ofLTRB(8f, 16f, 56f, 48f),
+                    paint = Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                        shader = Shader.LinearGradient(
+                            Point2F32(8.5f, 32.5f), Point2F32(55.5f, 32.5f),
+                            listOf(
+                                org.graphiks.kanvas.paint.GradientStop(0f, ColorARGB.Red),
+                                org.graphiks.kanvas.paint.GradientStop(.5f, ColorARGB.Green),
+                                org.graphiks.kanvas.paint.GradientStop(1f, ColorARGB.Blue),
+                            ),
+                            org.graphiks.kanvas.paint.TileMode.CLAMP,
+                        ),
+                        antiAlias = false,
+                    ),
+                ),
+                firstCommandId = GPUDrawCommandID(0),
+                firstPaintOrder = 0,
+                provenance = GPUFrameProvenance.None,
+                target = target(),
+                config = RenderConfig.DEFAULT,
+                capabilities = capabilities(),
+            ),
+        )
+
+        assertEquals("unsupported.stroke.rect_linear_gradient_three_stop_capability", lowered.code)
+    }
+
+    @Test
+    fun `three stop clamp gradient stroke lowers to four typed analytic bands only with its capability`() {
+        val operation = strokeRect(
+            bounds = RectF32.ofLTRB(8f, 16f, 56f, 48f),
+            paint = Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                shader = Shader.LinearGradient(
+                    Point2F32(8.5f, 32.5f), Point2F32(55.5f, 32.5f),
+                    listOf(
+                        org.graphiks.kanvas.paint.GradientStop(0f, ColorARGB.Red),
+                        org.graphiks.kanvas.paint.GradientStop(.5f, ColorARGB.Green),
+                        org.graphiks.kanvas.paint.GradientStop(1f, ColorARGB.Blue),
+                    ),
+                    org.graphiks.kanvas.paint.TileMode.CLAMP,
+                ),
+                antiAlias = false,
+            ),
+        )
+
+        val lowered = assertIs<GPUPreparedStrokeRectLowering.Ready>(
+            GPUPreparedStrokeRectLowerer.lower(
+                operation = operation,
+                firstCommandId = GPUDrawCommandID(0),
+                firstPaintOrder = 0,
+                provenance = GPUFrameProvenance.GmContent,
+                target = target(),
+                config = RenderConfig.DEFAULT,
+                capabilities = capabilities(withThreeStopStrokeGradient = true),
+            ),
+        )
+
+        assertEquals(4, lowered.commands.size)
+        lowered.commands.forEach { visual ->
+            val fill = assertIs<NormalizedDrawCommand.FillRect>(visual.normalized)
+            assertEquals(
+                org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSourceKind.AnalyticStrokeRectBand,
+                fill.source.kind,
+            )
+            val material = assertIs<org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor.LinearGradient>(fill.material)
+            assertTrue(material.allStopPositions.contentEquals(floatArrayOf(0f, .5f, 1f)))
+            assertEquals("clamp", material.tileMode)
+        }
+    }
+
+    @Test
+    fun `three stop gradient stroke preserves bounded pre-band refusals`() {
+        val threeStops = listOf(
+            org.graphiks.kanvas.paint.GradientStop(0f, ColorARGB.Red),
+            org.graphiks.kanvas.paint.GradientStop(.5f, ColorARGB.Green),
+            org.graphiks.kanvas.paint.GradientStop(1f, ColorARGB.Blue),
+        )
+        val fourStops = threeStops + org.graphiks.kanvas.paint.GradientStop(1f, ColorARGB.White)
+        val cases = listOf(
+            strokeRect(paint = Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                shader = Shader.LinearGradient(Point2F32(8f, 32f), Point2F32(56f, 32f), fourStops),
+                antiAlias = false,
+            )) to "unsupported.stroke.rect_gradient_stop_count",
+            strokeRect(paint = Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                shader = Shader.LinearGradient(
+                    Point2F32(8f, 32f), Point2F32(56f, 32f), threeStops,
+                    org.graphiks.kanvas.paint.TileMode.REPEAT,
+                ),
+                antiAlias = false,
+            )) to "unsupported.stroke.rect_material",
+            strokeRect(paint = Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                shader = Shader.LinearGradient(Point2F32(8f, 32f), Point2F32(56f, 32f), threeStops),
+                antiAlias = true,
+            )) to "unsupported.stroke.rect_anti_alias",
+            strokeRect(
+                paint = Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                    shader = Shader.LinearGradient(Point2F32(8f, 32f), Point2F32(56f, 32f), threeStops),
+                    antiAlias = false,
+                ),
+                transform = Matrix3x3F32.translation(2f, 0f),
+            ) to "unsupported.stroke.rect_transform",
+            strokeRect(paint = Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                shader = Shader.WithLocalMatrix(
+                    Shader.LinearGradient(Point2F32(8f, 32f), Point2F32(56f, 32f), threeStops),
+                    Matrix3x3F32.translation(1f, 0f),
+                ),
+                antiAlias = false,
+            )) to "unsupported.stroke.rect_material",
+        )
+
+        cases.forEach { (operation, expectedCode) ->
+            val lowered = assertIs<GPUPreparedStrokeRectLowering.Refused>(
+                GPUPreparedStrokeRectLowerer.lower(
+                    operation, GPUDrawCommandID(0), 0, GPUFrameProvenance.None,
+                    target(), RenderConfig.DEFAULT, capabilities(withThreeStopStrokeGradient = true),
+                ),
+            )
+            assertEquals(expectedCode, lowered.code)
+        }
     }
 
     @Test
@@ -457,16 +583,29 @@ class GPUPreparedStrokeRectLowererTest {
 
     private fun target() = GPUTargetFacts(64, 64, "rgba8unorm-srgb")
 
-    private fun capabilities() = GPUCapabilities(
+    private fun capabilities(withThreeStopStrokeGradient: Boolean = false) = GPUCapabilities(
         implementation = GPUImplementationIdentity(
             facadeName = "test", implementationName = "fake", adapterName = "mock", deviceName = "mock",
         ),
-        facts = listOf(
+        facts = buildList {
+            add(
             GPUCapabilityFact(
                 name = "first_slice.fill_rect.native", source = "test", value = "supported",
                 affectsValidity = true, evidenceLabel = "test:fill-rect",
             ),
-        ),
+            )
+            if (withThreeStopStrokeGradient) {
+                add(
+                    GPUCapabilityFact(
+                        name = GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_NATIVE,
+                        source = "test",
+                        value = "supported",
+                        affectsValidity = true,
+                        evidenceLabel = "test:stroke-rect-linear-gradient-three-stop",
+                    ),
+                )
+            }
+        },
         knownUnsupportedFacts = emptyList(),
         snapshotId = "stroke-rect-lowerer-test",
         limits = GPULimits(

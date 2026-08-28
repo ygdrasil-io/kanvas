@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.execution
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName
 
 class GPUBackendRuntimeNativeCapabilitiesTest {
     @Test
@@ -26,5 +27,13 @@ class GPUBackendRuntimeNativeCapabilitiesTest {
         assertEquals("supported", linear.value)
         assertEquals(true, linear.affectsValidity)
         assertEquals("core-primitive-gradient-linear-native", linear.evidenceLabel)
+
+        val threeStopStroke = assertNotNull(
+            facts[GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_NATIVE],
+        )
+        assertEquals("runtime", threeStopStroke.source)
+        assertEquals("supported", threeStopStroke.value)
+        assertEquals(true, threeStopStroke.affectsValidity)
+        assertEquals("core-primitive-gradient-linear-stroke-3stop-native", threeStopStroke.evidenceLabel)
     }
 }

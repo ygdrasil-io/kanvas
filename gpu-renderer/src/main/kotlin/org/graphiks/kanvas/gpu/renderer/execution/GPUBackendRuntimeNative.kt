@@ -213,6 +213,13 @@ internal fun nativeCorePrimitiveCapabilityFacts(): List<GPUCapabilityFact> = lis
     GPUCapabilityFact("first_slice.mask_blur.native", "runtime", "supported", true, "prepared-top-level-mask-blur"),
     GPUCapabilityFact("first_slice.fill_rect.affine.native", "runtime", "supported", true, "core-primitive-direct-native"),
     GPUCapabilityFact("first_slice.linear_gradient.native", "runtime", "supported", true, "core-primitive-gradient-linear-native"),
+    GPUCapabilityFact(
+        GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_NATIVE,
+        "runtime",
+        "supported",
+        true,
+        "core-primitive-gradient-linear-stroke-3stop-native",
+    ),
     GPUCapabilityFact("first_slice.radial_gradient.native", "runtime", "supported", true, "core-primitive-gradient-radial-native"),
     GPUCapabilityFact("first_slice.sweep_gradient.native", "runtime", "supported", true, "core-primitive-gradient-sweep-native"),
 )

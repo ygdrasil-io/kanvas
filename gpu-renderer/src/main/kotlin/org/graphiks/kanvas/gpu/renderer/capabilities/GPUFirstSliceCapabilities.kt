@@ -6,6 +6,8 @@ object GPUFirstSliceCapabilityName {
     const val SCISSOR_NATIVE = "first_slice.scissor.native"
     const val BOUNDED_CLIP_NATIVE = "first_slice.bounded_clip.native"
     const val PATH_FILL_STENCIL_COVER = "first_slice.path_fill.stencil_cover"
+    const val STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_NATIVE =
+        "first_slice.stroke_rect.linear_gradient_three_stop.native"
 }
 
 /** Builds a validity-affecting fact for one explicitly supported GPU capability. */
