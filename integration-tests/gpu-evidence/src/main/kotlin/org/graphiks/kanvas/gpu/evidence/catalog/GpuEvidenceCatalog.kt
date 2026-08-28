@@ -97,6 +97,10 @@ object GpuEvidenceCatalog {
         implicitClosureTrianglePath(),
         translatedTrianglePath(),
         uniformScaledTrianglePath(),
+        quadraticPathFill(),
+        cubicPathFill(),
+        ovalPathFill(),
+        circlePathFill(),
     )
     val refusalCases: List<EvidenceCase> = listOf(
         linearGradientThreeStops(),
@@ -1293,6 +1297,46 @@ object GpuEvidenceCatalog {
         fillRule = SurfaceSrgbPathFillCpuOracle.FillRule.Winding,
     )
 
+    private fun quadraticPathFill() = pathFillCase(
+        id = "quadratic-path-fill", title = "Quadratic path fill",
+        description = "Public Kanvas Surface non-AA winding quadratic drawPath fill.",
+        tags = setOf("path-fill", "quadratic", "kanvas-surface"),
+        program = KanvasScenePrograms.quadraticPathFill(), fill = intArrayOf(242, 135, 46, 255),
+        contours = listOf(SurfaceSrgbPathFillCpuOracle.Contour(quadraticContour())),
+        fillRule = SurfaceSrgbPathFillCpuOracle.FillRule.Winding,
+        comparisonRationale = "Independent pixel-center winding oracle evaluates the public quadratic Bézier analytically before polygon membership.",
+    )
+
+    private fun cubicPathFill() = pathFillCase(
+        id = "cubic-path-fill", title = "Cubic path fill",
+        description = "Public Kanvas Surface non-AA winding cubic drawPath fill.",
+        tags = setOf("path-fill", "cubic", "kanvas-surface"),
+        program = KanvasScenePrograms.cubicPathFill(), fill = intArrayOf(31, 115, 209, 255),
+        contours = listOf(SurfaceSrgbPathFillCpuOracle.Contour(cubicContour())),
+        fillRule = SurfaceSrgbPathFillCpuOracle.FillRule.Winding,
+        comparisonRationale = "Independent pixel-center winding oracle evaluates the public cubic Bézier before polygon membership.",
+    )
+
+    private fun ovalPathFill() = pathFillCase(
+        id = "oval-path-fill", title = "Oval path fill",
+        description = "Public Kanvas Surface non-AA oval drawPath fill lowered through cubic verbs.",
+        tags = setOf("path-fill", "oval", "cubic", "kanvas-surface"),
+        program = KanvasScenePrograms.ovalPathFill(), fill = intArrayOf(56, 220, 120, 255),
+        contours = listOf(SurfaceSrgbPathFillCpuOracle.Contour(ovalContour(10f, 12f, 54f, 52f))),
+        fillRule = SurfaceSrgbPathFillCpuOracle.FillRule.Winding,
+        comparisonRationale = "Independent pixel-center winding oracle evaluates the four cubic oval segments before polygon membership.",
+    )
+
+    private fun circlePathFill() = pathFillCase(
+        id = "circle-path-fill", title = "Circle path fill",
+        description = "Public Kanvas Surface non-AA circle drawPath fill lowered through cubic verbs.",
+        tags = setOf("path-fill", "circle", "cubic", "kanvas-surface"),
+        program = KanvasScenePrograms.circlePathFill(), fill = intArrayOf(242, 135, 46, 255),
+        contours = listOf(SurfaceSrgbPathFillCpuOracle.Contour(ovalContour(12f, 12f, 52f, 52f))),
+        fillRule = SurfaceSrgbPathFillCpuOracle.FillRule.Winding,
+        comparisonRationale = "Independent pixel-center winding oracle evaluates the four cubic circle segments before polygon membership.",
+    )
+
     private fun solidConcavePath() = pathFillCase(
         id = "solid-concave-path",
         title = "Solid concave path",
@@ -1449,6 +1493,39 @@ object GpuEvidenceCatalog {
     )
 
     private fun point(x: Float, y: Float) = SurfaceSrgbPathFillCpuOracle.Point(x, y)
+
+    /** Independent Bézier sampling for the CPU oracle; it does not call Kanvas lowering. */
+    private fun quadraticContour(): List<SurfaceSrgbPathFillCpuOracle.Point> =
+        (0..96).map { step ->
+            val t = step / 96f
+            val u = 1f - t
+            point(u * u * 8f + 2f * u * t * 32f + t * t * 56f, u * u * 56f + 2f * u * t * 4f + t * t * 56f)
+        }
+
+    private fun cubicContour(): List<SurfaceSrgbPathFillCpuOracle.Point> =
+        cubicSegment(8f, 56f, 8f, 0f, 56f, 0f, 56f, 56f)
+
+    private fun ovalContour(left: Float, top: Float, right: Float, bottom: Float): List<SurfaceSrgbPathFillCpuOracle.Point> {
+        val cx = (left + right) / 2f
+        val cy = (top + bottom) / 2f
+        val rx = (right - left) / 2f
+        val ry = (bottom - top) / 2f
+        val k = 0.55228475f
+        return (cubicSegment(cx + rx, cy, cx + rx, cy - k * ry, cx + k * rx, cy - ry, cx, cy - ry) +
+            cubicSegment(cx, cy - ry, cx - k * rx, cy - ry, cx - rx, cy - k * ry, cx - rx, cy).drop(1) +
+            cubicSegment(cx - rx, cy, cx - rx, cy + k * ry, cx - k * rx, cy + ry, cx, cy + ry).drop(1) +
+            cubicSegment(cx, cy + ry, cx + k * rx, cy + ry, cx + rx, cy + k * ry, cx + rx, cy).drop(1)).dropLast(1)
+    }
+
+    private fun cubicSegment(x0: Float, y0: Float, x1: Float, y1: Float, x2: Float, y2: Float, x3: Float, y3: Float) =
+        (0..24).map { step ->
+            val t = step / 24f
+            val u = 1f - t
+            point(
+                u * u * u * x0 + 3f * u * u * t * x1 + 3f * u * t * t * x2 + t * t * t * x3,
+                u * u * u * y0 + 3f * u * u * t * y1 + 3f * u * t * t * y2 + t * t * t * y3,
+            )
+        }
 
     private fun surfaceRefusal(id: String, title: String, description: String, tags: Set<String>, code: String, program: org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram) = EvidenceCase(
         EvidenceSceneDescriptor(EvidenceSceneId(id), title, description, 16, 16, 1L, tags, EvidenceExpectation.ShouldRefuse(code), OraclePolicy.StableRefusal, null, emptySet()), program, null,

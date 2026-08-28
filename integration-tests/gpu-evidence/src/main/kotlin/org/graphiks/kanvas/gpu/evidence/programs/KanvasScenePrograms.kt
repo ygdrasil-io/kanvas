@@ -799,6 +799,30 @@ object KanvasScenePrograms {
         }.apply { fillType = FillType.WINDING }, Paint.fill(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)).copy(antiAlias = false))
     })
 
+    fun quadraticPathFill() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        drawPath(Path {
+            moveTo(8f, 56f); quadTo(32f, 4f, 56f, 56f); close()
+        }, Paint.fill(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)).copy(antiAlias = false))
+    })
+
+    fun cubicPathFill() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        drawPath(Path {
+            moveTo(8f, 56f); cubicTo(8f, 0f, 56f, 0f, 56f, 56f); close()
+        }, Paint.fill(ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)).copy(antiAlias = false))
+    })
+
+    fun ovalPathFill() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        drawPath(Path {}.addOval(RectF32.ofLTRB(10f, 12f, 54f, 52f)), Paint.fill(ColorARGB.fromRGBA(56f / 255f, 220f / 255f, 120f / 255f)).copy(antiAlias = false))
+    })
+
+    fun circlePathFill() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        drawPath(Path {}.addCircle(32f, 32f, 20f), Paint.fill(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)).copy(antiAlias = false))
+    })
+
     fun solidConcavePath() = KanvasSurfaceProgram(ROUTE_ID, record = {
         drawColor(BACKGROUND)
         drawPath(Path {
