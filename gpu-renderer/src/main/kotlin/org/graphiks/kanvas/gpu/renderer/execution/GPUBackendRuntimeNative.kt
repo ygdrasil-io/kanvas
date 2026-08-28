@@ -5817,6 +5817,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
 internal class WgpuExecutionCaches(
     private val deviceGeneration: GPUDeviceGeneration,
+    private val capabilityFingerprint: String = "wgpu-execution-capabilities-v1",
     private val moduleCache: GPUExecutionObjectCache<GPUShaderModule> = GPUExecutionObjectCache(
         domain = GPUExecutionCacheDomain.Module,
         dispose = GPUShaderModule::close,
@@ -6471,6 +6472,7 @@ internal class WgpuExecutionCaches(
             subjectHash = subjectHash,
             deviceGeneration = deviceGeneration,
             expectedDeviceGeneration = deviceGeneration,
+            capabilityFingerprint = capabilityFingerprint,
             ownerScope = "GPUResourceProvider",
         )
 
