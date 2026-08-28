@@ -173,6 +173,36 @@ class GPUPreparedStrokeRectLowererTest {
     }
 
     @Test
+    fun `three stop gradient stroke refuses non srgb targets before bands`() {
+        val operation = strokeRect(
+            bounds = RectF32.ofLTRB(8f, 16f, 56f, 48f),
+            paint = Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                shader = Shader.LinearGradient(
+                    Point2F32(8.5f, 32.5f), Point2F32(55.5f, 32.5f),
+                    listOf(
+                        org.graphiks.kanvas.paint.GradientStop(0f, ColorARGB.Red),
+                        org.graphiks.kanvas.paint.GradientStop(.5f, ColorARGB.Green),
+                        org.graphiks.kanvas.paint.GradientStop(1f, ColorARGB.Blue),
+                    ),
+                    org.graphiks.kanvas.paint.TileMode.CLAMP,
+                ),
+                antiAlias = false,
+            ),
+        )
+
+        listOf("rgba8unorm", "bgra8unorm").forEach { format ->
+            val lowered = assertIs<GPUPreparedStrokeRectLowering.Refused>(
+                GPUPreparedStrokeRectLowerer.lower(
+                    operation, GPUDrawCommandID(0), 0, GPUFrameProvenance.None,
+                    target(format), RenderConfig.DEFAULT, capabilities(withThreeStopStrokeGradient = true),
+                ),
+            )
+            assertEquals("unsupported.stroke.rect_gradient_target", lowered.code)
+            assertEquals(format, lowered.facts["targetFormat"])
+        }
+    }
+
+    @Test
     fun `three stop clamp gradient stroke lowers to four typed analytic bands only with its capability`() {
         val operation = strokeRect(
             bounds = RectF32.ofLTRB(8f, 16f, 56f, 48f),
@@ -581,7 +611,7 @@ class GPUPreparedStrokeRectLowererTest {
         clip,
     )
 
-    private fun target() = GPUTargetFacts(64, 64, "rgba8unorm-srgb")
+    private fun target(format: String = "rgba8unorm-srgb") = GPUTargetFacts(64, 64, format)
 
     private fun capabilities(withThreeStopStrokeGradient: Boolean = false) = GPUCapabilities(
         implementation = GPUImplementationIdentity(

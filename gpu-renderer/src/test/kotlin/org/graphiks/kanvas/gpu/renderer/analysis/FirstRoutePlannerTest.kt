@@ -105,6 +105,12 @@ class FirstRoutePlannerTest {
             command(GPUCommandSourceKind.AnalyticStrokeRectBand),
         ).routeDecision
         assertTrue(typedDecision is GPURouteDecision.Native, typedDecision.toString())
+        assertTrue(
+            GPUFirstRoutePlanner(firstSliceWithLinearGradientCapabilities()).plan(
+                command(GPUCommandSourceKind.PublicFillRect),
+            ).routeDecision is GPURouteDecision.Native,
+            "W32 PublicFillRect three-stop admission must not consume the W37 stroke capability",
+        )
         assertEquals(
             "unsupported.material.mapping.linear_gradient_stop_count",
             assertIs<GPURouteDecision.Refused>(
