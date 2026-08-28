@@ -16,6 +16,7 @@ class ProductFlagConfigTest {
         assertTrue(config.linearGradientEnabled)
         assertTrue(config.strokeRectLinearGradientThreeStopEnabled)
         assertTrue(config.strokeRectLinearGradientThreeStopTranslateEnabled)
+        assertTrue(config.strokeRectLinearGradientUniformScaleEnabled)
         assertTrue(config.strokeRectLinearGradientTranslateEnabled)
         assertTrue(config.scissorEnabled)
         assertTrue(config.radialGradientEnabled)
@@ -133,6 +134,17 @@ class ProductFlagConfigTest {
         assertFalse(config.strokeRectLinearGradientThreeStopTranslateEnabled)
         assertFalse(config.buildCapabilities().facts.any {
             it.name == GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_TRANSLATE_NATIVE
+        })
+    }
+
+    @Test
+    fun `uniform scale linear stroke capability has an independent disable property`() {
+        val config = GPUProductFlagConfig.fromSystemProperties { key ->
+            if (key == GPUProductFlagConfig.StrokeRectLinearGradientUniformScaleDisableProperty) "true" else null
+        }
+        assertFalse(config.strokeRectLinearGradientUniformScaleEnabled)
+        assertFalse(config.buildCapabilities().facts.any {
+            it.name == GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_UNIFORM_SCALE_NATIVE
         })
     }
 
