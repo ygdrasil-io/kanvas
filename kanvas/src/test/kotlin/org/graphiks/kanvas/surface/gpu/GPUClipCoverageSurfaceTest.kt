@@ -207,6 +207,25 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
+    fun `nested intersect and difference rect clips retain their direct geometry resource refusal`() {
+        requireWebGpu()
+        val background = ColorARGB.of(255, 13, 20, 33)
+        val fill = ColorARGB.of(255, 242, 135, 46)
+        val surface = Surface(64, 64)
+        surface.canvas {
+            drawColor(background)
+            save()
+            clipRect(RectF32.ofLTRB(8f, 8f, 56f, 56f), ClipOp.INTERSECT, antiAlias = false)
+            clipRect(RectF32.ofLTRB(12f, 12f, 56f, 56f), ClipOp.INTERSECT, antiAlias = false)
+            clipRect(RectF32.ofLTRB(40f, 32f, 52f, 44f), ClipOp.DIFFERENCE, antiAlias = false)
+            drawRect(RectF32.ofLTRB(0f, 0f, 64f, 64f), Paint.fill(fill).copy(antiAlias = false))
+            restore()
+        }
+
+        assertTerminal("invalid.preflight.core_primitive_direct_geometry_resources", surface::render)
+    }
+
+    @Test
     fun `bounded cubic clip matches the independent CPU buffer for both fill rules and operations`() {
         requireWebGpu()
         val background = ColorARGB.of(255, 13, 20, 33)

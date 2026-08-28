@@ -3040,6 +3040,34 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `mapper turns an over-depth public clip stack into a stable pre-draw refusal`() {
+        val surface = Surface(32, 32)
+        surface.canvas {
+            clipRect(RectF32.ofLTRB(1f, 1f, 31f, 31f), ClipOp.INTERSECT, antiAlias = true)
+            clipRect(RectF32.ofLTRB(8f, 8f, 24f, 24f), ClipOp.DIFFERENCE, antiAlias = true)
+            clipRect(RectF32.ofLTRB(4f, 4f, 28f, 28f), ClipOp.INTERSECT, antiAlias = true)
+            drawRect(RectF32.ofLTRB(0f, 0f, 32f, 32f), Paint.fill(ColorARGB.Red))
+        }
+
+        val plan = GPUFramePathApiInventory.plan(
+            surface.snapshotOps(),
+            target(),
+            RenderConfig(maxClipStackDepth = 2u),
+            capabilitiesWith(FILL_RECT_CAPABILITY),
+        )
+
+        val visual = plan.visualCommands.single()
+        assertEquals(
+            "unsupported.clip.depth_budget",
+            assertIs<GPUClipCoveragePlan.Refused>(visual.clipCoverage).code,
+        )
+        assertEquals(
+            "unsupported.clip.depth_budget",
+            assertIs<GPUClipExecutionPlan.Refused>(visual.clipExecutionPlan).code,
+        )
+    }
+
+    @Test
     fun `mapper uses the analytic intersection frame route before mask byte budget`() {
         val surface = Surface(32, 32)
         surface.canvas {
