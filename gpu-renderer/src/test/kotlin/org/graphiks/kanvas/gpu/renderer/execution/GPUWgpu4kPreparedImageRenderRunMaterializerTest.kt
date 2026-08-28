@@ -237,7 +237,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
             bindingInputs = listOf(
                 GPUImageBindingInput("packet.nearest.a", GPUPreparedImageSampling.Nearest),
                 GPUImageBindingInput("packet.nearest.b", GPUPreparedImageSampling.Nearest),
-                GPUImageBindingInput("packet.linear", GPUPreparedImageSampling.Linear),
+                GPUImageBindingInput("packet.nearest.c", GPUPreparedImageSampling.Nearest),
             ),
             bindingLayoutHash =
                 "prepared-image.group0.dynamic-uniform-texture-sampler.v1",
@@ -247,7 +247,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
         val allocations = listOf(
             GPUPreparedImageUniformAllocation("packet.nearest.a", 0L, 112L),
             GPUPreparedImageUniformAllocation("packet.nearest.b", 256L, 112L),
-            GPUPreparedImageUniformAllocation("packet.linear", 512L, 112L),
+            GPUPreparedImageUniformAllocation("packet.nearest.c", 512L, 112L),
         )
         val result = GPUWgpu4kPreparedImageRenderRunMaterializer(
             cache,
@@ -260,7 +260,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
                     packets = listOf(
                         preparedImageSemantic(artifact, GPUPreparedImageSampling.Nearest, 1f),
                         preparedImageSemantic(artifact, GPUPreparedImageSampling.Nearest, 5f),
-                        preparedImageSemantic(artifact, GPUPreparedImageSampling.Linear, 9f),
+                        preparedImageSemantic(artifact, GPUPreparedImageSampling.Nearest, 9f),
                     ),
                     resources = listOf(resource),
                     uniformAllocations = allocations,
@@ -313,17 +313,17 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
             drawEntries[1].uniformBytes().toList(),
         )
         assertSame(drawEntries[0].bindGroup.bindGroup, drawEntries[1].bindGroup.bindGroup)
-        assertNotSame(drawEntries[0].bindGroup.bindGroup, drawEntries[2].bindGroup.bindGroup)
+        assertSame(drawEntries[0].bindGroup.bindGroup, drawEntries[2].bindGroup.bindGroup)
         assertTrue(drawEntries.drop(1).all {
             it.pipeline.pipeline === drawEntries.first().pipeline.pipeline
         })
         assertEquals(1, nativeDevice.pipelineCreates)
-        assertEquals(listOf("nearest", "linear"), factory.samplerFilters)
+        assertEquals(listOf("nearest"), factory.samplerFilters)
         assertEquals(1, factory.textureCreates)
         assertEquals(1, factory.textureViewCreates)
-        assertEquals(2, factory.samplerCreates)
+        assertEquals(1, factory.samplerCreates)
         assertEquals(1, factory.uniformBufferCreates)
-        assertEquals(2, factory.bindGroupCreates)
+        assertEquals(1, factory.bindGroupCreates)
 
         result.ownedResources.single().close()
         result.ownedResources.single().close()
@@ -932,7 +932,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
             artifact = artifact,
             bindingInputs = listOf(
                 GPUImageBindingInput("packet.first", GPUPreparedImageSampling.Nearest),
-                GPUImageBindingInput("packet.second", GPUPreparedImageSampling.Linear),
+                GPUImageBindingInput("packet.second", GPUPreparedImageSampling.Nearest),
             ),
             bindingLayoutHash =
                 "prepared-image.group0.dynamic-uniform-texture-sampler.v1",
@@ -957,7 +957,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
                 sourceScopeIndices = listOf(1, 2),
                 packets = listOf(
                     preparedImageSemantic(artifact, GPUPreparedImageSampling.Nearest, 1f),
-                    preparedImageSemantic(artifact, GPUPreparedImageSampling.Linear, 9f),
+                    preparedImageSemantic(artifact, GPUPreparedImageSampling.Nearest, 9f),
                 ),
                 resources = listOf(resource),
                 uniformAllocations = resource.bindingRequests.map { it.uniformAllocation },
@@ -975,11 +975,11 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
                 sourceScopeIndices = listOf(1, 2, 3),
                 packets = listOf(
                     preparedImageSemantic(artifact, GPUPreparedImageSampling.Nearest, 1f),
-                    preparedImageSemantic(artifact, GPUPreparedImageSampling.Linear, 9f),
+                    preparedImageSemantic(artifact, GPUPreparedImageSampling.Nearest, 9f),
                 ),
                 resources = listOf(
                     preparedImageResource(artifact, "packet.one"),
-                    preparedImageResource(artifact, "packet.two", GPUPreparedImageSampling.Linear),
+                    preparedImageResource(artifact, "packet.two"),
                 ),
                 uniformAllocations = listOf(
                     GPUPreparedImageUniformAllocation("packet.one", 0L, 112L),

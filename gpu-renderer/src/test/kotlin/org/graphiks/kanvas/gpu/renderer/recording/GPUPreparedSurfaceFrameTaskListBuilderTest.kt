@@ -353,7 +353,7 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
                 base,
                 commandId = 2,
                 artifactOverride = nearest,
-                sampling = GPUPreparedImageSampling.Linear,
+                sampling = GPUPreparedImageSampling.Nearest,
             ),
         )
 
@@ -379,7 +379,7 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
             val sampler = value.javaClass.getMethod("getSampler").invoke(value)
             packetId to sampler.javaClass.getMethod("getMagFilter").invoke(sampler) as String
         }.values.toSet()
-        assertEquals(setOf("nearest", "linear"), samplerModes)
+        assertEquals(setOf("nearest"), samplerModes)
         val retainedBindings = taskList.tasks.filterIsInstance<GPUTask.Render>()
             .flatMap { render ->
                 val field = render.javaClass.declaredFields.singleOrNull {
@@ -553,7 +553,7 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
                 base,
                 commandId = 1,
                 artifactOverride = nearest,
-                sampling = GPUPreparedImageSampling.Linear,
+                sampling = GPUPreparedImageSampling.Nearest,
             ),
         )
         val target = GPUFrameTargetRef("target.prepared-image-key-authority")
@@ -761,7 +761,7 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
             renderRun.drawEntries[1].pipeline.pipeline,
         )
         assertEquals(1, nativeDevice.pipelineCreates)
-        assertEquals(listOf("nearest", "linear"), handleFactory.samplerFilters)
+        assertEquals(listOf("nearest"), handleFactory.samplerFilters)
         assertEquals(
             listOf(sourceScopeIndices.last()),
             materialized.uniformUploads.single().consumerSourceStepIndices,
@@ -788,7 +788,7 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
                 base,
                 commandId = 1,
                 artifactOverride = nearest,
-                sampling = GPUPreparedImageSampling.Linear,
+                sampling = GPUPreparedImageSampling.Nearest,
             ),
         )
         val target = GPUFrameTargetRef("target.prepared-image-invalid-observer")

@@ -214,6 +214,34 @@ internal object GPUPreparedDrawImageLowerer {
         val dst = operation.dst
         val src = operation.src
 
+        // W28's only admitted image geometry is one complete immutable bitmap copied at
+        // native pixel resolution. Keeping this closed before artifact preparation prevents
+        // the hard-coded nearest sampler from silently becoming a scale, crop, or fractional
+        // sampling implementation.
+        val sourceIsWholeImage =
+            src.left == 0f && src.top == 0f &&
+                src.right == image.width.toFloat() && src.bottom == image.height.toFloat()
+        val destinationIsInteger =
+            listOf(dst.left, dst.top, dst.right, dst.bottom).all { coordinate ->
+                coordinate.isFinite() && coordinate == coordinate.toInt().toFloat()
+            }
+        val destinationIsNativeSize =
+            dst.right - dst.left == image.width.toFloat() &&
+                dst.bottom - dst.top == image.height.toFloat()
+        if (!sourceIsWholeImage || !destinationIsInteger || !destinationIsNativeSize) {
+            return GPUPreparedDrawImageLowering.Refused(
+                GPUPreparedImageRefusalCodes.RECT_GEOMETRY,
+                mapOf(
+                    "sourceId" to image.sourceId,
+                    "supportedSource" to "whole_image",
+                    "supportedDestination" to "integer_1_to_1",
+                    "src" to "${src.left},${src.top},${src.right},${src.bottom}",
+                    "dst" to "${dst.left},${dst.top},${dst.right},${dst.bottom}",
+                    "imageSize" to "${image.width}x${image.height}",
+                ),
+            )
+        }
+
         val dx0 = dst.left
         val dy0 = dst.top
         val dx1 = dst.right

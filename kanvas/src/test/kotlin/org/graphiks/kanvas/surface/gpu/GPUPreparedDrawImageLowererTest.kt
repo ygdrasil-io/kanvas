@@ -141,7 +141,12 @@ class GPUPreparedDrawImageLowererTest {
 
     private fun drawImage(
         image: Image,
-        dst: RectF32 = RectF32.ofLTRB(10f, 10f, 50f, 40f),
+        dst: RectF32 = RectF32.ofLTRB(
+            10f,
+            10f,
+            10f + image.width.toFloat(),
+            10f + image.height.toFloat(),
+        ),
         src: RectF32 = RectF32.ofLTRB(0f, 0f, image.width.toFloat(), image.height.toFloat()),
         paint: Paint? = null,
         transform: Matrix3x3F32 = Matrix3x3F32.Identity,
@@ -206,7 +211,7 @@ class GPUPreparedDrawImageLowererTest {
         )
         val result2 = assertIs<GPUPreparedDrawImageLowering.Ready>(
             GPUPreparedDrawImageLowerer.lower(
-                drawImage(image, RectF32.ofLTRB(20f, 20f, 60f, 50f)),
+                drawImage(image, RectF32.ofLTRB(20f, 20f, 24f, 23f)),
                 GPUDrawCommandID(1),
                 1,
                 GPUFrameProvenance.None,
@@ -309,10 +314,10 @@ class GPUPreparedDrawImageLowererTest {
     }
 
     @Test
-    fun `source rect and UV clamp exact`() {
+    fun `source crop is refused by the bounded native geometry contract`() {
         val image = rgbaImage(width = 8, height = 6)
         val src = RectF32.ofLTRB(1f, 2f, 5f, 4f)
-        val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
+        val result = assertIs<GPUPreparedDrawImageLowering.Refused>(
             GPUPreparedDrawImageLowerer.lower(
                 drawImage(image, src = src),
                 GPUDrawCommandID(0),
@@ -323,23 +328,13 @@ class GPUPreparedDrawImageLowererTest {
                 capabilities(),
             ),
         )
-        val geometry = result.command.preparedImage!!.geometry
-        val uvs = geometry.vertices.map { it.u to it.v }
-        val imageW = image.width.toFloat()
-        val imageH = image.height.toFloat()
-        val expectedUvs = listOf(
-            1f / imageW to 2f / imageH,
-            5f / imageW to 2f / imageH,
-            5f / imageW to 4f / imageH,
-            1f / imageW to 4f / imageH,
-        )
-        assertEquals(expectedUvs, uvs)
+        assertEquals(GPUPreparedImageRefusalCodes.RECT_GEOMETRY, result.code)
     }
 
     @Test
     fun `identity transform produces rect geometry with exact positions`() {
         val image = commonRgbaImage()
-        val dst = RectF32.ofLTRB(10f, 20f, 30f, 40f)
+        val dst = RectF32.ofLTRB(10f, 20f, 12f, 22f)
         val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
             GPUPreparedDrawImageLowerer.lower(
                 drawImage(image, dst = dst, transform = Matrix3x3F32.Identity),
@@ -355,7 +350,7 @@ class GPUPreparedDrawImageLowererTest {
         assertEquals(GPUPreparedImageGeometryClass.Rect, geometry.geometryClass)
         val positions = geometry.vertices.map { it.x to it.y }
         assertEquals(
-            listOf(10f to 20f, 30f to 20f, 30f to 40f, 10f to 40f),
+            listOf(10f to 20f, 12f to 20f, 12f to 22f, 10f to 22f),
             positions,
         )
     }
@@ -363,7 +358,7 @@ class GPUPreparedDrawImageLowererTest {
     @Test
     fun `integer translation is folded into native image destination`() {
         val image = commonRgbaImage()
-        val dst = RectF32.ofLTRB(0f, 0f, 20f, 20f)
+        val dst = RectF32.ofLTRB(0f, 0f, 2f, 2f)
         val tx = Matrix3x3F32.translation(5f, 10f)
         val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
             GPUPreparedDrawImageLowerer.lower(
@@ -378,12 +373,12 @@ class GPUPreparedDrawImageLowererTest {
         )
         val positions = result.command.preparedImage!!.geometry.vertices.map { it.x to it.y }
         assertEquals(
-            listOf(5f to 10f, 25f to 10f, 25f to 30f, 5f to 30f),
+            listOf(5f to 10f, 7f to 10f, 7f to 12f, 5f to 12f),
             positions,
         )
         val normalized = assertIs<NormalizedDrawCommand.DrawImageRect>(result.command.normalized)
         assertEquals(GPUTransformType.Identity, normalized.transform.type)
-        assertEquals(GPURect(5f, 10f, 25f, 30f), normalized.dst)
+        assertEquals(GPURect(5f, 10f, 7f, 12f), normalized.dst)
     }
 
     @Test
@@ -560,19 +555,50 @@ class GPUPreparedDrawImageLowererTest {
     }
 
     @Test
+    fun `scaled cropped and fractional image rectangles refuse before native submission`() {
+        val image = rgbaImage(width = 2, height = 1)
+        val scaled = assertIs<GPUPreparedDrawImageLowering.Refused>(
+            GPUPreparedDrawImageLowerer.lower(
+                drawImage(image, dst = RectF32.ofLTRB(10f, 10f, 11f, 11f)),
+                GPUDrawCommandID(0), 0, GPUFrameProvenance.None, target(),
+                RenderConfig.DEFAULT, capabilities(),
+            ),
+        )
+        val cropped = assertIs<GPUPreparedDrawImageLowering.Refused>(
+            GPUPreparedDrawImageLowerer.lower(
+                drawImage(
+                    image,
+                    dst = RectF32.ofLTRB(10f, 10f, 11f, 11f),
+                    src = RectF32.ofLTRB(0f, 0f, 1f, 1f),
+                ),
+                GPUDrawCommandID(1), 1, GPUFrameProvenance.None, target(),
+                RenderConfig.DEFAULT, capabilities(),
+            ),
+        )
+        val fractional = assertIs<GPUPreparedDrawImageLowering.Refused>(
+            GPUPreparedDrawImageLowerer.lower(
+                drawImage(image, dst = RectF32.ofLTRB(10.5f, 10f, 12.5f, 11f)),
+                GPUDrawCommandID(2), 2, GPUFrameProvenance.None, target(),
+                RenderConfig.DEFAULT, capabilities(),
+            ),
+        )
+
+        assertEquals(GPUPreparedImageRefusalCodes.RECT_GEOMETRY, scaled.code)
+        assertEquals(GPUPreparedImageRefusalCodes.RECT_GEOMETRY, cropped.code)
+        assertEquals(GPUPreparedImageRefusalCodes.RECT_GEOMETRY, fractional.code)
+    }
+
+    @Test
     fun `image shader rect preserves nearest alpha tint in normalized and native facts`() {
         val image = commonA8Image()
         val paint = Paint(
             color = ColorARGB.fromRGBA(1f, 0f, 0f, 0.5f),
-            shader = Shader.WithLocalMatrix(
-                Shader.Image(image, sampling = SamplingOptions.NEAREST),
-                Matrix3x3F32.translation(0.5f, 0f),
-            ),
+            shader = Shader.Image(image, sampling = SamplingOptions.NEAREST),
         )
         val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
             GPUPreparedDrawImageLowerer.lowerImageShaderRect(
                 operation = DisplayOp.DrawRect(
-                    rect = RectF32(0f, 0f, 2f, 1f),
+                    rect = RectF32(0f, 0f, 3f, 1f),
                     paint = paint,
                     transform = Matrix3x3F32.Identity,
                     clip = ClipStack.WideOpen,
@@ -735,7 +761,7 @@ class GPUPreparedDrawImageLowererTest {
         val op = DisplayOp.DrawImage(
             image = image,
             src = RectF32.ofLTRB(0f, 0f, 4f, 3f),
-            dst = RectF32.ofLTRB(10f, 10f, 50f, 40f),
+            dst = RectF32.ofLTRB(10f, 10f, 14f, 13f),
             paint = null,
             transform = Matrix3x3F32.Identity,
             clip = clipped,

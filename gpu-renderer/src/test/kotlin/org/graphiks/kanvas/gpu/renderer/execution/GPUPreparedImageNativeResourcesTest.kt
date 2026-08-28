@@ -44,12 +44,32 @@ import org.graphiks.kanvas.gpu.renderer.resources.buildImageFrameResourcePlanFro
 
 class GPUPreparedImageNativeResourcesTest {
     @Test
-    fun `native keys split upload sampler binding and uniform offsets`() {
+    fun `linear sampler plan is refused before native materialization`() {
+        val fixture = fixture(listOf(GPUImageBindingInput("packet.linear", GPUPreparedImageSampling.Nearest)))
+        val linearBinding = fixture.plan.bindingRequests.single().copy(
+            sampler = fixture.plan.bindingRequests.single().sampler.copy(
+                magFilter = "linear",
+                minFilter = "linear",
+            ),
+        )
+
+        val refusal = assertIs<GPUPreparedImageNativePreflightResult.Refused>(
+            GPUPreparedImageNativeResourcePreflighter.preflight(
+                fixture.request.copy(resourcePlan = fixture.plan.copy(bindingRequests = listOf(linearBinding))),
+            ),
+        )
+
+        assertEquals(GPUPreparedImageRefusalCodes.SAMPLING_FILTER, refusal.reasonCode)
+        assertEquals("preflight", refusal.facts["boundary"])
+    }
+
+    @Test
+    fun `nearest sampler shares binding while uniforms keep distinct offsets`() {
         val fixture = fixture(
             listOf(
                 GPUImageBindingInput("packet.nearest.a", GPUPreparedImageSampling.Nearest),
                 GPUImageBindingInput("packet.nearest.b", GPUPreparedImageSampling.Nearest),
-                GPUImageBindingInput("packet.linear", GPUPreparedImageSampling.Linear),
+                GPUImageBindingInput("packet.nearest.c", GPUPreparedImageSampling.Nearest),
             ),
         )
         val seal = assertIs<GPUPreparedImageNativePreflightResult.Sealed>(
@@ -57,15 +77,15 @@ class GPUPreparedImageNativeResourcesTest {
         )
 
         assertEquals(1, seal.uploadKeys.toSet().size)
-        assertEquals(2, seal.samplerKeysByPacketId.values.toSet().size)
-        assertEquals(2, seal.bindingKeysByPacketId.values.toSet().size)
+        assertEquals(1, seal.samplerKeysByPacketId.values.toSet().size)
+        assertEquals(1, seal.bindingKeysByPacketId.values.toSet().size)
         assertEquals(
             seal.bindingKeysByPacketId.getValue("packet.nearest.a"),
             seal.bindingKeysByPacketId.getValue("packet.nearest.b"),
         )
-        assertNotEquals(
+        assertEquals(
             seal.bindingKeysByPacketId.getValue("packet.nearest.a"),
-            seal.bindingKeysByPacketId.getValue("packet.linear"),
+            seal.bindingKeysByPacketId.getValue("packet.nearest.c"),
         )
         assertTrue(seal.uploadKeys.all { it.deviceGeneration == 7L })
         assertTrue(seal.samplerKeysByPacketId.values.all { it.deviceGeneration == 7L })
@@ -75,20 +95,20 @@ class GPUPreparedImageNativeResourcesTest {
         assertEquals(seal.uploadKeys.single(), resources.uploadKey(fixture.artifactKey))
         assertSame(resources.texture(fixture.artifactKey), resources.texture(fixture.artifactKey))
         assertSame(resources.binding("packet.nearest.a"), resources.binding("packet.nearest.b"))
-        assertNotSame(resources.binding("packet.nearest.a"), resources.binding("packet.linear"))
+        assertSame(resources.binding("packet.nearest.a"), resources.binding("packet.nearest.c"))
         assertEquals(
             listOf(0L, 256L, 512L),
             listOf(
                 resources.dynamicUniformOffset("packet.nearest.a"),
                 resources.dynamicUniformOffset("packet.nearest.b"),
-                resources.dynamicUniformOffset("packet.linear"),
+                resources.dynamicUniformOffset("packet.nearest.c"),
             ),
         )
         assertEquals(1, factory.textureCreates)
         assertEquals(1, factory.textureViewCreates)
-        assertEquals(2, factory.samplerCreates)
+        assertEquals(1, factory.samplerCreates)
         assertEquals(1, factory.uniformBufferCreates)
-        assertEquals(2, factory.bindGroupCreates)
+        assertEquals(1, factory.bindGroupCreates)
         resources.close()
     }
 
@@ -321,7 +341,7 @@ class GPUPreparedImageNativeResourcesTest {
         val fixture = fixture(
             listOf(
                 GPUImageBindingInput("packet.a", GPUPreparedImageSampling.Nearest),
-                GPUImageBindingInput("packet.b", GPUPreparedImageSampling.Linear),
+                GPUImageBindingInput("packet.b", GPUPreparedImageSampling.Nearest),
             ),
         )
         val changedBindings = fixture.plan.bindingRequests.mapIndexed { index, binding ->
@@ -346,7 +366,7 @@ class GPUPreparedImageNativeResourcesTest {
         val fixture = fixture(
             listOf(
                 GPUImageBindingInput("packet.a", GPUPreparedImageSampling.Nearest),
-                GPUImageBindingInput("packet.b", GPUPreparedImageSampling.Linear),
+                GPUImageBindingInput("packet.b", GPUPreparedImageSampling.Nearest),
             ),
         )
         val changedBindings = fixture.plan.bindingRequests.mapIndexed { index, binding ->
@@ -394,7 +414,7 @@ class GPUPreparedImageNativeResourcesTest {
         val fixture = fixture(
             listOf(
                 GPUImageBindingInput("packet.a", GPUPreparedImageSampling.Nearest),
-                GPUImageBindingInput("packet.b", GPUPreparedImageSampling.Linear),
+                GPUImageBindingInput("packet.b", GPUPreparedImageSampling.Nearest),
             ),
         )
         val changedBindings = fixture.plan.bindingRequests.map { binding ->
@@ -417,16 +437,13 @@ class GPUPreparedImageNativeResourcesTest {
     @Test
     fun `partial factory failure closes every created handle once in reverse order`() {
         val fixture = fixture(
-            listOf(
-                GPUImageBindingInput("packet.nearest", GPUPreparedImageSampling.Nearest),
-                GPUImageBindingInput("packet.linear", GPUPreparedImageSampling.Linear),
-            ),
+            listOf(GPUImageBindingInput("packet.nearest", GPUPreparedImageSampling.Nearest)),
         )
         val seal = assertIs<GPUPreparedImageNativePreflightResult.Sealed>(
             GPUPreparedImageNativeResourcePreflighter.preflight(fixture.request),
         )
         val events = mutableListOf<String>()
-        val factory = RecordingFactory(events, failOnSecondBindGroup = true)
+        val factory = RecordingFactory(events, failOnFirstBindGroup = true)
 
         assertFailsWith<IllegalStateException> {
             seal.materialize(factory, factory.bindGroupLayout)
@@ -536,6 +553,7 @@ class GPUPreparedImageNativeResourcesTest {
     private class RecordingFactory(
         private val closeEvents: MutableList<String> = mutableListOf(),
         private val failOnSecondBindGroup: Boolean = false,
+        private val failOnFirstBindGroup: Boolean = false,
         private val failCloseLabels: Set<String> = emptySet(),
     ) : GPUPreparedImageNativeHandleFactory {
         val bindGroupLayout: GPUBindGroupLayout = Proxy.newProxyInstance(
@@ -589,7 +607,9 @@ class GPUPreparedImageNativeResourcesTest {
             sampler: GPUSampler,
         ): GPUBindGroup {
             bindGroupCreates += 1
-            if (failOnSecondBindGroup && bindGroupCreates == 2) error("bind-group failure")
+            if ((failOnFirstBindGroup && bindGroupCreates == 1) ||
+                (failOnSecondBindGroup && bindGroupCreates == 2)
+            ) error("bind-group failure")
             return handle("bind-group.${request.sampler.magFilter}")
         }
 

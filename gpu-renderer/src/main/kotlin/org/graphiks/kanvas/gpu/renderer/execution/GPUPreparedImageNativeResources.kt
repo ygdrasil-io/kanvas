@@ -148,6 +148,12 @@ internal object GPUPreparedImageNativeResourcePreflighter {
     ): String? {
         val plan = request.resourcePlan
         if (plan.bindingRequests.any { binding ->
+                binding.sampler.magFilter != "nearest" || binding.sampler.minFilter != "nearest"
+            }
+        ) {
+            return GPUPreparedImageRefusalCodes.SAMPLING_FILTER
+        }
+        if (plan.bindingRequests.any { binding ->
                 binding.bindingLayoutHash != bindingLayoutIdentity
             }
         ) {

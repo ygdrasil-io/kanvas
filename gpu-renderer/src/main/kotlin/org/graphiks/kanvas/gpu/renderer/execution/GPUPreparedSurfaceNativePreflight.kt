@@ -17,6 +17,7 @@ import org.graphiks.kanvas.gpu.renderer.collections.immutableMap
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageMaskProducerUniformSlabSeal
@@ -4362,6 +4363,15 @@ internal class GPUPreparedSurfaceNativePreflight(
         uploads: List<Triple<Int, GPUFrameStep.UploadResourceStep, GPUImageFrameResourcePlan>>,
         shaderContract: GPUPreparedImageShaderContract,
     ): GPUPreparedSurfaceNativePreflightResult.Refused? {
+        if (imagePackets.any { (_, semantic) ->
+                semantic.sampling != GPUPreparedImageSampling.Nearest
+            }
+        ) {
+            return refused(
+                GPUPreparedImageRefusalCodes.SAMPLING_FILTER,
+                "Prepared-image native preflight supports nearest sampling only.",
+            )
+        }
         val artifactEvidenceByIdentity =
             IdentityHashMap<GPUPreparedImageUploadArtifact, GPUPreparedSurfaceArtifactByteEvidence>()
         val renderBindingList = framePlan.steps

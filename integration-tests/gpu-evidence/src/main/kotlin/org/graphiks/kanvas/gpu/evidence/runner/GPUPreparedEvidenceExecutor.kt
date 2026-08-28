@@ -10,6 +10,7 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendSession
 import org.graphiks.kanvas.gpu.renderer.execution.GPUOffscreenTargetRequest
 import org.graphiks.kanvas.gpu.renderer.execution.GPUPreparedSceneCompletedFrameResult
 import org.graphiks.kanvas.gpu.renderer.execution.GPUPreparedSceneFrameSession
+import org.graphiks.kanvas.gpu.renderer.execution.GPUPreparedSceneNativeCounters
 import org.graphiks.kanvas.gpu.renderer.execution.GPUSceneFrameOutput
 import org.graphiks.kanvas.gpu.renderer.execution.GPUSceneFrameOutputRequest
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
@@ -152,20 +153,44 @@ class ProductEvidenceBackendPort(private val backend: GPUBackendSession) : Evide
     private class ProductPreparedFramePort(private val frame: GPUPreparedSceneFrameSession) : EvidencePreparedFramePort {
         override fun render(program: PreparedEvidenceProgram): EvidenceCompletedFrame {
             val result = frame.renderFrame(requireNotNull(program.taskList), GPUSceneFrameOutputRequest.ReadbackRgba(GPUReadbackRequestID(program.readbackRequestId))).completion.toCompletableFuture().get(30, TimeUnit.SECONDS)
-            return result.toEvidenceCompletedFrame()
+            return result.toEvidenceCompletedFrame(frame.nativeCounters())
         }
         override fun renderCompletionOnly(program: PreparedEvidenceProgram): EvidenceCompletedFrame {
             val result = frame.renderFrame(requireNotNull(program.taskList), GPUSceneFrameOutputRequest.CurrentFrameCompletionOnly).completion.toCompletableFuture().get(30, TimeUnit.SECONDS)
-            return result.toEvidenceCompletedFrame()
+            return result.toEvidenceCompletedFrame(frame.nativeCounters())
         }
         override fun close() = frame.close()
     }
 }
 
-private fun GPUPreparedSceneCompletedFrameResult.toEvidenceCompletedFrame(): EvidenceCompletedFrame {
+private fun GPUPreparedSceneCompletedFrameResult.toEvidenceCompletedFrame(
+    nativeCounters: GPUPreparedSceneNativeCounters,
+): EvidenceCompletedFrame {
     val output = output as? GPUSceneFrameOutput.ReadbackRgba
-    return EvidenceCompletedFrame(attemptId.value, furthestPhase.name, outcome.name, diagnostic?.code?.value, diagnostic?.message, output?.requestId?.value, output?.bytes, encodedScopeKinds.map { it.name }, telemetry.events.map { StructuralEventEvidence(it.kind.name, it.phase.name, it.label) }, telemetry.counters.mapKeys { it.key.label }, diagnostic?.let(::completionDiagnosticLines).orEmpty())
+    return EvidenceCompletedFrame(
+        attemptId.value,
+        furthestPhase.name,
+        outcome.name,
+        diagnostic?.code?.value,
+        diagnostic?.message,
+        output?.requestId?.value,
+        output?.bytes,
+        encodedScopeKinds.map { it.name },
+        telemetry.events.map { StructuralEventEvidence(it.kind.name, it.phase.name, it.label) },
+        telemetry.counters.mapKeys { it.key.label } + nativeCounters.preparedImageEvidenceCounters(),
+        diagnostic?.let(::completionDiagnosticLines).orEmpty(),
+    )
 }
+
+private fun GPUPreparedSceneNativeCounters.preparedImageEvidenceCounters(): Map<String, Long> = mapOf(
+    "preparedImage.pipelineCreations" to preparedImagePipelineCreations,
+    "preparedImage.frameTextureCreations" to preparedImageFrameTextureCreations,
+    "preparedImage.frameTextureViewCreations" to preparedImageFrameTextureViewCreations,
+    "preparedImage.frameSamplerCreations" to preparedImageFrameSamplerCreations,
+    "preparedImage.frameUniformBufferCreations" to preparedImageFrameUniformBufferCreations,
+    "preparedImage.frameBindGroupCreations" to preparedImageFrameBindGroupCreations,
+    "preparedImage.queueWriteTextureCalls" to preparedImageFrameTextureWriteTextureCalls,
+)
 
 internal fun completionDiagnosticLines(diagnostic: org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic): List<String> = buildList {
     add("diagnostic.code=${diagnostic.code.value}"); add("diagnostic.domain=${diagnostic.domain.name}"); add("diagnostic.severity=${diagnostic.severity.name}"); add("diagnostic.message=${diagnostic.message}"); add("diagnostic.terminal=${diagnostic.isTerminal}"); add("diagnostic.retryable=${diagnostic.isRetryable}")

@@ -27,6 +27,7 @@ object GPUPreparedImageRefusalCodes {
     const val TILE_MODE = "unsupported.image.tile_mode"
     const val PERSPECTIVE_SAMPLING = "unsupported.image.perspective_sampling"
     const val AFFINE_SAMPLING = "unsupported.image.affine_sampling"
+    const val RECT_GEOMETRY = "unsupported.image.rect_geometry"
     const val NINE_GEOMETRY = "unsupported.image.nine_geometry"
     const val LATTICE_GEOMETRY = "unsupported.image.lattice_geometry"
     const val ATLAS_ARRAY_LENGTHS = "unsupported.image.atlas.array_lengths"
@@ -60,6 +61,7 @@ object GPUPreparedImageRefusalCodes {
         TILE_MODE,
         PERSPECTIVE_SAMPLING,
         AFFINE_SAMPLING,
+        RECT_GEOMETRY,
         NINE_GEOMETRY,
         LATTICE_GEOMETRY,
         ATLAS_ARRAY_LENGTHS,

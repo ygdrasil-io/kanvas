@@ -248,6 +248,19 @@ object EvidenceBundleVerifier {
                 require(structuralCounters["render.draw"]?.jsonPrimitive?.longOrNull?.let { it > 0L } == true) { "rendered evidence requires positive render.draw work" }
                 require(structuralCounters["render.pipelineBind"]?.jsonPrimitive?.longOrNull?.let { it > 0L } == true) { "rendered evidence requires positive render.pipelineBind work" }
             }
+            if (expected?.descriptor?.id?.value == "bounded-rgba8-nearest-bitmap") {
+                setOf(
+                    "preparedImage.textureUploadScope",
+                    "preparedImage.frameTextureCreations",
+                    "preparedImage.frameSamplerCreations",
+                    "preparedImage.frameBindGroupCreations",
+                    "preparedImage.queueWriteTextureCalls",
+                ).forEach { counter ->
+                    require(structuralCounters[counter]?.jsonPrimitive?.longOrNull?.let { it > 0L } == true) {
+                        "bounded bitmap evidence requires positive $counter"
+                    }
+                }
+            }
             val expectedRefusalReason = when {
                 expected?.descriptor?.expectation is EvidenceExpectation.ShouldRefuse -> (expected.descriptor.expectation as EvidenceExpectation.ShouldRefuse).stableReasonCode
                 recordedHistorical && expectation.startsWith("refuse:") -> expectation.removePrefix("refuse:")

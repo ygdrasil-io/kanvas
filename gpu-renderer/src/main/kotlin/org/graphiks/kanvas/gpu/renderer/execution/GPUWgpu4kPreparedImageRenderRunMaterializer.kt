@@ -8,6 +8,7 @@ import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageBindingLayoutTopology
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUImageFrameResourcePlan
@@ -609,6 +610,16 @@ internal object GPUPreparedImagePlanValidator {
         plan: GPUPreparedImageRenderRunPlan,
         validateUploadProvenance: Boolean,
     ): Pair<String, String>? {
+        if (plan.packets.any { it.sampling != GPUPreparedImageSampling.Nearest } ||
+            plan.resources.any { resource ->
+                resource.bindingRequests.any { request ->
+                    request.sampler.magFilter != "nearest" || request.sampler.minFilter != "nearest"
+                }
+            }
+        ) {
+            return GPUPreparedImageRefusalCodes.SAMPLING_FILTER to
+                "Prepared-image materialization supports nearest sampling only."
+        }
         val bindingLayoutIdentity = GPUPreparedImageBindingLayoutTopology.IDENTITY
         if (plan.packets.any { packet ->
                 packet.pipelineKey.bindingLayoutHash != bindingLayoutIdentity

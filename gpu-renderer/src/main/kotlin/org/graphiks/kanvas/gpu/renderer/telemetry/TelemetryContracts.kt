@@ -35,6 +35,7 @@ enum class GPUFrameStructuralCounter(val label: String) {
     EncoderFinish("encoder.finish"),
     QueueSubmit("queue.submit"),
     CompletionArm("completion.arm"),
+    PreparedImageTextureUploadScope("preparedImage.textureUploadScope"),
 }
 
 /** Closed event kinds. They report decisions made elsewhere and never select a route. */
@@ -93,6 +94,7 @@ class GPUFrameAttemptTelemetrySink(val attemptId: GPUFrameAttemptID) {
         phase: GPUFrameStructuralPhase,
         kind: GPUFrameStructuralEventKind,
         counter: GPUFrameStructuralCounter? = null,
+        additionalCounters: List<GPUFrameStructuralCounter> = emptyList(),
         label: String? = null,
     ) {
         check(!sealed) { "GPU frame telemetry attempt is already sealed" }
@@ -105,6 +107,7 @@ class GPUFrameAttemptTelemetrySink(val attemptId: GPUFrameAttemptID) {
         furthestRecordedPhase = phase.ordinal
         events += GPUFrameStructuralTelemetryEvent(kind, phase, label)
         counter?.let { name -> counters[name] = counters.getOrDefault(name, 0L) + 1L }
+        additionalCounters.forEach { name -> counters[name] = counters.getOrDefault(name, 0L) + 1L }
     }
 
     @Synchronized
