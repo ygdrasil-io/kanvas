@@ -19,8 +19,9 @@ pixel-validée à 100 % (0 pixel divergent, delta maximal 0, tolérance 1 LSB).
 Les artefacts sont sous
 `reports/gpu-renderer/evidence/correctness/promoted/radial-gradient-three-stop-stroke-rect/`.
 
-Les limites restent explicites : un nombre de stops différent de trois, un
-tile mode autre que `CLAMP`, une cible non-sRGB, l'anti-aliasing, une
+Les limites restent explicites : quatre stops ou plus sont refusés par W40 ;
+deux stops restent supportés par la route W38 dédiée. Un tile mode autre que
+`CLAMP`, une cible non-sRGB, l'anti-aliasing, une
 transformation, une matrice locale ou un color filter refusent avant la
 production des packets.
 
