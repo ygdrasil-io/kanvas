@@ -1478,6 +1478,102 @@ class GPUFramePathApiInventoryNativeSmokeTest {
     }
 
     @Test
+    fun `scaled translated diagonal butt miter stroke under winding path clip renders natively`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        val capabilities = requireNotNull(backend.capabilities)
+        val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(RenderConfig.DEFAULT.mapPreparedGpuColorConfig())
+        val targetBounds = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, 32, 32)
+        val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.stroke-diagonal-scaled-winding-clip")
+        val clipPath = Path().apply {
+            // Local triangle scaled by 1.5 and translated by (2,1).
+            moveTo(6.875f, 5.875f)
+            lineTo(24.875f, 5.875f)
+            lineTo(6.875f, 23.875f)
+            close()
+        }
+        val strokePath = Path().apply {
+            // Local endpoints (4.125,4.125)->(12.125,8.625) become device
+            // endpoints (8.1875,7.1875)->(20.1875,13.9375), width 3.
+            moveTo(4.125f, 4.125f)
+            lineTo(12.125f, 8.625f)
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    strokePath,
+                    Paint.stroke(ColorARGB.Red, 2f).copy(
+                        antiAlias = false,
+                        strokeCap = StrokeCap.BUTT,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.translation(2f, 1f) * Matrix3x3F32.scaling(1.5f, 1.5f),
+                    ClipStack.Complex(
+                        listOf(
+                            ClipStackOp.PathOp(
+                                clipPath,
+                                ClipOp.INTERSECT,
+                                antiAlias = false,
+                                transformClass = "uniform-positive-scale-translate",
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+            deviceGeneration = backend.deviceGeneration,
+        )
+        assertEquals(
+            "native.path_stroke.stencil_cover",
+            inventory.recording.analysis.records.single().routeDecisionLabel,
+        )
+        val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(
+            inventory.visualCommands.single().clipExecutionPlan,
+        )
+        assertEquals("uniform-positive-scale-translate", execution.pathTransformClass)
+        assertEquals(GPUClipStencilOperation.IncrementWrap, execution.producer.frontPassOperation)
+        assertEquals(GPUClipStencilOperation.DecrementWrap, execution.producer.backPassOperation)
+        assertEquals(GPUClipStencilCompare.NotEqual, execution.consumer.compare)
+        val clipGeometry = assertIs<GPUClipExecutionGeometry.Path>(execution.producer.geometry)
+        assertEquals(
+            listOf(6.875f, 5.875f, 24.875f, 5.875f, 6.875f, 23.875f, 6.875f, 5.875f),
+            clipGeometry.vertices,
+        )
+        val preparation = GPUFramePathApiInventory.prepareNativeTaskList(
+            inventory,
+            capabilities,
+            targetBounds,
+            readbackId,
+        )
+        val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            preparation,
+            (preparation as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}; facts=${it.facts}"
+            },
+        ).taskList
+        val session = backend.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(32, 32, colorMapping.physicalFormat, colorMapping.interpretation),
+        )
+        try {
+            val completed = session.renderFrame(
+                prepared,
+                GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
+            ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+            assertEquals(GPUFrameStructuralOutcome.Succeeded, completed.outcome)
+            val gpu = assertIs<GPUSceneFrameOutput.ReadbackRgba>(completed.output).bytes
+            assertContentEquals(deterministicScaledTranslatedDiagonalButtMiterWindingClipOracle(), gpu)
+            assertEquals(1L, session.nativeCounters().submits)
+            assertEquals(1L, session.nativeCounters().readbackCopies)
+        } finally {
+            session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
     fun `square cap stroke under winding path clip remains explicitly refused`() {
         val backend = GPUBackendRuntimeNativeFactory.createOrNull()
         assumeTrue(backend != null)
@@ -2288,6 +2384,49 @@ class GPUFramePathApiInventoryNativeSmokeTest {
                     val v = ((clipCy - clipAy) * (px - clipCx) +
                         (clipAx - clipCx) * (py - clipCy)) / denominator
                     if (u >= 0f && v >= 0f && u + v <= 1f) continue
+                    val projection = ((px - strokeAx) * strokeDx + (py - strokeAy) * strokeDy) /
+                        strokeLengthSquared
+                    if (projection < 0f || projection > 1f) continue
+                    val closestX = strokeAx + projection * strokeDx
+                    val closestY = strokeAy + projection * strokeDy
+                    val distanceX = px - closestX
+                    val distanceY = py - closestY
+                    if (distanceX * distanceX + distanceY * distanceY > halfWidthSquared) continue
+                    val offset = (y * 32 + x) * 4
+                    rgba[offset] = 0xff.toByte()
+                    rgba[offset + 3] = 0xff.toByte()
+                }
+            }
+        }
+
+    /** Independent device-space oracle for the scaled/translated diagonal stroke and clip. */
+    private fun deterministicScaledTranslatedDiagonalButtMiterWindingClipOracle(): ByteArray =
+        ByteArray(32 * 32 * 4).also { rgba ->
+            val strokeAx = 8.1875f
+            val strokeAy = 7.1875f
+            val strokeBx = 20.1875f
+            val strokeBy = 13.9375f
+            val strokeDx = strokeBx - strokeAx
+            val strokeDy = strokeBy - strokeAy
+            val strokeLengthSquared = strokeDx * strokeDx + strokeDy * strokeDy
+            val halfWidthSquared = 1.5f * 1.5f
+            val clipAx = 6.875f
+            val clipAy = 5.875f
+            val clipBx = 24.875f
+            val clipBy = 5.875f
+            val clipCx = 6.875f
+            val clipCy = 23.875f
+            val denominator = (clipBy - clipCy) * (clipAx - clipCx) +
+                (clipCx - clipBx) * (clipAy - clipCy)
+            for (y in 0 until 32) {
+                for (x in 0 until 32) {
+                    val px = x + 0.5f
+                    val py = y + 0.5f
+                    val u = ((clipBy - clipCy) * (px - clipCx) +
+                        (clipCx - clipBx) * (py - clipCy)) / denominator
+                    val v = ((clipCy - clipAy) * (px - clipCx) +
+                        (clipAx - clipCx) * (py - clipCy)) / denominator
+                    if (u < 0f || v < 0f || u + v > 1f) continue
                     val projection = ((px - strokeAx) * strokeDx + (py - strokeAy) * strokeDy) /
                         strokeLengthSquared
                     if (projection < 0f || projection > 1f) continue
