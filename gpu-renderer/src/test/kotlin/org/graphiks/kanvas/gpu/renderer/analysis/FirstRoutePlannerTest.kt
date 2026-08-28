@@ -101,10 +101,16 @@ class FirstRoutePlannerTest {
             ),
         )
 
-        val typedDecision = GPUFirstRoutePlanner(capabilities).plan(
+        val typedPlan = GPUFirstRoutePlanner(capabilities).plan(
             command(GPUCommandSourceKind.AnalyticStrokeRectBand),
-        ).routeDecision
+        )
+        val typedDecision = typedPlan.routeDecision
         assertTrue(typedDecision is GPURouteDecision.Native, typedDecision.toString())
+        assertEquals("native.stroke_rect.linear_gradient_three_stop", typedPlan.analysisRecord.routeDecisionLabel)
+        assertEquals(
+            listOf(GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_NATIVE),
+            assertIs<GPURouteDecision.Native>(typedDecision).route.requirements,
+        )
         assertTrue(
             GPUFirstRoutePlanner(firstSliceWithLinearGradientCapabilities()).plan(
                 command(GPUCommandSourceKind.PublicFillRect),
