@@ -2493,7 +2493,8 @@ private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
     }
 }
 
-private const val CORE_PRIMITIVE_STENCIL_EDGE_FAN_SOURCE_VERTEX_BUDGET = 256
+/** Must match the default public Surface route cap in RenderConfig. */
+private const val CORE_PRIMITIVE_STENCIL_EDGE_FAN_SOURCE_VERTEX_BUDGET = 1_024
 private const val CORE_PRIMITIVE_STENCIL_EDGE_FAN_BUDGET_DIAGNOSTIC =
     "unsupported.core_primitive.stencil_edge_fan_budget"
 

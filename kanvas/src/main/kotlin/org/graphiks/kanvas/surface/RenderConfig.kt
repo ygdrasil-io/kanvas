@@ -4,9 +4,9 @@ data class RenderConfig(
     val gpuColorFormat: GPUColorFormat = GPUColorFormat.RGBA8_UNORM_SRGB,
     val maxPathVertices: UInt = 131072u,
     /** Maximum stencil edge-fan triangles admitted by the public Surface path route. */
-    val maxPathFanTriangles: UInt = 512u,
+    val maxPathFanTriangles: UInt = 1_024u,
     /** Maximum bytes for the public Surface path edge-fan position/index buffers. */
-    val maxPathGeometryBytes: UInt = 18_432u,
+    val maxPathGeometryBytes: UInt = 36_864u,
     val curveTolerance: Float = 0.25f,
     val maxImagePixels: UInt = 67_108_864u,
     val maxMaskBlurIntermediateBytes: UInt = 67_108_864u,
