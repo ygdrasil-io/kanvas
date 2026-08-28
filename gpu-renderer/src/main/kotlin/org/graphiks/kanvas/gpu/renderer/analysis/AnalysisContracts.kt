@@ -297,6 +297,7 @@ class GPUFirstRoutePlanner(
         val isTwoStopStrokeRadialGradient = command.supportsTwoStopRadialGradientStroke()
         val isThreeStopStrokeRadialGradient = command.supportsThreeStopRadialGradientStroke()
         val isTwoStopStrokeSweepGradient = command.supportsTwoStopSweepGradientStroke()
+        val isUniformScaleTwoStopStrokeSweepGradient = command.supportsUniformScaleTwoStopSweepGradientStroke()
         val isThreeStopStrokeSweepGradient = command.supportsThreeStopSweepGradientStroke()
         val rectGeometryAuthority =
             corePrimitiveRectGeometryAuthority(command.rect, command.transform)
@@ -385,9 +386,9 @@ class GPUFirstRoutePlanner(
                     pipelineKey =
                         "pending.pipeline.fill_rect.sweep_gradient.${command.layer.target.colorFormat}.src_over"
                     renderStep = sweepGradientRenderStep
-                    routeLabel = if (isThreeStopStrokeSweepGradient) "native.stroke_rect.sweep_gradient_three_stop" else if (isTwoStopStrokeSweepGradient) "native.stroke_rect.sweep_gradient_two_stop" else "native.fill_rect.sweep_gradient"
+                    routeLabel = if (isUniformScaleTwoStopStrokeSweepGradient) "native.stroke_rect.sweep_gradient_two_stop_uniform_scale" else if (isThreeStopStrokeSweepGradient) "native.stroke_rect.sweep_gradient_three_stop" else if (isTwoStopStrokeSweepGradient) "native.stroke_rect.sweep_gradient_two_stop" else "native.fill_rect.sweep_gradient"
                     materialKeyHash = "pending.material.sweep_gradient"
-                    capabilityName = if (isThreeStopStrokeSweepGradient) GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_THREE_STOP_NATIVE else if (isTwoStopStrokeSweepGradient) GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE else firstSweepGradientCapabilityName
+                    capabilityName = if (isUniformScaleTwoStopStrokeSweepGradient) GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE else if (isThreeStopStrokeSweepGradient) GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_THREE_STOP_NATIVE else if (isTwoStopStrokeSweepGradient) GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE else firstSweepGradientCapabilityName
                 }
 
             }
@@ -1848,7 +1849,7 @@ class GPUFirstRoutePlanner(
             when (mf) {
                 is NormalizedMaskFilter.Blur -> mf.refusalCode()
             }
-        } ?: uniformScaleThreeStopLinearGradientStrokeRefusalCode() ?: uniformScaleTwoStopLinearGradientStrokeRefusalCode() ?: translatedThreeStopLinearGradientStrokeRefusalCode() ?: translatedTwoStopLinearGradientStrokeRefusalCode() ?: material.analysisRefusalCodeOrNull(
+        } ?: uniformScaleThreeStopLinearGradientStrokeRefusalCode() ?: uniformScaleTwoStopLinearGradientStrokeRefusalCode() ?: uniformScaleTwoStopSweepGradientStrokeRefusalCode() ?: translatedThreeStopLinearGradientStrokeRefusalCode() ?: translatedTwoStopLinearGradientStrokeRefusalCode() ?: material.analysisRefusalCodeOrNull(
             allowThreeStopLinearGradient = supportsBoundedThreeStopLinearGradient() ||
                 supportsThreeStopLinearGradientStroke() || supportsTranslatedThreeStopLinearGradientStroke() || supportsUniformScaleThreeStopLinearGradientStroke(),
             allowThreeStopRadialGradient = hasThreeStopRadialGradient(),
@@ -2125,6 +2126,25 @@ class GPUFirstRoutePlanner(
             gradient.allStopPositions?.size == 2 &&
             gradient.localMatrix == listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f)
     }
+
+    private fun NormalizedDrawCommand.FillRect.uniformScaleTwoStopSweepGradientStrokeRefusalCode(): String? {
+        if (source.kind != GPUCommandSourceKind.AnalyticStrokeRectUniformScaleSweepTwoStopBand) return null
+        val gradient = material as? GPUMaterialDescriptor.SweepGradient ?: return "unsupported.stroke.rect_material"
+        return when {
+            antiAlias -> "unsupported.stroke.rect_anti_alias"
+            transform.type != GPUTransformType.Identity -> "unsupported.stroke.rect_transform"
+            layer.target.colorFormat != "rgba8unorm-srgb" -> "unsupported.stroke.rect_gradient_target"
+            gradient.tileMode != "clamp" || gradient.startAngle != 0f || gradient.endAngle != 360f ||
+                gradient.allStopPositions?.contentEquals(floatArrayOf(0f, 1f)) != true ||
+                gradient.localMatrix != listOf(1f,0f,0f,0f,1f,0f,0f,0f,1f) -> "unsupported.stroke.rect_material"
+            !capabilities.hasFact(GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE) -> "unsupported.stroke.rect_sweep_gradient_two_stop_uniform_scale_capability"
+            else -> null
+        }
+    }
+
+    private fun NormalizedDrawCommand.FillRect.supportsUniformScaleTwoStopSweepGradientStroke() =
+        source.kind == GPUCommandSourceKind.AnalyticStrokeRectUniformScaleSweepTwoStopBand &&
+            uniformScaleTwoStopSweepGradientStrokeRefusalCode() == null
 
     private fun NormalizedDrawCommand.FillRect.supportsThreeStopSweepGradientStroke() =
         isBoundedThreeStopSweepGradientStroke() && capabilities.hasFact(GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_THREE_STOP_NATIVE)

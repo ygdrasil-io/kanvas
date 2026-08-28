@@ -18,6 +18,8 @@ object GPUFirstSliceCapabilityName {
         "first_slice.stroke_rect.radial_gradient_two_stop.native"
     const val STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE =
         "first_slice.stroke_rect.sweep_gradient_two_stop.native"
+    const val STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE =
+        "first_slice.stroke_rect.sweep_gradient_two_stop_uniform_scale.native"
     const val STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_NATIVE =
         "first_slice.stroke_rect.radial_gradient_three_stop.native"
     const val STROKE_RECT_SWEEP_GRADIENT_THREE_STOP_NATIVE =
