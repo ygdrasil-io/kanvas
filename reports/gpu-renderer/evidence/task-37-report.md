@@ -31,5 +31,5 @@ belongs to the later runtime-effect boundary wave.
   --tests '*RegisteredRuntimeEffectRouteTest'
 ```
 
-Result: 5 tests passed. `gpu-renderer-scenes` was not modified and no commit
-was created.
+Result: 5 tests passed. Source commit: `d1c087bc9`. `gpu-renderer-scenes` was
+not modified.
