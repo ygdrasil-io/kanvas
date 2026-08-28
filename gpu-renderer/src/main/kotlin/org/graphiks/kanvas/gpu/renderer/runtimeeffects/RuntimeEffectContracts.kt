@@ -86,7 +86,14 @@ data class GPURuntimeEffectRegistrySnapshot(
 /** Registry for product-supported runtime effects. */
 interface GPURuntimeEffectRegistry {
     /** Looks up a registered descriptor by ID. */
-    fun lookup(id: GPURuntimeEffectID): GPURuntimeEffectDescriptor? = TODO("Wire GPURuntimeEffectRegistry to registered Kotlin/WGSL descriptors")
+    fun lookup(id: GPURuntimeEffectID): GPURuntimeEffectDescriptor? = null
+
+    fun lookup(id: GPURuntimeEffectID, version: GPURuntimeEffectDescriptorVersion): GPURuntimeEffectDescriptor? =
+        lookup(id)?.takeIf { it.version == version }
+
+    fun kind(id: GPURuntimeEffectID): GPURuntimeEffectKind? = lookup(id)?.kind
+
+    fun cpuOracle(id: GPURuntimeEffectID): GPURuntimeEffectCPUOracle? = lookup(id)?.cpuOracle
 }
 
 /** Runtime-effect uniform schema. */
@@ -627,6 +634,9 @@ data class GPURuntimeEffectDescriptor(
     val sourceColorContract: GPUPreparedRuntimeEffectSourceColorContract? = null,
     val liveParameterSchema: GPURuntimeEffectLiveParameterSchema? = null,
     val diagnostics: List<GPURuntimeEffectDiagnostic> = emptyList(),
+    val kind: GPURuntimeEffectKind? = null,
+    val wgslSource: String? = null,
+    val cpuOracle: GPURuntimeEffectCPUOracle? = null,
 )
 
 /** Runtime-effect diagnostic. */

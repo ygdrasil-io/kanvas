@@ -1,5 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.runtimeeffects
 
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+
 import org.graphiks.kanvas.gpu.renderer.wgsl.IntrinsicsMatrixEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.IntrinsicsMatrixSourceHash
 
@@ -58,5 +61,28 @@ object IntrinsicsMatrixDescriptor {
         wgslPlan = wgslPlan,
         routeContract = routeContract,
         liveEditPlan = liveEditPlan,
+        kind = GPURuntimeEffectKind.Material,
+        wgslSource = org.graphiks.kanvas.gpu.renderer.wgsl.IntrinsicsMatrixWgsl,
+        cpuOracle = IntrinsicsMatrixCPUOracle,
     )
+}
+
+object IntrinsicsMatrixCPUOracle : GPURuntimeEffectCPUOracle {
+    override fun evaluate() = GPURuntimeEffectOracleResult(
+        IntrinsicsMatrixDescriptor.effectId,
+        runtimeEffectOracleEvidenceHash(IntrinsicsMatrixDescriptor.effectId, IntrinsicsMatrixDescriptor.descriptorVersion),
+    )
+
+    override fun evaluateMaterial(input: GPURuntimeEffectMaterialEvaluationInput): GPURuntimeEffectMaterialEvaluationResult {
+        if (input.uniformBytes.size != 96) return GPURuntimeEffectMaterialEvaluationResult.Unsupported(GPURuntimeEffectMaterialEvaluationRefusal.PAYLOAD_SIZE)
+        val b = ByteBuffer.wrap(input.uniformBytes).order(ByteOrder.LITTLE_ENDIAN)
+        val testCase = b.int; repeat(3) { b.int }
+        val m = FloatArray(16) { b.float }; val vector = FloatArray(4) { b.float }
+        if ((m + vector.toList()).any { !it.isFinite() }) return GPURuntimeEffectMaterialEvaluationResult.Unsupported(GPURuntimeEffectMaterialEvaluationRefusal.NON_FINITE_INPUT)
+        val out = when (testCase) {
+            2 -> FloatArray(4) { row -> (0..3).sumOf { col -> (m[col * 4 + row] * vector[col]).toDouble() }.toFloat() }
+            else -> floatArrayOf(0f, 0f, 0f, 1f)
+        }
+        return GPURuntimeEffectMaterialEvaluationResult.Color(out[0], out[1], out[2], out[3], runtimeEffectOracleEvidenceHash(IntrinsicsMatrixDescriptor.effectId, IntrinsicsMatrixDescriptor.descriptorVersion))
+    }
 }
