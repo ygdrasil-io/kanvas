@@ -994,12 +994,12 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
             "unsupported.core_primitive.stroke.dash_exact_lowering"
         pathEffectKind != null -> "unsupported.core_primitive.stroke.path_effect_exact_lowering"
         strokeCap !in setOf("butt", "square", "round") -> "unsupported.core_primitive.stroke.cap_exact_lowering"
+        !exactSingleSegment -> "unsupported.core_primitive.stroke.complex_exact_lowering"
         strokeCap == "round" && !matchesPixelExactRoundCapR2HorizontalV1() ->
             "unsupported.core_primitive.stroke.round_cap_pixel_exact_lowering"
         strokeJoin != "miter" -> "unsupported.core_primitive.stroke.join_exact_lowering"
         !strokeMiterLimit.isFinite() || strokeMiterLimit < 1f ->
             "unsupported.core_primitive.stroke.miter_exact_lowering"
-        !exactSingleSegment -> "unsupported.core_primitive.stroke.complex_exact_lowering"
         else -> null
     }
     if (refusalCode != null) {
