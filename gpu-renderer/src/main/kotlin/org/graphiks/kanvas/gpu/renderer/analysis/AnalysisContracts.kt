@@ -1833,7 +1833,7 @@ class GPUFirstRoutePlanner(
             when (mf) {
                 is NormalizedMaskFilter.Blur -> mf.refusalCode()
             }
-        } ?: material.analysisRefusalCodeOrNull(
+        } ?: translatedTwoStopLinearGradientStrokeRefusalCode() ?: material.analysisRefusalCodeOrNull(
             allowThreeStopLinearGradient = supportsBoundedThreeStopLinearGradient() ||
                 supportsThreeStopLinearGradientStroke(),
             allowThreeStopRadialGradient = hasThreeStopRadialGradient(),
@@ -1938,6 +1938,25 @@ class GPUFirstRoutePlanner(
     private fun NormalizedDrawCommand.FillRect.supportsTranslatedTwoStopLinearGradientStroke(): Boolean =
         isBoundedTranslatedTwoStopLinearGradientStroke() &&
             capabilities.hasFact(GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_TRANSLATE_NATIVE)
+
+    /** Typed translated stroke provenance is terminal: it must never fall back to generic FillRect. */
+    private fun NormalizedDrawCommand.FillRect.translatedTwoStopLinearGradientStrokeRefusalCode(): String? {
+        if (source.kind != GPUCommandSourceKind.AnalyticStrokeRectTranslatedBand) return null
+        val gradient = material as? GPUMaterialDescriptor.LinearGradient
+            ?: return "unsupported.stroke.rect_material"
+        return when {
+            antiAlias -> "unsupported.stroke.rect_anti_alias"
+            transform.type != GPUTransformType.Identity -> "unsupported.stroke.rect_transform"
+            layer.target.colorFormat != "rgba8unorm-srgb" -> "unsupported.stroke.rect_gradient_target"
+            gradient.allStopPositions?.size != 2 -> "unsupported.stroke.rect_gradient_stop_count"
+            gradient.tileMode != "clamp" -> "unsupported.stroke.rect_gradient_tile_mode"
+            gradient.localMatrix != listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f) ->
+                "unsupported.stroke.rect_material"
+            !capabilities.hasFact(GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_TRANSLATE_NATIVE) ->
+                "unsupported.stroke.rect_linear_gradient_translate_capability"
+            else -> null
+        }
+    }
 
     private fun NormalizedDrawCommand.FillRect.isBoundedTranslatedTwoStopLinearGradientStroke(): Boolean {
         val gradient = material as? GPUMaterialDescriptor.LinearGradient ?: return false

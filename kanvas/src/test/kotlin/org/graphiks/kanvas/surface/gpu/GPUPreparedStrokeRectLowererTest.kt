@@ -579,6 +579,22 @@ class GPUPreparedStrokeRectLowererTest {
         )
         assertEquals("unsupported.stroke.rect_linear_gradient_translate_capability", missingCapability.code)
 
+        val unsupportedTarget = assertIs<GPUPreparedStrokeRectLowering.Refused>(
+            GPUPreparedStrokeRectLowerer.lower(
+                gradientOperation, GPUDrawCommandID(0), 0, GPUFrameProvenance.None,
+                target("rgba8unorm"), RenderConfig.DEFAULT,
+                capabilities(withTranslatedTwoStopStrokeGradient = true),
+            ),
+        )
+        assertEquals("unsupported.stroke.rect_gradient_target", unsupportedTarget.code)
+        assertEquals("rgba8unorm", unsupportedTarget.facts["targetFormat"])
+        val unsupportedTargetMapping = GPUOpMapper.mapOperations(
+            listOf(gradientOperation), target("rgba8unorm"), RenderConfig.DEFAULT,
+            capabilities(withTranslatedTwoStopStrokeGradient = true),
+        )
+        assertEquals("unsupported.stroke.rect_gradient_target", unsupportedTargetMapping.preparedRefusal?.code)
+        assertTrue(unsupportedTargetMapping.visualCommands.isEmpty())
+
         val fractionalTranslation = assertIs<GPUPreparedStrokeRectLowering.Refused>(
             GPUPreparedStrokeRectLowerer.lower(
                 gradientOperation.copy(transform = Matrix3x3F32.translation(2.5f, 3f)),

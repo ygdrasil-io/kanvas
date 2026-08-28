@@ -94,6 +94,13 @@ internal object GPUPreparedStrokeRectLowerer {
                         mapOf("transform" to "gradient_requires_identity"),
                     )
                 }
+                if (translatedTwoStop && target.colorFormat != "rgba8unorm-srgb") {
+                    return refused(
+                        "unsupported.stroke.rect_gradient_target",
+                        operationIndex,
+                        mapOf("targetFormat" to target.colorFormat),
+                    )
+                }
                 if (translatedTwoStop && !capabilities.hasSupportedFact(
                         GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_TRANSLATE_NATIVE,
                     )

@@ -84,10 +84,10 @@ class FirstRoutePlannerTest {
             allStopPositions = floatArrayOf(0f, 1f),
             allStopColors = floatArrayOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
         )
-        fun command(sourceKind: GPUCommandSourceKind) = GPUFillRectCommandBuilder.build(
+        fun command(sourceKind: GPUCommandSourceKind, targetFormat: String = "rgba8unorm-srgb") = GPUFillRectCommandBuilder.build(
             commandId = GPUDrawCommandID(36),
             rect = GPURect(6f, 17f, 58f, 21f),
-            target = GPUTargetFacts(64, 64, "rgba8unorm-srgb"),
+            target = GPUTargetFacts(64, 64, targetFormat),
             material = material,
             source = GPUCommandSource("unit-test", "translated-linear-stroke-band", kind = sourceKind),
         ).copy(antiAlias = false)
@@ -128,6 +128,14 @@ class FirstRoutePlannerTest {
                         it.name == GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_TRANSLATE_NATIVE
                     }),
                 ).plan(command(GPUCommandSourceKind.AnalyticStrokeRectTranslatedBand)).routeDecision,
+            ).diagnostic.code,
+        )
+        assertEquals(
+            "unsupported.stroke.rect_gradient_target",
+            assertIs<GPURouteDecision.Refused>(
+                planner.plan(
+                    command(GPUCommandSourceKind.AnalyticStrokeRectTranslatedBand, "rgba8unorm"),
+                ).routeDecision,
             ).diagnostic.code,
         )
     }
