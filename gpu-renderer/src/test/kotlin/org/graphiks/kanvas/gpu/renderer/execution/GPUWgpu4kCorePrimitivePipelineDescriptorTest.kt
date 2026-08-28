@@ -1043,6 +1043,26 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
     }
 
     @Test
+    fun `path stencil dst read cover uses the exact dst read bind group component`() {
+        val pathDstReadKey = pathKey(regularCover(), cover = true).copy(
+            blend = GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination(
+                GPUBlendMode.DIFFERENCE,
+                "difference@v1",
+                GPUSourceCoverageEncoding.None,
+            ),
+        )
+
+        val mapped = assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>(
+            mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(pathDstReadKey),
+        )
+        assertEquals(GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverDstRead, mapped.identity.program)
+        assertEquals(
+            corePrimitiveDstReadComponentIdentity("difference"),
+            pathDstReadKey.corePrimitiveNativeComponentIdentityOrNull(),
+        )
+    }
+
+    @Test
     fun `analytic shape dst read shading keys map to the analytic dst read formula program`() {
         val dstReadKey = analyticShapeKey().copy(
             blend = GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination(
