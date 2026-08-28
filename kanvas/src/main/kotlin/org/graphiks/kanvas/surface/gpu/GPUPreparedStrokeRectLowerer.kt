@@ -118,6 +118,46 @@ internal object GPUPreparedStrokeRectLowerer {
                 paint.toMaterial() as? GPUMaterialDescriptor.LinearGradient
                     ?: return refused("unsupported.stroke.rect_material", operationIndex, materialRefusalFacts(operation))
             }
+            is Shader.RadialGradient -> {
+                if (operation.transform != Matrix3x3F32.Identity) {
+                    return refused(
+                        "unsupported.stroke.rect_transform",
+                        operationIndex,
+                        mapOf("transform" to "gradient_requires_identity"),
+                    )
+                }
+                when {
+                    shader.stops.size != 2 -> return refused(
+                        "unsupported.stroke.rect_gradient_stop_count",
+                        operationIndex,
+                        mapOf("stopCount" to shader.stops.size.toString()),
+                    )
+                    shader.tileMode != TileMode.CLAMP -> return refused(
+                        "unsupported.stroke.rect_gradient_tile_mode",
+                        operationIndex,
+                        mapOf("tileMode" to shader.tileMode.name),
+                    )
+                    target.colorFormat != "rgba8unorm-srgb" -> return refused(
+                        "unsupported.stroke.rect_gradient_target",
+                        operationIndex,
+                        mapOf("targetFormat" to target.colorFormat),
+                    )
+                    !capabilities.hasSupportedFact(
+                        GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_NATIVE,
+                    ) -> return refused(
+                        "unsupported.stroke.rect_radial_gradient_two_stop_capability",
+                        operationIndex,
+                        mapOf(
+                            "capability" to GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_NATIVE,
+                        ),
+                    )
+                }
+                if (paint.colorFilter != null || !shader.isAdmittedStrokeRadialGradient()) {
+                    return refused("unsupported.stroke.rect_material", operationIndex, materialRefusalFacts(operation))
+                }
+                paint.toMaterial() as? GPUMaterialDescriptor.RadialGradient
+                    ?: return refused("unsupported.stroke.rect_material", operationIndex, materialRefusalFacts(operation))
+            }
             else -> return refused("unsupported.stroke.rect_material", operationIndex, materialRefusalFacts(operation))
         }
 
@@ -332,6 +372,17 @@ private fun Shader.LinearGradient.isAdmittedStrokeGradient(): Boolean {
         } &&
         stops.zipWithNext().all { (left, right) -> left.position <= right.position }
 }
+
+private fun Shader.RadialGradient.isAdmittedStrokeRadialGradient(): Boolean =
+    tileMode == TileMode.CLAMP &&
+        interpolation == ColorSpaceInterpolation.SRGB &&
+        center.x.isFinite() && center.y.isFinite() && radius.isFinite() && radius > 0f &&
+        stops.size == 2 &&
+        stops.first().position == 0f && stops.last().position == 1f &&
+        stops.all { stop ->
+            stop.color.r.isFinite() && stop.color.g.isFinite() &&
+                stop.color.b.isFinite() && stop.color.a.isFinite()
+        }
 
 @OptIn(ExperimentalUnsignedTypes::class)
 private fun ColorFilter.isFoldableSolidColorFilter(): Boolean = when (this) {

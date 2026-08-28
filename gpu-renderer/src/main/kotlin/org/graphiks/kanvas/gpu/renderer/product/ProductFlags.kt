@@ -11,6 +11,7 @@ data class GPUProductFlagConfig(
     val fillRRectEnabled: Boolean = true,
     val linearGradientEnabled: Boolean = true,
     val strokeRectLinearGradientThreeStopEnabled: Boolean = true,
+    val strokeRectRadialGradientTwoStopEnabled: Boolean = true,
     val scissorEnabled: Boolean = true,
     val radialGradientEnabled: Boolean = true,
     val sweepGradientEnabled: Boolean = true,
@@ -83,6 +84,15 @@ data class GPUProductFlagConfig(
                 affectsValidity = true,
                 evidenceLabel = "product-flag:radialGradient",
             )
+            if (strokeEnabled && strokeRectRadialGradientTwoStopEnabled) {
+                facts += GPUCapabilityFact(
+                    name = GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_NATIVE,
+                    source = "product-flags",
+                    value = "supported",
+                    affectsValidity = true,
+                    evidenceLabel = "product-flag:strokeRectRadialGradientTwoStop",
+                )
+            }
         }
         if (sweepGradientEnabled) {
             facts += GPUCapabilityFact(

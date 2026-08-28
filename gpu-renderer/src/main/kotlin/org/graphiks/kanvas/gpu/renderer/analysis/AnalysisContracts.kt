@@ -290,6 +290,7 @@ class GPUFirstRoutePlanner(
         val isSweepGradient = command.material is GPUMaterialDescriptor.SweepGradient
         val isSimpleGradient = isLinearGradient || isRadialGradient || isSweepGradient
         val isThreeStopStrokeLinearGradient = command.supportsThreeStopLinearGradientStroke()
+        val isTwoStopStrokeRadialGradient = command.supportsTwoStopRadialGradientStroke()
         val rectGeometryAuthority =
             corePrimitiveRectGeometryAuthority(command.rect, command.transform)
         val rectRouteAuthority = when (command.material) {
@@ -340,9 +341,17 @@ class GPUFirstRoutePlanner(
                     pipelineKey =
                         "pending.pipeline.fill_rect.radial_gradient.${command.layer.target.colorFormat}.src_over"
                     renderStep = radialGradientRenderStep
-                    routeLabel = "native.fill_rect.radial_gradient"
+                    routeLabel = if (isTwoStopStrokeRadialGradient) {
+                        "native.stroke_rect.radial_gradient_two_stop"
+                    } else {
+                        "native.fill_rect.radial_gradient"
+                    }
                     materialKeyHash = "pending.material.radial_gradient"
-                    capabilityName = firstRadialGradientCapabilityName
+                    capabilityName = if (isTwoStopStrokeRadialGradient) {
+                        GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_NATIVE
+                    } else {
+                        firstRadialGradientCapabilityName
+                    }
                 }
 
                 is GPUMaterialDescriptor.SweepGradient -> {
@@ -1907,6 +1916,19 @@ class GPUFirstRoutePlanner(
             gradient.tileMode == "clamp" &&
             gradient.localMatrix == listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f) &&
             gradient.allStopPositions?.size == 3
+    }
+
+    /** The analytic stroke adapter owns this two-stop radial specialization. */
+    private fun NormalizedDrawCommand.FillRect.supportsTwoStopRadialGradientStroke(): Boolean {
+        val gradient = material as? GPUMaterialDescriptor.RadialGradient ?: return false
+        return source.kind == GPUCommandSourceKind.AnalyticStrokeRectBand &&
+            !antiAlias &&
+            transform.type == GPUTransformType.Identity &&
+            layer.target.colorFormat == "rgba8unorm-srgb" &&
+            gradient.tileMode == "clamp" &&
+            gradient.allStopPositions?.size == 2 &&
+            gradient.localMatrix == listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f) &&
+            capabilities.hasFact(GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_NATIVE)
     }
 
     /** The native ABI is larger, but only this proven FillRect route may consume a third sweep stop. */
