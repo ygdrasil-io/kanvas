@@ -2700,6 +2700,42 @@ class FirstRoutePlannerTest {
         )
     }
 
+    /** The bounded pixel-exact round cap must reach the native stencil-cover route. */
+    @Test
+    fun `fill path exact horizontal round cap builds native stencil cover route`() {
+        val command = GPUFillPathCommandBuilder.build(
+            commandId = GPUDrawCommandID(126),
+            pathKey = "path:round-segment:v1",
+            pathDescriptor = GPUPathFacts(
+                pathKey = "path:round-segment:v1",
+                verbCount = 2,
+                pointCount = 2,
+                fillRule = "NonZero",
+                inverseFill = false,
+                finiteProof = "finite",
+                volatility = "immutable",
+                transformClass = "identity",
+                edgeCount = 1,
+            ),
+            tessellatedVertices = listOf(6f, 16f, 26f, 16f),
+            contourStarts = listOf(0),
+            edgeCount = 1,
+            target = GPUTargetFacts(width = 32, height = 32, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0f, b = 0f, a = 1f),
+            stroke = true,
+            strokeWidth = 4f,
+            strokeCap = "round",
+            strokeJoin = "miter",
+            antiAlias = false,
+        )
+
+        val plan = GPUFirstRoutePlanner(firstSlicePathFillStencilCoverCapabilities()).plan(command)
+
+        assertEquals("native.path_stroke.stencil_cover", plan.analysisRecord.routeDecisionLabel)
+        assertEquals("route.path_stroke.126", assertIs<GPURouteDecision.Native>(plan.routeDecision).route.routeId)
+        assertEquals(emptyList(), plan.pass.diagnostics)
+    }
+
     /** FillPath stroke analysis consumes the captured miter limit instead of a hard-coded default. */
     @Test
     fun `fill path stroke refuses the captured subminimum miter limit`() {

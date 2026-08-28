@@ -2358,7 +2358,10 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
                 )
                 shapeDesc.strokeRefusalCode()
                     ?: pathDesc.strokePathRefusalCode()
-                    ?: strokeDesc.refusalCode(maxEdges = 128)
+                    ?: strokeDesc.refusalCode(
+                        maxEdges = 128,
+                        allowPixelExactRoundCap = isNativeSimpleStroke() && strokeCap == "round",
+                    )
                     ?: "unsupported.pipeline.capability_missing".takeUnless {
                         capabilities.hasFact(firstPreparedPathFillCapabilityName) ||
                             (isNativeSimpleStroke() && capabilities.hasFact(firstStencilCoverCapabilityName))
