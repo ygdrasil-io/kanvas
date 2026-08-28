@@ -7,6 +7,16 @@ import kotlin.test.assertTrue
 
 class BasicPrimitiveEvidenceCatalogTest {
     @Test
+    fun `fractional AA rectangle overlap has a public CPU-backed evidence row`() {
+        val evidenceCase = assertNotNull(GpuEvidenceCatalog.renderCases.firstOrNull {
+            it.descriptor.id.value == "fractional-aa-rect-overlap"
+        })
+
+        assertEquals(EvidenceExecutionBoundary.PublicSurface, evidenceCase.executionBoundary)
+        assertNotNull(evidenceCase.oracle)
+    }
+
+    @Test
     fun `basic primitive catalogue has public render evidence for color rect rrect drrect and points`() {
         val ids = GpuEvidenceCatalog.renderCases.map { it.descriptor.id.value }.toSet()
 

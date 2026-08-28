@@ -15,6 +15,7 @@ import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathDirectTriangle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathDRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbPathFillCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbFractionalRectCoverageCpuOracle
 import org.graphiks.kanvas.gpu.evidence.programs.KanvasScenePrograms
 import org.graphiks.kanvas.gpu.evidence.programs.RendererRefusalPrograms
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.GPUCustomRuntimeEffectID
@@ -36,6 +37,7 @@ object GpuEvidenceCatalog {
         basicPrimitivesValidAlpha(),
         basicPrimitivesOutOfBounds(),
         basicPrimitivesPoints(),
+        fractionalAaRectOverlap(),
         affinePathClipColor(),
         scissoredRadialGradient(),
         repeatGradientRendered(),
@@ -197,6 +199,33 @@ object GpuEvidenceCatalog {
             fillRect(28, 30, 32, 34, intArrayOf(242, 135, 46, 255))
             fillRect(60, 60, 64, 64, intArrayOf(242, 135, 46, 255))
         }.rgba() },
+    )
+
+    private fun fractionalAaRectOverlap() = EvidenceCase(
+        descriptor = EvidenceSceneDescriptor(
+            EvidenceSceneId("fractional-aa-rect-overlap"), "Fractional AA rectangle overlap",
+            "Public Surface scalar anti-aliasing of two opaque fractional rectangles under an integer scissor clip.",
+            64, 64, 1L, setOf("solid-rect", "coverage-aa", "overlap", "scissor", "kanvas-surface"),
+            EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-fractional-rect-area-coverage", 1),
+            ComparisonPolicy(1, 100.0, 1, "Independent exact pixel-area coverage with per-draw RGBA8 quantization; one byte rounding tolerance."),
+            emptySet(),
+        ),
+        program = KanvasScenePrograms.fractionalAaRectOverlap(),
+        oracle = SurfaceSrgbFractionalRectCoverageCpuOracle(
+            background = intArrayOf(13, 20, 33, 255),
+            rectangles = listOf(
+                SurfaceSrgbFractionalRectCoverageCpuOracle.Rectangle(
+                    SurfaceSrgbFractionalRectCoverageCpuOracle.DeviceRect(12.5f, 16.5f, 41.5f, 45.5f),
+                    intArrayOf(242, 135, 46, 255),
+                ),
+                SurfaceSrgbFractionalRectCoverageCpuOracle.Rectangle(
+                    SurfaceSrgbFractionalRectCoverageCpuOracle.DeviceRect(28.5f, 24.5f, 52.5f, 49.5f),
+                    intArrayOf(31, 115, 209, 255),
+                ),
+            ),
+            clip = SurfaceSrgbFractionalRectCoverageCpuOracle.DeviceRect(8f, 8f, 56f, 56f),
+        ),
     )
 
     private fun basicPrimitivesEmptyRectRefusal() = EvidenceCase(
