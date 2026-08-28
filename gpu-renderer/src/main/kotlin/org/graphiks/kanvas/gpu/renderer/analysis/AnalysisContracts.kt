@@ -1926,7 +1926,7 @@ class GPUFirstRoutePlanner(
     /** The native ABI is larger, but only this proven FillRect route may consume a third radial stop. */
     private fun NormalizedDrawCommand.FillRect.hasThreeStopRadialGradient(): Boolean {
         val gradient = material as? GPUMaterialDescriptor.RadialGradient ?: return false
-        return source.kind == GPUCommandSourceKind.PublicFillRect && !antiAlias &&
+        return !antiAlias &&
             transform.type == GPUTransformType.Identity &&
             gradient.tileMode == "clamp" &&
             gradient.localMatrix == listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f) &&

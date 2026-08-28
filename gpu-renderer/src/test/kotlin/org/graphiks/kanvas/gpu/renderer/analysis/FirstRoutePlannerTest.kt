@@ -185,6 +185,21 @@ class FirstRoutePlannerTest {
     }
 
     @Test
+    fun `three stop radial stroke route is reserved for analytic provenance`() {
+        val material = GPUMaterialDescriptor.RadialGradient(32.5f,32.5f,23.5f,1f,0f,0f,1f,0f,0f,1f,1f,
+            allStopPositions=floatArrayOf(0f,.5f,1f), allStopColors=floatArrayOf(1f,0f,0f,1f,0f,1f,0f,1f,0f,0f,1f,1f))
+        fun command(kind: GPUCommandSourceKind) = GPUFillRectCommandBuilder.build(GPUDrawCommandID(40), GPURect(6f,14f,58f,18f), GPUTargetFacts(64,64,"rgba8unorm-srgb"), material, source=GPUCommandSource("test","radial",kind=kind)).copy(antiAlias=false)
+        val caps = firstSliceWithLinearGradientCapabilities().copy(facts=firstSliceWithLinearGradientCapabilities().facts + listOf(
+            GPUCapabilityFact("first_slice.radial_gradient.native","test","supported",true,"radial"),
+            GPUCapabilityFact(GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_NATIVE,"test","supported",true,"stroke"),
+        ))
+        val planner=GPUFirstRoutePlanner(caps)
+        assertEquals("native.stroke_rect.radial_gradient_three_stop",planner.plan(command(GPUCommandSourceKind.AnalyticStrokeRectBand)).analysisRecord.routeDecisionLabel)
+        assertEquals("native.fill_rect.radial_gradient",planner.plan(command(GPUCommandSourceKind.PublicFillRect)).analysisRecord.routeDecisionLabel)
+        assertEquals("native.fill_rect.radial_gradient",planner.plan(command(GPUCommandSourceKind.Generic)).analysisRecord.routeDecisionLabel)
+    }
+
+    @Test
     fun `two stop full sweep gradient uses the dedicated stroke route only for analytic provenance`() {
         val material = GPUMaterialDescriptor.SweepGradient(
             32.5f, 32.5f, 0f, 360f, 1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f,
