@@ -6,6 +6,8 @@ object GPUFirstSliceCapabilityName {
     const val SCISSOR_NATIVE = "first_slice.scissor.native"
     const val BOUNDED_CLIP_NATIVE = "first_slice.bounded_clip.native"
     const val PATH_FILL_STENCIL_COVER = "first_slice.path_fill.stencil_cover"
+    /** Native direct-geometry route for one bounded axis-aligned path hairline. */
+    const val PATH_HAIRLINE_DIRECT_NATIVE = "first_slice.path_hairline.direct.native"
     const val STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_NATIVE =
         "first_slice.stroke_rect.linear_gradient_three_stop.native"
     const val STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_TRANSLATE_NATIVE =

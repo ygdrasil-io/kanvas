@@ -2824,6 +2824,39 @@ class FirstRoutePlannerTest {
     }
 
     @Test
+    fun `hairline direct capability does not depend on stencil cover capability`() {
+        val command = GPUFillPathCommandBuilder.build(
+            commandId = GPUDrawCommandID(130),
+            pathKey = "path:hairline-capability:v1",
+            pathDescriptor = GPUPathFacts(
+                pathKey = "path:hairline-capability:v1", verbCount = 2, pointCount = 2,
+                fillRule = "NonZero", inverseFill = false, finiteProof = "finite",
+                volatility = "immutable", transformClass = "identity", edgeCount = 1,
+            ),
+            tessellatedVertices = listOf(6f, 16f, 26f, 16f),
+            contourStarts = listOf(0), edgeCount = 1,
+            target = GPUTargetFacts(width = 32, height = 32, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0f, b = 0f, a = 1f),
+            stroke = true, strokeWidth = 0f, strokeCap = "butt", strokeJoin = "miter", antiAlias = false,
+        )
+        val capabilities = firstSlicePathFillCapabilities().copy(
+            facts = listOf(
+                GPUCapabilityFact(
+                    name = GPUFirstSliceCapabilityName.PATH_HAIRLINE_DIRECT_NATIVE,
+                    source = "unit-test", value = "supported", affectsValidity = true,
+                    evidenceLabel = "path-hairline-direct-fixture",
+                ),
+            ),
+            snapshotId = "path-hairline-direct-only-test",
+        )
+
+        val plan = GPUFirstRoutePlanner(capabilities).plan(command)
+
+        assertEquals("native.path_hairline.direct", plan.analysisRecord.routeDecisionLabel)
+        assertEquals("route.path_hairline.130", assertIs<GPURouteDecision.Native>(plan.routeDecision).route.routeId)
+    }
+
+    @Test
     fun `fill path hairline with AA remains refused`() {
         val command = GPUFillPathCommandBuilder.build(
             commandId = GPUDrawCommandID(129),
@@ -3775,13 +3808,22 @@ class FirstRoutePlannerTest {
     /** Capability snapshot that enables FillPath with stencil-cover promotion. */
     private fun firstSlicePathFillStencilCoverCapabilities(): GPUCapabilities =
         firstSlicePathFillCapabilities().copy(
-            facts = listOf(GPUCapabilityFact(
-                name = "first_slice.path_fill.stencil_cover",
-                source = "unit-test",
-                value = "supported",
-                affectsValidity = true,
-                evidenceLabel = "stencil-cover-fixture",
-            )),
+            facts = listOf(
+                GPUCapabilityFact(
+                    name = GPUFirstSliceCapabilityName.PATH_FILL_STENCIL_COVER,
+                    source = "unit-test",
+                    value = "supported",
+                    affectsValidity = true,
+                    evidenceLabel = "stencil-cover-fixture",
+                ),
+                GPUCapabilityFact(
+                    name = GPUFirstSliceCapabilityName.PATH_HAIRLINE_DIRECT_NATIVE,
+                    source = "unit-test",
+                    value = "supported",
+                    affectsValidity = true,
+                    evidenceLabel = "path-hairline-direct-fixture",
+                ),
+            ),
             snapshotId = "path-fill-stencil-cover-test",
         )
 

@@ -166,6 +166,13 @@ data class GPUProductFlagConfig(
                 affectsValidity = true,
                 evidenceLabel = "product-flag:pathFill",
             )
+            if (strokeEnabled) {
+                facts += supportedGPUCapabilityFact(
+                    GPUFirstSliceCapabilityName.PATH_HAIRLINE_DIRECT_NATIVE,
+                    "product-flags",
+                    "product-flag:pathHairlineDirect",
+                )
+            }
         }
         if (saveLayerEnabled) {
             facts += GPUCapabilityFact(
