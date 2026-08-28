@@ -654,6 +654,18 @@ object KanvasScenePrograms {
         )
     })
 
+    fun sweepGradientThreeStops() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawRect(RectF32.ofLTRB(8f, 8f, 56f, 56f), Paint(shader = Shader.SweepGradient(
+            Point2F32(32.5f, 32.5f), 0f, 360f,
+            listOf(
+                GradientStop(0f, ColorARGB.of(255, 255, 64, 64)),
+                GradientStop(.5f, ColorARGB.of(255, 56, 220, 120)),
+                GradientStop(1f, ColorARGB.of(255, 64, 112, 255)),
+            ),
+            TileMode.CLAMP,
+        ), antiAlias = false))
+    })
+
     fun linearGradientThreeStops() = KanvasSurfaceProgram(ROUTE_ID, record = {
         drawRect(RectF32.ofLTRB(8f, 16f, 56f, 48f), Paint(shader = Shader.LinearGradient(
             Point2F32(8.5f, 32.5f), Point2F32(55.5f, 32.5f),

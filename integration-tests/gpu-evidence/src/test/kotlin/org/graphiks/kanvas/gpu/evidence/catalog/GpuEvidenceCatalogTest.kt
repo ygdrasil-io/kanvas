@@ -73,7 +73,7 @@ class GpuEvidenceCatalogTest {
     }
 
     @Test
-    fun `catalog separates eighty eight public surface renders from nine refusals`() {
+    fun `catalog separates eighty nine public surface renders from nine refusals`() {
         val cases = GpuEvidenceCatalog.cases
 
         assertEquals(
@@ -92,6 +92,7 @@ class GpuEvidenceCatalogTest {
                 "radial-swatch",
                 "radial-gradient-three-stops",
                 "sweep-disk",
+                "sweep-gradient-three-stops",
                 "sweep-gradient-partial-angle", "affine-solid-rect", "basic-primitives-valid-alpha", "basic-primitives-out-of-bounds", "basic-primitives-points", "fractional-aa-rect-overlap", "affine-path-clip-color", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
                 "scaled-solid-rrect",
                 "solid-drrect-hole",
@@ -185,6 +186,7 @@ class GpuEvidenceCatalogTest {
                 "radial-swatch",
                 "radial-gradient-three-stops",
                 "sweep-disk",
+                "sweep-gradient-three-stops",
                 "sweep-gradient-partial-angle", "affine-solid-rect", "basic-primitives-valid-alpha", "basic-primitives-out-of-bounds", "basic-primitives-points", "fractional-aa-rect-overlap", "affine-path-clip-color", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
                 "scaled-solid-rrect",
                 "solid-drrect-hole",
@@ -262,11 +264,11 @@ class GpuEvidenceCatalogTest {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            List(88) { "kanvas.surface.render" },
+            List(89) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
-        assertEquals(88, GpuEvidenceCatalog.renderCases.size)
-        assertEquals(97, GpuEvidenceCatalog.cases.size)
+        assertEquals(89, GpuEvidenceCatalog.renderCases.size)
+        assertEquals(98, GpuEvidenceCatalog.cases.size)
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
 
         val solid = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "solid-card-stack" })
@@ -324,7 +326,7 @@ class GpuEvidenceCatalogTest {
         assertEquals(100.0, roundCapStroke.descriptor.comparison?.minimumSimilarityPercent)
         assertIs<KanvasSurfaceProgram>(roundCapStroke.program)
 
-        listOf("linear-gradient-lanes", "linear-gradient-three-stops", "radial-swatch", "radial-gradient-three-stops", "sweep-disk", "sweep-gradient-partial-angle", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal").forEach { id ->
+        listOf("linear-gradient-lanes", "linear-gradient-three-stops", "radial-swatch", "radial-gradient-three-stops", "sweep-disk", "sweep-gradient-three-stops", "sweep-gradient-partial-angle", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal").forEach { id ->
             val evidenceCase = assertNotNull(cases.firstOrNull { it.descriptor.id.value == id })
             assertEquals(64, evidenceCase.descriptor.width)
             assertEquals(64, evidenceCase.descriptor.height)
@@ -343,16 +345,17 @@ class GpuEvidenceCatalogTest {
                 "radial-swatch" to "surface-srgb-gradient-radial-clamp",
                 "radial-gradient-three-stops" to "surface-srgb-gradient-radial-clamp",
                 "sweep-disk" to "surface-srgb-gradient-sweep-clamp",
+                "sweep-gradient-three-stops" to "surface-srgb-gradient-sweep-clamp",
                 "sweep-gradient-partial-angle" to "surface-srgb-gradient-sweep-clamp",
                 "scissored-radial-gradient" to "surface-srgb-gradient-radial-clamp",
                 "repeat-gradient-refusal" to "surface-srgb-gradient-linear-repeat",
                 "gradient-stroke-refusal" to "surface-srgb-gradient-linear-clamp-stroke-bands",
             ),
-            listOf("linear-gradient-lanes", "linear-gradient-three-stops", "radial-swatch", "radial-gradient-three-stops", "sweep-disk", "sweep-gradient-partial-angle", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal").associateWith { id ->
+            listOf("linear-gradient-lanes", "linear-gradient-three-stops", "radial-swatch", "radial-gradient-three-stops", "sweep-disk", "sweep-gradient-three-stops", "sweep-gradient-partial-angle", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal").associateWith { id ->
                 (cases.first { it.descriptor.id.value == id }.descriptor.oracle as OraclePolicy.GeneratedCpu).oracleId
             },
         )
-        listOf("linear-gradient-lanes", "linear-gradient-three-stops", "radial-swatch", "radial-gradient-three-stops", "sweep-disk", "sweep-gradient-partial-angle", "scissored-radial-gradient", "repeat-gradient-refusal").forEach { id ->
+        listOf("linear-gradient-lanes", "linear-gradient-three-stops", "radial-swatch", "radial-gradient-three-stops", "sweep-disk", "sweep-gradient-three-stops", "sweep-gradient-partial-angle", "scissored-radial-gradient", "repeat-gradient-refusal").forEach { id ->
             val oracle = cases.first { it.descriptor.id.value == id }.descriptor.oracle as OraclePolicy.GeneratedCpu
             assertEquals(2, oracle.version)
             assertEquals(
@@ -404,6 +407,7 @@ class GpuEvidenceCatalogTest {
             "radial-swatch",
             "radial-gradient-three-stops",
             "sweep-disk",
+            "sweep-gradient-three-stops",
             "sweep-gradient-partial-angle", "affine-solid-rect", "basic-primitives-valid-alpha", "basic-primitives-out-of-bounds", "basic-primitives-points", "fractional-aa-rect-overlap", "affine-path-clip-color", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
             "scaled-solid-rrect",
             "solid-drrect-hole",
@@ -516,6 +520,7 @@ class GpuEvidenceCatalogTest {
                 "radial-swatch" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-radial-clamp", 2),
                 "radial-gradient-three-stops" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-radial-clamp", 2),
                 "sweep-disk" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-sweep-clamp", 2),
+                "sweep-gradient-three-stops" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-sweep-clamp", 2),
                 "sweep-gradient-partial-angle" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-sweep-clamp", 2),
                 "affine-solid-rect" to OraclePolicy.GeneratedCpu("reference-raster-affine-solid-rect", 1),
                 "basic-primitives-valid-alpha" to OraclePolicy.GeneratedCpu("surface-srgb-basic-primitives-alpha", 1),
@@ -611,6 +616,7 @@ class GpuEvidenceCatalogTest {
                 "radial-swatch" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
                 "radial-gradient-three-stops" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
                 "sweep-disk" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
+                "sweep-gradient-three-stops" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
                 "sweep-gradient-partial-angle" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
                 "affine-solid-rect" to ComparisonPolicy(0, 100.0, 1, "Exact RGBA8 output from hand-derived inverse affine pixel-center membership."),
                 "basic-primitives-valid-alpha" to ComparisonPolicy(1, 99.0, 1, "Independent straight-sRGB premultiplied SrcOver oracle; one RGBA8 rounding unit is tolerated."),
