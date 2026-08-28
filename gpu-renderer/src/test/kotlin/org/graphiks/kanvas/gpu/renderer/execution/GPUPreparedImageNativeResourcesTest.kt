@@ -44,23 +44,15 @@ import org.graphiks.kanvas.gpu.renderer.resources.buildImageFrameResourcePlanFro
 
 class GPUPreparedImageNativeResourcesTest {
     @Test
-    fun `linear sampler plan is refused before native materialization`() {
-        val fixture = fixture(listOf(GPUImageBindingInput("packet.linear", GPUPreparedImageSampling.Nearest)))
-        val linearBinding = fixture.plan.bindingRequests.single().copy(
-            sampler = fixture.plan.bindingRequests.single().sampler.copy(
-                magFilter = "linear",
-                minFilter = "linear",
-            ),
+    fun `generic native linear sampler plan reaches native preflight`() {
+        val fixture = fixture(listOf(GPUImageBindingInput("packet.linear", GPUPreparedImageSampling.Linear)))
+
+        val sealed = assertIs<GPUPreparedImageNativePreflightResult.Sealed>(
+            GPUPreparedImageNativeResourcePreflighter.preflight(fixture.request),
         )
 
-        val refusal = assertIs<GPUPreparedImageNativePreflightResult.Refused>(
-            GPUPreparedImageNativeResourcePreflighter.preflight(
-                fixture.request.copy(resourcePlan = fixture.plan.copy(bindingRequests = listOf(linearBinding))),
-            ),
-        )
-
-        assertEquals(GPUPreparedImageRefusalCodes.SAMPLING_FILTER, refusal.reasonCode)
-        assertEquals("preflight", refusal.facts["boundary"])
+        assertEquals("linear", sealed.request.resourcePlan.bindingRequests.single().sampler.magFilter)
+        assertEquals("linear", sealed.request.resourcePlan.bindingRequests.single().sampler.minFilter)
     }
 
     @Test

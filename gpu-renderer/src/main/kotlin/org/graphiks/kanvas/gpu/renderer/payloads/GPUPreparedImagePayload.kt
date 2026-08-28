@@ -14,6 +14,16 @@ enum class GPUPreparedImageGeometryClass { Rect, Quad }
 /** Closed sampler selection; sampler descriptors are deliberately not pipeline-key axes. */
 enum class GPUPreparedImageSampling { Nearest, Linear }
 
+/**
+ * Declares the image capability selected by a caller before Surface lowering.
+ *
+ * The generic route retains the native linear/scaled image implementation.
+ * W28 selects [BoundedNearest1To1] so its evidence is limited to the narrower
+ * whole-image, integer 1:1, nearest contract rather than redefining that
+ * generic route.
+ */
+enum class GPUPreparedImageRouteCapability { GenericNative, BoundedNearest1To1 }
+
 /** Closed source blend choices for alpha-atlas colorization. */
 enum class GPUPreparedAtlasSourceBlend { Src, Dst, SrcOver, Plus, Modulate }
 

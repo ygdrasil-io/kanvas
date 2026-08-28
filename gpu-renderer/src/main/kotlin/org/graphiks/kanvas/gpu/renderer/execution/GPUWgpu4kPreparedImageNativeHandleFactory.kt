@@ -92,10 +92,10 @@ internal class GPUWgpu4kPreparedImageNativeHandleFactory(
 
     override fun createSampler(descriptor: GPUSamplerDescriptor): GPUSampler {
         require(
-            descriptor.addressModeU == "clamp-to-edge" &&
+                descriptor.addressModeU == "clamp-to-edge" &&
                 descriptor.addressModeV == "clamp-to-edge" &&
-                descriptor.magFilter == "nearest" &&
-                descriptor.minFilter == "nearest" &&
+                descriptor.magFilter in setOf("nearest", "linear") &&
+                descriptor.minFilter in setOf("nearest", "linear") &&
                 descriptor.mipmapFilter == "none" &&
                 descriptor.lodMinClamp == "0" &&
                 descriptor.lodMaxClamp == "0" &&
@@ -187,6 +187,7 @@ private fun org.graphiks.kanvas.gpu.renderer.resources.GPUTextureDescriptor
 private fun String.preparedImageNativeFilter(axis: String): GPUFilterMode =
     when (this) {
         "nearest" -> GPUFilterMode.Nearest
+        "linear" -> GPUFilterMode.Linear
         else -> throw IllegalArgumentException(
             "Unsupported prepared-image $axis filter $this",
         )

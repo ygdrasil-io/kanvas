@@ -32,6 +32,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometryClass
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageRouteCapability
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
@@ -51,6 +52,10 @@ import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
 class GPUPreparedDrawImageLowererTest {
+
+    private val boundedW28Config = RenderConfig(
+        preparedImageRouteCapability = GPUPreparedImageRouteCapability.BoundedNearest1To1,
+    )
 
     private fun target() = GPUTargetFacts(64, 64, "rgba8unorm-srgb")
 
@@ -182,7 +187,7 @@ class GPUPreparedDrawImageLowererTest {
                 0,
                 GPUFrameProvenance.None,
                 target(),
-                RenderConfig.DEFAULT,
+                boundedW28Config,
                 capabilities(),
             ),
         )
@@ -324,7 +329,7 @@ class GPUPreparedDrawImageLowererTest {
                 0,
                 GPUFrameProvenance.None,
                 target(),
-                RenderConfig.DEFAULT,
+                boundedW28Config,
                 capabilities(),
             ),
         )
@@ -535,7 +540,7 @@ class GPUPreparedDrawImageLowererTest {
     }
 
     @Test
-    fun `linear sampling is refused before native nearest-only execution`() {
+    fun `bounded W28 capability refuses linear before native nearest-only execution`() {
         val image = rgbaImage()
         val paint = Paint.fill(ColorARGB.White).copy(
             shader = Shader.Image(image, sampling = SamplingOptions.LINEAR),
@@ -547,7 +552,7 @@ class GPUPreparedDrawImageLowererTest {
                 0,
                 GPUFrameProvenance.None,
                 target(),
-                RenderConfig.DEFAULT,
+                boundedW28Config,
                 capabilities(),
             ),
         )
@@ -555,13 +560,13 @@ class GPUPreparedDrawImageLowererTest {
     }
 
     @Test
-    fun `scaled cropped and fractional image rectangles refuse before native submission`() {
+    fun `bounded W28 capability refuses scaled cropped and fractional image rectangles`() {
         val image = rgbaImage(width = 2, height = 1)
         val scaled = assertIs<GPUPreparedDrawImageLowering.Refused>(
             GPUPreparedDrawImageLowerer.lower(
                 drawImage(image, dst = RectF32.ofLTRB(10f, 10f, 11f, 11f)),
                 GPUDrawCommandID(0), 0, GPUFrameProvenance.None, target(),
-                RenderConfig.DEFAULT, capabilities(),
+                boundedW28Config, capabilities(),
             ),
         )
         val cropped = assertIs<GPUPreparedDrawImageLowering.Refused>(
@@ -572,20 +577,33 @@ class GPUPreparedDrawImageLowererTest {
                     src = RectF32.ofLTRB(0f, 0f, 1f, 1f),
                 ),
                 GPUDrawCommandID(1), 1, GPUFrameProvenance.None, target(),
-                RenderConfig.DEFAULT, capabilities(),
+                boundedW28Config, capabilities(),
             ),
         )
         val fractional = assertIs<GPUPreparedDrawImageLowering.Refused>(
             GPUPreparedDrawImageLowerer.lower(
                 drawImage(image, dst = RectF32.ofLTRB(10.5f, 10f, 12.5f, 11f)),
                 GPUDrawCommandID(2), 2, GPUFrameProvenance.None, target(),
-                RenderConfig.DEFAULT, capabilities(),
+                boundedW28Config, capabilities(),
             ),
         )
 
         assertEquals(GPUPreparedImageRefusalCodes.RECT_GEOMETRY, scaled.code)
         assertEquals(GPUPreparedImageRefusalCodes.RECT_GEOMETRY, cropped.code)
         assertEquals(GPUPreparedImageRefusalCodes.RECT_GEOMETRY, fractional.code)
+    }
+
+    @Test
+    fun `generic native capability retains established scaled image support`() {
+        val image = rgbaImage(width = 2, height = 1)
+        val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
+            GPUPreparedDrawImageLowerer.lower(
+                drawImage(image, dst = RectF32.ofLTRB(10f, 10f, 11f, 11f)),
+                GPUDrawCommandID(0), 0, GPUFrameProvenance.None, target(),
+                RenderConfig.DEFAULT, capabilities(),
+            ),
+        )
+        assertEquals(GPUPreparedImageSampling.Nearest, result.command.preparedImage!!.sampling)
     }
 
     @Test

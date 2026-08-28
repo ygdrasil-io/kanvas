@@ -312,10 +312,6 @@ internal fun buildImageFrameResourcePlanFromBindings(
     ) {
         "Prepared-image packet IDs must be non-empty and unique"
     }
-    require(bindingInputs.all { it.sampling == GPUPreparedImageSampling.Nearest }) {
-        "${org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes.SAMPLING_FILTER}: " +
-            "prepared-image resource plans support nearest sampling only"
-    }
     require(bindingLayoutHash.isNotBlank()) { "bindingLayoutHash must not be blank" }
     require(frameIdentity.isNotBlank()) { "frameIdentity must not be blank" }
     require(artifact.colorInterpretation == GPUColorInterpretation.EncodedPremulSrgb.value) {
@@ -398,7 +394,10 @@ internal fun buildImageFrameResourcePlanFromBindings(
     val uniformSize = GPU_PREPARED_IMAGE_UNIFORM_ALLOCATION_SIZE_BYTES
     val uniformStride = alignUp(uniformSize, limits.minUniformBufferOffsetAlignment)
     val bindingRequests = bindingInputs.mapIndexed { index, bindingInput ->
-        val filter = "nearest"
+        val filter = when (bindingInput.sampling) {
+            GPUPreparedImageSampling.Nearest -> "nearest"
+            GPUPreparedImageSampling.Linear -> "linear"
+        }
         GPUImageBindingRequest(
             packetId = bindingInput.packetId,
             artifactKey = artifact.key,

@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.surface
 
 import org.graphiks.kanvas.gpu.renderer.geometry.GPUPathEdgeFanPayloadContract
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageRouteCapability
 
 data class RenderConfig(
     val gpuColorFormat: GPUColorFormat = GPUColorFormat.RGBA8_UNORM_SRGB,
@@ -15,6 +16,9 @@ data class RenderConfig(
     val maxClipIntermediateBytes: UInt = 67_108_864u,
     /** Maximum ordered clip elements admitted by the public Surface coverage-mask route. */
     val maxClipStackDepth: UInt = 8u,
+    /** Selects the explicit prepared-image capability admitted by this Surface. */
+    val preparedImageRouteCapability: GPUPreparedImageRouteCapability =
+        GPUPreparedImageRouteCapability.GenericNative,
     val diagnosticLevel: DiagnosticLevel = DiagnosticLevel.WARN,
     val debugLevel: DebugLevel = DebugLevel.OFF,
 ) {
@@ -61,6 +65,9 @@ data class RenderConfig(
                     ?.toUIntOrNull() ?: DEFAULT.maxClipIntermediateBytes,
                 maxClipStackDepth = p.getProperty("kanvas.render.maxClipStackDepth")
                     ?.toUIntOrNull() ?: DEFAULT.maxClipStackDepth,
+                preparedImageRouteCapability = p.getProperty("kanvas.render.preparedImageRouteCapability")
+                    ?.let { runCatching { GPUPreparedImageRouteCapability.valueOf(it) }.getOrNull() }
+                    ?: DEFAULT.preparedImageRouteCapability,
                 diagnosticLevel = p.getProperty("kanvas.render.diagnosticLevel")
                     ?.let { runCatching { DiagnosticLevel.valueOf(it) }.getOrNull() }
                     ?: DEFAULT.diagnosticLevel,

@@ -127,20 +127,20 @@ class GPUWgpu4kPreparedImageNativeHandleFactoryTest {
     }
 
     @Test
-    fun `rejects a linear sampler descriptor`() {
+    fun `generic native factory materializes a linear sampler descriptor`() {
         val native = CapturingPreparedImageNativeDevice()
         val factory = GPUWgpu4kPreparedImageNativeHandleFactory(native.device)
         val nearest = preparedImageResourcePlan().bindingRequests.single().sampler
 
-        assertFailsWith<IllegalArgumentException> {
-            factory.createSampler(
+        factory.createSampler(
             nearest.copy(
                 magFilter = "linear",
                 minFilter = "linear",
             ),
-            )
-        }
-        assertTrue(native.samplerDescriptors.isEmpty())
+        )
+        val descriptor = native.samplerDescriptors.single()
+        assertEquals(GPUFilterMode.Linear, descriptor.magFilter)
+        assertEquals(GPUFilterMode.Linear, descriptor.minFilter)
     }
 
     @Test

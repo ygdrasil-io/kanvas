@@ -35,6 +35,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometryClass
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageRouteCapability
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageVertex
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedAtlasSourceBlend
 import org.graphiks.kanvas.gpu.renderer.recording.buildPreparedImageGeometry
@@ -147,12 +148,16 @@ internal object GPUPreparedDrawImageLowerer {
             )
         }
         val requestedSampling = requestedImageShader?.sampling
+        val boundedW28 = config.preparedImageRouteCapability ==
+            GPUPreparedImageRouteCapability.BoundedNearest1To1
         val sampling = when (requestedSampling) {
             SamplingOptions.NEAREST -> GPUPreparedImageSampling.Nearest
-            SamplingOptions.LINEAR -> return GPUPreparedDrawImageLowering.Refused(
-                GPUPreparedImageRefusalCodes.SAMPLING_FILTER,
-                mapOf("sourceId" to image.sourceId, "sampling" to "linear", "supportedSampling" to "nearest"),
-            )
+            SamplingOptions.LINEAR -> if (boundedW28) {
+                return GPUPreparedDrawImageLowering.Refused(
+                    GPUPreparedImageRefusalCodes.SAMPLING_FILTER,
+                    mapOf("sourceId" to image.sourceId, "sampling" to "linear", "supportedSampling" to "nearest"),
+                )
+            } else GPUPreparedImageSampling.Linear
             null -> GPUPreparedImageSampling.Nearest
             is SamplingOptions.Cubic -> return GPUPreparedDrawImageLowering.Refused(
                 GPUPreparedImageRefusalCodes.SAMPLING_CUBIC,
@@ -214,10 +219,9 @@ internal object GPUPreparedDrawImageLowerer {
         val dst = operation.dst
         val src = operation.src
 
-        // W28's only admitted image geometry is one complete immutable bitmap copied at
-        // native pixel resolution. Keeping this closed before artifact preparation prevents
-        // the hard-coded nearest sampler from silently becoming a scale, crop, or fractional
-        // sampling implementation.
+        // W28's distinct capability admits one complete immutable bitmap copied at native
+        // pixel resolution. The generic native route intentionally retains its established
+        // crop, scaling, fractional local-matrix, and grid capabilities.
         val sourceIsWholeImage =
             src.left == 0f && src.top == 0f &&
                 src.right == image.width.toFloat() && src.bottom == image.height.toFloat()
@@ -228,7 +232,7 @@ internal object GPUPreparedDrawImageLowerer {
         val destinationIsNativeSize =
             dst.right - dst.left == image.width.toFloat() &&
                 dst.bottom - dst.top == image.height.toFloat()
-        if (!sourceIsWholeImage || !destinationIsInteger || !destinationIsNativeSize) {
+        if (boundedW28 && (!sourceIsWholeImage || !destinationIsInteger || !destinationIsNativeSize)) {
             return GPUPreparedDrawImageLowering.Refused(
                 GPUPreparedImageRefusalCodes.RECT_GEOMETRY,
                 mapOf(

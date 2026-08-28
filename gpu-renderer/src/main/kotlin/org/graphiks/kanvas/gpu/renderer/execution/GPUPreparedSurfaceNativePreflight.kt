@@ -4363,15 +4363,6 @@ internal class GPUPreparedSurfaceNativePreflight(
         uploads: List<Triple<Int, GPUFrameStep.UploadResourceStep, GPUImageFrameResourcePlan>>,
         shaderContract: GPUPreparedImageShaderContract,
     ): GPUPreparedSurfaceNativePreflightResult.Refused? {
-        if (imagePackets.any { (_, semantic) ->
-                semantic.sampling != GPUPreparedImageSampling.Nearest
-            }
-        ) {
-            return refused(
-                GPUPreparedImageRefusalCodes.SAMPLING_FILTER,
-                "Prepared-image native preflight supports nearest sampling only.",
-            )
-        }
         val artifactEvidenceByIdentity =
             IdentityHashMap<GPUPreparedImageUploadArtifact, GPUPreparedSurfaceArtifactByteEvidence>()
         val renderBindingList = framePlan.steps
