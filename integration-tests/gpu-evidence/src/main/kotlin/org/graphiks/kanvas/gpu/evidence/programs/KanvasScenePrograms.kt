@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.evidence.programs
 
 import org.graphiks.kanvas.paint.MaskFilter
+import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Shader
@@ -128,6 +129,46 @@ object KanvasScenePrograms {
         drawRect(RectF32.ofLTRB(4f, 8f, 20f, 40f), Paint.fill(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)))
         restore()
         drawRect(RectF32.ofLTRB(44f, 8f, 56f, 20f), Paint.fill(ColorARGB.White))
+    })
+
+    /** One integer-bounded RGBA8 saveLayer with two opaque children and a single SrcOver group-opacity restore. */
+    fun boundedSaveLayerSrcOverOpacity() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawRect(RectF32.ofLTRB(0f, 0f, 64f, 64f), Paint.fill(BACKGROUND).copy(antiAlias = false))
+        saveLayer(
+            RectF32.ofLTRB(8f, 8f, 56f, 56f),
+            Paint(
+                color = ColorARGB.fromRGBA(1f, 1f, 1f, 128f / 255f),
+                antiAlias = false,
+                blendMode = BlendMode.SRC_OVER,
+            ),
+        )
+        drawRect(
+            RectF32.ofLTRB(12f, 12f, 44f, 42f),
+            Paint.fill(ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)).copy(antiAlias = false),
+        )
+        drawRect(
+            RectF32.ofLTRB(24f, 22f, 52f, 54f),
+            Paint.fill(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)).copy(antiAlias = false),
+        )
+        restore()
+    })
+
+    /** Refuses a bounded layer restore that would require a destination-dependent blend route. */
+    fun boundedSaveLayerRestoreBlendRefusal() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawRect(RectF32.ofLTRB(0f, 0f, 64f, 64f), Paint.fill(BACKGROUND).copy(antiAlias = false))
+        saveLayer(
+            RectF32.ofLTRB(8f, 8f, 56f, 56f),
+            Paint(
+                color = ColorARGB.fromRGBA(1f, 1f, 1f, 128f / 255f),
+                antiAlias = false,
+                blendMode = BlendMode.MULTIPLY,
+            ),
+        )
+        drawRect(
+            RectF32.ofLTRB(12f, 12f, 44f, 42f),
+            Paint.fill(ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)).copy(antiAlias = false),
+        )
+        restore()
     })
 
     fun clipRRectSolid() = KanvasSurfaceProgram(ROUTE_ID, record = {

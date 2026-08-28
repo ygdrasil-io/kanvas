@@ -499,6 +499,47 @@ class GPUSaveLayerCompositeRegressionTest {
     }
 
     @Test
+    fun `bounded saveLayer applies opacity once after opaque children isolate with SrcOver`() {
+        requireWebGpu()
+
+        val surface = Surface(width = 8, height = 8)
+        surface.canvas {
+            drawRect(RectF32(0f, 0f, 8f, 8f), Paint(color = checkerGray.toColor(), antiAlias = false))
+            saveLayer(
+                RectF32(1f, 1f, 7f, 7f),
+                Paint(color = translucentRed.toColor(), antiAlias = false, blendMode = BlendMode.SRC_OVER),
+            )
+            drawRect(RectF32(2f, 2f, 6f, 5f), Paint(color = ColorARGB.Blue, antiAlias = false))
+            drawRect(RectF32(4f, 3f, 7f, 6f), Paint(color = green.toColor(), antiAlias = false))
+            restore()
+        }
+
+        val result = surface.render()
+
+        assertPixelNear(result.pixels, x = 3, y = 3, expected = sourceOverSrgb(translucentBlue, checkerGray), tolerance = 2)
+        assertPixelNear(result.pixels, x = 5, y = 4, expected = sourceOverSrgb(translucentGreen, checkerGray), tolerance = 2)
+        assertEquals(0, result.diagnostics.fatalCount)
+    }
+
+    @Test
+    fun `bounded saveLayer refuses non SrcOver restore before drawing`() {
+        requireWebGpu()
+
+        val surface = Surface(width = 8, height = 8)
+        surface.canvas {
+            drawRect(RectF32(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
+            saveLayer(
+                RectF32(2f, 2f, 6f, 6f),
+                Paint(color = translucentRed.toColor(), antiAlias = false, blendMode = BlendMode.MULTIPLY),
+            )
+            drawRect(RectF32(2f, 2f, 6f, 6f), Paint(color = translucentBlue.toColor(), antiAlias = false))
+            restore()
+        }
+
+        assertFatalCode({ surface.render() }, "unsupported.layer.restore_blend")
+    }
+
+    @Test
     fun `bounded saveLayer restores SRC without a destination read`() {
         requireWebGpu()
 
@@ -800,6 +841,7 @@ class GPUSaveLayerCompositeRegressionTest {
         val green = Rgba(red = 0, green = 255, blue = 0, alpha = 255)
         val translucentRed = Rgba(red = 255, green = 0, blue = 0, alpha = 128)
         val translucentBlue = Rgba(red = 0, green = 0, blue = 255, alpha = 128)
+        val translucentGreen = Rgba(red = 0, green = 255, blue = 0, alpha = 128)
         val translucentBackground = Rgba(red = 210, green = 184, blue = 135, alpha = 200)
     }
 }

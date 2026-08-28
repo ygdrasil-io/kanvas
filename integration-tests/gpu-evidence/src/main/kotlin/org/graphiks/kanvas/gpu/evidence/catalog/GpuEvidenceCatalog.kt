@@ -5,6 +5,7 @@ import org.graphiks.kanvas.gpu.evidence.oracle.ReferenceRaster
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbSeparableMaskBlurCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbOracleMath
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbSrcOverCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbSaveLayerSrcOverOpacityCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbGradientCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbLinearGradientStrokeBandsCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRoundCapStrokeCpuOracle
@@ -30,6 +31,7 @@ object GpuEvidenceCatalog {
         translucentCardOverlap(),
         scissorOverlay(),
         canvasStateRestoreToCount(),
+        boundedSaveLayerSrcOverOpacity(),
         strokeRectOutline(),
         roundCapStroke(),
         linearGradientLanes(),
@@ -117,6 +119,7 @@ object GpuEvidenceCatalog {
         reflectedPathTopologyRefusal(),
         unregisteredRuntimeEffectRefusal(),
         aggregateMemoryBudgetRefusal(),
+        boundedSaveLayerRestoreBlendRefusal(),
     )
     val cases: List<EvidenceCase> = renderCases + refusalCases
     val catalog = EvidenceSceneCatalog(cases.map(EvidenceCase::descriptor))
@@ -190,6 +193,24 @@ object GpuEvidenceCatalog {
         }.rgba() },
     )
 
+    private fun boundedSaveLayerSrcOverOpacity() = EvidenceCase(
+        descriptor = EvidenceSceneDescriptor(
+            EvidenceSceneId("bounded-save-layer-src-over-opacity"),
+            "Bounded saveLayer SrcOver opacity",
+            "Public Kanvas Surface one-layer RGBA8 isolation with two opaque children and a 128/255 SrcOver group-opacity restore.",
+            64,
+            64,
+            1L,
+            setOf("save-layer", "src-over", "group-opacity", "solid-rect", "kanvas-surface"),
+            EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-save-layer-src-over-opacity", 2),
+            ComparisonPolicy(2, 100.0, 1, "Independent linear-premultiplied CPU layer oracle; two LSBs cover bounded RGBA8 offscreen and composite quantization."),
+            emptySet(),
+        ),
+        program = KanvasScenePrograms.boundedSaveLayerSrcOverOpacity(),
+        oracle = SurfaceSrgbSaveLayerSrcOverOpacityCpuOracle(),
+    )
+
     private fun basicPrimitivesPoints() = EvidenceCase(
         descriptor = EvidenceSceneDescriptor(
             EvidenceSceneId("basic-primitives-points"), "Basic point primitives", "Public Surface POINTS lowering with bounded opaque square footprints and an off-target point.",
@@ -240,6 +261,24 @@ object GpuEvidenceCatalog {
             EvidenceExpectation.ShouldRefuse("unsupported.core_primitive.geometry.invalid"), OraclePolicy.StableRefusal, null, emptySet(),
         ),
         program = KanvasScenePrograms.basicPrimitivesEmptyRectRefusal(),
+        oracle = null,
+    )
+
+    private fun boundedSaveLayerRestoreBlendRefusal() = EvidenceCase(
+        descriptor = EvidenceSceneDescriptor(
+            EvidenceSceneId("bounded-save-layer-restore-blend-refusal"),
+            "Bounded saveLayer restore blend refusal",
+            "Public Kanvas Surface refuses a finite single saveLayer with MULTIPLY restore before child encoding or GPU submission.",
+            64,
+            64,
+            1L,
+            setOf("save-layer", "restore-blend", "refusal", "kanvas-surface"),
+            EvidenceExpectation.ShouldRefuse("unsupported.layer.restore_blend"),
+            OraclePolicy.StableRefusal,
+            null,
+            emptySet(),
+        ),
+        program = KanvasScenePrograms.boundedSaveLayerRestoreBlendRefusal(),
         oracle = null,
     )
 
