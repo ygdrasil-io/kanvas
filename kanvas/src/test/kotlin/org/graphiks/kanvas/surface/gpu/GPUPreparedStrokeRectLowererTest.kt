@@ -243,7 +243,7 @@ class GPUPreparedStrokeRectLowererTest {
                     org.graphiks.kanvas.paint.GradientStop(1f, ColorARGB.Blue),
                 )), antiAlias = false,
             )), GPUDrawCommandID(0), 0, GPUFrameProvenance.None, target(), RenderConfig.DEFAULT,
-            capabilities(withUniformScaleTwoStopStrokeSweepGradient = true),
+            capabilities(withTwoStopStrokeSweepGradient = true),
         ))
         assertEquals(4, lowered.commands.size)
         assertTrue(lowered.commands.all { assertIs<NormalizedDrawCommand.FillRect>(it.normalized).material is org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor.SweepGradient })
@@ -679,7 +679,6 @@ class GPUPreparedStrokeRectLowererTest {
         assertEquals("uniform-scale", ready.geometryPlan.path?.transformClass)
         assertEquals("uniform-scale", ready.geometryPlan.stroke?.transformClass)
         val first = assertIs<NormalizedDrawCommand.FillRect>(ready.commands.first().normalized)
-        assertEquals(GPUCommandSourceKind.AnalyticStrokeRectUniformScaleSweepTwoStopBand, first.source.kind)
         assertEquals(GPUCommandSourceKind.AnalyticStrokeRectUniformScaleBand, first.source.kind)
         val material = assertIs<org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor.LinearGradient>(first.material)
         assertEquals(18f, material.startX); assertEquals(36f, material.startY)
