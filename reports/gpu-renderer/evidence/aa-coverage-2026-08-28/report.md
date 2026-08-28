@@ -4,7 +4,9 @@
 
 `fractional-aa-rect-overlap` atteste la route publique `Kanvas Surface` pour
 deux rectangles solides opaques à bords demi-pixel, composés dans l'ordre sous
-un clip rect entier. La route est `kanvas.surface.render` et effectue une seule
+un clip rect entier qui coupe réellement le bord droit du second rectangle
+(pixel `(45,30)` bleu, `(46,30)` préservé au fond). La route est
+`kanvas.surface.render` et effectue une seule
 soumission GPU (`render.draw=3`, `render.pipelineBind=2`).
 
 L'oracle CPU est indépendant de WGSL : il calcule l'aire d'intersection de

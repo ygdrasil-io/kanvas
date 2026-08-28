@@ -224,7 +224,7 @@ object GpuEvidenceCatalog {
                     intArrayOf(31, 115, 209, 255),
                 ),
             ),
-            clip = SurfaceSrgbFractionalRectCoverageCpuOracle.DeviceRect(8f, 8f, 56f, 56f),
+            clip = SurfaceSrgbFractionalRectCoverageCpuOracle.DeviceRect(8f, 8f, 46f, 56f),
         ),
     )
 
