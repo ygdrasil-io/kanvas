@@ -118,6 +118,7 @@ object GpuEvidenceCatalog {
         linearGradientThreeStops(),
         basicPrimitivesEmptyRectRefusal(),
         perspectiveTransformRefusal(),
+        mirrorLinearGradientFillRectRefusal(),
         reflectedPathTopologyRefusal(),
         unregisteredRuntimeEffectRefusal(),
         aggregateMemoryBudgetRefusal(),
@@ -612,6 +613,19 @@ object GpuEvidenceCatalog {
             EvidenceExpectation.ShouldRefuse("unsupported.transform.perspective"), OraclePolicy.StableRefusal, null, emptySet(),
         ),
         KanvasScenePrograms.perspectiveTransformRefusal(),
+        null,
+    )
+
+    /** MIRROR is deliberately not a partial implementation of the bounded REPEAT route. */
+    private fun mirrorLinearGradientFillRectRefusal() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("mirror-linear-gradient-fillrect-refusal"),
+            "Mirror linear-gradient FillRect refusal",
+            "Public Kanvas Surface refuses a MIRROR linear gradient before native frame submission; only bounded REPEAT is supported on this route.",
+            64, 64, 1L, setOf("linear-gradient", "mirror", "fill-rect", "kanvas-surface", "refusal"),
+            EvidenceExpectation.ShouldRefuse("unsupported.material.gradient_tile_mode_unsupported"), OraclePolicy.StableRefusal, null, emptySet(),
+        ),
+        KanvasScenePrograms.mirrorLinearGradientFillRectRefusal(),
         null,
     )
 
