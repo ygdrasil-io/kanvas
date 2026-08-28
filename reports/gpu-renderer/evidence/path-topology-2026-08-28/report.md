@@ -13,9 +13,12 @@ La route publique `kanvas.surface.render` rend, sur une cible WebGPU offscreen
 | `inverse-even-odd-path-hole` | `InverseEvenOdd` | 0 pixel différent, 100 % |
 | `even-odd-bow-tie-path` | Une auto-intersection bornée, `EvenOdd` | 0 pixel différent, 100 % |
 
-Chaque scène promue contient une capture GPU native, un oracle CPU indépendant
+Chaque scène rendue contient une capture GPU native, un oracle CPU indépendant
 au centre des pixels, un diff, les statistiques et les diagnostics de route.
-La provenance des six bundles est le commit `5b57fd11d897a932130323c73749d142979bb9b9`.
+Le bundle `reflected-path-topology-refusal` est un cas de refus : il contient
+les diagnostics, les statistiques de route et la preuve `submissionDelta=0`,
+sans capture de rendu. La provenance des six bundles est le commit
+`5b57fd11d897a932130323c73749d142979bb9b9`.
 
 ## Refus explicite
 
