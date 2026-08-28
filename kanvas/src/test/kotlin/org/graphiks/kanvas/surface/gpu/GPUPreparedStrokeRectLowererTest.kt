@@ -790,6 +790,39 @@ class GPUPreparedStrokeRectLowererTest {
     }
 
     @Test
+    fun `uniform integer scaled three stop clamp sweep gradient stroke rebases center and device bands`() {
+        val shader = Shader.SweepGradient(
+            Point2F32(18f, 14f), 0f, 360f, listOf(
+                org.graphiks.kanvas.paint.GradientStop(0f, ColorARGB.Red),
+                org.graphiks.kanvas.paint.GradientStop(.5f, ColorARGB.Green),
+                org.graphiks.kanvas.paint.GradientStop(1f, ColorARGB.Blue),
+            ), org.graphiks.kanvas.paint.TileMode.CLAMP,
+        )
+        val operation = strokeRect(
+            bounds = RectF32.ofLTRB(8f, 8f, 28f, 24f),
+            paint = Paint.stroke(ColorARGB.Transparent, 2f).copy(shader = shader, antiAlias = false),
+            transform = Matrix3x3F32(sx = 2f, sy = 2f, tx = 2f, ty = 4f),
+        )
+        val absent = assertIs<GPUPreparedStrokeRectLowering.Refused>(GPUPreparedStrokeRectLowerer.lower(
+            operation, GPUDrawCommandID(0), 0, GPUFrameProvenance.None, target(), RenderConfig.DEFAULT,
+            capabilities(withThreeStopStrokeSweepGradient = true),
+        ))
+        assertEquals("unsupported.stroke.rect_sweep_gradient_three_stop_uniform_scale_capability", absent.code)
+        val ready = assertIs<GPUPreparedStrokeRectLowering.Ready>(GPUPreparedStrokeRectLowerer.lower(
+            operation, GPUDrawCommandID(0), 0, GPUFrameProvenance.None, target(), RenderConfig.DEFAULT,
+            capabilities(withUniformScaleThreeStopStrokeSweepGradient = true),
+        ))
+        assertEquals(4, ready.commands.size)
+        assertEquals("uniform-scale", ready.geometryPlan.path?.transformClass)
+        val first = assertIs<NormalizedDrawCommand.FillRect>(ready.commands.first().normalized)
+        assertEquals(GPUCommandSourceKind.AnalyticStrokeRectUniformScaleSweepThreeStopBand, first.source.kind)
+        val material = assertIs<org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor.SweepGradient>(first.material)
+        assertEquals(38f, material.centerX)
+        assertEquals(32f, material.centerY)
+        assertEquals(listOf(0f, .5f, 1f), material.allStopPositions?.toList())
+    }
+
+    @Test
     fun `uniform integer scaled two stop clamp radial gradient stroke rebases center radius and device bands`() {
         val shader = Shader.RadialGradient(
             center = Point2F32(18f, 14f),
@@ -1195,6 +1228,7 @@ class GPUPreparedStrokeRectLowererTest {
         withUniformScaleTwoStopStrokeGradient: Boolean = false,
         withUniformScaleThreeStopStrokeGradient: Boolean = false,
         withUniformScaleTwoStopStrokeSweepGradient: Boolean = false,
+        withUniformScaleThreeStopStrokeSweepGradient: Boolean = false,
         withUniformScaleTwoStopStrokeRadialGradient: Boolean = false,
         withUniformScaleThreeStopStrokeRadialGradient: Boolean = false,
         withTwoStopStrokeRadialGradient: Boolean = false,
@@ -1249,6 +1283,10 @@ class GPUPreparedStrokeRectLowererTest {
             if (withUniformScaleTwoStopStrokeSweepGradient) add(GPUCapabilityFact(
                 GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE,
                 "test", "supported", true, "test:stroke-rect-sweep-gradient-two-stop-uniform-scale",
+            ))
+            if (withUniformScaleThreeStopStrokeSweepGradient) add(GPUCapabilityFact(
+                GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_THREE_STOP_UNIFORM_SCALE_NATIVE,
+                "test", "supported", true, "test:stroke-rect-sweep-gradient-three-stop-uniform-scale",
             ))
             if (withUniformScaleTwoStopStrokeRadialGradient) add(GPUCapabilityFact(
                 GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE,
