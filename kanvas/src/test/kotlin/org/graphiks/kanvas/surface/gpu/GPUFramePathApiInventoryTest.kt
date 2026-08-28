@@ -2988,6 +2988,46 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `single diagonal square miter stroke with uniform scale and translation lowers to native stencil cover`() {
+        val path = Path().apply {
+            moveTo(4.125f, 4.125f)
+            lineTo(12.125f, 8.625f)
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    path,
+                    Paint.stroke(ColorARGB.Red, 2f).copy(
+                        antiAlias = false,
+                        strokeCap = StrokeCap.SQUARE,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.translation(2f, 3f) * Matrix3x3F32.scaling(2f, 2f),
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER),
+        )
+
+        assertEquals(null, inventory.preparedRefusal)
+        assertEquals(
+            "native.path_stroke.stencil_cover",
+            inventory.recording.analysis.records.single().routeDecisionLabel,
+        )
+        val semantic = assertIs<GPUCorePrimitiveSemanticGatherResult.Gathered>(
+            GPUFramePathApiInventory.gatherCorePrimitiveSemantics(
+                inventory,
+                GPUPixelBounds(0, 0, 32, 32),
+            ),
+        ).semantics.values.single() as GPUDrawSemanticPayload.CorePrimitive
+        val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
+        assertEquals(GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan, geometry.geometryMode)
+        assertEquals(GPUPixelBounds(7, 8, 29, 23), geometry.coverBounds)
+    }
+
+    @Test
     fun `single segment round joins and widths outside the fixed budget refuse`() {
         val path = Path().apply {
             moveTo(4f, 8f)

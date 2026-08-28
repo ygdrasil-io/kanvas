@@ -331,6 +331,58 @@ class GPUFramePathApiInventoryNativeSmokeTest {
     }
 
     @Test
+    fun `single diagonal square miter stroke with uniform scale and translation renders natively`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        val capabilities = requireNotNull(backend.capabilities)
+        val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(RenderConfig.DEFAULT.mapPreparedGpuColorConfig())
+        val targetBounds = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, 32, 32)
+        val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.stroke-diagonal-square-scaled-translated")
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    // Device endpoints are (10.25,11.25) -> (26.25,20.25); fractional values avoid cap ties.
+                    Path().apply { moveTo(4.125f, 4.125f); lineTo(12.125f, 8.625f) },
+                    Paint.stroke(ColorARGB.Red, 2f).copy(
+                        antiAlias = false,
+                        strokeCap = StrokeCap.SQUARE,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.translation(2f, 3f) * Matrix3x3F32.scaling(2f, 2f),
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+            deviceGeneration = backend.deviceGeneration,
+        )
+        val preparation = GPUFramePathApiInventory.prepareNativeTaskList(inventory, capabilities, targetBounds, readbackId)
+        val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            preparation,
+            (preparation as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}"
+            },
+        ).taskList
+        val session = backend.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(32, 32, colorMapping.physicalFormat, colorMapping.interpretation),
+        )
+        try {
+            val completed = session.renderFrame(prepared, GPUSceneFrameOutputRequest.ReadbackRgba(readbackId))
+                .completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+            assertEquals(GPUFrameStructuralOutcome.Succeeded, completed.outcome)
+            val gpu = assertIs<GPUSceneFrameOutput.ReadbackRgba>(completed.output).bytes
+            assertContentEquals(deterministicScaledTranslatedDiagonalSquareMiterStrokeOracle(), gpu)
+            assertEquals(1L, session.nativeCounters().submits)
+            assertEquals(1L, session.nativeCounters().readbackCopies)
+        } finally {
+            session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
     fun `single vertical butt miter stroke renders natively`() {
         val backend = GPUBackendRuntimeNativeFactory.createOrNull()
         assumeTrue(backend != null)
@@ -983,6 +1035,45 @@ class GPUFramePathApiInventoryNativeSmokeTest {
                     if (projection < 0f || projection > 1f) continue
                     val qx = ax + projection * dx
                     val qy = ay + projection * dy
+                    val distanceX = px - qx
+                    val distanceY = py - qy
+                    if (distanceX * distanceX + distanceY * distanceY > halfWidthSquared) continue
+                    val offset = (y * 32 + x) * 4
+                    rgba[offset] = 0xff.toByte()
+                    rgba[offset + 3] = 0xff.toByte()
+                }
+            }
+        }
+
+    /** Independent square-cap oracle in device space: extend by half width along the tangent. */
+    private fun deterministicScaledTranslatedDiagonalSquareMiterStrokeOracle(): ByteArray =
+        ByteArray(32 * 32 * 4).also { rgba ->
+            val ax = 10.25f
+            val ay = 11.25f
+            val bx = 26.25f
+            val by = 20.25f
+            val dx = bx - ax
+            val dy = by - ay
+            val length = kotlin.math.sqrt(dx * dx + dy * dy)
+            val tangentX = dx / length
+            val tangentY = dy / length
+            val extension = 2f
+            val startX = ax - tangentX * extension
+            val startY = ay - tangentY * extension
+            val endX = bx + tangentX * extension
+            val endY = by + tangentY * extension
+            val extendedDx = endX - startX
+            val extendedDy = endY - startY
+            val lengthSquared = extendedDx * extendedDx + extendedDy * extendedDy
+            val halfWidthSquared = extension * extension
+            for (y in 0 until 32) {
+                for (x in 0 until 32) {
+                    val px = x + 0.5f
+                    val py = y + 0.5f
+                    val projection = ((px - startX) * extendedDx + (py - startY) * extendedDy) / lengthSquared
+                    if (projection < 0f || projection > 1f) continue
+                    val qx = startX + projection * extendedDx
+                    val qy = startY + projection * extendedDy
                     val distanceX = px - qx
                     val distanceY = py - qy
                     if (distanceX * distanceX + distanceY * distanceY > halfWidthSquared) continue
