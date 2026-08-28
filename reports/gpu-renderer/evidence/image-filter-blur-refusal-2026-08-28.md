@@ -19,7 +19,8 @@ extent (at most 2048).  `GPUImageFilterDispatch.renderImageCommand` also
 contains a real WebGPU encoder for its source, horizontal, vertical, and scene
 composite passes.
 
-Those pieces do not make a public route: `renderImageCommand` has no call site;
+Those pieces do not make a public route: `renderImageCommand` has no production
+caller; its only callers are the tests in `GPUImageFilterDispatchTest`;
 `GPUBackendRenderRecorder.dispatchImageRect` refuses a blur plan with
 `unsupported.image-filter.blur.route-bypass`; and public Surface reaches
 `GPUPreparedDrawImageLowerer`, which rejects `Paint.imageFilter` at native

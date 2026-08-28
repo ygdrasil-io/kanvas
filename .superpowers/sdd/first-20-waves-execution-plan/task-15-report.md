@@ -17,7 +17,8 @@ bundle preserve that public boundary.
   ColorMatrix path is a stable `unsupported.image-filter.image.kind` refusal.
 - `GPUImageFilterDispatch.renderImageCommand` has a real local WebGPU encoder
   for source, horizontal blur, vertical blur, and scene composite passes.
-- It has no call site.  The legacy image dispatcher instead emits
+- It has no production caller; its only callers are the tests in
+  `GPUImageFilterDispatchTest`. The legacy image dispatcher instead emits
   `unsupported.image-filter.blur.route-bypass`; the public prepared Surface
   lowerer rejects `Paint.imageFilter` before native resources are created.
 - The existing `separable-blur-rect` evidence is mask-filter blur, not image
