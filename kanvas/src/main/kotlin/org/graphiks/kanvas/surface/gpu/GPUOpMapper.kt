@@ -616,7 +616,11 @@ internal object GPUOpMapper {
                     lowered.geometryRefusal
                         ?.takeIf { refusal ->
                             refusal.code == "geometry.path.fan_budget_exceeded" ||
-                                refusal.code == "geometry.path.memory_budget_exceeded"
+                                refusal.code == "geometry.path.memory_budget_exceeded" ||
+                                refusal.code == "geometry.path.fan_budget_config_exceeded" ||
+                                refusal.code == "geometry.path.memory_budget_config_exceeded" ||
+                                refusal.code == "geometry.path.fan_budget_config_out_of_int_range" ||
+                                refusal.code == "geometry.path.memory_budget_config_out_of_int_range"
                         }
                         ?.let { refusal ->
                         return GPUOpMapping(
@@ -888,10 +892,15 @@ internal object GPUOpMapper {
             }
         } catch (failure: IllegalStateException) {
             if (!failure.isPathBudgetFailure() || !operation.isCorePathOperation()) throw failure
-            val budgetCode = when ((failure as? PathTessellationBudgetExceeded)?.code) {
+            val tessellationBudget = failure as? PathTessellationBudgetExceeded
+            val budgetCode = when (tessellationBudget?.code) {
                 "geometry.path.fan_budget_exceeded",
                 "geometry.path.memory_budget_exceeded",
-                -> (failure as PathTessellationBudgetExceeded).code
+                "geometry.path.fan_budget_config_exceeded",
+                "geometry.path.memory_budget_config_exceeded",
+                "geometry.path.fan_budget_config_out_of_int_range",
+                "geometry.path.memory_budget_config_out_of_int_range",
+                -> tessellationBudget.code
                 else -> "unsupported.core_primitive.path_vertex_budget"
             }
             loweringRefusal = GPUCorePrimitiveGeometryRefusal(
@@ -1299,6 +1308,12 @@ private fun DisplayOp.DrawPath.toPathCommand(
     config: RenderConfig,
     sourceAuthority: GPUPathSourceAuthority = GPUPathSourceAuthority.Unknown,
 ): NormalizedDrawCommand.FillPath {
+    config.pathEdgeFanBudgetRefusalCodeOrNull()?.let { code ->
+        throw PathTessellationBudgetExceeded(
+            code = code,
+            message = "Public Surface path edge-fan configuration is outside the static payload contract",
+        )
+    }
     val tessellator = PathTessellator(
         tolerance = config.curveTolerance,
         maxVertices = config.maxPathVertices.toInt(),

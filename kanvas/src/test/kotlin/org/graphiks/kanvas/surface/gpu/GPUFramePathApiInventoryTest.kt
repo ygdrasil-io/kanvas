@@ -2090,6 +2090,32 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `public path rejects static and UInt-overflow fan memory configuration before submission`() {
+        val cases = listOf(
+            RenderConfig(maxPathVertices = 16u, maxPathFanTriangles = 1_025u) to
+                "geometry.path.fan_budget_config_exceeded",
+            RenderConfig(maxPathVertices = 16u, maxPathGeometryBytes = 36_865u) to
+                "geometry.path.memory_budget_config_exceeded",
+            RenderConfig(maxPathVertices = 16u, maxPathFanTriangles = UInt.MAX_VALUE) to
+                "geometry.path.fan_budget_config_out_of_int_range",
+            RenderConfig(maxPathVertices = 16u, maxPathGeometryBytes = UInt.MAX_VALUE) to
+                "geometry.path.memory_budget_config_out_of_int_range",
+        )
+
+        cases.forEach { (config, expectedCode) ->
+            val inventory = pathBudgetInventory(config)
+
+            assertEquals(expectedCode, assertNotNull(inventory.preparedRefusal).code)
+            assertTrue(
+                inventory.recording.taskList.tasks
+                    .filterIsInstance<GPUTask.Render>()
+                    .flatMap { it.drawPackets }
+                    .isEmpty(),
+            )
+        }
+    }
+
+    @Test
     fun `stencil edge fan over 256 source vertices preserves its budget diagnostic`() {
         val path = Path().apply {
             moveTo(1f, 1f)

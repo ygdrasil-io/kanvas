@@ -39,6 +39,10 @@ buffers are allocated and produce their respective stable diagnostics. This is
 large enough for the four 64×64 curve proofs while keeping the admission
 surface finite and auditable.
 
+Configurations above either static payload capacity, or unsigned values that
+cannot be represented by the backend `Int` contract, are refused during public
+`Surface` mapping before any draw packet is recorded.
+
 ## Deliberate boundary
 
 The public `Path` API currently has quadratic, cubic, oval and circle construction, but no conic verb. Adding one would also require an approved picture serialization and compatibility change. This wave therefore does not claim public conic rendering.
