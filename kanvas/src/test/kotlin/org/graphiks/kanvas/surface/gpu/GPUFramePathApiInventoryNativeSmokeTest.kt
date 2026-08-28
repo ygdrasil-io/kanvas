@@ -381,6 +381,77 @@ class GPUFramePathApiInventoryNativeSmokeTest {
     }
 
     @Test
+    fun `single diagonal butt miter stroke renders natively`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        val capabilities = requireNotNull(backend.capabilities)
+        val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(RenderConfig.DEFAULT.mapPreparedGpuColorConfig())
+        val targetBounds = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, 32, 32)
+        val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.stroke-diagonal")
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    // Fractional endpoints avoid rasterizer tie cases at the butt cap.
+                    Path().apply { moveTo(5.25f, 8.25f); lineTo(21.25f, 20.25f) },
+                    Paint.stroke(ColorARGB.Red, 4f).copy(
+                        antiAlias = false,
+                        strokeCap = StrokeCap.BUTT,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+            deviceGeneration = backend.deviceGeneration,
+        )
+        val preparation = GPUFramePathApiInventory.prepareNativeTaskList(inventory, capabilities, targetBounds, readbackId)
+        val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            preparation,
+            (preparation as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}"
+            },
+        ).taskList
+        val session = backend.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(32, 32, colorMapping.physicalFormat, colorMapping.interpretation),
+        )
+        try {
+            val completed = session.renderFrame(prepared, GPUSceneFrameOutputRequest.ReadbackRgba(readbackId))
+                .completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+            assertEquals(GPUFrameStructuralOutcome.Succeeded, completed.outcome)
+            val gpu = assertIs<GPUSceneFrameOutput.ReadbackRgba>(completed.output).bytes
+            val expected = deterministicDiagonalButtMiterStrokeOracle()
+            if (!expected.contentEquals(gpu)) {
+                val expectedPixels = buildSet {
+                    for (y in 0 until 32) for (x in 0 until 32) {
+                        val offset = (y * 32 + x) * 4
+                        if (expected[offset + 3].toInt() != 0) add("$x,$y")
+                    }
+                }
+                val actualPixels = buildSet {
+                    for (y in 0 until 32) for (x in 0 until 32) {
+                        val offset = (y * 32 + x) * 4
+                        if (gpu[offset + 3].toInt() != 0) add("$x,$y")
+                    }
+                }
+                error(
+                    "diagonal stroke mismatch missing=${expectedPixels - actualPixels} " +
+                        "extra=${actualPixels - expectedPixels}",
+                )
+            }
+            assertContentEquals(expected, gpu)
+            assertEquals(1L, session.nativeCounters().submits)
+            assertEquals(1L, session.nativeCounters().readbackCopies)
+        } finally {
+            session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
     fun `single segment butt miter stroke matches the deterministic CPU pixel oracle natively`() {
         val backend = GPUBackendRuntimeNativeFactory.createOrNull()
         assumeTrue(backend != null)
@@ -802,6 +873,33 @@ class GPUFramePathApiInventoryNativeSmokeTest {
     private fun deterministicSquareButtMiterStrokeOracle(): ByteArray = ByteArray(32 * 32 * 4).also { rgba ->
         for (y in 14 until 18) {
             for (x in 6 until 26) {
+                val offset = (y * 32 + x) * 4
+                rgba[offset] = 0xff.toByte()
+                rgba[offset + 3] = 0xff.toByte()
+            }
+        }
+    }
+
+    private fun deterministicDiagonalButtMiterStrokeOracle(): ByteArray = ByteArray(32 * 32 * 4).also { rgba ->
+        val ax = 5.25f
+        val ay = 8.25f
+        val bx = 21.25f
+        val by = 20.25f
+        val dx = bx - ax
+        val dy = by - ay
+        val lengthSquared = dx * dx + dy * dy
+        val halfWidthSquared = 2f * 2f
+        for (y in 0 until 32) {
+            for (x in 0 until 32) {
+                val px = x + 0.5f
+                val py = y + 0.5f
+                val projection = ((px - ax) * dx + (py - ay) * dy) / lengthSquared
+                if (projection < 0f || projection > 1f) continue
+                val qx = ax + projection * dx
+                val qy = ay + projection * dy
+                val distanceX = px - qx
+                val distanceY = py - qy
+                if (distanceX * distanceX + distanceY * distanceY > halfWidthSquared) continue
                 val offset = (y * 32 + x) * 4
                 rgba[offset] = 0xff.toByte()
                 rgba[offset + 3] = 0xff.toByte()
