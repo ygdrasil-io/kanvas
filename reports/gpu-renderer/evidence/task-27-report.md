@@ -11,7 +11,7 @@ interpole les trois stops en linéaire prémultiplié après décodage sRGB, pui
 stocke le résultat en RGBA8 sRGB.
 
 La preuve `sweep-gradient-three-stop-stroke-rect`, générée depuis le commit
-de contrat `1c98bacce83e3ea4e02fb1be711b627b827cecb7`, est promue : une
+de contrat `b9269433b10459eb3a730324c5290e65739f5364`, est promue : une
 soumission GPU, quatre draws, un bind de pipeline, diagnostics vides et
 comparaison pixel-validée à 100 % (0 pixel divergent, delta maximal 0,
 tolérance 1 LSB). Les artefacts sont sous
@@ -26,8 +26,8 @@ Commandes exécutées :
 
 ```text
 ./gradlew --no-daemon :integration-tests:gpu-evidence:test --tests org.graphiks.kanvas.gpu.evidence.catalog.GpuEvidenceCatalogOracleTest --tests org.graphiks.kanvas.gpu.evidence.catalog.GpuEvidenceCatalogTest
-./gradlew --no-daemon :integration-tests:gpu-evidence:generateGpuEvidence -Pscene=sweep-gradient-three-stop-stroke-rect -PsourceCommit=1c98bacce83e3ea4e02fb1be711b627b827cecb7
-./gradlew --no-daemon :integration-tests:gpu-evidence:verifyGeneratedGpuEvidence -Pscene=sweep-gradient-three-stop-stroke-rect -PsourceCommit=1c98bacce83e3ea4e02fb1be711b627b827cecb7
-./gradlew --no-daemon :integration-tests:gpu-evidence:promoteGpuEvidence -Pscene=sweep-gradient-three-stop-stroke-rect -PsourceCommit=1c98bacce83e3ea4e02fb1be711b627b827cecb7 -PpromotionReviewer=codex -PpromotionReason='W41 proves bounded three-stop clamp sweep rectangle stroke rendering through the public sRGB Surface route.'
+./gradlew --no-daemon :integration-tests:gpu-evidence:generateGpuEvidence -Pscene=sweep-gradient-three-stop-stroke-rect -PsourceCommit=b9269433b10459eb3a730324c5290e65739f5364
+./gradlew --no-daemon :integration-tests:gpu-evidence:verifyGeneratedGpuEvidence -Pscene=sweep-gradient-three-stop-stroke-rect -PsourceCommit=b9269433b10459eb3a730324c5290e65739f5364
+./gradlew --no-daemon :integration-tests:gpu-evidence:promoteGpuEvidence -Pscene=sweep-gradient-three-stop-stroke-rect -PsourceCommit=b9269433b10459eb3a730324c5290e65739f5364 -PpromotionReviewer=codex -PpromotionReason='W41 proves bounded three-stop clamp sweep rectangle stroke rendering through the public sRGB Surface route.'
 ./gradlew --no-daemon :integration-tests:gpu-evidence:verifyPromotedGpuEvidence
 ```
