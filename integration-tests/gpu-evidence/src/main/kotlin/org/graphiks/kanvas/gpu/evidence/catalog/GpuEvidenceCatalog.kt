@@ -39,6 +39,7 @@ object GpuEvidenceCatalog {
         linearGradientLanes(),
         linearGradientThreeStops(),
         radialSwatch(),
+        radialGradientThreeStops(),
         sweepDisk(),
         sweepGradientPartialAngle(),
         affineSolidRect(),
@@ -482,6 +483,32 @@ object GpuEvidenceCatalog {
             ),
             program = KanvasScenePrograms.radialSwatch(),
             oracle = SurfaceSrgbGradientCpuOracle.radial(
+                bounds,
+                SurfaceSrgbGradientCpuOracle.Point(32.5f, 32.5f),
+                23.5f,
+                stops,
+            ),
+        )
+    }
+
+    private fun radialGradientThreeStops(): EvidenceCase {
+        val bounds = SurfaceSrgbGradientCpuOracle.Rect(8f, 8f, 56f, 56f)
+        val stops = listOf(
+            SurfaceSrgbGradientCpuOracle.Stop(0f, 255, 232, 72),
+            SurfaceSrgbGradientCpuOracle.Stop(.5f, 64, 208, 144),
+            SurfaceSrgbGradientCpuOracle.Stop(1f, 48, 80, 192),
+        )
+        return EvidenceCase(
+            EvidenceSceneDescriptor(
+                EvidenceSceneId("radial-gradient-three-stops"),
+                "Radial gradient three stops",
+                "Public Kanvas Surface CorePrimitive FillRect renders an identity clamp radial gradient with three ordered opaque stops.",
+                64, 64, 1L, setOf("radial-gradient", "three-stops", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+                OraclePolicy.GeneratedCpu("surface-srgb-gradient-radial-clamp", 2),
+                ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."), emptySet(),
+            ),
+            KanvasScenePrograms.radialGradientThreeStops(),
+            SurfaceSrgbGradientCpuOracle.radial(
                 bounds,
                 SurfaceSrgbGradientCpuOracle.Point(32.5f, 32.5f),
                 23.5f,
