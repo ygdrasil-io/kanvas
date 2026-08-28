@@ -1843,6 +1843,9 @@ class GPUFirstRoutePlanner(
             isBoundedTwoStopSweepGradientStroke() &&
                 !capabilities.hasFact(GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE) ->
                 "unsupported.stroke.rect_sweep_gradient_two_stop_capability"
+            isBoundedThreeStopSweepGradientStroke() &&
+                !capabilities.hasFact(GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_THREE_STOP_NATIVE) ->
+                "unsupported.stroke.rect_sweep_gradient_three_stop_capability"
             transform.type == GPUTransformType.Perspective -> "unsupported.transform.perspective"
             transform.type == GPUTransformType.Singular -> "unsupported.transform.singular"
             transform.isAffineDeterminantNonFinite() -> "unsupported.transform.non_finite"

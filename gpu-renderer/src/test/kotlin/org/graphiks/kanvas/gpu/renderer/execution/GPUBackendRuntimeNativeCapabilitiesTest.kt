@@ -43,6 +43,8 @@ class GPUBackendRuntimeNativeCapabilitiesTest {
                 "core-primitive-gradient-radial-stroke-3stop-native",
             GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE to
                 "core-primitive-gradient-sweep-stroke-2stop-native",
+            GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_THREE_STOP_NATIVE to
+                "core-primitive-gradient-sweep-stroke-3stop-native",
         ).forEach { (name, label) ->
             val fact = assertNotNull(facts[name])
             assertEquals("runtime", fact.source)

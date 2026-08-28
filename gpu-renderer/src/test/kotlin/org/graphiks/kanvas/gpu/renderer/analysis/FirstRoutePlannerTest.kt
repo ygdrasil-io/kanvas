@@ -225,6 +225,30 @@ class FirstRoutePlannerTest {
     }
 
     @Test
+    fun `three stop full sweep gradient uses its dedicated stroke route only for analytic provenance`() {
+        val material = GPUMaterialDescriptor.SweepGradient(
+            32.5f, 32.5f, 0f, 360f, 1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f,
+            allStopPositions = floatArrayOf(0f, .5f, 1f),
+            allStopColors = floatArrayOf(1f,0f,0f,1f,0f,1f,0f,1f,0f,0f,1f,1f),
+        )
+        fun command(kind: GPUCommandSourceKind) = GPUFillRectCommandBuilder.build(
+            GPUDrawCommandID(41), GPURect(6f,14f,58f,18f), GPUTargetFacts(64,64,"rgba8unorm-srgb"), material,
+            source = GPUCommandSource("unit-test", "sweep-three-stop-stroke-band", kind = kind),
+        ).copy(antiAlias = false)
+        val capabilities = firstSliceWithLinearGradientCapabilities().copy(facts = firstSliceWithLinearGradientCapabilities().facts + listOf(
+            GPUCapabilityFact("first_slice.sweep_gradient.native", "unit-test", "supported", true, "sweep"),
+            GPUCapabilityFact(GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_THREE_STOP_NATIVE, "unit-test", "supported", true, "sweep-stroke-three-stop"),
+        ))
+        val planner = GPUFirstRoutePlanner(capabilities)
+        val typed = planner.plan(command(GPUCommandSourceKind.AnalyticStrokeRectBand))
+        assertEquals("native.stroke_rect.sweep_gradient_three_stop", typed.analysisRecord.routeDecisionLabel)
+        assertEquals(listOf(GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_THREE_STOP_NATIVE), assertIs<GPURouteDecision.Native>(typed.routeDecision).route.requirements)
+        assertEquals("native.fill_rect.sweep_gradient", planner.plan(command(GPUCommandSourceKind.PublicFillRect)).analysisRecord.routeDecisionLabel)
+        assertEquals("native.fill_rect.sweep_gradient", planner.plan(command(GPUCommandSourceKind.Generic)).analysisRecord.routeDecisionLabel)
+        assertEquals("unsupported.stroke.rect_sweep_gradient_three_stop_capability", assertIs<GPURouteDecision.Refused>(GPUFirstRoutePlanner(capabilities.copy(facts = capabilities.facts.filterNot { it.name == GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_THREE_STOP_NATIVE })).plan(command(GPUCommandSourceKind.AnalyticStrokeRectBand)).routeDecision).diagnostic.code)
+    }
+
+    @Test
     fun `native FillRect route builder retains its four argument JVM descriptor`() {
         val methods = GPUFirstRouteDecisionBuilder::class.java.methods.filter { method ->
             method.name == "nativeFillRect"
