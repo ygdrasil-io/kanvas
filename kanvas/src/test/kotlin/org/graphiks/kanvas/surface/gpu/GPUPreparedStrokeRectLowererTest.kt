@@ -519,7 +519,7 @@ class GPUPreparedStrokeRectLowererTest {
                     antiAlias = false,
                 ),
                 transform = Matrix3x3F32.translation(2f, 0f),
-            ) to "unsupported.stroke.rect_transform",
+            ) to "unsupported.stroke.rect_linear_gradient_three_stop_translate_capability",
             strokeRect(paint = Paint.stroke(ColorARGB.Transparent, 4f).copy(
                 shader = Shader.WithLocalMatrix(
                     Shader.LinearGradient(Point2F32(8f, 32f), Point2F32(56f, 32f), threeStops),
@@ -617,6 +617,43 @@ class GPUPreparedStrokeRectLowererTest {
         )
         assertEquals(null, solidMapping.preparedRefusal)
         assertEquals(listOf(0, 1, 2, 3), solidMapping.visualCommands.map { it.normalized.commandId.value })
+    }
+
+    @Test
+    fun `integer translated three stop clamp linear gradient stroke needs its capability and preserves stops`() {
+        val shader = Shader.LinearGradient(
+            Point2F32(8f, 32f), Point2F32(56f, 32f),
+            listOf(
+                org.graphiks.kanvas.paint.GradientStop(0f, ColorARGB.Red),
+                org.graphiks.kanvas.paint.GradientStop(.5f, ColorARGB.Green),
+                org.graphiks.kanvas.paint.GradientStop(1f, ColorARGB.Blue),
+            ),
+            org.graphiks.kanvas.paint.TileMode.CLAMP,
+        )
+        val operation = strokeRect(
+            bounds = RectF32.ofLTRB(8f, 16f, 56f, 48f),
+            paint = Paint.stroke(ColorARGB.Transparent, 4f).copy(shader = shader, antiAlias = false),
+            transform = Matrix3x3F32.translation(2f, 3f),
+        )
+        val absent = assertIs<GPUPreparedStrokeRectLowering.Refused>(GPUPreparedStrokeRectLowerer.lower(
+            operation, GPUDrawCommandID(0), 0, GPUFrameProvenance.None, target(), RenderConfig.DEFAULT,
+            capabilities(withThreeStopStrokeGradient = true),
+        ))
+        assertEquals("unsupported.stroke.rect_linear_gradient_three_stop_translate_capability", absent.code)
+        val ready = assertIs<GPUPreparedStrokeRectLowering.Ready>(GPUPreparedStrokeRectLowerer.lower(
+            operation, GPUDrawCommandID(0), 0, GPUFrameProvenance.None, target(), RenderConfig.DEFAULT,
+            capabilities(withTranslatedThreeStopStrokeGradient = true),
+        ))
+        assertEquals(4, ready.commands.size)
+        val material = assertIs<org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor.LinearGradient>(
+            assertIs<NormalizedDrawCommand.FillRect>(ready.commands.first().normalized).material,
+        )
+        assertEquals(GPUCommandSourceKind.AnalyticStrokeRectTranslatedThreeStopBand, assertIs<NormalizedDrawCommand.FillRect>(ready.commands.first().normalized).source.kind)
+        assertEquals(10f, material.startX)
+        assertEquals(35f, material.startY)
+        assertEquals(58f, material.endX)
+        assertEquals(35f, material.endY)
+        assertEquals(listOf(0f, .5f, 1f), material.allStopPositions?.toList())
     }
 
     @Test
@@ -905,6 +942,7 @@ class GPUPreparedStrokeRectLowererTest {
 
     private fun capabilities(
         withThreeStopStrokeGradient: Boolean = false,
+        withTranslatedThreeStopStrokeGradient: Boolean = false,
         withTranslatedTwoStopStrokeGradient: Boolean = false,
         withTwoStopStrokeRadialGradient: Boolean = false,
         withTwoStopStrokeSweepGradient: Boolean = false,
@@ -932,6 +970,10 @@ class GPUPreparedStrokeRectLowererTest {
                     ),
                 )
             }
+            if (withTranslatedThreeStopStrokeGradient) add(GPUCapabilityFact(
+                GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_TRANSLATE_NATIVE,
+                "test", "supported", true, "test:stroke-rect-linear-gradient-three-stop-translate",
+            ))
             if (withTranslatedTwoStopStrokeGradient) {
                 add(
                     GPUCapabilityFact(

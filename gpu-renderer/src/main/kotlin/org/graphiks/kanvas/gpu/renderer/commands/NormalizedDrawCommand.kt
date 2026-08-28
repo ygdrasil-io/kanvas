@@ -3172,6 +3172,7 @@ enum class GPUCommandSourceKind {
     PublicFillRect,
     AnalyticStrokeRectBand,
     AnalyticStrokeRectTranslatedBand,
+    AnalyticStrokeRectTranslatedThreeStopBand,
 }
 
 /** Source adapter information used by diagnostics and dumps. */

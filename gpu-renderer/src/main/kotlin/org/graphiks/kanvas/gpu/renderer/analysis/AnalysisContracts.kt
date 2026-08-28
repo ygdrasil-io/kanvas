@@ -291,6 +291,7 @@ class GPUFirstRoutePlanner(
         val isSimpleGradient = isLinearGradient || isRadialGradient || isSweepGradient
         val isThreeStopStrokeLinearGradient = command.supportsThreeStopLinearGradientStroke()
         val isTranslatedTwoStopStrokeLinearGradient = command.supportsTranslatedTwoStopLinearGradientStroke()
+        val isTranslatedThreeStopStrokeLinearGradient = command.supportsTranslatedThreeStopLinearGradientStroke()
         val isTwoStopStrokeRadialGradient = command.supportsTwoStopRadialGradientStroke()
         val isThreeStopStrokeRadialGradient = command.supportsThreeStopRadialGradientStroke()
         val isTwoStopStrokeSweepGradient = command.supportsTwoStopSweepGradientStroke()
@@ -328,7 +329,9 @@ class GPUFirstRoutePlanner(
                     pipelineKey =
                         "pending.pipeline.fill_rect.linear_gradient$tileModeSuffix.${command.layer.target.colorFormat}.src_over"
                     renderStep = linearGradientRenderStep
-                    routeLabel = if (isTranslatedTwoStopStrokeLinearGradient) {
+                    routeLabel = if (isTranslatedThreeStopStrokeLinearGradient) {
+                        "native.stroke_rect.linear_gradient_three_stop_translate"
+                    } else if (isTranslatedTwoStopStrokeLinearGradient) {
                         "native.stroke_rect.linear_gradient_translate"
                     } else if (isThreeStopStrokeLinearGradient) {
                         "native.stroke_rect.linear_gradient_three_stop"
@@ -336,7 +339,9 @@ class GPUFirstRoutePlanner(
                         "native.fill_rect.linear_gradient"
                     }
                     materialKeyHash = "pending.material.linear_gradient"
-                    capabilityName = if (isTranslatedTwoStopStrokeLinearGradient) {
+                    capabilityName = if (isTranslatedThreeStopStrokeLinearGradient) {
+                        GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_TRANSLATE_NATIVE
+                    } else if (isTranslatedTwoStopStrokeLinearGradient) {
                         GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_TRANSLATE_NATIVE
                     } else if (isThreeStopStrokeLinearGradient) {
                         GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_NATIVE
@@ -1833,9 +1838,9 @@ class GPUFirstRoutePlanner(
             when (mf) {
                 is NormalizedMaskFilter.Blur -> mf.refusalCode()
             }
-        } ?: translatedTwoStopLinearGradientStrokeRefusalCode() ?: material.analysisRefusalCodeOrNull(
+        } ?: translatedThreeStopLinearGradientStrokeRefusalCode() ?: translatedTwoStopLinearGradientStrokeRefusalCode() ?: material.analysisRefusalCodeOrNull(
             allowThreeStopLinearGradient = supportsBoundedThreeStopLinearGradient() ||
-                supportsThreeStopLinearGradientStroke(),
+                supportsThreeStopLinearGradientStroke() || supportsTranslatedThreeStopLinearGradientStroke(),
             allowThreeStopRadialGradient = hasThreeStopRadialGradient(),
             allowThreeStopSweepGradient = hasThreeStopSweepGradient(),
         ) ?: when {
@@ -1938,6 +1943,36 @@ class GPUFirstRoutePlanner(
     private fun NormalizedDrawCommand.FillRect.supportsTranslatedTwoStopLinearGradientStroke(): Boolean =
         isBoundedTranslatedTwoStopLinearGradientStroke() &&
             capabilities.hasFact(GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_TRANSLATE_NATIVE)
+
+    private fun NormalizedDrawCommand.FillRect.supportsTranslatedThreeStopLinearGradientStroke(): Boolean =
+        isBoundedTranslatedThreeStopLinearGradientStroke() &&
+            capabilities.hasFact(GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_TRANSLATE_NATIVE)
+
+    private fun NormalizedDrawCommand.FillRect.translatedThreeStopLinearGradientStrokeRefusalCode(): String? {
+        if (source.kind != GPUCommandSourceKind.AnalyticStrokeRectTranslatedThreeStopBand) return null
+        val gradient = material as? GPUMaterialDescriptor.LinearGradient
+            ?: return "unsupported.stroke.rect_material"
+        return when {
+            antiAlias -> "unsupported.stroke.rect_anti_alias"
+            transform.type != GPUTransformType.Identity -> "unsupported.stroke.rect_transform"
+            layer.target.colorFormat != "rgba8unorm-srgb" -> "unsupported.stroke.rect_gradient_target"
+            gradient.allStopPositions?.size != 3 -> "unsupported.stroke.rect_gradient_stop_count"
+            gradient.tileMode != "clamp" -> "unsupported.stroke.rect_gradient_tile_mode"
+            gradient.localMatrix != listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f) -> "unsupported.stroke.rect_material"
+            !capabilities.hasFact(GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_TRANSLATE_NATIVE) ->
+                "unsupported.stroke.rect_linear_gradient_three_stop_translate_capability"
+            else -> null
+        }
+    }
+
+    private fun NormalizedDrawCommand.FillRect.isBoundedTranslatedThreeStopLinearGradientStroke(): Boolean {
+        val gradient = material as? GPUMaterialDescriptor.LinearGradient ?: return false
+        return source.kind == GPUCommandSourceKind.AnalyticStrokeRectTranslatedThreeStopBand &&
+            !antiAlias && transform.type == GPUTransformType.Identity &&
+            layer.target.colorFormat == "rgba8unorm-srgb" && gradient.tileMode == "clamp" &&
+            gradient.allStopPositions?.size == 3 &&
+            gradient.localMatrix == listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f)
+    }
 
     /** Typed translated stroke provenance is terminal: it must never fall back to generic FillRect. */
     private fun NormalizedDrawCommand.FillRect.translatedTwoStopLinearGradientStrokeRefusalCode(): String? {
