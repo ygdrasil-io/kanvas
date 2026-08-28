@@ -113,6 +113,16 @@ class GpuEvidenceCatalogOracleTest {
     }
 
     @Test
+    fun `translated three stop linear stroke oracle rebases its axis across four device bands`() {
+        val pixels = oracle("linear-gradient-three-stop-translated-stroke-rect")
+
+        assertPixel(pixels, 64, 64, 8, 17, intArrayOf(255, 56, 56, 255))
+        assertPixel(pixels, 64, 64, 59, 17, intArrayOf(56, 112, 255, 255))
+        assertPixel(pixels, 64, 64, 31, 33, intArrayOf(0, 0, 0, 0))
+        assertPixel(pixels, 64, 64, 7, 17, intArrayOf(0, 0, 0, 0))
+    }
+
+    @Test
     fun `three stop radial stroke oracle samples pixel-center distance across four disjoint bands`() {
         val pixels = oracle("radial-gradient-three-stop-stroke-rect")
 
