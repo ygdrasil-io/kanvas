@@ -790,6 +790,53 @@ class GPUPreparedStrokeRectLowererTest {
     }
 
     @Test
+    fun `uniform integer scaled two stop clamp radial gradient stroke rebases center radius and device bands`() {
+        val shader = Shader.RadialGradient(
+            center = Point2F32(18f, 14f),
+            radius = 8f,
+            stops = gradientStops(),
+            tileMode = org.graphiks.kanvas.paint.TileMode.CLAMP,
+        )
+        val operation = strokeRect(
+            bounds = RectF32.ofLTRB(8f, 8f, 28f, 24f),
+            paint = Paint.stroke(ColorARGB.Transparent, 2f).copy(shader = shader, antiAlias = false),
+            transform = Matrix3x3F32(sx = 2f, sy = 2f, tx = 2f, ty = 4f),
+        )
+
+        val absent = assertIs<GPUPreparedStrokeRectLowering.Refused>(GPUPreparedStrokeRectLowerer.lower(
+            operation, GPUDrawCommandID(0), 0, GPUFrameProvenance.None, target(), RenderConfig.DEFAULT, capabilities(),
+        ))
+        assertEquals("unsupported.stroke.rect_radial_gradient_two_stop_uniform_scale_capability", absent.code)
+
+        val ready = assertIs<GPUPreparedStrokeRectLowering.Ready>(GPUPreparedStrokeRectLowerer.lower(
+            operation, GPUDrawCommandID(0), 0, GPUFrameProvenance.None, target(), RenderConfig.DEFAULT,
+            capabilities(withUniformScaleTwoStopStrokeRadialGradient = true),
+        ))
+        assertEquals(4, ready.commands.size)
+        assertEquals("uniform-scale", ready.geometryPlan.path?.transformClass)
+        assertEquals("uniform-scale", ready.geometryPlan.stroke?.transformClass)
+        assertEquals(
+            listOf(
+                GPUPixelBounds(16, 18, 60, 22),
+                GPUPixelBounds(16, 50, 60, 54),
+                GPUPixelBounds(16, 22, 20, 50),
+                GPUPixelBounds(56, 22, 60, 50),
+            ),
+            ready.commands.map { command ->
+                val fill = assertIs<NormalizedDrawCommand.FillRect>(command.normalized)
+                GPUPixelBounds(fill.rect.left.toInt(), fill.rect.top.toInt(), fill.rect.right.toInt(), fill.rect.bottom.toInt())
+            },
+        )
+        val first = assertIs<NormalizedDrawCommand.FillRect>(ready.commands.first().normalized)
+        assertEquals(GPUCommandSourceKind.AnalyticStrokeRectUniformScaleRadialTwoStopBand, first.source.kind)
+        val material = assertIs<org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor.RadialGradient>(first.material)
+        assertEquals(38f, material.centerX)
+        assertEquals(32f, material.centerY)
+        assertEquals(16f, material.radius)
+        assertEquals(listOf(0f, 1f), material.allStopPositions?.toList())
+    }
+
+    @Test
     fun `translated three stop linear gradient stroke refuses positions outside the proven contract before bands`() {
         val cases = listOf(
             "arbitrary midpoint" to listOf(0f, .25f, 1f),
@@ -1109,6 +1156,7 @@ class GPUPreparedStrokeRectLowererTest {
         withUniformScaleTwoStopStrokeGradient: Boolean = false,
         withUniformScaleThreeStopStrokeGradient: Boolean = false,
         withUniformScaleTwoStopStrokeSweepGradient: Boolean = false,
+        withUniformScaleTwoStopStrokeRadialGradient: Boolean = false,
         withTwoStopStrokeRadialGradient: Boolean = false,
         withTwoStopStrokeSweepGradient: Boolean = false,
         withThreeStopStrokeRadialGradient: Boolean = false,
@@ -1161,6 +1209,10 @@ class GPUPreparedStrokeRectLowererTest {
             if (withUniformScaleTwoStopStrokeSweepGradient) add(GPUCapabilityFact(
                 GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE,
                 "test", "supported", true, "test:stroke-rect-sweep-gradient-two-stop-uniform-scale",
+            ))
+            if (withUniformScaleTwoStopStrokeRadialGradient) add(GPUCapabilityFact(
+                GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE,
+                "test", "supported", true, "test:stroke-rect-radial-gradient-two-stop-uniform-scale",
             ))
             if (withTwoStopStrokeRadialGradient) {
                 add(

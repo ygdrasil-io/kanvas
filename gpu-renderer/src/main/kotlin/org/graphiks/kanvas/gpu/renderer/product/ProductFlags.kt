@@ -16,6 +16,7 @@ data class GPUProductFlagConfig(
     val strokeRectLinearGradientThreeStopUniformScaleEnabled: Boolean = true,
     val strokeRectLinearGradientTranslateEnabled: Boolean = true,
     val strokeRectRadialGradientTwoStopEnabled: Boolean = true,
+    val strokeRectRadialGradientTwoStopUniformScaleEnabled: Boolean = true,
     val strokeRectRadialGradientThreeStopEnabled: Boolean = true,
     val strokeRectSweepGradientTwoStopEnabled: Boolean = true,
     val strokeRectSweepGradientTwoStopUniformScaleEnabled: Boolean = true,
@@ -117,6 +118,10 @@ data class GPUProductFlagConfig(
                     evidenceLabel = "product-flag:strokeRectRadialGradientTwoStop",
                 )
             }
+            if (strokeEnabled && strokeRectRadialGradientTwoStopUniformScaleEnabled) facts += GPUCapabilityFact(
+                GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE,
+                "product-flags", "supported", true, "product-flag:strokeRectRadialGradientTwoStopUniformScale",
+            )
             if (strokeEnabled && strokeRectRadialGradientThreeStopEnabled) facts += GPUCapabilityFact(
                 GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_NATIVE,
                 "product-flags", "supported", true, "product-flag:strokeRectRadialGradientThreeStop",
@@ -338,6 +343,8 @@ data class GPUProductFlagConfig(
             "kanvas.gpu.renderer.product.strokeRectLinearGradientTranslate.disable"
         const val StrokeRectRadialGradientTwoStopDisableProperty: String =
             "kanvas.gpu.renderer.product.strokeRectRadialGradientTwoStop.disable"
+        const val StrokeRectRadialGradientTwoStopUniformScaleDisableProperty: String =
+            "kanvas.gpu.renderer.product.strokeRectRadialGradientTwoStopUniformScale.disable"
         const val StrokeRectRadialGradientThreeStopDisableProperty: String =
             "kanvas.gpu.renderer.product.strokeRectRadialGradientThreeStop.disable"
         const val StrokeRectSweepGradientTwoStopDisableProperty: String =
@@ -412,6 +419,8 @@ data class GPUProductFlagConfig(
                 propertyReader(StrokeRectLinearGradientTranslateDisableProperty).toBoolean()
             val strokeRectRadialGradientTwoStopDisabled =
                 propertyReader(StrokeRectRadialGradientTwoStopDisableProperty).toBoolean()
+            val strokeRectRadialGradientTwoStopUniformScaleDisabled =
+                propertyReader(StrokeRectRadialGradientTwoStopUniformScaleDisableProperty).toBoolean()
             val strokeRectRadialGradientThreeStopDisabled =
                 propertyReader(StrokeRectRadialGradientThreeStopDisableProperty).toBoolean()
             val strokeRectSweepGradientTwoStopDisabled =
@@ -448,6 +457,7 @@ data class GPUProductFlagConfig(
                 strokeRectLinearGradientThreeStopUniformScaleEnabled = !strokeRectLinearGradientThreeStopUniformScaleDisabled,
                 strokeRectLinearGradientTranslateEnabled = !strokeRectLinearGradientTranslateDisabled,
                 strokeRectRadialGradientTwoStopEnabled = !strokeRectRadialGradientTwoStopDisabled,
+                strokeRectRadialGradientTwoStopUniformScaleEnabled = !strokeRectRadialGradientTwoStopUniformScaleDisabled,
                 strokeRectRadialGradientThreeStopEnabled = !strokeRectRadialGradientThreeStopDisabled,
                 strokeRectSweepGradientTwoStopEnabled = !strokeRectSweepGradientTwoStopDisabled,
                 strokeRectSweepGradientTwoStopUniformScaleEnabled = !strokeRectSweepGradientTwoStopUniformScaleDisabled,
