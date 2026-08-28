@@ -335,10 +335,10 @@ object GpuEvidenceCatalog {
 
     private fun roundCapStroke(): EvidenceCase = EvidenceCase(
         EvidenceSceneDescriptor(
-            EvidenceSceneId("round-cap-stroke"), "Round-cap path stroke", "Public Kanvas Surface non-AA solid one-segment path stroke with round caps.",
+            EvidenceSceneId("round-cap-stroke"), "Pixel-exact round-cap path stroke", "Public Kanvas Surface non-AA radius-two, integral-grid horizontal path stroke with round caps.",
             32, 32, 1L, setOf("path-stroke", "round-cap", "kanvas-surface"), EvidenceExpectation.ShouldRender,
-            OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke", 1),
-            ComparisonPolicy(0, 100.0, 1, "Independent pixel-center union of a rectangle and two radius-two disks."), emptySet(),
+            OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke", 2),
+            ComparisonPolicy(0, 100.0, 1, "Independent pixel-center disk oracle for W25's integral-grid radius-two horizontal contract."), emptySet(),
         ),
         KanvasScenePrograms.roundCapStroke(),
         SurfaceSrgbRoundCapStrokeCpuOracle(6.0, 26.0, 16.0, 2.0, intArrayOf(255, 0, 0, 255)),

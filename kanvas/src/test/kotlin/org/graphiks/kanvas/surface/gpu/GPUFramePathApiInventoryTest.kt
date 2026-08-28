@@ -2339,6 +2339,99 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `round cap width outside the pixel-exact contract refuses before native preparation`() {
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(6f, 16f)
+                        lineTo(26f, 16f)
+                    },
+                    Paint.stroke(ColorARGB.Red, 6f).copy(
+                        antiAlias = false,
+                        strokeCap = StrokeCap.ROUND,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+        )
+
+        val refused = gatherRefusal(inventory)
+
+        assertEquals("unsupported.core_primitive.stroke.round_cap_pixel_exact_lowering", refused.code)
+        assertEquals("6.0", refused.facts["width"])
+        assertEquals("round", refused.facts["cap"])
+    }
+
+    @Test
+    fun `vertical round cap refuses before native preparation`() {
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(16f, 6f)
+                        lineTo(16f, 26f)
+                    },
+                    Paint.stroke(ColorARGB.Red, 4f).copy(
+                        antiAlias = false,
+                        strokeCap = StrokeCap.ROUND,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+        )
+
+        val refused = gatherRefusal(inventory)
+
+        assertEquals("unsupported.core_primitive.stroke.round_cap_pixel_exact_lowering", refused.code)
+        assertEquals("4.0", refused.facts["width"])
+        assertEquals("round", refused.facts["cap"])
+    }
+
+    @Test
+    fun `round cap requires an integral left-to-right segment of at least one width`() {
+        listOf(
+            6.5f to 26.5f,
+            6f to 8f,
+            26f to 6f,
+        ).forEach { (startX, endX) ->
+            val inventory = GPUFramePathApiInventory.plan(
+                operations = listOf(
+                    DisplayOp.DrawPath(
+                        Path().apply {
+                            moveTo(startX, 16f)
+                            lineTo(endX, 16f)
+                        },
+                        Paint.stroke(ColorARGB.Red, 4f).copy(
+                            antiAlias = false,
+                            strokeCap = StrokeCap.ROUND,
+                            strokeJoin = StrokeJoin.MITER,
+                        ),
+                        Matrix3x3F32.Identity,
+                        ClipStack.WideOpen,
+                    ),
+                ),
+                target = target(),
+                config = RenderConfig.DEFAULT,
+            )
+
+            assertEquals(
+                "unsupported.core_primitive.stroke.round_cap_pixel_exact_lowering",
+                gatherRefusal(inventory).code,
+                "startX=$startX endX=$endX",
+            )
+        }
+    }
+
+    @Test
     fun `single segment stroke refuses an unregistered path effect before native preparation`() {
         val inventory = GPUFramePathApiInventory.plan(
             operations = listOf(

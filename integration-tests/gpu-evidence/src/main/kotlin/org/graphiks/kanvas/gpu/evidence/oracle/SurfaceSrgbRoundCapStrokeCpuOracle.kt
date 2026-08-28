@@ -1,10 +1,15 @@
 package org.graphiks.kanvas.gpu.evidence.oracle
 
+import kotlin.math.floor
+
 /**
- * Independent pixel-center oracle for the bounded opaque round-cap segment.
+ * Independent pixel-center oracle for W25's pixel-exact opaque round-cap segment.
  *
  * It intentionally evaluates the geometric union directly instead of reusing
- * Kanvas stroke expansion or its stencil fan representation.
+ * Kanvas stroke expansion or its stencil fan representation. Its inputs are
+ * deliberately constrained to the only proven native tessellation domain:
+ * radius two, integral device grid, horizontal left-to-right segment and no
+ * overlap between the two caps.
  */
 class SurfaceSrgbRoundCapStrokeCpuOracle(
     private val startX: Double,
@@ -14,8 +19,9 @@ class SurfaceSrgbRoundCapStrokeCpuOracle(
     private val rgba: IntArray,
 ) : CpuOracle {
     init {
-        require(startX.isFinite() && endX.isFinite() && startX < endX)
-        require(centerY.isFinite() && radius.isFinite() && radius > 0.0)
+        require(startX.isIntegralDeviceCoordinate() && endX.isIntegralDeviceCoordinate() &&
+            centerY.isIntegralDeviceCoordinate() && radius == 2.0 && endX - startX >= 4.0
+        ) { "W25 round-cap oracle requires an integral left-to-right radius-two horizontal segment" }
         require(rgba.size == 4 && rgba.all { it in 0..255 })
     }
 
@@ -38,4 +44,6 @@ class SurfaceSrgbRoundCapStrokeCpuOracle(
 
     private fun squaredDistance(x: Double, y: Double, centerX: Double, centerY: Double): Double =
         (x - centerX) * (x - centerX) + (y - centerY) * (y - centerY)
+
+    private fun Double.isIntegralDeviceCoordinate(): Boolean = isFinite() && floor(this) == this
 }
