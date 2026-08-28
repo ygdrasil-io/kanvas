@@ -149,7 +149,7 @@ internal object GPUPreparedStrokeRectLowerer {
                         operationIndex,
                         mapOf("capability" to GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_NATIVE),
                     )
-                    !capabilities.hasSupportedFact(
+                    shader.stops.size == 2 && !capabilities.hasSupportedFact(
                         GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_NATIVE,
                     ) -> return refused(
                         "unsupported.stroke.rect_radial_gradient_two_stop_capability",

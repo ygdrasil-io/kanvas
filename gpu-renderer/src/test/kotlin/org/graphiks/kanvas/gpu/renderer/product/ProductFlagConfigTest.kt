@@ -120,6 +120,17 @@ class ProductFlagConfigTest {
     }
 
     @Test
+    fun `three stop radial stroke capability has an independent disable property`() {
+        val config = GPUProductFlagConfig.fromSystemProperties { key ->
+            if (key == GPUProductFlagConfig.StrokeRectRadialGradientThreeStopDisableProperty) "true" else null
+        }
+        assertFalse(config.strokeRectRadialGradientThreeStopEnabled)
+        assertFalse(config.buildCapabilities().facts.any {
+            it.name == GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_NATIVE
+        })
+    }
+
+    @Test
     fun `two stop sweep stroke capability has an independent disable property`() {
         val config = GPUProductFlagConfig.fromSystemProperties { key ->
             if (key == GPUProductFlagConfig.StrokeRectSweepGradientTwoStopDisableProperty) "true" else null
