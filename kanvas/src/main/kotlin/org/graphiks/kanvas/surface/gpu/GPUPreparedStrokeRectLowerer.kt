@@ -170,11 +170,12 @@ internal object GPUPreparedStrokeRectLowerer {
                     "unsupported.stroke.rect_transform", operationIndex, mapOf("transform" to "gradient_requires_identity"),
                 )
                 when {
-                    shader.stops.size != 2 -> return refused("unsupported.stroke.rect_gradient_stop_count", operationIndex, mapOf("stopCount" to shader.stops.size.toString()))
+                    shader.stops.size !in 2..3 -> return refused("unsupported.stroke.rect_gradient_stop_count", operationIndex, mapOf("stopCount" to shader.stops.size.toString()))
                     shader.tileMode != TileMode.CLAMP -> return refused("unsupported.stroke.rect_gradient_tile_mode", operationIndex, mapOf("tileMode" to shader.tileMode.name))
                     target.colorFormat != "rgba8unorm-srgb" -> return refused("unsupported.stroke.rect_gradient_target", operationIndex, mapOf("targetFormat" to target.colorFormat))
                     shader.startAngle != 0f || shader.endAngle != 360f -> return refused("unsupported.stroke.rect_gradient_angles", operationIndex, mapOf("startAngle" to shader.startAngle.toString(), "endAngle" to shader.endAngle.toString()))
-                    !capabilities.hasSupportedFact(GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE) -> return refused(
+                    shader.stops.size == 3 && !capabilities.hasSupportedFact(GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_THREE_STOP_NATIVE) -> return refused("unsupported.stroke.rect_sweep_gradient_three_stop_capability", operationIndex, mapOf("capability" to GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_THREE_STOP_NATIVE))
+                    shader.stops.size == 2 && !capabilities.hasSupportedFact(GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE) -> return refused(
                         "unsupported.stroke.rect_sweep_gradient_two_stop_capability", operationIndex,
                         mapOf("capability" to GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE),
                     )
@@ -413,8 +414,9 @@ private fun Shader.RadialGradient.isAdmittedStrokeRadialGradient(): Boolean =
 private fun Shader.SweepGradient.isAdmittedStrokeSweepGradient(): Boolean =
     tileMode == TileMode.CLAMP && interpolation == ColorSpaceInterpolation.SRGB &&
         center.x.isFinite() && center.y.isFinite() && startAngle == 0f && endAngle == 360f &&
-        stops.size == 2 && stops.first().position == 0f && stops.last().position == 1f &&
-        stops.all { it.color.r.isFinite() && it.color.g.isFinite() && it.color.b.isFinite() && it.color.a.isFinite() }
+        stops.size in 2..3 && stops.first().position == 0f && stops.last().position == 1f &&
+        stops.all { it.position.isFinite() && it.position in 0f..1f && it.color.r.isFinite() && it.color.g.isFinite() && it.color.b.isFinite() && it.color.a.isFinite() } &&
+        stops.zipWithNext().all { (left, right) -> left.position < right.position }
 
 @OptIn(ExperimentalUnsignedTypes::class)
 private fun ColorFilter.isFoldableSolidColorFilter(): Boolean = when (this) {
