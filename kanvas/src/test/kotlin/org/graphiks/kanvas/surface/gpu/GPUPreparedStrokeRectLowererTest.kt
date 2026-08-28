@@ -676,6 +676,8 @@ class GPUPreparedStrokeRectLowererTest {
         )
         val ready = assertIs<GPUPreparedStrokeRectLowering.Ready>(scaledResult)
         assertEquals(4, ready.commands.size)
+        assertEquals("uniform-scale", ready.geometryPlan.path?.transformClass)
+        assertEquals("uniform-scale", ready.geometryPlan.stroke?.transformClass)
         val first = assertIs<NormalizedDrawCommand.FillRect>(ready.commands.first().normalized)
         assertEquals(GPUCommandSourceKind.AnalyticStrokeRectUniformScaleBand, first.source.kind)
         val material = assertIs<org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor.LinearGradient>(first.material)

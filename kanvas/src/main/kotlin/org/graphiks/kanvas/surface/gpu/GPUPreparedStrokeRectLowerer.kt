@@ -14,6 +14,7 @@ import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.geometry.GPUAxisAlignedStrokeRectLowerer
 import org.graphiks.kanvas.gpu.renderer.geometry.GPUAxisAlignedStrokeRectLoweringRequest
 import org.graphiks.kanvas.gpu.renderer.geometry.GPUAxisAlignedStrokeRectLoweringResult
+import org.graphiks.kanvas.gpu.renderer.geometry.GPUGeometryPlan
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.ColorSpaceInterpolation
@@ -25,7 +26,10 @@ import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.matrix.Matrix3x3F32
 
 internal sealed interface GPUPreparedStrokeRectLowering {
-    class Ready(commands: List<GPUFramePathVisualCommand>) : GPUPreparedStrokeRectLowering {
+    class Ready(
+        commands: List<GPUFramePathVisualCommand>,
+        val geometryPlan: GPUGeometryPlan,
+    ) : GPUPreparedStrokeRectLowering {
         val commands: List<GPUFramePathVisualCommand> =
             Collections.unmodifiableList(commands.toList())
     }
@@ -277,7 +281,11 @@ internal object GPUPreparedStrokeRectLowerer {
                     mapOf("geometry" to "inverted"),
                 )
         }
-        val transformClass = if (operation.transform == Matrix3x3F32.Identity) "identity" else "translate"
+        val transformClass = when {
+            operation.transform == Matrix3x3F32.Identity -> "identity"
+            uniformlyScaledTwoStopLinearGradient -> "uniform-scale"
+            else -> "translate"
+        }
         val lowered = axisAlignedStrokeRectLowerer.lower(
             GPUAxisAlignedStrokeRectLoweringRequest(
                 targetBounds = GPUPixelBounds(0, 0, target.width, target.height),
@@ -346,7 +354,7 @@ internal object GPUPreparedStrokeRectLowerer {
                         )
                         ?: return refused("unsupported.stroke.rect_material", operationIndex)
                 }
-                GPUPreparedStrokeRectLowering.Ready(commands)
+                GPUPreparedStrokeRectLowering.Ready(commands, lowered.geometryPlan)
             }
         }
     }
