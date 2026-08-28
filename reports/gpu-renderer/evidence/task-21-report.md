@@ -25,8 +25,13 @@ Les gardes existantes refusent avant soumission :
 - AA : `unsupported.stroke.rect_anti_alias` ;
 - translation fractionnaire, scale, skew ou perspective :
   `unsupported.stroke.rect_transform` ;
-- shader, gradient, filtre ou autre matériau non solide :
-  `unsupported.stroke.rect_material`.
+- les matériaux non solides ou non foldables (shader non admis, gradient hors
+  contrat, filtre non foldable) : `unsupported.stroke.rect_material` ;
+- un `LinearGradient` autrement admis mais translaté :
+  `unsupported.stroke.rect_transform`.
+
+Un `ColorFilter` foldable sur un `SolidColor` reste admis par la route
+existante ; il n'est donc pas concerné par le refus de matériau ci-dessus.
 
 Ces refus sont couverts par `GPUPreparedStrokeRectLowererTest` et préservent
 la politique de fallback au lieu d'élargir implicitement la route.
