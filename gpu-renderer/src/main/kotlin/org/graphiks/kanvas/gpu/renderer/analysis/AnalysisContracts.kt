@@ -1887,6 +1887,8 @@ class GPUFirstRoutePlanner(
         val gradient = material as? GPUMaterialDescriptor.SweepGradient ?: return false
         return !antiAlias &&
             transform.type == GPUTransformType.Identity &&
+            layer.target.colorFormat == "rgba8unorm" &&
+            clip.kind == GPUClipKind.WideOpen &&
             gradient.tileMode == "clamp" &&
             gradient.localMatrix == listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f) &&
             gradient.allStopPositions?.size == 3
