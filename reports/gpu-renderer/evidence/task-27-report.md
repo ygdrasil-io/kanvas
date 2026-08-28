@@ -17,11 +17,10 @@ comparaison pixel-validée à 100 % (0 pixel divergent, delta maximal 0,
 tolérance 1 LSB). Les artefacts sont sous
 `reports/gpu-renderer/evidence/correctness/promoted/sweep-gradient-three-stop-stroke-rect/`.
 
-Les limites sont explicites : le contrat refuse un nombre de stops différent
-de trois, les positions malformées, tout tile mode hors `CLAMP`, les angles
-partiels, les cibles non sRGB, l’anti-aliasing, les transformations, une
-`localMatrix` non identité et les color filters. La route Sweep deux stops
-historique reste distincte.
+Les limites sont explicites : W41 refuse quatre stops ou plus, les positions
+malformées, tout tile mode hors `CLAMP`, les angles partiels, les cibles non
+sRGB, l’anti-aliasing, les transformations, une `localMatrix` non identité et
+les color filters. Deux stops relèvent de la route W39 distincte.
 
 Commandes exécutées :
 
