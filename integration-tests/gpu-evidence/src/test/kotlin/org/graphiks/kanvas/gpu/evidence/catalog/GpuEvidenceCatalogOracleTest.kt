@@ -7,6 +7,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle
 
 class GpuEvidenceCatalogOracleTest {
     @Test
@@ -145,6 +146,36 @@ class GpuEvidenceCatalogOracleTest {
                 SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle.Point(2.0, 4.0),
                 SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle.Stop(255, 56, 56),
                 SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle.Stop(56, 112, 255),
+            )
+        }
+    }
+
+    @Test
+    fun `uniform scaled three stop linear stroke oracle scales coverage and retains both intervals`() {
+        val pixels = oracle("linear-gradient-three-stop-uniform-scaled-stroke-rect")
+
+        assertPixel(pixels, 64, 64, 16, 18, intArrayOf(255, 56, 56, 255))
+        assertPixel(pixels, 64, 64, 59, 18, intArrayOf(56, 112, 255, 255))
+        val midpointOffset = (18 * 64 + 37) * 4
+        val midpoint = pixels.copyOfRange(midpointOffset, midpointOffset + 4).map { it.toInt() and 0xff }
+        assertNotEquals(intArrayOf(255, 56, 56, 255).toList(), midpoint)
+        assertNotEquals(intArrayOf(56, 112, 255, 255).toList(), midpoint)
+        assertPixel(pixels, 64, 64, 30, 36, intArrayOf(0, 0, 0, 0))
+        assertPixel(pixels, 64, 64, 15, 18, intArrayOf(0, 0, 0, 0))
+    }
+
+    @Test
+    fun `uniform scaled three stop linear stroke oracle rejects a degenerate scaled axis`() {
+        assertFailsWith<IllegalArgumentException> {
+            SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle(
+                List(4) { SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle.Rect(0, 0, 1, 1) },
+                SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle.Point(8.0, 16.0),
+                SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle.Point(8.0, 16.0),
+                2,
+                SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle.Point(2.0, 4.0),
+                SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle.Stop(255, 56, 56),
+                SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle.Stop(56, 220, 120),
+                SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle.Stop(56, 112, 255),
             )
         }
     }
