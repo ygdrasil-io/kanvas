@@ -14,6 +14,10 @@ full opaque red rectangle and an `EvenOdd` path with an outer rectangle
 `ClipOp.DIFFERENCE` clip.
 
 `GPUFramePathApiInventory.prepareNativeTaskList` records the frame successfully.
+Before preparation, the inventory is also asserted to carry a
+`GPUClipExecutionPlan.StencilCoverage` with `Invert` front/back operations and
+an `Equal` consumer comparison, so the pixel result cannot silently come from
+an unrelated clip route.
 The test submits it to the native WebGPU backend, checks `Succeeded`, compares
 the complete RGBA readback against an independent pixel-centre CPU oracle, and
 checks exactly one submit and one readback copy. Pure red is used so the exact
