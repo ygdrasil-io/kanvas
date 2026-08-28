@@ -14,6 +14,7 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
+import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSourceKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
@@ -540,14 +541,14 @@ class GPUPreparedStrokeRectLowererTest {
     }
 
     @Test
-    fun `translated clamp linear gradient stroke refuses before packets while translated solid remains admitted`() {
+    fun `integer translated two stop clamp linear gradient stroke rebases one device descriptor across all bands`() {
         val gradientOperation = strokeRect(
             bounds = RectF32.ofLTRB(8f, 16f, 56f, 48f),
             paint = Paint.stroke(ColorARGB.Transparent, 4f).copy(shader = linearGradient(), antiAlias = false),
-            transform = Matrix3x3F32.translation(2f, 0f),
+            transform = Matrix3x3F32.translation(2f, 3f),
         )
 
-        val lowered = assertIs<GPUPreparedStrokeRectLowering.Refused>(
+        val lowered = assertIs<GPUPreparedStrokeRectLowering.Ready>(
             GPUPreparedStrokeRectLowerer.lower(
                 gradientOperation,
                 GPUDrawCommandID(0),
@@ -555,18 +556,44 @@ class GPUPreparedStrokeRectLowererTest {
                 GPUFrameProvenance.None,
                 target(),
                 RenderConfig.DEFAULT,
-                capabilities(),
+                capabilities(withTranslatedTwoStopStrokeGradient = true),
             ),
         )
-        assertEquals("unsupported.stroke.rect_transform", lowered.code)
-        assertEquals("gradient_requires_identity", lowered.facts["transform"])
+        assertEquals(4, lowered.commands.size)
+        val materials = lowered.commands.map {
+            val fill = assertIs<NormalizedDrawCommand.FillRect>(it.normalized)
+            assertEquals(GPUCommandSourceKind.AnalyticStrokeRectTranslatedBand, fill.source.kind)
+            assertIs<org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor.LinearGradient>(fill.material)
+        }
+        assertTrue(materials.drop(1).all { it === materials.first() })
+        assertEquals(10f, materials.first().startX)
+        assertEquals(35f, materials.first().startY)
+        assertEquals(58f, materials.first().endX)
+        assertEquals(35f, materials.first().endY)
+
+        val missingCapability = assertIs<GPUPreparedStrokeRectLowering.Refused>(
+            GPUPreparedStrokeRectLowerer.lower(
+                gradientOperation, GPUDrawCommandID(0), 0, GPUFrameProvenance.None,
+                target(), RenderConfig.DEFAULT, capabilities(),
+            ),
+        )
+        assertEquals("unsupported.stroke.rect_linear_gradient_translate_capability", missingCapability.code)
+
+        val fractionalTranslation = assertIs<GPUPreparedStrokeRectLowering.Refused>(
+            GPUPreparedStrokeRectLowerer.lower(
+                gradientOperation.copy(transform = Matrix3x3F32.translation(2.5f, 3f)),
+                GPUDrawCommandID(0), 0, GPUFrameProvenance.None, target(), RenderConfig.DEFAULT,
+                capabilities(withTranslatedTwoStopStrokeGradient = true),
+            ),
+        )
+        assertEquals("unsupported.stroke.rect_transform", fractionalTranslation.code)
 
         val mapping = GPUOpMapper.mapOperations(
-            listOf(gradientOperation), target(), RenderConfig.DEFAULT, capabilities(),
+            listOf(gradientOperation), target(), RenderConfig.DEFAULT,
+            capabilities(withTranslatedTwoStopStrokeGradient = true),
         )
-        assertEquals("unsupported.stroke.rect_transform", mapping.preparedRefusal?.code)
-        assertTrue(mapping.visualCommands.isEmpty())
-        assertTrue(mapping.commandIdsByOperationIndex.isEmpty())
+        assertEquals(null, mapping.preparedRefusal)
+        assertEquals(listOf(0, 1, 2, 3), mapping.visualCommands.map { it.normalized.commandId.value })
 
         val solidMapping = GPUOpMapper.mapOperations(
             listOf(strokeRect(transform = Matrix3x3F32.translation(2f, 0f))),
@@ -862,6 +889,7 @@ class GPUPreparedStrokeRectLowererTest {
 
     private fun capabilities(
         withThreeStopStrokeGradient: Boolean = false,
+        withTranslatedTwoStopStrokeGradient: Boolean = false,
         withTwoStopStrokeRadialGradient: Boolean = false,
         withTwoStopStrokeSweepGradient: Boolean = false,
         withThreeStopStrokeRadialGradient: Boolean = false,
@@ -885,6 +913,17 @@ class GPUPreparedStrokeRectLowererTest {
                         value = "supported",
                         affectsValidity = true,
                         evidenceLabel = "test:stroke-rect-linear-gradient-three-stop",
+                    ),
+                )
+            }
+            if (withTranslatedTwoStopStrokeGradient) {
+                add(
+                    GPUCapabilityFact(
+                        name = GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_TRANSLATE_NATIVE,
+                        source = "test",
+                        value = "supported",
+                        affectsValidity = true,
+                        evidenceLabel = "test:stroke-rect-linear-gradient-translate",
                     ),
                 )
             }
