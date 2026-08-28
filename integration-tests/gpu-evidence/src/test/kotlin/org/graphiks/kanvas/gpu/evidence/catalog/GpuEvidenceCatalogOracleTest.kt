@@ -92,6 +92,17 @@ class GpuEvidenceCatalogOracleTest {
     }
 
     @Test
+    fun `three stop sweep stroke oracle samples each gradient interval across four disjoint bands`() {
+        val pixels = oracle("sweep-gradient-three-stop-stroke-rect")
+
+        assertPixel(pixels, 64, 64, 30, 15, intArrayOf(56, 181, 198, 255))
+        assertPixel(pixels, 64, 64, 30, 48, intArrayOf(184, 170, 97, 255))
+        assertPixel(pixels, 64, 64, 55, 30, intArrayOf(56, 117, 252, 255))
+        assertPixel(pixels, 64, 64, 30, 30, intArrayOf(0, 0, 0, 0))
+        assertPixel(pixels, 64, 64, 5, 15, intArrayOf(0, 0, 0, 0))
+    }
+
+    @Test
     fun `three stop radial stroke oracle samples pixel-center distance across four disjoint bands`() {
         val pixels = oracle("radial-gradient-three-stop-stroke-rect")
 

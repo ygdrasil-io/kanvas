@@ -13,6 +13,7 @@ import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbThreeStopLinearGradien
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbTwoStopRadialGradientStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbThreeStopRadialGradientStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbTwoStopSweepGradientStrokeCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbThreeStopSweepGradientStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRoundCapStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipRRectCpuOracle
@@ -61,6 +62,7 @@ object GpuEvidenceCatalog {
         radialGradientTwoStopStrokeRect(),
         radialGradientThreeStopStrokeRect(),
         sweepGradientTwoStopStrokeRect(),
+        sweepGradientThreeStopStrokeRect(),
         scaledSolidRRect(),
         solidDRRectHole(),
         asymmetricSolidRRect(),
@@ -881,6 +883,31 @@ object GpuEvidenceCatalog {
             ),
             SurfaceSrgbTwoStopSweepGradientStrokeCpuOracle.Point(32.5, 32.5),
             intArrayOf(255, 56, 56, 255), intArrayOf(56, 112, 255, 255),
+        ),
+    )
+
+    private fun sweepGradientThreeStopStrokeRect() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("sweep-gradient-three-stop-stroke-rect"), "Sweep gradient three-stop stroke rectangle",
+            "Public Kanvas Surface renders the bounded non-AA identity CLAMP three-stop sweep rectangle stroke.",
+            64, 64, 1L, setOf("stroke-rect", "sweep-gradient", "three-stops", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-gradient-sweep-clamp-three-stop-stroke-bands", 1),
+            ComparisonPolicy(1, 100.0, 1, "Independent four-band pixel-center three-stop sweep-angle interpolation and sRGB RGBA8 storage."), emptySet(),
+        ),
+        KanvasScenePrograms.sweepGradientThreeStopStrokeRect(),
+        SurfaceSrgbThreeStopSweepGradientStrokeCpuOracle(
+            listOf(
+                SurfaceSrgbThreeStopSweepGradientStrokeCpuOracle.Rect(6, 14, 58, 18),
+                SurfaceSrgbThreeStopSweepGradientStrokeCpuOracle.Rect(6, 46, 58, 50),
+                SurfaceSrgbThreeStopSweepGradientStrokeCpuOracle.Rect(6, 18, 10, 46),
+                SurfaceSrgbThreeStopSweepGradientStrokeCpuOracle.Rect(54, 18, 58, 46),
+            ),
+            SurfaceSrgbThreeStopSweepGradientStrokeCpuOracle.Point(32.5, 32.5),
+            listOf(
+                SurfaceSrgbThreeStopSweepGradientStrokeCpuOracle.Stop(0.0, 255, 56, 56),
+                SurfaceSrgbThreeStopSweepGradientStrokeCpuOracle.Stop(.5, 56, 220, 120),
+                SurfaceSrgbThreeStopSweepGradientStrokeCpuOracle.Stop(1.0, 56, 112, 255),
+            ),
         ),
     )
 

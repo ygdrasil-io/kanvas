@@ -814,6 +814,21 @@ object KanvasScenePrograms {
         ))
     })
 
+    fun sweepGradientThreeStopStrokeRect() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawRect(RectF32.ofLTRB(8f, 16f, 56f, 48f), Paint.stroke(ColorARGB.Transparent, 4f).copy(
+            shader = Shader.SweepGradient(
+                Point2F32(32.5f, 32.5f), 0f, 360f,
+                listOf(
+                    GradientStop(0f, ColorARGB.of(255, 255, 56, 56)),
+                    GradientStop(.5f, ColorARGB.of(255, 56, 220, 120)),
+                    GradientStop(1f, ColorARGB.of(255, 56, 112, 255)),
+                ),
+                TileMode.CLAMP,
+            ),
+            antiAlias = false,
+        ))
+    })
+
     fun scaledSolidRRect() = KanvasSurfaceProgram(ROUTE_ID, record = {
         drawColor(BACKGROUND)
         scale(2f, 1f)
