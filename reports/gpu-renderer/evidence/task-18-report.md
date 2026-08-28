@@ -12,7 +12,7 @@ L'ABI native était déjà capable de transporter jusqu'à seize stops : payload
 
 ## Preuve native promue
 
-`linear-gradient-three-stops` est promu dans `correctness/promoted/linear-gradient-three-stops/` pour le commit `2cf2794d1e82f735367a4cd6df156a4bb61f7f06`.
+`linear-gradient-three-stops` est promu dans `correctness/promoted/linear-gradient-three-stops/` pour le commit `2cf27941d3668b2c522720389e7d687ac54bba9e`.
 
 - Oracle CPU indépendant : décodage sRGB, interpolation en linear-premultiplied, stockage sRGB RGBA8.
 - GPU : une soumission, un draw et un bind de pipeline via `kanvas.surface.render`.
@@ -22,7 +22,7 @@ L'ABI native était déjà capable de transporter jusqu'à seize stops : payload
 Commandes rejouables :
 
 ```text
-./gradlew --no-daemon :integration-tests:gpu-evidence:generateGpuEvidence -Pscene=linear-gradient-three-stops -PsourceCommit=2cf2794d1e82f735367a4cd6df156a4bb61f7f06
-./gradlew --no-daemon :integration-tests:gpu-evidence:verifyGeneratedGpuEvidence -Pscene=linear-gradient-three-stops -PsourceCommit=2cf2794d1e82f735367a4cd6df156a4bb61f7f06
+./gradlew --no-daemon :integration-tests:gpu-evidence:generateGpuEvidence -Pscene=linear-gradient-three-stops -PsourceCommit=2cf27941d3668b2c522720389e7d687ac54bba9e
+./gradlew --no-daemon :integration-tests:gpu-evidence:verifyGeneratedGpuEvidence -Pscene=linear-gradient-three-stops -PsourceCommit=2cf27941d3668b2c522720389e7d687ac54bba9e
 ./gradlew --no-daemon :integration-tests:gpu-evidence:verifyPromotedGpuEvidence
 ```

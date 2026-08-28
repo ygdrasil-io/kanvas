@@ -1,1 +1,1 @@
-{"schemaVersion":"gpu-evidence-promotion-v2","promotedAtUtc":"2026-08-28T11:41:43.329732Z","reviewer":"codex","reason":"W32 validates bounded three-stop clamp FillRect rendering.","rebaseline":false,"sceneIds":["linear-gradient-three-stops"],"priorComparison":null,"newComparison":null}
+{"schemaVersion":"gpu-evidence-promotion-v2","promotedAtUtc":"2026-08-28T12:10:57.525085Z","reviewer":"codex","reason":"W32 validates bounded three-stop clamp FillRect rendering.","rebaseline":false,"sceneIds":["linear-gradient-three-stops"],"priorComparison":null,"newComparison":null}
