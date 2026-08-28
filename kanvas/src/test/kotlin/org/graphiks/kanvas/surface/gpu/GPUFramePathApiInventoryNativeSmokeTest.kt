@@ -692,6 +692,75 @@ class GPUFramePathApiInventoryNativeSmokeTest {
     }
 
     @Test
+    fun `inverse winding intersect path clip fills outside triangle natively`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        val capabilities = requireNotNull(backend.capabilities)
+        val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(RenderConfig.DEFAULT.mapPreparedGpuColorConfig())
+        val targetBounds = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, 32, 32)
+        val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.clip-inverse-winding-intersect")
+        val clipPath = Path().apply {
+            fillType = FillType.INVERSE_WINDING
+            moveTo(4.25f, 4.25f)
+            lineTo(27.25f, 4.25f)
+            lineTo(4.25f, 27.25f)
+            close()
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawRect(
+                    RectF32.ofLTRB(0f, 0f, 32f, 32f),
+                    Paint.fill(ColorARGB.Red).copy(antiAlias = false),
+                    Matrix3x3F32.Identity,
+                    ClipStack.Complex(
+                        listOf(ClipStackOp.PathOp(clipPath, ClipOp.INTERSECT, antiAlias = false)),
+                    ),
+                ),
+            ),
+            target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+            deviceGeneration = backend.deviceGeneration,
+        )
+        val clipExecution = assertIs<GPUClipExecutionPlan.StencilCoverage>(
+            inventory.visualCommands.single().clipExecutionPlan,
+        )
+        assertEquals(GPUClipStencilOperation.IncrementWrap, clipExecution.producer.frontPassOperation)
+        assertEquals(GPUClipStencilOperation.DecrementWrap, clipExecution.producer.backPassOperation)
+        assertEquals(GPUClipStencilCompare.Equal, clipExecution.consumer.compare)
+        val preparation = GPUFramePathApiInventory.prepareNativeTaskList(
+            inventory,
+            capabilities,
+            targetBounds,
+            readbackId,
+        )
+        val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            preparation,
+            (preparation as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}; facts=${it.facts}"
+            },
+        ).taskList
+        val session = backend.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(32, 32, colorMapping.physicalFormat, colorMapping.interpretation),
+        )
+        try {
+            val completed = session.renderFrame(
+                prepared,
+                GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
+            ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+            assertEquals(GPUFrameStructuralOutcome.Succeeded, completed.outcome)
+            val gpu = assertIs<GPUSceneFrameOutput.ReadbackRgba>(completed.output).bytes
+            assertContentEquals(deterministicInverseWindingIntersectTriangleOracle(), gpu)
+            assertEquals(1L, session.nativeCounters().submits)
+            assertEquals(1L, session.nativeCounters().readbackCopies)
+        } finally {
+            session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
     fun `single diagonal square miter stroke renders natively`() {
         val backend = GPUBackendRuntimeNativeFactory.createOrNull()
         assumeTrue(backend != null)
@@ -1319,6 +1388,30 @@ class GPUFramePathApiInventoryNativeSmokeTest {
                     rgba[offset + 1] = fill.green.toByte()
                     rgba[offset + 2] = fill.blue.toByte()
                     rgba[offset + 3] = fill.alpha.toByte()
+                }
+            }
+        }
+
+    /** Independent barycentric pixel-centre oracle for inverse winding triangle coverage. */
+    private fun deterministicInverseWindingIntersectTriangleOracle(): ByteArray =
+        ByteArray(32 * 32 * 4).also { rgba ->
+            val ax = 4.25f
+            val ay = 4.25f
+            val bx = 27.25f
+            val by = 4.25f
+            val cx = 4.25f
+            val cy = 27.25f
+            val denominator = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy)
+            for (y in 0 until 32) {
+                for (x in 0 until 32) {
+                    val px = x + 0.5f
+                    val py = y + 0.5f
+                    val u = ((by - cy) * (px - cx) + (cx - bx) * (py - cy)) / denominator
+                    val v = ((cy - ay) * (px - cx) + (ax - cx) * (py - cy)) / denominator
+                    if (u >= 0f && v >= 0f && u + v <= 1f) continue
+                    val offset = (y * 32 + x) * 4
+                    rgba[offset] = 0xff.toByte()
+                    rgba[offset + 3] = 0xff.toByte()
                 }
             }
         }
