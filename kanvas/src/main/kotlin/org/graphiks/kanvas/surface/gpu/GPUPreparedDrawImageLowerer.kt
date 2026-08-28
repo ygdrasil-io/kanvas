@@ -149,9 +149,11 @@ internal object GPUPreparedDrawImageLowerer {
         val requestedSampling = requestedImageShader?.sampling
         val sampling = when (requestedSampling) {
             SamplingOptions.NEAREST -> GPUPreparedImageSampling.Nearest
-            SamplingOptions.LINEAR,
-            null,
-            -> GPUPreparedImageSampling.Linear
+            SamplingOptions.LINEAR -> return GPUPreparedDrawImageLowering.Refused(
+                GPUPreparedImageRefusalCodes.SAMPLING_FILTER,
+                mapOf("sourceId" to image.sourceId, "sampling" to "linear", "supportedSampling" to "nearest"),
+            )
+            null -> GPUPreparedImageSampling.Nearest
             is SamplingOptions.Cubic -> return GPUPreparedDrawImageLowering.Refused(
                 GPUPreparedImageRefusalCodes.SAMPLING_CUBIC,
                 mapOf("sourceId" to image.sourceId),
@@ -183,6 +185,28 @@ internal object GPUPreparedDrawImageLowerer {
                     "kx" to operation.transform.kx.toString(),
                     "ky" to operation.transform.ky.toString(),
                     "sy" to operation.transform.sy.toString(),
+                ),
+            )
+        }
+
+        val transform = operation.transform
+        val integerTranslation =
+            transform.sx == 1f && transform.sy == 1f && transform.kx == 0f && transform.ky == 0f &&
+                transform.tx.isFinite() && transform.ty.isFinite() &&
+                transform.tx == transform.tx.toInt().toFloat() &&
+                transform.ty == transform.ty.toInt().toFloat()
+        if (!integerTranslation) {
+            return GPUPreparedDrawImageLowering.Refused(
+                GPUPreparedImageRefusalCodes.AFFINE_SAMPLING,
+                mapOf(
+                    "sourceId" to image.sourceId,
+                    "supportedTransform" to "identity_or_integer_translation",
+                    "sx" to transform.sx.toString(),
+                    "kx" to transform.kx.toString(),
+                    "ky" to transform.ky.toString(),
+                    "sy" to transform.sy.toString(),
+                    "tx" to transform.tx.toString(),
+                    "ty" to transform.ty.toString(),
                 ),
             )
         }
@@ -291,7 +315,12 @@ internal object GPUPreparedDrawImageLowerer {
         )
 
         val gpuSrc = GPURect(sx0, sy0, sx1, sy1)
-        val gpuDst = GPURect(dst.left, dst.top, dst.right, dst.bottom)
+        val gpuDst = GPURect(
+            dst.left + transform.tx,
+            dst.top + transform.ty,
+            dst.right + transform.tx,
+            dst.bottom + transform.ty,
+        )
 
         val minX = transformedCorners.minOf { it.x }
         val minY = transformedCorners.minOf { it.y }
@@ -320,14 +349,10 @@ internal object GPUPreparedDrawImageLowerer {
             imageSourceId = image.sourceId,
             src = gpuSrc,
             dst = gpuDst,
-            transform = GPUTransformFacts.affine(
-                scaleX = operation.transform.sx,
-                skewX = operation.transform.kx,
-                skewY = operation.transform.ky,
-                scaleY = operation.transform.sy,
-                translateX = operation.transform.tx,
-                translateY = operation.transform.ty,
-            ),
+            // Integer translations are folded into dst above. The native image dispatch
+            // consequently receives only an identity transform, which is the contract it
+            // actually materializes rather than a deferred recorder refusal.
+            transform = GPUTransformFacts.identity(),
             clip = operation.clip.toGPUClipFacts(target),
             layer = GPULayerFacts.root(target),
             material = material,

@@ -8,6 +8,20 @@ import kotlin.test.assertNotNull
 
 class GpuEvidenceCatalogOracleTest {
     @Test
+    fun `bounded bitmap oracle preserves literal nearest texels at its integer destination`() {
+        val pixels = oracle("bounded-rgba8-nearest-bitmap")
+
+        assertPixel(pixels, 64, 64, 11, 15, intArrayOf(13, 20, 33, 255))
+        assertPixel(pixels, 64, 64, 12, 16, intArrayOf(17, 34, 51, 255))
+        assertPixel(pixels, 64, 64, 13, 16, intArrayOf(221, 204, 187, 255))
+        assertPixel(pixels, 64, 64, 14, 16, intArrayOf(119, 136, 153, 255))
+        assertPixel(pixels, 64, 64, 12, 17, intArrayOf(68, 85, 102, 255))
+        assertPixel(pixels, 64, 64, 13, 17, intArrayOf(16, 32, 48, 255))
+        assertPixel(pixels, 64, 64, 14, 17, intArrayOf(170, 187, 204, 255))
+        assertPixel(pixels, 64, 64, 15, 18, intArrayOf(13, 20, 33, 255))
+    }
+
+    @Test
     fun `translucent overlap oracle matches literal premultiplied src-over pixels`() {
         val pixels = oracle("translucent-card-overlap")
 

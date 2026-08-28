@@ -21,10 +21,12 @@ object GPUPreparedImageRefusalCodes {
     const val UPLOAD_BUDGET_EXCEEDED = "unsupported.image.upload.budget_exceeded"
     const val TEXTURE_LIMIT = "unsupported.image.texture_limit"
     const val MIP_REQUIRED = "unsupported.image.mip_required"
+    const val SAMPLING_FILTER = "unsupported.image.sampling_filter"
     const val SAMPLING_CUBIC = "unsupported.image.sampling_cubic"
     const val SAMPLING_ANISOTROPIC = "unsupported.image.sampling_anisotropic"
     const val TILE_MODE = "unsupported.image.tile_mode"
     const val PERSPECTIVE_SAMPLING = "unsupported.image.perspective_sampling"
+    const val AFFINE_SAMPLING = "unsupported.image.affine_sampling"
     const val NINE_GEOMETRY = "unsupported.image.nine_geometry"
     const val LATTICE_GEOMETRY = "unsupported.image.lattice_geometry"
     const val ATLAS_ARRAY_LENGTHS = "unsupported.image.atlas.array_lengths"
@@ -52,10 +54,12 @@ object GPUPreparedImageRefusalCodes {
         UPLOAD_BUDGET_EXCEEDED,
         TEXTURE_LIMIT,
         MIP_REQUIRED,
+        SAMPLING_FILTER,
         SAMPLING_CUBIC,
         SAMPLING_ANISOTROPIC,
         TILE_MODE,
         PERSPECTIVE_SAMPLING,
+        AFFINE_SAMPLING,
         NINE_GEOMETRY,
         LATTICE_GEOMETRY,
         ATLAS_ARRAY_LENGTHS,

@@ -19,6 +19,8 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPURect
+import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
@@ -359,7 +361,7 @@ class GPUPreparedDrawImageLowererTest {
     }
 
     @Test
-    fun `translation transform produces rect geometry with shifted positions`() {
+    fun `integer translation is folded into native image destination`() {
         val image = commonRgbaImage()
         val dst = RectF32.ofLTRB(0f, 0f, 20f, 20f)
         val tx = Matrix3x3F32.translation(5f, 10f)
@@ -379,14 +381,17 @@ class GPUPreparedDrawImageLowererTest {
             listOf(5f to 10f, 25f to 10f, 25f to 30f, 5f to 30f),
             positions,
         )
+        val normalized = assertIs<NormalizedDrawCommand.DrawImageRect>(result.command.normalized)
+        assertEquals(GPUTransformType.Identity, normalized.transform.type)
+        assertEquals(GPURect(5f, 10f, 25f, 30f), normalized.dst)
     }
 
     @Test
-    fun `scale transform produces rect geometry with scaled positions`() {
+    fun `scale transform is refused before native image submission`() {
         val image = commonRgbaImage()
         val dst = RectF32.ofLTRB(1f, 2f, 4f, 6f)
         val scale = Matrix3x3F32.scaling(2f, 3f)
-        val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
+        val result = assertIs<GPUPreparedDrawImageLowering.Refused>(
             GPUPreparedDrawImageLowerer.lower(
                 drawImage(image, dst = dst, transform = scale),
                 GPUDrawCommandID(0),
@@ -397,19 +402,15 @@ class GPUPreparedDrawImageLowererTest {
                 capabilities(),
             ),
         )
-        val positions = result.command.preparedImage!!.geometry.vertices.map { it.x to it.y }
-        assertEquals(
-            listOf(2f to 6f, 8f to 6f, 8f to 18f, 2f to 18f),
-            positions,
-        )
+        assertEquals("unsupported.image.affine_sampling", result.code)
     }
 
     @Test
-    fun `rotation transform preserves four transformed corners`() {
+    fun `rotation transform is refused before native image submission`() {
         val image = commonRgbaImage()
         val dst = RectF32.ofLTRB(0f, 0f, 10f, 10f)
         val rotate = Matrix3x3F32.rotation(90f)
-        val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
+        val result = assertIs<GPUPreparedDrawImageLowering.Refused>(
             GPUPreparedDrawImageLowerer.lower(
                 drawImage(image, dst = dst, transform = rotate),
                 GPUDrawCommandID(0),
@@ -420,19 +421,15 @@ class GPUPreparedDrawImageLowererTest {
                 capabilities(),
             ),
         )
-        val geometry = result.command.preparedImage!!.geometry
-        assertPositions(
-            listOf(0f to 0f, 0f to 10f, -10f to 10f, -10f to 0f),
-            geometry.vertices.map { it.x to it.y },
-        )
+        assertEquals("unsupported.image.affine_sampling", result.code)
     }
 
     @Test
-    fun `reflection transform preserves four corners`() {
+    fun `reflection transform is refused before native image submission`() {
         val image = commonRgbaImage()
         val dst = RectF32.ofLTRB(1f, 2f, 5f, 8f)
         val reflectX = Matrix3x3F32.of(-1f, 0f, 0f, 0f, 1f, 0f)
-        val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
+        val result = assertIs<GPUPreparedDrawImageLowering.Refused>(
             GPUPreparedDrawImageLowerer.lower(
                 drawImage(image, dst = dst, transform = reflectX),
                 GPUDrawCommandID(0),
@@ -443,19 +440,15 @@ class GPUPreparedDrawImageLowererTest {
                 capabilities(),
             ),
         )
-        val geometry = result.command.preparedImage!!.geometry
-        assertPositions(
-            listOf(-1f to 2f, -5f to 2f, -5f to 8f, -1f to 8f),
-            geometry.vertices.map { it.x to it.y },
-        )
+        assertEquals("unsupported.image.affine_sampling", result.code)
     }
 
     @Test
-    fun `skew transform produces quad geometry with four corners preserved`() {
+    fun `skew transform is refused before native image submission`() {
         val image = commonRgbaImage()
         val dst = RectF32.ofLTRB(10f, 10f, 30f, 30f)
         val skew = Matrix3x3F32.of(1f, 0.5f, 0f, 0f, 1f, 0f)
-        val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
+        val result = assertIs<GPUPreparedDrawImageLowering.Refused>(
             GPUPreparedDrawImageLowerer.lower(
                 drawImage(image, dst = dst, transform = skew),
                 GPUDrawCommandID(0),
@@ -466,21 +459,16 @@ class GPUPreparedDrawImageLowererTest {
                 capabilities(),
             ),
         )
-        val geometry = result.command.preparedImage!!.geometry
-        assertEquals(GPUPreparedImageGeometryClass.Quad, geometry.geometryClass)
-        assertPositions(
-            listOf(15f to 10f, 35f to 10f, 45f to 30f, 25f to 30f),
-            geometry.vertices.map { it.x to it.y },
-        )
+        assertEquals("unsupported.image.affine_sampling", result.code)
     }
 
     @Test
-    fun `composed transform order is scale then rotation then translation`() {
+    fun `composed affine transform is refused before native image submission`() {
         val image = commonRgbaImage()
         val dst = RectF32.ofLTRB(1f, 2f, 3f, 4f)
         val transform =
             Matrix3x3F32.translation(10f, 20f) * Matrix3x3F32.rotation(90f) * Matrix3x3F32.scaling(2f, 3f)
-        val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
+        val result = assertIs<GPUPreparedDrawImageLowering.Refused>(
             GPUPreparedDrawImageLowerer.lower(
                 drawImage(image, dst = dst, transform = transform),
                 GPUDrawCommandID(0),
@@ -492,10 +480,7 @@ class GPUPreparedDrawImageLowererTest {
             ),
         )
 
-        assertPositions(
-            listOf(4f to 22f, 4f to 26f, -2f to 26f, -2f to 22f),
-            result.command.preparedImage!!.geometry.vertices.map { it.x to it.y },
-        )
+        assertEquals("unsupported.image.affine_sampling", result.code)
     }
 
     @Test
@@ -555,12 +540,12 @@ class GPUPreparedDrawImageLowererTest {
     }
 
     @Test
-    fun `LINEAR sampling conserved`() {
+    fun `linear sampling is refused before native nearest-only execution`() {
         val image = rgbaImage()
         val paint = Paint.fill(ColorARGB.White).copy(
             shader = Shader.Image(image, sampling = SamplingOptions.LINEAR),
         )
-        val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
+        val result = assertIs<GPUPreparedDrawImageLowering.Refused>(
             GPUPreparedDrawImageLowerer.lower(
                 drawImage(image, paint = paint),
                 GPUDrawCommandID(0),
@@ -571,7 +556,7 @@ class GPUPreparedDrawImageLowererTest {
                 capabilities(),
             ),
         )
-        assertEquals(GPUPreparedImageSampling.Linear, result.command.preparedImage!!.sampling)
+        assertEquals("unsupported.image.sampling_filter", result.code)
     }
 
     @Test
@@ -983,11 +968,11 @@ class GPUPreparedDrawImageLowererTest {
     }
 
     @Test
-    fun `cannot substitute with bounding box for skew`() {
+    fun `skew cannot reach native image submission through a bounding-box substitute`() {
         val image = commonRgbaImage()
         val dst = RectF32.ofLTRB(10f, 10f, 30f, 20f)
         val skew = Matrix3x3F32.of(1f, 0.5f, 0f, 0.3f, 1f, 0f)
-        val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
+        val result = assertIs<GPUPreparedDrawImageLowering.Refused>(
             GPUPreparedDrawImageLowerer.lower(
                 drawImage(image, dst = dst, transform = skew),
                 GPUDrawCommandID(0),
@@ -998,27 +983,11 @@ class GPUPreparedDrawImageLowererTest {
                 capabilities(),
             ),
         )
-        val geometry = result.command.preparedImage!!.geometry
-        assertEquals(GPUPreparedImageGeometryClass.Quad, geometry.geometryClass)
-
-        val positions = geometry.vertices.map { it.x to it.y }
-        val srcBbox = RectF32.ofLTRB(10f, 10f, 30f, 20f)
-        val expectedCorner1 = skew.transform(Point2F32(srcBbox.left, srcBbox.top))
-        val expectedCorner2 = skew.transform(Point2F32(srcBbox.right, srcBbox.top))
-        val expectedCorner3 = skew.transform(Point2F32(srcBbox.right, srcBbox.bottom))
-        val expectedCorner4 = skew.transform(Point2F32(srcBbox.left, srcBbox.bottom))
-        assertEquals(expectedCorner1.x, positions[0].first, 0.001f)
-        assertEquals(expectedCorner1.y, positions[0].second, 0.001f)
-        assertEquals(expectedCorner2.x, positions[1].first, 0.001f)
-        assertEquals(expectedCorner2.y, positions[1].second, 0.001f)
-        assertEquals(expectedCorner3.x, positions[2].first, 0.001f)
-        assertEquals(expectedCorner3.y, positions[2].second, 0.001f)
-        assertEquals(expectedCorner4.x, positions[3].first, 0.001f)
-        assertEquals(expectedCorner4.y, positions[3].second, 0.001f)
+        assertEquals("unsupported.image.affine_sampling", result.code)
     }
 
     @Test
-    fun `default sampling without paint produces LINEAR`() {
+    fun `default sampling without paint selects the native nearest sampler`() {
         val image = rgbaImage()
         val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
             GPUPreparedDrawImageLowerer.lower(
@@ -1031,7 +1000,7 @@ class GPUPreparedDrawImageLowererTest {
                 capabilities(),
             ),
         )
-        assertEquals(GPUPreparedImageSampling.Linear, result.command.preparedImage!!.sampling)
+        assertEquals(GPUPreparedImageSampling.Nearest, result.command.preparedImage!!.sampling)
     }
 
     @Test
