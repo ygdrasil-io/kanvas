@@ -221,6 +221,19 @@ class GPUPreparedStrokeRectLowererTest {
     }
 
     @Test
+    fun `radial stroke rejects malformed stop positions before bands`() {
+        val invalid = listOf(Float.NaN, -0.1f, 1.1f, .5f)
+        invalid.forEach { middle ->
+            val positions = if (middle == .5f) listOf(0f, 0f, 1f) else listOf(0f, middle, 1f)
+            val shader = Shader.RadialGradient(Point2F32(32f,32f),16f,positions.mapIndexed { index, p -> org.graphiks.kanvas.paint.GradientStop(p, if(index == 0) ColorARGB.Red else ColorARGB.Blue) })
+            val refused = assertIs<GPUPreparedStrokeRectLowering.Refused>(GPUPreparedStrokeRectLowerer.lower(
+                strokeRect(paint=Paint.stroke(ColorARGB.Transparent,4f).copy(shader=shader,antiAlias=false)), GPUDrawCommandID(0),0,GPUFrameProvenance.None,target(),RenderConfig.DEFAULT,capabilities(withThreeStopStrokeRadialGradient=true),
+            ))
+            assertEquals("unsupported.stroke.rect_material", refused.code)
+        }
+    }
+
+    @Test
     fun `two stop full sweep gradient stroke lowers to four bands only with dedicated capability`() {
         val lowered = assertIs<GPUPreparedStrokeRectLowering.Ready>(GPUPreparedStrokeRectLowerer.lower(
             strokeRect(bounds = RectF32.ofLTRB(8f, 16f, 56f, 48f), paint = Paint.stroke(ColorARGB.Transparent, 4f).copy(

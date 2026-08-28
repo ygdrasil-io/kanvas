@@ -405,9 +405,10 @@ private fun Shader.RadialGradient.isAdmittedStrokeRadialGradient(): Boolean =
         stops.size in 2..3 &&
         stops.first().position == 0f && stops.last().position == 1f &&
         stops.all { stop ->
-            stop.color.r.isFinite() && stop.color.g.isFinite() &&
+            stop.position.isFinite() && stop.position in 0f..1f &&
+                stop.color.r.isFinite() && stop.color.g.isFinite() &&
                 stop.color.b.isFinite() && stop.color.a.isFinite()
-        }
+        } && stops.zipWithNext().all { (left, right) -> left.position < right.position }
 
 private fun Shader.SweepGradient.isAdmittedStrokeSweepGradient(): Boolean =
     tileMode == TileMode.CLAMP && interpolation == ColorSpaceInterpolation.SRGB &&
