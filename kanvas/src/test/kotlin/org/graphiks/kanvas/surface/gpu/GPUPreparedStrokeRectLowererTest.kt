@@ -683,6 +683,24 @@ class GPUPreparedStrokeRectLowererTest {
         val material = assertIs<org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor.LinearGradient>(first.material)
         assertEquals(18f, material.startX); assertEquals(36f, material.startY)
         assertEquals(58f, material.endX); assertEquals(36f, material.endY)
+
+        val nonEndpointStops = Shader.LinearGradient(
+            Point2F32(8f, 16f), Point2F32(28f, 16f),
+            listOf(
+                org.graphiks.kanvas.paint.GradientStop(.1f, ColorARGB.Red),
+                org.graphiks.kanvas.paint.GradientStop(.9f, ColorARGB.Blue),
+            ),
+            org.graphiks.kanvas.paint.TileMode.CLAMP,
+        )
+        val nonEndpointResult = GPUPreparedStrokeRectLowerer.lower(
+            operation.copy(paint = operation.paint.copy(shader = nonEndpointStops)),
+            GPUDrawCommandID(0), 0, GPUFrameProvenance.None, target(), RenderConfig.DEFAULT,
+            capabilities(withUniformScaleTwoStopStrokeGradient = true),
+        )
+        assertEquals(
+            "unsupported.stroke.rect_material",
+            assertIs<GPUPreparedStrokeRectLowering.Refused>(nonEndpointResult).code,
+        )
     }
 
     @Test

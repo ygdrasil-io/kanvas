@@ -145,6 +145,10 @@ class FirstRoutePlannerTest {
         )
         assertTypedRefusal(
             "unsupported.stroke.rect_material",
+            planner.plan(command(material = baseMaterial.copy(allStopPositions = floatArrayOf(.1f, .9f)))),
+        )
+        assertTypedRefusal(
+            "unsupported.stroke.rect_material",
             planner.plan(command(material = GPUMaterialDescriptor.SolidColor(1f, 0f, 0f, 1f))),
         )
     }

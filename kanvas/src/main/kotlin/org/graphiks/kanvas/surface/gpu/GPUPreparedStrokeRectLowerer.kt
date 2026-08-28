@@ -120,6 +120,9 @@ internal object GPUPreparedStrokeRectLowerer {
                     "unsupported.stroke.rect_linear_gradient_uniform_scale_capability", operationIndex,
                     mapOf("capability" to GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_UNIFORM_SCALE_NATIVE),
                 )
+                if (uniformScale && !shader.hasProvenTwoStopPositions()) {
+                    return refused("unsupported.stroke.rect_material", operationIndex, materialRefusalFacts(operation))
+                }
                 if (translatedThreeStop && !shader.hasProvenThreeStopPositions()) {
                     return refused("unsupported.stroke.rect_material", operationIndex, materialRefusalFacts(operation))
                 }
@@ -482,6 +485,9 @@ private fun Shader.LinearGradient.isAdmittedStrokeGradient(): Boolean {
 /** W43's translated three-stop proof fixes both endpoints and the midpoint. */
 private fun Shader.LinearGradient.hasProvenThreeStopPositions(): Boolean =
     stops.size == 3 && stops.map { it.position } == listOf(0f, .5f, 1f)
+
+private fun Shader.LinearGradient.hasProvenTwoStopPositions(): Boolean =
+    stops.size == 2 && stops.map { it.position } == listOf(0f, 1f)
 
 private fun Shader.RadialGradient.isAdmittedStrokeRadialGradient(): Boolean =
     tileMode == TileMode.CLAMP &&

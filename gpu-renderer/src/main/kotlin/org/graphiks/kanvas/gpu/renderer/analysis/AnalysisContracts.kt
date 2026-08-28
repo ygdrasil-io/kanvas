@@ -1965,6 +1965,7 @@ class GPUFirstRoutePlanner(
             transform.type != GPUTransformType.Identity -> "unsupported.stroke.rect_transform"
             layer.target.colorFormat != "rgba8unorm-srgb" -> "unsupported.stroke.rect_gradient_target"
             gradient.allStopPositions?.size != 2 -> "unsupported.stroke.rect_gradient_stop_count"
+            !gradient.hasProvenUniformScaleTwoStopPositions() -> "unsupported.stroke.rect_material"
             gradient.tileMode != "clamp" || gradient.localMatrix != listOf(1f,0f,0f,0f,1f,0f,0f,0f,1f) -> "unsupported.stroke.rect_material"
             !capabilities.hasFact(GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_UNIFORM_SCALE_NATIVE) -> "unsupported.stroke.rect_linear_gradient_uniform_scale_capability"
             else -> null
@@ -1976,8 +1977,12 @@ class GPUFirstRoutePlanner(
         return source.kind == GPUCommandSourceKind.AnalyticStrokeRectUniformScaleBand && !antiAlias &&
             transform.type == GPUTransformType.Identity && layer.target.colorFormat == "rgba8unorm-srgb" &&
             gradient.tileMode == "clamp" && gradient.allStopPositions?.size == 2 &&
+            gradient.hasProvenUniformScaleTwoStopPositions() &&
             gradient.localMatrix == listOf(1f,0f,0f,0f,1f,0f,0f,0f,1f)
     }
+
+    private fun GPUMaterialDescriptor.LinearGradient.hasProvenUniformScaleTwoStopPositions(): Boolean =
+        allStopPositions?.contentEquals(floatArrayOf(0f, 1f)) == true
 
     private fun NormalizedDrawCommand.FillRect.translatedThreeStopLinearGradientStrokeRefusalCode(): String? {
         if (source.kind != GPUCommandSourceKind.AnalyticStrokeRectTranslatedThreeStopBand) return null
