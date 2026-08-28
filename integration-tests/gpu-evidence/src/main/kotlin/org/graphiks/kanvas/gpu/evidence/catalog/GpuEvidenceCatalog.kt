@@ -12,6 +12,7 @@ import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathLinearGradientCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathRadialGradientCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathDirectTriangleLinearGradientCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathDRRectCpuOracle
@@ -61,6 +62,7 @@ object GpuEvidenceCatalog {
         clipPathUniformScaledTriangleSolid(),
         clipPathUniformScaledTriangleTwoBands(),
         clipPathTriangleLinearGradient(),
+        clipPathTriangleRadialGradient(),
         clipPathTranslatedTriangleLinearGradient(),
         clipPathUniformScaledTriangleLinearGradient(),
         clipPathTriangleDirectTriangleSolid(),
@@ -917,6 +919,32 @@ object GpuEvidenceCatalog {
         triangle = directTriangleGradient(4f, 4.25f, 60f, 12f, 12f, 60f),
         start = SurfaceSrgbGradientCpuOracle.Point(20f, 19.3f),
         end = SurfaceSrgbGradientCpuOracle.Point(20f, 23.3f),
+    )
+
+    private fun clipPathTriangleRadialGradient() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("clip-path-triangle-radial-gradient"),
+            "Clamp radial gradient inside hard path clip",
+            "Public Kanvas Surface hard non-AA path clip with one opaque two-stop sRGB clamp radial-gradient FillRect consumer.",
+            64,
+            64,
+            1L,
+            setOf("clip-path", "radial-gradient", "hard-clip", "kanvas-surface"),
+            EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-clip-path-radial-gradient-device-space", 1),
+            ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent device-space winding clip and clamp-radial-gradient membership."),
+            emptySet(),
+        ),
+        KanvasScenePrograms.clipPathTriangleRadialGradient(),
+        SurfaceSrgbClipPathRadialGradientCpuOracle(
+            background = intArrayOf(13, 20, 33, 255),
+            points = listOf(clipPoint(8f, 8f), clipPoint(56f, 8f), clipPoint(8f, 55f)),
+            drawBounds = SurfaceSrgbGradientCpuOracle.Rect(0f, 0f, 64f, 64f),
+            center = SurfaceSrgbGradientCpuOracle.Point(24.5f, 24.5f),
+            radius = 24f,
+            startColor = intArrayOf(255, 0, 0, 255),
+            endColor = intArrayOf(0, 0, 255, 255),
+        ),
     )
 
     private fun clipPathTranslatedTriangleDirectTriangleLinearGradient() = clipPathDirectTriangleLinearGradientCase(

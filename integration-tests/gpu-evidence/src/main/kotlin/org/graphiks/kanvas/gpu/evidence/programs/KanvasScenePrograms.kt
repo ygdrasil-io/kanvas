@@ -427,6 +427,30 @@ object KanvasScenePrograms {
 
     fun clipPathTriangleLinearGradient() = clipPathLinearGradient()
 
+    fun clipPathTriangleRadialGradient() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        save()
+        clipPath(
+            Path { moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close() }
+                .apply { fillType = FillType.WINDING },
+            ClipOp.INTERSECT,
+            antiAlias = false,
+        )
+        drawRect(
+            RectF32.ofLTRB(0f, 0f, 64f, 64f),
+            Paint(
+                shader = Shader.RadialGradient(
+                    Point2F32(24.5f, 24.5f),
+                    24f,
+                    listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                    TileMode.CLAMP,
+                ),
+                antiAlias = false,
+            ),
+        )
+        restore()
+    })
+
     fun clipPathTranslatedTriangleLinearGradient() = clipPathLinearGradient {
         translate(2f, 0f)
     }

@@ -109,6 +109,20 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
     }
 
     @Test
+    fun `seal accepts a bounded clamp radial gradient consumer with its stencil pipeline identity`() {
+        val accepted = assertIs<GPUCorePrimitiveClipStencilNativeRoute.Accepted>(
+            sealGPUCorePrimitiveClipStencilNativeRoute(
+                request(consumers = mutableListOf(consumer(material = radialGradientMaterial()))),
+            ),
+        )
+
+        assertEquals(
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient,
+            accepted.consumers.single().structuralKey.shader,
+        )
+    }
+
+    @Test
     fun `seal accepts an opaque hard analytic rrect consumer without lowering it to triangles`() {
         val accepted = assertIs<GPUCorePrimitiveClipStencilNativeRoute.Accepted>(
             sealGPUCorePrimitiveClipStencilNativeRoute(
@@ -762,6 +776,17 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
         startY = 0f,
         endX = 40f,
         endY = 0f,
+        localMatrix = listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f),
+        interpolation = "srgb",
+        tileMode = "clamp",
+        positions = listOf(0f, 1f),
+        colors = listOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
+    )
+
+    private fun radialGradientMaterial() = GPUCorePrimitiveMaterialPayload.RadialGradient(
+        centerX = 20f,
+        centerY = 10f,
+        radius = 20f,
         localMatrix = listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f),
         interpolation = "srgb",
         tileMode = "clamp",

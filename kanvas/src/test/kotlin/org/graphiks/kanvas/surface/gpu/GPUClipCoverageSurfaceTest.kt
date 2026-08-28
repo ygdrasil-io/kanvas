@@ -991,6 +991,45 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
+    fun `public hard path clip submits an opaque clamp radial gradient rect`() {
+        requireWebGpu()
+        val background = ColorARGB.of(255, 13, 20, 33)
+        val surface = Surface(64, 64)
+        surface.canvas {
+            drawColor(background)
+            save()
+            clipPath(
+                Path { moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close() }
+                    .apply { fillType = FillType.WINDING },
+                ClipOp.INTERSECT,
+                antiAlias = false,
+            )
+            drawRect(
+                RectF32.ofLTRB(0f, 0f, 64f, 64f),
+                Paint(
+                    shader = Shader.RadialGradient(
+                        // Center on this exact device pixel center; this locks the native radial
+                        // program to an unambiguous opaque endpoint sample.
+                        Point2F32(24.5f, 24.5f),
+                        24f,
+                        listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                        TileMode.CLAMP,
+                    ),
+                    antiAlias = false,
+                ),
+            )
+            restore()
+        }
+
+        val result = surface.render()
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertEquals(0, result.stats.opsRefused)
+        assertTrue(result.stats.opsDispatched >= 2)
+        assertRgbaNear(result.pixels, 64, 24, 24, ColorARGB.Red, tolerance = 0)
+        assertRgbaNear(result.pixels, 64, 60, 60, background, tolerance = 0)
+    }
+
+    @Test
     fun `public quarter turn clamp gradient rect renders through a uniformly captured hard path clip`() {
         requireWebGpu()
         val background = ColorARGB.of(255, 13, 20, 33)
