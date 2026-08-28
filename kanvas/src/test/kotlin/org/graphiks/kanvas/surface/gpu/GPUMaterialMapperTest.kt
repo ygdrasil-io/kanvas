@@ -146,7 +146,7 @@ class GPUMaterialMapperTest {
     }
 
     @Test
-    fun `legacy repeat is retained while prepared v2 refuses other tile modes and stop counts`() {
+    fun `legacy repeat is retained while the bounded native FillRect route admits three clamp stops`() {
         val twoStops = listOf(
             GradientStop(0f, ColorARGB.Red),
             GradientStop(1f, ColorARGB.Blue),
@@ -167,6 +167,21 @@ class GPUMaterialMapperTest {
         assertEquals("repeat", legacyRepeat.tileMode)
         assertEquals(listOf(0f, 0.5f, 1f), legacyRepeat.allStopPositions?.toList())
 
+        val threeStopClamp = assertIs<GPUMaterialDescriptor.LinearGradient>(
+            Paint(
+                shader = Shader.LinearGradient(
+                    start = Point2F32(0f, 0f), end = Point2F32(8f, 0f),
+                    stops = listOf(
+                        twoStops.first(),
+                        GradientStop(0.5f, ColorARGB.White),
+                        twoStops.last(),
+                    ),
+                    tileMode = TileMode.CLAMP,
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+        assertEquals(listOf(0f, 0.5f, 1f), threeStopClamp.allStopPositions?.toList())
+
         listOf(
             Shader.LinearGradient(
                 start = Point2F32(0f, 0f), end = Point2F32(8f, 0f),
@@ -174,7 +189,12 @@ class GPUMaterialMapperTest {
             ) to "unsupported.material.mapping.linear_gradient_tile_mode",
             Shader.LinearGradient(
                 start = Point2F32(0f, 0f), end = Point2F32(8f, 0f),
-                stops = listOf(*twoStops.toTypedArray(), GradientStop(0.5f, ColorARGB.White)),
+                stops = listOf(
+                    twoStops.first(),
+                    GradientStop(0.33f, ColorARGB.White),
+                    GradientStop(0.66f, ColorARGB.Black),
+                    twoStops.last(),
+                ),
             ) to "unsupported.material.mapping.linear_gradient_stop_count",
         ).forEach { (shader, reason) ->
             val refused = assertIs<GPUMaterialDescriptor.Unsupported>(
@@ -267,7 +287,7 @@ class GPUMaterialMapperTest {
     }
 
     @Test
-    fun `linear wrappers retain source facts while prepared mapping refuses unsupported facts`() {
+    fun `linear wrappers retain source facts through bounded three stop mapping`() {
         val gradient = Shader.LinearGradient(
             start = Point2F32(1f, 2f),
             end = Point2F32(9f, 2f),
@@ -283,16 +303,11 @@ class GPUMaterialMapperTest {
             legacyMatrix.localMatrix,
         )
         assertEquals("srgb", legacyMatrix.interpolation)
-        val preparedMatrix = assertIs<GPUMaterialDescriptor.Unsupported>(
+        val preparedMatrix = assertIs<GPUMaterialDescriptor.LinearGradient>(
             Paint(shader = Shader.WithLocalMatrix(gradient, localMatrix))
                 .toPreparedMaterialMapping().descriptor,
         )
-        assertEquals(GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX, preparedMatrix.reason)
-        assertEquals(GPUMaterialKind.LinearGradient, preparedMatrix.originalKind)
-        assertEquals(
-            GPUPreparedMaterialUnsupportedReason.LINEAR_GRADIENT_STOP_COUNT,
-            assertIs<GPUMaterialDescriptor.Unsupported>(preparedMatrix.source).reason,
-        )
+        assertEquals(legacyMatrix.localMatrix, preparedMatrix.localMatrix)
 
         val legacyWorkingSpace = assertIs<GPUMaterialDescriptor.LinearGradient>(
             Paint(
@@ -317,10 +332,7 @@ class GPUMaterialMapperTest {
         )
         assertEquals(GPUPreparedMaterialUnsupportedReason.WORKING_COLOR_SPACE, preparedWorkingSpace.reason)
         assertEquals(GPUMaterialKind.LinearGradient, preparedWorkingSpace.originalKind)
-        assertEquals(
-            GPUPreparedMaterialUnsupportedReason.LINEAR_GRADIENT_STOP_COUNT,
-            assertIs<GPUMaterialDescriptor.Unsupported>(preparedWorkingSpace.source).reason,
-        )
+        assertIs<GPUMaterialDescriptor.LinearGradient>(preparedWorkingSpace.source)
     }
 
     @Test

@@ -211,7 +211,7 @@ enum class GPUPreparedMaterialUnsupportedReason(
     ),
     LINEAR_GRADIENT_STOP_COUNT(
         "unsupported.material.mapping.linear_gradient_stop_count",
-        "Prepared linear gradient mapping requires exactly two stops",
+        "Prepared linear gradient mapping exceeds the bounded route stop count",
     ),
     LINEAR_GRADIENT_NON_FINITE(
         "unsupported.material.mapping.linear_gradient_non_finite",
@@ -276,12 +276,14 @@ enum class GPUPreparedMaterialUnsupportedReason(
  */
 fun GPUMaterialDescriptor.gradientFactsRefusalReasonOrNull(
     deferLinearGradientTileModeToRoute: Boolean = false,
+    allowThreeStopLinearGradient: Boolean = false,
 ): GPUPreparedMaterialUnsupportedReason? =
     when (this) {
         is GPUMaterialDescriptor.LinearGradient -> when {
             tileMode != "clamp" && !deferLinearGradientTileModeToRoute ->
                 GPUPreparedMaterialUnsupportedReason.LINEAR_GRADIENT_TILE_MODE
-            (allStopPositions?.size ?: 2) != 2 -> GPUPreparedMaterialUnsupportedReason.LINEAR_GRADIENT_STOP_COUNT
+            (allStopPositions?.size ?: 2) !in (if (allowThreeStopLinearGradient) 2..3 else 2..2) ->
+                GPUPreparedMaterialUnsupportedReason.LINEAR_GRADIENT_STOP_COUNT
             !linearGradientFactsAreFinite() -> GPUPreparedMaterialUnsupportedReason.LINEAR_GRADIENT_NON_FINITE
             interpolation != "srgb" -> GPUPreparedMaterialUnsupportedReason.GRADIENT_INTERPOLATION
             else -> localMatrix.boundedAffineLocalMatrixRefusalOrNull(allowFullAffine = true)

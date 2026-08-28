@@ -1046,9 +1046,12 @@ private fun Shader.toPreparedMaterial(
     }
 }
 
-/** V2 validation applies only to its clamp-only prepared-material sub-route. */
+/**
+ * Preserve the bounded three-stop descriptor for the native CorePrimitive FillRect route.
+ * Other prepared routes retain their own two-stop admission at analysis/lowering time.
+ */
 private fun GPUMaterialDescriptor.LinearGradient.preparedV2LinearGradientRefusalReasonOrNull() =
-    if (tileMode == "repeat") null else gradientFactsRefusalReasonOrNull()
+    if (tileMode == "repeat") null else gradientFactsRefusalReasonOrNull(allowThreeStopLinearGradient = true)
 
 private fun Shader.Image.toPreparedImageMaterial(
     descriptorAssembly: GPUMaterialDescriptorAssemblySession,

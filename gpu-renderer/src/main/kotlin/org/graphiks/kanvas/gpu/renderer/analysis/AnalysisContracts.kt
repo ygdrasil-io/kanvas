@@ -1802,7 +1802,7 @@ class GPUFirstRoutePlanner(
             when (mf) {
                 is NormalizedMaskFilter.Blur -> mf.refusalCode()
             }
-        } ?: material.analysisRefusalCodeOrNull() ?: when {
+        } ?: material.analysisRefusalCodeOrNull(allowThreeStopLinearGradient = true) ?: when {
             transform.type == GPUTransformType.Perspective -> "unsupported.transform.perspective"
             transform.type == GPUTransformType.Singular -> "unsupported.transform.singular"
             transform.isAffineDeterminantNonFinite() -> "unsupported.transform.non_finite"
@@ -2161,13 +2161,16 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
         }
 
     /** Returns typed material refusal evidence before kind and capability admission checks. */
-    private fun GPUMaterialDescriptor.analysisRefusalCodeOrNull(): String? =
+    private fun GPUMaterialDescriptor.analysisRefusalCodeOrNull(
+        allowThreeStopLinearGradient: Boolean = false,
+    ): String? =
         (this as? GPUMaterialDescriptor.Unsupported)?.reason?.diagnosticCode
             // CorePrimitive owns the legacy linear-gradient tile-mode ABI, including repeat.
             // Defer only that route-specific validation; other prepared-material facts remain
             // terminal before route selection.
             ?: gradientFactsRefusalReasonOrNull(
                 deferLinearGradientTileModeToRoute = this is GPUMaterialDescriptor.LinearGradient,
+                allowThreeStopLinearGradient = allowThreeStopLinearGradient,
             )?.diagnosticCode
 
     /**

@@ -37,6 +37,7 @@ object GpuEvidenceCatalog {
         strokeRectOutline(),
         roundCapStroke(),
         linearGradientLanes(),
+        linearGradientThreeStops(),
         radialSwatch(),
         sweepDisk(),
         sweepGradientPartialAngle(),
@@ -115,7 +116,6 @@ object GpuEvidenceCatalog {
         circlePathFill(),
     )
     val refusalCases: List<EvidenceCase> = listOf(
-        linearGradientThreeStops(),
         basicPrimitivesEmptyRectRefusal(),
         perspectiveTransformRefusal(),
         mirrorLinearGradientFillRectRefusal(),
@@ -514,23 +514,31 @@ object GpuEvidenceCatalog {
         )
     }
 
-    private fun linearGradientThreeStops() = EvidenceCase(
-        EvidenceSceneDescriptor(
-            EvidenceSceneId("linear-gradient-three-stops"),
-            "Linear gradient three stops refusal",
-            "Public Kanvas Surface rejects a clamp linear gradient with three stops before submission.",
-            64,
-            64,
-            1L,
-            setOf("linear-gradient", "kanvas-surface", "refusal"),
-            EvidenceExpectation.ShouldRefuse("unsupported.material.mapping.linear_gradient_stop_count"),
-            OraclePolicy.StableRefusal,
-            null,
-            emptySet(),
-        ),
-        KanvasScenePrograms.linearGradientThreeStops(),
-        null,
-    )
+    private fun linearGradientThreeStops(): EvidenceCase {
+        val bounds = SurfaceSrgbGradientCpuOracle.Rect(8f, 16f, 56f, 48f)
+        val stops = listOf(
+            SurfaceSrgbGradientCpuOracle.Stop(0f, 255, 56, 56),
+            SurfaceSrgbGradientCpuOracle.Stop(.5f, 56, 220, 120),
+            SurfaceSrgbGradientCpuOracle.Stop(1f, 56, 112, 255),
+        )
+        return EvidenceCase(
+            EvidenceSceneDescriptor(
+                EvidenceSceneId("linear-gradient-three-stops"),
+                "Linear gradient three stops",
+                "Public Kanvas Surface CorePrimitive FillRect renders an identity clamp linear gradient with three ordered opaque stops.",
+                64, 64, 1L, setOf("linear-gradient", "three-stops", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+                OraclePolicy.GeneratedCpu("surface-srgb-gradient-linear-clamp", 2),
+                ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."), emptySet(),
+            ),
+            KanvasScenePrograms.linearGradientThreeStops(),
+            SurfaceSrgbGradientCpuOracle.linear(
+                bounds,
+                SurfaceSrgbGradientCpuOracle.Point(8.5f, 32.5f),
+                SurfaceSrgbGradientCpuOracle.Point(55.5f, 32.5f),
+                stops,
+            ),
+        )
+    }
 
     private fun sweepGradientPartialAngle() = gradientCase(
         "sweep-gradient-partial-angle", "Sweep gradient partial angle", "Public Kanvas Surface clamp sweep gradient across a partial angle range.",
