@@ -119,6 +119,17 @@ class ProductFlagConfigTest {
     }
 
     @Test
+    fun `two stop sweep stroke capability has an independent disable property`() {
+        val config = GPUProductFlagConfig.fromSystemProperties { key ->
+            if (key == GPUProductFlagConfig.StrokeRectSweepGradientTwoStopDisableProperty) "true" else null
+        }
+        assertFalse(config.strokeRectSweepGradientTwoStopEnabled)
+        assertFalse(config.buildCapabilities().facts.any {
+            it.name == GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE
+        })
+    }
+
+    @Test
     fun `disable property overrides scissor flag`() {
         val config = GPUProductFlagConfig.fromSystemProperties(
             propertyReader = { key ->
