@@ -39,5 +39,7 @@ legacy.
   -Pscene=mirror-linear-gradient-fillrect-refusal -PsourceCommit=<commit>
 ```
 
-La promotion est permise seulement pour le rendu REPEAT pixel-validé ; la
-preuve de refus MIRROR est promue comme refus stable séparé.
+Les deux bundles ont été générés depuis
+`5c6e36c4517ac85c11ff0d8fccf5943964c48e2b`, vérifiés, puis promus. La
+preuve REPEAT est un rendu GPU pixel-validé ; la preuve MIRROR est promue
+comme refus stable séparé avant soumission.
