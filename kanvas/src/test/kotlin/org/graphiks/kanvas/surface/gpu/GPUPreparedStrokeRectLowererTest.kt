@@ -183,6 +183,45 @@ class GPUPreparedStrokeRectLowererTest {
     }
 
     @Test
+    fun `two stop radial gradient stroke refuses every bounded-contract escape before bands`() {
+        fun radial(tileMode: org.graphiks.kanvas.paint.TileMode = org.graphiks.kanvas.paint.TileMode.CLAMP) =
+            Shader.RadialGradient(
+                Point2F32(32.5f, 32.5f), 23.5f,
+                listOf(
+                    org.graphiks.kanvas.paint.GradientStop(0f, ColorARGB.Red),
+                    org.graphiks.kanvas.paint.GradientStop(1f, ColorARGB.Blue),
+                ), tileMode,
+            )
+        fun operation(shader: Shader, antiAlias: Boolean = false, transform: Matrix3x3F32 = Matrix3x3F32.Identity) =
+            strokeRect(
+                bounds = RectF32.ofLTRB(8f, 16f, 56f, 48f),
+                paint = Paint.stroke(ColorARGB.Transparent, 4f).copy(shader = shader, antiAlias = antiAlias),
+                transform = transform,
+            )
+        val cases = listOf(
+            Triple(operation(radial(), antiAlias = true), target(), "unsupported.stroke.rect_anti_alias"),
+            Triple(operation(radial()), target("rgba8unorm"), "unsupported.stroke.rect_gradient_target"),
+            Triple(operation(radial(org.graphiks.kanvas.paint.TileMode.REPEAT)), target(), "unsupported.stroke.rect_gradient_tile_mode"),
+            Triple(operation(radial(org.graphiks.kanvas.paint.TileMode.MIRROR)), target(), "unsupported.stroke.rect_gradient_tile_mode"),
+            Triple(operation(radial(org.graphiks.kanvas.paint.TileMode.DECAL)), target(), "unsupported.stroke.rect_gradient_tile_mode"),
+            Triple(operation(radial(), transform = Matrix3x3F32.translation(1f, 0f)), target(), "unsupported.stroke.rect_transform"),
+            Triple(
+                operation(Shader.WithLocalMatrix(radial(), Matrix3x3F32.translation(1f, 0f))),
+                target(), "unsupported.stroke.rect_material",
+            ),
+        )
+        cases.forEach { (operation, target, expectedCode) ->
+            val refused = assertIs<GPUPreparedStrokeRectLowering.Refused>(
+                GPUPreparedStrokeRectLowerer.lower(
+                    operation, GPUDrawCommandID(0), 0, GPUFrameProvenance.None, target,
+                    RenderConfig.DEFAULT, capabilities(withTwoStopStrokeRadialGradient = true),
+                ),
+            )
+            assertEquals(expectedCode, refused.code)
+        }
+    }
+
+    @Test
     fun `three stop gradient stroke refuses before bands when its dedicated capability is absent`() {
         val lowered = assertIs<GPUPreparedStrokeRectLowering.Refused>(
             GPUPreparedStrokeRectLowerer.lower(
