@@ -189,7 +189,7 @@ class GpuEvidenceCatalogTest {
                 "radial-gradient-three-stops",
                 "sweep-disk",
                 "sweep-gradient-three-stops",
-                "sweep-gradient-partial-angle", "affine-solid-rect", "basic-primitives-valid-alpha", "basic-primitives-out-of-bounds", "basic-primitives-points", "fractional-aa-rect-overlap", "affine-path-clip-color", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal", "linear-gradient-three-stop-stroke-rect", "linear-gradient-two-stop-translated-stroke-rect", "linear-gradient-three-stop-translated-stroke-rect", "linear-gradient-two-stop-uniform-scaled-stroke-rect", "linear-gradient-three-stop-uniform-scaled-stroke-rect", "radial-gradient-two-stop-stroke-rect", "radial-gradient-three-stop-stroke-rect", "sweep-gradient-two-stop-stroke-rect", "sweep-gradient-three-stop-stroke-rect",
+                "sweep-gradient-partial-angle", "affine-solid-rect", "basic-primitives-valid-alpha", "basic-primitives-out-of-bounds", "basic-primitives-points", "fractional-aa-rect-overlap", "affine-path-clip-color", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal", "linear-gradient-three-stop-stroke-rect", "linear-gradient-two-stop-translated-stroke-rect", "linear-gradient-three-stop-translated-stroke-rect", "linear-gradient-two-stop-uniform-scaled-stroke-rect", "linear-gradient-three-stop-uniform-scaled-stroke-rect", "radial-gradient-two-stop-stroke-rect", "radial-gradient-three-stop-stroke-rect", "sweep-gradient-two-stop-stroke-rect", "sweep-gradient-two-stop-uniform-scaled-stroke-rect", "sweep-gradient-three-stop-stroke-rect",
                 "scaled-solid-rrect",
                 "solid-drrect-hole",
                 "asymmetric-solid-rrect",
@@ -266,11 +266,11 @@ class GpuEvidenceCatalogTest {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            List(99) { "kanvas.surface.render" },
+            List(100) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
-        assertEquals(99, GpuEvidenceCatalog.renderCases.size)
-        assertEquals(108, GpuEvidenceCatalog.cases.size)
+        assertEquals(100, GpuEvidenceCatalog.renderCases.size)
+        assertEquals(109, GpuEvidenceCatalog.cases.size)
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
 
         val solid = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "solid-card-stack" })
@@ -363,7 +363,7 @@ class GpuEvidenceCatalogTest {
                 "sweep-gradient-two-stop-uniform-scaled-stroke-rect" to "surface-srgb-gradient-sweep-clamp-two-stop-uniform-scaled-stroke-bands",
                 "sweep-gradient-three-stop-stroke-rect" to "surface-srgb-gradient-sweep-clamp-three-stop-stroke-bands",
             ),
-            listOf("linear-gradient-lanes", "linear-gradient-three-stops", "radial-swatch", "radial-gradient-three-stops", "sweep-disk", "sweep-gradient-three-stops", "sweep-gradient-partial-angle", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal", "linear-gradient-three-stop-stroke-rect", "linear-gradient-two-stop-translated-stroke-rect", "linear-gradient-three-stop-translated-stroke-rect", "linear-gradient-two-stop-uniform-scaled-stroke-rect", "linear-gradient-three-stop-uniform-scaled-stroke-rect", "radial-gradient-two-stop-stroke-rect", "radial-gradient-three-stop-stroke-rect", "sweep-gradient-two-stop-stroke-rect", "sweep-gradient-three-stop-stroke-rect").associateWith { id ->
+            listOf("linear-gradient-lanes", "linear-gradient-three-stops", "radial-swatch", "radial-gradient-three-stops", "sweep-disk", "sweep-gradient-three-stops", "sweep-gradient-partial-angle", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal", "linear-gradient-three-stop-stroke-rect", "linear-gradient-two-stop-translated-stroke-rect", "linear-gradient-three-stop-translated-stroke-rect", "linear-gradient-two-stop-uniform-scaled-stroke-rect", "linear-gradient-three-stop-uniform-scaled-stroke-rect", "radial-gradient-two-stop-stroke-rect", "radial-gradient-three-stop-stroke-rect", "sweep-gradient-two-stop-stroke-rect", "sweep-gradient-two-stop-uniform-scaled-stroke-rect", "sweep-gradient-three-stop-stroke-rect").associateWith { id ->
                 (cases.first { it.descriptor.id.value == id }.descriptor.oracle as OraclePolicy.GeneratedCpu).oracleId
             },
         )
@@ -421,7 +421,7 @@ class GpuEvidenceCatalogTest {
             "radial-gradient-three-stops",
             "sweep-disk",
             "sweep-gradient-three-stops",
-            "sweep-gradient-partial-angle", "affine-solid-rect", "basic-primitives-valid-alpha", "basic-primitives-out-of-bounds", "basic-primitives-points", "fractional-aa-rect-overlap", "affine-path-clip-color", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal", "linear-gradient-three-stop-stroke-rect", "linear-gradient-two-stop-translated-stroke-rect", "linear-gradient-three-stop-translated-stroke-rect", "linear-gradient-two-stop-uniform-scaled-stroke-rect", "linear-gradient-three-stop-uniform-scaled-stroke-rect", "radial-gradient-two-stop-stroke-rect", "radial-gradient-three-stop-stroke-rect", "sweep-gradient-two-stop-stroke-rect", "sweep-gradient-three-stop-stroke-rect",
+            "sweep-gradient-partial-angle", "affine-solid-rect", "basic-primitives-valid-alpha", "basic-primitives-out-of-bounds", "basic-primitives-points", "fractional-aa-rect-overlap", "affine-path-clip-color", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal", "linear-gradient-three-stop-stroke-rect", "linear-gradient-two-stop-translated-stroke-rect", "linear-gradient-three-stop-translated-stroke-rect", "linear-gradient-two-stop-uniform-scaled-stroke-rect", "linear-gradient-three-stop-uniform-scaled-stroke-rect", "radial-gradient-two-stop-stroke-rect", "radial-gradient-three-stop-stroke-rect", "sweep-gradient-two-stop-stroke-rect", "sweep-gradient-two-stop-uniform-scaled-stroke-rect", "sweep-gradient-three-stop-stroke-rect",
             "scaled-solid-rrect",
             "solid-drrect-hole",
             "asymmetric-solid-rrect",
