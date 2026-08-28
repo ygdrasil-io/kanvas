@@ -657,6 +657,35 @@ class GPUPreparedStrokeRectLowererTest {
     }
 
     @Test
+    fun `translated three stop linear gradient stroke refuses positions outside the proven contract before bands`() {
+        val cases = listOf(
+            "arbitrary midpoint" to listOf(0f, .25f, 1f),
+            "equal positions" to listOf(0f, .5f, .5f),
+            "missing first endpoint" to listOf(.1f, .5f, 1f),
+            "missing last endpoint" to listOf(0f, .5f, .9f),
+        )
+        cases.forEach { (name, positions) ->
+            val shader = Shader.LinearGradient(
+                Point2F32(8f, 32f), Point2F32(56f, 32f),
+                positions.zip(listOf(ColorARGB.Red, ColorARGB.Green, ColorARGB.Blue)) { position, color ->
+                    org.graphiks.kanvas.paint.GradientStop(position, color)
+                },
+                org.graphiks.kanvas.paint.TileMode.CLAMP,
+            )
+            val lowered = assertIs<GPUPreparedStrokeRectLowering.Refused>(GPUPreparedStrokeRectLowerer.lower(
+                strokeRect(
+                    bounds = RectF32.ofLTRB(8f, 16f, 56f, 48f),
+                    paint = Paint.stroke(ColorARGB.Transparent, 4f).copy(shader = shader, antiAlias = false),
+                    transform = Matrix3x3F32.translation(2f, 3f),
+                ),
+                GPUDrawCommandID(0), 0, GPUFrameProvenance.None, target(), RenderConfig.DEFAULT,
+                capabilities(withTranslatedThreeStopStrokeGradient = true),
+            ), name)
+            assertEquals("unsupported.stroke.rect_material", lowered.code, name)
+        }
+    }
+
+    @Test
     fun `malformed linear gradient stroke boundaries refuse as material without throwing`() {
         val validStops = gradientStops()
         val cases = listOf(

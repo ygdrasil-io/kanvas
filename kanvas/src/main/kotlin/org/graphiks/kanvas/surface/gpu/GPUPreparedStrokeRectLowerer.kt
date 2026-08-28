@@ -105,6 +105,9 @@ internal object GPUPreparedStrokeRectLowerer {
                         mapOf("targetFormat" to target.colorFormat),
                     )
                 }
+                if (translatedThreeStop && !shader.hasProvenThreeStopPositions()) {
+                    return refused("unsupported.stroke.rect_material", operationIndex, materialRefusalFacts(operation))
+                }
                 if (translatedThreeStop && !capabilities.hasSupportedFact(
                         GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_TRANSLATE_NATIVE,
                     )
@@ -447,6 +450,10 @@ private fun Shader.LinearGradient.isAdmittedStrokeGradient(): Boolean {
         } &&
         stops.zipWithNext().all { (left, right) -> left.position <= right.position }
 }
+
+/** W43's translated three-stop proof fixes both endpoints and the midpoint. */
+private fun Shader.LinearGradient.hasProvenThreeStopPositions(): Boolean =
+    stops.size == 3 && stops.map { it.position } == listOf(0f, .5f, 1f)
 
 private fun Shader.RadialGradient.isAdmittedStrokeRadialGradient(): Boolean =
     tileMode == TileMode.CLAMP &&

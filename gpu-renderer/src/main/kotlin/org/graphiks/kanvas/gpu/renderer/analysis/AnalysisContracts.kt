@@ -1957,6 +1957,7 @@ class GPUFirstRoutePlanner(
             transform.type != GPUTransformType.Identity -> "unsupported.stroke.rect_transform"
             layer.target.colorFormat != "rgba8unorm-srgb" -> "unsupported.stroke.rect_gradient_target"
             gradient.allStopPositions?.size != 3 -> "unsupported.stroke.rect_gradient_stop_count"
+            !gradient.hasProvenTranslatedThreeStopPositions() -> "unsupported.stroke.rect_material"
             gradient.tileMode != "clamp" -> "unsupported.stroke.rect_gradient_tile_mode"
             gradient.localMatrix != listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f) -> "unsupported.stroke.rect_material"
             !capabilities.hasFact(GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_TRANSLATE_NATIVE) ->
@@ -1971,8 +1972,12 @@ class GPUFirstRoutePlanner(
             !antiAlias && transform.type == GPUTransformType.Identity &&
             layer.target.colorFormat == "rgba8unorm-srgb" && gradient.tileMode == "clamp" &&
             gradient.allStopPositions?.size == 3 &&
+            gradient.hasProvenTranslatedThreeStopPositions() &&
             gradient.localMatrix == listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f)
     }
+
+    private fun GPUMaterialDescriptor.LinearGradient.hasProvenTranslatedThreeStopPositions(): Boolean =
+        allStopPositions?.contentEquals(floatArrayOf(0f, .5f, 1f)) == true
 
     /** Typed translated stroke provenance is terminal: it must never fall back to generic FillRect. */
     private fun NormalizedDrawCommand.FillRect.translatedTwoStopLinearGradientStrokeRefusalCode(): String? {

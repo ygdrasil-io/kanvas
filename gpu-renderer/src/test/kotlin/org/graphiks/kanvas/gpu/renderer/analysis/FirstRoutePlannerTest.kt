@@ -93,6 +93,15 @@ class FirstRoutePlannerTest {
         assertEquals("native.stroke_rect.linear_gradient_three_stop_translate", plan.analysisRecord.routeDecisionLabel)
         assertEquals(listOf(GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_TRANSLATE_NATIVE), assertIs<GPURouteDecision.Native>(plan.routeDecision).route.requirements)
         assertEquals("unsupported.stroke.rect_linear_gradient_three_stop_translate_capability", assertIs<GPURouteDecision.Refused>(GPUFirstRoutePlanner(firstSliceWithLinearGradientCapabilities()).plan(command()).routeDecision).diagnostic.code)
+        val arbitraryPositions = material.copy(allStopPositions = floatArrayOf(0f, .25f, 1f))
+        val arbitraryCommand = GPUFillRectCommandBuilder.build(
+            GPUDrawCommandID(37), GPURect(8f,17f,60f,21f), GPUTargetFacts(64,64,"rgba8unorm-srgb"), arbitraryPositions,
+            source = GPUCommandSource("unit-test", "translated-three-stop-stroke-band", kind = GPUCommandSourceKind.AnalyticStrokeRectTranslatedThreeStopBand),
+        ).copy(antiAlias = false)
+        assertEquals(
+            "unsupported.stroke.rect_material",
+            assertIs<GPURouteDecision.Refused>(GPUFirstRoutePlanner(caps).plan(arbitraryCommand).routeDecision).diagnostic.code,
+        )
     }
 
     @Test
