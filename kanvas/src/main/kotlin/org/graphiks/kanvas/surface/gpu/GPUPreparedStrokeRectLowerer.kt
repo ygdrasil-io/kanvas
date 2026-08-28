@@ -96,6 +96,9 @@ internal object GPUPreparedStrokeRectLowerer {
         val uniformlyScaledTwoStopRadialGradient = (paint.shader as? Shader.RadialGradient)?.let { shader ->
             shader.stops.size == 2 && operation.transform.isPositiveIntegralUniformScale()
         } == true
+        val uniformlyScaledThreeStopRadialGradient = (paint.shader as? Shader.RadialGradient)?.let { shader ->
+            shader.stops.size == 3 && operation.transform.isPositiveIntegralUniformScale()
+        } == true
         val finalMaterial = when (val shader = paint.shader) {
             null -> {
                 if (!paint.hasFoldableSolidColorFilter()) {
@@ -211,7 +214,8 @@ internal object GPUPreparedStrokeRectLowerer {
             }
             is Shader.RadialGradient -> {
                 val uniformScale = shader.stops.size == 2 && operation.transform.isPositiveIntegralUniformScale()
-                if (operation.transform != Matrix3x3F32.Identity && !uniformScale) {
+                val uniformScaleThreeStop = shader.stops.size == 3 && operation.transform.isPositiveIntegralUniformScale()
+                if (operation.transform != Matrix3x3F32.Identity && !uniformScale && !uniformScaleThreeStop) {
                     return refused(
                         "unsupported.stroke.rect_transform",
                         operationIndex,
@@ -238,9 +242,16 @@ internal object GPUPreparedStrokeRectLowerer {
                         "unsupported.stroke.rect_radial_gradient_two_stop_uniform_scale_capability", operationIndex,
                         mapOf("capability" to GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE),
                     )
+                    uniformScaleThreeStop && !capabilities.hasSupportedFact(
+                        GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_UNIFORM_SCALE_NATIVE,
+                    ) -> return refused(
+                        "unsupported.stroke.rect_radial_gradient_three_stop_uniform_scale_capability",
+                        operationIndex,
+                        mapOf("capability" to GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_UNIFORM_SCALE_NATIVE),
+                    )
                     shader.stops.size == 3 && !capabilities.hasSupportedFact(
                         GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_NATIVE,
-                    ) -> return refused(
+                    ) && !uniformScaleThreeStop -> return refused(
                         "unsupported.stroke.rect_radial_gradient_three_stop_capability",
                         operationIndex,
                         mapOf("capability" to GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_NATIVE),
@@ -259,7 +270,7 @@ internal object GPUPreparedStrokeRectLowerer {
                     return refused("unsupported.stroke.rect_material", operationIndex, materialRefusalFacts(operation))
                 }
                 (paint.toMaterial() as? GPUMaterialDescriptor.RadialGradient)?.let { material ->
-                    if (uniformScale) material.copy(
+                    if (uniformScale || uniformScaleThreeStop) material.copy(
                         centerX = material.centerX * operation.transform.sx + operation.transform.tx,
                         centerY = material.centerY * operation.transform.sy + operation.transform.ty,
                         radius = material.radius * operation.transform.sx,
@@ -303,7 +314,7 @@ internal object GPUPreparedStrokeRectLowerer {
         }
 
         val deviceRect = when (val admission = operation.strokeRectDeviceBounds(
-            target, uniformlyScaledTwoStopLinearGradient || uniformlyScaledThreeStopLinearGradient || uniformlyScaledTwoStopSweepGradient || uniformlyScaledTwoStopRadialGradient,
+            target, uniformlyScaledTwoStopLinearGradient || uniformlyScaledThreeStopLinearGradient || uniformlyScaledTwoStopSweepGradient || uniformlyScaledTwoStopRadialGradient || uniformlyScaledThreeStopRadialGradient,
         )) {
             is StrokeRectDeviceBounds.Admitted -> admission.bounds
             StrokeRectDeviceBounds.InvalidTransform ->
@@ -333,7 +344,7 @@ internal object GPUPreparedStrokeRectLowerer {
         }
         val transformClass = when {
             operation.transform == Matrix3x3F32.Identity -> "identity"
-            uniformlyScaledTwoStopLinearGradient || uniformlyScaledThreeStopLinearGradient || uniformlyScaledTwoStopSweepGradient || uniformlyScaledTwoStopRadialGradient -> "uniform-scale"
+            uniformlyScaledTwoStopLinearGradient || uniformlyScaledThreeStopLinearGradient || uniformlyScaledTwoStopSweepGradient || uniformlyScaledTwoStopRadialGradient || uniformlyScaledThreeStopRadialGradient -> "uniform-scale"
             else -> "translate"
         }
         val lowered = axisAlignedStrokeRectLowerer.lower(
@@ -341,7 +352,7 @@ internal object GPUPreparedStrokeRectLowerer {
                 targetBounds = GPUPixelBounds(0, 0, target.width, target.height),
                 pathBounds = deviceRect,
                 strokeWidth = paint.strokeWidth * if (
-                    uniformlyScaledTwoStopLinearGradient || uniformlyScaledThreeStopLinearGradient || uniformlyScaledTwoStopSweepGradient || uniformlyScaledTwoStopRadialGradient
+                    uniformlyScaledTwoStopLinearGradient || uniformlyScaledThreeStopLinearGradient || uniformlyScaledTwoStopSweepGradient || uniformlyScaledTwoStopRadialGradient || uniformlyScaledThreeStopRadialGradient
                 ) operation.transform.sx else 1f,
                 pathKey = "path:kanvas:drawRect.stroke:analytic:v1",
                 provenance = "kanvas-surface.drawRect.stroke.analytic-four-band",
@@ -406,6 +417,7 @@ internal object GPUPreparedStrokeRectLowerer {
                             uniformScaleThreeStop = uniformlyScaledThreeStopLinearGradient,
                             uniformScaleSweep = uniformlyScaledTwoStopSweepGradient,
                             uniformScaleRadial = uniformlyScaledTwoStopRadialGradient,
+                            uniformScaleRadialThreeStop = uniformlyScaledThreeStopRadialGradient,
                         )
                         ?: return refused("unsupported.stroke.rect_material", operationIndex)
                 }
@@ -609,6 +621,7 @@ private fun GPUFramePathVisualCommand.withAnalyticStrokeRectSource(
     uniformScaleThreeStop: Boolean = false,
     uniformScaleSweep: Boolean = false,
     uniformScaleRadial: Boolean = false,
+    uniformScaleRadialThreeStop: Boolean = false,
 ): GPUFramePathVisualCommand = copy(
     normalized = when (val command = normalized) {
         is org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand.FillRect -> command.copy(
@@ -616,7 +629,9 @@ private fun GPUFramePathVisualCommand.withAnalyticStrokeRectSource(
                 adapter = "kanvas-surface",
                 operation = "drawRect.stroke.analytic-four-band",
                 frameProvenance = provenance,
-                kind = if (uniformScaleRadial) {
+                kind = if (uniformScaleRadialThreeStop) {
+                    GPUCommandSourceKind.AnalyticStrokeRectUniformScaleRadialThreeStopBand
+                } else if (uniformScaleRadial) {
                     GPUCommandSourceKind.AnalyticStrokeRectUniformScaleRadialTwoStopBand
                 } else if (uniformScaleSweep) {
                     GPUCommandSourceKind.AnalyticStrokeRectUniformScaleSweepTwoStopBand

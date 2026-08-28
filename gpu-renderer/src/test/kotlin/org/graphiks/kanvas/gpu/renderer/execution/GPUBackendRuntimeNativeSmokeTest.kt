@@ -1112,6 +1112,7 @@ class GPUBackendRuntimeNativeSmokeTest {
                     GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_NATIVE,
                     GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE,
                     GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_NATIVE,
+                    GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_UNIFORM_SCALE_NATIVE,
                     "first_slice.sweep_gradient.native",
                     GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE,
                     GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE,
@@ -1149,6 +1150,8 @@ class GPUBackendRuntimeNativeSmokeTest {
                     "core-primitive-gradient-radial-stroke-2stop-uniform-scale-native",
                 GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_NATIVE to
                     "core-primitive-gradient-radial-stroke-3stop-native",
+                GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_UNIFORM_SCALE_NATIVE to
+                    "core-primitive-gradient-radial-stroke-3stop-uniform-scale-native",
                 "first_slice.sweep_gradient.native" to "core-primitive-gradient-sweep-native",
                 GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE to
                     "core-primitive-gradient-sweep-stroke-2stop-native",

@@ -18,6 +18,7 @@ import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbThreeStopRadialGradien
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbTwoStopSweepGradientStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbUniformScaledTwoStopSweepGradientStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbUniformScaledTwoStopRadialGradientStrokeCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbUniformScaledThreeStopRadialGradientStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbThreeStopSweepGradientStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRoundCapStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRRectCpuOracle
@@ -71,6 +72,7 @@ object GpuEvidenceCatalog {
         radialGradientTwoStopStrokeRect(),
         radialGradientTwoStopUniformScaledStrokeRect(),
         radialGradientThreeStopStrokeRect(),
+        radialGradientThreeStopUniformScaledStrokeRect(),
 sweepGradientTwoStopStrokeRect(),
 sweepGradientTwoStopUniformScaledStrokeRect(),
 sweepGradientThreeStopStrokeRect(),
@@ -1038,6 +1040,32 @@ sweepGradientThreeStopStrokeRect(),
             SurfaceSrgbUniformScaledTwoStopRadialGradientStrokeCpuOracle.Point(38.0, 32.0),
             16.0,
             intArrayOf(255, 56, 56, 255), intArrayOf(56, 112, 255, 255),
+        ),
+    )
+
+    private fun radialGradientThreeStopUniformScaledStrokeRect() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("radial-gradient-three-stop-uniform-scaled-stroke-rect"), "Uniform-scaled radial gradient three-stop stroke rectangle",
+            "Public Kanvas Surface renders a bounded non-AA CLAMP three-stop radial rectangle stroke under positive integral uniform scale and translation.",
+            64, 64, 1L, setOf("stroke-rect", "radial-gradient", "three-stops", "uniform-scale", "translation", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-gradient-radial-clamp-three-stop-uniform-scaled-stroke-bands", 1),
+            ComparisonPolicy(1, 100.0, 1, "Independent scaled four-band device coverage with uniformly scaled and translated three-stop sRGB radial center and radius."), emptySet(),
+        ),
+        KanvasScenePrograms.radialGradientThreeStopUniformScaledStrokeRect(),
+        SurfaceSrgbUniformScaledThreeStopRadialGradientStrokeCpuOracle(
+            listOf(
+                SurfaceSrgbUniformScaledThreeStopRadialGradientStrokeCpuOracle.Rect(16, 18, 60, 22),
+                SurfaceSrgbUniformScaledThreeStopRadialGradientStrokeCpuOracle.Rect(16, 50, 60, 54),
+                SurfaceSrgbUniformScaledThreeStopRadialGradientStrokeCpuOracle.Rect(16, 22, 20, 50),
+                SurfaceSrgbUniformScaledThreeStopRadialGradientStrokeCpuOracle.Rect(56, 22, 60, 50),
+            ),
+            SurfaceSrgbUniformScaledThreeStopRadialGradientStrokeCpuOracle.Point(38.0, 32.0),
+            16.0,
+            listOf(
+                SurfaceSrgbUniformScaledThreeStopRadialGradientStrokeCpuOracle.Stop(0.0, 255, 56, 56),
+                SurfaceSrgbUniformScaledThreeStopRadialGradientStrokeCpuOracle.Stop(.5, 56, 220, 120),
+                SurfaceSrgbUniformScaledThreeStopRadialGradientStrokeCpuOracle.Stop(1.0, 56, 112, 255),
+            ),
         ),
     )
 
