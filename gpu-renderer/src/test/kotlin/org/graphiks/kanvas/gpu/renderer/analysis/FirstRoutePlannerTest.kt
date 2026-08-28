@@ -479,6 +479,30 @@ class FirstRoutePlannerTest {
     }
 
     @Test
+    fun `uniform scale two stop sweep gradient requires typed provenance and capability`() {
+        val material = GPUMaterialDescriptor.SweepGradient(
+            38f, 32f, 0f, 360f, 1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f,
+            allStopPositions = floatArrayOf(0f, 1f), allStopColors = floatArrayOf(1f,0f,0f,1f,0f,0f,1f,1f),
+        )
+        fun command(kind: GPUCommandSourceKind) = GPUFillRectCommandBuilder.build(
+            GPUDrawCommandID(46), GPURect(16f,18f,60f,22f), GPUTargetFacts(64,64,"rgba8unorm-srgb"), material,
+            source = GPUCommandSource("unit-test", "uniform-scale-sweep-stroke-band", kind = kind),
+        ).copy(antiAlias = false)
+        val capabilities = firstSliceWithLinearGradientCapabilities().copy(facts = firstSliceWithLinearGradientCapabilities().facts + listOf(
+            GPUCapabilityFact("first_slice.sweep_gradient.native", "unit-test", "supported", true, "sweep"),
+            GPUCapabilityFact(GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE, "unit-test", "supported", true, "sweep-uniform-scale"),
+        ))
+        val planner = GPUFirstRoutePlanner(capabilities)
+        val accepted = planner.plan(command(GPUCommandSourceKind.AnalyticStrokeRectUniformScaleSweepTwoStopBand))
+        assertEquals("native.stroke_rect.sweep_gradient_two_stop_uniform_scale", accepted.analysisRecord.routeDecisionLabel)
+        assertEquals(listOf(GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE), assertIs<GPURouteDecision.Native>(accepted.routeDecision).route.requirements)
+        assertEquals("native.fill_rect.sweep_gradient", planner.plan(command(GPUCommandSourceKind.Generic)).analysisRecord.routeDecisionLabel)
+        val refused = GPUFirstRoutePlanner(capabilities.copy(facts = capabilities.facts.filterNot { it.name == GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE })).plan(command(GPUCommandSourceKind.AnalyticStrokeRectUniformScaleSweepTwoStopBand))
+        assertEquals("unsupported.stroke.rect_sweep_gradient_two_stop_uniform_scale_capability", assertIs<GPURouteDecision.Refused>(refused.routeDecision).diagnostic.code)
+        assertTrue(refused.pass.drawPackets.isEmpty())
+    }
+
+    @Test
     fun `three stop full sweep gradient uses its dedicated stroke route only for analytic provenance`() {
         val material = GPUMaterialDescriptor.SweepGradient(
             32.5f, 32.5f, 0f, 360f, 1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f,
