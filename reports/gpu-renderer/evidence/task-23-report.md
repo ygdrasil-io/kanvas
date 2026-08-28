@@ -18,9 +18,10 @@ avant publication des paquets.
 ## Preuve native
 
 La scène `linear-gradient-three-stop-stroke-rect` est validée pour le commit
-`6a90d181de9f113ad20ed33004e05cbdce4d4612`.
+`9c562b9aa8ec760cd0261d9b4db088696238024b`.
 
 - route : `kanvas.surface.render` ;
+- route d'analyse : `native.stroke_rect.linear_gradient_three_stop` ;
 - exécution : 1 soumission, 4 draws, 1 bind pipeline ;
 - refus : aucun ; `submissionDelta = 1` ;
 - oracle : CPU indépendant à trois stops, interpolation segmentée sRGB dans
@@ -38,6 +39,6 @@ review de la preuve et vérification du catalogue.
 ./gradlew --no-daemon :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.analysis.FirstRoutePlannerTest --tests org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeNativeCapabilitiesTest --tests org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeNativeSmokeTest --tests org.graphiks.kanvas.gpu.renderer.product.ProductFlagConfigTest
 ./gradlew --no-daemon :kanvas:test --tests org.graphiks.kanvas.surface.gpu.GPUPreparedStrokeRectLowererTest
 ./gradlew --no-daemon :integration-tests:gpu-evidence:test --tests org.graphiks.kanvas.gpu.evidence.catalog.GpuEvidenceCatalogTest
-./gradlew --no-daemon :integration-tests:gpu-evidence:generateGpuEvidence -Pscene=linear-gradient-three-stop-stroke-rect -PsourceCommit=6a90d181de9f113ad20ed33004e05cbdce4d4612
-./gradlew --no-daemon :integration-tests:gpu-evidence:verifyGeneratedGpuEvidence -Pscene=linear-gradient-three-stop-stroke-rect -PsourceCommit=6a90d181de9f113ad20ed33004e05cbdce4d4612
+./gradlew --no-daemon :integration-tests:gpu-evidence:generateGpuEvidence -Pscene=linear-gradient-three-stop-stroke-rect -PsourceCommit=9c562b9aa8ec760cd0261d9b4db088696238024b
+./gradlew --no-daemon :integration-tests:gpu-evidence:verifyGeneratedGpuEvidence -Pscene=linear-gradient-three-stop-stroke-rect -PsourceCommit=9c562b9aa8ec760cd0261d9b4db088696238024b
 ```
