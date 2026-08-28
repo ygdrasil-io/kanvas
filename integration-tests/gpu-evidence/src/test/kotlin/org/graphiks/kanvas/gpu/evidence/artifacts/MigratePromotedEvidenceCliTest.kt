@@ -339,15 +339,27 @@ class MigratePromotedEvidenceCliTest {
     private fun observation(evidenceCase: EvidenceCase, environment: EvidenceEnvironment): SceneObservation {
         val descriptor = evidenceCase.descriptor
         val rendered = descriptor.expectation is EvidenceExpectation.ShouldRender
+        val bitmapUpload = descriptor.id.value == "bounded-rgba8-nearest-bitmap"
         val routeId = routeId(evidenceCase)
         val route = RouteEvidence(
             routeId = routeId,
             attemptId = "attempt-${descriptor.id.value}",
             furthestPhase = if (rendered) "Completed" else null,
             outcome = if (rendered) "rendered" else "refused",
-            encodedScopeKinds = emptyList(),
+            encodedScopeKinds = if (bitmapUpload) listOf("Upload") else emptyList(),
             structuralEvents = emptyList(),
-            structuralCounters = if (rendered) mapOf("queue.submit" to 1L, "render.draw" to 1L, "render.pipelineBind" to 1L) else emptyMap(),
+            structuralCounters = if (rendered) buildMap {
+                putAll(mapOf("queue.submit" to 1L, "render.draw" to 1L, "render.pipelineBind" to 1L))
+                if (bitmapUpload) {
+                    putAll(mapOf(
+                        "preparedImage.textureUploadScope" to 1L,
+                        "preparedImage.frameTextureCreations" to 1L,
+                        "preparedImage.frameSamplerCreations" to 1L,
+                        "preparedImage.frameBindGroupCreations" to 1L,
+                        "preparedImage.queueWriteTextureCalls" to 1L,
+                    ))
+                }
+            } else emptyMap(),
             runtimeTelemetryDelta = GPUBackendRuntimeTelemetry(submissions = if (rendered) 1L else 0L),
         )
         return when (val expectation = descriptor.expectation) {
