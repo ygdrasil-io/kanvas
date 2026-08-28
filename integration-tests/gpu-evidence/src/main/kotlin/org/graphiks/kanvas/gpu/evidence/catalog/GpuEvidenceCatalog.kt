@@ -208,7 +208,7 @@ object GpuEvidenceCatalog {
             64, 64, 1L, setOf("solid-rect", "coverage-aa", "overlap", "scissor", "kanvas-surface"),
             EvidenceExpectation.ShouldRender,
             OraclePolicy.GeneratedCpu("surface-srgb-fractional-rect-area-coverage", 1),
-            ComparisonPolicy(1, 100.0, 1, "Independent exact pixel-area coverage with per-draw RGBA8 quantization; one byte rounding tolerance."),
+            ComparisonPolicy(1, 100.0, 1, "Independent exact pixel-area coverage in linear light; one byte rounding tolerance."),
             emptySet(),
         ),
         program = KanvasScenePrograms.fractionalAaRectOverlap(),

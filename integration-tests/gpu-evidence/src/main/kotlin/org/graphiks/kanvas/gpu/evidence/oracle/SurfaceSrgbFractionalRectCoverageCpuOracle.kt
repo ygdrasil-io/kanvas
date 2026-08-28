@@ -2,15 +2,13 @@ package org.graphiks.kanvas.gpu.evidence.oracle
 
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.roundToInt
 
 /**
  * Independent exact-area oracle for the bounded scalar-AA rectangle route.
  *
- * The product route first quantizes every opaque SrcOver draw into an RGBA8
- * target, then samples that target for the next draw.  The oracle preserves
- * that observable per-draw quantization without sharing GPU implementation
- * code or shader functions.
+ * Coverage is applied to the premultiplied linear-light SrcOver result before
+ * the final straight-sRGB readback encoding.  This is deliberately distinct
+ * from interpolating the encoded bytes, which would visibly darken AA edges.
  */
 class SurfaceSrgbFractionalRectCoverageCpuOracle(
     background: IntArray,
@@ -32,21 +30,30 @@ class SurfaceSrgbFractionalRectCoverageCpuOracle(
     }
 
     private val background = background.copyOf().also(::requireRgba)
+    private val backgroundLinear = SurfaceSrgbOracleMath.decodeStraight(background)
+    private val rectanglesLinear = rectangles.map { rectangle ->
+        SurfaceSrgbOracleMath.decodeStraight(rectangle.rgba)
+    }
 
     override fun render(width: Int, height: Int): ByteArray {
         val output = ByteArray(width * height * 4)
         for (y in 0 until height) for (x in 0 until width) {
-            val color = background.copyOf()
-            rectangles.forEach { rectangle ->
+            var color = backgroundLinear
+            rectangles.forEachIndexed { index, rectangle ->
                 val coverage = coverage(rectangle.bounds, x, y) * (clip?.let { coverage(it, x, y) } ?: 1f)
-                if (coverage == 0f) return@forEach
-                repeat(3) { channel ->
-                    color[channel] = (color[channel] + coverage * (rectangle.rgba[channel] - color[channel]))
-                        .roundToInt().coerceIn(0, 255)
-                }
+                if (coverage == 0f) return@forEachIndexed
+                val source = rectanglesLinear[index]
+                color = SurfaceSrgbOracleMath.LinearPremul(
+                    red = color.red + coverage * (source.red - color.red),
+                    green = color.green + coverage * (source.green - color.green),
+                    blue = color.blue + coverage * (source.blue - color.blue),
+                    alpha = color.alpha + coverage * (source.alpha - color.alpha),
+                )
             }
             val offset = (y * width + x) * 4
-            repeat(4) { channel -> output[offset + channel] = color[channel].toByte() }
+            SurfaceSrgbOracleMath.storeSrgb(color).forEachIndexed { channel, value ->
+                output[offset + channel] = value.toByte()
+            }
         }
         return output
     }
