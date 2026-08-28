@@ -932,7 +932,7 @@ object GpuEvidenceCatalog {
             setOf("clip-path", "radial-gradient", "hard-clip", "kanvas-surface"),
             EvidenceExpectation.ShouldRender,
             OraclePolicy.GeneratedCpu("surface-srgb-clip-path-radial-gradient-device-space", 1),
-            ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent device-space winding clip and clamp-radial-gradient membership."),
+            ComparisonPolicy(1, 100.0, 1, "Independent double-precision oracle; one RGBA8 LSB covers bounded f32 WGSL radial-distance and target-encoding rounding."),
             emptySet(),
         ),
         KanvasScenePrograms.clipPathTriangleRadialGradient(),

@@ -33,6 +33,19 @@ import org.graphiks.math.matrix.Matrix3x3F32
 
 class GpuEvidenceCatalogTest {
     @Test
+    fun `clip stencil radial evidence permits one f32 rounding unit and rejects two`() {
+        val policy = assertNotNull(GpuEvidenceCatalog.renderCases.single {
+            it.descriptor.id.value == "clip-path-triangle-radial-gradient"
+        }.descriptor.comparison)
+        val expected = byteArrayOf(105, 0, 238.toByte(), 255.toByte())
+        val oneLsb = byteArrayOf(105, 0, 239.toByte(), 255.toByte())
+        val twoLsb = byteArrayOf(105, 0, 240.toByte(), 255.toByte())
+
+        assertTrue(EvidenceComparator().compare(oneLsb, expected, 1, 1, policy).passed)
+        assertFalse(EvidenceComparator().compare(twoLsb, expected, 1, 1, policy).passed)
+    }
+
+    @Test
     fun `catalog separates eighty four public surface renders from six refusals`() {
         val cases = GpuEvidenceCatalog.cases
 
@@ -568,7 +581,7 @@ class GpuEvidenceCatalogTest {
                 "clip-path-uniform-scaled-triangle-solid" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent hard pixel-center winding path clip membership and paint order."),
                 "clip-path-uniform-scaled-triangle-two-bands" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent hard pixel-center winding path clip membership and paint order."),
                 "clip-path-triangle-linear-gradient" to ComparisonPolicy(1, 100.0, 1, "Independent device-space pixel-center winding clip and linear-light clamp gradient oracle."),
-                "clip-path-triangle-radial-gradient" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent device-space winding clip and clamp-radial-gradient membership."),
+                "clip-path-triangle-radial-gradient" to ComparisonPolicy(1, 100.0, 1, "Independent double-precision oracle; one RGBA8 LSB covers bounded f32 WGSL radial-distance and target-encoding rounding."),
                 "clip-path-translated-triangle-linear-gradient" to ComparisonPolicy(1, 100.0, 1, "Independent device-space pixel-center winding clip and linear-light clamp gradient oracle."),
                 "clip-path-uniform-scaled-triangle-linear-gradient" to ComparisonPolicy(1, 100.0, 1, "Independent device-space pixel-center winding clip and linear-light clamp gradient oracle."),
                 "clip-path-triangle-direct-triangle-solid" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent device-space pixel-center clip and direct-triangle membership."),
