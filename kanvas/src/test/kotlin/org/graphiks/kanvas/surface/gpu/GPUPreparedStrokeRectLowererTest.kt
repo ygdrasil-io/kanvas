@@ -199,6 +199,28 @@ class GPUPreparedStrokeRectLowererTest {
     }
 
     @Test
+    fun `three stop radial stroke rejects every material contract escape`() {
+        val stops = listOf(org.graphiks.kanvas.paint.GradientStop(0f, ColorARGB.Red), org.graphiks.kanvas.paint.GradientStop(.5f, ColorARGB.Green), org.graphiks.kanvas.paint.GradientStop(1f, ColorARGB.Blue))
+        fun op(shader: Shader, aa: Boolean = false, matrix: Matrix3x3F32 = Matrix3x3F32.Identity) = strokeRect(
+            paint = Paint.stroke(ColorARGB.Transparent, 4f).copy(shader = shader, antiAlias = aa), transform = matrix,
+        )
+        val radial = Shader.RadialGradient(Point2F32(32f,32f), 16f, stops)
+        val cases = listOf(
+            Triple(op(Shader.RadialGradient(Point2F32(32f,32f),16f,stops.take(2))), target(), "unsupported.stroke.rect_radial_gradient_two_stop_capability"),
+            Triple(op(Shader.RadialGradient(Point2F32(32f,32f),16f,stops + org.graphiks.kanvas.paint.GradientStop(1f,ColorARGB.White))), target(), "unsupported.stroke.rect_gradient_stop_count"),
+            Triple(op(Shader.RadialGradient(Point2F32(32f,32f),16f,stops, org.graphiks.kanvas.paint.TileMode.REPEAT)), target(), "unsupported.stroke.rect_gradient_tile_mode"),
+            Triple(op(radial, true), target(), "unsupported.stroke.rect_anti_alias"),
+            Triple(op(radial, matrix=Matrix3x3F32.translation(1f,0f)), target(), "unsupported.stroke.rect_transform"),
+            Triple(op(radial), target("rgba8unorm"), "unsupported.stroke.rect_gradient_target"),
+            Triple(op(Shader.WithLocalMatrix(radial, Matrix3x3F32.translation(1f,0f))), target(), "unsupported.stroke.rect_material"),
+            Triple(strokeRect(paint=Paint.stroke(ColorARGB.Transparent,4f).copy(shader=radial, colorFilter=ColorFilter.HighContrast, antiAlias=false)), target(), "unsupported.stroke.rect_material"),
+        )
+        cases.forEach { (operation, target, code) ->
+            assertEquals(code, assertIs<GPUPreparedStrokeRectLowering.Refused>(GPUPreparedStrokeRectLowerer.lower(operation,GPUDrawCommandID(0),0,GPUFrameProvenance.None,target,RenderConfig.DEFAULT,capabilities(withThreeStopStrokeRadialGradient=true))).code)
+        }
+    }
+
+    @Test
     fun `two stop full sweep gradient stroke lowers to four bands only with dedicated capability`() {
         val lowered = assertIs<GPUPreparedStrokeRectLowering.Ready>(GPUPreparedStrokeRectLowerer.lower(
             strokeRect(bounds = RectF32.ofLTRB(8f, 16f, 56f, 48f), paint = Paint.stroke(ColorARGB.Transparent, 4f).copy(
