@@ -1230,6 +1230,17 @@ private fun CanonicalHashSink.preparedImageBinding(value: GPUImageBindingRequest
     int("arrayLayerRangeFirst", value.view.arrayLayerRange.first)
     int("arrayLayerRangeLast", value.view.arrayLayerRange.last)
     samplerDescriptor("sampler", value.sampler)
+    string("routeCapability", value.routeCapability.name)
+    nullable("boundedGeometry", value.boundedGeometry) { geometry ->
+        string("geometryClass", geometry.geometryClass.name)
+        list("vertices", geometry.vertices) { vertex ->
+            int("xBits", vertex.x.toRawBits())
+            int("yBits", vertex.y.toRawBits())
+            int("uBits", vertex.u.toRawBits())
+            int("vBits", vertex.v.toRawBits())
+        }
+        list("indices", geometry.indices) { index -> int("index", index) }
+    }
     string("bindingLayoutHash", value.bindingLayoutHash)
     tag("GPUPreparedImageUniformAllocation")
     string("uniformPacketId", value.uniformAllocation.packetId)
@@ -1461,6 +1472,7 @@ private fun CanonicalHashSink.samplerDescriptor(name: String, value: GPUSamplerD
     list("capabilityRequirements", value.capabilityRequirements.sorted()) {
         string("requirement", it)
     }
+    string("preparedImageRouteCapability", value.preparedImageRouteCapability.name)
 }
 
 private fun GPUFrameStep.canonicalTypeTag(): String = when (this) {

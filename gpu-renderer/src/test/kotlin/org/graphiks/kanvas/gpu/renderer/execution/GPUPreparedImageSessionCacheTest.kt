@@ -11,11 +11,13 @@ import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertNotSame
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImagePipelineKey
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageRouteCapability
 
 class GPUPreparedImageSessionCacheTest {
     @Test
@@ -298,6 +300,30 @@ class GPUPreparedImageSessionCacheTest {
         cache.close()
 
         assertTrue(native.handles.all { it.closeCalls == 1 })
+    }
+
+    @Test
+    fun `batch keeps bounded capability separate from generic native pipeline`() {
+        val generation = GPUDeviceGenerationID(7)
+        val native = TrackingDevice()
+        val cache = GPUWgpu4kPreparedImageSessionCache(native.device, generation)
+        val generic = PIPELINE_KEY.copy(
+            routeCapability = GPUPreparedImageRouteCapability.GenericNative,
+        )
+        val bounded = PIPELINE_KEY.copy(
+            routeCapability = GPUPreparedImageRouteCapability.BoundedNearest1To1,
+        )
+
+        val ready = assertIs<GPUPreparedImageCacheBatchAcquire.Ready>(
+            cache.acquireBatch(listOf(generic, bounded), generation),
+        )
+
+        assertNotSame(
+            ready.pipelinesByKey.getValue(generic),
+            ready.pipelinesByKey.getValue(bounded),
+        )
+        assertEquals(5, native.handles.size)
+        cache.close()
     }
 
     @Test
