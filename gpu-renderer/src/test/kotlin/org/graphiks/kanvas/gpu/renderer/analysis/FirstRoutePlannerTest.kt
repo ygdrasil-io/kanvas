@@ -194,9 +194,12 @@ class FirstRoutePlannerTest {
             GPUCapabilityFact(GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_NATIVE,"test","supported",true,"stroke"),
         ))
         val planner=GPUFirstRoutePlanner(caps)
-        assertEquals("native.stroke_rect.radial_gradient_three_stop",planner.plan(command(GPUCommandSourceKind.AnalyticStrokeRectBand)).analysisRecord.routeDecisionLabel)
+        val typed = planner.plan(command(GPUCommandSourceKind.AnalyticStrokeRectBand))
+        assertEquals("native.stroke_rect.radial_gradient_three_stop",typed.analysisRecord.routeDecisionLabel)
+        assertEquals(listOf(GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_NATIVE), assertIs<GPURouteDecision.Native>(typed.routeDecision).route.requirements)
         assertEquals("native.fill_rect.radial_gradient",planner.plan(command(GPUCommandSourceKind.PublicFillRect)).analysisRecord.routeDecisionLabel)
         assertEquals("native.fill_rect.radial_gradient",planner.plan(command(GPUCommandSourceKind.Generic)).analysisRecord.routeDecisionLabel)
+        assertEquals("unsupported.stroke.rect_radial_gradient_three_stop_capability", assertIs<GPURouteDecision.Refused>(GPUFirstRoutePlanner(caps.copy(facts=caps.facts.filterNot { it.name == GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_NATIVE })).plan(command(GPUCommandSourceKind.AnalyticStrokeRectBand)).routeDecision).diagnostic.code)
     }
 
     @Test
