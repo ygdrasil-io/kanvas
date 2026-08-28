@@ -50,6 +50,7 @@ object GpuEvidenceCatalog {
         clipRRectSolid(),
         clipRRectEllipse(),
         clipRRectTwoBands(),
+        transformedClipRRectSolid(),
         clipPathTriangleSolid(),
         clipPathTriangleDifferenceSolid(),
         clipPathConcaveSolid(),
@@ -465,6 +466,27 @@ object GpuEvidenceCatalog {
             ),
             draws = listOf(
                 SurfaceSrgbClipPathCpuOracle.OpaqueRect(0f, 0f, 64f, 64f, intArrayOf(242, 135, 46, 255)),
+            ),
+        ),
+    )
+
+    private fun transformedClipRRectSolid() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("transformed-clip-rrect-solid"),
+            "Transformed hard RRect clip",
+            "Public Kanvas Surface freezes a finite scale-and-translation RRect clip in device space before an opaque rectangle consumer resets the CTM.",
+            64, 64, 1L, setOf("clip-rrect", "scale-translate", "analytic-coverage", "kanvas-surface"),
+            EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-transformed-rrect-clip-pixel-center", 1),
+            ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent device-space RRect membership."),
+            emptySet(),
+        ),
+        KanvasScenePrograms.transformedClipRRectSolid(),
+        SurfaceSrgbClipRRectCpuOracle(
+            background = intArrayOf(13, 20, 33, 255),
+            clip = SurfaceSrgbClipRRectCpuOracle.DeviceRRect(10f, 12f, 58f, 48f, 6f, 3f),
+            draws = listOf(
+                SurfaceSrgbClipRRectCpuOracle.OpaqueRect(0f, 0f, 64f, 64f, intArrayOf(31, 115, 209, 255)),
             ),
         ),
     )

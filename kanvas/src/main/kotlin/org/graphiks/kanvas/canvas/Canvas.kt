@@ -473,7 +473,12 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
                 transformClass = transformClass,
             )
         currentTransform.isScaleTranslate() ->
-            ClipStackOp.RRectOp(rrect.mapAxisAligned(currentTransform), op, antiAlias)
+            ClipStackOp.RRectOp(
+                rrect = rrect.mapAxisAligned(currentTransform),
+                op = op,
+                antiAlias = antiAlias,
+                transformClass = transformClass,
+            )
         !currentTransform.hasPerspective() ->
             ClipStackOp.PathOp(
                 Path().addRRect(rrect).transform(currentTransform),
