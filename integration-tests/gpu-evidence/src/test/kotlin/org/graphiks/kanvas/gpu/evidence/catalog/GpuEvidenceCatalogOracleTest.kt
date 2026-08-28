@@ -92,6 +92,16 @@ class GpuEvidenceCatalogOracleTest {
     }
 
     @Test
+    fun `three stop radial stroke oracle samples pixel-center distance across four disjoint bands`() {
+        val pixels = oracle("radial-gradient-three-stop-stroke-rect")
+
+        assertPixel(pixels, 64, 64, 30, 15, intArrayOf(56, 181, 197, 255))
+        assertPixel(pixels, 64, 64, 30, 48, intArrayOf(56, 189, 186, 255))
+        assertPixel(pixels, 64, 64, 30, 30, intArrayOf(0, 0, 0, 0))
+        assertPixel(pixels, 64, 64, 5, 15, intArrayOf(0, 0, 0, 0))
+    }
+
+    @Test
     fun `wave two oracles preserve hand-derived gradient affine and clip pixels`() {
         assertPixel(oracle("sweep-gradient-partial-angle"), 64, 64, 48, 32, intArrayOf(255, 64, 64, 255))
         assertPixel(oracle("sweep-gradient-partial-angle"), 64, 64, 32, 48, intArrayOf(236, 107, 126, 255))
