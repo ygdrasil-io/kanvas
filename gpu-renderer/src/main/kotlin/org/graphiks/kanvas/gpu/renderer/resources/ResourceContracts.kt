@@ -1857,7 +1857,7 @@ private fun GPUTextureDescriptor.matchesArtifactPixels(artifact: GPUUploadedText
         format == artifact.pixelFormat
 
 private fun GPUSamplerDescriptor.dumpToken(): String =
-    "$addressModeU/$addressModeV/$magFilter/$minFilter/$mipmapFilter"
+    "$addressModeU/$addressModeV/$magFilter/$minFilter/$mipmapFilter/$preparedImageRouteCapability"
 
 private const val uploadedTextureOwnershipNonClaimLine =
     "nonclaim:no-product-activation no-adapter-backed-execution no-live-resource-handle " +
@@ -3304,6 +3304,7 @@ private fun GPUSamplerDescriptor.materializationSamplerHash(): String =
         compareMode,
         maxAnisotropy.toString(),
         capabilityRequirements.sorted().joinToString("+"),
+        preparedImageRouteCapability.name,
     ).joinToString(":")
 
 private fun GPUPayloadMaterializationRequest.payloadTelemetry(

@@ -31,6 +31,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationRequest
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometry
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUComputePipelineKey
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
@@ -2162,7 +2163,8 @@ private fun GPUImageBindingRequest.stableDump(): String =
         "view={descriptorHash=${view.textureDescriptorHash},dimension=${view.viewDimension}," +
         "mips=${view.mipRange.first}..${view.mipRange.last}," +
         "layers=${view.arrayLayerRange.first}..${view.arrayLayerRange.last}}," +
-        "sampler=${sampler.stableDump()},bindingLayout=$bindingLayoutHash," +
+        "sampler=${sampler.stableDump()},routeCapability=${routeCapability.name}," +
+        "boundedGeometry=${boundedGeometry?.stableDump() ?: "none"},bindingLayout=$bindingLayoutHash," +
         "uniform={packet=${uniformAllocation.packetId},offset=${uniformAllocation.offset}," +
         "size=${uniformAllocation.size}}}"
 
@@ -2286,7 +2288,13 @@ private fun GPUSamplerDescriptor.stableDump(): String =
     "{addressU=$addressModeU,addressV=$addressModeV,mag=$magFilter,min=$minFilter," +
         "mipmap=$mipmapFilter,lodMin=$lodMinClamp,lodMax=$lodMaxClamp,compare=$compareMode," +
         "anisotropy=$maxAnisotropy," +
-        "requirements=${capabilityRequirements.sorted().joinToString(",")}}"
+        "requirements=${capabilityRequirements.sorted().joinToString(",")}," +
+        "routeCapability=${preparedImageRouteCapability.name}}"
+
+private fun GPUPreparedImageGeometry.stableDump(): String =
+    "${geometryClass.name}:" + vertices.joinToString("|") { vertex ->
+        "${vertex.x.toRawBits()},${vertex.y.toRawBits()},${vertex.u.toRawBits()},${vertex.v.toRawBits()}"
+    } + ":${indices.joinToString(",")}"
 
 private fun ByteArray.sha256(): String = MessageDigest.getInstance("SHA-256")
     .digest(this)

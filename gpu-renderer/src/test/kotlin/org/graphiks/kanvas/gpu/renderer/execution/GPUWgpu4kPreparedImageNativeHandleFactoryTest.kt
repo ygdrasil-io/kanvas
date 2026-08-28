@@ -39,6 +39,7 @@ import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceClass
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceFormat
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageBindingLayoutTopology
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageRouteCapability
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.resources.GPUImageBindingInput
@@ -141,6 +142,25 @@ class GPUWgpu4kPreparedImageNativeHandleFactoryTest {
         val descriptor = native.samplerDescriptors.single()
         assertEquals(GPUFilterMode.Linear, descriptor.magFilter)
         assertEquals(GPUFilterMode.Linear, descriptor.minFilter)
+    }
+
+    @Test
+    fun `bounded route factory rejects linear sampler before native sampler allocation`() {
+        val native = CapturingPreparedImageNativeDevice()
+        val factory = GPUWgpu4kPreparedImageNativeHandleFactory(native.device)
+        val nearest = preparedImageResourcePlan().bindingRequests.single().sampler
+
+        assertFailsWith<IllegalArgumentException> {
+            factory.createSampler(
+                nearest.copy(
+                    magFilter = "linear",
+                    minFilter = "linear",
+                    preparedImageRouteCapability = GPUPreparedImageRouteCapability.BoundedNearest1To1,
+                ),
+            )
+        }
+
+        assertTrue(native.samplerDescriptors.isEmpty())
     }
 
     @Test

@@ -565,6 +565,7 @@ private fun GPUSamplerDescriptor.preparedImageSamplerHash(): String = preparedIm
     compareMode,
     maxAnisotropy.toString(),
     capabilityRequirements.sorted().joinToString("+"),
+    preparedImageRouteCapability.name,
 )
 
 private fun preparedImageHash(vararg tokens: String): String =

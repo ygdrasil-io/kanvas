@@ -30,6 +30,10 @@ import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceClass
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceFormat
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometry
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometryClass
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageRouteCapability
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageVertex
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
@@ -43,6 +47,101 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUUploadLayout
 import org.graphiks.kanvas.gpu.renderer.resources.buildImageFrameResourcePlanFromBindings
 
 class GPUPreparedImageNativeResourcesTest {
+    @Test
+    fun `bounded nearest 1 to 1 resource plan reaches preflight without handles`() {
+        val fixture = fixture(
+            listOf(
+                GPUImageBindingInput(
+                    packetId = "packet.bounded.nearest",
+                    sampling = GPUPreparedImageSampling.Nearest,
+                    routeCapability = GPUPreparedImageRouteCapability.BoundedNearest1To1,
+                    boundedGeometry = boundedGeometry(),
+                ),
+            ),
+        )
+
+        val sealed = assertIs<GPUPreparedImageNativePreflightResult.Sealed>(
+            GPUPreparedImageNativeResourcePreflighter.preflight(fixture.request),
+        )
+
+        assertEquals(
+            GPUPreparedImageRouteCapability.BoundedNearest1To1,
+            sealed.request.resourcePlan.bindingRequests.single().routeCapability,
+        )
+        assertEquals("nearest", sealed.request.resourcePlan.bindingRequests.single().sampler.magFilter)
+    }
+
+    @Test
+    fun `bounded route rejects linear or forged corner geometry before materialization`() {
+        val fixture = fixture(
+            listOf(
+                GPUImageBindingInput(
+                    packetId = "packet.bounded.refusal",
+                    sampling = GPUPreparedImageSampling.Nearest,
+                    routeCapability = GPUPreparedImageRouteCapability.BoundedNearest1To1,
+                    boundedGeometry = boundedGeometry(),
+                ),
+            ),
+        )
+        val binding = fixture.plan.bindingRequests.single()
+        val malformedCorners = binding.copy(
+            boundedGeometry = GPUPreparedImageGeometry(
+                GPUPreparedImageGeometryClass.Rect,
+                listOf(
+                    GPUPreparedImageVertex(4f, 6f, 0f, 0f),
+                    GPUPreparedImageVertex(6f, 7f, 1f, 0f),
+                    GPUPreparedImageVertex(6f, 8f, 1f, 1f),
+                    GPUPreparedImageVertex(3f, 8f, 0f, 1f),
+                ),
+                listOf(0, 1, 2, 0, 2, 3),
+            ),
+        )
+        val linear = binding.copy(sampler = binding.sampler.copy(magFilter = "linear", minFilter = "linear"))
+
+        listOf(malformedCorners, linear).forEach { forged ->
+            val factory = RecordingFactory()
+            val refused = assertIs<GPUPreparedImageNativePreflightResult.Refused>(
+                GPUPreparedImageNativeResourcePreflighter.preflight(
+                    fixture.request.copy(
+                        resourcePlan = fixture.plan.copy(bindingRequests = listOf(forged)),
+                    ),
+                ),
+            )
+
+            assertEquals(GPUPreparedImageRefusalCodes.RECT_GEOMETRY, refused.reasonCode)
+            assertEquals("preflight", refused.facts["boundary"])
+            assertEquals(0, factory.createCalls)
+        }
+    }
+
+    @Test
+    fun `bounded route capability incoherence refuses before native handles`() {
+        val fixture = fixture(
+            listOf(
+                GPUImageBindingInput(
+                    packetId = "packet.bounded.incoherent",
+                    sampling = GPUPreparedImageSampling.Nearest,
+                    routeCapability = GPUPreparedImageRouteCapability.BoundedNearest1To1,
+                    boundedGeometry = boundedGeometry(),
+                ),
+            ),
+        )
+        val incoherent = fixture.plan.bindingRequests.single().copy(
+            sampler = fixture.plan.bindingRequests.single().sampler.copy(
+                preparedImageRouteCapability = GPUPreparedImageRouteCapability.GenericNative,
+            ),
+        )
+
+        val refused = assertIs<GPUPreparedImageNativePreflightResult.Refused>(
+            GPUPreparedImageNativeResourcePreflighter.preflight(
+                fixture.request.copy(resourcePlan = fixture.plan.copy(bindingRequests = listOf(incoherent))),
+            ),
+        )
+
+        assertEquals(GPUPreparedImageRefusalCodes.RECT_GEOMETRY, refused.reasonCode)
+        assertEquals("preflight", refused.facts["boundary"])
+    }
+
     @Test
     fun `generic native linear sampler plan reaches native preflight`() {
         val fixture = fixture(listOf(GPUImageBindingInput("packet.linear", GPUPreparedImageSampling.Linear)))
@@ -534,6 +633,17 @@ class GPUPreparedImageNativeResourcesTest {
             maxBufferSize = 1L shl 30,
             maxDynamicUniformBuffersPerPipelineLayout = 1,
         ),
+    )
+
+    private fun boundedGeometry(): GPUPreparedImageGeometry = GPUPreparedImageGeometry(
+        GPUPreparedImageGeometryClass.Rect,
+        listOf(
+            GPUPreparedImageVertex(4f, 6f, 0f, 0f),
+            GPUPreparedImageVertex(6f, 6f, 1f, 0f),
+            GPUPreparedImageVertex(6f, 8f, 1f, 1f),
+            GPUPreparedImageVertex(4f, 8f, 0f, 1f),
+        ),
+        listOf(0, 1, 2, 0, 2, 3),
     )
 
     private data class Fixture(

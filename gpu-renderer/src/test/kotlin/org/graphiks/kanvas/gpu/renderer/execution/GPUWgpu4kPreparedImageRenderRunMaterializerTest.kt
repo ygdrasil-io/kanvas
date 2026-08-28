@@ -40,6 +40,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometryClass
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImagePayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImagePayloadInput
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageRouteCapability
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageVertex
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageUploadLayout
@@ -52,6 +53,63 @@ import org.graphiks.kanvas.gpu.renderer.resources.buildImageFrameResourcePlanFro
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 
 class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
+    @Test
+    fun `bounded capability materializer accepts nearest and refuses linear before native handles`() {
+        val artifact = preparedImageArtifact(pixelSeed = 53)
+        val geometry = boundedGeometryForMaterializer()
+        val resource = buildImageFrameResourcePlanFromBindings(
+            artifact = artifact,
+            bindingInputs = listOf(
+                GPUImageBindingInput(
+                    packetId = "packet.bounded.materializer",
+                    sampling = GPUPreparedImageSampling.Nearest,
+                    routeCapability = GPUPreparedImageRouteCapability.BoundedNearest1To1,
+                    boundedGeometry = geometry,
+                ),
+            ),
+            bindingLayoutHash = "prepared-image.group0.dynamic-uniform-texture-sampler.v1",
+            capabilities = preparedImageCapabilities(),
+            frameIdentity = "frame.bounded.materializer",
+        )
+        val nearestPlan = preparedImageRenderRunPlan(
+            sourceScopeIndices = listOf(1, 2),
+            packets = listOf(boundedPreparedImageSemantic(artifact, GPUPreparedImageSampling.Nearest, geometry)),
+            resources = listOf(resource),
+            uniformAllocations = resource.bindingRequests.map { it.uniformAllocation },
+        )
+        val readyDevice = RecordingPreparedImageDevice()
+        val readyCache = GPUWgpu4kPreparedImageSessionCache(readyDevice.device, GPUDeviceGenerationID(251))
+        val ready = assertIs<GPUPreparedRenderRunMaterialization.Ready>(
+            GPUWgpu4kPreparedImageRenderRunMaterializer(
+                readyCache,
+                GPUWgpu4kPreparedImageNativeHandleFactory(readyDevice.device),
+                preparedImageCapabilities(),
+            ).materializeAcceptedRun(nearestPlan, GPUDeviceGenerationID(251)),
+        )
+        ready.ownedResources.forEach(AutoCloseable::close)
+        readyCache.close()
+
+        val refusedDevice = RecordingPreparedImageDevice()
+        val refusedCache = GPUWgpu4kPreparedImageSessionCache(refusedDevice.device, GPUDeviceGenerationID(252))
+        val refusal = assertIs<GPUPreparedRenderRunMaterialization.Refused>(
+            GPUWgpu4kPreparedImageRenderRunMaterializer(
+                refusedCache,
+                GPUWgpu4kPreparedImageNativeHandleFactory(refusedDevice.device),
+                preparedImageCapabilities(),
+            ).materializeAcceptedRun(
+                nearestPlan.copy(
+                    packets = listOf(
+                        boundedPreparedImageSemantic(artifact, GPUPreparedImageSampling.Linear, geometry),
+                    ),
+                ),
+                GPUDeviceGenerationID(252),
+            ),
+        )
+        assertEquals(GPUPreparedImageRefusalCodes.RECT_GEOMETRY, refusal.code)
+        assertEquals(0, refusedDevice.handleCreates)
+        refusedCache.close()
+    }
+
     @Test
     fun `texture limit refuses through the real materializer before exact factory or device allocation`() {
         val generation = GPUDeviceGenerationID(171)
@@ -1245,6 +1303,39 @@ private fun preparedImageSemantic(
             frameProvenance = GPUFrameProvenance.GmContent,
         ),
     )
+
+private fun boundedPreparedImageSemantic(
+    artifact: org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedImageUploadArtifact,
+    sampling: GPUPreparedImageSampling,
+    geometry: GPUPreparedImageGeometry,
+): GPUDrawSemanticPayload.SampledImage =
+    GPUPreparedImagePayloadGatherer().gatherSemantic(
+        GPUPreparedImagePayloadInput(
+            payloadRef = GPUDrawPayloadRef(251, "image.draw.texture_upload"),
+            artifact = artifact,
+            geometry = geometry,
+            sampling = sampling,
+            routeCapability = GPUPreparedImageRouteCapability.BoundedNearest1To1,
+            tintPremultipliedRgba = listOf(1f, 1f, 1f, 1f),
+            atlasColorPremultipliedRgba = null,
+            atlasSourceBlend = null,
+            targetBounds = GPUPixelBounds(0, 0, 16, 16),
+            scissorBounds = GPUPixelBounds(0, 0, 16, 16),
+            blendPlanIdentity = "SrcOver",
+            frameProvenance = GPUFrameProvenance.GmContent,
+        ),
+    )
+
+private fun boundedGeometryForMaterializer(): GPUPreparedImageGeometry = GPUPreparedImageGeometry(
+    GPUPreparedImageGeometryClass.Rect,
+    listOf(
+        GPUPreparedImageVertex(4f, 6f, 0f, 0f),
+        GPUPreparedImageVertex(6f, 6f, 1f, 0f),
+        GPUPreparedImageVertex(6f, 8f, 1f, 1f),
+        GPUPreparedImageVertex(4f, 8f, 0f, 1f),
+    ),
+    listOf(0, 1, 2, 0, 2, 3),
+)
 
 internal fun preparedImageCapabilities() = GPUCapabilities(
     implementation = GPUImplementationIdentity("GPU", "test", "adapter", "device"),

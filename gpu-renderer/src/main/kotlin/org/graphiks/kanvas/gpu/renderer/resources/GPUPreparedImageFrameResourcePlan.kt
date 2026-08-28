@@ -571,8 +571,10 @@ private fun GPUPreparedImageGeometry?.isBoundedNativeImageGeometry(
     val top = vertices[0].y
     val right = vertices[2].x
     val bottom = vertices[2].y
+    val expectedPositions = listOf(left to top, right to top, right to bottom, left to bottom)
     return listOf(left, top, right, bottom).all { value -> value.isFinite() && value == value.toInt().toFloat() } &&
         right - left == artifactWidth.toFloat() && bottom - top == artifactHeight.toFloat() &&
+        vertices.map { it.x to it.y } == expectedPositions &&
         vertices.map { it.u to it.v } == listOf(0f to 0f, 1f to 0f, 1f to 1f, 0f to 1f)
 }
 

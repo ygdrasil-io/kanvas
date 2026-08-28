@@ -58,6 +58,7 @@ data class GPUPreparedImagePipelineKey(
     val destinationBlendState: String,
     val targetFormat: String,
     val bindingLayoutHash: String,
+    val routeCapability: GPUPreparedImageRouteCapability = GPUPreparedImageRouteCapability.GenericNative,
 )
 
 /** Input gathered after image preparation and before any native resource is materialized. */
@@ -155,6 +156,7 @@ internal fun GPUPreparedImagePayloadInput.pipelineKey(): GPUPreparedImagePipelin
     destinationBlendState = blendPlanIdentity,
     targetFormat = GPU_PREPARED_IMAGE_TARGET_FORMAT,
     bindingLayoutHash = GPUPreparedImageBindingLayoutTopology.IDENTITY,
+    routeCapability = routeCapability,
 )
 
 internal fun GPUPreparedImagePayloadInput.canonicalHash(): String = preparedImageSha256Hex(
@@ -183,6 +185,7 @@ internal fun GPUPreparedImagePayloadInput.canonicalHash(): String = preparedImag
         }
         append("indices=").append(geometry.indices.joinToString(",")).append(';')
         append("sampling=").append(sampling.name).append(';')
+        append("routeCapability=").append(routeCapability.name).append(';')
         append("tint=").append(tintPremultipliedRgba.joinToString(",") { it.toRawBits().toString() }).append(';')
         append("atlasColor=").append(atlasColorPremultipliedRgba?.joinToString(",") { it.toRawBits().toString() } ?: "none").append(';')
         append("atlasSourceBlend=").append(atlasSourceBlend?.name ?: "none").append(';')
@@ -209,7 +212,7 @@ internal fun GPUPreparedImagePayloadInput.stableDumpLine(canonicalHash: String):
         geometry.vertices.mapIndexed { index, vertex ->
             "vertex$index=${vertex.x.toRawBits()},${vertex.y.toRawBits()},${vertex.u.toRawBits()},${vertex.v.toRawBits()}"
         }.joinToString(" ") + " indices=${geometry.indices.joinToString(",")} " +
-        "sampling=${sampling.name} tint=${tintPremultipliedRgba.joinToString(",") { it.toRawBits().toString() }} " +
+        "sampling=${sampling.name} routeCapability=${routeCapability.name} tint=${tintPremultipliedRgba.joinToString(",") { it.toRawBits().toString() }} " +
         "atlasColor=${atlasColorPremultipliedRgba?.joinToString(",") { it.toRawBits().toString() } ?: "none"} " +
         "atlasBlend=${atlasSourceBlend?.name ?: "none"} " +
         "blend=$blendPlanIdentity target=$targetBounds scissor=$scissorBounds provenance=${frameProvenance.annotationValue}"
