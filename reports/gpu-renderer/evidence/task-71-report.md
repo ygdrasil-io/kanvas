@@ -13,9 +13,12 @@ opaque red rectangle and a non-AA triangle whose fill type is
 coverage is the area outside the triangle.
 
 The frame is prepared through `GPUFramePathApiInventory.prepareNativeTaskList`
-and submitted to the native WebGPU backend. The test checks `Succeeded`, exactly
-one native submit and one readback, and compares every RGBA byte with an
-independent barycentric pixel-centre oracle for the outside-of-triangle region.
+and submitted to the native WebGPU backend. Before preparation, the inventory
+is asserted to carry `GPUClipExecutionPlan.StencilCoverage` with winding
+increment/decrement producer operations and an `Equal` consumer comparison,
+which pins the inverse-fill stencil route. The test then checks `Succeeded`,
+exactly one native submit and one readback, and compares every RGBA byte with
+an independent barycentric pixel-centre oracle for the outside-of-triangle region.
 Pure red keeps the byte oracle invariant under the sRGB transfer function.
 
 Validated command:
