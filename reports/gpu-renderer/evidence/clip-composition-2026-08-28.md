@@ -59,3 +59,35 @@ producteur inverse path exige depth/stencil, le refus est
 `unsupported.recording.core_primitive_clip_mask_depth_stencil_topology_unavailable`
 : il requiert la topologie full-target depth/stencil B3.4, absente du runtime
 actuel. Ce n'est donc pas promu comme support rendu dans cette vague.
+
+## Investigation B3.4 — blocage natif explicite
+
+L'enquête confirme que `wgpu4k` possède les primitives WebGPU nécessaires :
+le runtime bas niveau peut créer `Depth24PlusStencil8`, l'attacher à un
+`RenderPassDepthStencilAttachment` et exécuter des passes stencil. Le blocage
+ne relève donc pas de cette dépendance, mais de la route publique
+`gpu-renderer` :
+
+- le builder refuse encore `depthStencilRequired` pour un `CoverageMask` ;
+- le prepared route ferme ce profil couleur-only et le frame pool interdit
+  l'emprunt simultané du masque et de `ClipDepthStencil` ;
+- le materializer sélectionne aujourd'hui soit la voie masque, soit la voie
+  clip-stencil, jamais une seule pass avec les deux ressources et leurs
+  durées de vie scellées.
+
+Une alternative plus petite a aussi été évaluée : abaisser uniquement un
+triangle convexe hard/Winding/non-inverse, placé après un `Rect Intersect`,
+vers un producteur couleur `DstOut`. Son résultat serait exact pour ce seul
+cas (`rect ∩ non-triangle`). Elle ne peut toutefois pas être ajoutée comme un
+petit flag : elle requiert un shader à attribut vertex, une autorité de
+géométrie scellée, des uploads V/I, `DrawIndexed`, des offsets de buffers
+pour les consommateurs existants et une adaptation du pool/préflight. C'est
+une nouvelle voie de matérialisation, sans preuve Surface à ce stade.
+
+Décision de la vague : aucun support path+CoverageMask n'est annoncé ni
+promu. Les variantes path, inverse, AA, plusieurs contours, MSAA, trois
+producteurs ou plus, et tout stack demandant `ClipDepthStencil` restent
+explicitement refusés. Une vague ultérieure pourra choisir soit une
+matérialisation B3.4 complète avec preuve Surface CPU/GPU/diff/statistiques,
+soit une mini-route triangle accompagnée de la même preuve, mais pas une
+acceptation déclarative intermédiaire.
