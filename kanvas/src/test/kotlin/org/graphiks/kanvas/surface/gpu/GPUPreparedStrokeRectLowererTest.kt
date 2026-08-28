@@ -725,6 +725,20 @@ class GPUPreparedStrokeRectLowererTest {
             capabilities(withUniformScaleThreeStopStrokeGradient = true),
         ))
         assertEquals(4, ready.commands.size)
+        assertEquals("uniform-scale", ready.geometryPlan.path?.transformClass)
+        assertEquals("uniform-scale", ready.geometryPlan.stroke?.transformClass)
+        assertEquals(
+            listOf(
+                GPUPixelBounds(16, 18, 60, 22),
+                GPUPixelBounds(16, 50, 60, 54),
+                GPUPixelBounds(16, 22, 20, 50),
+                GPUPixelBounds(56, 22, 60, 50),
+            ),
+            ready.commands.map { command ->
+                val fill = assertIs<NormalizedDrawCommand.FillRect>(command.normalized)
+                GPUPixelBounds(fill.rect.left.toInt(), fill.rect.top.toInt(), fill.rect.right.toInt(), fill.rect.bottom.toInt())
+            },
+        )
         val first = assertIs<NormalizedDrawCommand.FillRect>(ready.commands.first().normalized)
         assertEquals(GPUCommandSourceKind.AnalyticStrokeRectUniformScaleThreeStopBand, first.source.kind)
         val material = assertIs<org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor.LinearGradient>(first.material)

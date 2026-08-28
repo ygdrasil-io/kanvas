@@ -303,14 +303,16 @@ internal object GPUPreparedStrokeRectLowerer {
         }
         val transformClass = when {
             operation.transform == Matrix3x3F32.Identity -> "identity"
-            uniformlyScaledTwoStopLinearGradient -> "uniform-scale"
+            uniformlyScaledTwoStopLinearGradient || uniformlyScaledThreeStopLinearGradient -> "uniform-scale"
             else -> "translate"
         }
         val lowered = axisAlignedStrokeRectLowerer.lower(
             GPUAxisAlignedStrokeRectLoweringRequest(
                 targetBounds = GPUPixelBounds(0, 0, target.width, target.height),
                 pathBounds = deviceRect,
-                strokeWidth = paint.strokeWidth * if (uniformlyScaledTwoStopLinearGradient) operation.transform.sx else 1f,
+                strokeWidth = paint.strokeWidth * if (
+                    uniformlyScaledTwoStopLinearGradient || uniformlyScaledThreeStopLinearGradient
+                ) operation.transform.sx else 1f,
                 pathKey = "path:kanvas:drawRect.stroke:analytic:v1",
                 provenance = "kanvas-surface.drawRect.stroke.analytic-four-band",
                 cap = paint.strokeCap.name.lowercase().replaceFirstChar { it.uppercaseChar() },
