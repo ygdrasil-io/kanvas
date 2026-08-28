@@ -22,11 +22,14 @@ Surface.
 ## Pourquoi la promotion serait incorrecte
 
 L'analyse décide l'admission de trois stops à partir du `FillRect` normalisé :
-non-AA, CTM identité, `CLAMP` et `localMatrix` identité. Après l'abaissement
-des quatre bandes, elle ne distingue plus le `DrawRect` stroke public du
-`FillRect` public W32. Un cas W36 à trois stops pourrait donc satisfaire cette
-garde par accident, tout en contredisant le périmètre explicitement annoncé
-pour W32.
+non-AA, CTM identité, `CLAMP` et `localMatrix` identité. La provenance du
+stroke est pourtant explicitement conservée par
+`withAnalyticStrokeRectSource()` : `adapter = kanvas-surface` et
+`operation = drawRect.stroke.analytic-four-band`. La garde
+`supportsBoundedThreeStopLinearGradient()` ne consulte pas cette provenance ;
+elle admet donc tout `FillRect` qui satisfait ses seules gardes. Un cas W36 à
+trois stops pourrait ainsi satisfaire la garde W32 tout en contredisant son
+périmètre explicitement annoncé.
 
 Les diagnostics de `GPUPreparedStrokeRectLowerer` restent corrects pour la
 translation d'un gradient (`unsupported.stroke.rect_transform`), AA
@@ -36,12 +39,11 @@ spécifique de nombre de stops.
 
 ## Correctif requis avant une tranche positive
 
-Un futur changement de production devra préserver l'identité de l'opération
-publique jusqu'à la décision d'admission, ou porter explicitement une
-capacité distincte `DrawRect.stroke` à trois stops avec ses propres gardes et
-tests de refus. Cette décision devra être TDD, suivre le chemin Surface
-complet et générer une nouvelle preuve CPU/GPU. W36 ne modifie ni le lowerer,
-ni W32–W35, ni le catalogue promu.
+Un futur changement de production devra exclure cette provenance stroke de la
+garde W32, ou porter explicitement une capacité distincte `DrawRect.stroke` à
+trois stops avec ses propres gardes et tests de refus. Cette décision devra
+être TDD, suivre le chemin Surface complet et générer une nouvelle preuve
+CPU/GPU. W36 ne modifie ni le lowerer, ni W32–W35, ni le catalogue promu.
 
 Il n'y a donc ni bundle généré ni promotion pour cette vague : le fichier est
 un blocker d'architecture de route, pas une preuve de support.
