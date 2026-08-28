@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.evidence.programs
 
 import org.graphiks.kanvas.paint.MaskFilter
+import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.GradientStop
@@ -67,6 +68,27 @@ object KanvasScenePrograms {
             Image.fromPixels(1, 1, byteArrayOf(255.toByte(), 255.toByte(), 255.toByte(), 255.toByte()), sourceId = "gpu-evidence.bounded-bitmap-linear-refusal"),
             RectF32.ofLTRB(12f, 16f, 13f, 17f),
             SamplingOptions.LINEAR,
+        )
+    })
+
+    /**
+     * A real public image-filter invocation, deliberately kept refusal-only
+     * until the prepared Surface product can own the blur intermediates.
+     */
+    fun imageFilterBlurRefusal() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawImage(
+            Image.fromPixels(
+                width = 9,
+                height = 9,
+                pixels = ByteArray(9 * 9 * 4).also { pixels ->
+                    val center = (4 * 9 + 4) * 4
+                    pixels[center] = 255.toByte()
+                    pixels[center + 3] = 255.toByte()
+                },
+                sourceId = "gpu-evidence.image-filter-blur-refusal",
+            ),
+            RectF32.ofLTRB(24f, 24f, 33f, 33f),
+            Paint(imageFilter = ImageFilter.Blur(2f, 2f, TileMode.CLAMP)),
         )
     })
 
