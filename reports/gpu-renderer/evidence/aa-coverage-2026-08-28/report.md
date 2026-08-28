@@ -31,10 +31,10 @@ avant tout travail natif.
 
 ```text
 ./gradlew :integration-tests:gpu-evidence:generateGpuEvidence \
-  -PsourceCommit=fe815489a4831079d08446c5e4a14c43c189ea16 \
+  -PsourceCommit=e3376caeb14aae70f98f8ff085f00f7e54a52bec \
   -Pscene=fractional-aa-rect-overlap
 ./gradlew :integration-tests:gpu-evidence:verifyGeneratedGpuEvidence \
-  -PsourceCommit=fe815489a4831079d08446c5e4a14c43c189ea16 \
+  -PsourceCommit=e3376caeb14aae70f98f8ff085f00f7e54a52bec \
   -Pscene=fractional-aa-rect-overlap
 ./gradlew :integration-tests:gpu-evidence:verifyPromotedGpuEvidence
 ```
