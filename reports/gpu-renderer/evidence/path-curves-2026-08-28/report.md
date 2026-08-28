@@ -15,6 +15,30 @@ Date: 2026-08-28
 
 `GPUClipCoverageSurfaceTest.bounded cubic clip matches the independent CPU buffer for both fill rules and operations` completed on the headless WebGPU adapter. It compares full RGBA buffers for winding/even-odd and intersect/difference variants; no CPU fallback is selected.
 
+The four public fill families were additionally generated and promoted from
+commit `0c26e93cd4ca5122dda70d926fd3980cad8e8017`:
+
+| Family | Promoted bundle | Result |
+| --- | --- | --- |
+| Quadratic | `correctness/promoted/quadratic-path-fill/` | 64×64 independent CPU oracle and native WebGPU readback; 100%, 0 differing pixels. |
+| Cubic | `correctness/promoted/cubic-path-fill/` | 64×64 independent CPU oracle and native WebGPU readback; 100%, 0 differing pixels. |
+| Oval | `correctness/promoted/oval-path-fill/` | 64×64 independent CPU oracle and native WebGPU readback; 100%, 0 differing pixels. |
+| Circle | `correctness/promoted/circle-path-fill/` | 64×64 independent CPU oracle and native WebGPU readback; 100%, 0 differing pixels. |
+
+Each bundle contains CPU/GPU captures, diff and statistics, route diagnostics,
+adapter metadata and integrity hashes.  The route diagnostics attest one native
+`kanvas.surface.render` submission per case; no refusal or CPU fallback was
+recorded. `verifyPromotedGpuEvidence` independently verified the whole
+promoted catalogue after the four additions.
+
+## Bound
+
+The public route admits at most 1,024 stencil edge-fan triangles, or 36,864
+bytes (36 bytes per fan triangle). Both limits are checked before the edge-fan
+buffers are allocated and produce their respective stable diagnostics. This is
+large enough for the four 64×64 curve proofs while keeping the admission
+surface finite and auditable.
+
 ## Deliberate boundary
 
 The public `Path` API currently has quadratic, cubic, oval and circle construction, but no conic verb. Adding one would also require an approved picture serialization and compatibility change. This wave therefore does not claim public conic rendering.
