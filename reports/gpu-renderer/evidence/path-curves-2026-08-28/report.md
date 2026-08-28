@@ -16,7 +16,8 @@ Date: 2026-08-28
 `GPUClipCoverageSurfaceTest.bounded cubic clip matches the independent CPU buffer for both fill rules and operations` completed on the headless WebGPU adapter. It compares full RGBA buffers for winding/even-odd and intersect/difference variants; no CPU fallback is selected.
 
 The four public fill families were additionally generated and promoted from
-commit `0c26e93cd4ca5122dda70d926fd3980cad8e8017`:
+commit `3cc329d187b01ec61d1693134658a2165dba95d2` after the shared payload
+contract correction:
 
 | Family | Promoted bundle | Result |
 | --- | --- | --- |
@@ -26,7 +27,9 @@ commit `0c26e93cd4ca5122dda70d926fd3980cad8e8017`:
 | Circle | `correctness/promoted/circle-path-fill/` | 64×64 independent CPU oracle and native WebGPU readback; 100%, 0 differing pixels. |
 
 Each bundle contains CPU/GPU captures, diff and statistics, route diagnostics,
-adapter metadata and integrity hashes.  The route diagnostics attest one native
+adapter metadata and integrity hashes. The rerun preserved the CPU/GPU bytes
+and their manifest hashes; the regenerated catalogue binds all four bundles to
+the code-final commit above. The route diagnostics attest one native
 `kanvas.surface.render` submission per case; no refusal or CPU fallback was
 recorded. `verifyPromotedGpuEvidence` independently verified the whole
 promoted catalogue after the four additions.
@@ -34,7 +37,9 @@ promoted catalogue after the four additions.
 ## Bound
 
 The public route admits at most 1,024 stencil edge-fan triangles, or 36,864
-bytes (36 bytes per fan triangle). Both limits are checked before the edge-fan
+bytes (36 bytes per fan triangle). `GPUPathEdgeFanPayloadContract` is the
+single renderer-owned source for these capacities: payload validation and
+`RenderConfig` derive from it. Both limits are checked before the edge-fan
 buffers are allocated and produce their respective stable diagnostics. This is
 large enough for the four 64×64 curve proofs while keeping the admission
 surface finite and auditable.
