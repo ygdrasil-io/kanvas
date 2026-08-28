@@ -2,16 +2,18 @@
 
 ## Périmètre livré
 
-La route publique `Surface` accepte maintenant un `FillRect` RGBA8 non-AA avec
-un `SweepGradient` `CLAMP` à trois stops opaques, CTM et `localMatrix`
-identités. Les routes sweep à un ou deux stops déjà présentes ne changent pas.
+La route publique `Surface` accepte maintenant un `FillRect`
+`RGBA8_UNORM_SRGB` non-AA avec un `SweepGradient` `CLAMP` à trois stops
+opaques, CTM et `localMatrix` identités, et un clip `WideOpen`. Les routes
+sweep à un ou deux stops déjà présentes ne changent pas.
 
 Cette tranche reste volontairement plus étroite que l'ABI CorePrimitive :
 quatre stops ou plus sont refusés avant soumission par
 `unsupported.material.sweep_gradient_stop_count`. Un sweep à trois stops avec
 `REPEAT`, AA, CTM non identité ou `localMatrix` non identité est également
-refusé avant toute soumission. Il n'y a aucun claim pour RRect, Path, clip,
-affine, filtre, ni autres tile modes.
+refusé avant toute soumission. Les targets `RGBA8_UNORM` et `BGRA8_UNORM`, un
+clip `DeviceRect` ou complexe, RRect, Path, affine, filtre et les autres tile
+modes restent hors périmètre.
 
 ## Vérification ABI et route
 
@@ -28,10 +30,10 @@ dans la route : la politique reste stable sans modifier les contrats W32/W33.
 
 `sweep-gradient-three-stops` est promu dans
 `correctness/promoted/sweep-gradient-three-stops/` pour le commit
-`fb13555e006712ee9a7aa09de054c49de868ec05`.
+`1794a51493002de2bfad121bd274f032d8fbbb83`.
 
 - Oracle CPU indépendant : décodage sRGB, interpolation linear-premultiplied,
-  stockage sRGB RGBA8.
+  stockage `RGBA8_UNORM_SRGB` (readback RGBA8 encodé sRGB).
 - GPU : `kanvas.surface.render`, une soumission, un draw et un bind pipeline.
 - Diff : 0 pixel différent, delta maximal 0, similarité 100 %, tolérance 1 LSB.
 - Diagnostics : aucun refus, `submissionDelta = 1`.
@@ -39,8 +41,8 @@ dans la route : la politique reste stable sans modifier les contrats W32/W33.
 Commandes rejouables :
 
 ```text
-./gradlew --no-daemon :integration-tests:gpu-evidence:generateGpuEvidence -Pscene=sweep-gradient-three-stops -PsourceCommit=fb13555e006712ee9a7aa09de054c49de868ec05
-./gradlew --no-daemon :integration-tests:gpu-evidence:verifyGeneratedGpuEvidence -Pscene=sweep-gradient-three-stops -PsourceCommit=fb13555e006712ee9a7aa09de054c49de868ec05
-./gradlew --no-daemon :integration-tests:gpu-evidence:promoteGpuEvidence -Pscene=sweep-gradient-three-stops -PsourceCommit=fb13555e006712ee9a7aa09de054c49de868ec05 -PpromotionReviewer=codex -PpromotionReason='W34 validates bounded three-stop clamp sweep FillRect rendering.'
+./gradlew --no-daemon :integration-tests:gpu-evidence:generateGpuEvidence -Pscene=sweep-gradient-three-stops -PsourceCommit=1794a51493002de2bfad121bd274f032d8fbbb83
+./gradlew --no-daemon :integration-tests:gpu-evidence:verifyGeneratedGpuEvidence -Pscene=sweep-gradient-three-stops -PsourceCommit=1794a51493002de2bfad121bd274f032d8fbbb83
+./gradlew --no-daemon :integration-tests:gpu-evidence:promoteGpuEvidence -Pscene=sweep-gradient-three-stops -PsourceCommit=1794a51493002de2bfad121bd274f032d8fbbb83 -PpromotionReviewer=codex -PpromotionReason='W34 proves bounded three-stop clamp sweep FillRect on the public sRGB Surface target.'
 ./gradlew --no-daemon :integration-tests:gpu-evidence:verifyPromotedGpuEvidence
 ```
