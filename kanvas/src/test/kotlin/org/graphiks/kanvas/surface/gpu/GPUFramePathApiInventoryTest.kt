@@ -32,6 +32,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.geometry.GPUPathEdgeFanPayloadContract
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
@@ -77,6 +78,23 @@ import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
 
 class GPUFramePathApiInventoryTest {
+    @Test
+    fun `public path defaults derive from the stencil edge fan payload contract`() {
+        assertEquals(
+            GPUPathEdgeFanPayloadContract.MAX_TRIANGLES,
+            RenderConfig.DEFAULT.maxPathFanTriangles,
+        )
+        assertEquals(
+            GPUPathEdgeFanPayloadContract.MAX_GEOMETRY_BYTES,
+            RenderConfig.DEFAULT.maxPathGeometryBytes,
+        )
+        assertEquals(
+            GPUPathEdgeFanPayloadContract.BYTES_PER_TRIANGLE,
+            GPUPathEdgeFanPayloadContract.MAX_GEOMETRY_BYTES /
+                GPUPathEdgeFanPayloadContract.MAX_TRIANGLES,
+        )
+    }
+
     @Test
     fun `identical draw paths retain one content key across command ids`() {
         val path = Path().apply {
