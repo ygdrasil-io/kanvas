@@ -271,6 +271,7 @@ class GpuEvidenceCatalogOracleTest {
         val windingHole = oracle("winding-path-hole")
         val inverseWinding = oracle("inverse-winding-triangle-path")
         val inverseEvenOdd = oracle("inverse-even-odd-path-hole")
+        val bowTie = oracle("even-odd-bow-tie-path")
 
         assertPixel(triangle, 64, 64, 8, 8, orange)
         assertPixel(triangle, 64, 64, 55, 8, background)
@@ -305,6 +306,11 @@ class GpuEvidenceCatalogOracleTest {
         assertPixel(inverseEvenOdd, 64, 64, 30, 30, green)
         assertPixel(inverseEvenOdd, 64, 64, 44, 30, background)
         assertEquals(2320, fillPixelCount(inverseEvenOdd, green))
+
+        assertPixel(bowTie, 64, 64, 16, 16, green)
+        assertPixel(bowTie, 64, 64, 32, 32, background)
+        assertPixel(bowTie, 64, 64, 16, 48, green)
+
     }
 
     @Test
