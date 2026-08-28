@@ -2820,6 +2820,32 @@ class FirstRoutePlannerTest {
     }
 
     @Test
+    fun `fill path simple stroke with uniform scale and translation builds native stencil cover route`() {
+        val command = GPUFillPathCommandBuilder.build(
+            commandId = GPUDrawCommandID(129),
+            pathKey = "path:scaled-translated-stroke-segment:v1",
+            pathDescriptor = GPUPathFacts(
+                pathKey = "path:scaled-translated-stroke-segment:v1", verbCount = 2, pointCount = 2,
+                fillRule = "NonZero", inverseFill = false, finiteProof = "finite",
+                volatility = "immutable", transformClass = "affine", edgeCount = 1,
+            ),
+            tessellatedVertices = listOf(4f, 8f, 14f, 8f), contourStarts = listOf(0), edgeCount = 1,
+            target = GPUTargetFacts(width = 32, height = 32, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0f, b = 0f, a = 1f),
+            transform = GPUTransformFacts.affine(
+                scaleX = 2f, skewX = 0f, skewY = 0f, scaleY = 2f,
+                translateX = 2f, translateY = 3f,
+            ),
+            stroke = true, strokeWidth = 2f, strokeCap = "butt", strokeJoin = "miter", antiAlias = false,
+        )
+
+        val plan = GPUFirstRoutePlanner(firstSlicePathFillStencilCoverCapabilities()).plan(command)
+
+        assertEquals("native.path_stroke.stencil_cover", plan.analysisRecord.routeDecisionLabel)
+        assertEquals("route.path_stroke.129", assertIs<GPURouteDecision.Native>(plan.routeDecision).route.routeId)
+    }
+
+    @Test
     fun `fill path single segment hairline builds native direct route`() {
         val command = GPUFillPathCommandBuilder.build(
             commandId = GPUDrawCommandID(128),
