@@ -2789,6 +2789,37 @@ class FirstRoutePlannerTest {
     }
 
     @Test
+    fun `fill path simple stroke with uniform scale builds native stencil cover route`() {
+        val command = GPUFillPathCommandBuilder.build(
+            commandId = GPUDrawCommandID(127),
+            pathKey = "path:scaled-stroke-segment:v1",
+            pathDescriptor = GPUPathFacts(
+                pathKey = "path:scaled-stroke-segment:v1", verbCount = 2, pointCount = 2,
+                fillRule = "NonZero", inverseFill = false, finiteProof = "finite",
+                volatility = "immutable", transformClass = "scale", edgeCount = 1,
+            ),
+            tessellatedVertices = listOf(4f, 8f, 14f, 8f), contourStarts = listOf(0), edgeCount = 1,
+            target = GPUTargetFacts(width = 32, height = 32, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0f, b = 0f, a = 1f),
+            transform = GPUTransformFacts.scale(2f, 2f),
+            stroke = true, strokeWidth = 2f, strokeCap = "butt", strokeJoin = "miter", antiAlias = false,
+        )
+
+        val plan = GPUFirstRoutePlanner(firstSlicePathFillStencilCoverCapabilities()).plan(command)
+
+        assertEquals("native.path_stroke.stencil_cover", plan.analysisRecord.routeDecisionLabel)
+        assertEquals("route.path_stroke.127", assertIs<GPURouteDecision.Native>(plan.routeDecision).route.routeId)
+
+        val scaledRoundPlan = GPUFirstRoutePlanner(firstSlicePathFillStencilCoverCapabilities()).plan(
+            command.copy(strokeWidth = 4f, strokeCap = "round"),
+        )
+        assertEquals(
+            "unsupported.stroke.cap",
+            assertIs<GPURouteDecision.Refused>(scaledRoundPlan.routeDecision).diagnostic.code,
+        )
+    }
+
+    @Test
     fun `fill path single segment hairline builds native direct route`() {
         val command = GPUFillPathCommandBuilder.build(
             commandId = GPUDrawCommandID(128),

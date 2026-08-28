@@ -3,6 +3,12 @@ package org.graphiks.kanvas.gpu.renderer.commands
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 
+/** Returns true only for a finite, strictly positive uniform scale. */
+fun GPUTransformFacts.isUniformPositiveScale(): Boolean =
+    type == GPUTransformType.Scale &&
+        scaleX.isFinite() && scaleY.isFinite() &&
+        scaleX > 0f && scaleX == scaleY
+
 /**
  * Shared admission contract for the deliberately narrow native path hairline route.
  *
@@ -22,9 +28,7 @@ fun NormalizedDrawCommand.FillPath.isBoundedNativePathHairline(): Boolean =
         strokeMiterLimit.isFinite() && strokeMiterLimit >= 1f &&
         (transform.type == GPUTransformType.Identity ||
             transform.type == GPUTransformType.Translate ||
-            (transform.type == GPUTransformType.Scale &&
-                transform.scaleX.isFinite() && transform.scaleY.isFinite() &&
-                transform.scaleX > 0f && transform.scaleX == transform.scaleY)) &&
+            transform.isUniformPositiveScale()) &&
         (clip.executionPlan == GPUClipExecutionPlan.NoClip ||
             clip.executionPlan is GPUClipExecutionPlan.ScissorOnly) &&
         material is GPUMaterialDescriptor.SolidColor &&
