@@ -28,6 +28,8 @@ data class RenderResult(
     val stats: RenderStats,
     /** Prepared GPU structural steps observed for this completed render. */
     val structuralSteps: List<String> = emptyList(),
+    /** Native route counters attached only when the completed renderer can observe them. */
+    val nativeEvidenceCounters: Map<String, Long> = emptyMap(),
 ) {
     /** True when no diagnostics were recorded during rendering. */
     val isClean: Boolean get() = diagnostics.isEmpty
@@ -45,7 +47,7 @@ data class RenderResult(
         if (this === other) return true
         if (other !is RenderResult) return false
         return pixels.contentEquals(other.pixels) && width == other.width && height == other.height
-            && format == other.format && colorSpace == other.colorSpace && diagnostics == other.diagnostics && stats == other.stats && structuralSteps == other.structuralSteps
+            && format == other.format && colorSpace == other.colorSpace && diagnostics == other.diagnostics && stats == other.stats && structuralSteps == other.structuralSteps && nativeEvidenceCounters == other.nativeEvidenceCounters
     }
-    override fun hashCode(): Int = pixels.contentHashCode() * 31 + width + height + format.hashCode() + colorSpace.hashCode() + diagnostics.hashCode() + stats.hashCode() + structuralSteps.hashCode()
+    override fun hashCode(): Int = pixels.contentHashCode() * 31 + width + height + format.hashCode() + colorSpace.hashCode() + diagnostics.hashCode() + stats.hashCode() + structuralSteps.hashCode() + nativeEvidenceCounters.hashCode()
 }

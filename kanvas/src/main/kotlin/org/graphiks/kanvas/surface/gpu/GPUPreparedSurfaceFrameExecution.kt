@@ -107,6 +107,10 @@ internal data class GPUPreparedSurfaceExecutionEvidence(
     val invariantCounters: GPUPreparedSceneInvariantCounterDeltas =
         GPUPreparedSceneInvariantCounterDeltas(),
     val structuralSteps: List<String> = emptyList(),
+    val preparedImageFrameTextureCreations: Long = 0L,
+    val preparedImageFrameSamplerCreations: Long = 0L,
+    val preparedImageFrameBindGroupCreations: Long = 0L,
+    val preparedImageFrameTextureWriteTextureCalls: Long = 0L,
 )
 
 internal sealed interface GPUPreparedSurfaceExecutionResult {
@@ -866,6 +870,22 @@ internal class GPUPreparedSurfaceFrameExecutor(
                     postFrameCounters.distinctRetentionTickets,
                 ),
                 structuralSteps = pending.structuralSteps,
+                preparedImageFrameTextureCreations = delta(
+                    pending.beforeSubmit.preparedImageFrameTextureCreations,
+                    pending.afterCompletion.preparedImageFrameTextureCreations,
+                ),
+                preparedImageFrameSamplerCreations = delta(
+                    pending.beforeSubmit.preparedImageFrameSamplerCreations,
+                    pending.afterCompletion.preparedImageFrameSamplerCreations,
+                ),
+                preparedImageFrameBindGroupCreations = delta(
+                    pending.beforeSubmit.preparedImageFrameBindGroupCreations,
+                    pending.afterCompletion.preparedImageFrameBindGroupCreations,
+                ),
+                preparedImageFrameTextureWriteTextureCalls = delta(
+                    pending.beforeSubmit.preparedImageFrameTextureWriteTextureCalls,
+                    pending.afterCompletion.preparedImageFrameTextureWriteTextureCalls,
+                ),
                 textCounters = GPUPreparedTextFrameCounters(
                     a8Instances = pending.textMetrics.a8InstanceCount,
                     colorGlyphInstances = pending.textMetrics.colorGlyphInstanceCount,

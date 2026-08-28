@@ -127,7 +127,7 @@ class KanvasSurfaceEvidenceExecutor(
             "queue.submit" to delta.submissions,
             "render.draw" to result.stats.drawCallCount.toLong(),
             "render.pipelineBind" to result.stats.pipelineCount.toLong(),
-        ),
+        ) + result.nativeEvidenceCounters,
         delta,
     )
 }
