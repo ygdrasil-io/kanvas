@@ -9,6 +9,14 @@ fun GPUTransformFacts.isUniformPositiveScale(): Boolean =
         scaleX.isFinite() && scaleY.isFinite() &&
         scaleX > 0f && scaleX == scaleY
 
+/** Returns true only for a finite affine uniform scale with finite translation. */
+fun GPUTransformFacts.isUniformPositiveScaleTranslate(): Boolean =
+    type == GPUTransformType.Affine &&
+        translateX.isFinite() && translateY.isFinite() &&
+        scaleX.isFinite() && scaleY.isFinite() &&
+        scaleX > 0f && scaleX == scaleY &&
+        skewX == 0f && skewY == 0f
+
 /**
  * Shared admission contract for the deliberately narrow native path hairline route.
  *
@@ -28,7 +36,7 @@ fun NormalizedDrawCommand.FillPath.isBoundedNativePathHairline(): Boolean =
         strokeMiterLimit.isFinite() && strokeMiterLimit >= 1f &&
         (transform.type == GPUTransformType.Identity ||
             transform.type == GPUTransformType.Translate ||
-            transform.isUniformPositiveScale()) &&
+            (transform.isUniformPositiveScale() || transform.isUniformPositiveScaleTranslate())) &&
         (clip.executionPlan == GPUClipExecutionPlan.NoClip ||
             clip.executionPlan is GPUClipExecutionPlan.ScissorOnly) &&
         material is GPUMaterialDescriptor.SolidColor &&

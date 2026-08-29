@@ -20,6 +20,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.commands.isBoundedNativePathHairline
 import org.graphiks.kanvas.gpu.renderer.commands.isUniformPositiveScale
+import org.graphiks.kanvas.gpu.renderer.commands.isUniformPositiveScaleTranslate
 import org.graphiks.kanvas.gpu.renderer.commands.gradientFactsRefusalReasonOrNull
 import org.graphiks.kanvas.gpu.renderer.commands.imageLocalMatrixRefusalReasonOrNull
 import org.graphiks.kanvas.gpu.renderer.commands.isAffineDeterminantNonFinite
@@ -2551,7 +2552,7 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
             strokeJoin == "miter" &&
             strokeMiterLimit.isFinite() && strokeMiterLimit >= 1f &&
             (transform.type in setOf(GPUTransformType.Identity, GPUTransformType.Translate) ||
-                transform.isUniformPositiveScale())
+                transform.isUniformPositiveScale() || transform.isUniformPositiveScaleTranslate())
 
     private fun NormalizedDrawCommand.FillPath.matchesPixelExactRoundCapR2HorizontalV1(): Boolean {
         if (transform.type !in setOf(GPUTransformType.Identity, GPUTransformType.Translate)) return false
