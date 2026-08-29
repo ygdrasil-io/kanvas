@@ -370,6 +370,8 @@ internal fun GPUCorePrimitiveRenderPipelineStructuralKey.corePrimitiveNativeComp
         val mapped = mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(this)
     ) {
         is GPUWgpu4kCorePrimitivePipelineMapping.Mapped -> when {
+            mapped.identity.program == GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverDstRead ->
+                mapped.componentIdentity
             this.shader.isGradient() ->
                 corePrimitiveGradientComponentIdentity(this.shader)
             mapped.identity.program.isAnalyticShape() ->
