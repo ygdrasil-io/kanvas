@@ -30,6 +30,7 @@ import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathRadialGradient
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathRadialStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathSweepStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathSweepEvenOddHoleStrokeCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathLinearGradientStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathDirectTriangleLinearGradientCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathDRRectCpuOracle
@@ -115,6 +116,7 @@ sweepGradientTwoStopStrokeRect(),
         clipPathSweepButtStrokeInverseWinding(),
         clipPathSweepSquareStrokeRightAngleWinding(),
         clipPathSweepButtStrokeWinding(),
+        clipPathLinearGradientSquareStrokeWinding(),
         clipPathTranslatedTriangleRadialGradient(),
         clipPathTranslatedTriangleLinearGradient(),
         clipPathUniformScaledTriangleLinearGradient(),
@@ -2000,6 +2002,38 @@ sweepGradientTwoStopStrokeRect(),
             startColor = intArrayOf(255, 0, 0, 255),
             endColor = intArrayOf(0, 0, 255, 255),
             squareCaps = false,
+        ),
+    )
+
+    private fun clipPathLinearGradientSquareStrokeWinding() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("clip-path-linear-gradient-square-stroke-winding"),
+            "Winding clip with a linear-gradient square stroke",
+            "Public Kanvas Surface hard non-AA Winding triangle clip around one opaque two-stop clamp linear-gradient square-cap miter stroke.",
+            64,
+            64,
+            1L,
+            setOf("clip-path", "linear-gradient", "stroke", "winding", "hard-clip", "square-cap", "kanvas-surface"),
+            EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-clip-path-linear-gradient-winding-square-stroke-device-space", 1),
+            ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent pixel-center Winding triangle, square stroke coverage and clamp linear-gradient interpolation."),
+            emptySet(),
+        ),
+        KanvasScenePrograms.clipPathLinearGradientSquareStrokeWinding(),
+        SurfaceSrgbClipPathLinearGradientStrokeCpuOracle(
+            background = intArrayOf(13, 20, 33, 255),
+            points = listOf(
+                SurfaceSrgbClipPathLinearGradientStrokeCpuOracle.Point(7.25, 6.25),
+                SurfaceSrgbClipPathLinearGradientStrokeCpuOracle.Point(30.25, 6.25),
+                SurfaceSrgbClipPathLinearGradientStrokeCpuOracle.Point(7.25, 29.25),
+            ),
+            strokeStart = SurfaceSrgbClipPathLinearGradientStrokeCpuOracle.Point(5.25, 8.25),
+            strokeEnd = SurfaceSrgbClipPathLinearGradientStrokeCpuOracle.Point(21.25, 20.25),
+            strokeWidth = 4.0,
+            gradientStart = SurfaceSrgbClipPathLinearGradientStrokeCpuOracle.Point(0.0, 0.0),
+            gradientEnd = SurfaceSrgbClipPathLinearGradientStrokeCpuOracle.Point(32.0, 0.0),
+            startColor = intArrayOf(255, 0, 0, 255),
+            endColor = intArrayOf(0, 0, 255, 255),
         ),
     )
 
