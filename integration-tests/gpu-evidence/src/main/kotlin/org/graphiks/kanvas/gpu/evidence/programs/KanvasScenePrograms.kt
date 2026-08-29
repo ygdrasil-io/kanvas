@@ -209,6 +209,36 @@ object KanvasScenePrograms {
         restore()
     })
 
+    /** Round-cap material/stencil composition is still refused after route selection. */
+    fun linearGradientRoundStrokeUnderWindingRefusal() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        save()
+        clipPath(
+            Path {
+                moveTo(7.25f, 6.25f)
+                lineTo(30.25f, 6.25f)
+                lineTo(7.25f, 29.25f)
+                close()
+            }.apply { fillType = FillType.WINDING },
+            ClipOp.INTERSECT,
+            antiAlias = false,
+        )
+        drawPath(
+            Path { moveTo(6f, 16f); lineTo(26f, 16f) },
+            Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                shader = Shader.LinearGradient(
+                    Point2F32(0f, 0f),
+                    Point2F32(32f, 0f),
+                    listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                    TileMode.CLAMP,
+                ),
+                antiAlias = false,
+                strokeCap = StrokeCap.ROUND,
+                strokeJoin = StrokeJoin.MITER,
+            ),
+        )
+        restore()
+    })
+
     fun basicPrimitivesValidAlpha() = KanvasSurfaceProgram(ROUTE_ID, record = {
         clear(ColorARGB.Transparent)
         drawColor(ColorARGB.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f, .5f))

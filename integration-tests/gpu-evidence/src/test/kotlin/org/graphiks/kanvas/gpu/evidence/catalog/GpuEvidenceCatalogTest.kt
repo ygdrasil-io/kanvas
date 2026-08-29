@@ -73,7 +73,7 @@ class GpuEvidenceCatalogTest {
     }
 
     @Test
-    fun `catalog separates one hundred fifty-one public surface renders from thirteen refusals`() {
+    fun `catalog separates one hundred fifty-one public surface renders from fourteen refusals`() {
         val cases = GpuEvidenceCatalog.cases
 
         assertEquals(
@@ -220,6 +220,7 @@ class GpuEvidenceCatalogTest {
                 "rotated-diagonal-stroke-winding-refusal",
                 "rotated-radial-stroke-local-matrix-refusal",
                 "three-stop-sweep-stroke-winding-refusal",
+                "linear-gradient-round-stroke-winding-refusal",
             ),
             cases.map { it.descriptor.id.value },
         )
@@ -358,7 +359,7 @@ class GpuEvidenceCatalogTest {
             GpuEvidenceCatalog.renderCases.map { it.descriptor.id.value },
         )
         assertEquals(
-            listOf("basic-primitives-empty-rect-refusal", "perspective-transform-refusal", "mirror-linear-gradient-fillrect-refusal", "reflected-path-topology-refusal", "custom-runtime-effect-unregistered-refusal", "aggregate-memory-budget-refusal", "bounded-save-layer-restore-blend-refusal", "bounded-bitmap-linear-refusal", "image-filter-blur-refusal", "round-cap-stroke-winding-refusal", "rotated-diagonal-stroke-winding-refusal", "rotated-radial-stroke-local-matrix-refusal", "three-stop-sweep-stroke-winding-refusal"),
+            listOf("basic-primitives-empty-rect-refusal", "perspective-transform-refusal", "mirror-linear-gradient-fillrect-refusal", "reflected-path-topology-refusal", "custom-runtime-effect-unregistered-refusal", "aggregate-memory-budget-refusal", "bounded-save-layer-restore-blend-refusal", "bounded-bitmap-linear-refusal", "image-filter-blur-refusal", "round-cap-stroke-winding-refusal", "rotated-diagonal-stroke-winding-refusal", "rotated-radial-stroke-local-matrix-refusal", "three-stop-sweep-stroke-winding-refusal", "linear-gradient-round-stroke-winding-refusal"),
             GpuEvidenceCatalog.refusalCases.map { it.descriptor.id.value },
         )
         assertTrue(GpuEvidenceCatalog.renderCases.all { it.program is KanvasSurfaceProgram })
@@ -370,7 +371,7 @@ class GpuEvidenceCatalogTest {
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
         assertEquals(151, GpuEvidenceCatalog.renderCases.size)
-        assertEquals(164, GpuEvidenceCatalog.cases.size)
+        assertEquals(165, GpuEvidenceCatalog.cases.size)
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
 
         val solid = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "solid-card-stack" })
@@ -666,6 +667,7 @@ class GpuEvidenceCatalogTest {
                 "rotated-diagonal-stroke-winding-refusal" to "kanvas.surface.render",
                 "rotated-radial-stroke-local-matrix-refusal" to "kanvas.surface.render",
                 "three-stop-sweep-stroke-winding-refusal" to "kanvas.surface.render",
+                "linear-gradient-round-stroke-winding-refusal" to "kanvas.surface.render",
             ),
             GpuEvidenceCatalog.refusalCases.filter { it.program is KanvasSurfaceProgram }.associate { evidenceCase ->
                 evidenceCase.descriptor.id.value to assertIs<KanvasSurfaceProgram>(evidenceCase.program).routeId

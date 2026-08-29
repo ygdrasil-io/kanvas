@@ -215,6 +215,7 @@ sweepGradientTwoStopStrokeRect(),
         rotatedDiagonalStrokeUnderWindingRefusal(),
         rotatedRadialStrokeLocalMatrixRefusal(),
         threeStopSweepStrokeUnderWindingRefusal(),
+        linearGradientRoundStrokeUnderWindingRefusal(),
     )
     val cases: List<EvidenceCase> = renderCases + refusalCases
     val catalog = EvidenceSceneCatalog(cases.map(EvidenceCase::descriptor))
@@ -341,6 +342,15 @@ sweepGradientTwoStopStrokeRect(),
         tags = setOf("path-stroke", "sweep-gradient", "three-stops", "path-clip", "winding", "refusal", "kanvas-surface"),
         code = "unsupported.material.sweep_gradient_stop_count",
         program = KanvasScenePrograms.threeStopSweepStrokeUnderWindingRefusal(),
+    )
+
+    private fun linearGradientRoundStrokeUnderWindingRefusal() = surfaceRefusal(
+        id = "linear-gradient-round-stroke-winding-refusal",
+        title = "Linear-gradient round stroke under winding clip refusal",
+        description = "Public Kanvas Surface refuses a two-stop CLAMP linear-gradient round-cap stroke under a winding path clip during material/stencil preparation, even though the simple geometry route is recognized.",
+        tags = setOf("path-stroke", "round-cap", "linear-gradient", "path-clip", "winding", "refusal", "kanvas-surface"),
+        code = "unsupported.core_primitive.material.path_stencil",
+        program = KanvasScenePrograms.linearGradientRoundStrokeUnderWindingRefusal(),
     )
 
     private fun basicPrimitivesValidAlpha() = EvidenceCase(
