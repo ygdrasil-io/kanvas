@@ -15,6 +15,8 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.commands.isPositiveUniformScaleTranslateGradientLocalMatrix
 import org.graphiks.kanvas.gpu.renderer.commands.isBoundedNativePathHairline
+import org.graphiks.kanvas.gpu.renderer.commands.isUniformPositiveScale
+import org.graphiks.kanvas.gpu.renderer.commands.isUniformPositiveScaleTranslate
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.geometry.FlattenedPath
 import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellator
@@ -1376,7 +1378,8 @@ private fun NormalizedDrawCommand.FillPath.matchesHorizontalDashedButtMiterV1():
         contourStarts != listOf(0) || tessellatedVertices.size != 4 ||
         strokeWidth != 4f || strokeCap != "butt" || strokeJoin != "miter" ||
         !strokeMiterLimit.isFinite() || strokeMiterLimit < 1f ||
-        transform.type !in setOf(GPUTransformType.Identity, GPUTransformType.Translate)
+        !(transform.type in setOf(GPUTransformType.Identity, GPUTransformType.Translate) ||
+            transform.isUniformPositiveScale() || transform.isUniformPositiveScaleTranslate())
     ) return false
     val start = transform.map(tessellatedVertices[0], tessellatedVertices[1])
     val end = transform.map(tessellatedVertices[2], tessellatedVertices[3])
@@ -1391,7 +1394,8 @@ private fun NormalizedDrawCommand.FillPath.matchesVerticalDashedButtMiterV1(): B
         contourStarts != listOf(0) || tessellatedVertices.size != 4 ||
         strokeWidth != 4f || strokeCap != "butt" || strokeJoin != "miter" ||
         !strokeMiterLimit.isFinite() || strokeMiterLimit < 1f ||
-        transform.type !in setOf(GPUTransformType.Identity, GPUTransformType.Translate)
+        !(transform.type in setOf(GPUTransformType.Identity, GPUTransformType.Translate) ||
+            transform.isUniformPositiveScale() || transform.isUniformPositiveScaleTranslate())
     ) return false
     val start = transform.map(tessellatedVertices[0], tessellatedVertices[1])
     val end = transform.map(tessellatedVertices[2], tessellatedVertices[3])

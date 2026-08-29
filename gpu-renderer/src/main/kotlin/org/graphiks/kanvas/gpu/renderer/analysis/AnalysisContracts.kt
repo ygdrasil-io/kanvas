@@ -2569,12 +2569,14 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
     private fun NormalizedDrawCommand.FillPath.matchesHorizontalDashedButtMiterV1(): Boolean {
         if (pathEffectKind != "Dash" || dashIntervals?.toList() != listOf(8f, 4f) ||
             !isBoundedHorizontalDashedPhase(dashPhase) || strokeWidth != 4f || strokeCap != "butt" || strokeJoin != "miter" ||
-            tessellatedVertices.size != 4 || transform.type !in setOf(GPUTransformType.Identity, GPUTransformType.Translate)
+            tessellatedVertices.size != 4 ||
+            !(transform.type in setOf(GPUTransformType.Identity, GPUTransformType.Translate) ||
+                transform.isUniformPositiveScale() || transform.isUniformPositiveScaleTranslate())
         ) return false
-        val startX = tessellatedVertices[0] + transform.translateX
-        val startY = tessellatedVertices[1] + transform.translateY
-        val endX = tessellatedVertices[2] + transform.translateX
-        val endY = tessellatedVertices[3] + transform.translateY
+        val startX = transform.scaleX * tessellatedVertices[0] + transform.translateX
+        val startY = transform.scaleY * tessellatedVertices[1] + transform.translateY
+        val endX = transform.scaleX * tessellatedVertices[2] + transform.translateX
+        val endY = transform.scaleY * tessellatedVertices[3] + transform.translateY
         return startX.isIntegralDeviceCoordinate() && startY.isIntegralDeviceCoordinate() &&
             endX.isIntegralDeviceCoordinate() && endY.isIntegralDeviceCoordinate() &&
             startY == endY && kotlin.math.abs(endX - startX) >= 12f
@@ -2583,12 +2585,14 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
     private fun NormalizedDrawCommand.FillPath.matchesVerticalDashedButtMiterV1(): Boolean {
         if (pathEffectKind != "Dash" || dashIntervals?.toList() != listOf(8f, 4f) ||
             !isBoundedHorizontalDashedPhase(dashPhase) || strokeWidth != 4f || strokeCap != "butt" || strokeJoin != "miter" ||
-            tessellatedVertices.size != 4 || transform.type !in setOf(GPUTransformType.Identity, GPUTransformType.Translate)
+            tessellatedVertices.size != 4 ||
+            !(transform.type in setOf(GPUTransformType.Identity, GPUTransformType.Translate) ||
+                transform.isUniformPositiveScale() || transform.isUniformPositiveScaleTranslate())
         ) return false
-        val startX = tessellatedVertices[0] + transform.translateX
-        val startY = tessellatedVertices[1] + transform.translateY
-        val endX = tessellatedVertices[2] + transform.translateX
-        val endY = tessellatedVertices[3] + transform.translateY
+        val startX = transform.scaleX * tessellatedVertices[0] + transform.translateX
+        val startY = transform.scaleY * tessellatedVertices[1] + transform.translateY
+        val endX = transform.scaleX * tessellatedVertices[2] + transform.translateX
+        val endY = transform.scaleY * tessellatedVertices[3] + transform.translateY
         return startX.isIntegralDeviceCoordinate() && startY.isIntegralDeviceCoordinate() &&
             endX.isIntegralDeviceCoordinate() && endY.isIntegralDeviceCoordinate() &&
             startX == endX && kotlin.math.abs(endY - startY) >= 12f
