@@ -1911,6 +1911,22 @@ object KanvasScenePrograms {
         )
     })
 
+    /** The same bounded dash route consumed by an integral device scissor. */
+    fun scissoredHorizontalDashedButtMiterStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        save()
+        clipRect(RectF32.ofLTRB(8f, 14f, 20f, 19f), antiAlias = false)
+        drawPath(
+            Path { moveTo(4f, 16f); lineTo(28f, 16f) },
+            Paint.stroke(ColorARGB.Red, 4f).copy(
+                antiAlias = false,
+                strokeCap = StrokeCap.BUTT,
+                strokeJoin = StrokeJoin.MITER,
+                pathEffect = PathEffect.Dash(floatArrayOf(8f, 4f), phase = 0f),
+            ),
+        )
+        restore()
+    })
+
     fun scissoredRoundCapStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
         save()
         clipRect(RectF32.ofLTRB(5f, 14f, 18f, 19f), antiAlias = false)
