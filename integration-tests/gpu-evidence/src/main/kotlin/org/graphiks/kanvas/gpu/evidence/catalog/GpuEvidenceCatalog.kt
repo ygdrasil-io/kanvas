@@ -83,6 +83,7 @@ object GpuEvidenceCatalog {
         uniformlyScaledTranslatedReverseRoundCapStroke(),
         uniformlyScaledReverseVerticalRoundCapStroke(),
         uniformlyScaledTranslatedReverseVerticalRoundCapStroke(),
+        uniformlyScaledScissoredRoundCapStroke(),
         scaledTranslatedHorizontalHairline(),
         scaledHorizontalHairline(),
         horizontalHairline(),
@@ -1195,6 +1196,34 @@ sweepGradientTwoStopStrokeRect(),
             centerX = 36.0,
             radius = 4.0,
             rgba = intArrayOf(255, 0, 0, 255),
+        ),
+    )
+
+    private fun uniformlyScaledScissoredRoundCapStroke(): EvidenceCase = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("uniformly-scaled-scissored-round-cap-stroke"),
+            "Uniformly scaled scissored round-cap path stroke",
+            "Public Kanvas Surface non-AA horizontal width-four round-cap path stroke under scale two and an integral device scissor.",
+            64,
+            64,
+            1L,
+            setOf("path-stroke", "round-cap", "uniform-scale", "scissor", "kanvas-surface"),
+            EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke-uniform-scale-scissor", 2),
+            ComparisonPolicy(0, 100.0, 1, "Independent pixel-center disk oracle for the scale-two radius-four union intersected with the integral device scissor."),
+            emptySet(),
+        ),
+        KanvasScenePrograms.uniformlyScaledScissoredRoundCapStroke(),
+        SurfaceSrgbRoundCapStrokeScissorCpuOracle(
+            startX = 16.0,
+            endX = 48.0,
+            centerY = 32.0,
+            radius = 4.0,
+            color = intArrayOf(255, 0, 0, 255),
+            clipLeft = 12,
+            clipTop = 30,
+            clipRight = 20,
+            clipBottom = 38,
         ),
     )
 

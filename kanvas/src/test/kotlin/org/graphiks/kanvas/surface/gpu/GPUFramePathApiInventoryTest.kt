@@ -4008,6 +4008,45 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `uniformly scaled scissored round cap reaches native preparation`() {
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(8f, 16f)
+                        lineTo(24f, 16f)
+                    },
+                    Paint.stroke(ColorARGB.Red, 4f).copy(
+                        antiAlias = false,
+                        strokeCap = StrokeCap.ROUND,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.scaling(2f, 2f),
+                    ClipStack.DeviceRect(RectF32.ofLTRB(12f, 30f, 20f, 38f), false),
+                ),
+            ),
+            target = target(width = 64, height = 64),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER),
+        )
+
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+        val semantic = assertIs<GPUCorePrimitiveSemanticGatherResult.Gathered>(
+            GPUFramePathApiInventory.gatherCorePrimitiveSemantics(
+                inventory,
+                GPUPixelBounds(0, 0, 64, 64),
+            ),
+        ).semantics.values.single() as GPUDrawSemanticPayload.CorePrimitive
+        val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
+        assertEquals(GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan, geometry.geometryMode)
+        assertEquals(
+            GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundUniformScaleV1,
+            geometry.strokeStyle?.loweringProof,
+        )
+        assertEquals(GPUPixelBounds(12, 30, 20, 38), semantic.scissorBounds)
+    }
+
+    @Test
     fun `reverse horizontal round cap reaches native preparation`() {
         val inventory = GPUFramePathApiInventory.plan(
             operations = listOf(
