@@ -94,6 +94,7 @@ object GpuEvidenceCatalog {
         windingPathHole(),
         inverseWindingTrianglePath(),
         inverseEvenOddPathHole(),
+        evenOddBowTiePath(),
         implicitClosureTrianglePath(),
         translatedTrianglePath(),
         uniformScaledTrianglePath(),
@@ -106,6 +107,7 @@ object GpuEvidenceCatalog {
         linearGradientThreeStops(),
         basicPrimitivesEmptyRectRefusal(),
         perspectiveTransformRefusal(),
+        reflectedPathTopologyRefusal(),
         unregisteredRuntimeEffectRefusal(),
         aggregateMemoryBudgetRefusal(),
     )
@@ -1424,6 +1426,30 @@ object GpuEvidenceCatalog {
         fillRule = SurfaceSrgbPathFillCpuOracle.FillRule.InverseEvenOdd,
         oracleVersion = 2,
         comparisonRationale = "Exact opaque RGBA8 output from independent pixel-center inverse winding/even-odd polygon membership.",
+    )
+
+    private fun evenOddBowTiePath() = pathFillCase(
+        id = "even-odd-bow-tie-path",
+        title = "Even-odd bow-tie path",
+        description = "Public Kanvas Surface non-AA even-odd path with one bounded self-intersection.",
+        tags = setOf("path-fill", "even-odd", "self-intersection", "kanvas-surface"),
+        program = KanvasScenePrograms.evenOddBowTiePath(),
+        fill = intArrayOf(56, 220, 120, 255),
+        contours = listOf(
+            SurfaceSrgbPathFillCpuOracle.Contour(listOf(
+                point(8f, 8f), point(56f, 56f), point(8f, 56f), point(56f, 8f),
+            )),
+        ),
+        fillRule = SurfaceSrgbPathFillCpuOracle.FillRule.EvenOdd,
+    )
+
+    private fun reflectedPathTopologyRefusal() = surfaceRefusal(
+        id = "reflected-path-topology-refusal",
+        title = "Reflected path topology refusal",
+        description = "Public Kanvas Surface refuses a reflected multi-contour winding path before native submission because reflected path topology is not yet admitted.",
+        tags = setOf("path-fill", "winding", "reflection", "refusal", "kanvas-surface"),
+        code = "unsupported.transform.class_downgrade",
+        program = KanvasScenePrograms.reflectedWindingPathHole(),
     )
 
     private fun implicitClosureTrianglePath() = pathFillCase(

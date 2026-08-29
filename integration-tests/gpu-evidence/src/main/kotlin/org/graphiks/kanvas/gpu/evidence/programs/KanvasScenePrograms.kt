@@ -865,6 +865,23 @@ object KanvasScenePrograms {
         }, Paint.fill(ColorARGB.fromRGBA(56f / 255f, 220f / 255f, 120f / 255f)).copy(antiAlias = false))
     })
 
+    fun evenOddBowTiePath() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        drawPath(Path {
+            moveTo(8f, 8f); lineTo(56f, 56f); lineTo(8f, 56f); lineTo(56f, 8f); close()
+        }.apply { fillType = FillType.EVEN_ODD }, Paint.fill(ColorARGB.fromRGBA(56f / 255f, 220f / 255f, 120f / 255f)).copy(antiAlias = false))
+    })
+
+    fun reflectedWindingPathHole() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        concat(Matrix3x3F32(sx = -1f, sy = 1f, tx = 64f))
+        drawPath(Path {}.apply {
+            addRect(RectF32.ofLTRB(8f, 8f, 56f, 56f))
+            reverseAddPath(Path {}.apply { addRect(RectF32.ofLTRB(16f, 20f, 34f, 44f)) })
+            fillType = FillType.WINDING
+        }, Paint.fill(ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)).copy(antiAlias = false))
+    })
+
     fun implicitClosureTrianglePath() = KanvasSurfaceProgram(ROUTE_ID, record = {
         drawColor(BACKGROUND)
         drawPath(Path {
