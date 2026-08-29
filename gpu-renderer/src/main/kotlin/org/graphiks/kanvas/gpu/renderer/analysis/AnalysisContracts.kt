@@ -2538,7 +2538,7 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
      * one immutable, open two-point contour, finite bounded width and no join work. Butt and
      * square caps remain broadly bounded; round is limited to the separate pixel-exact
      * radius-two axis-aligned contract (identity/translation or an exact right-angle turn),
-     * because its tessellator uses a polygonal approximation.
+     * plus the first bounded uniform-scale lane with a denser polygonal approximation.
      * More than one segment remains on the prepared/refusal path until its outline topology is
      * independently proven in a native packet.
      */
@@ -2566,7 +2566,8 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
                             matchesPixelExactRoundCapR2ReverseVerticalV1() ||
                             matchesPixelExactRoundCapR2QuarterTurnV1() ||
                             matchesPixelExactRoundCapR2HalfTurnV1() ||
-                            matchesPixelExactRoundCapR2NegativeQuarterTurnV1()))
+                            matchesPixelExactRoundCapR2NegativeQuarterTurnV1() ||
+                            matchesUniformScaledRoundCapV1()))
                 ) &&
             strokeJoin == "miter" &&
             strokeMiterLimit.isFinite() && strokeMiterLimit >= 1f &&
@@ -2710,6 +2711,17 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
         val axisAligned = start.first == end.first || start.second == end.second
         return integral && axisAligned &&
             kotlin.math.abs(end.first - start.first) + kotlin.math.abs(end.second - start.second) >= strokeWidth
+    }
+
+    /** First bounded scaled round-cap lane: width four, horizontal, scale exactly two. */
+    private fun NormalizedDrawCommand.FillPath.matchesUniformScaledRoundCapV1(): Boolean {
+        if (!transform.isUniformPositiveScale()) return false
+        if (transform.scaleX != 2f || strokeWidth != 4f || tessellatedVertices.size != 4) return false
+        val start = transform.mapPathPoint(tessellatedVertices[0], tessellatedVertices[1])
+        val end = transform.mapPathPoint(tessellatedVertices[2], tessellatedVertices[3])
+        return start.first.isIntegralDeviceCoordinate() && start.second.isIntegralDeviceCoordinate() &&
+            end.first.isIntegralDeviceCoordinate() && end.second.isIntegralDeviceCoordinate() &&
+            start.second == end.second && end.first - start.first >= 8f
     }
 
     private fun Float.isIntegralDeviceCoordinate(): Boolean = isFinite() && floor(this) == this

@@ -6,10 +6,9 @@ import kotlin.math.floor
  * Independent pixel-center oracle for W25's pixel-exact opaque round-cap segment.
  *
  * It intentionally evaluates the geometric union directly instead of reusing
- * Kanvas stroke expansion or its stencil fan representation. Its inputs are
- * deliberately constrained to the only proven native tessellation domain:
- * radius two, integral device grid, horizontal left-to-right segment and no
- * overlap between the two caps.
+ * Kanvas stroke expansion or its stencil fan representation. Callers select a
+ * bounded integral device segment and radius; route-specific admission remains
+ * enforced by the production lowering proof.
  */
 class SurfaceSrgbRoundCapStrokeCpuOracle(
     private val startX: Double,
@@ -20,8 +19,8 @@ class SurfaceSrgbRoundCapStrokeCpuOracle(
 ) : CpuOracle {
     init {
         require(startX.isIntegralDeviceCoordinate() && endX.isIntegralDeviceCoordinate() &&
-            centerY.isIntegralDeviceCoordinate() && radius == 2.0 && endX - startX >= 4.0
-        ) { "W25 round-cap oracle requires an integral left-to-right radius-two horizontal segment" }
+            centerY.isIntegralDeviceCoordinate() && radius.isFinite() && radius > 0.0 && endX - startX >= 2.0 * radius
+        ) { "round-cap oracle requires an integral left-to-right segment with a positive radius" }
         require(rgba.size == 4 && rgba.all { it in 0..255 })
     }
 

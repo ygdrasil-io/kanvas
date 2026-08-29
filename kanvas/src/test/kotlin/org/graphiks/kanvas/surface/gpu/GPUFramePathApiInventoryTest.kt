@@ -3679,6 +3679,69 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `uniformly scaled round cap reaches native preparation`() {
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(8f, 16f)
+                        lineTo(24f, 16f)
+                    },
+                    Paint.stroke(ColorARGB.Red, 4f).copy(
+                        antiAlias = false,
+                        strokeCap = StrokeCap.ROUND,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.scaling(2f, 2f),
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target = target(width = 64, height = 64),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER),
+        )
+
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+        val semantic = gatheredSemantic(inventory) as GPUDrawSemanticPayload.CorePrimitive
+        val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
+        assertEquals(GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan, geometry.geometryMode)
+        assertEquals(
+            GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundUniformScaleV1,
+            geometry.strokeStyle?.loweringProof,
+        )
+        assertTrue(geometry.coverBounds.left <= 12)
+        assertTrue(geometry.coverBounds.top <= 28)
+    }
+
+    @Test
+    fun `uniformly scaled round cap outside scale two remains explicitly refused`() {
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(8f, 16f)
+                        lineTo(24f, 16f)
+                    },
+                    Paint.stroke(ColorARGB.Red, 4f).copy(
+                        antiAlias = false,
+                        strokeCap = StrokeCap.ROUND,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.scaling(3f, 3f),
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target = target(width = 96, height = 96),
+            config = RenderConfig.DEFAULT,
+        )
+
+        val refusal = gatherRefusal(inventory)
+        assertEquals("unsupported.core_primitive.stroke.round_cap_pixel_exact_lowering", refusal.code)
+        assertEquals("4.0", refusal.facts["width"])
+        assertEquals("round", refusal.facts["cap"])
+    }
+
+    @Test
     fun `reverse horizontal round cap reaches native preparation`() {
         val inventory = GPUFramePathApiInventory.plan(
             operations = listOf(
