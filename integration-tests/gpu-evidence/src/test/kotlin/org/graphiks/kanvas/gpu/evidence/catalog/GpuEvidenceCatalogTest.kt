@@ -74,7 +74,7 @@ class GpuEvidenceCatalogTest {
     }
 
     @Test
-    fun `catalog separates one hundred seventy-five public surface renders from seventeen refusals`() {
+    fun `catalog separates one hundred ninety-two public surface renders from sixteen refusals`() {
         val cases = GpuEvidenceCatalog.cases
 
         assertEquals(
@@ -89,6 +89,7 @@ class GpuEvidenceCatalogTest {
                 "stroke-rect-outline",
                 "translated-stroke-rect-outline",
                 "round-cap-stroke",
+                "round-cap-stroke-winding-clip",
                 "vertical-round-cap-stroke",
                 "quarter-turn-round-cap-stroke",
                 "half-turn-round-cap-stroke",
@@ -257,7 +258,6 @@ class GpuEvidenceCatalogTest {
                 "bounded-save-layer-restore-blend-refusal",
                 "bounded-bitmap-linear-refusal",
                 "image-filter-blur-refusal",
-                "round-cap-stroke-winding-refusal",
                 "rotated-diagonal-stroke-winding-refusal",
                 "rotated-radial-stroke-local-matrix-refusal",
                 "three-stop-sweep-stroke-winding-refusal",
@@ -280,6 +280,7 @@ class GpuEvidenceCatalogTest {
                 "stroke-rect-outline",
                 "translated-stroke-rect-outline",
                 "round-cap-stroke",
+                "round-cap-stroke-winding-clip",
                 "vertical-round-cap-stroke",
                 "quarter-turn-round-cap-stroke",
                 "half-turn-round-cap-stroke",
@@ -443,7 +444,7 @@ class GpuEvidenceCatalogTest {
             GpuEvidenceCatalog.renderCases.map { it.descriptor.id.value },
         )
         assertEquals(
-            listOf("basic-primitives-empty-rect-refusal", "perspective-transform-refusal", "mirror-linear-gradient-fillrect-refusal", "reflected-path-topology-refusal", "custom-runtime-effect-unregistered-refusal", "aggregate-memory-budget-refusal", "bounded-save-layer-restore-blend-refusal", "bounded-bitmap-linear-refusal", "image-filter-blur-refusal", "round-cap-stroke-winding-refusal", "rotated-diagonal-stroke-winding-refusal", "rotated-radial-stroke-local-matrix-refusal", "three-stop-sweep-stroke-winding-refusal", "linear-gradient-round-stroke-winding-refusal", "three-stop-radial-stroke-winding-refusal", "non-right-angle-sweep-stroke-refusal", "empty-dash-stroke-refusal"),
+            listOf("basic-primitives-empty-rect-refusal", "perspective-transform-refusal", "mirror-linear-gradient-fillrect-refusal", "reflected-path-topology-refusal", "custom-runtime-effect-unregistered-refusal", "aggregate-memory-budget-refusal", "bounded-save-layer-restore-blend-refusal", "bounded-bitmap-linear-refusal", "image-filter-blur-refusal", "rotated-diagonal-stroke-winding-refusal", "rotated-radial-stroke-local-matrix-refusal", "three-stop-sweep-stroke-winding-refusal", "linear-gradient-round-stroke-winding-refusal", "three-stop-radial-stroke-winding-refusal", "non-right-angle-sweep-stroke-refusal", "empty-dash-stroke-refusal"),
             GpuEvidenceCatalog.refusalCases.map { it.descriptor.id.value },
         )
         assertTrue(GpuEvidenceCatalog.renderCases.all { it.program is KanvasSurfaceProgram })
@@ -451,10 +452,10 @@ class GpuEvidenceCatalogTest {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            List(191) { "kanvas.surface.render" },
+            List(192) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
-        assertEquals(191, GpuEvidenceCatalog.renderCases.size)
+        assertEquals(192, GpuEvidenceCatalog.renderCases.size)
         assertEquals(208, GpuEvidenceCatalog.cases.size)
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
 
@@ -603,6 +604,7 @@ class GpuEvidenceCatalogTest {
             "stroke-rect-outline",
             "translated-stroke-rect-outline",
             "round-cap-stroke",
+            "round-cap-stroke-winding-clip",
             "vertical-round-cap-stroke",
             "quarter-turn-round-cap-stroke",
             "half-turn-round-cap-stroke",
@@ -787,7 +789,6 @@ class GpuEvidenceCatalogTest {
                 "bounded-save-layer-restore-blend-refusal" to "kanvas.surface.render",
                 "bounded-bitmap-linear-refusal" to "kanvas.surface.render",
                 "image-filter-blur-refusal" to "kanvas.surface.render",
-                "round-cap-stroke-winding-refusal" to "kanvas.surface.render",
                 "rotated-diagonal-stroke-winding-refusal" to "kanvas.surface.render",
                 "rotated-radial-stroke-local-matrix-refusal" to "kanvas.surface.render",
                 "three-stop-sweep-stroke-winding-refusal" to "kanvas.surface.render",
@@ -813,6 +814,7 @@ class GpuEvidenceCatalogTest {
                 "stroke-rect-outline" to OraclePolicy.GeneratedCpu("reference-raster-stroke-rect-bands", 1),
                 "translated-stroke-rect-outline" to OraclePolicy.GeneratedCpu("reference-raster-stroke-rect-bands", 2),
                 "round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke", 2),
+                "round-cap-stroke-winding-clip" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-round-cap-stroke", 1),
                 "vertical-round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke-vertical", 2),
                 "quarter-turn-round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke-vertical", 2),
                 "half-turn-round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke-vertical", 2),
@@ -1011,6 +1013,7 @@ class GpuEvidenceCatalogTest {
                 "stroke-rect-outline" to ComparisonPolicy(0, 100.0, 1, "Exact integer RGBA8 output from four literal analytic coverage bands."),
                 "translated-stroke-rect-outline" to ComparisonPolicy(0, 100.0, 1, "Exact integer RGBA8 output from four translated analytic coverage bands."),
                 "round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Independent pixel-center disk oracle for W25's integral-grid radius-two horizontal contract."),
+                "round-cap-stroke-winding-clip" to ComparisonPolicy(0, 100.0, 1, "Exact pixel-center winding clip and round-cap stroke coverage from an independent CPU oracle."),
                 "vertical-round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Independent pixel-center disk oracle for the integral-grid radius-two vertical contract."),
                 "quarter-turn-round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Independent pixel-center disk oracle for the integral-grid vertical result of the quarter-turn contract."),
                 "half-turn-round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Independent pixel-center disk oracle for the integral-grid vertical result of the half-turn contract."),

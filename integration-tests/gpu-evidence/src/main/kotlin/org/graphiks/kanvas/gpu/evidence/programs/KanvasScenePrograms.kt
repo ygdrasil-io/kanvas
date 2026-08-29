@@ -94,12 +94,8 @@ object KanvasScenePrograms {
         )
     })
 
-    /**
-     * Complex path clips are still terminal for round-cap path strokes. Keep
-     * this public Surface shape as an explicit refusal until the native
-     * stencil-cover route can own the clip/stroke composition.
-     */
-    fun roundCapStrokeUnderWindingRefusal() = KanvasSurfaceProgram(ROUTE_ID, record = {
+    /** A bounded native route: opaque non-AA round-cap stroke under winding path clip. */
+    fun roundCapStrokeUnderWindingClip() = KanvasSurfaceProgram(ROUTE_ID, record = {
         save()
         clipPath(
             Path {
