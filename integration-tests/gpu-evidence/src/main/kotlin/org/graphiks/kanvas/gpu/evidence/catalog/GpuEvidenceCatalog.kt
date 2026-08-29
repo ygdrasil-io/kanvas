@@ -67,6 +67,7 @@ object GpuEvidenceCatalog {
         halfTurnRoundCapStroke(),
         negativeQuarterTurnRoundCapStroke(),
         scissoredVerticalRoundCapStroke(),
+        reverseVerticalRoundCapStroke(),
         scaledTranslatedHorizontalHairline(),
         scaledHorizontalHairline(),
         horizontalHairline(),
@@ -779,6 +780,30 @@ sweepGradientTwoStopStrokeRect(),
             clipTop = 5,
             clipRight = 18,
             clipBottom = 22,
+        ),
+    )
+
+    private fun reverseVerticalRoundCapStroke(): EvidenceCase = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("reverse-vertical-round-cap-stroke"),
+            "Pixel-exact reverse vertical round-cap path stroke",
+            "Public Kanvas Surface non-AA integral-grid vertical radius-two round-cap path with its source contour recorded from bottom to top.",
+            32,
+            32,
+            1L,
+            setOf("path-stroke", "round-cap", "vertical", "reverse", "kanvas-surface"),
+            EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke-vertical", 2),
+            ComparisonPolicy(0, 100.0, 1, "Independent pixel-center disk oracle for the direction-invariant integral-grid vertical contract."),
+            emptySet(),
+        ),
+        KanvasScenePrograms.reverseVerticalRoundCapStroke(),
+        SurfaceSrgbRoundCapVerticalStrokeCpuOracle(
+            startY = 6.0,
+            endY = 26.0,
+            centerX = 16.0,
+            radius = 2.0,
+            rgba = intArrayOf(255, 0, 0, 255),
         ),
     )
 

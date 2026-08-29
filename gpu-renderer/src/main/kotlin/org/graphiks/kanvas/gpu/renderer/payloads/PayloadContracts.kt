@@ -1167,6 +1167,8 @@ enum class GPUCorePrimitiveStrokeLoweringProof {
     SingleSegmentRoundPixelExactR2HorizontalV1,
     /** One integral vertical radius-two round-cap segment with the pixel-exact tessellation proof. */
     SingleSegmentRoundPixelExactR2VerticalV1,
+    /** One integral reverse vertical radius-two round-cap segment with the pixel-exact tessellation proof. */
+    SingleSegmentRoundPixelExactR2ReverseVerticalV1,
     /** One integral radius-two round-cap segment after an exact quarter-turn rotation. */
     SingleSegmentRoundPixelExactR2QuarterTurnV1,
     /** One integral radius-two round-cap segment after an exact half-turn rotation. */
@@ -2517,6 +2519,8 @@ private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
                         GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2HorizontalV1 ->
                             stroke.cap == "round" && stroke.width == 4f
                         GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2VerticalV1 ->
+                            stroke.cap == "round" && stroke.width == 4f
+                        GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2ReverseVerticalV1 ->
                             stroke.cap == "round" && stroke.width == 4f
                         GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2QuarterTurnV1 ->
                             stroke.cap == "round" && stroke.width == 4f
