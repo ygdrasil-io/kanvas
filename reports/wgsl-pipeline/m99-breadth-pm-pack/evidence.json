@@ -2,7 +2,7 @@
   "categoryRows": [
     {
       "category": "supported",
-      "count": 16,
+      "count": 13,
       "meaning": "Selected rows with complete reference, CPU/GPU, diff/stat, route diagnostics and fallbackReason=none."
     },
     {
@@ -12,7 +12,7 @@
     },
     {
       "category": "dependency-gated",
-      "count": 3,
+      "count": 1,
       "meaning": "Real dependency required; no short-lived font/codec substitute is added."
     },
     {
@@ -94,16 +94,13 @@
     {
       "bitmapSupportRows": 2,
       "colorSupportRows": 2,
-      "dependencyGatedRows": 2,
       "id": "color-bitmap-codec",
-      "realCodecDecodeSceneRows": 1,
       "sourceArtifacts": [
         "reports/wgsl-pipeline/color-pipeline-bounded-policy/kan-045-color-pipeline-bounded-policy.json",
-        "reports/wgsl-pipeline/tile-modes-mipmap-boundary/kan-046-tile-modes-mipmap-boundary.json",
-        "reports/wgsl-pipeline/codec-provenance-matrix/kan-047-codec-provenance-matrix.json"
+        "reports/wgsl-pipeline/tile-modes-mipmap-boundary/kan-046-tile-modes-mipmap-boundary.json"
       ],
-      "summary": "Bounded color/bitmap rows and one real PNG source stay visible without broad codec, mipmap or color-managed decode claims.",
-      "theme": "Color, bitmap and codec provenance"
+      "summary": "Bounded color and bitmap rows stay visible without broad mipmap or color-managed decode claims.",
+      "theme": "Color and bitmap provenance"
     },
     {
       "id": "performance-cache",
@@ -187,11 +184,11 @@
       "KAN-035..KAN-040",
       "KAN-041..KAN-042",
       "KAN-043..KAN-044",
-      "KAN-045..KAN-047",
+      "KAN-045..KAN-046",
       "KAN-048..KAN-049"
     ],
     "status": "pass",
-    "supportRows": 16
+    "supportRows": 13
   },
   "readinessDelta": 0.0,
   "releaseBlockingChange": false,
@@ -308,9 +305,9 @@
       "ticket": "KAN-043..KAN-044"
     },
     {
-      "sourceArtifact": "reports/wgsl-pipeline/codec-provenance-matrix/kan-047-codec-provenance-matrix.json",
-      "theme": "Color, bitmap sampling and codec provenance",
-      "ticket": "KAN-045..KAN-047"
+      "sourceArtifact": "reports/wgsl-pipeline/tile-modes-mipmap-boundary/kan-046-tile-modes-mipmap-boundary.json",
+      "theme": "Color and bitmap sampling",
+      "ticket": "KAN-045..KAN-046"
     },
     {
       "sourceArtifact": "reports/wgsl-pipeline/cache-telemetry-release-gate/kan-049-cache-telemetry-release-gate.json",
@@ -328,7 +325,7 @@
     "readinessDelta": 0.0,
     "rendererChanged": false,
     "reportingOnlyVisible": true,
-    "supportRows": 16,
+    "supportRows": 13,
     "thresholdsWeakened": false
   },
   "supportRows": [
@@ -659,82 +656,6 @@
         "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/stats.json"
       ],
       "sourceTicket": "KAN-046",
-      "status": "pass"
-    },
-    {
-      "claimScope": "simple-fixture-backed-bitmap-rect-nearest",
-      "fallbackReason": "none",
-      "family": "color-bitmap-codec",
-      "id": "kan047.paint.bitmap-rect.nearest.fixture.v1",
-      "proof": {
-        "cpuGpu": true,
-        "diffStat": true,
-        "fallbackStable": true,
-        "reference": true,
-        "routeDiagnostics": true
-      },
-      "sourceArtifact": "reports/wgsl-pipeline/codec-provenance-matrix/kan-047-codec-provenance-matrix.json",
-      "sourcePaths": [
-        "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/cpu.png",
-        "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/reference.png",
-        "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/route-cpu.json",
-        "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/route-webgpu.json",
-        "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/stats.json",
-        "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/webgpu.png"
-      ],
-      "sourceTicket": "KAN-047",
-      "status": "pass"
-    },
-    {
-      "claimScope": "bounded-bitmap-sampling-only",
-      "fallbackReason": "none",
-      "family": "color-bitmap-codec",
-      "id": "kan047.bitmap-shader-repeat-tile",
-      "proof": {
-        "cpuGpu": true,
-        "diffStat": true,
-        "fallbackStable": true,
-        "reference": true,
-        "routeDiagnostics": true
-      },
-      "sourceArtifact": "reports/wgsl-pipeline/codec-provenance-matrix/kan-047-codec-provenance-matrix.json",
-      "sourcePaths": [
-        "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/cpu-diff.png",
-        "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/cpu.png",
-        "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/gpu-diff.png",
-        "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/gpu.png",
-        "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/route-cpu.json",
-        "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/route-gpu.json",
-        "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/skia.png",
-        "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/stats.json"
-      ],
-      "sourceTicket": "KAN-047",
-      "status": "pass"
-    },
-    {
-      "claimScope": "bounded-bitmap-sampling-only",
-      "fallbackReason": "none",
-      "family": "color-bitmap-codec",
-      "id": "kan047.bitmap-subset-local-matrix-repeat",
-      "proof": {
-        "cpuGpu": true,
-        "diffStat": true,
-        "fallbackStable": true,
-        "reference": true,
-        "routeDiagnostics": true
-      },
-      "sourceArtifact": "reports/wgsl-pipeline/codec-provenance-matrix/kan-047-codec-provenance-matrix.json",
-      "sourcePaths": [
-        "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/cpu-diff.png",
-        "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/cpu.png",
-        "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/gpu-diff.png",
-        "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/gpu.png",
-        "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/route-cpu.json",
-        "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/route-gpu.json",
-        "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/skia.png",
-        "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/stats.json"
-      ],
-      "sourceTicket": "KAN-047",
       "status": "pass"
     }
   ],
