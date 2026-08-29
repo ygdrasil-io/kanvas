@@ -1245,6 +1245,7 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
         !exactSingleSegment && !boundedMultiSegment -> "unsupported.core_primitive.stroke.complex_exact_lowering"
         strokeCap == "round" &&
             !matchesPixelExactRoundCapR2HorizontalV1() &&
+            !matchesPixelExactRoundCapR2ReverseHorizontalV1() &&
             !matchesPixelExactRoundCapR2VerticalV1() &&
             !matchesPixelExactRoundCapR2ReverseVerticalV1() &&
             !matchesPixelExactRoundCapR2QuarterTurnV1() &&
@@ -1372,6 +1373,8 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
                 strokeCap == "square" -> GPUCorePrimitiveStrokeLoweringProof.SingleSegmentSquareV1
                 strokeCap == "round" && matchesPixelExactRoundCapR2HorizontalV1() ->
                     GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2HorizontalV1
+                strokeCap == "round" && matchesPixelExactRoundCapR2ReverseHorizontalV1() ->
+                    GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2ReverseHorizontalV1
                 strokeCap == "round" && matchesPixelExactRoundCapR2VerticalV1() ->
                     GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2VerticalV1
                 strokeCap == "round" && matchesPixelExactRoundCapR2ReverseVerticalV1() ->
@@ -1440,6 +1443,17 @@ private fun NormalizedDrawCommand.FillPath.matchesPixelExactRoundCapR2Horizontal
     return start.first.isIntegralDeviceCoordinate() && start.second.isIntegralDeviceCoordinate() &&
         end.first.isIntegralDeviceCoordinate() && end.second.isIntegralDeviceCoordinate() &&
         start.second == end.second && end.first - start.first >= strokeWidth
+}
+
+private fun NormalizedDrawCommand.FillPath.matchesPixelExactRoundCapR2ReverseHorizontalV1(): Boolean {
+    if (strokeWidth != 4f || transform.type !in setOf(GPUTransformType.Identity, GPUTransformType.Translate) ||
+        tessellatedVertices.size != 4
+    ) return false
+    val start = transform.map(tessellatedVertices[0], tessellatedVertices[1])
+    val end = transform.map(tessellatedVertices[2], tessellatedVertices[3])
+    return start.first.isIntegralDeviceCoordinate() && start.second.isIntegralDeviceCoordinate() &&
+        end.first.isIntegralDeviceCoordinate() && end.second.isIntegralDeviceCoordinate() &&
+        start.second == end.second && start.first - end.first >= strokeWidth
 }
 
 private fun NormalizedDrawCommand.FillPath.matchesPixelExactRoundCapR2VerticalV1(): Boolean {
