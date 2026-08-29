@@ -74,6 +74,9 @@ internal object GPUPreparedStrokeRectLowerer {
                 materialRefusalFacts(operation),
             )
         }
+        val translatedTwoStopLinearGradient = (paint.shader as? Shader.LinearGradient)?.let { shader ->
+            shader.stops.size == 2 && operation.transform.isNonZeroIntegralTranslation()
+        } == true
         val finalMaterial = when (val shader = paint.shader) {
             null -> {
                 if (!paint.hasFoldableSolidColorFilter()) {
@@ -83,11 +86,32 @@ internal object GPUPreparedStrokeRectLowerer {
                     ?: return refused("unsupported.stroke.rect_material", operationIndex, materialRefusalFacts(operation))
             }
             is Shader.LinearGradient -> {
-                if (operation.transform != Matrix3x3F32.Identity) {
+                val translatedTwoStop = shader.stops.size == 2 && operation.transform.isNonZeroIntegralTranslation()
+                if (operation.transform != Matrix3x3F32.Identity && !translatedTwoStop) {
                     return refused(
                         "unsupported.stroke.rect_transform",
                         operationIndex,
                         mapOf("transform" to "gradient_requires_identity"),
+                    )
+                }
+                if (translatedTwoStop && target.colorFormat != "rgba8unorm-srgb") {
+                    return refused(
+                        "unsupported.stroke.rect_gradient_target",
+                        operationIndex,
+                        mapOf("targetFormat" to target.colorFormat),
+                    )
+                }
+                if (translatedTwoStop && !capabilities.hasSupportedFact(
+                        GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_TRANSLATE_NATIVE,
+                    )
+                ) {
+                    return refused(
+                        "unsupported.stroke.rect_linear_gradient_translate_capability",
+                        operationIndex,
+                        mapOf(
+                            "capability" to
+                                GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_TRANSLATE_NATIVE,
+                        ),
                     )
                 }
                 when {
@@ -115,7 +139,15 @@ internal object GPUPreparedStrokeRectLowerer {
                 if (paint.colorFilter != null || !shader.isAdmittedStrokeGradient()) {
                     return refused("unsupported.stroke.rect_material", operationIndex, materialRefusalFacts(operation))
                 }
-                paint.toMaterial() as? GPUMaterialDescriptor.LinearGradient
+                (paint.toMaterial() as? GPUMaterialDescriptor.LinearGradient)
+                    ?.let { material ->
+                        if (translatedTwoStop) material.copy(
+                            startX = material.startX + operation.transform.tx,
+                            startY = material.startY + operation.transform.ty,
+                            endX = material.endX + operation.transform.tx,
+                            endY = material.endY + operation.transform.ty,
+                        ) else material
+                    }
                     ?: return refused("unsupported.stroke.rect_material", operationIndex, materialRefusalFacts(operation))
             }
             is Shader.RadialGradient -> {
@@ -274,7 +306,11 @@ internal object GPUPreparedStrokeRectLowerer {
                         operation.clip,
                     )
                     GPUOpMapper.lowerPreparedCoreVisual(fill, commandId, paintOrder, context)
-                        ?.withAnalyticStrokeRectSource(provenance, finalMaterial)
+                        ?.withAnalyticStrokeRectSource(
+                            provenance,
+                            finalMaterial,
+                            translated = translatedTwoStopLinearGradient,
+                        )
                         ?: return refused("unsupported.stroke.rect_material", operationIndex)
                 }
                 GPUPreparedStrokeRectLowering.Ready(commands)
@@ -461,6 +497,7 @@ private fun GPUCapabilities.hasSupportedFact(name: String): Boolean =
 private fun GPUFramePathVisualCommand.withAnalyticStrokeRectSource(
     provenance: GPUFrameProvenance,
     material: GPUMaterialDescriptor,
+    translated: Boolean = false,
 ): GPUFramePathVisualCommand = copy(
     normalized = when (val command = normalized) {
         is org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand.FillRect -> command.copy(
@@ -468,10 +505,21 @@ private fun GPUFramePathVisualCommand.withAnalyticStrokeRectSource(
                 adapter = "kanvas-surface",
                 operation = "drawRect.stroke.analytic-four-band",
                 frameProvenance = provenance,
-                kind = GPUCommandSourceKind.AnalyticStrokeRectBand,
+                kind = if (translated) {
+                    GPUCommandSourceKind.AnalyticStrokeRectTranslatedBand
+                } else {
+                    GPUCommandSourceKind.AnalyticStrokeRectBand
+                },
             ),
             material = material,
         )
         else -> error("Analytic rectangular stroke bands must be filled rectangles")
     },
 )
+
+private fun Matrix3x3F32.isNonZeroIntegralTranslation(): Boolean =
+    !hasPerspective() && sx == 1f && sy == 1f && kx == 0f && ky == 0f &&
+        persp0 == 0f && persp1 == 0f && persp2 == 1f &&
+        tx.isFinite() && ty.isFinite() &&
+        tx.toInt().toFloat() == tx && ty.toInt().toFloat() == ty &&
+        (tx != 0f || ty != 0f)

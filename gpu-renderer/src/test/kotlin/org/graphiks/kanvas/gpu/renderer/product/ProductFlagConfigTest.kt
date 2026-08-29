@@ -15,6 +15,7 @@ class ProductFlagConfigTest {
         assertTrue(config.fillRRectEnabled)
         assertTrue(config.linearGradientEnabled)
         assertTrue(config.strokeRectLinearGradientThreeStopEnabled)
+        assertTrue(config.strokeRectLinearGradientTranslateEnabled)
         assertTrue(config.scissorEnabled)
         assertTrue(config.radialGradientEnabled)
         assertTrue(config.sweepGradientEnabled)
@@ -106,6 +107,19 @@ class ProductFlagConfigTest {
                 it.name == GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_NATIVE
             },
         )
+    }
+
+    @Test
+    fun `translated two stop linear stroke capability has an independent disable property`() {
+        val config = GPUProductFlagConfig.fromSystemProperties { key ->
+            if (key == GPUProductFlagConfig.StrokeRectLinearGradientTranslateDisableProperty) "true" else null
+        }
+
+        assertTrue(config.linearGradientEnabled)
+        assertFalse(config.strokeRectLinearGradientTranslateEnabled)
+        assertFalse(config.buildCapabilities().facts.any {
+            it.name == GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_TRANSLATE_NATIVE
+        })
     }
 
     @Test

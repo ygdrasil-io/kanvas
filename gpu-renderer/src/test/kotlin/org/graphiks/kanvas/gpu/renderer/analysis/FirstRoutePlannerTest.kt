@@ -76,6 +76,71 @@ import org.graphiks.kanvas.gpu.renderer.routing.GPURouteDecision
 /** Verifies the first native FillRect analysis, route, and pass builder. */
 class FirstRoutePlannerTest {
     @Test
+    fun `translated two stop linear gradient stroke requires typed translated provenance and capability`() {
+        val material = GPUMaterialDescriptor.LinearGradient(
+            startX = 10f, startY = 35f, endX = 58f, endY = 35f,
+            startR = 1f, startG = 0f, startB = 0f, startA = 1f,
+            endR = 0f, endG = 0f, endB = 1f, endA = 1f,
+            allStopPositions = floatArrayOf(0f, 1f),
+            allStopColors = floatArrayOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
+        )
+        fun command(sourceKind: GPUCommandSourceKind, targetFormat: String = "rgba8unorm-srgb") = GPUFillRectCommandBuilder.build(
+            commandId = GPUDrawCommandID(36),
+            rect = GPURect(6f, 17f, 58f, 21f),
+            target = GPUTargetFacts(64, 64, targetFormat),
+            material = material,
+            source = GPUCommandSource("unit-test", "translated-linear-stroke-band", kind = sourceKind),
+        ).copy(antiAlias = false)
+        val capabilities = firstSliceWithLinearGradientCapabilities().copy(
+            facts = firstSliceWithLinearGradientCapabilities().facts + GPUCapabilityFact(
+                name = GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_TRANSLATE_NATIVE,
+                source = "unit-test",
+                value = "supported",
+                affectsValidity = true,
+                evidenceLabel = "translated-linear-stroke-fixture",
+            ),
+        )
+        val planner = GPUFirstRoutePlanner(capabilities)
+
+        val typed = planner.plan(command(GPUCommandSourceKind.AnalyticStrokeRectTranslatedBand))
+        assertEquals("native.stroke_rect.linear_gradient_translate", typed.analysisRecord.routeDecisionLabel)
+        assertEquals(
+            listOf(GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_TRANSLATE_NATIVE),
+            assertIs<GPURouteDecision.Native>(typed.routeDecision).route.requirements,
+        )
+        assertEquals(
+            "native.fill_rect.linear_gradient",
+            planner.plan(command(GPUCommandSourceKind.PublicFillRect)).analysisRecord.routeDecisionLabel,
+        )
+        assertEquals(
+            "native.fill_rect.linear_gradient",
+            planner.plan(command(GPUCommandSourceKind.Generic)).analysisRecord.routeDecisionLabel,
+        )
+        assertEquals(
+            "native.fill_rect.linear_gradient",
+            planner.plan(command(GPUCommandSourceKind.AnalyticStrokeRectBand)).analysisRecord.routeDecisionLabel,
+        )
+        assertEquals(
+            "unsupported.stroke.rect_linear_gradient_translate_capability",
+            assertIs<GPURouteDecision.Refused>(
+                GPUFirstRoutePlanner(
+                    capabilities.copy(facts = capabilities.facts.filterNot {
+                        it.name == GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_TRANSLATE_NATIVE
+                    }),
+                ).plan(command(GPUCommandSourceKind.AnalyticStrokeRectTranslatedBand)).routeDecision,
+            ).diagnostic.code,
+        )
+        assertEquals(
+            "unsupported.stroke.rect_gradient_target",
+            assertIs<GPURouteDecision.Refused>(
+                planner.plan(
+                    command(GPUCommandSourceKind.AnalyticStrokeRectTranslatedBand, "rgba8unorm"),
+                ).routeDecision,
+            ).diagnostic.code,
+        )
+    }
+
+    @Test
     fun `three stop linear gradient requires the typed stroke source and its distinct capability`() {
         val material = GPUMaterialDescriptor.LinearGradient(
             startX = 8.5f, startY = 32.5f, endX = 55.5f, endY = 32.5f,
