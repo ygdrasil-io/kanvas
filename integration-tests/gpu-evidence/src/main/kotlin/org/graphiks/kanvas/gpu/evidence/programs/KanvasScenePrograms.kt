@@ -1278,6 +1278,30 @@ object KanvasScenePrograms {
         restore()
     })
 
+    fun clipPathDiagonalSquareStrokeWinding() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        save()
+        clipPath(
+            Path {
+                moveTo(7.25f, 6.25f)
+                lineTo(30.25f, 6.25f)
+                lineTo(7.25f, 29.25f)
+                close()
+            }.apply { fillType = FillType.WINDING },
+            ClipOp.INTERSECT,
+            antiAlias = false,
+        )
+        drawPath(
+            Path { moveTo(5.25f, 8.25f); lineTo(21.25f, 20.25f) },
+            Paint.stroke(ColorARGB.Red, 4f).copy(
+                antiAlias = false,
+                strokeCap = StrokeCap.SQUARE,
+                strokeJoin = StrokeJoin.MITER,
+            ),
+        )
+        restore()
+    })
+
     fun clipPathTranslatedTriangleRadialGradient() = clipPathTriangleRadialGradientScene {
         translate(2f, 0f)
     }
