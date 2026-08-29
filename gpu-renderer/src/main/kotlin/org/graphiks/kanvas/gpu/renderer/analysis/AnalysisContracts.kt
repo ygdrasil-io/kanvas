@@ -913,6 +913,9 @@ class GPUFirstRoutePlanner(
 
         return when {
             command.maskFilter != null -> blurMaskFillPathRouteDecision(command)
+            command.stroke && command.isNativeSimpleHairline() &&
+                capabilities.hasFact(firstStencilCoverCapabilityName) ->
+                nativeHairlineRouteDecision(command)
             command.stroke && command.isNativeSimpleStroke() &&
                 capabilities.hasFact(firstStencilCoverCapabilityName) ->
                 nativeSimpleStrokeRouteDecision(command)
@@ -922,6 +925,59 @@ class GPUFirstRoutePlanner(
             else ->
                 preparedFillPathRouteDecision(command)
         }
+    }
+
+    /** Builds the native direct-geometry route for one bounded axis-aligned hairline. */
+    private fun nativeHairlineRouteDecision(command: NormalizedDrawCommand.FillPath): GPUFirstRoutePlan {
+        val recordId = "analysis.fill_path.${command.commandId.value}"
+        val pipelineKey =
+            "pending.pipeline.path_hairline.direct.${command.layer.target.colorFormat}.src_over"
+        val renderStep = "path.hairline.direct"
+        val analysisRecord = GPUDrawAnalysisRecord(
+            recordId = recordId,
+            commandIdValue = command.commandId.value,
+            commandFamily = "FillPath",
+            boundsHash = command.bounds.stableHash(),
+            routeDecisionLabel = "native.path_hairline.direct",
+            materialKeyHash = "pending.material.${command.material.kind.name.lowercase()}",
+            renderStepCandidates = listOf(renderStep),
+            sortKey = SortKey(command.ordering.paintOrder.toLong()),
+            diagnostics = command.transform.analysisDiagnostics(recordId = recordId) +
+                command.pathFactsDiagnostics(recordId = recordId),
+        )
+        val routeDecision = GPUFirstRouteDecisionBuilder.nativeHairline(
+            commandIdValue = command.commandId.value,
+            pipelinePreimageHash = pipelineKey,
+            renderStepIdentity = renderStep,
+            requirements = listOf(firstStencilCoverCapabilityName),
+        )
+        val analysisDecision = GPUDrawAnalysisDecision.Candidate(
+            recordId = recordId,
+            routeDecisionLabel = "native.path_hairline.direct",
+            resourceDeclarations = emptyList(),
+            renderStepCandidates = listOf(renderStep),
+        )
+        val pass = GPUFirstRoutePassBuilder.acceptedFillPath(
+            commandIdValue = command.commandId.value,
+            analysisRecordId = recordId,
+            sortKey = command.ordering.paintOrder.toLong(),
+            renderStepIdentity = renderStep,
+            pipelineKey = GPURenderPipelineKey(pipelineKey),
+            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
+            boundsHash = command.bounds.stableHash(),
+            scissorBoundsHash = command.scissorBoundsHash(),
+            originalPaintOrder = command.ordering.paintOrder,
+            targetStateHash = command.targetStateHash(),
+            frameProvenance = command.source.frameProvenance,
+            clipCoveragePlan = command.clip.coveragePlan,
+            clipExecutionPlan = command.clip.executionPlan,
+        )
+        return GPUFirstRoutePlan(
+            analysisRecord = analysisRecord,
+            analysisDecision = analysisDecision,
+            routeDecision = routeDecision,
+            pass = pass,
+        )
     }
 
     /** Builds a prepared FillStroke CPUPreparedGPU route and pass for stroked paths. */
@@ -2402,13 +2458,18 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
                 )
                 shapeDesc.strokeRefusalCode()
                     ?: pathDesc.strokePathRefusalCode()
-                    ?: strokeDesc.refusalCode(
-                        maxEdges = 128,
-                        allowPixelExactRoundCap = isNativeSimpleStroke() && strokeCap == "round",
-                    )
+                    ?: if (isNativeSimpleHairline()) {
+                        null
+                    } else {
+                        strokeDesc.refusalCode(
+                            maxEdges = 128,
+                            allowPixelExactRoundCap = isNativeSimpleStroke() && strokeCap == "round",
+                        )
+                    }
                     ?: "unsupported.pipeline.capability_missing".takeUnless {
                         capabilities.hasFact(firstPreparedPathFillCapabilityName) ||
-                            (isNativeSimpleStroke() && capabilities.hasFact(firstStencilCoverCapabilityName))
+                            ((isNativeSimpleStroke() || isNativeSimpleHairline()) &&
+                                capabilities.hasFact(firstStencilCoverCapabilityName))
                     }
             }
             pathDescriptor.edgeCount < 0 -> "unsupported.geometry.path_invalid_edges"
@@ -2487,6 +2548,31 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
             strokeJoin == "miter" &&
             strokeMiterLimit.isFinite() && strokeMiterLimit >= 1f &&
             transform.type in setOf(GPUTransformType.Identity, GPUTransformType.Translate)
+
+    /** One non-AA butt/miter segment whose zero width is resolved as a device hairline. */
+    private fun NormalizedDrawCommand.FillPath.isNativeSimpleHairline(): Boolean =
+        contourStarts == listOf(0) &&
+            tessellatedVertices.size == 4 &&
+            strokeWidth == 0f &&
+            !antiAlias &&
+            (dashIntervals == null || dashIntervals.isEmpty()) &&
+            pathEffectKind == null &&
+            strokeCap == "butt" &&
+            strokeJoin == "miter" &&
+            strokeMiterLimit.isFinite() && strokeMiterLimit >= 1f &&
+            transform.type in setOf(GPUTransformType.Identity, GPUTransformType.Translate) &&
+            commandClipAllowsDirectGeometry() &&
+            material is GPUMaterialDescriptor.SolidColor &&
+            blend.mode == GPUBlendMode.SRC_OVER &&
+            layer.scopeKind == GPULayerScopeKind.Root &&
+            tessellatedVertices.all(Float::isFinite) &&
+            transform.translateX.isFinite() && transform.translateY.isFinite() &&
+            (tessellatedVertices[0] == tessellatedVertices[2] ||
+                tessellatedVertices[1] == tessellatedVertices[3])
+
+    private fun NormalizedDrawCommand.FillPath.commandClipAllowsDirectGeometry(): Boolean =
+        clip.executionPlan == GPUClipExecutionPlan.NoClip ||
+            clip.executionPlan is GPUClipExecutionPlan.ScissorOnly
 
     private fun NormalizedDrawCommand.FillPath.matchesPixelExactRoundCapR2HorizontalV1(): Boolean {
         if (strokeWidth != 4f || tessellatedVertices.size != 4) return false

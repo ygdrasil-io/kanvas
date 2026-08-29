@@ -291,6 +291,23 @@ object GPUFirstRouteDecisionBuilder {
             ),
         )
 
+    /** Builds the bounded native direct-geometry route for one axis-aligned hairline. */
+    fun nativeHairline(
+        commandIdValue: Int,
+        pipelinePreimageHash: String,
+        renderStepIdentity: String,
+        requirements: List<String>,
+    ): GPURouteDecision.Native =
+        GPURouteDecision.Native(
+            route = GPUNativeRoute(
+                routeId = "route.path_hairline.$commandIdValue",
+                consumerKind = "native.path_hairline.direct",
+                renderStepIdentity = renderStepIdentity,
+                pipelinePreimageHash = pipelinePreimageHash,
+                requirements = requirements,
+            ),
+        )
+
     /** Builds a prepared FillPath CPUPreparedGPU route decision. */
     fun preparedFillPath(
         commandIdValue: Int,
