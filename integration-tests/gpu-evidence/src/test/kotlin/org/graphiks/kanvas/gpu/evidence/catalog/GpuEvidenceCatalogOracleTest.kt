@@ -434,6 +434,16 @@ class GpuEvidenceCatalogOracleTest {
     }
 
     @Test
+    fun `translated scissored round cap stroke rebases device coverage`() {
+        val pixels = oracle("translated-scissored-round-cap-stroke", 32, 32)
+
+        assertPixel(pixels, 32, 32, 9, 17, intArrayOf(255, 0, 0, 255))
+        assertPixel(pixels, 32, 32, 19, 19, intArrayOf(255, 0, 0, 255))
+        assertPixel(pixels, 32, 32, 21, 18, intArrayOf(0, 0, 0, 0))
+        assertPixel(pixels, 32, 32, 8, 21, intArrayOf(0, 0, 0, 0))
+    }
+
+    @Test
     fun `bounded bitmap oracle preserves literal nearest texels at its integer destination`() {
         val pixels = oracle("bounded-rgba8-nearest-bitmap")
 
