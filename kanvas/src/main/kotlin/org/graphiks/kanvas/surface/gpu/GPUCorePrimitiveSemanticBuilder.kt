@@ -3,6 +3,7 @@ package org.graphiks.kanvas.surface.gpu
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.pow
+import kotlin.math.sqrt
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUDrawAnalysisRecord
 import org.graphiks.kanvas.gpu.renderer.analysis.matchesCorePrimitiveRectGeometry
 import org.graphiks.kanvas.gpu.renderer.analysis.matchesCorePrimitiveRRectGeometry
@@ -436,10 +437,19 @@ private fun GPUMaterialDescriptor?.toCorePrimitiveMaterial(
         ) {
             refuseCoreMaterial("unsupported.core_primitive.material.stops", facts)
         }
+        val deviceCenter = deviceGradientTransform?.map(centerX, centerY) ?: (centerX to centerY)
+        val deviceRadius = deviceGradientTransform?.let { transform ->
+            val center = deviceCenter
+            val edge = transform.map(centerX + radius, centerY)
+            val dx = edge.first - center.first
+            val dy = edge.second - center.second
+            (dx * dx + dy * dy).takeIf { it.isFinite() && it > 0f }?.let(::sqrt)
+                ?: refuseCoreMaterial("unsupported.core_primitive.material.radial.radius", facts)
+        } ?: radius
         val payload = GPUCorePrimitiveMaterialPayload.RadialGradient(
-            centerX = centerX,
-            centerY = centerY,
-            radius = radius,
+            centerX = deviceCenter.first,
+            centerY = deviceCenter.second,
+            radius = deviceRadius,
             localMatrix = localMatrix,
             interpolation = interpolation,
             tileMode = tileMode,
@@ -752,6 +762,7 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
 private fun GPUFramePathVisualCommand.nativeHardPathClipGradientTransformOrNull(): GPUTransformFacts? {
     val gradient = normalized.material
     if (gradient !is GPUMaterialDescriptor.LinearGradient &&
+        gradient !is GPUMaterialDescriptor.RadialGradient &&
         gradient !is GPUMaterialDescriptor.SweepGradient
     ) return null
     val stencilClip = clipExecutionPlan as? org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan.StencilCoverage
@@ -762,11 +773,13 @@ private fun GPUFramePathVisualCommand.nativeHardPathClipGradientTransformOrNull(
             (gradient is GPUMaterialDescriptor.LinearGradient &&
                 geometryCoverage == GPUCoverageConsumption.FullOrScissor) ||
             isExactHardPathClipStrokeLinearGradientCandidate() ||
+            isExactHardPathClipStrokeRadialGradientCandidate() ||
             isExactHardPathClipStrokeSweepGradientCandidate()
         else -> false
     }
     val clampGradient = when (gradient) {
         is GPUMaterialDescriptor.LinearGradient -> gradient.tileMode == "clamp"
+        is GPUMaterialDescriptor.RadialGradient -> gradient.tileMode == "clamp"
         is GPUMaterialDescriptor.SweepGradient -> gradient.tileMode == "clamp"
         else -> false
     }
@@ -776,8 +789,9 @@ private fun GPUFramePathVisualCommand.nativeHardPathClipGradientTransformOrNull(
         stencilClip.pathTransformClass !in HARD_PATH_CLIP_GRADIENT_TRANSFORM_CLASSES
     ) return null
     val transformAccepted = when (gradient) {
-        is GPUMaterialDescriptor.LinearGradient ->
-            normalized.transform.isNativeHardPathClipGradientTransform()
+        is GPUMaterialDescriptor.LinearGradient,
+        is GPUMaterialDescriptor.RadialGradient,
+        -> normalized.transform.isNativeHardPathClipGradientTransform()
         is GPUMaterialDescriptor.SweepGradient ->
             normalized.transform.isNativeHardPathClipSweepGradientTransform()
         else -> false
@@ -818,13 +832,22 @@ private fun GPUFramePathVisualCommand.isExactHardPathClipStrokeLinearGradientCan
 
 /**
  * Closed admission predicate for the direct radial-gradient stroke lane.
- * Radial material coordinates are evaluated by the native shader after its bounded local matrix;
- * the draw transform remains identity until an authenticated device-space radial mapping exists.
+ * The CTM is absorbed into the device-space center/radius; local-matrix composition stays
+ * isolated to the identity-CTM lane proven by W136.
  */
 private fun GPUFramePathVisualCommand.isExactHardPathClipStrokeRadialGradientCandidate(): Boolean {
     val path = normalized as? NormalizedDrawCommand.FillPath ?: return false
     val gradient = path.material as? GPUMaterialDescriptor.RadialGradient ?: return false
     val stencilClip = clipExecutionPlan as? GPUClipExecutionPlan.StencilCoverage ?: return false
+    val localMatrixAccepted = if (path.transform.type == GPUTransformType.Identity) {
+        gradient.localMatrix.isPositiveUniformScaleTranslateGradientLocalMatrix()
+    } else {
+        gradient.localMatrix == listOf(
+            1f, 0f, 0f,
+            0f, 1f, 0f,
+            0f, 0f, 1f,
+        )
+    }
     return path.stroke &&
         !path.antiAlias &&
         path.maskFilter == null &&
@@ -838,12 +861,12 @@ private fun GPUFramePathVisualCommand.isExactHardPathClipStrokeRadialGradientCan
         (path.dashIntervals?.isEmpty() ?: true) &&
         path.pathDescriptor.fillRule in setOf("NonZero", "winding") &&
         !path.pathDescriptor.inverseFill &&
-        path.transform.type == GPUTransformType.Identity &&
+        path.transform.isNativeHardPathClipGradientTransform() &&
         gradient.tileMode == "clamp" &&
         gradient.interpolation == "srgb" &&
         (gradient.allStopPositions?.size ?: 2) == 2 &&
         (gradient.allStopColors?.size ?: 8) == 8 &&
-        gradient.localMatrix.isPositiveUniformScaleTranslateGradientLocalMatrix() &&
+        localMatrixAccepted &&
         stencilClip.sampleCount == 1
 }
 
