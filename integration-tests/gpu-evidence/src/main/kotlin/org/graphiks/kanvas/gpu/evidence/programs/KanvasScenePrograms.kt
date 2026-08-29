@@ -1997,6 +1997,24 @@ object KanvasScenePrograms {
         restore()
     })
 
+    /** The scale-two round-cap route for a translated vertical integral-grid segment. */
+    fun uniformlyScaledTranslatedVerticalRoundCapStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        save()
+        translate(4f, 6f)
+        scale(2f, 2f)
+        drawPath(
+            Path {
+                moveTo(16f, 8f)
+                lineTo(16f, 24f)
+            },
+            Paint.stroke(ColorARGB.Red, 4f).copy(
+                antiAlias = false,
+                strokeCap = StrokeCap.ROUND,
+            ),
+        )
+        restore()
+    })
+
     /** The translated reversed vertical radius-two round-cap route under an integral scissor. */
     fun translatedScissoredReverseVerticalRoundCapStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
         save()
