@@ -18,8 +18,7 @@ Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :
 ## Documents
 
 - [Spec architecturale](specs/2026-08-29-skia-renderer-remediation-design.md)
-- Le premier plan d'implémentation W0–W2 sera ajouté dans `plans/` après
-  validation de la spec.
+- [Plan d'implémentation W0–W2](plans/2026-08-29-w00-w02-foundation-implementation-plan.md)
 - Le suivi détaillé de chaque vague sera créé dans `waves/` lors de son
   activation, afin d'éviter des documents vides ou prématurés.
 
@@ -46,4 +45,3 @@ refactor/
 ├── plans/       # plans d'implémentation exécutables
 └── waves/       # états, décisions et écarts par vague active
 ```
-
