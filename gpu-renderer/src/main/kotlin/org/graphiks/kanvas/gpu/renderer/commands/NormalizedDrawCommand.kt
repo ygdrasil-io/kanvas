@@ -3176,6 +3176,7 @@ enum class GPUCommandSourceKind {
     AnalyticStrokeRectUniformScaleBand,
     AnalyticStrokeRectUniformScaleThreeStopBand,
     AnalyticStrokeRectUniformScaleSweepTwoStopBand,
+    AnalyticStrokeRectUniformScaleRadialTwoStopBand,
 }
 
 /** Source adapter information used by diagnostics and dumps. */

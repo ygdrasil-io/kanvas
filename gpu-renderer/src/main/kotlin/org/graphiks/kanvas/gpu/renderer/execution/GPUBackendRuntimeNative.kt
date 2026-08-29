@@ -247,6 +247,11 @@ internal fun nativeCorePrimitiveCapabilityFacts(): List<GPUCapabilityFact> = lis
         "core-primitive-gradient-radial-stroke-2stop-native",
     ),
     supportedGPUCapabilityFact(
+        GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE,
+        "runtime",
+        "core-primitive-gradient-radial-stroke-2stop-uniform-scale-native",
+    ),
+    supportedGPUCapabilityFact(
         GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_NATIVE,
         "runtime", "core-primitive-gradient-radial-stroke-3stop-native",
     ),

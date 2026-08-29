@@ -503,6 +503,31 @@ class FirstRoutePlannerTest {
     }
 
     @Test
+    fun `uniform scale two stop radial gradient requires typed provenance and capability`() {
+        val material = GPUMaterialDescriptor.RadialGradient(
+            38f, 32f, 32f, 0f, 0f, 1f, 0f, 0f, 1f, 1f, 1f,
+            allStopPositions = floatArrayOf(0f, 1f),
+            allStopColors = floatArrayOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
+        )
+        fun command(kind: GPUCommandSourceKind) = GPUFillRectCommandBuilder.build(
+            GPUDrawCommandID(47), GPURect(16f, 18f, 60f, 22f), GPUTargetFacts(64, 64, "rgba8unorm-srgb"), material,
+            source = GPUCommandSource("unit-test", "uniform-scale-radial-stroke-band", kind = kind),
+        ).copy(antiAlias = false)
+        val capabilities = firstSliceWithLinearGradientCapabilities().copy(facts = firstSliceWithLinearGradientCapabilities().facts + listOf(
+            GPUCapabilityFact("first_slice.radial_gradient.native", "unit-test", "supported", true, "radial"),
+            GPUCapabilityFact(GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE, "unit-test", "supported", true, "radial-uniform-scale"),
+        ))
+        val planner = GPUFirstRoutePlanner(capabilities)
+        val accepted = planner.plan(command(GPUCommandSourceKind.AnalyticStrokeRectUniformScaleRadialTwoStopBand))
+        assertEquals("native.stroke_rect.radial_gradient_two_stop_uniform_scale", accepted.analysisRecord.routeDecisionLabel)
+        assertEquals(listOf(GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE), assertIs<GPURouteDecision.Native>(accepted.routeDecision).route.requirements)
+        assertEquals("native.fill_rect.radial_gradient", planner.plan(command(GPUCommandSourceKind.Generic)).analysisRecord.routeDecisionLabel)
+        val refused = GPUFirstRoutePlanner(capabilities.copy(facts = capabilities.facts.filterNot { it.name == GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE })).plan(command(GPUCommandSourceKind.AnalyticStrokeRectUniformScaleRadialTwoStopBand))
+        assertEquals("unsupported.stroke.rect_radial_gradient_two_stop_uniform_scale_capability", assertIs<GPURouteDecision.Refused>(refused.routeDecision).diagnostic.code)
+        assertTrue(refused.pass.drawPackets.isEmpty())
+    }
+
+    @Test
     fun `three stop full sweep gradient uses its dedicated stroke route only for analytic provenance`() {
         val material = GPUMaterialDescriptor.SweepGradient(
             32.5f, 32.5f, 0f, 360f, 1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f,
@@ -2673,6 +2698,42 @@ class FirstRoutePlannerTest {
             "prepared.stroke.path_triangle_v1.w1.0.butt.miter.e3",
             routeDecision.route.artifactKey.value,
         )
+    }
+
+    /** The bounded pixel-exact round cap must reach the native stencil-cover route. */
+    @Test
+    fun `fill path exact horizontal round cap builds native stencil cover route`() {
+        val command = GPUFillPathCommandBuilder.build(
+            commandId = GPUDrawCommandID(126),
+            pathKey = "path:round-segment:v1",
+            pathDescriptor = GPUPathFacts(
+                pathKey = "path:round-segment:v1",
+                verbCount = 2,
+                pointCount = 2,
+                fillRule = "NonZero",
+                inverseFill = false,
+                finiteProof = "finite",
+                volatility = "immutable",
+                transformClass = "identity",
+                edgeCount = 1,
+            ),
+            tessellatedVertices = listOf(6f, 16f, 26f, 16f),
+            contourStarts = listOf(0),
+            edgeCount = 1,
+            target = GPUTargetFacts(width = 32, height = 32, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0f, b = 0f, a = 1f),
+            stroke = true,
+            strokeWidth = 4f,
+            strokeCap = "round",
+            strokeJoin = "miter",
+            antiAlias = false,
+        )
+
+        val plan = GPUFirstRoutePlanner(firstSlicePathFillStencilCoverCapabilities()).plan(command)
+
+        assertEquals("native.path_stroke.stencil_cover", plan.analysisRecord.routeDecisionLabel)
+        assertEquals("route.path_stroke.126", assertIs<GPURouteDecision.Native>(plan.routeDecision).route.routeId)
+        assertEquals(emptyList(), plan.pass.diagnostics)
     }
 
     /** FillPath stroke analysis consumes the captured miter limit instead of a hard-coded default. */

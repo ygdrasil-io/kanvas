@@ -172,6 +172,17 @@ class ProductFlagConfigTest {
     }
 
     @Test
+    fun `uniform scale two stop radial stroke capability has an independent disable property`() {
+        val config = GPUProductFlagConfig.fromSystemProperties { key ->
+            if (key == GPUProductFlagConfig.StrokeRectRadialGradientTwoStopUniformScaleDisableProperty) "true" else null
+        }
+        assertFalse(config.strokeRectRadialGradientTwoStopUniformScaleEnabled)
+        assertFalse(config.buildCapabilities().facts.any {
+            it.name == GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE
+        })
+    }
+
+    @Test
     fun `uniform scale two stop sweep stroke capability has an independent disable property`() {
         val config = GPUProductFlagConfig.fromSystemProperties { key ->
             if (key == GPUProductFlagConfig.StrokeRectSweepGradientTwoStopUniformScaleDisableProperty) "true" else null

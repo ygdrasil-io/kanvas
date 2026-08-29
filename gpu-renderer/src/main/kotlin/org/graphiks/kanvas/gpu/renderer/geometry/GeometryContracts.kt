@@ -1803,12 +1803,15 @@ private fun GPUPathDescriptor.strokeAndFillRefusalCode(
         else -> null
     }
 
-internal fun GPUStrokeDescriptor.refusalCode(maxEdges: Int): String? =
+internal fun GPUStrokeDescriptor.refusalCode(
+    maxEdges: Int,
+    allowPixelExactRoundCap: Boolean = false,
+): String? =
     when {
         !finiteWidth || !width.isFinite() || width <= 0f -> "unsupported.stroke.width_invalid"
         width < 0.5f || width > 64f -> "unsupported.stroke.width_budget"
         hairline -> "unsupported.stroke.hairline_policy"
-        cap != "Butt" -> "unsupported.stroke.cap"
+        cap != "Butt" && !(allowPixelExactRoundCap && cap == "Round") -> "unsupported.stroke.cap"
         join != "Miter" -> "unsupported.stroke.join"
         !miter.isFinite() || miter < 1f -> "unsupported.stroke.miter_limit"
         dashOrPathEffectRef != null -> {
