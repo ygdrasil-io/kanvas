@@ -218,6 +218,7 @@ sweepGradientTwoStopStrokeRect(),
         linearGradientRoundStrokeUnderWindingRefusal(),
         threeStopRadialStrokeUnderWindingRefusal(),
         nonRightAngleSweepStrokeRefusal(),
+        emptyDashStrokeRefusal(),
     )
     val cases: List<EvidenceCase> = renderCases + refusalCases
     val catalog = EvidenceSceneCatalog(cases.map(EvidenceCase::descriptor))
@@ -371,6 +372,15 @@ sweepGradientTwoStopStrokeRect(),
         tags = setOf("path-stroke", "sweep-gradient", "rotation", "inverse-winding", "path-clip", "refusal", "kanvas-surface"),
         code = "unsupported.geometry.perspective_path",
         program = KanvasScenePrograms.nonRightAngleSweepStrokeRefusal(),
+    )
+
+    private fun emptyDashStrokeRefusal() = surfaceRefusal(
+        id = "empty-dash-stroke-refusal",
+        title = "Empty dash stroke refusal",
+        description = "Public Kanvas Surface refuses a path stroke with an empty Dash interval array before native preparation; no exact dash lowering is defined for the empty effect.",
+        tags = setOf("path-stroke", "path-effect", "dash", "empty", "refusal", "kanvas-surface"),
+        code = "unsupported.core_primitive.stroke.dash_exact_lowering",
+        program = KanvasScenePrograms.emptyDashStrokeRefusal(),
     )
 
     private fun basicPrimitivesValidAlpha() = EvidenceCase(

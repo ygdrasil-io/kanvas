@@ -4,6 +4,7 @@ import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.SamplingOptions
@@ -302,6 +303,17 @@ object KanvasScenePrograms {
             ),
         )
         restore()
+    })
+
+    /** Empty dash arrays have no exact lowering and must stop before native preparation. */
+    fun emptyDashStrokeRefusal() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawPath(
+            Path { moveTo(4f, 8f); lineTo(24f, 8f) },
+            Paint.stroke(ColorARGB.Red, 4f).copy(
+                antiAlias = false,
+                pathEffect = PathEffect.Dash(floatArrayOf()),
+            ),
+        )
     })
 
     fun basicPrimitivesValidAlpha() = KanvasSurfaceProgram(ROUTE_ID, record = {
