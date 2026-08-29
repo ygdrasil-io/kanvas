@@ -2205,12 +2205,15 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 corePrimitiveClipStencilConsumerShaderOrNull(
                     request.coreSemantics().getValue(packet.commandIdValue).material,
                     request.coreSemantics().getValue(packet.commandIdValue).geometry,
-                ) == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient
+                ) in setOf(
+                    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient,
+                    GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient,
+                )
             }
         ) {
             return refused(
                 "unsupported.recording.core_primitive_clip_stencil_gradient_msaa",
-                "Clamp linear-gradient hard path clips require the exact single-sample route.",
+                "Clamp linear- and radial-gradient hard path clips require the exact single-sample route.",
             )
         }
         val validNativeClipStencilConsumers = nativeClipStencilPlan?.sampleCount == 1 &&
@@ -2233,6 +2236,8 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient ->
                             packet.renderStepId.value == "linear.gradient.fill" ||
                                 semantic.hasExactDirectTrianglePathConsumerGeometry()
+                        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient ->
+                            packet.renderStepId.value == "radial.gradient.fill"
                         else -> false
                     } &&
                     semantic.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor
@@ -2240,7 +2245,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         if (nativeClipStencilPlan?.sampleCount == 1 && !validNativeClipStencilConsumers) {
             return refused(
                 "unsupported.recording.core_primitive_clip_stencil_mixed_geometry",
-                "The bounded clip-stencil scope accepts only one or two direct solid Path or FillRect consumers, clamp-linear-gradient FillRect consumers, or authenticated clamp-linear-gradient direct-triangle Path consumers.",
+                "The bounded clip-stencil scope accepts only one or two direct solid Path or FillRect consumers, clamp-linear-gradient FillRect consumers, clamp-radial-gradient FillRect consumers, or authenticated clamp-linear-gradient direct-triangle Path consumers.",
             )
         }
         val nativeClipStencilPrefixCommandIds = nativeClipStencilPlan

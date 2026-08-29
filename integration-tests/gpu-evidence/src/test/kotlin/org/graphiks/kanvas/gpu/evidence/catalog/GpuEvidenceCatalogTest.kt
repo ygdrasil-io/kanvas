@@ -33,7 +33,20 @@ import org.graphiks.math.matrix.Matrix3x3F32
 
 class GpuEvidenceCatalogTest {
     @Test
-    fun `catalog separates eighty three public surface renders from six refusals`() {
+    fun `clip stencil radial evidence permits one f32 rounding unit and rejects two`() {
+        val policy = assertNotNull(GpuEvidenceCatalog.renderCases.single {
+            it.descriptor.id.value == "clip-path-triangle-radial-gradient"
+        }.descriptor.comparison)
+        val expected = byteArrayOf(105, 0, 238.toByte(), 255.toByte())
+        val oneLsb = byteArrayOf(105, 0, 239.toByte(), 255.toByte())
+        val twoLsb = byteArrayOf(105, 0, 240.toByte(), 255.toByte())
+
+        assertTrue(EvidenceComparator().compare(oneLsb, expected, 1, 1, policy).passed)
+        assertFalse(EvidenceComparator().compare(twoLsb, expected, 1, 1, policy).passed)
+    }
+
+    @Test
+    fun `catalog separates eighty four public surface renders from six refusals`() {
         val cases = GpuEvidenceCatalog.cases
 
         assertEquals(
@@ -66,6 +79,7 @@ class GpuEvidenceCatalogTest {
                 "clip-path-uniform-scaled-triangle-solid",
                 "clip-path-uniform-scaled-triangle-two-bands",
                 "clip-path-triangle-linear-gradient",
+                "clip-path-triangle-radial-gradient",
                 "clip-path-translated-triangle-linear-gradient",
                 "clip-path-uniform-scaled-triangle-linear-gradient",
                 "clip-path-triangle-direct-triangle-solid",
@@ -151,6 +165,7 @@ class GpuEvidenceCatalogTest {
                 "clip-path-uniform-scaled-triangle-solid",
                 "clip-path-uniform-scaled-triangle-two-bands",
                 "clip-path-triangle-linear-gradient",
+                "clip-path-triangle-radial-gradient",
                 "clip-path-translated-triangle-linear-gradient",
                 "clip-path-uniform-scaled-triangle-linear-gradient",
                 "clip-path-triangle-direct-triangle-solid",
@@ -209,11 +224,11 @@ class GpuEvidenceCatalogTest {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            List(83) { "kanvas.surface.render" },
+            List(84) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
-        assertEquals(83, GpuEvidenceCatalog.renderCases.size)
-        assertEquals(89, GpuEvidenceCatalog.cases.size)
+        assertEquals(84, GpuEvidenceCatalog.renderCases.size)
+        assertEquals(90, GpuEvidenceCatalog.cases.size)
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
 
         val solid = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "solid-card-stack" })
@@ -361,6 +376,7 @@ class GpuEvidenceCatalogTest {
                 "clip-path-uniform-scaled-triangle-solid",
                 "clip-path-uniform-scaled-triangle-two-bands",
                 "clip-path-triangle-linear-gradient",
+                "clip-path-triangle-radial-gradient",
                 "clip-path-translated-triangle-linear-gradient",
                 "clip-path-uniform-scaled-triangle-linear-gradient",
                 "clip-path-triangle-direct-triangle-solid",
@@ -474,6 +490,7 @@ class GpuEvidenceCatalogTest {
                 "clip-path-uniform-scaled-triangle-solid" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-pixel-center", 1),
                 "clip-path-uniform-scaled-triangle-two-bands" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-pixel-center", 1),
                 "clip-path-triangle-linear-gradient" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-linear-gradient-device-space", 1),
+                "clip-path-triangle-radial-gradient" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-radial-gradient-device-space", 1),
                 "clip-path-translated-triangle-linear-gradient" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-linear-gradient-device-space", 1),
                 "clip-path-uniform-scaled-triangle-linear-gradient" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-linear-gradient-device-space", 1),
                 "clip-path-triangle-direct-triangle-solid" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-direct-triangle-pixel-center", 1),
@@ -564,6 +581,7 @@ class GpuEvidenceCatalogTest {
                 "clip-path-uniform-scaled-triangle-solid" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent hard pixel-center winding path clip membership and paint order."),
                 "clip-path-uniform-scaled-triangle-two-bands" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent hard pixel-center winding path clip membership and paint order."),
                 "clip-path-triangle-linear-gradient" to ComparisonPolicy(1, 100.0, 1, "Independent device-space pixel-center winding clip and linear-light clamp gradient oracle."),
+                "clip-path-triangle-radial-gradient" to ComparisonPolicy(1, 100.0, 1, "Independent double-precision oracle; one RGBA8 LSB covers bounded f32 WGSL radial-distance and target-encoding rounding."),
                 "clip-path-translated-triangle-linear-gradient" to ComparisonPolicy(1, 100.0, 1, "Independent device-space pixel-center winding clip and linear-light clamp gradient oracle."),
                 "clip-path-uniform-scaled-triangle-linear-gradient" to ComparisonPolicy(1, 100.0, 1, "Independent device-space pixel-center winding clip and linear-light clamp gradient oracle."),
                 "clip-path-triangle-direct-triangle-solid" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent device-space pixel-center clip and direct-triangle membership."),
