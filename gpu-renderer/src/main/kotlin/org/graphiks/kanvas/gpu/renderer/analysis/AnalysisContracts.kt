@@ -2454,7 +2454,9 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
                         null -> dashIntervals?.let { "dash:${it.joinToString(",")}" }
                         else -> "path-effect:$pathEffectKind"
                     },
-                    transformClass = transform.type.name.lowercase(),
+                    // Keep the canonical path transform class so exact right-angle rotations
+                    // are not downgraded to the generic affine/perspective refusal bucket.
+                    transformClass = pathDescriptor.transformClass,
                     finiteWidth = strokeWidth > 0f && strokeWidth.isFinite(),
                     hairline = strokeWidth <= 0f,
                     edgeCount = edgeCount,
@@ -2552,7 +2554,8 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
             strokeJoin == "miter" &&
             strokeMiterLimit.isFinite() && strokeMiterLimit >= 1f &&
             (transform.type in setOf(GPUTransformType.Identity, GPUTransformType.Translate) ||
-                transform.isUniformPositiveScale() || transform.isUniformPositiveScaleTranslate())
+                transform.isUniformPositiveScale() || transform.isUniformPositiveScaleTranslate() ||
+                transform.isExactQuarterTurnPathRotation() || transform.isExactHalfTurnPathRotation())
 
     private fun NormalizedDrawCommand.FillPath.matchesPixelExactRoundCapR2HorizontalV1(): Boolean {
         if (transform.type !in setOf(GPUTransformType.Identity, GPUTransformType.Translate)) return false

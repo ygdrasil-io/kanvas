@@ -16,6 +16,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPURuntimeEffectUniformValue
 import org.graphiks.kanvas.gpu.renderer.commands.containsUnsupportedMaterial
 import org.graphiks.kanvas.gpu.renderer.commands.gradientFactsRefusalReasonOrNull
 import org.graphiks.kanvas.gpu.renderer.commands.imageLocalMatrixRefusalReasonOrNull
+import org.graphiks.kanvas.gpu.renderer.commands.isPositiveUniformScaleTranslateGradientLocalMatrix
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes
 import org.graphiks.kanvas.image.AlphaType
@@ -975,6 +976,38 @@ private fun Shader.toPreparedMaterial(
                             source = source,
                         )
                     } ?: mapped
+                }
+            } else if (source is GPUMaterialDescriptor.SweepGradient) {
+                val composed = source.localMatrix.composeGradientLocalMatrix(matrix)
+                if (composed == null || !composed.isPositiveUniformScaleTranslateGradientLocalMatrix()) {
+                    mapper.descriptorAssembly.preparedUnsupported(
+                        reason = GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX,
+                        originalKind = GPUMaterialKind.SweepGradient,
+                        source = source,
+                    )
+                } else {
+                    source.copy().withGradientFacts(
+                        GPUMaterialDescriptor.GradientFacts(
+                            interpolation = source.interpolation,
+                            localMatrix = composed,
+                        ),
+                    )
+                }
+            } else if (source is GPUMaterialDescriptor.RadialGradient) {
+                val composed = source.localMatrix.composeGradientLocalMatrix(matrix)
+                if (composed == null || !composed.isPositiveUniformScaleTranslateGradientLocalMatrix()) {
+                    mapper.descriptorAssembly.preparedUnsupported(
+                        reason = GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX,
+                        originalKind = GPUMaterialKind.RadialGradient,
+                        source = source,
+                    )
+                } else {
+                    source.copy().withGradientFacts(
+                        GPUMaterialDescriptor.GradientFacts(
+                            interpolation = source.interpolation,
+                            localMatrix = composed,
+                        ),
+                    )
                 }
             } else {
                 mapper.descriptorAssembly.preparedUnsupported(
