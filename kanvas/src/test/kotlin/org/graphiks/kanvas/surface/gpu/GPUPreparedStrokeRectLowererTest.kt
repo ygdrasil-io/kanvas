@@ -837,6 +837,45 @@ class GPUPreparedStrokeRectLowererTest {
     }
 
     @Test
+    fun `uniform integer scaled three stop clamp radial gradient stroke rebases center radius and device bands`() {
+        val shader = Shader.RadialGradient(
+            center = Point2F32(18f, 14f),
+            radius = 8f,
+            stops = listOf(
+                org.graphiks.kanvas.paint.GradientStop(0f, ColorARGB.Red),
+                org.graphiks.kanvas.paint.GradientStop(.5f, ColorARGB.Green),
+                org.graphiks.kanvas.paint.GradientStop(1f, ColorARGB.Blue),
+            ),
+            tileMode = org.graphiks.kanvas.paint.TileMode.CLAMP,
+        )
+        val operation = strokeRect(
+            bounds = RectF32.ofLTRB(8f, 8f, 28f, 24f),
+            paint = Paint.stroke(ColorARGB.Transparent, 2f).copy(shader = shader, antiAlias = false),
+            transform = Matrix3x3F32(sx = 2f, sy = 2f, tx = 2f, ty = 4f),
+        )
+
+        val absent = assertIs<GPUPreparedStrokeRectLowering.Refused>(GPUPreparedStrokeRectLowerer.lower(
+            operation, GPUDrawCommandID(0), 0, GPUFrameProvenance.None, target(), RenderConfig.DEFAULT,
+            capabilities(withThreeStopStrokeRadialGradient = true),
+        ))
+        assertEquals("unsupported.stroke.rect_radial_gradient_three_stop_uniform_scale_capability", absent.code)
+
+        val ready = assertIs<GPUPreparedStrokeRectLowering.Ready>(GPUPreparedStrokeRectLowerer.lower(
+            operation, GPUDrawCommandID(0), 0, GPUFrameProvenance.None, target(), RenderConfig.DEFAULT,
+            capabilities(withUniformScaleThreeStopStrokeRadialGradient = true),
+        ))
+        assertEquals(4, ready.commands.size)
+        assertEquals("uniform-scale", ready.geometryPlan.path?.transformClass)
+        val first = assertIs<NormalizedDrawCommand.FillRect>(ready.commands.first().normalized)
+        assertEquals(GPUCommandSourceKind.AnalyticStrokeRectUniformScaleRadialThreeStopBand, first.source.kind)
+        val material = assertIs<org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor.RadialGradient>(first.material)
+        assertEquals(38f, material.centerX)
+        assertEquals(32f, material.centerY)
+        assertEquals(16f, material.radius)
+        assertEquals(listOf(0f, .5f, 1f), material.allStopPositions?.toList())
+    }
+
+    @Test
     fun `translated three stop linear gradient stroke refuses positions outside the proven contract before bands`() {
         val cases = listOf(
             "arbitrary midpoint" to listOf(0f, .25f, 1f),
@@ -1157,6 +1196,7 @@ class GPUPreparedStrokeRectLowererTest {
         withUniformScaleThreeStopStrokeGradient: Boolean = false,
         withUniformScaleTwoStopStrokeSweepGradient: Boolean = false,
         withUniformScaleTwoStopStrokeRadialGradient: Boolean = false,
+        withUniformScaleThreeStopStrokeRadialGradient: Boolean = false,
         withTwoStopStrokeRadialGradient: Boolean = false,
         withTwoStopStrokeSweepGradient: Boolean = false,
         withThreeStopStrokeRadialGradient: Boolean = false,
@@ -1213,6 +1253,10 @@ class GPUPreparedStrokeRectLowererTest {
             if (withUniformScaleTwoStopStrokeRadialGradient) add(GPUCapabilityFact(
                 GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE,
                 "test", "supported", true, "test:stroke-rect-radial-gradient-two-stop-uniform-scale",
+            ))
+            if (withUniformScaleThreeStopStrokeRadialGradient) add(GPUCapabilityFact(
+                GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_UNIFORM_SCALE_NATIVE,
+                "test", "supported", true, "test:stroke-rect-radial-gradient-three-stop-uniform-scale",
             ))
             if (withTwoStopStrokeRadialGradient) {
                 add(
