@@ -1551,6 +1551,16 @@ object KanvasScenePrograms {
         restore()
     })
 
+    fun horizontalHairline() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawPath(
+            Path {
+                moveTo(4f, 16f)
+                lineTo(28f, 16f)
+            },
+            Paint.stroke(ColorARGB.Red, 0f).copy(antiAlias = false),
+        )
+    })
+
     fun scissoredRoundCapStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
         save()
         clipRect(RectF32.ofLTRB(5f, 14f, 18f, 19f), antiAlias = false)

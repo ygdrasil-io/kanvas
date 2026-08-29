@@ -60,6 +60,7 @@ object GpuEvidenceCatalog {
         roundCapStroke(),
         scaledTranslatedHorizontalHairline(),
         scaledHorizontalHairline(),
+        horizontalHairline(),
         scissoredRoundCapStroke(),
         translatedScissoredRoundCapStroke(),
         scissoredDiagonalButtStroke(),
@@ -582,6 +583,29 @@ sweepGradientTwoStopStrokeRect(),
         KanvasScenePrograms.scaledHorizontalHairline(),
         SurfaceSrgbHairlineCpuOracle(
             startX = 8.0,
+            endX = 28.0,
+            centerY = 16.0,
+            color = intArrayOf(255, 0, 0, 255),
+        ),
+    )
+
+    private fun horizontalHairline(): EvidenceCase = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("horizontal-hairline"),
+            "Horizontal hairline",
+            "Public Kanvas Surface zero-width non-AA horizontal hairline on an integral device row.",
+            32,
+            32,
+            1L,
+            setOf("path-hairline", "kanvas-surface"),
+            EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-hairline-direct-device-quad", 2),
+            ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent one-pixel device-row hairline coverage oracle."),
+            emptySet(),
+        ),
+        KanvasScenePrograms.horizontalHairline(),
+        SurfaceSrgbHairlineCpuOracle(
+            startX = 4.0,
             endX = 28.0,
             centerY = 16.0,
             color = intArrayOf(255, 0, 0, 255),
