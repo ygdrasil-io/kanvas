@@ -46,6 +46,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.commands.isBoundedNativePathHairline
 import org.graphiks.kanvas.gpu.renderer.state.GPUPathSourceAuthority
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextArtifactRef
@@ -1352,7 +1353,7 @@ private fun DisplayOp.DrawPath.directTriangleSourceAuthority(): GPUPathSourceAut
 }
 
 private fun NormalizedDrawCommand.geometryCoverage(): GPUCoverageConsumption = when (this) {
-    is NormalizedDrawCommand.FillPath -> if (isBoundedDirectTriangleFill()) {
+    is NormalizedDrawCommand.FillPath -> if (isBoundedDirectTriangleFill() || isBoundedNativePathHairline()) {
         GPUCoverageConsumption.FullOrScissor
     } else {
         GPUCoverageConsumption.StencilCoverage1x
@@ -1534,11 +1535,8 @@ private fun GPUClipCoveragePlan.Mask.toMaskExecutionPlan(
         it.kind == GPUClipCoverageElementKind.Path &&
             !it.antiAlias &&
             (
-                it.operation == GPUClipCoverageOperation.Intersect ||
-                    (
-                        it.operation == GPUClipCoverageOperation.Difference &&
-                            !it.inverseFill
-                    )
+                    it.operation == GPUClipCoverageOperation.Intersect ||
+                        it.operation == GPUClipCoverageOperation.Difference
             )
     }
     if (singleHardPathClip != null) {
@@ -1666,6 +1664,7 @@ private val HARD_PATH_CLIP_TRANSFORM_CLASSES = setOf(
     "uniform-positive-scale-translate",
     "scale",
     "scale-translate",
+    "right-angle-rotation",
 )
 
 private fun GPUClipCoverageElement.executionGeometryOrRefusal(): GPUClipExecutionGeometry? = try {

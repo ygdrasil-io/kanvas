@@ -18,6 +18,9 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizer
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.commands.isBoundedNativePathHairline
+import org.graphiks.kanvas.gpu.renderer.commands.isUniformPositiveScale
+import org.graphiks.kanvas.gpu.renderer.commands.isUniformPositiveScaleTranslate
 import org.graphiks.kanvas.gpu.renderer.commands.gradientFactsRefusalReasonOrNull
 import org.graphiks.kanvas.gpu.renderer.commands.imageLocalMatrixRefusalReasonOrNull
 import org.graphiks.kanvas.gpu.renderer.commands.isAffineDeterminantNonFinite
@@ -913,6 +916,9 @@ class GPUFirstRoutePlanner(
 
         return when {
             command.maskFilter != null -> blurMaskFillPathRouteDecision(command)
+            command.stroke && command.isBoundedNativePathHairline() &&
+                capabilities.hasFact(firstPathHairlineDirectCapabilityName) ->
+                nativeHairlineRouteDecision(command)
             command.stroke && command.isNativeSimpleStroke() &&
                 capabilities.hasFact(firstStencilCoverCapabilityName) ->
                 nativeSimpleStrokeRouteDecision(command)
@@ -922,6 +928,59 @@ class GPUFirstRoutePlanner(
             else ->
                 preparedFillPathRouteDecision(command)
         }
+    }
+
+    /** Builds the native direct-geometry route for one bounded axis-aligned hairline. */
+    private fun nativeHairlineRouteDecision(command: NormalizedDrawCommand.FillPath): GPUFirstRoutePlan {
+        val recordId = "analysis.fill_path.${command.commandId.value}"
+        val pipelineKey =
+            "pending.pipeline.path_hairline.direct.${command.layer.target.colorFormat}.src_over"
+        val renderStep = "path.hairline.direct"
+        val analysisRecord = GPUDrawAnalysisRecord(
+            recordId = recordId,
+            commandIdValue = command.commandId.value,
+            commandFamily = "FillPath",
+            boundsHash = command.bounds.stableHash(),
+            routeDecisionLabel = "native.path_hairline.direct",
+            materialKeyHash = "pending.material.${command.material.kind.name.lowercase()}",
+            renderStepCandidates = listOf(renderStep),
+            sortKey = SortKey(command.ordering.paintOrder.toLong()),
+            diagnostics = command.transform.analysisDiagnostics(recordId = recordId) +
+                command.pathFactsDiagnostics(recordId = recordId),
+        )
+        val routeDecision = GPUFirstRouteDecisionBuilder.nativeHairline(
+            commandIdValue = command.commandId.value,
+            pipelinePreimageHash = pipelineKey,
+            renderStepIdentity = renderStep,
+            requirements = listOf(firstPathHairlineDirectCapabilityName),
+        )
+        val analysisDecision = GPUDrawAnalysisDecision.Candidate(
+            recordId = recordId,
+            routeDecisionLabel = "native.path_hairline.direct",
+            resourceDeclarations = emptyList(),
+            renderStepCandidates = listOf(renderStep),
+        )
+        val pass = GPUFirstRoutePassBuilder.acceptedFillPath(
+            commandIdValue = command.commandId.value,
+            analysisRecordId = recordId,
+            sortKey = command.ordering.paintOrder.toLong(),
+            renderStepIdentity = renderStep,
+            pipelineKey = GPURenderPipelineKey(pipelineKey),
+            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
+            boundsHash = command.bounds.stableHash(),
+            scissorBoundsHash = command.scissorBoundsHash(),
+            originalPaintOrder = command.ordering.paintOrder,
+            targetStateHash = command.targetStateHash(),
+            frameProvenance = command.source.frameProvenance,
+            clipCoveragePlan = command.clip.coveragePlan,
+            clipExecutionPlan = command.clip.executionPlan,
+        )
+        return GPUFirstRoutePlan(
+            analysisRecord = analysisRecord,
+            analysisDecision = analysisDecision,
+            routeDecision = routeDecision,
+            pass = pass,
+        )
     }
 
     /** Builds a prepared FillStroke CPUPreparedGPU route and pass for stroked paths. */
@@ -2395,20 +2454,28 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
                         null -> dashIntervals?.let { "dash:${it.joinToString(",")}" }
                         else -> "path-effect:$pathEffectKind"
                     },
-                    transformClass = transform.type.name.lowercase(),
+                    // Keep the canonical path transform class so exact right-angle rotations
+                    // are not downgraded to the generic affine/perspective refusal bucket.
+                    transformClass = pathDescriptor.transformClass,
                     finiteWidth = strokeWidth > 0f && strokeWidth.isFinite(),
                     hairline = strokeWidth <= 0f,
                     edgeCount = edgeCount,
                 )
                 shapeDesc.strokeRefusalCode()
                     ?: pathDesc.strokePathRefusalCode()
-                    ?: strokeDesc.refusalCode(
-                        maxEdges = 128,
-                        allowPixelExactRoundCap = isNativeSimpleStroke() && strokeCap == "round",
-                    )
+                    ?: if (isBoundedNativePathHairline() || isNativeSimpleStroke()) {
+                        null
+                    } else {
+                        strokeDesc.refusalCode(
+                            maxEdges = 128,
+                            allowPixelExactRoundCap = isNativeSimpleStroke() && strokeCap == "round",
+                        )
+                    }
                     ?: "unsupported.pipeline.capability_missing".takeUnless {
                         capabilities.hasFact(firstPreparedPathFillCapabilityName) ||
-                            (isNativeSimpleStroke() && capabilities.hasFact(firstStencilCoverCapabilityName))
+                            (isNativeSimpleStroke() && capabilities.hasFact(firstStencilCoverCapabilityName)) ||
+                            (isBoundedNativePathHairline() &&
+                                capabilities.hasFact(firstPathHairlineDirectCapabilityName))
                     }
             }
             pathDescriptor.edgeCount < 0 -> "unsupported.geometry.path_invalid_edges"
@@ -2486,9 +2553,12 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
                 ) &&
             strokeJoin == "miter" &&
             strokeMiterLimit.isFinite() && strokeMiterLimit >= 1f &&
-            transform.type in setOf(GPUTransformType.Identity, GPUTransformType.Translate)
+            (transform.type in setOf(GPUTransformType.Identity, GPUTransformType.Translate) ||
+                transform.isUniformPositiveScale() || transform.isUniformPositiveScaleTranslate() ||
+                transform.isExactQuarterTurnPathRotation() || transform.isExactHalfTurnPathRotation())
 
     private fun NormalizedDrawCommand.FillPath.matchesPixelExactRoundCapR2HorizontalV1(): Boolean {
+        if (transform.type !in setOf(GPUTransformType.Identity, GPUTransformType.Translate)) return false
         if (strokeWidth != 4f || tessellatedVertices.size != 4) return false
         val startX = tessellatedVertices[0] + transform.translateX
         val startY = tessellatedVertices[1] + transform.translateY
@@ -2839,6 +2909,10 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
 
         /** Required capability fact for the path fill stencil-cover native promotion. */
         const val firstStencilCoverCapabilityName = GPUFirstSliceCapabilityName.PATH_FILL_STENCIL_COVER
+
+        /** Required capability fact for the bounded direct path hairline route. */
+        const val firstPathHairlineDirectCapabilityName =
+            GPUFirstSliceCapabilityName.PATH_HAIRLINE_DIRECT_NATIVE
 
         /** Transform classes supported by the first native FillRect route. */
         val acceptedTransformTypes = setOf(
