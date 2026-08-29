@@ -59,7 +59,7 @@ class GpuEvidenceCatalogTest {
     }
 
     @Test
-    fun `catalog separates eighty six public surface renders from eight refusals`() {
+    fun `catalog separates eighty six public surface renders from nine refusals`() {
         val cases = GpuEvidenceCatalog.cases
 
         assertEquals(
@@ -149,6 +149,7 @@ class GpuEvidenceCatalogTest {
                 "aggregate-memory-budget-refusal",
                 "bounded-save-layer-restore-blend-refusal",
                 "bounded-bitmap-linear-refusal",
+                "image-filter-blur-refusal",
             ),
             cases.map { it.descriptor.id.value },
         )
@@ -235,7 +236,7 @@ class GpuEvidenceCatalogTest {
             GpuEvidenceCatalog.renderCases.map { it.descriptor.id.value },
         )
         assertEquals(
-            listOf("linear-gradient-three-stops", "basic-primitives-empty-rect-refusal", "perspective-transform-refusal", "reflected-path-topology-refusal", "custom-runtime-effect-unregistered-refusal", "aggregate-memory-budget-refusal", "bounded-save-layer-restore-blend-refusal", "bounded-bitmap-linear-refusal"),
+            listOf("linear-gradient-three-stops", "basic-primitives-empty-rect-refusal", "perspective-transform-refusal", "reflected-path-topology-refusal", "custom-runtime-effect-unregistered-refusal", "aggregate-memory-budget-refusal", "bounded-save-layer-restore-blend-refusal", "bounded-bitmap-linear-refusal", "image-filter-blur-refusal"),
             GpuEvidenceCatalog.refusalCases.map { it.descriptor.id.value },
         )
         assertTrue(GpuEvidenceCatalog.renderCases.all { it.program is KanvasSurfaceProgram })
@@ -247,7 +248,7 @@ class GpuEvidenceCatalogTest {
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
         assertEquals(86, GpuEvidenceCatalog.renderCases.size)
-        assertEquals(94, GpuEvidenceCatalog.cases.size)
+        assertEquals(95, GpuEvidenceCatalog.cases.size)
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
 
         val solid = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "solid-card-stack" })
@@ -468,6 +469,7 @@ class GpuEvidenceCatalogTest {
                 "reflected-path-topology-refusal" to "kanvas.surface.render",
                 "bounded-save-layer-restore-blend-refusal" to "kanvas.surface.render",
                 "bounded-bitmap-linear-refusal" to "kanvas.surface.render",
+                "image-filter-blur-refusal" to "kanvas.surface.render",
             ),
             GpuEvidenceCatalog.refusalCases.filter { it.program is KanvasSurfaceProgram }.associate { evidenceCase ->
                 evidenceCase.descriptor.id.value to assertIs<KanvasSurfaceProgram>(evidenceCase.program).routeId

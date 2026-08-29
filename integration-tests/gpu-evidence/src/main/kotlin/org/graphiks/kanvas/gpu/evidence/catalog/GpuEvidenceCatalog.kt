@@ -123,6 +123,7 @@ object GpuEvidenceCatalog {
         aggregateMemoryBudgetRefusal(),
         boundedSaveLayerRestoreBlendRefusal(),
         boundedBitmapLinearRefusal(),
+        imageFilterBlurRefusal(),
     )
     val cases: List<EvidenceCase> = renderCases + refusalCases
     val catalog = EvidenceSceneCatalog(cases.map(EvidenceCase::descriptor))
@@ -194,6 +195,24 @@ object GpuEvidenceCatalog {
             emptySet(),
         ),
         program = KanvasScenePrograms.boundedBitmapLinearRefusal(),
+        oracle = null,
+    )
+
+    private fun imageFilterBlurRefusal() = EvidenceCase(
+        descriptor = EvidenceSceneDescriptor(
+            EvidenceSceneId("image-filter-blur-refusal"),
+            "Image-filter blur public refusal",
+            "Public Kanvas Surface records one RGBA8 impulse with a single CLAMP blur; the prepared product refuses before submission because it cannot materialize the blur intermediates.",
+            64,
+            64,
+            1L,
+            setOf("bitmap", "image-filter", "blur", "clamp", "refusal", "kanvas-surface"),
+            EvidenceExpectation.ShouldRefuse("unsupported.image.native_binding"),
+            OraclePolicy.StableRefusal,
+            null,
+            emptySet(),
+        ),
+        program = KanvasScenePrograms.imageFilterBlurRefusal(),
         oracle = null,
     )
 

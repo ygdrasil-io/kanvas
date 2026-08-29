@@ -1,0 +1,1 @@
+{"attemptId":"attempt-1","diagnostics":["diagnostic.code=unsupported.image.native_binding"],"stableReasonCode":"unsupported.image.native_binding","message":"unsupported.image.native_binding: Prepared Surface operation could not be lowered.","submissionDelta":0}
