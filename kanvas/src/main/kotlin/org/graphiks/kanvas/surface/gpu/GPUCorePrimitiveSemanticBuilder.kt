@@ -1521,7 +1521,7 @@ private fun NormalizedDrawCommand.FillPath.matchesPixelExactRoundCapR2NegativeQu
  * keeps the device-space outline aligned with the independent radius-four oracle.
  */
 private fun NormalizedDrawCommand.FillPath.matchesUniformScaledRoundCapV1(): Boolean {
-    if (!transform.isUniformPositiveScale()) return false
+    if (!(transform.isUniformPositiveScale() || transform.isUniformPositiveScaleTranslate())) return false
     if (transform.scaleX != 2f || strokeWidth != 4f || tessellatedVertices.size != 4) return false
     val start = transform.map(tessellatedVertices[0], tessellatedVertices[1])
     val end = transform.map(tessellatedVertices[2], tessellatedVertices[3])
