@@ -58,6 +58,8 @@ sealed interface ClipStackOp {
         val op: ClipOp,
         override val antiAlias: Boolean = true,
         override val perspectiveCaptureRefusal: Boolean = false,
+        /** Capture-time CTM class retained after the RRect is mapped to device space. */
+        val transformClass: String = "identity",
     ) : ClipStackOp
 
     /** Arbitrary path clip operation. */

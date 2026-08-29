@@ -72,6 +72,23 @@ class CanvasTest {
     }
 
     @Test
+    fun `scaled rrect clip retains its capture-time transform class after later CTM changes`() {
+        val buffer = TestBuffer()
+        val canvas = Canvas(buffer)
+
+        canvas.translate(3f, 5f)
+        canvas.scale(2f, 3f)
+        canvas.clipRRect(RRectF32.of(RectF32.ofLTRB(4f, 6f, 12f, 16f), radius = 2f), antiAlias = false)
+        canvas.resetMatrix()
+        canvas.translate(100f, 200f)
+
+        val clip = assertIs<ClipStack.Complex>(buffer.ops().filterIsInstance<DisplayOp.SetClip>().last().clip)
+        val captured = assertIs<ClipStackOp.RRectOp>(clip.ops.single())
+        assertEquals("scale-translate", captured.transformClass)
+        assertEquals(RectF32.ofLTRB(11f, 23f, 27f, 53f), captured.rrect.rect)
+    }
+
+    @Test
     fun `rotated clip rect is captured as a device path`() {
         val buffer = TestBuffer()
         val canvas = Canvas(buffer)

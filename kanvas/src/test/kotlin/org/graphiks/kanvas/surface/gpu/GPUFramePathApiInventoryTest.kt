@@ -2907,6 +2907,38 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `transformed rrect clip keeps device-space provenance for rect rrect and path consumers`() {
+        val surface = Surface(64, 64)
+        surface.canvas {
+            translate(4f, 6f)
+            scale(1.5f, .75f)
+            clipRRect(
+                RRectF32.of(RectF32.ofLTRB(4f, 8f, 36f, 56f), radius = 4f),
+                ClipOp.INTERSECT,
+                antiAlias = false,
+            )
+            resetMatrix()
+            drawRect(RectF32.ofLTRB(0f, 0f, 64f, 64f), Paint.fill(ColorARGB.Red).copy(antiAlias = false))
+            drawRRect(RRectF32.of(RectF32.ofLTRB(8f, 8f, 56f, 56f), radius = 3f), Paint.fill(ColorARGB.Green).copy(antiAlias = false))
+            drawPath(triangle(), Paint.fill(ColorARGB.Blue).copy(antiAlias = false))
+        }
+
+        val plan = GPUFramePathApiInventory.plan(
+            surface.snapshotOps(),
+            target(64, 64),
+            RenderConfig.DEFAULT,
+            capabilitiesWith(FILL_RECT_CAPABILITY),
+        )
+
+        assertEquals(3, plan.visualCommands.size)
+        plan.visualCommands.forEach { visual ->
+            val analytic = assertIs<GPUClipExecutionPlan.AnalyticCoverage>(visual.clipExecutionPlan)
+            assertIs<GPUClipExecutionGeometry.RRect>(analytic.geometry)
+            assertEquals("scale-translate", visual.normalized.clip.coverageRequest!!.elements.single().transformClass)
+        }
+    }
+
+    @Test
     fun `mapper preserves depth one coverage and execution identity while bypassing frame mask budget`() {
         val surface = Surface(32, 32)
         surface.canvas {

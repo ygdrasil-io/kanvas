@@ -159,6 +159,25 @@ object KanvasScenePrograms {
         restore()
     })
 
+    /** A transformed hard RRect clip is frozen in device space before its rect consumer resets the CTM. */
+    fun transformedClipRRectSolid() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        save()
+        translate(4f, 6f)
+        scale(1.5f, .75f)
+        clipRRect(
+            RRectF32.of(RectF32.ofLTRB(4f, 8f, 36f, 56f), radius = 4f),
+            ClipOp.INTERSECT,
+            antiAlias = false,
+        )
+        resetMatrix()
+        drawRect(
+            RectF32.ofLTRB(0f, 0f, 64f, 64f),
+            Paint.fill(ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)).copy(antiAlias = false),
+        )
+        restore()
+    })
+
     fun clipPathTriangleSolid() = KanvasSurfaceProgram(ROUTE_ID, record = {
         drawColor(BACKGROUND)
         save()

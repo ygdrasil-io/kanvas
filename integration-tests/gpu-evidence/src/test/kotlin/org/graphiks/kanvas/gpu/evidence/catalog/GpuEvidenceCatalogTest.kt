@@ -32,7 +32,7 @@ import org.graphiks.math.matrix.Matrix3x3F32
 
 class GpuEvidenceCatalogTest {
     @Test
-    fun `catalog separates eighty public surface renders from six refusals`() {
+    fun `catalog separates eighty two public surface renders from six refusals`() {
         val cases = GpuEvidenceCatalog.cases
 
         assertEquals(
@@ -46,7 +46,7 @@ class GpuEvidenceCatalogTest {
                 "linear-gradient-lanes",
                 "radial-swatch",
                 "sweep-disk",
-                "sweep-gradient-partial-angle", "affine-solid-rect", "basic-primitives-valid-alpha", "basic-primitives-out-of-bounds", "basic-primitives-points", "affine-path-clip-color", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
+                "sweep-gradient-partial-angle", "affine-solid-rect", "basic-primitives-valid-alpha", "basic-primitives-out-of-bounds", "basic-primitives-points", "fractional-aa-rect-overlap", "affine-path-clip-color", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
                 "scaled-solid-rrect",
                 "solid-drrect-hole",
                 "asymmetric-solid-rrect",
@@ -55,6 +55,7 @@ class GpuEvidenceCatalogTest {
                 "clip-rrect-solid",
                 "clip-rrect-ellipse",
                 "clip-rrect-two-bands",
+                "transformed-clip-rrect-solid",
                 "clip-path-triangle-solid",
                 "clip-path-triangle-difference-solid",
                 "clip-path-concave-solid",
@@ -129,7 +130,7 @@ class GpuEvidenceCatalogTest {
                 "linear-gradient-lanes",
                 "radial-swatch",
                 "sweep-disk",
-                "sweep-gradient-partial-angle", "affine-solid-rect", "basic-primitives-valid-alpha", "basic-primitives-out-of-bounds", "basic-primitives-points", "affine-path-clip-color", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
+                "sweep-gradient-partial-angle", "affine-solid-rect", "basic-primitives-valid-alpha", "basic-primitives-out-of-bounds", "basic-primitives-points", "fractional-aa-rect-overlap", "affine-path-clip-color", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
                 "scaled-solid-rrect",
                 "solid-drrect-hole",
                 "asymmetric-solid-rrect",
@@ -138,6 +139,7 @@ class GpuEvidenceCatalogTest {
                 "clip-rrect-solid",
                 "clip-rrect-ellipse",
                 "clip-rrect-two-bands",
+                "transformed-clip-rrect-solid",
                 "clip-path-triangle-solid",
                 "clip-path-triangle-difference-solid",
                 "clip-path-concave-solid",
@@ -204,11 +206,11 @@ class GpuEvidenceCatalogTest {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            List(80) { "kanvas.surface.render" },
+            List(82) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
-        assertEquals(80, GpuEvidenceCatalog.renderCases.size)
-        assertEquals(86, GpuEvidenceCatalog.cases.size)
+        assertEquals(82, GpuEvidenceCatalog.renderCases.size)
+        assertEquals(88, GpuEvidenceCatalog.cases.size)
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
 
         val solid = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "solid-card-stack" })
@@ -330,7 +332,7 @@ class GpuEvidenceCatalogTest {
             "linear-gradient-lanes",
             "radial-swatch",
             "sweep-disk",
-            "sweep-gradient-partial-angle", "affine-solid-rect", "basic-primitives-valid-alpha", "basic-primitives-out-of-bounds", "basic-primitives-points", "affine-path-clip-color", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
+            "sweep-gradient-partial-angle", "affine-solid-rect", "basic-primitives-valid-alpha", "basic-primitives-out-of-bounds", "basic-primitives-points", "fractional-aa-rect-overlap", "affine-path-clip-color", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
             "scaled-solid-rrect",
             "solid-drrect-hole",
             "asymmetric-solid-rrect",
@@ -339,6 +341,7 @@ class GpuEvidenceCatalogTest {
                 "clip-rrect-solid",
                 "clip-rrect-ellipse",
                 "clip-rrect-two-bands",
+                "transformed-clip-rrect-solid",
                 "clip-path-triangle-solid",
                 "clip-path-triangle-difference-solid",
                 "clip-path-concave-solid",
@@ -437,6 +440,7 @@ class GpuEvidenceCatalogTest {
                 "basic-primitives-valid-alpha" to OraclePolicy.GeneratedCpu("surface-srgb-basic-primitives-alpha", 1),
                 "basic-primitives-out-of-bounds" to OraclePolicy.GeneratedCpu("reference-raster-basic-primitive-bounds", 1),
                 "basic-primitives-points" to OraclePolicy.GeneratedCpu("reference-raster-draw-points-squares", 1),
+                "fractional-aa-rect-overlap" to OraclePolicy.GeneratedCpu("surface-srgb-fractional-rect-area-coverage", 1),
                 "affine-path-clip-color" to OraclePolicy.GeneratedCpu("surface-srgb-affine-path-clip-pixel-center", 1),
                 "scissored-radial-gradient" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-radial-clamp", 2),
                 "repeat-gradient-refusal" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-linear-repeat", 2),
@@ -449,6 +453,7 @@ class GpuEvidenceCatalogTest {
                 "clip-rrect-solid" to OraclePolicy.GeneratedCpu("surface-srgb-clip-rrect-pixel-center", 1),
                 "clip-rrect-ellipse" to OraclePolicy.GeneratedCpu("surface-srgb-clip-rrect-pixel-center", 1),
                 "clip-rrect-two-bands" to OraclePolicy.GeneratedCpu("surface-srgb-clip-rrect-pixel-center", 1),
+                "transformed-clip-rrect-solid" to OraclePolicy.GeneratedCpu("surface-srgb-transformed-rrect-clip-pixel-center", 1),
                 "clip-path-triangle-solid" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-pixel-center", 1),
                 "clip-path-triangle-difference-solid" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-pixel-center", 1),
                 "clip-path-concave-solid" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-pixel-center", 1),
@@ -524,6 +529,7 @@ class GpuEvidenceCatalogTest {
                 "basic-primitives-valid-alpha" to ComparisonPolicy(1, 99.0, 1, "Independent straight-sRGB premultiplied SrcOver oracle; one RGBA8 rounding unit is tolerated."),
                 "basic-primitives-out-of-bounds" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 target clipping and no-op semantics."),
                 "basic-primitives-points" to ComparisonPolicy(0, 100.0, 1, "Exact opaque four-pixel-wide point footprints after target clipping."),
+                "fractional-aa-rect-overlap" to ComparisonPolicy(1, 100.0, 1, "Independent exact pixel-area coverage in linear light; one byte rounding tolerance."),
                 "affine-path-clip-color" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent device-space affine rectangle clip membership."),
                 "scissored-radial-gradient" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
                 "repeat-gradient-refusal" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
@@ -536,6 +542,7 @@ class GpuEvidenceCatalogTest {
                 "clip-rrect-solid" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent hard pixel-center RRect clip membership."),
                 "clip-rrect-ellipse" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent hard pixel-center RRect clip membership."),
                 "clip-rrect-two-bands" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent hard pixel-center RRect clip membership and paint order."),
+                "transformed-clip-rrect-solid" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent device-space RRect membership."),
                 "clip-path-triangle-solid" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent hard pixel-center winding path clip membership and paint order."),
                 "clip-path-triangle-difference-solid" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent hard pixel-center winding path difference membership and paint order."),
                 "clip-path-concave-solid" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent hard pixel-center winding path clip membership and paint order."),
