@@ -2537,7 +2537,8 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
      * The native path-stencil route is intentionally smaller than generic prepared strokes:
      * one immutable, open two-point contour, finite bounded width and no join work. Butt and
      * square caps remain broadly bounded; round is limited to the separate pixel-exact
-     * radius-two horizontal contract, because its tessellator uses a polygonal approximation.
+     * radius-two axis-aligned contract (identity/translation or an exact quarter-turn), because
+     * its tessellator uses a polygonal approximation.
      * More than one segment remains on the prepared/refusal path until its outline topology is
      * independently proven in a native packet.
      */
@@ -2559,7 +2560,9 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
                 strokeCap == "butt" ||
                     (tessellatedVertices.size == 4 && strokeCap == "square") ||
                     (tessellatedVertices.size == 4 && strokeCap == "round" &&
-                        (matchesPixelExactRoundCapR2HorizontalV1() || matchesPixelExactRoundCapR2VerticalV1()))
+                        (matchesPixelExactRoundCapR2HorizontalV1() ||
+                            matchesPixelExactRoundCapR2VerticalV1() ||
+                            matchesPixelExactRoundCapR2QuarterTurnV1()))
                 ) &&
             strokeJoin == "miter" &&
             strokeMiterLimit.isFinite() && strokeMiterLimit >= 1f &&
@@ -2642,6 +2645,18 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
         return startX.isIntegralDeviceCoordinate() && startY.isIntegralDeviceCoordinate() &&
             endX.isIntegralDeviceCoordinate() && endY.isIntegralDeviceCoordinate() &&
             startX == endX && endY - startY >= strokeWidth
+    }
+
+    private fun NormalizedDrawCommand.FillPath.matchesPixelExactRoundCapR2QuarterTurnV1(): Boolean {
+        if (!transform.isExactQuarterTurnPathRotation()) return false
+        if (strokeWidth != 4f || tessellatedVertices.size != 4) return false
+        val start = transform.mapPathPoint(tessellatedVertices[0], tessellatedVertices[1])
+        val end = transform.mapPathPoint(tessellatedVertices[2], tessellatedVertices[3])
+        val integral = listOf(start.first, start.second, end.first, end.second)
+            .all { it.isIntegralDeviceCoordinate() }
+        val axisAligned = start.first == end.first || start.second == end.second
+        return integral && axisAligned &&
+            kotlin.math.abs(end.first - start.first) + kotlin.math.abs(end.second - start.second) >= strokeWidth
     }
 
     private fun Float.isIntegralDeviceCoordinate(): Boolean = isFinite() && floor(this) == this
