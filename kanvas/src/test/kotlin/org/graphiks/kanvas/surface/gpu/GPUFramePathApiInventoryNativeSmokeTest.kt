@@ -2683,6 +2683,104 @@ class GPUFramePathApiInventoryNativeSmokeTest {
     }
 
     @Test
+    fun `clamp radial gradient right angle square miter stroke under winding clip renders natively`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        val capabilities = requireNotNull(backend.capabilities)
+        val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(RenderConfig.DEFAULT.mapPreparedGpuColorConfig())
+        val targetBounds = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, 32, 32)
+        val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.radial-square-right-angle-clip")
+        val clipPath = Path().apply {
+            moveTo(27.75f, 4.25f)
+            lineTo(27.75f, 27.25f)
+            lineTo(4.75f, 4.25f)
+            close()
+        }
+        val drawTransform = Matrix3x3F32.rotation(90f, pivotX = 16f, pivotY = 16f)
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(8.25f, 8.25f)
+                        lineTo(20.25f, 14.25f)
+                    },
+                    Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                        shader = Shader.RadialGradient(
+                            Point2F32(16f, 16f),
+                            16f,
+                            listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                        ),
+                        antiAlias = false,
+                        strokeCap = StrokeCap.SQUARE,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    drawTransform,
+                    ClipStack.Complex(
+                        listOf(
+                            ClipStackOp.PathOp(
+                                clipPath,
+                                ClipOp.INTERSECT,
+                                antiAlias = false,
+                                transformClass = "right-angle-rotation",
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+            deviceGeneration = backend.deviceGeneration,
+        )
+        val visual = inventory.visualCommands.single()
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+        assertEquals(32f, visual.normalized.transform.translateX)
+        assertEquals(0f, visual.normalized.transform.translateY)
+        assertEquals(0f, visual.normalized.transform.scaleX)
+        assertEquals(0f, visual.normalized.transform.scaleY)
+        assertEquals(-1f, visual.normalized.transform.skewX)
+        assertEquals(1f, visual.normalized.transform.skewY)
+        val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(visual.clipExecutionPlan)
+        assertEquals("right-angle-rotation", execution.pathTransformClass)
+        assertEquals(GPUClipStencilOperation.IncrementWrap, execution.producer.frontPassOperation)
+        assertEquals(GPUClipStencilOperation.DecrementWrap, execution.producer.backPassOperation)
+        assertEquals(GPUClipStencilCompare.NotEqual, execution.consumer.compare)
+        val clipGeometry = assertIs<GPUClipExecutionGeometry.Path>(execution.producer.geometry)
+        assertEquals(GPUClipFillRule.Winding, clipGeometry.fillRule)
+        assertTrue(!clipGeometry.inverseFill)
+        val preparation = GPUFramePathApiInventory.prepareNativeTaskList(
+            inventory,
+            capabilities,
+            targetBounds,
+            readbackId,
+        )
+        val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            preparation,
+            (preparation as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}; facts=${it.facts}"
+            },
+        ).taskList
+        val session = backend.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(32, 32, colorMapping.physicalFormat, colorMapping.interpretation),
+        )
+        try {
+            val completed = session.renderFrame(
+                prepared,
+                GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
+            ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+            assertEquals(GPUFrameStructuralOutcome.Succeeded, completed.outcome)
+            val gpu = assertIs<GPUSceneFrameOutput.ReadbackRgba>(completed.output).bytes
+            assertRgbaWithinOneLsb(deterministicRightAngleDiagonalSquareMiterRadialWindingClipOracle(), gpu)
+            assertEquals(1L, session.nativeCounters().submits)
+            assertEquals(1L, session.nativeCounters().readbackCopies)
+        } finally {
+            session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
     fun `clamp radial gradient butt miter stroke under winding path clip renders natively`() {
         val backend = GPUBackendRuntimeNativeFactory.createOrNull()
         assumeTrue(backend != null)
@@ -6832,6 +6930,61 @@ class GPUFramePathApiInventoryNativeSmokeTest {
                     val distanceY = py - closestY
                     if (distanceX * distanceX + distanceY * distanceY > extension * extension) continue
                     val t = (py / 32f).coerceIn(0f, 1f)
+                    val red = linearToSrgb((1f - t) * srgbToLinear(1f) + t * srgbToLinear(0f))
+                    val blue = linearToSrgb((1f - t) * srgbToLinear(0f) + t * srgbToLinear(1f))
+                    val offset = (y * 32 + x) * 4
+                    rgba[offset] = (red * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 2] = (blue * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 3] = 0xff.toByte()
+                }
+            }
+        }
+
+    /** Independent device-space oracle for the right-angle rotated square-cap radial stroke and Winding clip. */
+    private fun deterministicRightAngleDiagonalSquareMiterRadialWindingClipOracle(): ByteArray =
+        ByteArray(32 * 32 * 4).also { rgba ->
+            val ax = 23.75f
+            val ay = 8.25f
+            val bx = 17.75f
+            val by = 20.25f
+            val dx = bx - ax
+            val dy = by - ay
+            val length = kotlin.math.sqrt(dx * dx + dy * dy)
+            val extension = 2f
+            val startX = ax - dx / length * extension
+            val startY = ay - dy / length * extension
+            val endX = bx + dx / length * extension
+            val endY = by + dy / length * extension
+            val extendedDx = endX - startX
+            val extendedDy = endY - startY
+            val lengthSquared = extendedDx * extendedDx + extendedDy * extendedDy
+            val clipAx = 27.75f
+            val clipAy = 4.25f
+            val clipBx = 27.75f
+            val clipBy = 27.25f
+            val clipCx = 4.75f
+            val clipCy = 4.25f
+            val denominator = (clipBy - clipCy) * (clipAx - clipCx) +
+                (clipCx - clipBx) * (clipAy - clipCy)
+            for (y in 0 until 32) {
+                for (x in 0 until 32) {
+                    val px = x + 0.5f
+                    val py = y + 0.5f
+                    val u = ((clipBy - clipCy) * (px - clipCx) +
+                        (clipCx - clipBx) * (py - clipCy)) / denominator
+                    val v = ((clipCy - clipAy) * (px - clipCx) +
+                        (clipAx - clipCx) * (py - clipCy)) / denominator
+                    if (u < 0f || v < 0f || u + v > 1f) continue
+                    val projection = ((px - startX) * extendedDx + (py - startY) * extendedDy) /
+                        lengthSquared
+                    if (projection < 0f || projection > 1f) continue
+                    val closestX = startX + projection * extendedDx
+                    val closestY = startY + projection * extendedDy
+                    val distanceX = px - closestX
+                    val distanceY = py - closestY
+                    if (distanceX * distanceX + distanceY * distanceY > extension * extension) continue
+                    val radialDistance = kotlin.math.sqrt((px - 16f) * (px - 16f) + (py - 16f) * (py - 16f))
+                    val t = (radialDistance / 16f).coerceIn(0f, 1f)
                     val red = linearToSrgb((1f - t) * srgbToLinear(1f) + t * srgbToLinear(0f))
                     val blue = linearToSrgb((1f - t) * srgbToLinear(0f) + t * srgbToLinear(1f))
                     val offset = (y * 32 + x) * 4

@@ -19,6 +19,7 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskCombine
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipFillRule
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilCompare
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
@@ -2613,6 +2614,64 @@ class GPUFramePathApiInventoryTest {
         )
 
         assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+    }
+
+    @Test
+    fun `exact right angle radial draw with square miter stroke under winding clip reaches the hard path clip route`() {
+        val capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER)
+        val clipPath = Path().apply {
+            moveTo(27.75f, 4.25f)
+            lineTo(27.75f, 27.25f)
+            lineTo(4.75f, 4.25f)
+            close()
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(8.25f, 8.25f)
+                        lineTo(20.25f, 14.25f)
+                    },
+                    Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                        shader = Shader.RadialGradient(
+                            Point2F32(16f, 16f),
+                            16f,
+                            listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                            TileMode.CLAMP,
+                        ),
+                        antiAlias = false,
+                        strokeCap = StrokeCap.SQUARE,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.rotation(90f, pivotX = 16f, pivotY = 16f),
+                    ClipStack.Complex(
+                        listOf(
+                            ClipStackOp.PathOp(
+                                clipPath,
+                                ClipOp.INTERSECT,
+                                antiAlias = false,
+                                transformClass = "right-angle-rotation",
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+        )
+
+        val visual = inventory.visualCommands.single()
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+        assertEquals(listOf("route:native.path_stroke.stencil_cover"), inventory.recording.routeDiagnostics)
+        val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(visual.clipExecutionPlan)
+        assertEquals("right-angle-rotation", execution.pathTransformClass)
+        assertEquals(GPUClipStencilOperation.IncrementWrap, execution.producer.frontPassOperation)
+        assertEquals(GPUClipStencilOperation.DecrementWrap, execution.producer.backPassOperation)
+        assertEquals(GPUClipStencilCompare.NotEqual, execution.consumer.compare)
+        val clipGeometry = assertIs<GPUClipExecutionGeometry.Path>(execution.producer.geometry)
+        assertEquals(GPUClipFillRule.Winding, clipGeometry.fillRule)
+        assertEquals(false, clipGeometry.inverseFill)
     }
 
     @Test
