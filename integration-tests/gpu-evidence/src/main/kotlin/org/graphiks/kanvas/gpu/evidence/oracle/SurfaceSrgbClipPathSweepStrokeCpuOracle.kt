@@ -14,6 +14,7 @@ class SurfaceSrgbClipPathSweepStrokeCpuOracle(
     private val center: Point,
     private val startColor: IntArray,
     private val endColor: IntArray,
+    private val shaderTranslation: Point = Point(0.0, 0.0),
 ) : CpuOracle {
     data class Point(val x: Double, val y: Double)
 
@@ -37,6 +38,9 @@ class SurfaceSrgbClipPathSweepStrokeCpuOracle(
             "stroke segment must be finite and non-degenerate"
         }
         require(center.x.isFinite() && center.y.isFinite()) { "center must be finite" }
+        require(shaderTranslation.x.isFinite() && shaderTranslation.y.isFinite()) {
+            "shader translation must be finite"
+        }
     }
 
     override fun render(width: Int, height: Int): ByteArray {
@@ -50,7 +54,10 @@ class SurfaceSrgbClipPathSweepStrokeCpuOracle(
             val px = x + 0.5
             val py = y + 0.5
             val color = if (contains(px, py) && coversSquareStroke(px, py, halfWidthSquared)) {
-                val rawTurn = atan2(py - center.y, px - center.x) / fullTurn
+                val rawTurn = atan2(
+                    py + shaderTranslation.y - center.y,
+                    px + shaderTranslation.x - center.x,
+                ) / fullTurn
                 val t = (rawTurn - kotlin.math.floor(rawTurn)).coerceIn(0.0, 1.0)
                 SurfaceSrgbOracleMath.storeSrgb(
                     SurfaceSrgbOracleMath.LinearPremul(
@@ -95,4 +102,3 @@ class SurfaceSrgbClipPathSweepStrokeCpuOracle(
         return winding != 0
     }
 }
-
