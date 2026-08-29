@@ -22,6 +22,7 @@ import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbUniformScaledTwoStopRa
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbUniformScaledThreeStopRadialGradientStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbThreeStopSweepGradientStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRoundCapStrokeCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRoundCapVerticalStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRoundCapStrokeScissorCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbSolidStrokeScissorCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbSolidStrokeCpuOracle
@@ -60,6 +61,7 @@ object GpuEvidenceCatalog {
         strokeRectOutline(),
         translatedStrokeRectOutline(),
         roundCapStroke(),
+        verticalRoundCapStroke(),
         scaledTranslatedHorizontalHairline(),
         scaledHorizontalHairline(),
         horizontalHairline(),
@@ -649,6 +651,30 @@ sweepGradientTwoStopStrokeRect(),
         ),
         KanvasScenePrograms.roundCapStroke(),
         SurfaceSrgbRoundCapStrokeCpuOracle(6.0, 26.0, 16.0, 2.0, intArrayOf(255, 0, 0, 255)),
+    )
+
+    private fun verticalRoundCapStroke(): EvidenceCase = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("vertical-round-cap-stroke"),
+            "Pixel-exact vertical round-cap path stroke",
+            "Public Kanvas Surface non-AA radius-two, integral-grid vertical path stroke with round caps.",
+            32,
+            32,
+            1L,
+            setOf("path-stroke", "round-cap", "vertical", "kanvas-surface"),
+            EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke-vertical", 2),
+            ComparisonPolicy(0, 100.0, 1, "Independent pixel-center disk oracle for the integral-grid radius-two vertical contract."),
+            emptySet(),
+        ),
+        KanvasScenePrograms.verticalRoundCapStroke(),
+        SurfaceSrgbRoundCapVerticalStrokeCpuOracle(
+            startY = 6.0,
+            endY = 26.0,
+            centerX = 16.0,
+            radius = 2.0,
+            rgba = intArrayOf(255, 0, 0, 255),
+        ),
     )
 
     private fun scaledTranslatedHorizontalHairline(): EvidenceCase = EvidenceCase(

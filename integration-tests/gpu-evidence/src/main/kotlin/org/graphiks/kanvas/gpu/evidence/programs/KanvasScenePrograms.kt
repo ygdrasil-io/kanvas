@@ -1747,6 +1747,19 @@ object KanvasScenePrograms {
         )
     })
 
+    fun verticalRoundCapStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawPath(
+            Path {
+                moveTo(16f, 6f)
+                lineTo(16f, 26f)
+            },
+            Paint.stroke(ColorARGB.Red, 4f).copy(
+                antiAlias = false,
+                strokeCap = StrokeCap.ROUND,
+            ),
+        )
+    })
+
     fun scaledTranslatedHorizontalHairline() = KanvasSurfaceProgram(ROUTE_ID, record = {
         save()
         translate(2f, 3f)

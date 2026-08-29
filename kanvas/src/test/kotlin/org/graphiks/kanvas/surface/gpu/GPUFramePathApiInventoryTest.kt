@@ -3579,7 +3579,7 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
-    fun `vertical round cap refuses before native preparation`() {
+    fun `vertical round cap reaches native preparation`() {
         val inventory = GPUFramePathApiInventory.plan(
             operations = listOf(
                 DisplayOp.DrawPath(
@@ -3598,13 +3598,17 @@ class GPUFramePathApiInventoryTest {
             ),
             target = target(),
             config = RenderConfig.DEFAULT,
+            capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER),
         )
 
-        val refused = gatherRefusal(inventory)
-
-        assertEquals("unsupported.core_primitive.stroke.round_cap_pixel_exact_lowering", refused.code)
-        assertEquals("4.0", refused.facts["width"])
-        assertEquals("round", refused.facts["cap"])
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+        val semantic = gatheredSemantic(inventory) as GPUDrawSemanticPayload.CorePrimitive
+        val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
+        assertEquals(GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan, geometry.geometryMode)
+        assertEquals(
+            GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2VerticalV1,
+            geometry.strokeStyle?.loweringProof,
+        )
     }
 
     @Test

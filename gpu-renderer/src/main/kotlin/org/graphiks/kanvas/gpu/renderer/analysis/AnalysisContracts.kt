@@ -2558,7 +2558,8 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
             (
                 strokeCap == "butt" ||
                     (tessellatedVertices.size == 4 && strokeCap == "square") ||
-                    (tessellatedVertices.size == 4 && strokeCap == "round" && matchesPixelExactRoundCapR2HorizontalV1())
+                    (tessellatedVertices.size == 4 && strokeCap == "round" &&
+                        (matchesPixelExactRoundCapR2HorizontalV1() || matchesPixelExactRoundCapR2VerticalV1()))
                 ) &&
             strokeJoin == "miter" &&
             strokeMiterLimit.isFinite() && strokeMiterLimit >= 1f &&
@@ -2629,6 +2630,18 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
         return startX.isIntegralDeviceCoordinate() && startY.isIntegralDeviceCoordinate() &&
             endX.isIntegralDeviceCoordinate() && endY.isIntegralDeviceCoordinate() &&
             startY == endY && endX - startX >= strokeWidth
+    }
+
+    private fun NormalizedDrawCommand.FillPath.matchesPixelExactRoundCapR2VerticalV1(): Boolean {
+        if (transform.type !in setOf(GPUTransformType.Identity, GPUTransformType.Translate)) return false
+        if (strokeWidth != 4f || tessellatedVertices.size != 4) return false
+        val startX = tessellatedVertices[0] + transform.translateX
+        val startY = tessellatedVertices[1] + transform.translateY
+        val endX = tessellatedVertices[2] + transform.translateX
+        val endY = tessellatedVertices[3] + transform.translateY
+        return startX.isIntegralDeviceCoordinate() && startY.isIntegralDeviceCoordinate() &&
+            endX.isIntegralDeviceCoordinate() && endY.isIntegralDeviceCoordinate() &&
+            startX == endX && endY - startY >= strokeWidth
     }
 
     private fun Float.isIntegralDeviceCoordinate(): Boolean = isFinite() && floor(this) == this
