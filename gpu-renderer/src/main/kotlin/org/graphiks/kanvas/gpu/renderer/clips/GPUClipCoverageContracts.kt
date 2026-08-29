@@ -177,6 +177,7 @@ object GPUClipCoverageRefusalCodes {
     const val TEXTURE_LIMIT = "unsupported.clip.texture_limit"
     const val INTERMEDIATE_BUDGET = "unsupported.clip.intermediate_budget"
     const val VERTEX_BUDGET = "unsupported.clip.vertex_budget"
+    const val DEPTH_BUDGET = "unsupported.clip.depth_budget"
 }
 
 /** Backend-neutral clip coverage plan consumed by later WebGPU execution work. */

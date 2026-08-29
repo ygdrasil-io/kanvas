@@ -58,6 +58,9 @@ object GPUClipCoveragePlanner {
         if (request.targetWidth > maxTextureDimension2D || request.targetHeight > maxTextureDimension2D) {
             return GPUClipCoveragePlan.Refused(GPUClipCoverageRefusalCodes.TEXTURE_LIMIT)
         }
+        if (request.elements.size.toLong() > config.maxClipStackDepth.toLong()) {
+            return GPUClipCoveragePlan.Refused(GPUClipCoverageRefusalCodes.DEPTH_BUDGET)
+        }
         val vertexCount = request.elements.sumOf { it.vertexCount.toLong() }
         if (vertexCount > config.maxPathVertices.toLong()) {
             return GPUClipCoveragePlan.Refused(GPUClipCoverageRefusalCodes.VERTEX_BUDGET)

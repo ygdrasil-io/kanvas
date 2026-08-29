@@ -333,6 +333,28 @@ class GPUClipCoverageContractsTest {
     }
 
     @Test
+    fun `clip planner refuses a composition deeper than its configured budget before mask allocation`() {
+        val element = element(
+            kind = GPUClipCoverageElementKind.Rect,
+            values = listOf(0f, 0f, 64f, 64f),
+            vertexCount = 0,
+            antiAlias = true,
+        )
+        val request = request(width = 64, height = 64, elements = List(3) { element })
+
+        val plan = GPUClipCoveragePlanner.planForFrameRoute(
+            request = request,
+            config = RenderConfig(maxClipStackDepth = 2u, maxClipIntermediateBytes = 1u),
+            maxTextureDimension2D = 4096,
+        )
+
+        assertEquals(
+            "unsupported.clip.depth_budget",
+            assertIs<GPUClipCoveragePlan.Refused>(plan).code,
+        )
+    }
+
+    @Test
     fun `clip planner refuses intermediate byte arithmetic overflow`() {
         val plan = GPUClipCoveragePlanner.plan(
             request = request(

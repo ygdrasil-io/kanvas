@@ -13,6 +13,8 @@ data class RenderConfig(
     val maxImagePixels: UInt = 67_108_864u,
     val maxMaskBlurIntermediateBytes: UInt = 67_108_864u,
     val maxClipIntermediateBytes: UInt = 67_108_864u,
+    /** Maximum ordered clip elements admitted by the public Surface coverage-mask route. */
+    val maxClipStackDepth: UInt = 8u,
     val diagnosticLevel: DiagnosticLevel = DiagnosticLevel.WARN,
     val debugLevel: DebugLevel = DebugLevel.OFF,
 ) {
@@ -57,6 +59,8 @@ data class RenderConfig(
                     ?.toUIntOrNull() ?: DEFAULT.maxMaskBlurIntermediateBytes,
                 maxClipIntermediateBytes = p.getProperty("kanvas.render.maxClipIntermediateBytes")
                     ?.toUIntOrNull() ?: DEFAULT.maxClipIntermediateBytes,
+                maxClipStackDepth = p.getProperty("kanvas.render.maxClipStackDepth")
+                    ?.toUIntOrNull() ?: DEFAULT.maxClipStackDepth,
                 diagnosticLevel = p.getProperty("kanvas.render.diagnosticLevel")
                     ?.let { runCatching { DiagnosticLevel.valueOf(it) }.getOrNull() }
                     ?: DEFAULT.diagnosticLevel,
