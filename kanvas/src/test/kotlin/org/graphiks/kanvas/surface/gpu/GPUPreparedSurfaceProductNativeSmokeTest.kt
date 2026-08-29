@@ -536,6 +536,53 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
     }
 
     @Test
+    fun `public Surface uniformly scaled translated round cap stroke preserves translated coverage`() {
+        val surface = Surface(width = 64, height = 64, format = PixelFormat.RGBA8)
+        surface.canvas {
+            save()
+            translate(4f, 6f)
+            scale(2f, 2f)
+            drawPath(
+                Path().apply {
+                    moveTo(8f, 16f)
+                    lineTo(24f, 16f)
+                },
+                Paint.stroke(ColorARGB.Red, 4f).copy(
+                    antiAlias = false,
+                    strokeCap = org.graphiks.kanvas.paint.StrokeCap.ROUND,
+                ),
+            )
+            restore()
+        }
+        val decisions = mutableListOf<GPUPreparedSurfaceRouteDecision>()
+        val result = GPUPreparedSurfaceProductEntry.render(
+            operations = surface.snapshotOps(),
+            width = surface.width,
+            height = surface.height,
+            format = surface.format,
+            config = surface.config,
+            executionPort = GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceNativeBackendPortFactory),
+            trace = GPUPreparedSurfaceRouteTrace(decisions::add),
+        )
+
+        val evidence = assertIs<GPUPreparedSurfaceRouteDecision.Prepared>(decisions.single()).evidence
+        val pixels = result.pixels.toByteArray()
+        var redPixels = 0
+        for (y in 0 until 64) for (x in 0 until 64) {
+            if (pixelAt(pixels, 64, x, y) == listOf(255, 0, 0, 255)) redPixels++
+        }
+        assertEquals(308, redPixels)
+        assertEquals(listOf(255, 0, 0, 255), pixelAt(pixels, 64, 20, 38))
+        assertEquals(listOf(255, 0, 0, 255), pixelAt(pixels, 64, 17, 38))
+        assertEquals(listOf(0, 0, 0, 0), pixelAt(pixels, 64, 15, 38))
+        assertEquals(0, result.stats.opsRefused)
+        assertTrue(evidence.draws + evidence.drawIndexed > 0L)
+        assertTrue(evidence.pipelineBinds > 0L)
+        assertTrue(evidence.submits > 0L)
+        assertTrue(evidence.readbackCopies > 0L)
+    }
+
+    @Test
     fun `public Surface quarter turn round cap stroke executes the pixel exact native route`() {
         val surface = Surface(width = 32, height = 32, format = PixelFormat.RGBA8)
         surface.canvas {
