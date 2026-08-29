@@ -307,6 +307,34 @@ class PathTessellatorTest {
     }
 
     @Test
+    fun `quadratic flattening uses bounded adaptive subdivision`() {
+        val tessellator = PathTessellator(tolerance = 0.25f, maxFanTriangles = 1024)
+        val flattened = tessellator.flattenWithContours(
+            PathData(
+                verbs = listOf(
+                    PathVerb.MoveTo(Point(100f, 0f)),
+                    PathVerb.QuadTo(Point(100f, 55.23f), Point(55.23f, 100f)),
+                    PathVerb.QuadTo(Point(0f, 100f), Point(0f, 55.23f)),
+                    PathVerb.QuadTo(Point(0f, 0f), Point(55.23f, 0f)),
+                    PathVerb.Close,
+                ),
+                points = emptyList(),
+            ),
+        )
+
+        // The former uniform estimator emitted 183 segments per quadratic
+        // here (551 points including the contour), while the bounded adaptive
+        // route emits exactly 50 points for this deterministic three-quad
+        // contour. Keep the count explicit so a future change cannot silently
+        // reintroduce fan pressure.
+        assertEquals(50, flattened.points.size)
+        tessellator.validateStencilEdgeFanBudget(flattened)
+        assertEquals(50, tessellator.stencilEdgeFan(flattened).triangleCount)
+        assertEquals(Point(100f, 0f), flattened.points.first())
+        assertEquals(Point(100f, 0f), flattened.points.last())
+    }
+
+    @Test
     fun `cubic bezier flattens correctly`() {
         val tessellator = PathTessellator(tolerance = 1f)
         val path = PathData(

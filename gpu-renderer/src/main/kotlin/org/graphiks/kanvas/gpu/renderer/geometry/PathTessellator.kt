@@ -188,12 +188,24 @@ class PathTessellator(
     }
 
     private fun emitQuadraticSegments(p0: Point, p1: Point, p2: Point, result: MutableList<Point>) {
-        val steps = quadraticStepCount(p0, p1, p2)
-        for (i in 1..steps) {
-            val t = i.toFloat() / steps
-            val x = (1 - t) * (1 - t) * p0.x + 2 * (1 - t) * t * p1.x + t * t * p2.x
-            val y = (1 - t) * (1 - t) * p0.y + 2 * (1 - t) * t * p1.y + t * t * p2.y
-            appendPoint(result, Point(x, y))
+        val pending = java.util.ArrayDeque<QuadraticSegment>()
+        pending.addLast(QuadraticSegment(p0, p1, p2, depth = 0))
+        while (pending.isNotEmpty()) {
+            val segment = pending.removeLast()
+            if (segment.depth >= MAX_QUADRATIC_SUBDIVISION_DEPTH ||
+                quadraticFlatness(segment.p0, segment.p1, segment.p2) <= tolerance
+            ) {
+                appendPoint(result, segment.p2)
+                continue
+            }
+
+            val p01 = midpoint(segment.p0, segment.p1)
+            val p12 = midpoint(segment.p1, segment.p2)
+            val p012 = midpoint(p01, p12)
+            val nextDepth = segment.depth + 1
+            // LIFO order keeps the emitted endpoints in curve order.
+            pending.addLast(QuadraticSegment(p012, p12, segment.p2, nextDepth))
+            pending.addLast(QuadraticSegment(segment.p0, p01, p012, nextDepth))
         }
     }
 
@@ -384,11 +396,16 @@ class PathTessellator(
         return GeometryTriangleData(vertices.toFloatArray(), indices.toIntArray())
     }
 
+    private fun quadraticFlatness(p0: Point, p1: Point, p2: Point): Float =
+        distanceToSegment(p1, p0, p2)
+
+    /** Conics still use the rational evaluator below; retain a conservative
+     * parameter count until a rational De Casteljau route is introduced. */
     private fun quadraticStepCount(p0: Point, p1: Point, p2: Point): Int {
-        val dx = p2.x - 2 * p1.x + p0.x
-        val dy = p2.y - 2 * p1.y + p0.y
-        val len = kotlin.math.sqrt(dx * dx + dy * dy)
-        return (len / tolerance).toInt().coerceAtLeast(2)
+        val dx = p2.x.toDouble() - 2.0 * p1.x + p0.x
+        val dy = p2.y.toDouble() - 2.0 * p1.y + p0.y
+        val len = kotlin.math.hypot(dx, dy)
+        return (len / tolerance.toDouble()).toInt().coerceAtLeast(2)
     }
 
     private data class ContourState(
@@ -405,7 +422,15 @@ class PathTessellator(
         val depth: Int,
     )
 
+    private data class QuadraticSegment(
+        val p0: Point,
+        val p1: Point,
+        val p2: Point,
+        val depth: Int,
+    )
+
     private companion object {
         const val MAX_CUBIC_SUBDIVISION_DEPTH = 16
+        const val MAX_QUADRATIC_SUBDIVISION_DEPTH = 16
     }
 }
