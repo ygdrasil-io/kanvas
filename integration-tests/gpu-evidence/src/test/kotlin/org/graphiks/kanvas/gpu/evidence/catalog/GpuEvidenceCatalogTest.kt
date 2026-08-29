@@ -104,6 +104,10 @@ class GpuEvidenceCatalogTest {
                 "implicit-closure-triangle-path",
                 "translated-triangle-path",
                 "uniform-scaled-triangle-path",
+                "quadratic-path-fill",
+                "cubic-path-fill",
+                "oval-path-fill",
+                "circle-path-fill",
                 "linear-gradient-three-stops",
                 "basic-primitives-empty-rect-refusal",
                 "perspective-transform-refusal",
@@ -181,6 +185,10 @@ class GpuEvidenceCatalogTest {
                 "implicit-closure-triangle-path",
                 "translated-triangle-path",
                 "uniform-scaled-triangle-path",
+                "quadratic-path-fill",
+                "cubic-path-fill",
+                "oval-path-fill",
+                "circle-path-fill",
             ),
             GpuEvidenceCatalog.renderCases.map { it.descriptor.id.value },
         )
@@ -193,11 +201,11 @@ class GpuEvidenceCatalogTest {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            List(75) { "kanvas.surface.render" },
+            List(79) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
-        assertEquals(75, GpuEvidenceCatalog.renderCases.size)
-        assertEquals(80, GpuEvidenceCatalog.cases.size)
+        assertEquals(79, GpuEvidenceCatalog.renderCases.size)
+        assertEquals(84, GpuEvidenceCatalog.cases.size)
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
 
         val solid = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "solid-card-stack" })
@@ -377,6 +385,10 @@ class GpuEvidenceCatalogTest {
             "implicit-closure-triangle-path",
             "translated-triangle-path",
             "uniform-scaled-triangle-path",
+            "quadratic-path-fill",
+            "cubic-path-fill",
+            "oval-path-fill",
+            "circle-path-fill",
         )
         assertEquals(
             expectedRenderIds.associateWith { "kanvas.surface.render" },
@@ -481,6 +493,10 @@ class GpuEvidenceCatalogTest {
                 "implicit-closure-triangle-path" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 2),
                 "translated-triangle-path" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 2),
                 "uniform-scaled-triangle-path" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 2),
+                "quadratic-path-fill" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 2),
+                "cubic-path-fill" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 2),
+                "oval-path-fill" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 2),
+                "circle-path-fill" to OraclePolicy.GeneratedCpu("surface-srgb-path-pixel-center", 2),
             ),
             GpuEvidenceCatalog.renderCases.associate { evidenceCase ->
                 evidenceCase.descriptor.id.value to evidenceCase.descriptor.oracle
@@ -563,6 +579,10 @@ class GpuEvidenceCatalogTest {
                 "implicit-closure-triangle-path" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent pixel-center winding/even-odd polygon membership."),
                 "translated-triangle-path" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent pixel-center winding/even-odd polygon membership."),
                 "uniform-scaled-triangle-path" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent pixel-center winding/even-odd polygon membership."),
+                "quadratic-path-fill" to ComparisonPolicy(0, 100.0, 1, "Independent pixel-center winding oracle evaluates the public quadratic Bézier analytically before polygon membership."),
+                "cubic-path-fill" to ComparisonPolicy(0, 100.0, 1, "Independent pixel-center winding oracle evaluates the public cubic Bézier before polygon membership."),
+                "oval-path-fill" to ComparisonPolicy(0, 100.0, 1, "Independent pixel-center winding oracle evaluates the four cubic oval segments before polygon membership."),
+                "circle-path-fill" to ComparisonPolicy(0, 100.0, 1, "Independent pixel-center winding oracle evaluates the four cubic circle segments before polygon membership."),
             ),
             GpuEvidenceCatalog.renderCases.associate { evidenceCase ->
                 evidenceCase.descriptor.id.value to evidenceCase.descriptor.comparison

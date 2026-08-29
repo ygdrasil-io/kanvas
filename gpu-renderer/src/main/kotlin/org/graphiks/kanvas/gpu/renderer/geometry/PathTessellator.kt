@@ -25,6 +25,8 @@ sealed interface PathVerb {
     data class QuadTo(val c: Point, val p: Point) : PathVerb
     /** Draws a cubic bezier curve to p using control points c1 and c2. */
     data class CubicTo(val c1: Point, val c2: Point, val p: Point) : PathVerb
+    /** Draws a rational quadratic Bézier curve with the supplied positive weight. */
+    data class ConicTo(val c: Point, val p: Point, val weight: Float) : PathVerb
     /** Closes the current contour back to its start point. */
     data object Close : PathVerb
 }
@@ -63,6 +65,18 @@ data class FlattenedPath(
     val contourStarts: List<Int>,
 )
 
+/** Stable input refusal emitted before a curve can produce partial geometry. */
+class PathTessellationRefusal(
+    val code: String,
+    message: String,
+) : IllegalArgumentException(message)
+
+/** Stable, pre-allocation refusal for a bounded path geometry budget. */
+class PathTessellationBudgetExceeded(
+    val code: String,
+    message: String,
+) : IllegalStateException(message)
+
 /**
  * Flattens bezier curves into line segments and triangulates
  * the resulting polygon into a triangle fan.
@@ -74,7 +88,15 @@ data class FlattenedPath(
 class PathTessellator(
     private val tolerance: Float = 0.25f,
     private val maxVertices: Int = 256,
+    private val maxFanTriangles: Int = GPUPathEdgeFanPayloadContract.MAX_TRIANGLES.toInt(),
+    private val maxGeometryBytes: Int = GPUPathEdgeFanPayloadContract.MAX_GEOMETRY_BYTES.toInt(),
 ) {
+    init {
+        require(tolerance.isFinite() && tolerance > 0f) { "Path tolerance must be finite and positive" }
+        require(maxVertices >= 0) { "Path vertex budget must be non-negative" }
+        require(maxFanTriangles >= 0) { "Path fan budget must be non-negative" }
+        require(maxGeometryBytes >= 0) { "Path geometry memory budget must be non-negative" }
+    }
     /**
      * Flattens a [PathData] into a list of [Point]s by
      * approximating quad/cubic curves with line segments.
@@ -115,6 +137,11 @@ class PathTessellator(
                     emitCubicSegments(current, verb.c1, verb.c2, verb.p, result)
                     current = verb.p
                 }
+                is PathVerb.ConicTo -> {
+                    beginContourIfNeeded(contour, current, result, contourStarts)
+                    emitConicSegments(current, verb.c, verb.p, verb.weight, result)
+                    current = verb.p
+                }
                 is PathVerb.Close -> {
                     if (contour.isOpen && current != contour.start) {
                         appendPoint(result, contour.start)
@@ -152,8 +179,9 @@ class PathTessellator(
 
     private fun appendPoint(result: MutableList<Point>, point: Point) {
         if (result.size >= maxVertices) {
-            throw IllegalStateException(
-                "Path flattened to ${result.size + 1} vertices, exceeds budget of $maxVertices"
+            throw PathTessellationBudgetExceeded(
+                code = "geometry.path.vertex_budget_exceeded",
+                message = "Path flattened to ${result.size + 1} vertices, exceeds budget of $maxVertices",
             )
         }
         result.add(point)
@@ -185,6 +213,36 @@ class PathTessellator(
         }
     }
 
+    private fun emitConicSegments(p0: Point, p1: Point, p2: Point, weight: Float, result: MutableList<Point>) {
+        if (!weight.isFinite() || weight <= 0f) {
+            throw PathTessellationRefusal(
+                code = "geometry.path.invalid_conic",
+                message = "Path conic weight must be finite and positive",
+            )
+        }
+        val steps = quadraticStepCount(p0, p1, p2)
+        for (i in 1..steps) {
+            val t = i.toFloat() / steps
+            val u = 1f - t
+            val denominator = u * u + 2f * weight * u * t + t * t
+            if (!denominator.isFinite() || denominator <= 0f) {
+                throw PathTessellationRefusal(
+                    code = "geometry.path.invalid_conic",
+                    message = "Path conic denominator must be finite and positive",
+                )
+            }
+            val x = (u * u * p0.x + 2f * weight * u * t * p1.x + t * t * p2.x) / denominator
+            val y = (u * u * p0.y + 2f * weight * u * t * p1.y + t * t * p2.y) / denominator
+            if (!x.isFinite() || !y.isFinite()) {
+                throw PathTessellationRefusal(
+                    code = "geometry.path.invalid_conic",
+                    message = "Path conic emitted non-finite point",
+                )
+            }
+            appendPoint(result, Point(x, y))
+        }
+    }
+
     /**
      * Triangulates a list of flattened contour points into a
      * triangle fan indexed buffer. The first vertex serves as
@@ -209,6 +267,40 @@ class PathTessellator(
     }
 
     /**
+     * Checks the stencil edge-fan route before it allocates its expanded vertex
+     * and index buffers. Surface adapters must call this during mapping.
+     */
+    fun validateStencilEdgeFanBudget(flattened: FlattenedPath) {
+        if (flattened.points.isEmpty()) {
+            require(flattened.contourStarts.isEmpty() || flattened.contourStarts == listOf(0)) {
+                "Empty FlattenedPath contour starts must point to zero exactly once"
+            }
+            return
+        }
+        val triangleCount = flattened.contourStarts.indices.sumOf { contourIndex ->
+            val start = flattened.contourStarts[contourIndex]
+            val end = flattened.contourStarts.getOrElse(contourIndex + 1) { flattened.points.size }
+            require(start in 0 until flattened.points.size && end in (start + 1)..flattened.points.size) {
+                "Path contour metadata is outside flattened point bounds"
+            }
+            end - start
+        }
+        if (triangleCount > maxFanTriangles) {
+            throw PathTessellationBudgetExceeded(
+                code = "geometry.path.fan_budget_exceeded",
+                message = "Path edge fan requires $triangleCount triangles, exceeds budget of $maxFanTriangles",
+            )
+        }
+        val geometryBytes = triangleCount.toLong() * 36L
+        if (geometryBytes > maxGeometryBytes.toLong()) {
+            throw PathTessellationBudgetExceeded(
+                code = "geometry.path.memory_budget_exceeded",
+                message = "Path edge fan requires $geometryBytes bytes, exceeds budget of $maxGeometryBytes",
+            )
+        }
+    }
+
+    /**
      * Produces one triangle from an exterior anchor to each contour edge for a
      * stencil write pass. Unlike [triangulate], contour boundaries are retained.
      */
@@ -225,6 +317,7 @@ class PathTessellator(
                 indices = intArrayOf(0, 1, 2),
             )
         }
+        validateStencilEdgeFanBudget(flattened)
         val anchor = Point(
             minOf(-1f, flattened.points.minOf { it.x } - 1f),
             minOf(-1f, flattened.points.minOf { it.y } - 1f),

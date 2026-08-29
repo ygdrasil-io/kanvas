@@ -77,6 +77,7 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPU_ANALYTIC_MULTI_RECT_MAX_ELEMEN
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds as GPUClipBounds
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellator
+import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellationBudgetExceeded
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.TileMode
@@ -612,6 +613,30 @@ internal object GPUOpMapper {
                         culledCoreOperationIndices += operationIndex
                         return@forEachIndexed
                     }
+                    lowered.geometryRefusal
+                        ?.takeIf { refusal ->
+                            refusal.code == "geometry.path.fan_budget_exceeded" ||
+                                refusal.code == "geometry.path.memory_budget_exceeded" ||
+                                refusal.code == "geometry.path.fan_budget_config_exceeded" ||
+                                refusal.code == "geometry.path.memory_budget_config_exceeded" ||
+                                refusal.code == "geometry.path.fan_budget_config_out_of_int_range" ||
+                                refusal.code == "geometry.path.memory_budget_config_out_of_int_range" ||
+                                refusal.code == "unsupported.core_primitive.path_vertex_budget_config_out_of_int_range"
+                        }
+                        ?.let { refusal ->
+                        return GPUOpMapping(
+                            visualCommands = emptyList(),
+                            stateEvents = stateEvents.toList(),
+                            preparedRefusal = GPUPreparedOperationRefusal(
+                                commandId = paintOrder,
+                                operationIndex = operationIndex,
+                                code = refusal.code,
+                                facts = refusal.refusalFacts,
+                            ),
+                            culledTextOperationIndices = culledTextOperationIndices.toSet(),
+                            culledCoreOperationIndices = culledCoreOperationIndices.toSet(),
+                        )
+                    }
                     visual += lowered
                     recordCommandIds(
                         operationIndex,
@@ -867,11 +892,25 @@ internal object GPUOpMapper {
                 else -> null
             }
         } catch (failure: IllegalStateException) {
-            if (!failure.isPathVertexBudgetFailure() || !operation.isCorePathOperation()) throw failure
+            if (!failure.isPathBudgetFailure() || !operation.isCorePathOperation()) throw failure
+            val tessellationBudget = failure as? PathTessellationBudgetExceeded
+            val budgetCode = when (tessellationBudget?.code) {
+                "geometry.path.fan_budget_exceeded",
+                "geometry.path.memory_budget_exceeded",
+                "geometry.path.fan_budget_config_exceeded",
+                "geometry.path.memory_budget_config_exceeded",
+                "geometry.path.fan_budget_config_out_of_int_range",
+                "geometry.path.memory_budget_config_out_of_int_range",
+                "unsupported.core_primitive.path_vertex_budget_config_out_of_int_range",
+                -> tessellationBudget.code
+                else -> "unsupported.core_primitive.path_vertex_budget"
+            }
             loweringRefusal = GPUCorePrimitiveGeometryRefusal(
-                code = "unsupported.core_primitive.path_vertex_budget",
+                code = budgetCode,
                 refusalFacts = mapOf(
                     "maxPathVertices" to config.maxPathVertices.toString(),
+                    "maxPathFanTriangles" to config.maxPathFanTriangles.toString(),
+                    "maxPathGeometryBytes" to config.maxPathGeometryBytes.toString(),
                     "reason" to (failure.message ?: "path_vertex_budget"),
                 ),
             ).also(onGeometryRefusal)
@@ -1134,7 +1173,7 @@ private fun GPUBlendMode.toPaintBlendMode(): BlendMode = when (this) {
     GPUBlendMode.LUMINOSITY -> BlendMode.LUMINOSITY
 }
 
-private fun Throwable.isPathVertexBudgetFailure(): Boolean =
+private fun Throwable.isPathBudgetFailure(): Boolean = this is PathTessellationBudgetExceeded ||
     message?.let { it.startsWith("Path flattened to ") || it.startsWith("Path has ") } == true
 
 private fun DisplayOp.isCorePathOperation(): Boolean = when (this) {
@@ -1271,10 +1310,20 @@ private fun DisplayOp.DrawPath.toPathCommand(
     config: RenderConfig,
     sourceAuthority: GPUPathSourceAuthority = GPUPathSourceAuthority.Unknown,
 ): NormalizedDrawCommand.FillPath {
-    val flattened = PathTessellator(
+    config.pathEdgeFanBudgetRefusalCodeOrNull()?.let { code ->
+        throw PathTessellationBudgetExceeded(
+            code = code,
+            message = "Public Surface path edge-fan configuration is outside the static payload contract",
+        )
+    }
+    val tessellator = PathTessellator(
         tolerance = config.curveTolerance,
         maxVertices = config.maxPathVertices.toInt(),
-    ).flattenWithContours(path.toPathTessellatorData())
+        maxFanTriangles = config.maxPathFanTriangles.toInt(),
+        maxGeometryBytes = config.maxPathGeometryBytes.toInt(),
+    )
+    val flattened = tessellator.flattenWithContours(path.toPathTessellatorData())
+    tessellator.validateStencilEdgeFanBudget(flattened)
     return toNormalizedCommand(
         commandId,
         target,

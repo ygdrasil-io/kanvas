@@ -14,6 +14,7 @@ import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.collections.immutableSet
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.geometry.GPUPathEdgeFanPayloadContract
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialProgram
 import org.graphiks.kanvas.gpu.renderer.materials.preparedMaterialSrgbToLinear
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
@@ -2438,7 +2439,7 @@ private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
                 require(stroke == null) {
                     "Fill stencil edge fans cannot retain stroke lowering facts"
                 }
-                require(sourceVertexCount <= CORE_PRIMITIVE_STENCIL_EDGE_FAN_SOURCE_VERTEX_BUDGET) {
+                require(sourceVertexCount <= GPUPathEdgeFanPayloadContract.MAX_TRIANGLES.toInt()) {
                     CORE_PRIMITIVE_STENCIL_EDGE_FAN_BUDGET_DIAGNOSTIC
                 }
                 require(sourceContourStarts.hasCanonicalContourLengths(sourceVertexCount)) {
@@ -2493,7 +2494,6 @@ private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
     }
 }
 
-private const val CORE_PRIMITIVE_STENCIL_EDGE_FAN_SOURCE_VERTEX_BUDGET = 256
 private const val CORE_PRIMITIVE_STENCIL_EDGE_FAN_BUDGET_DIAGNOSTIC =
     "unsupported.core_primitive.stencil_edge_fan_budget"
 
