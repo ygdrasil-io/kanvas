@@ -2781,7 +2781,7 @@ class FirstRoutePlannerTest {
             antiAlias = false,
         )
 
-        val plan = GPUFirstRoutePlanner(firstSlicePathFillCapabilities()).plan(command)
+        val plan = GPUFirstRoutePlanner(firstSlicePathFillStencilCoverCapabilities()).plan(command)
 
         assertEquals("native.path_stroke.stencil_cover", plan.analysisRecord.routeDecisionLabel)
         assertEquals("route.path_stroke.126", assertIs<GPURouteDecision.Native>(plan.routeDecision).route.routeId)
