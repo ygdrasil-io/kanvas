@@ -1169,6 +1169,8 @@ enum class GPUCorePrimitiveStrokeLoweringProof {
     MultiSegmentButtMiterV1,
     /** One integral horizontal segment with the [8,4] butt/miter dash proof at phase 0 or 4. */
     HorizontalDashedButtMiterV1,
+    /** One integral vertical segment with the [8,4] butt/miter dash proof at phase 0 or 4. */
+    VerticalDashedButtMiterV1,
 }
 
 /** Exact source stroke facts plus the named lowering implementation that consumed them. */
@@ -2494,7 +2496,10 @@ private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
                 }
                 require(
                     stroke.dashIntervals.isEmpty() ||
-                        (stroke.loweringProof == GPUCorePrimitiveStrokeLoweringProof.HorizontalDashedButtMiterV1 &&
+                        (stroke.loweringProof in setOf(
+                            GPUCorePrimitiveStrokeLoweringProof.HorizontalDashedButtMiterV1,
+                            GPUCorePrimitiveStrokeLoweringProof.VerticalDashedButtMiterV1,
+                        ) &&
                             stroke.dashIntervals == listOf(8f, 4f) && isBoundedHorizontalDashedPhase(stroke.dashPhase)),
                 ) { "Core stroke proof does not support this dash pattern" }
                 require(
@@ -2506,6 +2511,8 @@ private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
                         GPUCorePrimitiveStrokeLoweringProof.MultiSegmentButtMiterV1 ->
                             stroke.cap == "butt" && stroke.join == "miter"
                         GPUCorePrimitiveStrokeLoweringProof.HorizontalDashedButtMiterV1 ->
+                            sourceVertexCount == 2 && stroke.cap == "butt" && stroke.join == "miter"
+                        GPUCorePrimitiveStrokeLoweringProof.VerticalDashedButtMiterV1 ->
                             sourceVertexCount == 2 && stroke.cap == "butt" && stroke.join == "miter"
                     },
                 ) {

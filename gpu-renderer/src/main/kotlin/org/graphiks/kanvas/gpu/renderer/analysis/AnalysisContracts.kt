@@ -2554,7 +2554,7 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
             strokeWidth.isFinite() && strokeWidth in 0.5f..64f &&
             (!antiAlias || matchesHorizontalAntiAliasedButtMiterV1()) &&
             ((dashIntervals == null || dashIntervals.isEmpty()) && pathEffectKind == null ||
-                matchesHorizontalDashedButtMiterV1()) &&
+                matchesHorizontalDashedButtMiterV1() || matchesVerticalDashedButtMiterV1()) &&
             (
                 strokeCap == "butt" ||
                     (tessellatedVertices.size == 4 && strokeCap == "square") ||
@@ -2578,6 +2578,20 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
         return startX.isIntegralDeviceCoordinate() && startY.isIntegralDeviceCoordinate() &&
             endX.isIntegralDeviceCoordinate() && endY.isIntegralDeviceCoordinate() &&
             startY == endY && endX - startX >= 12f
+    }
+
+    private fun NormalizedDrawCommand.FillPath.matchesVerticalDashedButtMiterV1(): Boolean {
+        if (pathEffectKind != "Dash" || dashIntervals?.toList() != listOf(8f, 4f) ||
+            !isBoundedHorizontalDashedPhase(dashPhase) || strokeWidth != 4f || strokeCap != "butt" || strokeJoin != "miter" ||
+            tessellatedVertices.size != 4 || transform.type !in setOf(GPUTransformType.Identity, GPUTransformType.Translate)
+        ) return false
+        val startX = tessellatedVertices[0] + transform.translateX
+        val startY = tessellatedVertices[1] + transform.translateY
+        val endX = tessellatedVertices[2] + transform.translateX
+        val endY = tessellatedVertices[3] + transform.translateY
+        return startX.isIntegralDeviceCoordinate() && startY.isIntegralDeviceCoordinate() &&
+            endX.isIntegralDeviceCoordinate() && endY.isIntegralDeviceCoordinate() &&
+            startX == endX && endY - startY >= 12f
     }
 
     /** The first native StencilAA/MSAA stroke lane: one horizontal width-four segment. */
