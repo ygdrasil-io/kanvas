@@ -17,6 +17,7 @@ data class InventoryRenderEvidence(
     val route: String = "gpu",
     val setupState: InventorySetupState = InventorySetupState.SUCCEEDED,
     val setupDiagnostic: String? = null,
+    val conformanceDecision: GmConformanceDecision = GmConformanceDecision(GmConformanceScope.ELIGIBLE),
 ) {
     init {
         require(operationCount >= 0) { "operationCount must be non-negative" }
@@ -56,7 +57,12 @@ data class SkiaGmInventoryRow(
     val referenceStatus: String,
     val setupState: InventorySetupState = InventorySetupState.NOT_ATTEMPTED,
     val setupDiagnostic: String? = null,
+    val conformanceDecision: GmConformanceDecision = GmConformanceDecision(GmConformanceScope.ELIGIBLE),
 ) {
+    val conformanceScope: String get() = conformanceDecision.scope.wireName
+    val conformanceReason: String? get() = conformanceDecision.reason
+    val conformanceOwner: String? get() = conformanceDecision.owner
+
     init {
         operationCount?.let { require(it >= 0) { "operationCount must be non-negative" } }
         if (attempted) {
@@ -116,6 +122,7 @@ fun buildSkiaGmInventory(
     val scores = loadSkiaGmScores(scoresFile, names.toSet(), allowOrphanScores)
     return gms.map { gm ->
         val evidence = renderEvidence[gm.name]
+        val conformanceDecision = evidence?.conformanceDecision ?: SkiaGmConformance.decisionFor(gm)
         SkiaGmInventoryRow(
             name = gm.name,
             family = gm.renderFamily.name,
@@ -135,6 +142,7 @@ fun buildSkiaGmInventory(
             },
             setupState = evidence?.setupState ?: InventorySetupState.NOT_ATTEMPTED,
             setupDiagnostic = evidence?.setupDiagnostic,
+            conformanceDecision = conformanceDecision,
         )
     }
 }
@@ -142,8 +150,9 @@ fun buildSkiaGmInventory(
 fun renderSkiaGmInventoryJson(rows: List<SkiaGmInventoryRow>, scoreAudit: SkiaGmScoreAudit = SkiaGmScoreAudit(emptyList(), true)): String = buildString {
     val orphanRows = scoreAudit.orphanRows.joinToString(",") { "\"${inventoryJsonEscape(it)}\"" }
     appendLine("{")
-    appendLine("  \"schemaVersion\": \"gpu-gm-inventory-v2\",")
+    appendLine("  \"schemaVersion\": \"gpu-gm-inventory-v3\",")
     appendLine("  \"scoreAudit\": {\"strict\": ${scoreAudit.strict}, \"orphanCount\": ${scoreAudit.orphanRows.size}, \"orphanRows\": [$orphanRows]},")
+    appendLine("  \"summary\": ${inventorySummaryJson(rows)},")
     appendLine("  \"rows\": [")
     rows.forEachIndexed { index, row ->
         val comma = if (index + 1 == rows.size) "" else ","
@@ -164,12 +173,27 @@ fun renderSkiaGmInventoryJson(rows: List<SkiaGmInventoryRow>, scoreAudit: SkiaGm
         appendLine("      \"route\": \"${inventoryJsonEscape(row.route)}\",")
         appendLine("      \"firstDiagnostic\": $firstDiagnostic,")
         appendLine("      \"setupState\": \"${row.setupState.name}\",")
-        appendLine("      \"setupDiagnostic\": ${row.setupDiagnostic?.let { "\"${inventoryJsonEscape(it)}\"" } ?: "null"}")
+        appendLine("      \"setupDiagnostic\": ${row.setupDiagnostic?.let { "\"${inventoryJsonEscape(it)}\"" } ?: "null"},")
+        appendLine("      \"conformanceScope\": \"${row.conformanceScope}\",")
+        appendLine("      \"conformanceReason\": ${row.conformanceReason?.let { "\"${inventoryJsonEscape(it)}\"" } ?: "null"},")
+        appendLine("      \"conformanceOwner\": ${row.conformanceOwner?.let { "\"${inventoryJsonEscape(it)}\"" } ?: "null"}")
         appendLine("    }$comma")
     }
     appendLine("  ]")
     appendLine("}")
 }.trimEnd()
+
+private fun inventorySummaryJson(rows: List<SkiaGmInventoryRow>): String {
+    fun countsJson(counts: Map<String, Int>): String = counts.toSortedMap().entries.joinToString(",") {
+        "\"${inventoryJsonEscape(it.key)}\": ${it.value}"
+    }.let { "{$it}" }
+
+    val scopes = rows.groupingBy { it.conformanceScope }.eachCount()
+    val families = rows.groupingBy { it.family }.eachCount()
+    val terminalDiagnostics = rows.asSequence().filter { it.terminalFailure }.mapNotNull { it.firstDiagnostic }
+        .groupingBy { it }.eachCount()
+    return "{\"registeredCount\": ${rows.size},\"mustAttemptCount\": ${rows.count { it.conformanceDecision.mustAttempt }},\"byScope\": ${countsJson(scopes)},\"byFamily\": ${countsJson(families)},\"terminalDiagnostics\": ${countsJson(terminalDiagnostics)}}"
+}
 
 fun main(args: Array<String>) {
     require(args.size == 1) { "Usage: SkiaGmInventory <output.json>" }
@@ -177,29 +201,7 @@ fun main(args: Array<String>) {
     try {
         val entries = SkiaGmRegistry.entries()
         val rows = entries.mapNotNull { it.gm }
-        val evidence = rows.associate { gm ->
-            gm.name to when {
-                gm.renderFamily == RenderFamily.TEXT -> InventoryRenderEvidence(
-                    attempted = false,
-                    renderSucceeded = false,
-                    terminalFailure = false,
-                    operationCount = 0,
-                    diagnostics = listOf("excluded:text-dependency-gated"),
-                    route = "excluded:text-dependency-gated",
-                    setupState = InventorySetupState.NOT_ATTEMPTED,
-                )
-                gm.renderCost == RenderCost.BLOCKING -> InventoryRenderEvidence(
-                    attempted = false,
-                    renderSucceeded = false,
-                    terminalFailure = false,
-                    operationCount = 0,
-                    diagnostics = listOf("excluded:blocking-by-policy"),
-                    route = "excluded:blocking-by-policy",
-                    setupState = InventorySetupState.NOT_ATTEMPTED,
-                )
-                else -> SkiaGmRenderer.inventoryEvidence(gm)
-            }
-        }
+        val evidence = rows.associate { gm -> gm.name to SkiaGmRenderer.inventoryEvidence(gm) }
         val scoreFile = File("test-similarity-scores.properties")
         val scoreAudit = auditSkiaGmScores(scoreFile, rows.map { it.name }.toSet())
         val inventory = buildSkiaGmInventory(rows, File("src/test/resources/reference"), scoreFile, evidence, allowOrphanScores = true)

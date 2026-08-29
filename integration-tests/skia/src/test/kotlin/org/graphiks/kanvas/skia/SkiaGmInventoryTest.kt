@@ -114,6 +114,37 @@ class SkiaGmInventoryTest {
     }
 
     @Test
+    fun `v3 json exposes conformance fields and deterministic summaries`() {
+        val row = SkiaGmInventoryRow(
+            name = "a",
+            family = "PATH",
+            referenceName = "a",
+            referenceAvailable = true,
+            renderAvailable = true,
+            attempted = true,
+            terminalFailure = false,
+            score = 97.5,
+            operationCount = 3,
+            route = "gpu",
+            firstDiagnostic = null,
+            referenceStatus = "trusted",
+            setupState = InventorySetupState.SUCCEEDED,
+            conformanceDecision = GmConformanceDecision(GmConformanceScope.ELIGIBLE),
+        )
+
+        val json = renderSkiaGmInventoryJson(listOf(row))
+
+        assertTrue("\"schemaVersion\": \"gpu-gm-inventory-v3\"" in json)
+        assertTrue("\"conformanceScope\": \"eligible\"" in json)
+        assertTrue("\"conformanceReason\": null" in json)
+        assertTrue("\"conformanceOwner\": null" in json)
+        assertTrue("\"registeredCount\": 1" in json)
+        assertTrue("\"mustAttemptCount\": 1" in json)
+        assertTrue("\"byScope\": {\"eligible\": 1}" in json)
+        assertTrue("\"byFamily\": {\"PATH\": 1}" in json)
+    }
+
+    @Test
     fun `score parser rejects duplicate and orphan rows`() {
         val root = Files.createTempDirectory("gm-scores").toFile()
         val duplicate = root.resolve("duplicate.properties").apply { writeText("a=1\na=2\n") }

@@ -100,6 +100,8 @@ internal fun captureInventoryEvidence(
     gm: SkiaGm,
     createSurface: () -> InventorySurfaceCapture,
 ): InventoryRenderEvidence {
+    val initialDecision = SkiaGmConformance.decisionFor(gm)
+    if (!initialDecision.mustAttempt) return excludedInventoryEvidence(initialDecision)
     val surface = try {
         createSurface()
     } catch (failure: Exception) {
@@ -111,13 +113,15 @@ internal fun captureInventoryEvidence(
             route = "setup-failure",
             setupState = InventorySetupState.FAILED,
             setupDiagnostic = failure.message.orEmpty(),
+            conformanceDecision = initialDecision,
         )
     }
+    lateinit var gmCanvas: GmCanvas
     try {
         val canvas = surface.canvas()
         canvas.drawRect(RectF32(0f, 0f, gm.width.toFloat(), gm.height.toFloat()),
             Paint(color = ColorARGB.fromRGBA(1f, 1f, 1f, 1f), antiAlias = false))
-        val gmCanvas = GmCanvas(canvas, gm.width, gm.height)
+        gmCanvas = GmCanvas(canvas, gm.width, gm.height)
         gm.onOnceBeforeDraw(gmCanvas)
         gm.draw(gmCanvas, gm.width, gm.height)
     } catch (failure: Exception) {
@@ -129,8 +133,11 @@ internal fun captureInventoryEvidence(
             route = "setup-failure",
             setupState = InventorySetupState.FAILED,
             setupDiagnostic = failure.message.orEmpty(),
+            conformanceDecision = initialDecision,
         )
     }
+    val finalDecision = SkiaGmConformance.decisionFor(gm, gmCanvas.observedExternalDependencies())
+    if (!finalDecision.mustAttempt) return excludedInventoryEvidence(finalDecision, surface.snapshotOperationCount())
     return try {
         val result = surface.render()
         InventoryRenderEvidence(
@@ -140,6 +147,7 @@ internal fun captureInventoryEvidence(
             operationCount = surface.snapshotOperationCount(),
             diagnostics = result.diagnostics.entries.map { "${it.code}: ${it.reason}" },
             route = "gpu",
+            conformanceDecision = finalDecision,
         )
     } catch (failure: Exception) {
         InventoryRenderEvidence(
@@ -149,9 +157,24 @@ internal fun captureInventoryEvidence(
             operationCount = surface.snapshotOperationCount(),
             diagnostics = listOf(failure.message.orEmpty()),
             route = "render-failure",
+            conformanceDecision = finalDecision,
         )
     }
 }
+
+private fun excludedInventoryEvidence(
+    decision: GmConformanceDecision,
+    operationCount: Int = 0,
+): InventoryRenderEvidence = InventoryRenderEvidence(
+    attempted = false,
+    renderSucceeded = false,
+    terminalFailure = false,
+    operationCount = operationCount,
+    diagnostics = listOf("excluded:${decision.scope.wireName}"),
+    route = "excluded:${decision.scope.wireName}",
+    setupState = InventorySetupState.NOT_ATTEMPTED,
+    conformanceDecision = decision,
+)
 
 data class SkiaRenderResult(
     val rgba: ByteArray,
