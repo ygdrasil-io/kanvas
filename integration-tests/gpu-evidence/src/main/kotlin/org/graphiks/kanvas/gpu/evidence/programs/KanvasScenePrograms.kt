@@ -1963,6 +1963,22 @@ object KanvasScenePrograms {
         )
     })
 
+    /** The bounded vertical dash route consumed by an integral device scissor. */
+    fun scissoredVerticalDashedButtMiterStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        save()
+        clipRect(RectF32.ofLTRB(14f, 8f, 19f, 20f), antiAlias = false)
+        drawPath(
+            Path { moveTo(16f, 4f); lineTo(16f, 28f) },
+            Paint.stroke(ColorARGB.Red, 4f).copy(
+                antiAlias = false,
+                strokeCap = StrokeCap.BUTT,
+                strokeJoin = StrokeJoin.MITER,
+                pathEffect = PathEffect.Dash(floatArrayOf(8f, 4f), phase = 0f),
+            ),
+        )
+        restore()
+    })
+
     /** The same bounded dash route consumed by an integral device scissor. */
     fun scissoredHorizontalDashedButtMiterStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
         save()
