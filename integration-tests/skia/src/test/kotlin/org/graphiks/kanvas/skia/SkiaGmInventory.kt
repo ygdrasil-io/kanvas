@@ -210,7 +210,16 @@ fun main(args: Array<String>) {
         val evidence = rows.associate { gm -> gm.name to SkiaGmRenderer.inventoryEvidence(gm) }
         val scoreFile = File("test-similarity-scores.properties")
         val scoreAudit = auditSkiaGmScores(scoreFile, rows.map { it.name }.toSet())
-        val inventory = buildSkiaGmInventory(rows, File("src/test/resources/reference"), scoreFile, evidence, allowOrphanScores = true)
+        val inventory = buildSkiaGmInventory(
+            gms = rows,
+            referenceDir = File("src/test/resources/reference"),
+            scoresFile = scoreFile,
+            renderEvidence = evidence,
+            allowOrphanScores = false,
+        )
+        require(scoreAudit.strict) {
+            "Orphan GM scores: ${scoreAudit.orphanRows.joinToString()}"
+        }
         val failedProviders = entries.filter { it.gm == null }
         val allRows = inventory + failedProviders.map(::providerUnloadableInventoryRow)
         writeSkiaGmInventoryJson(File(args[0]), allRows, scoreAudit)
