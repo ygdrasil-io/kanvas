@@ -2322,6 +2322,87 @@ class GPUFramePathApiInventoryNativeSmokeTest {
     }
 
     @Test
+    fun `clamp linear gradient butt miter stroke under even odd hole clip renders natively`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        val capabilities = requireNotNull(backend.capabilities)
+        val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(RenderConfig.DEFAULT.mapPreparedGpuColorConfig())
+        val targetBounds = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, 32, 32)
+        val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.gradient-butt-even-odd-hole-clip")
+        val clipPath = Path().apply {
+            fillType = FillType.EVEN_ODD
+            addRect(RectF32.ofLTRB(3.25f, 3.25f, 28.75f, 28.75f))
+            addRect(RectF32.ofLTRB(10.25f, 10.25f, 21.75f, 21.75f))
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(5.25f, 8.25f)
+                        lineTo(21.25f, 20.25f)
+                    },
+                    Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                        shader = Shader.LinearGradient(
+                            Point2F32(0f, 0f),
+                            Point2F32(32f, 0f),
+                            listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                        ),
+                        antiAlias = false,
+                        strokeCap = StrokeCap.BUTT,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.Identity,
+                    ClipStack.Complex(listOf(ClipStackOp.PathOp(clipPath, ClipOp.INTERSECT, antiAlias = false))),
+                ),
+            ),
+            target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+            deviceGeneration = backend.deviceGeneration,
+        )
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+        val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(
+            inventory.visualCommands.single().clipExecutionPlan,
+        )
+        assertEquals(GPUClipStencilOperation.Invert, execution.producer.frontPassOperation)
+        assertEquals(GPUClipStencilOperation.Invert, execution.producer.backPassOperation)
+        assertEquals(GPUClipStencilCompare.NotEqual, execution.consumer.compare)
+        val clipGeometry = assertIs<GPUClipExecutionGeometry.Path>(execution.producer.geometry)
+        assertEquals(GPUClipFillRule.EvenOdd, clipGeometry.fillRule)
+        assertTrue(!clipGeometry.inverseFill)
+        val preparation = GPUFramePathApiInventory.prepareNativeTaskList(
+            inventory,
+            capabilities,
+            targetBounds,
+            readbackId,
+        )
+        val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            preparation,
+            (preparation as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}; facts=${it.facts}"
+            },
+        ).taskList
+        val session = backend.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(32, 32, colorMapping.physicalFormat, colorMapping.interpretation),
+        )
+        try {
+            val completed = session.renderFrame(
+                prepared,
+                GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
+            ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+            assertEquals(GPUFrameStructuralOutcome.Succeeded, completed.outcome)
+            val gpu = assertIs<GPUSceneFrameOutput.ReadbackRgba>(completed.output).bytes
+            assertContentEquals(deterministicDiagonalButtMiterGradientEvenOddHoleClipOracle(), gpu)
+            assertEquals(1L, session.nativeCounters().submits)
+            assertEquals(1L, session.nativeCounters().readbackCopies)
+        } finally {
+            session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
     fun `clamp linear gradient round stroke under winding path clip remains refused`() {
         val backend = GPUBackendRuntimeNativeFactory.createOrNull()
         assumeTrue(backend != null)
@@ -4012,6 +4093,51 @@ class GPUFramePathApiInventoryNativeSmokeTest {
                     val v = ((clipCy - clipAy) * (px - clipCx) +
                         (clipAx - clipCx) * (py - clipCy)) / denominator
                     if (u >= 0f && v >= 0f && u + v <= 1f) continue
+                    val projection = ((px - strokeAx) * strokeDx + (py - strokeAy) * strokeDy) /
+                        strokeLengthSquared
+                    if (projection < 0f || projection > 1f) continue
+                    val closestX = strokeAx + projection * strokeDx
+                    val closestY = strokeAy + projection * strokeDy
+                    val distanceX = px - closestX
+                    val distanceY = py - closestY
+                    if (distanceX * distanceX + distanceY * distanceY > halfWidthSquared) continue
+                    val t = (px / 32f).coerceIn(0f, 1f)
+                    val red = linearToSrgb((1f - t) * srgbToLinear(1f) + t * srgbToLinear(0f))
+                    val blue = linearToSrgb((1f - t) * srgbToLinear(0f) + t * srgbToLinear(1f))
+                    val offset = (y * 32 + x) * 4
+                    rgba[offset] = (red * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 2] = (blue * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 3] = 0xff.toByte()
+                }
+            }
+        }
+
+    /** Independent pixel-centre oracle for a gradient stroke through an EvenOdd hole. */
+    private fun deterministicDiagonalButtMiterGradientEvenOddHoleClipOracle(): ByteArray =
+        ByteArray(32 * 32 * 4).also { rgba ->
+            val strokeAx = 5.25f
+            val strokeAy = 8.25f
+            val strokeBx = 21.25f
+            val strokeBy = 20.25f
+            val strokeDx = strokeBx - strokeAx
+            val strokeDy = strokeBy - strokeAy
+            val strokeLengthSquared = strokeDx * strokeDx + strokeDy * strokeDy
+            val halfWidthSquared = 2f * 2f
+            val outerLeft = 3.25f
+            val outerTop = 3.25f
+            val outerRight = 28.75f
+            val outerBottom = 28.75f
+            val innerLeft = 10.25f
+            val innerTop = 10.25f
+            val innerRight = 21.75f
+            val innerBottom = 21.75f
+            for (y in 0 until 32) {
+                for (x in 0 until 32) {
+                    val px = x + 0.5f
+                    val py = y + 0.5f
+                    val inOuter = px > outerLeft && px < outerRight && py > outerTop && py < outerBottom
+                    val inInner = px > innerLeft && px < innerRight && py > innerTop && py < innerBottom
+                    if (!inOuter.xor(inInner)) continue
                     val projection = ((px - strokeAx) * strokeDx + (py - strokeAy) * strokeDy) /
                         strokeLengthSquared
                     if (projection < 0f || projection > 1f) continue
