@@ -343,6 +343,22 @@ class SkiaGmInventoryTest {
     }
 
     @Test
+    fun `non fatal Error during draw is isolated as an eligible setup failure`() {
+        val surface = FailingRenderInventorySurface()
+
+        val evidence = captureInventoryEvidence(MeshZeroInitInventoryProbeGm()) { surface }
+
+        assertFalse(evidence.attempted)
+        assertFalse(evidence.renderSucceeded)
+        assertFalse(evidence.terminalFailure)
+        assertEquals(InventorySetupState.FAILED, evidence.setupState)
+        assertEquals("setup-failure", evidence.route)
+        assertEquals("STUB.MESH.GPU_ZERO_INIT", evidence.setupDiagnostic)
+        assertEquals(GmConformanceScope.ELIGIBLE, evidence.conformanceDecision.scope)
+        assertEquals(0, surface.renderCalls)
+    }
+
+    @Test
     fun `one failing Surface render is terminal and is never retried`() {
         val surface = FailingRenderInventorySurface()
         val evidence = captureInventoryEvidence(InventoryProbeGm()) { surface }
@@ -391,6 +407,14 @@ private class UnsupportedStrokeInventoryProbeGm : SkiaGm by InventoryProbeGm() {
 private class ThrowingDrawInventoryProbeGm : SkiaGm by InventoryProbeGm() {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         throw IllegalStateException("gm-draw-failed-after-background")
+    }
+}
+
+private class MeshZeroInitInventoryProbeGm : SkiaGm by InventoryProbeGm() {
+    override val name = "mesh_zero_init"
+
+    override fun draw(canvas: GmCanvas, width: Int, height: Int) {
+        throw NotImplementedError("STUB.MESH.GPU_ZERO_INIT")
     }
 }
 

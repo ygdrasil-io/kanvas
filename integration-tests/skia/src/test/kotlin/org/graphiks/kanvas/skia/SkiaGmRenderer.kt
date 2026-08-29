@@ -104,7 +104,8 @@ internal fun captureInventoryEvidence(
     if (!initialDecision.mustAttempt) return excludedInventoryEvidence(initialDecision)
     val surface = try {
         createSurface()
-    } catch (failure: Exception) {
+    } catch (failure: Throwable) {
+        rethrowFatalSetupFailure(failure)
         return InventoryRenderEvidence(
             attempted = false,
             renderSucceeded = false,
@@ -125,7 +126,8 @@ internal fun captureInventoryEvidence(
         gmCanvas = createdCanvas
         gm.onOnceBeforeDraw(createdCanvas)
         gm.draw(createdCanvas, gm.width, gm.height)
-    } catch (failure: Exception) {
+    } catch (failure: Throwable) {
+        rethrowFatalSetupFailure(failure)
         val finalDecision = gmCanvas?.let { canvas ->
             SkiaGmConformance.decisionFor(gm, canvas.observedExternalDependencies())
         } ?: initialDecision
@@ -159,7 +161,8 @@ internal fun captureInventoryEvidence(
             route = "gpu",
             conformanceDecision = finalDecision,
         )
-    } catch (failure: Exception) {
+    } catch (failure: Throwable) {
+        rethrowFatalSetupFailure(failure)
         InventoryRenderEvidence(
             attempted = true,
             renderSucceeded = false,
@@ -170,6 +173,11 @@ internal fun captureInventoryEvidence(
             conformanceDecision = finalDecision,
         )
     }
+}
+
+@Suppress("DEPRECATION")
+private fun rethrowFatalSetupFailure(failure: Throwable) {
+    if (failure is VirtualMachineError || failure is ThreadDeath) throw failure
 }
 
 private fun excludedInventoryEvidence(
