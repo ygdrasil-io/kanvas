@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="org.graphiks.kanvas.skia.gm.clip.SimpleAaclipGmTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-08-13T21:43:52.224Z" hostname="b3-16-2026-08-13-16-13" time="0.001">
-  <properties/>
-  <testcase name="port keeps Skia background and clip geometry()" classname="org.graphiks.kanvas.skia.gm.clip.SimpleAaclipGmTest" time="0.001"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

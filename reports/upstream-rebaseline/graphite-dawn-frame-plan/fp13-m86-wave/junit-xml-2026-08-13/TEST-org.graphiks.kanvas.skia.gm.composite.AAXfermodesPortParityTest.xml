@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="org.graphiks.kanvas.skia.gm.composite.AAXfermodesPortParityTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-08-13T21:43:52.225Z" hostname="b3-16-2026-08-13-16-13" time="0.001">
-  <properties/>
-  <testcase name="SCREEN is the coefficient cutoff()" classname="org.graphiks.kanvas.skia.gm.composite.AAXfermodesPortParityTest" time="0.0"/>
-  <testcase name="upstream mode order matches SkBlendMode C++ parity order()" classname="org.graphiks.kanvas.skia.gm.composite.AAXfermodesPortParityTest" time="0.0"/>
-  <testcase name="upstream geometry constants match the C++ GM()" classname="org.graphiks.kanvas.skia.gm.composite.AAXfermodesPortParityTest" time="0.0"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

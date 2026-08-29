@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="org.graphiks.kanvas.skia.gm.image.AllBitmapConfigsGmTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-08-13T21:43:53.435Z" hostname="b3-16-2026-08-13-16-13" time="0.014">
-  <properties/>
-  <testcase name="draws one full-size image for each bitmap config()" classname="org.graphiks.kanvas.skia.gm.image.AllBitmapConfigsGmTest" time="0.014"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>
