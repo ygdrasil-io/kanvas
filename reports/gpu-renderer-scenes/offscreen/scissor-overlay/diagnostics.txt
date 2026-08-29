@@ -1,8 +1,0 @@
-rendered scissor-overlay via WebGPU offscreen
-adapter=Apple M2 Max
-clearCommands=1
-fillRectCommands=3
-fillRRectCommands=0
-linearGradientRectCommands=0
-clipCommands=1
-bitmapRectCommands=0

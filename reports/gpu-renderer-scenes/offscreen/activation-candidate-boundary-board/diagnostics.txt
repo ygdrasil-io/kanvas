@@ -1,8 +1,0 @@
-rendered activation-candidate-boundary-board via WebGPU offscreen
-adapter=Apple M2 Max
-clearCommands=1
-fillRectCommands=6
-fillRRectCommands=0
-linearGradientRectCommands=0
-clipCommands=0
-bitmapRectCommands=0

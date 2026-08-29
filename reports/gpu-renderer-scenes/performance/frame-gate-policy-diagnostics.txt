@@ -1,9 +1,0 @@
-frame-gate-policy baseline=Apple M-series targetFps=60 warnFps=30 targetFrameMs=16.6667 warnFrameMs=33.3333 anyQuarantined=false
-frame-gate family=FillRect frameTimeMs=4.6678 fps=214.2344 status=pass
-frame-gate family=LinearGradient frameTimeMs=4.6792 fps=213.7118 status=pass
-frame-gate family=RadialGradient frameTimeMs=3.9956 fps=250.2770 status=pass
-frame-gate family=SweepGradient frameTimeMs=3.7131 fps=269.3202 status=pass
-frame-gate family=Blur frameTimeMs=6.7312 fps=148.5630 status=pass
-frame-gate family=ColorMatrix frameTimeMs=3.1033 fps=322.2370 status=pass
-frame-gate family=Stroke frameTimeMs=3.2530 fps=307.4041 status=pass
-nonclaim:frame-gate-policy no-product-activation no-cross-platform-claim apple-m-series-baseline-only
