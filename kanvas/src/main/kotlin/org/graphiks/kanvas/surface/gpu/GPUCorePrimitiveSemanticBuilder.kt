@@ -3,6 +3,7 @@ package org.graphiks.kanvas.surface.gpu
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.pow
+import kotlin.math.sqrt
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUDrawAnalysisRecord
 import org.graphiks.kanvas.gpu.renderer.analysis.matchesCorePrimitiveRectGeometry
 import org.graphiks.kanvas.gpu.renderer.analysis.matchesCorePrimitiveRRectGeometry
@@ -12,6 +13,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.commands.isPositiveUniformScaleTranslateGradientLocalMatrix
 import org.graphiks.kanvas.gpu.renderer.commands.isBoundedNativePathHairline
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.geometry.FlattenedPath
@@ -435,10 +437,19 @@ private fun GPUMaterialDescriptor?.toCorePrimitiveMaterial(
         ) {
             refuseCoreMaterial("unsupported.core_primitive.material.stops", facts)
         }
+        val deviceCenter = deviceGradientTransform?.map(centerX, centerY) ?: (centerX to centerY)
+        val deviceRadius = deviceGradientTransform?.let { transform ->
+            val center = deviceCenter
+            val edge = transform.map(centerX + radius, centerY)
+            val dx = edge.first - center.first
+            val dy = edge.second - center.second
+            (dx * dx + dy * dy).takeIf { it.isFinite() && it > 0f }?.let(::sqrt)
+                ?: refuseCoreMaterial("unsupported.core_primitive.material.radial.radius", facts)
+        } ?: radius
         val payload = GPUCorePrimitiveMaterialPayload.RadialGradient(
-            centerX = centerX,
-            centerY = centerY,
-            radius = radius,
+            centerX = deviceCenter.first,
+            centerY = deviceCenter.second,
+            radius = deviceRadius,
             localMatrix = localMatrix,
             interpolation = interpolation,
             tileMode = tileMode,
@@ -450,6 +461,7 @@ private fun GPUMaterialDescriptor?.toCorePrimitiveMaterial(
         payload to listOf(0f, 0f, 0f, 0f)
     }
     is GPUMaterialDescriptor.SweepGradient -> {
+        val angleOffset = deviceGradientTransform?.rebasedSweepAngleOffsetDegrees() ?: 0f
         val facts = this@toCorePrimitiveMaterial.corePrimitiveMaterialFacts()
         if (tileMode != "clamp") {
             refuseCoreMaterial("unsupported.core_primitive.material.tile_mode", facts)
@@ -484,11 +496,18 @@ private fun GPUMaterialDescriptor?.toCorePrimitiveMaterial(
         ) {
             refuseCoreMaterial("unsupported.core_primitive.material.stops", facts)
         }
-        val payload = GPUCorePrimitiveMaterialPayload.SweepGradient(
-            centerX = centerX,
-            centerY = centerY,
+        val deviceCenter = deviceGradientTransform?.map(centerX, centerY) ?: (centerX to centerY)
+        val (rebasedStartAngle, rebasedEndAngle) = rebaseSweepAnglesWithFullTurnOffset(
             startAngle = startAngle,
             endAngle = endAngle,
+            angleOffset = angleOffset,
+            sweepSpan = sweepSpan,
+        )
+        val payload = GPUCorePrimitiveMaterialPayload.SweepGradient(
+            centerX = deviceCenter.first,
+            centerY = deviceCenter.second,
+            startAngle = rebasedStartAngle,
+            endAngle = rebasedEndAngle,
             localMatrix = localMatrix,
             interpolation = interpolation,
             tileMode = tileMode,
@@ -538,14 +557,19 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
     colorTransform: GPUCorePrimitiveColorTransform,
 ): GPUCorePrimitivePayloadInput {
     val normalizedMaterial = normalized.material
-    if (normalizedMaterial is GPUMaterialDescriptor.LinearGradient &&
-        geometryCoverage == GPUCoverageConsumption.StencilCoverage1x
+    if (geometryCoverage == GPUCoverageConsumption.StencilCoverage1x &&
+        ((normalizedMaterial is GPUMaterialDescriptor.LinearGradient &&
+            !isExactHardPathClipStrokeLinearGradientCandidate()) ||
+            (normalizedMaterial is GPUMaterialDescriptor.RadialGradient &&
+                !isExactHardPathClipStrokeRadialGradientCandidate()) ||
+            (normalizedMaterial is GPUMaterialDescriptor.SweepGradient &&
+                !isExactHardPathClipStrokeSweepGradientCandidate()))
     ) {
         refuseGeometry("unsupported.core_primitive.material.path_stencil", normalizedMaterial.corePrimitiveMaterialFacts())
     }
     val (material, premultipliedRgba) = normalizedMaterial.toCorePrimitiveMaterial(
         colorTransform = colorTransform,
-        deviceGradientTransform = nativeHardPathClipLinearGradientTransformOrNull(),
+        deviceGradientTransform = nativeHardPathClipGradientTransformOrNull(),
     )
     val sourceFamily = normalized.toCoreSourceFamily()
     val rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority?
@@ -693,8 +717,11 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
         geometry.fillRule == GPUCorePrimitiveFillRule.Winding &&
         !geometry.inverseFill &&
         geometry.strokeStyle?.let { style ->
-            style.cap == "butt" && style.join == "miter" &&
-                style.loweringProof == GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1
+            style.join == "miter" && when (style.cap) {
+                "butt" -> style.loweringProof == GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1
+                "square" -> style.loweringProof == GPUCorePrimitiveStrokeLoweringProof.SingleSegmentSquareV1
+                else -> false
+            }
         } == true
     return GPUCorePrimitivePayloadInput(
         commandIdValue = normalized.commandId.value,
@@ -739,21 +766,150 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
  * Keeps the direct gradient device-coordinate conversion local to the bounded hard-path-clip
  * route. Other material classes, tile modes, and transforms retain their existing refusals.
  */
-private fun GPUFramePathVisualCommand.nativeHardPathClipLinearGradientTransformOrNull(): GPUTransformFacts? {
-    val gradient = normalized.material as? GPUMaterialDescriptor.LinearGradient ?: return null
+private fun GPUFramePathVisualCommand.nativeHardPathClipGradientTransformOrNull(): GPUTransformFacts? {
+    val gradient = normalized.material
+    if (gradient !is GPUMaterialDescriptor.LinearGradient &&
+        gradient !is GPUMaterialDescriptor.RadialGradient &&
+        gradient !is GPUMaterialDescriptor.SweepGradient
+    ) return null
     val stencilClip = clipExecutionPlan as? org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan.StencilCoverage
         ?: return null
     val eligibleConsumer = when (normalized) {
-        is NormalizedDrawCommand.FillRect -> true
-        is NormalizedDrawCommand.FillPath -> geometryCoverage == GPUCoverageConsumption.FullOrScissor
+        is NormalizedDrawCommand.FillRect -> gradient is GPUMaterialDescriptor.LinearGradient
+        is NormalizedDrawCommand.FillPath ->
+            (gradient is GPUMaterialDescriptor.LinearGradient &&
+                geometryCoverage == GPUCoverageConsumption.FullOrScissor) ||
+            isExactHardPathClipStrokeLinearGradientCandidate() ||
+            isExactHardPathClipStrokeRadialGradientCandidate() ||
+            isExactHardPathClipStrokeSweepGradientCandidate()
         else -> false
     }
-    if (gradient.tileMode != "clamp" || normalized.antiAlias() ||
+    val clampGradient = when (gradient) {
+        is GPUMaterialDescriptor.LinearGradient -> gradient.tileMode == "clamp"
+        is GPUMaterialDescriptor.RadialGradient -> gradient.tileMode == "clamp"
+        is GPUMaterialDescriptor.SweepGradient -> gradient.tileMode == "clamp"
+        else -> false
+    }
+    if (!clampGradient || normalized.antiAlias() ||
         !eligibleConsumer ||
         stencilClip.sampleCount != 1 ||
         stencilClip.pathTransformClass !in HARD_PATH_CLIP_GRADIENT_TRANSFORM_CLASSES
     ) return null
-    return normalized.transform.takeIf(GPUTransformFacts::isNativeHardPathClipGradientTransform)
+    val transformAccepted = when (gradient) {
+        is GPUMaterialDescriptor.LinearGradient,
+        is GPUMaterialDescriptor.RadialGradient,
+        -> normalized.transform.isNativeHardPathClipGradientTransform()
+        is GPUMaterialDescriptor.SweepGradient ->
+            normalized.transform.isNativeHardPathClipSweepGradientTransform()
+        else -> false
+    }
+    return normalized.transform.takeIf { transformAccepted }
+}
+
+/**
+ * Closed admission predicate for the direct triangle stroke + hard path clip gradient lane.
+ * This deliberately mirrors the exact stroke facts consumed by [strokeDeviceGeometry] and does
+ * not admit edge-fan, round-cap, multi-segment, dashed, filtered, or anti-aliased paths.
+ */
+private fun GPUFramePathVisualCommand.isExactHardPathClipStrokeLinearGradientCandidate(): Boolean {
+    val path = normalized as? NormalizedDrawCommand.FillPath ?: return false
+    val gradient = path.material as? GPUMaterialDescriptor.LinearGradient ?: return false
+    val stencilClip = clipExecutionPlan as? GPUClipExecutionPlan.StencilCoverage ?: return false
+    return path.stroke &&
+        !path.antiAlias &&
+        path.maskFilter == null &&
+        path.contourStarts == listOf(0) &&
+        path.tessellatedVertices.size == 4 &&
+        path.strokeWidth.isFinite() && path.strokeWidth in 0.5f..64f &&
+        path.strokeCap in setOf("butt", "square") &&
+        path.strokeJoin == "miter" &&
+        path.strokeMiterLimit.isFinite() && path.strokeMiterLimit >= 1f &&
+        path.pathEffectKind == null &&
+        (path.dashIntervals?.isEmpty() ?: true) &&
+        path.pathDescriptor.fillRule in setOf("NonZero", "winding") &&
+        !path.pathDescriptor.inverseFill &&
+        gradient.tileMode == "clamp" &&
+        (gradient.allStopPositions?.size ?: 2) == 2 &&
+        (gradient.allStopColors?.size ?: 8) == 8 &&
+        gradient.interpolation == "srgb" &&
+        stencilClip.sampleCount == 1 &&
+        stencilClip.pathTransformClass in HARD_PATH_CLIP_GRADIENT_TRANSFORM_CLASSES &&
+        path.transform.isNativeHardPathClipGradientTransform()
+}
+
+/**
+ * Closed admission predicate for the direct radial-gradient stroke lane.
+ * The CTM is absorbed into the device-space center/radius; local-matrix composition stays
+ * isolated to the identity-CTM lane proven by W136.
+ */
+private fun GPUFramePathVisualCommand.isExactHardPathClipStrokeRadialGradientCandidate(): Boolean {
+    val path = normalized as? NormalizedDrawCommand.FillPath ?: return false
+    val gradient = path.material as? GPUMaterialDescriptor.RadialGradient ?: return false
+    val stencilClip = clipExecutionPlan as? GPUClipExecutionPlan.StencilCoverage ?: return false
+    val localMatrixAccepted = if (path.transform.type == GPUTransformType.Identity) {
+        gradient.localMatrix.isPositiveUniformScaleTranslateGradientLocalMatrix()
+    } else {
+        gradient.localMatrix == listOf(
+            1f, 0f, 0f,
+            0f, 1f, 0f,
+            0f, 0f, 1f,
+        )
+    }
+    return path.stroke &&
+        !path.antiAlias &&
+        path.maskFilter == null &&
+        path.contourStarts == listOf(0) &&
+        path.tessellatedVertices.size == 4 &&
+        path.strokeWidth.isFinite() && path.strokeWidth in 0.5f..64f &&
+        path.strokeCap in setOf("butt", "square") &&
+        path.strokeJoin == "miter" &&
+        path.strokeMiterLimit.isFinite() && path.strokeMiterLimit >= 1f &&
+        path.pathEffectKind == null &&
+        (path.dashIntervals?.isEmpty() ?: true) &&
+        path.pathDescriptor.fillRule in setOf("NonZero", "winding") &&
+        !path.pathDescriptor.inverseFill &&
+        path.transform.isNativeHardPathClipGradientTransform() &&
+        gradient.tileMode == "clamp" &&
+        gradient.interpolation == "srgb" &&
+        (gradient.allStopPositions?.size ?: 2) == 2 &&
+        (gradient.allStopColors?.size ?: 8) == 8 &&
+        localMatrixAccepted &&
+        stencilClip.sampleCount == 1
+}
+
+/**
+ * Closed admission predicate for the direct sweep-gradient stroke lane.
+ * Identity, translation, and positive uniform scale/translation are admitted because the
+ * materializer maps the sweep center into device space; rotations remain refused until their
+ * sweep angles are transformed as well.
+ */
+private fun GPUFramePathVisualCommand.isExactHardPathClipStrokeSweepGradientCandidate(): Boolean {
+    val path = normalized as? NormalizedDrawCommand.FillPath ?: return false
+    val gradient = path.material as? GPUMaterialDescriptor.SweepGradient ?: return false
+    val stencilClip = clipExecutionPlan as? GPUClipExecutionPlan.StencilCoverage ?: return false
+    val sweepSpan = gradient.endAngle - gradient.startAngle
+    return path.stroke &&
+        !path.antiAlias &&
+        path.maskFilter == null &&
+        path.contourStarts == listOf(0) &&
+        path.tessellatedVertices.size == 4 &&
+        path.strokeWidth.isFinite() && path.strokeWidth in 0.5f..64f &&
+        path.strokeCap in setOf("butt", "square") &&
+        path.strokeJoin == "miter" &&
+        path.strokeMiterLimit.isFinite() && path.strokeMiterLimit >= 1f &&
+        path.pathEffectKind == null &&
+        (path.dashIntervals?.isEmpty() ?: true) &&
+        path.pathDescriptor.fillRule in setOf("NonZero", "winding") &&
+        !path.pathDescriptor.inverseFill &&
+        path.transform.isNativeHardPathClipSweepGradientTransform() &&
+        gradient.tileMode == "clamp" &&
+        gradient.interpolation == "srgb" &&
+        gradient.startAngle.isFinite() && gradient.endAngle.isFinite() &&
+        sweepSpan.isFinite() && sweepSpan > 0f && sweepSpan <= 360f &&
+        (gradient.allStopPositions?.size ?: 2) == 2 &&
+        (gradient.allStopColors?.size ?: 8) == 8 &&
+        gradient.localMatrix.isPositiveUniformScaleTranslateGradientLocalMatrix() &&
+        stencilClip.sampleCount == 1
 }
 
 private fun GPUTransformFacts.isNativeHardPathClipGradientTransform(): Boolean = when (type) {
@@ -769,6 +925,39 @@ private fun GPUTransformFacts.isNativeHardPathClipGradientTransform(): Boolean =
     -> false
 }
 
+/** Sweep gradients only have an authenticated center mapping in this lane. */
+private fun GPUTransformFacts.isNativeHardPathClipSweepGradientTransform(): Boolean = when (type) {
+    GPUTransformType.Identity,
+    GPUTransformType.Translate,
+    GPUTransformType.Scale,
+    GPUTransformType.Affine,
+    -> skewX == 0f && skewY == 0f && scaleX > 0f && scaleX == scaleY
+        || isExactQuarterTurnHardPathClipGradientRotation()
+    GPUTransformType.Perspective,
+    GPUTransformType.Singular,
+    -> false
+}
+
+private fun GPUTransformFacts.rebasedSweepAngleOffsetDegrees(): Float =
+    if (isExactQuarterTurnHardPathClipGradientRotation()) 90f else 0f
+
+private fun normalizeSweepAngleRebase(angleDegrees: Float): Float {
+    val clamped = angleDegrees % 360f
+    return if (clamped < 0f) clamped + 360f else clamped
+}
+
+private fun rebaseSweepAnglesWithFullTurnOffset(
+    startAngle: Float,
+    endAngle: Float,
+    angleOffset: Float,
+    sweepSpan: Float,
+): Pair<Float, Float> {
+    if (angleOffset == 0f) return startAngle to endAngle
+    val rebasedStart = normalizeSweepAngleRebase(startAngle + angleOffset)
+    val rebasedEnd = rebasedStart + sweepSpan
+    return rebasedStart to rebasedEnd
+}
+
 private fun GPUTransformFacts.isExactQuarterTurnHardPathClipGradientRotation(): Boolean =
     type == GPUTransformType.Affine &&
         scaleX == 0f && scaleY == 0f && skewX == -1f && skewY == 1f
@@ -777,6 +966,7 @@ private val HARD_PATH_CLIP_GRADIENT_TRANSFORM_CLASSES = setOf(
     "identity",
     "translate",
     "uniform-positive-scale-translate",
+    "right-angle-rotation",
 )
 
 private fun GPUCorePrimitiveColorTransform.apply(channel: Float): Float = when (this) {
@@ -1088,16 +1278,26 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
     val devicePoints = outline.vertices.chunked(2).map { pair ->
         pair[0] to pair[1]
     }
+    val directStrokeVertices = when {
+        strokeCap == "butt" && outline.vertices.size == 8 &&
+            outline.contourStarts == listOf(0, 4) -> outline.vertices
+        // GPUStroke emits the exact square outline as three adjacent quads. For
+        // the bounded one-segment hard-clip proof, collapse those quads to their
+        // four outer corners without changing their device-space geometry.
+        strokeCap == "square" && outline.vertices.size == 24 &&
+            outline.contourStarts == listOf(0, 4, 8, 12) ->
+            outline.vertices.subList(8, 12) + outline.vertices.subList(20, 24)
+        else -> null
+    }
     if (
         clip.executionPlan is GPUClipExecutionPlan.StencilCoverage &&
             exactSingleSegment &&
-            strokeCap == "butt" &&
+            strokeCap in setOf("butt", "square") &&
             strokeJoin == "miter" &&
-            outline.vertices.size == 8 &&
-            outline.contourStarts == listOf(0, 4)
+            directStrokeVertices != null
     ) {
         return GPUCorePrimitiveGeometryInput.TriangulatedPath(
-            vertices = outline.vertices,
+            vertices = directStrokeVertices,
             indices = listOf(0, 1, 2, 0, 2, 3),
             sourceContourStarts = listOf(0),
             sourceVertexCount = 2,
@@ -1112,7 +1312,10 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
                 miterLimit = strokeMiterLimit,
                 dashIntervals = dashIntervals?.toList().orEmpty(),
                 dashPhase = dashPhase,
-                loweringProof = GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1,
+                loweringProof = when (strokeCap) {
+                    "square" -> GPUCorePrimitiveStrokeLoweringProof.SingleSegmentSquareV1
+                    else -> GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1
+                },
             ),
             sourceAuthority = pathDescriptor.sourceAuthority,
         )
