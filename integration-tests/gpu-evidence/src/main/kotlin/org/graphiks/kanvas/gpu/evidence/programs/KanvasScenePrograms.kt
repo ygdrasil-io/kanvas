@@ -2044,6 +2044,23 @@ object KanvasScenePrograms {
         restore()
     })
 
+    /** The bounded vertical dash route under integral scale and translation. */
+    fun uniformlyScaledTranslatedVerticalDashedButtMiterStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        save()
+        translate(2f, 4f)
+        scale(2f, 2f)
+        drawPath(
+            Path { moveTo(8f, 3f); lineTo(8f, 13f) },
+            Paint.stroke(ColorARGB.Red, 4f).copy(
+                antiAlias = false,
+                strokeCap = StrokeCap.BUTT,
+                strokeJoin = StrokeJoin.MITER,
+                pathEffect = PathEffect.Dash(floatArrayOf(8f, 4f), phase = 0f),
+            ),
+        )
+        restore()
+    })
+
     /** The same bounded dash route consumed by an integral device scissor. */
     fun scissoredHorizontalDashedButtMiterStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
         save()
