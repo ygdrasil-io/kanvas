@@ -444,6 +444,16 @@ class GpuEvidenceCatalogOracleTest {
     }
 
     @Test
+    fun `scaled horizontal hairline preserves the direct device row`() {
+        val pixels = oracle("scaled-horizontal-hairline", 32, 32)
+
+        assertPixel(pixels, 32, 32, 8, 16, intArrayOf(255, 0, 0, 255))
+        assertPixel(pixels, 32, 32, 27, 16, intArrayOf(255, 0, 0, 255))
+        assertPixel(pixels, 32, 32, 28, 16, intArrayOf(0, 0, 0, 0))
+        assertPixel(pixels, 32, 32, 8, 15, intArrayOf(0, 0, 0, 0))
+    }
+
+    @Test
     fun `translated scissored round cap stroke rebases device coverage`() {
         val pixels = oracle("translated-scissored-round-cap-stroke", 32, 32)
 
