@@ -914,7 +914,7 @@ class GPUFirstRoutePlanner(
         return when {
             command.maskFilter != null -> blurMaskFillPathRouteDecision(command)
             command.stroke && command.isNativeSimpleHairline() &&
-                capabilities.hasFact(firstStencilCoverCapabilityName) ->
+                capabilities.hasFact(firstPathHairlineDirectCapabilityName) ->
                 nativeHairlineRouteDecision(command)
             command.stroke && command.isNativeSimpleStroke() &&
                 capabilities.hasFact(firstStencilCoverCapabilityName) ->
@@ -949,7 +949,7 @@ class GPUFirstRoutePlanner(
             commandIdValue = command.commandId.value,
             pipelinePreimageHash = pipelineKey,
             renderStepIdentity = renderStep,
-            requirements = listOf(firstStencilCoverCapabilityName),
+            requirements = listOf(firstPathHairlineDirectCapabilityName),
         )
         val analysisDecision = GPUDrawAnalysisDecision.Candidate(
             recordId = recordId,
@@ -2468,8 +2468,8 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
                     }
                     ?: "unsupported.pipeline.capability_missing".takeUnless {
                         capabilities.hasFact(firstPreparedPathFillCapabilityName) ||
-                            ((isNativeSimpleStroke() || isNativeSimpleHairline()) &&
-                                capabilities.hasFact(firstStencilCoverCapabilityName))
+                            (isNativeSimpleStroke() && capabilities.hasFact(firstStencilCoverCapabilityName)) ||
+                            (isNativeSimpleHairline() && capabilities.hasFact(firstPathHairlineDirectCapabilityName))
                     }
             }
             pathDescriptor.edgeCount < 0 -> "unsupported.geometry.path_invalid_edges"
@@ -2925,6 +2925,10 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
 
         /** Required capability fact for the path fill stencil-cover native promotion. */
         const val firstStencilCoverCapabilityName = GPUFirstSliceCapabilityName.PATH_FILL_STENCIL_COVER
+
+        /** Required capability fact for the bounded direct path hairline route. */
+        const val firstPathHairlineDirectCapabilityName =
+            GPUFirstSliceCapabilityName.PATH_HAIRLINE_DIRECT_NATIVE
 
         /** Transform classes supported by the first native FillRect route. */
         val acceptedTransformTypes = setOf(
