@@ -4,7 +4,7 @@
   "surfaceRenders": 4,
   "targetPixelsPerRender": 1024,
   "rgbaChannelsCompared": 16384,
-  "flattenedClipVertices": 190,
+  "flattenedClipVertices": 26,
   "maxPathVertices": 256,
   "budgetIncreased": false,
   "thresholdPolicy": {

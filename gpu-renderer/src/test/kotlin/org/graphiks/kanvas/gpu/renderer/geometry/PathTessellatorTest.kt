@@ -325,6 +325,27 @@ class PathTessellatorTest {
     }
 
     @Test
+    fun `cubic flattening preserves collinear control-point overshoot`() {
+        val tessellator = PathTessellator(tolerance = 0.25f)
+        val flattened = tessellator.flatten(
+            PathData(
+                verbs = listOf(
+                    PathVerb.MoveTo(Point(0f, 0f)),
+                    PathVerb.CubicTo(
+                        c1 = Point(400f, 0f),
+                        c2 = Point(-300f, 0f),
+                        p = Point(100f, 0f),
+                    ),
+                ),
+                points = emptyList(),
+            ),
+        )
+
+        assertTrue(flattened.any { it.x < 0f }, "Cubic must retain its negative overshoot")
+        assertTrue(flattened.any { it.x > 100f }, "Cubic must retain its positive overshoot")
+    }
+
+    @Test
     fun `bounded cubic GM curve fits the edge fan payload budget`() {
         val tessellator = PathTessellator(
             tolerance = 0.25f,

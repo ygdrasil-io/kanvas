@@ -15,7 +15,7 @@ les refus de dernier ressort.
 
 ## Résultats des preuves
 
-- `PathTessellatorTest` : 28 tests, 0 échec. Le cubic vertical de `clipcubic`
+- `PathTessellatorTest` : 29 tests, 0 échec. Le cubic vertical de `clipcubic`
   reste sous les 1 024 triangles du payload et le test de budget excessif
   conserve un refus stable.
 - `GPUClipCoverageContractsTest` : 24 tests, 0 échec. Les clips cubiques
@@ -27,6 +27,10 @@ les refus de dernier ressort.
   dispatchées, 0 refus, similarité `99.52191894127378 %` contre
   `reference/clippedcubic.png` (seuil GM `94.3 %`), erreur moyenne
   `0.0016432698389529509`.
+  Les images GPU, diff, référence et les statistiques sont conservées dans
+  `clipped-cubic-gm-2026-08-29/`. Le CPU oracle complet de ce GM 1240×390 est
+  explicitement refusé (`unsupported.cpu.oracle_not_available`) : la PNG Skia
+  reste une référence externe et n’est pas présentée comme oracle CPU.
 - `CurvedClipGmSurfaceRefusalEvidenceTest` : `clippedcubic` est promu sur la
   route cubic bornée; `clipcubic` reste un refus explicite
   `unsupported.stroke.width_invalid` (17 opérations), car son second dessin

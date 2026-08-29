@@ -6,7 +6,7 @@
     "fillRules": ["Winding", "EvenOdd"],
     "antiAlias": false,
     "transform": ["identity", "translate", "uniform-positive-scale-translate"],
-    "edgeBudget": "190 flattened vertices <= RenderConfig.maxPathVertices (256)"
+    "edgeBudget": "26 flattened vertices <= RenderConfig.maxPathVertices (256)"
   },
   "terminalRefusals": {
     "inverseCubic": { "diagnostic": "unsupported.clip.inverse_cubic", "test": "GPUClipCoverageSurfaceTest.inverse cubic clip remains a terminal refusal" },
@@ -16,7 +16,7 @@
   },
   "gmTerminalAttempts": {
     "clipcubic": { "operations": 17, "diagnostic": "unsupported.stroke.width_invalid" },
-    "clippedcubic": { "operations": 19, "diagnostic": "unsupported.core_primitive.stencil_edge_fan_budget" }
+    "clippedcubic": { "operations": 10, "outcome": "rendered", "route": "bounded-cubic-path" }
   },
-  "nonClaims": ["no arbitrary clip stack", "no inverse cubic clip", "no perspective", "no ScalarAA cubic clip", "no GM promotion or GM source change", "no budget or threshold relaxation"]
+  "nonClaims": ["no arbitrary clip stack", "no inverse cubic clip", "no perspective", "no ScalarAA cubic clip", "no clipcubic hairline-stroke promotion", "no budget or threshold relaxation"]
 }

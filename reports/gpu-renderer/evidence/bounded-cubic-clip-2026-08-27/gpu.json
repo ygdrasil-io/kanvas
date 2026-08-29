@@ -4,6 +4,7 @@
   "target": "RGBA8 32x32 single sample",
   "readback": "RGBA8 from four independent Surface renders",
   "nativeEvidence": "GPUClipCoverageSurfaceTest.bounded cubic clip matches the independent CPU buffer for both fill rules and operations",
+  "flattenedClipVertices": 26,
   "stencilCover": true,
   "scalarAAPromoted": false
 }

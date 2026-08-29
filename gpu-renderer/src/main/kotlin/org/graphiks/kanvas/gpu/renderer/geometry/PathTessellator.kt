@@ -223,27 +223,34 @@ class PathTessellator(
     }
 
     private fun midpoint(a: Point, b: Point): Point = Point(
-        (a.x + b.x) * 0.5f,
-        (a.y + b.y) * 0.5f,
+        a.x * 0.5f + b.x * 0.5f,
+        a.y * 0.5f + b.y * 0.5f,
     )
 
     private fun cubicFlatness(p0: Point, p1: Point, p2: Point, p3: Point): Float = maxOf(
-        distanceToLine(p1, p0, p3),
-        distanceToLine(p2, p0, p3),
+        distanceToSegment(p1, p0, p3),
+        distanceToSegment(p2, p0, p3),
     )
 
-    private fun distanceToLine(point: Point, start: Point, end: Point): Float {
-        val dx = end.x - start.x
-        val dy = end.y - start.y
-        val length = kotlin.math.sqrt(dx * dx + dy * dy)
-        if (length == 0f) {
-            val px = point.x - start.x
-            val py = point.y - start.y
-            return kotlin.math.sqrt(px * px + py * py)
+    private fun distanceToSegment(point: Point, start: Point, end: Point): Float {
+        val startX = start.x.toDouble()
+        val startY = start.y.toDouble()
+        val dx = end.x.toDouble() - startX
+        val dy = end.y.toDouble() - startY
+        val lengthSquared = dx * dx + dy * dy
+        val pointX = point.x.toDouble()
+        val pointY = point.y.toDouble()
+        if (lengthSquared == 0.0) {
+            return kotlin.math.hypot(pointX - startX, pointY - startY).toFloat()
         }
-        return kotlin.math.abs(
-            (point.x - start.x) * dy - (point.y - start.y) * dx,
-        ) / length
+
+        val projection = (
+            (pointX - startX) * dx + (pointY - startY) * dy
+        ) / lengthSquared
+        val t = projection.coerceIn(0.0, 1.0)
+        val nearestX = startX + t * dx
+        val nearestY = startY + t * dy
+        return kotlin.math.hypot(pointX - nearestX, pointY - nearestY).toFloat()
     }
 
     private fun emitConicSegments(p0: Point, p1: Point, p2: Point, weight: Float, result: MutableList<Point>) {

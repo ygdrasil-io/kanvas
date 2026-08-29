@@ -1,0 +1,19 @@
+{
+  "gm": "clippedcubic",
+  "routeId": "bounded-cubic-path",
+  "surface": "headless/offscreen WebGPU",
+  "sourceRoute": [
+    "SkiaGmRenderer",
+    "GPUFramePathApiInventory",
+    "PathTessellator.emitCubicSegments (adaptive De Casteljau)",
+    "GPUCorePrimitivePreparedFrameTaskListBuilder",
+    "wgpu4k submit/readback"
+  ],
+  "nativeEvidence": {
+    "test": "ClippedCubicGmTest.clipped cubic GM renders through the bounded path route",
+    "dispatchCount": 10,
+    "refusedCount": 0,
+    "reference": "src/test/resources/reference/clippedcubic.png"
+  },
+  "fallback": "No hidden CPU fallback; unsupported path budgets remain terminal refusals."
+}

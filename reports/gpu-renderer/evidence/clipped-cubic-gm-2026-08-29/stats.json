@@ -1,0 +1,19 @@
+{
+  "gm": "clippedcubic",
+  "route": "bounded-cubic-path",
+  "width": 1240,
+  "height": 390,
+  "dispatchCount": 10,
+  "refusedCount": 0,
+  "tolerance": 2,
+  "minimumSimilarityPercent": 94.3,
+  "similarityPercent": 99.52191894127378,
+  "pixelMatchPercent": 99.52191894127378,
+  "ssim": 0.9896361998303327,
+  "matchingPixels": 481288,
+  "totalPixels": 483600,
+  "meanChannelError": 0.0016432698389529509,
+  "maxDiff": [255, 255, 255, 0],
+  "meanDiff": [116.86548442906575, 116.86548442906575, 116.86548442906575, 0.0],
+  "pass": true
+}

@@ -2741,7 +2741,7 @@ class GPUClipCoverageSurfaceTest {
 
     /**
      * Two same-direction cubic rings: Winding keeps the centre, while EvenOdd
-     * punches it out. Their 190 flattened edges remain below the explicit
+     * punches it out. Their 26 flattened edges remain below the explicit
      * 256-edge fixture budget without sharing the GPU flattening implementation.
      */
     private fun boundedCubicHolePath(fillType: FillType): Path = Path().apply {
