@@ -73,7 +73,7 @@ class GpuEvidenceCatalogTest {
     }
 
     @Test
-    fun `catalog separates one hundred thirty-two public surface renders from nine refusals`() {
+    fun `catalog separates one hundred thirty-three public surface renders from nine refusals`() {
         val cases = GpuEvidenceCatalog.cases
 
         assertEquals(
@@ -116,6 +116,7 @@ class GpuEvidenceCatalogTest {
                 "clip-path-triangle-radial-stroke",
                 "clip-path-translated-triangle-radial-stroke",
                 "clip-path-local-radial-matrix-stroke",
+                "clip-path-local-radial-matrix-square-stroke",
                 "clip-path-right-angle-radial-square-stroke",
                 "clip-path-sweep-square-stroke",
                 "clip-path-local-sweep-matrix-stroke",
@@ -240,6 +241,7 @@ class GpuEvidenceCatalogTest {
                 "clip-path-triangle-radial-stroke",
                 "clip-path-translated-triangle-radial-stroke",
                 "clip-path-local-radial-matrix-stroke",
+                "clip-path-local-radial-matrix-square-stroke",
                 "clip-path-right-angle-radial-square-stroke",
                 "clip-path-sweep-square-stroke",
                 "clip-path-local-sweep-matrix-stroke",
@@ -324,11 +326,11 @@ class GpuEvidenceCatalogTest {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            List(132) { "kanvas.surface.render" },
+            List(133) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
-        assertEquals(132, GpuEvidenceCatalog.renderCases.size)
-        assertEquals(141, GpuEvidenceCatalog.cases.size)
+        assertEquals(133, GpuEvidenceCatalog.renderCases.size)
+        assertEquals(142, GpuEvidenceCatalog.cases.size)
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
 
         val solid = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "solid-card-stack" })
@@ -504,6 +506,7 @@ class GpuEvidenceCatalogTest {
                 "clip-path-triangle-radial-stroke",
                 "clip-path-translated-triangle-radial-stroke",
                 "clip-path-local-radial-matrix-stroke",
+                "clip-path-local-radial-matrix-square-stroke",
                 "clip-path-right-angle-radial-square-stroke",
                 "clip-path-sweep-square-stroke",
                 "clip-path-local-sweep-matrix-stroke",
@@ -669,6 +672,7 @@ class GpuEvidenceCatalogTest {
                 "clip-path-triangle-radial-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-radial-stroke-device-space", 1),
                 "clip-path-translated-triangle-radial-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-radial-stroke-device-space", 1),
                 "clip-path-local-radial-matrix-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-radial-stroke-device-space", 1),
+                "clip-path-local-radial-matrix-square-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-radial-local-matrix-square-stroke-device-space", 1),
                 "clip-path-right-angle-radial-square-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-radial-stroke-device-space", 1),
                 "clip-path-sweep-square-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-sweep-stroke-device-space", 1),
                 "clip-path-local-sweep-matrix-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-sweep-stroke-device-space", 1),
@@ -808,6 +812,7 @@ class GpuEvidenceCatalogTest {
                 "clip-path-triangle-radial-stroke" to ComparisonPolicy(1, 100.0, 1, "Independent pixel-center winding clip, butt stroke distance and linear-light radial interpolation."),
                 "clip-path-translated-triangle-radial-stroke" to ComparisonPolicy(1, 100.0, 1, "Independent translated device-space pixel-center winding clip, butt stroke distance and linear-light radial interpolation."),
                 "clip-path-local-radial-matrix-stroke" to ComparisonPolicy(1, 100.0, 1, "Independent device-space clip/stroke coverage with translated local-matrix radial sampling and linear-light interpolation."),
+                "clip-path-local-radial-matrix-square-stroke" to ComparisonPolicy(1, 100.0, 1, "Independent device-space clip, square stroke coverage, translated local-matrix radial sampling and linear-light interpolation."),
                 "clip-path-right-angle-radial-square-stroke" to ComparisonPolicy(1, 100.0, 1, "Independent right-angle device-space winding clip, square-cap stroke distance and linear-light radial interpolation."),
                 "clip-path-sweep-square-stroke" to ComparisonPolicy(1, 100.0, 1, "Independent pixel-center winding clip, square stroke distance and full-turn linear-light sweep interpolation."),
                 "clip-path-local-sweep-matrix-stroke" to ComparisonPolicy(1, 100.0, 1, "Independent device-space clip/stroke coverage with translated local-matrix full-turn sweep sampling and linear-light interpolation."),

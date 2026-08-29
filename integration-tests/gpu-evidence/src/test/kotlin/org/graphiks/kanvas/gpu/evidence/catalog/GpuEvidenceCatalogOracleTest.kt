@@ -40,6 +40,17 @@ class GpuEvidenceCatalogOracleTest {
     }
 
     @Test
+    fun `local radial matrix square stroke preserves cap extension`() {
+        val pixels = oracle("clip-path-local-radial-matrix-square-stroke")
+        val background = intArrayOf(13, 20, 33, 255).toList()
+
+        assertNotEquals(background, pixel(pixels, 64, 64, 7, 7).toList())
+        assertNotEquals(background, pixel(pixels, 64, 64, 15, 15).toList())
+        assertNotEquals(background, pixel(pixels, 64, 64, 18, 16).toList())
+        assertPixel(pixels, 64, 64, 20, 20, intArrayOf(13, 20, 33, 255))
+    }
+
+    @Test
     fun `right angle radial square stroke oracle preserves rotated device coverage`() {
         val pixels = oracle("clip-path-right-angle-radial-square-stroke")
 
