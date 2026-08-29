@@ -3166,11 +3166,19 @@ data class GPUOrderingFacts(
 /** Compatibility alias for frame provenance owned by the foundation state package. */
 typealias GPUFrameProvenance = org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 
+/** Closed source identity used by route admission without parsing diagnostic strings. */
+enum class GPUCommandSourceKind {
+    Generic,
+    PublicFillRect,
+    AnalyticStrokeRectBand,
+}
+
 /** Source adapter information used by diagnostics and dumps. */
 data class GPUCommandSource(
     val adapter: String,
     val operation: String,
     val frameProvenance: GPUFrameProvenance = GPUFrameProvenance.None,
+    val kind: GPUCommandSourceKind = GPUCommandSourceKind.Generic,
 ) {
     init {
         require(adapter.isNotBlank()) { "GPUCommandSource.adapter must not be blank" }

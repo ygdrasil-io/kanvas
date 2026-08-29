@@ -3,7 +3,9 @@ package org.graphiks.kanvas.surface.gpu
 import java.util.Collections
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName
 import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource
+import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSourceKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
@@ -86,6 +88,28 @@ internal object GPUPreparedStrokeRectLowerer {
                         "unsupported.stroke.rect_transform",
                         operationIndex,
                         mapOf("transform" to "gradient_requires_identity"),
+                    )
+                }
+                when {
+                    shader.stops.size > 3 -> return refused(
+                        "unsupported.stroke.rect_gradient_stop_count",
+                        operationIndex,
+                        mapOf("stopCount" to shader.stops.size.toString()),
+                    )
+                    shader.stops.size == 3 && target.colorFormat != "rgba8unorm-srgb" -> return refused(
+                        "unsupported.stroke.rect_gradient_target",
+                        operationIndex,
+                        mapOf("targetFormat" to target.colorFormat),
+                    )
+                    shader.stops.size == 3 && !capabilities.hasSupportedFact(
+                        GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_NATIVE,
+                    ) -> return refused(
+                        "unsupported.stroke.rect_linear_gradient_three_stop_capability",
+                        operationIndex,
+                        mapOf(
+                            "capability" to
+                                GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_NATIVE,
+                        ),
                     )
                 }
                 if (paint.colorFilter != null || !shader.isAdmittedStrokeGradient()) {
@@ -346,6 +370,9 @@ private val foldableSolidColorBlendModes = setOf(
     org.graphiks.kanvas.paint.BlendMode.MODULATE,
 )
 
+private fun GPUCapabilities.hasSupportedFact(name: String): Boolean =
+    facts.any { fact -> fact.name == name && fact.value == "supported" && fact.affectsValidity }
+
 private fun GPUFramePathVisualCommand.withAnalyticStrokeRectSource(
     provenance: GPUFrameProvenance,
     material: GPUMaterialDescriptor,
@@ -356,6 +383,7 @@ private fun GPUFramePathVisualCommand.withAnalyticStrokeRectSource(
                 adapter = "kanvas-surface",
                 operation = "drawRect.stroke.analytic-four-band",
                 frameProvenance = provenance,
+                kind = GPUCommandSourceKind.AnalyticStrokeRectBand,
             ),
             material = material,
         )

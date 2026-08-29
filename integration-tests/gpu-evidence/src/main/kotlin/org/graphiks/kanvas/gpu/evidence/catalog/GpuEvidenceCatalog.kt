@@ -9,6 +9,7 @@ import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbBitmapNearestCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbSaveLayerSrcOverOpacityCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbGradientCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbLinearGradientStrokeBandsCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRoundCapStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipRRectCpuOracle
@@ -53,6 +54,7 @@ object GpuEvidenceCatalog {
         scissoredRadialGradient(),
         repeatGradientRendered(),
         gradientStrokeRefusal(),
+        linearGradientThreeStopStrokeRect(),
         scaledSolidRRect(),
         solidDRRectHole(),
         asymmetricSolidRRect(),
@@ -780,6 +782,32 @@ object GpuEvidenceCatalog {
             SurfaceSrgbLinearGradientStrokeBandsCpuOracle.Point(55.5, 32.5),
             SurfaceSrgbLinearGradientStrokeBandsCpuOracle.Stop(0.0, 255, 56, 56),
             SurfaceSrgbLinearGradientStrokeBandsCpuOracle.Stop(1.0, 56, 112, 255),
+        ),
+    )
+
+    private fun linearGradientThreeStopStrokeRect() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("linear-gradient-three-stop-stroke-rect"), "Linear gradient three-stop stroke rectangle",
+            "Public Kanvas Surface renders a non-AA identity CLAMP three-stop LinearGradient rectangle stroke as four typed analytic bands.",
+            64, 64, 1L, setOf("stroke-rect", "linear-gradient", "three-stops", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-gradient-linear-clamp-three-stop-stroke-bands", 1),
+            ComparisonPolicy(1, 100.0, 1, "Independent four-band device coverage with three-stop sRGB decode, linear-premultiplied interpolation, and sRGB RGBA8 storage."), emptySet(),
+        ),
+        KanvasScenePrograms.linearGradientThreeStopStrokeRect(),
+        SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle(
+            listOf(
+                SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle.Rect(6, 14, 58, 18),
+                SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle.Rect(6, 46, 58, 50),
+                SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle.Rect(6, 18, 10, 46),
+                SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle.Rect(54, 18, 58, 46),
+            ),
+            SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle.Point(8.5, 32.5),
+            SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle.Point(55.5, 32.5),
+            listOf(
+                SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle.Stop(0.0, 255, 56, 56),
+                SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle.Stop(.5, 56, 220, 120),
+                SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle.Stop(1.0, 56, 112, 255),
+            ),
         ),
     )
 

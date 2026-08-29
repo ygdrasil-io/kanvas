@@ -6,6 +6,7 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipKind
+import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSourceKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPULayerScopeKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
@@ -288,6 +289,7 @@ class GPUFirstRoutePlanner(
         val isRadialGradient = command.material is GPUMaterialDescriptor.RadialGradient
         val isSweepGradient = command.material is GPUMaterialDescriptor.SweepGradient
         val isSimpleGradient = isLinearGradient || isRadialGradient || isSweepGradient
+        val isThreeStopStrokeLinearGradient = command.supportsThreeStopLinearGradientStroke()
         val rectGeometryAuthority =
             corePrimitiveRectGeometryAuthority(command.rect, command.transform)
         val rectRouteAuthority = when (command.material) {
@@ -321,9 +323,17 @@ class GPUFirstRoutePlanner(
                     pipelineKey =
                         "pending.pipeline.fill_rect.linear_gradient$tileModeSuffix.${command.layer.target.colorFormat}.src_over"
                     renderStep = linearGradientRenderStep
-                    routeLabel = "native.fill_rect.linear_gradient"
+                    routeLabel = if (isThreeStopStrokeLinearGradient) {
+                        "native.stroke_rect.linear_gradient_three_stop"
+                    } else {
+                        "native.fill_rect.linear_gradient"
+                    }
                     materialKeyHash = "pending.material.linear_gradient"
-                    capabilityName = firstLinearGradientCapabilityName
+                    capabilityName = if (isThreeStopStrokeLinearGradient) {
+                        GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_NATIVE
+                    } else {
+                        firstLinearGradientCapabilityName
+                    }
                 }
 
                 is GPUMaterialDescriptor.RadialGradient -> {
@@ -1803,7 +1813,8 @@ class GPUFirstRoutePlanner(
                 is NormalizedMaskFilter.Blur -> mf.refusalCode()
             }
         } ?: material.analysisRefusalCodeOrNull(
-            allowThreeStopLinearGradient = supportsBoundedThreeStopLinearGradient(),
+            allowThreeStopLinearGradient = supportsBoundedThreeStopLinearGradient() ||
+                supportsThreeStopLinearGradientStroke(),
             allowThreeStopRadialGradient = hasThreeStopRadialGradient(),
             allowThreeStopSweepGradient = hasThreeStopSweepGradient(),
         ) ?: when {
@@ -1865,11 +1876,27 @@ class GPUFirstRoutePlanner(
      */
     private fun NormalizedDrawCommand.FillRect.supportsBoundedThreeStopLinearGradient(): Boolean {
         val gradient = material as? GPUMaterialDescriptor.LinearGradient ?: return false
-        return !antiAlias &&
+        return source.kind == GPUCommandSourceKind.PublicFillRect &&
+            !antiAlias &&
             transform.type == GPUTransformType.Identity &&
             gradient.tileMode == "clamp" &&
             gradient.allStopPositions?.size == 3 &&
             gradient.localMatrix == listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f)
+    }
+
+    /** W37 admits a third linear stop only for the typed four-band stroke lowering. */
+    private fun NormalizedDrawCommand.FillRect.supportsThreeStopLinearGradientStroke(): Boolean {
+        val gradient = material as? GPUMaterialDescriptor.LinearGradient ?: return false
+        return source.kind == GPUCommandSourceKind.AnalyticStrokeRectBand &&
+            !antiAlias &&
+            transform.type == GPUTransformType.Identity &&
+            layer.target.colorFormat == "rgba8unorm-srgb" &&
+            gradient.tileMode == "clamp" &&
+            gradient.allStopPositions?.size == 3 &&
+            gradient.localMatrix == listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f) &&
+            capabilities.hasFact(
+                GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_NATIVE,
+            )
     }
 
     /** The native ABI is larger, but only this proven FillRect route may consume a third radial stop. */

@@ -14,6 +14,7 @@ class ProductFlagConfigTest {
 
         assertTrue(config.fillRRectEnabled)
         assertTrue(config.linearGradientEnabled)
+        assertTrue(config.strokeRectLinearGradientThreeStopEnabled)
         assertTrue(config.scissorEnabled)
         assertTrue(config.radialGradientEnabled)
         assertTrue(config.sweepGradientEnabled)
@@ -28,6 +29,11 @@ class ProductFlagConfigTest {
         val factsByName = capabilities.facts.associateBy { it.name }
         assertTrue(factsByName.containsKey("first_slice.fill_rrect.native"))
         assertTrue(factsByName.containsKey("first_slice.linear_gradient.native"))
+        assertTrue(
+            factsByName.containsKey(
+                GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_NATIVE,
+            ),
+        )
         assertTrue(factsByName.containsKey(GPUFirstSliceCapabilityName.SCISSOR_NATIVE))
         assertTrue(factsByName.containsKey("first_slice.radial_gradient.native"))
         assertTrue(factsByName.containsKey("first_slice.sweep_gradient.native"))
@@ -81,6 +87,23 @@ class ProductFlagConfigTest {
         assertTrue(config.scissorEnabled)
         assertTrue(config.radialGradientEnabled)
         assertTrue(config.sweepGradientEnabled)
+    }
+
+    @Test
+    fun `three stop stroke gradient capability has an independent disable property`() {
+        val config = GPUProductFlagConfig.fromSystemProperties(
+            propertyReader = { key ->
+                if (key == GPUProductFlagConfig.StrokeRectLinearGradientThreeStopDisableProperty) "true" else null
+            },
+        )
+
+        assertTrue(config.linearGradientEnabled)
+        assertFalse(config.strokeRectLinearGradientThreeStopEnabled)
+        assertFalse(
+            config.buildCapabilities().facts.any {
+                it.name == GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_NATIVE
+            },
+        )
     }
 
     @Test
