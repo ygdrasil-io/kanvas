@@ -7,6 +7,7 @@ import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbOracleMath
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbSrcOverCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbGradientCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbLinearGradientStrokeBandsCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRoundCapStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathCpuOracle
@@ -29,6 +30,7 @@ object GpuEvidenceCatalog {
         scissorOverlay(),
         canvasStateRestoreToCount(),
         strokeRectOutline(),
+        roundCapStroke(),
         linearGradientLanes(),
         radialSwatch(),
         sweepDisk(),
@@ -330,6 +332,17 @@ object GpuEvidenceCatalog {
             }.rgba() },
         )
     }
+
+    private fun roundCapStroke(): EvidenceCase = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("round-cap-stroke"), "Pixel-exact round-cap path stroke", "Public Kanvas Surface non-AA radius-two, integral-grid horizontal path stroke with round caps.",
+            32, 32, 1L, setOf("path-stroke", "round-cap", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke", 2),
+            ComparisonPolicy(0, 100.0, 1, "Independent pixel-center disk oracle for W25's integral-grid radius-two horizontal contract."), emptySet(),
+        ),
+        KanvasScenePrograms.roundCapStroke(),
+        SurfaceSrgbRoundCapStrokeCpuOracle(6.0, 26.0, 16.0, 2.0, intArrayOf(255, 0, 0, 255)),
+    )
 
     private fun linearGradientLanes(): EvidenceCase {
         val bounds = SurfaceSrgbGradientCpuOracle.Rect(8f, 16f, 56f, 48f)

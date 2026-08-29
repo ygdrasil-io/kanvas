@@ -993,11 +993,13 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
         pathEffectKind == "Dash" || dashIntervals?.isNotEmpty() == true ->
             "unsupported.core_primitive.stroke.dash_exact_lowering"
         pathEffectKind != null -> "unsupported.core_primitive.stroke.path_effect_exact_lowering"
-        strokeCap !in setOf("butt", "square") -> "unsupported.core_primitive.stroke.cap_exact_lowering"
+        strokeCap !in setOf("butt", "square", "round") -> "unsupported.core_primitive.stroke.cap_exact_lowering"
+        !exactSingleSegment -> "unsupported.core_primitive.stroke.complex_exact_lowering"
+        strokeCap == "round" && !matchesPixelExactRoundCapR2HorizontalV1() ->
+            "unsupported.core_primitive.stroke.round_cap_pixel_exact_lowering"
         strokeJoin != "miter" -> "unsupported.core_primitive.stroke.join_exact_lowering"
         !strokeMiterLimit.isFinite() || strokeMiterLimit < 1f ->
             "unsupported.core_primitive.stroke.miter_exact_lowering"
-        !exactSingleSegment -> "unsupported.core_primitive.stroke.complex_exact_lowering"
         else -> null
     }
     if (refusalCode != null) {
@@ -1067,15 +1069,36 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
             miterLimit = strokeMiterLimit,
             dashIntervals = dashIntervals?.toList().orEmpty(),
             dashPhase = dashPhase,
-            loweringProof = if (strokeCap == "square") {
-                GPUCorePrimitiveStrokeLoweringProof.SingleSegmentSquareV1
-            } else {
-                GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1
+            loweringProof = when (strokeCap) {
+                "square" -> GPUCorePrimitiveStrokeLoweringProof.SingleSegmentSquareV1
+                "round" -> GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2HorizontalV1
+                else -> GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1
             },
         ),
         sourceAuthority = pathDescriptor.sourceAuthority,
     )
 }
+
+/**
+ * `GPUStroke` approximates a semicircular cap with five 36-degree chords. For a non-AA
+ * radius-two cap on the integral pixel grid, that polygon and the mathematical disk classify
+ * the same pixel centres: the fringe centres are the half-integer offsets `(±1.5, ±0.5)`
+ * (inside both) and `(±1.5, ±1.5)` (outside both). Keeping the segment horizontal, at least
+ * one stroke-width long and on the integral device grid prevents rotation, fractional samples
+ * and overlapping caps from invalidating that proof.
+ */
+private fun NormalizedDrawCommand.FillPath.matchesPixelExactRoundCapR2HorizontalV1(): Boolean {
+    if (strokeWidth != 4f || transform.type !in setOf(GPUTransformType.Identity, GPUTransformType.Translate) ||
+        tessellatedVertices.size != 4
+    ) return false
+    val start = transform.map(tessellatedVertices[0], tessellatedVertices[1])
+    val end = transform.map(tessellatedVertices[2], tessellatedVertices[3])
+    return start.first.isIntegralDeviceCoordinate() && start.second.isIntegralDeviceCoordinate() &&
+        end.first.isIntegralDeviceCoordinate() && end.second.isIntegralDeviceCoordinate() &&
+        start.second == end.second && end.first - start.first >= strokeWidth
+}
+
+private fun Float.isIntegralDeviceCoordinate(): Boolean = isFinite() && floor(this) == this
 
 private fun org.graphiks.kanvas.gpu.renderer.commands.GPUBounds.toPixelCoverBounds(
     target: GPUPixelBounds,

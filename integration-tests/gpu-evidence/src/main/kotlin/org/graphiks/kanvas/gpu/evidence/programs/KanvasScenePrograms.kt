@@ -4,6 +4,7 @@ import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.pipeline.ClipOp
@@ -455,6 +456,19 @@ object KanvasScenePrograms {
         drawRect(
             RectF32.ofLTRB(16f, 16f, 48f, 48f),
             Paint.stroke(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f), 6f).copy(antiAlias = false),
+        )
+    })
+
+    fun roundCapStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawPath(
+            Path {
+                moveTo(6f, 16f)
+                lineTo(26f, 16f)
+            },
+            Paint.stroke(ColorARGB.Red, 4f).copy(
+                antiAlias = false,
+                strokeCap = StrokeCap.ROUND,
+            ),
         )
     })
 

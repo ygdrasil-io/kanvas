@@ -173,6 +173,8 @@ private fun GPUCorePrimitiveGeometry.TriangulatedPath.isExactSingleSegmentStroke
             stroke.cap == "butt"
         GPUCorePrimitiveStrokeLoweringProof.SingleSegmentSquareV1 ->
             stroke.cap == "square"
+        GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2HorizontalV1 ->
+            stroke.cap == "round" && stroke.width == 4f
     }
 }
 

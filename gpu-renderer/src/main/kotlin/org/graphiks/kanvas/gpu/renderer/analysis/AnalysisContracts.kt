@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.analysis
 
+import kotlin.math.floor
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
@@ -2083,9 +2084,11 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
 
     /**
      * The native path-stencil route is intentionally smaller than generic prepared strokes:
-     * one immutable, open two-point contour, finite bounded width, solid butt/square cap, and
-     * no join work. More than one segment remains on the prepared/refusal path until its
-     * outline topology is independently proven in a native packet.
+     * one immutable, open two-point contour, finite bounded width and no join work. Butt and
+     * square caps remain broadly bounded; round is limited to the separate pixel-exact
+     * radius-two horizontal contract, because its tessellator uses a polygonal approximation.
+     * More than one segment remains on the prepared/refusal path until its outline topology is
+     * independently proven in a native packet.
      */
     private fun NormalizedDrawCommand.FillPath.isNativeSimpleStroke(): Boolean =
         contourStarts == listOf(0) &&
@@ -2094,10 +2097,26 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
             !antiAlias &&
             (dashIntervals == null || dashIntervals.isEmpty()) &&
             pathEffectKind == null &&
-            strokeCap in setOf("butt", "square") &&
+            (
+                strokeCap in setOf("butt", "square") ||
+                    (strokeCap == "round" && matchesPixelExactRoundCapR2HorizontalV1())
+                ) &&
             strokeJoin == "miter" &&
             strokeMiterLimit.isFinite() && strokeMiterLimit >= 1f &&
             transform.type in setOf(GPUTransformType.Identity, GPUTransformType.Translate)
+
+    private fun NormalizedDrawCommand.FillPath.matchesPixelExactRoundCapR2HorizontalV1(): Boolean {
+        if (strokeWidth != 4f || tessellatedVertices.size != 4) return false
+        val startX = tessellatedVertices[0] + transform.translateX
+        val startY = tessellatedVertices[1] + transform.translateY
+        val endX = tessellatedVertices[2] + transform.translateX
+        val endY = tessellatedVertices[3] + transform.translateY
+        return startX.isIntegralDeviceCoordinate() && startY.isIntegralDeviceCoordinate() &&
+            endX.isIntegralDeviceCoordinate() && endY.isIntegralDeviceCoordinate() &&
+            startY == endY && endX - startX >= strokeWidth
+    }
+
+    private fun Float.isIntegralDeviceCoordinate(): Boolean = isFinite() && floor(this) == this
 
     /**
      * The bounded direct-triangle path consumer shares the same device-space gradient lowering
