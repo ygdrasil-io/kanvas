@@ -70,6 +70,7 @@ object GpuEvidenceCatalog {
         reverseVerticalRoundCapStroke(),
         reverseHorizontalRoundCapStroke(),
         translatedReverseHorizontalRoundCapStroke(),
+        scissoredReverseHorizontalRoundCapStroke(),
         scaledTranslatedHorizontalHairline(),
         scaledHorizontalHairline(),
         horizontalHairline(),
@@ -854,6 +855,34 @@ sweepGradientTwoStopStrokeRect(),
             centerY = 18.0,
             radius = 2.0,
             rgba = intArrayOf(255, 0, 0, 255),
+        ),
+    )
+
+    private fun scissoredReverseHorizontalRoundCapStroke(): EvidenceCase = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("scissored-reverse-horizontal-round-cap-stroke"),
+            "Pixel-exact scissored reverse horizontal round-cap path stroke",
+            "Public Kanvas Surface non-AA integral-grid horizontal radius-two round-cap path recorded from right to left and intersected with an integral device scissor.",
+            32,
+            32,
+            1L,
+            setOf("path-stroke", "round-cap", "horizontal", "reverse", "scissor", "kanvas-surface"),
+            EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke-scissor", 2),
+            ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent reverse horizontal round-cap union intersected with the integral device scissor."),
+            emptySet(),
+        ),
+        KanvasScenePrograms.scissoredReverseHorizontalRoundCapStroke(),
+        SurfaceSrgbRoundCapStrokeScissorCpuOracle(
+            startX = 6.0,
+            endX = 26.0,
+            centerY = 16.0,
+            radius = 2.0,
+            color = intArrayOf(255, 0, 0, 255),
+            clipLeft = 24,
+            clipTop = 15,
+            clipRight = 27,
+            clipBottom = 18,
         ),
     )
 
