@@ -1,6 +1,6 @@
 # W146 — translated triangle radial-gradient clip
 
-The existing hard-path radial FillRect consumer is extended with a translated sibling:
+The existing hard-path radial FillRect consumer is covered by a translated sibling:
 the scene translates the clip triangle, rectangle, and radial center by `(2, 0)` and
 uses the independent double-precision CPU oracle in device space.
 
