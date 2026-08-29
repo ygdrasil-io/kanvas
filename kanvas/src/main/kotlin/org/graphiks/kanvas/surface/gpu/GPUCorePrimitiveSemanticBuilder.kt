@@ -1382,7 +1382,7 @@ private fun NormalizedDrawCommand.FillPath.matchesHorizontalDashedButtMiterV1():
     val end = transform.map(tessellatedVertices[2], tessellatedVertices[3])
     return start.first.isIntegralDeviceCoordinate() && start.second.isIntegralDeviceCoordinate() &&
         end.first.isIntegralDeviceCoordinate() && end.second.isIntegralDeviceCoordinate() &&
-        start.second == end.second && end.first - start.first >= 12f
+        start.second == end.second && kotlin.math.abs(end.first - start.first) >= 12f
 }
 
 private fun NormalizedDrawCommand.FillPath.matchesVerticalDashedButtMiterV1(): Boolean {
@@ -1397,7 +1397,7 @@ private fun NormalizedDrawCommand.FillPath.matchesVerticalDashedButtMiterV1(): B
     val end = transform.map(tessellatedVertices[2], tessellatedVertices[3])
     return start.first.isIntegralDeviceCoordinate() && start.second.isIntegralDeviceCoordinate() &&
         end.first.isIntegralDeviceCoordinate() && end.second.isIntegralDeviceCoordinate() &&
-        start.first == end.first && end.second - start.second >= 12f
+        start.first == end.first && kotlin.math.abs(end.second - start.second) >= 12f
 }
 
 /**

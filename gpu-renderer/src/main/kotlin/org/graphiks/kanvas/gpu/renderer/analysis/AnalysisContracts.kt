@@ -2577,7 +2577,7 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
         val endY = tessellatedVertices[3] + transform.translateY
         return startX.isIntegralDeviceCoordinate() && startY.isIntegralDeviceCoordinate() &&
             endX.isIntegralDeviceCoordinate() && endY.isIntegralDeviceCoordinate() &&
-            startY == endY && endX - startX >= 12f
+            startY == endY && kotlin.math.abs(endX - startX) >= 12f
     }
 
     private fun NormalizedDrawCommand.FillPath.matchesVerticalDashedButtMiterV1(): Boolean {
@@ -2591,7 +2591,7 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
         val endY = tessellatedVertices[3] + transform.translateY
         return startX.isIntegralDeviceCoordinate() && startY.isIntegralDeviceCoordinate() &&
             endX.isIntegralDeviceCoordinate() && endY.isIntegralDeviceCoordinate() &&
-            startX == endX && endY - startY >= 12f
+            startX == endX && kotlin.math.abs(endY - startY) >= 12f
     }
 
     /** The first native StencilAA/MSAA stroke lane: one horizontal width-four segment. */

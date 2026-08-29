@@ -1924,6 +1924,19 @@ object KanvasScenePrograms {
         )
     })
 
+    /** The bounded dash route with the path traversed in the reverse direction. */
+    fun reverseHorizontalDashedButtMiterStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawPath(
+            Path { moveTo(28f, 16f); lineTo(4f, 16f) },
+            Paint.stroke(ColorARGB.Red, 4f).copy(
+                antiAlias = false,
+                strokeCap = StrokeCap.BUTT,
+                strokeJoin = StrokeJoin.MITER,
+                pathEffect = PathEffect.Dash(floatArrayOf(8f, 4f), phase = 0f),
+            ),
+        )
+    })
+
     /** The same bounded dash route consumed by an integral device scissor. */
     fun scissoredHorizontalDashedButtMiterStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
         save()

@@ -74,7 +74,7 @@ class GpuEvidenceCatalogTest {
     }
 
     @Test
-    fun `catalog separates one hundred fifty-seven public surface renders from seventeen refusals`() {
+    fun `catalog separates one hundred fifty-eight public surface renders from seventeen refusals`() {
         val cases = GpuEvidenceCatalog.cases
 
         assertEquals(
@@ -105,6 +105,7 @@ class GpuEvidenceCatalogTest {
                 "translated-scissored-round-cap-stroke",
                 "horizontal-dashed-butt-miter-stroke",
                 "vertical-dashed-butt-miter-stroke",
+                "reverse-horizontal-dashed-butt-miter-stroke",
                 "scissored-horizontal-dashed-butt-miter-stroke",
                 "translated-horizontal-dashed-butt-miter-stroke",
                 "phase-shifted-horizontal-dashed-butt-miter-stroke",
@@ -262,6 +263,7 @@ class GpuEvidenceCatalogTest {
                 "translated-scissored-round-cap-stroke",
                 "horizontal-dashed-butt-miter-stroke",
                 "vertical-dashed-butt-miter-stroke",
+                "reverse-horizontal-dashed-butt-miter-stroke",
                 "scissored-horizontal-dashed-butt-miter-stroke",
                 "translated-horizontal-dashed-butt-miter-stroke",
                 "phase-shifted-horizontal-dashed-butt-miter-stroke",
@@ -383,11 +385,11 @@ class GpuEvidenceCatalogTest {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            List(157) { "kanvas.surface.render" },
+            List(158) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
-        assertEquals(157, GpuEvidenceCatalog.renderCases.size)
-        assertEquals(174, GpuEvidenceCatalog.cases.size)
+        assertEquals(158, GpuEvidenceCatalog.renderCases.size)
+        assertEquals(175, GpuEvidenceCatalog.cases.size)
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
 
         val solid = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "solid-card-stack" })
@@ -551,6 +553,7 @@ class GpuEvidenceCatalogTest {
             "translated-scissored-round-cap-stroke",
             "horizontal-dashed-butt-miter-stroke",
             "vertical-dashed-butt-miter-stroke",
+            "reverse-horizontal-dashed-butt-miter-stroke",
             "scissored-horizontal-dashed-butt-miter-stroke",
             "translated-horizontal-dashed-butt-miter-stroke",
             "phase-shifted-horizontal-dashed-butt-miter-stroke",
@@ -727,6 +730,7 @@ class GpuEvidenceCatalogTest {
                 "translated-scissored-round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke-translated-scissor", 2),
                 "horizontal-dashed-butt-miter-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-dashed-stroke", 1),
                 "vertical-dashed-butt-miter-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-dashed-stroke-vertical", 1),
+                "reverse-horizontal-dashed-butt-miter-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-dashed-stroke-reverse-horizontal", 1),
                 "scissored-horizontal-dashed-butt-miter-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-dashed-stroke-scissor", 1),
                 "translated-horizontal-dashed-butt-miter-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-dashed-stroke-translated", 1),
                 "phase-shifted-horizontal-dashed-butt-miter-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-dashed-stroke-phase-four", 1),
@@ -891,6 +895,7 @@ class GpuEvidenceCatalogTest {
                 "translated-scissored-round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent translated round-cap union intersected with the integral device scissor."),
                 "horizontal-dashed-butt-miter-stroke" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent pixel-center dashed-stroke oracle."),
                 "vertical-dashed-butt-miter-stroke" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent pixel-center vertical dashed-stroke oracle."),
+                "reverse-horizontal-dashed-butt-miter-stroke" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent pixel-center oracle evaluated along the source path direction."),
                 "scissored-horizontal-dashed-butt-miter-stroke" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent dashed-stroke oracle intersected with the integral device scissor."),
                 "translated-horizontal-dashed-butt-miter-stroke" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent translated dashed-stroke oracle."),
                 "phase-shifted-horizontal-dashed-butt-miter-stroke" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent phase-aware dashed-stroke oracle."),
@@ -1169,6 +1174,13 @@ class GpuEvidenceCatalogTest {
         assertEquals(dashedStroke.paint, verticalDashedStroke.paint)
         assertEquals(Matrix3x3F32.Identity, verticalDashedStroke.transform)
         assertEquals(ClipStack.WideOpen, verticalDashedStroke.clip)
+
+        val reverseDashedStroke = assertIs<DisplayOp.DrawPath>(ops("reverse-horizontal-dashed-butt-miter-stroke").single())
+        assertEquals(RectF32.ofLTRB(4f, 16f, 28f, 16f), reverseDashedStroke.path.computeBounds())
+        assertFalse(PathMeasure(reverseDashedStroke.path).isClosed)
+        assertEquals(dashedStroke.paint, reverseDashedStroke.paint)
+        assertEquals(Matrix3x3F32.Identity, reverseDashedStroke.transform)
+        assertEquals(ClipStack.WideOpen, reverseDashedStroke.clip)
 
         val scissoredDashedStroke = assertIs<DisplayOp.DrawPath>(ops("scissored-horizontal-dashed-butt-miter-stroke").single { it is DisplayOp.DrawPath })
         assertEquals(RectF32.ofLTRB(4f, 16f, 28f, 16f), scissoredDashedStroke.path.computeBounds())
