@@ -12,6 +12,22 @@
 
 **Global Constraints:** `font` et le décodage/encodage `codec` restent hors périmètre. Les images RGBA en mémoire restent éligibles. Aucun fallback CPU silencieux. Aucun mélange legacy/nouveau renderer dans une frame. Aucun test ne lit le source, les imports, les packages, les noms de classes internes, le WGSL ou la forme exacte d'un futur `RenderGraph`. Les frontières sont vérifiées par la compilation Gradle et la visibilité Kotlin. Toutes les écritures manuelles utilisent `apply_patch`; toutes les commandes shell sont préfixées par `rtk`.
 
+### Amendement d'exécution approuvé — quarantaine de non-rendabilité pratique
+
+Après observation d'un run exhaustif W00, une GM peut être placée dans le scope
+temporaire `quarantined-resource-limit` uniquement lorsqu'un run réel et isolé
+démontre qu'elle n'est pas pratiquement terminable avec le renderer legacy. La
+quarantaine est une liste fermée de noms GM, avec raison et owner obligatoires ;
+elle ne peut pas être dérivée de `RenderCost.BLOCKING`, d'une famille ou d'une
+heuristique. Son `mustAttempt` vaut `false` pour permettre aux autres GMs de
+produire l'inventaire.
+
+Cette quarantaine ne satisfait pas la gate W00 stricte et doit être publiée
+comme dette explicite dans les statuts W00/W02. Première preuve observée :
+`jpg-color-cube`, interrompue après 1 h 21 min 29 s dans
+`Surface.makeImageSnapshot()` lors de l'assemblage legacy de 262 144
+`drawRect`, avec le processus toujours CPU-actif et sans résultat final.
+
 ## Carte des fichiers
 
 ### W0 — vérité de référence
@@ -1156,7 +1172,7 @@ Le plan est terminé uniquement lorsque :
 
 - le registre contient 631 GMs instanciables et aucun provider inconnu ;
 - l'inventaire v3 est strict, sans score orphelin et sans exclusion `blocking` ;
-- chaque GM possède exactement une classification font/codec/eligible/accepted gap ;
+- chaque GM possède exactement une classification font/codec/eligible/accepted gap/quarantaine temporaire ;
 - les objets géométriques canoniques et leurs opérations résident dans `:math` ;
 - une mutation externe ne change jamais une opération enregistrée ou une Picture ;
 - le writer Picture écrit v8 avec IDs stables et le reader lit encore v7 ;
