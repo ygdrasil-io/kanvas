@@ -424,6 +424,16 @@ class GpuEvidenceCatalogOracleTest {
     }
 
     @Test
+    fun `scissored round cap stroke preserves the integral device bounds`() {
+        val pixels = oracle("scissored-round-cap-stroke", 32, 32)
+
+        assertPixel(pixels, 32, 32, 6, 15, intArrayOf(255, 0, 0, 255))
+        assertPixel(pixels, 32, 32, 16, 17, intArrayOf(255, 0, 0, 255))
+        assertPixel(pixels, 32, 32, 18, 16, intArrayOf(0, 0, 0, 0))
+        assertPixel(pixels, 32, 32, 5, 19, intArrayOf(0, 0, 0, 0))
+    }
+
+    @Test
     fun `bounded bitmap oracle preserves literal nearest texels at its integer destination`() {
         val pixels = oracle("bounded-rgba8-nearest-bitmap")
 
@@ -890,9 +900,9 @@ class GpuEvidenceCatalogOracleTest {
         }
     }
 
-    private fun oracle(id: String): ByteArray = assertNotNull(
+    private fun oracle(id: String, width: Int = 64, height: Int = 64): ByteArray = assertNotNull(
         GpuEvidenceCatalog.renderCases.firstOrNull { it.descriptor.id.value == id }?.oracle,
-    ).render(64, 64)
+    ).render(width, height)
 
     private fun paintedPixelCount(pixels: ByteArray, background: IntArray): Int =
         pixels.asList().chunked(4).count { pixel ->
