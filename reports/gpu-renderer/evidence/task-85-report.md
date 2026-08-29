@@ -1,42 +1,51 @@
-# W109 — cap square sous clip path Winding natif
+# W109 — cap square sous clip path Winding
 
 ## Objectif
 
-Faire passer en rendu natif le cas borné d’un stroke mono-segment `square/miter`
-sous un clip path `Winding + INTERSECT`, qui était auparavant refusé par la
-composition du clip stencil.
+Transformer la preuve de refus du cap `square` en preuve native pour un segment
+diagonal mono-segment, non-AA, sous `ClipOp.INTERSECT` Winding.
 
-## Correction
+## Cause et correction
 
-L’outline device déjà calculé pour un segment square est maintenant admis dans
-la même forme `DirectTriangles` canonique que le butt : un contour, deux points
-source, huit coordonnées et les indices `[0,1,2,0,2,3]`. Les contrats de
-validation et de préparation reconnaissent `SingleSegmentSquareV1`; les autres
-caps, les dashes, les contours multiples et les joins non-miter restent refusés.
+Le mapper reconnaissait déjà ce stroke comme admissible et `GPUStroke` produisait
+son outline exact sous forme de trois quads adjacents (corps, extension de début,
+extension de fin). La préparation CorePrimitive refusait ensuite la composition
+avec `StencilCoverage`, car les validators DirectTriangles n’acceptaient que le
+proof `SingleSegmentButtV1` et la sémantique restait en `StrokeStencilEdgeFan`.
+
+La correction reste bornée à `SingleSegmentSquareV1` : pour un contour unique de
+deux points, l’outline square existant est réduit à ses quatre coins externes
+device (8 coordonnées), avec les indices canoniques `[0,1,2,0,2,3]`, Winding
+non-inverse et couverture `FullOrScissor`. Les validators du payload, du direct
+native route et du frame builder acceptent désormais uniquement la paire
+cohérente `cap=square` / `SingleSegmentSquareV1`. Les autres caps, joins, dashes
+et topologies restent refusés.
 
 ## Preuve native
 
-Fixture 32×32, AA désactivé, segment diagonal `(5.25,8.25)->(21.25,20.25)`,
-largeur 4, cap square, join miter, sous un triangle Winding en `INTERSECT`.
-Le test vérifie la route `native.path_stroke.stencil_cover`, le plan
-`StencilCoverage`, les opérations `IncrementWrap/DecrementWrap`, le consumer
-`NotEqual`, la préparation native, un submit et un readback. Le buffer RGBA
-complet est comparé à un oracle CPU indépendant qui étend le segment de la
-demi-largeur avant de tester la distance au segment.
+Le test `diagonal square cap stroke under winding path clip renders natively`
+vérifie la route `native.path_stroke.stencil_cover`, le producer stencil
+`IncrementWrap/DecrementWrap`, le consumer `NotEqual`, une préparation native
+réussie, un submit et un readback uniques, puis compare le RGBA complet à un
+oracle CPU indépendant. L’oracle étend le segment de la demi-largeur le long de
+sa tangente et intersecte le résultat avec le triangle Winding au centre de
+chaque pixel.
 
 ## Vérification
 
+Commande ciblée :
+
 ```text
-rtk ./gradlew --no-daemon :kanvas:test --tests '*GPUFramePathApiInventoryNativeSmokeTest.diagonal square cap stroke under winding path clip renders natively'
+./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.gpu.GPUFramePathApiInventoryNativeSmokeTest.diagonal square cap stroke under winding path clip renders natively'
 ```
 
-Résultat : `BUILD SUCCESSFUL`, test PASS. La classe complète
-`GPUFramePathApiInventoryNativeSmokeTest` a également été relancée avec succès
-et `rtk git diff --check` est propre.
+Résultat : `BUILD SUCCESSFUL`, test PASS.
+
+La classe complète `GPUFramePathApiInventoryNativeSmokeTest` a également été
+relancée avec succès, tous les tests PASS. `git diff --check` est propre.
 
 ## Limites
 
-La correction reste limitée au single-segment square/miter non-AA, avec clip
-stencil 1x. Les caps round, les dashes, l’anti-aliasing, les transformations
-non bornées et les strokes multi-contours restent hors contrat. Aucun PNG,
-seuil ou `gpu-renderer-scenes` n’a été modifié.
+La promotion concerne uniquement le cap square mono-segment, join miter, sans
+AA, sous clip path Winding non-inverse. Aucun seuil, PNG ou
+`gpu-renderer-scenes` n’a été modifié.
