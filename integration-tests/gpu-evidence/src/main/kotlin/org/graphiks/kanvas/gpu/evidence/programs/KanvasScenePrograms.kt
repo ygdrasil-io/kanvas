@@ -2103,6 +2103,25 @@ object KanvasScenePrograms {
         restore()
     })
 
+    /** The translated scale-two round-cap route constrained by an integral device scissor. */
+    fun uniformlyScaledTranslatedScissoredRoundCapStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        save()
+        clipRect(RectF32.ofLTRB(16f, 36f, 24f, 44f), antiAlias = false)
+        translate(4f, 6f)
+        scale(2f, 2f)
+        drawPath(
+            Path {
+                moveTo(8f, 16f)
+                lineTo(24f, 16f)
+            },
+            Paint.stroke(ColorARGB.Red, 4f).copy(
+                antiAlias = false,
+                strokeCap = StrokeCap.ROUND,
+            ),
+        )
+        restore()
+    })
+
     /** The translated reversed vertical radius-two round-cap route under an integral scissor. */
     fun translatedScissoredReverseVerticalRoundCapStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
         save()
