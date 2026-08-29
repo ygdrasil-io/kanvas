@@ -117,6 +117,31 @@ object KanvasScenePrograms {
         restore()
     })
 
+    /** Non-right-angle path-stroke rotation remains outside the admitted clip route. */
+    fun rotatedDiagonalStrokeUnderWindingRefusal() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        save()
+        clipPath(
+            Path {
+                moveTo(7.25f, 6.25f)
+                lineTo(30.25f, 6.25f)
+                lineTo(7.25f, 29.25f)
+                close()
+            }.apply { fillType = FillType.WINDING },
+            ClipOp.INTERSECT,
+            antiAlias = false,
+        )
+        rotate(45f, 16f, 16f)
+        drawPath(
+            Path { moveTo(8.25f, 8.25f); lineTo(20.25f, 14.25f) },
+            Paint.stroke(ColorARGB.Red, 4f).copy(
+                antiAlias = false,
+                strokeCap = StrokeCap.BUTT,
+                strokeJoin = StrokeJoin.MITER,
+            ),
+        )
+        restore()
+    })
+
     fun basicPrimitivesValidAlpha() = KanvasSurfaceProgram(ROUTE_ID, record = {
         clear(ColorARGB.Transparent)
         drawColor(ColorARGB.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f, .5f))
