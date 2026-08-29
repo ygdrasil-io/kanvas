@@ -4286,7 +4286,7 @@ class GPUFramePathApiInventoryNativeSmokeTest {
     }
 
     @Test
-    fun `clamp sweep gradient transformed right angle stroke remains refused`() {
+    fun `clamp sweep gradient right angle square miter stroke under winding clip renders natively`() {
         val backend = GPUBackendRuntimeNativeFactory.createOrNull()
         assumeTrue(backend != null)
         backend!!
@@ -4295,8 +4295,9 @@ class GPUFramePathApiInventoryNativeSmokeTest {
             val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(
                 RenderConfig.DEFAULT.mapPreparedGpuColorConfig(),
             )
+            val targetBounds = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, 32, 32)
+            val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.sweep-right-angle")
             val clipPath = Path().apply {
-                fillType = FillType.INVERSE_WINDING
                 moveTo(6.875f, 5.875f)
                 lineTo(24.875f, 5.875f)
                 lineTo(6.875f, 23.875f)
@@ -4339,14 +4340,107 @@ class GPUFramePathApiInventoryNativeSmokeTest {
                 deviceGeneration = backend.deviceGeneration,
             )
             assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+            val visual = inventory.visualCommands.single()
+            val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(visual.clipExecutionPlan)
+            val clipGeometry = assertIs<GPUClipExecutionGeometry.Path>(execution.producer.geometry)
+            assertEquals("right-angle-rotation", execution.pathTransformClass)
+            assertEquals(GPUClipStencilCompare.NotEqual, execution.consumer.compare)
+            assertEquals(GPUClipFillRule.Winding, clipGeometry.fillRule)
+            assertTrue(!clipGeometry.inverseFill)
             val preparation = GPUFramePathApiInventory.prepareNativeTaskList(
                 inventory,
                 capabilities,
-                org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, 32, 32),
-                GPUReadbackRequestID("readback.inventory-core-primitive.sweep-right-angle-refused"),
+                targetBounds,
+                readbackId,
             )
-            val refused = assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(preparation)
-            assertEquals("unsupported.core_primitive.material.path_stencil", refused.diagnostic.code.value)
+            val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+                preparation,
+                (preparation as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                    "${it.code.value}: ${it.message}; facts=${it.facts}"
+                },
+            ).taskList
+            val session = backend.prepareSceneFrameSession(
+                GPUOffscreenTargetRequest(32, 32, colorMapping.physicalFormat, colorMapping.interpretation),
+            )
+            try {
+                val completed = session.renderFrame(
+                    prepared,
+                    GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
+                ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+                assertEquals(
+                    GPUFrameStructuralOutcome.Succeeded,
+                    completed.outcome,
+                    "Sweep native execution refused/failed: ${completed.diagnostic}",
+                )
+                val gpu = assertIs<GPUSceneFrameOutput.ReadbackRgba>(completed.output).bytes
+                assertRgbaWithinOneLsb(
+                    deterministicRightAngleSquareMiterSweepWindingClipOracle(),
+                    gpu,
+                )
+                assertEquals(1L, session.nativeCounters().submits)
+                assertEquals(1L, session.nativeCounters().readbackCopies)
+            } finally {
+                session.close()
+            }
+        } finally {
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
+    fun `clamp sweep gradient non-right-angle stroke remains refused before native preparation`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        try {
+            val capabilities = requireNotNull(backend.capabilities)
+            val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(
+                RenderConfig.DEFAULT.mapPreparedGpuColorConfig(),
+            )
+            val clipPath = Path().apply {
+                fillType = FillType.INVERSE_WINDING
+                moveTo(6.875f, 5.875f)
+                lineTo(24.875f, 5.875f)
+                lineTo(6.875f, 23.875f)
+                close()
+            }
+            val inventory = GPUFramePathApiInventory.plan(
+                operations = listOf(
+                    DisplayOp.DrawPath(
+                        Path().apply {
+                            moveTo(4.125f, 4.125f)
+                            lineTo(12.125f, 8.625f)
+                        },
+                        Paint.stroke(ColorARGB.Transparent, 2f).copy(
+                            shader = Shader.SweepGradient(
+                                Point2F32(16f, 16f),
+                                0f,
+                                360f,
+                                listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                            ),
+                            antiAlias = false,
+                            strokeCap = StrokeCap.BUTT,
+                            strokeJoin = StrokeJoin.MITER,
+                        ),
+                        Matrix3x3F32.rotation(15f),
+                        ClipStack.Complex(
+                            listOf(
+                                ClipStackOp.PathOp(
+                                    clipPath,
+                                    ClipOp.INTERSECT,
+                                    antiAlias = false,
+                                    transformClass = "non-right-angle-rotation",
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+                target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+                config = RenderConfig.DEFAULT,
+                capabilities = capabilities,
+                deviceGeneration = backend.deviceGeneration,
+            )
+            assertEquals("refused.unsupported.geometry.perspective_path", inventory.recording.analysis.records.single().routeDecisionLabel)
         } finally {
             GPUBackendRuntimeNativeFactory.dispose()
         }
@@ -6930,6 +7024,62 @@ class GPUFramePathApiInventoryNativeSmokeTest {
                     val distanceY = py - closestY
                     if (distanceX * distanceX + distanceY * distanceY > extension * extension) continue
                     val t = (py / 32f).coerceIn(0f, 1f)
+                    val red = linearToSrgb((1f - t) * srgbToLinear(1f) + t * srgbToLinear(0f))
+                    val blue = linearToSrgb((1f - t) * srgbToLinear(0f) + t * srgbToLinear(1f))
+                    val offset = (y * 32 + x) * 4
+                    rgba[offset] = (red * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 2] = (blue * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 3] = 0xff.toByte()
+                }
+            }
+        }
+
+    /** Independent device-space oracle for the right-angle rotated square-cap sweep stroke with +90° angle rebasing. */
+    private fun deterministicRightAngleSquareMiterSweepWindingClipOracle(): ByteArray =
+        ByteArray(32 * 32 * 4).also { rgba ->
+            val ax = 27.875f
+            val ay = 4.125f
+            val bx = 23.375f
+            val by = 12.125f
+            val dx = bx - ax
+            val dy = by - ay
+            val length = kotlin.math.sqrt(dx * dx + dy * dy)
+            val extension = 1f
+            val startX = ax - dx / length * extension
+            val startY = ay - dy / length * extension
+            val endX = bx + dx / length * extension
+            val endY = by + dy / length * extension
+            val extendedDx = endX - startX
+            val extendedDy = endY - startY
+            val lengthSquared = extendedDx * extendedDx + extendedDy * extendedDy
+            val clipAx = 6.875f
+            val clipAy = 5.875f
+            val clipBx = 24.875f
+            val clipBy = 5.875f
+            val clipCx = 6.875f
+            val clipCy = 23.875f
+            val denominator = (clipBy - clipCy) * (clipAx - clipCx) +
+                (clipCx - clipBx) * (clipAy - clipCy)
+            val fullTurn = (2f * kotlin.math.PI).toFloat()
+            for (y in 0 until 32) {
+                for (x in 0 until 32) {
+                    val px = x + 0.5f
+                    val py = y + 0.5f
+                    val u = ((clipBy - clipCy) * (px - clipCx) +
+                        (clipCx - clipBx) * (py - clipCy)) / denominator
+                    val v = ((clipCy - clipAy) * (px - clipCx) +
+                        (clipAx - clipCx) * (py - clipCy)) / denominator
+                    if (u < 0f || v < 0f || u + v > 1f) continue
+                    val projection = ((px - startX) * extendedDx + (py - startY) * extendedDy) /
+                        lengthSquared
+                    if (projection < 0f || projection > 1f) continue
+                    val closestX = startX + projection * extendedDx
+                    val closestY = startY + projection * extendedDy
+                    val distanceX = px - closestX
+                    val distanceY = py - closestY
+                    if (distanceX * distanceX + distanceY * distanceY > extension * extension) continue
+                    val rawTurn = kotlin.math.atan2(py - 16f, px - 16f) / fullTurn
+                    val t = ((rawTurn - 0.25f) - kotlin.math.floor(rawTurn - 0.25f)).coerceIn(0f, 1f)
                     val red = linearToSrgb((1f - t) * srgbToLinear(1f) + t * srgbToLinear(0f))
                     val blue = linearToSrgb((1f - t) * srgbToLinear(0f) + t * srgbToLinear(1f))
                     val offset = (y * 32 + x) * 4

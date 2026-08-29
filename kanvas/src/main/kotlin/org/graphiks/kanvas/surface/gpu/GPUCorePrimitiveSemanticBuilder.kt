@@ -461,6 +461,7 @@ private fun GPUMaterialDescriptor?.toCorePrimitiveMaterial(
         payload to listOf(0f, 0f, 0f, 0f)
     }
     is GPUMaterialDescriptor.SweepGradient -> {
+        val angleOffset = deviceGradientTransform?.rebasedSweepAngleOffsetDegrees() ?: 0f
         val facts = this@toCorePrimitiveMaterial.corePrimitiveMaterialFacts()
         if (tileMode != "clamp") {
             refuseCoreMaterial("unsupported.core_primitive.material.tile_mode", facts)
@@ -496,11 +497,17 @@ private fun GPUMaterialDescriptor?.toCorePrimitiveMaterial(
             refuseCoreMaterial("unsupported.core_primitive.material.stops", facts)
         }
         val deviceCenter = deviceGradientTransform?.map(centerX, centerY) ?: (centerX to centerY)
+        val (rebasedStartAngle, rebasedEndAngle) = rebaseSweepAnglesWithFullTurnOffset(
+            startAngle = startAngle,
+            endAngle = endAngle,
+            angleOffset = angleOffset,
+            sweepSpan = sweepSpan,
+        )
         val payload = GPUCorePrimitiveMaterialPayload.SweepGradient(
             centerX = deviceCenter.first,
             centerY = deviceCenter.second,
-            startAngle = startAngle,
-            endAngle = endAngle,
+            startAngle = rebasedStartAngle,
+            endAngle = rebasedEndAngle,
             localMatrix = localMatrix,
             interpolation = interpolation,
             tileMode = tileMode,
@@ -925,9 +932,30 @@ private fun GPUTransformFacts.isNativeHardPathClipSweepGradientTransform(): Bool
     GPUTransformType.Scale,
     GPUTransformType.Affine,
     -> skewX == 0f && skewY == 0f && scaleX > 0f && scaleX == scaleY
+        || isExactQuarterTurnHardPathClipGradientRotation()
     GPUTransformType.Perspective,
     GPUTransformType.Singular,
     -> false
+}
+
+private fun GPUTransformFacts.rebasedSweepAngleOffsetDegrees(): Float =
+    if (isExactQuarterTurnHardPathClipGradientRotation()) 90f else 0f
+
+private fun normalizeSweepAngleRebase(angleDegrees: Float): Float {
+    val clamped = angleDegrees % 360f
+    return if (clamped < 0f) clamped + 360f else clamped
+}
+
+private fun rebaseSweepAnglesWithFullTurnOffset(
+    startAngle: Float,
+    endAngle: Float,
+    angleOffset: Float,
+    sweepSpan: Float,
+): Pair<Float, Float> {
+    if (angleOffset == 0f) return startAngle to endAngle
+    val rebasedStart = normalizeSweepAngleRebase(startAngle + angleOffset)
+    val rebasedEnd = rebasedStart + sweepSpan
+    return rebasedStart to rebasedEnd
 }
 
 private fun GPUTransformFacts.isExactQuarterTurnHardPathClipGradientRotation(): Boolean =
