@@ -1535,11 +1535,8 @@ private fun GPUClipCoveragePlan.Mask.toMaskExecutionPlan(
         it.kind == GPUClipCoverageElementKind.Path &&
             !it.antiAlias &&
             (
-                it.operation == GPUClipCoverageOperation.Intersect ||
-                    (
-                        it.operation == GPUClipCoverageOperation.Difference &&
-                            !it.inverseFill
-                    )
+                    it.operation == GPUClipCoverageOperation.Intersect ||
+                        it.operation == GPUClipCoverageOperation.Difference
             )
     }
     if (singleHardPathClip != null) {
@@ -1667,6 +1664,7 @@ private val HARD_PATH_CLIP_TRANSFORM_CLASSES = setOf(
     "uniform-positive-scale-translate",
     "scale",
     "scale-translate",
+    "right-angle-rotation",
 )
 
 private fun GPUClipCoverageElement.executionGeometryOrRefusal(): GPUClipExecutionGeometry? = try {

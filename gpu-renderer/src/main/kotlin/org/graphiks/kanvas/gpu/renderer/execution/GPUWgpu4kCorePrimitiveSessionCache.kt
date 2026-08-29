@@ -327,6 +327,9 @@ private fun GPUWgpu4kCorePrimitivePipelineCacheKey.hasCompatibleComponentIdentit
                 GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerRadialGradientRegular,
                 GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerRadialGradientInverse,
                 -> GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient
+                GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerSweepGradientRegular,
+                GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerSweepGradientInverse,
+                -> GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient
                 else -> null
             }
     pipelineIdentity.program.isClipStencilProducer() ->
