@@ -24,6 +24,7 @@ import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbThreeStopSweepGradient
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRoundCapStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRoundCapStrokeScissorCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbSolidStrokeScissorCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbHairlineCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathCpuOracle
@@ -57,6 +58,7 @@ object GpuEvidenceCatalog {
         strokeRectOutline(),
         translatedStrokeRectOutline(),
         roundCapStroke(),
+        scaledTranslatedHorizontalHairline(),
         scissoredRoundCapStroke(),
         translatedScissoredRoundCapStroke(),
         scissoredDiagonalButtStroke(),
@@ -537,6 +539,29 @@ sweepGradientTwoStopStrokeRect(),
         ),
         KanvasScenePrograms.roundCapStroke(),
         SurfaceSrgbRoundCapStrokeCpuOracle(6.0, 26.0, 16.0, 2.0, intArrayOf(255, 0, 0, 255)),
+    )
+
+    private fun scaledTranslatedHorizontalHairline(): EvidenceCase = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("scaled-translated-horizontal-hairline"),
+            "Scaled translated horizontal hairline",
+            "Public Kanvas Surface zero-width non-AA horizontal hairline transformed by a uniform scale and translation onto an integral device row.",
+            32,
+            32,
+            1L,
+            setOf("path-hairline", "uniform-scale", "translation", "kanvas-surface"),
+            EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-hairline-direct-device-quad", 2),
+            ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent one-pixel device-row hairline coverage oracle."),
+            emptySet(),
+        ),
+        KanvasScenePrograms.scaledTranslatedHorizontalHairline(),
+        SurfaceSrgbHairlineCpuOracle(
+            startX = 10.0,
+            endX = 30.0,
+            centerY = 18.0,
+            color = intArrayOf(255, 0, 0, 255),
+        ),
     )
 
     private fun scissoredRoundCapStroke(): EvidenceCase = EvidenceCase(
