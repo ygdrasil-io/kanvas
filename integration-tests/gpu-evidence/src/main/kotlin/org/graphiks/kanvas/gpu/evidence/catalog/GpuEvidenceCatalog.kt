@@ -65,6 +65,7 @@ object GpuEvidenceCatalog {
         verticalButtMiterStroke(),
         horizontalSquareMiterStroke(),
         diagonalButtMiterStroke(),
+        diagonalSquareMiterStroke(),
         scissoredRoundCapStroke(),
         translatedScissoredRoundCapStroke(),
         scissoredDiagonalButtStroke(),
@@ -689,6 +690,32 @@ sweepGradientTwoStopStrokeRect(),
             strokeEndY = 20.25,
             strokeWidth = 4.0,
             color = intArrayOf(255, 0, 0, 255),
+        ),
+    )
+
+    private fun diagonalSquareMiterStroke(): EvidenceCase = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("diagonal-square-miter-stroke"),
+            "Diagonal square miter stroke",
+            "Public Kanvas Surface non-AA diagonal width-four square-cap miter stroke with fractional endpoints.",
+            32,
+            32,
+            1L,
+            setOf("path-stroke", "square-cap", "diagonal", "kanvas-surface"),
+            EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-solid-stroke", 2),
+            ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent pixel-center stroke oracle with tangent-aligned cap extension."),
+            emptySet(),
+        ),
+        KanvasScenePrograms.diagonalSquareMiterStroke(),
+        SurfaceSrgbSolidStrokeCpuOracle(
+            strokeStartX = 5.25,
+            strokeStartY = 8.25,
+            strokeEndX = 21.25,
+            strokeEndY = 20.25,
+            strokeWidth = 4.0,
+            color = intArrayOf(255, 0, 0, 255),
+            squareCaps = true,
         ),
     )
 

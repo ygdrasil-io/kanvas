@@ -496,6 +496,16 @@ class GpuEvidenceCatalogOracleTest {
     }
 
     @Test
+    fun `diagonal square miter stroke extends along the tangent`() {
+        val pixels = oracle("diagonal-square-miter-stroke", 32, 32)
+
+        assertPixel(pixels, 32, 32, 4, 7, intArrayOf(255, 0, 0, 255))
+        assertPixel(pixels, 32, 32, 22, 21, intArrayOf(255, 0, 0, 255))
+        assertPixel(pixels, 32, 32, 2, 7, intArrayOf(0, 0, 0, 0))
+        assertPixel(pixels, 32, 32, 23, 22, intArrayOf(0, 0, 0, 0))
+    }
+
+    @Test
     fun `translated scissored round cap stroke rebases device coverage`() {
         val pixels = oracle("translated-scissored-round-cap-stroke", 32, 32)
 
