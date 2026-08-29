@@ -558,6 +558,32 @@ object KanvasScenePrograms {
         restore()
     })
 
+    fun clipPathTranslatedTriangleRadialGradientStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        save()
+        translate(2f, 0f)
+        clipPath(
+            Path { moveTo(7.25f, 6.25f); lineTo(30.25f, 6.25f); lineTo(7.25f, 29.25f); close() }
+                .apply { fillType = FillType.WINDING },
+            ClipOp.INTERSECT,
+            antiAlias = false,
+        )
+        drawPath(
+            Path { moveTo(5.25f, 8.25f); lineTo(21.25f, 20.25f) },
+            Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                shader = Shader.RadialGradient(
+                    Point2F32(16f, 16f),
+                    16f,
+                    listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                    TileMode.CLAMP,
+                ),
+                antiAlias = false,
+                strokeCap = StrokeCap.BUTT,
+            ),
+        )
+        restore()
+    })
+
     fun clipPathTranslatedTriangleRadialGradient() = clipPathTriangleRadialGradientScene {
         translate(2f, 0f)
     }

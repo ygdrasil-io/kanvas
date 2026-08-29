@@ -21,6 +21,16 @@ class GpuEvidenceCatalogOracleTest {
     }
 
     @Test
+    fun `translated radial stroke oracle preserves device-space coverage and gradient`() {
+        val pixels = oracle("clip-path-translated-triangle-radial-stroke")
+
+        assertPixel(pixels, 64, 64, 9, 7, intArrayOf(137, 0, 225, 255))
+        assertPixel(pixels, 64, 64, 17, 15, intArrayOf(250, 0, 59, 255))
+        assertPixel(pixels, 64, 64, 20, 18, intArrayOf(13, 20, 33, 255))
+        assertPixel(pixels, 64, 64, 22, 20, intArrayOf(13, 20, 33, 255))
+    }
+
+    @Test
     fun `bounded bitmap oracle preserves literal nearest texels at its integer destination`() {
         val pixels = oracle("bounded-rgba8-nearest-bitmap")
 
