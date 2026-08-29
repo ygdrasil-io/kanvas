@@ -1805,6 +1805,7 @@ class GPUFirstRoutePlanner(
         } ?: material.analysisRefusalCodeOrNull(
             allowThreeStopLinearGradient = supportsBoundedThreeStopLinearGradient(),
             allowThreeStopRadialGradient = hasThreeStopRadialGradient(),
+            allowThreeStopSweepGradient = hasThreeStopSweepGradient(),
         ) ?: when {
             transform.type == GPUTransformType.Perspective -> "unsupported.transform.perspective"
             transform.type == GPUTransformType.Singular -> "unsupported.transform.singular"
@@ -1876,6 +1877,18 @@ class GPUFirstRoutePlanner(
         val gradient = material as? GPUMaterialDescriptor.RadialGradient ?: return false
         return !antiAlias &&
             transform.type == GPUTransformType.Identity &&
+            gradient.tileMode == "clamp" &&
+            gradient.localMatrix == listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f) &&
+            gradient.allStopPositions?.size == 3
+    }
+
+    /** The native ABI is larger, but only this proven FillRect route may consume a third sweep stop. */
+    private fun NormalizedDrawCommand.FillRect.hasThreeStopSweepGradient(): Boolean {
+        val gradient = material as? GPUMaterialDescriptor.SweepGradient ?: return false
+        return !antiAlias &&
+            transform.type == GPUTransformType.Identity &&
+            layer.target.colorFormat == "rgba8unorm-srgb" &&
+            clip.kind == GPUClipKind.WideOpen &&
             gradient.tileMode == "clamp" &&
             gradient.localMatrix == listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f) &&
             gradient.allStopPositions?.size == 3
@@ -2191,6 +2204,7 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
     private fun GPUMaterialDescriptor.analysisRefusalCodeOrNull(
         allowThreeStopLinearGradient: Boolean = false,
         allowThreeStopRadialGradient: Boolean = false,
+        allowThreeStopSweepGradient: Boolean = false,
     ): String? =
         (this as? GPUMaterialDescriptor.Unsupported)?.reason?.diagnosticCode
             // CorePrimitive owns the legacy linear-gradient tile-mode ABI, including repeat.
@@ -2200,6 +2214,7 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
                 deferLinearGradientTileModeToRoute = this is GPUMaterialDescriptor.LinearGradient,
                 allowThreeStopLinearGradient = allowThreeStopLinearGradient,
                 allowThreeStopRadialGradient = allowThreeStopRadialGradient,
+                allowThreeStopSweepGradient = allowThreeStopSweepGradient,
             )?.diagnosticCode
 
     /**
