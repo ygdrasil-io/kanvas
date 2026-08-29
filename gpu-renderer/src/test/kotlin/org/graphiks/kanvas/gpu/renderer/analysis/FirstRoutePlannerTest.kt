@@ -2781,7 +2781,7 @@ class FirstRoutePlannerTest {
             antiAlias = false,
         )
 
-        val plan = GPUFirstRoutePlanner(firstSlicePathFillStencilCoverCapabilities()).plan(command)
+        val plan = GPUFirstRoutePlanner(firstSlicePathFillCapabilities()).plan(command)
 
         assertEquals("native.path_stroke.stencil_cover", plan.analysisRecord.routeDecisionLabel)
         assertEquals("route.path_stroke.126", assertIs<GPURouteDecision.Native>(plan.routeDecision).route.routeId)
@@ -2843,6 +2843,50 @@ class FirstRoutePlannerTest {
 
         assertEquals("native.path_stroke.stencil_cover", plan.analysisRecord.routeDecisionLabel)
         assertEquals("route.path_stroke.129", assertIs<GPURouteDecision.Native>(plan.routeDecision).route.routeId)
+    }
+
+    @Test
+    fun `fill path horizontal width four anti aliased stroke builds native stencil cover route`() {
+        val command = GPUFillPathCommandBuilder.build(
+            commandId = GPUDrawCommandID(130),
+            pathKey = "path:aa-stroke-segment:v1",
+            pathDescriptor = GPUPathFacts(
+                pathKey = "path:aa-stroke-segment:v1", verbCount = 2, pointCount = 2,
+                fillRule = "NonZero", inverseFill = false, finiteProof = "finite",
+                volatility = "immutable", transformClass = "identity", edgeCount = 1,
+            ),
+            tessellatedVertices = listOf(4f, 8f, 28f, 8f), contourStarts = listOf(0), edgeCount = 1,
+            target = GPUTargetFacts(width = 32, height = 32, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0f, b = 0f, a = 1f),
+            stroke = true, strokeWidth = 4f, strokeCap = "butt", strokeJoin = "miter", antiAlias = true,
+        )
+
+        val plan = GPUFirstRoutePlanner(firstSlicePathFillStencilCoverCapabilities()).plan(command)
+
+        assertEquals("native.path_stroke.stencil_cover", plan.analysisRecord.routeDecisionLabel)
+        assertIs<GPURouteDecision.Native>(plan.routeDecision)
+    }
+
+    @Test
+    fun `fill path anti aliased non horizontal stroke remains prepared`() {
+        val command = GPUFillPathCommandBuilder.build(
+            commandId = GPUDrawCommandID(131),
+            pathKey = "path:aa-diagonal-stroke:v1",
+            pathDescriptor = GPUPathFacts(
+                pathKey = "path:aa-diagonal-stroke:v1", verbCount = 2, pointCount = 2,
+                fillRule = "NonZero", inverseFill = false, finiteProof = "finite",
+                volatility = "immutable", transformClass = "identity", edgeCount = 1,
+            ),
+            tessellatedVertices = listOf(4f, 8f, 28f, 12f), contourStarts = listOf(0), edgeCount = 1,
+            target = GPUTargetFacts(width = 32, height = 32, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0f, b = 0f, a = 1f),
+            stroke = true, strokeWidth = 4f, strokeCap = "butt", strokeJoin = "miter", antiAlias = true,
+        )
+
+        val plan = GPUFirstRoutePlanner(firstSlicePathFillCapabilities()).plan(command)
+
+        assertEquals("prepared.path_stroke.tessellated", plan.analysisRecord.routeDecisionLabel)
+        assertIs<GPURouteDecision.Prepared>(plan.routeDecision)
     }
 
     @Test
