@@ -73,7 +73,7 @@ class GpuEvidenceCatalogTest {
     }
 
     @Test
-    fun `catalog separates one hundred thirty-eight public surface renders from nine refusals`() {
+    fun `catalog separates one hundred thirty-nine public surface renders from nine refusals`() {
         val cases = GpuEvidenceCatalog.cases
 
         assertEquals(
@@ -90,6 +90,7 @@ class GpuEvidenceCatalogTest {
                 "round-cap-stroke",
                 "scissored-round-cap-stroke",
                 "translated-scissored-round-cap-stroke",
+                "scissored-diagonal-butt-stroke",
                 "linear-gradient-lanes",
                 "linear-gradient-three-stops",
                 "radial-swatch",
@@ -220,6 +221,7 @@ class GpuEvidenceCatalogTest {
                 "round-cap-stroke",
                 "scissored-round-cap-stroke",
                 "translated-scissored-round-cap-stroke",
+                "scissored-diagonal-butt-stroke",
                 "linear-gradient-lanes",
                 "linear-gradient-three-stops",
                 "radial-swatch",
@@ -336,11 +338,11 @@ class GpuEvidenceCatalogTest {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            List(138) { "kanvas.surface.render" },
+            List(139) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
-        assertEquals(138, GpuEvidenceCatalog.renderCases.size)
-        assertEquals(147, GpuEvidenceCatalog.cases.size)
+        assertEquals(139, GpuEvidenceCatalog.renderCases.size)
+        assertEquals(148, GpuEvidenceCatalog.cases.size)
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
 
         val solid = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "solid-card-stack" })
@@ -490,6 +492,7 @@ class GpuEvidenceCatalogTest {
             "round-cap-stroke",
             "scissored-round-cap-stroke",
             "translated-scissored-round-cap-stroke",
+            "scissored-diagonal-butt-stroke",
             "linear-gradient-lanes",
             "linear-gradient-three-stops",
             "radial-swatch",
@@ -639,6 +642,7 @@ class GpuEvidenceCatalogTest {
                 "round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke", 2),
                 "scissored-round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke-scissor", 2),
                 "translated-scissored-round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke-translated-scissor", 2),
+                "scissored-diagonal-butt-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-diagonal-butt-stroke-scissor", 2),
                 "linear-gradient-lanes" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-linear-clamp", 2),
                 "linear-gradient-three-stops" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-linear-clamp", 2),
                 "radial-swatch" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-radial-clamp", 2),
@@ -784,6 +788,7 @@ class GpuEvidenceCatalogTest {
                 "round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Independent pixel-center disk oracle for W25's integral-grid radius-two horizontal contract."),
                 "scissored-round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent round-cap union intersected with the integral device scissor."),
                 "translated-scissored-round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent translated round-cap union intersected with the integral device scissor."),
+                "scissored-diagonal-butt-stroke" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from independent diagonal stroke coverage intersected with the integral device scissor."),
                 "linear-gradient-lanes" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
                 "linear-gradient-three-stops" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
                 "radial-swatch" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),

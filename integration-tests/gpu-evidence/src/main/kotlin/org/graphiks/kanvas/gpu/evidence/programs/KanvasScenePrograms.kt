@@ -1557,6 +1557,23 @@ object KanvasScenePrograms {
         restore()
     })
 
+    fun scissoredDiagonalButtStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        save()
+        clipRect(RectF32.ofLTRB(8f, 10f, 20f, 19f), antiAlias = false)
+        drawPath(
+            Path {
+                moveTo(5.25f, 8.25f)
+                lineTo(21.25f, 20.25f)
+            },
+            Paint.stroke(ColorARGB.Red, 4f).copy(
+                antiAlias = false,
+                strokeCap = StrokeCap.BUTT,
+                strokeJoin = StrokeJoin.MITER,
+            ),
+        )
+        restore()
+    })
+
     fun linearGradientLanes() = KanvasSurfaceProgram(ROUTE_ID, record = {
         drawRect(
             RectF32.ofLTRB(8f, 16f, 56f, 48f),
