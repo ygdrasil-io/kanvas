@@ -8,6 +8,7 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.StrokeCap
+import org.graphiks.kanvas.paint.StrokeJoin
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.pipeline.ClipOp
@@ -799,6 +800,38 @@ object KanvasScenePrograms {
                 ),
                 antiAlias = false,
                 strokeCap = StrokeCap.SQUARE,
+            ),
+        )
+        restore()
+    })
+
+    fun clipPathSweepSquareStrokeScaledTranslatedInverseWinding() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        save()
+        translate(2f, 1f)
+        scale(1.5f, 1.5f)
+        clipPath(
+            Path {
+                moveTo(3.25f, 3.25f)
+                lineTo(15.25f, 3.25f)
+                lineTo(3.25f, 15.25f)
+                close()
+            }.apply { fillType = FillType.INVERSE_WINDING },
+            ClipOp.INTERSECT,
+            antiAlias = false,
+        )
+        drawPath(
+            Path { moveTo(4.125f, 4.125f); lineTo(12.125f, 8.625f) },
+            Paint.stroke(ColorARGB.Transparent, 2f).copy(
+                shader = Shader.SweepGradient(
+                    Point2F32(16f, 16f),
+                    0f,
+                    360f,
+                    listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                ),
+                antiAlias = false,
+                strokeCap = StrokeCap.SQUARE,
+                strokeJoin = StrokeJoin.MITER,
             ),
         )
         restore()
