@@ -446,6 +446,32 @@ object KanvasScenePrograms {
         drawRect(RectF32.ofLTRB(8f, 16f, 40f, 48f), Paint.fill(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)).copy(antiAlias = false))
     })
 
+    /** A device-space non-uniform affine scale clip remains valid after the CTM is reset for its consumer. */
+    fun affinePathClipColor() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        save()
+        setMatrix(Matrix3x3F32(sx = .75f, tx = 2f, sy = .5f, ty = 1f))
+        clipPath(Path {
+            moveTo(8f, 8f)
+            lineTo(56f, 8f)
+            lineTo(56f, 56f)
+            lineTo(8f, 56f)
+            close()
+        }, antiAlias = false)
+        resetMatrix()
+        drawColor(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f))
+        restore()
+    })
+
+    /** General perspective remains a public Surface refusal; no partial frame may be submitted. */
+    fun perspectiveTransformRefusal() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        setMatrix(Matrix3x3F32(persp0 = .1f))
+        drawRect(
+            RectF32.ofLTRB(8f, 8f, 56f, 56f),
+            Paint.fill(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)).copy(antiAlias = false),
+        )
+    })
+
     fun scissoredRadialGradient() = KanvasSurfaceProgram(ROUTE_ID, record = {
         save()
         clipRect(RectF32.ofLTRB(20f, 12f, 52f, 52f), antiAlias = false)

@@ -1065,7 +1065,7 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `public non uniform scaled hard path clip remains refused with capture provenance`() {
+    fun `public non uniform scaled hard path clip renders at its captured device-space coordinates`() {
         requireWebGpu()
         val triangle = Path().apply {
             moveTo(4f, 4f)
@@ -1078,11 +1078,123 @@ class GPUClipCoverageSurfaceTest {
             save()
             scale(0.75f, 0.5f)
             clipPath(triangle, ClipOp.INTERSECT, antiAlias = false)
-            drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(ColorARGB.Red))
+            resetMatrix()
+            drawPath(
+                Path().apply {
+                    moveTo(0f, 0f)
+                    lineTo(32f, 0f)
+                    lineTo(0f, 32f)
+                    close()
+                },
+                Paint.fill(ColorARGB.Red).copy(antiAlias = false),
+            )
             restore()
         }
 
-        assertTerminal("unsupported.clip.path_transform", surface::render)
+        val result = surface.render()
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertRgbaNear(result.pixels, 32, 4, 3, ColorARGB.Red)
+        assertRgbaNear(result.pixels, 32, 22, 3, ColorARGB.Transparent)
+        assertRgbaNear(result.pixels, 32, 4, 16, ColorARGB.Transparent)
+    }
+
+    @Test
+    fun `public skewed hard path clip refuses before submission`() {
+        requireWebGpu()
+        val surface = Surface(32, 32)
+        surface.canvas {
+            save()
+            skew(0.25f, 0f)
+            clipPath(Path().apply { addRect(RectF32(4f, 4f, 28f, 28f)) }, ClipOp.INTERSECT, antiAlias = false)
+            resetMatrix()
+            drawColor(ColorARGB.Red)
+            restore()
+        }
+
+        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> { surface.render() }
+        assertEquals("unsupported.clip.path_transform", failure.diagnostic.code.value)
+    }
+
+    @Test
+    fun `public rotated hard path clip refuses before submission`() {
+        requireWebGpu()
+        val surface = Surface(32, 32)
+        surface.canvas {
+            save()
+            rotate(15f)
+            clipPath(Path().apply { addRect(RectF32(4f, 4f, 28f, 28f)) }, ClipOp.INTERSECT, antiAlias = false)
+            resetMatrix()
+            drawColor(ColorARGB.Red)
+            restore()
+        }
+
+        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> { surface.render() }
+        assertEquals("unsupported.clip.path_transform", failure.diagnostic.code.value)
+    }
+
+    @Test
+    fun `public singular and non finite hard path clip transforms refuse before submission`() {
+        requireWebGpu()
+        val session = requireNotNull(GPUBackendRuntimeFactory.createOrNull())
+        val submissionsBefore = session.runtimeTelemetry.submissions
+        val cases = listOf(
+            "singular" to 0f to "unsupported.transform.affine_singular",
+            "nan" to Float.NaN to "unsupported.transform.non_finite",
+            "infinity" to Float.POSITIVE_INFINITY to "unsupported.transform.non_finite",
+        )
+
+        cases.forEach { (labelAndScale, expectedCode) ->
+            val (label, scaleX) = labelAndScale
+            val surface = Surface(32, 32)
+            surface.canvas {
+                save()
+                scale(scaleX, 1f)
+                clipPath(Path().apply { addRect(RectF32(4f, 4f, 28f, 28f)) }, ClipOp.INTERSECT, antiAlias = false)
+                resetMatrix()
+                drawColor(ColorARGB.Red)
+                restore()
+            }
+
+            val failure = assertFailsWith<GPUPreparedSurfaceTerminalException>(label) { surface.render() }
+            assertEquals(expectedCode, failure.diagnostic.code.value, label)
+            assertEquals(submissionsBefore, session.runtimeTelemetry.submissions, label)
+        }
+    }
+
+    @Test
+    fun `public singular and non finite rect rrect and path clips refuse before submission`() {
+        requireWebGpu()
+        val session = requireNotNull(GPUBackendRuntimeFactory.createOrNull())
+        val submissionsBefore = session.runtimeTelemetry.submissions
+        val scales = listOf(
+            "singular" to 0f to "unsupported.transform.affine_singular",
+            "nan" to Float.NaN to "unsupported.transform.non_finite",
+            "infinity" to Float.POSITIVE_INFINITY to "unsupported.transform.non_finite",
+        )
+        val clipKinds = listOf("rect", "rrect", "path")
+
+        clipKinds.forEach { kind ->
+            scales.forEach { (labelAndScale, expectedCode) ->
+                val (label, scaleX) = labelAndScale
+                val surface = Surface(32, 32)
+                surface.canvas {
+                    save()
+                    scale(scaleX, 1f)
+                    when (kind) {
+                        "rect" -> clipRect(RectF32(4f, 4f, 28f, 28f), ClipOp.INTERSECT, antiAlias = false)
+                        "rrect" -> clipRRect(RRectF32.of(RectF32(4f, 4f, 28f, 28f), radius = 4f), ClipOp.INTERSECT, antiAlias = false)
+                        else -> clipPath(Path().apply { addRect(RectF32(4f, 4f, 28f, 28f)) }, ClipOp.INTERSECT, antiAlias = false)
+                    }
+                    resetMatrix()
+                    drawColor(ColorARGB.Red)
+                    restore()
+                }
+
+                val failure = assertFailsWith<GPUPreparedSurfaceTerminalException>("$kind-$label") { surface.render() }
+                assertEquals(expectedCode, failure.diagnostic.code.value, "$kind-$label")
+                assertEquals(submissionsBefore, session.runtimeTelemetry.submissions, "$kind-$label")
+            }
+        }
     }
 
     @Test

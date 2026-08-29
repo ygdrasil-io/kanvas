@@ -185,6 +185,28 @@ class CanvasTest {
     @Test fun `Canvas resetMatrix`() { val b = TestBuffer(); val c = Canvas(b); c.translate(100f, 200f); c.resetMatrix(); assertEquals(Matrix3x3F32.Identity, c.matrix) }
 
     @Test
+    fun `Canvas affine API captures a bounded clip and resets its draw CTM`() {
+        val buffer = TestBuffer()
+        val canvas = Canvas(buffer)
+
+        canvas.translate(3f, 5f)
+        canvas.scale(2f, .5f)
+        canvas.rotate(90f)
+        canvas.skew(.25f, 0f)
+        canvas.concat(Matrix3x3F32.translation(4f, -2f))
+        canvas.setMatrix(Matrix3x3F32(sx = .75f, kx = .25f, tx = 1f, sy = .5f))
+        canvas.clipRect(RectF32.ofLTRB(4f, 4f, 28f, 28f), antiAlias = false)
+        canvas.resetMatrix()
+        canvas.drawRect(RectF32.ofLTRB(0f, 0f, 32f, 32f), Paint.fill(ColorARGB.Red).copy(antiAlias = false))
+
+        val clip = assertIs<ClipStack.Complex>(buffer.ops().filterIsInstance<DisplayOp.SetClip>().single().clip)
+        assertEquals("affine", assertIs<ClipStackOp.PathOp>(clip.ops.single()).transformClass)
+        val draw = buffer.ops().filterIsInstance<DisplayOp.DrawRect>().single()
+        assertEquals(Matrix3x3F32.Identity, draw.transform)
+        assertEquals(7, buffer.ops().filterIsInstance<DisplayOp.SetTransform>().size)
+    }
+
+    @Test
     fun `empty CFF glyph completes text expansion without recording a draw`() {
         val typeface = fontFixture(
             relativePath = "reports/font/fixtures/fonts/scaler/SourceSerif4-Regular.otf",

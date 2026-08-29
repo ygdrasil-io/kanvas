@@ -112,6 +112,26 @@ class GPUPreparedSurfaceFrameBuilderTest {
     }
 
     @Test
+    fun `public non finite singular and perspective transforms refuse before frame task assembly`() {
+        val cases = listOf(
+            "non-finite" to Matrix3x3F32(tx = Float.NaN) to "unsupported.transform.non_finite",
+            "singular" to Matrix3x3F32(sx = 0f, sy = 1f) to "unsupported.transform.affine_singular",
+            "perspective" to Matrix3x3F32(persp0 = .1f) to "unsupported.transform.perspective",
+        )
+
+        cases.forEach { (labelAndMatrix, expectedCode) ->
+            val (label, matrix) = labelAndMatrix
+            val refused = assertIs<GPUPreparedSurfaceFrameBuildResult.Refused>(
+                GPUPreparedSurfaceFrameBuilder.build(
+                    request(listOf(rect().copy(transform = matrix))),
+                ),
+                label,
+            )
+            assertEquals(expectedCode, refused.diagnostic.code.value, label)
+        }
+    }
+
+    @Test
     fun `public axis scaled solid DrawRRect records sealed device geometry`() {
         val result = GPUPreparedSurfaceFrameBuilder.build(
             request(
@@ -285,7 +305,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
         )
 
         val refused = assertIs<GPUPreparedSurfaceFrameBuildResult.Refused>(result)
-        assertEquals("unsupported.geometry.path_key_nondeterministic", refused.diagnostic.code.value)
+        assertEquals("unsupported.core_primitive.material.path_stencil", refused.diagnostic.code.value)
     }
 
     @Test
@@ -1060,14 +1080,16 @@ class GPUPreparedSurfaceFrameBuilderTest {
             linearMaterial,
         )
 
-        val cases = listOf(
-            request(listOf(DisplayOp.DrawPoints(
+        val squareLine = request(listOf(DisplayOp.DrawPoints(
                 PointMode.LINES,
                 listOf(Point2F32(2f, 2f), Point2F32(12f, 2f)),
                 Paint.stroke(ColorARGB.Red, 2f).copy(strokeCap = StrokeCap.SQUARE, antiAlias = false),
                 Matrix3x3F32.Identity,
                 ClipStack.WideOpen,
-            ))) to "unsupported.geometry.path_key_nondeterministic",
+            )))
+        assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(GPUPreparedSurfaceFrameBuilder.build(squareLine))
+
+        val cases = listOf(
             request(listOf(rect().copy(clip = complexClip)), capabilities = capabilities(boundedClip = false)) to
                 "unsupported.clip.mask_unavailable",
             request(listOf(rect()), capabilities = capabilities(fillRect = false)) to

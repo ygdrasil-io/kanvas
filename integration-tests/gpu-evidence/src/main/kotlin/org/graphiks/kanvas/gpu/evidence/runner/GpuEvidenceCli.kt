@@ -97,7 +97,14 @@ class GpuEvidenceCliRunner(
                                             code
                                         }
                                         is EvidenceVerdict.Fail -> {
-                                            System.err.println("gpu evidence ${evidenceCase.descriptor.id.value} failed: ${verdict.reason}")
+                                            val comparison = (observation as? SceneObservation.Rendered)?.comparison
+                                            val comparisonDetail = comparison?.let {
+                                                " differingPixels=${it.differingPixels} maxChannelDifference=${it.maxChannelDifference}" +
+                                                    " meanChannelDifference=${it.meanChannelDifference} similarity=${it.similarityPercent}"
+                                            }.orEmpty()
+                                            System.err.println(
+                                                "gpu evidence ${evidenceCase.descriptor.id.value} failed: ${verdict.reason}$comparisonDetail",
+                                            )
                                             1
                                         }
                                         is EvidenceVerdict.Unavailable -> {
