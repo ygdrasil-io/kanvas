@@ -2814,9 +2814,10 @@ class FirstRoutePlannerTest {
             command.copy(strokeWidth = 4f, strokeCap = "round"),
         )
         assertEquals(
-            "unsupported.stroke.cap",
-            assertIs<GPURouteDecision.Refused>(scaledRoundPlan.routeDecision).diagnostic.code,
+            "native.path_stroke.stencil_cover",
+            scaledRoundPlan.analysisRecord.routeDecisionLabel,
         )
+        assertEquals("route.path_stroke.127", assertIs<GPURouteDecision.Native>(scaledRoundPlan.routeDecision).route.routeId)
     }
 
     @Test

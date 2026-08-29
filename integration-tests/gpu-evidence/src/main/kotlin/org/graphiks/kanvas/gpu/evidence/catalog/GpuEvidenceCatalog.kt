@@ -75,6 +75,7 @@ object GpuEvidenceCatalog {
         translatedScissoredReverseHorizontalRoundCapStroke(),
         translatedReverseVerticalRoundCapStroke(),
         translatedScissoredReverseVerticalRoundCapStroke(),
+        uniformlyScaledRoundCapStroke(),
         scaledTranslatedHorizontalHairline(),
         scaledHorizontalHairline(),
         horizontalHairline(),
@@ -995,6 +996,30 @@ sweepGradientTwoStopStrokeRect(),
             clipTop = 5,
             clipRight = 18,
             clipBottom = 8,
+        ),
+    )
+
+    private fun uniformlyScaledRoundCapStroke(): EvidenceCase = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("uniformly-scaled-round-cap-stroke"),
+            "Uniformly scaled round-cap path stroke",
+            "Public Kanvas Surface non-AA horizontal round-cap path stroke at width four under a bounded positive uniform scale of two.",
+            64,
+            64,
+            1L,
+            setOf("path-stroke", "round-cap", "horizontal", "uniform-scale", "kanvas-surface"),
+            EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke-uniform-scale", 2),
+            ComparisonPolicy(0, 100.0, 1, "Independent pixel-center disk oracle for the integral device radius-four result of the promoted scale-two contract."),
+            emptySet(),
+        ),
+        KanvasScenePrograms.uniformlyScaledRoundCapStroke(),
+        SurfaceSrgbRoundCapStrokeCpuOracle(
+            startX = 16.0,
+            endX = 48.0,
+            centerY = 32.0,
+            radius = 4.0,
+            rgba = intArrayOf(255, 0, 0, 255),
         ),
     )
 

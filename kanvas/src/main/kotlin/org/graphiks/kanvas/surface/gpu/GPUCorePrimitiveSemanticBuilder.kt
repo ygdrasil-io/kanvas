@@ -1250,7 +1250,8 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
             !matchesPixelExactRoundCapR2ReverseVerticalV1() &&
             !matchesPixelExactRoundCapR2QuarterTurnV1() &&
             !matchesPixelExactRoundCapR2HalfTurnV1() &&
-            !matchesPixelExactRoundCapR2NegativeQuarterTurnV1() ->
+            !matchesPixelExactRoundCapR2NegativeQuarterTurnV1() &&
+            !matchesUniformScaledRoundCapV1() ->
             "unsupported.core_primitive.stroke.round_cap_pixel_exact_lowering"
         strokeJoin != "miter" -> "unsupported.core_primitive.stroke.join_exact_lowering"
         !strokeMiterLimit.isFinite() || strokeMiterLimit < 1f ->
@@ -1385,6 +1386,8 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
                     GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2HalfTurnV1
                 strokeCap == "round" && matchesPixelExactRoundCapR2NegativeQuarterTurnV1() ->
                     GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2NegativeQuarterTurnV1
+                strokeCap == "round" && matchesUniformScaledRoundCapV1() ->
+                    GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundUniformScaleV1
                 else -> GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1
             },
         ),
@@ -1510,6 +1513,21 @@ private fun NormalizedDrawCommand.FillPath.matchesPixelExactRoundCapR2NegativeQu
     val axisAligned = start.first == end.first || start.second == end.second
     return integral && axisAligned &&
         kotlin.math.abs(end.first - start.first) + kotlin.math.abs(end.second - start.second) >= strokeWidth
+}
+
+/**
+ * First promoted scaled round-cap lane: one horizontal width-four segment under an
+ * integral positive uniform scale of exactly two. The denser native cap tessellation
+ * keeps the device-space outline aligned with the independent radius-four oracle.
+ */
+private fun NormalizedDrawCommand.FillPath.matchesUniformScaledRoundCapV1(): Boolean {
+    if (!transform.isUniformPositiveScale()) return false
+    if (transform.scaleX != 2f || strokeWidth != 4f || tessellatedVertices.size != 4) return false
+    val start = transform.map(tessellatedVertices[0], tessellatedVertices[1])
+    val end = transform.map(tessellatedVertices[2], tessellatedVertices[3])
+    return start.first.isIntegralDeviceCoordinate() && start.second.isIntegralDeviceCoordinate() &&
+        end.first.isIntegralDeviceCoordinate() && end.second.isIntegralDeviceCoordinate() &&
+        start.second == end.second && end.first - start.first >= 8f
 }
 
 private fun Float.isIntegralDeviceCoordinate(): Boolean = isFinite() && floor(this) == this

@@ -1177,6 +1177,8 @@ enum class GPUCorePrimitiveStrokeLoweringProof {
     SingleSegmentRoundPixelExactR2HalfTurnV1,
     /** One integral radius-two round-cap segment after an exact negative quarter-turn rotation. */
     SingleSegmentRoundPixelExactR2NegativeQuarterTurnV1,
+    /** One horizontal round-cap segment with a bounded positive uniform scale. */
+    SingleSegmentRoundUniformScaleV1,
     /** Bounded open polyline, butt caps and miter joins, lowered to a stroke edge fan. */
     MultiSegmentButtMiterV1,
     /** One integral horizontal segment with the [8,4] butt/miter dash proof at phase 0 or 4. */
@@ -2531,6 +2533,8 @@ private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
                         GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2HalfTurnV1 ->
                             stroke.cap == "round" && stroke.width == 4f
                         GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2NegativeQuarterTurnV1 ->
+                            stroke.cap == "round" && stroke.width == 4f
+                        GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundUniformScaleV1 ->
                             stroke.cap == "round" && stroke.width == 4f
                         GPUCorePrimitiveStrokeLoweringProof.MultiSegmentButtMiterV1 ->
                             stroke.cap == "butt" && stroke.join == "miter"

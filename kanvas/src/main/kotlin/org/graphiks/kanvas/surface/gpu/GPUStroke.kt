@@ -304,7 +304,17 @@ internal fun strokeToFillGeometry(
     }
     val effectiveWidth = if (strokeWidth == 0f) 1f else strokeWidth
     val halfWidth = effectiveWidth / 2f
-    val segments = ROUND_CAP_TESSELLATION_SEGMENTS
+    // A positive uniform scale magnifies the local round-cap polygon. Use a denser
+    // device-space approximation for the first promoted scaled lane while retaining
+    // the six-segment pixel-exact contract for the integral radius-two routes.
+    val segments = if (
+        transform.scaleX > 1f && transform.scaleX == transform.scaleY &&
+        transform.skewX == 0f && transform.skewY == 0f
+    ) {
+        ROUND_CAP_TESSELLATION_SEGMENTS * 2
+    } else {
+        ROUND_CAP_TESSELLATION_SEGMENTS
+    }
     val result = mutableListOf<Float>()
     val contourResult = mutableListOf(0)
 
