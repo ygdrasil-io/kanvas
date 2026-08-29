@@ -60,6 +60,7 @@ import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.StrokeJoin
+import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.surface.Surface
@@ -1844,6 +1845,80 @@ class GPUFramePathApiInventoryTest {
                     .isEmpty(),
             )
         }
+    }
+
+    @Test
+    fun `three stop radial FillRect keeps the bounded public refusal policy`() {
+        val threeStops = listOf(
+            GradientStop(0f, ColorARGB.Red),
+            GradientStop(0.5f, ColorARGB.Green),
+            GradientStop(1f, ColorARGB.Blue),
+        )
+        val cases = listOf(
+            Shader.RadialGradient(
+                Point2F32(16f, 16f), 16f,
+                threeStops + GradientStop(1f, ColorARGB.White),
+                TileMode.CLAMP,
+            ).let { Triple(it, false, "unsupported.material.radial_gradient_stop_count") },
+            Triple(
+                Shader.RadialGradient(Point2F32(16f, 16f), 16f, threeStops, TileMode.REPEAT),
+                false,
+                "unsupported.material.radial_gradient_stop_count",
+            ),
+            Triple(
+                Shader.RadialGradient(Point2F32(16f, 16f), 16f, threeStops, TileMode.CLAMP),
+                true,
+                "unsupported.material.radial_gradient_stop_count",
+            ),
+            Triple(
+                Shader.WithLocalMatrix(
+                Shader.RadialGradient(Point2F32(16f, 16f), 16f, threeStops, TileMode.CLAMP),
+                Matrix3x3F32.translation(1f, 0f),
+                ),
+                false,
+                "unsupported.material.mapping.local_matrix",
+            ),
+        )
+
+        cases.forEach { (shader, antiAlias, expectedCode) ->
+            val inventory = GPUFramePathApiInventory.plan(
+                listOf(
+                    DisplayOp.DrawRect(
+                        RectF32.ofLTRB(2f, 2f, 30f, 30f),
+                        Paint(shader = shader).copy(antiAlias = antiAlias),
+                        Matrix3x3F32.Identity,
+                        ClipStack.WideOpen,
+                    ),
+                ),
+                target(),
+                RenderConfig.DEFAULT,
+                capabilitiesWith(FILL_RECT_CAPABILITY, "first_slice.radial_gradient.native"),
+            )
+
+            assertEquals(listOf("refused:$expectedCode"), inventory.recording.routeDiagnostics)
+            assertTrue(inventory.recording.taskList.tasks.filterIsInstance<GPUTask.Render>()
+                .flatMap(GPUTask.Render::drawPackets).isEmpty())
+        }
+
+        val translated = GPUFramePathApiInventory.plan(
+            listOf(
+                DisplayOp.DrawRect(
+                    RectF32.ofLTRB(2f, 2f, 30f, 30f),
+                    Paint(shader = Shader.RadialGradient(
+                        Point2F32(16f, 16f), 16f, threeStops, TileMode.CLAMP,
+                    )).copy(antiAlias = false),
+                    Matrix3x3F32.translation(1f, 0f),
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target(),
+            RenderConfig.DEFAULT,
+            capabilitiesWith(FILL_RECT_CAPABILITY, "first_slice.radial_gradient.native"),
+        )
+        assertEquals(
+            listOf("refused:unsupported.material.radial_gradient_stop_count"),
+            translated.recording.routeDiagnostics,
+        )
     }
 
     @Test

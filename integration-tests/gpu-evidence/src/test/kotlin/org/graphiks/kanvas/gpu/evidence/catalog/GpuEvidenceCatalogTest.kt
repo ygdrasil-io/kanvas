@@ -73,7 +73,7 @@ class GpuEvidenceCatalogTest {
     }
 
     @Test
-    fun `catalog separates eighty six public surface renders from ten refusals`() {
+    fun `catalog separates eighty eight public surface renders from nine refusals`() {
         val cases = GpuEvidenceCatalog.cases
 
         assertEquals(
@@ -90,6 +90,7 @@ class GpuEvidenceCatalogTest {
                 "linear-gradient-lanes",
                 "linear-gradient-three-stops",
                 "radial-swatch",
+                "radial-gradient-three-stops",
                 "sweep-disk",
                 "sweep-gradient-partial-angle", "affine-solid-rect", "basic-primitives-valid-alpha", "basic-primitives-out-of-bounds", "basic-primitives-points", "fractional-aa-rect-overlap", "affine-path-clip-color", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
                 "scaled-solid-rrect",
@@ -182,6 +183,7 @@ class GpuEvidenceCatalogTest {
                 "linear-gradient-lanes",
                 "linear-gradient-three-stops",
                 "radial-swatch",
+                "radial-gradient-three-stops",
                 "sweep-disk",
                 "sweep-gradient-partial-angle", "affine-solid-rect", "basic-primitives-valid-alpha", "basic-primitives-out-of-bounds", "basic-primitives-points", "fractional-aa-rect-overlap", "affine-path-clip-color", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
                 "scaled-solid-rrect",
@@ -260,11 +262,11 @@ class GpuEvidenceCatalogTest {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            List(87) { "kanvas.surface.render" },
+            List(88) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
-        assertEquals(87, GpuEvidenceCatalog.renderCases.size)
-        assertEquals(96, GpuEvidenceCatalog.cases.size)
+        assertEquals(88, GpuEvidenceCatalog.renderCases.size)
+        assertEquals(97, GpuEvidenceCatalog.cases.size)
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
 
         val solid = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "solid-card-stack" })
@@ -322,7 +324,7 @@ class GpuEvidenceCatalogTest {
         assertEquals(100.0, roundCapStroke.descriptor.comparison?.minimumSimilarityPercent)
         assertIs<KanvasSurfaceProgram>(roundCapStroke.program)
 
-        listOf("linear-gradient-lanes", "linear-gradient-three-stops", "radial-swatch", "sweep-disk", "sweep-gradient-partial-angle", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal").forEach { id ->
+        listOf("linear-gradient-lanes", "linear-gradient-three-stops", "radial-swatch", "radial-gradient-three-stops", "sweep-disk", "sweep-gradient-partial-angle", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal").forEach { id ->
             val evidenceCase = assertNotNull(cases.firstOrNull { it.descriptor.id.value == id })
             assertEquals(64, evidenceCase.descriptor.width)
             assertEquals(64, evidenceCase.descriptor.height)
@@ -339,17 +341,18 @@ class GpuEvidenceCatalogTest {
                 "linear-gradient-lanes" to "surface-srgb-gradient-linear-clamp",
                 "linear-gradient-three-stops" to "surface-srgb-gradient-linear-clamp",
                 "radial-swatch" to "surface-srgb-gradient-radial-clamp",
+                "radial-gradient-three-stops" to "surface-srgb-gradient-radial-clamp",
                 "sweep-disk" to "surface-srgb-gradient-sweep-clamp",
                 "sweep-gradient-partial-angle" to "surface-srgb-gradient-sweep-clamp",
                 "scissored-radial-gradient" to "surface-srgb-gradient-radial-clamp",
                 "repeat-gradient-refusal" to "surface-srgb-gradient-linear-repeat",
                 "gradient-stroke-refusal" to "surface-srgb-gradient-linear-clamp-stroke-bands",
             ),
-            listOf("linear-gradient-lanes", "linear-gradient-three-stops", "radial-swatch", "sweep-disk", "sweep-gradient-partial-angle", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal").associateWith { id ->
+            listOf("linear-gradient-lanes", "linear-gradient-three-stops", "radial-swatch", "radial-gradient-three-stops", "sweep-disk", "sweep-gradient-partial-angle", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal").associateWith { id ->
                 (cases.first { it.descriptor.id.value == id }.descriptor.oracle as OraclePolicy.GeneratedCpu).oracleId
             },
         )
-        listOf("linear-gradient-lanes", "linear-gradient-three-stops", "radial-swatch", "sweep-disk", "sweep-gradient-partial-angle", "scissored-radial-gradient", "repeat-gradient-refusal").forEach { id ->
+        listOf("linear-gradient-lanes", "linear-gradient-three-stops", "radial-swatch", "radial-gradient-three-stops", "sweep-disk", "sweep-gradient-partial-angle", "scissored-radial-gradient", "repeat-gradient-refusal").forEach { id ->
             val oracle = cases.first { it.descriptor.id.value == id }.descriptor.oracle as OraclePolicy.GeneratedCpu
             assertEquals(2, oracle.version)
             assertEquals(
@@ -399,6 +402,7 @@ class GpuEvidenceCatalogTest {
             "linear-gradient-lanes",
             "linear-gradient-three-stops",
             "radial-swatch",
+            "radial-gradient-three-stops",
             "sweep-disk",
             "sweep-gradient-partial-angle", "affine-solid-rect", "basic-primitives-valid-alpha", "basic-primitives-out-of-bounds", "basic-primitives-points", "fractional-aa-rect-overlap", "affine-path-clip-color", "scissored-radial-gradient", "repeat-gradient-refusal", "gradient-stroke-refusal",
             "scaled-solid-rrect",
@@ -510,6 +514,7 @@ class GpuEvidenceCatalogTest {
                 "linear-gradient-lanes" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-linear-clamp", 2),
                 "linear-gradient-three-stops" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-linear-clamp", 2),
                 "radial-swatch" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-radial-clamp", 2),
+                "radial-gradient-three-stops" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-radial-clamp", 2),
                 "sweep-disk" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-sweep-clamp", 2),
                 "sweep-gradient-partial-angle" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-sweep-clamp", 2),
                 "affine-solid-rect" to OraclePolicy.GeneratedCpu("reference-raster-affine-solid-rect", 1),
@@ -604,6 +609,7 @@ class GpuEvidenceCatalogTest {
                 "linear-gradient-lanes" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
                 "linear-gradient-three-stops" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
                 "radial-swatch" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
+                "radial-gradient-three-stops" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
                 "sweep-disk" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
                 "sweep-gradient-partial-angle" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
                 "affine-solid-rect" to ComparisonPolicy(0, 100.0, 1, "Exact RGBA8 output from hand-derived inverse affine pixel-center membership."),
@@ -863,6 +869,22 @@ class GpuEvidenceCatalogTest {
                 Matrix3x3F32.Identity, ClipStack.WideOpen,
             )),
             ops("linear-gradient-three-stops"),
+        )
+        assertEquals(
+            listOf(DisplayOp.DrawRect(
+                RectF32.ofLTRB(8f, 8f, 56f, 56f),
+                Paint(shader = Shader.RadialGradient(
+                    Point2F32(32.5f, 32.5f), 23.5f,
+                    listOf(
+                        GradientStop(0f, yellow),
+                        GradientStop(.5f, ColorARGB.of(255, 64, 208, 144)),
+                        GradientStop(1f, radialBlue),
+                    ),
+                    TileMode.CLAMP,
+                ), antiAlias = false),
+                Matrix3x3F32.Identity, ClipStack.WideOpen,
+            )),
+            ops("radial-gradient-three-stops"),
         )
         assertEquals(
             listOf(DisplayOp.DrawRect(

@@ -628,6 +628,18 @@ object KanvasScenePrograms {
         )
     })
 
+    fun radialGradientThreeStops() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawRect(RectF32.ofLTRB(8f, 8f, 56f, 56f), Paint(shader = Shader.RadialGradient(
+            Point2F32(32.5f, 32.5f), 23.5f,
+            listOf(
+                GradientStop(0f, ColorARGB.of(255, 255, 232, 72)),
+                GradientStop(.5f, ColorARGB.of(255, 64, 208, 144)),
+                GradientStop(1f, ColorARGB.of(255, 48, 80, 192)),
+            ),
+            TileMode.CLAMP,
+        ), antiAlias = false))
+    })
+
     fun sweepDisk() = KanvasSurfaceProgram(ROUTE_ID, record = {
         drawRect(
             RectF32.ofLTRB(8f, 8f, 56f, 56f),
