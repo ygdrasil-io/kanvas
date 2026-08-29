@@ -1928,6 +1928,24 @@ object KanvasScenePrograms {
         restore()
     })
 
+    /** The translated reversed vertical radius-two round-cap route under an integral scissor. */
+    fun translatedScissoredReverseVerticalRoundCapStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        save()
+        clipRect(RectF32.ofLTRB(17f, 28f, 20f, 30f), antiAlias = false)
+        translate(2f, 3f)
+        drawPath(
+            Path {
+                moveTo(16f, 26f)
+                lineTo(16f, 6f)
+            },
+            Paint.stroke(ColorARGB.Red, 4f).copy(
+                antiAlias = false,
+                strokeCap = StrokeCap.ROUND,
+            ),
+        )
+        restore()
+    })
+
     fun scaledTranslatedHorizontalHairline() = KanvasSurfaceProgram(ROUTE_ID, record = {
         save()
         translate(2f, 3f)
