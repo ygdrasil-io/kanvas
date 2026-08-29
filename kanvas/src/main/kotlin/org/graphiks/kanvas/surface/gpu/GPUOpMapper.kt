@@ -1535,11 +1535,8 @@ private fun GPUClipCoveragePlan.Mask.toMaskExecutionPlan(
         it.kind == GPUClipCoverageElementKind.Path &&
             !it.antiAlias &&
             (
-                it.operation == GPUClipCoverageOperation.Intersect ||
-                    (
-                        it.operation == GPUClipCoverageOperation.Difference &&
-                            !it.inverseFill
-                    )
+                    it.operation == GPUClipCoverageOperation.Intersect ||
+                        it.operation == GPUClipCoverageOperation.Difference
             )
     }
     if (singleHardPathClip != null) {

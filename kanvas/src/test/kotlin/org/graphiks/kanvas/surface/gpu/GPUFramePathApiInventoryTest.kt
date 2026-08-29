@@ -4482,7 +4482,7 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
-    fun `mapper does not admit inverse winding difference path clip to the single stencil route`() {
+    fun `mapper admits inverse winding difference path clip to the single stencil route`() {
         val surface = Surface(32, 32)
         surface.canvas {
             clipPath(triangle().apply { fillType = FillType.INVERSE_WINDING }, ClipOp.DIFFERENCE, antiAlias = false)
@@ -4494,7 +4494,16 @@ class GPUFramePathApiInventoryTest {
             capabilitiesWith(FILL_RECT_CAPABILITY, PATH_FILL_STENCIL_COVER),
         )
 
-        assertFalse(plan.visualCommands.single().clipExecutionPlan is GPUClipExecutionPlan.StencilCoverage)
+        val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(
+            plan.visualCommands.single().clipExecutionPlan,
+        )
+        val geometry = assertIs<GPUClipExecutionGeometry.Path>(execution.producer.geometry)
+        assertTrue(geometry.inverseFill)
+        assertTrue(execution.consumerInverseFill)
+        assertEquals(GPUClipStencilCompare.NotEqual, execution.consumer.compare)
+        assertEquals(GPUClipStencilOperation.IncrementWrap, execution.producer.frontPassOperation)
+        assertEquals(GPUClipStencilOperation.DecrementWrap, execution.producer.backPassOperation)
+        assertClipExecutionPropagation(plan, execution)
     }
 
     @Test
