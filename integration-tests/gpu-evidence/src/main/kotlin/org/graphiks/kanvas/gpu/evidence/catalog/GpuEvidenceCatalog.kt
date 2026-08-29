@@ -217,6 +217,7 @@ sweepGradientTwoStopStrokeRect(),
         threeStopSweepStrokeUnderWindingRefusal(),
         linearGradientRoundStrokeUnderWindingRefusal(),
         threeStopRadialStrokeUnderWindingRefusal(),
+        nonRightAngleSweepStrokeRefusal(),
     )
     val cases: List<EvidenceCase> = renderCases + refusalCases
     val catalog = EvidenceSceneCatalog(cases.map(EvidenceCase::descriptor))
@@ -361,6 +362,15 @@ sweepGradientTwoStopStrokeRect(),
         tags = setOf("path-stroke", "radial-gradient", "three-stops", "path-clip", "winding", "refusal", "kanvas-surface"),
         code = "unsupported.material.radial_gradient_stop_count",
         program = KanvasScenePrograms.threeStopRadialStrokeUnderWindingRefusal(),
+    )
+
+    private fun nonRightAngleSweepStrokeRefusal() = surfaceRefusal(
+        id = "non-right-angle-sweep-stroke-refusal",
+        title = "Non-right-angle sweep stroke refusal",
+        description = "Public Kanvas Surface refuses a two-stop CLAMP sweep-gradient butt/miter stroke rotated by 15 degrees under an inverse-winding path clip; only the bounded identity/right-angle transform classes are admitted.",
+        tags = setOf("path-stroke", "sweep-gradient", "rotation", "inverse-winding", "path-clip", "refusal", "kanvas-surface"),
+        code = "unsupported.geometry.perspective_path",
+        program = KanvasScenePrograms.nonRightAngleSweepStrokeRefusal(),
     )
 
     private fun basicPrimitivesValidAlpha() = EvidenceCase(
