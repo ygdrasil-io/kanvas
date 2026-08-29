@@ -20,6 +20,7 @@ import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.GradientStop
+import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.TileMode
@@ -73,7 +74,7 @@ class GpuEvidenceCatalogTest {
     }
 
     @Test
-    fun `catalog separates one hundred fifty-one public surface renders from seventeen refusals`() {
+    fun `catalog separates one hundred fifty-two public surface renders from seventeen refusals`() {
         val cases = GpuEvidenceCatalog.cases
 
         assertEquals(
@@ -102,6 +103,7 @@ class GpuEvidenceCatalogTest {
                 "horizontal-butt-miter-stroke",
                 "scissored-round-cap-stroke",
                 "translated-scissored-round-cap-stroke",
+                "horizontal-dashed-butt-miter-stroke",
                 "scissored-diagonal-butt-stroke",
                 "linear-gradient-lanes",
                 "linear-gradient-three-stops",
@@ -253,6 +255,7 @@ class GpuEvidenceCatalogTest {
                 "horizontal-butt-miter-stroke",
                 "scissored-round-cap-stroke",
                 "translated-scissored-round-cap-stroke",
+                "horizontal-dashed-butt-miter-stroke",
                 "scissored-diagonal-butt-stroke",
                 "linear-gradient-lanes",
                 "linear-gradient-three-stops",
@@ -370,11 +373,11 @@ class GpuEvidenceCatalogTest {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            List(151) { "kanvas.surface.render" },
+            List(152) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
-        assertEquals(151, GpuEvidenceCatalog.renderCases.size)
-        assertEquals(168, GpuEvidenceCatalog.cases.size)
+        assertEquals(152, GpuEvidenceCatalog.renderCases.size)
+        assertEquals(169, GpuEvidenceCatalog.cases.size)
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
 
         val solid = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "solid-card-stack" })
@@ -536,6 +539,7 @@ class GpuEvidenceCatalogTest {
             "horizontal-butt-miter-stroke",
             "scissored-round-cap-stroke",
             "translated-scissored-round-cap-stroke",
+            "horizontal-dashed-butt-miter-stroke",
             "scissored-diagonal-butt-stroke",
             "linear-gradient-lanes",
             "linear-gradient-three-stops",
@@ -706,6 +710,7 @@ class GpuEvidenceCatalogTest {
                 "horizontal-butt-miter-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-solid-stroke", 2),
                 "scissored-round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke-scissor", 2),
                 "translated-scissored-round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke-translated-scissor", 2),
+                "horizontal-dashed-butt-miter-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-dashed-stroke", 1),
                 "scissored-diagonal-butt-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-diagonal-butt-stroke-scissor", 2),
                 "linear-gradient-lanes" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-linear-clamp", 2),
                 "linear-gradient-three-stops" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-linear-clamp", 2),
@@ -864,6 +869,7 @@ class GpuEvidenceCatalogTest {
                 "horizontal-butt-miter-stroke" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent finite-segment pixel-center oracle."),
                 "scissored-round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent round-cap union intersected with the integral device scissor."),
                 "translated-scissored-round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent translated round-cap union intersected with the integral device scissor."),
+                "horizontal-dashed-butt-miter-stroke" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent pixel-center dashed-stroke oracle."),
                 "scissored-diagonal-butt-stroke" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from independent diagonal stroke coverage intersected with the integral device scissor."),
                 "linear-gradient-lanes" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
                 "linear-gradient-three-stops" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
@@ -1117,6 +1123,20 @@ class GpuEvidenceCatalogTest {
         )
         assertEquals(Matrix3x3F32.Identity, roundCapStroke.transform)
         assertEquals(ClipStack.WideOpen, roundCapStroke.clip)
+
+        val dashedStroke = assertIs<DisplayOp.DrawPath>(ops("horizontal-dashed-butt-miter-stroke").single())
+        assertEquals(RectF32.ofLTRB(4f, 16f, 28f, 16f), dashedStroke.path.computeBounds())
+        assertFalse(PathMeasure(dashedStroke.path).isClosed)
+        assertEquals(
+            Paint.stroke(ColorARGB.Red, 4f).copy(
+                antiAlias = false,
+                strokeCap = StrokeCap.BUTT,
+                pathEffect = PathEffect.Dash(floatArrayOf(8f, 4f), phase = 0f),
+            ),
+            dashedStroke.paint,
+        )
+        assertEquals(Matrix3x3F32.Identity, dashedStroke.transform)
+        assertEquals(ClipStack.WideOpen, dashedStroke.clip)
         assertEquals(
             listOf(
                 DisplayOp.DrawRect(

@@ -1898,6 +1898,19 @@ object KanvasScenePrograms {
         )
     })
 
+    /** The bounded production dash route: two 8px on-runs separated by 4px gaps. */
+    fun horizontalDashedButtMiterStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawPath(
+            Path { moveTo(4f, 16f); lineTo(28f, 16f) },
+            Paint.stroke(ColorARGB.Red, 4f).copy(
+                antiAlias = false,
+                strokeCap = StrokeCap.BUTT,
+                strokeJoin = StrokeJoin.MITER,
+                pathEffect = PathEffect.Dash(floatArrayOf(8f, 4f), phase = 0f),
+            ),
+        )
+    })
+
     fun scissoredRoundCapStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
         save()
         clipRect(RectF32.ofLTRB(5f, 14f, 18f, 19f), antiAlias = false)

@@ -25,6 +25,7 @@ import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRoundCapStrokeCpuOracl
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRoundCapStrokeScissorCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbSolidStrokeScissorCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbSolidStrokeCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbDashedStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbHairlineCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipRRectCpuOracle
@@ -73,6 +74,7 @@ object GpuEvidenceCatalog {
         horizontalButtMiterStroke(),
         scissoredRoundCapStroke(),
         translatedScissoredRoundCapStroke(),
+        horizontalDashedButtMiterStroke(),
         scissoredDiagonalButtStroke(),
         linearGradientLanes(),
         linearGradientThreeStops(),
@@ -926,6 +928,33 @@ sweepGradientTwoStopStrokeRect(),
             strokeEndX = 28.0,
             strokeEndY = 16.0,
             strokeWidth = 4.0,
+            color = intArrayOf(255, 0, 0, 255),
+        ),
+    )
+
+    private fun horizontalDashedButtMiterStroke(): EvidenceCase = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("horizontal-dashed-butt-miter-stroke"),
+            "Horizontal dashed butt miter stroke",
+            "Public Kanvas Surface non-AA horizontal width-four butt-cap miter stroke with the bounded repeating 8-on/4-off dash route.",
+            32,
+            32,
+            1L,
+            setOf("path-stroke", "path-effect", "dash", "butt-cap", "horizontal", "kanvas-surface"),
+            EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-dashed-stroke", 1),
+            ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent pixel-center dashed-stroke oracle."),
+            emptySet(),
+        ),
+        KanvasScenePrograms.horizontalDashedButtMiterStroke(),
+        SurfaceSrgbDashedStrokeCpuOracle(
+            strokeStartX = 4.0,
+            strokeStartY = 16.0,
+            strokeEndX = 28.0,
+            strokeEndY = 16.0,
+            strokeWidth = 4.0,
+            dashIntervals = listOf(8.0, 4.0),
+            dashPhase = 0.0,
             color = intArrayOf(255, 0, 0, 255),
         ),
     )
