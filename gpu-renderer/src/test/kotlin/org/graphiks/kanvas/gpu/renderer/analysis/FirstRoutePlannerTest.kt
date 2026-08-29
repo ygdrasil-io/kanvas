@@ -138,6 +138,53 @@ class FirstRoutePlannerTest {
     }
 
     @Test
+    fun `two stop radial gradient requires typed stroke provenance and its dedicated capability`() {
+        val material = GPUMaterialDescriptor.RadialGradient(
+            centerX = 32.5f, centerY = 32.5f, radius = 23.5f,
+            startR = 1f, startG = 0f, startB = 0f, startA = 1f,
+            endR = 0f, endG = 0f, endB = 1f, endA = 1f,
+            allStopPositions = floatArrayOf(0f, 1f),
+            allStopColors = floatArrayOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
+        )
+        fun command(sourceKind: GPUCommandSourceKind) = GPUFillRectCommandBuilder.build(
+            commandId = GPUDrawCommandID(38), rect = GPURect(6f, 14f, 58f, 18f),
+            target = GPUTargetFacts(64, 64, "rgba8unorm-srgb"), material = material,
+            source = GPUCommandSource("unit-test", "radial-stroke-band", kind = sourceKind),
+        ).copy(antiAlias = false)
+        val base = firstSliceWithLinearGradientCapabilities().copy(
+            facts = firstSliceWithLinearGradientCapabilities().facts + listOf(
+                GPUCapabilityFact("first_slice.radial_gradient.native", "unit-test", "supported", true, "radial-fixture"),
+                GPUCapabilityFact(
+                    GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_NATIVE,
+                    "unit-test", "supported", true, "two-stop-radial-stroke-fixture",
+                ),
+            ),
+        )
+        val typed = GPUFirstRoutePlanner(base).plan(command(GPUCommandSourceKind.AnalyticStrokeRectBand))
+        assertEquals("native.stroke_rect.radial_gradient_two_stop", typed.analysisRecord.routeDecisionLabel)
+        assertEquals(
+            listOf(GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_NATIVE),
+            assertIs<GPURouteDecision.Native>(typed.routeDecision).route.requirements,
+        )
+        assertEquals(
+            "native.fill_rect.radial_gradient",
+            GPUFirstRoutePlanner(base).plan(command(GPUCommandSourceKind.PublicFillRect)).analysisRecord.routeDecisionLabel,
+        )
+        assertEquals(
+            "native.fill_rect.radial_gradient",
+            GPUFirstRoutePlanner(base).plan(command(GPUCommandSourceKind.Generic)).analysisRecord.routeDecisionLabel,
+        )
+        assertEquals(
+            "unsupported.stroke.rect_radial_gradient_two_stop_capability",
+            assertIs<GPURouteDecision.Refused>(
+                GPUFirstRoutePlanner(base.copy(facts = base.facts.filterNot {
+                    it.name == GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_NATIVE
+                })).plan(command(GPUCommandSourceKind.AnalyticStrokeRectBand)).routeDecision,
+            ).diagnostic.code,
+        )
+    }
+
+    @Test
     fun `native FillRect route builder retains its four argument JVM descriptor`() {
         val methods = GPUFirstRouteDecisionBuilder::class.java.methods.filter { method ->
             method.name == "nativeFillRect"

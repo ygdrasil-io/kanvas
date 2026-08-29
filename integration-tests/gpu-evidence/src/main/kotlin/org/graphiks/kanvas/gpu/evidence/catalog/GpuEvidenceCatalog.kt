@@ -10,6 +10,7 @@ import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbSaveLayerSrcOverOpacit
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbGradientCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbLinearGradientStrokeBandsCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbTwoStopRadialGradientStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRoundCapStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipRRectCpuOracle
@@ -55,6 +56,7 @@ object GpuEvidenceCatalog {
         repeatGradientRendered(),
         gradientStrokeRefusal(),
         linearGradientThreeStopStrokeRect(),
+        radialGradientTwoStopStrokeRect(),
         scaledSolidRRect(),
         solidDRRectHole(),
         asymmetricSolidRRect(),
@@ -808,6 +810,27 @@ object GpuEvidenceCatalog {
                 SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle.Stop(.5, 56, 220, 120),
                 SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle.Stop(1.0, 56, 112, 255),
             ),
+        ),
+    )
+
+    private fun radialGradientTwoStopStrokeRect() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("radial-gradient-two-stop-stroke-rect"), "Radial gradient two-stop stroke rectangle",
+            "Public Kanvas Surface renders the bounded non-AA identity CLAMP two-stop radial rectangle stroke.",
+            64, 64, 1L, setOf("stroke-rect", "radial-gradient", "two-stops", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-gradient-radial-clamp-two-stop-stroke-bands", 1),
+            ComparisonPolicy(1, 100.0, 1, "Independent four-band pixel-center radial interpolation and sRGB RGBA8 storage."), emptySet(),
+        ),
+        KanvasScenePrograms.radialGradientTwoStopStrokeRect(),
+        SurfaceSrgbTwoStopRadialGradientStrokeCpuOracle(
+            listOf(
+                SurfaceSrgbTwoStopRadialGradientStrokeCpuOracle.Rect(6, 14, 58, 18),
+                SurfaceSrgbTwoStopRadialGradientStrokeCpuOracle.Rect(6, 46, 58, 50),
+                SurfaceSrgbTwoStopRadialGradientStrokeCpuOracle.Rect(6, 18, 10, 46),
+                SurfaceSrgbTwoStopRadialGradientStrokeCpuOracle.Rect(54, 18, 58, 46),
+            ),
+            SurfaceSrgbTwoStopRadialGradientStrokeCpuOracle.Point(32.5, 32.5), 23.5,
+            intArrayOf(255, 56, 56, 255), intArrayOf(56, 112, 255, 255),
         ),
     )
 

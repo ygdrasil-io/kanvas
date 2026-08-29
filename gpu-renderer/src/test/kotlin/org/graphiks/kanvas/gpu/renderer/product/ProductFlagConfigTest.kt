@@ -107,6 +107,18 @@ class ProductFlagConfigTest {
     }
 
     @Test
+    fun `two stop radial stroke capability has an independent disable property`() {
+        val config = GPUProductFlagConfig.fromSystemProperties { key ->
+            if (key == GPUProductFlagConfig.StrokeRectRadialGradientTwoStopDisableProperty) "true" else null
+        }
+        assertTrue(config.radialGradientEnabled)
+        assertFalse(config.strokeRectRadialGradientTwoStopEnabled)
+        assertFalse(config.buildCapabilities().facts.any {
+            it.name == GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_NATIVE
+        })
+    }
+
+    @Test
     fun `disable property overrides scissor flag`() {
         val config = GPUProductFlagConfig.fromSystemProperties(
             propertyReader = { key ->
