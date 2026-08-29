@@ -167,6 +167,15 @@ class GpuEvidenceCatalogOracleTest {
     }
 
     @Test
+    fun `winding butt sweep paints the interior without endpoint extension`() {
+        val pixels = oracle("clip-path-sweep-butt-stroke-winding")
+
+        assertPixel(pixels, 64, 64, 7, 7, intArrayOf(165, 0, 207, 255))
+        assertPixel(pixels, 64, 64, 16, 15, intArrayOf(99, 0, 240, 255))
+        assertPixel(pixels, 64, 64, 22, 20, intArrayOf(13, 20, 33, 255))
+    }
+
+    @Test
     fun `bounded bitmap oracle preserves literal nearest texels at its integer destination`() {
         val pixels = oracle("bounded-rgba8-nearest-bitmap")
 
