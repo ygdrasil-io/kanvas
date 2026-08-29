@@ -64,7 +64,31 @@ class SkiaGmConformanceTest {
         assertEquals(GmConformanceScope.EXCLUDED_FONT, evidence.conformanceDecision.scope)
         assertEquals("direct-font-output", evidence.conformanceDecision.reason)
         assertFalse(evidence.attempted)
+        assertEquals(InventorySetupState.SUCCEEDED, evidence.setupState)
         assertEquals(0, surface.renderCalls)
+    }
+
+    @Test
+    fun `drawString observed before setup failure remains excluded font`() {
+        assertObservedFontSetupFailure {
+            it.drawString("font", 1f, 10f, portableFont(10f), Paint(color = ColorARGB.Black))
+        }
+    }
+
+    @Test
+    fun `drawGlyphs observed before setup failure remains excluded font`() {
+        assertObservedFontSetupFailure {
+            val font = portableFont(10f)
+            it.drawGlyphs(listOf(1), listOf(org.graphiks.math.geometry.Point2F32(1f, 10f)), font, Paint(color = ColorARGB.Black))
+        }
+    }
+
+    @Test
+    fun `drawTextBlob observed before setup failure remains excluded font`() {
+        assertObservedFontSetupFailure {
+            val font = portableFont(10f)
+            it.drawTextBlob(font.toTextBlob("font", 0f, 0f), 0f, 0f, Paint(color = ColorARGB.Black))
+        }
     }
 
     @Test
@@ -87,6 +111,7 @@ class SkiaGmConformanceTest {
         assertEquals(GmConformanceScope.EXCLUDED_CODEC, evidence.conformanceDecision.scope)
         assertEquals("direct-codec-decode-or-encode", evidence.conformanceDecision.reason)
         assertFalse(evidence.attempted)
+        assertEquals(InventorySetupState.NOT_ATTEMPTED, evidence.setupState)
         assertEquals(0, surface.renderCalls)
     }
 
@@ -118,6 +143,17 @@ class SkiaGmConformanceTest {
     }
 }
 
+private fun assertObservedFontSetupFailure(emitFont: (GmCanvas) -> Unit) {
+    val surface = ConformanceSurface()
+
+    val evidence = captureInventoryEvidence(ObservedFontThenThrowProbeGm(emitFont)) { surface }
+
+    assertEquals(GmConformanceScope.EXCLUDED_FONT, evidence.conformanceDecision.scope)
+    assertFalse(evidence.attempted)
+    assertEquals(InventorySetupState.FAILED, evidence.setupState)
+    assertEquals(0, surface.renderCalls)
+}
+
 private open class ConformanceProbeGm(
     override val name: String = "conformance-probe",
     override val renderFamily: RenderFamily = RenderFamily.PATH,
@@ -130,6 +166,15 @@ private open class ConformanceProbeGm(
 private class FontOutputProbeGm : ConformanceProbeGm() {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawString("font", 1f, 10f, portableFont(10f), Paint(color = ColorARGB.Black))
+    }
+}
+
+private class ObservedFontThenThrowProbeGm(
+    private val emitFont: (GmCanvas) -> Unit,
+) : ConformanceProbeGm() {
+    override fun draw(canvas: GmCanvas, width: Int, height: Int) {
+        emitFont(canvas)
+        error("font-output-setup-failure")
     }
 }
 

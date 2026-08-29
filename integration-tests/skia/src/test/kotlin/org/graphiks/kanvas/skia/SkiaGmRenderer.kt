@@ -116,15 +116,19 @@ internal fun captureInventoryEvidence(
             conformanceDecision = initialDecision,
         )
     }
-    lateinit var gmCanvas: GmCanvas
+    var gmCanvas: GmCanvas? = null
     try {
         val canvas = surface.canvas()
         canvas.drawRect(RectF32(0f, 0f, gm.width.toFloat(), gm.height.toFloat()),
             Paint(color = ColorARGB.fromRGBA(1f, 1f, 1f, 1f), antiAlias = false))
-        gmCanvas = GmCanvas(canvas, gm.width, gm.height)
-        gm.onOnceBeforeDraw(gmCanvas)
-        gm.draw(gmCanvas, gm.width, gm.height)
+        val createdCanvas = GmCanvas(canvas, gm.width, gm.height)
+        gmCanvas = createdCanvas
+        gm.onOnceBeforeDraw(createdCanvas)
+        gm.draw(createdCanvas, gm.width, gm.height)
     } catch (failure: Exception) {
+        val finalDecision = gmCanvas?.let { canvas ->
+            SkiaGmConformance.decisionFor(gm, canvas.observedExternalDependencies())
+        } ?: initialDecision
         return InventoryRenderEvidence(
             attempted = false,
             renderSucceeded = false,
@@ -133,11 +137,17 @@ internal fun captureInventoryEvidence(
             route = "setup-failure",
             setupState = InventorySetupState.FAILED,
             setupDiagnostic = failure.message.orEmpty(),
-            conformanceDecision = initialDecision,
+            conformanceDecision = finalDecision,
         )
     }
-    val finalDecision = SkiaGmConformance.decisionFor(gm, gmCanvas.observedExternalDependencies())
-    if (!finalDecision.mustAttempt) return excludedInventoryEvidence(finalDecision, surface.snapshotOperationCount())
+    val finalDecision = SkiaGmConformance.decisionFor(gm, checkNotNull(gmCanvas).observedExternalDependencies())
+    if (!finalDecision.mustAttempt) {
+        return excludedInventoryEvidence(
+            decision = finalDecision,
+            operationCount = surface.snapshotOperationCount(),
+            setupState = InventorySetupState.SUCCEEDED,
+        )
+    }
     return try {
         val result = surface.render()
         InventoryRenderEvidence(
@@ -165,6 +175,7 @@ internal fun captureInventoryEvidence(
 private fun excludedInventoryEvidence(
     decision: GmConformanceDecision,
     operationCount: Int = 0,
+    setupState: InventorySetupState = InventorySetupState.NOT_ATTEMPTED,
 ): InventoryRenderEvidence = InventoryRenderEvidence(
     attempted = false,
     renderSucceeded = false,
@@ -172,7 +183,7 @@ private fun excludedInventoryEvidence(
     operationCount = operationCount,
     diagnostics = listOf("excluded:${decision.scope.wireName}"),
     route = "excluded:${decision.scope.wireName}",
-    setupState = InventorySetupState.NOT_ATTEMPTED,
+    setupState = setupState,
     conformanceDecision = decision,
 )
 

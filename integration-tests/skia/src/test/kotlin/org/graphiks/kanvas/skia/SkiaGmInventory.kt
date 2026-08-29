@@ -26,9 +26,15 @@ data class InventoryRenderEvidence(
                 "A non-attempted setup cannot have render evidence"
             }
             InventorySetupState.SUCCEEDED -> {
-                require(attempted) { "A successful setup must reach Surface.render()" }
-                require(renderSucceeded.xor(terminalFailure)) {
-                    "A render attempt must either succeed or terminally fail"
+                if (conformanceDecision.mustAttempt) {
+                    require(attempted) { "A must-attempt setup must reach Surface.render()" }
+                    require(renderSucceeded.xor(terminalFailure)) {
+                        "A render attempt must either succeed or terminally fail"
+                    }
+                } else {
+                    require(!attempted && !renderSucceeded && !terminalFailure) {
+                        "An excluded setup cannot have render evidence"
+                    }
                 }
                 require(setupDiagnostic == null) { "A successful setup cannot have a setup diagnostic" }
             }
