@@ -38,9 +38,9 @@
     "KAN-035..KAN-040",
     "KAN-041..KAN-042",
     "KAN-043..KAN-044",
-    "KAN-045..KAN-047",
+    "KAN-045..KAN-046",
     "KAN-048..KAN-049"
   ],
   "status": "pass",
-  "supportRows": 16
+  "supportRows": 13
 }
