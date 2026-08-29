@@ -464,6 +464,16 @@ class GpuEvidenceCatalogOracleTest {
     }
 
     @Test
+    fun `vertical butt miter stroke covers only the segment body`() {
+        val pixels = oracle("vertical-butt-miter-stroke", 32, 32)
+
+        assertPixel(pixels, 32, 32, 14, 4, intArrayOf(255, 0, 0, 255))
+        assertPixel(pixels, 32, 32, 17, 27, intArrayOf(255, 0, 0, 255))
+        assertPixel(pixels, 32, 32, 13, 16, intArrayOf(0, 0, 0, 0))
+        assertPixel(pixels, 32, 32, 16, 28, intArrayOf(0, 0, 0, 0))
+    }
+
+    @Test
     fun `translated scissored round cap stroke rebases device coverage`() {
         val pixels = oracle("translated-scissored-round-cap-stroke", 32, 32)
 

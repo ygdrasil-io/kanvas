@@ -24,6 +24,7 @@ import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbThreeStopSweepGradient
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRoundCapStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRoundCapStrokeScissorCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbSolidStrokeScissorCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbSolidStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbHairlineCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipRRectCpuOracle
@@ -61,6 +62,7 @@ object GpuEvidenceCatalog {
         scaledTranslatedHorizontalHairline(),
         scaledHorizontalHairline(),
         horizontalHairline(),
+        verticalButtMiterStroke(),
         scissoredRoundCapStroke(),
         translatedScissoredRoundCapStroke(),
         scissoredDiagonalButtStroke(),
@@ -608,6 +610,31 @@ sweepGradientTwoStopStrokeRect(),
             startX = 4.0,
             endX = 28.0,
             centerY = 16.0,
+            color = intArrayOf(255, 0, 0, 255),
+        ),
+    )
+
+    private fun verticalButtMiterStroke(): EvidenceCase = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("vertical-butt-miter-stroke"),
+            "Vertical butt miter stroke",
+            "Public Kanvas Surface non-AA vertical width-four butt-cap miter stroke on integral device coordinates.",
+            32,
+            32,
+            1L,
+            setOf("path-stroke", "butt-cap", "vertical", "kanvas-surface"),
+            EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-solid-stroke", 2),
+            ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent pixel-center stroke oracle."),
+            emptySet(),
+        ),
+        KanvasScenePrograms.verticalButtMiterStroke(),
+        SurfaceSrgbSolidStrokeCpuOracle(
+            strokeStartX = 16.0,
+            strokeStartY = 4.0,
+            strokeEndX = 16.0,
+            strokeEndY = 28.0,
+            strokeWidth = 4.0,
             color = intArrayOf(255, 0, 0, 255),
         ),
     )
