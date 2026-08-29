@@ -1,9 +1,0 @@
-COLRv0 color glyph parity report
-fixture=/fonts/skia/colr.ttf
-baseGlyph=2
-layerGlyphs=7,8
-reference=cpu-source-over + mirrored-llvmpipe-srgb-store
-matchingPixels=4096/4096
-pixelExact=true
-targetSize=64x64
-uniformBytes=784

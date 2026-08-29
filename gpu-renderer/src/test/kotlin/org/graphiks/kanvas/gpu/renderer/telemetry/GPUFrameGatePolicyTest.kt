@@ -145,6 +145,7 @@ class GPUFrameGatePolicyTest {
         assertFailsWith<IllegalArgumentException> {
             frameLane(
                 laneId = "mismatch",
+                sourceKind = "synthetic-test-input",
                 stableFrameMs = listOf(10.0, 10.0),
                 sourceHash = frameGateOwnedSampleFixtureSha,
                 adapterLabel = "apple-m2-max",
@@ -175,7 +176,7 @@ private fun frameLane(
     laneId: String,
     targetState: GPUFrameGateState = GPUFrameGateState.Candidate,
     sourceKind: String = "owned-adapter-frame-samples",
-    sourceArtifactLabel: String = "reports/gpu-renderer-scenes/frame-samples/frame-gate-blocker-board/frame-samples.json",
+    sourceArtifactLabel: String = "synthetic:test-frame-gate-owned-samples",
     sourceHash: String? = null,
     sceneId: String = "frame-gate-blocker-board",
     adapterLabel: String? = null,

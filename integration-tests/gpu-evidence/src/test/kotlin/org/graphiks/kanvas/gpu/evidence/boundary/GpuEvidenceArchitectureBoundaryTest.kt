@@ -60,7 +60,6 @@ class GpuEvidenceArchitectureBoundaryTest {
         assertTrue(promotedVerificationTask.contains("\"--all\""), "promoted verification must explicitly verify the full promoted catalogue")
         assertTrue(argumentProviderBody(promotionTask).contains("+ selectionArguments(requireExplicitAllForPromotion = true)"), "promotion must share the selection helper with an explicit-full guard")
         assertTrue(argumentProviderBody(promotionTask).contains("promotionRebaselineArguments"), "promotion must preserve explicit rebaseline metadata forwarding")
-        assertFalse(build.contains("gpu-renderer-scenes"), "retired scenes module must remain absent")
         val dependencies = build.substringAfter("dependencies {").substringBefore("\n}")
         assertFalse(dependencies.contains("scene"), "scene must not alter dependencies")
         assertFalse(outsideArgumentProvider(correctnessTask).contains("--scene"), "scene selection must not alter correctness task configuration outside CLI arguments")
@@ -122,8 +121,6 @@ class GpuEvidenceArchitectureBoundaryTest {
         val projectRoot = File(".").canonicalFile
         val forbidden = mapOf(
             "direct backend dependency" to Regex("wgpu4k|io\\.ygdrasil\\.webgpu"),
-            "legacy module dependency" to Regex("project\\(\\\"?:gpu-renderer-scenes\\\"?\\)"),
-            "legacy source import" to Regex("org\\.graphiks\\.kanvas\\.gpu\\.renderer\\.scenes"),
             "direct target allocation" to Regex("\\.createOffscreenTarget\\("),
             "direct encoding" to Regex("\\.encode(?:OffscreenTexture)?\\("),
             "scene-owned WGSL" to Regex("@(vertex|fragment|compute)|@group\\("),

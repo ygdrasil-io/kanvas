@@ -62,6 +62,6 @@ class GPUAxisAlignedStrokeRectLowererTest {
         pathBounds = pathBounds,
         strokeWidth = strokeWidth,
         pathKey = "path:scene:stroke-rect-outline:rect-outline:v1",
-        provenance = "gpu-renderer-scenes",
+        provenance = "synthetic:test-axis-aligned-stroke-rect",
     )
 }
