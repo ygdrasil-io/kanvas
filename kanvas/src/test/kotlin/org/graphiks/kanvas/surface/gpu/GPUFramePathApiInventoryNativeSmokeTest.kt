@@ -2188,6 +2188,59 @@ class GPUFramePathApiInventoryNativeSmokeTest {
     }
 
     @Test
+    fun `round cap stroke under winding path clip remains explicitly refused`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        try {
+            val capabilities = requireNotNull(backend.capabilities)
+            val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(
+                RenderConfig.DEFAULT.mapPreparedGpuColorConfig(),
+            )
+            val targetBounds = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, 32, 32)
+            val clipPath = Path().apply {
+                moveTo(3.25f, 3.25f)
+                lineTo(28.75f, 3.25f)
+                lineTo(3.25f, 28.75f)
+                close()
+            }
+            val inventory = GPUFramePathApiInventory.plan(
+                operations = listOf(
+                    DisplayOp.DrawPath(
+                        Path().apply {
+                            moveTo(6f, 16f)
+                            lineTo(26f, 16f)
+                        },
+                        Paint.stroke(ColorARGB.Red, 4f).copy(
+                            antiAlias = false,
+                            strokeCap = StrokeCap.ROUND,
+                        ),
+                        Matrix3x3F32.Identity,
+                        ClipStack.Complex(
+                            listOf(ClipStackOp.PathOp(clipPath, ClipOp.INTERSECT, antiAlias = false)),
+                        ),
+                    ),
+                ),
+                target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+                config = RenderConfig.DEFAULT,
+                capabilities = capabilities,
+                deviceGeneration = backend.deviceGeneration,
+            )
+            assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+            val preparation = GPUFramePathApiInventory.prepareNativeTaskList(
+                inventory,
+                capabilities,
+                targetBounds,
+                null,
+            )
+            val refused = assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(preparation)
+            assertEquals("unsupported.recording.core_primitive_path_stencil_clip", refused.diagnostic.code.value)
+        } finally {
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
     fun `public Surface render submits a bounded round cap path stroke with the CPU oracle`() {
         val backend = GPUBackendRuntimeNativeFactory.createOrNull()
         assumeTrue(backend != null)
