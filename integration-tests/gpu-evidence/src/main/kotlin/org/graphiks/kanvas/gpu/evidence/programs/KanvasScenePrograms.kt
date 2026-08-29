@@ -1163,6 +1163,36 @@ object KanvasScenePrograms {
         restore()
     })
 
+    fun clipPathLinearGradientRightAngleButtStrokeWinding() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        save()
+        clipPath(
+            Path {
+                moveTo(27.75f, 4.25f)
+                lineTo(27.75f, 27.25f)
+                lineTo(4.75f, 4.25f)
+                close()
+            }.apply { fillType = FillType.WINDING },
+            ClipOp.INTERSECT,
+            antiAlias = false,
+        )
+        rotate(90f, 16f, 16f)
+        drawPath(
+            Path { moveTo(8.25f, 8.25f); lineTo(20.25f, 14.25f) },
+            Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                shader = Shader.LinearGradient(
+                    Point2F32(0f, 0f),
+                    Point2F32(32f, 0f),
+                    listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                ),
+                antiAlias = false,
+                strokeCap = StrokeCap.BUTT,
+                strokeJoin = StrokeJoin.MITER,
+            ),
+        )
+        restore()
+    })
+
     fun clipPathTranslatedTriangleRadialGradient() = clipPathTriangleRadialGradientScene {
         translate(2f, 0f)
     }
