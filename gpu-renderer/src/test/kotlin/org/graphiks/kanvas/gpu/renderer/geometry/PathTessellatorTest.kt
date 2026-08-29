@@ -441,6 +441,27 @@ class PathTessellatorTest {
     }
 
     @Test
+    fun `rational conic uses homogeneous adaptive subdivision`() {
+        val flattened = PathTessellator(tolerance = 1f).flatten(
+            PathData(
+                verbs = listOf(
+                    PathVerb.MoveTo(Point(0f, 0f)),
+                    PathVerb.ConicTo(Point(50f, 100f), Point(100f, 0f), weight = 0.70710677f),
+                ),
+                points = emptyList(),
+            ),
+        )
+
+        // The midpoint of a rational conic is not the midpoint of its control
+        // polygon. Homogeneous De Casteljau must preserve the raised arc while
+        // keeping the tessellation bounded (the old uniform estimator emitted
+        // a count unrelated to the rational weight).
+        assertTrue(flattened.size in 8..64, "unexpected adaptive conic count: ${flattened.size}")
+        val midpoint = flattened.minBy { kotlin.math.abs(it.x - 50f) }
+        assertTrue(midpoint.y > 0f, "rational midpoint lost its curvature: $midpoint points=$flattened")
+    }
+
+    @Test
     fun `non-positive conic weight is a stable lowering refusal`() {
         val failure = assertFailsWith<PathTessellationRefusal> {
             PathTessellator().flatten(

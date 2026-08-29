@@ -1,0 +1,13 @@
+{
+  "feature": "rational_conic_homogeneous_adaptive_subdivision",
+  "algorithm": "de_casteljau_homogeneous",
+  "maxSubdivisionDepth": 16,
+  "test": "PathTessellatorTest.rational conic uses homogeneous adaptive subdivision",
+  "boundedPointCount": {
+    "min": 8,
+    "max": 64
+  },
+  "cpuOracle": "test asserts rational midpoint remains above chord",
+  "gpuRoute": "not_promoted",
+  "gmImpact": "conicpaths remains blocked by unsupported.stroke.width_invalid; no GM claim"
+}
