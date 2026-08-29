@@ -1525,9 +1525,11 @@ private fun NormalizedDrawCommand.FillPath.matchesUniformScaledRoundCapV1(): Boo
     if (transform.scaleX != 2f || strokeWidth != 4f || tessellatedVertices.size != 4) return false
     val start = transform.map(tessellatedVertices[0], tessellatedVertices[1])
     val end = transform.map(tessellatedVertices[2], tessellatedVertices[3])
+    val horizontal = start.second == end.second && end.first - start.first >= 8f
+    val vertical = start.first == end.first && end.second - start.second >= 8f
     return start.first.isIntegralDeviceCoordinate() && start.second.isIntegralDeviceCoordinate() &&
         end.first.isIntegralDeviceCoordinate() && end.second.isIntegralDeviceCoordinate() &&
-        start.second == end.second && end.first - start.first >= 8f
+        (horizontal || vertical)
 }
 
 private fun Float.isIntegralDeviceCoordinate(): Boolean = isFinite() && floor(this) == this
