@@ -2241,6 +2241,76 @@ class GPUFramePathApiInventoryNativeSmokeTest {
     }
 
     @Test
+    fun `horizontal round cap stroke under integral device scissor renders natively`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        val capabilities = requireNotNull(backend.capabilities)
+        val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(
+            RenderConfig.DEFAULT.mapPreparedGpuColorConfig(),
+        )
+        val targetBounds = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, 32, 32)
+        val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.stroke-round-scissor")
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(6f, 16f)
+                        lineTo(26f, 16f)
+                    },
+                    Paint.stroke(ColorARGB.Red, 4f).copy(
+                        antiAlias = false,
+                        strokeCap = StrokeCap.ROUND,
+                    ),
+                    Matrix3x3F32.Identity,
+                    ClipStack.DeviceRect(RectF32.ofLTRB(5f, 14f, 18f, 19f), antiAlias = false),
+                ),
+            ),
+            target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+            deviceGeneration = backend.deviceGeneration,
+        )
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+        val clipExecution = assertIs<GPUClipExecutionPlan.ScissorOnly>(
+            inventory.visualCommands.single().clipExecutionPlan,
+        )
+        assertEquals(
+            org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(5, 14, 18, 19),
+            clipExecution.scissor,
+        )
+        val preparation = GPUFramePathApiInventory.prepareNativeTaskList(
+            inventory,
+            capabilities,
+            targetBounds,
+            readbackId,
+        )
+        val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            preparation,
+            (preparation as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}; facts=${it.facts}"
+            },
+        ).taskList
+        val session = backend.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(32, 32, colorMapping.physicalFormat, colorMapping.interpretation),
+        )
+        try {
+            val completed = session.renderFrame(
+                prepared,
+                GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
+            ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+            assertEquals(GPUFrameStructuralOutcome.Succeeded, completed.outcome)
+            val gpu = assertIs<GPUSceneFrameOutput.ReadbackRgba>(completed.output).bytes
+            assertContentEquals(deterministicRoundCapStrokeScissorOracle(), gpu)
+            assertEquals(1L, session.nativeCounters().submits)
+            assertEquals(1L, session.nativeCounters().readbackCopies)
+        } finally {
+            session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
     fun `public Surface render submits a bounded round cap path stroke with the CPU oracle`() {
         val backend = GPUBackendRuntimeNativeFactory.createOrNull()
         assumeTrue(backend != null)
@@ -3166,6 +3236,24 @@ class GPUFramePathApiInventoryNativeSmokeTest {
     private fun deterministicRoundCapStrokeOracle(): ByteArray = ByteArray(32 * 32 * 4).also { rgba ->
         for (y in 0 until 32) {
             for (x in 0 until 32) {
+                val sampleX = x + 0.5f
+                val sampleY = y + 0.5f
+                val inBody = sampleX in 6f..26f && sampleY in 14f..18f
+                val inStartCap = (sampleX - 6f) * (sampleX - 6f) + (sampleY - 16f) * (sampleY - 16f) <= 4f
+                val inEndCap = (sampleX - 26f) * (sampleX - 26f) + (sampleY - 16f) * (sampleY - 16f) <= 4f
+                if (inBody || inStartCap || inEndCap) {
+                    val offset = (y * 32 + x) * 4
+                    rgba[offset] = 0xff.toByte()
+                    rgba[offset + 3] = 0xff.toByte()
+                }
+            }
+        }
+    }
+
+    /** Independent round-cap oracle intersected with the integral device scissor. */
+    private fun deterministicRoundCapStrokeScissorOracle(): ByteArray = ByteArray(32 * 32 * 4).also { rgba ->
+        for (y in 14 until 19) {
+            for (x in 5 until 18) {
                 val sampleX = x + 0.5f
                 val sampleY = y + 0.5f
                 val inBody = sampleX in 6f..26f && sampleY in 14f..18f
