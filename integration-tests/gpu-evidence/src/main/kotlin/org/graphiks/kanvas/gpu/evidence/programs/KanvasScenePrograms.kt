@@ -1253,6 +1253,31 @@ object KanvasScenePrograms {
         restore()
     })
 
+    fun clipPathHalfTurnButtStrokeWinding() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        save()
+        clipPath(
+            Path {
+                moveTo(3.25f, 3.25f)
+                lineTo(28.75f, 3.25f)
+                lineTo(28.75f, 28.75f)
+                close()
+            }.apply { fillType = FillType.WINDING },
+            ClipOp.INTERSECT,
+            antiAlias = false,
+        )
+        rotate(180f, 16f, 10f)
+        drawPath(
+            Path { moveTo(8.25f, 8.25f); lineTo(20.25f, 14.25f) },
+            Paint.stroke(ColorARGB.Red, 4f).copy(
+                antiAlias = false,
+                strokeCap = StrokeCap.BUTT,
+                strokeJoin = StrokeJoin.MITER,
+            ),
+        )
+        restore()
+    })
+
     fun clipPathTranslatedTriangleRadialGradient() = clipPathTriangleRadialGradientScene {
         translate(2f, 0f)
     }

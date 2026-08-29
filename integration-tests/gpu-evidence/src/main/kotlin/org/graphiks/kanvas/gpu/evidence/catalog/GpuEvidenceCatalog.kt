@@ -35,6 +35,7 @@ import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathEvenOddLinearG
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathDirectTriangleLinearGradientCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathDRRectCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathSolidStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbPathFillCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbFractionalRectCoverageCpuOracle
 import org.graphiks.kanvas.gpu.evidence.programs.KanvasScenePrograms
@@ -126,6 +127,7 @@ sweepGradientTwoStopStrokeRect(),
         clipPathLinearGradientButtStrokeInverseWinding(),
         clipPathLinearGradientRightAngleButtStrokeWinding(),
         clipPathLinearGradientRightAngleSquareStrokeWinding(),
+        clipPathHalfTurnButtStrokeWinding(),
         clipPathTranslatedTriangleRadialGradient(),
         clipPathTranslatedTriangleLinearGradient(),
         clipPathUniformScaledTriangleLinearGradient(),
@@ -2303,6 +2305,35 @@ sweepGradientTwoStopStrokeRect(),
             gradientEnd = SurfaceSrgbClipPathLinearGradientStrokeCpuOracle.Point(0.0, 32.0),
             startColor = intArrayOf(255, 0, 0, 255),
             endColor = intArrayOf(0, 0, 255, 255),
+        ),
+    )
+
+    private fun clipPathHalfTurnButtStrokeWinding() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("clip-path-half-turn-butt-stroke-winding"),
+            "Half-turn Winding clip with an opaque butt stroke",
+            "Public Kanvas Surface hard non-AA Winding triangle clip around one opaque width-four butt-cap miter stroke rotated by 180 degrees around a bounded pivot.",
+            64,
+            64,
+            1L,
+            setOf("clip-path", "stroke", "winding", "hard-clip", "butt-cap", "half-turn-rotation", "kanvas-surface"),
+            EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-clip-path-half-turn-butt-stroke-device-space", 1),
+            ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent half-turn device-space Winding triangle and butt stroke coverage."),
+            emptySet(),
+        ),
+        KanvasScenePrograms.clipPathHalfTurnButtStrokeWinding(),
+        SurfaceSrgbClipPathSolidStrokeCpuOracle(
+            background = intArrayOf(13, 20, 33, 255),
+            points = listOf(
+                SurfaceSrgbClipPathSolidStrokeCpuOracle.Point(3.25, 3.25),
+                SurfaceSrgbClipPathSolidStrokeCpuOracle.Point(28.75, 3.25),
+                SurfaceSrgbClipPathSolidStrokeCpuOracle.Point(28.75, 28.75),
+            ),
+            strokeStart = SurfaceSrgbClipPathSolidStrokeCpuOracle.Point(23.75, 11.75),
+            strokeEnd = SurfaceSrgbClipPathSolidStrokeCpuOracle.Point(11.75, 5.75),
+            strokeWidth = 4.0,
+            color = intArrayOf(255, 0, 0, 255),
         ),
     )
 
