@@ -1664,6 +1664,17 @@ object KanvasScenePrograms {
         restore()
     })
 
+    fun horizontalButtMiterStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawPath(
+            Path { moveTo(4f, 16f); lineTo(28f, 16f) },
+            Paint.stroke(ColorARGB.Red, 4f).copy(
+                antiAlias = false,
+                strokeCap = StrokeCap.BUTT,
+                strokeJoin = StrokeJoin.MITER,
+            ),
+        )
+    })
+
     fun scissoredRoundCapStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
         save()
         clipRect(RectF32.ofLTRB(5f, 14f, 18f, 19f), antiAlias = false)
