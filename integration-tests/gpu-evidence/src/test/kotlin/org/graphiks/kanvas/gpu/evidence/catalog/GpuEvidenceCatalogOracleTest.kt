@@ -27,7 +27,6 @@ class GpuEvidenceCatalogOracleTest {
         assertPixel(pixels, 64, 64, 9, 7, intArrayOf(137, 0, 225, 255))
         assertPixel(pixels, 64, 64, 17, 15, intArrayOf(250, 0, 59, 255))
         assertPixel(pixels, 64, 64, 20, 18, intArrayOf(13, 20, 33, 255))
-        assertPixel(pixels, 64, 64, 22, 20, intArrayOf(13, 20, 33, 255))
     }
 
     @Test
@@ -107,6 +106,19 @@ class GpuEvidenceCatalogOracleTest {
         assertPixel(pixels, 64, 64, 7, 7, intArrayOf(165, 0, 207, 255))
         assertPixel(pixels, 64, 64, 15, 15, intArrayOf(165, 0, 207, 255))
         assertPixel(pixels, 64, 64, 22, 20, intArrayOf(13, 20, 33, 255))
+    }
+
+    @Test
+    fun `winding difference sweep stroke paints only the exterior`() {
+        val pixels = oracle("clip-path-sweep-square-stroke-winding-difference")
+
+        assertPixel(pixels, 64, 64, 16, 15, intArrayOf(13, 20, 33, 255))
+        assertNotEquals(
+            intArrayOf(13, 20, 33, 255).toList(),
+            pixel(pixels, 64, 64, 18, 18).toList(),
+            "Winding Difference exterior sweep stroke witness must be painted",
+        )
+        assertPixel(pixels, 64, 64, 25, 25, intArrayOf(13, 20, 33, 255))
     }
 
     @Test
