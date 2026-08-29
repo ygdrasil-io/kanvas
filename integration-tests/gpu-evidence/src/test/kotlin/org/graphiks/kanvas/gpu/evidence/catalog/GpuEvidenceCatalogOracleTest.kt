@@ -176,6 +176,23 @@ class GpuEvidenceCatalogOracleTest {
     }
 
     @Test
+    fun `winding linear gradient square stroke combines clip coverage and clamp sampling`() {
+        val pixels = oracle("clip-path-linear-gradient-square-stroke-winding")
+
+        assertNotEquals(
+            intArrayOf(13, 20, 33, 255).toList(),
+            pixel(pixels, 64, 64, 7, 7).toList(),
+            "linear-gradient stroke interior witness must be painted",
+        )
+        assertNotEquals(
+            intArrayOf(13, 20, 33, 255).toList(),
+            pixel(pixels, 64, 64, 16, 15).toList(),
+            "linear-gradient stroke midpoint must be painted",
+        )
+        assertPixel(pixels, 64, 64, 22, 20, intArrayOf(13, 20, 33, 255))
+    }
+
+    @Test
     fun `bounded bitmap oracle preserves literal nearest texels at its integer destination`() {
         val pixels = oracle("bounded-rgba8-nearest-bitmap")
 
