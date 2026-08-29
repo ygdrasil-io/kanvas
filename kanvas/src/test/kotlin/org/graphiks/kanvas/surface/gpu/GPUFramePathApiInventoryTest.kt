@@ -2908,6 +2908,45 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `single diagonal butt miter stroke retains an integral device scissor`() {
+        val surface = Surface(32, 32)
+        surface.canvas {
+            clipRect(
+                RectF32.ofLTRB(8f, 10f, 20f, 19f),
+                ClipOp.INTERSECT,
+                antiAlias = false,
+            )
+            drawPath(
+                Path().apply {
+                    moveTo(5.25f, 8.25f)
+                    lineTo(21.25f, 20.25f)
+                },
+                Paint.stroke(ColorARGB.Red, 4f).copy(
+                    antiAlias = false,
+                    strokeCap = StrokeCap.BUTT,
+                    strokeJoin = StrokeJoin.MITER,
+                ),
+            )
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = surface.snapshotOps(),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER),
+        )
+
+        val visual = inventory.visualCommands.single()
+        assertEquals(
+            GPUClipExecutionPlan.ScissorOnly(GPUPixelBounds(8, 10, 20, 19)),
+            visual.clipExecutionPlan,
+        )
+        assertEquals(
+            "native.path_stroke.stencil_cover",
+            inventory.recording.analysis.records.single().routeDecisionLabel,
+        )
+    }
+
+    @Test
     fun `single diagonal square miter stroke lowers to native stencil cover`() {
         val path = Path().apply {
             moveTo(5.25f, 8.25f)

@@ -179,17 +179,14 @@ class GPUClipCoverageSurfaceTest {
         requireWebGpu()
         val background = ColorARGB.of(255, 13, 20, 33)
         val fill = ColorARGB.of(255, 242, 135, 46)
+        val clipPath = Path {
+            moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close()
+        }.apply { fillType = FillType.WINDING }
         val surface = Surface(64, 64)
         surface.canvas {
             drawColor(background)
             save()
-            clipPath(
-                Path {
-                    moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close()
-                }.apply { fillType = FillType.WINDING },
-                ClipOp.DIFFERENCE,
-                antiAlias = false,
-            )
+            clipPath(clipPath, ClipOp.DIFFERENCE, antiAlias = false)
             drawRect(
                 RectF32.ofLTRB(0f, 0f, 64f, 64f),
                 Paint.fill(fill).copy(antiAlias = false),
@@ -199,6 +196,12 @@ class GPUClipCoverageSurfaceTest {
 
         val result = surface.render()
         assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertEquals(0, result.stats.opsRefused, result.diagnostics.entries.toString())
+        assertArrayEquals(
+            cubicClipCpuOracle(clipPath, ClipOp.DIFFERENCE, background, fill, width = 64, height = 64),
+            result.pixels.toByteArray(),
+            "triangle difference CPU/GPU byte diff",
+        )
         assertEquals(2968, result.pixels.asList().chunked(4).count { pixel ->
             pixel.map { it.toInt() } == listOf(242, 135, 46, 255)
         })
