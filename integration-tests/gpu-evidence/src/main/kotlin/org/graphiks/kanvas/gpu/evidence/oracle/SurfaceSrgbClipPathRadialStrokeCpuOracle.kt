@@ -34,8 +34,8 @@ class SurfaceSrgbClipPathRadialStrokeCpuOracle(
         require((background + startColor + endColor).all { it in 0..255 }) {
             "colors must be byte channels"
         }
-        require(strokeWidth.isFinite() && strokeWidth == 4.0) {
-            "fixture requires a width-four stroke"
+        require(strokeWidth.isFinite() && strokeWidth > 0.0) {
+            "stroke width must be finite and positive"
         }
         require(lengthSquared.isFinite() && lengthSquared > 0.0) {
             "stroke segment must be finite and non-degenerate"
