@@ -40,6 +40,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRRectGeometryAu
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceFamily
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveStrokeLoweringProof
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveStrokeStyle
+import org.graphiks.kanvas.gpu.renderer.payloads.isBoundedHorizontalDashedPhase
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.sealedDeviceGeometryInput
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecording
@@ -1368,7 +1369,7 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
 
 private fun NormalizedDrawCommand.FillPath.matchesHorizontalDashedButtMiterV1(): Boolean {
     if (!stroke || antiAlias || pathEffectKind != "Dash" ||
-        dashIntervals?.toList() != listOf(8f, 4f) || dashPhase != 0f ||
+        dashIntervals?.toList() != listOf(8f, 4f) || !isBoundedHorizontalDashedPhase(dashPhase) ||
         contourStarts != listOf(0) || tessellatedVertices.size != 4 ||
         strokeWidth != 4f || strokeCap != "butt" || strokeJoin != "miter" ||
         !strokeMiterLimit.isFinite() || strokeMiterLimit < 1f ||

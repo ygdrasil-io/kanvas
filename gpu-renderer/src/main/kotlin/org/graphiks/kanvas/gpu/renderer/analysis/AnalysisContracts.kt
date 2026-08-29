@@ -73,6 +73,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUMaterialPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadGatherPlan
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUSolidPayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.payloads.preparedImageScissorAuthority
+import org.graphiks.kanvas.gpu.renderer.payloads.isBoundedHorizontalDashedPhase
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.routing.GPUFirstRouteDecisionBuilder
 import org.graphiks.kanvas.gpu.renderer.routing.GPURouteDecision
@@ -2567,7 +2568,7 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
 
     private fun NormalizedDrawCommand.FillPath.matchesHorizontalDashedButtMiterV1(): Boolean {
         if (pathEffectKind != "Dash" || dashIntervals?.toList() != listOf(8f, 4f) ||
-            dashPhase != 0f || strokeWidth != 4f || strokeCap != "butt" || strokeJoin != "miter" ||
+            !isBoundedHorizontalDashedPhase(dashPhase) || strokeWidth != 4f || strokeCap != "butt" || strokeJoin != "miter" ||
             tessellatedVertices.size != 4 || transform.type !in setOf(GPUTransformType.Identity, GPUTransformType.Translate)
         ) return false
         val startX = tessellatedVertices[0] + transform.translateX
