@@ -2147,6 +2147,99 @@ class GPUFramePathApiInventoryNativeSmokeTest {
     }
 
     @Test
+    fun `clamp linear gradient scaled translated butt miter stroke under winding path clip renders natively`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        val capabilities = requireNotNull(backend.capabilities)
+        val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(RenderConfig.DEFAULT.mapPreparedGpuColorConfig())
+        val targetBounds = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, 32, 32)
+        val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.gradient-scaled-translated-butt-clip")
+        val clipPath = Path().apply {
+            moveTo(6.875f, 5.875f)
+            lineTo(24.875f, 5.875f)
+            lineTo(6.875f, 23.875f)
+            close()
+        }
+        val drawTransform = Matrix3x3F32.translation(2f, 1f) * Matrix3x3F32.scaling(1.5f, 1.5f)
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(4.125f, 4.125f)
+                        lineTo(12.125f, 8.625f)
+                    },
+                    Paint.stroke(ColorARGB.Transparent, 2f).copy(
+                        shader = Shader.LinearGradient(
+                            Point2F32(0f, 0f),
+                            Point2F32(32f, 0f),
+                            listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                        ),
+                        antiAlias = false,
+                        strokeCap = StrokeCap.BUTT,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    drawTransform,
+                    ClipStack.Complex(
+                        listOf(
+                            ClipStackOp.PathOp(
+                                clipPath,
+                                ClipOp.INTERSECT,
+                                antiAlias = false,
+                                transformClass = "uniform-positive-scale-translate",
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+            deviceGeneration = backend.deviceGeneration,
+        )
+        val visual = inventory.visualCommands.single()
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+        assertEquals(2f, visual.normalized.transform.translateX)
+        assertEquals(1f, visual.normalized.transform.translateY)
+        assertEquals(1.5f, visual.normalized.transform.scaleX)
+        assertEquals(1.5f, visual.normalized.transform.scaleY)
+        val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(visual.clipExecutionPlan)
+        assertEquals("uniform-positive-scale-translate", execution.pathTransformClass)
+        assertEquals(GPUClipStencilOperation.IncrementWrap, execution.producer.frontPassOperation)
+        assertEquals(GPUClipStencilOperation.DecrementWrap, execution.producer.backPassOperation)
+        assertEquals(GPUClipStencilCompare.NotEqual, execution.consumer.compare)
+        val preparation = GPUFramePathApiInventory.prepareNativeTaskList(
+            inventory,
+            capabilities,
+            targetBounds,
+            readbackId,
+        )
+        val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            preparation,
+            (preparation as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}; facts=${it.facts}"
+            },
+        ).taskList
+        val session = backend.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(32, 32, colorMapping.physicalFormat, colorMapping.interpretation),
+        )
+        try {
+            val completed = session.renderFrame(
+                prepared,
+                GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
+            ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+            assertEquals(GPUFrameStructuralOutcome.Succeeded, completed.outcome)
+            val gpu = assertIs<GPUSceneFrameOutput.ReadbackRgba>(completed.output).bytes
+            assertContentEquals(deterministicScaledTranslatedDiagonalButtMiterGradientWindingClipOracle(), gpu)
+            assertEquals(1L, session.nativeCounters().submits)
+            assertEquals(1L, session.nativeCounters().readbackCopies)
+        } finally {
+            session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
     fun `clamp linear gradient round stroke under winding path clip remains refused`() {
         val backend = GPUBackendRuntimeNativeFactory.createOrNull()
         assumeTrue(backend != null)
@@ -3752,6 +3845,53 @@ class GPUFramePathApiInventoryNativeSmokeTest {
                     val distanceY = py - closestY
                     if (distanceX * distanceX + distanceY * distanceY > halfWidthSquared) continue
                     val t = (px / 32f).coerceIn(0f, 1f)
+                    val red = linearToSrgb((1f - t) * srgbToLinear(1f) + t * srgbToLinear(0f))
+                    val blue = linearToSrgb((1f - t) * srgbToLinear(0f) + t * srgbToLinear(1f))
+                    val offset = (y * 32 + x) * 4
+                    rgba[offset] = (red * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 2] = (blue * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 3] = 0xff.toByte()
+                }
+            }
+        }
+
+    /** Independent device-space oracle for the scaled/translated gradient stroke and clip. */
+    private fun deterministicScaledTranslatedDiagonalButtMiterGradientWindingClipOracle(): ByteArray =
+        ByteArray(32 * 32 * 4).also { rgba ->
+            val strokeAx = 8.1875f
+            val strokeAy = 7.1875f
+            val strokeBx = 20.1875f
+            val strokeBy = 13.9375f
+            val strokeDx = strokeBx - strokeAx
+            val strokeDy = strokeBy - strokeAy
+            val strokeLengthSquared = strokeDx * strokeDx + strokeDy * strokeDy
+            val halfWidthSquared = 1.5f * 1.5f
+            val clipAx = 6.875f
+            val clipAy = 5.875f
+            val clipBx = 24.875f
+            val clipBy = 5.875f
+            val clipCx = 6.875f
+            val clipCy = 23.875f
+            val denominator = (clipBy - clipCy) * (clipAx - clipCx) +
+                (clipCx - clipBx) * (clipAy - clipCy)
+            for (y in 0 until 32) {
+                for (x in 0 until 32) {
+                    val px = x + 0.5f
+                    val py = y + 0.5f
+                    val u = ((clipBy - clipCy) * (px - clipCx) +
+                        (clipCx - clipBx) * (py - clipCy)) / denominator
+                    val v = ((clipCy - clipAy) * (px - clipCx) +
+                        (clipAx - clipCx) * (py - clipCy)) / denominator
+                    if (u < 0f || v < 0f || u + v > 1f) continue
+                    val projection = ((px - strokeAx) * strokeDx + (py - strokeAy) * strokeDy) /
+                        strokeLengthSquared
+                    if (projection < 0f || projection > 1f) continue
+                    val closestX = strokeAx + projection * strokeDx
+                    val closestY = strokeAy + projection * strokeDy
+                    val distanceX = px - closestX
+                    val distanceY = py - closestY
+                    if (distanceX * distanceX + distanceY * distanceY > halfWidthSquared) continue
+                    val t = ((px - 2f) / 48f).coerceIn(0f, 1f)
                     val red = linearToSrgb((1f - t) * srgbToLinear(1f) + t * srgbToLinear(0f))
                     val blue = linearToSrgb((1f - t) * srgbToLinear(0f) + t * srgbToLinear(1f))
                     val offset = (y * 32 + x) * 4
