@@ -131,6 +131,7 @@ sweepGradientTwoStopStrokeRect(),
         clipPathHalfTurnButtStrokeWinding(),
         clipPathDiagonalSquareStrokeWinding(),
         clipPathTranslatedRadialSquareStrokeWinding(),
+        clipPathScaledTranslatedDiagonalButtStrokeWinding(),
         clipPathTranslatedTriangleRadialGradient(),
         clipPathTranslatedTriangleLinearGradient(),
         clipPathUniformScaledTriangleLinearGradient(),
@@ -2434,6 +2435,35 @@ sweepGradientTwoStopStrokeRect(),
             startColor = intArrayOf(255, 0, 0, 255),
             endColor = intArrayOf(0, 0, 255, 255),
             squareCaps = true,
+        ),
+    )
+
+    private fun clipPathScaledTranslatedDiagonalButtStrokeWinding() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("clip-path-scaled-translated-diagonal-butt-stroke-winding"),
+            "Scaled translated Winding clip with a diagonal butt stroke",
+            "Public Kanvas Surface hard non-AA Winding triangle clip around one opaque diagonal width-three butt-cap miter stroke under a uniform 1.5x scale and translation.",
+            64,
+            64,
+            1L,
+            setOf("clip-path", "stroke", "winding", "hard-clip", "butt-cap", "uniform-scale", "translation", "kanvas-surface"),
+            EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-clip-path-scaled-translated-diagonal-butt-stroke-device-space", 1),
+            ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent transformed device-space Winding triangle and butt stroke coverage."),
+            emptySet(),
+        ),
+        KanvasScenePrograms.clipPathScaledTranslatedDiagonalButtStrokeWinding(),
+        SurfaceSrgbClipPathSolidStrokeCpuOracle(
+            background = intArrayOf(13, 20, 33, 255),
+            points = listOf(
+                SurfaceSrgbClipPathSolidStrokeCpuOracle.Point(6.875, 5.875),
+                SurfaceSrgbClipPathSolidStrokeCpuOracle.Point(24.875, 5.875),
+                SurfaceSrgbClipPathSolidStrokeCpuOracle.Point(6.875, 23.875),
+            ),
+            strokeStart = SurfaceSrgbClipPathSolidStrokeCpuOracle.Point(8.1875, 7.1875),
+            strokeEnd = SurfaceSrgbClipPathSolidStrokeCpuOracle.Point(20.1875, 13.9375),
+            strokeWidth = 3.0,
+            color = intArrayOf(255, 0, 0, 255),
         ),
     )
 

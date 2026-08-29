@@ -73,7 +73,7 @@ class GpuEvidenceCatalogTest {
     }
 
     @Test
-    fun `catalog separates one hundred thirty-three public surface renders from nine refusals`() {
+    fun `catalog separates one hundred thirty-four public surface renders from nine refusals`() {
         val cases = GpuEvidenceCatalog.cases
 
         assertEquals(
@@ -142,6 +142,7 @@ class GpuEvidenceCatalogTest {
                 "clip-path-half-turn-butt-stroke-winding",
                 "clip-path-diagonal-square-stroke-winding",
                 "clip-path-translated-radial-square-stroke-winding",
+                "clip-path-scaled-translated-diagonal-butt-stroke-winding",
                 "clip-path-translated-triangle-radial-gradient",
                 "clip-path-translated-triangle-linear-gradient",
                 "clip-path-uniform-scaled-triangle-linear-gradient",
@@ -267,6 +268,7 @@ class GpuEvidenceCatalogTest {
                 "clip-path-half-turn-butt-stroke-winding",
                 "clip-path-diagonal-square-stroke-winding",
                 "clip-path-translated-radial-square-stroke-winding",
+                "clip-path-scaled-translated-diagonal-butt-stroke-winding",
                 "clip-path-translated-triangle-radial-gradient",
                 "clip-path-translated-triangle-linear-gradient",
                 "clip-path-uniform-scaled-triangle-linear-gradient",
@@ -326,11 +328,11 @@ class GpuEvidenceCatalogTest {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            List(133) { "kanvas.surface.render" },
+            List(134) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
-        assertEquals(133, GpuEvidenceCatalog.renderCases.size)
-        assertEquals(142, GpuEvidenceCatalog.cases.size)
+        assertEquals(134, GpuEvidenceCatalog.renderCases.size)
+        assertEquals(143, GpuEvidenceCatalog.cases.size)
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
 
         val solid = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "solid-card-stack" })
@@ -532,6 +534,7 @@ class GpuEvidenceCatalogTest {
                 "clip-path-half-turn-butt-stroke-winding",
                 "clip-path-diagonal-square-stroke-winding",
                 "clip-path-translated-radial-square-stroke-winding",
+                "clip-path-scaled-translated-diagonal-butt-stroke-winding",
                 "clip-path-translated-triangle-radial-gradient",
                 "clip-path-translated-triangle-linear-gradient",
                 "clip-path-uniform-scaled-triangle-linear-gradient",
@@ -698,6 +701,7 @@ class GpuEvidenceCatalogTest {
                 "clip-path-half-turn-butt-stroke-winding" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-half-turn-butt-stroke-device-space", 1),
                 "clip-path-diagonal-square-stroke-winding" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-diagonal-square-stroke-device-space", 1),
                 "clip-path-translated-radial-square-stroke-winding" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-translated-radial-square-stroke-device-space", 1),
+                "clip-path-scaled-translated-diagonal-butt-stroke-winding" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-scaled-translated-diagonal-butt-stroke-device-space", 1),
                 "clip-path-translated-triangle-radial-gradient" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-radial-gradient-device-space", 1),
                 "clip-path-translated-triangle-linear-gradient" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-linear-gradient-device-space", 1),
                 "clip-path-uniform-scaled-triangle-linear-gradient" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-linear-gradient-device-space", 1),
@@ -838,6 +842,7 @@ class GpuEvidenceCatalogTest {
                 "clip-path-half-turn-butt-stroke-winding" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent half-turn device-space Winding triangle and butt stroke coverage."),
                 "clip-path-diagonal-square-stroke-winding" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent device-space Winding triangle and square stroke coverage."),
                 "clip-path-translated-radial-square-stroke-winding" to ComparisonPolicy(1, 100.0, 1, "Independent transformed device-space Winding triangle, square stroke coverage and linear-light radial interpolation."),
+                "clip-path-scaled-translated-diagonal-butt-stroke-winding" to ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent transformed device-space Winding triangle and butt stroke coverage."),
                 "clip-path-translated-triangle-radial-gradient" to ComparisonPolicy(1, 100.0, 1, "Independent double-precision oracle with translated device-space geometry."),
                 "clip-path-translated-triangle-linear-gradient" to ComparisonPolicy(1, 100.0, 1, "Independent device-space pixel-center winding clip and linear-light clamp gradient oracle."),
                 "clip-path-uniform-scaled-triangle-linear-gradient" to ComparisonPolicy(1, 100.0, 1, "Independent device-space pixel-center winding clip and linear-light clamp gradient oracle."),
