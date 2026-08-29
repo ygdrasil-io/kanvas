@@ -41,6 +41,7 @@ class GpuEvidenceCatalogTest {
                 "separable-blur-rect",
                 "translucent-card-overlap",
                 "scissor-overlay",
+                "canvas-state-restore-to-count",
                 "stroke-rect-outline",
                 "linear-gradient-lanes",
                 "radial-swatch",
@@ -115,6 +116,7 @@ class GpuEvidenceCatalogTest {
                 "separable-blur-rect",
                 "translucent-card-overlap",
                 "scissor-overlay",
+                "canvas-state-restore-to-count",
                 "stroke-rect-outline",
                 "linear-gradient-lanes",
                 "radial-swatch",
@@ -189,11 +191,11 @@ class GpuEvidenceCatalogTest {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            List(70) { "kanvas.surface.render" },
+            List(71) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
-        assertEquals(70, GpuEvidenceCatalog.renderCases.size)
-        assertEquals(73, GpuEvidenceCatalog.cases.size)
+        assertEquals(71, GpuEvidenceCatalog.renderCases.size)
+        assertEquals(74, GpuEvidenceCatalog.cases.size)
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
 
         val solid = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "solid-card-stack" })
@@ -310,6 +312,7 @@ class GpuEvidenceCatalogTest {
             "separable-blur-rect",
             "translucent-card-overlap",
             "scissor-overlay",
+            "canvas-state-restore-to-count",
             "stroke-rect-outline",
             "linear-gradient-lanes",
             "radial-swatch",
@@ -401,6 +404,7 @@ class GpuEvidenceCatalogTest {
                 "separable-blur-rect" to OraclePolicy.GeneratedCpu("surface-srgb-mask-blur-normal-decal", 2),
                 "translucent-card-overlap" to OraclePolicy.GeneratedCpu("surface-srgb-linear-premul-src-over", 2),
                 "scissor-overlay" to OraclePolicy.GeneratedCpu("reference-raster-scissor-intersections", 1),
+                "canvas-state-restore-to-count" to OraclePolicy.GeneratedCpu("reference-raster-canvas-state-restore-to-count", 1),
                 "stroke-rect-outline" to OraclePolicy.GeneratedCpu("reference-raster-stroke-rect-bands", 1),
                 "linear-gradient-lanes" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-linear-clamp", 2),
                 "radial-swatch" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-radial-clamp", 2),
@@ -478,6 +482,7 @@ class GpuEvidenceCatalogTest {
                 "separable-blur-rect" to ComparisonPolicy(2, 99.0, 1, "Bounded GPU floating-point rounding is allowed after the independently quantized vertical mask stage."),
                 "translucent-card-overlap" to ComparisonPolicy(1, 100.0, 1, "Hardware rgba8unorm nearest quantization may differ from the independent linear-premultiplied sRGB oracle by one RGB byte; alpha remains exact and delta 2 remains a failure."),
                 "scissor-overlay" to ComparisonPolicy(0, 100.0, 1, "Exact integer RGBA8 output from literal scissor intersections."),
+                "canvas-state-restore-to-count" to ComparisonPolicy(0, 100.0, 1, "Exact integer RGBA8 output from literal parent/child scissor state and post-restore sentinels."),
                 "stroke-rect-outline" to ComparisonPolicy(0, 100.0, 1, "Exact integer RGBA8 output from four literal analytic coverage bands."),
                 "linear-gradient-lanes" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
                 "radial-swatch" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),

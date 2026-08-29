@@ -19,6 +19,7 @@ import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import kotlin.test.assertIs
 
@@ -36,6 +37,25 @@ class CanvasTest {
     @Test fun `Canvas translate`() { val b = TestBuffer(); val c = Canvas(b); c.translate(10f, 20f); assertEquals(10f, c.matrix.tx); assertEquals(20f, c.matrix.ty) }
     @Test fun `Canvas draws bake transform`() { val b = TestBuffer(); val c = Canvas(b); c.translate(10f, 0f); c.drawRect(RectF32.ofLTRB(0f,0f,100f,80f), Paint.fill(ColorARGB.Red)); assertEquals(10f, (b.ops().filterIsInstance<DisplayOp.DrawRect>().first()).transform.tx) }
     @Test fun `Canvas clipRect`() { val b = TestBuffer(); val c = Canvas(b); c.clipRect(RectF32.ofLTRB(0f,0f,50f,50f)); assertEquals(RectF32.ofLTRB(0f,0f,50f,50f), c.localClipBounds) }
+
+    @Test
+    fun `clip queries stay in local coordinates after a scale translate capture`() {
+        val buffer = TestBuffer()
+        val canvas = Canvas(buffer)
+        val localClip = RectF32.ofLTRB(5f, 7f, 25f, 37f)
+
+        canvas.translate(10f, 20f)
+        canvas.scale(2f, 3f)
+        canvas.clipRect(localClip, antiAlias = false)
+
+        val queriedClip = canvas.localClipBounds
+        assertEquals(localClip.left, queriedClip.left, 1e-5f)
+        assertEquals(localClip.top, queriedClip.top, 1e-5f)
+        assertEquals(localClip.right, queriedClip.right, 1e-5f)
+        assertEquals(localClip.bottom, queriedClip.bottom, 1e-5f)
+        assertFalse(canvas.quickReject(RectF32.ofLTRB(6f, 8f, 8f, 10f)))
+        assertTrue(canvas.quickReject(RectF32.ofLTRB(26f, 8f, 28f, 10f)))
+    }
     @Test
     fun `clip geometry is frozen when captured not when a later draw occurs`() {
         val buffer = TestBuffer()
@@ -117,6 +137,49 @@ class CanvasTest {
         assertIs<ClipStackOp.RRectOp>(nested.ops[1])
         assertEquals(outer, assertIs<ClipStack.DeviceRect>(draws[1].clip).rect)
         assertEquals(2, assertIs<ClipStack.Complex>(draws[0].clip).ops.size)
+    }
+
+    @Test
+    fun `restore to count restores parent clip for the post restore sentinel`() {
+        val buffer = TestBuffer()
+        val canvas = Canvas(buffer)
+        val parent = RectF32.ofLTRB(8f, 8f, 40f, 40f)
+        val child = RectF32.ofLTRB(16f, 16f, 32f, 32f)
+
+        val outerCount = canvas.save()
+        canvas.clipRect(parent, antiAlias = false)
+        canvas.save()
+        canvas.drawRect(RectF32.ofLTRB(0f, 0f, 64f, 64f), Paint.fill(ColorARGB.Blue))
+        canvas.save()
+        canvas.clipRect(child, antiAlias = false)
+        canvas.drawRect(RectF32.ofLTRB(0f, 0f, 64f, 64f), Paint.fill(ColorARGB.Green))
+        canvas.restoreToCount(outerCount)
+        canvas.drawRect(RectF32.ofLTRB(10f, 8f, 20f, 40f), Paint.fill(ColorARGB.Red))
+        canvas.restore()
+        canvas.drawRect(RectF32.ofLTRB(44f, 8f, 56f, 20f), Paint.fill(ColorARGB.White))
+
+        val draws = buffer.ops().filterIsInstance<DisplayOp.DrawRect>()
+        val childClip = assertIs<ClipStack.Complex>(draws[1].clip)
+        assertEquals(2, childClip.ops.size)
+        assertEquals(child, assertIs<ClipStackOp.RectOp>(childClip.ops[1]).rect)
+        assertEquals(parent, assertIs<ClipStack.DeviceRect>(draws[2].clip).rect)
+        assertEquals(ClipStack.WideOpen, draws[3].clip)
+        assertEquals(0, canvas.saveCount)
+    }
+
+    @Test
+    fun `negative restore count is a stable no op even with saved state`() {
+        val buffer = TestBuffer()
+        val canvas = Canvas(buffer)
+
+        canvas.save()
+        canvas.translate(7f, 11f)
+        canvas.restoreToCount(-1)
+
+        assertEquals(1, canvas.saveCount)
+        assertEquals(7f, canvas.matrix.tx)
+        assertEquals(11f, canvas.matrix.ty)
+        assertEquals(1, buffer.ops().filterIsInstance<DisplayOp.SetTransform>().size)
     }
 
     @Test fun `Canvas resetMatrix`() { val b = TestBuffer(); val c = Canvas(b); c.translate(100f, 200f); c.resetMatrix(); assertEquals(Matrix3x3F32.Identity, c.matrix) }

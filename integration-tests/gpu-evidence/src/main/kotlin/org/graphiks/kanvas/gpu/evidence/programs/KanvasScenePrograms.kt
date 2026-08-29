@@ -61,6 +61,19 @@ object KanvasScenePrograms {
         restore()
     })
 
+    fun canvasStateRestoreToCount() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        save()
+        clipRect(RectF32.ofLTRB(8f, 8f, 40f, 40f), antiAlias = false)
+        drawRect(RectF32.ofLTRB(4f, 4f, 44f, 44f), Paint.fill(ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)))
+        save()
+        clipRect(RectF32.ofLTRB(16f, 16f, 32f, 32f), antiAlias = false)
+        restoreToCount(1)
+        drawRect(RectF32.ofLTRB(4f, 8f, 20f, 40f), Paint.fill(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)))
+        restore()
+        drawRect(RectF32.ofLTRB(44f, 8f, 56f, 20f), Paint.fill(ColorARGB.White))
+    })
+
     fun clipRRectSolid() = KanvasSurfaceProgram(ROUTE_ID, record = {
         drawColor(BACKGROUND)
         save()
