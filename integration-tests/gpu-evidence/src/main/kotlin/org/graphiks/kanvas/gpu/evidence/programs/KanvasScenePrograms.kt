@@ -1572,6 +1572,17 @@ object KanvasScenePrograms {
         )
     })
 
+    fun horizontalSquareMiterStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawPath(
+            Path { moveTo(8f, 16f); lineTo(24f, 16f) },
+            Paint.stroke(ColorARGB.Red, 4f).copy(
+                antiAlias = false,
+                strokeCap = StrokeCap.SQUARE,
+                strokeJoin = StrokeJoin.MITER,
+            ),
+        )
+    })
+
     fun scissoredRoundCapStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
         save()
         clipRect(RectF32.ofLTRB(5f, 14f, 18f, 19f), antiAlias = false)
