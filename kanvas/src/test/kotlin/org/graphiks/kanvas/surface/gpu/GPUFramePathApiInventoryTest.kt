@@ -603,7 +603,8 @@ class GPUFramePathApiInventoryTest {
         )
         val cases = listOf(
             Matrix3x3F32.rotation(45f) to GPUCorePrimitiveRectRouteAuthority.RectAffineDirectTrianglesV1,
-            Matrix3x3F32.scaling(-1f, 1f) to GPUCorePrimitiveRectRouteAuthority.RectAxisAligned,
+            Matrix3x3F32.translation(16f, 0f) * Matrix3x3F32.scaling(-1f, 1f) to
+                GPUCorePrimitiveRectRouteAuthority.RectAxisAligned,
             Matrix3x3F32.skewing(0.25f, 0.125f) to
                 GPUCorePrimitiveRectRouteAuthority.RectAffineDirectTrianglesV1,
         )
@@ -1150,6 +1151,33 @@ class GPUFramePathApiInventoryTest {
         assertEquals(listOf(20f, 20f, 44f, 44f), geometry.innerBounds)
         assertEquals(List(8) { 4f }, geometry.innerRadii)
         assertEquals(GPUCorePrimitiveCoverageMode.FullOrScissor, semantic.coverageMode)
+    }
+
+    @Test
+    fun `valid rrect and drrect fully outside the target are stable no ops before native routing`() {
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawRRect(
+                    RRectF32.of(RectF32.ofLTRB(-32f, -32f, -8f, -8f), radius = 4f),
+                    Paint.fill(ColorARGB.Red).copy(antiAlias = false),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+                DisplayOp.DrawDRRect(
+                    RRectF32.of(RectF32.ofLTRB(72f, 72f, 104f, 104f), radius = 6f),
+                    RRectF32.of(RectF32.ofLTRB(80f, 80f, 96f, 96f), radius = 3f),
+                    Paint.fill(ColorARGB.Blue).copy(antiAlias = false),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+        )
+
+        assertEquals(emptyList(), inventory.visualCommands)
+        assertEquals(null, inventory.preparedRefusal)
+        assertTrue(inventory.recording.taskList.tasks.none { it is GPUTask.Refused })
     }
 
     @Test

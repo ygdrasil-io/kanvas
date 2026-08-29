@@ -1,0 +1,1 @@
+{"expectation":"refuse:unsupported.core_primitive.geometry.invalid","observedOutcome":"refused","verdictKind":"pass","reason":"exact refusal before submission"}

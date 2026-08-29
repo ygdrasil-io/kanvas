@@ -42,6 +42,28 @@ class SurfaceTest {
         assertEquals(AlphaType.PREMUL, subset.alphaType)
         assertArrayEquals(byteArrayOf(0, 0, -1, -1), subset.pixels)
     }
+
+    @Test
+    fun `annotation is pixel inert and snapshots distinguish valid empty and out of bounds subsets`() {
+        val surface = Surface(4, 3)
+        surface.canvas {
+            clear(ColorARGB.Transparent)
+            drawColor(ColorARGB.fromRGBA(1f, 0f, 0f, .5f))
+            drawAnnotation(RectF32.Empty, "evidence", "basic-primitives")
+        }
+
+        val render = surface.render()
+        val whole = surface.makeImageSnapshot()
+        val valid = surface.makeImageSnapshot(RectF32.ofLTRB(1f, 1f, 3f, 3f))
+
+        assertArrayEquals(render.pixels.toByteArray(), whole.pixels)
+        assertNotNull(valid)
+        assertEquals(2, valid!!.width)
+        assertEquals(2, valid.height)
+        assertEquals(null, surface.makeImageSnapshot(RectF32.ofLTRB(1f, 1f, 1f, 2f)))
+        assertEquals(null, surface.makeImageSnapshot(RectF32.ofLTRB(8f, 1f, 9f, 2f)))
+        assertTrue(surface.snapshotOps().any { it is org.graphiks.kanvas.canvas.DisplayOp.Annotation })
+    }
     @Test fun `Surface canvas DSL`() { val s = Surface(320, 240); s.canvas { drawRect(RectF32.ofLTRB(0f,0f,100f,80f), Paint.fill(ColorARGB.Red)) }; val r = s.render(); assertEquals(1, r.stats.opsDispatched) }
     @Test
     fun `readPixels copies correct region`() {

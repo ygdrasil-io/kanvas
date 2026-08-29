@@ -33,6 +33,9 @@ object GpuEvidenceCatalog {
         sweepDisk(),
         sweepGradientPartialAngle(),
         affineSolidRect(),
+        basicPrimitivesValidAlpha(),
+        basicPrimitivesOutOfBounds(),
+        basicPrimitivesPoints(),
         affinePathClipColor(),
         scissoredRadialGradient(),
         repeatGradientRendered(),
@@ -97,6 +100,7 @@ object GpuEvidenceCatalog {
     )
     val refusalCases: List<EvidenceCase> = listOf(
         linearGradientThreeStops(),
+        basicPrimitivesEmptyRectRefusal(),
         perspectiveTransformRefusal(),
         unregisteredRuntimeEffectRefusal(),
         aggregateMemoryBudgetRefusal(),
@@ -137,6 +141,67 @@ object GpuEvidenceCatalog {
             }.rgba() },
         )
     }
+
+    private fun basicPrimitivesValidAlpha() = EvidenceCase(
+        descriptor = EvidenceSceneDescriptor(
+            EvidenceSceneId("basic-primitives-valid-alpha"), "Basic primitives alpha", "Public Surface clear, drawColor and non-AA rectangle with straight-sRGB alpha inputs.",
+            64, 64, 1L, setOf("clear", "draw-color", "solid-rect", "alpha", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-basic-primitives-alpha", 1),
+            ComparisonPolicy(1, 99.0, 1, "Independent straight-sRGB premultiplied SrcOver oracle; one RGBA8 rounding unit is tolerated."), emptySet(),
+        ),
+        program = KanvasScenePrograms.basicPrimitivesValidAlpha(),
+        oracle = SurfaceSrgbSrcOverCpuOracle(
+            background = intArrayOf(0, 0, 0, 0),
+            rectangles = listOf(
+                SurfaceSrgbSrcOverCpuOracle.StraightSrgbRectangle(
+                    SurfaceSrgbOracleMath.PixelRect(0, 0, 64, 64), intArrayOf(13, 20, 33, 128),
+                ),
+                SurfaceSrgbSrcOverCpuOracle.StraightSrgbRectangle(
+                    SurfaceSrgbOracleMath.PixelRect(8, 12, 56, 52), intArrayOf(242, 135, 46, 128),
+                ),
+            ),
+        ),
+    )
+
+    private fun basicPrimitivesOutOfBounds() = EvidenceCase(
+        descriptor = EvidenceSceneDescriptor(
+            EvidenceSceneId("basic-primitives-out-of-bounds"), "Basic primitive bounds", "Public Surface off-target RRect/DRRect are no-op while a partially out-of-bounds rect is clipped to the target.",
+            64, 64, 1L, setOf("solid-rect", "solid-rrect", "solid-drrect", "out-of-bounds", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("reference-raster-basic-primitive-bounds", 1),
+            ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 target clipping and no-op semantics."), emptySet(),
+        ),
+        program = KanvasScenePrograms.basicPrimitivesOutOfBounds(),
+        oracle = CpuOracle { width, height -> ReferenceRaster(width, height).apply {
+            clear(intArrayOf(13, 20, 33, 255))
+            fillRect(-8, -8, 4, 4, intArrayOf(31, 115, 209, 255))
+        }.rgba() },
+    )
+
+    private fun basicPrimitivesPoints() = EvidenceCase(
+        descriptor = EvidenceSceneDescriptor(
+            EvidenceSceneId("basic-primitives-points"), "Basic point primitives", "Public Surface POINTS lowering with bounded opaque square footprints and an off-target point.",
+            64, 64, 1L, setOf("draw-points", "solid-rect", "out-of-bounds", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("reference-raster-draw-points-squares", 1),
+            ComparisonPolicy(0, 100.0, 1, "Exact opaque four-pixel-wide point footprints after target clipping."), emptySet(),
+        ),
+        program = KanvasScenePrograms.basicPrimitivesPoints(),
+        oracle = CpuOracle { width, height -> ReferenceRaster(width, height).apply {
+            clear(intArrayOf(13, 20, 33, 255))
+            fillRect(8, 10, 12, 14, intArrayOf(242, 135, 46, 255))
+            fillRect(28, 30, 32, 34, intArrayOf(242, 135, 46, 255))
+            fillRect(60, 60, 64, 64, intArrayOf(242, 135, 46, 255))
+        }.rgba() },
+    )
+
+    private fun basicPrimitivesEmptyRectRefusal() = EvidenceCase(
+        descriptor = EvidenceSceneDescriptor(
+            EvidenceSceneId("basic-primitives-empty-rect-refusal"), "Empty rectangle refusal", "Public Surface empty rectangle is rejected before submission with its current stable geometry diagnostic.",
+            64, 64, 1L, setOf("solid-rect", "empty", "refusal", "kanvas-surface"),
+            EvidenceExpectation.ShouldRefuse("unsupported.core_primitive.geometry.invalid"), OraclePolicy.StableRefusal, null, emptySet(),
+        ),
+        program = KanvasScenePrograms.basicPrimitivesEmptyRectRefusal(),
+        oracle = null,
+    )
 
     private fun separableBlurRect(): EvidenceCase {
         return EvidenceCase(
