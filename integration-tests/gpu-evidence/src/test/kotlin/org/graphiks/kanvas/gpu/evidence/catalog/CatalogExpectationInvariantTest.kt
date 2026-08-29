@@ -57,8 +57,8 @@ class CatalogExpectationInvariantTest {
 
     @Test
     fun `every render case has exactly one oracle and every refusal has none`() {
-        assertEquals(202, GpuEvidenceCatalog.cases.size)
-        assertEquals(185, GpuEvidenceCatalog.renderCases.size)
+        assertEquals(203, GpuEvidenceCatalog.cases.size)
+        assertEquals(186, GpuEvidenceCatalog.renderCases.size)
         assertEquals(17, GpuEvidenceCatalog.refusalCases.size)
         GpuEvidenceCatalog.renderCases.forEach { evidenceCase ->
             assertIs<org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram>(evidenceCase.program)
