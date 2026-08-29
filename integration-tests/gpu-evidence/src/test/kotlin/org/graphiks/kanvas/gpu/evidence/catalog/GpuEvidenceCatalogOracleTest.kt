@@ -406,6 +406,24 @@ class GpuEvidenceCatalogOracleTest {
     }
 
     @Test
+    fun `right angle diagonal square stroke preserves rotated cap extension`() {
+        val pixels = oracle("clip-path-right-angle-diagonal-square-stroke-winding")
+        val background = intArrayOf(13, 20, 33, 255).toList()
+
+        assertNotEquals(
+            background,
+            pixel(pixels, 64, 64, 24, 8).toList(),
+            "right-angle square-cap endpoint witness must be painted",
+        )
+        assertNotEquals(
+            background,
+            pixel(pixels, 64, 64, 19, 18).toList(),
+            "right-angle square stroke midpoint must be painted",
+        )
+        assertPixel(pixels, 64, 64, 10, 20, intArrayOf(13, 20, 33, 255))
+    }
+
+    @Test
     fun `bounded bitmap oracle preserves literal nearest texels at its integer destination`() {
         val pixels = oracle("bounded-rgba8-nearest-bitmap")
 
