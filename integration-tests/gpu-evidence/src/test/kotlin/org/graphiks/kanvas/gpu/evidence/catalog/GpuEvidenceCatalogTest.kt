@@ -33,6 +33,19 @@ import org.graphiks.math.matrix.Matrix3x3F32
 
 class GpuEvidenceCatalogTest {
     @Test
+    fun `mirror linear gradient FillRect is a public Surface refusal`() {
+        val evidenceCase = assertNotNull(GpuEvidenceCatalog.cases.firstOrNull {
+            it.descriptor.id.value == "mirror-linear-gradient-fillrect-refusal"
+        })
+
+        assertEquals(
+            EvidenceExpectation.ShouldRefuse("unsupported.material.gradient_tile_mode_unsupported"),
+            evidenceCase.descriptor.expectation,
+        )
+        assertIs<KanvasSurfaceProgram>(evidenceCase.program)
+    }
+
+    @Test
     fun `bounded saveLayer evidence keeps its root background on the supported solid rect route`() {
         val operations = ops("bounded-save-layer-src-over-opacity")
 
@@ -59,7 +72,7 @@ class GpuEvidenceCatalogTest {
     }
 
     @Test
-    fun `catalog separates eighty six public surface renders from nine refusals`() {
+    fun `catalog separates eighty six public surface renders from ten refusals`() {
         val cases = GpuEvidenceCatalog.cases
 
         assertEquals(
@@ -144,6 +157,7 @@ class GpuEvidenceCatalogTest {
                 "linear-gradient-three-stops",
                 "basic-primitives-empty-rect-refusal",
                 "perspective-transform-refusal",
+                "mirror-linear-gradient-fillrect-refusal",
                 "reflected-path-topology-refusal",
                 "custom-runtime-effect-unregistered-refusal",
                 "aggregate-memory-budget-refusal",
@@ -236,7 +250,7 @@ class GpuEvidenceCatalogTest {
             GpuEvidenceCatalog.renderCases.map { it.descriptor.id.value },
         )
         assertEquals(
-            listOf("linear-gradient-three-stops", "basic-primitives-empty-rect-refusal", "perspective-transform-refusal", "reflected-path-topology-refusal", "custom-runtime-effect-unregistered-refusal", "aggregate-memory-budget-refusal", "bounded-save-layer-restore-blend-refusal", "bounded-bitmap-linear-refusal", "image-filter-blur-refusal"),
+            listOf("linear-gradient-three-stops", "basic-primitives-empty-rect-refusal", "perspective-transform-refusal", "mirror-linear-gradient-fillrect-refusal", "reflected-path-topology-refusal", "custom-runtime-effect-unregistered-refusal", "aggregate-memory-budget-refusal", "bounded-save-layer-restore-blend-refusal", "bounded-bitmap-linear-refusal", "image-filter-blur-refusal"),
             GpuEvidenceCatalog.refusalCases.map { it.descriptor.id.value },
         )
         assertTrue(GpuEvidenceCatalog.renderCases.all { it.program is KanvasSurfaceProgram })
@@ -248,7 +262,7 @@ class GpuEvidenceCatalogTest {
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
         assertEquals(86, GpuEvidenceCatalog.renderCases.size)
-        assertEquals(95, GpuEvidenceCatalog.cases.size)
+        assertEquals(96, GpuEvidenceCatalog.cases.size)
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
 
         val solid = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "solid-card-stack" })
@@ -466,6 +480,7 @@ class GpuEvidenceCatalogTest {
                 "linear-gradient-three-stops" to "kanvas.surface.render",
                 "basic-primitives-empty-rect-refusal" to "kanvas.surface.render",
                 "perspective-transform-refusal" to "kanvas.surface.render",
+                "mirror-linear-gradient-fillrect-refusal" to "kanvas.surface.render",
                 "reflected-path-topology-refusal" to "kanvas.surface.render",
                 "bounded-save-layer-restore-blend-refusal" to "kanvas.surface.render",
                 "bounded-bitmap-linear-refusal" to "kanvas.surface.render",

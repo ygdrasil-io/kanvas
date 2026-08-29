@@ -705,6 +705,13 @@ object KanvasScenePrograms {
         ), antiAlias = false))
     })
 
+    fun mirrorLinearGradientFillRectRefusal() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawRect(RectF32.ofLTRB(0f, 16f, 64f, 48f), Paint(shader = Shader.LinearGradient(
+            Point2F32(16.5f, 32.5f), Point2F32(31.5f, 32.5f),
+            listOf(GradientStop(0f, ColorARGB.of(255, 255, 56, 56)), GradientStop(1f, ColorARGB.of(255, 56, 112, 255))), TileMode.MIRROR,
+        ), antiAlias = false))
+    })
+
     fun gradientStrokeRefusal() = KanvasSurfaceProgram(ROUTE_ID, record = {
         drawRect(RectF32.ofLTRB(8f, 16f, 56f, 48f), Paint.stroke(ColorARGB.Transparent, 4f).copy(
             shader = Shader.LinearGradient(
