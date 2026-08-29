@@ -1363,6 +1363,32 @@ object KanvasScenePrograms {
         restore()
     })
 
+    fun clipPathScaledTranslatedDiagonalButtStrokeWinding() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        save()
+        translate(2f, 1f)
+        scale(1.5f, 1.5f)
+        clipPath(
+            Path {
+                moveTo(3.25f, 3.25f)
+                lineTo(15.25f, 3.25f)
+                lineTo(3.25f, 15.25f)
+                close()
+            }.apply { fillType = FillType.WINDING },
+            ClipOp.INTERSECT,
+            antiAlias = false,
+        )
+        drawPath(
+            Path { moveTo(4.125f, 4.125f); lineTo(12.125f, 8.625f) },
+            Paint.stroke(ColorARGB.Red, 2f).copy(
+                antiAlias = false,
+                strokeCap = StrokeCap.BUTT,
+                strokeJoin = StrokeJoin.MITER,
+            ),
+        )
+        restore()
+    })
+
     fun clipPathTranslatedTriangleRadialGradient() = clipPathTriangleRadialGradientScene {
         translate(2f, 0f)
     }
