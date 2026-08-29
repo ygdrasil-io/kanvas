@@ -307,6 +307,25 @@ class PathTessellatorTest {
     }
 
     @Test
+    fun `shallow non-linear quadratic keeps a curve midpoint`() {
+        val flat = PathTessellator(tolerance = 1f).flatten(
+            PathData(
+                verbs = listOf(
+                    PathVerb.MoveTo(Point(4f, 4f)),
+                    PathVerb.QuadTo(Point(8f, 4.1f), Point(12f, 4f)),
+                    PathVerb.Close,
+                ),
+                points = emptyList(),
+            ),
+        )
+
+        assertEquals(
+            listOf(Point(4f, 4f), Point(8f, 4.05f), Point(12f, 4f), Point(4f, 4f)),
+            flat,
+        )
+    }
+
+    @Test
     fun `quadratic flattening uses bounded adaptive subdivision`() {
         val tessellator = PathTessellator(tolerance = 0.25f, maxFanTriangles = 1024)
         val flattened = tessellator.flattenWithContours(

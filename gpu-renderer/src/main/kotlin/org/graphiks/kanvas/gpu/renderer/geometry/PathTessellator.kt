@@ -192,9 +192,15 @@ class PathTessellator(
         pending.addLast(QuadraticSegment(p0, p1, p2, depth = 0))
         while (pending.isNotEmpty()) {
             val segment = pending.removeLast()
-            if (segment.depth >= MAX_QUADRATIC_SUBDIVISION_DEPTH ||
-                quadraticFlatness(segment.p0, segment.p1, segment.p2) <= tolerance
-            ) {
+            // Keep one subdivision for a non-linear quadratic even when its
+            // control point falls within the pixel tolerance.  Without this,
+            // a shallow curve can collapse to its chord and, in the common
+            // close-path case, leave only a degenerate triangle for the
+            // downstream path route.  Exactly linear quadratics still take
+            // the cheap single-segment path.
+            val flat = quadraticFlatness(segment.p0, segment.p1, segment.p2) <= tolerance
+            val linearAtRoot = segment.depth == 0 && segment.p1 == midpoint(segment.p0, segment.p2)
+            if (segment.depth >= MAX_QUADRATIC_SUBDIVISION_DEPTH || (flat && (segment.depth > 0 || linearAtRoot))) {
                 appendPoint(result, segment.p2)
                 continue
             }
