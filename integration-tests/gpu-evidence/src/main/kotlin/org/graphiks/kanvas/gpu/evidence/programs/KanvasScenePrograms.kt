@@ -1845,6 +1845,23 @@ object KanvasScenePrograms {
         )
     })
 
+    /** The reversed vertical radius-two round-cap route under a small upper-cap scissor. */
+    fun scissoredReverseVerticalRoundCapStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        save()
+        clipRect(RectF32.ofLTRB(16f, 5f, 18f, 8f), antiAlias = false)
+        drawPath(
+            Path {
+                moveTo(16f, 26f)
+                lineTo(16f, 6f)
+            },
+            Paint.stroke(ColorARGB.Red, 4f).copy(
+                antiAlias = false,
+                strokeCap = StrokeCap.ROUND,
+            ),
+        )
+        restore()
+    })
+
     /** The horizontal radius-two round-cap route with the source contour reversed. */
     fun reverseHorizontalRoundCapStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
         drawPath(

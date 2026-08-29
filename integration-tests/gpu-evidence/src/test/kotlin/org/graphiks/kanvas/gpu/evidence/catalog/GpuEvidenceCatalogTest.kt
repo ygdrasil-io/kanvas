@@ -95,6 +95,7 @@ class GpuEvidenceCatalogTest {
                 "negative-quarter-turn-round-cap-stroke",
                 "scissored-vertical-round-cap-stroke",
                 "reverse-vertical-round-cap-stroke",
+                "scissored-reverse-vertical-round-cap-stroke",
                 "reverse-horizontal-round-cap-stroke",
                 "translated-reverse-horizontal-round-cap-stroke",
                 "scissored-reverse-horizontal-round-cap-stroke",
@@ -275,6 +276,7 @@ class GpuEvidenceCatalogTest {
                 "negative-quarter-turn-round-cap-stroke",
                 "scissored-vertical-round-cap-stroke",
                 "reverse-vertical-round-cap-stroke",
+                "scissored-reverse-vertical-round-cap-stroke",
                 "reverse-horizontal-round-cap-stroke",
                 "translated-reverse-horizontal-round-cap-stroke",
                 "scissored-reverse-horizontal-round-cap-stroke",
@@ -429,11 +431,11 @@ class GpuEvidenceCatalogTest {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            List(180) { "kanvas.surface.render" },
+            List(181) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
-        assertEquals(180, GpuEvidenceCatalog.renderCases.size)
-        assertEquals(197, GpuEvidenceCatalog.cases.size)
+        assertEquals(181, GpuEvidenceCatalog.renderCases.size)
+        assertEquals(198, GpuEvidenceCatalog.cases.size)
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
 
         val solid = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "solid-card-stack" })
@@ -587,6 +589,7 @@ class GpuEvidenceCatalogTest {
             "negative-quarter-turn-round-cap-stroke",
             "scissored-vertical-round-cap-stroke",
             "reverse-vertical-round-cap-stroke",
+            "scissored-reverse-vertical-round-cap-stroke",
             "reverse-horizontal-round-cap-stroke",
             "translated-reverse-horizontal-round-cap-stroke",
             "scissored-reverse-horizontal-round-cap-stroke",
@@ -786,6 +789,7 @@ class GpuEvidenceCatalogTest {
                 "negative-quarter-turn-round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke-vertical", 2),
                 "scissored-vertical-round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke-vertical-scissor", 2),
                 "reverse-vertical-round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke-vertical", 2),
+                "scissored-reverse-vertical-round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke-vertical-scissor", 2),
                 "reverse-horizontal-round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke", 2),
                 "translated-reverse-horizontal-round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke", 2),
                 "scissored-reverse-horizontal-round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke-scissor", 2),
@@ -973,6 +977,7 @@ class GpuEvidenceCatalogTest {
                 "negative-quarter-turn-round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Independent pixel-center disk oracle for the integral-grid vertical result of the negative-quarter-turn contract."),
                 "scissored-vertical-round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent vertical round-cap union intersected with the integral device scissor."),
                 "reverse-vertical-round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Independent pixel-center disk oracle for the direction-invariant integral-grid vertical contract."),
+                "scissored-reverse-vertical-round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent reverse vertical round-cap union intersected with the integral device scissor."),
                 "reverse-horizontal-round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Independent pixel-center disk oracle for the direction-invariant integral-grid horizontal contract."),
                 "translated-reverse-horizontal-round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Independent pixel-center disk oracle for the direction-invariant translated integral-grid horizontal contract."),
                 "scissored-reverse-horizontal-round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent reverse horizontal round-cap union intersected with the integral device scissor."),
@@ -1326,6 +1331,19 @@ class GpuEvidenceCatalogTest {
         )
         assertEquals(Matrix3x3F32.Identity, reverseVerticalRoundCapStroke.transform)
         assertEquals(ClipStack.WideOpen, reverseVerticalRoundCapStroke.clip)
+
+        val scissoredReverseVerticalRoundCapStroke = assertIs<DisplayOp.DrawPath>(ops("scissored-reverse-vertical-round-cap-stroke").single { it is DisplayOp.DrawPath })
+        assertEquals(RectF32.ofLTRB(16f, 6f, 16f, 26f), scissoredReverseVerticalRoundCapStroke.path.computeBounds())
+        assertFalse(PathMeasure(scissoredReverseVerticalRoundCapStroke.path).isClosed)
+        assertEquals(
+            Paint.stroke(ColorARGB.Red, 4f).copy(antiAlias = false, strokeCap = StrokeCap.ROUND),
+            scissoredReverseVerticalRoundCapStroke.paint,
+        )
+        assertEquals(Matrix3x3F32.Identity, scissoredReverseVerticalRoundCapStroke.transform)
+        assertEquals(
+            ClipStack.DeviceRect(RectF32.ofLTRB(16f, 5f, 18f, 8f), false),
+            scissoredReverseVerticalRoundCapStroke.clip,
+        )
 
         val reverseHorizontalRoundCapStroke = assertIs<DisplayOp.DrawPath>(ops("reverse-horizontal-round-cap-stroke").single())
         assertEquals(RectF32.ofLTRB(6f, 16f, 26f, 16f), reverseHorizontalRoundCapStroke.path.computeBounds())
