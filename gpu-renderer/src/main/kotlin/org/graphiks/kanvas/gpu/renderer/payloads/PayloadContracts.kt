@@ -2442,12 +2442,15 @@ private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
                         sourceVertexCount == 2 &&
                         fillRule == GPUCorePrimitiveFillRule.Winding &&
                         !inverseFill &&
-                        stroke.cap == "butt" &&
                         stroke.join == "miter" &&
                         stroke.dashIntervals.isEmpty() &&
-                        stroke.loweringProof == GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1,
+                        when (stroke.cap) {
+                            "butt" -> stroke.loweringProof == GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1
+                            "square" -> stroke.loweringProof == GPUCorePrimitiveStrokeLoweringProof.SingleSegmentSquareV1
+                            else -> false
+                        },
                 ) {
-                    "Direct stroke triangles require the exact single-segment butt/miter lowering proof"
+                    "Direct stroke triangles require the exact single-segment butt/square miter lowering proof"
                 }
             }
             GPUCorePrimitiveGeometryMode.StencilEdgeFan -> {
