@@ -1,0 +1,15 @@
+{
+  "feature": "bounded_horizontal_dashed_butt_miter_stroke",
+  "stroke": { "widthPx": 4, "cap": "butt", "join": "miter", "antiAlias": false },
+  "dash": { "intervals": [8, 4], "phase": 0 },
+  "path": { "points": 2, "orientation": "horizontal", "coordinates": "integral-device" },
+  "transformPolicy": ["identity", "translation"],
+  "route": "native.path_stroke.stencil_cover",
+  "proof": "HorizontalDashedButtMiterV1",
+  "positiveTest": "GPUFramePathApiInventoryTest.bounded horizontal dashed butt stroke reaches native stencil cover",
+  "negativeTest": "GPUFramePathApiInventoryTest.nearby dashed stroke remains refused outside the fixed proof",
+  "negativeDiagnostic": "unsupported.core_primitive.stroke.dash_exact_lowering",
+  "cpuOracle": "explicit_refusal_not_available",
+  "gpuCapture": "not_produced",
+  "gmPromotion": "none"
+}

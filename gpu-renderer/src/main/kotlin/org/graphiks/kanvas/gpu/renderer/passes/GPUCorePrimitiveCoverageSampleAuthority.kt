@@ -172,7 +172,10 @@ private fun GPUCorePrimitiveGeometry.TriangulatedPath.isExactSingleSegmentStroke
     val stroke = strokeStyle ?: return false
     if (!stroke.width.isFinite() || stroke.width !in 0.5f..64f ||
         !stroke.miterLimit.isFinite() || stroke.miterLimit < 1f ||
-        stroke.join != "miter" || stroke.dashIntervals.isNotEmpty()
+        stroke.join != "miter" ||
+        (stroke.dashIntervals.isNotEmpty() &&
+            !(stroke.loweringProof == GPUCorePrimitiveStrokeLoweringProof.HorizontalDashedButtMiterV1 &&
+                stroke.dashIntervals == listOf(8f, 4f) && stroke.dashPhase == 0f))
     ) return false
     return when (stroke.loweringProof) {
         GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1 ->
@@ -183,6 +186,9 @@ private fun GPUCorePrimitiveGeometry.TriangulatedPath.isExactSingleSegmentStroke
             stroke.cap == "round" && stroke.width == 4f
         GPUCorePrimitiveStrokeLoweringProof.MultiSegmentButtMiterV1 ->
             sourceVertexCount in 3..8 && stroke.cap == "butt" && stroke.join == "miter"
+        GPUCorePrimitiveStrokeLoweringProof.HorizontalDashedButtMiterV1 ->
+            sourceVertexCount == 2 && stroke.cap == "butt" && stroke.join == "miter" &&
+                stroke.dashIntervals == listOf(8f, 4f) && stroke.dashPhase == 0f
     }
 }
 

@@ -2552,8 +2552,8 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
             tessellatedVertices.chunked(2).let { points -> points.first() != points.last() } &&
             strokeWidth.isFinite() && strokeWidth in 0.5f..64f &&
             !antiAlias &&
-            (dashIntervals == null || dashIntervals.isEmpty()) &&
-            pathEffectKind == null &&
+            ((dashIntervals == null || dashIntervals.isEmpty()) && pathEffectKind == null ||
+                matchesHorizontalDashedButtMiterV1()) &&
             (
                 strokeCap == "butt" ||
                     (tessellatedVertices.size == 4 && strokeCap == "square") ||
@@ -2564,6 +2564,20 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
             (transform.type in setOf(GPUTransformType.Identity, GPUTransformType.Translate) ||
                 transform.isUniformPositiveScale() || transform.isUniformPositiveScaleTranslate() ||
                 transform.isExactQuarterTurnPathRotation() || transform.isExactHalfTurnPathRotation())
+
+    private fun NormalizedDrawCommand.FillPath.matchesHorizontalDashedButtMiterV1(): Boolean {
+        if (pathEffectKind != "Dash" || dashIntervals?.toList() != listOf(8f, 4f) ||
+            dashPhase != 0f || strokeWidth != 4f || strokeCap != "butt" || strokeJoin != "miter" ||
+            tessellatedVertices.size != 4 || transform.type !in setOf(GPUTransformType.Identity, GPUTransformType.Translate)
+        ) return false
+        val startX = tessellatedVertices[0] + transform.translateX
+        val startY = tessellatedVertices[1] + transform.translateY
+        val endX = tessellatedVertices[2] + transform.translateX
+        val endY = tessellatedVertices[3] + transform.translateY
+        return startX.isIntegralDeviceCoordinate() && startY.isIntegralDeviceCoordinate() &&
+            endX.isIntegralDeviceCoordinate() && endY.isIntegralDeviceCoordinate() &&
+            startY == endY && endX - startX >= 12f
+    }
 
     private fun NormalizedDrawCommand.FillPath.matchesPixelExactRoundCapR2HorizontalV1(): Boolean {
         if (transform.type !in setOf(GPUTransformType.Identity, GPUTransformType.Translate)) return false

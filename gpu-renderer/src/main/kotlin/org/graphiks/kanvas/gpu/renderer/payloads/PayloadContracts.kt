@@ -1167,6 +1167,8 @@ enum class GPUCorePrimitiveStrokeLoweringProof {
     SingleSegmentRoundPixelExactR2HorizontalV1,
     /** Bounded open polyline, butt caps and miter joins, lowered to a stroke edge fan. */
     MultiSegmentButtMiterV1,
+    /** One integral horizontal segment with the fixed [8,4] butt/miter dash proof. */
+    HorizontalDashedButtMiterV1,
 }
 
 /** Exact source stroke facts plus the named lowering implementation that consumed them. */
@@ -2490,9 +2492,11 @@ private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
                 require(fillRule == GPUCorePrimitiveFillRule.Winding && !inverseFill) {
                     "Core single-segment stroke proof requires non-inverse winding fill"
                 }
-                require(stroke.dashIntervals.isEmpty()) {
-                    "Core single-segment stroke proof does not support dashes"
-                }
+                require(
+                    stroke.dashIntervals.isEmpty() ||
+                        (stroke.loweringProof == GPUCorePrimitiveStrokeLoweringProof.HorizontalDashedButtMiterV1 &&
+                            stroke.dashIntervals == listOf(8f, 4f) && stroke.dashPhase == 0f),
+                ) { "Core stroke proof does not support this dash pattern" }
                 require(
                     when (stroke.loweringProof) {
                         GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1 -> stroke.cap == "butt"
@@ -2501,6 +2505,8 @@ private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
                             stroke.cap == "round" && stroke.width == 4f
                         GPUCorePrimitiveStrokeLoweringProof.MultiSegmentButtMiterV1 ->
                             stroke.cap == "butt" && stroke.join == "miter"
+                        GPUCorePrimitiveStrokeLoweringProof.HorizontalDashedButtMiterV1 ->
+                            sourceVertexCount == 2 && stroke.cap == "butt" && stroke.join == "miter"
                     },
                 ) {
                     "Core single-segment stroke cap must match its closed lowering proof"

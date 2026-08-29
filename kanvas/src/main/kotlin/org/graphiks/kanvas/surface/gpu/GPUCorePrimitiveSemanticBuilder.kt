@@ -1193,6 +1193,7 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
 ): GPUCorePrimitiveGeometryInput {
     val pointCount = tessellatedVertices.size / 2
     val exactSingleSegment = contourStarts == listOf(0) && pointCount == 2
+    val horizontalDashed = matchesHorizontalDashedButtMiterV1()
     val boundedMultiSegment = contourStarts == listOf(0) && pointCount in 3..8 &&
         edgeCount in (pointCount - 1)..pointCount && strokeCap == "butt" && strokeJoin == "miter" &&
         tessellatedVertices.chunked(2).zipWithNext().all { (a, b) ->
@@ -1232,9 +1233,9 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
         !strokeWidth.isFinite() -> "unsupported.core_primitive.stroke.width_nonfinite"
         strokeWidth == 0f -> "unsupported.core_primitive.stroke.hairline_exact_lowering"
         strokeWidth < 0.5f || strokeWidth > 64f -> "unsupported.core_primitive.stroke.width_budget"
-        pathEffectKind == "Dash" || dashIntervals?.isNotEmpty() == true ->
+        (pathEffectKind == "Dash" || dashIntervals?.isNotEmpty() == true) && !horizontalDashed ->
             "unsupported.core_primitive.stroke.dash_exact_lowering"
-        pathEffectKind != null -> "unsupported.core_primitive.stroke.path_effect_exact_lowering"
+        pathEffectKind != null && !horizontalDashed -> "unsupported.core_primitive.stroke.path_effect_exact_lowering"
         strokeCap !in setOf("butt", "square", "round") -> "unsupported.core_primitive.stroke.cap_exact_lowering"
         !exactSingleSegment && !boundedMultiSegment -> "unsupported.core_primitive.stroke.complex_exact_lowering"
         strokeCap == "round" && !matchesPixelExactRoundCapR2HorizontalV1() ->
@@ -1355,6 +1356,7 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
             dashPhase = dashPhase,
             loweringProof = when {
                 boundedMultiSegment -> GPUCorePrimitiveStrokeLoweringProof.MultiSegmentButtMiterV1
+                horizontalDashed -> GPUCorePrimitiveStrokeLoweringProof.HorizontalDashedButtMiterV1
                 strokeCap == "square" -> GPUCorePrimitiveStrokeLoweringProof.SingleSegmentSquareV1
                 strokeCap == "round" -> GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2HorizontalV1
                 else -> GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1
@@ -1362,6 +1364,21 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
         ),
         sourceAuthority = pathDescriptor.sourceAuthority,
     )
+}
+
+private fun NormalizedDrawCommand.FillPath.matchesHorizontalDashedButtMiterV1(): Boolean {
+    if (!stroke || antiAlias || pathEffectKind != "Dash" ||
+        dashIntervals?.toList() != listOf(8f, 4f) || dashPhase != 0f ||
+        contourStarts != listOf(0) || tessellatedVertices.size != 4 ||
+        strokeWidth != 4f || strokeCap != "butt" || strokeJoin != "miter" ||
+        !strokeMiterLimit.isFinite() || strokeMiterLimit < 1f ||
+        transform.type !in setOf(GPUTransformType.Identity, GPUTransformType.Translate)
+    ) return false
+    val start = transform.map(tessellatedVertices[0], tessellatedVertices[1])
+    val end = transform.map(tessellatedVertices[2], tessellatedVertices[3])
+    return start.first.isIntegralDeviceCoordinate() && start.second.isIntegralDeviceCoordinate() &&
+        end.first.isIntegralDeviceCoordinate() && end.second.isIntegralDeviceCoordinate() &&
+        start.second == end.second && end.first - start.first >= 12f
 }
 
 /**
