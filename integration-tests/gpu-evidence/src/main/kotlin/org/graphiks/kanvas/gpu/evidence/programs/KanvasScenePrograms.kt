@@ -1927,6 +1927,22 @@ object KanvasScenePrograms {
         restore()
     })
 
+    /** The bounded dash route under an integral translation of the CTM. */
+    fun translatedHorizontalDashedButtMiterStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        save()
+        translate(3f, 2f)
+        drawPath(
+            Path { moveTo(4f, 16f); lineTo(28f, 16f) },
+            Paint.stroke(ColorARGB.Red, 4f).copy(
+                antiAlias = false,
+                strokeCap = StrokeCap.BUTT,
+                strokeJoin = StrokeJoin.MITER,
+                pathEffect = PathEffect.Dash(floatArrayOf(8f, 4f), phase = 0f),
+            ),
+        )
+        restore()
+    })
+
     fun scissoredRoundCapStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
         save()
         clipRect(RectF32.ofLTRB(5f, 14f, 18f, 19f), antiAlias = false)

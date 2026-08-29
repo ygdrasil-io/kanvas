@@ -76,6 +76,7 @@ object GpuEvidenceCatalog {
         translatedScissoredRoundCapStroke(),
         horizontalDashedButtMiterStroke(),
         scissoredHorizontalDashedButtMiterStroke(),
+        translatedHorizontalDashedButtMiterStroke(),
         scissoredDiagonalButtStroke(),
         linearGradientLanes(),
         linearGradientThreeStops(),
@@ -988,6 +989,33 @@ sweepGradientTwoStopStrokeRect(),
             clipTop = 14,
             clipRight = 20,
             clipBottom = 19,
+        ),
+    )
+
+    private fun translatedHorizontalDashedButtMiterStroke(): EvidenceCase = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("translated-horizontal-dashed-butt-miter-stroke"),
+            "Translated horizontal dashed butt miter stroke",
+            "Public Kanvas Surface non-AA bounded repeating 8-on/4-off dash stroke under the integral translation (3,2).",
+            32,
+            32,
+            1L,
+            setOf("path-stroke", "path-effect", "dash", "butt-cap", "horizontal", "translate", "kanvas-surface"),
+            EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-dashed-stroke-translated", 1),
+            ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent translated dashed-stroke oracle."),
+            emptySet(),
+        ),
+        KanvasScenePrograms.translatedHorizontalDashedButtMiterStroke(),
+        SurfaceSrgbDashedStrokeCpuOracle(
+            strokeStartX = 7.0,
+            strokeStartY = 18.0,
+            strokeEndX = 31.0,
+            strokeEndY = 18.0,
+            strokeWidth = 4.0,
+            dashIntervals = listOf(8.0, 4.0),
+            dashPhase = 0.0,
+            color = intArrayOf(255, 0, 0, 255),
         ),
     )
 
