@@ -724,6 +724,100 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
     }
 
     @Test
+    fun `public Surface quarter turn horizontal dashed butt stroke preserves device phase`() {
+        val surface = Surface(width = 32, height = 32, format = PixelFormat.RGBA8)
+        surface.canvas {
+            save()
+            translate(20f, 4f)
+            rotate(90f)
+            drawPath(
+                Path().apply {
+                    moveTo(4f, 8f)
+                    lineTo(16f, 8f)
+                },
+                Paint.stroke(ColorARGB.Red, 4f).copy(
+                    antiAlias = false,
+                    pathEffect = PathEffect.Dash(floatArrayOf(8f, 4f), phase = 0f),
+                ),
+            )
+            restore()
+        }
+        val decisions = mutableListOf<GPUPreparedSurfaceRouteDecision>()
+        val result = GPUPreparedSurfaceProductEntry.render(
+            operations = surface.snapshotOps(),
+            width = surface.width,
+            height = surface.height,
+            format = surface.format,
+            config = surface.config,
+            executionPort = GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceNativeBackendPortFactory),
+            trace = GPUPreparedSurfaceRouteTrace(decisions::add),
+        )
+
+        val evidence = assertIs<GPUPreparedSurfaceRouteDecision.Prepared>(decisions.single()).evidence
+        val pixels = result.pixels.toByteArray()
+        var redPixels = 0
+        for (y in 0 until 32) for (x in 0 until 32) {
+            if (pixelAt(pixels, 32, x, y) == listOf(255, 0, 0, 255)) redPixels++
+        }
+        assertEquals(32, redPixels)
+        assertEquals(listOf(255, 0, 0, 255), pixelAt(pixels, 32, 11, 8))
+        assertEquals(listOf(0, 0, 0, 0), pixelAt(pixels, 32, 11, 16))
+        assertEquals(0, result.stats.opsRefused)
+        assertTrue(evidence.draws + evidence.drawIndexed > 0L)
+        assertTrue(evidence.pipelineBinds > 0L)
+        assertTrue(evidence.submits > 0L)
+        assertTrue(evidence.readbackCopies > 0L)
+    }
+
+    @Test
+    fun `public Surface half turn vertical dashed butt stroke preserves source phase`() {
+        val surface = Surface(width = 32, height = 32, format = PixelFormat.RGBA8)
+        surface.canvas {
+            save()
+            translate(32f, 32f)
+            rotate(180f)
+            drawPath(
+                Path().apply {
+                    moveTo(8f, 4f)
+                    lineTo(8f, 28f)
+                },
+                Paint.stroke(ColorARGB.Red, 4f).copy(
+                    antiAlias = false,
+                    pathEffect = PathEffect.Dash(floatArrayOf(8f, 4f), phase = 0f),
+                ),
+            )
+            restore()
+        }
+        val decisions = mutableListOf<GPUPreparedSurfaceRouteDecision>()
+        val result = GPUPreparedSurfaceProductEntry.render(
+            operations = surface.snapshotOps(),
+            width = surface.width,
+            height = surface.height,
+            format = surface.format,
+            config = surface.config,
+            executionPort = GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceNativeBackendPortFactory),
+            trace = GPUPreparedSurfaceRouteTrace(decisions::add),
+        )
+
+        val evidence = assertIs<GPUPreparedSurfaceRouteDecision.Prepared>(decisions.single()).evidence
+        val pixels = result.pixels.toByteArray()
+        var redPixels = 0
+        for (y in 0 until 32) for (x in 0 until 32) {
+            if (pixelAt(pixels, 32, x, y) == listOf(255, 0, 0, 255)) redPixels++
+        }
+        assertEquals(64, redPixels)
+        assertEquals(listOf(255, 0, 0, 255), pixelAt(pixels, 32, 23, 27))
+        assertEquals(listOf(0, 0, 0, 0), pixelAt(pixels, 32, 23, 19))
+        assertEquals(listOf(255, 0, 0, 255), pixelAt(pixels, 32, 23, 15))
+        assertEquals(listOf(0, 0, 0, 0), pixelAt(pixels, 32, 23, 7))
+        assertEquals(0, result.stats.opsRefused)
+        assertTrue(evidence.draws + evidence.drawIndexed > 0L)
+        assertTrue(evidence.pipelineBinds > 0L)
+        assertTrue(evidence.submits > 0L)
+        assertTrue(evidence.readbackCopies > 0L)
+    }
+
+    @Test
     fun `public Surface scissored phase shifted dashed butt stroke preserves gaps`() {
         val surface = Surface(width = 32, height = 32, format = PixelFormat.RGBA8)
         surface.canvas {
