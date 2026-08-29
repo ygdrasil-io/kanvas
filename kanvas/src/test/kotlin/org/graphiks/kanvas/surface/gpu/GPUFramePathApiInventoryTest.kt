@@ -19,6 +19,7 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskCombine
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipFillRule
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilCompare
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
@@ -1876,7 +1877,7 @@ class GPUFramePathApiInventoryTest {
                 Matrix3x3F32.translation(1f, 0f),
                 ),
                 false,
-                "unsupported.material.mapping.local_matrix",
+                "unsupported.material.radial_gradient_stop_count",
             ),
         )
 
@@ -1970,7 +1971,7 @@ class GPUFramePathApiInventoryTest {
                     Matrix3x3F32.translation(1f, 0f),
                 ),
                 false,
-                "unsupported.material.mapping.local_matrix",
+                "unsupported.material.sweep_gradient_stop_count",
             ),
         )
         cases.forEach { (shader, antiAlias, expectedCode) ->
@@ -2486,6 +2487,404 @@ class GPUFramePathApiInventoryTest {
                 "${diagnostic.code.value}: ${diagnostic.message}; facts=${diagnostic.facts}"
             },
         )
+    }
+
+    @Test
+    fun `translated local sweep matrix reaches the hard path clip stroke stencil route`() {
+        val capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER)
+        val clipPath = Path().apply {
+            moveTo(3f, 3f)
+            lineTo(29f, 3f)
+            lineTo(3f, 29f)
+            close()
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(5.25f, 8.25f)
+                        lineTo(21.25f, 20.25f)
+                    },
+                    Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                        shader = Shader.WithLocalMatrix(
+                            Shader.SweepGradient(
+                                Point2F32(16f, 16f),
+                                0f,
+                                360f,
+                                listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                                TileMode.CLAMP,
+                            ),
+                            Matrix3x3F32.translation(1.25f, -0.75f),
+                        ),
+                        antiAlias = false,
+                        strokeCap = StrokeCap.SQUARE,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.Identity,
+                    ClipStack.Complex(listOf(ClipStackOp.PathOp(clipPath, ClipOp.INTERSECT, antiAlias = false))),
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+        )
+
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+    }
+
+    @Test
+    fun `translated local radial matrix reaches the hard path clip stroke stencil route`() {
+        val capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER)
+        val clipPath = Path().apply {
+            moveTo(3f, 3f)
+            lineTo(29f, 3f)
+            lineTo(3f, 29f)
+            close()
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(5.25f, 8.25f)
+                        lineTo(21.25f, 20.25f)
+                    },
+                    Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                        shader = Shader.WithLocalMatrix(
+                            Shader.RadialGradient(
+                                Point2F32(16f, 16f),
+                                16f,
+                                listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                                TileMode.CLAMP,
+                            ),
+                            Matrix3x3F32.translation(1.25f, -0.75f),
+                        ),
+                        antiAlias = false,
+                        strokeCap = StrokeCap.SQUARE,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.Identity,
+                    ClipStack.Complex(listOf(ClipStackOp.PathOp(clipPath, ClipOp.INTERSECT, antiAlias = false))),
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+        )
+
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+    }
+
+    @Test
+    fun `translated radial draw reaches the hard path clip stroke stencil route`() {
+        val clipPath = Path().apply {
+            moveTo(7.25f, 6.25f)
+            lineTo(30.25f, 6.25f)
+            lineTo(7.25f, 29.25f)
+            close()
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(5.25f, 8.25f)
+                        lineTo(21.25f, 20.25f)
+                    },
+                    Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                        shader = Shader.RadialGradient(
+                            Point2F32(16f, 16f),
+                            16f,
+                            listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                            TileMode.CLAMP,
+                        ),
+                        antiAlias = false,
+                        strokeCap = StrokeCap.SQUARE,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.of(
+                        1.25f, 0f, 2f,
+                        0f, 1.25f, -1f,
+                        0f, 0f, 1f,
+                    ),
+                    ClipStack.Complex(listOf(ClipStackOp.PathOp(clipPath, ClipOp.INTERSECT, antiAlias = false))),
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER),
+        )
+
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+    }
+
+    @Test
+    fun `exact right angle radial draw with square miter stroke under winding clip reaches the hard path clip route`() {
+        val capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER)
+        val clipPath = Path().apply {
+            moveTo(27.75f, 4.25f)
+            lineTo(27.75f, 27.25f)
+            lineTo(4.75f, 4.25f)
+            close()
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(8.25f, 8.25f)
+                        lineTo(20.25f, 14.25f)
+                    },
+                    Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                        shader = Shader.RadialGradient(
+                            Point2F32(16f, 16f),
+                            16f,
+                            listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                            TileMode.CLAMP,
+                        ),
+                        antiAlias = false,
+                        strokeCap = StrokeCap.SQUARE,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.rotation(90f, pivotX = 16f, pivotY = 16f),
+                    ClipStack.Complex(
+                        listOf(
+                            ClipStackOp.PathOp(
+                                clipPath,
+                                ClipOp.INTERSECT,
+                                antiAlias = false,
+                                transformClass = "right-angle-rotation",
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+        )
+
+        val visual = inventory.visualCommands.single()
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+        assertEquals(listOf("route:native.path_stroke.stencil_cover"), inventory.recording.routeDiagnostics)
+        val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(visual.clipExecutionPlan)
+        assertEquals("right-angle-rotation", execution.pathTransformClass)
+        assertEquals(GPUClipStencilOperation.IncrementWrap, execution.producer.frontPassOperation)
+        assertEquals(GPUClipStencilOperation.DecrementWrap, execution.producer.backPassOperation)
+        assertEquals(GPUClipStencilCompare.NotEqual, execution.consumer.compare)
+        val clipGeometry = assertIs<GPUClipExecutionGeometry.Path>(execution.producer.geometry)
+        assertEquals(GPUClipFillRule.Winding, clipGeometry.fillRule)
+        assertEquals(false, clipGeometry.inverseFill)
+    }
+
+    @Test
+    fun `exact right angle sweep draw with square miter stroke under winding clip reaches the hard path clip route`() {
+        val capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER)
+        val clipPath = Path().apply {
+            moveTo(27.75f, 4.25f)
+            lineTo(27.75f, 27.25f)
+            lineTo(4.75f, 4.25f)
+            close()
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(8.25f, 8.25f)
+                        lineTo(20.25f, 14.25f)
+                    },
+                    Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                        shader = Shader.SweepGradient(
+                            Point2F32(16f, 16f),
+                            0f,
+                            360f,
+                            listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                        ),
+                        antiAlias = false,
+                        strokeCap = StrokeCap.SQUARE,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.rotation(90f, pivotX = 16f, pivotY = 16f),
+                    ClipStack.Complex(
+                        listOf(
+                            ClipStackOp.PathOp(
+                                clipPath,
+                                ClipOp.INTERSECT,
+                                antiAlias = false,
+                                transformClass = "right-angle-rotation",
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+        )
+
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+        assertEquals(
+            listOf("route:native.path_stroke.stencil_cover"),
+            inventory.recording.routeDiagnostics,
+        )
+    }
+
+    @Test
+    fun `sweep draw with non-right-angle rotation remains refused before hard path clip recording`() {
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(8.25f, 8.25f)
+                        lineTo(20.25f, 14.25f)
+                    },
+                    Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                        shader = Shader.SweepGradient(
+                            Point2F32(16f, 16f),
+                            0f,
+                            360f,
+                            listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                        ),
+                        antiAlias = false,
+                        strokeCap = StrokeCap.BUTT,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.rotation(15f),
+                    ClipStack.Complex(listOf(ClipStackOp.PathOp(
+                        Path().apply {
+                            moveTo(27.75f, 4.25f)
+                            lineTo(27.75f, 27.25f)
+                            lineTo(4.75f, 4.25f)
+                            close()
+                        },
+                        ClipOp.INTERSECT,
+                        antiAlias = false,
+                        transformClass = "non-right-angle-rotation",
+                    ))),
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER),
+        )
+
+        assertEquals(
+            "refused.unsupported.geometry.perspective_path",
+            inventory.recording.analysis.records.single().routeDecisionLabel,
+        )
+    }
+
+    @Test
+    fun `general radial draw rotation remains refused before native preparation`() {
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(5.25f, 8.25f)
+                        lineTo(21.25f, 20.25f)
+                    },
+                    Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                        shader = Shader.RadialGradient(
+                            Point2F32(16f, 16f),
+                            16f,
+                            listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                            TileMode.CLAMP,
+                        ),
+                        antiAlias = false,
+                        strokeCap = StrokeCap.SQUARE,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.rotation(15f),
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER),
+        )
+
+        assertTrue(inventory.recording.analysis.records.single().routeDecisionLabel.startsWith("refused."))
+    }
+
+    @Test
+    fun `rotated and nonuniform local radial matrices remain refused before hard path clip recording`() {
+        listOf(
+            Matrix3x3F32.rotation(90f),
+            Matrix3x3F32.scaling(2f, 1f),
+        ).forEach { localMatrix ->
+            val inventory = GPUFramePathApiInventory.plan(
+                operations = listOf(
+                    DisplayOp.DrawPath(
+                        Path().apply {
+                            moveTo(5.25f, 8.25f)
+                            lineTo(21.25f, 20.25f)
+                        },
+                        Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                            shader = Shader.WithLocalMatrix(
+                                Shader.RadialGradient(
+                                    Point2F32(16f, 16f),
+                                    16f,
+                                    listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                                    TileMode.CLAMP,
+                                ),
+                                localMatrix,
+                            ),
+                            antiAlias = false,
+                            strokeCap = StrokeCap.SQUARE,
+                            strokeJoin = StrokeJoin.MITER,
+                        ),
+                        Matrix3x3F32.Identity,
+                        ClipStack.WideOpen,
+                    ),
+                ),
+                target = target(),
+                config = RenderConfig.DEFAULT,
+                capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER),
+            )
+
+            assertEquals(
+                "refused.unsupported.material.mapping.local_matrix",
+                inventory.recording.analysis.records.single().routeDecisionLabel,
+            )
+        }
+    }
+
+    @Test
+    fun `rotated and nonuniform local sweep matrices remain refused before hard path clip recording`() {
+        listOf(
+            Matrix3x3F32.rotation(90f),
+            Matrix3x3F32.scaling(2f, 1f),
+        ).forEach { localMatrix ->
+            val inventory = GPUFramePathApiInventory.plan(
+                operations = listOf(
+                    DisplayOp.DrawPath(
+                        Path().apply {
+                            moveTo(5.25f, 8.25f)
+                            lineTo(21.25f, 20.25f)
+                        },
+                        Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                            shader = Shader.WithLocalMatrix(
+                                Shader.SweepGradient(
+                                    Point2F32(16f, 16f),
+                                    stops = listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                                ),
+                                localMatrix,
+                            ),
+                            antiAlias = false,
+                            strokeCap = StrokeCap.SQUARE,
+                            strokeJoin = StrokeJoin.MITER,
+                        ),
+                        Matrix3x3F32.Identity,
+                        ClipStack.WideOpen,
+                    ),
+                ),
+                target = target(),
+                config = RenderConfig.DEFAULT,
+                capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER),
+            )
+
+            assertEquals(
+                "refused.unsupported.material.mapping.local_matrix",
+                inventory.recording.analysis.records.single().routeDecisionLabel,
+            )
+        }
     }
 
     @Test
@@ -4482,7 +4881,7 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
-    fun `mapper does not admit inverse winding difference path clip to the single stencil route`() {
+    fun `mapper admits inverse winding difference path clip to the single stencil route`() {
         val surface = Surface(32, 32)
         surface.canvas {
             clipPath(triangle().apply { fillType = FillType.INVERSE_WINDING }, ClipOp.DIFFERENCE, antiAlias = false)
@@ -4494,7 +4893,16 @@ class GPUFramePathApiInventoryTest {
             capabilitiesWith(FILL_RECT_CAPABILITY, PATH_FILL_STENCIL_COVER),
         )
 
-        assertFalse(plan.visualCommands.single().clipExecutionPlan is GPUClipExecutionPlan.StencilCoverage)
+        val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(
+            plan.visualCommands.single().clipExecutionPlan,
+        )
+        val geometry = assertIs<GPUClipExecutionGeometry.Path>(execution.producer.geometry)
+        assertTrue(geometry.inverseFill)
+        assertTrue(execution.consumerInverseFill)
+        assertEquals(GPUClipStencilCompare.NotEqual, execution.consumer.compare)
+        assertEquals(GPUClipStencilOperation.IncrementWrap, execution.producer.frontPassOperation)
+        assertEquals(GPUClipStencilOperation.DecrementWrap, execution.producer.backPassOperation)
+        assertClipExecutionPropagation(plan, execution)
     }
 
     @Test
