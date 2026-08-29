@@ -43,6 +43,7 @@ import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathDirectTriangle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathDRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathSolidStrokeCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathRoundCapStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbPathFillCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbFractionalRectCoverageCpuOracle
 import org.graphiks.kanvas.gpu.evidence.programs.KanvasScenePrograms
@@ -62,6 +63,7 @@ object GpuEvidenceCatalog {
         strokeRectOutline(),
         translatedStrokeRectOutline(),
         roundCapStroke(),
+        roundCapStrokeUnderWindingClip(),
         verticalRoundCapStroke(),
         quarterTurnRoundCapStroke(),
         halfTurnRoundCapStroke(),
@@ -254,7 +256,6 @@ sweepGradientTwoStopStrokeRect(),
         boundedSaveLayerRestoreBlendRefusal(),
         boundedBitmapLinearRefusal(),
         imageFilterBlurRefusal(),
-        roundCapStrokeUnderWindingRefusal(),
         rotatedDiagonalStrokeUnderWindingRefusal(),
         rotatedRadialStrokeLocalMatrixRefusal(),
         threeStopSweepStrokeUnderWindingRefusal(),
@@ -354,13 +355,31 @@ sweepGradientTwoStopStrokeRect(),
         oracle = null,
     )
 
-    private fun roundCapStrokeUnderWindingRefusal() = surfaceRefusal(
-        id = "round-cap-stroke-winding-refusal",
-        title = "Round-cap stroke under winding clip refusal",
-        description = "Public Kanvas Surface refuses a non-AA round-cap path stroke under a complex winding path clip before native submission; the native stencil-cover composition is not yet admitted.",
-        tags = setOf("path-stroke", "round-cap", "path-clip", "winding", "refusal", "kanvas-surface"),
-        code = "unsupported.recording.core_primitive_path_stencil_clip",
-        program = KanvasScenePrograms.roundCapStrokeUnderWindingRefusal(),
+    private fun roundCapStrokeUnderWindingClip(): EvidenceCase = EvidenceCase(
+        descriptor = EvidenceSceneDescriptor(
+            EvidenceSceneId("round-cap-stroke-winding-clip"),
+            "Round-cap stroke under winding clip",
+            "Public Kanvas Surface renders an opaque non-AA radius-two round-cap path stroke through the native stencil-cover route under a winding triangle clip.",
+            32, 32, 1L,
+            setOf("path-stroke", "round-cap", "path-clip", "winding", "hard-clip", "kanvas-surface"),
+            EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-clip-path-round-cap-stroke", 1),
+            ComparisonPolicy(0, 100.0, 1, "Exact pixel-center winding clip and round-cap stroke coverage from an independent CPU oracle."),
+            emptySet(),
+        ),
+        program = KanvasScenePrograms.roundCapStrokeUnderWindingClip(),
+        oracle = SurfaceSrgbClipPathRoundCapStrokeCpuOracle(
+            background = intArrayOf(0, 0, 0, 0),
+            points = listOf(
+                SurfaceSrgbClipPathRoundCapStrokeCpuOracle.Point(3.25, 3.25),
+                SurfaceSrgbClipPathRoundCapStrokeCpuOracle.Point(28.75, 3.25),
+                SurfaceSrgbClipPathRoundCapStrokeCpuOracle.Point(3.25, 28.75),
+            ),
+            strokeStart = SurfaceSrgbClipPathRoundCapStrokeCpuOracle.Point(6.0, 16.0),
+            strokeEnd = SurfaceSrgbClipPathRoundCapStrokeCpuOracle.Point(26.0, 16.0),
+            strokeWidth = 4.0,
+            color = intArrayOf(255, 0, 0, 255),
+        ),
     )
 
     private fun rotatedDiagonalStrokeUnderWindingRefusal() = surfaceRefusal(

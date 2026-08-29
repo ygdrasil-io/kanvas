@@ -743,6 +743,38 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
+    fun `public round cap stroke renders inside a winding path clip`() {
+        requireWebGpu()
+        val surface = Surface(32, 32)
+        surface.canvas {
+            save()
+            clipPath(
+                Path {
+                    moveTo(3.25f, 3.25f)
+                    lineTo(28.75f, 3.25f)
+                    lineTo(3.25f, 28.75f)
+                    close()
+                }.apply { fillType = FillType.WINDING },
+                ClipOp.INTERSECT,
+                antiAlias = false,
+            )
+            drawPath(
+                Path { moveTo(6f, 16f); lineTo(26f, 16f) },
+                Paint.stroke(ColorARGB.Red, 4f).copy(
+                    antiAlias = false,
+                    strokeCap = org.graphiks.kanvas.paint.StrokeCap.ROUND,
+                ),
+            )
+            restore()
+        }
+
+        val result = surface.render()
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertRgbaNear(result.pixels, 32, 12, 16, ColorARGB.Red, tolerance = 0)
+        assertRgbaNear(result.pixels, 32, 24, 16, ColorARGB.Transparent, tolerance = 0)
+    }
+
+    @Test
     fun `public concave drawPath remains refused inside a hard path clip stencil scope`() {
         requireWebGpu()
         val surface = Surface(64, 64)

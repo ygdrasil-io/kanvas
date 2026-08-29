@@ -2456,21 +2456,33 @@ private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
         when (geometryMode) {
             GPUCorePrimitiveGeometryMode.DirectTriangles -> if (stroke != null) {
                 require(
-                    vertices.size == 8 &&
-                        indices == listOf(0, 1, 2, 0, 2, 3) &&
-                        sourceContourStarts == listOf(0) &&
+                    sourceContourStarts == listOf(0) &&
                         sourceVertexCount == 2 &&
                         fillRule == GPUCorePrimitiveFillRule.Winding &&
                         !inverseFill &&
                         stroke.join == "miter" &&
                         stroke.dashIntervals.isEmpty() &&
-                        when (stroke.cap) {
-                            "butt" -> stroke.loweringProof == GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1
-                            "square" -> stroke.loweringProof == GPUCorePrimitiveStrokeLoweringProof.SingleSegmentSquareV1
-                            else -> false
-                        },
+                        (
+                            (vertices.size == 8 &&
+                                indices == listOf(0, 1, 2, 0, 2, 3) &&
+                                stroke.loweringProof in setOf(
+                                    GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1,
+                                    GPUCorePrimitiveStrokeLoweringProof.SingleSegmentSquareV1,
+                                ) && stroke.cap in setOf("butt", "square")) ||
+                                (stroke.cap == "round" &&
+                                    stroke.loweringProof in setOf(
+                                        GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2HorizontalV1,
+                                        GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2VerticalV1,
+                                        GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2ReverseVerticalV1,
+                                        GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2ReverseHorizontalV1,
+                                        GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2QuarterTurnV1,
+                                        GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2HalfTurnV1,
+                                        GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2NegativeQuarterTurnV1,
+                                        GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundUniformScaleV1,
+                                    ) && hasCanonicalDirectRoundCapTopology(vertices, indices))
+                        ),
                 ) {
-                    "Direct stroke triangles require the exact single-segment butt/square miter lowering proof"
+                    "Direct stroke triangles require the exact single-segment butt/square or round-cap miter lowering proof"
                 }
             }
             GPUCorePrimitiveGeometryMode.StencilEdgeFan -> {
@@ -2565,6 +2577,27 @@ private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
 
 private const val CORE_PRIMITIVE_STENCIL_EDGE_FAN_BUDGET_DIAGNOSTIC =
     "unsupported.core_primitive.stencil_edge_fan_budget"
+
+private fun hasCanonicalDirectRoundCapTopology(
+    vertices: List<Float>,
+    indices: List<Int>,
+): Boolean {
+    val vertexCount = vertices.size / 2
+    if (vertexCount < 9 || (vertexCount - 4) % 2 != 0) return false
+    val capVertexCount = (vertexCount - 4) / 2
+    if (capVertexCount < 3) return false
+    val starts = listOf(0, 4, 4 + capVertexCount)
+    val expected = buildList {
+        addAll(listOf(0, 1, 2, 0, 2, 3))
+        starts.drop(1).forEachIndexed { contourIndex, start ->
+            val end = starts.getOrElse(contourIndex + 2) { vertexCount }
+            for (index in start + 1 until end - 1) {
+                addAll(listOf(start, index, index + 1))
+            }
+        }
+    }
+    return indices == expected
+}
 
 private fun List<Int>.hasCanonicalContourLengths(sourceVertexCount: Int): Boolean =
     indices.all { contourIndex ->
