@@ -69,6 +69,7 @@ object GpuEvidenceCatalog {
         scaledButtMiterStroke(),
         scaledTranslatedButtMiterStroke(),
         scaledTranslatedDiagonalButtMiterStroke(),
+        scaledTranslatedDiagonalSquareMiterStroke(),
         scissoredRoundCapStroke(),
         translatedScissoredRoundCapStroke(),
         scissoredDiagonalButtStroke(),
@@ -794,6 +795,32 @@ sweepGradientTwoStopStrokeRect(),
             strokeEndY = 20.25,
             strokeWidth = 4.0,
             color = intArrayOf(255, 0, 0, 255),
+        ),
+    )
+
+    private fun scaledTranslatedDiagonalSquareMiterStroke(): EvidenceCase = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("scaled-translated-diagonal-square-miter-stroke"),
+            "Scaled translated diagonal square miter stroke",
+            "Public Kanvas Surface non-AA diagonal width-four square-cap miter stroke under a uniform 2x scale and integral translation.",
+            32,
+            32,
+            1L,
+            setOf("path-stroke", "square-cap", "diagonal", "uniform-scale", "translation", "kanvas-surface"),
+            EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-solid-stroke", 2),
+            ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent transformed tangent-extended stroke oracle."),
+            emptySet(),
+        ),
+        KanvasScenePrograms.scaledTranslatedDiagonalSquareMiterStroke(),
+        SurfaceSrgbSolidStrokeCpuOracle(
+            strokeStartX = 10.25,
+            strokeStartY = 11.25,
+            strokeEndX = 26.25,
+            strokeEndY = 20.25,
+            strokeWidth = 4.0,
+            color = intArrayOf(255, 0, 0, 255),
+            squareCaps = true,
         ),
     )
 
