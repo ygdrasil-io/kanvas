@@ -74,7 +74,7 @@ class GpuEvidenceCatalogTest {
     }
 
     @Test
-    fun `catalog separates one hundred seventy-five public surface renders from seventeen refusals`() {
+    fun `catalog separates one hundred ninety-two public surface renders from sixteen refusals`() {
         val cases = GpuEvidenceCatalog.cases
 
         assertEquals(
@@ -89,6 +89,7 @@ class GpuEvidenceCatalogTest {
                 "stroke-rect-outline",
                 "translated-stroke-rect-outline",
                 "round-cap-stroke",
+                "round-cap-stroke-winding-clip",
                 "vertical-round-cap-stroke",
                 "quarter-turn-round-cap-stroke",
                 "half-turn-round-cap-stroke",
@@ -108,6 +109,10 @@ class GpuEvidenceCatalogTest {
                 "uniformly-scaled-translated-vertical-round-cap-stroke",
                 "uniformly-scaled-reverse-round-cap-stroke",
                 "uniformly-scaled-translated-reverse-round-cap-stroke",
+                "uniformly-scaled-reverse-vertical-round-cap-stroke",
+                "uniformly-scaled-translated-reverse-vertical-round-cap-stroke",
+                "uniformly-scaled-scissored-round-cap-stroke",
+                "uniformly-scaled-translated-scissored-round-cap-stroke",
                 "scaled-translated-horizontal-hairline",
                 "scaled-horizontal-hairline",
                 "horizontal-hairline",
@@ -253,7 +258,6 @@ class GpuEvidenceCatalogTest {
                 "bounded-save-layer-restore-blend-refusal",
                 "bounded-bitmap-linear-refusal",
                 "image-filter-blur-refusal",
-                "round-cap-stroke-winding-refusal",
                 "rotated-diagonal-stroke-winding-refusal",
                 "rotated-radial-stroke-local-matrix-refusal",
                 "three-stop-sweep-stroke-winding-refusal",
@@ -276,6 +280,7 @@ class GpuEvidenceCatalogTest {
                 "stroke-rect-outline",
                 "translated-stroke-rect-outline",
                 "round-cap-stroke",
+                "round-cap-stroke-winding-clip",
                 "vertical-round-cap-stroke",
                 "quarter-turn-round-cap-stroke",
                 "half-turn-round-cap-stroke",
@@ -295,6 +300,10 @@ class GpuEvidenceCatalogTest {
                 "uniformly-scaled-translated-vertical-round-cap-stroke",
                 "uniformly-scaled-reverse-round-cap-stroke",
                 "uniformly-scaled-translated-reverse-round-cap-stroke",
+                "uniformly-scaled-reverse-vertical-round-cap-stroke",
+                "uniformly-scaled-translated-reverse-vertical-round-cap-stroke",
+                "uniformly-scaled-scissored-round-cap-stroke",
+                "uniformly-scaled-translated-scissored-round-cap-stroke",
                 "scaled-translated-horizontal-hairline",
                 "scaled-horizontal-hairline",
                 "horizontal-hairline",
@@ -435,7 +444,7 @@ class GpuEvidenceCatalogTest {
             GpuEvidenceCatalog.renderCases.map { it.descriptor.id.value },
         )
         assertEquals(
-            listOf("basic-primitives-empty-rect-refusal", "perspective-transform-refusal", "mirror-linear-gradient-fillrect-refusal", "reflected-path-topology-refusal", "custom-runtime-effect-unregistered-refusal", "aggregate-memory-budget-refusal", "bounded-save-layer-restore-blend-refusal", "bounded-bitmap-linear-refusal", "image-filter-blur-refusal", "round-cap-stroke-winding-refusal", "rotated-diagonal-stroke-winding-refusal", "rotated-radial-stroke-local-matrix-refusal", "three-stop-sweep-stroke-winding-refusal", "linear-gradient-round-stroke-winding-refusal", "three-stop-radial-stroke-winding-refusal", "non-right-angle-sweep-stroke-refusal", "empty-dash-stroke-refusal"),
+            listOf("basic-primitives-empty-rect-refusal", "perspective-transform-refusal", "mirror-linear-gradient-fillrect-refusal", "reflected-path-topology-refusal", "custom-runtime-effect-unregistered-refusal", "aggregate-memory-budget-refusal", "bounded-save-layer-restore-blend-refusal", "bounded-bitmap-linear-refusal", "image-filter-blur-refusal", "rotated-diagonal-stroke-winding-refusal", "rotated-radial-stroke-local-matrix-refusal", "three-stop-sweep-stroke-winding-refusal", "linear-gradient-round-stroke-winding-refusal", "three-stop-radial-stroke-winding-refusal", "non-right-angle-sweep-stroke-refusal", "empty-dash-stroke-refusal"),
             GpuEvidenceCatalog.refusalCases.map { it.descriptor.id.value },
         )
         assertTrue(GpuEvidenceCatalog.renderCases.all { it.program is KanvasSurfaceProgram })
@@ -443,11 +452,11 @@ class GpuEvidenceCatalogTest {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            List(187) { "kanvas.surface.render" },
+            List(192) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
-        assertEquals(187, GpuEvidenceCatalog.renderCases.size)
-        assertEquals(204, GpuEvidenceCatalog.cases.size)
+        assertEquals(192, GpuEvidenceCatalog.renderCases.size)
+        assertEquals(208, GpuEvidenceCatalog.cases.size)
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
 
         val solid = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "solid-card-stack" })
@@ -595,6 +604,7 @@ class GpuEvidenceCatalogTest {
             "stroke-rect-outline",
             "translated-stroke-rect-outline",
             "round-cap-stroke",
+            "round-cap-stroke-winding-clip",
             "vertical-round-cap-stroke",
             "quarter-turn-round-cap-stroke",
             "half-turn-round-cap-stroke",
@@ -614,6 +624,10 @@ class GpuEvidenceCatalogTest {
             "uniformly-scaled-translated-vertical-round-cap-stroke",
             "uniformly-scaled-reverse-round-cap-stroke",
             "uniformly-scaled-translated-reverse-round-cap-stroke",
+            "uniformly-scaled-reverse-vertical-round-cap-stroke",
+            "uniformly-scaled-translated-reverse-vertical-round-cap-stroke",
+            "uniformly-scaled-scissored-round-cap-stroke",
+            "uniformly-scaled-translated-scissored-round-cap-stroke",
             "scaled-translated-horizontal-hairline",
             "scaled-horizontal-hairline",
             "horizontal-hairline",
@@ -775,7 +789,6 @@ class GpuEvidenceCatalogTest {
                 "bounded-save-layer-restore-blend-refusal" to "kanvas.surface.render",
                 "bounded-bitmap-linear-refusal" to "kanvas.surface.render",
                 "image-filter-blur-refusal" to "kanvas.surface.render",
-                "round-cap-stroke-winding-refusal" to "kanvas.surface.render",
                 "rotated-diagonal-stroke-winding-refusal" to "kanvas.surface.render",
                 "rotated-radial-stroke-local-matrix-refusal" to "kanvas.surface.render",
                 "three-stop-sweep-stroke-winding-refusal" to "kanvas.surface.render",
@@ -801,6 +814,7 @@ class GpuEvidenceCatalogTest {
                 "stroke-rect-outline" to OraclePolicy.GeneratedCpu("reference-raster-stroke-rect-bands", 1),
                 "translated-stroke-rect-outline" to OraclePolicy.GeneratedCpu("reference-raster-stroke-rect-bands", 2),
                 "round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke", 2),
+                "round-cap-stroke-winding-clip" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-round-cap-stroke", 1),
                 "vertical-round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke-vertical", 2),
                 "quarter-turn-round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke-vertical", 2),
                 "half-turn-round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke-vertical", 2),
@@ -820,6 +834,10 @@ class GpuEvidenceCatalogTest {
                 "uniformly-scaled-translated-vertical-round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke-uniform-scale-translate-vertical", 2),
                 "uniformly-scaled-reverse-round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke-uniform-scale", 2),
                 "uniformly-scaled-translated-reverse-round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke-uniform-scale-translate", 2),
+                "uniformly-scaled-reverse-vertical-round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke-uniform-scale-vertical", 2),
+                "uniformly-scaled-translated-reverse-vertical-round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke-uniform-scale-translate-vertical", 2),
+                "uniformly-scaled-scissored-round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke-uniform-scale-scissor", 2),
+                "uniformly-scaled-translated-scissored-round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke-uniform-scale-translate-scissor", 2),
                 "scaled-translated-horizontal-hairline" to OraclePolicy.GeneratedCpu("surface-srgb-hairline-direct-device-quad", 2),
                 "scaled-horizontal-hairline" to OraclePolicy.GeneratedCpu("surface-srgb-hairline-direct-device-quad", 2),
                 "horizontal-hairline" to OraclePolicy.GeneratedCpu("surface-srgb-hairline-direct-device-quad", 2),
@@ -995,6 +1013,7 @@ class GpuEvidenceCatalogTest {
                 "stroke-rect-outline" to ComparisonPolicy(0, 100.0, 1, "Exact integer RGBA8 output from four literal analytic coverage bands."),
                 "translated-stroke-rect-outline" to ComparisonPolicy(0, 100.0, 1, "Exact integer RGBA8 output from four translated analytic coverage bands."),
                 "round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Independent pixel-center disk oracle for W25's integral-grid radius-two horizontal contract."),
+                "round-cap-stroke-winding-clip" to ComparisonPolicy(0, 100.0, 1, "Exact pixel-center winding clip and round-cap stroke coverage from an independent CPU oracle."),
                 "vertical-round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Independent pixel-center disk oracle for the integral-grid radius-two vertical contract."),
                 "quarter-turn-round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Independent pixel-center disk oracle for the integral-grid vertical result of the quarter-turn contract."),
                 "half-turn-round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Independent pixel-center disk oracle for the integral-grid vertical result of the half-turn contract."),
@@ -1014,6 +1033,10 @@ class GpuEvidenceCatalogTest {
                 "uniformly-scaled-translated-vertical-round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Independent pixel-center disk oracle for the integral device radius-four vertical result after scale and translation."),
                 "uniformly-scaled-reverse-round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Independent pixel-center disk oracle for the direction-invariant integral device radius-four result of the promoted scale-two contract."),
                 "uniformly-scaled-translated-reverse-round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Independent pixel-center disk oracle for the direction-invariant integral device radius-four result after scale and translation."),
+                "uniformly-scaled-reverse-vertical-round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Independent pixel-center disk oracle for the direction-invariant integral device radius-four vertical result of the promoted scale-two contract."),
+                "uniformly-scaled-translated-reverse-vertical-round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Independent pixel-center disk oracle for the direction-invariant integral device radius-four vertical result after scale and translation."),
+                "uniformly-scaled-scissored-round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Independent pixel-center disk oracle for the scale-two radius-four union intersected with the integral device scissor."),
+                "uniformly-scaled-translated-scissored-round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Independent pixel-center disk oracle for the translated scale-two radius-four union intersected with the integral device scissor."),
                 "scaled-translated-horizontal-hairline" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent one-pixel device-row hairline coverage oracle."),
                 "scaled-horizontal-hairline" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent one-pixel device-row hairline coverage oracle."),
                 "horizontal-hairline" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent one-pixel device-row hairline coverage oracle."),
@@ -1512,6 +1535,58 @@ class GpuEvidenceCatalogTest {
             uniformlyScaledTranslatedReverseRoundCapStroke.transform,
         )
         assertEquals(ClipStack.WideOpen, uniformlyScaledTranslatedReverseRoundCapStroke.clip)
+
+        val uniformlyScaledReverseVerticalRoundCapStroke = assertIs<DisplayOp.DrawPath>(ops("uniformly-scaled-reverse-vertical-round-cap-stroke").single { it is DisplayOp.DrawPath })
+        assertEquals(RectF32.ofLTRB(16f, 8f, 16f, 24f), uniformlyScaledReverseVerticalRoundCapStroke.path.computeBounds())
+        assertFalse(PathMeasure(uniformlyScaledReverseVerticalRoundCapStroke.path).isClosed)
+        assertEquals(
+            Paint.stroke(ColorARGB.Red, 4f).copy(antiAlias = false, strokeCap = StrokeCap.ROUND),
+            uniformlyScaledReverseVerticalRoundCapStroke.paint,
+        )
+        assertEquals(Matrix3x3F32.scaling(2f, 2f), uniformlyScaledReverseVerticalRoundCapStroke.transform)
+        assertEquals(ClipStack.WideOpen, uniformlyScaledReverseVerticalRoundCapStroke.clip)
+
+        val uniformlyScaledTranslatedReverseVerticalRoundCapStroke = assertIs<DisplayOp.DrawPath>(ops("uniformly-scaled-translated-reverse-vertical-round-cap-stroke").single { it is DisplayOp.DrawPath })
+        assertEquals(RectF32.ofLTRB(16f, 8f, 16f, 24f), uniformlyScaledTranslatedReverseVerticalRoundCapStroke.path.computeBounds())
+        assertFalse(PathMeasure(uniformlyScaledTranslatedReverseVerticalRoundCapStroke.path).isClosed)
+        assertEquals(
+            Paint.stroke(ColorARGB.Red, 4f).copy(antiAlias = false, strokeCap = StrokeCap.ROUND),
+            uniformlyScaledTranslatedReverseVerticalRoundCapStroke.paint,
+        )
+        assertEquals(
+            Matrix3x3F32.translation(4f, 6f) * Matrix3x3F32.scaling(2f, 2f),
+            uniformlyScaledTranslatedReverseVerticalRoundCapStroke.transform,
+        )
+        assertEquals(ClipStack.WideOpen, uniformlyScaledTranslatedReverseVerticalRoundCapStroke.clip)
+
+        val uniformlyScaledScissoredRoundCapStroke = assertIs<DisplayOp.DrawPath>(ops("uniformly-scaled-scissored-round-cap-stroke").single { it is DisplayOp.DrawPath })
+        assertEquals(RectF32.ofLTRB(8f, 16f, 24f, 16f), uniformlyScaledScissoredRoundCapStroke.path.computeBounds())
+        assertFalse(PathMeasure(uniformlyScaledScissoredRoundCapStroke.path).isClosed)
+        assertEquals(
+            Paint.stroke(ColorARGB.Red, 4f).copy(antiAlias = false, strokeCap = StrokeCap.ROUND),
+            uniformlyScaledScissoredRoundCapStroke.paint,
+        )
+        assertEquals(Matrix3x3F32.scaling(2f, 2f), uniformlyScaledScissoredRoundCapStroke.transform)
+        assertEquals(
+            ClipStack.DeviceRect(RectF32.ofLTRB(12f, 30f, 20f, 38f), false),
+            uniformlyScaledScissoredRoundCapStroke.clip,
+        )
+
+        val uniformlyScaledTranslatedScissoredRoundCapStroke = assertIs<DisplayOp.DrawPath>(ops("uniformly-scaled-translated-scissored-round-cap-stroke").single { it is DisplayOp.DrawPath })
+        assertEquals(RectF32.ofLTRB(8f, 16f, 24f, 16f), uniformlyScaledTranslatedScissoredRoundCapStroke.path.computeBounds())
+        assertFalse(PathMeasure(uniformlyScaledTranslatedScissoredRoundCapStroke.path).isClosed)
+        assertEquals(
+            Paint.stroke(ColorARGB.Red, 4f).copy(antiAlias = false, strokeCap = StrokeCap.ROUND),
+            uniformlyScaledTranslatedScissoredRoundCapStroke.paint,
+        )
+        assertEquals(
+            Matrix3x3F32.translation(4f, 6f) * Matrix3x3F32.scaling(2f, 2f),
+            uniformlyScaledTranslatedScissoredRoundCapStroke.transform,
+        )
+        assertEquals(
+            ClipStack.DeviceRect(RectF32.ofLTRB(16f, 36f, 24f, 44f), false),
+            uniformlyScaledTranslatedScissoredRoundCapStroke.clip,
+        )
 
         val dashedStroke = assertIs<DisplayOp.DrawPath>(ops("horizontal-dashed-butt-miter-stroke").single())
         assertEquals(RectF32.ofLTRB(4f, 16f, 28f, 16f), dashedStroke.path.computeBounds())

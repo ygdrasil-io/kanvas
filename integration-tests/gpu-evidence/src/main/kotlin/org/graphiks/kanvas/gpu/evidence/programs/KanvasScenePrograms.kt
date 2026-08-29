@@ -94,12 +94,8 @@ object KanvasScenePrograms {
         )
     })
 
-    /**
-     * Complex path clips are still terminal for round-cap path strokes. Keep
-     * this public Surface shape as an explicit refusal until the native
-     * stencil-cover route can own the clip/stroke composition.
-     */
-    fun roundCapStrokeUnderWindingRefusal() = KanvasSurfaceProgram(ROUTE_ID, record = {
+    /** A bounded native route: opaque non-AA round-cap stroke under winding path clip. */
+    fun roundCapStrokeUnderWindingClip() = KanvasSurfaceProgram(ROUTE_ID, record = {
         save()
         clipPath(
             Path {
@@ -2041,6 +2037,78 @@ object KanvasScenePrograms {
             Path {
                 moveTo(24f, 16f)
                 lineTo(8f, 16f)
+            },
+            Paint.stroke(ColorARGB.Red, 4f).copy(
+                antiAlias = false,
+                strokeCap = StrokeCap.ROUND,
+            ),
+        )
+        restore()
+    })
+
+    /** The scale-two round-cap route for a reversed vertical integral-grid segment. */
+    fun uniformlyScaledReverseVerticalRoundCapStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        save()
+        scale(2f, 2f)
+        drawPath(
+            Path {
+                moveTo(16f, 24f)
+                lineTo(16f, 8f)
+            },
+            Paint.stroke(ColorARGB.Red, 4f).copy(
+                antiAlias = false,
+                strokeCap = StrokeCap.ROUND,
+            ),
+        )
+        restore()
+    })
+
+    /** The scale-two round-cap route for a translated reversed vertical integral-grid segment. */
+    fun uniformlyScaledTranslatedReverseVerticalRoundCapStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        save()
+        translate(4f, 6f)
+        scale(2f, 2f)
+        drawPath(
+            Path {
+                moveTo(16f, 24f)
+                lineTo(16f, 8f)
+            },
+            Paint.stroke(ColorARGB.Red, 4f).copy(
+                antiAlias = false,
+                strokeCap = StrokeCap.ROUND,
+            ),
+        )
+        restore()
+    })
+
+    /** The scale-two round-cap route constrained by an integral device scissor. */
+    fun uniformlyScaledScissoredRoundCapStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        save()
+        clipRect(RectF32.ofLTRB(12f, 30f, 20f, 38f), antiAlias = false)
+        scale(2f, 2f)
+        drawPath(
+            Path {
+                moveTo(8f, 16f)
+                lineTo(24f, 16f)
+            },
+            Paint.stroke(ColorARGB.Red, 4f).copy(
+                antiAlias = false,
+                strokeCap = StrokeCap.ROUND,
+            ),
+        )
+        restore()
+    })
+
+    /** The translated scale-two round-cap route constrained by an integral device scissor. */
+    fun uniformlyScaledTranslatedScissoredRoundCapStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        save()
+        clipRect(RectF32.ofLTRB(16f, 36f, 24f, 44f), antiAlias = false)
+        translate(4f, 6f)
+        scale(2f, 2f)
+        drawPath(
+            Path {
+                moveTo(8f, 16f)
+                lineTo(24f, 16f)
             },
             Paint.stroke(ColorARGB.Red, 4f).copy(
                 antiAlias = false,

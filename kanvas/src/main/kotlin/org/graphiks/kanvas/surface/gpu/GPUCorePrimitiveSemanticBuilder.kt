@@ -704,7 +704,10 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
             sealedGeometry = null
         }
     }
-    val geometry = sealedGeometry ?: normalized.toDeviceGeometry(targetBounds)
+    val geometry = sealedGeometry ?: normalized.toDeviceGeometry(
+        targetBounds = targetBounds,
+        clipExecutionPlan = clipExecutionPlan,
+    )
     val scissor = clipCoverage.toPreparedScissorBounds(
         targetBounds = targetBounds,
         nonScissorClipRetainedSeparately = true,
@@ -713,16 +716,20 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
     val directStrokeUnderHardPathClip = clipExecutionPlan is GPUClipExecutionPlan.StencilCoverage &&
         geometry is GPUCorePrimitiveGeometryInput.TriangulatedPath &&
         geometry.geometryMode == GPUCorePrimitiveGeometryMode.DirectTriangles &&
-        geometry.vertices.size == 8 &&
-        geometry.indices == listOf(0, 1, 2, 0, 2, 3) &&
         geometry.sourceContourStarts == listOf(0) &&
         geometry.sourceVertexCount == 2 &&
         geometry.fillRule == GPUCorePrimitiveFillRule.Winding &&
         !geometry.inverseFill &&
         geometry.strokeStyle?.let { style ->
-            style.join == "miter" && when (style.cap) {
-                "butt" -> style.loweringProof == GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1
-                "square" -> style.loweringProof == GPUCorePrimitiveStrokeLoweringProof.SingleSegmentSquareV1
+            style.join == "miter" && style.dashIntervals.isEmpty() && when (style.cap) {
+                "butt" -> geometry.vertices.size == 8 &&
+                    geometry.indices == listOf(0, 1, 2, 0, 2, 3) &&
+                    style.loweringProof == GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1
+                "square" -> geometry.vertices.size == 8 &&
+                    geometry.indices == listOf(0, 1, 2, 0, 2, 3) &&
+                    style.loweringProof == GPUCorePrimitiveStrokeLoweringProof.SingleSegmentSquareV1
+                "round" -> style.loweringProof.isRoundCapProof() &&
+                    geometry.hasCanonicalDirectRoundCapTopology()
                 else -> false
             }
         } == true
@@ -1004,6 +1011,7 @@ private fun NormalizedDrawCommand.antiAlias(): Boolean = when (this) {
 
 private fun NormalizedDrawCommand.toDeviceGeometry(
     targetBounds: GPUPixelBounds,
+    clipExecutionPlan: GPUClipExecutionPlan? = null,
 ): GPUCorePrimitiveGeometryInput = when (this) {
     is NormalizedDrawCommand.FillRect -> {
         val corners = listOf(
@@ -1035,12 +1043,42 @@ private fun NormalizedDrawCommand.toDeviceGeometry(
     is NormalizedDrawCommand.FillRRect -> error(
         "unsupported.core_primitive.rrect.analysis_authority_missing",
     )
-    is NormalizedDrawCommand.FillPath -> pathDeviceGeometry(targetBounds)
+    is NormalizedDrawCommand.FillPath -> pathDeviceGeometry(targetBounds, clipExecutionPlan)
     else -> error("Non-core command reached Slice 12A semantic gathering")
+}
+
+private fun GPUCorePrimitiveStrokeLoweringProof.isRoundCapProof(): Boolean = this in setOf(
+    GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2HorizontalV1,
+    GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2VerticalV1,
+    GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2ReverseVerticalV1,
+    GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2ReverseHorizontalV1,
+    GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2QuarterTurnV1,
+    GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2HalfTurnV1,
+    GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2NegativeQuarterTurnV1,
+    GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundUniformScaleV1,
+)
+
+private fun GPUCorePrimitiveGeometryInput.TriangulatedPath.hasCanonicalDirectRoundCapTopology(): Boolean {
+    val vertexCount = vertices.size / 2
+    if (vertexCount < 9 || (vertexCount - 4) % 2 != 0) return false
+    val capVertexCount = (vertexCount - 4) / 2
+    if (capVertexCount < 3) return false
+    val starts = listOf(0, 4, 4 + capVertexCount)
+    val expected = buildList {
+        addAll(listOf(0, 1, 2, 0, 2, 3))
+        starts.drop(1).forEachIndexed { contourIndex, start ->
+            val end = starts.getOrElse(contourIndex + 2) { vertexCount }
+            for (index in start + 1 until end - 1) {
+                addAll(listOf(start, index, index + 1))
+            }
+        }
+    }
+    return indices == expected
 }
 
 private fun NormalizedDrawCommand.FillPath.pathDeviceGeometry(
     targetBounds: GPUPixelBounds,
+    clipExecutionPlan: GPUClipExecutionPlan? = null,
 ): GPUCorePrimitiveGeometryInput {
     if (source.operation == "drawPoint" || source.operation == "drawPoints.points") {
         val refusalCode = when {
@@ -1061,7 +1099,7 @@ private fun NormalizedDrawCommand.FillPath.pathDeviceGeometry(
         }
         if (strokeWidth == 0f) return hairlinePointDeviceGeometry(targetBounds)
     }
-    if (stroke) return strokeDeviceGeometry(targetBounds)
+    if (stroke) return strokeDeviceGeometry(targetBounds, clipExecutionPlan)
     if (tessellatedVertices.isEmpty()) {
         refuseGeometry(
             code = if (pathDescriptor.inverseFill) {
@@ -1193,6 +1231,7 @@ private fun NormalizedDrawCommand.FillPath.hairlinePointDeviceGeometry(
 
 private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
     targetBounds: GPUPixelBounds,
+    clipExecutionPlan: GPUClipExecutionPlan? = null,
 ): GPUCorePrimitiveGeometryInput {
     val pointCount = tessellatedVertices.size / 2
     val exactSingleSegment = contourStarts == listOf(0) && pointCount == 2
@@ -1310,16 +1349,72 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
             outline.vertices.subList(8, 12) + outline.vertices.subList(20, 24)
         else -> null
     }
-    if (
-        !antiAlias && clip.executionPlan is GPUClipExecutionPlan.StencilCoverage &&
-            exactSingleSegment &&
-            strokeCap in setOf("butt", "square") &&
-            strokeJoin == "miter" &&
-            directStrokeVertices != null
+    // A round-cap outline is emitted as one body quad followed by one triangle
+    // fan per cap.  Under the bounded hard-clip route the clip stencil already
+    // owns the attachment, so keep this exact opaque triangle list as a direct
+    // consumer instead of asking the same stencil for a second stroke cover.
+    val directRoundCapIndices = if (
+        strokeCap == "round" && exactSingleSegment && strokeJoin == "miter" &&
+            outline.contourStarts.size == 4 && outline.contourStarts.firstOrNull() == 0 &&
+            outline.contourStarts.getOrNull(1) == 4 &&
+            outline.contourStarts.drop(1).all { it >= 0 } &&
+            outline.vertices.size / 2 >= 9
     ) {
+        val vertexCount = outline.vertices.size / 2
+        val indices = mutableListOf<Int>()
+        val bodyStart = outline.contourStarts[0]
+        val bodyEnd = outline.contourStarts[1]
+        if (bodyEnd - bodyStart == 4) {
+            indices += listOf(bodyStart, bodyStart + 1, bodyStart + 2,
+                bodyStart, bodyStart + 2, bodyStart + 3)
+            outline.contourStarts.drop(1).forEachIndexed { contourIndex, start ->
+                val end = outline.contourStarts.getOrElse(contourIndex + 2) { vertexCount }
+                for (index in start + 1 until end - 1) {
+                    indices += listOf(start, index, index + 1)
+                }
+            }
+        }
+        indices.takeIf { it.isNotEmpty() && it.size % 3 == 0 }
+    } else {
+        null
+    }
+    val loweringProof = when {
+        boundedMultiSegment -> GPUCorePrimitiveStrokeLoweringProof.MultiSegmentButtMiterV1
+        horizontalDashed -> GPUCorePrimitiveStrokeLoweringProof.HorizontalDashedButtMiterV1
+        verticalDashed -> GPUCorePrimitiveStrokeLoweringProof.VerticalDashedButtMiterV1
+        strokeCap == "square" -> GPUCorePrimitiveStrokeLoweringProof.SingleSegmentSquareV1
+        strokeCap == "round" && matchesPixelExactRoundCapR2HorizontalV1() ->
+            GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2HorizontalV1
+        strokeCap == "round" && matchesPixelExactRoundCapR2ReverseHorizontalV1() ->
+            GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2ReverseHorizontalV1
+        strokeCap == "round" && matchesPixelExactRoundCapR2VerticalV1() ->
+            GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2VerticalV1
+        strokeCap == "round" && matchesPixelExactRoundCapR2ReverseVerticalV1() ->
+            GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2ReverseVerticalV1
+        strokeCap == "round" && matchesPixelExactRoundCapR2QuarterTurnV1() ->
+            GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2QuarterTurnV1
+        strokeCap == "round" && matchesPixelExactRoundCapR2HalfTurnV1() ->
+            GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2HalfTurnV1
+        strokeCap == "round" && matchesPixelExactRoundCapR2NegativeQuarterTurnV1() ->
+            GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2NegativeQuarterTurnV1
+        strokeCap == "round" && matchesUniformScaledRoundCapV1() ->
+            GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundUniformScaleV1
+        else -> GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1
+    }
+    val hardClip = clipExecutionPlan as? GPUClipExecutionPlan.StencilCoverage
+    if (
+        !antiAlias && hardClip != null &&
+            exactSingleSegment &&
+            strokeJoin == "miter" &&
+            (directStrokeVertices != null ||
+                (hardClip.sampleCount == 1 && directRoundCapIndices != null))
+    ) {
+        val vertices = directStrokeVertices ?: outline.vertices
+        val indices = directStrokeVertices?.let { listOf(0, 1, 2, 0, 2, 3) }
+            ?: requireNotNull(directRoundCapIndices)
         return GPUCorePrimitiveGeometryInput.TriangulatedPath(
-            vertices = directStrokeVertices,
-            indices = listOf(0, 1, 2, 0, 2, 3),
+            vertices = vertices,
+            indices = indices,
             sourceContourStarts = listOf(0),
             sourceVertexCount = 2,
             coverBounds = devicePoints.toPixelCoverBounds(targetBounds),
@@ -1333,10 +1428,7 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
                 miterLimit = strokeMiterLimit,
                 dashIntervals = dashIntervals?.toList().orEmpty(),
                 dashPhase = dashPhase,
-                loweringProof = when (strokeCap) {
-                    "square" -> GPUCorePrimitiveStrokeLoweringProof.SingleSegmentSquareV1
-                    else -> GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1
-                },
+                loweringProof = loweringProof,
             ),
             sourceAuthority = pathDescriptor.sourceAuthority,
         )
@@ -1367,29 +1459,7 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
             miterLimit = strokeMiterLimit,
             dashIntervals = dashIntervals?.toList().orEmpty(),
             dashPhase = dashPhase,
-            loweringProof = when {
-                boundedMultiSegment -> GPUCorePrimitiveStrokeLoweringProof.MultiSegmentButtMiterV1
-                horizontalDashed -> GPUCorePrimitiveStrokeLoweringProof.HorizontalDashedButtMiterV1
-                verticalDashed -> GPUCorePrimitiveStrokeLoweringProof.VerticalDashedButtMiterV1
-                strokeCap == "square" -> GPUCorePrimitiveStrokeLoweringProof.SingleSegmentSquareV1
-                strokeCap == "round" && matchesPixelExactRoundCapR2HorizontalV1() ->
-                    GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2HorizontalV1
-                strokeCap == "round" && matchesPixelExactRoundCapR2ReverseHorizontalV1() ->
-                    GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2ReverseHorizontalV1
-                strokeCap == "round" && matchesPixelExactRoundCapR2VerticalV1() ->
-                    GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2VerticalV1
-                strokeCap == "round" && matchesPixelExactRoundCapR2ReverseVerticalV1() ->
-                    GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2ReverseVerticalV1
-                strokeCap == "round" && matchesPixelExactRoundCapR2QuarterTurnV1() ->
-                    GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2QuarterTurnV1
-                strokeCap == "round" && matchesPixelExactRoundCapR2HalfTurnV1() ->
-                    GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2HalfTurnV1
-                strokeCap == "round" && matchesPixelExactRoundCapR2NegativeQuarterTurnV1() ->
-                    GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2NegativeQuarterTurnV1
-                strokeCap == "round" && matchesUniformScaledRoundCapV1() ->
-                    GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundUniformScaleV1
-                else -> GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1
-            },
+            loweringProof = loweringProof,
         ),
         sourceAuthority = pathDescriptor.sourceAuthority,
     )

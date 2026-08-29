@@ -25,6 +25,9 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeNativeFactory
 import org.graphiks.kanvas.gpu.renderer.execution.GPUOffscreenTargetRequest
 import org.graphiks.kanvas.gpu.renderer.execution.GPUSceneFrameOutput
 import org.graphiks.kanvas.gpu.renderer.execution.GPUSceneFrameOutputRequest
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitivePreparedFrameResult
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlanner
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
@@ -4911,7 +4914,7 @@ class GPUFramePathApiInventoryNativeSmokeTest {
     }
 
     @Test
-    fun `round cap stroke under winding path clip remains explicitly refused`() {
+    fun `round cap stroke under winding path clip reaches the native clip route`() {
         val backend = GPUBackendRuntimeNativeFactory.createOrNull()
         assumeTrue(backend != null)
         backend!!
@@ -4950,14 +4953,59 @@ class GPUFramePathApiInventoryNativeSmokeTest {
                 deviceGeneration = backend.deviceGeneration,
             )
             assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+            val gathered = assertIs<GPUCorePrimitiveSemanticGatherResult.Gathered>(
+                GPUFramePathApiInventory.gatherCorePrimitiveSemantics(inventory, targetBounds),
+            )
+            val semantic = assertIs<GPUDrawSemanticPayload.CorePrimitive>(gathered.semantics.values.single())
+            val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
+            val outline = strokeToFillGeometry(
+                contourVertices = listOf(6f, 16f, 26f, 16f),
+                contourStarts = listOf(0),
+                strokeWidth = 4f,
+                capStyle = StrokeCap.ROUND,
+                joinStyle = StrokeJoin.MITER,
+            )
+            assertEquals(listOf(0, 4, 11, 18), outline.contourStarts)
+            assertEquals(36, outline.vertices.size)
+            assertEquals(
+                GPUCorePrimitiveGeometryMode.DirectTriangles,
+                geometry.geometryMode,
+                "normalized=${inventory.visualCommands.single().normalized}, " +
+                    "clipExecution=${inventory.visualCommands.single().clipExecutionPlan}, " +
+                    "geometry=$geometry",
+            )
+            val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.round-cap-winding-clip")
             val preparation = GPUFramePathApiInventory.prepareNativeTaskList(
                 inventory,
                 capabilities,
                 targetBounds,
-                null,
+                readbackId,
             )
-            val refused = assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(preparation)
-            assertEquals("unsupported.recording.core_primitive_path_stencil_clip", refused.diagnostic.code.value)
+            val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+                preparation,
+                (preparation as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                    "${it.code.value}: ${it.message}"
+                },
+            ).taskList
+            val session = backend.prepareSceneFrameSession(
+                GPUOffscreenTargetRequest(32, 32, colorMapping.physicalFormat, colorMapping.interpretation),
+            )
+            try {
+                val completed = session.renderFrame(
+                    prepared,
+                    GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
+                ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+                assertEquals(GPUFrameStructuralOutcome.Succeeded, completed.outcome)
+                val gpu = assertIs<GPUSceneFrameOutput.ReadbackRgba>(completed.output).bytes
+                fun pixel(x: Int, y: Int): List<Int> {
+                    val offset = (y * 32 + x) * 4
+                    return (0 until 4).map { channel -> gpu[offset + channel].toInt() and 0xff }
+                }
+                assertEquals(listOf(255, 0, 0, 255), pixel(12, 16))
+                assertEquals(listOf(0, 0, 0, 0), pixel(24, 16))
+            } finally {
+                session.close()
+            }
         } finally {
             GPUBackendRuntimeNativeFactory.dispose()
         }

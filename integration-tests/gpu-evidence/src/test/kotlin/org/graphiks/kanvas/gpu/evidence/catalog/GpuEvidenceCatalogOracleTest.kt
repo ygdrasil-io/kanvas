@@ -434,6 +434,15 @@ class GpuEvidenceCatalogOracleTest {
     }
 
     @Test
+    fun `round cap stroke winding clip oracle keeps the clipped endpoint outside`() {
+        val pixels = oracle("round-cap-stroke-winding-clip", 32, 32)
+
+        assertPixel(pixels, 32, 32, 12, 16, intArrayOf(255, 0, 0, 255))
+        assertPixel(pixels, 32, 32, 24, 16, intArrayOf(0, 0, 0, 0))
+        assertPixel(pixels, 32, 32, 2, 16, intArrayOf(0, 0, 0, 0))
+    }
+
+    @Test
     fun `scaled translated horizontal hairline covers one device row`() {
         val pixels = oracle("scaled-translated-horizontal-hairline", 32, 32)
 

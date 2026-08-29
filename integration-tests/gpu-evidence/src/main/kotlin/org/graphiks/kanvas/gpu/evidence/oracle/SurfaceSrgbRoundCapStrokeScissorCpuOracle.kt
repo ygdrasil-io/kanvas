@@ -16,8 +16,8 @@ class SurfaceSrgbRoundCapStrokeScissorCpuOracle(
 ) : CpuOracle {
     init {
         require(startX.isIntegralDeviceCoordinate() && endX.isIntegralDeviceCoordinate() &&
-            centerY.isIntegralDeviceCoordinate() && radius == 2.0 && endX - startX >= 4.0
-        ) { "round-cap scissor oracle requires an integral left-to-right radius-two horizontal segment" }
+            centerY.isIntegralDeviceCoordinate() && radius.isFinite() && radius > 0.0 && endX - startX >= 2.0 * radius
+        ) { "round-cap scissor oracle requires an integral left-to-right horizontal segment with a positive radius" }
         require(color.size == 4 && color.all { it in 0..255 }) { "color must be RGBA byte channels" }
         require(clipLeft >= 0 && clipTop >= 0 && clipRight > clipLeft && clipBottom > clipTop) {
             "scissor must be a non-empty integral device rectangle"

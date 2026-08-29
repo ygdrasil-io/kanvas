@@ -958,20 +958,52 @@ private fun GPUDrawSemanticPayload.CorePrimitive.hasExactDirectTriangleRectGradi
 private fun GPUDrawSemanticPayload.CorePrimitive.hasExactDirectStrokePathConsumerGeometry(): Boolean {
     val path = geometry as? GPUCorePrimitiveGeometry.TriangulatedPath ?: return false
     val style = path.strokeStyle ?: return false
-    return sourceFamily == GPUCorePrimitiveSourceFamily.Path &&
-        path.geometryMode == GPUCorePrimitiveGeometryMode.DirectTriangles &&
-        path.vertices.size == 8 &&
+    if (sourceFamily != GPUCorePrimitiveSourceFamily.Path ||
+        path.geometryMode != GPUCorePrimitiveGeometryMode.DirectTriangles ||
+        path.sourceContourStarts != listOf(0) || path.sourceVertexCount != 2 ||
+        path.fillRule != GPUCorePrimitiveFillRule.Winding || path.inverseFill ||
+        style.join != "miter" || style.dashIntervals.isNotEmpty()
+    ) return false
+    val buttOrSquare = path.vertices.size == 8 &&
         path.indices == listOf(0, 1, 2, 0, 2, 3) &&
-        path.sourceContourStarts == listOf(0) &&
-        path.sourceVertexCount == 2 &&
-        path.fillRule == GPUCorePrimitiveFillRule.Winding &&
-        !path.inverseFill &&
-        style.join == "miter" &&
         when (style.cap) {
             "butt" -> style.loweringProof == GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1
             "square" -> style.loweringProof == GPUCorePrimitiveStrokeLoweringProof.SingleSegmentSquareV1
             else -> false
         }
+    val roundCap = style.cap == "round" &&
+        style.loweringProof in setOf(
+            GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2HorizontalV1,
+            GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2VerticalV1,
+            GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2ReverseVerticalV1,
+            GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2ReverseHorizontalV1,
+            GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2QuarterTurnV1,
+            GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2HalfTurnV1,
+            GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2NegativeQuarterTurnV1,
+            GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundUniformScaleV1,
+        ) && hasCanonicalDirectRoundCapTopology(path.vertices, path.indices)
+    return buttOrSquare || roundCap
+}
+
+private fun hasCanonicalDirectRoundCapTopology(
+    vertices: List<Float>,
+    indices: List<Int>,
+): Boolean {
+    val vertexCount = vertices.size / 2
+    if (vertexCount < 9 || (vertexCount - 4) % 2 != 0) return false
+    val capVertexCount = (vertexCount - 4) / 2
+    if (capVertexCount < 3) return false
+    val starts = listOf(0, 4, 4 + capVertexCount)
+    val expected = buildList {
+        addAll(listOf(0, 1, 2, 0, 2, 3))
+        starts.drop(1).forEachIndexed { contourIndex, start ->
+            val end = starts.getOrElse(contourIndex + 2) { vertexCount }
+            for (index in start + 1 until end - 1) {
+                addAll(listOf(start, index, index + 1))
+            }
+        }
+    }
+    return indices == expected
 }
 
 private fun GPUDrawSemanticPayload.CorePrimitive.hasExactHardPathClipConsumerGeometry(): Boolean =
