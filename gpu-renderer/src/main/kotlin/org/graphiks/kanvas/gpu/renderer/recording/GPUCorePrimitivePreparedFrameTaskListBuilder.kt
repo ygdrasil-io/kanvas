@@ -17,6 +17,7 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilLoadOperation
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilStoreOperation
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
+import org.graphiks.kanvas.gpu.renderer.commands.isPositiveUniformScaleTranslateGradientLocalMatrix
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
@@ -841,11 +842,7 @@ private fun GPUCorePrimitiveMaterialPayload.RadialGradient.isExactTwoStopClampGr
         interpolation == "srgb" &&
         positions.size == 2 &&
         colors.size == 8 &&
-        localMatrix == listOf(
-            1f, 0f, 0f,
-            0f, 1f, 0f,
-            0f, 0f, 1f,
-        )
+        localMatrix.isPositiveUniformScaleTranslateGradientLocalMatrix()
 
 private fun GPUCorePrimitiveMaterialPayload.SweepGradient.isExactTwoStopClampSweepGradient(): Boolean {
     val span = endAngle - startAngle
@@ -855,11 +852,7 @@ private fun GPUCorePrimitiveMaterialPayload.SweepGradient.isExactTwoStopClampSwe
         span.isFinite() && span > 0f && span <= 360f &&
         positions.size == 2 &&
         colors.size == 8 &&
-        localMatrix == listOf(
-            1f, 0f, 0f,
-            0f, 1f, 0f,
-            0f, 0f, 1f,
-        )
+        localMatrix.isPositiveUniformScaleTranslateGradientLocalMatrix()
 }
 
 private fun directCorePrimitiveGeometryBytes(
@@ -1745,7 +1738,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             return refused(
                 "unsupported.recording.core_primitive_material.non_solid",
                 "The legacy native CorePrimitive task builder accepts only solid color, or the exact " +
-                    "single-sample clamp-linear/radial-gradient direct-triangle hard-path-clip material ABI.",
+                    "single-sample clamp-linear/radial/sweep-gradient direct-triangle hard-path-clip material ABI.",
             )
         }
         basePackets.firstOrNull { packet ->

@@ -35,6 +35,7 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.StrokeJoin
+import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.surface.RenderConfig
@@ -2682,6 +2683,104 @@ class GPUFramePathApiInventoryNativeSmokeTest {
     }
 
     @Test
+    fun `clamp radial gradient right angle square miter stroke under winding clip renders natively`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        val capabilities = requireNotNull(backend.capabilities)
+        val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(RenderConfig.DEFAULT.mapPreparedGpuColorConfig())
+        val targetBounds = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, 32, 32)
+        val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.radial-square-right-angle-clip")
+        val clipPath = Path().apply {
+            moveTo(27.75f, 4.25f)
+            lineTo(27.75f, 27.25f)
+            lineTo(4.75f, 4.25f)
+            close()
+        }
+        val drawTransform = Matrix3x3F32.rotation(90f, pivotX = 16f, pivotY = 16f)
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(8.25f, 8.25f)
+                        lineTo(20.25f, 14.25f)
+                    },
+                    Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                        shader = Shader.RadialGradient(
+                            Point2F32(16f, 16f),
+                            16f,
+                            listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                        ),
+                        antiAlias = false,
+                        strokeCap = StrokeCap.SQUARE,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    drawTransform,
+                    ClipStack.Complex(
+                        listOf(
+                            ClipStackOp.PathOp(
+                                clipPath,
+                                ClipOp.INTERSECT,
+                                antiAlias = false,
+                                transformClass = "right-angle-rotation",
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+            deviceGeneration = backend.deviceGeneration,
+        )
+        val visual = inventory.visualCommands.single()
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+        assertEquals(32f, visual.normalized.transform.translateX)
+        assertEquals(0f, visual.normalized.transform.translateY)
+        assertEquals(0f, visual.normalized.transform.scaleX)
+        assertEquals(0f, visual.normalized.transform.scaleY)
+        assertEquals(-1f, visual.normalized.transform.skewX)
+        assertEquals(1f, visual.normalized.transform.skewY)
+        val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(visual.clipExecutionPlan)
+        assertEquals("right-angle-rotation", execution.pathTransformClass)
+        assertEquals(GPUClipStencilOperation.IncrementWrap, execution.producer.frontPassOperation)
+        assertEquals(GPUClipStencilOperation.DecrementWrap, execution.producer.backPassOperation)
+        assertEquals(GPUClipStencilCompare.NotEqual, execution.consumer.compare)
+        val clipGeometry = assertIs<GPUClipExecutionGeometry.Path>(execution.producer.geometry)
+        assertEquals(GPUClipFillRule.Winding, clipGeometry.fillRule)
+        assertTrue(!clipGeometry.inverseFill)
+        val preparation = GPUFramePathApiInventory.prepareNativeTaskList(
+            inventory,
+            capabilities,
+            targetBounds,
+            readbackId,
+        )
+        val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            preparation,
+            (preparation as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}; facts=${it.facts}"
+            },
+        ).taskList
+        val session = backend.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(32, 32, colorMapping.physicalFormat, colorMapping.interpretation),
+        )
+        try {
+            val completed = session.renderFrame(
+                prepared,
+                GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
+            ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+            assertEquals(GPUFrameStructuralOutcome.Succeeded, completed.outcome)
+            val gpu = assertIs<GPUSceneFrameOutput.ReadbackRgba>(completed.output).bytes
+            assertRgbaWithinOneLsb(deterministicRightAngleDiagonalSquareMiterRadialWindingClipOracle(), gpu)
+            assertEquals(1L, session.nativeCounters().submits)
+            assertEquals(1L, session.nativeCounters().readbackCopies)
+        } finally {
+            session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
     fun `clamp radial gradient butt miter stroke under winding path clip renders natively`() {
         val backend = GPUBackendRuntimeNativeFactory.createOrNull()
         assumeTrue(backend != null)
@@ -2759,6 +2858,241 @@ class GPUFramePathApiInventoryNativeSmokeTest {
             assertEquals(1L, session.nativeCounters().readbackCopies)
         } finally {
             session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
+    fun `translated radial draw square miter stroke under winding clip renders natively`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        val capabilities = requireNotNull(backend.capabilities)
+        val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(RenderConfig.DEFAULT.mapPreparedGpuColorConfig())
+        val targetBounds = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, 32, 32)
+        val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.radial-ctm-translate-winding-clip")
+        val clipPath = Path().apply {
+            moveTo(2.25f, 2.25f)
+            lineTo(31.25f, 2.25f)
+            lineTo(2.25f, 31.25f)
+            close()
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(5.25f, 8.25f)
+                        lineTo(21.25f, 20.25f)
+                    },
+                    Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                        shader = Shader.RadialGradient(
+                            Point2F32(16f, 16f),
+                            16f,
+                            listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                            TileMode.CLAMP,
+                        ),
+                        antiAlias = false,
+                        strokeCap = StrokeCap.SQUARE,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.of(
+                        1.25f, 0f, 2f,
+                        0f, 1.25f, -1f,
+                        0f, 0f, 1f,
+                    ),
+                    ClipStack.Complex(listOf(ClipStackOp.PathOp(clipPath, ClipOp.INTERSECT, antiAlias = false))),
+                ),
+            ),
+            target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+            deviceGeneration = backend.deviceGeneration,
+        )
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+        val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(inventory.visualCommands.single().clipExecutionPlan)
+        assertEquals(GPUClipStencilOperation.IncrementWrap, execution.producer.frontPassOperation)
+        assertEquals(GPUClipStencilOperation.DecrementWrap, execution.producer.backPassOperation)
+        assertEquals(GPUClipStencilCompare.NotEqual, execution.consumer.compare)
+        val clipGeometry = assertIs<GPUClipExecutionGeometry.Path>(execution.producer.geometry)
+        assertEquals(GPUClipFillRule.Winding, clipGeometry.fillRule)
+        assertTrue(!clipGeometry.inverseFill)
+        val preparation = GPUFramePathApiInventory.prepareNativeTaskList(
+            inventory,
+            capabilities,
+            targetBounds,
+            readbackId,
+        )
+        val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            preparation,
+            (preparation as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}; facts=${it.facts}"
+            },
+        ).taskList
+        val session = backend.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(32, 32, colorMapping.physicalFormat, colorMapping.interpretation),
+        )
+        try {
+            val completed = session.renderFrame(
+                prepared,
+                GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
+            ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+            assertEquals(
+                GPUFrameStructuralOutcome.Succeeded,
+                completed.outcome,
+                "Radial CTM translation native execution refused/failed: ${completed.diagnostic}",
+            )
+            val gpu = assertIs<GPUSceneFrameOutput.ReadbackRgba>(completed.output).bytes
+            assertRgbaWithinOneLsb(deterministicTranslatedDiagonalSquareMiterRadialWindingClipOracle(), gpu)
+            assertEquals(1L, session.nativeCounters().submits)
+            assertEquals(1L, session.nativeCounters().readbackCopies)
+        } finally {
+            session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
+    fun `translated local radial matrix square miter stroke under winding clip renders natively`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        val capabilities = requireNotNull(backend.capabilities)
+        val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(RenderConfig.DEFAULT.mapPreparedGpuColorConfig())
+        val targetBounds = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, 32, 32)
+        val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.radial-local-translate-winding-clip")
+        val clipPath = Path().apply {
+            moveTo(7.25f, 6.25f)
+            lineTo(30.25f, 6.25f)
+            lineTo(7.25f, 29.25f)
+            close()
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(5.25f, 8.25f)
+                        lineTo(21.25f, 20.25f)
+                    },
+                    Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                        shader = Shader.WithLocalMatrix(
+                            Shader.RadialGradient(
+                                Point2F32(16f, 16f),
+                                16f,
+                                listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                                TileMode.CLAMP,
+                            ),
+                            Matrix3x3F32.translation(1.25f, -0.75f),
+                        ),
+                        antiAlias = false,
+                        strokeCap = StrokeCap.SQUARE,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.Identity,
+                    ClipStack.Complex(listOf(ClipStackOp.PathOp(clipPath, ClipOp.INTERSECT, antiAlias = false))),
+                ),
+            ),
+            target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+            deviceGeneration = backend.deviceGeneration,
+        )
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+        val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(inventory.visualCommands.single().clipExecutionPlan)
+        assertEquals(GPUClipStencilOperation.IncrementWrap, execution.producer.frontPassOperation)
+        assertEquals(GPUClipStencilOperation.DecrementWrap, execution.producer.backPassOperation)
+        assertEquals(GPUClipStencilCompare.NotEqual, execution.consumer.compare)
+        val preparation = GPUFramePathApiInventory.prepareNativeTaskList(
+            inventory,
+            capabilities,
+            targetBounds,
+            readbackId,
+        )
+        val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            preparation,
+            (preparation as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}; facts=${it.facts}"
+            },
+        ).taskList
+        val session = backend.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(32, 32, colorMapping.physicalFormat, colorMapping.interpretation),
+        )
+        try {
+            val completed = session.renderFrame(
+                prepared,
+                GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
+            ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+            assertEquals(
+                GPUFrameStructuralOutcome.Succeeded,
+                completed.outcome,
+                "Radial local-translate native execution refused/failed: ${completed.diagnostic}",
+            )
+            val gpu = assertIs<GPUSceneFrameOutput.ReadbackRgba>(completed.output).bytes
+            assertRgbaWithinOneLsb(deterministicDiagonalSquareMiterRadialLocalTranslationWindingClipOracle(), gpu)
+            assertEquals(1L, session.nativeCounters().submits)
+            assertEquals(1L, session.nativeCounters().readbackCopies)
+        } finally {
+            session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
+    fun `rotated and nonuniform local radial matrices remain refused before native preparation`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        try {
+            val capabilities = requireNotNull(backend.capabilities)
+            val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(
+                RenderConfig.DEFAULT.mapPreparedGpuColorConfig(),
+            )
+            val clipPath = Path().apply {
+                moveTo(7.25f, 6.25f)
+                lineTo(30.25f, 6.25f)
+                lineTo(7.25f, 29.25f)
+                close()
+            }
+            listOf(Matrix3x3F32.rotation(90f), Matrix3x3F32.scaling(2f, 1f)).forEach { localMatrix ->
+                val inventory = GPUFramePathApiInventory.plan(
+                    operations = listOf(
+                        DisplayOp.DrawPath(
+                            Path().apply {
+                                moveTo(5.25f, 8.25f)
+                                lineTo(21.25f, 20.25f)
+                            },
+                            Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                                shader = Shader.WithLocalMatrix(
+                                    Shader.RadialGradient(
+                                        Point2F32(16f, 16f),
+                                        16f,
+                                        listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                                        TileMode.CLAMP,
+                                    ),
+                                    localMatrix,
+                                ),
+                                antiAlias = false,
+                                strokeCap = StrokeCap.SQUARE,
+                                strokeJoin = StrokeJoin.MITER,
+                            ),
+                            Matrix3x3F32.Identity,
+                            ClipStack.Complex(listOf(ClipStackOp.PathOp(clipPath, ClipOp.INTERSECT, antiAlias = false))),
+                        ),
+                    ),
+                    target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+                    config = RenderConfig.DEFAULT,
+                    capabilities = capabilities,
+                    deviceGeneration = backend.deviceGeneration,
+                )
+                assertEquals(
+                    "refused.unsupported.material.mapping.local_matrix",
+                    inventory.recording.analysis.records.single().routeDecisionLabel,
+                )
+                assertEquals(
+                    listOf("refused:unsupported.material.mapping.local_matrix"),
+                    inventory.recording.routeDiagnostics,
+                )
+            }
+        } finally {
             GPUBackendRuntimeNativeFactory.dispose()
         }
     }
@@ -3183,6 +3517,931 @@ class GPUFramePathApiInventoryNativeSmokeTest {
             assertEquals(1L, session.nativeCounters().readbackCopies)
         } finally {
             session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
+    fun `clamp sweep gradient square miter stroke under inverse even odd hole clip renders natively`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        val capabilities = requireNotNull(backend.capabilities)
+        val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(RenderConfig.DEFAULT.mapPreparedGpuColorConfig())
+        val targetBounds = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, 32, 32)
+        val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.sweep-square-inverse-even-odd-hole-clip")
+        val clipPath = Path().apply {
+            fillType = FillType.INVERSE_EVEN_ODD
+            addRect(RectF32.ofLTRB(3.25f, 3.25f, 28.75f, 28.75f))
+            addRect(RectF32.ofLTRB(10.25f, 10.25f, 21.75f, 21.75f))
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(5.25f, 8.25f)
+                        lineTo(21.25f, 20.25f)
+                    },
+                    Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                        shader = Shader.SweepGradient(
+                            Point2F32(16f, 16f),
+                            0f,
+                            360f,
+                            listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                        ),
+                        antiAlias = false,
+                        strokeCap = StrokeCap.SQUARE,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.Identity,
+                    ClipStack.Complex(listOf(ClipStackOp.PathOp(clipPath, ClipOp.INTERSECT, antiAlias = false))),
+                ),
+            ),
+            target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+            deviceGeneration = backend.deviceGeneration,
+        )
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+        val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(inventory.visualCommands.single().clipExecutionPlan)
+        assertEquals(GPUClipStencilOperation.Invert, execution.producer.frontPassOperation)
+        assertEquals(GPUClipStencilOperation.Invert, execution.producer.backPassOperation)
+        assertEquals(GPUClipStencilCompare.Equal, execution.consumer.compare)
+        val clipGeometry = assertIs<GPUClipExecutionGeometry.Path>(execution.producer.geometry)
+        assertEquals(GPUClipFillRule.EvenOdd, clipGeometry.fillRule)
+        assertTrue(clipGeometry.inverseFill)
+        val preparation = GPUFramePathApiInventory.prepareNativeTaskList(
+            inventory,
+            capabilities,
+            targetBounds,
+            readbackId,
+        )
+        val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            preparation,
+            (preparation as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}; facts=${it.facts}"
+            },
+        ).taskList
+        val session = backend.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(32, 32, colorMapping.physicalFormat, colorMapping.interpretation),
+        )
+        try {
+            val completed = session.renderFrame(
+                prepared,
+                GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
+            ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+            assertEquals(
+                GPUFrameStructuralOutcome.Succeeded,
+                completed.outcome,
+                "Sweep inverse EvenOdd native execution refused/failed: ${completed.diagnostic}",
+            )
+            val gpu = assertIs<GPUSceneFrameOutput.ReadbackRgba>(completed.output).bytes
+            assertRgbaWithinOneLsb(deterministicDiagonalSquareMiterSweepInverseEvenOddHoleClipOracle(), gpu)
+            assertEquals(1L, session.nativeCounters().submits)
+            assertEquals(1L, session.nativeCounters().readbackCopies)
+        } finally {
+            session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
+    fun `clamp sweep gradient square miter stroke under winding difference clip renders natively`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        val capabilities = requireNotNull(backend.capabilities)
+        val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(RenderConfig.DEFAULT.mapPreparedGpuColorConfig())
+        val targetBounds = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, 32, 32)
+        val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.sweep-square-difference-clip")
+        val clipPath = Path().apply {
+            moveTo(7.25f, 6.25f)
+            lineTo(30.25f, 6.25f)
+            lineTo(7.25f, 29.25f)
+            close()
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(5.25f, 8.25f)
+                        lineTo(21.25f, 20.25f)
+                    },
+                    Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                        shader = Shader.SweepGradient(
+                            Point2F32(16f, 16f),
+                            0f,
+                            360f,
+                            listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                        ),
+                        antiAlias = false,
+                        strokeCap = StrokeCap.SQUARE,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.Identity,
+                    ClipStack.Complex(listOf(ClipStackOp.PathOp(clipPath, ClipOp.DIFFERENCE, antiAlias = false))),
+                ),
+            ),
+            target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+            deviceGeneration = backend.deviceGeneration,
+        )
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+        val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(inventory.visualCommands.single().clipExecutionPlan)
+        assertEquals(GPUClipStencilOperation.IncrementWrap, execution.producer.frontPassOperation)
+        assertEquals(GPUClipStencilOperation.DecrementWrap, execution.producer.backPassOperation)
+        assertEquals(GPUClipStencilCompare.Equal, execution.consumer.compare)
+        val clipGeometry = assertIs<GPUClipExecutionGeometry.Path>(execution.producer.geometry)
+        assertEquals(GPUClipFillRule.Winding, clipGeometry.fillRule)
+        assertTrue(!clipGeometry.inverseFill)
+        val preparation = GPUFramePathApiInventory.prepareNativeTaskList(
+            inventory,
+            capabilities,
+            targetBounds,
+            readbackId,
+        )
+        val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            preparation,
+            (preparation as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}; facts=${it.facts}"
+            },
+        ).taskList
+        val session = backend.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(32, 32, colorMapping.physicalFormat, colorMapping.interpretation),
+        )
+        try {
+            val completed = session.renderFrame(
+                prepared,
+                GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
+            ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+            assertEquals(
+                GPUFrameStructuralOutcome.Succeeded,
+                completed.outcome,
+                "Sweep square Difference native execution refused/failed: ${completed.diagnostic}",
+            )
+            val gpu = assertIs<GPUSceneFrameOutput.ReadbackRgba>(completed.output).bytes
+            assertRgbaWithinOneLsb(deterministicDiagonalSquareMiterSweepWindingDifferenceClipOracle(), gpu)
+            assertEquals(1L, session.nativeCounters().submits)
+            assertEquals(1L, session.nativeCounters().readbackCopies)
+        } finally {
+            session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
+    fun `clamp sweep gradient square miter stroke under even odd difference hole clip renders natively`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        val capabilities = requireNotNull(backend.capabilities)
+        val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(RenderConfig.DEFAULT.mapPreparedGpuColorConfig())
+        val targetBounds = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, 32, 32)
+        val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.sweep-square-even-odd-difference-hole-clip")
+        val clipPath = Path().apply {
+            fillType = FillType.EVEN_ODD
+            addRect(RectF32.ofLTRB(3.25f, 3.25f, 28.75f, 28.75f))
+            addRect(RectF32.ofLTRB(10.25f, 10.25f, 21.75f, 21.75f))
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(5.25f, 8.25f)
+                        lineTo(21.25f, 20.25f)
+                    },
+                    Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                        shader = Shader.SweepGradient(
+                            Point2F32(16f, 16f),
+                            0f,
+                            360f,
+                            listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                        ),
+                        antiAlias = false,
+                        strokeCap = StrokeCap.SQUARE,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.Identity,
+                    ClipStack.Complex(listOf(ClipStackOp.PathOp(clipPath, ClipOp.DIFFERENCE, antiAlias = false))),
+                ),
+            ),
+            target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+            deviceGeneration = backend.deviceGeneration,
+        )
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+        val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(inventory.visualCommands.single().clipExecutionPlan)
+        assertEquals(GPUClipStencilOperation.Invert, execution.producer.frontPassOperation)
+        assertEquals(GPUClipStencilOperation.Invert, execution.producer.backPassOperation)
+        assertEquals(GPUClipStencilCompare.Equal, execution.consumer.compare)
+        val clipGeometry = assertIs<GPUClipExecutionGeometry.Path>(execution.producer.geometry)
+        assertEquals(GPUClipFillRule.EvenOdd, clipGeometry.fillRule)
+        assertTrue(!clipGeometry.inverseFill)
+        val preparation = GPUFramePathApiInventory.prepareNativeTaskList(
+            inventory,
+            capabilities,
+            targetBounds,
+            readbackId,
+        )
+        val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            preparation,
+            (preparation as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}; facts=${it.facts}"
+            },
+        ).taskList
+        val session = backend.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(32, 32, colorMapping.physicalFormat, colorMapping.interpretation),
+        )
+        try {
+            val completed = session.renderFrame(
+                prepared,
+                GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
+            ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+            assertEquals(
+                GPUFrameStructuralOutcome.Succeeded,
+                completed.outcome,
+                "Sweep square EvenOdd Difference native execution refused/failed: ${completed.diagnostic}",
+            )
+            val gpu = assertIs<GPUSceneFrameOutput.ReadbackRgba>(completed.output).bytes
+            assertRgbaWithinOneLsb(deterministicDiagonalSquareMiterSweepEvenOddDifferenceHoleClipOracle(), gpu)
+            assertEquals(1L, session.nativeCounters().submits)
+            assertEquals(1L, session.nativeCounters().readbackCopies)
+        } finally {
+            session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
+    fun `clamp sweep gradient square miter stroke under inverse winding difference clip renders natively`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        val capabilities = requireNotNull(backend.capabilities)
+        val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(RenderConfig.DEFAULT.mapPreparedGpuColorConfig())
+        val targetBounds = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, 32, 32)
+        val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.sweep-square-inverse-winding-difference-clip")
+        val clipPath = Path().apply {
+            fillType = FillType.INVERSE_WINDING
+            moveTo(7.25f, 6.25f)
+            lineTo(30.25f, 6.25f)
+            lineTo(7.25f, 29.25f)
+            close()
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(5.25f, 8.25f)
+                        lineTo(21.25f, 20.25f)
+                    },
+                    Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                        shader = Shader.SweepGradient(
+                            Point2F32(16f, 16f),
+                            0f,
+                            360f,
+                            listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                        ),
+                        antiAlias = false,
+                        strokeCap = StrokeCap.SQUARE,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.Identity,
+                    ClipStack.Complex(listOf(ClipStackOp.PathOp(clipPath, ClipOp.DIFFERENCE, antiAlias = false))),
+                ),
+            ),
+            target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+            deviceGeneration = backend.deviceGeneration,
+        )
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+        val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(inventory.visualCommands.single().clipExecutionPlan)
+        assertEquals(GPUClipStencilOperation.IncrementWrap, execution.producer.frontPassOperation)
+        assertEquals(GPUClipStencilOperation.DecrementWrap, execution.producer.backPassOperation)
+        assertEquals(GPUClipStencilCompare.NotEqual, execution.consumer.compare)
+        val clipGeometry = assertIs<GPUClipExecutionGeometry.Path>(execution.producer.geometry)
+        assertEquals(GPUClipFillRule.Winding, clipGeometry.fillRule)
+        assertTrue(clipGeometry.inverseFill)
+        val preparation = GPUFramePathApiInventory.prepareNativeTaskList(
+            inventory,
+            capabilities,
+            targetBounds,
+            readbackId,
+        )
+        val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            preparation,
+            (preparation as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}; facts=${it.facts}"
+            },
+        ).taskList
+        val session = backend.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(32, 32, colorMapping.physicalFormat, colorMapping.interpretation),
+        )
+        try {
+            val completed = session.renderFrame(
+                prepared,
+                GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
+            ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+            assertEquals(
+                GPUFrameStructuralOutcome.Succeeded,
+                completed.outcome,
+                "Sweep inverse Winding Difference native execution refused/failed: ${completed.diagnostic}",
+            )
+            val gpu = assertIs<GPUSceneFrameOutput.ReadbackRgba>(completed.output).bytes
+            assertRgbaWithinOneLsb(deterministicDiagonalSquareMiterSweepInverseWindingDifferenceClipOracle(), gpu)
+            assertEquals(1L, session.nativeCounters().submits)
+            assertEquals(1L, session.nativeCounters().readbackCopies)
+        } finally {
+            session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
+    fun `clamp sweep gradient square miter stroke under inverse even odd difference hole clip renders natively`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        val capabilities = requireNotNull(backend.capabilities)
+        val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(RenderConfig.DEFAULT.mapPreparedGpuColorConfig())
+        val targetBounds = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, 32, 32)
+        val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.sweep-square-inverse-even-odd-difference-hole-clip")
+        val clipPath = Path().apply {
+            fillType = FillType.INVERSE_EVEN_ODD
+            addRect(RectF32.ofLTRB(3.25f, 3.25f, 28.75f, 28.75f))
+            addRect(RectF32.ofLTRB(10.25f, 10.25f, 21.75f, 21.75f))
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(5.25f, 8.25f)
+                        lineTo(21.25f, 20.25f)
+                    },
+                    Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                        shader = Shader.SweepGradient(
+                            Point2F32(16f, 16f),
+                            0f,
+                            360f,
+                            listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                        ),
+                        antiAlias = false,
+                        strokeCap = StrokeCap.SQUARE,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.Identity,
+                    ClipStack.Complex(listOf(ClipStackOp.PathOp(clipPath, ClipOp.DIFFERENCE, antiAlias = false))),
+                ),
+            ),
+            target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+            deviceGeneration = backend.deviceGeneration,
+        )
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+        val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(inventory.visualCommands.single().clipExecutionPlan)
+        assertEquals(GPUClipStencilOperation.Invert, execution.producer.frontPassOperation)
+        assertEquals(GPUClipStencilOperation.Invert, execution.producer.backPassOperation)
+        assertEquals(GPUClipStencilCompare.NotEqual, execution.consumer.compare)
+        val clipGeometry = assertIs<GPUClipExecutionGeometry.Path>(execution.producer.geometry)
+        assertEquals(GPUClipFillRule.EvenOdd, clipGeometry.fillRule)
+        assertTrue(clipGeometry.inverseFill)
+        val preparation = GPUFramePathApiInventory.prepareNativeTaskList(
+            inventory,
+            capabilities,
+            targetBounds,
+            readbackId,
+        )
+        val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            preparation,
+            (preparation as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}; facts=${it.facts}"
+            },
+        ).taskList
+        val session = backend.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(32, 32, colorMapping.physicalFormat, colorMapping.interpretation),
+        )
+        try {
+            val completed = session.renderFrame(
+                prepared,
+                GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
+            ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+            assertEquals(
+                GPUFrameStructuralOutcome.Succeeded,
+                completed.outcome,
+                "Sweep inverse EvenOdd Difference native execution refused/failed: ${completed.diagnostic}",
+            )
+            val gpu = assertIs<GPUSceneFrameOutput.ReadbackRgba>(completed.output).bytes
+            assertRgbaWithinOneLsb(deterministicDiagonalSquareMiterSweepInverseEvenOddDifferenceHoleClipOracle(), gpu)
+            assertEquals(1L, session.nativeCounters().submits)
+            assertEquals(1L, session.nativeCounters().readbackCopies)
+        } finally {
+            session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
+    fun `clamp sweep gradient square miter stroke under scaled translated inverse winding clip renders natively`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        val capabilities = requireNotNull(backend.capabilities)
+        val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(RenderConfig.DEFAULT.mapPreparedGpuColorConfig())
+        val targetBounds = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, 32, 32)
+        val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.sweep-square-scaled-translated-inverse-winding-clip")
+        val clipPath = Path().apply {
+            fillType = FillType.INVERSE_WINDING
+            moveTo(6.875f, 5.875f)
+            lineTo(24.875f, 5.875f)
+            lineTo(6.875f, 23.875f)
+            close()
+        }
+        val drawTransform = Matrix3x3F32.translation(2f, 1f) * Matrix3x3F32.scaling(1.5f, 1.5f)
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(4.125f, 4.125f)
+                        lineTo(12.125f, 8.625f)
+                    },
+                    Paint.stroke(ColorARGB.Transparent, 2f).copy(
+                        shader = Shader.SweepGradient(
+                            Point2F32(16f, 16f),
+                            0f,
+                            360f,
+                            listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                        ),
+                        antiAlias = false,
+                        strokeCap = StrokeCap.SQUARE,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    drawTransform,
+                    ClipStack.Complex(
+                        listOf(
+                            ClipStackOp.PathOp(
+                                clipPath,
+                                ClipOp.INTERSECT,
+                                antiAlias = false,
+                                transformClass = "uniform-positive-scale-translate",
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+            deviceGeneration = backend.deviceGeneration,
+        )
+        val visual = inventory.visualCommands.single()
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+        assertEquals(2f, visual.normalized.transform.translateX)
+        assertEquals(1f, visual.normalized.transform.translateY)
+        assertEquals(1.5f, visual.normalized.transform.scaleX)
+        assertEquals(1.5f, visual.normalized.transform.scaleY)
+        val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(visual.clipExecutionPlan)
+        assertEquals("uniform-positive-scale-translate", execution.pathTransformClass)
+        assertEquals(GPUClipStencilOperation.IncrementWrap, execution.producer.frontPassOperation)
+        assertEquals(GPUClipStencilOperation.DecrementWrap, execution.producer.backPassOperation)
+        assertEquals(GPUClipStencilCompare.Equal, execution.consumer.compare)
+        val clipGeometry = assertIs<GPUClipExecutionGeometry.Path>(execution.producer.geometry)
+        assertEquals(GPUClipFillRule.Winding, clipGeometry.fillRule)
+        assertTrue(clipGeometry.inverseFill)
+        val preparation = GPUFramePathApiInventory.prepareNativeTaskList(
+            inventory,
+            capabilities,
+            targetBounds,
+            readbackId,
+        )
+        val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            preparation,
+            (preparation as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}; facts=${it.facts}"
+            },
+        ).taskList
+        val session = backend.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(32, 32, colorMapping.physicalFormat, colorMapping.interpretation),
+        )
+        try {
+            val completed = session.renderFrame(
+                prepared,
+                GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
+            ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+            assertEquals(
+                GPUFrameStructuralOutcome.Succeeded,
+                completed.outcome,
+                "Sweep scaled inverse Winding native execution refused/failed: ${completed.diagnostic}",
+            )
+            val gpu = assertIs<GPUSceneFrameOutput.ReadbackRgba>(completed.output).bytes
+            assertRgbaWithinOneLsb(deterministicScaledTranslatedSquareMiterSweepInverseWindingClipOracle(), gpu)
+            assertEquals(1L, session.nativeCounters().submits)
+            assertEquals(1L, session.nativeCounters().readbackCopies)
+        } finally {
+            session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
+    fun `clamp sweep gradient square miter stroke under scaled translated inverse even odd difference hole clip renders natively`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        val capabilities = requireNotNull(backend.capabilities)
+        val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(RenderConfig.DEFAULT.mapPreparedGpuColorConfig())
+        val targetBounds = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, 32, 32)
+        val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.sweep-square-scaled-translated-inverse-even-odd-difference-hole-clip")
+        val clipPath = Path().apply {
+            fillType = FillType.INVERSE_EVEN_ODD
+            addRect(RectF32.ofLTRB(6.875f, 5.875f, 24.875f, 23.875f))
+            addRect(RectF32.ofLTRB(11.375f, 10.375f, 20.375f, 16.375f))
+        }
+        val drawTransform = Matrix3x3F32.translation(2f, 1f) * Matrix3x3F32.scaling(1.5f, 1.5f)
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(4.125f, 4.125f)
+                        lineTo(12.125f, 8.625f)
+                    },
+                    Paint.stroke(ColorARGB.Transparent, 2f).copy(
+                        shader = Shader.SweepGradient(
+                            Point2F32(16f, 16f),
+                            0f,
+                            360f,
+                            listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                        ),
+                        antiAlias = false,
+                        strokeCap = StrokeCap.SQUARE,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    drawTransform,
+                    ClipStack.Complex(
+                        listOf(
+                            ClipStackOp.PathOp(
+                                clipPath,
+                                ClipOp.DIFFERENCE,
+                                antiAlias = false,
+                                transformClass = "uniform-positive-scale-translate",
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+            deviceGeneration = backend.deviceGeneration,
+        )
+        val visual = inventory.visualCommands.single()
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+        assertEquals(2f, visual.normalized.transform.translateX)
+        assertEquals(1f, visual.normalized.transform.translateY)
+        assertEquals(1.5f, visual.normalized.transform.scaleX)
+        assertEquals(1.5f, visual.normalized.transform.scaleY)
+        val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(visual.clipExecutionPlan)
+        assertEquals("uniform-positive-scale-translate", execution.pathTransformClass)
+        assertEquals(GPUClipStencilOperation.Invert, execution.producer.frontPassOperation)
+        assertEquals(GPUClipStencilOperation.Invert, execution.producer.backPassOperation)
+        assertEquals(GPUClipStencilCompare.NotEqual, execution.consumer.compare)
+        val clipGeometry = assertIs<GPUClipExecutionGeometry.Path>(execution.producer.geometry)
+        assertEquals(GPUClipFillRule.EvenOdd, clipGeometry.fillRule)
+        assertTrue(clipGeometry.inverseFill)
+        val preparation = GPUFramePathApiInventory.prepareNativeTaskList(inventory, capabilities, targetBounds, readbackId)
+        val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            preparation,
+            (preparation as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}; facts=${it.facts}"
+            },
+        ).taskList
+        val session = backend.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(32, 32, colorMapping.physicalFormat, colorMapping.interpretation),
+        )
+        try {
+            val completed = session.renderFrame(
+                prepared,
+                GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
+            ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+            assertEquals(
+                GPUFrameStructuralOutcome.Succeeded,
+                completed.outcome,
+                "Sweep scaled inverse EvenOdd Difference native execution refused/failed: ${completed.diagnostic}",
+            )
+            val gpu = assertIs<GPUSceneFrameOutput.ReadbackRgba>(completed.output).bytes
+            assertRgbaWithinOneLsb(deterministicScaledTranslatedSquareMiterSweepInverseEvenOddDifferenceHoleClipOracle(), gpu)
+            assertEquals(1L, session.nativeCounters().submits)
+            assertEquals(1L, session.nativeCounters().readbackCopies)
+        } finally {
+            session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
+    fun `translated local sweep matrix square miter stroke under winding clip renders natively`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        val capabilities = requireNotNull(backend.capabilities)
+        val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(RenderConfig.DEFAULT.mapPreparedGpuColorConfig())
+        val targetBounds = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, 32, 32)
+        val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.sweep-square-local-translate-winding-clip")
+        val clipPath = Path().apply {
+            moveTo(7.25f, 6.25f)
+            lineTo(30.25f, 6.25f)
+            lineTo(7.25f, 29.25f)
+            close()
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(5.25f, 8.25f)
+                        lineTo(21.25f, 20.25f)
+                    },
+                    Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                        shader = Shader.WithLocalMatrix(
+                            Shader.SweepGradient(
+                                Point2F32(16f, 16f),
+                                0f,
+                                360f,
+                                listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                            ),
+                            Matrix3x3F32.translation(1.25f, -0.75f),
+                        ),
+                        antiAlias = false,
+                        strokeCap = StrokeCap.SQUARE,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.Identity,
+                    ClipStack.Complex(listOf(ClipStackOp.PathOp(clipPath, ClipOp.INTERSECT, antiAlias = false))),
+                ),
+            ),
+            target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+            deviceGeneration = backend.deviceGeneration,
+        )
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+        val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(inventory.visualCommands.single().clipExecutionPlan)
+        assertEquals(GPUClipStencilOperation.IncrementWrap, execution.producer.frontPassOperation)
+        assertEquals(GPUClipStencilOperation.DecrementWrap, execution.producer.backPassOperation)
+        assertEquals(GPUClipStencilCompare.NotEqual, execution.consumer.compare)
+        val preparation = GPUFramePathApiInventory.prepareNativeTaskList(
+            inventory,
+            capabilities,
+            targetBounds,
+            readbackId,
+        )
+        val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            preparation,
+            (preparation as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}; facts=${it.facts}"
+            },
+        ).taskList
+        val session = backend.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(32, 32, colorMapping.physicalFormat, colorMapping.interpretation),
+        )
+        try {
+            val completed = session.renderFrame(
+                prepared,
+                GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
+            ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+            assertEquals(
+                GPUFrameStructuralOutcome.Succeeded,
+                completed.outcome,
+                "Sweep local-translate native execution refused/failed: ${completed.diagnostic}",
+            )
+            val gpu = assertIs<GPUSceneFrameOutput.ReadbackRgba>(completed.output).bytes
+            assertRgbaWithinOneLsb(deterministicDiagonalSquareMiterSweepLocalTranslationWindingClipOracle(), gpu)
+            assertEquals(1L, session.nativeCounters().submits)
+            assertEquals(1L, session.nativeCounters().readbackCopies)
+        } finally {
+            session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
+    fun `rotated and nonuniform local sweep matrices remain refused before native preparation`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        try {
+            val capabilities = requireNotNull(backend.capabilities)
+            val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(
+                RenderConfig.DEFAULT.mapPreparedGpuColorConfig(),
+            )
+            val clipPath = Path().apply {
+                moveTo(7.25f, 6.25f)
+                lineTo(30.25f, 6.25f)
+                lineTo(7.25f, 29.25f)
+                close()
+            }
+            listOf(Matrix3x3F32.rotation(90f), Matrix3x3F32.scaling(2f, 1f)).forEach { localMatrix ->
+                val inventory = GPUFramePathApiInventory.plan(
+                    operations = listOf(
+                        DisplayOp.DrawPath(
+                            Path().apply {
+                                moveTo(5.25f, 8.25f)
+                                lineTo(21.25f, 20.25f)
+                            },
+                            Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                                shader = Shader.WithLocalMatrix(
+                                    Shader.SweepGradient(
+                                        Point2F32(16f, 16f),
+                                        stops = listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                                    ),
+                                    localMatrix,
+                                ),
+                                antiAlias = false,
+                                strokeCap = StrokeCap.SQUARE,
+                                strokeJoin = StrokeJoin.MITER,
+                            ),
+                            Matrix3x3F32.Identity,
+                            ClipStack.Complex(listOf(ClipStackOp.PathOp(clipPath, ClipOp.INTERSECT, antiAlias = false))),
+                        ),
+                    ),
+                    target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+                    config = RenderConfig.DEFAULT,
+                    capabilities = capabilities,
+                    deviceGeneration = backend.deviceGeneration,
+                )
+                assertEquals(
+                    "refused.unsupported.material.mapping.local_matrix",
+                    inventory.recording.analysis.records.single().routeDecisionLabel,
+                )
+                assertEquals(
+                    listOf("refused:unsupported.material.mapping.local_matrix"),
+                    inventory.recording.routeDiagnostics,
+                )
+            }
+        } finally {
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
+    fun `clamp sweep gradient right angle square miter stroke under winding clip renders natively`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        try {
+            val capabilities = requireNotNull(backend.capabilities)
+            val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(
+                RenderConfig.DEFAULT.mapPreparedGpuColorConfig(),
+            )
+            val targetBounds = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, 32, 32)
+            val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.sweep-right-angle")
+            val clipPath = Path().apply {
+                moveTo(6.875f, 5.875f)
+                lineTo(24.875f, 5.875f)
+                lineTo(6.875f, 23.875f)
+                close()
+            }
+            val inventory = GPUFramePathApiInventory.plan(
+                operations = listOf(
+                    DisplayOp.DrawPath(
+                        Path().apply {
+                            moveTo(4.125f, 4.125f)
+                            lineTo(12.125f, 8.625f)
+                        },
+                        Paint.stroke(ColorARGB.Transparent, 2f).copy(
+                            shader = Shader.SweepGradient(
+                                Point2F32(16f, 16f),
+                                0f,
+                                360f,
+                                listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                            ),
+                            antiAlias = false,
+                            strokeCap = StrokeCap.SQUARE,
+                            strokeJoin = StrokeJoin.MITER,
+                        ),
+                        Matrix3x3F32.rotation(90f, pivotX = 16f, pivotY = 16f),
+                        ClipStack.Complex(
+                            listOf(
+                                ClipStackOp.PathOp(
+                                    clipPath,
+                                    ClipOp.INTERSECT,
+                                    antiAlias = false,
+                                    transformClass = "right-angle-rotation",
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+                target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+                config = RenderConfig.DEFAULT,
+                capabilities = capabilities,
+                deviceGeneration = backend.deviceGeneration,
+            )
+            assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+            val visual = inventory.visualCommands.single()
+            val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(visual.clipExecutionPlan)
+            val clipGeometry = assertIs<GPUClipExecutionGeometry.Path>(execution.producer.geometry)
+            assertEquals("right-angle-rotation", execution.pathTransformClass)
+            assertEquals(GPUClipStencilCompare.NotEqual, execution.consumer.compare)
+            assertEquals(GPUClipFillRule.Winding, clipGeometry.fillRule)
+            assertTrue(!clipGeometry.inverseFill)
+            val preparation = GPUFramePathApiInventory.prepareNativeTaskList(
+                inventory,
+                capabilities,
+                targetBounds,
+                readbackId,
+            )
+            val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+                preparation,
+                (preparation as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                    "${it.code.value}: ${it.message}; facts=${it.facts}"
+                },
+            ).taskList
+            val session = backend.prepareSceneFrameSession(
+                GPUOffscreenTargetRequest(32, 32, colorMapping.physicalFormat, colorMapping.interpretation),
+            )
+            try {
+                val completed = session.renderFrame(
+                    prepared,
+                    GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
+                ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+                assertEquals(
+                    GPUFrameStructuralOutcome.Succeeded,
+                    completed.outcome,
+                    "Sweep native execution refused/failed: ${completed.diagnostic}",
+                )
+                val gpu = assertIs<GPUSceneFrameOutput.ReadbackRgba>(completed.output).bytes
+                assertRgbaWithinOneLsb(
+                    deterministicRightAngleSquareMiterSweepWindingClipOracle(),
+                    gpu,
+                )
+                assertEquals(1L, session.nativeCounters().submits)
+                assertEquals(1L, session.nativeCounters().readbackCopies)
+            } finally {
+                session.close()
+            }
+        } finally {
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
+    fun `clamp sweep gradient non-right-angle stroke remains refused before native preparation`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        try {
+            val capabilities = requireNotNull(backend.capabilities)
+            val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(
+                RenderConfig.DEFAULT.mapPreparedGpuColorConfig(),
+            )
+            val clipPath = Path().apply {
+                fillType = FillType.INVERSE_WINDING
+                moveTo(6.875f, 5.875f)
+                lineTo(24.875f, 5.875f)
+                lineTo(6.875f, 23.875f)
+                close()
+            }
+            val inventory = GPUFramePathApiInventory.plan(
+                operations = listOf(
+                    DisplayOp.DrawPath(
+                        Path().apply {
+                            moveTo(4.125f, 4.125f)
+                            lineTo(12.125f, 8.625f)
+                        },
+                        Paint.stroke(ColorARGB.Transparent, 2f).copy(
+                            shader = Shader.SweepGradient(
+                                Point2F32(16f, 16f),
+                                0f,
+                                360f,
+                                listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                            ),
+                            antiAlias = false,
+                            strokeCap = StrokeCap.BUTT,
+                            strokeJoin = StrokeJoin.MITER,
+                        ),
+                        Matrix3x3F32.rotation(15f),
+                        ClipStack.Complex(
+                            listOf(
+                                ClipStackOp.PathOp(
+                                    clipPath,
+                                    ClipOp.INTERSECT,
+                                    antiAlias = false,
+                                    transformClass = "non-right-angle-rotation",
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+                target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+                config = RenderConfig.DEFAULT,
+                capabilities = capabilities,
+                deviceGeneration = backend.deviceGeneration,
+            )
+            assertEquals("refused.unsupported.geometry.perspective_path", inventory.recording.analysis.records.single().routeDecisionLabel)
+        } finally {
             GPUBackendRuntimeNativeFactory.dispose()
         }
     }
@@ -4929,6 +6188,179 @@ class GPUFramePathApiInventoryNativeSmokeTest {
             }
         }
 
+    /** Independent pixel-centre oracle for a sweep shader with a translated local matrix. */
+    private fun deterministicDiagonalSquareMiterSweepLocalTranslationWindingClipOracle(): ByteArray =
+        ByteArray(32 * 32 * 4).also { rgba ->
+            val ax = 5.25f
+            val ay = 8.25f
+            val bx = 21.25f
+            val by = 20.25f
+            val dx = bx - ax
+            val dy = by - ay
+            val length = kotlin.math.sqrt(dx * dx + dy * dy)
+            val tangentX = dx / length
+            val tangentY = dy / length
+            val extension = 2f
+            val startX = ax - tangentX * extension
+            val startY = ay - tangentY * extension
+            val endX = bx + tangentX * extension
+            val endY = by + tangentY * extension
+            val extendedDx = endX - startX
+            val extendedDy = endY - startY
+            val lengthSquared = extendedDx * extendedDx + extendedDy * extendedDy
+            val clipAx = 7.25f
+            val clipAy = 6.25f
+            val clipBx = 30.25f
+            val clipBy = 6.25f
+            val clipCx = 7.25f
+            val clipCy = 29.25f
+            val denominator = (clipBy - clipCy) * (clipAx - clipCx) +
+                (clipCx - clipBx) * (clipAy - clipCy)
+            val fullTurn = (2f * kotlin.math.PI).toFloat()
+            for (y in 0 until 32) {
+                for (x in 0 until 32) {
+                    val px = x + 0.5f
+                    val py = y + 0.5f
+                    val u = ((clipBy - clipCy) * (px - clipCx) +
+                        (clipCx - clipBx) * (py - clipCy)) / denominator
+                    val v = ((clipCy - clipAy) * (px - clipCx) +
+                        (clipAx - clipCx) * (py - clipCy)) / denominator
+                    if (u < 0f || v < 0f || u + v > 1f) continue
+                    val projection = ((px - startX) * extendedDx + (py - startY) * extendedDy) /
+                        lengthSquared
+                    if (projection < 0f || projection > 1f) continue
+                    val closestX = startX + projection * extendedDx
+                    val closestY = startY + projection * extendedDy
+                    val distanceX = px - closestX
+                    val distanceY = py - closestY
+                    if (distanceX * distanceX + distanceY * distanceY > extension * extension) continue
+                    // The local matrix maps device coordinates to sweep coordinates.
+                    val rawTurn = kotlin.math.atan2(py - 0.75f - 16f, px + 1.25f - 16f) / fullTurn
+                    val t = (rawTurn - kotlin.math.floor(rawTurn)).coerceIn(0f, 1f)
+                    val red = linearToSrgb((1f - t) * srgbToLinear(1f) + t * srgbToLinear(0f))
+                    val blue = linearToSrgb((1f - t) * srgbToLinear(0f) + t * srgbToLinear(1f))
+                    val offset = (y * 32 + x) * 4
+                    rgba[offset] = (red * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 2] = (blue * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 3] = 0xff.toByte()
+                }
+            }
+        }
+
+    /** Independent pixel-centre oracle for an inverse Winding Difference clip (the triangle interior remains). */
+    private fun deterministicDiagonalSquareMiterSweepInverseWindingDifferenceClipOracle(): ByteArray =
+        ByteArray(32 * 32 * 4).also { rgba ->
+            val ax = 5.25f
+            val ay = 8.25f
+            val bx = 21.25f
+            val by = 20.25f
+            val dx = bx - ax
+            val dy = by - ay
+            val length = kotlin.math.sqrt(dx * dx + dy * dy)
+            val tangentX = dx / length
+            val tangentY = dy / length
+            val extension = 2f
+            val startX = ax - tangentX * extension
+            val startY = ay - tangentY * extension
+            val endX = bx + tangentX * extension
+            val endY = by + tangentY * extension
+            val extendedDx = endX - startX
+            val extendedDy = endY - startY
+            val lengthSquared = extendedDx * extendedDx + extendedDy * extendedDy
+            val clipAx = 7.25f
+            val clipAy = 6.25f
+            val clipBx = 30.25f
+            val clipBy = 6.25f
+            val clipCx = 7.25f
+            val clipCy = 29.25f
+            val denominator = (clipBy - clipCy) * (clipAx - clipCx) +
+                (clipCx - clipBx) * (clipAy - clipCy)
+            val fullTurn = (2f * kotlin.math.PI).toFloat()
+            for (y in 0 until 32) {
+                for (x in 0 until 32) {
+                    val px = x + 0.5f
+                    val py = y + 0.5f
+                    val u = ((clipBy - clipCy) * (px - clipCx) +
+                        (clipCx - clipBx) * (py - clipCy)) / denominator
+                    val v = ((clipCy - clipAy) * (px - clipCx) +
+                        (clipAx - clipCx) * (py - clipCy)) / denominator
+                    if (u < 0f || v < 0f || u + v > 1f) continue
+                    val projection = ((px - startX) * extendedDx + (py - startY) * extendedDy) /
+                        lengthSquared
+                    if (projection < 0f || projection > 1f) continue
+                    val closestX = startX + projection * extendedDx
+                    val closestY = startY + projection * extendedDy
+                    val distanceX = px - closestX
+                    val distanceY = py - closestY
+                    if (distanceX * distanceX + distanceY * distanceY > extension * extension) continue
+                    val rawTurn = kotlin.math.atan2(py - 16f, px - 16f) / fullTurn
+                    val t = (rawTurn - kotlin.math.floor(rawTurn)).coerceIn(0f, 1f)
+                    val red = linearToSrgb((1f - t) * srgbToLinear(1f) + t * srgbToLinear(0f))
+                    val blue = linearToSrgb((1f - t) * srgbToLinear(0f) + t * srgbToLinear(1f))
+                    val offset = (y * 32 + x) * 4
+                    rgba[offset] = (red * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 2] = (blue * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 3] = 0xff.toByte()
+                }
+            }
+        }
+
+    /** Independent pixel-centre oracle for an inverse EvenOdd Difference clip (the EvenOdd shell remains). */
+    private fun deterministicDiagonalSquareMiterSweepInverseEvenOddDifferenceHoleClipOracle(): ByteArray =
+        ByteArray(32 * 32 * 4).also { rgba ->
+            val ax = 5.25f
+            val ay = 8.25f
+            val bx = 21.25f
+            val by = 20.25f
+            val dx = bx - ax
+            val dy = by - ay
+            val length = kotlin.math.sqrt(dx * dx + dy * dy)
+            val tangentX = dx / length
+            val tangentY = dy / length
+            val extension = 2f
+            val startX = ax - tangentX * extension
+            val startY = ay - tangentY * extension
+            val endX = bx + tangentX * extension
+            val endY = by + tangentY * extension
+            val extendedDx = endX - startX
+            val extendedDy = endY - startY
+            val lengthSquared = extendedDx * extendedDx + extendedDy * extendedDy
+            val outerLeft = 3.25f
+            val outerTop = 3.25f
+            val outerRight = 28.75f
+            val outerBottom = 28.75f
+            val innerLeft = 10.25f
+            val innerTop = 10.25f
+            val innerRight = 21.75f
+            val innerBottom = 21.75f
+            val fullTurn = (2f * kotlin.math.PI).toFloat()
+            for (y in 0 until 32) {
+                for (x in 0 until 32) {
+                    val px = x + 0.5f
+                    val py = y + 0.5f
+                    val inOuter = px > outerLeft && px < outerRight && py > outerTop && py < outerBottom
+                    val inInner = px > innerLeft && px < innerRight && py > innerTop && py < innerBottom
+                    if (!inOuter.xor(inInner)) continue
+                    val projection = ((px - startX) * extendedDx + (py - startY) * extendedDy) /
+                        lengthSquared
+                    if (projection < 0f || projection > 1f) continue
+                    val closestX = startX + projection * extendedDx
+                    val closestY = startY + projection * extendedDy
+                    val distanceX = px - closestX
+                    val distanceY = py - closestY
+                    if (distanceX * distanceX + distanceY * distanceY > extension * extension) continue
+                    val rawTurn = kotlin.math.atan2(py - 16f, px - 16f) / fullTurn
+                    val t = (rawTurn - kotlin.math.floor(rawTurn)).coerceIn(0f, 1f)
+                    val red = linearToSrgb((1f - t) * srgbToLinear(1f) + t * srgbToLinear(0f))
+                    val blue = linearToSrgb((1f - t) * srgbToLinear(0f) + t * srgbToLinear(1f))
+                    val offset = (y * 32 + x) * 4
+                    rgba[offset] = (red * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 2] = (blue * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 3] = 0xff.toByte()
+                }
+            }
+        }
+
     /** Independent pixel-centre oracle for a square-cap sweep stroke through an EvenOdd hole. */
     private fun deterministicDiagonalSquareMiterSweepEvenOddHoleClipOracle(): ByteArray =
         ByteArray(32 * 32 * 4).also { rgba ->
@@ -4965,6 +6397,176 @@ class GPUFramePathApiInventoryNativeSmokeTest {
                     val inOuter = px > outerLeft && px < outerRight && py > outerTop && py < outerBottom
                     val inInner = px > innerLeft && px < innerRight && py > innerTop && py < innerBottom
                     if (!inOuter.xor(inInner)) continue
+                    val projection = ((px - startX) * extendedDx + (py - startY) * extendedDy) /
+                        lengthSquared
+                    if (projection < 0f || projection > 1f) continue
+                    val closestX = startX + projection * extendedDx
+                    val closestY = startY + projection * extendedDy
+                    val distanceX = px - closestX
+                    val distanceY = py - closestY
+                    if (distanceX * distanceX + distanceY * distanceY > extension * extension) continue
+                    val rawTurn = kotlin.math.atan2(py - 16f, px - 16f) / fullTurn
+                    val t = (rawTurn - kotlin.math.floor(rawTurn)).coerceIn(0f, 1f)
+                    val red = linearToSrgb((1f - t) * srgbToLinear(1f) + t * srgbToLinear(0f))
+                    val blue = linearToSrgb((1f - t) * srgbToLinear(0f) + t * srgbToLinear(1f))
+                    val offset = (y * 32 + x) * 4
+                    rgba[offset] = (red * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 2] = (blue * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 3] = 0xff.toByte()
+                }
+            }
+        }
+
+    /** Independent pixel-centre oracle for a square-cap sweep stroke outside an EvenOdd Difference clip. */
+    private fun deterministicDiagonalSquareMiterSweepEvenOddDifferenceHoleClipOracle(): ByteArray =
+        ByteArray(32 * 32 * 4).also { rgba ->
+            val ax = 5.25f
+            val ay = 8.25f
+            val bx = 21.25f
+            val by = 20.25f
+            val dx = bx - ax
+            val dy = by - ay
+            val length = kotlin.math.sqrt(dx * dx + dy * dy)
+            val tangentX = dx / length
+            val tangentY = dy / length
+            val extension = 2f
+            val startX = ax - tangentX * extension
+            val startY = ay - tangentY * extension
+            val endX = bx + tangentX * extension
+            val endY = by + tangentY * extension
+            val extendedDx = endX - startX
+            val extendedDy = endY - startY
+            val lengthSquared = extendedDx * extendedDx + extendedDy * extendedDy
+            val outerLeft = 3.25f
+            val outerTop = 3.25f
+            val outerRight = 28.75f
+            val outerBottom = 28.75f
+            val innerLeft = 10.25f
+            val innerTop = 10.25f
+            val innerRight = 21.75f
+            val innerBottom = 21.75f
+            val fullTurn = (2f * kotlin.math.PI).toFloat()
+            for (y in 0 until 32) {
+                for (x in 0 until 32) {
+                    val px = x + 0.5f
+                    val py = y + 0.5f
+                    val inOuter = px > outerLeft && px < outerRight && py > outerTop && py < outerBottom
+                    val inInner = px > innerLeft && px < innerRight && py > innerTop && py < innerBottom
+                    if (inOuter.xor(inInner)) continue
+                    val projection = ((px - startX) * extendedDx + (py - startY) * extendedDy) /
+                        lengthSquared
+                    if (projection < 0f || projection > 1f) continue
+                    val closestX = startX + projection * extendedDx
+                    val closestY = startY + projection * extendedDy
+                    val distanceX = px - closestX
+                    val distanceY = py - closestY
+                    if (distanceX * distanceX + distanceY * distanceY > extension * extension) continue
+                    val rawTurn = kotlin.math.atan2(py - 16f, px - 16f) / fullTurn
+                    val t = (rawTurn - kotlin.math.floor(rawTurn)).coerceIn(0f, 1f)
+                    val red = linearToSrgb((1f - t) * srgbToLinear(1f) + t * srgbToLinear(0f))
+                    val blue = linearToSrgb((1f - t) * srgbToLinear(0f) + t * srgbToLinear(1f))
+                    val offset = (y * 32 + x) * 4
+                    rgba[offset] = (red * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 2] = (blue * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 3] = 0xff.toByte()
+                }
+            }
+        }
+
+    /** Independent pixel-centre oracle for a square-cap sweep stroke outside an inverse EvenOdd shell. */
+    private fun deterministicDiagonalSquareMiterSweepInverseEvenOddHoleClipOracle(): ByteArray =
+        ByteArray(32 * 32 * 4).also { rgba ->
+            val ax = 5.25f
+            val ay = 8.25f
+            val bx = 21.25f
+            val by = 20.25f
+            val dx = bx - ax
+            val dy = by - ay
+            val length = kotlin.math.sqrt(dx * dx + dy * dy)
+            val tangentX = dx / length
+            val tangentY = dy / length
+            val extension = 2f
+            val startX = ax - tangentX * extension
+            val startY = ay - tangentY * extension
+            val endX = bx + tangentX * extension
+            val endY = by + tangentY * extension
+            val extendedDx = endX - startX
+            val extendedDy = endY - startY
+            val lengthSquared = extendedDx * extendedDx + extendedDy * extendedDy
+            val outerLeft = 3.25f
+            val outerTop = 3.25f
+            val outerRight = 28.75f
+            val outerBottom = 28.75f
+            val innerLeft = 10.25f
+            val innerTop = 10.25f
+            val innerRight = 21.75f
+            val innerBottom = 21.75f
+            val fullTurn = (2f * kotlin.math.PI).toFloat()
+            for (y in 0 until 32) {
+                for (x in 0 until 32) {
+                    val px = x + 0.5f
+                    val py = y + 0.5f
+                    val inOuter = px > outerLeft && px < outerRight && py > outerTop && py < outerBottom
+                    val inInner = px > innerLeft && px < innerRight && py > innerTop && py < innerBottom
+                    if (inOuter.xor(inInner)) continue
+                    val projection = ((px - startX) * extendedDx + (py - startY) * extendedDy) /
+                        lengthSquared
+                    if (projection < 0f || projection > 1f) continue
+                    val closestX = startX + projection * extendedDx
+                    val closestY = startY + projection * extendedDy
+                    val distanceX = px - closestX
+                    val distanceY = py - closestY
+                    if (distanceX * distanceX + distanceY * distanceY > extension * extension) continue
+                    val rawTurn = kotlin.math.atan2(py - 16f, px - 16f) / fullTurn
+                    val t = (rawTurn - kotlin.math.floor(rawTurn)).coerceIn(0f, 1f)
+                    val red = linearToSrgb((1f - t) * srgbToLinear(1f) + t * srgbToLinear(0f))
+                    val blue = linearToSrgb((1f - t) * srgbToLinear(0f) + t * srgbToLinear(1f))
+                    val offset = (y * 32 + x) * 4
+                    rgba[offset] = (red * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 2] = (blue * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 3] = 0xff.toByte()
+                }
+            }
+        }
+
+    /** Independent pixel-centre oracle for a square-cap sweep stroke outside a Difference clip. */
+    private fun deterministicDiagonalSquareMiterSweepWindingDifferenceClipOracle(): ByteArray =
+        ByteArray(32 * 32 * 4).also { rgba ->
+            val ax = 5.25f
+            val ay = 8.25f
+            val bx = 21.25f
+            val by = 20.25f
+            val dx = bx - ax
+            val dy = by - ay
+            val length = kotlin.math.sqrt(dx * dx + dy * dy)
+            val tangentX = dx / length
+            val tangentY = dy / length
+            val extension = 2f
+            val startX = ax - tangentX * extension
+            val startY = ay - tangentY * extension
+            val endX = bx + tangentX * extension
+            val endY = by + tangentY * extension
+            val extendedDx = endX - startX
+            val extendedDy = endY - startY
+            val lengthSquared = extendedDx * extendedDx + extendedDy * extendedDy
+            val clipAx = 7.25f
+            val clipAy = 6.25f
+            val clipBx = 30.25f
+            val clipBy = 6.25f
+            val clipCx = 7.25f
+            val clipCy = 29.25f
+            val denominator = (clipBy - clipCy) * (clipAx - clipCx) +
+                (clipCx - clipBx) * (clipAy - clipCy)
+            val fullTurn = (2f * kotlin.math.PI).toFloat()
+            for (y in 0 until 32) {
+                for (x in 0 until 32) {
+                    val px = x + 0.5f
+                    val py = y + 0.5f
+                    val u = ((clipBy - clipCy) * (px - clipCx) +
+                        (clipCx - clipBx) * (py - clipCy)) / denominator
+                    val v = ((clipCy - clipAy) * (px - clipCx) +
+                        (clipAx - clipCx) * (py - clipCy)) / denominator
+                    if (u >= 0f && v >= 0f && u + v <= 1f) continue
                     val projection = ((px - startX) * extendedDx + (py - startY) * extendedDy) /
                         lengthSquared
                     if (projection < 0f || projection > 1f) continue
@@ -5068,6 +6670,120 @@ class GPUFramePathApiInventoryNativeSmokeTest {
                     val distanceY = py - closestY
                     if (distanceX * distanceX + distanceY * distanceY > halfWidthSquared) continue
                     val t = ((px - 2f) / 48f).coerceIn(0f, 1f)
+                    val red = linearToSrgb((1f - t) * srgbToLinear(1f) + t * srgbToLinear(0f))
+                    val blue = linearToSrgb((1f - t) * srgbToLinear(0f) + t * srgbToLinear(1f))
+                    val offset = (y * 32 + x) * 4
+                    rgba[offset] = (red * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 2] = (blue * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 3] = 0xff.toByte()
+                }
+            }
+        }
+
+    /** Independent device-space oracle for the transformed inverse-Winding sweep stroke. */
+    private fun deterministicScaledTranslatedSquareMiterSweepInverseWindingClipOracle(): ByteArray =
+        ByteArray(32 * 32 * 4).also { rgba ->
+            val strokeAx = 8.1875f
+            val strokeAy = 7.1875f
+            val strokeBx = 20.1875f
+            val strokeBy = 13.9375f
+            val strokeDx = strokeBx - strokeAx
+            val strokeDy = strokeBy - strokeAy
+            val strokeLength = kotlin.math.sqrt(strokeDx * strokeDx + strokeDy * strokeDy)
+            val tangentX = strokeDx / strokeLength
+            val tangentY = strokeDy / strokeLength
+            val extension = 1.5f
+            val startX = strokeAx - tangentX * extension
+            val startY = strokeAy - tangentY * extension
+            val endX = strokeBx + tangentX * extension
+            val endY = strokeBy + tangentY * extension
+            val extendedDx = endX - startX
+            val extendedDy = endY - startY
+            val lengthSquared = extendedDx * extendedDx + extendedDy * extendedDy
+            val halfWidthSquared = extension * extension
+            val clipAx = 6.875f
+            val clipAy = 5.875f
+            val clipBx = 24.875f
+            val clipBy = 5.875f
+            val clipCx = 6.875f
+            val clipCy = 23.875f
+            val denominator = (clipBy - clipCy) * (clipAx - clipCx) +
+                (clipCx - clipBx) * (clipAy - clipCy)
+            val fullTurn = (2f * kotlin.math.PI).toFloat()
+            for (y in 0 until 32) {
+                for (x in 0 until 32) {
+                    val px = x + 0.5f
+                    val py = y + 0.5f
+                    val u = ((clipBy - clipCy) * (px - clipCx) +
+                        (clipCx - clipBx) * (py - clipCy)) / denominator
+                    val v = ((clipCy - clipAy) * (px - clipCx) +
+                        (clipAx - clipCx) * (py - clipCy)) / denominator
+                    // Inverse Winding + Intersect keeps the exterior of the triangle.
+                    if (u >= 0f && v >= 0f && u + v <= 1f) continue
+                    val projection = ((px - startX) * extendedDx + (py - startY) * extendedDy) /
+                        lengthSquared
+                    if (projection < 0f || projection > 1f) continue
+                    val closestX = startX + projection * extendedDx
+                    val closestY = startY + projection * extendedDy
+                    val distanceX = px - closestX
+                    val distanceY = py - closestY
+                    if (distanceX * distanceX + distanceY * distanceY > halfWidthSquared) continue
+                    val localX = (px - 2f) / 1.5f
+                    val localY = (py - 1f) / 1.5f
+                    val rawTurn = kotlin.math.atan2(localY - 16f, localX - 16f) / fullTurn
+                    val t = (rawTurn - kotlin.math.floor(rawTurn)).coerceIn(0f, 1f)
+                    val red = linearToSrgb((1f - t) * srgbToLinear(1f) + t * srgbToLinear(0f))
+                    val blue = linearToSrgb((1f - t) * srgbToLinear(0f) + t * srgbToLinear(1f))
+                    val offset = (y * 32 + x) * 4
+                    rgba[offset] = (red * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 2] = (blue * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 3] = 0xff.toByte()
+                }
+            }
+        }
+
+    /** Independent device-space oracle for the transformed inverse-EvenOdd Difference shell. */
+    private fun deterministicScaledTranslatedSquareMiterSweepInverseEvenOddDifferenceHoleClipOracle(): ByteArray =
+        ByteArray(32 * 32 * 4).also { rgba ->
+            val ax = 8.1875f
+            val ay = 7.1875f
+            val bx = 20.1875f
+            val by = 13.9375f
+            val dx = bx - ax
+            val dy = by - ay
+            val length = kotlin.math.sqrt(dx * dx + dy * dy)
+            val tangentX = dx / length
+            val tangentY = dy / length
+            val extension = 1.5f
+            val startX = ax - tangentX * extension
+            val startY = ay - tangentY * extension
+            val endX = bx + tangentX * extension
+            val endY = by + tangentY * extension
+            val extendedDx = endX - startX
+            val extendedDy = endY - startY
+            val lengthSquared = extendedDx * extendedDx + extendedDy * extendedDy
+            val halfWidthSquared = extension * extension
+            val fullTurn = (2f * kotlin.math.PI).toFloat()
+            for (y in 0 until 32) {
+                for (x in 0 until 32) {
+                    val px = x + 0.5f
+                    val py = y + 0.5f
+                    val inOuter = px > 6.875f && px < 24.875f && py > 5.875f && py < 23.875f
+                    val inInner = px > 11.375f && px < 20.375f && py > 10.375f && py < 16.375f
+                    // Inverse EvenOdd + Difference keeps the shell (outer xor hole).
+                    if (!inOuter.xor(inInner)) continue
+                    val projection = ((px - startX) * extendedDx + (py - startY) * extendedDy) /
+                        lengthSquared
+                    if (projection < 0f || projection > 1f) continue
+                    val closestX = startX + projection * extendedDx
+                    val closestY = startY + projection * extendedDy
+                    val distanceX = px - closestX
+                    val distanceY = py - closestY
+                    if (distanceX * distanceX + distanceY * distanceY > halfWidthSquared) continue
+                    val localX = (px - 2f) / 1.5f
+                    val localY = (py - 1f) / 1.5f
+                    val rawTurn = kotlin.math.atan2(localY - 16f, localX - 16f) / fullTurn
+                    val t = (rawTurn - kotlin.math.floor(rawTurn)).coerceIn(0f, 1f)
                     val red = linearToSrgb((1f - t) * srgbToLinear(1f) + t * srgbToLinear(0f))
                     val blue = linearToSrgb((1f - t) * srgbToLinear(0f) + t * srgbToLinear(1f))
                     val offset = (y * 32 + x) * 4
@@ -5318,6 +7034,117 @@ class GPUFramePathApiInventoryNativeSmokeTest {
             }
         }
 
+    /** Independent device-space oracle for the right-angle rotated square-cap sweep stroke with +90° angle rebasing. */
+    private fun deterministicRightAngleSquareMiterSweepWindingClipOracle(): ByteArray =
+        ByteArray(32 * 32 * 4).also { rgba ->
+            val ax = 27.875f
+            val ay = 4.125f
+            val bx = 23.375f
+            val by = 12.125f
+            val dx = bx - ax
+            val dy = by - ay
+            val length = kotlin.math.sqrt(dx * dx + dy * dy)
+            val extension = 1f
+            val startX = ax - dx / length * extension
+            val startY = ay - dy / length * extension
+            val endX = bx + dx / length * extension
+            val endY = by + dy / length * extension
+            val extendedDx = endX - startX
+            val extendedDy = endY - startY
+            val lengthSquared = extendedDx * extendedDx + extendedDy * extendedDy
+            val clipAx = 6.875f
+            val clipAy = 5.875f
+            val clipBx = 24.875f
+            val clipBy = 5.875f
+            val clipCx = 6.875f
+            val clipCy = 23.875f
+            val denominator = (clipBy - clipCy) * (clipAx - clipCx) +
+                (clipCx - clipBx) * (clipAy - clipCy)
+            val fullTurn = (2f * kotlin.math.PI).toFloat()
+            for (y in 0 until 32) {
+                for (x in 0 until 32) {
+                    val px = x + 0.5f
+                    val py = y + 0.5f
+                    val u = ((clipBy - clipCy) * (px - clipCx) +
+                        (clipCx - clipBx) * (py - clipCy)) / denominator
+                    val v = ((clipCy - clipAy) * (px - clipCx) +
+                        (clipAx - clipCx) * (py - clipCy)) / denominator
+                    if (u < 0f || v < 0f || u + v > 1f) continue
+                    val projection = ((px - startX) * extendedDx + (py - startY) * extendedDy) /
+                        lengthSquared
+                    if (projection < 0f || projection > 1f) continue
+                    val closestX = startX + projection * extendedDx
+                    val closestY = startY + projection * extendedDy
+                    val distanceX = px - closestX
+                    val distanceY = py - closestY
+                    if (distanceX * distanceX + distanceY * distanceY > extension * extension) continue
+                    val rawTurn = kotlin.math.atan2(py - 16f, px - 16f) / fullTurn
+                    val t = ((rawTurn - 0.25f) - kotlin.math.floor(rawTurn - 0.25f)).coerceIn(0f, 1f)
+                    val red = linearToSrgb((1f - t) * srgbToLinear(1f) + t * srgbToLinear(0f))
+                    val blue = linearToSrgb((1f - t) * srgbToLinear(0f) + t * srgbToLinear(1f))
+                    val offset = (y * 32 + x) * 4
+                    rgba[offset] = (red * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 2] = (blue * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 3] = 0xff.toByte()
+                }
+            }
+        }
+
+    /** Independent device-space oracle for the right-angle rotated square-cap radial stroke and Winding clip. */
+    private fun deterministicRightAngleDiagonalSquareMiterRadialWindingClipOracle(): ByteArray =
+        ByteArray(32 * 32 * 4).also { rgba ->
+            val ax = 23.75f
+            val ay = 8.25f
+            val bx = 17.75f
+            val by = 20.25f
+            val dx = bx - ax
+            val dy = by - ay
+            val length = kotlin.math.sqrt(dx * dx + dy * dy)
+            val extension = 2f
+            val startX = ax - dx / length * extension
+            val startY = ay - dy / length * extension
+            val endX = bx + dx / length * extension
+            val endY = by + dy / length * extension
+            val extendedDx = endX - startX
+            val extendedDy = endY - startY
+            val lengthSquared = extendedDx * extendedDx + extendedDy * extendedDy
+            val clipAx = 27.75f
+            val clipAy = 4.25f
+            val clipBx = 27.75f
+            val clipBy = 27.25f
+            val clipCx = 4.75f
+            val clipCy = 4.25f
+            val denominator = (clipBy - clipCy) * (clipAx - clipCx) +
+                (clipCx - clipBx) * (clipAy - clipCy)
+            for (y in 0 until 32) {
+                for (x in 0 until 32) {
+                    val px = x + 0.5f
+                    val py = y + 0.5f
+                    val u = ((clipBy - clipCy) * (px - clipCx) +
+                        (clipCx - clipBx) * (py - clipCy)) / denominator
+                    val v = ((clipCy - clipAy) * (px - clipCx) +
+                        (clipAx - clipCx) * (py - clipCy)) / denominator
+                    if (u < 0f || v < 0f || u + v > 1f) continue
+                    val projection = ((px - startX) * extendedDx + (py - startY) * extendedDy) /
+                        lengthSquared
+                    if (projection < 0f || projection > 1f) continue
+                    val closestX = startX + projection * extendedDx
+                    val closestY = startY + projection * extendedDy
+                    val distanceX = px - closestX
+                    val distanceY = py - closestY
+                    if (distanceX * distanceX + distanceY * distanceY > extension * extension) continue
+                    val radialDistance = kotlin.math.sqrt((px - 16f) * (px - 16f) + (py - 16f) * (py - 16f))
+                    val t = (radialDistance / 16f).coerceIn(0f, 1f)
+                    val red = linearToSrgb((1f - t) * srgbToLinear(1f) + t * srgbToLinear(0f))
+                    val blue = linearToSrgb((1f - t) * srgbToLinear(0f) + t * srgbToLinear(1f))
+                    val offset = (y * 32 + x) * 4
+                    rgba[offset] = (red * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 2] = (blue * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 3] = 0xff.toByte()
+                }
+            }
+        }
+
     /** Independent linear-light oracle for the radial gradient stroke and Winding clip. */
     private fun deterministicDiagonalButtMiterRadialWindingClipOracle(): ByteArray =
         ByteArray(32 * 32 * 4).also { rgba ->
@@ -5356,6 +7183,115 @@ class GPUFramePathApiInventoryNativeSmokeTest {
                     if (distanceX * distanceX + distanceY * distanceY > halfWidthSquared) continue
                     val radialDistance = kotlin.math.sqrt((px - 16f) * (px - 16f) + (py - 16f) * (py - 16f))
                     val t = (radialDistance / 16f).coerceIn(0f, 1f)
+                    val red = linearToSrgb((1f - t) * srgbToLinear(1f) + t * srgbToLinear(0f))
+                    val blue = linearToSrgb((1f - t) * srgbToLinear(0f) + t * srgbToLinear(1f))
+                    val offset = (y * 32 + x) * 4
+                    rgba[offset] = (red * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 2] = (blue * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 3] = 0xff.toByte()
+                }
+            }
+        }
+
+    /** Independent oracle for radial sampling through a translated local matrix. */
+    private fun deterministicDiagonalSquareMiterRadialLocalTranslationWindingClipOracle(): ByteArray =
+        ByteArray(32 * 32 * 4).also { rgba ->
+            val strokeAx = 5.25f
+            val strokeAy = 8.25f
+            val strokeBx = 21.25f
+            val strokeBy = 20.25f
+            val strokeDx = strokeBx - strokeAx
+            val strokeDy = strokeBy - strokeAy
+            val strokeLengthSquared = strokeDx * strokeDx + strokeDy * strokeDy
+            val halfWidthSquared = 2f * 2f
+            val clipAx = 7.25f
+            val clipAy = 6.25f
+            val clipBx = 30.25f
+            val clipBy = 6.25f
+            val clipCx = 7.25f
+            val clipCy = 29.25f
+            val denominator = (clipBy - clipCy) * (clipAx - clipCx) +
+                (clipCx - clipBx) * (clipAy - clipCy)
+            for (y in 0 until 32) {
+                for (x in 0 until 32) {
+                    val px = x + 0.5f
+                    val py = y + 0.5f
+                    val u = ((clipBy - clipCy) * (px - clipCx) +
+                        (clipCx - clipBx) * (py - clipCy)) / denominator
+                    val v = ((clipCy - clipAy) * (px - clipCx) +
+                        (clipAx - clipCx) * (py - clipCy)) / denominator
+                    if (u < 0f || v < 0f || u + v > 1f) continue
+                    val projection = ((px - strokeAx) * strokeDx + (py - strokeAy) * strokeDy) /
+                        strokeLengthSquared
+                    if (projection < 0f || projection > 1f) continue
+                    val closestX = strokeAx + projection * strokeDx
+                    val closestY = strokeAy + projection * strokeDy
+                    val distanceX = px - closestX
+                    val distanceY = py - closestY
+                    if (distanceX * distanceX + distanceY * distanceY > halfWidthSquared) continue
+                    // The local matrix maps device coordinates to radial coordinates.
+                    val radialDistance = kotlin.math.sqrt(
+                        (px + 1.25f - 16f) * (px + 1.25f - 16f) +
+                            (py - 0.75f - 16f) * (py - 0.75f - 16f),
+                    )
+                    val t = (radialDistance / 16f).coerceIn(0f, 1f)
+                    val red = linearToSrgb((1f - t) * srgbToLinear(1f) + t * srgbToLinear(0f))
+                    val blue = linearToSrgb((1f - t) * srgbToLinear(0f) + t * srgbToLinear(1f))
+                    val offset = (y * 32 + x) * 4
+                    rgba[offset] = (red * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 2] = (blue * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 3] = 0xff.toByte()
+                }
+            }
+        }
+
+    /** Independent device-space oracle for a translated radial stroke and Winding clip. */
+    private fun deterministicTranslatedDiagonalSquareMiterRadialWindingClipOracle(): ByteArray =
+        ByteArray(32 * 32 * 4).also { rgba ->
+            val centerAx = 8.5625f
+            val centerAy = 9.3125f
+            val centerBx = 28.5625f
+            val centerBy = 24.3125f
+            val centerDx = centerBx - centerAx
+            val centerDy = centerBy - centerAy
+            val centerLength = kotlin.math.sqrt(centerDx * centerDx + centerDy * centerDy)
+            val halfWidth = 2.5f
+            val extension = halfWidth / centerLength
+            val strokeAx = centerAx - centerDx * extension
+            val strokeAy = centerAy - centerDy * extension
+            val strokeBx = centerBx + centerDx * extension
+            val strokeBy = centerBy + centerDy * extension
+            val strokeDx = strokeBx - strokeAx
+            val strokeDy = strokeBy - strokeAy
+            val strokeLengthSquared = strokeDx * strokeDx + strokeDy * strokeDy
+            val halfWidthSquared = halfWidth * halfWidth
+            val clipAx = 2.25f
+            val clipAy = 2.25f
+            val clipBx = 31.25f
+            val clipBy = 2.25f
+            val clipCx = 2.25f
+            val clipCy = 31.25f
+            val denominator = (clipBy - clipCy) * (clipAx - clipCx) +
+                (clipCx - clipBx) * (clipAy - clipCy)
+            for (y in 0 until 32) {
+                for (x in 0 until 32) {
+                    val px = x + 0.5f
+                    val py = y + 0.5f
+                    val u = ((clipBy - clipCy) * (px - clipCx) +
+                        (clipCx - clipBx) * (py - clipCy)) / denominator
+                    val v = ((clipCy - clipAy) * (px - clipCx) +
+                        (clipAx - clipCx) * (py - clipCy)) / denominator
+                    if (u < 0f || v < 0f || u + v > 1f) continue
+                    val projection = ((px - strokeAx) * strokeDx + (py - strokeAy) * strokeDy) /
+                        strokeLengthSquared
+                    if (projection < 0f || projection > 1f) continue
+                    val closestX = strokeAx + projection * strokeDx
+                    val closestY = strokeAy + projection * strokeDy
+                    val distanceX = px - closestX
+                    val distanceY = py - closestY
+                    if (distanceX * distanceX + distanceY * distanceY > halfWidthSquared) continue
+                    val radialDistance = kotlin.math.sqrt((px - 22f) * (px - 22f) + (py - 19f) * (py - 19f))
+                    val t = (radialDistance / 20f).coerceIn(0f, 1f)
                     val red = linearToSrgb((1f - t) * srgbToLinear(1f) + t * srgbToLinear(0f))
                     val blue = linearToSrgb((1f - t) * srgbToLinear(0f) + t * srgbToLinear(1f))
                     val offset = (y * 32 + x) * 4
