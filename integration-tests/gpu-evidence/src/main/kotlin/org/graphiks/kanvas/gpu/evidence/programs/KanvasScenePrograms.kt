@@ -63,6 +63,24 @@ object KanvasScenePrograms {
         )
     })
 
+    /** Two opaque scalar-AA rectangles deliberately overlap after an integer scissor clip. */
+    fun fractionalAaRectOverlap() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        save()
+        // The right edge cuts the blue rectangle. This is intentionally not a
+        // decorative clip: pixel (45, 30) is blue while (46, 30) stays background.
+        clipRect(RectF32.ofLTRB(8f, 8f, 46f, 56f), antiAlias = false)
+        drawRect(
+            RectF32.ofLTRB(12.5f, 16.5f, 41.5f, 45.5f),
+            Paint.fill(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)),
+        )
+        drawRect(
+            RectF32.ofLTRB(28.5f, 24.5f, 52.5f, 49.5f),
+            Paint.fill(ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)),
+        )
+        restore()
+    })
+
     fun separableBlurRect() = KanvasSurfaceProgram(ROUTE_ID, record = {
         drawRect(
             RectF32.ofLTRB(16f, 16f, 48f, 48f),
