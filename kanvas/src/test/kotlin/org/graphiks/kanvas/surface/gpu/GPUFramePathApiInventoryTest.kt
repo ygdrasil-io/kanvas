@@ -2530,6 +2530,66 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `translated triangle radial gradient remains explicitly refused outside hard stroke lane`() {
+        val clip = Path().apply {
+            moveTo(4f, 4f)
+            lineTo(28f, 4f)
+            lineTo(4f, 28f)
+            close()
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(6f, 6f)
+                        lineTo(26f, 6f)
+                        lineTo(6f, 26f)
+                        close()
+                    },
+                    Paint.fill(ColorARGB.Transparent).copy(
+                        shader = Shader.RadialGradient(
+                            Point2F32(16f, 16f), 16f,
+                            listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                            TileMode.CLAMP,
+                        ),
+                        antiAlias = false,
+                    ),
+                    Matrix3x3F32.translation(2f, 1f),
+                    ClipStack.Complex(listOf(ClipStackOp.PathOp(clip, ClipOp.INTERSECT, antiAlias = false))),
+                ),
+            ),
+            target = target(), config = RenderConfig.DEFAULT,
+            capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER),
+        )
+        assertTrue(inventory.recording.analysis.records.single().routeDecisionLabel != "native.path_stroke.stencil_cover")
+    }
+
+    @Test
+    fun `translated triangle radial FillRect reaches native hard clip route`() {
+        val clip = Path().apply {
+            moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close()
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawRect(
+                    RectF32.ofLTRB(0f, 0f, 64f, 64f),
+                    Paint(shader = Shader.RadialGradient(
+                        Point2F32(24.5f, 24.5f), 24f,
+                        listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                        TileMode.CLAMP,
+                    )).copy(antiAlias = false),
+                    Matrix3x3F32.translation(2f, 0f),
+                    ClipStack.Complex(listOf(ClipStackOp.PathOp(clip, ClipOp.INTERSECT, antiAlias = false))),
+                ),
+            ),
+            target = target(), config = RenderConfig.DEFAULT,
+            capabilities = capabilitiesWith(FILL_RECT_CAPABILITY, PATH_FILL_STENCIL_COVER, "first_slice.radial_gradient.native"),
+        )
+        assertEquals("native.fill_rect.radial_gradient", inventory.recording.analysis.records.single().routeDecisionLabel)
+        assertEquals(listOf("route:native.fill_rect.radial_gradient"), inventory.recording.routeDiagnostics)
+    }
+
+    @Test
     fun `translated local sweep matrix reaches the hard path clip stroke stencil route`() {
         val capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER)
         val clipPath = Path().apply {
