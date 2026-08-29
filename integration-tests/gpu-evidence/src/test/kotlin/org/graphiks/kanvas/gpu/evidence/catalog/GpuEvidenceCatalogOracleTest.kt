@@ -3,8 +3,10 @@ package org.graphiks.kanvas.gpu.evidence.catalog
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle
 
 class GpuEvidenceCatalogOracleTest {
     @Test
@@ -120,6 +122,31 @@ class GpuEvidenceCatalogOracleTest {
         assertPixel(pixels, 64, 64, 59, 17, intArrayOf(56, 112, 255, 255))
         assertPixel(pixels, 64, 64, 31, 33, intArrayOf(0, 0, 0, 0))
         assertPixel(pixels, 64, 64, 7, 17, intArrayOf(0, 0, 0, 0))
+    }
+
+    @Test
+    fun `uniform scaled two stop linear stroke oracle scales coverage and rebases its axis`() {
+        val pixels = oracle("linear-gradient-two-stop-uniform-scaled-stroke-rect")
+
+        assertPixel(pixels, 64, 64, 16, 18, intArrayOf(255, 56, 56, 255))
+        assertPixel(pixels, 64, 64, 59, 18, intArrayOf(56, 112, 255, 255))
+        assertPixel(pixels, 64, 64, 30, 36, intArrayOf(0, 0, 0, 0))
+        assertPixel(pixels, 64, 64, 15, 18, intArrayOf(0, 0, 0, 0))
+    }
+
+    @Test
+    fun `uniform scaled two stop linear stroke oracle rejects a degenerate scaled axis`() {
+        assertFailsWith<IllegalArgumentException> {
+            SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle(
+                List(4) { SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle.Rect(0, 0, 1, 1) },
+                SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle.Point(8.0, 16.0),
+                SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle.Point(8.0, 16.0),
+                2,
+                SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle.Point(2.0, 4.0),
+                SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle.Stop(255, 56, 56),
+                SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle.Stop(56, 112, 255),
+            )
+        }
     }
 
     @Test

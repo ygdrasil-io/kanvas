@@ -76,6 +76,84 @@ import org.graphiks.kanvas.gpu.renderer.routing.GPURouteDecision
 /** Verifies the first native FillRect analysis, route, and pass builder. */
 class FirstRoutePlannerTest {
     @Test
+    fun `uniform scale linear gradient stroke requires its typed provenance and capability`() {
+        val baseMaterial = GPUMaterialDescriptor.LinearGradient(
+            startX = 12f, startY = 36f, endX = 60f, endY = 36f,
+            startR = 1f, startG = 0f, startB = 0f, startA = 1f,
+            endR = 0f, endG = 0f, endB = 1f, endA = 1f,
+            allStopPositions = floatArrayOf(0f, 1f),
+            allStopColors = floatArrayOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
+        )
+        fun command(
+            material: GPUMaterialDescriptor = baseMaterial,
+            targetFormat: String = "rgba8unorm-srgb",
+        ) = GPUFillRectCommandBuilder.build(
+            commandId = GPUDrawCommandID(44),
+            rect = GPURect(8f, 16f, 60f, 20f),
+            target = GPUTargetFacts(64, 64, targetFormat),
+            material = material,
+            source = GPUCommandSource(
+                "unit-test",
+                "uniform-scale-linear-stroke-band",
+                kind = GPUCommandSourceKind.AnalyticStrokeRectUniformScaleBand,
+            ),
+        ).copy(antiAlias = false)
+        val capabilities = firstSliceWithLinearGradientCapabilities().copy(
+            facts = firstSliceWithLinearGradientCapabilities().facts + GPUCapabilityFact(
+                name = GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_UNIFORM_SCALE_NATIVE,
+                source = "unit-test",
+                value = "supported",
+                affectsValidity = true,
+                evidenceLabel = "uniform-scale-linear-stroke-fixture",
+            ),
+        )
+        val planner = GPUFirstRoutePlanner(capabilities)
+
+        val accepted = planner.plan(command())
+        assertEquals(
+            "native.stroke_rect.linear_gradient_uniform_scale",
+            accepted.analysisRecord.routeDecisionLabel,
+        )
+        assertEquals(
+            listOf(GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_UNIFORM_SCALE_NATIVE),
+            assertIs<GPURouteDecision.Native>(accepted.routeDecision).route.requirements,
+        )
+
+        fun assertTypedRefusal(expectedCode: String, rejected: GPUFirstRoutePlan) {
+            assertEquals(
+                expectedCode,
+                assertIs<GPURouteDecision.Refused>(rejected.routeDecision).diagnostic.code,
+            )
+            assertTrue(rejected.pass.drawPackets.isEmpty(), "typed stroke provenance must not fall back")
+        }
+
+        assertTypedRefusal(
+            "unsupported.stroke.rect_linear_gradient_uniform_scale_capability",
+            GPUFirstRoutePlanner(
+                capabilities.copy(facts = capabilities.facts.filterNot {
+                    it.name == GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_UNIFORM_SCALE_NATIVE
+                }),
+            ).plan(command()),
+        )
+        assertTypedRefusal(
+            "unsupported.stroke.rect_gradient_target",
+            planner.plan(command(targetFormat = "rgba8unorm")),
+        )
+        assertTypedRefusal(
+            "unsupported.stroke.rect_gradient_stop_count",
+            planner.plan(command(material = baseMaterial.copy(allStopPositions = floatArrayOf(0f, .5f, 1f)))),
+        )
+        assertTypedRefusal(
+            "unsupported.stroke.rect_material",
+            planner.plan(command(material = baseMaterial.copy(allStopPositions = floatArrayOf(.1f, .9f)))),
+        )
+        assertTypedRefusal(
+            "unsupported.stroke.rect_material",
+            planner.plan(command(material = GPUMaterialDescriptor.SolidColor(1f, 0f, 0f, 1f))),
+        )
+    }
+
+    @Test
     fun `translated three stop linear gradient stroke uses only its dedicated capability`() {
         val material = GPUMaterialDescriptor.LinearGradient(
             10f, 35f, 58f, 35f, 1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f,

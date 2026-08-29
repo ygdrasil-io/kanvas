@@ -58,10 +58,10 @@ class GPUAxisAlignedStrokeRectLowerer {
                 "The miter limit is too small for exact rectangular corners.",
             )
         }
-        if (request.transformClass !in setOf("identity", "translate")) {
+        if (request.transformClass !in setOf("identity", "translate", "uniform-scale")) {
             return refused(
                 "unsupported.stroke.rect_transform",
-                "The first analytic stroke-rect slice accepts identity or translate transforms.",
+                "The first analytic stroke-rect slice accepts identity, translate, or uniform-scale transforms.",
             )
         }
         if (!request.pathKey.startsWith("path:") || request.pathKey.contains("handle", ignoreCase = true) ||
