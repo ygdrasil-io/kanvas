@@ -15,6 +15,7 @@ class SurfaceSrgbClipPathSweepStrokeCpuOracle(
     private val startColor: IntArray,
     private val endColor: IntArray,
     private val shaderTranslation: Point = Point(0.0, 0.0),
+    private val clipInverted: Boolean = false,
 ) : CpuOracle {
     data class Point(val x: Double, val y: Double)
 
@@ -99,6 +100,7 @@ class SurfaceSrgbClipPathSweepStrokeCpuOracle(
                 winding--
             }
         }
-        return winding != 0
+        val inside = winding != 0
+        return if (clipInverted) !inside else inside
     }
 }
