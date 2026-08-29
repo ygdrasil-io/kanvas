@@ -1,7 +1,0 @@
-draws=100
-shaderModules=1
-pipelines=1
-pipelineCreatesAfterWarmup=0
-cacheHits=99
-cacheMisses=1
-uniformUploadBytes=11200
