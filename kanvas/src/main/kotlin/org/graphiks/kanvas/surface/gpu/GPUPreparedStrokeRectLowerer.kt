@@ -77,6 +77,9 @@ internal object GPUPreparedStrokeRectLowerer {
         val translatedTwoStopLinearGradient = (paint.shader as? Shader.LinearGradient)?.let { shader ->
             shader.stops.size == 2 && operation.transform.isNonZeroIntegralTranslation()
         } == true
+        val translatedThreeStopLinearGradient = (paint.shader as? Shader.LinearGradient)?.let { shader ->
+            shader.stops.size == 3 && operation.transform.isNonZeroIntegralTranslation()
+        } == true
         val finalMaterial = when (val shader = paint.shader) {
             null -> {
                 if (!paint.hasFoldableSolidColorFilter()) {
@@ -87,20 +90,32 @@ internal object GPUPreparedStrokeRectLowerer {
             }
             is Shader.LinearGradient -> {
                 val translatedTwoStop = shader.stops.size == 2 && operation.transform.isNonZeroIntegralTranslation()
-                if (operation.transform != Matrix3x3F32.Identity && !translatedTwoStop) {
+                val translatedThreeStop = shader.stops.size == 3 && operation.transform.isNonZeroIntegralTranslation()
+                if (operation.transform != Matrix3x3F32.Identity && !translatedTwoStop && !translatedThreeStop) {
                     return refused(
                         "unsupported.stroke.rect_transform",
                         operationIndex,
                         mapOf("transform" to "gradient_requires_identity"),
                     )
                 }
-                if (translatedTwoStop && target.colorFormat != "rgba8unorm-srgb") {
+                if ((translatedTwoStop || translatedThreeStop) && target.colorFormat != "rgba8unorm-srgb") {
                     return refused(
                         "unsupported.stroke.rect_gradient_target",
                         operationIndex,
                         mapOf("targetFormat" to target.colorFormat),
                     )
                 }
+                if (translatedThreeStop && !shader.hasProvenThreeStopPositions()) {
+                    return refused("unsupported.stroke.rect_material", operationIndex, materialRefusalFacts(operation))
+                }
+                if (translatedThreeStop && !capabilities.hasSupportedFact(
+                        GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_TRANSLATE_NATIVE,
+                    )
+                ) return refused(
+                    "unsupported.stroke.rect_linear_gradient_three_stop_translate_capability",
+                    operationIndex,
+                    mapOf("capability" to GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_TRANSLATE_NATIVE),
+                )
                 if (translatedTwoStop && !capabilities.hasSupportedFact(
                         GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_TRANSLATE_NATIVE,
                     )
@@ -125,7 +140,7 @@ internal object GPUPreparedStrokeRectLowerer {
                         operationIndex,
                         mapOf("targetFormat" to target.colorFormat),
                     )
-                    shader.stops.size == 3 && !capabilities.hasSupportedFact(
+                    shader.stops.size == 3 && !translatedThreeStop && !capabilities.hasSupportedFact(
                         GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_NATIVE,
                     ) -> return refused(
                         "unsupported.stroke.rect_linear_gradient_three_stop_capability",
@@ -141,7 +156,7 @@ internal object GPUPreparedStrokeRectLowerer {
                 }
                 (paint.toMaterial() as? GPUMaterialDescriptor.LinearGradient)
                     ?.let { material ->
-                        if (translatedTwoStop) material.copy(
+                        if (translatedTwoStop || translatedThreeStop) material.copy(
                             startX = material.startX + operation.transform.tx,
                             startY = material.startY + operation.transform.ty,
                             endX = material.endX + operation.transform.tx,
@@ -310,6 +325,7 @@ internal object GPUPreparedStrokeRectLowerer {
                             provenance,
                             finalMaterial,
                             translated = translatedTwoStopLinearGradient,
+                            translatedThreeStop = translatedThreeStopLinearGradient,
                         )
                         ?: return refused("unsupported.stroke.rect_material", operationIndex)
                 }
@@ -435,6 +451,10 @@ private fun Shader.LinearGradient.isAdmittedStrokeGradient(): Boolean {
         stops.zipWithNext().all { (left, right) -> left.position <= right.position }
 }
 
+/** W43's translated three-stop proof fixes both endpoints and the midpoint. */
+private fun Shader.LinearGradient.hasProvenThreeStopPositions(): Boolean =
+    stops.size == 3 && stops.map { it.position } == listOf(0f, .5f, 1f)
+
 private fun Shader.RadialGradient.isAdmittedStrokeRadialGradient(): Boolean =
     tileMode == TileMode.CLAMP &&
         interpolation == ColorSpaceInterpolation.SRGB &&
@@ -498,6 +518,7 @@ private fun GPUFramePathVisualCommand.withAnalyticStrokeRectSource(
     provenance: GPUFrameProvenance,
     material: GPUMaterialDescriptor,
     translated: Boolean = false,
+    translatedThreeStop: Boolean = false,
 ): GPUFramePathVisualCommand = copy(
     normalized = when (val command = normalized) {
         is org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand.FillRect -> command.copy(
@@ -505,7 +526,9 @@ private fun GPUFramePathVisualCommand.withAnalyticStrokeRectSource(
                 adapter = "kanvas-surface",
                 operation = "drawRect.stroke.analytic-four-band",
                 frameProvenance = provenance,
-                kind = if (translated) {
+                kind = if (translatedThreeStop) {
+                    GPUCommandSourceKind.AnalyticStrokeRectTranslatedThreeStopBand
+                } else if (translated) {
                     GPUCommandSourceKind.AnalyticStrokeRectTranslatedBand
                 } else {
                     GPUCommandSourceKind.AnalyticStrokeRectBand

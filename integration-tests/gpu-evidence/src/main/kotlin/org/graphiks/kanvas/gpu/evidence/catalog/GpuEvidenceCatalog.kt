@@ -61,6 +61,7 @@ object GpuEvidenceCatalog {
         gradientStrokeRefusal(),
         linearGradientThreeStopStrokeRect(),
         linearGradientTwoStopTranslatedStrokeRect(),
+        linearGradientThreeStopTranslatedStrokeRect(),
         radialGradientTwoStopStrokeRect(),
         radialGradientThreeStopStrokeRect(),
         sweepGradientTwoStopStrokeRect(),
@@ -842,6 +843,32 @@ object GpuEvidenceCatalog {
             SurfaceSrgbTranslatedTwoStopLinearGradientStrokeCpuOracle.Vector(2.0, 3.0),
             SurfaceSrgbTranslatedTwoStopLinearGradientStrokeCpuOracle.Stop(255, 56, 56),
             SurfaceSrgbTranslatedTwoStopLinearGradientStrokeCpuOracle.Stop(56, 112, 255),
+        ),
+    )
+
+    private fun linearGradientThreeStopTranslatedStrokeRect() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("linear-gradient-three-stop-translated-stroke-rect"), "Translated linear gradient three-stop stroke rectangle",
+            "Public Kanvas Surface renders a bounded non-AA CLAMP three-stop LinearGradient stroke under integral translation.",
+            64, 64, 1L, setOf("stroke-rect", "linear-gradient", "three-stops", "translation", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-gradient-linear-clamp-three-stop-translated-stroke-bands", 1),
+            ComparisonPolicy(1, 100.0, 1, "Independent four translated device bands with pixel-center three-stop sRGB interpolation."), emptySet(),
+        ),
+        KanvasScenePrograms.linearGradientThreeStopTranslatedStrokeRect(),
+        SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle(
+            listOf(
+                SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle.Rect(8, 17, 60, 21),
+                SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle.Rect(8, 49, 60, 53),
+                SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle.Rect(8, 21, 12, 49),
+                SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle.Rect(56, 21, 60, 49),
+            ),
+            SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle.Point(10.5, 35.5),
+            SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle.Point(57.5, 35.5),
+            listOf(
+                SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle.Stop(0.0, 255, 56, 56),
+                SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle.Stop(.5, 56, 220, 120),
+                SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle.Stop(1.0, 56, 112, 255),
+            ),
         ),
     )
 

@@ -8,6 +8,8 @@ object GPUFirstSliceCapabilityName {
     const val PATH_FILL_STENCIL_COVER = "first_slice.path_fill.stencil_cover"
     const val STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_NATIVE =
         "first_slice.stroke_rect.linear_gradient_three_stop.native"
+    const val STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_TRANSLATE_NATIVE =
+        "first_slice.stroke_rect.linear_gradient_three_stop_translate.native"
     const val STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_NATIVE =
         "first_slice.stroke_rect.radial_gradient_two_stop.native"
     const val STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE =
