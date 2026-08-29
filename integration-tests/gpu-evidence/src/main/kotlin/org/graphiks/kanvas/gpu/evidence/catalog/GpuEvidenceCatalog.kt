@@ -213,6 +213,7 @@ sweepGradientTwoStopStrokeRect(),
         imageFilterBlurRefusal(),
         roundCapStrokeUnderWindingRefusal(),
         rotatedDiagonalStrokeUnderWindingRefusal(),
+        rotatedRadialStrokeLocalMatrixRefusal(),
     )
     val cases: List<EvidenceCase> = renderCases + refusalCases
     val catalog = EvidenceSceneCatalog(cases.map(EvidenceCase::descriptor))
@@ -321,6 +322,15 @@ sweepGradientTwoStopStrokeRect(),
         tags = setOf("path-stroke", "butt-cap", "miter-join", "rotation", "path-clip", "winding", "refusal", "kanvas-surface"),
         code = "unsupported.geometry.perspective_path",
         program = KanvasScenePrograms.rotatedDiagonalStrokeUnderWindingRefusal(),
+    )
+
+    private fun rotatedRadialStrokeLocalMatrixRefusal() = surfaceRefusal(
+        id = "rotated-radial-stroke-local-matrix-refusal",
+        title = "Rotated radial stroke local-matrix refusal",
+        description = "Public Kanvas Surface refuses a square-miter radial-gradient stroke whose local shader matrix rotates by 90 degrees under a winding path clip; native mapping admits only the bounded local-matrix classes.",
+        tags = setOf("path-stroke", "radial-gradient", "local-matrix", "rotation", "path-clip", "winding", "refusal", "kanvas-surface"),
+        code = "unsupported.material.mapping.local_matrix",
+        program = KanvasScenePrograms.rotatedRadialStrokeLocalMatrixRefusal(),
     )
 
     private fun basicPrimitivesValidAlpha() = EvidenceCase(
