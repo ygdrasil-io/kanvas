@@ -219,8 +219,9 @@ class VerifyEvidenceCliTest {
             val descriptor = evidenceCase.descriptor
             val environment = EvidenceEnvironment(commit, "test", "1", "test", "17", EvidenceAdapter("test-adapter", "test-vendor", "test-device", "test-architecture", "test-description", false), 1L, "native", true)
             val rendered = descriptor.expectation is EvidenceExpectation.ShouldRender
+            val bitmapUpload = descriptor.id.value == "bounded-rgba8-nearest-bitmap"
             val routeId = routeId(evidenceCase.program)
-            val route = RouteEvidence(routeId, "attempt", if (rendered) "Completed" else null, if (rendered) "rendered" else "refused", emptyList(), emptyList(), if (rendered) mapOf("queue.submit" to 1L, "render.draw" to 1L, "render.pipelineBind" to 1L) else emptyMap(), GPUBackendRuntimeTelemetry(submissions = if (rendered) 1L else 0L))
+            val route = RouteEvidence(routeId, "attempt", if (rendered) "Completed" else null, if (rendered) "rendered" else "refused", if (bitmapUpload) listOf("Upload") else emptyList(), emptyList(), fixtureCounters(rendered, bitmapUpload), GPUBackendRuntimeTelemetry(submissions = if (rendered) 1L else 0L))
             val observation = if (rendered) {
                 val pixels = requireNotNull(evidenceCase.oracle).render(descriptor.width, descriptor.height)
                 val comparison = EvidenceComparator().compare(pixels, pixels, descriptor.width, descriptor.height, requireNotNull(descriptor.comparison))
@@ -242,8 +243,9 @@ class VerifyEvidenceCliTest {
             val descriptor = evidenceCase.descriptor
             val environment = EvidenceEnvironment(COMMIT, "test", "1", "test", "17", EvidenceAdapter("test-adapter", "test-vendor", "test-device", "test-architecture", "test-description", false), 1L, "native", true)
             val rendered = descriptor.expectation is EvidenceExpectation.ShouldRender
+            val bitmapUpload = descriptor.id.value == "bounded-rgba8-nearest-bitmap"
             val routeId = routeId(evidenceCase.program)
-            val route = RouteEvidence(routeId, "attempt", if (rendered) "Completed" else null, if (rendered) "rendered" else "refused", emptyList(), emptyList(), if (rendered) mapOf("queue.submit" to 1L, "render.draw" to 1L, "render.pipelineBind" to 1L) else emptyMap(), GPUBackendRuntimeTelemetry(submissions = if (rendered) 1L else 0L))
+            val route = RouteEvidence(routeId, "attempt", if (rendered) "Completed" else null, if (rendered) "rendered" else "refused", if (bitmapUpload) listOf("Upload") else emptyList(), emptyList(), fixtureCounters(rendered, bitmapUpload), GPUBackendRuntimeTelemetry(submissions = if (rendered) 1L else 0L))
             val observation = if (rendered) {
                 val pixels = requireNotNull(evidenceCase.oracle).render(descriptor.width, descriptor.height)
                 val comparison = EvidenceComparator().compare(pixels, pixels, descriptor.width, descriptor.height, requireNotNull(descriptor.comparison))
@@ -272,6 +274,20 @@ class VerifyEvidenceCliTest {
         is RoutedSceneProgram -> program.routeId
         else -> error("unsupported evidence program: ${program::class.qualifiedName}")
     }
+
+    private fun fixtureCounters(rendered: Boolean, bitmapUpload: Boolean): Map<String, Long> =
+        if (!rendered) emptyMap() else buildMap {
+            putAll(mapOf("queue.submit" to 1L, "render.draw" to 1L, "render.pipelineBind" to 1L))
+            if (bitmapUpload) {
+                putAll(mapOf(
+                    "preparedImage.textureUploadScope" to 1L,
+                    "preparedImage.frameTextureCreations" to 1L,
+                    "preparedImage.frameSamplerCreations" to 1L,
+                    "preparedImage.frameBindGroupCreations" to 1L,
+                    "preparedImage.queueWriteTextureCalls" to 1L,
+                ))
+            }
+        }
 
     private fun generatedRoot() = repository.resolve("reports/gpu-renderer/evidence/correctness/generated/$COMMIT")
 

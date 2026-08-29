@@ -21,12 +21,23 @@ class GpuEvidencePerformanceCli(private val runtime: PerformanceRuntime, private
             val selected = GpuEvidenceCatalog.renderCases.let { cases -> request.sceneId?.let { id -> cases.filter { it.descriptor.id.value == id } } ?: cases }
             var code = 0
             selected.forEach { scene ->
-                val result = GpuEvidencePerformanceRunner(backend, request.sourceCommit, request.config).run(scene)
+                val measured = GpuEvidencePerformanceRunner(backend, request.sourceCommit, request.config).run(scene)
+                val tier = PerformanceTiering.evaluate(measured, PerformanceBudget(
+                    family = scene.descriptor.id.value,
+                    tier = PerformanceTier.P1,
+                    p50FrameNanos = 16_700_000L,
+                    p95FrameNanos = 33_300_000L,
+                    maxAllocations = Long.MAX_VALUE,
+                    maxPipelineBuilds = Long.MAX_VALUE,
+                    maxUploadBytes = Long.MAX_VALUE,
+                    maxReadbackBytes = Long.MAX_VALUE,
+                ))
+                val result = measured.copy(diagnostics = measured.diagnostics + tier.diagnostics.map { "tier:$it" })
                 writer.writeGenerated(result)
                 val coldSubmissions = result.telemetry.cold.delta["submissions"]?.value ?: "unavailable"
                 val warmupSubmissions = result.telemetry.warmup.delta["submissions"]?.value ?: "unavailable"
                 val measuredSubmissions = result.telemetry.measured.delta["submissions"]?.value ?: "unavailable"
-                println("${scene.descriptor.id.value}: ${result.verdict::class.simpleName} samples=${result.timingSamplesNanos.size} submissions=$coldSubmissions/$warmupSubmissions/$measuredSubmissions")
+                println("${scene.descriptor.id.value}: ${result.verdict::class.simpleName} tier=${tier.tier} status=${tier.status} samples=${result.timingSamplesNanos.size} submissions=$coldSubmissions/$warmupSubmissions/$measuredSubmissions")
                 if (result.verdict is PerformanceVerdict.Failed || result.verdict is PerformanceVerdict.Unavailable) code = 1
             }
             code

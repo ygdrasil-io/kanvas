@@ -288,12 +288,13 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
                     Shader.DirectGeometry,
                     Shader.DirectLinearGradient,
                     Shader.DirectRadialGradient,
+                    Shader.DirectSweepGradient,
                     Shader.AnalyticRRect,
                     Shader.AnalyticDRRect,
                 ) &&
                     depthStencil is DepthStencil.Stencil
                 ) {
-                    "CorePrimitive clip-stencil consumer requires direct, analytic-RRect, linear-gradient, or radial-gradient geometry and stencil state"
+                    "CorePrimitive clip-stencil consumer requires direct, analytic-RRect, linear-gradient, radial-gradient, or sweep-gradient geometry and stencil state"
                 }
                 require(clipStencilFillRule == null && clip == Clip.None) {
                     "CorePrimitive clip-stencil consumer keeps fill and dynamic clip facts outside its key"
@@ -628,9 +629,10 @@ internal fun corePrimitiveClipStencilConsumerRenderPipelineStructuralKey(
             GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry,
             GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient,
             GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient,
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient,
             GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRRect,
             GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticDRRect,
-        )) { "Clip-stencil consumers support only direct, clamp-linear-gradient, clamp-radial-gradient, analytic-RRect, or analytic-DRRect shaders" }
+        )) { "Clip-stencil consumers support only direct, clamp-linear-gradient, clamp-radial-gradient, clamp-sweep-gradient, analytic-RRect, or analytic-DRRect shaders" }
     },
     topology = when (shader) {
         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRRect -> GPUCorePrimitiveRenderPipelineStructuralKey.Topology.AnalyticRRect
@@ -664,6 +666,9 @@ internal fun corePrimitiveClipStencilConsumerShaderOrNull(
             .takeIf { material.tileMode == "clamp" }
     is GPUCorePrimitiveMaterialPayload.RadialGradient ->
         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient
+            .takeIf { material.tileMode == "clamp" }
+    is GPUCorePrimitiveMaterialPayload.SweepGradient ->
+        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient
             .takeIf { material.tileMode == "clamp" }
     else -> null
 }

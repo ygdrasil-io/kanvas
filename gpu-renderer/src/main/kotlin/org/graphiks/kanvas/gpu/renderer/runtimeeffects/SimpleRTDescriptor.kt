@@ -77,6 +77,9 @@ object SimpleRTDescriptor {
         routeContract = routeContract,
         liveEditPlan = liveEditPlan,
         sourceColorContract = GPUPreparedRuntimeEffectSourceColorContract.LinearStraightRgba,
+        kind = GPURuntimeEffectKind.Material,
+        wgslSource = org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTWgsl,
+        cpuOracle = SimpleRTCPUOracle,
     )
     /** Builds a minimal [GPURuntimeEffectExecutionRequest] for testing dispatch paths. */
     fun createExecutionRequest(): GPURuntimeEffectExecutionRequest {
@@ -260,7 +263,7 @@ private fun materialEvaluationEvidenceHash(
         .digestIdentity()
 }
 
-private fun runtimeEffectOracleEvidenceHash(
+internal fun runtimeEffectOracleEvidenceHash(
     id: GPURuntimeEffectID,
     version: GPURuntimeEffectDescriptorVersion,
 ): String {

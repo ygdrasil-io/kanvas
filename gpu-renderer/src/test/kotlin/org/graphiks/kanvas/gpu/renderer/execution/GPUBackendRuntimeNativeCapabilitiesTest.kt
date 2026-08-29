@@ -3,8 +3,21 @@ package org.graphiks.kanvas.gpu.renderer.execution
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName
 
 class GPUBackendRuntimeNativeCapabilitiesTest {
+    @Test
+    fun `native facts publish dedicated direct path hairline capability`() {
+        val fact = assertNotNull(
+            nativeCorePrimitiveCapabilityFacts().associateBy { it.name }[
+                GPUFirstSliceCapabilityName.PATH_HAIRLINE_DIRECT_NATIVE,
+            ],
+        )
+        assertEquals("runtime", fact.source)
+        assertEquals("supported", fact.value)
+        assertEquals("core-primitive-path-hairline-direct-native", fact.evidenceLabel)
+    }
+
     @Test
     fun `native core primitive capability facts publish bounded linear radial and sweep`() {
         val facts = nativeCorePrimitiveCapabilityFacts().associateBy { it.name }
@@ -26,5 +39,46 @@ class GPUBackendRuntimeNativeCapabilitiesTest {
         assertEquals("supported", linear.value)
         assertEquals(true, linear.affectsValidity)
         assertEquals("core-primitive-gradient-linear-native", linear.evidenceLabel)
+
+        val threeStopStroke = assertNotNull(
+            facts[GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_NATIVE],
+        )
+        assertEquals("runtime", threeStopStroke.source)
+        assertEquals("supported", threeStopStroke.value)
+        assertEquals(true, threeStopStroke.affectsValidity)
+        assertEquals("core-primitive-gradient-linear-stroke-3stop-native", threeStopStroke.evidenceLabel)
+
+        listOf(
+            GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_TRANSLATE_NATIVE to
+                "core-primitive-gradient-linear-stroke-3stop-translate-native",
+            GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_UNIFORM_SCALE_NATIVE to
+                "core-primitive-gradient-linear-stroke-uniform-scale-native",
+            GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_UNIFORM_SCALE_NATIVE to
+                "core-primitive-gradient-linear-stroke-3stop-uniform-scale-native",
+            GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_TRANSLATE_NATIVE to
+                "core-primitive-gradient-linear-stroke-translate-native",
+            GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_NATIVE to
+                "core-primitive-gradient-radial-stroke-2stop-native",
+            GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE to
+                "core-primitive-gradient-radial-stroke-2stop-uniform-scale-native",
+            GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_NATIVE to
+                "core-primitive-gradient-radial-stroke-3stop-native",
+            GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_UNIFORM_SCALE_NATIVE to
+                "core-primitive-gradient-radial-stroke-3stop-uniform-scale-native",
+            GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE to
+                "core-primitive-gradient-sweep-stroke-2stop-native",
+            GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE to
+                "core-primitive-gradient-sweep-stroke-2stop-uniform-scale-native",
+            GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_THREE_STOP_UNIFORM_SCALE_NATIVE to
+                "core-primitive-gradient-sweep-stroke-3stop-uniform-scale-native",
+            GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_THREE_STOP_NATIVE to
+                "core-primitive-gradient-sweep-stroke-3stop-native",
+        ).forEach { (name, label) ->
+            val fact = assertNotNull(facts[name])
+            assertEquals("runtime", fact.source)
+            assertEquals("supported", fact.value)
+            assertEquals(true, fact.affectsValidity)
+            assertEquals(label, fact.evidenceLabel)
+        }
     }
 }

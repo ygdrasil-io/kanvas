@@ -12,6 +12,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipAtomicGroupID
@@ -27,6 +28,7 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilProducerPlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilStoreOperation
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource
+import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSourceKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUApplyFilterCommandBuilder
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawLayerCommandBuilder
@@ -73,6 +75,534 @@ import org.graphiks.kanvas.gpu.renderer.routing.GPURouteDecision
 
 /** Verifies the first native FillRect analysis, route, and pass builder. */
 class FirstRoutePlannerTest {
+    @Test
+    fun `uniform scale three stop linear gradient stroke requires its typed provenance and capability`() {
+        val baseMaterial = GPUMaterialDescriptor.LinearGradient(
+            startX = 18f, startY = 36f, endX = 58f, endY = 36f,
+            startR = 1f, startG = 0f, startB = 0f, startA = 1f,
+            endR = 0f, endG = 0f, endB = 1f, endA = 1f,
+            allStopPositions = floatArrayOf(0f, .5f, 1f),
+            allStopColors = floatArrayOf(
+                1f, 0f, 0f, 1f,
+                0f, 1f, 0f, 1f,
+                0f, 0f, 1f, 1f,
+            ),
+        )
+        fun command(
+            material: GPUMaterialDescriptor = baseMaterial,
+            targetFormat: String = "rgba8unorm-srgb",
+        ) = GPUFillRectCommandBuilder.build(
+            commandId = GPUDrawCommandID(45),
+            rect = GPURect(16f, 18f, 60f, 22f),
+            target = GPUTargetFacts(64, 64, targetFormat),
+            material = material,
+            source = GPUCommandSource(
+                "unit-test",
+                "uniform-scale-three-stop-linear-stroke-band",
+                kind = GPUCommandSourceKind.AnalyticStrokeRectUniformScaleThreeStopBand,
+            ),
+        ).copy(antiAlias = false)
+        val capabilities = firstSliceWithLinearGradientCapabilities().copy(
+            facts = firstSliceWithLinearGradientCapabilities().facts + GPUCapabilityFact(
+                name = GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_UNIFORM_SCALE_NATIVE,
+                source = "unit-test",
+                value = "supported",
+                affectsValidity = true,
+                evidenceLabel = "uniform-scale-three-stop-linear-stroke-fixture",
+            ),
+        )
+        val planner = GPUFirstRoutePlanner(capabilities)
+
+        val accepted = planner.plan(command())
+        assertEquals(
+            "native.stroke_rect.linear_gradient_three_stop_uniform_scale",
+            accepted.analysisRecord.routeDecisionLabel,
+        )
+        assertEquals(
+            listOf(GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_UNIFORM_SCALE_NATIVE),
+            assertIs<GPURouteDecision.Native>(accepted.routeDecision).route.requirements,
+        )
+
+        fun assertTypedRefusal(expectedCode: String, rejected: GPUFirstRoutePlan) {
+            assertEquals(
+                expectedCode,
+                assertIs<GPURouteDecision.Refused>(rejected.routeDecision).diagnostic.code,
+            )
+            assertTrue(rejected.pass.drawPackets.isEmpty(), "typed stroke provenance must not fall back")
+        }
+
+        assertTypedRefusal(
+            "unsupported.stroke.rect_linear_gradient_three_stop_uniform_scale_capability",
+            GPUFirstRoutePlanner(
+                capabilities.copy(facts = capabilities.facts.filterNot {
+                    it.name == GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_UNIFORM_SCALE_NATIVE
+                }),
+            ).plan(command()),
+        )
+        assertTypedRefusal(
+            "unsupported.stroke.rect_gradient_target",
+            planner.plan(command(targetFormat = "rgba8unorm")),
+        )
+        assertTypedRefusal(
+            "unsupported.stroke.rect_gradient_stop_count",
+            planner.plan(command(material = baseMaterial.copy(allStopPositions = floatArrayOf(0f, 1f)))),
+        )
+        assertTypedRefusal(
+            "unsupported.stroke.rect_material",
+            planner.plan(command(material = baseMaterial.copy(allStopPositions = floatArrayOf(0f, .25f, 1f)))),
+        )
+        assertTypedRefusal(
+            "unsupported.stroke.rect_material",
+            planner.plan(command(material = GPUMaterialDescriptor.SolidColor(1f, 0f, 0f, 1f))),
+        )
+    }
+
+    @Test
+    fun `uniform scale linear gradient stroke requires its typed provenance and capability`() {
+        val baseMaterial = GPUMaterialDescriptor.LinearGradient(
+            startX = 12f, startY = 36f, endX = 60f, endY = 36f,
+            startR = 1f, startG = 0f, startB = 0f, startA = 1f,
+            endR = 0f, endG = 0f, endB = 1f, endA = 1f,
+            allStopPositions = floatArrayOf(0f, 1f),
+            allStopColors = floatArrayOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
+        )
+        fun command(
+            material: GPUMaterialDescriptor = baseMaterial,
+            targetFormat: String = "rgba8unorm-srgb",
+        ) = GPUFillRectCommandBuilder.build(
+            commandId = GPUDrawCommandID(44),
+            rect = GPURect(8f, 16f, 60f, 20f),
+            target = GPUTargetFacts(64, 64, targetFormat),
+            material = material,
+            source = GPUCommandSource(
+                "unit-test",
+                "uniform-scale-linear-stroke-band",
+                kind = GPUCommandSourceKind.AnalyticStrokeRectUniformScaleBand,
+            ),
+        ).copy(antiAlias = false)
+        val capabilities = firstSliceWithLinearGradientCapabilities().copy(
+            facts = firstSliceWithLinearGradientCapabilities().facts + GPUCapabilityFact(
+                name = GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_UNIFORM_SCALE_NATIVE,
+                source = "unit-test",
+                value = "supported",
+                affectsValidity = true,
+                evidenceLabel = "uniform-scale-linear-stroke-fixture",
+            ),
+        )
+        val planner = GPUFirstRoutePlanner(capabilities)
+
+        val accepted = planner.plan(command())
+        assertEquals(
+            "native.stroke_rect.linear_gradient_uniform_scale",
+            accepted.analysisRecord.routeDecisionLabel,
+        )
+        assertEquals(
+            listOf(GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_UNIFORM_SCALE_NATIVE),
+            assertIs<GPURouteDecision.Native>(accepted.routeDecision).route.requirements,
+        )
+
+        fun assertTypedRefusal(expectedCode: String, rejected: GPUFirstRoutePlan) {
+            assertEquals(
+                expectedCode,
+                assertIs<GPURouteDecision.Refused>(rejected.routeDecision).diagnostic.code,
+            )
+            assertTrue(rejected.pass.drawPackets.isEmpty(), "typed stroke provenance must not fall back")
+        }
+
+        assertTypedRefusal(
+            "unsupported.stroke.rect_linear_gradient_uniform_scale_capability",
+            GPUFirstRoutePlanner(
+                capabilities.copy(facts = capabilities.facts.filterNot {
+                    it.name == GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_UNIFORM_SCALE_NATIVE
+                }),
+            ).plan(command()),
+        )
+        assertTypedRefusal(
+            "unsupported.stroke.rect_gradient_target",
+            planner.plan(command(targetFormat = "rgba8unorm")),
+        )
+        assertTypedRefusal(
+            "unsupported.stroke.rect_gradient_stop_count",
+            planner.plan(command(material = baseMaterial.copy(allStopPositions = floatArrayOf(0f, .5f, 1f)))),
+        )
+        assertTypedRefusal(
+            "unsupported.stroke.rect_material",
+            planner.plan(command(material = baseMaterial.copy(allStopPositions = floatArrayOf(.1f, .9f)))),
+        )
+        assertTypedRefusal(
+            "unsupported.stroke.rect_material",
+            planner.plan(command(material = GPUMaterialDescriptor.SolidColor(1f, 0f, 0f, 1f))),
+        )
+    }
+
+    @Test
+    fun `translated three stop linear gradient stroke uses only its dedicated capability`() {
+        val material = GPUMaterialDescriptor.LinearGradient(
+            10f, 35f, 58f, 35f, 1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f,
+            allStopPositions = floatArrayOf(0f, .5f, 1f),
+            allStopColors = floatArrayOf(1f,0f,0f,1f, 0f,1f,0f,1f, 0f,0f,1f,1f),
+        )
+        fun command() = GPUFillRectCommandBuilder.build(
+            GPUDrawCommandID(35), GPURect(8f,17f,60f,21f), GPUTargetFacts(64,64,"rgba8unorm-srgb"), material,
+            source = GPUCommandSource("unit-test", "translated-three-stop-stroke-band", kind = GPUCommandSourceKind.AnalyticStrokeRectTranslatedThreeStopBand),
+        ).copy(antiAlias = false)
+        val caps = firstSliceWithLinearGradientCapabilities().copy(facts = firstSliceWithLinearGradientCapabilities().facts + GPUCapabilityFact(
+            GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_TRANSLATE_NATIVE, "unit-test", "supported", true, "translated-three-stop",
+        ))
+        val plan = GPUFirstRoutePlanner(caps).plan(command())
+        assertEquals("native.stroke_rect.linear_gradient_three_stop_translate", plan.analysisRecord.routeDecisionLabel)
+        assertEquals(listOf(GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_TRANSLATE_NATIVE), assertIs<GPURouteDecision.Native>(plan.routeDecision).route.requirements)
+        assertEquals("unsupported.stroke.rect_linear_gradient_three_stop_translate_capability", assertIs<GPURouteDecision.Refused>(GPUFirstRoutePlanner(firstSliceWithLinearGradientCapabilities()).plan(command()).routeDecision).diagnostic.code)
+        val arbitraryPositions = material.copy(allStopPositions = floatArrayOf(0f, .25f, 1f))
+        val arbitraryCommand = GPUFillRectCommandBuilder.build(
+            GPUDrawCommandID(37), GPURect(8f,17f,60f,21f), GPUTargetFacts(64,64,"rgba8unorm-srgb"), arbitraryPositions,
+            source = GPUCommandSource("unit-test", "translated-three-stop-stroke-band", kind = GPUCommandSourceKind.AnalyticStrokeRectTranslatedThreeStopBand),
+        ).copy(antiAlias = false)
+        assertEquals(
+            "unsupported.stroke.rect_material",
+            assertIs<GPURouteDecision.Refused>(GPUFirstRoutePlanner(caps).plan(arbitraryCommand).routeDecision).diagnostic.code,
+        )
+    }
+
+    @Test
+    fun `translated two stop linear gradient stroke requires typed translated provenance and capability`() {
+        val material = GPUMaterialDescriptor.LinearGradient(
+            startX = 10f, startY = 35f, endX = 58f, endY = 35f,
+            startR = 1f, startG = 0f, startB = 0f, startA = 1f,
+            endR = 0f, endG = 0f, endB = 1f, endA = 1f,
+            allStopPositions = floatArrayOf(0f, 1f),
+            allStopColors = floatArrayOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
+        )
+        fun command(sourceKind: GPUCommandSourceKind, targetFormat: String = "rgba8unorm-srgb") = GPUFillRectCommandBuilder.build(
+            commandId = GPUDrawCommandID(36),
+            rect = GPURect(6f, 17f, 58f, 21f),
+            target = GPUTargetFacts(64, 64, targetFormat),
+            material = material,
+            source = GPUCommandSource("unit-test", "translated-linear-stroke-band", kind = sourceKind),
+        ).copy(antiAlias = false)
+        val capabilities = firstSliceWithLinearGradientCapabilities().copy(
+            facts = firstSliceWithLinearGradientCapabilities().facts + GPUCapabilityFact(
+                name = GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_TRANSLATE_NATIVE,
+                source = "unit-test",
+                value = "supported",
+                affectsValidity = true,
+                evidenceLabel = "translated-linear-stroke-fixture",
+            ),
+        )
+        val planner = GPUFirstRoutePlanner(capabilities)
+
+        val typed = planner.plan(command(GPUCommandSourceKind.AnalyticStrokeRectTranslatedBand))
+        assertEquals("native.stroke_rect.linear_gradient_translate", typed.analysisRecord.routeDecisionLabel)
+        assertEquals(
+            listOf(GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_TRANSLATE_NATIVE),
+            assertIs<GPURouteDecision.Native>(typed.routeDecision).route.requirements,
+        )
+        assertEquals(
+            "native.fill_rect.linear_gradient",
+            planner.plan(command(GPUCommandSourceKind.PublicFillRect)).analysisRecord.routeDecisionLabel,
+        )
+        assertEquals(
+            "native.fill_rect.linear_gradient",
+            planner.plan(command(GPUCommandSourceKind.Generic)).analysisRecord.routeDecisionLabel,
+        )
+        assertEquals(
+            "native.fill_rect.linear_gradient",
+            planner.plan(command(GPUCommandSourceKind.AnalyticStrokeRectBand)).analysisRecord.routeDecisionLabel,
+        )
+        assertEquals(
+            "unsupported.stroke.rect_linear_gradient_translate_capability",
+            assertIs<GPURouteDecision.Refused>(
+                GPUFirstRoutePlanner(
+                    capabilities.copy(facts = capabilities.facts.filterNot {
+                        it.name == GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_TRANSLATE_NATIVE
+                    }),
+                ).plan(command(GPUCommandSourceKind.AnalyticStrokeRectTranslatedBand)).routeDecision,
+            ).diagnostic.code,
+        )
+        assertEquals(
+            "unsupported.stroke.rect_gradient_target",
+            assertIs<GPURouteDecision.Refused>(
+                planner.plan(
+                    command(GPUCommandSourceKind.AnalyticStrokeRectTranslatedBand, "rgba8unorm"),
+                ).routeDecision,
+            ).diagnostic.code,
+        )
+    }
+
+    @Test
+    fun `three stop linear gradient requires the typed stroke source and its distinct capability`() {
+        val material = GPUMaterialDescriptor.LinearGradient(
+            startX = 8.5f, startY = 32.5f, endX = 55.5f, endY = 32.5f,
+            startR = 1f, startG = 0f, startB = 0f, startA = 1f,
+            endR = 0f, endG = 0f, endB = 1f, endA = 1f,
+            allStopPositions = floatArrayOf(0f, .5f, 1f),
+            allStopColors = floatArrayOf(1f, 0f, 0f, 1f, 0f, 1f, 0f, 1f, 0f, 0f, 1f, 1f),
+        )
+        fun command(sourceKind: GPUCommandSourceKind) = GPUFillRectCommandBuilder.build(
+            commandId = GPUDrawCommandID(37),
+            rect = GPURect(6f, 14f, 58f, 18f),
+            target = GPUTargetFacts(64, 64, "rgba8unorm-srgb"),
+            material = material,
+            source = GPUCommandSource("unit-test", "stroke-band", kind = sourceKind),
+        ).copy(antiAlias = false)
+        val capabilities = firstSliceWithLinearGradientCapabilities().copy(
+            facts = firstSliceWithLinearGradientCapabilities().facts + GPUCapabilityFact(
+                name = GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_NATIVE,
+                source = "unit-test",
+                value = "supported",
+                affectsValidity = true,
+                evidenceLabel = "three-stop-stroke-fixture",
+            ),
+        )
+
+        val typedPlan = GPUFirstRoutePlanner(capabilities).plan(
+            command(GPUCommandSourceKind.AnalyticStrokeRectBand),
+        )
+        val typedDecision = typedPlan.routeDecision
+        assertTrue(typedDecision is GPURouteDecision.Native, typedDecision.toString())
+        assertEquals("native.stroke_rect.linear_gradient_three_stop", typedPlan.analysisRecord.routeDecisionLabel)
+        assertEquals(
+            listOf(GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_NATIVE),
+            assertIs<GPURouteDecision.Native>(typedDecision).route.requirements,
+        )
+        assertTrue(
+            GPUFirstRoutePlanner(firstSliceWithLinearGradientCapabilities()).plan(
+                command(GPUCommandSourceKind.PublicFillRect),
+            ).routeDecision is GPURouteDecision.Native,
+            "W32 PublicFillRect three-stop admission must not consume the W37 stroke capability",
+        )
+        assertEquals(
+            "unsupported.material.mapping.linear_gradient_stop_count",
+            assertIs<GPURouteDecision.Refused>(
+                GPUFirstRoutePlanner(capabilities).plan(command(GPUCommandSourceKind.Generic)).routeDecision,
+            ).diagnostic.code,
+        )
+        assertEquals(
+            "unsupported.material.mapping.linear_gradient_stop_count",
+            assertIs<GPURouteDecision.Refused>(
+                GPUFirstRoutePlanner(
+                    capabilities.copy(
+                        facts = capabilities.facts.filterNot {
+                            it.name == GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_NATIVE
+                        },
+                    ),
+                ).plan(command(GPUCommandSourceKind.AnalyticStrokeRectBand)).routeDecision,
+            ).diagnostic.code,
+        )
+    }
+
+    @Test
+    fun `two stop radial gradient requires typed stroke provenance and its dedicated capability`() {
+        val material = GPUMaterialDescriptor.RadialGradient(
+            centerX = 32.5f, centerY = 32.5f, radius = 23.5f,
+            startR = 1f, startG = 0f, startB = 0f, startA = 1f,
+            endR = 0f, endG = 0f, endB = 1f, endA = 1f,
+            allStopPositions = floatArrayOf(0f, 1f),
+            allStopColors = floatArrayOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
+        )
+        fun command(sourceKind: GPUCommandSourceKind) = GPUFillRectCommandBuilder.build(
+            commandId = GPUDrawCommandID(38), rect = GPURect(6f, 14f, 58f, 18f),
+            target = GPUTargetFacts(64, 64, "rgba8unorm-srgb"), material = material,
+            source = GPUCommandSource("unit-test", "radial-stroke-band", kind = sourceKind),
+        ).copy(antiAlias = false)
+        val base = firstSliceWithLinearGradientCapabilities().copy(
+            facts = firstSliceWithLinearGradientCapabilities().facts + listOf(
+                GPUCapabilityFact("first_slice.radial_gradient.native", "unit-test", "supported", true, "radial-fixture"),
+                GPUCapabilityFact(
+                    GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_NATIVE,
+                    "unit-test", "supported", true, "two-stop-radial-stroke-fixture",
+                ),
+            ),
+        )
+        val typed = GPUFirstRoutePlanner(base).plan(command(GPUCommandSourceKind.AnalyticStrokeRectBand))
+        assertEquals("native.stroke_rect.radial_gradient_two_stop", typed.analysisRecord.routeDecisionLabel)
+        assertEquals(
+            listOf(GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_NATIVE),
+            assertIs<GPURouteDecision.Native>(typed.routeDecision).route.requirements,
+        )
+        assertEquals(
+            "native.fill_rect.radial_gradient",
+            GPUFirstRoutePlanner(base).plan(command(GPUCommandSourceKind.PublicFillRect)).analysisRecord.routeDecisionLabel,
+        )
+        assertEquals(
+            "native.fill_rect.radial_gradient",
+            GPUFirstRoutePlanner(base).plan(command(GPUCommandSourceKind.Generic)).analysisRecord.routeDecisionLabel,
+        )
+        assertEquals(
+            "unsupported.stroke.rect_radial_gradient_two_stop_capability",
+            assertIs<GPURouteDecision.Refused>(
+                GPUFirstRoutePlanner(base.copy(facts = base.facts.filterNot {
+                    it.name == GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_NATIVE
+                })).plan(command(GPUCommandSourceKind.AnalyticStrokeRectBand)).routeDecision,
+            ).diagnostic.code,
+        )
+    }
+
+    @Test
+    fun `three stop radial stroke route is reserved for analytic provenance`() {
+        val material = GPUMaterialDescriptor.RadialGradient(32.5f,32.5f,23.5f,1f,0f,0f,1f,0f,0f,1f,1f,
+            allStopPositions=floatArrayOf(0f,.5f,1f), allStopColors=floatArrayOf(1f,0f,0f,1f,0f,1f,0f,1f,0f,0f,1f,1f))
+        fun command(kind: GPUCommandSourceKind) = GPUFillRectCommandBuilder.build(GPUDrawCommandID(40), GPURect(6f,14f,58f,18f), GPUTargetFacts(64,64,"rgba8unorm-srgb"), material, source=GPUCommandSource("test","radial",kind=kind)).copy(antiAlias=false)
+        val caps = firstSliceWithLinearGradientCapabilities().copy(facts=firstSliceWithLinearGradientCapabilities().facts + listOf(
+            GPUCapabilityFact("first_slice.radial_gradient.native","test","supported",true,"radial"),
+            GPUCapabilityFact(GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_NATIVE,"test","supported",true,"stroke"),
+        ))
+        val planner=GPUFirstRoutePlanner(caps)
+        val typed = planner.plan(command(GPUCommandSourceKind.AnalyticStrokeRectBand))
+        assertEquals("native.stroke_rect.radial_gradient_three_stop",typed.analysisRecord.routeDecisionLabel)
+        assertEquals(listOf(GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_NATIVE), assertIs<GPURouteDecision.Native>(typed.routeDecision).route.requirements)
+        assertEquals("native.fill_rect.radial_gradient",planner.plan(command(GPUCommandSourceKind.PublicFillRect)).analysisRecord.routeDecisionLabel)
+        assertEquals("native.fill_rect.radial_gradient",planner.plan(command(GPUCommandSourceKind.Generic)).analysisRecord.routeDecisionLabel)
+        assertEquals("unsupported.stroke.rect_radial_gradient_three_stop_capability", assertIs<GPURouteDecision.Refused>(GPUFirstRoutePlanner(caps.copy(facts=caps.facts.filterNot { it.name == GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_NATIVE })).plan(command(GPUCommandSourceKind.AnalyticStrokeRectBand)).routeDecision).diagnostic.code)
+    }
+
+    @Test
+    fun `two stop full sweep gradient uses the dedicated stroke route only for analytic provenance`() {
+        val material = GPUMaterialDescriptor.SweepGradient(
+            32.5f, 32.5f, 0f, 360f, 1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f,
+            allStopPositions = floatArrayOf(0f, 1f), allStopColors = floatArrayOf(1f,0f,0f,1f,0f,0f,1f,1f),
+        )
+        fun command(kind: GPUCommandSourceKind) = GPUFillRectCommandBuilder.build(
+            GPUDrawCommandID(39), GPURect(6f,14f,58f,18f), GPUTargetFacts(64,64,"rgba8unorm-srgb"), material,
+            source = GPUCommandSource("unit-test", "sweep-stroke-band", kind = kind),
+        ).copy(antiAlias = false)
+        val capabilities = firstSliceWithLinearGradientCapabilities().copy(facts = firstSliceWithLinearGradientCapabilities().facts + listOf(
+            GPUCapabilityFact("first_slice.sweep_gradient.native", "unit-test", "supported", true, "sweep"),
+            GPUCapabilityFact(GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE, "unit-test", "supported", true, "sweep-stroke"),
+        ))
+        val typed = GPUFirstRoutePlanner(capabilities).plan(command(GPUCommandSourceKind.AnalyticStrokeRectBand))
+        assertEquals("native.stroke_rect.sweep_gradient_two_stop", typed.analysisRecord.routeDecisionLabel)
+        assertEquals(listOf(GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE), assertIs<GPURouteDecision.Native>(typed.routeDecision).route.requirements)
+        assertEquals("native.fill_rect.sweep_gradient", GPUFirstRoutePlanner(capabilities).plan(command(GPUCommandSourceKind.PublicFillRect)).analysisRecord.routeDecisionLabel)
+        assertEquals("native.fill_rect.sweep_gradient", GPUFirstRoutePlanner(capabilities).plan(command(GPUCommandSourceKind.Generic)).analysisRecord.routeDecisionLabel)
+        assertEquals("unsupported.stroke.rect_sweep_gradient_two_stop_capability", assertIs<GPURouteDecision.Refused>(GPUFirstRoutePlanner(capabilities.copy(facts = capabilities.facts.filterNot { it.name == GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE })).plan(command(GPUCommandSourceKind.AnalyticStrokeRectBand)).routeDecision).diagnostic.code)
+    }
+
+    @Test
+    fun `uniform scale two stop sweep gradient requires typed provenance and capability`() {
+        val material = GPUMaterialDescriptor.SweepGradient(
+            38f, 32f, 0f, 360f, 1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f,
+            allStopPositions = floatArrayOf(0f, 1f), allStopColors = floatArrayOf(1f,0f,0f,1f,0f,0f,1f,1f),
+        )
+        fun command(kind: GPUCommandSourceKind) = GPUFillRectCommandBuilder.build(
+            GPUDrawCommandID(46), GPURect(16f,18f,60f,22f), GPUTargetFacts(64,64,"rgba8unorm-srgb"), material,
+            source = GPUCommandSource("unit-test", "uniform-scale-sweep-stroke-band", kind = kind),
+        ).copy(antiAlias = false)
+        val capabilities = firstSliceWithLinearGradientCapabilities().copy(facts = firstSliceWithLinearGradientCapabilities().facts + listOf(
+            GPUCapabilityFact("first_slice.sweep_gradient.native", "unit-test", "supported", true, "sweep"),
+            GPUCapabilityFact(GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE, "unit-test", "supported", true, "sweep-uniform-scale"),
+        ))
+        val planner = GPUFirstRoutePlanner(capabilities)
+        val accepted = planner.plan(command(GPUCommandSourceKind.AnalyticStrokeRectUniformScaleSweepTwoStopBand))
+        assertEquals("native.stroke_rect.sweep_gradient_two_stop_uniform_scale", accepted.analysisRecord.routeDecisionLabel)
+        assertEquals(listOf(GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE), assertIs<GPURouteDecision.Native>(accepted.routeDecision).route.requirements)
+        assertEquals("native.fill_rect.sweep_gradient", planner.plan(command(GPUCommandSourceKind.Generic)).analysisRecord.routeDecisionLabel)
+        val refused = GPUFirstRoutePlanner(capabilities.copy(facts = capabilities.facts.filterNot { it.name == GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE })).plan(command(GPUCommandSourceKind.AnalyticStrokeRectUniformScaleSweepTwoStopBand))
+        assertEquals("unsupported.stroke.rect_sweep_gradient_two_stop_uniform_scale_capability", assertIs<GPURouteDecision.Refused>(refused.routeDecision).diagnostic.code)
+        assertTrue(refused.pass.drawPackets.isEmpty())
+    }
+
+    @Test
+    fun `uniform scale two stop radial gradient requires typed provenance and capability`() {
+        val material = GPUMaterialDescriptor.RadialGradient(
+            38f, 32f, 32f, 0f, 0f, 1f, 0f, 0f, 1f, 1f, 1f,
+            allStopPositions = floatArrayOf(0f, 1f),
+            allStopColors = floatArrayOf(1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f),
+        )
+        fun command(kind: GPUCommandSourceKind) = GPUFillRectCommandBuilder.build(
+            GPUDrawCommandID(47), GPURect(16f, 18f, 60f, 22f), GPUTargetFacts(64, 64, "rgba8unorm-srgb"), material,
+            source = GPUCommandSource("unit-test", "uniform-scale-radial-stroke-band", kind = kind),
+        ).copy(antiAlias = false)
+        val capabilities = firstSliceWithLinearGradientCapabilities().copy(facts = firstSliceWithLinearGradientCapabilities().facts + listOf(
+            GPUCapabilityFact("first_slice.radial_gradient.native", "unit-test", "supported", true, "radial"),
+            GPUCapabilityFact(GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE, "unit-test", "supported", true, "radial-uniform-scale"),
+        ))
+        val planner = GPUFirstRoutePlanner(capabilities)
+        val accepted = planner.plan(command(GPUCommandSourceKind.AnalyticStrokeRectUniformScaleRadialTwoStopBand))
+        assertEquals("native.stroke_rect.radial_gradient_two_stop_uniform_scale", accepted.analysisRecord.routeDecisionLabel)
+        assertEquals(listOf(GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE), assertIs<GPURouteDecision.Native>(accepted.routeDecision).route.requirements)
+        assertEquals("native.fill_rect.radial_gradient", planner.plan(command(GPUCommandSourceKind.Generic)).analysisRecord.routeDecisionLabel)
+        val refused = GPUFirstRoutePlanner(capabilities.copy(facts = capabilities.facts.filterNot { it.name == GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE })).plan(command(GPUCommandSourceKind.AnalyticStrokeRectUniformScaleRadialTwoStopBand))
+        assertEquals("unsupported.stroke.rect_radial_gradient_two_stop_uniform_scale_capability", assertIs<GPURouteDecision.Refused>(refused.routeDecision).diagnostic.code)
+        assertTrue(refused.pass.drawPackets.isEmpty())
+    }
+
+    @Test
+    fun `uniform scale three stop radial gradient requires typed provenance and capability`() {
+        val material = GPUMaterialDescriptor.RadialGradient(
+            38f, 32f, 32f, 0f, 0f, 1f, 0f, 0f, 1f, 1f, 1f,
+            allStopPositions = floatArrayOf(0f, .5f, 1f),
+            allStopColors = floatArrayOf(1f, 0f, 0f, 1f, 0f, 1f, 0f, 1f, 0f, 0f, 1f, 1f),
+        )
+        fun command(kind: GPUCommandSourceKind) = GPUFillRectCommandBuilder.build(
+            GPUDrawCommandID(48), GPURect(16f, 18f, 60f, 22f), GPUTargetFacts(64, 64, "rgba8unorm-srgb"), material,
+            source = GPUCommandSource("unit-test", "uniform-scale-radial-three-stop-stroke-band", kind = kind),
+        ).copy(antiAlias = false)
+        val base = firstSliceWithLinearGradientCapabilities()
+        val capabilities = base.copy(facts = base.facts + listOf(
+            GPUCapabilityFact("first_slice.radial_gradient.native", "unit-test", "supported", true, "radial"),
+            GPUCapabilityFact(GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_UNIFORM_SCALE_NATIVE, "unit-test", "supported", true, "radial-three-uniform-scale"),
+        ))
+        val planner = GPUFirstRoutePlanner(capabilities)
+        val accepted = planner.plan(command(GPUCommandSourceKind.AnalyticStrokeRectUniformScaleRadialThreeStopBand))
+        assertEquals("native.stroke_rect.radial_gradient_three_stop_uniform_scale", accepted.analysisRecord.routeDecisionLabel)
+        assertEquals(listOf(GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_UNIFORM_SCALE_NATIVE), assertIs<GPURouteDecision.Native>(accepted.routeDecision).route.requirements)
+        assertEquals("native.fill_rect.radial_gradient", planner.plan(command(GPUCommandSourceKind.Generic)).analysisRecord.routeDecisionLabel)
+        val refused = GPUFirstRoutePlanner(capabilities.copy(facts = capabilities.facts.filterNot { it.name == GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_UNIFORM_SCALE_NATIVE })).plan(command(GPUCommandSourceKind.AnalyticStrokeRectUniformScaleRadialThreeStopBand))
+        assertEquals("unsupported.stroke.rect_radial_gradient_three_stop_uniform_scale_capability", assertIs<GPURouteDecision.Refused>(refused.routeDecision).diagnostic.code)
+        assertTrue(refused.pass.drawPackets.isEmpty())
+    }
+
+    @Test
+    fun `uniform scale three stop sweep gradient requires typed provenance and capability`() {
+        val material = GPUMaterialDescriptor.SweepGradient(
+            38f, 32f, 0f, 360f, 1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f,
+            allStopPositions = floatArrayOf(0f, .5f, 1f),
+            allStopColors = floatArrayOf(1f, 0f, 0f, 1f, 0f, 1f, 0f, 1f, 0f, 0f, 1f, 1f),
+        )
+        fun command(kind: GPUCommandSourceKind) = GPUFillRectCommandBuilder.build(
+            GPUDrawCommandID(49), GPURect(16f, 18f, 60f, 22f), GPUTargetFacts(64, 64, "rgba8unorm-srgb"), material,
+            source = GPUCommandSource("unit-test", "uniform-scale-sweep-three-stop-stroke-band", kind = kind),
+        ).copy(antiAlias = false)
+        val base = firstSliceWithLinearGradientCapabilities()
+        val capabilities = base.copy(facts = base.facts + listOf(
+            GPUCapabilityFact("first_slice.sweep_gradient.native", "unit-test", "supported", true, "sweep"),
+            GPUCapabilityFact(GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_THREE_STOP_UNIFORM_SCALE_NATIVE, "unit-test", "supported", true, "sweep-three-uniform-scale"),
+        ))
+        val planner = GPUFirstRoutePlanner(capabilities)
+        val accepted = planner.plan(command(GPUCommandSourceKind.AnalyticStrokeRectUniformScaleSweepThreeStopBand))
+        assertEquals("native.stroke_rect.sweep_gradient_three_stop_uniform_scale", accepted.analysisRecord.routeDecisionLabel)
+        assertEquals(listOf(GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_THREE_STOP_UNIFORM_SCALE_NATIVE), assertIs<GPURouteDecision.Native>(accepted.routeDecision).route.requirements)
+        assertEquals("native.fill_rect.sweep_gradient", planner.plan(command(GPUCommandSourceKind.Generic)).analysisRecord.routeDecisionLabel)
+        val refused = GPUFirstRoutePlanner(capabilities.copy(facts = capabilities.facts.filterNot { it.name == GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_THREE_STOP_UNIFORM_SCALE_NATIVE })).plan(command(GPUCommandSourceKind.AnalyticStrokeRectUniformScaleSweepThreeStopBand))
+        assertEquals("unsupported.stroke.rect_sweep_gradient_three_stop_uniform_scale_capability", assertIs<GPURouteDecision.Refused>(refused.routeDecision).diagnostic.code)
+        assertTrue(refused.pass.drawPackets.isEmpty())
+    }
+
+    @Test
+    fun `three stop full sweep gradient uses its dedicated stroke route only for analytic provenance`() {
+        val material = GPUMaterialDescriptor.SweepGradient(
+            32.5f, 32.5f, 0f, 360f, 1f, 0f, 0f, 1f, 0f, 0f, 1f, 1f,
+            allStopPositions = floatArrayOf(0f, .5f, 1f),
+            allStopColors = floatArrayOf(1f,0f,0f,1f,0f,1f,0f,1f,0f,0f,1f,1f),
+        )
+        fun command(kind: GPUCommandSourceKind) = GPUFillRectCommandBuilder.build(
+            GPUDrawCommandID(41), GPURect(6f,14f,58f,18f), GPUTargetFacts(64,64,"rgba8unorm-srgb"), material,
+            source = GPUCommandSource("unit-test", "sweep-three-stop-stroke-band", kind = kind),
+        ).copy(antiAlias = false)
+        val capabilities = firstSliceWithLinearGradientCapabilities().copy(facts = firstSliceWithLinearGradientCapabilities().facts + listOf(
+            GPUCapabilityFact("first_slice.sweep_gradient.native", "unit-test", "supported", true, "sweep"),
+            GPUCapabilityFact(GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_THREE_STOP_NATIVE, "unit-test", "supported", true, "sweep-stroke-three-stop"),
+        ))
+        val planner = GPUFirstRoutePlanner(capabilities)
+        val typed = planner.plan(command(GPUCommandSourceKind.AnalyticStrokeRectBand))
+        assertEquals("native.stroke_rect.sweep_gradient_three_stop", typed.analysisRecord.routeDecisionLabel)
+        assertEquals(listOf(GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_THREE_STOP_NATIVE), assertIs<GPURouteDecision.Native>(typed.routeDecision).route.requirements)
+        assertEquals("native.fill_rect.sweep_gradient", planner.plan(command(GPUCommandSourceKind.PublicFillRect)).analysisRecord.routeDecisionLabel)
+        assertEquals("native.fill_rect.sweep_gradient", planner.plan(command(GPUCommandSourceKind.Generic)).analysisRecord.routeDecisionLabel)
+        assertEquals("unsupported.stroke.rect_sweep_gradient_three_stop_capability", assertIs<GPURouteDecision.Refused>(GPUFirstRoutePlanner(capabilities.copy(facts = capabilities.facts.filterNot { it.name == GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_THREE_STOP_NATIVE })).plan(command(GPUCommandSourceKind.AnalyticStrokeRectBand)).routeDecision).diagnostic.code)
+    }
+
     @Test
     fun `native FillRect route builder retains its four argument JVM descriptor`() {
         val methods = GPUFirstRouteDecisionBuilder::class.java.methods.filter { method ->
@@ -2222,6 +2752,188 @@ class FirstRoutePlannerTest {
         )
     }
 
+    /** The bounded pixel-exact round cap must reach the native stencil-cover route. */
+    @Test
+    fun `fill path exact horizontal round cap builds native stencil cover route`() {
+        val command = GPUFillPathCommandBuilder.build(
+            commandId = GPUDrawCommandID(126),
+            pathKey = "path:round-segment:v1",
+            pathDescriptor = GPUPathFacts(
+                pathKey = "path:round-segment:v1",
+                verbCount = 2,
+                pointCount = 2,
+                fillRule = "NonZero",
+                inverseFill = false,
+                finiteProof = "finite",
+                volatility = "immutable",
+                transformClass = "identity",
+                edgeCount = 1,
+            ),
+            tessellatedVertices = listOf(6f, 16f, 26f, 16f),
+            contourStarts = listOf(0),
+            edgeCount = 1,
+            target = GPUTargetFacts(width = 32, height = 32, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0f, b = 0f, a = 1f),
+            stroke = true,
+            strokeWidth = 4f,
+            strokeCap = "round",
+            strokeJoin = "miter",
+            antiAlias = false,
+        )
+
+        val plan = GPUFirstRoutePlanner(firstSlicePathFillStencilCoverCapabilities()).plan(command)
+
+        assertEquals("native.path_stroke.stencil_cover", plan.analysisRecord.routeDecisionLabel)
+        assertEquals("route.path_stroke.126", assertIs<GPURouteDecision.Native>(plan.routeDecision).route.routeId)
+        assertEquals(emptyList(), plan.pass.diagnostics)
+    }
+
+    @Test
+    fun `fill path simple stroke with uniform scale builds native stencil cover route`() {
+        val command = GPUFillPathCommandBuilder.build(
+            commandId = GPUDrawCommandID(127),
+            pathKey = "path:scaled-stroke-segment:v1",
+            pathDescriptor = GPUPathFacts(
+                pathKey = "path:scaled-stroke-segment:v1", verbCount = 2, pointCount = 2,
+                fillRule = "NonZero", inverseFill = false, finiteProof = "finite",
+                volatility = "immutable", transformClass = "scale", edgeCount = 1,
+            ),
+            tessellatedVertices = listOf(4f, 8f, 14f, 8f), contourStarts = listOf(0), edgeCount = 1,
+            target = GPUTargetFacts(width = 32, height = 32, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0f, b = 0f, a = 1f),
+            transform = GPUTransformFacts.scale(2f, 2f),
+            stroke = true, strokeWidth = 2f, strokeCap = "butt", strokeJoin = "miter", antiAlias = false,
+        )
+
+        val plan = GPUFirstRoutePlanner(firstSlicePathFillStencilCoverCapabilities()).plan(command)
+
+        assertEquals("native.path_stroke.stencil_cover", plan.analysisRecord.routeDecisionLabel)
+        assertEquals("route.path_stroke.127", assertIs<GPURouteDecision.Native>(plan.routeDecision).route.routeId)
+
+        val scaledRoundPlan = GPUFirstRoutePlanner(firstSlicePathFillStencilCoverCapabilities()).plan(
+            command.copy(strokeWidth = 4f, strokeCap = "round"),
+        )
+        assertEquals(
+            "unsupported.stroke.cap",
+            assertIs<GPURouteDecision.Refused>(scaledRoundPlan.routeDecision).diagnostic.code,
+        )
+    }
+
+    @Test
+    fun `fill path simple stroke with uniform scale and translation builds native stencil cover route`() {
+        val command = GPUFillPathCommandBuilder.build(
+            commandId = GPUDrawCommandID(129),
+            pathKey = "path:scaled-translated-stroke-segment:v1",
+            pathDescriptor = GPUPathFacts(
+                pathKey = "path:scaled-translated-stroke-segment:v1", verbCount = 2, pointCount = 2,
+                fillRule = "NonZero", inverseFill = false, finiteProof = "finite",
+                volatility = "immutable", transformClass = "affine", edgeCount = 1,
+            ),
+            tessellatedVertices = listOf(4f, 8f, 14f, 8f), contourStarts = listOf(0), edgeCount = 1,
+            target = GPUTargetFacts(width = 32, height = 32, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0f, b = 0f, a = 1f),
+            transform = GPUTransformFacts.affine(
+                scaleX = 2f, skewX = 0f, skewY = 0f, scaleY = 2f,
+                translateX = 2f, translateY = 3f,
+            ),
+            stroke = true, strokeWidth = 2f, strokeCap = "butt", strokeJoin = "miter", antiAlias = false,
+        )
+
+        val plan = GPUFirstRoutePlanner(firstSlicePathFillStencilCoverCapabilities()).plan(command)
+
+        assertEquals("native.path_stroke.stencil_cover", plan.analysisRecord.routeDecisionLabel)
+        assertEquals("route.path_stroke.129", assertIs<GPURouteDecision.Native>(plan.routeDecision).route.routeId)
+    }
+
+    @Test
+    fun `fill path single segment hairline builds native direct route`() {
+        val command = GPUFillPathCommandBuilder.build(
+            commandId = GPUDrawCommandID(128),
+            pathKey = "path:hairline-segment:v1",
+            pathDescriptor = GPUPathFacts(
+                pathKey = "path:hairline-segment:v1",
+                verbCount = 2,
+                pointCount = 2,
+                fillRule = "NonZero",
+                inverseFill = false,
+                finiteProof = "finite",
+                volatility = "immutable",
+                transformClass = "identity",
+                edgeCount = 1,
+            ),
+            tessellatedVertices = listOf(6f, 16f, 26f, 16f),
+            contourStarts = listOf(0),
+            edgeCount = 1,
+            target = GPUTargetFacts(width = 32, height = 32, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0f, b = 0f, a = 1f),
+            stroke = true,
+            strokeWidth = 0f,
+            strokeCap = "butt",
+            strokeJoin = "miter",
+            antiAlias = false,
+        )
+
+        val plan = GPUFirstRoutePlanner(firstSlicePathFillStencilCoverCapabilities()).plan(command)
+
+        assertEquals("native.path_hairline.direct", plan.analysisRecord.routeDecisionLabel)
+        assertEquals("route.path_hairline.128", assertIs<GPURouteDecision.Native>(plan.routeDecision).route.routeId)
+        assertEquals(emptyList(), plan.pass.diagnostics)
+    }
+
+    @Test
+    fun `hairline direct capability does not depend on stencil cover capability`() {
+        val command = GPUFillPathCommandBuilder.build(
+            commandId = GPUDrawCommandID(130),
+            pathKey = "path:hairline-capability:v1",
+            pathDescriptor = GPUPathFacts(
+                pathKey = "path:hairline-capability:v1", verbCount = 2, pointCount = 2,
+                fillRule = "NonZero", inverseFill = false, finiteProof = "finite",
+                volatility = "immutable", transformClass = "identity", edgeCount = 1,
+            ),
+            tessellatedVertices = listOf(6f, 16f, 26f, 16f),
+            contourStarts = listOf(0), edgeCount = 1,
+            target = GPUTargetFacts(width = 32, height = 32, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0f, b = 0f, a = 1f),
+            stroke = true, strokeWidth = 0f, strokeCap = "butt", strokeJoin = "miter", antiAlias = false,
+        )
+        val capabilities = firstSlicePathFillCapabilities().copy(
+            facts = listOf(
+                GPUCapabilityFact(
+                    name = GPUFirstSliceCapabilityName.PATH_HAIRLINE_DIRECT_NATIVE,
+                    source = "unit-test", value = "supported", affectsValidity = true,
+                    evidenceLabel = "path-hairline-direct-fixture",
+                ),
+            ),
+            snapshotId = "path-hairline-direct-only-test",
+        )
+
+        val plan = GPUFirstRoutePlanner(capabilities).plan(command)
+
+        assertEquals("native.path_hairline.direct", plan.analysisRecord.routeDecisionLabel)
+        assertEquals("route.path_hairline.130", assertIs<GPURouteDecision.Native>(plan.routeDecision).route.routeId)
+    }
+
+    @Test
+    fun `fill path hairline with AA remains refused`() {
+        val command = GPUFillPathCommandBuilder.build(
+            commandId = GPUDrawCommandID(129),
+            pathKey = "path:hairline-aa:v1",
+            pathDescriptor = GPUPathFacts(
+                pathKey = "path:hairline-aa:v1", verbCount = 2, pointCount = 2,
+                fillRule = "NonZero", inverseFill = false, finiteProof = "finite",
+                volatility = "immutable", transformClass = "identity", edgeCount = 1,
+            ),
+            tessellatedVertices = listOf(6f, 16f, 26f, 16f), contourStarts = listOf(0), edgeCount = 1,
+            target = GPUTargetFacts(width = 32, height = 32, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0f, b = 0f, a = 1f),
+            stroke = true, strokeWidth = 0f, strokeCap = "butt", strokeJoin = "miter", antiAlias = true,
+        )
+
+        val plan = GPUFirstRoutePlanner(firstSlicePathFillStencilCoverCapabilities()).plan(command)
+
+        assertEquals("unsupported.stroke.width_invalid", assertIs<GPURouteDecision.Refused>(plan.routeDecision).diagnostic.code)
+    }
+
     /** FillPath stroke analysis consumes the captured miter limit instead of a hard-coded default. */
     @Test
     fun `fill path stroke refuses the captured subminimum miter limit`() {
@@ -3153,13 +3865,22 @@ class FirstRoutePlannerTest {
     /** Capability snapshot that enables FillPath with stencil-cover promotion. */
     private fun firstSlicePathFillStencilCoverCapabilities(): GPUCapabilities =
         firstSlicePathFillCapabilities().copy(
-            facts = listOf(GPUCapabilityFact(
-                name = "first_slice.path_fill.stencil_cover",
-                source = "unit-test",
-                value = "supported",
-                affectsValidity = true,
-                evidenceLabel = "stencil-cover-fixture",
-            )),
+            facts = listOf(
+                GPUCapabilityFact(
+                    name = GPUFirstSliceCapabilityName.PATH_FILL_STENCIL_COVER,
+                    source = "unit-test",
+                    value = "supported",
+                    affectsValidity = true,
+                    evidenceLabel = "stencil-cover-fixture",
+                ),
+                GPUCapabilityFact(
+                    name = GPUFirstSliceCapabilityName.PATH_HAIRLINE_DIRECT_NATIVE,
+                    source = "unit-test",
+                    value = "supported",
+                    affectsValidity = true,
+                    evidenceLabel = "path-hairline-direct-fixture",
+                ),
+            ),
             snapshotId = "path-fill-stencil-cover-test",
         )
 

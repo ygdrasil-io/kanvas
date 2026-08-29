@@ -587,6 +587,17 @@ object KanvasScenePrograms {
         )
     })
 
+    fun translatedStrokeRectOutline() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        save()
+        translate(5f, 7f)
+        drawRect(
+            RectF32.ofLTRB(16f, 16f, 48f, 48f),
+            Paint.stroke(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f), 6f).copy(antiAlias = false),
+        )
+        restore()
+    })
+
     fun roundCapStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
         drawPath(
             Path {
@@ -628,6 +639,18 @@ object KanvasScenePrograms {
         )
     })
 
+    fun radialGradientThreeStops() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawRect(RectF32.ofLTRB(8f, 8f, 56f, 56f), Paint(shader = Shader.RadialGradient(
+            Point2F32(32.5f, 32.5f), 23.5f,
+            listOf(
+                GradientStop(0f, ColorARGB.of(255, 255, 232, 72)),
+                GradientStop(.5f, ColorARGB.of(255, 64, 208, 144)),
+                GradientStop(1f, ColorARGB.of(255, 48, 80, 192)),
+            ),
+            TileMode.CLAMP,
+        ), antiAlias = false))
+    })
+
     fun sweepDisk() = KanvasSurfaceProgram(ROUTE_ID, record = {
         drawRect(
             RectF32.ofLTRB(8f, 8f, 56f, 56f),
@@ -640,6 +663,18 @@ object KanvasScenePrograms {
                 antiAlias = false,
             ),
         )
+    })
+
+    fun sweepGradientThreeStops() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawRect(RectF32.ofLTRB(8f, 8f, 56f, 56f), Paint(shader = Shader.SweepGradient(
+            Point2F32(32.5f, 32.5f), 0f, 360f,
+            listOf(
+                GradientStop(0f, ColorARGB.of(255, 255, 64, 64)),
+                GradientStop(.5f, ColorARGB.of(255, 56, 220, 120)),
+                GradientStop(1f, ColorARGB.of(255, 64, 112, 255)),
+            ),
+            TileMode.CLAMP,
+        ), antiAlias = false))
     })
 
     fun linearGradientThreeStops() = KanvasSurfaceProgram(ROUTE_ID, record = {
@@ -705,12 +740,198 @@ object KanvasScenePrograms {
         ), antiAlias = false))
     })
 
+    fun mirrorLinearGradientFillRectRefusal() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawRect(RectF32.ofLTRB(0f, 16f, 64f, 48f), Paint(shader = Shader.LinearGradient(
+            Point2F32(16.5f, 32.5f), Point2F32(31.5f, 32.5f),
+            listOf(GradientStop(0f, ColorARGB.of(255, 255, 56, 56)), GradientStop(1f, ColorARGB.of(255, 56, 112, 255))), TileMode.MIRROR,
+        ), antiAlias = false))
+    })
+
     fun gradientStrokeRefusal() = KanvasSurfaceProgram(ROUTE_ID, record = {
         drawRect(RectF32.ofLTRB(8f, 16f, 56f, 48f), Paint.stroke(ColorARGB.Transparent, 4f).copy(
             shader = Shader.LinearGradient(
                 Point2F32(8.5f, 32.5f), Point2F32(55.5f, 32.5f),
                 listOf(GradientStop(0f, ColorARGB.of(255, 255, 56, 56)), GradientStop(1f, ColorARGB.of(255, 56, 112, 255))), TileMode.CLAMP,
             ), antiAlias = false,
+        ))
+    })
+
+    fun linearGradientThreeStopStrokeRect() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawRect(RectF32.ofLTRB(8f, 16f, 56f, 48f), Paint.stroke(ColorARGB.Transparent, 4f).copy(
+            shader = Shader.LinearGradient(
+                Point2F32(8.5f, 32.5f), Point2F32(55.5f, 32.5f),
+                listOf(
+                    GradientStop(0f, ColorARGB.of(255, 255, 56, 56)),
+                    GradientStop(.5f, ColorARGB.of(255, 56, 220, 120)),
+                    GradientStop(1f, ColorARGB.of(255, 56, 112, 255)),
+                ),
+                TileMode.CLAMP,
+            ),
+            antiAlias = false,
+        ))
+    })
+
+    fun linearGradientTwoStopTranslatedStrokeRect() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        translate(2f, 3f)
+        drawRect(RectF32.ofLTRB(8f, 16f, 56f, 48f), Paint.stroke(ColorARGB.Transparent, 4f).copy(
+            shader = Shader.LinearGradient(
+                Point2F32(8.5f, 32.5f), Point2F32(55.5f, 32.5f),
+                listOf(
+                    GradientStop(0f, ColorARGB.of(255, 255, 56, 56)),
+                    GradientStop(1f, ColorARGB.of(255, 56, 112, 255)),
+                ),
+                TileMode.CLAMP,
+            ),
+            antiAlias = false,
+        ))
+    })
+
+    fun linearGradientThreeStopTranslatedStrokeRect() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        translate(2f, 3f)
+        drawRect(RectF32.ofLTRB(8f, 16f, 56f, 48f), Paint.stroke(ColorARGB.Transparent, 4f).copy(
+            shader = Shader.LinearGradient(Point2F32(8.5f, 32.5f), Point2F32(55.5f, 32.5f), listOf(
+                GradientStop(0f, ColorARGB.of(255, 255, 56, 56)),
+                GradientStop(.5f, ColorARGB.of(255, 56, 220, 120)),
+                GradientStop(1f, ColorARGB.of(255, 56, 112, 255)),
+            ), TileMode.CLAMP), antiAlias = false,
+        ))
+    })
+
+    fun linearGradientTwoStopUniformScaledStrokeRect() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        translate(2f, 4f)
+        scale(2f, 2f)
+        drawRect(RectF32.ofLTRB(8f, 8f, 28f, 24f), Paint.stroke(ColorARGB.Transparent, 2f).copy(
+            shader = Shader.LinearGradient(Point2F32(8f, 16f), Point2F32(28f, 16f), listOf(
+                GradientStop(0f, ColorARGB.of(255, 255, 56, 56)),
+                GradientStop(1f, ColorARGB.of(255, 56, 112, 255)),
+            ), TileMode.CLAMP), antiAlias = false,
+        ))
+    })
+
+    fun linearGradientThreeStopUniformScaledStrokeRect() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        translate(2f, 4f)
+        scale(2f, 2f)
+        drawRect(RectF32.ofLTRB(8f, 8f, 28f, 24f), Paint.stroke(ColorARGB.Transparent, 2f).copy(
+            shader = Shader.LinearGradient(Point2F32(8f, 16f), Point2F32(28f, 16f), listOf(
+                GradientStop(0f, ColorARGB.of(255, 255, 56, 56)),
+                GradientStop(.5f, ColorARGB.of(255, 56, 220, 120)),
+                GradientStop(1f, ColorARGB.of(255, 56, 112, 255)),
+            ), TileMode.CLAMP), antiAlias = false,
+        ))
+    })
+
+    fun radialGradientTwoStopUniformScaledStrokeRect() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        translate(2f, 4f)
+        scale(2f, 2f)
+        drawRect(RectF32.ofLTRB(8f, 8f, 28f, 24f), Paint.stroke(ColorARGB.Transparent, 2f).copy(
+            shader = Shader.RadialGradient(
+                Point2F32(18f, 14f), 8f, listOf(
+                    GradientStop(0f, ColorARGB.of(255, 255, 56, 56)),
+                    GradientStop(1f, ColorARGB.of(255, 56, 112, 255)),
+                ), TileMode.CLAMP,
+            ), antiAlias = false,
+        ))
+    })
+
+    fun radialGradientThreeStopUniformScaledStrokeRect() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        translate(2f, 4f)
+        scale(2f, 2f)
+        drawRect(RectF32.ofLTRB(8f, 8f, 28f, 24f), Paint.stroke(ColorARGB.Transparent, 2f).copy(
+            shader = Shader.RadialGradient(
+                Point2F32(18f, 14f), 8f, listOf(
+                    GradientStop(0f, ColorARGB.of(255, 255, 56, 56)),
+                    GradientStop(.5f, ColorARGB.of(255, 56, 220, 120)),
+                    GradientStop(1f, ColorARGB.of(255, 56, 112, 255)),
+                ), TileMode.CLAMP,
+            ), antiAlias = false,
+        ))
+    })
+
+    fun radialGradientTwoStopStrokeRect() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawRect(RectF32.ofLTRB(8f, 16f, 56f, 48f), Paint.stroke(ColorARGB.Transparent, 4f).copy(
+            shader = Shader.RadialGradient(
+                Point2F32(32.5f, 32.5f), 23.5f,
+                listOf(
+                    GradientStop(0f, ColorARGB.of(255, 255, 56, 56)),
+                    GradientStop(1f, ColorARGB.of(255, 56, 112, 255)),
+                ),
+                TileMode.CLAMP,
+            ),
+            antiAlias = false,
+        ))
+    })
+
+    fun radialGradientThreeStopStrokeRect() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawRect(RectF32.ofLTRB(8f, 16f, 56f, 48f), Paint.stroke(ColorARGB.Transparent, 4f).copy(
+            shader = Shader.RadialGradient(
+                Point2F32(32.5f, 32.5f), 23.5f,
+                listOf(
+                    GradientStop(0f, ColorARGB.of(255, 255, 56, 56)),
+                    GradientStop(.5f, ColorARGB.of(255, 56, 220, 120)),
+                    GradientStop(1f, ColorARGB.of(255, 56, 112, 255)),
+                ),
+                TileMode.CLAMP,
+            ),
+            antiAlias = false,
+        ))
+    })
+
+    fun sweepGradientTwoStopStrokeRect() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawRect(RectF32.ofLTRB(8f, 16f, 56f, 48f), Paint.stroke(ColorARGB.Transparent, 4f).copy(
+            shader = Shader.SweepGradient(
+                Point2F32(32.5f, 32.5f), 0f, 360f,
+                listOf(
+                    GradientStop(0f, ColorARGB.of(255, 255, 56, 56)),
+                    GradientStop(1f, ColorARGB.of(255, 56, 112, 255)),
+                ),
+                TileMode.CLAMP,
+            ),
+            antiAlias = false,
+        ))
+    })
+
+    fun sweepGradientTwoStopUniformScaledStrokeRect() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        translate(2f, 4f)
+        scale(2f, 2f)
+        drawRect(RectF32.ofLTRB(8f, 8f, 28f, 24f), Paint.stroke(ColorARGB.Transparent, 2f).copy(
+            shader = Shader.SweepGradient(
+                Point2F32(18f, 14f), 0f, 360f,
+                listOf(
+                    GradientStop(0f, ColorARGB.of(255, 255, 56, 56)),
+                    GradientStop(1f, ColorARGB.of(255, 56, 112, 255)),
+                ),
+                TileMode.CLAMP,
+            ),
+            antiAlias = false,
+        ))
+    })
+
+    fun sweepGradientThreeStopUniformScaledStrokeRect() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        translate(2f, 4f)
+        scale(2f, 2f)
+        drawRect(RectF32.ofLTRB(8f, 8f, 28f, 24f), Paint.stroke(ColorARGB.Transparent, 2f).copy(
+            shader = Shader.SweepGradient(
+                Point2F32(18f, 14f), 0f, 360f, listOf(
+                    GradientStop(0f, ColorARGB.of(255, 255, 56, 56)),
+                    GradientStop(.5f, ColorARGB.of(255, 56, 220, 120)),
+                    GradientStop(1f, ColorARGB.of(255, 56, 112, 255)),
+                ), TileMode.CLAMP,
+            ), antiAlias = false,
+        ))
+    })
+
+    fun sweepGradientThreeStopStrokeRect() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawRect(RectF32.ofLTRB(8f, 16f, 56f, 48f), Paint.stroke(ColorARGB.Transparent, 4f).copy(
+            shader = Shader.SweepGradient(
+                Point2F32(32.5f, 32.5f), 0f, 360f,
+                listOf(
+                    GradientStop(0f, ColorARGB.of(255, 255, 56, 56)),
+                    GradientStop(.5f, ColorARGB.of(255, 56, 220, 120)),
+                    GradientStop(1f, ColorARGB.of(255, 56, 112, 255)),
+                ),
+                TileMode.CLAMP,
+            ),
+            antiAlias = false,
         ))
     })
 

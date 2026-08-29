@@ -229,6 +229,9 @@ class PromoteEvidenceCliRunner internal constructor(
         // Selected artifacts may be stale precisely because this operation replaces
         // them. Read the existing catalogue and environment without validating those
         // entries; the fully staged root is independently verified after replacement.
+        require(Files.isRegularFile(promoted.resolve("promotion.json"), NOFOLLOW_LINKS)) {
+            "promoted evidence root requires promotion metadata"
+        }
         val existingSceneIds = readCatalogEntries(promoted).map(EvidenceCatalogEntry::sceneId)
         require(existingSceneIds.isNotEmpty()) { "promoted catalog contains no scenes" }
         val existing = ValidatedCatalogRoot(

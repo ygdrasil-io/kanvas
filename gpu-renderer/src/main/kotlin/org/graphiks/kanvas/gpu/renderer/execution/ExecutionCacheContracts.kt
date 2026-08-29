@@ -33,10 +33,15 @@ data class GPUExecutionCacheRequest(
     val ownerScope: String,
     val releaseBlocking: Boolean = false,
     val productRouteActivated: Boolean = false,
+    /** Stable capability/adapter identity; backend handles never belong here. */
+    val capabilityFingerprint: String = "unspecified",
 ) {
     init {
         require(keyHash.isNotBlank()) { "GPUExecutionCacheRequest.keyHash must not be blank" }
         require(subjectHash.isNotBlank()) { "GPUExecutionCacheRequest.subjectHash must not be blank" }
+        require(capabilityFingerprint.isNotBlank()) {
+            "GPUExecutionCacheRequest.capabilityFingerprint must not be blank"
+        }
         require(ownerScope.isNotBlank()) { "GPUExecutionCacheRequest.ownerScope must not be blank" }
         require(!releaseBlocking) { "GPUExecutionCacheRequest.releaseBlocking must stay false" }
         require(!productRouteActivated) {
@@ -105,10 +110,15 @@ sealed interface GPUExecutionCacheDecision<out T : Any> {
  */
 class GPUExecutionObjectCache<T : Any>(
     private val domain: GPUExecutionCacheDomain,
+    private val maxEntries: Int = 256,
     private val dispose: (T) -> Unit = {},
 ) : AutoCloseable {
     private val entries = linkedMapOf<CacheEntryKey, T>()
     private var closeRequested = false
+
+    init {
+        require(maxEntries > 0) { "GPUExecutionObjectCache.maxEntries must be positive" }
+    }
 
     /** Gets or creates one cache entry with deterministic telemetry. */
     fun getOrCreate(
@@ -131,6 +141,8 @@ class GPUExecutionObjectCache<T : Any>(
         val entryKey = request.entryKey()
         val cached = entries[entryKey]
         if (cached != null) {
+            entries.remove(entryKey)
+            entries[entryKey] = cached
             return GPUExecutionCacheDecision.Ready(
                 request = request,
                 handle = cached,
@@ -138,25 +150,28 @@ class GPUExecutionObjectCache<T : Any>(
             )
         }
 
+        val events = mutableListOf(request.cacheEvent(GPUCacheEventResult.Miss))
         return try {
+            if (entries.size >= maxEntries) {
+                val eldest = entries.entries.first()
+                disposeEntry(eldest.value)
+                entries.remove(eldest.key)
+                events += request.cacheEvent(GPUCacheEventResult.Evict)
+            }
             val handle = create()
             entries[entryKey] = handle
+            events += request.cacheEvent(GPUCacheEventResult.Create)
             GPUExecutionCacheDecision.Ready(
                 request = request,
                 handle = handle,
-                cacheEvents = listOf(
-                    request.cacheEvent(GPUCacheEventResult.Miss),
-                    request.cacheEvent(GPUCacheEventResult.Create),
-                ),
+                cacheEvents = events,
             )
         } catch (_: Throwable) {
+            events += request.cacheEvent(GPUCacheEventResult.Failure)
             GPUExecutionCacheDecision.Refused(
                 request = request,
                 diagnosticCode = "unsupported.execution.cache_create_failed",
-                cacheEvents = listOf(
-                    request.cacheEvent(GPUCacheEventResult.Miss),
-                    request.cacheEvent(GPUCacheEventResult.Failure),
-                ),
+                cacheEvents = events,
             )
         }
     }
@@ -206,6 +221,7 @@ class GPUExecutionObjectCache<T : Any>(
         val keyHash: String,
         val subjectHash: String,
         val deviceGeneration: GPUDeviceGenerationID,
+        val capabilityFingerprint: String,
     )
 
     private fun GPUExecutionCacheRequest.entryKey(): CacheEntryKey =
@@ -213,6 +229,7 @@ class GPUExecutionObjectCache<T : Any>(
             keyHash = keyHash,
             subjectHash = subjectHash,
             deviceGeneration = deviceGeneration,
+            capabilityFingerprint = capabilityFingerprint,
         )
 }
 
