@@ -2,7 +2,7 @@ package org.graphiks.kanvas.gpu.evidence.oracle
 
 import kotlin.math.floor
 
-/** Independent pixel-center oracle for an integral vertical radius-two round-cap segment. */
+/** Independent pixel-center oracle for an integral vertical round-cap segment. */
 class SurfaceSrgbRoundCapVerticalStrokeCpuOracle(
     private val startY: Double,
     private val endY: Double,
@@ -12,8 +12,8 @@ class SurfaceSrgbRoundCapVerticalStrokeCpuOracle(
 ) : CpuOracle {
     init {
         require(startY.isIntegralDeviceCoordinate() && endY.isIntegralDeviceCoordinate() &&
-            centerX.isIntegralDeviceCoordinate() && radius == 2.0 && endY - startY >= 4.0
-        ) { "round-cap oracle requires an integral bottom-to-top radius-two vertical segment" }
+            centerX.isIntegralDeviceCoordinate() && radius.isFinite() && radius > 0.0 && endY - startY >= 2.0 * radius
+        ) { "round-cap oracle requires an integral bottom-to-top segment with a positive radius" }
         require(rgba.size == 4 && rgba.all { it in 0..255 })
     }
 

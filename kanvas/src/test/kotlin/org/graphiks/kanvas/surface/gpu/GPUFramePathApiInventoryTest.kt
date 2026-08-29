@@ -3780,6 +3780,44 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `uniformly scaled vertical round cap reaches native preparation`() {
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(16f, 8f)
+                        lineTo(16f, 24f)
+                    },
+                    Paint.stroke(ColorARGB.Red, 4f).copy(
+                        antiAlias = false,
+                        strokeCap = StrokeCap.ROUND,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.scaling(2f, 2f),
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target = target(width = 64, height = 64),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER),
+        )
+
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+        val semantic = assertIs<GPUCorePrimitiveSemanticGatherResult.Gathered>(
+            GPUFramePathApiInventory.gatherCorePrimitiveSemantics(
+                inventory,
+                GPUPixelBounds(0, 0, 64, 64),
+            ),
+        ).semantics.values.single() as GPUDrawSemanticPayload.CorePrimitive
+        val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
+        assertEquals(GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan, geometry.geometryMode)
+        assertEquals(
+            GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundUniformScaleV1,
+            geometry.strokeStyle?.loweringProof,
+        )
+    }
+
+    @Test
     fun `reverse horizontal round cap reaches native preparation`() {
         val inventory = GPUFramePathApiInventory.plan(
             operations = listOf(
