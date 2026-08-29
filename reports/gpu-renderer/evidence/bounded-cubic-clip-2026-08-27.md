@@ -18,12 +18,13 @@ adaptatif). Les 4 096 canaux de chaque variante, soit 16 384 canaux, sont
 byte-exact (`tolerance = 0`) contre les readbacks WebGPU. Les pixels adjacents
 aux arêtes cubiques extérieure et intérieure sont aussi nommés dans le test.
 
-La voie reste headless/offscreen. La fixture a exactement 190 vertices après
-flattening, sous `RenderConfig.maxPathVertices = 256`. Aucun GM n’a été
-modifié, aucune limite d’arêtes ni seuil de similarité/performance n’a été
-relâché. Un runner frais fixe les refus exacts : `clipcubic` (17 opérations,
-`unsupported.stroke.width_invalid`) et `clippedcubic` (19 opérations,
-`unsupported.core_primitive.stencil_edge_fan_budget`).
+La voie reste headless/offscreen. La fixture a exactement 26 vertices après
+flattening adaptatif, sous `RenderConfig.maxPathVertices = 256`. W140 a
+également promu le GM `clippedcubic` : 10 opérations sont dispatchées sans
+refus sur la route cubic bornée. `clipcubic` reste refusé (17 opérations,
+`unsupported.stroke.width_invalid`) car son hairline stroke sort du contrat
+de stroke actuel. Les PNG, statistiques et diagnostics de cette promotion
+sont dans `reports/gpu-renderer/evidence/clipped-cubic-gm-2026-08-29/`.
 
 Les refus restent explicites : `unsupported.clip.inverse_cubic`,
 `unsupported_transform:Perspective` et `unsupported.clip.vertex_budget`.

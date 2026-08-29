@@ -1,0 +1,19 @@
+{
+  "gm": "clippedcubic",
+  "renderedOutcome": {
+    "dispatchCount": 10,
+    "refusedCount": 0,
+    "diagnostic": null
+  },
+  "relatedRefusal": {
+    "gm": "clipcubic",
+    "operations": 17,
+    "diagnostic": "unsupported.stroke.width_invalid",
+    "policy": "Hairline cubic stroke remains explicitly refused; this wave promotes only the bounded filled-path route."
+  },
+  "stablePolicies": [
+    "geometry.path.vertex_budget_exceeded",
+    "geometry.path.fan_budget_exceeded",
+    "unsupported.stroke.width_invalid"
+  ]
+}

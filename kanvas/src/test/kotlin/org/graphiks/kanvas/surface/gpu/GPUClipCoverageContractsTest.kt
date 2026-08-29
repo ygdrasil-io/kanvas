@@ -527,7 +527,11 @@ class GPUClipCoverageContractsTest {
     fun `cubic clip defers over budget edges to planner`() {
         val path = Path().apply {
             moveTo(0f, 0f)
-            cubicTo(0f, 80f, 80f, 80f, 80f, 0f)
+            var x = 0f
+            repeat(40) {
+                cubicTo(x, 80f, x + 80f, 80f, x + 80f, 0f)
+                x += 80f
+            }
             close()
         }
         val request = requireNotNull(

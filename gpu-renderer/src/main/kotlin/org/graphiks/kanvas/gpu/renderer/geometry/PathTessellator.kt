@@ -198,19 +198,59 @@ class PathTessellator(
     }
 
     private fun emitCubicSegments(p0: Point, p1: Point, p2: Point, p3: Point, result: MutableList<Point>) {
-        val steps = cubicStepCount(p0, p1, p2, p3)
-        for (i in 1..steps) {
-            val t = i.toFloat() / steps
-            val x = (1 - t).let { it * it * it } * p0.x +
-                3 * (1 - t) * (1 - t) * t * p1.x +
-                3 * (1 - t) * t * t * p2.x +
-                t * t * t * p3.x
-            val y = (1 - t).let { it * it * it } * p0.y +
-                3 * (1 - t) * (1 - t) * t * p1.y +
-                3 * (1 - t) * t * t * p2.y +
-                t * t * t * p3.y
-            appendPoint(result, Point(x, y))
+        val pending = java.util.ArrayDeque<CubicSegment>()
+        pending.addLast(CubicSegment(p0, p1, p2, p3, depth = 0))
+        while (pending.isNotEmpty()) {
+            val segment = pending.removeLast()
+            if (segment.depth >= MAX_CUBIC_SUBDIVISION_DEPTH ||
+                cubicFlatness(segment.p0, segment.p1, segment.p2, segment.p3) <= tolerance
+            ) {
+                appendPoint(result, segment.p3)
+                continue
+            }
+
+            val p01 = midpoint(segment.p0, segment.p1)
+            val p12 = midpoint(segment.p1, segment.p2)
+            val p23 = midpoint(segment.p2, segment.p3)
+            val p012 = midpoint(p01, p12)
+            val p123 = midpoint(p12, p23)
+            val p0123 = midpoint(p012, p123)
+            val nextDepth = segment.depth + 1
+            // LIFO order keeps the emitted endpoints in curve order.
+            pending.addLast(CubicSegment(p0123, p123, p23, segment.p3, nextDepth))
+            pending.addLast(CubicSegment(segment.p0, p01, p012, p0123, nextDepth))
         }
+    }
+
+    private fun midpoint(a: Point, b: Point): Point = Point(
+        a.x * 0.5f + b.x * 0.5f,
+        a.y * 0.5f + b.y * 0.5f,
+    )
+
+    private fun cubicFlatness(p0: Point, p1: Point, p2: Point, p3: Point): Float = maxOf(
+        distanceToSegment(p1, p0, p3),
+        distanceToSegment(p2, p0, p3),
+    )
+
+    private fun distanceToSegment(point: Point, start: Point, end: Point): Float {
+        val startX = start.x.toDouble()
+        val startY = start.y.toDouble()
+        val dx = end.x.toDouble() - startX
+        val dy = end.y.toDouble() - startY
+        val lengthSquared = dx * dx + dy * dy
+        val pointX = point.x.toDouble()
+        val pointY = point.y.toDouble()
+        if (lengthSquared == 0.0) {
+            return kotlin.math.hypot(pointX - startX, pointY - startY).toFloat()
+        }
+
+        val projection = (
+            (pointX - startX) * dx + (pointY - startY) * dy
+        ) / lengthSquared
+        val t = projection.coerceIn(0.0, 1.0)
+        val nearestX = startX + t * dx
+        val nearestY = startY + t * dy
+        return kotlin.math.hypot(pointX - nearestX, pointY - nearestY).toFloat()
     }
 
     private fun emitConicSegments(p0: Point, p1: Point, p2: Point, weight: Float, result: MutableList<Point>) {
@@ -351,22 +391,21 @@ class PathTessellator(
         return (len / tolerance).toInt().coerceAtLeast(2)
     }
 
-    private fun cubicStepCount(p0: Point, p1: Point, p2: Point, p3: Point): Int {
-        val dx1 = p1.x - p0.x
-        val dy1 = p1.y - p0.y
-        val dx2 = p2.x - p1.x
-        val dy2 = p2.y - p1.y
-        val dx3 = p3.x - p2.x
-        val dy3 = p3.y - p2.y
-        val len = kotlin.math.sqrt(dx1 * dx1 + dy1 * dy1) +
-            kotlin.math.sqrt(dx2 * dx2 + dy2 * dy2) +
-            kotlin.math.sqrt(dx3 * dx3 + dy3 * dy3)
-        return (len / tolerance).toInt().coerceAtLeast(2)
-    }
-
     private data class ContourState(
         var start: Point,
         var isOpen: Boolean = false,
         var hasExplicitStart: Boolean = false,
     )
+
+    private data class CubicSegment(
+        val p0: Point,
+        val p1: Point,
+        val p2: Point,
+        val p3: Point,
+        val depth: Int,
+    )
+
+    private companion object {
+        const val MAX_CUBIC_SUBDIVISION_DEPTH = 16
+    }
 }

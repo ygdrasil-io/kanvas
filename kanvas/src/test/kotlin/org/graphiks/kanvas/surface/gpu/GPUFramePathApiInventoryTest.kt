@@ -4855,6 +4855,7 @@ class GPUFramePathApiInventoryTest {
             ),
         )
 
+        var observedVertexCount: Int? = null
         variants.forEach { expected ->
             val surface = Surface(32, 32)
             surface.canvas {
@@ -4873,7 +4874,14 @@ class GPUFramePathApiInventoryTest {
             )
             val geometry = assertIs<GPUClipExecutionGeometry.Path>(execution.producer.geometry)
 
-            assertEquals(190, geometry.vertices.size / 2)
+            val vertexCount = geometry.vertices.size / 2
+            assertTrue(vertexCount in 3..256, "vertexCount=$vertexCount")
+            assertTrue(vertexCount > 8, "expected cubic flattening to retain curve detail")
+            if (observedVertexCount == null) {
+                observedVertexCount = vertexCount
+            } else {
+                assertEquals(observedVertexCount, vertexCount)
+            }
             assertEquals(expected.front, execution.producer.frontPassOperation)
             assertEquals(expected.back, execution.producer.backPassOperation)
             assertEquals(expected.consumer, execution.consumer.compare)

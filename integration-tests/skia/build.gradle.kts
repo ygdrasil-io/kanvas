@@ -35,6 +35,7 @@ tasks.withType<Test> {
         "kanvas.gm.from",
         "kanvas.gm.to",
         "kanvas.gm.name",
+        "kanvas.gm.writeEvidence",
         "kanvas.render.debugLevel",
     ).forEach { propertyName ->
         System.getProperty(propertyName)?.let { value ->

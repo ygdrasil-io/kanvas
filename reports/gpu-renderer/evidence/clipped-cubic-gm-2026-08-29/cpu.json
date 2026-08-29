@@ -1,0 +1,8 @@
+{
+  "gm": "clippedcubic",
+  "status": "refused",
+  "diagnostic": "unsupported.cpu.oracle_not_available",
+  "reason": "The headless test harness has no independent CPU rasterizer for this 1240x390 Skia GM. The checked-in Skia PNG is used only as the external GM reference; it is not claimed as a CPU oracle.",
+  "stable": true,
+  "policy": "Do not promote a CPU/GPU parity claim for this GM until an independent CPU rasterizer is delivered. GPU promotion remains conditioned on native WebGPU evidence and the GM reference threshold."
+}

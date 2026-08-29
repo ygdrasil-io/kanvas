@@ -142,7 +142,7 @@
       "score": 74.0710175439,
       "operationCount": 23,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
+      "firstDiagnostic": "unsupported.mask-filter.blur.sigma: Core primitive geometry cannot be lowered exactly by the current canonical route.",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -286,7 +286,7 @@
       "score": 58.9133579126,
       "operationCount": 145,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.material.source_unimplemented: unsupported.material.source_unimplemented",
+      "firstDiagnostic": "unsupported.material.radial_gradient_stop_count: unsupported.material.radial_gradient_stop_count",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -350,7 +350,7 @@
       "score": 55.4541666667,
       "operationCount": 7,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.stroke.expansion_budget_exceeded: unsupported.stroke.expansion_budget_exceeded",
+      "firstDiagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -430,7 +430,7 @@
       "score": 78.5514066496,
       "operationCount": 38,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
+      "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -606,7 +606,7 @@
       "score": 0.0000000000,
       "operationCount": 7,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
+      "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -846,7 +846,7 @@
       "score": null,
       "operationCount": 6,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
+      "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -1070,9 +1070,9 @@
       "score": 4.7151979566,
       "operationCount": 1,
       "route": "setup-failure",
-      "firstDiagnostic": "unsupported.material.gradient_tile_mode_unsupported: unsupported.material.gradient_tile_mode_unsupported",
+      "firstDiagnostic": "unsupported.material.radial_gradient_stop_count: unsupported.material.radial_gradient_stop_count",
       "setupState": "FAILED",
-      "setupDiagnostic": "unsupported.material.gradient_tile_mode_unsupported: unsupported.material.gradient_tile_mode_unsupported"
+      "setupDiagnostic": "unsupported.material.radial_gradient_stop_count: unsupported.material.radial_gradient_stop_count"
     },
     {
       "name": "crbug_892988",
@@ -1166,7 +1166,7 @@
       "score": 27.5487500000,
       "operationCount": 5,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
+      "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -1182,7 +1182,7 @@
       "score": 26.0559082031,
       "operationCount": 7,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
+      "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -1198,7 +1198,7 @@
       "score": 26.0559082031,
       "operationCount": 7,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
+      "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -1230,7 +1230,7 @@
       "score": 67.2982812500,
       "operationCount": 3,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
+      "firstDiagnostic": "geometry.path.fan_budget_exceeded: Prepared Surface operation could not be lowered.",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -1326,7 +1326,7 @@
       "score": 93.8333333333,
       "operationCount": 4,
       "route": "render-failure",
-      "firstDiagnostic": "invalid.surface.prepared.frame-build-contract: Prepared Surface frame construction violated an internal contract.",
+      "firstDiagnostic": "invalid.preflight.core_primitive_clip_producer_authority: Resource-backed clip consumer is missing its sealed producer topology.",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -1480,13 +1480,13 @@
       "referenceName": "p3_ovals",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": false,
+      "renderAvailable": true,
       "attempted": true,
-      "terminalFailure": true,
-      "score": 88.2472222222,
+      "terminalFailure": false,
+      "score": 88.4486111111,
       "operationCount": 4,
-      "route": "render-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
+      "route": "gpu",
+      "firstDiagnostic": null,
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -1499,7 +1499,7 @@
       "renderAvailable": true,
       "attempted": true,
       "terminalFailure": false,
-      "score": 0.0000000000,
+      "score": 0.2243041992,
       "operationCount": 9,
       "route": "gpu",
       "firstDiagnostic": null,
@@ -2094,7 +2094,7 @@
       "score": 35.5241699219,
       "operationCount": 2,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
+      "firstDiagnostic": "invalid.preflight.core_primitive_path_stencil_msaa_authority: Path stencil MSAA authority requires one unique path-bearing render scope.",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -2334,7 +2334,7 @@
       "score": 32.9228354978,
       "operationCount": 65,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.material.source_unimplemented: unsupported.material.source_unimplemented",
+      "firstDiagnostic": "unsupported.material.sweep_gradient_stop_count: unsupported.material.sweep_gradient_stop_count",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -2382,7 +2382,7 @@
       "score": 80.6000000000,
       "operationCount": 29,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
+      "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -2441,14 +2441,14 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": false,
-      "terminalFailure": false,
+      "attempted": true,
+      "terminalFailure": true,
       "score": 74.2448571429,
-      "operationCount": 55,
-      "route": "setup-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
-      "setupState": "FAILED",
-      "setupDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
+      "operationCount": 79,
+      "route": "render-failure",
+      "firstDiagnostic": "unsupported.image.native_binding: Prepared Surface operation could not be lowered.",
+      "setupState": "SUCCEEDED",
+      "setupDiagnostic": null
     },
     {
       "name": "imagefiltersclipped",
@@ -2462,7 +2462,7 @@
       "score": 80.2048837209,
       "operationCount": 74,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
+      "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -2536,13 +2536,13 @@
       "referenceName": "imagefilterstransformed",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": false,
+      "renderAvailable": true,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 2.9990079365,
       "operationCount": 16,
-      "route": "render-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
+      "route": "gpu",
+      "firstDiagnostic": null,
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -2638,9 +2638,9 @@
       "score": 60.7990722656,
       "operationCount": 1,
       "route": "setup-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
+      "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.",
       "setupState": "FAILED",
-      "setupDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
+      "setupDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route."
     },
     {
       "name": "luminosity_overflow",
@@ -2667,7 +2667,7 @@
       "renderAvailable": true,
       "attempted": true,
       "terminalFailure": false,
-      "score": 7.8500000000,
+      "score": 8.7142857143,
       "operationCount": 3,
       "route": "gpu",
       "firstDiagnostic": null,
@@ -2686,7 +2686,7 @@
       "score": 30.7081481481,
       "operationCount": 16,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.material.source_unimplemented: unsupported.material.source_unimplemented",
+      "firstDiagnostic": "unsupported.material.sweep_gradient_stop_count: unsupported.material.sweep_gradient_stop_count",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -2782,7 +2782,7 @@
       "score": 41.8116363636,
       "operationCount": 3,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
+      "firstDiagnostic": "unsupported.recording.core_primitive_path_stencil_msaa_pass_break: Path stencil MSAA 4x requires one uninterrupted base render scope.",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -3048,13 +3048,13 @@
       "referenceName": "shadermaskfilter_gradient",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": false,
+      "renderAvailable": true,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 81.6238403320,
       "operationCount": 2,
-      "route": "render-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
+      "route": "gpu",
+      "firstDiagnostic": null,
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -3064,13 +3064,13 @@
       "referenceName": "shadow_utils_gray",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": false,
+      "renderAvailable": true,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 77.9166666667,
       "operationCount": 7,
-      "route": "render-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
+      "route": "gpu",
+      "firstDiagnostic": null,
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -3080,13 +3080,13 @@
       "referenceName": "shadow_utils_occl",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": false,
+      "renderAvailable": true,
       "attempted": true,
-      "terminalFailure": true,
+      "terminalFailure": false,
       "score": 68.5195312500,
       "operationCount": 7,
-      "route": "render-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
+      "route": "gpu",
+      "firstDiagnostic": null,
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -3342,7 +3342,7 @@
       "score": 1.4750000000,
       "operationCount": 3,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.material.gradient_antialias: unsupported.material.gradient_antialias",
+      "firstDiagnostic": "unsupported.material.sweep_gradient_stop_count: unsupported.material.sweep_gradient_stop_count",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -3358,7 +3358,7 @@
       "score": 93.8952205882,
       "operationCount": 3,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.material.source_unimplemented: unsupported.material.source_unimplemented",
+      "firstDiagnostic": "unsupported.material.radial_gradient_stop_count: unsupported.material.radial_gradient_stop_count",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -3870,7 +3870,7 @@
       "score": 55.0175000000,
       "operationCount": 7,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.material.source_unimplemented: unsupported.material.source_unimplemented",
+      "firstDiagnostic": "unsupported.material.sweep_gradient_stop_count: unsupported.material.sweep_gradient_stop_count",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -3918,7 +3918,7 @@
       "score": 100.0000000000,
       "operationCount": 2,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.material.gradient_antialias: unsupported.material.gradient_antialias",
+      "firstDiagnostic": "unsupported.material.radial_gradient_stop_count: unsupported.material.radial_gradient_stop_count",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -3934,7 +3934,7 @@
       "score": 100.0000000000,
       "operationCount": 2,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.material.gradient_antialias: unsupported.material.gradient_antialias",
+      "firstDiagnostic": "unsupported.material.radial_gradient_stop_count: unsupported.material.radial_gradient_stop_count",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -3950,7 +3950,7 @@
       "score": 34.8735351563,
       "operationCount": 3,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.material.gradient_antialias: unsupported.material.gradient_antialias",
+      "firstDiagnostic": "unsupported.material.radial_gradient_stop_count: unsupported.material.radial_gradient_stop_count",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -4142,7 +4142,7 @@
       "score": 43.0553668478,
       "operationCount": 13,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.material.gradient_antialias: unsupported.material.gradient_antialias",
+      "firstDiagnostic": "unsupported.material.sweep_gradient_stop_count: unsupported.material.sweep_gradient_stop_count",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -4347,7 +4347,7 @@
       "renderAvailable": true,
       "attempted": true,
       "terminalFailure": false,
-      "score": 20.1666666667,
+      "score": 22.7222222222,
       "operationCount": 2,
       "route": "gpu",
       "firstDiagnostic": null,
@@ -4411,7 +4411,7 @@
       "renderAvailable": true,
       "attempted": true,
       "terminalFailure": false,
-      "score": 95.4781144781,
+      "score": 95.3535353535,
       "operationCount": 11,
       "route": "gpu",
       "firstDiagnostic": null,
@@ -4635,7 +4635,7 @@
       "renderAvailable": true,
       "attempted": true,
       "terminalFailure": false,
-      "score": 30.0964355469,
+      "score": 29.9133300781,
       "operationCount": 4,
       "route": "gpu",
       "firstDiagnostic": null,
@@ -4827,7 +4827,7 @@
       "renderAvailable": true,
       "attempted": true,
       "terminalFailure": false,
-      "score": 0.0009765625,
+      "score": 5.6966145833,
       "operationCount": 2,
       "route": "gpu",
       "firstDiagnostic": null,
@@ -4843,7 +4843,7 @@
       "renderAvailable": true,
       "attempted": true,
       "terminalFailure": false,
-      "score": 45.3125000000,
+      "score": 100.0000000000,
       "operationCount": 2,
       "route": "gpu",
       "firstDiagnostic": null,
@@ -4862,9 +4862,9 @@
       "score": 66.9082641602,
       "operationCount": 1,
       "route": "setup-failure",
-      "firstDiagnostic": "unsupported.material.gradient_tile_mode_unsupported: unsupported.material.gradient_tile_mode_unsupported",
+      "firstDiagnostic": "unsupported.material.radial_gradient_stop_count: unsupported.material.radial_gradient_stop_count",
       "setupState": "FAILED",
-      "setupDiagnostic": "unsupported.material.gradient_tile_mode_unsupported: unsupported.material.gradient_tile_mode_unsupported"
+      "setupDiagnostic": "unsupported.material.radial_gradient_stop_count: unsupported.material.radial_gradient_stop_count"
     },
     {
       "name": "drawimage_sampling",
@@ -4891,7 +4891,7 @@
       "renderAvailable": true,
       "attempted": true,
       "terminalFailure": false,
-      "score": 28.7407407407,
+      "score": 29.5833333333,
       "operationCount": 4,
       "route": "gpu",
       "firstDiagnostic": null,
@@ -5358,9 +5358,9 @@
       "score": 91.3968750000,
       "operationCount": 21,
       "route": "setup-failure",
-      "firstDiagnostic": "unsupported.stroke.expansion_budget_exceeded: unsupported.stroke.expansion_budget_exceeded",
+      "firstDiagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing",
       "setupState": "FAILED",
-      "setupDiagnostic": "unsupported.stroke.expansion_budget_exceeded: unsupported.stroke.expansion_budget_exceeded"
+      "setupDiagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing"
     },
     {
       "name": "imagemagnifier_bounds",
@@ -5419,7 +5419,7 @@
       "renderAvailable": true,
       "attempted": true,
       "terminalFailure": false,
-      "score": 49.8010616785,
+      "score": 49.4945020222,
       "operationCount": 79,
       "route": "gpu",
       "firstDiagnostic": null,
@@ -5515,7 +5515,7 @@
       "renderAvailable": true,
       "attempted": true,
       "terminalFailure": false,
-      "score": 92.9693333333,
+      "score": 92.9986666667,
       "operationCount": 10,
       "route": "gpu",
       "firstDiagnostic": null,
@@ -5528,15 +5528,15 @@
       "referenceName": "image_subset",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": false,
-      "attempted": false,
+      "renderAvailable": true,
+      "attempted": true,
       "terminalFailure": false,
       "score": 94.1064049587,
-      "operationCount": 1,
-      "route": "setup-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
-      "setupState": "FAILED",
-      "setupDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
+      "operationCount": 4,
+      "route": "gpu",
+      "firstDiagnostic": null,
+      "setupState": "SUCCEEDED",
+      "setupDiagnostic": null
     },
     {
       "name": "imageshader_tinyscale",
@@ -5739,7 +5739,7 @@
       "renderAvailable": true,
       "attempted": true,
       "terminalFailure": false,
-      "score": 88.6337792642,
+      "score": 88.6270903010,
       "operationCount": 10,
       "route": "gpu",
       "firstDiagnostic": null,
@@ -5784,15 +5784,15 @@
       "referenceName": "nearest_half_pixel_image",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": true,
-      "attempted": true,
+      "renderAvailable": false,
+      "attempted": false,
       "terminalFailure": false,
       "score": 73.4493874919,
-      "operationCount": 2,
-      "route": "gpu",
-      "firstDiagnostic": null,
-      "setupState": "SUCCEEDED",
-      "setupDiagnostic": null
+      "operationCount": 1,
+      "route": "setup-failure",
+      "firstDiagnostic": "invalid.surface.prepared.image-lowerer-authority: Normalized image facts and prepared lowerer facts must remain identical.",
+      "setupState": "FAILED",
+      "setupDiagnostic": "invalid.surface.prepared.image-lowerer-authority: Normalized image facts and prepared lowerer facts must remain identical."
     },
     {
       "name": "new_texture_image",
@@ -5838,9 +5838,9 @@
       "score": 71.3378906250,
       "operationCount": 257,
       "route": "setup-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
+      "firstDiagnostic": "invalid.core_primitive.coverage_sample.stencil_1x_requires_single_sample: Stencil1x requires a single-sample frame and cannot be relabeled as multisample coverage.",
       "setupState": "FAILED",
-      "setupDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
+      "setupDiagnostic": "invalid.core_primitive.coverage_sample.stencil_1x_requires_single_sample: Stencil1x requires a single-sample frame and cannot be relabeled as multisample coverage."
     },
     {
       "name": "null_child_rt",
@@ -5934,9 +5934,9 @@
       "score": 30.8374384236,
       "operationCount": 3,
       "route": "setup-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
+      "firstDiagnostic": "unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route.",
       "setupState": "FAILED",
-      "setupDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
+      "setupDiagnostic": "unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
       "name": "pictureshadercache",
@@ -5950,9 +5950,9 @@
       "score": 95.9200000000,
       "operationCount": 1,
       "route": "setup-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
+      "firstDiagnostic": "unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route.",
       "setupState": "FAILED",
-      "setupDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
+      "setupDiagnostic": "unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
       "name": "pictureshader",
@@ -5966,9 +5966,9 @@
       "score": 35.8000985222,
       "operationCount": 3,
       "route": "setup-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
+      "firstDiagnostic": "unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route.",
       "setupState": "FAILED",
-      "setupDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
+      "setupDiagnostic": "unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
       "name": "pictureshader_localwrapper",
@@ -5982,9 +5982,9 @@
       "score": 35.8000985222,
       "operationCount": 3,
       "route": "setup-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
+      "firstDiagnostic": "unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route.",
       "setupState": "FAILED",
-      "setupDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
+      "setupDiagnostic": "unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route."
     },
     {
       "name": "pictureshader_persp",
@@ -6078,9 +6078,9 @@
       "score": 24.9023437500,
       "operationCount": 1,
       "route": "setup-failure",
-      "firstDiagnostic": "unsupported.stroke.expansion_budget_exceeded: unsupported.stroke.expansion_budget_exceeded",
+      "firstDiagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing",
       "setupState": "FAILED",
-      "setupDiagnostic": "unsupported.stroke.expansion_budget_exceeded: unsupported.stroke.expansion_budget_exceeded"
+      "setupDiagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing"
     },
     {
       "name": "reinterpretcolorspace",
@@ -6361,14 +6361,14 @@
       "referenceStatus": "trusted",
       "referenceAvailable": true,
       "renderAvailable": false,
-      "attempted": false,
-      "terminalFailure": false,
+      "attempted": true,
+      "terminalFailure": true,
       "score": 75.2938375601,
-      "operationCount": 1,
-      "route": "setup-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
-      "setupState": "FAILED",
-      "setupDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route."
+      "operationCount": 2,
+      "route": "render-failure",
+      "firstDiagnostic": "unsupported.material.mapping.local_matrix: Prepared Surface operation could not be lowered.",
+      "setupState": "SUCCEEDED",
+      "setupDiagnostic": null
     },
     {
       "name": "tilemode_decal",
@@ -6888,13 +6888,13 @@
       "referenceName": "circle_sizes",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": false,
+      "renderAvailable": true,
       "attempted": true,
-      "terminalFailure": true,
-      "score": 92.0715332031,
+      "terminalFailure": false,
+      "score": 94.3969726563,
       "operationCount": 17,
-      "route": "render-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
+      "route": "gpu",
+      "firstDiagnostic": null,
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -6907,7 +6907,7 @@
       "renderAvailable": false,
       "attempted": false,
       "terminalFailure": false,
-      "score": 99.2985938792,
+      "score": 99.5219189413,
       "operationCount": 0,
       "route": "excluded:blocking-by-policy",
       "firstDiagnostic": "excluded:blocking-by-policy",
@@ -6936,13 +6936,13 @@
       "referenceName": "concavepaths",
       "referenceStatus": "trusted",
       "referenceAvailable": true,
-      "renderAvailable": false,
+      "renderAvailable": true,
       "attempted": true,
-      "terminalFailure": true,
-      "score": 98.6133333333,
+      "terminalFailure": false,
+      "score": 98.7976666667,
       "operationCount": 30,
-      "route": "render-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
+      "route": "gpu",
+      "firstDiagnostic": null,
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -6958,7 +6958,7 @@
       "score": 94.4009284420,
       "operationCount": 73,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid",
+      "firstDiagnostic": "geometry.path.fan_budget_exceeded: Prepared Surface operation could not be lowered.",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -7006,7 +7006,7 @@
       "score": 96.4859848485,
       "operationCount": 40,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
+      "firstDiagnostic": "geometry.path.fan_budget_exceeded: Prepared Surface operation could not be lowered.",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -7182,7 +7182,7 @@
       "score": 54.9012000000,
       "operationCount": 39,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.material.gradient_antialias: unsupported.material.gradient_antialias",
+      "firstDiagnostic": "unsupported.material.radial_gradient_stop_count: unsupported.material.radial_gradient_stop_count",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -7262,7 +7262,7 @@
       "score": 12.0575990875,
       "operationCount": 66,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.material.source_unimplemented: unsupported.material.source_unimplemented",
+      "firstDiagnostic": "unsupported.material.radial_gradient_stop_count: unsupported.material.radial_gradient_stop_count",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -7358,7 +7358,7 @@
       "score": 91.9345864662,
       "operationCount": 6,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
+      "firstDiagnostic": "geometry.path.fan_budget_exceeded: Prepared Surface operation could not be lowered.",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -7374,7 +7374,7 @@
       "score": 20.5175000000,
       "operationCount": 10001,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
+      "firstDiagnostic": "unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route.",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -7390,7 +7390,7 @@
       "score": null,
       "operationCount": 3,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
+      "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -7406,7 +7406,7 @@
       "score": null,
       "operationCount": 397,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
+      "firstDiagnostic": "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted: ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -7454,7 +7454,7 @@
       "score": 38.5096000000,
       "operationCount": 151,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
+      "firstDiagnostic": "geometry.path.fan_budget_exceeded: Prepared Surface operation could not be lowered.",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -7502,7 +7502,7 @@
       "score": 84.7214574899,
       "operationCount": 13,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.core_primitive.stencil_edge_fan_budget: Core primitive geometry cannot be lowered exactly by the current canonical route.",
+      "firstDiagnostic": "geometry.path.fan_budget_exceeded: Prepared Surface operation could not be lowered.",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -7790,7 +7790,7 @@
       "score": 94.1055297852,
       "operationCount": 7,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.stroke.width_invalid: unsupported.stroke.width_invalid",
+      "firstDiagnostic": "geometry.path.fan_budget_exceeded: Prepared Surface operation could not be lowered.",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -7854,7 +7854,7 @@
       "score": 78.9075000000,
       "operationCount": 401,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.stroke.expansion_budget_exceeded: unsupported.stroke.expansion_budget_exceeded",
+      "firstDiagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -8030,7 +8030,7 @@
       "score": 99.5000000000,
       "operationCount": 7,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.stroke.expansion_budget_exceeded: unsupported.stroke.expansion_budget_exceeded",
+      "firstDiagnostic": "unsupported.pipeline.capability_missing: unsupported.pipeline.capability_missing",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -8206,7 +8206,7 @@
       "score": 0.0000000000,
       "operationCount": 5,
       "route": "render-failure",
-      "firstDiagnostic": "unsupported.material.gradient_antialias: unsupported.material.gradient_antialias",
+      "firstDiagnostic": "unsupported.material.sweep_gradient_stop_count: unsupported.material.sweep_gradient_stop_count",
       "setupState": "SUCCEEDED",
       "setupDiagnostic": null
     },
@@ -8923,7 +8923,7 @@
       "renderAvailable": false,
       "attempted": false,
       "terminalFailure": false,
-      "score": 75.7900000000,
+      "score": 75.7911111111,
       "operationCount": 0,
       "route": "excluded:text-dependency-gated",
       "firstDiagnostic": "excluded:text-dependency-gated",
