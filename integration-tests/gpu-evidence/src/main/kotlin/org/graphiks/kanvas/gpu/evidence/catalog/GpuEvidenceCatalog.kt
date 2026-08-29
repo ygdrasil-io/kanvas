@@ -216,6 +216,7 @@ sweepGradientTwoStopStrokeRect(),
         rotatedRadialStrokeLocalMatrixRefusal(),
         threeStopSweepStrokeUnderWindingRefusal(),
         linearGradientRoundStrokeUnderWindingRefusal(),
+        threeStopRadialStrokeUnderWindingRefusal(),
     )
     val cases: List<EvidenceCase> = renderCases + refusalCases
     val catalog = EvidenceSceneCatalog(cases.map(EvidenceCase::descriptor))
@@ -351,6 +352,15 @@ sweepGradientTwoStopStrokeRect(),
         tags = setOf("path-stroke", "round-cap", "linear-gradient", "path-clip", "winding", "refusal", "kanvas-surface"),
         code = "unsupported.core_primitive.material.path_stencil",
         program = KanvasScenePrograms.linearGradientRoundStrokeUnderWindingRefusal(),
+    )
+
+    private fun threeStopRadialStrokeUnderWindingRefusal() = surfaceRefusal(
+        id = "three-stop-radial-stroke-winding-refusal",
+        title = "Three-stop radial stroke under winding clip refusal",
+        description = "Public Kanvas Surface refuses a non-AA butt/miter path stroke using a three-stop CLAMP radial gradient under a winding path clip; the bounded native radial mapping currently admits two stops only.",
+        tags = setOf("path-stroke", "radial-gradient", "three-stops", "path-clip", "winding", "refusal", "kanvas-surface"),
+        code = "unsupported.material.radial_gradient_stop_count",
+        program = KanvasScenePrograms.threeStopRadialStrokeUnderWindingRefusal(),
     )
 
     private fun basicPrimitivesValidAlpha() = EvidenceCase(
