@@ -64,6 +64,7 @@ object GpuEvidenceCatalog {
         verticalRoundCapStroke(),
         quarterTurnRoundCapStroke(),
         halfTurnRoundCapStroke(),
+        negativeQuarterTurnRoundCapStroke(),
         scaledTranslatedHorizontalHairline(),
         scaledHorizontalHairline(),
         horizontalHairline(),
@@ -718,6 +719,30 @@ sweepGradientTwoStopStrokeRect(),
             emptySet(),
         ),
         KanvasScenePrograms.halfTurnRoundCapStroke(),
+        SurfaceSrgbRoundCapVerticalStrokeCpuOracle(
+            startY = 8.0,
+            endY = 20.0,
+            centerX = 20.0,
+            radius = 2.0,
+            rgba = intArrayOf(255, 0, 0, 255),
+        ),
+    )
+
+    private fun negativeQuarterTurnRoundCapStroke(): EvidenceCase = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("negative-quarter-turn-round-cap-stroke"),
+            "Pixel-exact negative-quarter-turn round-cap path stroke",
+            "Public Kanvas Surface non-AA radius-two horizontal round-cap path rotated exactly -90 degrees onto the integral device grid.",
+            32,
+            32,
+            1L,
+            setOf("path-stroke", "round-cap", "negative-quarter-turn", "kanvas-surface"),
+            EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke-vertical", 2),
+            ComparisonPolicy(0, 100.0, 1, "Independent pixel-center disk oracle for the integral-grid vertical result of the negative-quarter-turn contract."),
+            emptySet(),
+        ),
+        KanvasScenePrograms.negativeQuarterTurnRoundCapStroke(),
         SurfaceSrgbRoundCapVerticalStrokeCpuOracle(
             startY = 8.0,
             endY = 20.0,

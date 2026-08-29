@@ -193,6 +193,8 @@ private fun GPUCorePrimitiveGeometry.TriangulatedPath.isExactSingleSegmentStroke
             stroke.cap == "round" && stroke.width == 4f
         GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2HalfTurnV1 ->
             stroke.cap == "round" && stroke.width == 4f
+        GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2NegativeQuarterTurnV1 ->
+            stroke.cap == "round" && stroke.width == 4f
         GPUCorePrimitiveStrokeLoweringProof.MultiSegmentButtMiterV1 ->
             sourceVertexCount in 3..8 && stroke.cap == "butt" && stroke.join == "miter"
         GPUCorePrimitiveStrokeLoweringProof.HorizontalDashedButtMiterV1 ->

@@ -1796,6 +1796,24 @@ object KanvasScenePrograms {
         restore()
     })
 
+    /** The radius-two round-cap route after an exact negative quarter-turn rotation. */
+    fun negativeQuarterTurnRoundCapStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        save()
+        translate(12f, 24f)
+        rotate(-90f)
+        drawPath(
+            Path {
+                moveTo(4f, 8f)
+                lineTo(16f, 8f)
+            },
+            Paint.stroke(ColorARGB.Red, 4f).copy(
+                antiAlias = false,
+                strokeCap = StrokeCap.ROUND,
+            ),
+        )
+        restore()
+    })
+
     fun scaledTranslatedHorizontalHairline() = KanvasSurfaceProgram(ROUTE_ID, record = {
         save()
         translate(2f, 3f)

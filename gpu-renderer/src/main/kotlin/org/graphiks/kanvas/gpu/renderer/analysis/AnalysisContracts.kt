@@ -2563,13 +2563,15 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
                         (matchesPixelExactRoundCapR2HorizontalV1() ||
                             matchesPixelExactRoundCapR2VerticalV1() ||
                             matchesPixelExactRoundCapR2QuarterTurnV1() ||
-                            matchesPixelExactRoundCapR2HalfTurnV1()))
+                            matchesPixelExactRoundCapR2HalfTurnV1() ||
+                            matchesPixelExactRoundCapR2NegativeQuarterTurnV1()))
                 ) &&
             strokeJoin == "miter" &&
             strokeMiterLimit.isFinite() && strokeMiterLimit >= 1f &&
             (transform.type in setOf(GPUTransformType.Identity, GPUTransformType.Translate) ||
                 transform.isUniformPositiveScale() || transform.isUniformPositiveScaleTranslate() ||
-                transform.isExactQuarterTurnPathRotation() || transform.isExactHalfTurnPathRotation())
+                transform.isExactQuarterTurnPathRotation() || transform.isExactHalfTurnPathRotation() ||
+                transform.isExactNegativeQuarterTurnPathRotation())
 
     private fun NormalizedDrawCommand.FillPath.matchesHorizontalDashedButtMiterV1(): Boolean {
         if (pathEffectKind != "Dash" || dashIntervals?.toList() != listOf(8f, 4f) ||
@@ -2662,6 +2664,18 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
 
     private fun NormalizedDrawCommand.FillPath.matchesPixelExactRoundCapR2HalfTurnV1(): Boolean {
         if (!transform.isExactHalfTurnPathRotation()) return false
+        if (strokeWidth != 4f || tessellatedVertices.size != 4) return false
+        val start = transform.mapPathPoint(tessellatedVertices[0], tessellatedVertices[1])
+        val end = transform.mapPathPoint(tessellatedVertices[2], tessellatedVertices[3])
+        val integral = listOf(start.first, start.second, end.first, end.second)
+            .all { it.isIntegralDeviceCoordinate() }
+        val axisAligned = start.first == end.first || start.second == end.second
+        return integral && axisAligned &&
+            kotlin.math.abs(end.first - start.first) + kotlin.math.abs(end.second - start.second) >= strokeWidth
+    }
+
+    private fun NormalizedDrawCommand.FillPath.matchesPixelExactRoundCapR2NegativeQuarterTurnV1(): Boolean {
+        if (!transform.isExactNegativeQuarterTurnPathRotation()) return false
         if (strokeWidth != 4f || tessellatedVertices.size != 4) return false
         val start = transform.mapPathPoint(tessellatedVertices[0], tessellatedVertices[1])
         val end = transform.mapPathPoint(tessellatedVertices[2], tessellatedVertices[3])
@@ -3271,8 +3285,13 @@ private fun GPUTransformFacts.isAcceptedFillPathTransform(
 }
 
 private fun GPUTransformFacts.isExactQuarterTurnPathRotation(): Boolean =
-    translateX.isFinite() && translateY.isFinite() &&
+        translateX.isFinite() && translateY.isFinite() &&
         scaleX == 0f && scaleY == 0f && skewX == -1f && skewY == 1f
+
+private fun GPUTransformFacts.isExactNegativeQuarterTurnPathRotation(): Boolean =
+    type == GPUTransformType.Affine &&
+        translateX.isFinite() && translateY.isFinite() &&
+        scaleX == 0f && scaleY == 0f && skewX == 1f && skewY == -1f
 
 private fun GPUTransformFacts.isExactHalfTurnPathRotation(): Boolean =
     translateX.isFinite() && translateY.isFinite() &&
