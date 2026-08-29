@@ -2764,6 +2764,148 @@ class GPUFramePathApiInventoryNativeSmokeTest {
     }
 
     @Test
+    fun `clamp sweep gradient butt miter stroke under winding path clip renders natively`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        val capabilities = requireNotNull(backend.capabilities)
+        val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(RenderConfig.DEFAULT.mapPreparedGpuColorConfig())
+        val targetBounds = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, 32, 32)
+        val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.sweep-butt-winding-clip")
+        val clipPath = Path().apply {
+            moveTo(7.25f, 6.25f)
+            lineTo(30.25f, 6.25f)
+            lineTo(7.25f, 29.25f)
+            close()
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(5.25f, 8.25f)
+                        lineTo(21.25f, 20.25f)
+                    },
+                    Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                        shader = Shader.SweepGradient(
+                            Point2F32(16f, 16f),
+                            0f,
+                            360f,
+                            listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                        ),
+                        antiAlias = false,
+                        strokeCap = StrokeCap.BUTT,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.Identity,
+                    ClipStack.Complex(listOf(ClipStackOp.PathOp(clipPath, ClipOp.INTERSECT, antiAlias = false))),
+                ),
+            ),
+            target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+            deviceGeneration = backend.deviceGeneration,
+        )
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+        val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(inventory.visualCommands.single().clipExecutionPlan)
+        assertEquals(GPUClipStencilOperation.IncrementWrap, execution.producer.frontPassOperation)
+        assertEquals(GPUClipStencilOperation.DecrementWrap, execution.producer.backPassOperation)
+        assertEquals(GPUClipStencilCompare.NotEqual, execution.consumer.compare)
+        val clipGeometry = assertIs<GPUClipExecutionGeometry.Path>(execution.producer.geometry)
+        assertEquals(GPUClipFillRule.Winding, clipGeometry.fillRule)
+        assertTrue(!clipGeometry.inverseFill)
+        val preparation = GPUFramePathApiInventory.prepareNativeTaskList(
+            inventory,
+            capabilities,
+            targetBounds,
+            readbackId,
+        )
+        val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            preparation,
+            (preparation as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}; facts=${it.facts}"
+            },
+        ).taskList
+        val session = backend.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(32, 32, colorMapping.physicalFormat, colorMapping.interpretation),
+        )
+        try {
+            val completed = session.renderFrame(
+                prepared,
+                GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
+            ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+            assertEquals(
+                GPUFrameStructuralOutcome.Succeeded,
+                completed.outcome,
+                "Sweep native execution refused/failed: ${completed.diagnostic}",
+            )
+            val gpu = assertIs<GPUSceneFrameOutput.ReadbackRgba>(completed.output).bytes
+            assertRgbaWithinOneLsb(deterministicDiagonalButtMiterSweepWindingClipOracle(), gpu)
+            assertEquals(1L, session.nativeCounters().submits)
+            assertEquals(1L, session.nativeCounters().readbackCopies)
+        } finally {
+            session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
+    fun `clamp three stop sweep gradient stroke under winding path clip remains refused`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        try {
+            val capabilities = requireNotNull(backend.capabilities)
+            val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(
+                RenderConfig.DEFAULT.mapPreparedGpuColorConfig(),
+            )
+            val clipPath = Path().apply {
+                moveTo(7.25f, 6.25f)
+                lineTo(30.25f, 6.25f)
+                lineTo(7.25f, 29.25f)
+                close()
+            }
+            val inventory = GPUFramePathApiInventory.plan(
+                operations = listOf(
+                    DisplayOp.DrawPath(
+                        Path().apply { moveTo(5.25f, 8.25f); lineTo(21.25f, 20.25f) },
+                        Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                            shader = Shader.SweepGradient(
+                                Point2F32(16f, 16f),
+                                0f,
+                                360f,
+                                listOf(
+                                    GradientStop(0f, ColorARGB.Red),
+                                    GradientStop(0.5f, ColorARGB.Green),
+                                    GradientStop(1f, ColorARGB.Blue),
+                                ),
+                            ),
+                            antiAlias = false,
+                            strokeCap = StrokeCap.BUTT,
+                            strokeJoin = StrokeJoin.MITER,
+                        ),
+                        Matrix3x3F32.Identity,
+                        ClipStack.Complex(listOf(ClipStackOp.PathOp(clipPath, ClipOp.INTERSECT, antiAlias = false))),
+                    ),
+                ),
+                target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+                config = RenderConfig.DEFAULT,
+                capabilities = capabilities,
+                deviceGeneration = backend.deviceGeneration,
+            )
+            assertEquals(
+                "refused.unsupported.material.sweep_gradient_stop_count",
+                inventory.recording.analysis.records.single().routeDecisionLabel,
+            )
+            assertEquals(
+                listOf("refused:unsupported.material.sweep_gradient_stop_count"),
+                inventory.recording.routeDiagnostics,
+            )
+        } finally {
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
     fun `clamp linear gradient round stroke under winding path clip remains refused`() {
         val backend = GPUBackendRuntimeNativeFactory.createOrNull()
         assumeTrue(backend != null)
@@ -4771,6 +4913,55 @@ class GPUFramePathApiInventoryNativeSmokeTest {
             }
         }
 
+    /** Independent linear-light oracle for the full-turn sweep gradient stroke and Winding clip. */
+    private fun deterministicDiagonalButtMiterSweepWindingClipOracle(): ByteArray =
+        ByteArray(32 * 32 * 4).also { rgba ->
+            val strokeAx = 5.25f
+            val strokeAy = 8.25f
+            val strokeBx = 21.25f
+            val strokeBy = 20.25f
+            val strokeDx = strokeBx - strokeAx
+            val strokeDy = strokeBy - strokeAy
+            val strokeLengthSquared = strokeDx * strokeDx + strokeDy * strokeDy
+            val halfWidthSquared = 2f * 2f
+            val clipAx = 7.25f
+            val clipAy = 6.25f
+            val clipBx = 30.25f
+            val clipBy = 6.25f
+            val clipCx = 7.25f
+            val clipCy = 29.25f
+            val denominator = (clipBy - clipCy) * (clipAx - clipCx) +
+                (clipCx - clipBx) * (clipAy - clipCy)
+            val fullTurn = (2f * kotlin.math.PI).toFloat()
+            for (y in 0 until 32) {
+                for (x in 0 until 32) {
+                    val px = x + 0.5f
+                    val py = y + 0.5f
+                    val u = ((clipBy - clipCy) * (px - clipCx) +
+                        (clipCx - clipBx) * (py - clipCy)) / denominator
+                    val v = ((clipCy - clipAy) * (px - clipCx) +
+                        (clipAx - clipCx) * (py - clipCy)) / denominator
+                    if (u < 0f || v < 0f || u + v > 1f) continue
+                    val projection = ((px - strokeAx) * strokeDx + (py - strokeAy) * strokeDy) /
+                        strokeLengthSquared
+                    if (projection < 0f || projection > 1f) continue
+                    val closestX = strokeAx + projection * strokeDx
+                    val closestY = strokeAy + projection * strokeDy
+                    val distanceX = px - closestX
+                    val distanceY = py - closestY
+                    if (distanceX * distanceX + distanceY * distanceY > halfWidthSquared) continue
+                    val rawTurn = kotlin.math.atan2(py - 16f, px - 16f) / fullTurn
+                    val t = (rawTurn - kotlin.math.floor(rawTurn)).coerceIn(0f, 1f)
+                    val red = linearToSrgb((1f - t) * srgbToLinear(1f) + t * srgbToLinear(0f))
+                    val blue = linearToSrgb((1f - t) * srgbToLinear(0f) + t * srgbToLinear(1f))
+                    val offset = (y * 32 + x) * 4
+                    rgba[offset] = (red * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 2] = (blue * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 3] = 0xff.toByte()
+                }
+            }
+        }
+
     private fun srgbToLinear(encoded: Float): Float = if (encoded <= 0.04045f) {
         encoded / 12.92f
     } else {
@@ -4857,4 +5048,12 @@ private fun assertRgbaWithinOneLsb(expected: List<Int>, actual: List<Int>) {
         },
         "expected RGBA within one LSB of $expected but was $actual",
     )
+}
+
+private fun assertRgbaWithinOneLsb(expected: ByteArray, actual: ByteArray) {
+    assertEquals(expected.size, actual.size)
+    val mismatch = expected.indices.firstOrNull { index ->
+        abs((expected[index].toInt() and 0xff) - (actual[index].toInt() and 0xff)) > 1
+    }
+    assertTrue(mismatch == null, "expected RGBA byte array within one LSB at every channel, first mismatch=$mismatch")
 }

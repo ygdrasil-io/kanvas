@@ -542,7 +542,9 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
         ((normalizedMaterial is GPUMaterialDescriptor.LinearGradient &&
             !isExactHardPathClipStrokeLinearGradientCandidate()) ||
             (normalizedMaterial is GPUMaterialDescriptor.RadialGradient &&
-                !isExactHardPathClipStrokeRadialGradientCandidate()))
+                !isExactHardPathClipStrokeRadialGradientCandidate()) ||
+            (normalizedMaterial is GPUMaterialDescriptor.SweepGradient &&
+                !isExactHardPathClipStrokeSweepGradientCandidate()))
     ) {
         refuseGeometry("unsupported.core_primitive.material.path_stencil", normalizedMaterial.corePrimitiveMaterialFacts())
     }
@@ -820,6 +822,36 @@ private fun GPUFramePathVisualCommand.isExactHardPathClipStrokeRadialGradientCan
         path.transform.type == GPUTransformType.Identity &&
         gradient.tileMode == "clamp" &&
         gradient.interpolation == "srgb" &&
+        (gradient.allStopPositions?.size ?: 2) == 2 &&
+        (gradient.allStopColors?.size ?: 8) == 8 &&
+        gradient.localMatrix == listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f) &&
+        stencilClip.sampleCount == 1
+}
+
+/** Closed admission predicate for the identity-transform direct sweep-gradient stroke lane. */
+private fun GPUFramePathVisualCommand.isExactHardPathClipStrokeSweepGradientCandidate(): Boolean {
+    val path = normalized as? NormalizedDrawCommand.FillPath ?: return false
+    val gradient = path.material as? GPUMaterialDescriptor.SweepGradient ?: return false
+    val stencilClip = clipExecutionPlan as? GPUClipExecutionPlan.StencilCoverage ?: return false
+    val sweepSpan = gradient.endAngle - gradient.startAngle
+    return path.stroke &&
+        !path.antiAlias &&
+        path.maskFilter == null &&
+        path.contourStarts == listOf(0) &&
+        path.tessellatedVertices.size == 4 &&
+        path.strokeWidth.isFinite() && path.strokeWidth in 0.5f..64f &&
+        path.strokeCap in setOf("butt", "square") &&
+        path.strokeJoin == "miter" &&
+        path.strokeMiterLimit.isFinite() && path.strokeMiterLimit >= 1f &&
+        path.pathEffectKind == null &&
+        (path.dashIntervals?.isEmpty() ?: true) &&
+        path.pathDescriptor.fillRule in setOf("NonZero", "winding") &&
+        !path.pathDescriptor.inverseFill &&
+        path.transform.type == GPUTransformType.Identity &&
+        gradient.tileMode == "clamp" &&
+        gradient.interpolation == "srgb" &&
+        gradient.startAngle.isFinite() && gradient.endAngle.isFinite() &&
+        sweepSpan.isFinite() && sweepSpan > 0f && sweepSpan <= 360f &&
         (gradient.allStopPositions?.size ?: 2) == 2 &&
         (gradient.allStopColors?.size ?: 8) == 8 &&
         gradient.localMatrix == listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f) &&

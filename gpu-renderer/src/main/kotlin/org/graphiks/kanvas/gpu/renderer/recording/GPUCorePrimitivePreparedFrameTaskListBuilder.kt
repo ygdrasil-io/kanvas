@@ -283,6 +283,9 @@ internal fun classifyCorePrimitiveDirectNativeRoute(
                     semantic.hasExactDirectStrokePathConsumerGeometry()) ||
                 (semantic.material is GPUCorePrimitiveMaterialPayload.RadialGradient &&
                     semantic.material.isExactTwoStopClampGradient() &&
+                    semantic.hasExactDirectStrokePathConsumerGeometry()) ||
+                (semantic.material is GPUCorePrimitiveMaterialPayload.SweepGradient &&
+                    semantic.material.isExactTwoStopClampSweepGradient() &&
                     semantic.hasExactDirectStrokePathConsumerGeometry())
             ) -> semantic.targetBounds
         else -> (corePrimitiveDirectClipAuthority(
@@ -825,6 +828,7 @@ private fun GPUDrawPacket.isExactDirectTriangleClampGradientHardPathClipConsumer
     val clampGradient = when (val material = semantic.material) {
         is GPUCorePrimitiveMaterialPayload.LinearGradient -> material.tileMode == "clamp"
         is GPUCorePrimitiveMaterialPayload.RadialGradient -> material.isExactTwoStopClampGradient()
+        is GPUCorePrimitiveMaterialPayload.SweepGradient -> material.isExactTwoStopClampSweepGradient()
         else -> false
     }
     return clampGradient &&
@@ -842,6 +846,21 @@ private fun GPUCorePrimitiveMaterialPayload.RadialGradient.isExactTwoStopClampGr
             0f, 1f, 0f,
             0f, 0f, 1f,
         )
+
+private fun GPUCorePrimitiveMaterialPayload.SweepGradient.isExactTwoStopClampSweepGradient(): Boolean {
+    val span = endAngle - startAngle
+    return tileMode == "clamp" &&
+        interpolation == "srgb" &&
+        startAngle.isFinite() && endAngle.isFinite() &&
+        span.isFinite() && span > 0f && span <= 360f &&
+        positions.size == 2 &&
+        colors.size == 8 &&
+        localMatrix == listOf(
+            1f, 0f, 0f,
+            0f, 1f, 0f,
+            0f, 0f, 1f,
+        )
+}
 
 private fun directCorePrimitiveGeometryBytes(
     packet: GPUDrawPacket,
@@ -2297,6 +2316,11 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                                 (semantic.material is GPUCorePrimitiveMaterialPayload.RadialGradient &&
                                     semantic.material.isExactTwoStopClampGradient() &&
                                     semantic.hasExactDirectStrokePathConsumerGeometry())
+                        GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient ->
+                            packet.renderStepId.value == "sweep.gradient.fill" ||
+                                (semantic.material is GPUCorePrimitiveMaterialPayload.SweepGradient &&
+                                    semantic.material.isExactTwoStopClampSweepGradient() &&
+                                    semantic.hasExactDirectStrokePathConsumerGeometry())
                         else -> false
                     } &&
                     semantic.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor
@@ -2304,7 +2328,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         if (nativeClipStencilPlan?.sampleCount == 1 && !validNativeClipStencilConsumers) {
             return refused(
                 "unsupported.recording.core_primitive_clip_stencil_mixed_geometry",
-                "The bounded clip-stencil scope accepts only one or two direct solid Path or FillRect consumers, the exact single-segment butt/miter stroke consumer, clamp-linear-gradient FillRect consumers, clamp-radial-gradient FillRect consumers, or authenticated clamp-linear-gradient direct-triangle Path consumers.",
+                "The bounded clip-stencil scope accepts only one or two direct solid Path or FillRect consumers, the exact single-segment butt/miter stroke consumer, clamp-gradient FillRect consumers, or authenticated clamp-linear/radial/sweep-gradient direct-triangle Path consumers.",
             )
         }
         val nativeClipStencilPrefixCommandIds = nativeClipStencilPlan
