@@ -1937,6 +1937,19 @@ object KanvasScenePrograms {
         )
     })
 
+    /** The bounded dash route with a vertical path traversed from bottom to top. */
+    fun reverseVerticalDashedButtMiterStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawPath(
+            Path { moveTo(16f, 28f); lineTo(16f, 4f) },
+            Paint.stroke(ColorARGB.Red, 4f).copy(
+                antiAlias = false,
+                strokeCap = StrokeCap.BUTT,
+                strokeJoin = StrokeJoin.MITER,
+                pathEffect = PathEffect.Dash(floatArrayOf(8f, 4f), phase = 0f),
+            ),
+        )
+    })
+
     /** The same bounded dash route consumed by an integral device scissor. */
     fun scissoredHorizontalDashedButtMiterStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
         save()
