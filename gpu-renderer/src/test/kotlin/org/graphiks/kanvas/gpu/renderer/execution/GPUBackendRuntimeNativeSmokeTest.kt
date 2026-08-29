@@ -1105,7 +1105,9 @@ class GPUBackendRuntimeNativeSmokeTest {
                     "first_slice.linear_gradient.native",
                     GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_NATIVE,
                     "first_slice.radial_gradient.native",
+                    GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_NATIVE,
                     "first_slice.sweep_gradient.native",
+                    GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE,
                 ),
                 nativeRouteFacts.keys,
             )
@@ -1127,7 +1129,11 @@ class GPUBackendRuntimeNativeSmokeTest {
                 GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_NATIVE to
                     "core-primitive-gradient-linear-stroke-3stop-native",
                 "first_slice.radial_gradient.native" to "core-primitive-gradient-radial-native",
+                GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_NATIVE to
+                    "core-primitive-gradient-radial-stroke-2stop-native",
                 "first_slice.sweep_gradient.native" to "core-primitive-gradient-sweep-native",
+                GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE to
+                    "core-primitive-gradient-sweep-stroke-2stop-native",
             )
             expectedNativeEvidence.forEach { (name, evidenceLabel) ->
                 val fact = nativeRouteFacts.getValue(name)

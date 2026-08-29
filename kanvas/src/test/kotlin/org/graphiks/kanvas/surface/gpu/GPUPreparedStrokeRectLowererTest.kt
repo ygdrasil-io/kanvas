@@ -183,6 +183,63 @@ class GPUPreparedStrokeRectLowererTest {
     }
 
     @Test
+    fun `two stop full sweep gradient stroke lowers to four bands only with dedicated capability`() {
+        val lowered = assertIs<GPUPreparedStrokeRectLowering.Ready>(GPUPreparedStrokeRectLowerer.lower(
+            strokeRect(bounds = RectF32.ofLTRB(8f, 16f, 56f, 48f), paint = Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                shader = Shader.SweepGradient(Point2F32(32.5f, 32.5f), 0f, 360f, listOf(
+                    org.graphiks.kanvas.paint.GradientStop(0f, ColorARGB.Red),
+                    org.graphiks.kanvas.paint.GradientStop(1f, ColorARGB.Blue),
+                )), antiAlias = false,
+            )), GPUDrawCommandID(0), 0, GPUFrameProvenance.None, target(), RenderConfig.DEFAULT,
+            capabilities(withTwoStopStrokeSweepGradient = true),
+        ))
+        assertEquals(4, lowered.commands.size)
+        assertTrue(lowered.commands.all { assertIs<NormalizedDrawCommand.FillRect>(it.normalized).material is org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor.SweepGradient })
+    }
+
+    @Test
+    fun `two stop sweep gradient stroke refuses every bounded-contract escape before bands`() {
+        fun sweep(
+            stops: List<org.graphiks.kanvas.paint.GradientStop> = listOf(
+                org.graphiks.kanvas.paint.GradientStop(0f, ColorARGB.Red),
+                org.graphiks.kanvas.paint.GradientStop(1f, ColorARGB.Blue),
+            ),
+            tileMode: org.graphiks.kanvas.paint.TileMode = org.graphiks.kanvas.paint.TileMode.CLAMP,
+            startAngle: Float = 0f,
+            endAngle: Float = 360f,
+        ) = Shader.SweepGradient(Point2F32(32.5f, 32.5f), startAngle, endAngle, stops, tileMode)
+        fun operation(shader: Shader, antiAlias: Boolean = false, transform: Matrix3x3F32 = Matrix3x3F32.Identity, colorFilter: ColorFilter? = null) =
+            strokeRect(
+                bounds = RectF32.ofLTRB(8f, 16f, 56f, 48f),
+                paint = Paint.stroke(ColorARGB.Transparent, 4f).copy(shader = shader, antiAlias = antiAlias, colorFilter = colorFilter),
+                transform = transform,
+            )
+        val cases = listOf(
+            Triple(operation(sweep(listOf(org.graphiks.kanvas.paint.GradientStop(0f, ColorARGB.Red)))), target(), "unsupported.stroke.rect_gradient_stop_count"),
+            Triple(operation(sweep(listOf(org.graphiks.kanvas.paint.GradientStop(0f, ColorARGB.Red), org.graphiks.kanvas.paint.GradientStop(.5f, ColorARGB.Green), org.graphiks.kanvas.paint.GradientStop(1f, ColorARGB.Blue)))), target(), "unsupported.stroke.rect_gradient_stop_count"),
+            Triple(operation(sweep(tileMode = org.graphiks.kanvas.paint.TileMode.REPEAT)), target(), "unsupported.stroke.rect_gradient_tile_mode"),
+            Triple(operation(sweep(tileMode = org.graphiks.kanvas.paint.TileMode.MIRROR)), target(), "unsupported.stroke.rect_gradient_tile_mode"),
+            Triple(operation(sweep(tileMode = org.graphiks.kanvas.paint.TileMode.DECAL)), target(), "unsupported.stroke.rect_gradient_tile_mode"),
+            Triple(operation(sweep(startAngle = 45f, endAngle = 315f)), target(), "unsupported.stroke.rect_gradient_angles"),
+            Triple(operation(sweep()), target("rgba8unorm"), "unsupported.stroke.rect_gradient_target"),
+            Triple(operation(sweep()), target("bgra8unorm"), "unsupported.stroke.rect_gradient_target"),
+            Triple(operation(sweep(), antiAlias = true), target(), "unsupported.stroke.rect_anti_alias"),
+            Triple(operation(sweep(), transform = Matrix3x3F32.translation(1f, 0f)), target(), "unsupported.stroke.rect_transform"),
+            Triple(operation(Shader.WithLocalMatrix(sweep(), Matrix3x3F32.translation(1f, 0f))), target(), "unsupported.stroke.rect_material"),
+            Triple(operation(sweep(), colorFilter = ColorFilter.HighContrast), target(), "unsupported.stroke.rect_material"),
+        )
+        cases.forEach { (operation, target, expectedCode) ->
+            val refused = assertIs<GPUPreparedStrokeRectLowering.Refused>(
+                GPUPreparedStrokeRectLowerer.lower(
+                    operation, GPUDrawCommandID(0), 0, GPUFrameProvenance.None, target,
+                    RenderConfig.DEFAULT, capabilities(withTwoStopStrokeSweepGradient = true),
+                ),
+            )
+            assertEquals(expectedCode, refused.code)
+        }
+    }
+
+    @Test
     fun `two stop radial gradient stroke refuses every bounded-contract escape before bands`() {
         fun radial(tileMode: org.graphiks.kanvas.paint.TileMode = org.graphiks.kanvas.paint.TileMode.CLAMP) =
             Shader.RadialGradient(
@@ -507,7 +564,7 @@ class GPUPreparedStrokeRectLowererTest {
                 paint = strokePaint.copy(
                     shader = Shader.SweepGradient(Point2F32(32f, 32f), stops = gradientStops()),
                 ),
-            ) to "unsupported.stroke.rect_material",
+            ) to "unsupported.stroke.rect_sweep_gradient_two_stop_capability",
             "repeat gradient stroke material" to strokeRect(
                 paint = strokePaint.copy(shader = linearGradient(org.graphiks.kanvas.paint.TileMode.REPEAT)),
             ) to "unsupported.stroke.rect_material",
@@ -700,6 +757,7 @@ class GPUPreparedStrokeRectLowererTest {
     private fun capabilities(
         withThreeStopStrokeGradient: Boolean = false,
         withTwoStopStrokeRadialGradient: Boolean = false,
+        withTwoStopStrokeSweepGradient: Boolean = false,
     ) = GPUCapabilities(
         implementation = GPUImplementationIdentity(
             facadeName = "test", implementationName = "fake", adapterName = "mock", deviceName = "mock",
@@ -733,6 +791,10 @@ class GPUPreparedStrokeRectLowererTest {
                     ),
                 )
             }
+            if (withTwoStopStrokeSweepGradient) add(GPUCapabilityFact(
+                GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE, "test", "supported", true,
+                "test:stroke-rect-sweep-gradient-two-stop",
+            ))
         },
         knownUnsupportedFacts = emptyList(),
         snapshotId = "stroke-rect-lowerer-test",

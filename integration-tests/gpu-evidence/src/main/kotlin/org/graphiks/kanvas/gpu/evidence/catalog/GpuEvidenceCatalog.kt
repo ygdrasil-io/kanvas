@@ -11,6 +11,7 @@ import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbGradientCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbLinearGradientStrokeBandsCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbTwoStopRadialGradientStrokeCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbTwoStopSweepGradientStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRoundCapStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipRRectCpuOracle
@@ -57,6 +58,7 @@ object GpuEvidenceCatalog {
         gradientStrokeRefusal(),
         linearGradientThreeStopStrokeRect(),
         radialGradientTwoStopStrokeRect(),
+        sweepGradientTwoStopStrokeRect(),
         scaledSolidRRect(),
         solidDRRectHole(),
         asymmetricSolidRRect(),
@@ -830,6 +832,27 @@ object GpuEvidenceCatalog {
                 SurfaceSrgbTwoStopRadialGradientStrokeCpuOracle.Rect(54, 18, 58, 46),
             ),
             SurfaceSrgbTwoStopRadialGradientStrokeCpuOracle.Point(32.5, 32.5), 23.5,
+            intArrayOf(255, 56, 56, 255), intArrayOf(56, 112, 255, 255),
+        ),
+    )
+
+    private fun sweepGradientTwoStopStrokeRect() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("sweep-gradient-two-stop-stroke-rect"), "Sweep gradient two-stop stroke rectangle",
+            "Public Kanvas Surface renders the bounded non-AA identity CLAMP two-stop sweep rectangle stroke.",
+            64, 64, 1L, setOf("stroke-rect", "sweep-gradient", "two-stops", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-gradient-sweep-clamp-two-stop-stroke-bands", 1),
+            ComparisonPolicy(1, 100.0, 1, "Independent four-band pixel-center sweep-angle interpolation and sRGB RGBA8 storage."), emptySet(),
+        ),
+        KanvasScenePrograms.sweepGradientTwoStopStrokeRect(),
+        SurfaceSrgbTwoStopSweepGradientStrokeCpuOracle(
+            listOf(
+                SurfaceSrgbTwoStopSweepGradientStrokeCpuOracle.Rect(6, 14, 58, 18),
+                SurfaceSrgbTwoStopSweepGradientStrokeCpuOracle.Rect(6, 46, 58, 50),
+                SurfaceSrgbTwoStopSweepGradientStrokeCpuOracle.Rect(6, 18, 10, 46),
+                SurfaceSrgbTwoStopSweepGradientStrokeCpuOracle.Rect(54, 18, 58, 46),
+            ),
+            SurfaceSrgbTwoStopSweepGradientStrokeCpuOracle.Point(32.5, 32.5),
             intArrayOf(255, 56, 56, 255), intArrayOf(56, 112, 255, 255),
         ),
     )

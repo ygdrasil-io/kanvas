@@ -158,6 +158,24 @@ internal object GPUPreparedStrokeRectLowerer {
                 paint.toMaterial() as? GPUMaterialDescriptor.RadialGradient
                     ?: return refused("unsupported.stroke.rect_material", operationIndex, materialRefusalFacts(operation))
             }
+            is Shader.SweepGradient -> {
+                if (operation.transform != Matrix3x3F32.Identity) return refused(
+                    "unsupported.stroke.rect_transform", operationIndex, mapOf("transform" to "gradient_requires_identity"),
+                )
+                when {
+                    shader.stops.size != 2 -> return refused("unsupported.stroke.rect_gradient_stop_count", operationIndex, mapOf("stopCount" to shader.stops.size.toString()))
+                    shader.tileMode != TileMode.CLAMP -> return refused("unsupported.stroke.rect_gradient_tile_mode", operationIndex, mapOf("tileMode" to shader.tileMode.name))
+                    target.colorFormat != "rgba8unorm-srgb" -> return refused("unsupported.stroke.rect_gradient_target", operationIndex, mapOf("targetFormat" to target.colorFormat))
+                    shader.startAngle != 0f || shader.endAngle != 360f -> return refused("unsupported.stroke.rect_gradient_angles", operationIndex, mapOf("startAngle" to shader.startAngle.toString(), "endAngle" to shader.endAngle.toString()))
+                    !capabilities.hasSupportedFact(GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE) -> return refused(
+                        "unsupported.stroke.rect_sweep_gradient_two_stop_capability", operationIndex,
+                        mapOf("capability" to GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE),
+                    )
+                }
+                if (paint.colorFilter != null || !shader.isAdmittedStrokeSweepGradient()) return refused("unsupported.stroke.rect_material", operationIndex, materialRefusalFacts(operation))
+                paint.toMaterial() as? GPUMaterialDescriptor.SweepGradient
+                    ?: return refused("unsupported.stroke.rect_material", operationIndex, materialRefusalFacts(operation))
+            }
             else -> return refused("unsupported.stroke.rect_material", operationIndex, materialRefusalFacts(operation))
         }
 
@@ -383,6 +401,12 @@ private fun Shader.RadialGradient.isAdmittedStrokeRadialGradient(): Boolean =
             stop.color.r.isFinite() && stop.color.g.isFinite() &&
                 stop.color.b.isFinite() && stop.color.a.isFinite()
         }
+
+private fun Shader.SweepGradient.isAdmittedStrokeSweepGradient(): Boolean =
+    tileMode == TileMode.CLAMP && interpolation == ColorSpaceInterpolation.SRGB &&
+        center.x.isFinite() && center.y.isFinite() && startAngle == 0f && endAngle == 360f &&
+        stops.size == 2 && stops.first().position == 0f && stops.last().position == 1f &&
+        stops.all { it.color.r.isFinite() && it.color.g.isFinite() && it.color.b.isFinite() && it.color.a.isFinite() }
 
 @OptIn(ExperimentalUnsignedTypes::class)
 private fun ColorFilter.isFoldableSolidColorFilter(): Boolean = when (this) {

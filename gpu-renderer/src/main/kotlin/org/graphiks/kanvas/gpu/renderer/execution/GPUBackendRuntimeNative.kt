@@ -226,6 +226,10 @@ internal fun nativeCorePrimitiveCapabilityFacts(): List<GPUCapabilityFact> = lis
         "runtime",
         "core-primitive-gradient-radial-stroke-2stop-native",
     ),
+    supportedGPUCapabilityFact(
+        GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE,
+        "runtime", "core-primitive-gradient-sweep-stroke-2stop-native",
+    ),
     GPUCapabilityFact("first_slice.sweep_gradient.native", "runtime", "supported", true, "core-primitive-gradient-sweep-native"),
 )
 

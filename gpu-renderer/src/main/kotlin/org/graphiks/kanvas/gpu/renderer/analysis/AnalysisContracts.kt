@@ -291,6 +291,7 @@ class GPUFirstRoutePlanner(
         val isSimpleGradient = isLinearGradient || isRadialGradient || isSweepGradient
         val isThreeStopStrokeLinearGradient = command.supportsThreeStopLinearGradientStroke()
         val isTwoStopStrokeRadialGradient = command.supportsTwoStopRadialGradientStroke()
+        val isTwoStopStrokeSweepGradient = command.supportsTwoStopSweepGradientStroke()
         val rectGeometryAuthority =
             corePrimitiveRectGeometryAuthority(command.rect, command.transform)
         val rectRouteAuthority = when (command.material) {
@@ -358,9 +359,9 @@ class GPUFirstRoutePlanner(
                     pipelineKey =
                         "pending.pipeline.fill_rect.sweep_gradient.${command.layer.target.colorFormat}.src_over"
                     renderStep = sweepGradientRenderStep
-                    routeLabel = "native.fill_rect.sweep_gradient"
+                    routeLabel = if (isTwoStopStrokeSweepGradient) "native.stroke_rect.sweep_gradient_two_stop" else "native.fill_rect.sweep_gradient"
                     materialKeyHash = "pending.material.sweep_gradient"
-                    capabilityName = firstSweepGradientCapabilityName
+                    capabilityName = if (isTwoStopStrokeSweepGradient) GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE else firstSweepGradientCapabilityName
                 }
 
             }
@@ -1830,6 +1831,9 @@ class GPUFirstRoutePlanner(
             isBoundedTwoStopRadialGradientStroke() &&
                 !capabilities.hasFact(GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_NATIVE) ->
                 "unsupported.stroke.rect_radial_gradient_two_stop_capability"
+            isBoundedTwoStopSweepGradientStroke() &&
+                !capabilities.hasFact(GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE) ->
+                "unsupported.stroke.rect_sweep_gradient_two_stop_capability"
             transform.type == GPUTransformType.Perspective -> "unsupported.transform.perspective"
             transform.type == GPUTransformType.Singular -> "unsupported.transform.singular"
             transform.isAffineDeterminantNonFinite() -> "unsupported.transform.non_finite"
@@ -1934,6 +1938,18 @@ class GPUFirstRoutePlanner(
             transform.type == GPUTransformType.Identity &&
             layer.target.colorFormat == "rgba8unorm-srgb" &&
             gradient.tileMode == "clamp" &&
+            gradient.allStopPositions?.size == 2 &&
+            gradient.localMatrix == listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f)
+    }
+
+    private fun NormalizedDrawCommand.FillRect.supportsTwoStopSweepGradientStroke() =
+        isBoundedTwoStopSweepGradientStroke() && capabilities.hasFact(GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE)
+
+    private fun NormalizedDrawCommand.FillRect.isBoundedTwoStopSweepGradientStroke(): Boolean {
+        val gradient = material as? GPUMaterialDescriptor.SweepGradient ?: return false
+        return source.kind == GPUCommandSourceKind.AnalyticStrokeRectBand && !antiAlias &&
+            transform.type == GPUTransformType.Identity && layer.target.colorFormat == "rgba8unorm-srgb" &&
+            gradient.tileMode == "clamp" && gradient.startAngle == 0f && gradient.endAngle == 360f &&
             gradient.allStopPositions?.size == 2 &&
             gradient.localMatrix == listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f)
     }
