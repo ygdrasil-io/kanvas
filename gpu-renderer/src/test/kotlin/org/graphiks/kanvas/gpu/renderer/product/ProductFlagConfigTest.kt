@@ -242,6 +242,17 @@ class ProductFlagConfigTest {
     }
 
     @Test
+    fun `uniform scale three stop sweep stroke capability has an independent disable property`() {
+        val config = GPUProductFlagConfig.fromSystemProperties { key ->
+            if (key == GPUProductFlagConfig.StrokeRectSweepGradientThreeStopUniformScaleDisableProperty) "true" else null
+        }
+        assertFalse(config.strokeRectSweepGradientThreeStopUniformScaleEnabled)
+        assertFalse(config.buildCapabilities().facts.any {
+            it.name == GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_THREE_STOP_UNIFORM_SCALE_NATIVE
+        })
+    }
+
+    @Test
     fun `disable property overrides scissor flag`() {
         val config = GPUProductFlagConfig.fromSystemProperties(
             propertyReader = { key ->
