@@ -47,33 +47,6 @@ public data class BidiResolution(
     public val diagnostics: List<ShapingDiagnostic>,
 )
 
-public data class BidiFixtureDumpInput(
-    public val fixtureName: String,
-    public val sourceText: String,
-    public val result: BidiResolution,
-)
-
-public data class BidiRunsDump(
-    public val unicodeVersion: String,
-    public val inputs: List<BidiFixtureDumpInput>,
-) {
-    public fun toCanonicalJson(): String = buildString {
-        append("{\n")
-        append("  \"schemaVersion\": 1,\n")
-        append("  \"dumpId\": \"bidi-runs\",\n")
-        append("  \"ownerTickets\": [\"KFONT-M5-003\"],\n")
-        appendJsonField("unicodeVersion", unicodeVersion, comma = true)
-        appendJsonField("sourceTextHashAlgorithm", BIDI_SOURCE_TEXT_HASH_ALGORITHM, comma = true)
-        append("  \"inputs\": [\n")
-        append(inputs.joinToString(",\n") { input -> input.toCanonicalJson().prependIndent("    ") })
-        append("\n  ],\n")
-        append("  \"nonClaims\": [\n")
-        append(BidiNonClaims.joinToString(",\n") { nonClaim -> "    ${jsonString(nonClaim)}" })
-        append("\n  ]\n")
-        append("}\n")
-    }
-}
-
 public interface DetailedBidiResolver : BidiResolver {
     public fun resolveDetailed(
         request: ShapingRequest,
@@ -599,7 +572,6 @@ private data class OpenBidiControl(
     val expectedCloser: String,
 )
 
-private const val BIDI_SOURCE_TEXT_HASH_ALGORITHM = "sha256-utf16-code-units"
 private const val ParagraphDirectionLtr = "LeftToRight"
 private const val ParagraphDirectionRtl = "RightToLeft"
 private const val BidiDirectionLtr = "L"
@@ -607,15 +579,6 @@ private const val BidiDirectionRtl = "R"
 
 private val StrongBidiClasses = setOf("L", "R", "AL")
 private val NeutralBidiClasses = setOf("B", "S", "WS", "ON", "BN", "LRE", "RLE", "LRO", "RLO", "PDF", "LRI", "RLI", "FSI", "PDI")
-private val BidiNonClaims = listOf(
-    "bounded-kfont-m5-003-fixture-evidence-only",
-    "no-complete-uax9-claim",
-    "no-paired-bracket-resolution-claim",
-    "no-paragraph-visual-line-ordering-claim",
-    "no-gsub-gpos-shaping-claim",
-    "no-gpu-text-route-claim",
-)
-
 private fun paragraphDirectionName(requestedDirection: Int, scalars: List<BidiScalar>): String =
     when {
         requestedDirection < 0 -> ParagraphDirectionRtl
@@ -732,114 +695,3 @@ private fun String.sourceTextHash(): String {
         "%02x".format(byte.toInt() and 0xFF)
     }
 }
-
-private fun BidiFixtureDumpInput.toCanonicalJson(): String = buildString {
-    append("{\n")
-    appendJsonField("fixtureName", fixtureName, comma = true, indent = "  ")
-    appendJsonField("inputTextHash", result.sourceTextHash, comma = true, indent = "  ")
-    appendJsonField("paragraphDirection", result.paragraphDirection, comma = true, indent = "  ")
-    append("  \"clusters\": [\n")
-    append(result.clusters.joinToString(",\n") { cluster -> cluster.toCanonicalJson().prependIndent("    ") })
-    append("\n  ],\n")
-    append("  \"runs\": [\n")
-    append(result.runs.joinToString(",\n") { run -> run.toCanonicalJson().prependIndent("    ") })
-    append("\n  ],\n")
-    append("  \"sourceControls\": [")
-    if (result.sourceControls.isNotEmpty()) {
-        append("\n")
-        append(result.sourceControls.joinToString(",\n") { control -> control.toCanonicalJson().prependIndent("    ") })
-        append("\n  ")
-    }
-    append("],\n")
-    append("  \"trace\": [")
-    if (result.trace.isNotEmpty()) {
-        append("\n")
-        append(result.trace.joinToString(",\n") { event -> event.toCanonicalJson().prependIndent("    ") })
-        append("\n  ")
-    }
-    append("],\n")
-    append("  \"diagnostics\": [")
-    if (result.diagnostics.isNotEmpty()) {
-        append("\n")
-        append(result.diagnostics.joinToString(",\n") { diagnostic -> diagnostic.toCanonicalJson().prependIndent("    ") })
-        append("\n  ")
-    }
-    append("]\n")
-    append("}")
-}
-
-private fun GraphemeCluster.toCanonicalJson(): String = buildString {
-    append("{")
-    append(jsonString("clusterIndex")).append(": ").append(clusterIndex).append(", ")
-    append(jsonString("utf16Range")).append(": ").append(jsonString(utf16Range.toRangeLabel())).append(", ")
-    append(jsonString("codePointRange")).append(": ").append(jsonString(codePointRange.toRangeLabel())).append(", ")
-    append(jsonString("clusterLevel")).append(": ").append(clusterLevel).append(", ")
-    append(jsonString("sourceTextHash")).append(": ").append(jsonString(sourceTextHash)).append(", ")
-    append(jsonString("unicodeVersion")).append(": ").append(jsonString(unicodeVersion)).append(", ")
-    append(jsonString("breakBeforeRuleId")).append(": ").append(jsonString(breakBeforeRuleId))
-    append("}")
-}
-
-private fun ResolvedBidiRun.toCanonicalJson(): String = buildString {
-    append("{")
-    append(jsonString("logicalUtf16Range")).append(": ").append(jsonString(logicalUtf16Range.toRangeLabel())).append(", ")
-    append(jsonString("clusterRange")).append(": ").append(jsonString(clusterRange.toRangeLabel())).append(", ")
-    append(jsonString("embeddingLevel")).append(": ").append(embeddingLevel).append(", ")
-    append(jsonString("direction")).append(": ").append(jsonString(direction)).append(", ")
-    append(jsonString("paragraphDirection")).append(": ").append(jsonString(paragraphDirection)).append(", ")
-    append(jsonString("resolvedBidiClasses")).append(": ").append(resolvedBidiClasses.joinToString(prefix = "[", postfix = "]") { jsonString(it) }).append(", ")
-    append(jsonString("sourceControls")).append(": ").append(sourceControls.joinToString(prefix = "[", postfix = "]") { it.toCanonicalJson() })
-    append("}")
-}
-
-private fun BidiControl.toCanonicalJson(): String = buildString {
-    append("{")
-    append(jsonString("kind")).append(": ").append(jsonString(kind)).append(", ")
-    append(jsonString("utf16Range")).append(": ").append(jsonString(utf16Range.toRangeLabel())).append(", ")
-    append(jsonString("depthBefore")).append(": ").append(depthBefore).append(", ")
-    append(jsonString("depthAfter")).append(": ").append(depthAfter).append(", ")
-    append(jsonString("balanced")).append(": ").append(balanced)
-    append("}")
-}
-
-private fun BidiTraceEvent.toCanonicalJson(): String = buildString {
-    append("{")
-    append(jsonString("rule")).append(": ").append(jsonString(rule)).append(", ")
-    append(jsonString("utf16Range")).append(": ").append(jsonString(utf16Range.toRangeLabel())).append(", ")
-    append(jsonString("beforeClass")).append(": ").append(jsonString(beforeClass)).append(", ")
-    append(jsonString("afterClass")).append(": ").append(jsonString(afterClass))
-    append("}")
-}
-
-private fun ShapingDiagnostic.toCanonicalJson(): String = buildString {
-    append("{")
-    append(jsonString("code")).append(": ").append(jsonString(code)).append(", ")
-    append(jsonString("severity")).append(": ").append(jsonString("refusal")).append(", ")
-    append(jsonString("textRange")).append(": ").append(jsonString(textRange?.toRangeLabel())).append(", ")
-    append(jsonString("message")).append(": ").append(jsonString(message))
-    append("}")
-}
-
-private fun StringBuilder.appendJsonField(name: String, value: String?, comma: Boolean, indent: String = "  ") {
-    append(indent).append(jsonString(name)).append(": ").append(jsonString(value))
-    if (comma) append(",")
-    append("\n")
-}
-
-private fun jsonString(value: String?): String =
-    value?.let {
-        buildString {
-            append('"')
-            for (char in it) {
-                when (char) {
-                    '\\' -> append("\\\\")
-                    '"' -> append("\\\"")
-                    '\n' -> append("\\n")
-                    '\r' -> append("\\r")
-                    '\t' -> append("\\t")
-                    else -> append(char)
-                }
-            }
-            append('"')
-        }
-    } ?: "null"

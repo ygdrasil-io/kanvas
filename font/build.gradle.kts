@@ -10,6 +10,4 @@ dependencies {
     api(project(":font:text"))
     api(project(":font:glyph"))
     api(project(":font:gpu-api"))
-
-    testImplementation(kotlin("test"))
 }

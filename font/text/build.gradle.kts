@@ -9,5 +9,4 @@ dependencies {
 
     implementation(project(":font:scaler"))
     implementation(kotlin("stdlib"))
-    testImplementation(kotlin("test"))
 }
