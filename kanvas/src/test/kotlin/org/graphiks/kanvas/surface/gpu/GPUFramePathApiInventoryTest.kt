@@ -2675,6 +2675,103 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `exact right angle sweep draw with square miter stroke under winding clip reaches the hard path clip route`() {
+        val capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER)
+        val clipPath = Path().apply {
+            moveTo(27.75f, 4.25f)
+            lineTo(27.75f, 27.25f)
+            lineTo(4.75f, 4.25f)
+            close()
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(8.25f, 8.25f)
+                        lineTo(20.25f, 14.25f)
+                    },
+                    Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                        shader = Shader.SweepGradient(
+                            Point2F32(16f, 16f),
+                            0f,
+                            360f,
+                            listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                        ),
+                        antiAlias = false,
+                        strokeCap = StrokeCap.SQUARE,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.rotation(90f, pivotX = 16f, pivotY = 16f),
+                    ClipStack.Complex(
+                        listOf(
+                            ClipStackOp.PathOp(
+                                clipPath,
+                                ClipOp.INTERSECT,
+                                antiAlias = false,
+                                transformClass = "right-angle-rotation",
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+        )
+
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+        assertEquals(
+            listOf("route:native.path_stroke.stencil_cover"),
+            inventory.recording.routeDiagnostics,
+        )
+    }
+
+    @Test
+    fun `sweep draw with non-right-angle rotation remains refused before hard path clip recording`() {
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(8.25f, 8.25f)
+                        lineTo(20.25f, 14.25f)
+                    },
+                    Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                        shader = Shader.SweepGradient(
+                            Point2F32(16f, 16f),
+                            0f,
+                            360f,
+                            listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                        ),
+                        antiAlias = false,
+                        strokeCap = StrokeCap.BUTT,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.rotation(15f),
+                    ClipStack.Complex(listOf(ClipStackOp.PathOp(
+                        Path().apply {
+                            moveTo(27.75f, 4.25f)
+                            lineTo(27.75f, 27.25f)
+                            lineTo(4.75f, 4.25f)
+                            close()
+                        },
+                        ClipOp.INTERSECT,
+                        antiAlias = false,
+                        transformClass = "non-right-angle-rotation",
+                    ))),
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER),
+        )
+
+        assertEquals(
+            "refused.unsupported.geometry.perspective_path",
+            inventory.recording.analysis.records.single().routeDecisionLabel,
+        )
+    }
+
+    @Test
     fun `general radial draw rotation remains refused before native preparation`() {
         val inventory = GPUFramePathApiInventory.plan(
             operations = listOf(
