@@ -7,17 +7,16 @@ import org.graphiks.kanvas.gpu.renderer.analysis.GPUDrawAnalysisRecord
 import org.graphiks.kanvas.gpu.renderer.analysis.matchesCorePrimitiveRectGeometry
 import org.graphiks.kanvas.gpu.renderer.analysis.matchesCorePrimitiveRRectGeometry
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
-import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.commands.isBoundedNativePathHairline
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.geometry.FlattenedPath
 import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellator
 import org.graphiks.kanvas.gpu.renderer.geometry.Point as GPUPathPoint
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
-import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.filters.MaskBlurPlan
 import org.graphiks.kanvas.gpu.renderer.filters.MaskBlurPlanner
@@ -39,7 +38,6 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceFamily
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveStrokeLoweringProof
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveStrokeStyle
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
-import org.graphiks.kanvas.gpu.renderer.commands.GPULayerScopeKind
 import org.graphiks.kanvas.gpu.renderer.payloads.sealedDeviceGeometryInput
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecording
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
@@ -989,7 +987,7 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
 ): GPUCorePrimitiveGeometryInput {
     val pointCount = tessellatedVertices.size / 2
     val exactSingleSegment = contourStarts == listOf(0) && pointCount == 2
-    if (strokeWidth == 0f && isNativeSimpleHairline()) {
+    if (strokeWidth == 0f && isBoundedNativePathHairline()) {
         val start = transform.map(tessellatedVertices[0], tessellatedVertices[1])
         val end = transform.map(tessellatedVertices[2], tessellatedVertices[3])
         val horizontal = start.second == end.second
@@ -1108,23 +1106,6 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
         ),
         sourceAuthority = pathDescriptor.sourceAuthority,
     )
-}
-
-private fun NormalizedDrawCommand.FillPath.isNativeSimpleHairline(): Boolean {
-    if (contourStarts != listOf(0) || tessellatedVertices.size != 4 || strokeWidth != 0f ||
-        antiAlias || (dashIntervals?.isNotEmpty() == true) || pathEffectKind != null ||
-        strokeCap != "butt" || strokeJoin != "miter" || !strokeMiterLimit.isFinite() ||
-        strokeMiterLimit < 1f || transform.type !in setOf(GPUTransformType.Identity, GPUTransformType.Translate) ||
-        (clip.executionPlan != GPUClipExecutionPlan.NoClip &&
-            clip.executionPlan !is GPUClipExecutionPlan.ScissorOnly) ||
-        material !is GPUMaterialDescriptor.SolidColor ||
-        blend.mode != GPUBlendMode.SRC_OVER ||
-        layer.scopeKind != GPULayerScopeKind.Root
-    ) return false
-    val start = transform.map(tessellatedVertices[0], tessellatedVertices[1])
-    val end = transform.map(tessellatedVertices[2], tessellatedVertices[3])
-    return start.first.isFinite() && start.second.isFinite() && end.first.isFinite() && end.second.isFinite() &&
-        (start.first == end.first || start.second == end.second)
 }
 
 /**
