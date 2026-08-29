@@ -2530,6 +2530,41 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `translated triangle radial gradient remains explicitly refused outside hard stroke lane`() {
+        val clip = Path().apply {
+            moveTo(4f, 4f)
+            lineTo(28f, 4f)
+            lineTo(4f, 28f)
+            close()
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(6f, 6f)
+                        lineTo(26f, 6f)
+                        lineTo(6f, 26f)
+                        close()
+                    },
+                    Paint.fill(ColorARGB.Transparent).copy(
+                        shader = Shader.RadialGradient(
+                            Point2F32(16f, 16f), 16f,
+                            listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                            TileMode.CLAMP,
+                        ),
+                        antiAlias = false,
+                    ),
+                    Matrix3x3F32.translation(2f, 1f),
+                    ClipStack.Complex(listOf(ClipStackOp.PathOp(clip, ClipOp.INTERSECT, antiAlias = false))),
+                ),
+            ),
+            target = target(), config = RenderConfig.DEFAULT,
+            capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER),
+        )
+        assertTrue(inventory.recording.analysis.records.single().routeDecisionLabel != "native.path_stroke.stencil_cover")
+    }
+
+    @Test
     fun `translated local sweep matrix reaches the hard path clip stroke stencil route`() {
         val capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER)
         val clipPath = Path().apply {
