@@ -62,32 +62,36 @@ public class PathBuilder(
 
     /** Appends a clockwise, closed oval contour using four cubic Bézier curves. */
     public fun addOval(rect: RectF32): PathBuilder = apply {
-        val centerX = rect.centerX()
-        val centerY = rect.centerY()
-        val radiusX = rect.width() / 2f
-        val radiusY = rect.height() / 2f
-        val controlScale = 0.5522847498f
+        val left = rect.left.toDouble()
+        val top = rect.top.toDouble()
+        val right = rect.right.toDouble()
+        val bottom = rect.bottom.toDouble()
+        val centerX = (left + right) * 0.5
+        val centerY = (top + bottom) * 0.5
+        val radiusX = (right - left) * 0.5
+        val radiusY = (bottom - top) * 0.5
+        val controlScale = 0.5522847498
 
-        moveTo(centerX + radiusX, centerY)
+        moveTo((centerX + radiusX).toFloat(), centerY.toFloat())
         cubicTo(
-            centerX + radiusX, centerY - controlScale * radiusY,
-            centerX + controlScale * radiusX, centerY - radiusY,
-            centerX, centerY - radiusY,
+            (centerX + radiusX).toFloat(), (centerY + controlScale * radiusY).toFloat(),
+            (centerX + controlScale * radiusX).toFloat(), (centerY + radiusY).toFloat(),
+            centerX.toFloat(), (centerY + radiusY).toFloat(),
         )
         cubicTo(
-            centerX - controlScale * radiusX, centerY - radiusY,
-            centerX - radiusX, centerY - controlScale * radiusY,
-            centerX - radiusX, centerY,
+            (centerX - controlScale * radiusX).toFloat(), (centerY + radiusY).toFloat(),
+            (centerX - radiusX).toFloat(), (centerY + controlScale * radiusY).toFloat(),
+            (centerX - radiusX).toFloat(), centerY.toFloat(),
         )
         cubicTo(
-            centerX - radiusX, centerY + controlScale * radiusY,
-            centerX - controlScale * radiusX, centerY + radiusY,
-            centerX, centerY + radiusY,
+            (centerX - radiusX).toFloat(), (centerY - controlScale * radiusY).toFloat(),
+            (centerX - controlScale * radiusX).toFloat(), (centerY - radiusY).toFloat(),
+            centerX.toFloat(), (centerY - radiusY).toFloat(),
         )
         cubicTo(
-            centerX + controlScale * radiusX, centerY + radiusY,
-            centerX + radiusX, centerY + controlScale * radiusY,
-            centerX + radiusX, centerY,
+            (centerX + controlScale * radiusX).toFloat(), (centerY - radiusY).toFloat(),
+            (centerX + radiusX).toFloat(), (centerY - controlScale * radiusY).toFloat(),
+            (centerX + radiusX).toFloat(), centerY.toFloat(),
         )
         close()
     }
@@ -96,16 +100,20 @@ public class PathBuilder(
     public fun addRRect(rrect: RRectF32): PathBuilder = apply {
         val rect = rrect.rect
         val (topLeft, topRight, bottomRight, bottomLeft) = normalizedRadii(rrect)
+        val left = rect.left.toDouble()
+        val top = rect.top.toDouble()
+        val right = rect.right.toDouble()
+        val bottom = rect.bottom.toDouble()
 
-        moveTo(rect.left + topLeft.x, rect.top)
-        lineTo(rect.right - topRight.x, rect.top)
-        arcTo(topRight.x, topRight.y, 0f, largeArc = false, sweep = true, rect.right, rect.top + topRight.y)
-        lineTo(rect.right, rect.bottom - bottomRight.y)
-        arcTo(bottomRight.x, bottomRight.y, 0f, largeArc = false, sweep = true, rect.right - bottomRight.x, rect.bottom)
-        lineTo(rect.left + bottomLeft.x, rect.bottom)
-        arcTo(bottomLeft.x, bottomLeft.y, 0f, largeArc = false, sweep = true, rect.left, rect.bottom - bottomLeft.y)
-        lineTo(rect.left, rect.top + topLeft.y)
-        arcTo(topLeft.x, topLeft.y, 0f, largeArc = false, sweep = true, rect.left + topLeft.x, rect.top)
+        moveTo((left + topLeft.x).toFloat(), top.toFloat())
+        lineTo((right - topRight.x).toFloat(), top.toFloat())
+        arcTo(topRight.x, topRight.y, 0f, largeArc = false, sweep = true, right.toFloat(), (top + topRight.y).toFloat())
+        lineTo(right.toFloat(), (bottom - bottomRight.y).toFloat())
+        arcTo(bottomRight.x, bottomRight.y, 0f, largeArc = false, sweep = true, (right - bottomRight.x).toFloat(), bottom.toFloat())
+        lineTo((left + bottomLeft.x).toFloat(), bottom.toFloat())
+        arcTo(bottomLeft.x, bottomLeft.y, 0f, largeArc = false, sweep = true, left.toFloat(), (bottom - bottomLeft.y).toFloat())
+        lineTo(left.toFloat(), (top + topLeft.y).toFloat())
+        arcTo(topLeft.x, topLeft.y, 0f, largeArc = false, sweep = true, (left + topLeft.x).toFloat(), top.toFloat())
         close()
     }
 
@@ -118,21 +126,21 @@ public class PathBuilder(
     private fun append(segment: PathSegmentF32): PathBuilder = apply { segments += segment }
 
     private fun normalizedRadii(rrect: RRectF32): Array<CornerRadiiF32> {
-        val width = rrect.rect.width().coerceAtLeast(0f)
-        val height = rrect.rect.height().coerceAtLeast(0f)
+        val width = (rrect.rect.right.toDouble() - rrect.rect.left.toDouble()).coerceAtLeast(0.0)
+        val height = (rrect.rect.bottom.toDouble() - rrect.rect.top.toDouble()).coerceAtLeast(0.0)
         val topLeft = rrect.topLeft.nonNegative()
         val topRight = rrect.topRight.nonNegative()
         val bottomRight = rrect.bottomRight.nonNegative()
         val bottomLeft = rrect.bottomLeft.nonNegative()
         val scale = min(
-            1f,
+            1.0,
             min(
-                ratioOrOne(width, topLeft.x + topRight.x),
+                ratioOrOne(width, topLeft.x.toDouble() + topRight.x.toDouble()),
                 min(
-                    ratioOrOne(width, bottomLeft.x + bottomRight.x),
+                    ratioOrOne(width, bottomLeft.x.toDouble() + bottomRight.x.toDouble()),
                     min(
-                        ratioOrOne(height, topLeft.y + bottomLeft.y),
-                        ratioOrOne(height, topRight.y + bottomRight.y),
+                        ratioOrOne(height, topLeft.y.toDouble() + bottomLeft.y.toDouble()),
+                        ratioOrOne(height, topRight.y.toDouble() + bottomRight.y.toDouble()),
                     ),
                 ),
             ),
@@ -145,12 +153,12 @@ public class PathBuilder(
         )
     }
 
-    private fun ratioOrOne(limit: Float, sum: Float): Float =
-        if (sum > limit && sum > 0f) limit / sum else 1f
+    private fun ratioOrOne(limit: Double, sum: Double): Double =
+        if (sum > limit && sum > 0.0) limit / sum else 1.0
 
     private fun CornerRadiiF32.nonNegative(): CornerRadiiF32 =
         CornerRadiiF32.of(x.coerceAtLeast(0f), y.coerceAtLeast(0f))
 
-    private fun CornerRadiiF32.scaled(scale: Float): CornerRadiiF32 =
-        CornerRadiiF32.of(x * scale, y * scale)
+    private fun CornerRadiiF32.scaled(scale: Double): CornerRadiiF32 =
+        CornerRadiiF32.of((x.toDouble() * scale).toFloat(), (y.toDouble() * scale).toFloat())
 }

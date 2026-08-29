@@ -3,6 +3,7 @@ package org.graphiks.math.geometry
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 class PathBuilderTest {
     @Test
@@ -38,11 +39,36 @@ class PathBuilderTest {
 
         assertEquals(6, path.segmentCount)
         assertEquals(PathSegmentF32.MoveTo(Point2F32(10f, 8f)), path.segmentAt(0))
-        assertEquals(Point2F32(6f, 4f), (path.segmentAt(1) as PathSegmentF32.CubicTo).point)
+        assertEquals(Point2F32(6f, 12f), (path.segmentAt(1) as PathSegmentF32.CubicTo).point)
         assertEquals(Point2F32(2f, 8f), (path.segmentAt(2) as PathSegmentF32.CubicTo).point)
-        assertEquals(Point2F32(6f, 12f), (path.segmentAt(3) as PathSegmentF32.CubicTo).point)
+        assertEquals(Point2F32(6f, 4f), (path.segmentAt(3) as PathSegmentF32.CubicTo).point)
         assertEquals(Point2F32(10f, 8f), (path.segmentAt(4) as PathSegmentF32.CubicTo).point)
         assertEquals(PathSegmentF32.Close, path.segmentAt(5))
+    }
+
+    @Test
+    fun `closed helpers use the same clockwise contour orientation`() {
+        val rect = RectF32.ofLTRB(0f, 0f, 10f, 8f)
+        val paths = listOf(
+            PathBuilder().addRect(rect).build(),
+            PathBuilder().addOval(rect).build(),
+            PathBuilder().addRRect(RRectF32.of(rect, radius = 2f)).build(),
+        )
+
+        paths.forEach { path ->
+            assertTrue(signedArea(path) > 0f)
+        }
+    }
+
+    @Test
+    fun `add oval keeps all emitted points finite for extreme finite bounds`() {
+        val path = PathBuilder()
+            .addOval(RectF32.ofLTRB(-Float.MAX_VALUE, -1f, Float.MAX_VALUE, 1f))
+            .build()
+
+        path.flatMap(::pointsIn).forEach { point ->
+            assertTrue(point.isFinite())
+        }
     }
 
     @Test
@@ -61,6 +87,32 @@ class PathBuilderTest {
     }
 
     @Test
+    fun `add rounded rect normalizes extreme finite radii without collapsing them`() {
+        val radius = CornerRadiiF32.of(Float.MAX_VALUE)
+        val path = PathBuilder()
+            .addRRect(
+                RRectF32(
+                    RectF32.ofLTRB(0f, 0f, 10f, 8f),
+                    radius,
+                    radius,
+                    radius,
+                    radius,
+                ),
+            )
+            .build()
+
+        val arcs = path.filterIsInstance<PathSegmentF32.ArcTo>()
+        assertEquals(4, arcs.size)
+        path.flatMap(::pointsIn).forEach { point -> assertTrue(point.isFinite()) }
+        arcs.forEach { arc ->
+            assertEquals(4f, arc.radius.x, arc.toString())
+            assertEquals(4f, arc.radius.y, arc.toString())
+            assertTrue(arc.radius.isFinite())
+            assertTrue(arc.point.isFinite())
+        }
+    }
+
+    @Test
     fun `add path copies all source contours`() {
         val source = PathBuilder().moveTo(1f, 2f).lineTo(3f, 4f).close().build()
         val target = PathBuilder().moveTo(5f, 6f)
@@ -75,5 +127,23 @@ class PathBuilderTest {
             ),
             target.build().toList(),
         )
+    }
+
+    private fun signedArea(path: PathF32): Float {
+        val points = path.flatMap(::pointsIn)
+        return points.indices.sumOf { index ->
+            val point = points[index]
+            val next = points[(index + 1) % points.size]
+            (point.x * next.y - point.y * next.x).toDouble()
+        }.toFloat() / 2f
+    }
+
+    private fun pointsIn(segment: PathSegmentF32): List<Point2F32> = when (segment) {
+        is PathSegmentF32.MoveTo -> listOf(segment.point)
+        is PathSegmentF32.LineTo -> listOf(segment.point)
+        is PathSegmentF32.QuadTo -> listOf(segment.control, segment.point)
+        is PathSegmentF32.CubicTo -> listOf(segment.control1, segment.control2, segment.point)
+        is PathSegmentF32.ArcTo -> listOf(segment.point)
+        PathSegmentF32.Close -> emptyList()
     }
 }
