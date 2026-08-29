@@ -817,10 +817,9 @@ private fun GPUFramePathVisualCommand.isExactHardPathClipStrokeLinearGradientCan
 }
 
 /**
- * Closed admission predicate for the identity-transform direct radial-gradient stroke lane.
- * Radial material coordinates are currently captured without a device transform, so this lane
- * deliberately refuses transformed consumers until an authenticated radial transform mapping
- * exists.
+ * Closed admission predicate for the direct radial-gradient stroke lane.
+ * Radial material coordinates are evaluated by the native shader after its bounded local matrix;
+ * the draw transform remains identity until an authenticated device-space radial mapping exists.
  */
 private fun GPUFramePathVisualCommand.isExactHardPathClipStrokeRadialGradientCandidate(): Boolean {
     val path = normalized as? NormalizedDrawCommand.FillPath ?: return false
@@ -844,7 +843,7 @@ private fun GPUFramePathVisualCommand.isExactHardPathClipStrokeRadialGradientCan
         gradient.interpolation == "srgb" &&
         (gradient.allStopPositions?.size ?: 2) == 2 &&
         (gradient.allStopColors?.size ?: 8) == 8 &&
-        gradient.localMatrix == listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f) &&
+        gradient.localMatrix.isPositiveUniformScaleTranslateGradientLocalMatrix() &&
         stencilClip.sampleCount == 1
 }
 

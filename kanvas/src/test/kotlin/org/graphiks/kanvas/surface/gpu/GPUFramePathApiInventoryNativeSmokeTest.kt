@@ -35,6 +35,7 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.StrokeJoin
+import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.surface.RenderConfig
@@ -2759,6 +2760,152 @@ class GPUFramePathApiInventoryNativeSmokeTest {
             assertEquals(1L, session.nativeCounters().readbackCopies)
         } finally {
             session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
+    fun `translated local radial matrix square miter stroke under winding clip renders natively`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        val capabilities = requireNotNull(backend.capabilities)
+        val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(RenderConfig.DEFAULT.mapPreparedGpuColorConfig())
+        val targetBounds = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, 32, 32)
+        val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.radial-local-translate-winding-clip")
+        val clipPath = Path().apply {
+            moveTo(7.25f, 6.25f)
+            lineTo(30.25f, 6.25f)
+            lineTo(7.25f, 29.25f)
+            close()
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(5.25f, 8.25f)
+                        lineTo(21.25f, 20.25f)
+                    },
+                    Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                        shader = Shader.WithLocalMatrix(
+                            Shader.RadialGradient(
+                                Point2F32(16f, 16f),
+                                16f,
+                                listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                                TileMode.CLAMP,
+                            ),
+                            Matrix3x3F32.translation(1.25f, -0.75f),
+                        ),
+                        antiAlias = false,
+                        strokeCap = StrokeCap.SQUARE,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.Identity,
+                    ClipStack.Complex(listOf(ClipStackOp.PathOp(clipPath, ClipOp.INTERSECT, antiAlias = false))),
+                ),
+            ),
+            target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+            deviceGeneration = backend.deviceGeneration,
+        )
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+        val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(inventory.visualCommands.single().clipExecutionPlan)
+        assertEquals(GPUClipStencilOperation.IncrementWrap, execution.producer.frontPassOperation)
+        assertEquals(GPUClipStencilOperation.DecrementWrap, execution.producer.backPassOperation)
+        assertEquals(GPUClipStencilCompare.NotEqual, execution.consumer.compare)
+        val preparation = GPUFramePathApiInventory.prepareNativeTaskList(
+            inventory,
+            capabilities,
+            targetBounds,
+            readbackId,
+        )
+        val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            preparation,
+            (preparation as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}; facts=${it.facts}"
+            },
+        ).taskList
+        val session = backend.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(32, 32, colorMapping.physicalFormat, colorMapping.interpretation),
+        )
+        try {
+            val completed = session.renderFrame(
+                prepared,
+                GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
+            ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+            assertEquals(
+                GPUFrameStructuralOutcome.Succeeded,
+                completed.outcome,
+                "Radial local-translate native execution refused/failed: ${completed.diagnostic}",
+            )
+            val gpu = assertIs<GPUSceneFrameOutput.ReadbackRgba>(completed.output).bytes
+            assertRgbaWithinOneLsb(deterministicDiagonalSquareMiterRadialLocalTranslationWindingClipOracle(), gpu)
+            assertEquals(1L, session.nativeCounters().submits)
+            assertEquals(1L, session.nativeCounters().readbackCopies)
+        } finally {
+            session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
+    fun `rotated and nonuniform local radial matrices remain refused before native preparation`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        try {
+            val capabilities = requireNotNull(backend.capabilities)
+            val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(
+                RenderConfig.DEFAULT.mapPreparedGpuColorConfig(),
+            )
+            val clipPath = Path().apply {
+                moveTo(7.25f, 6.25f)
+                lineTo(30.25f, 6.25f)
+                lineTo(7.25f, 29.25f)
+                close()
+            }
+            listOf(Matrix3x3F32.rotation(90f), Matrix3x3F32.scaling(2f, 1f)).forEach { localMatrix ->
+                val inventory = GPUFramePathApiInventory.plan(
+                    operations = listOf(
+                        DisplayOp.DrawPath(
+                            Path().apply {
+                                moveTo(5.25f, 8.25f)
+                                lineTo(21.25f, 20.25f)
+                            },
+                            Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                                shader = Shader.WithLocalMatrix(
+                                    Shader.RadialGradient(
+                                        Point2F32(16f, 16f),
+                                        16f,
+                                        listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                                        TileMode.CLAMP,
+                                    ),
+                                    localMatrix,
+                                ),
+                                antiAlias = false,
+                                strokeCap = StrokeCap.SQUARE,
+                                strokeJoin = StrokeJoin.MITER,
+                            ),
+                            Matrix3x3F32.Identity,
+                            ClipStack.Complex(listOf(ClipStackOp.PathOp(clipPath, ClipOp.INTERSECT, antiAlias = false))),
+                        ),
+                    ),
+                    target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+                    config = RenderConfig.DEFAULT,
+                    capabilities = capabilities,
+                    deviceGeneration = backend.deviceGeneration,
+                )
+                assertEquals(
+                    "refused.unsupported.material.mapping.local_matrix",
+                    inventory.recording.analysis.records.single().routeDecisionLabel,
+                )
+                assertEquals(
+                    listOf("refused:unsupported.material.mapping.local_matrix"),
+                    inventory.recording.routeDiagnostics,
+                )
+            }
+        } finally {
             GPUBackendRuntimeNativeFactory.dispose()
         }
     }
@@ -6643,6 +6790,58 @@ class GPUFramePathApiInventoryNativeSmokeTest {
                     val distanceY = py - closestY
                     if (distanceX * distanceX + distanceY * distanceY > halfWidthSquared) continue
                     val radialDistance = kotlin.math.sqrt((px - 16f) * (px - 16f) + (py - 16f) * (py - 16f))
+                    val t = (radialDistance / 16f).coerceIn(0f, 1f)
+                    val red = linearToSrgb((1f - t) * srgbToLinear(1f) + t * srgbToLinear(0f))
+                    val blue = linearToSrgb((1f - t) * srgbToLinear(0f) + t * srgbToLinear(1f))
+                    val offset = (y * 32 + x) * 4
+                    rgba[offset] = (red * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 2] = (blue * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 3] = 0xff.toByte()
+                }
+            }
+        }
+
+    /** Independent oracle for radial sampling through a translated local matrix. */
+    private fun deterministicDiagonalSquareMiterRadialLocalTranslationWindingClipOracle(): ByteArray =
+        ByteArray(32 * 32 * 4).also { rgba ->
+            val strokeAx = 5.25f
+            val strokeAy = 8.25f
+            val strokeBx = 21.25f
+            val strokeBy = 20.25f
+            val strokeDx = strokeBx - strokeAx
+            val strokeDy = strokeBy - strokeAy
+            val strokeLengthSquared = strokeDx * strokeDx + strokeDy * strokeDy
+            val halfWidthSquared = 2f * 2f
+            val clipAx = 7.25f
+            val clipAy = 6.25f
+            val clipBx = 30.25f
+            val clipBy = 6.25f
+            val clipCx = 7.25f
+            val clipCy = 29.25f
+            val denominator = (clipBy - clipCy) * (clipAx - clipCx) +
+                (clipCx - clipBx) * (clipAy - clipCy)
+            for (y in 0 until 32) {
+                for (x in 0 until 32) {
+                    val px = x + 0.5f
+                    val py = y + 0.5f
+                    val u = ((clipBy - clipCy) * (px - clipCx) +
+                        (clipCx - clipBx) * (py - clipCy)) / denominator
+                    val v = ((clipCy - clipAy) * (px - clipCx) +
+                        (clipAx - clipCx) * (py - clipCy)) / denominator
+                    if (u < 0f || v < 0f || u + v > 1f) continue
+                    val projection = ((px - strokeAx) * strokeDx + (py - strokeAy) * strokeDy) /
+                        strokeLengthSquared
+                    if (projection < 0f || projection > 1f) continue
+                    val closestX = strokeAx + projection * strokeDx
+                    val closestY = strokeAy + projection * strokeDy
+                    val distanceX = px - closestX
+                    val distanceY = py - closestY
+                    if (distanceX * distanceX + distanceY * distanceY > halfWidthSquared) continue
+                    // The local matrix maps device coordinates to radial coordinates.
+                    val radialDistance = kotlin.math.sqrt(
+                        (px + 1.25f - 16f) * (px + 1.25f - 16f) +
+                            (py - 0.75f - 16f) * (py - 0.75f - 16f),
+                    )
                     val t = (radialDistance / 16f).coerceIn(0f, 1f)
                     val red = linearToSrgb((1f - t) * srgbToLinear(1f) + t * srgbToLinear(0f))
                     val blue = linearToSrgb((1f - t) * srgbToLinear(0f) + t * srgbToLinear(1f))

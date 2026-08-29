@@ -301,7 +301,8 @@ fun GPUMaterialDescriptor.gradientFactsRefusalReasonOrNull(
         }
         is GPUMaterialDescriptor.RadialGradient -> when {
             interpolation != "srgb" -> GPUPreparedMaterialUnsupportedReason.GRADIENT_INTERPOLATION
-            localMatrix != IDENTITY_GRADIENT_LOCAL_MATRIX -> GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX
+            !localMatrix.isPositiveUniformScaleTranslateGradientLocalMatrix() ->
+                GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX
             (allStopPositions?.size ?: 2) !in
                 (if (allowThreeStopRadialGradient) 1..3 else 1..2) ->
                 GPUPreparedMaterialUnsupportedReason.RADIAL_GRADIENT_STOP_COUNT

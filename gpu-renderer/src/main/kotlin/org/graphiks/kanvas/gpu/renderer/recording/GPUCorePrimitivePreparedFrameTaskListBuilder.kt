@@ -842,11 +842,7 @@ private fun GPUCorePrimitiveMaterialPayload.RadialGradient.isExactTwoStopClampGr
         interpolation == "srgb" &&
         positions.size == 2 &&
         colors.size == 8 &&
-        localMatrix == listOf(
-            1f, 0f, 0f,
-            0f, 1f, 0f,
-            0f, 0f, 1f,
-        )
+        localMatrix.isPositiveUniformScaleTranslateGradientLocalMatrix()
 
 private fun GPUCorePrimitiveMaterialPayload.SweepGradient.isExactTwoStopClampSweepGradient(): Boolean {
     val span = endAngle - startAngle
