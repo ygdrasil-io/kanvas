@@ -1193,6 +1193,13 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
 ): GPUCorePrimitiveGeometryInput {
     val pointCount = tessellatedVertices.size / 2
     val exactSingleSegment = contourStarts == listOf(0) && pointCount == 2
+    val boundedMultiSegment = contourStarts == listOf(0) && pointCount in 3..8 &&
+        edgeCount in (pointCount - 1)..pointCount && strokeCap == "butt" && strokeJoin == "miter" &&
+        tessellatedVertices.chunked(2).zipWithNext().all { (a, b) ->
+            val dx = b[0] - a[0]
+            val dy = b[1] - a[1]
+            dx.isFinite() && dy.isFinite() && (dx != 0f || dy != 0f)
+        } && tessellatedVertices.chunked(2).let { points -> points.first() != points.last() }
     if (strokeWidth == 0f && isBoundedNativePathHairline()) {
         val start = transform.map(tessellatedVertices[0], tessellatedVertices[1])
         val end = transform.map(tessellatedVertices[2], tessellatedVertices[3])
@@ -1229,7 +1236,7 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
             "unsupported.core_primitive.stroke.dash_exact_lowering"
         pathEffectKind != null -> "unsupported.core_primitive.stroke.path_effect_exact_lowering"
         strokeCap !in setOf("butt", "square", "round") -> "unsupported.core_primitive.stroke.cap_exact_lowering"
-        !exactSingleSegment -> "unsupported.core_primitive.stroke.complex_exact_lowering"
+        !exactSingleSegment && !boundedMultiSegment -> "unsupported.core_primitive.stroke.complex_exact_lowering"
         strokeCap == "round" && !matchesPixelExactRoundCapR2HorizontalV1() ->
             "unsupported.core_primitive.stroke.round_cap_pixel_exact_lowering"
         strokeJoin != "miter" -> "unsupported.core_primitive.stroke.join_exact_lowering"
@@ -1334,7 +1341,7 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
         vertices = edgeFan.vertices.toList(),
         indices = edgeFan.indices.toList(),
         sourceContourStarts = listOf(0),
-        sourceVertexCount = 2,
+        sourceVertexCount = if (boundedMultiSegment) pointCount else 2,
         coverBounds = devicePoints.toPixelCoverBounds(targetBounds),
         geometryMode = GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan,
         fillRule = GPUCorePrimitiveFillRule.Winding,
@@ -1346,9 +1353,10 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
             miterLimit = strokeMiterLimit,
             dashIntervals = dashIntervals?.toList().orEmpty(),
             dashPhase = dashPhase,
-            loweringProof = when (strokeCap) {
-                "square" -> GPUCorePrimitiveStrokeLoweringProof.SingleSegmentSquareV1
-                "round" -> GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2HorizontalV1
+            loweringProof = when {
+                boundedMultiSegment -> GPUCorePrimitiveStrokeLoweringProof.MultiSegmentButtMiterV1
+                strokeCap == "square" -> GPUCorePrimitiveStrokeLoweringProof.SingleSegmentSquareV1
+                strokeCap == "round" -> GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2HorizontalV1
                 else -> GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1
             },
         ),

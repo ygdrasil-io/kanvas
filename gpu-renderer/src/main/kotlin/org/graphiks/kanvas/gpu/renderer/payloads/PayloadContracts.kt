@@ -1165,6 +1165,8 @@ enum class GPUCorePrimitiveStrokeLoweringProof {
     SingleSegmentButtV1,
     SingleSegmentSquareV1,
     SingleSegmentRoundPixelExactR2HorizontalV1,
+    /** Bounded open polyline, butt caps and miter joins, lowered to a stroke edge fan. */
+    MultiSegmentButtMiterV1,
 }
 
 /** Exact source stroke facts plus the named lowering implementation that consumed them. */
@@ -2478,8 +2480,8 @@ private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
                 require(stroke != null) {
                     "Stroke stencil edge fans require exact stroke lowering facts"
                 }
-                require(sourceContourStarts == listOf(0) && sourceVertexCount == 2) {
-                    "Core single-segment stroke proof requires exactly one two-vertex source contour"
+                require(sourceContourStarts == listOf(0) && sourceVertexCount in 2..8) {
+                    "Core bounded stroke proof requires one two-to-eight-vertex source contour"
                 }
                 require(fillRule == GPUCorePrimitiveFillRule.Winding && !inverseFill) {
                     "Core single-segment stroke proof requires non-inverse winding fill"
@@ -2493,6 +2495,8 @@ private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
                         GPUCorePrimitiveStrokeLoweringProof.SingleSegmentSquareV1 -> stroke.cap == "square"
                         GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2HorizontalV1 ->
                             stroke.cap == "round" && stroke.width == 4f
+                        GPUCorePrimitiveStrokeLoweringProof.MultiSegmentButtMiterV1 ->
+                            stroke.cap == "butt" && stroke.join == "miter"
                     },
                 ) {
                     "Core single-segment stroke cap must match its closed lowering proof"

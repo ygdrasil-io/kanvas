@@ -163,7 +163,7 @@ private fun GPUCorePrimitiveGeometry.TriangulatedPath.isExactSingleSegmentStroke
             GPUCorePrimitiveGeometryMode.DirectTriangles,
             GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan,
         ) ||
-        sourceContourStarts != listOf(0) || sourceVertexCount != 2 ||
+        sourceContourStarts != listOf(0) || sourceVertexCount !in 2..8 ||
         fillRule != GPUCorePrimitiveFillRule.Winding || inverseFill
     ) return false
     if (geometryMode == GPUCorePrimitiveGeometryMode.DirectTriangles &&
@@ -181,6 +181,8 @@ private fun GPUCorePrimitiveGeometry.TriangulatedPath.isExactSingleSegmentStroke
             stroke.cap == "square"
         GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2HorizontalV1 ->
             stroke.cap == "round" && stroke.width == 4f
+        GPUCorePrimitiveStrokeLoweringProof.MultiSegmentButtMiterV1 ->
+            sourceVertexCount in 3..8 && stroke.cap == "butt" && stroke.join == "miter"
     }
 }
 
