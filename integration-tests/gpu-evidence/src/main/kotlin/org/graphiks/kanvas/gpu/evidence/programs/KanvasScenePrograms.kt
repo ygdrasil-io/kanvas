@@ -2061,6 +2061,40 @@ object KanvasScenePrograms {
         restore()
     })
 
+    /** The bounded horizontal dash route after an exact quarter-turn rotation. */
+    fun quarterTurnHorizontalDashedButtMiterStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        save()
+        translate(20f, 4f)
+        rotate(90f)
+        drawPath(
+            Path { moveTo(4f, 8f); lineTo(16f, 8f) },
+            Paint.stroke(ColorARGB.Red, 4f).copy(
+                antiAlias = false,
+                strokeCap = StrokeCap.BUTT,
+                strokeJoin = StrokeJoin.MITER,
+                pathEffect = PathEffect.Dash(floatArrayOf(8f, 4f), phase = 0f),
+            ),
+        )
+        restore()
+    })
+
+    /** The bounded vertical dash route after an exact half-turn rotation. */
+    fun halfTurnVerticalDashedButtMiterStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        save()
+        translate(32f, 32f)
+        rotate(180f)
+        drawPath(
+            Path { moveTo(8f, 4f); lineTo(8f, 28f) },
+            Paint.stroke(ColorARGB.Red, 4f).copy(
+                antiAlias = false,
+                strokeCap = StrokeCap.BUTT,
+                strokeJoin = StrokeJoin.MITER,
+                pathEffect = PathEffect.Dash(floatArrayOf(8f, 4f), phase = 0f),
+            ),
+        )
+        restore()
+    })
+
     /** The same bounded dash route consumed by an integral device scissor. */
     fun scissoredHorizontalDashedButtMiterStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
         save()

@@ -1379,7 +1379,8 @@ private fun NormalizedDrawCommand.FillPath.matchesHorizontalDashedButtMiterV1():
         strokeWidth != 4f || strokeCap != "butt" || strokeJoin != "miter" ||
         !strokeMiterLimit.isFinite() || strokeMiterLimit < 1f ||
         !(transform.type in setOf(GPUTransformType.Identity, GPUTransformType.Translate) ||
-            transform.isUniformPositiveScale() || transform.isUniformPositiveScaleTranslate())
+            transform.isUniformPositiveScale() || transform.isUniformPositiveScaleTranslate() ||
+            transform.isExactQuarterTurnPathRotation() || transform.isExactHalfTurnPathRotation())
     ) return false
     val start = transform.map(tessellatedVertices[0], tessellatedVertices[1])
     val end = transform.map(tessellatedVertices[2], tessellatedVertices[3])
@@ -1395,7 +1396,8 @@ private fun NormalizedDrawCommand.FillPath.matchesVerticalDashedButtMiterV1(): B
         strokeWidth != 4f || strokeCap != "butt" || strokeJoin != "miter" ||
         !strokeMiterLimit.isFinite() || strokeMiterLimit < 1f ||
         !(transform.type in setOf(GPUTransformType.Identity, GPUTransformType.Translate) ||
-            transform.isUniformPositiveScale() || transform.isUniformPositiveScaleTranslate())
+            transform.isUniformPositiveScale() || transform.isUniformPositiveScaleTranslate() ||
+            transform.isExactQuarterTurnPathRotation() || transform.isExactHalfTurnPathRotation())
     ) return false
     val start = transform.map(tessellatedVertices[0], tessellatedVertices[1])
     val end = transform.map(tessellatedVertices[2], tessellatedVertices[3])
@@ -1467,6 +1469,16 @@ private fun GPUTransformFacts.map(x: Float, y: Float): Pair<Float, Float> {
     }
     return mapped
 }
+
+private fun GPUTransformFacts.isExactQuarterTurnPathRotation(): Boolean =
+    type == GPUTransformType.Affine &&
+        translateX.isFinite() && translateY.isFinite() &&
+        scaleX == 0f && scaleY == 0f && skewX == -1f && skewY == 1f
+
+private fun GPUTransformFacts.isExactHalfTurnPathRotation(): Boolean =
+    (type == GPUTransformType.Scale || type == GPUTransformType.Affine) &&
+        translateX.isFinite() && translateY.isFinite() &&
+        scaleX == -1f && scaleY == -1f && skewX == 0f && skewY == 0f
 
 private fun refuseGeometry(code: String, facts: Map<String, String>): Nothing =
     throw GPUCorePrimitiveGeometryRefusalException(GPUCorePrimitiveGeometryRefusal(code, facts))

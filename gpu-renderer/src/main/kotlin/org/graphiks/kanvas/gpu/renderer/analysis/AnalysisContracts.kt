@@ -2571,12 +2571,15 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
             !isBoundedHorizontalDashedPhase(dashPhase) || strokeWidth != 4f || strokeCap != "butt" || strokeJoin != "miter" ||
             tessellatedVertices.size != 4 ||
             !(transform.type in setOf(GPUTransformType.Identity, GPUTransformType.Translate) ||
-                transform.isUniformPositiveScale() || transform.isUniformPositiveScaleTranslate())
+                transform.isUniformPositiveScale() || transform.isUniformPositiveScaleTranslate() ||
+                transform.isExactQuarterTurnPathRotation() || transform.isExactHalfTurnPathRotation())
         ) return false
-        val startX = transform.scaleX * tessellatedVertices[0] + transform.translateX
-        val startY = transform.scaleY * tessellatedVertices[1] + transform.translateY
-        val endX = transform.scaleX * tessellatedVertices[2] + transform.translateX
-        val endY = transform.scaleY * tessellatedVertices[3] + transform.translateY
+        val start = transform.mapPathPoint(tessellatedVertices[0], tessellatedVertices[1])
+        val end = transform.mapPathPoint(tessellatedVertices[2], tessellatedVertices[3])
+        val startX = start.first
+        val startY = start.second
+        val endX = end.first
+        val endY = end.second
         return startX.isIntegralDeviceCoordinate() && startY.isIntegralDeviceCoordinate() &&
             endX.isIntegralDeviceCoordinate() && endY.isIntegralDeviceCoordinate() &&
             startY == endY && kotlin.math.abs(endX - startX) >= 12f
@@ -2587,12 +2590,15 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
             !isBoundedHorizontalDashedPhase(dashPhase) || strokeWidth != 4f || strokeCap != "butt" || strokeJoin != "miter" ||
             tessellatedVertices.size != 4 ||
             !(transform.type in setOf(GPUTransformType.Identity, GPUTransformType.Translate) ||
-                transform.isUniformPositiveScale() || transform.isUniformPositiveScaleTranslate())
+                transform.isUniformPositiveScale() || transform.isUniformPositiveScaleTranslate() ||
+                transform.isExactQuarterTurnPathRotation() || transform.isExactHalfTurnPathRotation())
         ) return false
-        val startX = transform.scaleX * tessellatedVertices[0] + transform.translateX
-        val startY = transform.scaleY * tessellatedVertices[1] + transform.translateY
-        val endX = transform.scaleX * tessellatedVertices[2] + transform.translateX
-        val endY = transform.scaleY * tessellatedVertices[3] + transform.translateY
+        val start = transform.mapPathPoint(tessellatedVertices[0], tessellatedVertices[1])
+        val end = transform.mapPathPoint(tessellatedVertices[2], tessellatedVertices[3])
+        val startX = start.first
+        val startY = start.second
+        val endX = end.first
+        val endY = end.second
         return startX.isIntegralDeviceCoordinate() && startY.isIntegralDeviceCoordinate() &&
             endX.isIntegralDeviceCoordinate() && endY.isIntegralDeviceCoordinate() &&
             startX == endX && kotlin.math.abs(endY - startY) >= 12f
@@ -3230,6 +3236,9 @@ private fun GPUTransformFacts.isExactQuarterTurnPathRotation(): Boolean =
 private fun GPUTransformFacts.isExactHalfTurnPathRotation(): Boolean =
     translateX.isFinite() && translateY.isFinite() &&
         scaleX == -1f && scaleY == -1f && skewX == 0f && skewY == 0f
+
+private fun GPUTransformFacts.mapPathPoint(x: Float, y: Float): Pair<Float, Float> =
+    scaleX * x + skewX * y + translateX to skewY * x + scaleY * y + translateY
 
 private fun GPUTransformFacts.isNonAxisAlignedAffine(): Boolean =
     type == GPUTransformType.Affine && (skewX != 0f || skewY != 0f)
