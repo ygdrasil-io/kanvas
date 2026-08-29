@@ -236,6 +236,19 @@ class GpuEvidenceCatalogOracleTest {
     }
 
     @Test
+    fun `even odd hole linear gradient butt stroke preserves the hole`() {
+        val pixels = oracle("clip-path-linear-gradient-butt-stroke-even-odd-hole")
+
+        assertNotEquals(
+            intArrayOf(13, 20, 33, 255).toList(),
+            pixel(pixels, 64, 64, 7, 7).toList(),
+            "EvenOdd shell stroke witness must be painted",
+        )
+        assertPixel(pixels, 64, 64, 16, 15, intArrayOf(13, 20, 33, 255))
+        assertPixel(pixels, 64, 64, 22, 20, intArrayOf(13, 20, 33, 255))
+    }
+
+    @Test
     fun `bounded bitmap oracle preserves literal nearest texels at its integer destination`() {
         val pixels = oracle("bounded-rgba8-nearest-bitmap")
 
