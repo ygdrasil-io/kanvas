@@ -33,6 +33,19 @@ import org.graphiks.math.matrix.Matrix3x3F32
 
 class GpuEvidenceCatalogTest {
     @Test
+    fun `bounded saveLayer evidence keeps its root background on the supported solid rect route`() {
+        val operations = ops("bounded-save-layer-src-over-opacity")
+
+        assertEquals(5, operations.size)
+        val background = assertIs<DisplayOp.DrawRect>(operations[0])
+        assertEquals(RectF32.ofLTRB(0f, 0f, 64f, 64f), background.rect)
+        assertIs<DisplayOp.BeginLayer>(operations[1])
+        assertIs<DisplayOp.DrawRect>(operations[2])
+        assertIs<DisplayOp.DrawRect>(operations[3])
+        assertIs<DisplayOp.EndLayer>(operations[4])
+    }
+
+    @Test
     fun `clip stencil radial evidence permits one f32 rounding unit and rejects two`() {
         val policy = assertNotNull(GpuEvidenceCatalog.renderCases.single {
             it.descriptor.id.value == "clip-path-triangle-radial-gradient"
@@ -46,7 +59,7 @@ class GpuEvidenceCatalogTest {
     }
 
     @Test
-    fun `catalog separates eighty four public surface renders from six refusals`() {
+    fun `catalog separates eighty five public surface renders from seven refusals`() {
         val cases = GpuEvidenceCatalog.cases
 
         assertEquals(
@@ -56,6 +69,7 @@ class GpuEvidenceCatalogTest {
                 "translucent-card-overlap",
                 "scissor-overlay",
                 "canvas-state-restore-to-count",
+                "bounded-save-layer-src-over-opacity",
                 "stroke-rect-outline",
                 "round-cap-stroke",
                 "linear-gradient-lanes",
@@ -132,6 +146,7 @@ class GpuEvidenceCatalogTest {
                 "reflected-path-topology-refusal",
                 "custom-runtime-effect-unregistered-refusal",
                 "aggregate-memory-budget-refusal",
+                "bounded-save-layer-restore-blend-refusal",
             ),
             cases.map { it.descriptor.id.value },
         )
@@ -142,6 +157,7 @@ class GpuEvidenceCatalogTest {
                 "translucent-card-overlap",
                 "scissor-overlay",
                 "canvas-state-restore-to-count",
+                "bounded-save-layer-src-over-opacity",
                 "stroke-rect-outline",
                 "round-cap-stroke",
                 "linear-gradient-lanes",
@@ -216,7 +232,7 @@ class GpuEvidenceCatalogTest {
             GpuEvidenceCatalog.renderCases.map { it.descriptor.id.value },
         )
         assertEquals(
-            listOf("linear-gradient-three-stops", "basic-primitives-empty-rect-refusal", "perspective-transform-refusal", "reflected-path-topology-refusal", "custom-runtime-effect-unregistered-refusal", "aggregate-memory-budget-refusal"),
+            listOf("linear-gradient-three-stops", "basic-primitives-empty-rect-refusal", "perspective-transform-refusal", "reflected-path-topology-refusal", "custom-runtime-effect-unregistered-refusal", "aggregate-memory-budget-refusal", "bounded-save-layer-restore-blend-refusal"),
             GpuEvidenceCatalog.refusalCases.map { it.descriptor.id.value },
         )
         assertTrue(GpuEvidenceCatalog.renderCases.all { it.program is KanvasSurfaceProgram })
@@ -224,11 +240,11 @@ class GpuEvidenceCatalogTest {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            List(84) { "kanvas.surface.render" },
+            List(85) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
-        assertEquals(84, GpuEvidenceCatalog.renderCases.size)
-        assertEquals(90, GpuEvidenceCatalog.cases.size)
+        assertEquals(85, GpuEvidenceCatalog.renderCases.size)
+        assertEquals(92, GpuEvidenceCatalog.cases.size)
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
 
         val solid = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "solid-card-stack" })
@@ -353,6 +369,7 @@ class GpuEvidenceCatalogTest {
             "translucent-card-overlap",
             "scissor-overlay",
             "canvas-state-restore-to-count",
+            "bounded-save-layer-src-over-opacity",
             "stroke-rect-outline",
             "round-cap-stroke",
             "linear-gradient-lanes",
@@ -445,6 +462,7 @@ class GpuEvidenceCatalogTest {
                 "basic-primitives-empty-rect-refusal" to "kanvas.surface.render",
                 "perspective-transform-refusal" to "kanvas.surface.render",
                 "reflected-path-topology-refusal" to "kanvas.surface.render",
+                "bounded-save-layer-restore-blend-refusal" to "kanvas.surface.render",
             ),
             GpuEvidenceCatalog.refusalCases.filter { it.program is KanvasSurfaceProgram }.associate { evidenceCase ->
                 evidenceCase.descriptor.id.value to assertIs<KanvasSurfaceProgram>(evidenceCase.program).routeId
@@ -458,6 +476,7 @@ class GpuEvidenceCatalogTest {
                 "translucent-card-overlap" to OraclePolicy.GeneratedCpu("surface-srgb-linear-premul-src-over", 2),
                 "scissor-overlay" to OraclePolicy.GeneratedCpu("reference-raster-scissor-intersections", 1),
                 "canvas-state-restore-to-count" to OraclePolicy.GeneratedCpu("reference-raster-canvas-state-restore-to-count", 1),
+                "bounded-save-layer-src-over-opacity" to OraclePolicy.GeneratedCpu("surface-srgb-save-layer-src-over-opacity", 2),
                 "stroke-rect-outline" to OraclePolicy.GeneratedCpu("reference-raster-stroke-rect-bands", 1),
                 "round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke", 2),
                 "linear-gradient-lanes" to OraclePolicy.GeneratedCpu("surface-srgb-gradient-linear-clamp", 2),
@@ -549,6 +568,7 @@ class GpuEvidenceCatalogTest {
                 "translucent-card-overlap" to ComparisonPolicy(1, 100.0, 1, "Hardware rgba8unorm nearest quantization may differ from the independent linear-premultiplied sRGB oracle by one RGB byte; alpha remains exact and delta 2 remains a failure."),
                 "scissor-overlay" to ComparisonPolicy(0, 100.0, 1, "Exact integer RGBA8 output from literal scissor intersections."),
                 "canvas-state-restore-to-count" to ComparisonPolicy(0, 100.0, 1, "Exact integer RGBA8 output from literal parent/child scissor state and post-restore sentinels."),
+                "bounded-save-layer-src-over-opacity" to ComparisonPolicy(2, 100.0, 1, "Independent linear-premultiplied CPU layer oracle; two LSBs cover bounded RGBA8 offscreen and composite quantization."),
                 "stroke-rect-outline" to ComparisonPolicy(0, 100.0, 1, "Exact integer RGBA8 output from four literal analytic coverage bands."),
                 "round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Independent pixel-center disk oracle for W25's integral-grid radius-two horizontal contract."),
                 "linear-gradient-lanes" to ComparisonPolicy(1, 100.0, 1, "Independent sRGB decode, linear-premultiplied interpolation, and sRGB target storage."),
