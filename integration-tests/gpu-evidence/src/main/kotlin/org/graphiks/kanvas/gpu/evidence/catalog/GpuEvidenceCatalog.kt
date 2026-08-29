@@ -23,6 +23,7 @@ import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbUniformScaledThreeStop
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbThreeStopSweepGradientStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRoundCapStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRoundCapVerticalStrokeCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRoundCapVerticalStrokeScissorCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRoundCapStrokeScissorCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbSolidStrokeScissorCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbSolidStrokeCpuOracle
@@ -65,6 +66,7 @@ object GpuEvidenceCatalog {
         quarterTurnRoundCapStroke(),
         halfTurnRoundCapStroke(),
         negativeQuarterTurnRoundCapStroke(),
+        scissoredVerticalRoundCapStroke(),
         scaledTranslatedHorizontalHairline(),
         scaledHorizontalHairline(),
         horizontalHairline(),
@@ -749,6 +751,34 @@ sweepGradientTwoStopStrokeRect(),
             centerX = 20.0,
             radius = 2.0,
             rgba = intArrayOf(255, 0, 0, 255),
+        ),
+    )
+
+    private fun scissoredVerticalRoundCapStroke(): EvidenceCase = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("scissored-vertical-round-cap-stroke"),
+            "Scissored vertical round-cap path stroke",
+            "Public Kanvas Surface non-AA integral-grid vertical radius-two round-cap stroke intersected with an integral device scissor.",
+            32,
+            32,
+            1L,
+            setOf("path-stroke", "round-cap", "vertical", "scissor", "kanvas-surface"),
+            EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke-vertical-scissor", 2),
+            ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent vertical round-cap union intersected with the integral device scissor."),
+            emptySet(),
+        ),
+        KanvasScenePrograms.scissoredVerticalRoundCapStroke(),
+        SurfaceSrgbRoundCapVerticalStrokeScissorCpuOracle(
+            startY = 6.0,
+            endY = 26.0,
+            centerX = 16.0,
+            radius = 2.0,
+            rgba = intArrayOf(255, 0, 0, 255),
+            clipLeft = 14,
+            clipTop = 5,
+            clipRight = 18,
+            clipBottom = 22,
         ),
     )
 
