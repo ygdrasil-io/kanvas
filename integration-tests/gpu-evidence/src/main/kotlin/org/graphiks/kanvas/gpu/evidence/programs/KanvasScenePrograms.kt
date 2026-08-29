@@ -273,6 +273,37 @@ object KanvasScenePrograms {
         restore()
     })
 
+    /** A non-right-angle transform keeps sweep path-stroke composition refused. */
+    fun nonRightAngleSweepStrokeRefusal() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        save()
+        clipPath(
+            Path {
+                moveTo(6.875f, 5.875f)
+                lineTo(24.875f, 5.875f)
+                lineTo(6.875f, 23.875f)
+                close()
+            }.apply { fillType = FillType.INVERSE_WINDING },
+            ClipOp.INTERSECT,
+            antiAlias = false,
+        )
+        rotate(15f)
+        drawPath(
+            Path { moveTo(4.125f, 4.125f); lineTo(12.125f, 8.625f) },
+            Paint.stroke(ColorARGB.Transparent, 2f).copy(
+                shader = Shader.SweepGradient(
+                    Point2F32(16f, 16f),
+                    0f,
+                    360f,
+                    listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                ),
+                antiAlias = false,
+                strokeCap = StrokeCap.BUTT,
+                strokeJoin = StrokeJoin.MITER,
+            ),
+        )
+        restore()
+    })
+
     fun basicPrimitivesValidAlpha() = KanvasSurfaceProgram(ROUTE_ID, record = {
         clear(ColorARGB.Transparent)
         drawColor(ColorARGB.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f, .5f))
