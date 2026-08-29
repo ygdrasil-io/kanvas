@@ -1,0 +1,6 @@
+{
+  "fixture": "bounded-open-polyline-butt-miter-v1",
+  "status": "explicit-refusal",
+  "code": "unsupported.cpu.oracle_not_available",
+  "message": "This wave proves route admission and geometry payload integrity; no independent CPU/GPU pixel capture was produced."
+}

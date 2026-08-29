@@ -2542,14 +2542,22 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
      */
     private fun NormalizedDrawCommand.FillPath.isNativeSimpleStroke(): Boolean =
         contourStarts == listOf(0) &&
-            tessellatedVertices.size == 4 &&
+            (tessellatedVertices.size == 4 || tessellatedVertices.size in 6..16) &&
+            edgeCount in (tessellatedVertices.size / 2 - 1)..(tessellatedVertices.size / 2) &&
+            tessellatedVertices.chunked(2).zipWithNext().all { (a, b) ->
+                val dx = b[0] - a[0]
+                val dy = b[1] - a[1]
+                dx.isFinite() && dy.isFinite() && (dx != 0f || dy != 0f)
+            } &&
+            tessellatedVertices.chunked(2).let { points -> points.first() != points.last() } &&
             strokeWidth.isFinite() && strokeWidth in 0.5f..64f &&
             !antiAlias &&
             (dashIntervals == null || dashIntervals.isEmpty()) &&
             pathEffectKind == null &&
             (
-                strokeCap in setOf("butt", "square") ||
-                    (strokeCap == "round" && matchesPixelExactRoundCapR2HorizontalV1())
+                strokeCap == "butt" ||
+                    (tessellatedVertices.size == 4 && strokeCap == "square") ||
+                    (tessellatedVertices.size == 4 && strokeCap == "round" && matchesPixelExactRoundCapR2HorizontalV1())
                 ) &&
             strokeJoin == "miter" &&
             strokeMiterLimit.isFinite() && strokeMiterLimit >= 1f &&

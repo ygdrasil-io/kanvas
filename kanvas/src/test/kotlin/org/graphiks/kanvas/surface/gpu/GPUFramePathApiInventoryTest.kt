@@ -1221,6 +1221,7 @@ class GPUFramePathApiInventoryTest {
             ),
             target = target(),
             config = RenderConfig.DEFAULT,
+            capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER),
         )
 
         assertEquals(emptyList(), inventory.visualCommands)
@@ -2914,6 +2915,38 @@ class GPUFramePathApiInventoryTest {
 
         assertEquals("unsupported.core_primitive.stroke.join_exact_lowering", refused.code)
         assertEquals("bevel", refused.facts["join"])
+    }
+
+    @Test
+    fun `bounded open polyline butt miter stroke reaches native stencil cover`() {
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(4f, 8f)
+                        lineTo(24f, 8f)
+                        lineTo(24f, 20f)
+                    },
+                    Paint.stroke(ColorARGB.Red, 4f).copy(
+                        antiAlias = false,
+                        strokeCap = StrokeCap.BUTT,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER),
+        )
+
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+        val semantic = gatheredSemantic(inventory) as GPUDrawSemanticPayload.CorePrimitive
+        val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
+        assertEquals(GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan, geometry.geometryMode)
+        assertEquals(3, geometry.sourceVertexCount)
+        assertEquals(GPUCorePrimitiveStrokeLoweringProof.MultiSegmentButtMiterV1, geometry.strokeStyle?.loweringProof)
     }
 
     @Test

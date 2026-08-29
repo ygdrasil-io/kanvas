@@ -1,0 +1,11 @@
+{
+  "fixture": "bounded-open-polyline-butt-miter-v1",
+  "route": "native.path_stroke.stencil_cover",
+  "geometry": "StrokeStencilEdgeFan",
+  "sourceContour": { "points": 3, "maxPoints": 8, "closed": false },
+  "stroke": { "width": 4, "cap": "butt", "join": "miter", "antiAlias": false, "dash": false },
+  "transforms": ["identity", "translate", "uniform-positive-scale", "uniform-positive-scale-translate"],
+  "proof": "MultiSegmentButtMiterV1",
+  "nativeExecution": "route-and-payload-contract-tested",
+  "pixelOracle": "not-produced-by-this-wave"
+}
