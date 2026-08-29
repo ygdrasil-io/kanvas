@@ -73,7 +73,7 @@ class GpuEvidenceCatalogTest {
     }
 
     @Test
-    fun `catalog separates one hundred one public surface renders from nine refusals`() {
+    fun `catalog separates one hundred eight public surface renders from nine refusals`() {
         val cases = GpuEvidenceCatalog.cases
 
         assertEquals(
@@ -116,6 +116,7 @@ class GpuEvidenceCatalogTest {
                 "clip-path-triangle-radial-stroke",
                 "clip-path-translated-triangle-radial-stroke",
                 "clip-path-local-radial-matrix-stroke",
+                "clip-path-right-angle-radial-square-stroke",
                 "clip-path-translated-triangle-radial-gradient",
                 "clip-path-translated-triangle-linear-gradient",
                 "clip-path-uniform-scaled-triangle-linear-gradient",
@@ -215,6 +216,7 @@ class GpuEvidenceCatalogTest {
                 "clip-path-triangle-radial-stroke",
                 "clip-path-translated-triangle-radial-stroke",
                 "clip-path-local-radial-matrix-stroke",
+                "clip-path-right-angle-radial-square-stroke",
                 "clip-path-translated-triangle-radial-gradient",
                 "clip-path-translated-triangle-linear-gradient",
                 "clip-path-uniform-scaled-triangle-linear-gradient",
@@ -274,11 +276,11 @@ class GpuEvidenceCatalogTest {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            List(107) { "kanvas.surface.render" },
+            List(108) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
-        assertEquals(107, GpuEvidenceCatalog.renderCases.size)
-        assertEquals(116, GpuEvidenceCatalog.cases.size)
+        assertEquals(108, GpuEvidenceCatalog.renderCases.size)
+        assertEquals(117, GpuEvidenceCatalog.cases.size)
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
 
         val solid = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "solid-card-stack" })
@@ -454,6 +456,7 @@ class GpuEvidenceCatalogTest {
                 "clip-path-triangle-radial-stroke",
                 "clip-path-translated-triangle-radial-stroke",
                 "clip-path-local-radial-matrix-stroke",
+                "clip-path-right-angle-radial-square-stroke",
                 "clip-path-translated-triangle-radial-gradient",
                 "clip-path-translated-triangle-linear-gradient",
                 "clip-path-uniform-scaled-triangle-linear-gradient",
@@ -594,6 +597,7 @@ class GpuEvidenceCatalogTest {
                 "clip-path-triangle-radial-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-radial-stroke-device-space", 1),
                 "clip-path-translated-triangle-radial-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-radial-stroke-device-space", 1),
                 "clip-path-local-radial-matrix-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-radial-stroke-device-space", 1),
+                "clip-path-right-angle-radial-square-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-radial-stroke-device-space", 1),
                 "clip-path-translated-triangle-radial-gradient" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-radial-gradient-device-space", 1),
                 "clip-path-translated-triangle-linear-gradient" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-linear-gradient-device-space", 1),
                 "clip-path-uniform-scaled-triangle-linear-gradient" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-linear-gradient-device-space", 1),
@@ -708,6 +712,7 @@ class GpuEvidenceCatalogTest {
                 "clip-path-triangle-radial-stroke" to ComparisonPolicy(1, 100.0, 1, "Independent pixel-center winding clip, butt stroke distance and linear-light radial interpolation."),
                 "clip-path-translated-triangle-radial-stroke" to ComparisonPolicy(1, 100.0, 1, "Independent translated device-space pixel-center winding clip, butt stroke distance and linear-light radial interpolation."),
                 "clip-path-local-radial-matrix-stroke" to ComparisonPolicy(1, 100.0, 1, "Independent device-space clip/stroke coverage with translated local-matrix radial sampling and linear-light interpolation."),
+                "clip-path-right-angle-radial-square-stroke" to ComparisonPolicy(1, 100.0, 1, "Independent right-angle device-space winding clip, square-cap stroke distance and linear-light radial interpolation."),
                 "clip-path-translated-triangle-radial-gradient" to ComparisonPolicy(1, 100.0, 1, "Independent double-precision oracle with translated device-space geometry."),
                 "clip-path-translated-triangle-linear-gradient" to ComparisonPolicy(1, 100.0, 1, "Independent device-space pixel-center winding clip and linear-light clamp gradient oracle."),
                 "clip-path-uniform-scaled-triangle-linear-gradient" to ComparisonPolicy(1, 100.0, 1, "Independent device-space pixel-center winding clip and linear-light clamp gradient oracle."),

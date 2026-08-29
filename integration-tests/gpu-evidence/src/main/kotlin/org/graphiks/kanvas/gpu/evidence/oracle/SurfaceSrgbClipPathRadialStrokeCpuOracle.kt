@@ -17,6 +17,7 @@ class SurfaceSrgbClipPathRadialStrokeCpuOracle(
     private val startColor: IntArray,
     private val endColor: IntArray,
     private val shaderTranslation: Point = Point(0.0, 0.0),
+    private val squareCaps: Boolean = false,
 ) : CpuOracle {
     data class Point(val x: Double, val y: Double)
 
@@ -80,7 +81,12 @@ class SurfaceSrgbClipPathRadialStrokeCpuOracle(
 
     private fun coversStroke(x: Double, y: Double, halfWidthSquared: Double): Boolean {
         val projection = ((x - strokeStart.x) * dx + (y - strokeStart.y) * dy) / lengthSquared
-        if (projection !in 0.0..1.0) return false // butt caps; miter is irrelevant for one segment
+        val capExtension = if (squareCaps) {
+            kotlin.math.sqrt(halfWidthSquared / lengthSquared)
+        } else {
+            0.0
+        }
+        if (projection !in -capExtension..(1.0 + capExtension)) return false
         val closestX = strokeStart.x + projection * dx
         val closestY = strokeStart.y + projection * dy
         val distanceX = x - closestX
