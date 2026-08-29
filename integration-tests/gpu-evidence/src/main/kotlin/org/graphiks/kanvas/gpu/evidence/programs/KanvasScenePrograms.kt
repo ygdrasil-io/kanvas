@@ -613,6 +613,35 @@ object KanvasScenePrograms {
         restore()
     })
 
+    fun clipPathLocalRadialMatrixSquareStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        save()
+        clipPath(
+            Path { moveTo(7.25f, 6.25f); lineTo(30.25f, 6.25f); lineTo(7.25f, 29.25f); close() }
+                .apply { fillType = FillType.WINDING },
+            ClipOp.INTERSECT,
+            antiAlias = false,
+        )
+        drawPath(
+            Path { moveTo(5.25f, 8.25f); lineTo(21.25f, 20.25f) },
+            Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                shader = Shader.WithLocalMatrix(
+                    Shader.RadialGradient(
+                        Point2F32(16f, 16f),
+                        16f,
+                        listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                        TileMode.CLAMP,
+                    ),
+                    Matrix3x3F32.translation(1.25f, -0.75f),
+                ),
+                antiAlias = false,
+                strokeCap = StrokeCap.SQUARE,
+                strokeJoin = StrokeJoin.MITER,
+            ),
+        )
+        restore()
+    })
+
     fun clipPathRightAngleRadialSquareStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
         drawColor(BACKGROUND)
         save()
