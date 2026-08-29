@@ -17,6 +17,8 @@ class SurfaceSrgbClipPathSweepEvenOddHoleStrokeCpuOracle(
     private val endColor: IntArray,
     private val inverse: Boolean = false,
     private val squareCaps: Boolean = true,
+    private val shaderTranslation: Point = Point(0.0, 0.0),
+    private val shaderScale: Double = 1.0,
 ) : CpuOracle {
     data class Point(val x: Double, val y: Double)
     data class Rect(val left: Double, val top: Double, val right: Double, val bottom: Double)
@@ -34,13 +36,19 @@ class SurfaceSrgbClipPathSweepEvenOddHoleStrokeCpuOracle(
         }
         require(outer.left < outer.right && outer.top < outer.bottom) { "outer rect must be ordered" }
         require(inner.left < inner.right && inner.top < inner.bottom) { "inner rect must be ordered" }
-        require(strokeWidth.isFinite() && strokeWidth == 4.0) {
-            "fixture requires a width-four stroke"
+        require(strokeWidth.isFinite() && strokeWidth > 0.0) {
+            "stroke width must be finite and positive"
         }
         require(lengthSquared.isFinite() && lengthSquared > 0.0) {
             "stroke segment must be finite and non-degenerate"
         }
         require(center.x.isFinite() && center.y.isFinite()) { "center must be finite" }
+        require(shaderTranslation.x.isFinite() && shaderTranslation.y.isFinite()) {
+            "shader translation must be finite"
+        }
+        require(shaderScale.isFinite() && shaderScale > 0.0) {
+            "shader scale must be finite and positive"
+        }
     }
 
     override fun render(width: Int, height: Int): ByteArray {
@@ -54,7 +62,10 @@ class SurfaceSrgbClipPathSweepEvenOddHoleStrokeCpuOracle(
             val px = x + 0.5
             val py = y + 0.5
             val color = if (containsEvenOdd(px, py) && coversSquareStroke(px, py, halfWidthSquared)) {
-                val rawTurn = atan2(py - center.y, px - center.x) / fullTurn
+                val rawTurn = atan2(
+                    (py + shaderTranslation.y) / shaderScale - center.y,
+                    (px + shaderTranslation.x) / shaderScale - center.x,
+                ) / fullTurn
                 val t = (rawTurn - kotlin.math.floor(rawTurn)).coerceIn(0.0, 1.0)
                 SurfaceSrgbOracleMath.storeSrgb(
                     SurfaceSrgbOracleMath.LinearPremul(

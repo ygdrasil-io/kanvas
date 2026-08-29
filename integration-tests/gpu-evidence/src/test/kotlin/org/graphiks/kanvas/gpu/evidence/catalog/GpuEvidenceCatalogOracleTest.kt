@@ -132,6 +132,19 @@ class GpuEvidenceCatalogOracleTest {
     }
 
     @Test
+    fun `scaled translated inverse even odd difference sweep keeps the transformed shell`() {
+        val pixels = oracle("clip-path-sweep-square-stroke-scaled-translated-inverse-even-odd-difference-hole")
+
+        assertNotEquals(
+            intArrayOf(13, 20, 33, 255).toList(),
+            pixel(pixels, 64, 64, 8, 7).toList(),
+            "transformed shell stroke witness must be painted",
+        )
+        assertPixel(pixels, 64, 64, 12, 11, intArrayOf(13, 20, 33, 255))
+        assertPixel(pixels, 64, 64, 19, 14, intArrayOf(13, 20, 33, 255))
+    }
+
+    @Test
     fun `bounded bitmap oracle preserves literal nearest texels at its integer destination`() {
         val pixels = oracle("bounded-rgba8-nearest-bitmap")
 
