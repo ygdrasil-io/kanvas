@@ -813,6 +813,7 @@ private val HARD_PATH_CLIP_GRADIENT_TRANSFORM_CLASSES = setOf(
     "identity",
     "translate",
     "uniform-positive-scale-translate",
+    "right-angle-rotation",
 )
 
 private fun GPUCorePrimitiveColorTransform.apply(channel: Float): Float = when (this) {
