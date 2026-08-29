@@ -845,6 +845,90 @@ class GPUFramePathApiInventoryNativeSmokeTest {
     }
 
     @Test
+    fun `uniform scaled translated hard path clip retains device geometry and winding stencil state natively`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        val capabilities = requireNotNull(backend.capabilities)
+        val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(RenderConfig.DEFAULT.mapPreparedGpuColorConfig())
+        val targetBounds = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, 32, 32)
+        val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.clip-uniform-scale-translate-intersect")
+        val clipPath = Path().apply {
+            // Local triangle (3.25,3.25)-(15.25,3.25)-(3.25,15.25), after scale 1.5 and
+            // translation (2,1), retained directly in device space below.
+            moveTo(6.875f, 5.875f)
+            lineTo(24.875f, 5.875f)
+            lineTo(6.875f, 23.875f)
+            close()
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawRect(
+                    RectF32.ofLTRB(0f, 0f, 32f, 32f),
+                    Paint.fill(ColorARGB.Red).copy(antiAlias = false),
+                    Matrix3x3F32.Identity,
+                    ClipStack.Complex(
+                        listOf(
+                            ClipStackOp.PathOp(
+                                clipPath,
+                                ClipOp.INTERSECT,
+                                antiAlias = false,
+                                transformClass = "uniform-positive-scale-translate",
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+            deviceGeneration = backend.deviceGeneration,
+        )
+        val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(
+            inventory.visualCommands.single().clipExecutionPlan,
+        )
+        assertEquals("uniform-positive-scale-translate", execution.pathTransformClass)
+        assertEquals(GPUClipStencilOperation.IncrementWrap, execution.producer.frontPassOperation)
+        assertEquals(GPUClipStencilOperation.DecrementWrap, execution.producer.backPassOperation)
+        assertEquals(GPUClipStencilCompare.NotEqual, execution.consumer.compare)
+        val geometry = assertIs<GPUClipExecutionGeometry.Path>(execution.producer.geometry)
+        assertEquals(
+            listOf(6.875f, 5.875f, 24.875f, 5.875f, 6.875f, 23.875f, 6.875f, 5.875f),
+            geometry.vertices,
+        )
+
+        val preparation = GPUFramePathApiInventory.prepareNativeTaskList(
+            inventory,
+            capabilities,
+            targetBounds,
+            readbackId,
+        )
+        val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            preparation,
+            (preparation as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}; facts=${it.facts}"
+            },
+        ).taskList
+        val session = backend.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(32, 32, colorMapping.physicalFormat, colorMapping.interpretation),
+        )
+        try {
+            val completed = session.renderFrame(
+                prepared,
+                GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
+            ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+            assertEquals(GPUFrameStructuralOutcome.Succeeded, completed.outcome)
+            val gpu = assertIs<GPUSceneFrameOutput.ReadbackRgba>(completed.output).bytes
+            assertContentEquals(deterministicUniformScaledTranslatedWindingIntersectTriangleOracle(), gpu)
+            assertEquals(1L, session.nativeCounters().submits)
+            assertEquals(1L, session.nativeCounters().readbackCopies)
+        } finally {
+            session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
     fun `single diagonal square miter stroke renders natively`() {
         val backend = GPUBackendRuntimeNativeFactory.createOrNull()
         assumeTrue(backend != null)
@@ -1509,6 +1593,30 @@ class GPUFramePathApiInventoryNativeSmokeTest {
             val by = 6.25f
             val cx = 7.25f
             val cy = 29.25f
+            val denominator = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy)
+            for (y in 0 until 32) {
+                for (x in 0 until 32) {
+                    val px = x + 0.5f
+                    val py = y + 0.5f
+                    val u = ((by - cy) * (px - cx) + (cx - bx) * (py - cy)) / denominator
+                    val v = ((cy - ay) * (px - cx) + (ax - cx) * (py - cy)) / denominator
+                    if (u < 0f || v < 0f || u + v > 1f) continue
+                    val offset = (y * 32 + x) * 4
+                    rgba[offset] = 0xff.toByte()
+                    rgba[offset + 3] = 0xff.toByte()
+                }
+            }
+        }
+
+    /** Independent barycentric pixel-centre oracle for the scaled/translated triangle. */
+    private fun deterministicUniformScaledTranslatedWindingIntersectTriangleOracle(): ByteArray =
+        ByteArray(32 * 32 * 4).also { rgba ->
+            val ax = 6.875f
+            val ay = 5.875f
+            val bx = 24.875f
+            val by = 5.875f
+            val cx = 6.875f
+            val cy = 23.875f
             val denominator = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy)
             for (y in 0 until 32) {
                 for (x in 0 until 32) {
