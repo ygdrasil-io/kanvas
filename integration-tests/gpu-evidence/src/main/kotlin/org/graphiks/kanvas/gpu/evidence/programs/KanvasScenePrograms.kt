@@ -531,9 +531,16 @@ object KanvasScenePrograms {
 
     fun clipPathTriangleLinearGradient() = clipPathLinearGradient()
 
-    fun clipPathTriangleRadialGradient() = KanvasSurfaceProgram(ROUTE_ID, record = {
+    fun clipPathTriangleRadialGradient() = clipPathTriangleRadialGradientScene {}
+
+    fun clipPathTranslatedTriangleRadialGradient() = clipPathTriangleRadialGradientScene {
+        translate(2f, 0f)
+    }
+
+    private fun clipPathTriangleRadialGradientScene(transform: org.graphiks.kanvas.canvas.Canvas.() -> Unit) = KanvasSurfaceProgram(ROUTE_ID, record = {
         drawColor(BACKGROUND)
         save()
+        transform()
         clipPath(
             Path { moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close() }
                 .apply { fillType = FillType.WINDING },
