@@ -110,6 +110,19 @@ class GpuEvidenceCatalogOracleTest {
     }
 
     @Test
+    fun `scaled translated inverse winding sweep stroke follows transformed device geometry`() {
+        val pixels = oracle("clip-path-sweep-square-stroke-scaled-translated-inverse-winding")
+
+        assertPixel(pixels, 64, 64, 7, 7, intArrayOf(13, 20, 33, 255))
+        assertPixel(pixels, 64, 64, 15, 15, intArrayOf(13, 20, 33, 255))
+        assertNotEquals(
+            intArrayOf(13, 20, 33, 255).toList(),
+            pixel(pixels, 64, 64, 19, 14).toList(),
+            "transformed stroke exterior witness must be painted",
+        )
+    }
+
+    @Test
     fun `bounded bitmap oracle preserves literal nearest texels at its integer destination`() {
         val pixels = oracle("bounded-rgba8-nearest-bitmap")
 
@@ -590,6 +603,12 @@ class GpuEvidenceCatalogOracleTest {
         val offset = (y * width + x) * 4
         assertEquals(4, expected.size)
         assertContentEquals(expected.map(Int::toByte).toByteArray(), pixels.copyOfRange(offset, offset + 4), "pixel ($x,$y)")
+    }
+
+    private fun pixel(pixels: ByteArray, width: Int, height: Int, x: Int, y: Int): IntArray {
+        require(x in 0 until width && y in 0 until height)
+        val offset = (y * width + x) * 4
+        return IntArray(4) { pixels[offset + it].toInt() and 0xff }
     }
 
     private fun assertInteriorPixel(pixels: ByteArray, x: Int, y: Int, expected: IntArray) {

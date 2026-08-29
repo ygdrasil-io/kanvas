@@ -16,6 +16,7 @@ class SurfaceSrgbClipPathSweepStrokeCpuOracle(
     private val endColor: IntArray,
     private val shaderTranslation: Point = Point(0.0, 0.0),
     private val clipInverted: Boolean = false,
+    private val shaderScale: Double = 1.0,
 ) : CpuOracle {
     data class Point(val x: Double, val y: Double)
 
@@ -32,8 +33,8 @@ class SurfaceSrgbClipPathSweepStrokeCpuOracle(
         require((background + startColor + endColor).all { it in 0..255 }) {
             "colors must be byte channels"
         }
-        require(strokeWidth.isFinite() && strokeWidth == 4.0) {
-            "fixture requires a width-four stroke"
+        require(strokeWidth.isFinite() && strokeWidth > 0.0) {
+            "stroke width must be finite and positive"
         }
         require(lengthSquared.isFinite() && lengthSquared > 0.0) {
             "stroke segment must be finite and non-degenerate"
@@ -41,6 +42,9 @@ class SurfaceSrgbClipPathSweepStrokeCpuOracle(
         require(center.x.isFinite() && center.y.isFinite()) { "center must be finite" }
         require(shaderTranslation.x.isFinite() && shaderTranslation.y.isFinite()) {
             "shader translation must be finite"
+        }
+        require(shaderScale.isFinite() && shaderScale > 0.0) {
+            "shader scale must be finite and positive"
         }
     }
 
@@ -56,8 +60,8 @@ class SurfaceSrgbClipPathSweepStrokeCpuOracle(
             val py = y + 0.5
             val color = if (contains(px, py) && coversSquareStroke(px, py, halfWidthSquared)) {
                 val rawTurn = atan2(
-                    py + shaderTranslation.y - center.y,
-                    px + shaderTranslation.x - center.x,
+                    (py + shaderTranslation.y) / shaderScale - center.y,
+                    (px + shaderTranslation.x) / shaderScale - center.x,
                 ) / fullTurn
                 val t = (rawTurn - kotlin.math.floor(rawTurn)).coerceIn(0.0, 1.0)
                 SurfaceSrgbOracleMath.storeSrgb(
