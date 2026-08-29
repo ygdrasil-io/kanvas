@@ -212,6 +212,7 @@ sweepGradientTwoStopStrokeRect(),
         boundedBitmapLinearRefusal(),
         imageFilterBlurRefusal(),
         roundCapStrokeUnderWindingRefusal(),
+        rotatedDiagonalStrokeUnderWindingRefusal(),
     )
     val cases: List<EvidenceCase> = renderCases + refusalCases
     val catalog = EvidenceSceneCatalog(cases.map(EvidenceCase::descriptor))
@@ -311,6 +312,15 @@ sweepGradientTwoStopStrokeRect(),
         tags = setOf("path-stroke", "round-cap", "path-clip", "winding", "refusal", "kanvas-surface"),
         code = "unsupported.recording.core_primitive_path_stencil_clip",
         program = KanvasScenePrograms.roundCapStrokeUnderWindingRefusal(),
+    )
+
+    private fun rotatedDiagonalStrokeUnderWindingRefusal() = surfaceRefusal(
+        id = "rotated-diagonal-stroke-winding-refusal",
+        title = "Rotated diagonal stroke under winding clip refusal",
+        description = "Public Kanvas Surface refuses a 45-degree rotated diagonal butt/miter path stroke under a winding path clip before native submission; only the admitted bounded transform classes may reach stencil cover.",
+        tags = setOf("path-stroke", "butt-cap", "miter-join", "rotation", "path-clip", "winding", "refusal", "kanvas-surface"),
+        code = "unsupported.geometry.perspective_path",
+        program = KanvasScenePrograms.rotatedDiagonalStrokeUnderWindingRefusal(),
     )
 
     private fun basicPrimitivesValidAlpha() = EvidenceCase(
