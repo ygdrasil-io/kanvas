@@ -308,6 +308,23 @@ class GpuEvidenceCatalogOracleTest {
     }
 
     @Test
+    fun `half turn winding solid stroke follows rotated geometry`() {
+        val pixels = oracle("clip-path-half-turn-butt-stroke-winding")
+
+        assertNotEquals(
+            intArrayOf(13, 20, 33, 255).toList(),
+            pixel(pixels, 64, 64, 20, 9).toList(),
+            "half-turn solid stroke witness must be painted",
+        )
+        assertNotEquals(
+            intArrayOf(13, 20, 33, 255).toList(),
+            pixel(pixels, 64, 64, 12, 6).toList(),
+            "half-turn endpoint witness must be painted",
+        )
+        assertPixel(pixels, 64, 64, 16, 16, intArrayOf(13, 20, 33, 255))
+    }
+
+    @Test
     fun `bounded bitmap oracle preserves literal nearest texels at its integer destination`() {
         val pixels = oracle("bounded-rgba8-nearest-bitmap")
 
