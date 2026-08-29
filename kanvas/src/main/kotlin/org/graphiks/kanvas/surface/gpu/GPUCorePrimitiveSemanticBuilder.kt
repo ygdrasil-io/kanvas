@@ -538,9 +538,11 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
     colorTransform: GPUCorePrimitiveColorTransform,
 ): GPUCorePrimitivePayloadInput {
     val normalizedMaterial = normalized.material
-    if (normalizedMaterial is GPUMaterialDescriptor.LinearGradient &&
-        geometryCoverage == GPUCoverageConsumption.StencilCoverage1x &&
-        !isExactHardPathClipStrokeLinearGradientCandidate()
+    if (geometryCoverage == GPUCoverageConsumption.StencilCoverage1x &&
+        ((normalizedMaterial is GPUMaterialDescriptor.LinearGradient &&
+            !isExactHardPathClipStrokeLinearGradientCandidate()) ||
+            (normalizedMaterial is GPUMaterialDescriptor.RadialGradient &&
+                !isExactHardPathClipStrokeRadialGradientCandidate()))
     ) {
         refuseGeometry("unsupported.core_primitive.material.path_stencil", normalizedMaterial.corePrimitiveMaterialFacts())
     }
@@ -790,6 +792,38 @@ private fun GPUFramePathVisualCommand.isExactHardPathClipStrokeLinearGradientCan
         stencilClip.sampleCount == 1 &&
         stencilClip.pathTransformClass in HARD_PATH_CLIP_GRADIENT_TRANSFORM_CLASSES &&
         path.transform.isNativeHardPathClipGradientTransform()
+}
+
+/**
+ * Closed admission predicate for the identity-transform direct radial-gradient stroke lane.
+ * Radial material coordinates are currently captured without a device transform, so this lane
+ * deliberately refuses transformed consumers until an authenticated radial transform mapping
+ * exists.
+ */
+private fun GPUFramePathVisualCommand.isExactHardPathClipStrokeRadialGradientCandidate(): Boolean {
+    val path = normalized as? NormalizedDrawCommand.FillPath ?: return false
+    val gradient = path.material as? GPUMaterialDescriptor.RadialGradient ?: return false
+    val stencilClip = clipExecutionPlan as? GPUClipExecutionPlan.StencilCoverage ?: return false
+    return path.stroke &&
+        !path.antiAlias &&
+        path.maskFilter == null &&
+        path.contourStarts == listOf(0) &&
+        path.tessellatedVertices.size == 4 &&
+        path.strokeWidth.isFinite() && path.strokeWidth in 0.5f..64f &&
+        path.strokeCap in setOf("butt", "square") &&
+        path.strokeJoin == "miter" &&
+        path.strokeMiterLimit.isFinite() && path.strokeMiterLimit >= 1f &&
+        path.pathEffectKind == null &&
+        (path.dashIntervals?.isEmpty() ?: true) &&
+        path.pathDescriptor.fillRule in setOf("NonZero", "winding") &&
+        !path.pathDescriptor.inverseFill &&
+        path.transform.type == GPUTransformType.Identity &&
+        gradient.tileMode == "clamp" &&
+        gradient.interpolation == "srgb" &&
+        (gradient.allStopPositions?.size ?: 2) == 2 &&
+        (gradient.allStopColors?.size ?: 8) == 8 &&
+        gradient.localMatrix == listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f) &&
+        stencilClip.sampleCount == 1
 }
 
 private fun GPUTransformFacts.isNativeHardPathClipGradientTransform(): Boolean = when (type) {

@@ -273,11 +273,18 @@ internal fun classifyCorePrimitiveDirectNativeRoute(
         clipExecutionPlan is GPUClipExecutionPlan.StencilCoverage &&
             clipExecutionPlan.sampleCount == 1 &&
             clipExecutionPlan.pathTransformClass == "identity" &&
-            (semantic.geometry is GPUCorePrimitiveGeometry.RRect ||
-                semantic.geometry is GPUCorePrimitiveGeometry.DRRect ||
-                semantic.hasExactDirectStrokePathConsumerGeometry()) &&
-            semantic.material is GPUCorePrimitiveMaterialPayload.SolidColor &&
-            semantic.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor -> semantic.targetBounds
+            semantic.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor &&
+            (
+                ((semantic.geometry is GPUCorePrimitiveGeometry.RRect ||
+                    semantic.geometry is GPUCorePrimitiveGeometry.DRRect ||
+                    semantic.hasExactDirectStrokePathConsumerGeometry()) &&
+                    semantic.material is GPUCorePrimitiveMaterialPayload.SolidColor) ||
+                (semantic.material is GPUCorePrimitiveMaterialPayload.LinearGradient &&
+                    semantic.hasExactDirectStrokePathConsumerGeometry()) ||
+                (semantic.material is GPUCorePrimitiveMaterialPayload.RadialGradient &&
+                    semantic.material.isExactTwoStopClampGradient() &&
+                    semantic.hasExactDirectStrokePathConsumerGeometry())
+            ) -> semantic.targetBounds
         else -> (corePrimitiveDirectClipAuthority(
             clipExecutionPlan,
             semantic.targetBounds,
@@ -815,11 +822,26 @@ private fun GPUDrawPacket.isExactDirectTriangleClampGradientHardPathClipConsumer
     semantic: GPUDrawSemanticPayload.CorePrimitive,
 ): Boolean {
     val clip = clipExecutionPlan as? GPUClipExecutionPlan.StencilCoverage ?: return false
-    return semantic.material is GPUCorePrimitiveMaterialPayload.LinearGradient &&
-        semantic.material.tileMode == "clamp" &&
+    val clampGradient = when (val material = semantic.material) {
+        is GPUCorePrimitiveMaterialPayload.LinearGradient -> material.tileMode == "clamp"
+        is GPUCorePrimitiveMaterialPayload.RadialGradient -> material.isExactTwoStopClampGradient()
+        else -> false
+    }
+    return clampGradient &&
         semantic.hasExactClampGradientHardPathClipConsumerGeometry() &&
         clip.sampleCount == 1 && clip.corePrimitiveClipStencilNativePathOrNull() != null
 }
+
+private fun GPUCorePrimitiveMaterialPayload.RadialGradient.isExactTwoStopClampGradient(): Boolean =
+    tileMode == "clamp" &&
+        interpolation == "srgb" &&
+        positions.size == 2 &&
+        colors.size == 8 &&
+        localMatrix == listOf(
+            1f, 0f, 0f,
+            0f, 1f, 0f,
+            0f, 0f, 1f,
+        )
 
 private fun directCorePrimitiveGeometryBytes(
     packet: GPUDrawPacket,
@@ -1704,7 +1726,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             return refused(
                 "unsupported.recording.core_primitive_material.non_solid",
                 "The legacy native CorePrimitive task builder accepts only solid color, or the exact " +
-                    "single-sample clamp-linear-gradient direct-triangle hard-path-clip material ABI.",
+                    "single-sample clamp-linear/radial-gradient direct-triangle hard-path-clip material ABI.",
             )
         }
         basePackets.firstOrNull { packet ->
@@ -2271,7 +2293,10 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                                 semantic.hasExactDirectTrianglePathConsumerGeometry() ||
                                 semantic.hasExactDirectStrokePathConsumerGeometry()
                         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient ->
-                            packet.renderStepId.value == "radial.gradient.fill"
+                            packet.renderStepId.value == "radial.gradient.fill" ||
+                                (semantic.material is GPUCorePrimitiveMaterialPayload.RadialGradient &&
+                                    semantic.material.isExactTwoStopClampGradient() &&
+                                    semantic.hasExactDirectStrokePathConsumerGeometry())
                         else -> false
                     } &&
                     semantic.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor
