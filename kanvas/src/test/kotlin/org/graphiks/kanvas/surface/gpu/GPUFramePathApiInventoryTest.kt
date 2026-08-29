@@ -3144,6 +3144,38 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `bounded reverse vertical dashed butt stroke reaches native stencil cover`() {
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(16f, 28f)
+                        lineTo(16f, 4f)
+                    },
+                    Paint.stroke(ColorARGB.Red, 4f).copy(
+                        antiAlias = false,
+                        strokeCap = StrokeCap.BUTT,
+                        strokeJoin = StrokeJoin.MITER,
+                        pathEffect = PathEffect.Dash(floatArrayOf(8f, 4f), phase = 0f),
+                    ),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER),
+        )
+
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+        val semantic = gatheredSemantic(inventory) as GPUDrawSemanticPayload.CorePrimitive
+        val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
+        assertEquals(GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan, geometry.geometryMode)
+        assertEquals(listOf(8f, 4f), geometry.strokeStyle?.dashIntervals)
+        assertEquals(GPUCorePrimitiveStrokeLoweringProof.VerticalDashedButtMiterV1, geometry.strokeStyle?.loweringProof)
+    }
+
+    @Test
     fun `nearby dashed stroke remains refused outside the fixed proof`() {
         val inventory = GPUFramePathApiInventory.plan(
             operations = listOf(
