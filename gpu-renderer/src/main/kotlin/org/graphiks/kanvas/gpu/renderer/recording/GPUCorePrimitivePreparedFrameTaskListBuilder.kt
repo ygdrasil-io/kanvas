@@ -932,9 +932,12 @@ private fun GPUDrawSemanticPayload.CorePrimitive.hasExactDirectStrokePathConsume
         path.sourceVertexCount == 2 &&
         path.fillRule == GPUCorePrimitiveFillRule.Winding &&
         !path.inverseFill &&
-        style.cap == "butt" &&
         style.join == "miter" &&
-        style.loweringProof == GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1
+        when (style.cap) {
+            "butt" -> style.loweringProof == GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1
+            "square" -> style.loweringProof == GPUCorePrimitiveStrokeLoweringProof.SingleSegmentSquareV1
+            else -> false
+        }
 }
 
 private fun GPUDrawSemanticPayload.CorePrimitive.hasExactHardPathClipConsumerGeometry(): Boolean =

@@ -1813,7 +1813,7 @@ class GPUFramePathApiInventoryNativeSmokeTest {
     }
 
     @Test
-    fun `square cap stroke under winding path clip remains explicitly refused`() {
+    fun `diagonal square cap stroke under winding path clip renders natively`() {
         val backend = GPUBackendRuntimeNativeFactory.createOrNull()
         assumeTrue(backend != null)
         backend!!
@@ -1850,14 +1850,42 @@ class GPUFramePathApiInventoryNativeSmokeTest {
                 capabilities = capabilities,
                 deviceGeneration = backend.deviceGeneration,
             )
+            assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+            val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(
+                inventory.visualCommands.single().clipExecutionPlan,
+            )
+            assertEquals(GPUClipStencilOperation.IncrementWrap, execution.producer.frontPassOperation)
+            assertEquals(GPUClipStencilOperation.DecrementWrap, execution.producer.backPassOperation)
+            assertEquals(GPUClipStencilCompare.NotEqual, execution.consumer.compare)
             val preparation = GPUFramePathApiInventory.prepareNativeTaskList(
                 inventory,
                 capabilities,
                 targetBounds,
-                null,
+                GPUReadbackRequestID("readback.inventory-core-primitive.stroke-diagonal-square-clip"),
             )
-            val refused = assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(preparation)
-            assertEquals("unsupported.recording.core_primitive_path_stencil_clip", refused.diagnostic.code.value)
+            val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+                preparation,
+                (preparation as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                    "${it.code.value}: ${it.message}; facts=${it.facts}"
+                },
+            ).taskList
+            val session = backend.prepareSceneFrameSession(
+                GPUOffscreenTargetRequest(32, 32, colorMapping.physicalFormat, colorMapping.interpretation),
+            )
+            try {
+                val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.stroke-diagonal-square-clip")
+                val completed = session.renderFrame(
+                    prepared,
+                    GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
+                ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+                assertEquals(GPUFrameStructuralOutcome.Succeeded, completed.outcome)
+                val gpu = assertIs<GPUSceneFrameOutput.ReadbackRgba>(completed.output).bytes
+                assertContentEquals(deterministicDiagonalSquareMiterWindingClipOracle(), gpu)
+                assertEquals(1L, session.nativeCounters().submits)
+                assertEquals(1L, session.nativeCounters().readbackCopies)
+            } finally {
+                session.close()
+            }
         } finally {
             GPUBackendRuntimeNativeFactory.dispose()
         }
@@ -3025,6 +3053,58 @@ class GPUFramePathApiInventoryNativeSmokeTest {
             }
         }
     }
+
+    /** Independent square-cap oracle for the diagonal stroke intersected with a Winding triangle. */
+    private fun deterministicDiagonalSquareMiterWindingClipOracle(): ByteArray =
+        ByteArray(32 * 32 * 4).also { rgba ->
+            val ax = 5.25f
+            val ay = 8.25f
+            val bx = 21.25f
+            val by = 20.25f
+            val dx = bx - ax
+            val dy = by - ay
+            val length = kotlin.math.sqrt(dx * dx + dy * dy)
+            val tangentX = dx / length
+            val tangentY = dy / length
+            val extension = 2f
+            val startX = ax - tangentX * extension
+            val startY = ay - tangentY * extension
+            val endX = bx + tangentX * extension
+            val endY = by + tangentY * extension
+            val extendedDx = endX - startX
+            val extendedDy = endY - startY
+            val lengthSquared = extendedDx * extendedDx + extendedDy * extendedDy
+            val clipAx = 7.25f
+            val clipAy = 6.25f
+            val clipBx = 30.25f
+            val clipBy = 6.25f
+            val clipCx = 7.25f
+            val clipCy = 29.25f
+            val denominator = (clipBy - clipCy) * (clipAx - clipCx) +
+                (clipCx - clipBx) * (clipAy - clipCy)
+            for (y in 0 until 32) {
+                for (x in 0 until 32) {
+                    val px = x + 0.5f
+                    val py = y + 0.5f
+                    val u = ((clipBy - clipCy) * (px - clipCx) +
+                        (clipCx - clipBx) * (py - clipCy)) / denominator
+                    val v = ((clipCy - clipAy) * (px - clipCx) +
+                        (clipAx - clipCx) * (py - clipCy)) / denominator
+                    if (u < 0f || v < 0f || u + v > 1f) continue
+                    val projection = ((px - startX) * extendedDx + (py - startY) * extendedDy) /
+                        lengthSquared
+                    if (projection < 0f || projection > 1f) continue
+                    val closestX = startX + projection * extendedDx
+                    val closestY = startY + projection * extendedDy
+                    val distanceX = px - closestX
+                    val distanceY = py - closestY
+                    if (distanceX * distanceX + distanceY * distanceY > extension * extension) continue
+                    val offset = (y * 32 + x) * 4
+                    rgba[offset] = 0xff.toByte()
+                    rgba[offset + 3] = 0xff.toByte()
+                }
+            }
+        }
 
     /**
      * Independent analytic oracle: the round-capped segment is the union of its

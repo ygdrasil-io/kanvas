@@ -255,9 +255,12 @@ private fun GPUCorePrimitiveGeometry.TriangulatedPath.isExactDirectStrokePathCon
         sourceVertexCount == 2 &&
         fillRule == GPUCorePrimitiveFillRule.Winding &&
         !inverseFill &&
-        stroke.cap == "butt" &&
         stroke.join == "miter" &&
-        stroke.loweringProof == GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1
+        when (stroke.cap) {
+            "butt" -> stroke.loweringProof == GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1
+            "square" -> stroke.loweringProof == GPUCorePrimitiveStrokeLoweringProof.SingleSegmentSquareV1
+            else -> false
+        }
 }
 
 private val QUAD_INDICES = intArrayOf(0, 2, 1, 0, 3, 2)

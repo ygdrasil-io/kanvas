@@ -693,8 +693,11 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
         geometry.fillRule == GPUCorePrimitiveFillRule.Winding &&
         !geometry.inverseFill &&
         geometry.strokeStyle?.let { style ->
-            style.cap == "butt" && style.join == "miter" &&
-                style.loweringProof == GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1
+            style.join == "miter" && when (style.cap) {
+                "butt" -> style.loweringProof == GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1
+                "square" -> style.loweringProof == GPUCorePrimitiveStrokeLoweringProof.SingleSegmentSquareV1
+                else -> false
+            }
         } == true
     return GPUCorePrimitivePayloadInput(
         commandIdValue = normalized.commandId.value,
@@ -1088,16 +1091,26 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
     val devicePoints = outline.vertices.chunked(2).map { pair ->
         pair[0] to pair[1]
     }
+    val directStrokeVertices = when {
+        strokeCap == "butt" && outline.vertices.size == 8 &&
+            outline.contourStarts == listOf(0, 4) -> outline.vertices
+        // GPUStroke emits the exact square outline as three adjacent quads. For
+        // the bounded one-segment hard-clip proof, collapse those quads to their
+        // four outer corners without changing their device-space geometry.
+        strokeCap == "square" && outline.vertices.size == 24 &&
+            outline.contourStarts == listOf(0, 4, 8, 12) ->
+            outline.vertices.subList(8, 12) + outline.vertices.subList(20, 24)
+        else -> null
+    }
     if (
         clip.executionPlan is GPUClipExecutionPlan.StencilCoverage &&
             exactSingleSegment &&
-            strokeCap == "butt" &&
+            strokeCap in setOf("butt", "square") &&
             strokeJoin == "miter" &&
-            outline.vertices.size == 8 &&
-            outline.contourStarts == listOf(0, 4)
+            directStrokeVertices != null
     ) {
         return GPUCorePrimitiveGeometryInput.TriangulatedPath(
-            vertices = outline.vertices,
+            vertices = directStrokeVertices,
             indices = listOf(0, 1, 2, 0, 2, 3),
             sourceContourStarts = listOf(0),
             sourceVertexCount = 2,
@@ -1112,7 +1125,10 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
                 miterLimit = strokeMiterLimit,
                 dashIntervals = dashIntervals?.toList().orEmpty(),
                 dashPhase = dashPhase,
-                loweringProof = GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1,
+                loweringProof = when (strokeCap) {
+                    "square" -> GPUCorePrimitiveStrokeLoweringProof.SingleSegmentSquareV1
+                    else -> GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1
+                },
             ),
             sourceAuthority = pathDescriptor.sourceAuthority,
         )
