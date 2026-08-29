@@ -27,6 +27,7 @@ import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathLinearGradientCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathRadialGradientCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathRadialStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathDirectTriangleLinearGradientCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathDRRectCpuOracle
@@ -96,6 +97,7 @@ sweepGradientTwoStopStrokeRect(),
         clipPathUniformScaledTriangleTwoBands(),
         clipPathTriangleLinearGradient(),
         clipPathTriangleRadialGradient(),
+        clipPathTriangleRadialGradientStroke(),
         clipPathTranslatedTriangleRadialGradient(),
         clipPathTranslatedTriangleLinearGradient(),
         clipPathUniformScaledTriangleLinearGradient(),
@@ -1479,6 +1481,38 @@ sweepGradientTwoStopStrokeRect(),
             drawBounds = SurfaceSrgbGradientCpuOracle.Rect(0f, 0f, 64f, 64f),
             center = SurfaceSrgbGradientCpuOracle.Point(24.5f, 24.5f),
             radius = 24f,
+            startColor = intArrayOf(255, 0, 0, 255),
+            endColor = intArrayOf(0, 0, 255, 255),
+        ),
+    )
+
+    private fun clipPathTriangleRadialGradientStroke() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("clip-path-triangle-radial-stroke"),
+            "Radial gradient stroke inside hard path clip",
+            "Public Kanvas Surface hard non-AA Winding triangle clip with one opaque two-stop clamp radial butt/miter path stroke.",
+            64,
+            64,
+            1L,
+            setOf("clip-path", "radial-gradient", "stroke", "hard-clip", "kanvas-surface"),
+            EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-clip-path-radial-stroke-device-space", 1),
+            ComparisonPolicy(1, 100.0, 1, "Independent pixel-center winding clip, butt stroke distance and linear-light radial interpolation."),
+            emptySet(),
+        ),
+        KanvasScenePrograms.clipPathTriangleRadialGradientStroke(),
+        SurfaceSrgbClipPathRadialStrokeCpuOracle(
+            background = intArrayOf(13, 20, 33, 255),
+            points = listOf(
+                SurfaceSrgbClipPathRadialStrokeCpuOracle.Point(7.25, 6.25),
+                SurfaceSrgbClipPathRadialStrokeCpuOracle.Point(30.25, 6.25),
+                SurfaceSrgbClipPathRadialStrokeCpuOracle.Point(7.25, 29.25),
+            ),
+            strokeStart = SurfaceSrgbClipPathRadialStrokeCpuOracle.Point(5.25, 8.25),
+            strokeEnd = SurfaceSrgbClipPathRadialStrokeCpuOracle.Point(21.25, 20.25),
+            strokeWidth = 4.0,
+            center = SurfaceSrgbClipPathRadialStrokeCpuOracle.Point(16.0, 16.0),
+            radius = 16.0,
             startColor = intArrayOf(255, 0, 0, 255),
             endColor = intArrayOf(0, 0, 255, 255),
         ),
