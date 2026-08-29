@@ -210,6 +210,11 @@ internal fun nativeCorePrimitiveCapabilityFacts(): List<GPUCapabilityFact> = lis
     supportedGPUCapabilityFact(GPUFirstSliceCapabilityName.SCISSOR_NATIVE, "runtime", "core-primitive-direct-native"),
     supportedGPUCapabilityFact(GPUFirstSliceCapabilityName.BOUNDED_CLIP_NATIVE, "runtime", "core-primitive-bounded-clip-native"),
     supportedGPUCapabilityFact(GPUFirstSliceCapabilityName.PATH_FILL_STENCIL_COVER, "runtime", "core-primitive-path-stencil-native"),
+    supportedGPUCapabilityFact(
+        GPUFirstSliceCapabilityName.PATH_HAIRLINE_DIRECT_NATIVE,
+        "runtime",
+        "core-primitive-path-hairline-direct-native",
+    ),
     GPUCapabilityFact("first_slice.mask_blur.native", "runtime", "supported", true, "prepared-top-level-mask-blur"),
     GPUCapabilityFact("first_slice.fill_rect.affine.native", "runtime", "supported", true, "core-primitive-direct-native"),
     GPUCapabilityFact("first_slice.linear_gradient.native", "runtime", "supported", true, "core-primitive-gradient-linear-native"),
@@ -5817,6 +5822,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
 internal class WgpuExecutionCaches(
     private val deviceGeneration: GPUDeviceGeneration,
+    private val capabilityFingerprint: String = "wgpu-execution-capabilities-v1",
     private val moduleCache: GPUExecutionObjectCache<GPUShaderModule> = GPUExecutionObjectCache(
         domain = GPUExecutionCacheDomain.Module,
         dispose = GPUShaderModule::close,
@@ -6471,6 +6477,7 @@ internal class WgpuExecutionCaches(
             subjectHash = subjectHash,
             deviceGeneration = deviceGeneration,
             expectedDeviceGeneration = deviceGeneration,
+            capabilityFingerprint = capabilityFingerprint,
             ownerScope = "GPUResourceProvider",
         )
 

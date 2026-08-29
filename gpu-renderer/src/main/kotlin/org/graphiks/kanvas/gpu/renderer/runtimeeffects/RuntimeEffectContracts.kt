@@ -220,6 +220,9 @@ data class GPURuntimeEffectDescriptorRouteRequest(
     val wgslEvidence: GPURuntimeEffectWGSLEvidence?,
     val cpuOracle: GPURuntimeEffectOracleResult?,
     val dynamicSkSLSourceProvided: Boolean = false,
+    val dynamicWGSLSourceProvided: Boolean = false,
+    val dynamicCompilationRequested: Boolean = false,
+    val vmExecutionRequested: Boolean = false,
 )
 
 /** Registered runtime-effect route plan. */
@@ -1065,6 +1068,9 @@ private fun GPURuntimeEffectDescriptorRouteRequest.refusalCode(
 ): String? =
     when {
         dynamicSkSLSourceProvided -> "unsupported.runtime_effect.dynamic_sksl_forbidden"
+        dynamicWGSLSourceProvided -> "unsupported.runtime_effect.dynamic_wgsl_forbidden"
+        dynamicCompilationRequested -> "unsupported.runtime_effect.dynamic_compilation_forbidden"
+        vmExecutionRequested -> "unsupported.runtime_effect.vm_execution_forbidden"
         hasDescriptorCollision -> "unsupported.runtime_effect.descriptor_collision"
         descriptor == null -> "unsupported.runtime_effect.unregistered_descriptor"
         requestedPlacement !in descriptor.routeContract.acceptedPlacements -> "unsupported.runtime_effect.kind_mismatch"

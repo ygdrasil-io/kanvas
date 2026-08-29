@@ -16,8 +16,8 @@ class CurvedClipGmSurfaceRefusalEvidenceTest {
     fun `curved clip GMs expose fresh terminal route facts`() {
         GpuAvailability.requireWebGpu()
         val expected = mapOf(
-            "clipcubic" to ExpectedTerminalRefusal("unsupported.stroke.width_invalid", 17),
-            "clippedcubic" to ExpectedTerminalRefusal("unsupported.core_primitive.stencil_edge_fan_budget", 19),
+            "clipcubic" to ExpectedTerminalRefusal("geometry.path.fan_budget_exceeded", 17),
+            "clippedcubic" to ExpectedTerminalRefusal("geometry.path.fan_budget_exceeded", 19),
         )
         expected.forEach { (name, refusal) ->
             val gm = requireNotNull(SkiaGmRegistry.all().singleOrNull { it.name == name })

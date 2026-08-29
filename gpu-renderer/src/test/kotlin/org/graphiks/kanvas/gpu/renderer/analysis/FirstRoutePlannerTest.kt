@@ -2788,6 +2788,152 @@ class FirstRoutePlannerTest {
         assertEquals(emptyList(), plan.pass.diagnostics)
     }
 
+    @Test
+    fun `fill path simple stroke with uniform scale builds native stencil cover route`() {
+        val command = GPUFillPathCommandBuilder.build(
+            commandId = GPUDrawCommandID(127),
+            pathKey = "path:scaled-stroke-segment:v1",
+            pathDescriptor = GPUPathFacts(
+                pathKey = "path:scaled-stroke-segment:v1", verbCount = 2, pointCount = 2,
+                fillRule = "NonZero", inverseFill = false, finiteProof = "finite",
+                volatility = "immutable", transformClass = "scale", edgeCount = 1,
+            ),
+            tessellatedVertices = listOf(4f, 8f, 14f, 8f), contourStarts = listOf(0), edgeCount = 1,
+            target = GPUTargetFacts(width = 32, height = 32, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0f, b = 0f, a = 1f),
+            transform = GPUTransformFacts.scale(2f, 2f),
+            stroke = true, strokeWidth = 2f, strokeCap = "butt", strokeJoin = "miter", antiAlias = false,
+        )
+
+        val plan = GPUFirstRoutePlanner(firstSlicePathFillStencilCoverCapabilities()).plan(command)
+
+        assertEquals("native.path_stroke.stencil_cover", plan.analysisRecord.routeDecisionLabel)
+        assertEquals("route.path_stroke.127", assertIs<GPURouteDecision.Native>(plan.routeDecision).route.routeId)
+
+        val scaledRoundPlan = GPUFirstRoutePlanner(firstSlicePathFillStencilCoverCapabilities()).plan(
+            command.copy(strokeWidth = 4f, strokeCap = "round"),
+        )
+        assertEquals(
+            "unsupported.stroke.cap",
+            assertIs<GPURouteDecision.Refused>(scaledRoundPlan.routeDecision).diagnostic.code,
+        )
+    }
+
+    @Test
+    fun `fill path simple stroke with uniform scale and translation builds native stencil cover route`() {
+        val command = GPUFillPathCommandBuilder.build(
+            commandId = GPUDrawCommandID(129),
+            pathKey = "path:scaled-translated-stroke-segment:v1",
+            pathDescriptor = GPUPathFacts(
+                pathKey = "path:scaled-translated-stroke-segment:v1", verbCount = 2, pointCount = 2,
+                fillRule = "NonZero", inverseFill = false, finiteProof = "finite",
+                volatility = "immutable", transformClass = "affine", edgeCount = 1,
+            ),
+            tessellatedVertices = listOf(4f, 8f, 14f, 8f), contourStarts = listOf(0), edgeCount = 1,
+            target = GPUTargetFacts(width = 32, height = 32, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0f, b = 0f, a = 1f),
+            transform = GPUTransformFacts.affine(
+                scaleX = 2f, skewX = 0f, skewY = 0f, scaleY = 2f,
+                translateX = 2f, translateY = 3f,
+            ),
+            stroke = true, strokeWidth = 2f, strokeCap = "butt", strokeJoin = "miter", antiAlias = false,
+        )
+
+        val plan = GPUFirstRoutePlanner(firstSlicePathFillStencilCoverCapabilities()).plan(command)
+
+        assertEquals("native.path_stroke.stencil_cover", plan.analysisRecord.routeDecisionLabel)
+        assertEquals("route.path_stroke.129", assertIs<GPURouteDecision.Native>(plan.routeDecision).route.routeId)
+    }
+
+    @Test
+    fun `fill path single segment hairline builds native direct route`() {
+        val command = GPUFillPathCommandBuilder.build(
+            commandId = GPUDrawCommandID(128),
+            pathKey = "path:hairline-segment:v1",
+            pathDescriptor = GPUPathFacts(
+                pathKey = "path:hairline-segment:v1",
+                verbCount = 2,
+                pointCount = 2,
+                fillRule = "NonZero",
+                inverseFill = false,
+                finiteProof = "finite",
+                volatility = "immutable",
+                transformClass = "identity",
+                edgeCount = 1,
+            ),
+            tessellatedVertices = listOf(6f, 16f, 26f, 16f),
+            contourStarts = listOf(0),
+            edgeCount = 1,
+            target = GPUTargetFacts(width = 32, height = 32, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0f, b = 0f, a = 1f),
+            stroke = true,
+            strokeWidth = 0f,
+            strokeCap = "butt",
+            strokeJoin = "miter",
+            antiAlias = false,
+        )
+
+        val plan = GPUFirstRoutePlanner(firstSlicePathFillStencilCoverCapabilities()).plan(command)
+
+        assertEquals("native.path_hairline.direct", plan.analysisRecord.routeDecisionLabel)
+        assertEquals("route.path_hairline.128", assertIs<GPURouteDecision.Native>(plan.routeDecision).route.routeId)
+        assertEquals(emptyList(), plan.pass.diagnostics)
+    }
+
+    @Test
+    fun `hairline direct capability does not depend on stencil cover capability`() {
+        val command = GPUFillPathCommandBuilder.build(
+            commandId = GPUDrawCommandID(130),
+            pathKey = "path:hairline-capability:v1",
+            pathDescriptor = GPUPathFacts(
+                pathKey = "path:hairline-capability:v1", verbCount = 2, pointCount = 2,
+                fillRule = "NonZero", inverseFill = false, finiteProof = "finite",
+                volatility = "immutable", transformClass = "identity", edgeCount = 1,
+            ),
+            tessellatedVertices = listOf(6f, 16f, 26f, 16f),
+            contourStarts = listOf(0), edgeCount = 1,
+            target = GPUTargetFacts(width = 32, height = 32, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0f, b = 0f, a = 1f),
+            stroke = true, strokeWidth = 0f, strokeCap = "butt", strokeJoin = "miter", antiAlias = false,
+        )
+        val capabilities = firstSlicePathFillCapabilities().copy(
+            facts = listOf(
+                GPUCapabilityFact(
+                    name = GPUFirstSliceCapabilityName.PATH_HAIRLINE_DIRECT_NATIVE,
+                    source = "unit-test", value = "supported", affectsValidity = true,
+                    evidenceLabel = "path-hairline-direct-fixture",
+                ),
+            ),
+            snapshotId = "path-hairline-direct-only-test",
+        )
+
+        val plan = GPUFirstRoutePlanner(capabilities).plan(command)
+
+        assertEquals("native.path_hairline.direct", plan.analysisRecord.routeDecisionLabel)
+        assertEquals("route.path_hairline.130", assertIs<GPURouteDecision.Native>(plan.routeDecision).route.routeId)
+    }
+
+    @Test
+    fun `fill path hairline with AA remains refused`() {
+        val command = GPUFillPathCommandBuilder.build(
+            commandId = GPUDrawCommandID(129),
+            pathKey = "path:hairline-aa:v1",
+            pathDescriptor = GPUPathFacts(
+                pathKey = "path:hairline-aa:v1", verbCount = 2, pointCount = 2,
+                fillRule = "NonZero", inverseFill = false, finiteProof = "finite",
+                volatility = "immutable", transformClass = "identity", edgeCount = 1,
+            ),
+            tessellatedVertices = listOf(6f, 16f, 26f, 16f), contourStarts = listOf(0), edgeCount = 1,
+            target = GPUTargetFacts(width = 32, height = 32, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0f, b = 0f, a = 1f),
+            stroke = true, strokeWidth = 0f, strokeCap = "butt", strokeJoin = "miter", antiAlias = true,
+        )
+
+        val plan = GPUFirstRoutePlanner(firstSlicePathFillStencilCoverCapabilities()).plan(command)
+
+        assertEquals("unsupported.stroke.width_invalid", assertIs<GPURouteDecision.Refused>(plan.routeDecision).diagnostic.code)
+    }
+
     /** FillPath stroke analysis consumes the captured miter limit instead of a hard-coded default. */
     @Test
     fun `fill path stroke refuses the captured subminimum miter limit`() {
@@ -3719,13 +3865,22 @@ class FirstRoutePlannerTest {
     /** Capability snapshot that enables FillPath with stencil-cover promotion. */
     private fun firstSlicePathFillStencilCoverCapabilities(): GPUCapabilities =
         firstSlicePathFillCapabilities().copy(
-            facts = listOf(GPUCapabilityFact(
-                name = "first_slice.path_fill.stencil_cover",
-                source = "unit-test",
-                value = "supported",
-                affectsValidity = true,
-                evidenceLabel = "stencil-cover-fixture",
-            )),
+            facts = listOf(
+                GPUCapabilityFact(
+                    name = GPUFirstSliceCapabilityName.PATH_FILL_STENCIL_COVER,
+                    source = "unit-test",
+                    value = "supported",
+                    affectsValidity = true,
+                    evidenceLabel = "stencil-cover-fixture",
+                ),
+                GPUCapabilityFact(
+                    name = GPUFirstSliceCapabilityName.PATH_HAIRLINE_DIRECT_NATIVE,
+                    source = "unit-test",
+                    value = "supported",
+                    affectsValidity = true,
+                    evidenceLabel = "path-hairline-direct-fixture",
+                ),
+            ),
             snapshotId = "path-fill-stencil-cover-test",
         )
 

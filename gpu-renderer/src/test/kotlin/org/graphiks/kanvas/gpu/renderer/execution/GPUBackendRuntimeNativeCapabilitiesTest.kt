@@ -7,6 +7,18 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName
 
 class GPUBackendRuntimeNativeCapabilitiesTest {
     @Test
+    fun `native facts publish dedicated direct path hairline capability`() {
+        val fact = assertNotNull(
+            nativeCorePrimitiveCapabilityFacts().associateBy { it.name }[
+                GPUFirstSliceCapabilityName.PATH_HAIRLINE_DIRECT_NATIVE,
+            ],
+        )
+        assertEquals("runtime", fact.source)
+        assertEquals("supported", fact.value)
+        assertEquals("core-primitive-path-hairline-direct-native", fact.evidenceLabel)
+    }
+
+    @Test
     fun `native core primitive capability facts publish bounded linear radial and sweep`() {
         val facts = nativeCorePrimitiveCapabilityFacts().associateBy { it.name }
 
