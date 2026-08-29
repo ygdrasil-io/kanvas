@@ -3713,6 +3713,101 @@ class GPUFramePathApiInventoryNativeSmokeTest {
     }
 
     @Test
+    fun `clamp sweep gradient square miter stroke under scaled translated inverse even odd difference hole clip renders natively`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        val capabilities = requireNotNull(backend.capabilities)
+        val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(RenderConfig.DEFAULT.mapPreparedGpuColorConfig())
+        val targetBounds = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, 32, 32)
+        val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.sweep-square-scaled-translated-inverse-even-odd-difference-hole-clip")
+        val clipPath = Path().apply {
+            fillType = FillType.INVERSE_EVEN_ODD
+            addRect(RectF32.ofLTRB(6.875f, 5.875f, 24.875f, 23.875f))
+            addRect(RectF32.ofLTRB(11.375f, 10.375f, 20.375f, 16.375f))
+        }
+        val drawTransform = Matrix3x3F32.translation(2f, 1f) * Matrix3x3F32.scaling(1.5f, 1.5f)
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(4.125f, 4.125f)
+                        lineTo(12.125f, 8.625f)
+                    },
+                    Paint.stroke(ColorARGB.Transparent, 2f).copy(
+                        shader = Shader.SweepGradient(
+                            Point2F32(16f, 16f),
+                            0f,
+                            360f,
+                            listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                        ),
+                        antiAlias = false,
+                        strokeCap = StrokeCap.SQUARE,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    drawTransform,
+                    ClipStack.Complex(
+                        listOf(
+                            ClipStackOp.PathOp(
+                                clipPath,
+                                ClipOp.DIFFERENCE,
+                                antiAlias = false,
+                                transformClass = "uniform-positive-scale-translate",
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+            deviceGeneration = backend.deviceGeneration,
+        )
+        val visual = inventory.visualCommands.single()
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+        assertEquals(2f, visual.normalized.transform.translateX)
+        assertEquals(1f, visual.normalized.transform.translateY)
+        assertEquals(1.5f, visual.normalized.transform.scaleX)
+        assertEquals(1.5f, visual.normalized.transform.scaleY)
+        val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(visual.clipExecutionPlan)
+        assertEquals("uniform-positive-scale-translate", execution.pathTransformClass)
+        assertEquals(GPUClipStencilOperation.Invert, execution.producer.frontPassOperation)
+        assertEquals(GPUClipStencilOperation.Invert, execution.producer.backPassOperation)
+        assertEquals(GPUClipStencilCompare.NotEqual, execution.consumer.compare)
+        val clipGeometry = assertIs<GPUClipExecutionGeometry.Path>(execution.producer.geometry)
+        assertEquals(GPUClipFillRule.EvenOdd, clipGeometry.fillRule)
+        assertTrue(clipGeometry.inverseFill)
+        val preparation = GPUFramePathApiInventory.prepareNativeTaskList(inventory, capabilities, targetBounds, readbackId)
+        val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            preparation,
+            (preparation as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}; facts=${it.facts}"
+            },
+        ).taskList
+        val session = backend.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(32, 32, colorMapping.physicalFormat, colorMapping.interpretation),
+        )
+        try {
+            val completed = session.renderFrame(
+                prepared,
+                GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
+            ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+            assertEquals(
+                GPUFrameStructuralOutcome.Succeeded,
+                completed.outcome,
+                "Sweep scaled inverse EvenOdd Difference native execution refused/failed: ${completed.diagnostic}",
+            )
+            val gpu = assertIs<GPUSceneFrameOutput.ReadbackRgba>(completed.output).bytes
+            assertRgbaWithinOneLsb(deterministicScaledTranslatedSquareMiterSweepInverseEvenOddDifferenceHoleClipOracle(), gpu)
+            assertEquals(1L, session.nativeCounters().submits)
+            assertEquals(1L, session.nativeCounters().readbackCopies)
+        } finally {
+            session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
     fun `clamp sweep gradient transformed right angle stroke remains refused`() {
         val backend = GPUBackendRuntimeNativeFactory.createOrNull()
         assumeTrue(backend != null)
@@ -5994,6 +6089,58 @@ class GPUFramePathApiInventoryNativeSmokeTest {
                         (clipAx - clipCx) * (py - clipCy)) / denominator
                     // Inverse Winding + Intersect keeps the exterior of the triangle.
                     if (u >= 0f && v >= 0f && u + v <= 1f) continue
+                    val projection = ((px - startX) * extendedDx + (py - startY) * extendedDy) /
+                        lengthSquared
+                    if (projection < 0f || projection > 1f) continue
+                    val closestX = startX + projection * extendedDx
+                    val closestY = startY + projection * extendedDy
+                    val distanceX = px - closestX
+                    val distanceY = py - closestY
+                    if (distanceX * distanceX + distanceY * distanceY > halfWidthSquared) continue
+                    val localX = (px - 2f) / 1.5f
+                    val localY = (py - 1f) / 1.5f
+                    val rawTurn = kotlin.math.atan2(localY - 16f, localX - 16f) / fullTurn
+                    val t = (rawTurn - kotlin.math.floor(rawTurn)).coerceIn(0f, 1f)
+                    val red = linearToSrgb((1f - t) * srgbToLinear(1f) + t * srgbToLinear(0f))
+                    val blue = linearToSrgb((1f - t) * srgbToLinear(0f) + t * srgbToLinear(1f))
+                    val offset = (y * 32 + x) * 4
+                    rgba[offset] = (red * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 2] = (blue * 255f).roundToInt().coerceIn(0, 255).toByte()
+                    rgba[offset + 3] = 0xff.toByte()
+                }
+            }
+        }
+
+    /** Independent device-space oracle for the transformed inverse-EvenOdd Difference shell. */
+    private fun deterministicScaledTranslatedSquareMiterSweepInverseEvenOddDifferenceHoleClipOracle(): ByteArray =
+        ByteArray(32 * 32 * 4).also { rgba ->
+            val ax = 8.1875f
+            val ay = 7.1875f
+            val bx = 20.1875f
+            val by = 13.9375f
+            val dx = bx - ax
+            val dy = by - ay
+            val length = kotlin.math.sqrt(dx * dx + dy * dy)
+            val tangentX = dx / length
+            val tangentY = dy / length
+            val extension = 1.5f
+            val startX = ax - tangentX * extension
+            val startY = ay - tangentY * extension
+            val endX = bx + tangentX * extension
+            val endY = by + tangentY * extension
+            val extendedDx = endX - startX
+            val extendedDy = endY - startY
+            val lengthSquared = extendedDx * extendedDx + extendedDy * extendedDy
+            val halfWidthSquared = extension * extension
+            val fullTurn = (2f * kotlin.math.PI).toFloat()
+            for (y in 0 until 32) {
+                for (x in 0 until 32) {
+                    val px = x + 0.5f
+                    val py = y + 0.5f
+                    val inOuter = px > 6.875f && px < 24.875f && py > 5.875f && py < 23.875f
+                    val inInner = px > 11.375f && px < 20.375f && py > 10.375f && py < 16.375f
+                    // Inverse EvenOdd + Difference keeps the shell (outer xor hole).
+                    if (!inOuter.xor(inInner)) continue
                     val projection = ((px - startX) * extendedDx + (py - startY) * extendedDy) /
                         lengthSquared
                     if (projection < 0f || projection > 1f) continue
