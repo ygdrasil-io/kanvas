@@ -74,7 +74,7 @@ class GpuEvidenceCatalogTest {
     }
 
     @Test
-    fun `catalog separates one hundred sixty-eight public surface renders from seventeen refusals`() {
+    fun `catalog separates one hundred sixty-nine public surface renders from seventeen refusals`() {
         val cases = GpuEvidenceCatalog.cases
 
         assertEquals(
@@ -89,6 +89,7 @@ class GpuEvidenceCatalogTest {
                 "stroke-rect-outline",
                 "translated-stroke-rect-outline",
                 "round-cap-stroke",
+                "vertical-round-cap-stroke",
                 "scaled-translated-horizontal-hairline",
                 "scaled-horizontal-hairline",
                 "horizontal-hairline",
@@ -257,6 +258,7 @@ class GpuEvidenceCatalogTest {
                 "stroke-rect-outline",
                 "translated-stroke-rect-outline",
                 "round-cap-stroke",
+                "vertical-round-cap-stroke",
                 "scaled-translated-horizontal-hairline",
                 "scaled-horizontal-hairline",
                 "horizontal-hairline",
@@ -405,11 +407,11 @@ class GpuEvidenceCatalogTest {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            List(168) { "kanvas.surface.render" },
+            List(169) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
-        assertEquals(168, GpuEvidenceCatalog.renderCases.size)
-        assertEquals(185, GpuEvidenceCatalog.cases.size)
+        assertEquals(169, GpuEvidenceCatalog.renderCases.size)
+        assertEquals(186, GpuEvidenceCatalog.cases.size)
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
 
         val solid = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "solid-card-stack" })
@@ -557,6 +559,7 @@ class GpuEvidenceCatalogTest {
             "stroke-rect-outline",
             "translated-stroke-rect-outline",
             "round-cap-stroke",
+            "vertical-round-cap-stroke",
             "scaled-translated-horizontal-hairline",
             "scaled-horizontal-hairline",
             "horizontal-hairline",
@@ -744,6 +747,7 @@ class GpuEvidenceCatalogTest {
                 "stroke-rect-outline" to OraclePolicy.GeneratedCpu("reference-raster-stroke-rect-bands", 1),
                 "translated-stroke-rect-outline" to OraclePolicy.GeneratedCpu("reference-raster-stroke-rect-bands", 2),
                 "round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke", 2),
+                "vertical-round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke-vertical", 2),
                 "scaled-translated-horizontal-hairline" to OraclePolicy.GeneratedCpu("surface-srgb-hairline-direct-device-quad", 2),
                 "scaled-horizontal-hairline" to OraclePolicy.GeneratedCpu("surface-srgb-hairline-direct-device-quad", 2),
                 "horizontal-hairline" to OraclePolicy.GeneratedCpu("surface-srgb-hairline-direct-device-quad", 2),
@@ -919,6 +923,7 @@ class GpuEvidenceCatalogTest {
                 "stroke-rect-outline" to ComparisonPolicy(0, 100.0, 1, "Exact integer RGBA8 output from four literal analytic coverage bands."),
                 "translated-stroke-rect-outline" to ComparisonPolicy(0, 100.0, 1, "Exact integer RGBA8 output from four translated analytic coverage bands."),
                 "round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Independent pixel-center disk oracle for W25's integral-grid radius-two horizontal contract."),
+                "vertical-round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Independent pixel-center disk oracle for the integral-grid radius-two vertical contract."),
                 "scaled-translated-horizontal-hairline" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent one-pixel device-row hairline coverage oracle."),
                 "scaled-horizontal-hairline" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent one-pixel device-row hairline coverage oracle."),
                 "horizontal-hairline" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent one-pixel device-row hairline coverage oracle."),
@@ -1203,6 +1208,16 @@ class GpuEvidenceCatalogTest {
         )
         assertEquals(Matrix3x3F32.Identity, roundCapStroke.transform)
         assertEquals(ClipStack.WideOpen, roundCapStroke.clip)
+
+        val verticalRoundCapStroke = assertIs<DisplayOp.DrawPath>(ops("vertical-round-cap-stroke").single())
+        assertEquals(RectF32.ofLTRB(16f, 6f, 16f, 26f), verticalRoundCapStroke.path.computeBounds())
+        assertFalse(PathMeasure(verticalRoundCapStroke.path).isClosed)
+        assertEquals(
+            Paint.stroke(ColorARGB.Red, 4f).copy(antiAlias = false, strokeCap = StrokeCap.ROUND),
+            verticalRoundCapStroke.paint,
+        )
+        assertEquals(Matrix3x3F32.Identity, verticalRoundCapStroke.transform)
+        assertEquals(ClipStack.WideOpen, verticalRoundCapStroke.clip)
 
         val dashedStroke = assertIs<DisplayOp.DrawPath>(ops("horizontal-dashed-butt-miter-stroke").single())
         assertEquals(RectF32.ofLTRB(4f, 16f, 28f, 16f), dashedStroke.path.computeBounds())
