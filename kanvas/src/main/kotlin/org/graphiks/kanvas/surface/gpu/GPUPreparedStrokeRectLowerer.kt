@@ -87,6 +87,9 @@ internal object GPUPreparedStrokeRectLowerer {
         val uniformlyScaledTwoStopLinearGradient = (paint.shader as? Shader.LinearGradient)?.let { shader ->
             shader.stops.size == 2 && operation.transform.isPositiveIntegralUniformScale()
         } == true
+        val uniformlyScaledThreeStopLinearGradient = (paint.shader as? Shader.LinearGradient)?.let { shader ->
+            shader.stops.size == 3 && operation.transform.isPositiveIntegralUniformScale()
+        } == true
         val finalMaterial = when (val shader = paint.shader) {
             null -> {
                 if (!paint.hasFoldableSolidColorFilter()) {
@@ -99,7 +102,8 @@ internal object GPUPreparedStrokeRectLowerer {
                 val translatedTwoStop = shader.stops.size == 2 && operation.transform.isNonZeroIntegralTranslation()
                 val translatedThreeStop = shader.stops.size == 3 && operation.transform.isNonZeroIntegralTranslation()
                 val uniformScale = shader.stops.size == 2 && operation.transform.isPositiveIntegralUniformScale()
-                if (operation.transform != Matrix3x3F32.Identity && !translatedTwoStop && !translatedThreeStop && !uniformScale) {
+                val uniformScaleThreeStop = shader.stops.size == 3 && operation.transform.isPositiveIntegralUniformScale()
+                if (operation.transform != Matrix3x3F32.Identity && !translatedTwoStop && !translatedThreeStop && !uniformScale && !uniformScaleThreeStop) {
                     return refused(
                         "unsupported.stroke.rect_transform",
                         operationIndex,
@@ -113,12 +117,23 @@ internal object GPUPreparedStrokeRectLowerer {
                         mapOf("targetFormat" to target.colorFormat),
                     )
                 }
-                if (uniformScale && target.colorFormat != "rgba8unorm-srgb") return refused(
+                if ((uniformScale || uniformScaleThreeStop) && target.colorFormat != "rgba8unorm-srgb") return refused(
                     "unsupported.stroke.rect_gradient_target", operationIndex, mapOf("targetFormat" to target.colorFormat),
                 )
                 if (uniformScale && !capabilities.hasSupportedFact(GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_UNIFORM_SCALE_NATIVE)) return refused(
                     "unsupported.stroke.rect_linear_gradient_uniform_scale_capability", operationIndex,
                     mapOf("capability" to GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_UNIFORM_SCALE_NATIVE),
+                )
+                if (uniformScaleThreeStop && !shader.hasProvenThreeStopPositions()) {
+                    return refused("unsupported.stroke.rect_material", operationIndex, materialRefusalFacts(operation))
+                }
+                if (uniformScaleThreeStop && !capabilities.hasSupportedFact(
+                        GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_UNIFORM_SCALE_NATIVE,
+                    )
+                ) return refused(
+                    "unsupported.stroke.rect_linear_gradient_three_stop_uniform_scale_capability",
+                    operationIndex,
+                    mapOf("capability" to GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_UNIFORM_SCALE_NATIVE),
                 )
                 if (uniformScale && !shader.hasProvenTwoStopPositions()) {
                     return refused("unsupported.stroke.rect_material", operationIndex, materialRefusalFacts(operation))
@@ -158,7 +173,7 @@ internal object GPUPreparedStrokeRectLowerer {
                         operationIndex,
                         mapOf("targetFormat" to target.colorFormat),
                     )
-                    shader.stops.size == 3 && !translatedThreeStop && !capabilities.hasSupportedFact(
+                    shader.stops.size == 3 && !translatedThreeStop && !uniformScaleThreeStop && !capabilities.hasSupportedFact(
                         GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_NATIVE,
                     ) -> return refused(
                         "unsupported.stroke.rect_linear_gradient_three_stop_capability",
@@ -174,7 +189,7 @@ internal object GPUPreparedStrokeRectLowerer {
                 }
                 (paint.toMaterial() as? GPUMaterialDescriptor.LinearGradient)
                     ?.let { material ->
-                        if (uniformScale) material.copy(
+                        if (uniformScale || uniformScaleThreeStop) material.copy(
                             startX = material.startX * operation.transform.sx + operation.transform.tx,
                             startY = material.startY * operation.transform.sy + operation.transform.ty,
                             endX = material.endX * operation.transform.sx + operation.transform.tx,
@@ -257,7 +272,9 @@ internal object GPUPreparedStrokeRectLowerer {
             else -> return refused("unsupported.stroke.rect_material", operationIndex, materialRefusalFacts(operation))
         }
 
-        val deviceRect = when (val admission = operation.strokeRectDeviceBounds(target, uniformlyScaledTwoStopLinearGradient)) {
+        val deviceRect = when (val admission = operation.strokeRectDeviceBounds(
+            target, uniformlyScaledTwoStopLinearGradient || uniformlyScaledThreeStopLinearGradient,
+        )) {
             is StrokeRectDeviceBounds.Admitted -> admission.bounds
             StrokeRectDeviceBounds.InvalidTransform ->
                 return refused(
@@ -286,14 +303,16 @@ internal object GPUPreparedStrokeRectLowerer {
         }
         val transformClass = when {
             operation.transform == Matrix3x3F32.Identity -> "identity"
-            uniformlyScaledTwoStopLinearGradient -> "uniform-scale"
+            uniformlyScaledTwoStopLinearGradient || uniformlyScaledThreeStopLinearGradient -> "uniform-scale"
             else -> "translate"
         }
         val lowered = axisAlignedStrokeRectLowerer.lower(
             GPUAxisAlignedStrokeRectLoweringRequest(
                 targetBounds = GPUPixelBounds(0, 0, target.width, target.height),
                 pathBounds = deviceRect,
-                strokeWidth = paint.strokeWidth * if (uniformlyScaledTwoStopLinearGradient) operation.transform.sx else 1f,
+                strokeWidth = paint.strokeWidth * if (
+                    uniformlyScaledTwoStopLinearGradient || uniformlyScaledThreeStopLinearGradient
+                ) operation.transform.sx else 1f,
                 pathKey = "path:kanvas:drawRect.stroke:analytic:v1",
                 provenance = "kanvas-surface.drawRect.stroke.analytic-four-band",
                 cap = paint.strokeCap.name.lowercase().replaceFirstChar { it.uppercaseChar() },
@@ -354,6 +373,7 @@ internal object GPUPreparedStrokeRectLowerer {
                             translated = translatedTwoStopLinearGradient,
                             translatedThreeStop = translatedThreeStopLinearGradient,
                             uniformScale = uniformlyScaledTwoStopLinearGradient,
+                            uniformScaleThreeStop = uniformlyScaledThreeStopLinearGradient,
                         )
                         ?: return refused("unsupported.stroke.rect_material", operationIndex)
                 }
@@ -554,6 +574,7 @@ private fun GPUFramePathVisualCommand.withAnalyticStrokeRectSource(
     translated: Boolean = false,
     translatedThreeStop: Boolean = false,
     uniformScale: Boolean = false,
+    uniformScaleThreeStop: Boolean = false,
 ): GPUFramePathVisualCommand = copy(
     normalized = when (val command = normalized) {
         is org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand.FillRect -> command.copy(
@@ -561,7 +582,9 @@ private fun GPUFramePathVisualCommand.withAnalyticStrokeRectSource(
                 adapter = "kanvas-surface",
                 operation = "drawRect.stroke.analytic-four-band",
                 frameProvenance = provenance,
-                kind = if (uniformScale) {
+                kind = if (uniformScaleThreeStop) {
+                    GPUCommandSourceKind.AnalyticStrokeRectUniformScaleThreeStopBand
+                } else if (uniformScale) {
                     GPUCommandSourceKind.AnalyticStrokeRectUniformScaleBand
                 } else if (translatedThreeStop) {
                     GPUCommandSourceKind.AnalyticStrokeRectTranslatedThreeStopBand

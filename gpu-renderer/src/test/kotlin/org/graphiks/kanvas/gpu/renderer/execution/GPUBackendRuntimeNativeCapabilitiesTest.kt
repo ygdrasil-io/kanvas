@@ -41,6 +41,8 @@ class GPUBackendRuntimeNativeCapabilitiesTest {
                 "core-primitive-gradient-linear-stroke-3stop-translate-native",
             GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_UNIFORM_SCALE_NATIVE to
                 "core-primitive-gradient-linear-stroke-uniform-scale-native",
+            GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_UNIFORM_SCALE_NATIVE to
+                "core-primitive-gradient-linear-stroke-3stop-uniform-scale-native",
             GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_TRANSLATE_NATIVE to
                 "core-primitive-gradient-linear-stroke-translate-native",
             GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_NATIVE to
