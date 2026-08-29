@@ -108,6 +108,7 @@ class GpuEvidenceCatalogTest {
                 "reverse-horizontal-dashed-butt-miter-stroke",
                 "reverse-vertical-dashed-butt-miter-stroke",
                 "phase-shifted-vertical-dashed-butt-miter-stroke",
+                "scissored-vertical-dashed-butt-miter-stroke",
                 "scissored-horizontal-dashed-butt-miter-stroke",
                 "translated-horizontal-dashed-butt-miter-stroke",
                 "phase-shifted-horizontal-dashed-butt-miter-stroke",
@@ -268,6 +269,7 @@ class GpuEvidenceCatalogTest {
                 "reverse-horizontal-dashed-butt-miter-stroke",
                 "reverse-vertical-dashed-butt-miter-stroke",
                 "phase-shifted-vertical-dashed-butt-miter-stroke",
+                "scissored-vertical-dashed-butt-miter-stroke",
                 "scissored-horizontal-dashed-butt-miter-stroke",
                 "translated-horizontal-dashed-butt-miter-stroke",
                 "phase-shifted-horizontal-dashed-butt-miter-stroke",
@@ -389,11 +391,11 @@ class GpuEvidenceCatalogTest {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            List(160) { "kanvas.surface.render" },
+            List(161) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
-        assertEquals(160, GpuEvidenceCatalog.renderCases.size)
-        assertEquals(177, GpuEvidenceCatalog.cases.size)
+        assertEquals(161, GpuEvidenceCatalog.renderCases.size)
+        assertEquals(178, GpuEvidenceCatalog.cases.size)
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
 
         val solid = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "solid-card-stack" })
@@ -560,6 +562,7 @@ class GpuEvidenceCatalogTest {
             "reverse-horizontal-dashed-butt-miter-stroke",
             "reverse-vertical-dashed-butt-miter-stroke",
             "phase-shifted-vertical-dashed-butt-miter-stroke",
+            "scissored-vertical-dashed-butt-miter-stroke",
             "scissored-horizontal-dashed-butt-miter-stroke",
             "translated-horizontal-dashed-butt-miter-stroke",
             "phase-shifted-horizontal-dashed-butt-miter-stroke",
@@ -739,6 +742,7 @@ class GpuEvidenceCatalogTest {
                 "reverse-horizontal-dashed-butt-miter-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-dashed-stroke-reverse-horizontal", 1),
                 "reverse-vertical-dashed-butt-miter-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-dashed-stroke-reverse-vertical", 1),
                 "phase-shifted-vertical-dashed-butt-miter-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-dashed-stroke-phase-four-vertical", 1),
+                "scissored-vertical-dashed-butt-miter-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-dashed-stroke-vertical-scissor", 1),
                 "scissored-horizontal-dashed-butt-miter-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-dashed-stroke-scissor", 1),
                 "translated-horizontal-dashed-butt-miter-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-dashed-stroke-translated", 1),
                 "phase-shifted-horizontal-dashed-butt-miter-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-dashed-stroke-phase-four", 1),
@@ -906,6 +910,7 @@ class GpuEvidenceCatalogTest {
                 "reverse-horizontal-dashed-butt-miter-stroke" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent pixel-center oracle evaluated along the source path direction."),
                 "reverse-vertical-dashed-butt-miter-stroke" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent pixel-center oracle evaluated along the reverse vertical source path direction."),
                 "phase-shifted-vertical-dashed-butt-miter-stroke" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent phase-aware vertical dashed-stroke oracle."),
+                "scissored-vertical-dashed-butt-miter-stroke" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent vertical dashed-stroke oracle intersected with the integral device scissor."),
                 "scissored-horizontal-dashed-butt-miter-stroke" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent dashed-stroke oracle intersected with the integral device scissor."),
                 "translated-horizontal-dashed-butt-miter-stroke" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent translated dashed-stroke oracle."),
                 "phase-shifted-horizontal-dashed-butt-miter-stroke" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent phase-aware dashed-stroke oracle."),
@@ -1208,6 +1213,14 @@ class GpuEvidenceCatalogTest {
         )
         assertEquals(Matrix3x3F32.Identity, phaseShiftedVerticalDashedStroke.transform)
         assertEquals(ClipStack.WideOpen, phaseShiftedVerticalDashedStroke.clip)
+
+        val scissoredVerticalDashedStroke = assertIs<DisplayOp.DrawPath>(ops("scissored-vertical-dashed-butt-miter-stroke").single { it is DisplayOp.DrawPath })
+        assertEquals(RectF32.ofLTRB(16f, 4f, 16f, 28f), scissoredVerticalDashedStroke.path.computeBounds())
+        assertEquals(
+            ClipStack.DeviceRect(RectF32.ofLTRB(14f, 8f, 19f, 20f), false),
+            scissoredVerticalDashedStroke.clip,
+        )
+        assertEquals(dashedStroke.paint, scissoredVerticalDashedStroke.paint)
 
         val scissoredDashedStroke = assertIs<DisplayOp.DrawPath>(ops("scissored-horizontal-dashed-butt-miter-stroke").single { it is DisplayOp.DrawPath })
         assertEquals(RectF32.ofLTRB(4f, 16f, 28f, 16f), scissoredDashedStroke.path.computeBounds())
