@@ -91,7 +91,7 @@
 - Créer `refactor/waves/W02-scene-ir/status.md`.
 - Modifier `refactor/README.md`.
 
-## Tâche 1 — Réparer le registre GM réel
+## Task 1 — Réparer le registre GM réel
 
 **Fichiers :**
 
@@ -157,7 +157,7 @@ rtk git commit -m "test: make Skia GM registry fully loadable"
 
 Résultat attendu : test vert, 631 GMs instanciables, aucun provider `UNKNOWN`.
 
-## Tâche 2 — Introduire la classification de conformance et l'inventaire v3
+## Task 2 — Introduire la classification de conformance et l'inventaire v3
 
 **Fichiers :**
 
@@ -264,7 +264,7 @@ rtk git commit -m "feat: classify the Skia GM conformance population"
 
 Résultat attendu : tests verts ; aucune route `excluded:blocking-by-policy` ne peut être produite.
 
-## Tâche 3 — Réconcilier les scores et figer W00
+## Task 3 — Réconcilier les scores et figer W00
 
 **Fichiers :**
 
@@ -330,7 +330,7 @@ rtk git add integration-tests/skia/test-similarity-scores.properties reports/gpu
 rtk git commit -m "docs: freeze the W00 Skia truth baseline"
 ```
 
-## Tâche 4 — Ajouter `PathF32` et `PathBuilder` dans `:math:geometry`
+## Task 4 — Ajouter `PathF32` et `PathBuilder` dans `:math:geometry`
 
 **Fichiers :**
 
@@ -408,7 +408,7 @@ rtk git add math/geometry/src/commonMain/kotlin/org/graphiks/math/geometry/PathF
 rtk git commit -m "feat(math): add immutable path geometry"
 ```
 
-## Tâche 5 — Déplacer analyses, régions, mesures et opérations neutres dans `:math`
+## Task 5 — Déplacer analyses, régions, mesures et opérations neutres dans `:math`
 
 **Fichiers :**
 
@@ -458,7 +458,7 @@ rtk git add math/geometry/src/commonMain/kotlin/org/graphiks/math/geometry math/
 rtk git commit -m "refactor(math): own neutral path operations"
 ```
 
-## Tâche 6 — Placer les transformations géométriques dans `:math:matrix`
+## Task 6 — Placer les transformations géométriques dans `:math:matrix`
 
 **Fichiers :**
 
@@ -503,7 +503,7 @@ rtk git add math/matrix/src/commonMain/kotlin/org/graphiks/math/matrix/PathTrans
 rtk git commit -m "refactor(math): move path transforms to matrix"
 ```
 
-## Tâche 7 — Brancher les façades de compatibilité et figer les opérations enregistrées
+## Task 7 — Brancher les façades de compatibilité et figer les opérations enregistrées
 
 **Fichiers :**
 
@@ -576,7 +576,7 @@ rtk git add kanvas/src/main/kotlin/org/graphiks/kanvas/geometry kanvas/src/main/
 rtk git commit -m "refactor: freeze geometry at Canvas recording"
 ```
 
-## Tâche 8 — Écrire `Picture` v8 et conserver le reader v7
+## Task 8 — Écrire `Picture` v8 et conserver le reader v7
 
 **Fichiers :**
 
@@ -652,7 +652,7 @@ rtk git add kanvas/src/main/kotlin/org/graphiks/kanvas/picture kanvas/src/test/k
 rtk git commit -m "feat: write immutable Picture format 8"
 ```
 
-## Tâche 9 — Créer `:render-ir` et ses contrats fondamentaux
+## Task 9 — Créer `:render-ir` et ses contrats fondamentaux
 
 **Fichiers :**
 
@@ -763,7 +763,7 @@ rtk git add settings.gradle.kts render-ir
 rtk git commit -m "feat: introduce backend-neutral scene IR"
 ```
 
-## Tâche 10 — Ajouter le material graph, les effets et ressources immuables
+## Task 10 — Ajouter le material graph, les effets et ressources immuables
 
 **Fichiers :**
 
@@ -821,7 +821,7 @@ rtk git add render-ir/src/main/kotlin/org/graphiks/kanvas/render/ir render-ir/sr
 rtk git commit -m "feat: add immutable scene material graph"
 ```
 
-## Tâche 11 — Adapter tous les `DisplayOp` vers la Scene IR
+## Task 11 — Adapter tous les `DisplayOp` vers la Scene IR
 
 **Fichiers :**
 
@@ -883,7 +883,7 @@ rtk git add kanvas/build.gradle.kts kanvas/src/main/kotlin/org/graphiks/kanvas/r
 rtk git commit -m "feat: capture DisplayOps into scene IR"
 ```
 
-## Tâche 12 — Transférer la propriété du format Picture v8 à `:render-ir`
+## Task 12 — Transférer la propriété du format Picture v8 à `:render-ir`
 
 **Fichiers :**
 
@@ -932,7 +932,7 @@ rtk git add render-ir/src/main/kotlin/org/graphiks/kanvas/render/ir/SceneArchive
 rtk git commit -m "refactor: move Picture v8 serialization to scene IR"
 ```
 
-## Tâche 13 — Exposer la capture de scène et fermer la gate de toutes les GMs éligibles
+## Task 13 — Exposer la capture de scène et fermer la gate de toutes les GMs éligibles
 
 **Fichiers :**
 
@@ -997,7 +997,7 @@ rtk git add kanvas/src/main/kotlin/org/graphiks/kanvas/surface/Surface.kt kanvas
 rtk git commit -m "test: prove eligible GMs capture into scene IR"
 ```
 
-## Tâche 14 — Corriger les frontières de modules et publier le statut W02
+## Task 14 — Corriger les frontières de modules et publier le statut W02
 
 **Fichiers :**
 
