@@ -211,6 +211,7 @@ sweepGradientTwoStopStrokeRect(),
         boundedSaveLayerRestoreBlendRefusal(),
         boundedBitmapLinearRefusal(),
         imageFilterBlurRefusal(),
+        roundCapStrokeUnderWindingRefusal(),
     )
     val cases: List<EvidenceCase> = renderCases + refusalCases
     val catalog = EvidenceSceneCatalog(cases.map(EvidenceCase::descriptor))
@@ -301,6 +302,15 @@ sweepGradientTwoStopStrokeRect(),
         ),
         program = KanvasScenePrograms.imageFilterBlurRefusal(),
         oracle = null,
+    )
+
+    private fun roundCapStrokeUnderWindingRefusal() = surfaceRefusal(
+        id = "round-cap-stroke-winding-refusal",
+        title = "Round-cap stroke under winding clip refusal",
+        description = "Public Kanvas Surface refuses a non-AA round-cap path stroke under a complex winding path clip before native submission; the native stencil-cover composition is not yet admitted.",
+        tags = setOf("path-stroke", "round-cap", "path-clip", "winding", "refusal", "kanvas-surface"),
+        code = "unsupported.recording.core_primitive_path_stencil_clip",
+        program = KanvasScenePrograms.roundCapStrokeUnderWindingRefusal(),
     )
 
     private fun basicPrimitivesValidAlpha() = EvidenceCase(
