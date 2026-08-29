@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "gpu-path-tessellation-evidence-v1",
+  "date": "2026-08-29",
+  "route": "native.path_fill.stencil_cover",
+  "fixture": {
+    "verb": "quadTo",
+    "curves": 3,
+    "tolerance": 0.25,
+    "maxFanTriangles": 1024
+  },
+  "comparison": {
+    "uniformSegmentsPerCurve": 183,
+    "uniformSourceVertices": 551,
+    "adaptiveSegmentsPerCurve": 16,
+    "adaptiveSourceVertices": 50,
+    "adaptiveFanTriangles": 50,
+    "adaptiveFanBudgetAccepted": true
+  },
+  "promotion": {
+    "gm": false,
+    "reason": "conicpaths still contains unsupported hairline strokes"
+  },
+  "refusals": [
+    "unsupported.stroke.width_invalid",
+    "geometry.path.vertex_budget_exceeded",
+    "geometry.path.fan_budget_exceeded",
+    "geometry.path.memory_budget_exceeded"
+  ]
+}
