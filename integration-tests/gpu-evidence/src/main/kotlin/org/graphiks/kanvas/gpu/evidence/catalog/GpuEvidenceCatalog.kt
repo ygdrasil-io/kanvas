@@ -23,6 +23,7 @@ import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbUniformScaledThreeStop
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbThreeStopSweepGradientStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRoundCapStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRoundCapStrokeScissorCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbSolidStrokeScissorCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathCpuOracle
@@ -58,6 +59,7 @@ object GpuEvidenceCatalog {
         roundCapStroke(),
         scissoredRoundCapStroke(),
         translatedScissoredRoundCapStroke(),
+        scissoredDiagonalButtStroke(),
         linearGradientLanes(),
         linearGradientThreeStops(),
         radialSwatch(),
@@ -590,6 +592,35 @@ sweepGradientTwoStopStrokeRect(),
             clipTop = 16,
             clipRight = 21,
             clipBottom = 21,
+        ),
+    )
+
+    private fun scissoredDiagonalButtStroke(): EvidenceCase = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("scissored-diagonal-butt-stroke"),
+            "Scissored diagonal butt stroke",
+            "Public Kanvas Surface non-AA diagonal width-four butt-cap miter stroke constrained by an integral device scissor.",
+            32,
+            32,
+            1L,
+            setOf("path-stroke", "butt-cap", "scissor", "kanvas-surface"),
+            EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-diagonal-butt-stroke-scissor", 2),
+            ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from independent diagonal stroke coverage intersected with the integral device scissor."),
+            emptySet(),
+        ),
+        KanvasScenePrograms.scissoredDiagonalButtStroke(),
+        SurfaceSrgbSolidStrokeScissorCpuOracle(
+            strokeStartX = 5.25,
+            strokeStartY = 8.25,
+            strokeEndX = 21.25,
+            strokeEndY = 20.25,
+            strokeWidth = 4.0,
+            color = intArrayOf(255, 0, 0, 255),
+            clipLeft = 8,
+            clipTop = 10,
+            clipRight = 20,
+            clipBottom = 19,
         ),
     )
 

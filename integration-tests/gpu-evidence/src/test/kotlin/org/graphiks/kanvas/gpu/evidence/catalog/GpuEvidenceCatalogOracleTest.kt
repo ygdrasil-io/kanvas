@@ -444,6 +444,16 @@ class GpuEvidenceCatalogOracleTest {
     }
 
     @Test
+    fun `scissored diagonal butt stroke preserves integral device bounds`() {
+        val pixels = oracle("scissored-diagonal-butt-stroke", 32, 32)
+
+        assertPixel(pixels, 32, 32, 8, 10, intArrayOf(255, 0, 0, 255))
+        assertPixel(pixels, 32, 32, 14, 15, intArrayOf(255, 0, 0, 255))
+        assertPixel(pixels, 32, 32, 20, 14, intArrayOf(0, 0, 0, 0))
+        assertPixel(pixels, 32, 32, 10, 19, intArrayOf(0, 0, 0, 0))
+    }
+
+    @Test
     fun `bounded bitmap oracle preserves literal nearest texels at its integer destination`() {
         val pixels = oracle("bounded-rgba8-nearest-bitmap")
 
