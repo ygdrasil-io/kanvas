@@ -1,1 +1,1 @@
-{"expectation":"refuse:unsupported.material.mapping.linear_gradient_stop_count","observedOutcome":"refused","verdictKind":"pass","reason":"exact refusal before submission"}
+{"expectation":"render","observedOutcome":"rendered","verdictKind":"pass","reason":"rendered image passed comparison"}
