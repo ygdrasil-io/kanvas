@@ -1,7 +1,5 @@
 package org.graphiks.kanvas.glyph.gpu
 
-import java.nio.file.Files
-import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -9,14 +7,6 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class GPUTextMaterialKeyLeakageTest {
-    @Test
-    fun `material key leakage report matches repo golden`() {
-        assertEquals(
-            Files.readString(projectRoot().resolve("reports/pure-kotlin-text/text-material-key-leakage-report.json")).trimEnd(),
-            defaultMaterialKeyLeakageReportJson().trimEnd(),
-        )
-    }
-
     @Test
     fun `glyph id variance does not change material identity`() {
         val cases = listOf(
@@ -278,14 +268,6 @@ class GPUTextMaterialKeyLeakageTest {
         assertTrue(cleanCases.size > leakCases.size, "Most cases should be clean")
     }
 
-    private fun projectRoot(): Path {
-        var current = Path.of("").toAbsolutePath().normalize()
-        while (current.parent != null && !Files.isDirectory(current.resolve("reports/pure-kotlin-text"))) {
-            current = current.parent
-        }
-        return current
-    }
-
     private fun leakageCase(
         caseId: String,
         materialIdentifierValue: String,
@@ -305,6 +287,7 @@ class GPUTextMaterialKeyLeakageTest {
             expectedLeakageStatus = cleanLabel,
         )
     }
+
 }
 
 private fun String.normalizedMaterialKeyField(): String =

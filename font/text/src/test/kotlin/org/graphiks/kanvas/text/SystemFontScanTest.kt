@@ -50,7 +50,7 @@ class SystemFontScanTest {
 
     private fun projectRoot(): Path {
         var current = Path.of("").toAbsolutePath().normalize()
-        while (current.parent != null && !Files.isDirectory(current.resolve("reports/pure-kotlin-text"))) {
+        while (current.parent != null && !Files.isRegularFile(current.resolve("settings.gradle.kts"))) {
             current = current.parent
         }
         return current

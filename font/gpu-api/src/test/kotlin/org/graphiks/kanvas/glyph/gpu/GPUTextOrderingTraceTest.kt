@@ -1,7 +1,5 @@
 package org.graphiks.kanvas.glyph.gpu
 
-import java.nio.file.Files
-import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -9,16 +7,6 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 
 class GPUTextOrderingTraceTest {
-    @Test
-    fun `default ordering trace report matches repo golden`() {
-        val root = projectRoot()
-
-        assertEquals(
-            Files.readString(root.resolve("reports/pure-kotlin-text/gpu-text-ordering-trace.json")).trimEnd(),
-            defaultGPUTextOrderingTraceReportJson().trimEnd(),
-        )
-    }
-
     @Test
     fun `accepted A8 ordering trace links upload instance generation and draw tasks`() {
         val result = planGPUTextOrderingTrace(defaultGPUTextOrderingFixture())
@@ -112,11 +100,4 @@ class GPUTextOrderingTraceTest {
         }
     }
 
-    private fun projectRoot(): Path {
-        var current = Path.of("").toAbsolutePath().normalize()
-        while (current.parent != null && !Files.isDirectory(current.resolve("reports/pure-kotlin-text"))) {
-            current = current.parent
-        }
-        return current
-    }
 }

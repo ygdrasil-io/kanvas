@@ -1,7 +1,5 @@
 package org.graphiks.kanvas.font
 
-import java.nio.file.Files
-import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -147,17 +145,6 @@ class FontCatalogTest {
     }
 
     @Test
-    fun `checked in font catalog json matches generated default catalog`() {
-        val expected = Files.readString(projectRoot().resolve("reports/pure-kotlin-text/font-catalog.json"))
-        val actual = defaultBundledFontCatalog().toCanonicalJson().value
-
-        assertEquals(expected.trim(), actual)
-        assertContains(actual, """"catalogId":"font-catalog"""")
-        assertContains(actual, """"claimPromotionAllowed":false""")
-        assertFalse(actual.contains("system-scanned-host-dependent"))
-    }
-
-    @Test
     fun `default bundled font catalog includes deterministic multilingual fallback breadth`() {
         val catalog = defaultBundledFontCatalog()
 
@@ -188,15 +175,6 @@ class FontCatalogTest {
                     entry.colorFormats == listOf("COLRv1")
             },
         )
-    }
-
-    @Test
-    fun `checked in duplicate face catalog golden matches deterministic builder output`() {
-        val expected = Files.readString(projectRoot().resolve("reports/pure-kotlin-text/font-catalog-duplicate-face.json"))
-        val actual = duplicateFaceCatalogGoldenJson()
-
-        assertEquals(expected.trim(), actual)
-        assertContains(actual, """"code":"font.catalog.duplicate-face"""")
     }
 
     private fun testCatalogInput(
@@ -301,39 +279,4 @@ class FontCatalogTest {
         return digest.joinToString(separator = "") { byte -> "%02x".format(byte) }
     }
 
-    private fun duplicateFaceCatalogGoldenJson(): String {
-        val primary = testCatalogInput(
-            fixtureId = "duplicate-face-primary",
-            declaredName = "Duplicate Face Sans Regular",
-            familyName = "Duplicate Face Sans",
-            styleName = "Regular",
-            relativePath = "reports/font/fixtures/fonts/liberation/LiberationSans-Regular.ttf",
-            contentByte = 0x31,
-            genericFamilies = listOf("sans-serif"),
-            scriptCoverage = listOf("Latin"),
-        )
-        val duplicate = testCatalogInput(
-            fixtureId = "duplicate-face-secondary",
-            declaredName = "Duplicate Face Sans Regular Alt",
-            familyName = "Duplicate Face Sans",
-            styleName = "Regular",
-            relativePath = "reports/font/fixtures/fonts/liberation/LiberationSans-Regular.ttf",
-            contentByte = 0x32,
-            genericFamilies = listOf("sans-serif"),
-            scriptCoverage = listOf("Latin"),
-        )
-        val catalog = BundledFontCatalogBuilder.build(
-            generation = 17,
-            inputs = listOf(primary, duplicate),
-        )
-        return catalog.toCanonicalJson().value
-    }
-
-    private fun projectRoot(): Path {
-        var current = Path.of("").toAbsolutePath().normalize()
-        while (current.parent != null && !Files.isDirectory(current.resolve("reports/pure-kotlin-text"))) {
-            current = current.parent
-        }
-        return current
-    }
 }

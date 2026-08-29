@@ -93,8 +93,8 @@ class CodecAllKotlinAssemblyTest {
         val codec = Codec.MakeFromData(CodecTestFixtures.simpleRgbaPng())
 
         assertNotNull(codec)
-        val info = codec!!.getKanvasInfo()
-        val (bitmap, result) = codec.getKanvasImage()
+        val info = codec!!.getInfo()
+        val (bitmap, result) = codec.getImage()
 
         assertEquals(ColorType.RGBA_8888, info.colorType)
         assertEquals(Codec.Result.kSuccess, result)

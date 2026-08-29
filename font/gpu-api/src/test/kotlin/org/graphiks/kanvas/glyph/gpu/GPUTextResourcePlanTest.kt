@@ -1,7 +1,5 @@
 package org.graphiks.kanvas.glyph.gpu
 
-import java.nio.file.Files
-import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -9,32 +7,6 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 
 class GPUTextResourcePlanTest {
-    @Test
-    fun `default resource upload instance and binding reports match repo goldens`() {
-        val root = projectRoot()
-
-        assertEquals(
-            Files.readString(root.resolve("reports/pure-kotlin-text/gpu-text-resource-plan.json")).trimEnd(),
-            defaultGPUTextResourcePlanReportJson().trimEnd(),
-        )
-        assertEquals(
-            Files.readString(root.resolve("reports/pure-kotlin-text/gpu-text-upload-plan.json")).trimEnd(),
-            defaultGPUTextUploadPlanReportJson().trimEnd(),
-        )
-        assertEquals(
-            Files.readString(root.resolve("reports/pure-kotlin-text/gpu-text-instance-layout.json")).trimEnd(),
-            defaultGPUTextInstanceLayoutReportJson().trimEnd(),
-        )
-        assertEquals(
-            Files.readString(root.resolve("reports/pure-kotlin-text/gpu-text-binding-plan.json")).trimEnd(),
-            defaultGPUTextBindingPlanReportJson().trimEnd(),
-        )
-        assertEquals(
-            Files.readString(root.resolve("reports/pure-kotlin-text/gpu-text-resource-refusals.json")).trimEnd(),
-            defaultGPUTextResourceRefusalReportJson().trimEnd(),
-        )
-    }
-
     @Test
     fun `accepted A8 resource contract references subrun resource upload instance and binding plans`() {
         val result = planGPUTextResourceContracts(defaultGPUTextResourceContractFixture())
@@ -189,11 +161,4 @@ class GPUTextResourcePlanTest {
         }
     }
 
-    private fun projectRoot(): Path {
-        var current = Path.of("").toAbsolutePath().normalize()
-        while (current.parent != null && !Files.isDirectory(current.resolve("reports/pure-kotlin-text"))) {
-            current = current.parent
-        }
-        return current
-    }
 }

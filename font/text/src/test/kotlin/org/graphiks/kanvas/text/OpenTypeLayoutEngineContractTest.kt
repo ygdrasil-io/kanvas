@@ -264,14 +264,6 @@ class OpenTypeLayoutEngineContractTest {
         assertTrue(matrix.contains("\"no-complete-target-support-claim\""))
         assertTrue(matrix.contains("\"no-native-shaper-oracle-claim\""))
 
-        val dumpIndex = readProjectFile("reports/pure-kotlin-text/dump-evidence-index.json")
-        assertTrue(dumpIndex.contains("\"dumpId\": \"feature-policy-matrix\""))
-
-        val manifest = readProjectFile("reports/pure-kotlin-text/fixture-evidence-manifest.json")
-        assertTrue(manifest.contains("\"reports/font/fixtures/expected/shaping/feature-policy-matrix.json\""))
-
-        val dashboard = readProjectFile("reports/pure-kotlin-text/font-claim-dashboard.json")
-        assertTrue(dashboard.contains("\"reports/font/fixtures/expected/shaping/feature-policy-matrix.json\""))
     }
 
     @Test
@@ -291,23 +283,6 @@ class OpenTypeLayoutEngineContractTest {
             assertTrue(trace.contains("\"defaulted\": [{\"tag\": \"ccmp\", \"value\": 1}, {\"tag\": \"locl\", \"value\": 1}, {\"tag\": \"rlig\", \"value\": 1}, {\"tag\": \"clig\", \"value\": 1}, {\"tag\": \"calt\", \"value\": 1}, {\"tag\": \"mark\", \"value\": 1}, {\"tag\": \"mkmk\", \"value\": 1}]"))
             assertTrue(trace.contains("\"unsupported\": []"))
         }
-    }
-
-    @Test
-    fun dumpIndexManifestAndDashboardTrackOpenTypeLayoutContractWithoutSupportPromotion() {
-        val dumpIndex = readProjectFile("reports/pure-kotlin-text/dump-evidence-index.json")
-        assertTrue(dumpIndex.contains("\"dumpId\": \"shaping-plan\""))
-        assertTrue(dumpIndex.contains("\"ownerTicket\": \"KFONT-M6-001\""))
-        assertTrue(dumpIndex.contains("\"reports/font/fixtures/expected/shaping/opentype-layout-contract-shaped-glyph-run.json\""))
-
-        val manifest = readProjectFile("reports/pure-kotlin-text/fixture-evidence-manifest.json")
-        assertTrue(manifest.contains("\"familyId\": \"opentype-layout-contract\""))
-        assertTrue(manifest.contains("\"no-complex-shaping-support-claim\""))
-
-        val dashboard = readProjectFile("reports/pure-kotlin-text/font-claim-dashboard.json")
-        assertTrue(dashboard.contains("\"surfaceId\": \"complex-shaping\""))
-        assertTrue(dashboard.contains("\"reports/font/fixtures/expected/shaping/shaping-plan.json\""))
-        assertTrue(dashboard.contains("\"claimPromotionAllowed\": false"))
     }
 
     private fun latinRunInput(

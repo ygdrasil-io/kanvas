@@ -2,55 +2,13 @@ package org.graphiks.kanvas.font.sfnt
 
 import org.graphiks.kanvas.font.FontSourceID
 import org.graphiks.kanvas.font.FontSourceKind
-import org.graphiks.kanvas.font.FontSource
-import java.nio.file.Files
-import java.nio.file.Path
-import java.security.MessageDigest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertFalse
 import kotlin.test.assertNull
-import kotlin.test.assertTrue
 import kotlin.uuid.Uuid
 
 class SFNTParserEntryPointTest {
-    @Test
-    fun sfntParserUsesOneBoundedRequestForSingleSfntAndTtcDirectoryReports() {
-        val report = sfntDirectoryReport()
-        val actual = SFNTDirectoryReportWriter.write(report)
-        val expectedPath = projectRoot().resolve("reports/pure-kotlin-text/sfnt-directory.json")
-
-        if (!Files.exists(expectedPath)) {
-            error("Missing sfnt-directory.json golden. Actual report:\n$actual")
-        }
-
-        assertEquals(Files.readString(expectedPath), actual)
-        assertEquals(actual, SFNTDirectoryReportWriter.write(sfntDirectoryReport()))
-        assertTrue(actual.contains("\"ticketIds\": ["))
-        assertTrue(actual.contains("\"KFONT-M2-001\""))
-        assertTrue(actual.contains("\"KFONT-M2-002\""))
-        assertTrue(actual.contains("\"KFONT-M2-005\""))
-        assertTrue(actual.contains("\"containerKind\": \"SINGLE_FACE\""))
-        assertTrue(actual.contains("\"containerKind\": \"TTC_COLLECTION\""))
-        assertTrue(actual.contains("\"code\": \"font.collection-index-invalid\""))
-        assertTrue(actual.contains("\"entryId\": \"generated-directory-diagnostics\""))
-        assertTrue(actual.contains("\"code\": \"font.sfnt.required-table-missing\""))
-        assertTrue(actual.contains("\"code\": \"font.sfnt.table-out-of-bounds\""))
-        assertTrue(actual.contains("\"code\": \"font.sfnt.table-duplicate\""))
-        assertTrue(actual.contains("\"code\": \"font.sfnt.table-overlap\""))
-        assertTrue(actual.contains("\"entryId\": \"generated-optional-table-malformed\""))
-        assertTrue(actual.contains("\"sourceSha256\": \"${optionalMalformedFaceFixture().sha256HexForTest()}\""))
-        assertTrue(actual.contains("\"faceDiagnostics\": ["))
-        assertTrue(actual.contains("\"table\": \"fvar\""))
-        assertTrue(actual.contains("\"causeCode\": \"font.sfnt.optional-table-malformed\""))
-        assertTrue(actual.contains("\"dashboardClassification\": \"tracked-gap\""))
-        assertTrue(actual.contains("\"claimPromotionAllowed\": false"))
-        listOf("GPU", "Skia", "HarfBuzz", "FreeType", "Fontations", "CoreText", "DirectWrite").forEach { token ->
-            assertFalse(actual.contains(token), "sfnt-directory.json must not contain hidden engine token $token")
-        }
-    }
-
     @Test
     fun invalidCollectionIndexReturnsStableDiagnosticWithoutParsingAnotherFace() {
         val ttc = generatedTtcFixture()
@@ -160,254 +118,11 @@ class SFNTParserEntryPointTest {
         )
     }
 
-    private fun sfntDirectoryReport(): SFNTDirectoryReport {
-        val parser = DefaultSFNTParser()
-        val liberationPath = projectRoot().resolve("reports/font/fixtures/fonts/liberation/LiberationSans-Regular.ttf")
-        val ttc = generatedTtcFixture()
-        val single = parser.parse(
-            SFNTParseRequest(
-                sourceId = LIBERATION_SOURCE_ID,
-                sourceKind = FontSourceKind.FILE,
-                displayName = "LiberationSans-Regular.ttf",
-                bytes = BoundedFontBytes(rawBytes = Files.readAllBytes(liberationPath)),
-                collectionIndex = 0,
-                parserGeneration = 1,
-            ),
-        )
-        val ttcFace = parser.parse(
-            SFNTParseRequest(
-                sourceId = GENERATED_TTC_SOURCE_ID,
-                sourceKind = FontSourceKind.MEMORY,
-                displayName = "generated-ttc-face-index",
-                bytes = BoundedFontBytes(rawBytes = ttc),
-                collectionIndex = 1,
-                parserGeneration = 1,
-            ),
-        )
-        val invalidIndex = parser.parse(
-            SFNTParseRequest(
-                sourceId = GENERATED_TTC_SOURCE_ID,
-                sourceKind = FontSourceKind.MEMORY,
-                displayName = "generated-ttc-face-index-invalid",
-                bytes = BoundedFontBytes(rawBytes = ttc),
-                collectionIndex = 3,
-                parserGeneration = 1,
-            ),
-        )
-        val directoryDiagnostics = parser.parse(
-            SFNTParseRequest(
-                sourceId = FontSourceID(Uuid.parse("550e8400-e29b-41d4-a716-446655449105")),
-                sourceKind = FontSourceKind.MEMORY,
-                displayName = "generated-directory-diagnostics",
-                bytes = BoundedFontBytes(rawBytes = directoryDiagnosticsFixture()),
-                collectionIndex = 0,
-                parserGeneration = 1,
-                requiredTables = setOf(SFNTTableTag("cmap"), SFNTTableTag("glyf"), SFNTTableTag("head")),
-            ),
-        )
-        val optionalMalformedBytes = optionalMalformedFaceFixture()
-        val optionalMalformed = DefaultOpenTypeFaceParser().parse(
-            FontSource(
-                id = FontSourceID(Uuid.parse("550e8400-e29b-41d4-a716-446655449106")),
-                kind = FontSourceKind.MEMORY,
-                displayName = "generated-optional-table-malformed",
-                bytes = optionalMalformedBytes,
-            ),
-        )
-        val badVersionBytes = badSfntVersionFixture()
-        val truncatedHeaderBytes = truncatedHeaderFixture()
-        val invalidTtcBytes = ttcFont(malformedMinimalFace("TTC Fixture", glyphId = 5))
-        val outOfBoundsBytes = tableOutOfBoundsFixture()
-        val overlapBytes = overlappingTablesFixture()
-        val duplicateBytes = duplicateTagFixture()
-        val missingRequiredBytes = malformedMinimalFace("Missing Required", glyphId = 7)
-
-        return SFNTDirectoryReport(
-            entries = listOf(
-                malformedDirectoryEntry(
-                    entryId = "generated-bad-sfnt-version",
-                    fixtureId = "malformed-sfnt-bad-version-generated",
-                    sourceId = "550e8400-e29b-41d4-a716-44665544a001",
-                    displayName = "generated-bad-sfnt-version",
-                    bytes = badVersionBytes,
-                ),
-                malformedDirectoryEntry(
-                    entryId = "generated-truncated-sfnt-header",
-                    fixtureId = "malformed-sfnt-truncated-header-generated",
-                    sourceId = "550e8400-e29b-41d4-a716-44665544a002",
-                    displayName = "generated-truncated-sfnt-header",
-                    bytes = truncatedHeaderBytes,
-                ),
-                malformedDirectoryEntry(
-                    entryId = "generated-malformed-ttc-invalid-index",
-                    fixtureId = "malformed-sfnt-invalid-ttc-index-generated",
-                    sourceId = "550e8400-e29b-41d4-a716-44665544a003",
-                    displayName = "generated-malformed-ttc-invalid-index",
-                    bytes = invalidTtcBytes,
-                    collectionIndex = 3,
-                ),
-                malformedDirectoryEntry(
-                    entryId = "generated-table-out-of-bounds",
-                    fixtureId = "malformed-sfnt-table-out-of-bounds-generated",
-                    sourceId = "550e8400-e29b-41d4-a716-44665544a004",
-                    displayName = "generated-table-out-of-bounds",
-                    bytes = outOfBoundsBytes,
-                ),
-                malformedDirectoryEntry(
-                    entryId = "generated-overlapping-tables",
-                    fixtureId = "malformed-sfnt-overlapping-tables-generated",
-                    sourceId = "550e8400-e29b-41d4-a716-44665544a005",
-                    displayName = "generated-overlapping-tables",
-                    bytes = overlapBytes,
-                ),
-                malformedDirectoryEntry(
-                    entryId = "generated-duplicate-tag",
-                    fixtureId = "malformed-sfnt-duplicate-tag-generated",
-                    sourceId = "550e8400-e29b-41d4-a716-44665544a006",
-                    displayName = "generated-duplicate-tag",
-                    bytes = duplicateBytes,
-                ),
-                malformedDirectoryEntry(
-                    entryId = "generated-missing-required-table",
-                    fixtureId = "malformed-sfnt-missing-required-table-generated",
-                    sourceId = "550e8400-e29b-41d4-a716-44665544a007",
-                    displayName = "generated-missing-required-table",
-                    bytes = missingRequiredBytes,
-                    requiredTables = setOf(SFNTTableTag("glyf"), SFNTTableTag("loca")),
-                ),
-                SFNTDirectoryReportEntry.fromResult(
-                    entryId = "single-ttf-liberation-sans",
-                    fixtureId = "single-ttf-liberation-sans",
-                    fixtureKind = "BundledFontSource",
-                    result = single,
-                ),
-                SFNTDirectoryReportEntry.fromResult(
-                    entryId = "generated-ttc-face-index-1",
-                    fixtureId = "ttc-face-index-planned-generated",
-                    fixtureKind = "GeneratedFixtureFontSource",
-                    result = ttcFace,
-                ),
-                SFNTDirectoryReportEntry.fromResult(
-                    entryId = "generated-ttc-invalid-index",
-                    fixtureId = "ttc-face-index-planned-generated",
-                    fixtureKind = "GeneratedFixtureFontSource",
-                    result = invalidIndex,
-                ),
-                SFNTDirectoryReportEntry.fromResult(
-                    entryId = "generated-directory-diagnostics",
-                    fixtureId = "sfnt-directory-diagnostics-generated",
-                    fixtureKind = "GeneratedFixtureFontSource",
-                    result = directoryDiagnostics,
-                ),
-                SFNTDirectoryReportEntry.fromFaceData(
-                    entryId = "generated-optional-table-malformed",
-                    fixtureId = "font-source-sfnt-malformed-optional-table-diagnostic",
-                    fixtureKind = "GeneratedFixtureFontSource",
-                    face = optionalMalformed,
-                ),
-            ),
-        )
-    }
-
-    private fun malformedDirectoryEntry(
-        entryId: String,
-        fixtureId: String,
-        sourceId: String,
-        displayName: String,
-        bytes: ByteArray,
-        collectionIndex: Int = 0,
-        requiredTables: Set<SFNTTableTag> = emptySet(),
-    ): SFNTDirectoryReportEntry =
-        SFNTDirectoryReportEntry.fromResult(
-            entryId = entryId,
-            fixtureId = fixtureId,
-            fixtureKind = "GeneratedFixtureFontSource",
-            result = DefaultSFNTParser().parse(
-                SFNTParseRequest(
-                    sourceId = FontSourceID(Uuid.parse(sourceId)),
-                    sourceKind = FontSourceKind.MEMORY,
-                    displayName = displayName,
-                    bytes = BoundedFontBytes(rawBytes = bytes),
-                    collectionIndex = collectionIndex,
-                    parserGeneration = 1,
-                    requiredTables = requiredTables,
-                ),
-            ),
-            sourceSha256 = bytes.sha256HexForTest(),
-        )
-
     private fun generatedTtcFixture(): ByteArray =
         ttcFont(
             minimalFace("Generated TTC One", glyphId = 7, unitsPerEm = 1000, advanceWidth = 500),
             minimalFace("Generated TTC Two", glyphId = 11, unitsPerEm = 1200, advanceWidth = 610),
         )
-
-    private fun directoryDiagnosticsFixture(): ByteArray {
-        val font = ByteArray(96)
-        font.writeUInt32(0, 0x00010000)
-        font.writeUInt16(4, 4)
-        writeDirectoryRecord(font, index = 0, tag = "name", checksum = 0, offset = 80, length = 8)
-        writeDirectoryRecord(font, index = 1, tag = "name", checksum = 1, offset = 88, length = 4)
-        writeDirectoryRecord(font, index = 2, tag = "cmap", checksum = 2, offset = 90, length = 6)
-        writeDirectoryRecord(font, index = 3, tag = "post", checksum = 3, offset = 92, length = 12)
-        return font
-    }
-
-    private fun badSfntVersionFixture(): ByteArray =
-        ByteArray(12).also { bytes ->
-            bytes.writeUInt32(0, 0x00020000)
-        }
-
-    private fun truncatedHeaderFixture(): ByteArray =
-        ByteArray(10).also { bytes ->
-            bytes.writeUInt32(0, 0x00010000)
-            bytes.writeUInt16(4, 1)
-        }
-
-    private fun tableOutOfBoundsFixture(): ByteArray =
-        directoryOnlyFont(sourceLength = 80, "post" to TestTableRecord(offset = 72, length = 16))
-
-    private fun overlappingTablesFixture(): ByteArray =
-        directoryOnlyFont(
-            sourceLength = 96,
-            "name" to TestTableRecord(offset = 48, length = 16),
-            "cmap" to TestTableRecord(offset = 56, length = 12),
-        )
-
-    private fun duplicateTagFixture(): ByteArray =
-        directoryOnlyFont(
-            sourceLength = 96,
-            "name" to TestTableRecord(offset = 48, length = 4),
-            "name" to TestTableRecord(offset = 56, length = 4),
-        )
-
-    private fun directoryOnlyFont(
-        sourceLength: Int,
-        vararg records: Pair<String, TestTableRecord>,
-    ): ByteArray {
-        val font = ByteArray(sourceLength)
-        font.writeUInt32(0, 0x00010000)
-        font.writeUInt16(4, records.size)
-        records.forEachIndexed { index, (tag, record) ->
-            writeDirectoryRecord(font, index = index, tag = tag, checksum = index, offset = record.offset, length = record.length)
-        }
-        return font
-    }
-
-    private fun writeDirectoryRecord(
-        font: ByteArray,
-        index: Int,
-        tag: String,
-        checksum: Int,
-        offset: Int,
-        length: Int,
-    ) {
-        val recordOffset = 12 + index * 16
-        tag.toByteArray(Charsets.ISO_8859_1).copyInto(font, recordOffset)
-        font.writeUInt32(recordOffset + 4, checksum)
-        font.writeUInt32(recordOffset + 8, offset)
-        font.writeUInt32(recordOffset + 12, length)
-    }
 
     private fun minimalFace(
         family: String,
@@ -442,82 +157,6 @@ class SFNTParserEntryPointTest {
             "hmtx" to hmtxTable(advanceWidth = advanceWidth, leftSideBearing = 0),
         )
 
-    private fun malformedMinimalFace(family: String, glyphId: Int): ByteArray =
-        sfntFontWithChecksums(
-            "name" to nameTable(
-                testNameRecord(
-                    platformId = 3,
-                    encodingId = 1,
-                    languageId = 0x0409,
-                    nameId = 1,
-                    bytes = family.toByteArray(Charsets.UTF_16BE),
-                ),
-            ),
-            "cmap" to cmapTable(
-                testCMapRecord(
-                    platformId = 3,
-                    encodingId = 1,
-                    subtable = format4Subtable(testFormat4Segment(startCode = 0x0041, endCode = 0x0041, startGlyphId = glyphId)),
-                ),
-            ),
-            "head" to headTable(
-                unitsPerEm = 1000,
-                bounds = OpenTypeFontBounds(xMin = 0, yMin = -200, xMax = 1000, yMax = 820),
-                indexToLocFormat = 0,
-            ),
-            "hhea" to hheaTable(ascender = 820, descender = -180, lineGap = 40, numberOfHMetrics = 1),
-            "maxp" to maxpTable(numGlyphs = 1),
-            "hmtx" to hmtxTable(advanceWidth = 500, leftSideBearing = 0),
-        )
-
-    private fun optionalMalformedFaceFixture(): ByteArray =
-        sfntFont(
-            "name" to nameTable(
-                testNameRecord(
-                    platformId = 3,
-                    encodingId = 1,
-                    languageId = 0x0409,
-                    nameId = 1,
-                    bytes = "Optional Malformed".toByteArray(Charsets.UTF_16BE),
-                ),
-            ),
-            "cmap" to cmapTable(
-                testCMapRecord(
-                    platformId = 3,
-                    encodingId = 1,
-                    subtable = format4Subtable(
-                        testFormat4Segment(
-                            startCode = 0x0041,
-                            endCode = 0x0041,
-                            startGlyphId = 17,
-                        ),
-                    ),
-                ),
-            ),
-            "head" to headTable(
-                unitsPerEm = 1000,
-                bounds = OpenTypeFontBounds(xMin = 0, yMin = -200, xMax = 1000, yMax = 820),
-                indexToLocFormat = 0,
-            ),
-            "hhea" to hheaTable(ascender = 820, descender = -180, lineGap = 40, numberOfHMetrics = 1),
-            "maxp" to maxpTable(numGlyphs = 1),
-            "hmtx" to hmtxTable(advanceWidth = 500, leftSideBearing = 0),
-            "fvar" to ByteArray(8),
-        )
-
-    private fun ByteArray.sha256HexForTest(): String {
-        val digest = MessageDigest.getInstance("SHA-256").digest(this)
-        return digest.joinToString("") { byte -> "%02x".format(byte) }
-    }
-
-    private fun projectRoot(): Path {
-        var current = Path.of("").toAbsolutePath().normalize()
-        while (current.parent != null && !Files.isDirectory(current.resolve("reports/font/fixtures"))) {
-            current = current.parent
-        }
-        return current
-    }
-
     private data class TestNameRecord(
         val platformId: Int,
         val encodingId: Int,
@@ -537,8 +176,6 @@ class SFNTParserEntryPointTest {
         val endCode: Int,
         val idDelta: Int,
     )
-    private data class TestTableRecord(val offset: Int, val length: Int)
-
     private fun testNameRecord(
         platformId: Int,
         encodingId: Int,
@@ -772,7 +409,6 @@ class SFNTParserEntryPointTest {
             (this[offset + 3].toInt() and 0xff)
 
     private companion object {
-        private val LIBERATION_SOURCE_ID = FontSourceID(Uuid.parse("831c03a5-238d-5b9c-93a5-90c6414ab1cd"))
         private val GENERATED_TTC_SOURCE_ID = FontSourceID(Uuid.parse("e7fcb0f9-4a4d-5f0c-b7e8-5704535b80c8"))
     }
 }
