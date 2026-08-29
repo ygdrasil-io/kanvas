@@ -16,6 +16,7 @@ class SurfaceSrgbClipPathRadialStrokeCpuOracle(
     private val radius: Double,
     private val startColor: IntArray,
     private val endColor: IntArray,
+    private val shaderTranslation: Point = Point(0.0, 0.0),
 ) : CpuOracle {
     data class Point(val x: Double, val y: Double)
 
@@ -39,6 +40,9 @@ class SurfaceSrgbClipPathRadialStrokeCpuOracle(
             "stroke segment must be finite and non-degenerate"
         }
         require(radius.isFinite() && radius > 0.0) { "radius must be finite and positive" }
+        require(shaderTranslation.x.isFinite() && shaderTranslation.y.isFinite()) {
+            "shader translation must be finite"
+        }
     }
 
     override fun render(width: Int, height: Int): ByteArray {
@@ -51,7 +55,12 @@ class SurfaceSrgbClipPathRadialStrokeCpuOracle(
             val px = x + 0.5
             val py = y + 0.5
             val color = if (contains(px, py) && coversStroke(px, py, halfWidthSquared)) {
-                val t = (hypot(px - center.x, py - center.y) / radius).coerceIn(0.0, 1.0)
+                val t = (
+                    hypot(
+                        px + shaderTranslation.x - center.x,
+                        py + shaderTranslation.y - center.y,
+                    ) / radius
+                ).coerceIn(0.0, 1.0)
                 SurfaceSrgbOracleMath.storeSrgb(
                     SurfaceSrgbOracleMath.LinearPremul(
                         start.red + (end.red - start.red) * t,

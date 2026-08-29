@@ -31,6 +31,16 @@ class GpuEvidenceCatalogOracleTest {
     }
 
     @Test
+    fun `local radial matrix stroke oracle rebases shader sampling without changing coverage`() {
+        val pixels = oracle("clip-path-local-radial-matrix-stroke")
+
+        assertPixel(pixels, 64, 64, 7, 7, intArrayOf(141, 0, 223, 255))
+        assertPixel(pixels, 64, 64, 15, 15, intArrayOf(245, 0, 85, 255))
+        assertPixel(pixels, 64, 64, 18, 16, intArrayOf(227, 0, 133, 255))
+        assertPixel(pixels, 64, 64, 20, 20, intArrayOf(13, 20, 33, 255))
+    }
+
+    @Test
     fun `bounded bitmap oracle preserves literal nearest texels at its integer destination`() {
         val pixels = oracle("bounded-rgba8-nearest-bitmap")
 
