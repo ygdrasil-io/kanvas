@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.evidence.performance
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceAdapter
 import org.graphiks.kanvas.gpu.evidence.catalog.EvidenceCase
@@ -75,16 +76,11 @@ class PerformanceRunnerTest {
 
     @Test fun `non Surface render program is rejected before measurement`() {
         val catalogCase = GpuEvidenceCatalog.renderCases.first()
-        val evidenceCase = catalogCase.copy(program = SceneProgram {
-            ScenePreparation.Refused("test", "unused", emptyList())
-        })
-        val backend = SurfaceTelemetryProbe()
-
-        val run = GpuEvidencePerformanceRunner(backend, "a".repeat(40)).run(evidenceCase)
-
-        val unavailable = assertIs<PerformanceVerdict.Unavailable>(run.verdict)
-        assertEquals("performance requires a Kanvas Surface program", unavailable.reason)
-        assertEquals(0L, backend.submissions)
+        assertFailsWith<IllegalArgumentException> {
+            catalogCase.copy(program = SceneProgram {
+                ScenePreparation.Refused("test", "unused", emptyList())
+            })
+        }
     }
 
     @Test fun `zero Surface runtime submissions fail measurement deterministically`() {

@@ -24,7 +24,8 @@ enum class MetricSource { Observed, Derived, Unavailable }
 
 internal val PERFORMANCE_COUNTER_KEYS = setOf(
     "submissions", "commandBuffers", "renderPasses", "buffersCreated", "texturesCreated",
-    "queueWrites", "uniformSlabsCreated", "bindGroupsCreated", "cache.execution",
+    "intermediateTexturesCreated", "destinationReadbackSnapshots", "queueWrites",
+    "uniformSlabsCreated", "uniformSlabBytesAllocated", "bindGroupsCreated", "samplersCreated", "cache.execution",
 )
 
 data class FrameTimingSummary(
@@ -151,8 +152,12 @@ internal fun GPUBackendRuntimeTelemetry.toPerformanceCounters(): Map<String, Lon
     "renderPasses" to renderPasses,
     "buffersCreated" to buffersCreated,
     "texturesCreated" to texturesCreated,
+    "intermediateTexturesCreated" to intermediateTexturesCreated,
+    "destinationReadbackSnapshots" to destinationReadbackSnapshots,
     "queueWrites" to queueWrites,
     "uniformSlabsCreated" to uniformSlabsCreated,
+    "uniformSlabBytesAllocated" to uniformSlabBytesAllocated,
     "bindGroupsCreated" to bindGroupsCreated,
+    "samplersCreated" to samplersCreated,
     "cache.execution" to passBatchPlans,
 )
