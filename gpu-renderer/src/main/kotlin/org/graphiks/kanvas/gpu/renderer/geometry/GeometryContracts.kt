@@ -1803,12 +1803,15 @@ private fun GPUPathDescriptor.strokeAndFillRefusalCode(
         else -> null
     }
 
-internal fun GPUStrokeDescriptor.refusalCode(maxEdges: Int): String? =
+internal fun GPUStrokeDescriptor.refusalCode(
+    maxEdges: Int,
+    allowPixelExactRoundCap: Boolean = false,
+): String? =
     when {
         !finiteWidth || !width.isFinite() || width <= 0f -> "unsupported.stroke.width_invalid"
         width < 0.5f || width > 64f -> "unsupported.stroke.width_budget"
         hairline -> "unsupported.stroke.hairline_policy"
-        cap !in setOf("Butt", "Round", "Square") -> "unsupported.stroke.cap"
+        cap != "Butt" && !(allowPixelExactRoundCap && cap == "Round") -> "unsupported.stroke.cap"
         join != "Miter" -> "unsupported.stroke.join"
         !miter.isFinite() || miter < 1f -> "unsupported.stroke.miter_limit"
         dashOrPathEffectRef != null -> {
@@ -1823,7 +1826,7 @@ internal fun GPUStrokeDescriptor.refusalCode(maxEdges: Int): String? =
             } else "unsupported.stroke.path_effect_unregistered"
         }
         transformClass == "nonuniform" -> "unsupported.stroke.nonuniform_transform"
-        transformClass !in setOf("identity", "translate") -> "unsupported.geometry.perspective_path"
+        transformClass !in setOf("identity", "translate", "right-angle-rotation") -> "unsupported.geometry.perspective_path"
         edgeCount < 0 || edgeCount > maxEdges -> "unsupported.stroke.expansion_budget_exceeded"
         else -> null
     }
@@ -1930,7 +1933,7 @@ private fun GPUPathDescriptor.stencilCoverPathRefusalCode(maxEdges: Int): String
         verbCount <= 0 || pointCount <= 0 -> "unsupported.geometry.descriptor_invalid"
         fillRule !in setOf("NonZero", "EvenOdd", "InverseWinding", "InverseEvenOdd") -> "unsupported.geometry.path_fill_rule"
         transformClass == "perspective" -> "unsupported.geometry.perspective_path"
-        transformClass !in setOf("identity", "translate") -> "unsupported.transform.path_class"
+        transformClass !in setOf("identity", "translate", "right-angle-rotation") -> "unsupported.transform.path_class"
         edgeCount < 0 || edgeCount > maxEdges -> "unsupported.geometry.path_edge_budget_exceeded"
         finiteProof != "finite" -> "unsupported.geometry.path_nonfinite"
         volatility != "immutable" -> "unsupported.geometry.path_mutable"

@@ -15,6 +15,9 @@ class ProductFlagConfigTest {
         assertTrue(config.fillRRectEnabled)
         assertTrue(config.linearGradientEnabled)
         assertTrue(config.strokeRectLinearGradientThreeStopEnabled)
+        assertTrue(config.strokeRectLinearGradientThreeStopTranslateEnabled)
+        assertTrue(config.strokeRectLinearGradientUniformScaleEnabled)
+        assertTrue(config.strokeRectLinearGradientTranslateEnabled)
         assertTrue(config.scissorEnabled)
         assertTrue(config.radialGradientEnabled)
         assertTrue(config.sweepGradientEnabled)
@@ -34,10 +37,12 @@ class ProductFlagConfigTest {
                 GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_NATIVE,
             ),
         )
+        assertTrue(factsByName.containsKey(GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_TRANSLATE_NATIVE))
         assertTrue(factsByName.containsKey(GPUFirstSliceCapabilityName.SCISSOR_NATIVE))
         assertTrue(factsByName.containsKey("first_slice.radial_gradient.native"))
         assertTrue(factsByName.containsKey("first_slice.sweep_gradient.native"))
         assertTrue(factsByName.containsKey(GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE))
+        assertTrue(factsByName.containsKey(GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_THREE_STOP_NATIVE))
         assertTrue(factsByName.containsKey("first_slice.path_fill.native"))
         assertEquals(
             "product-flag:scissor",
@@ -108,6 +113,53 @@ class ProductFlagConfigTest {
     }
 
     @Test
+    fun `translated two stop linear stroke capability has an independent disable property`() {
+        val config = GPUProductFlagConfig.fromSystemProperties { key ->
+            if (key == GPUProductFlagConfig.StrokeRectLinearGradientTranslateDisableProperty) "true" else null
+        }
+
+        assertTrue(config.linearGradientEnabled)
+        assertFalse(config.strokeRectLinearGradientTranslateEnabled)
+        assertFalse(config.buildCapabilities().facts.any {
+            it.name == GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_TRANSLATE_NATIVE
+        })
+    }
+
+    @Test
+    fun `translated three stop linear stroke capability has an independent disable property`() {
+        val config = GPUProductFlagConfig.fromSystemProperties { key ->
+            if (key == GPUProductFlagConfig.StrokeRectLinearGradientThreeStopTranslateDisableProperty) "true" else null
+        }
+        assertTrue(config.strokeRectLinearGradientThreeStopEnabled)
+        assertFalse(config.strokeRectLinearGradientThreeStopTranslateEnabled)
+        assertFalse(config.buildCapabilities().facts.any {
+            it.name == GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_TRANSLATE_NATIVE
+        })
+    }
+
+    @Test
+    fun `uniform scale linear stroke capability has an independent disable property`() {
+        val config = GPUProductFlagConfig.fromSystemProperties { key ->
+            if (key == GPUProductFlagConfig.StrokeRectLinearGradientUniformScaleDisableProperty) "true" else null
+        }
+        assertFalse(config.strokeRectLinearGradientUniformScaleEnabled)
+        assertFalse(config.buildCapabilities().facts.any {
+            it.name == GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_UNIFORM_SCALE_NATIVE
+        })
+    }
+
+    @Test
+    fun `uniform scale three stop linear stroke capability has an independent disable property`() {
+        val config = GPUProductFlagConfig.fromSystemProperties { key ->
+            if (key == GPUProductFlagConfig.StrokeRectLinearGradientThreeStopUniformScaleDisableProperty) "true" else null
+        }
+        assertFalse(config.strokeRectLinearGradientThreeStopUniformScaleEnabled)
+        assertFalse(config.buildCapabilities().facts.any {
+            it.name == GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_UNIFORM_SCALE_NATIVE
+        })
+    }
+
+    @Test
     fun `two stop radial stroke capability has an independent disable property`() {
         val config = GPUProductFlagConfig.fromSystemProperties { key ->
             if (key == GPUProductFlagConfig.StrokeRectRadialGradientTwoStopDisableProperty) "true" else null
@@ -116,6 +168,28 @@ class ProductFlagConfigTest {
         assertFalse(config.strokeRectRadialGradientTwoStopEnabled)
         assertFalse(config.buildCapabilities().facts.any {
             it.name == GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_NATIVE
+        })
+    }
+
+    @Test
+    fun `uniform scale two stop radial stroke capability has an independent disable property`() {
+        val config = GPUProductFlagConfig.fromSystemProperties { key ->
+            if (key == GPUProductFlagConfig.StrokeRectRadialGradientTwoStopUniformScaleDisableProperty) "true" else null
+        }
+        assertFalse(config.strokeRectRadialGradientTwoStopUniformScaleEnabled)
+        assertFalse(config.buildCapabilities().facts.any {
+            it.name == GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE
+        })
+    }
+
+    @Test
+    fun `uniform scale two stop sweep stroke capability has an independent disable property`() {
+        val config = GPUProductFlagConfig.fromSystemProperties { key ->
+            if (key == GPUProductFlagConfig.StrokeRectSweepGradientTwoStopUniformScaleDisableProperty) "true" else null
+        }
+        assertFalse(config.strokeRectSweepGradientTwoStopUniformScaleEnabled)
+        assertFalse(config.buildCapabilities().facts.any {
+            it.name == GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE
         })
     }
 
@@ -131,6 +205,17 @@ class ProductFlagConfigTest {
     }
 
     @Test
+    fun `uniform scale three stop radial stroke capability has an independent disable property`() {
+        val config = GPUProductFlagConfig.fromSystemProperties { key ->
+            if (key == GPUProductFlagConfig.StrokeRectRadialGradientThreeStopUniformScaleDisableProperty) "true" else null
+        }
+        assertFalse(config.strokeRectRadialGradientThreeStopUniformScaleEnabled)
+        assertFalse(config.buildCapabilities().facts.any {
+            it.name == GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_UNIFORM_SCALE_NATIVE
+        })
+    }
+
+    @Test
     fun `two stop sweep stroke capability has an independent disable property`() {
         val config = GPUProductFlagConfig.fromSystemProperties { key ->
             if (key == GPUProductFlagConfig.StrokeRectSweepGradientTwoStopDisableProperty) "true" else null
@@ -140,6 +225,30 @@ class ProductFlagConfigTest {
         assertTrue(config.buildCapabilities().facts.any { it.name == "first_slice.sweep_gradient.native" })
         assertFalse(config.buildCapabilities().facts.any {
             it.name == GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE
+        })
+    }
+
+    @Test
+    fun `three stop sweep stroke capability has an independent disable property`() {
+        val config = GPUProductFlagConfig.fromSystemProperties { key ->
+            if (key == GPUProductFlagConfig.StrokeRectSweepGradientThreeStopDisableProperty) "true" else null
+        }
+        assertFalse(config.strokeRectSweepGradientThreeStopEnabled)
+        assertTrue(config.sweepGradientEnabled)
+        assertTrue(config.buildCapabilities().facts.any { it.name == "first_slice.sweep_gradient.native" })
+        assertFalse(config.buildCapabilities().facts.any {
+            it.name == GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_THREE_STOP_NATIVE
+        })
+    }
+
+    @Test
+    fun `uniform scale three stop sweep stroke capability has an independent disable property`() {
+        val config = GPUProductFlagConfig.fromSystemProperties { key ->
+            if (key == GPUProductFlagConfig.StrokeRectSweepGradientThreeStopUniformScaleDisableProperty) "true" else null
+        }
+        assertFalse(config.strokeRectSweepGradientThreeStopUniformScaleEnabled)
+        assertFalse(config.buildCapabilities().facts.any {
+            it.name == GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_THREE_STOP_UNIFORM_SCALE_NATIVE
         })
     }
 

@@ -1104,11 +1104,20 @@ class GPUBackendRuntimeNativeSmokeTest {
                     "first_slice.mask_blur.native",
                     "first_slice.linear_gradient.native",
                     GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_NATIVE,
+                    GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_TRANSLATE_NATIVE,
+                    GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_UNIFORM_SCALE_NATIVE,
+                    GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_UNIFORM_SCALE_NATIVE,
+                    GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_TRANSLATE_NATIVE,
                     "first_slice.radial_gradient.native",
                     GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_NATIVE,
+                    GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE,
                     GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_NATIVE,
+                    GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_UNIFORM_SCALE_NATIVE,
                     "first_slice.sweep_gradient.native",
                     GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE,
+                    GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE,
+                    GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_THREE_STOP_NATIVE,
+                    GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_THREE_STOP_UNIFORM_SCALE_NATIVE,
                 ),
                 nativeRouteFacts.keys,
             )
@@ -1129,14 +1138,30 @@ class GPUBackendRuntimeNativeSmokeTest {
                 "first_slice.linear_gradient.native" to "core-primitive-gradient-linear-native",
                 GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_NATIVE to
                     "core-primitive-gradient-linear-stroke-3stop-native",
+                GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_TRANSLATE_NATIVE to
+                    "core-primitive-gradient-linear-stroke-3stop-translate-native",
+                GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_UNIFORM_SCALE_NATIVE to
+                    "core-primitive-gradient-linear-stroke-uniform-scale-native",
+                GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_TRANSLATE_NATIVE to
+                    "core-primitive-gradient-linear-stroke-translate-native",
                 "first_slice.radial_gradient.native" to "core-primitive-gradient-radial-native",
                 GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_NATIVE to
                     "core-primitive-gradient-radial-stroke-2stop-native",
+                GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE to
+                    "core-primitive-gradient-radial-stroke-2stop-uniform-scale-native",
                 GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_NATIVE to
                     "core-primitive-gradient-radial-stroke-3stop-native",
+                GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_UNIFORM_SCALE_NATIVE to
+                    "core-primitive-gradient-radial-stroke-3stop-uniform-scale-native",
                 "first_slice.sweep_gradient.native" to "core-primitive-gradient-sweep-native",
                 GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE to
                     "core-primitive-gradient-sweep-stroke-2stop-native",
+                GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE to
+                    "core-primitive-gradient-sweep-stroke-2stop-uniform-scale-native",
+                GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_THREE_STOP_UNIFORM_SCALE_NATIVE to
+                    "core-primitive-gradient-sweep-stroke-3stop-uniform-scale-native",
+                GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_THREE_STOP_NATIVE to
+                    "core-primitive-gradient-sweep-stroke-3stop-native",
             )
             expectedNativeEvidence.forEach { (name, evidenceLabel) ->
                 val fact = nativeRouteFacts.getValue(name)

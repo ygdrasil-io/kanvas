@@ -2434,8 +2434,24 @@ private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
         }
         val stroke = strokeStyle?.copy(dashIntervals = dashIntervalsSnapshot(strokeStyle.dashIntervals))
         when (geometryMode) {
-            GPUCorePrimitiveGeometryMode.DirectTriangles -> require(stroke == null) {
-                "Direct core triangles cannot retain stroke lowering facts"
+            GPUCorePrimitiveGeometryMode.DirectTriangles -> if (stroke != null) {
+                require(
+                    vertices.size == 8 &&
+                        indices == listOf(0, 1, 2, 0, 2, 3) &&
+                        sourceContourStarts == listOf(0) &&
+                        sourceVertexCount == 2 &&
+                        fillRule == GPUCorePrimitiveFillRule.Winding &&
+                        !inverseFill &&
+                        stroke.join == "miter" &&
+                        stroke.dashIntervals.isEmpty() &&
+                        when (stroke.cap) {
+                            "butt" -> stroke.loweringProof == GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1
+                            "square" -> stroke.loweringProof == GPUCorePrimitiveStrokeLoweringProof.SingleSegmentSquareV1
+                            else -> false
+                        },
+                ) {
+                    "Direct stroke triangles require the exact single-segment butt/square miter lowering proof"
+                }
             }
             GPUCorePrimitiveGeometryMode.StencilEdgeFan -> {
                 require(stroke == null) {

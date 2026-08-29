@@ -9,10 +9,18 @@ import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbBitmapNearestCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbSaveLayerSrcOverOpacityCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbGradientCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbLinearGradientStrokeBandsCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbTranslatedTwoStopLinearGradientStrokeCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbTwoStopRadialGradientStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbThreeStopRadialGradientStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbTwoStopSweepGradientStrokeCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbUniformScaledTwoStopSweepGradientStrokeCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbUniformScaledThreeStopSweepGradientStrokeCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbUniformScaledTwoStopRadialGradientStrokeCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbUniformScaledThreeStopRadialGradientStrokeCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbThreeStopSweepGradientStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRoundCapStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipRRectCpuOracle
@@ -58,9 +66,18 @@ object GpuEvidenceCatalog {
         repeatGradientRendered(),
         gradientStrokeRefusal(),
         linearGradientThreeStopStrokeRect(),
+        linearGradientTwoStopTranslatedStrokeRect(),
+        linearGradientThreeStopTranslatedStrokeRect(),
+        linearGradientTwoStopUniformScaledStrokeRect(),
+        linearGradientThreeStopUniformScaledStrokeRect(),
         radialGradientTwoStopStrokeRect(),
+        radialGradientTwoStopUniformScaledStrokeRect(),
         radialGradientThreeStopStrokeRect(),
-        sweepGradientTwoStopStrokeRect(),
+        radialGradientThreeStopUniformScaledStrokeRect(),
+sweepGradientTwoStopStrokeRect(),
+        sweepGradientTwoStopUniformScaledStrokeRect(),
+        sweepGradientThreeStopStrokeRect(),
+        sweepGradientThreeStopUniformScaledStrokeRect(),
         scaledSolidRRect(),
         solidDRRectHole(),
         asymmetricSolidRRect(),
@@ -817,6 +834,107 @@ object GpuEvidenceCatalog {
         ),
     )
 
+    private fun linearGradientTwoStopTranslatedStrokeRect() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("linear-gradient-two-stop-translated-stroke-rect"), "Translated linear gradient two-stop stroke rectangle",
+            "Public Kanvas Surface translates a bounded non-AA CLAMP two-stop LinearGradient rectangle stroke by integral device pixels.",
+            64, 64, 1L, setOf("stroke-rect", "linear-gradient", "two-stops", "translation", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-gradient-linear-clamp-two-stop-translated-stroke-bands", 1),
+            ComparisonPolicy(1, 100.0, 1, "Independent four-band device coverage and separately translated two-stop sRGB linear-gradient axis."), emptySet(),
+        ),
+        KanvasScenePrograms.linearGradientTwoStopTranslatedStrokeRect(),
+        SurfaceSrgbTranslatedTwoStopLinearGradientStrokeCpuOracle(
+            listOf(
+                SurfaceSrgbTranslatedTwoStopLinearGradientStrokeCpuOracle.Rect(8, 17, 60, 21),
+                SurfaceSrgbTranslatedTwoStopLinearGradientStrokeCpuOracle.Rect(8, 49, 60, 53),
+                SurfaceSrgbTranslatedTwoStopLinearGradientStrokeCpuOracle.Rect(8, 21, 12, 49),
+                SurfaceSrgbTranslatedTwoStopLinearGradientStrokeCpuOracle.Rect(56, 21, 60, 49),
+            ),
+            SurfaceSrgbTranslatedTwoStopLinearGradientStrokeCpuOracle.Point(8.5, 32.5),
+            SurfaceSrgbTranslatedTwoStopLinearGradientStrokeCpuOracle.Point(55.5, 32.5),
+            SurfaceSrgbTranslatedTwoStopLinearGradientStrokeCpuOracle.Vector(2.0, 3.0),
+            SurfaceSrgbTranslatedTwoStopLinearGradientStrokeCpuOracle.Stop(255, 56, 56),
+            SurfaceSrgbTranslatedTwoStopLinearGradientStrokeCpuOracle.Stop(56, 112, 255),
+        ),
+    )
+
+    private fun linearGradientThreeStopTranslatedStrokeRect() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("linear-gradient-three-stop-translated-stroke-rect"), "Translated linear gradient three-stop stroke rectangle",
+            "Public Kanvas Surface renders a bounded non-AA CLAMP three-stop LinearGradient stroke under integral translation.",
+            64, 64, 1L, setOf("stroke-rect", "linear-gradient", "three-stops", "translation", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-gradient-linear-clamp-three-stop-translated-stroke-bands", 1),
+            ComparisonPolicy(1, 100.0, 1, "Independent four translated device bands with pixel-center three-stop sRGB interpolation."), emptySet(),
+        ),
+        KanvasScenePrograms.linearGradientThreeStopTranslatedStrokeRect(),
+        SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle(
+            listOf(
+                SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle.Rect(8, 17, 60, 21),
+                SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle.Rect(8, 49, 60, 53),
+                SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle.Rect(8, 21, 12, 49),
+                SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle.Rect(56, 21, 60, 49),
+            ),
+            SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle.Point(10.5, 35.5),
+            SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle.Point(57.5, 35.5),
+            listOf(
+                SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle.Stop(0.0, 255, 56, 56),
+                SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle.Stop(.5, 56, 220, 120),
+                SurfaceSrgbThreeStopLinearGradientStrokeCpuOracle.Stop(1.0, 56, 112, 255),
+            ),
+        ),
+    )
+
+    private fun linearGradientTwoStopUniformScaledStrokeRect() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("linear-gradient-two-stop-uniform-scaled-stroke-rect"), "Uniform-scaled linear gradient two-stop stroke rectangle",
+            "Public Kanvas Surface renders a bounded non-AA CLAMP two-stop LinearGradient rectangle stroke under positive integral uniform scale and translation.",
+            64, 64, 1L, setOf("stroke-rect", "linear-gradient", "two-stops", "uniform-scale", "translation", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-gradient-linear-clamp-two-stop-uniform-scaled-stroke-bands", 1),
+            ComparisonPolicy(1, 100.0, 1, "Independent scaled four-band device coverage with uniformly scaled and translated two-stop sRGB linear-gradient axis."), emptySet(),
+        ),
+        KanvasScenePrograms.linearGradientTwoStopUniformScaledStrokeRect(),
+        SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle(
+            listOf(
+                SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle.Rect(16, 18, 60, 22),
+                SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle.Rect(16, 50, 60, 54),
+                SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle.Rect(16, 22, 20, 50),
+                SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle.Rect(56, 22, 60, 50),
+            ),
+            SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle.Point(8.0, 16.0),
+            SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle.Point(28.0, 16.0),
+            2,
+            SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle.Point(2.0, 4.0),
+            SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle.Stop(255, 56, 56),
+            SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle.Stop(56, 112, 255),
+        ),
+    )
+
+    private fun linearGradientThreeStopUniformScaledStrokeRect() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("linear-gradient-three-stop-uniform-scaled-stroke-rect"), "Uniform-scaled linear gradient three-stop stroke rectangle",
+            "Public Kanvas Surface renders a bounded non-AA CLAMP three-stop LinearGradient rectangle stroke under positive integral uniform scale and translation.",
+            64, 64, 1L, setOf("stroke-rect", "linear-gradient", "three-stops", "uniform-scale", "translation", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-gradient-linear-clamp-three-stop-uniform-scaled-stroke-bands", 1),
+            ComparisonPolicy(1, 100.0, 1, "Independent scaled four-band device coverage with uniformly scaled and translated three-stop sRGB linear-gradient axis."), emptySet(),
+        ),
+        KanvasScenePrograms.linearGradientThreeStopUniformScaledStrokeRect(),
+        SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle(
+            listOf(
+                SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle.Rect(16, 18, 60, 22),
+                SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle.Rect(16, 50, 60, 54),
+                SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle.Rect(16, 22, 20, 50),
+                SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle.Rect(56, 22, 60, 50),
+            ),
+            SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle.Point(8.0, 16.0),
+            SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle.Point(28.0, 16.0),
+            2,
+            SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle.Point(2.0, 4.0),
+            SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle.Stop(255, 56, 56),
+            SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle.Stop(56, 220, 120),
+            SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle.Stop(56, 112, 255),
+        ),
+    )
+
     private fun radialGradientTwoStopStrokeRect() = EvidenceCase(
         EvidenceSceneDescriptor(
             EvidenceSceneId("radial-gradient-two-stop-stroke-rect"), "Radial gradient two-stop stroke rectangle",
@@ -881,6 +999,125 @@ object GpuEvidenceCatalog {
             ),
             SurfaceSrgbTwoStopSweepGradientStrokeCpuOracle.Point(32.5, 32.5),
             intArrayOf(255, 56, 56, 255), intArrayOf(56, 112, 255, 255),
+        ),
+    )
+
+    private fun sweepGradientTwoStopUniformScaledStrokeRect() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("sweep-gradient-two-stop-uniform-scaled-stroke-rect"), "Uniform-scaled sweep gradient two-stop stroke rectangle",
+            "Public Kanvas Surface renders a bounded non-AA full sweep CLAMP two-stop rectangle stroke under integral uniform scale and translation.",
+            64, 64, 1L, setOf("stroke-rect", "sweep-gradient", "two-stops", "uniform-scale", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-gradient-sweep-clamp-two-stop-uniform-scaled-stroke-bands", 1),
+            ComparisonPolicy(1, 100.0, 1, "Independent device-center sweep-angle interpolation and scaled four-band coverage."), emptySet(),
+        ),
+        KanvasScenePrograms.sweepGradientTwoStopUniformScaledStrokeRect(),
+        SurfaceSrgbUniformScaledTwoStopSweepGradientStrokeCpuOracle(
+            listOf(
+                SurfaceSrgbUniformScaledTwoStopSweepGradientStrokeCpuOracle.Rect(16, 18, 60, 22),
+                SurfaceSrgbUniformScaledTwoStopSweepGradientStrokeCpuOracle.Rect(16, 50, 60, 54),
+                SurfaceSrgbUniformScaledTwoStopSweepGradientStrokeCpuOracle.Rect(16, 22, 20, 50),
+                SurfaceSrgbUniformScaledTwoStopSweepGradientStrokeCpuOracle.Rect(56, 22, 60, 50),
+            ),
+            SurfaceSrgbUniformScaledTwoStopSweepGradientStrokeCpuOracle.Point(38.0, 32.0),
+            intArrayOf(255, 56, 56, 255), intArrayOf(56, 112, 255, 255),
+        ),
+    )
+
+    private fun radialGradientTwoStopUniformScaledStrokeRect() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("radial-gradient-two-stop-uniform-scaled-stroke-rect"), "Uniform-scaled radial gradient two-stop stroke rectangle",
+            "Public Kanvas Surface renders a bounded non-AA CLAMP two-stop radial rectangle stroke under positive integral uniform scale and translation.",
+            64, 64, 1L, setOf("stroke-rect", "radial-gradient", "two-stops", "uniform-scale", "translation", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-gradient-radial-clamp-two-stop-uniform-scaled-stroke-bands", 1),
+            ComparisonPolicy(1, 100.0, 1, "Independent scaled four-band device coverage with uniformly scaled and translated two-stop sRGB radial center and radius."), emptySet(),
+        ),
+        KanvasScenePrograms.radialGradientTwoStopUniformScaledStrokeRect(),
+        SurfaceSrgbUniformScaledTwoStopRadialGradientStrokeCpuOracle(
+            listOf(
+                SurfaceSrgbUniformScaledTwoStopRadialGradientStrokeCpuOracle.Rect(16, 18, 60, 22),
+                SurfaceSrgbUniformScaledTwoStopRadialGradientStrokeCpuOracle.Rect(16, 50, 60, 54),
+                SurfaceSrgbUniformScaledTwoStopRadialGradientStrokeCpuOracle.Rect(16, 22, 20, 50),
+                SurfaceSrgbUniformScaledTwoStopRadialGradientStrokeCpuOracle.Rect(56, 22, 60, 50),
+            ),
+            SurfaceSrgbUniformScaledTwoStopRadialGradientStrokeCpuOracle.Point(38.0, 32.0),
+            16.0,
+            intArrayOf(255, 56, 56, 255), intArrayOf(56, 112, 255, 255),
+        ),
+    )
+
+    private fun radialGradientThreeStopUniformScaledStrokeRect() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("radial-gradient-three-stop-uniform-scaled-stroke-rect"), "Uniform-scaled radial gradient three-stop stroke rectangle",
+            "Public Kanvas Surface renders a bounded non-AA CLAMP three-stop radial rectangle stroke under positive integral uniform scale and translation.",
+            64, 64, 1L, setOf("stroke-rect", "radial-gradient", "three-stops", "uniform-scale", "translation", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-gradient-radial-clamp-three-stop-uniform-scaled-stroke-bands", 1),
+            ComparisonPolicy(1, 100.0, 1, "Independent scaled four-band device coverage with uniformly scaled and translated three-stop sRGB radial center and radius."), emptySet(),
+        ),
+        KanvasScenePrograms.radialGradientThreeStopUniformScaledStrokeRect(),
+        SurfaceSrgbUniformScaledThreeStopRadialGradientStrokeCpuOracle(
+            listOf(
+                SurfaceSrgbUniformScaledThreeStopRadialGradientStrokeCpuOracle.Rect(16, 18, 60, 22),
+                SurfaceSrgbUniformScaledThreeStopRadialGradientStrokeCpuOracle.Rect(16, 50, 60, 54),
+                SurfaceSrgbUniformScaledThreeStopRadialGradientStrokeCpuOracle.Rect(16, 22, 20, 50),
+                SurfaceSrgbUniformScaledThreeStopRadialGradientStrokeCpuOracle.Rect(56, 22, 60, 50),
+            ),
+            SurfaceSrgbUniformScaledThreeStopRadialGradientStrokeCpuOracle.Point(38.0, 32.0),
+            16.0,
+            listOf(
+                SurfaceSrgbUniformScaledThreeStopRadialGradientStrokeCpuOracle.Stop(0.0, 255, 56, 56),
+                SurfaceSrgbUniformScaledThreeStopRadialGradientStrokeCpuOracle.Stop(.5, 56, 220, 120),
+                SurfaceSrgbUniformScaledThreeStopRadialGradientStrokeCpuOracle.Stop(1.0, 56, 112, 255),
+            ),
+        ),
+    )
+
+    private fun sweepGradientThreeStopStrokeRect() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("sweep-gradient-three-stop-stroke-rect"), "Sweep gradient three-stop stroke rectangle",
+            "Public Kanvas Surface renders the bounded non-AA identity CLAMP three-stop sweep rectangle stroke.",
+            64, 64, 1L, setOf("stroke-rect", "sweep-gradient", "three-stops", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-gradient-sweep-clamp-three-stop-stroke-bands", 1),
+            ComparisonPolicy(1, 100.0, 1, "Independent four-band pixel-center three-stop sweep-angle interpolation and sRGB RGBA8 storage."), emptySet(),
+        ),
+        KanvasScenePrograms.sweepGradientThreeStopStrokeRect(),
+        SurfaceSrgbThreeStopSweepGradientStrokeCpuOracle(
+            listOf(
+                SurfaceSrgbThreeStopSweepGradientStrokeCpuOracle.Rect(6, 14, 58, 18),
+                SurfaceSrgbThreeStopSweepGradientStrokeCpuOracle.Rect(6, 46, 58, 50),
+                SurfaceSrgbThreeStopSweepGradientStrokeCpuOracle.Rect(6, 18, 10, 46),
+                SurfaceSrgbThreeStopSweepGradientStrokeCpuOracle.Rect(54, 18, 58, 46),
+            ),
+            SurfaceSrgbThreeStopSweepGradientStrokeCpuOracle.Point(32.5, 32.5),
+            listOf(
+                SurfaceSrgbThreeStopSweepGradientStrokeCpuOracle.Stop(0.0, 255, 56, 56),
+                SurfaceSrgbThreeStopSweepGradientStrokeCpuOracle.Stop(.5, 56, 220, 120),
+                SurfaceSrgbThreeStopSweepGradientStrokeCpuOracle.Stop(1.0, 56, 112, 255),
+            ),
+        ),
+    )
+
+    private fun sweepGradientThreeStopUniformScaledStrokeRect() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("sweep-gradient-three-stop-uniform-scaled-stroke-rect"), "Uniform-scaled sweep gradient three-stop stroke rectangle",
+            "Public Kanvas Surface renders a bounded non-AA full sweep CLAMP three-stop rectangle stroke under positive integral uniform scale and translation.",
+            64, 64, 1L, setOf("stroke-rect", "sweep-gradient", "three-stops", "uniform-scale", "translation", "kanvas-surface"), EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-gradient-sweep-clamp-three-stop-uniform-scaled-stroke-bands", 1),
+            ComparisonPolicy(1, 100.0, 1, "Independent scaled four-band device coverage with uniformly scaled and translated three-stop sRGB sweep center."), emptySet(),
+        ),
+        KanvasScenePrograms.sweepGradientThreeStopUniformScaledStrokeRect(),
+        SurfaceSrgbUniformScaledThreeStopSweepGradientStrokeCpuOracle(
+            listOf(
+                SurfaceSrgbUniformScaledThreeStopSweepGradientStrokeCpuOracle.Rect(16, 18, 60, 22),
+                SurfaceSrgbUniformScaledThreeStopSweepGradientStrokeCpuOracle.Rect(16, 50, 60, 54),
+                SurfaceSrgbUniformScaledThreeStopSweepGradientStrokeCpuOracle.Rect(16, 22, 20, 50),
+                SurfaceSrgbUniformScaledThreeStopSweepGradientStrokeCpuOracle.Rect(56, 22, 60, 50),
+            ),
+            SurfaceSrgbUniformScaledThreeStopSweepGradientStrokeCpuOracle.Point(38.0, 32.0),
+            listOf(
+                SurfaceSrgbUniformScaledThreeStopSweepGradientStrokeCpuOracle.Stop(0.0, 255, 56, 56),
+                SurfaceSrgbUniformScaledThreeStopSweepGradientStrokeCpuOracle.Stop(.5, 56, 220, 120),
+                SurfaceSrgbUniformScaledThreeStopSweepGradientStrokeCpuOracle.Stop(1.0, 56, 112, 255),
+            ),
         ),
     )
 

@@ -1,5 +1,11 @@
 package org.graphiks.kanvas.gpu.renderer.runtimeeffects
 
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import kotlin.math.atan2
+import kotlin.math.sqrt
+import kotlin.math.sin
+
 import org.graphiks.kanvas.gpu.renderer.wgsl.SpiralRTEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.SpiralRTSourceHash
 
@@ -61,5 +67,29 @@ object SpiralRTDescriptor {
         wgslPlan = wgslPlan,
         routeContract = routeContract,
         liveEditPlan = liveEditPlan,
+        kind = GPURuntimeEffectKind.Material,
+        wgslSource = org.graphiks.kanvas.gpu.renderer.wgsl.SpiralRTWgsl,
+        cpuOracle = SpiralRTCPUOracle,
     )
+}
+
+object SpiralRTCPUOracle : GPURuntimeEffectCPUOracle {
+    override fun evaluate() = GPURuntimeEffectOracleResult(
+        SpiralRTDescriptor.effectId,
+        runtimeEffectOracleEvidenceHash(SpiralRTDescriptor.effectId, SpiralRTDescriptor.descriptorVersion),
+    )
+
+    override fun evaluateMaterial(input: GPURuntimeEffectMaterialEvaluationInput): GPURuntimeEffectMaterialEvaluationResult {
+        if (input.uniformBytes.size != 64 || !input.localPositionX.isFinite() || !input.localPositionY.isFinite())
+            return GPURuntimeEffectMaterialEvaluationResult.Unsupported(GPURuntimeEffectMaterialEvaluationRefusal.PAYLOAD_SIZE)
+        val v = ByteBuffer.wrap(input.uniformBytes).order(ByteOrder.LITTLE_ENDIAN).let { b -> List(16) { b.float } }
+        if (v.any { !it.isFinite() }) return GPURuntimeEffectMaterialEvaluationResult.Unsupported(GPURuntimeEffectMaterialEvaluationRefusal.NON_FINITE_INPUT)
+        val dx = input.localPositionX - v[0]; val dy = input.localPositionY - v[1]
+        val spiral = sin(atan2(dy, dx) + sqrt(dx * dx + dy * dy) * v[12]) * .5f + .5f
+        return GPURuntimeEffectMaterialEvaluationResult.Color(
+            v[4] * (1 - spiral) + v[8] * spiral, v[5] * (1 - spiral) + v[9] * spiral,
+            v[6] * (1 - spiral) + v[10] * spiral, v[7] * (1 - spiral) + v[11] * spiral,
+            runtimeEffectOracleEvidenceHash(SpiralRTDescriptor.effectId, SpiralRTDescriptor.descriptorVersion),
+        )
+    }
 }

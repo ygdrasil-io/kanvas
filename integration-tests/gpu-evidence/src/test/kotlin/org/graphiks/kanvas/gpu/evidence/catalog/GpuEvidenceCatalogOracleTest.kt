@@ -3,8 +3,11 @@ package org.graphiks.kanvas.gpu.evidence.catalog
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle
 
 class GpuEvidenceCatalogOracleTest {
     @Test
@@ -89,6 +92,92 @@ class GpuEvidenceCatalogOracleTest {
         assertPixel(pixels, 64, 64, 30, 48, intArrayOf(223, 76, 149, 255))
         assertPixel(pixels, 64, 64, 30, 30, intArrayOf(0, 0, 0, 0))
         assertPixel(pixels, 64, 64, 5, 15, intArrayOf(0, 0, 0, 0))
+    }
+
+    @Test
+    fun `three stop sweep stroke oracle samples each gradient interval across four disjoint bands`() {
+        val pixels = oracle("sweep-gradient-three-stop-stroke-rect")
+
+        assertPixel(pixels, 64, 64, 30, 15, intArrayOf(56, 181, 198, 255))
+        assertPixel(pixels, 64, 64, 30, 48, intArrayOf(184, 170, 97, 255))
+        assertPixel(pixels, 64, 64, 55, 30, intArrayOf(56, 117, 252, 255))
+        assertPixel(pixels, 64, 64, 30, 30, intArrayOf(0, 0, 0, 0))
+        assertPixel(pixels, 64, 64, 5, 15, intArrayOf(0, 0, 0, 0))
+    }
+
+    @Test
+    fun `translated two stop linear stroke oracle rebases its axis across four device bands`() {
+        val pixels = oracle("linear-gradient-two-stop-translated-stroke-rect")
+
+        assertPixel(pixels, 64, 64, 30, 18, intArrayOf(202, 85, 179, 255))
+        assertPixel(pixels, 64, 64, 30, 51, intArrayOf(202, 85, 179, 255))
+        assertPixel(pixels, 64, 64, 31, 33, intArrayOf(0, 0, 0, 0))
+        assertPixel(pixels, 64, 64, 7, 17, intArrayOf(0, 0, 0, 0))
+    }
+
+    @Test
+    fun `translated three stop linear stroke oracle rebases its axis across four device bands`() {
+        val pixels = oracle("linear-gradient-three-stop-translated-stroke-rect")
+
+        assertPixel(pixels, 64, 64, 8, 17, intArrayOf(255, 56, 56, 255))
+        assertPixel(pixels, 64, 64, 59, 17, intArrayOf(56, 112, 255, 255))
+        assertPixel(pixels, 64, 64, 31, 33, intArrayOf(0, 0, 0, 0))
+        assertPixel(pixels, 64, 64, 7, 17, intArrayOf(0, 0, 0, 0))
+    }
+
+    @Test
+    fun `uniform scaled two stop linear stroke oracle scales coverage and rebases its axis`() {
+        val pixels = oracle("linear-gradient-two-stop-uniform-scaled-stroke-rect")
+
+        assertPixel(pixels, 64, 64, 16, 18, intArrayOf(255, 56, 56, 255))
+        assertPixel(pixels, 64, 64, 59, 18, intArrayOf(56, 112, 255, 255))
+        assertPixel(pixels, 64, 64, 30, 36, intArrayOf(0, 0, 0, 0))
+        assertPixel(pixels, 64, 64, 15, 18, intArrayOf(0, 0, 0, 0))
+    }
+
+    @Test
+    fun `uniform scaled two stop linear stroke oracle rejects a degenerate scaled axis`() {
+        assertFailsWith<IllegalArgumentException> {
+            SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle(
+                List(4) { SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle.Rect(0, 0, 1, 1) },
+                SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle.Point(8.0, 16.0),
+                SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle.Point(8.0, 16.0),
+                2,
+                SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle.Point(2.0, 4.0),
+                SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle.Stop(255, 56, 56),
+                SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle.Stop(56, 112, 255),
+            )
+        }
+    }
+
+    @Test
+    fun `uniform scaled three stop linear stroke oracle scales coverage and retains both intervals`() {
+        val pixels = oracle("linear-gradient-three-stop-uniform-scaled-stroke-rect")
+
+        assertPixel(pixels, 64, 64, 16, 18, intArrayOf(255, 56, 56, 255))
+        assertPixel(pixels, 64, 64, 59, 18, intArrayOf(56, 112, 255, 255))
+        val midpointOffset = (18 * 64 + 37) * 4
+        val midpoint = pixels.copyOfRange(midpointOffset, midpointOffset + 4).map { it.toInt() and 0xff }
+        assertNotEquals(intArrayOf(255, 56, 56, 255).toList(), midpoint)
+        assertNotEquals(intArrayOf(56, 112, 255, 255).toList(), midpoint)
+        assertPixel(pixels, 64, 64, 30, 36, intArrayOf(0, 0, 0, 0))
+        assertPixel(pixels, 64, 64, 15, 18, intArrayOf(0, 0, 0, 0))
+    }
+
+    @Test
+    fun `uniform scaled three stop linear stroke oracle rejects a degenerate scaled axis`() {
+        assertFailsWith<IllegalArgumentException> {
+            SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle(
+                List(4) { SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle.Rect(0, 0, 1, 1) },
+                SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle.Point(8.0, 16.0),
+                SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle.Point(8.0, 16.0),
+                2,
+                SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle.Point(2.0, 4.0),
+                SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle.Stop(255, 56, 56),
+                SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle.Stop(56, 220, 120),
+                SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle.Stop(56, 112, 255),
+            )
+        }
     }
 
     @Test

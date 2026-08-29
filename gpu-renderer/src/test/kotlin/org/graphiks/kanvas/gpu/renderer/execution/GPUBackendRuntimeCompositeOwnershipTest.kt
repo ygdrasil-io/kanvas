@@ -173,6 +173,7 @@ class GPUBackendRuntimeCompositeOwnershipTest {
                 subjectHash = "${domain.telemetryDomain}-subject",
                 deviceGeneration = generation,
                 expectedDeviceGeneration = generation,
+                capabilityFingerprint = "test-capabilities-v1",
                 ownerScope = "WgpuExecutionCaches",
             ),
         ) {

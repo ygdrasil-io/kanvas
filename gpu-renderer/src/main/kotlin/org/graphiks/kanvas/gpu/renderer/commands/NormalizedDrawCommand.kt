@@ -301,7 +301,8 @@ fun GPUMaterialDescriptor.gradientFactsRefusalReasonOrNull(
         }
         is GPUMaterialDescriptor.RadialGradient -> when {
             interpolation != "srgb" -> GPUPreparedMaterialUnsupportedReason.GRADIENT_INTERPOLATION
-            localMatrix != IDENTITY_GRADIENT_LOCAL_MATRIX -> GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX
+            !localMatrix.isPositiveUniformScaleTranslateGradientLocalMatrix() ->
+                GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX
             (allStopPositions?.size ?: 2) !in
                 (if (allowThreeStopRadialGradient) 1..3 else 1..2) ->
                 GPUPreparedMaterialUnsupportedReason.RADIAL_GRADIENT_STOP_COUNT
@@ -309,7 +310,8 @@ fun GPUMaterialDescriptor.gradientFactsRefusalReasonOrNull(
         }
         is GPUMaterialDescriptor.SweepGradient -> when {
             interpolation != "srgb" -> GPUPreparedMaterialUnsupportedReason.GRADIENT_INTERPOLATION
-            localMatrix != IDENTITY_GRADIENT_LOCAL_MATRIX -> GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX
+            !localMatrix.isPositiveUniformScaleTranslateGradientLocalMatrix() ->
+                GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX
             (allStopPositions?.size ?: 2) !in
                 (if (allowThreeStopSweepGradient) 1..3 else 1..2) ->
                 GPUPreparedMaterialUnsupportedReason.SWEEP_GRADIENT_STOP_COUNT
@@ -317,6 +319,23 @@ fun GPUMaterialDescriptor.gradientFactsRefusalReasonOrNull(
         }
         else -> null
     }
+
+/**
+ * Bounded affine subset whose sweep angles remain unchanged: identity or a positive uniform
+ * scale plus translation. Skew, rotation, perspective, singular matrices, and non-finite
+ * values remain outside the local-matrix contract.
+ */
+fun List<Float>.isPositiveUniformScaleTranslateGradientLocalMatrix(): Boolean {
+    if (size != 9 || any { !it.isFinite() }) return false
+    val scale = this[0]
+    return scale > 0f &&
+        this[1] == 0f &&
+        this[3] == 0f &&
+        this[4] == scale &&
+        this[6] == 0f &&
+        this[7] == 0f &&
+        this[8] == 1f
+}
 
 /** Returns the closed refusal reason for image local-matrix facts outside the bounded route. */
 fun GPUMaterialDescriptor.ImageDraw.imageLocalMatrixRefusalReasonOrNull(): GPUPreparedMaterialUnsupportedReason? {
@@ -3171,6 +3190,14 @@ enum class GPUCommandSourceKind {
     Generic,
     PublicFillRect,
     AnalyticStrokeRectBand,
+    AnalyticStrokeRectTranslatedBand,
+    AnalyticStrokeRectTranslatedThreeStopBand,
+    AnalyticStrokeRectUniformScaleBand,
+    AnalyticStrokeRectUniformScaleThreeStopBand,
+    AnalyticStrokeRectUniformScaleSweepTwoStopBand,
+    AnalyticStrokeRectUniformScaleSweepThreeStopBand,
+    AnalyticStrokeRectUniformScaleRadialTwoStopBand,
+    AnalyticStrokeRectUniformScaleRadialThreeStopBand,
 }
 
 /** Source adapter information used by diagnostics and dumps. */

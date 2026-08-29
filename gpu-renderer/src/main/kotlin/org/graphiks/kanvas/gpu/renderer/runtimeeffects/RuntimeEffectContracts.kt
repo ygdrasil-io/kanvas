@@ -86,7 +86,14 @@ data class GPURuntimeEffectRegistrySnapshot(
 /** Registry for product-supported runtime effects. */
 interface GPURuntimeEffectRegistry {
     /** Looks up a registered descriptor by ID. */
-    fun lookup(id: GPURuntimeEffectID): GPURuntimeEffectDescriptor? = TODO("Wire GPURuntimeEffectRegistry to registered Kotlin/WGSL descriptors")
+    fun lookup(id: GPURuntimeEffectID): GPURuntimeEffectDescriptor? = null
+
+    fun lookup(id: GPURuntimeEffectID, version: GPURuntimeEffectDescriptorVersion): GPURuntimeEffectDescriptor? =
+        lookup(id)?.takeIf { it.version == version }
+
+    fun kind(id: GPURuntimeEffectID): GPURuntimeEffectKind? = lookup(id)?.kind
+
+    fun cpuOracle(id: GPURuntimeEffectID): GPURuntimeEffectCPUOracle? = lookup(id)?.cpuOracle
 }
 
 /** Runtime-effect uniform schema. */
@@ -213,6 +220,9 @@ data class GPURuntimeEffectDescriptorRouteRequest(
     val wgslEvidence: GPURuntimeEffectWGSLEvidence?,
     val cpuOracle: GPURuntimeEffectOracleResult?,
     val dynamicSkSLSourceProvided: Boolean = false,
+    val dynamicWGSLSourceProvided: Boolean = false,
+    val dynamicCompilationRequested: Boolean = false,
+    val vmExecutionRequested: Boolean = false,
 )
 
 /** Registered runtime-effect route plan. */
@@ -627,6 +637,9 @@ data class GPURuntimeEffectDescriptor(
     val sourceColorContract: GPUPreparedRuntimeEffectSourceColorContract? = null,
     val liveParameterSchema: GPURuntimeEffectLiveParameterSchema? = null,
     val diagnostics: List<GPURuntimeEffectDiagnostic> = emptyList(),
+    val kind: GPURuntimeEffectKind? = null,
+    val wgslSource: String? = null,
+    val cpuOracle: GPURuntimeEffectCPUOracle? = null,
 )
 
 /** Runtime-effect diagnostic. */
@@ -1055,6 +1068,9 @@ private fun GPURuntimeEffectDescriptorRouteRequest.refusalCode(
 ): String? =
     when {
         dynamicSkSLSourceProvided -> "unsupported.runtime_effect.dynamic_sksl_forbidden"
+        dynamicWGSLSourceProvided -> "unsupported.runtime_effect.dynamic_wgsl_forbidden"
+        dynamicCompilationRequested -> "unsupported.runtime_effect.dynamic_compilation_forbidden"
+        vmExecutionRequested -> "unsupported.runtime_effect.vm_execution_forbidden"
         hasDescriptorCollision -> "unsupported.runtime_effect.descriptor_collision"
         descriptor == null -> "unsupported.runtime_effect.unregistered_descriptor"
         requestedPlacement !in descriptor.routeContract.acceptedPlacements -> "unsupported.runtime_effect.kind_mismatch"
