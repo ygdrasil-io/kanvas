@@ -587,6 +587,17 @@ object KanvasScenePrograms {
         )
     })
 
+    fun translatedStrokeRectOutline() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        save()
+        translate(5f, 7f)
+        drawRect(
+            RectF32.ofLTRB(16f, 16f, 48f, 48f),
+            Paint.stroke(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f), 6f).copy(antiAlias = false),
+        )
+        restore()
+    })
+
     fun roundCapStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
         drawPath(
             Path {
