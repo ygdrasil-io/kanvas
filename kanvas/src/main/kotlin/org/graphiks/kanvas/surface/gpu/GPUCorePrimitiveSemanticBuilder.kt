@@ -539,7 +539,8 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
 ): GPUCorePrimitivePayloadInput {
     val normalizedMaterial = normalized.material
     if (normalizedMaterial is GPUMaterialDescriptor.LinearGradient &&
-        geometryCoverage == GPUCoverageConsumption.StencilCoverage1x
+        geometryCoverage == GPUCoverageConsumption.StencilCoverage1x &&
+        !isExactHardPathClipStrokeLinearGradientCandidate()
     ) {
         refuseGeometry("unsupported.core_primitive.material.path_stencil", normalizedMaterial.corePrimitiveMaterialFacts())
     }
@@ -748,7 +749,8 @@ private fun GPUFramePathVisualCommand.nativeHardPathClipLinearGradientTransformO
         ?: return null
     val eligibleConsumer = when (normalized) {
         is NormalizedDrawCommand.FillRect -> true
-        is NormalizedDrawCommand.FillPath -> geometryCoverage == GPUCoverageConsumption.FullOrScissor
+        is NormalizedDrawCommand.FillPath -> geometryCoverage == GPUCoverageConsumption.FullOrScissor ||
+            isExactHardPathClipStrokeLinearGradientCandidate()
         else -> false
     }
     if (gradient.tileMode != "clamp" || normalized.antiAlias() ||
@@ -757,6 +759,37 @@ private fun GPUFramePathVisualCommand.nativeHardPathClipLinearGradientTransformO
         stencilClip.pathTransformClass !in HARD_PATH_CLIP_GRADIENT_TRANSFORM_CLASSES
     ) return null
     return normalized.transform.takeIf(GPUTransformFacts::isNativeHardPathClipGradientTransform)
+}
+
+/**
+ * Closed admission predicate for the direct triangle stroke + hard path clip gradient lane.
+ * This deliberately mirrors the exact stroke facts consumed by [strokeDeviceGeometry] and does
+ * not admit edge-fan, round-cap, multi-segment, dashed, filtered, or anti-aliased paths.
+ */
+private fun GPUFramePathVisualCommand.isExactHardPathClipStrokeLinearGradientCandidate(): Boolean {
+    val path = normalized as? NormalizedDrawCommand.FillPath ?: return false
+    val gradient = path.material as? GPUMaterialDescriptor.LinearGradient ?: return false
+    val stencilClip = clipExecutionPlan as? GPUClipExecutionPlan.StencilCoverage ?: return false
+    return path.stroke &&
+        !path.antiAlias &&
+        path.maskFilter == null &&
+        path.contourStarts == listOf(0) &&
+        path.tessellatedVertices.size == 4 &&
+        path.strokeWidth.isFinite() && path.strokeWidth in 0.5f..64f &&
+        path.strokeCap in setOf("butt", "square") &&
+        path.strokeJoin == "miter" &&
+        path.strokeMiterLimit.isFinite() && path.strokeMiterLimit >= 1f &&
+        path.pathEffectKind == null &&
+        (path.dashIntervals?.isEmpty() ?: true) &&
+        path.pathDescriptor.fillRule in setOf("NonZero", "winding") &&
+        !path.pathDescriptor.inverseFill &&
+        gradient.tileMode == "clamp" &&
+        (gradient.allStopPositions?.size ?: 2) == 2 &&
+        (gradient.allStopColors?.size ?: 8) == 8 &&
+        gradient.interpolation == "srgb" &&
+        stencilClip.sampleCount == 1 &&
+        stencilClip.pathTransformClass in HARD_PATH_CLIP_GRADIENT_TRANSFORM_CLASSES &&
+        path.transform.isNativeHardPathClipGradientTransform()
 }
 
 private fun GPUTransformFacts.isNativeHardPathClipGradientTransform(): Boolean = when (type) {
