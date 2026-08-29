@@ -1,5 +1,9 @@
 package org.graphiks.kanvas.gpu.renderer.runtimeeffects
 
+import org.graphiks.wgsl.parser.parseWgslResult
+
+data class RuntimeEffectWgslValidation(val accepted: Boolean, val diagnostic: String? = null)
+
 /**
  * Concrete runtime-effect registry wired to registered Kotlin/WGSL descriptors.
  * Provides lookups for all registered runtime effects.
@@ -29,4 +33,24 @@ class KanvasRuntimeEffectRegistry : GPURuntimeEffectRegistry {
     )
 
     override fun lookup(id: GPURuntimeEffectID): GPURuntimeEffectDescriptor? = descriptors[id]
+
+    fun snapshot(
+        registryVersion: String = "runtime-registry-v1",
+        generation: Long = 1L,
+        provenance: String = "kanvas-registered-descriptors",
+    ): GPURuntimeEffectRegistrySnapshot = GPURuntimeEffectRegistrySnapshot(
+        registryVersion, generation, descriptors.values.toList(), provenance,
+    )
+
+    fun validateWgsl(id: GPURuntimeEffectID): RuntimeEffectWgslValidation {
+        val source = lookup(id)?.wgslSource
+            ?: return RuntimeEffectWgslValidation(false, "unsupported.runtime_effect.unregistered_descriptor")
+        return try {
+            val parsed = parseWgslResult(source)
+            if (parsed.isSuccess) RuntimeEffectWgslValidation(true)
+            else RuntimeEffectWgslValidation(false, "unsupported.runtime_effect.wgsl_reflection")
+        } catch (_: NoClassDefFoundError) {
+            RuntimeEffectWgslValidation(false, "unsupported.runtime_effect.wgsl_parser_unavailable")
+        }
+    }
 }

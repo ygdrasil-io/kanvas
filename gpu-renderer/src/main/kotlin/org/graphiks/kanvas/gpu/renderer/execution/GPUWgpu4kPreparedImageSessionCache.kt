@@ -357,6 +357,7 @@ internal class GPUWgpu4kPreparedImageSessionCache(
                     ) "src" else "src-over",
                     targetFormat = "RGBA8UnormSrgb",
                     bindingLayoutHash = bindingLayoutIdentity,
+                    routeCapability = key.routeCapability,
                 ),
                 targetFormat = targetFormat,
                 destinationBlendState = destinationBlendState,

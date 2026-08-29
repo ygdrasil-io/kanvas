@@ -1,55 +1,63 @@
-# WIP 50 — Runtime effects enregistrés, WGSL et layouts
+# WIP 50 — runtime effects enregistrés et WGSL
 
-> Document temporaire. `SkRuntimeEffect` est une façade de compatibilité : ce
-> lot ne permet ni compilation dynamique SkSL, ni VM, ni workaround caché.
+> Brief d'exécution de `W50` à `W53`. `SkRuntimeEffect` reste une façade de
+> compatibilité; Kanvas ne compile pas de SkSL arbitraire.
 
-## Objectif du groupe
+## Fichiers propriétaires
 
-Prouver que chaque runtime effect supporté est un descriptor Kanvas enregistré,
-avec comportement CPU associé, WGSL parsé/réfléchi et bindings matériels
-conformes. Tous les autres effets sont refusés avant création de pipeline. La
-validation WGSL d'un custom effect n'est pas une preuve de support `Surface`.
-
-## Code et tests à lire
-
-| Zone | Fichiers principaux |
+| Zone | Fichiers |
 | --- | --- |
-| Registry/dispatch | `../gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/runtimeeffects/KanvasRuntimeEffectRegistry.kt`, `KanvasCustomRuntimeEffectRegistry.kt`, `GPURuntimeEffectDispatch.kt`, `GPURuntimeEffectExecutor.kt` |
-| Lowering material | `.../materials/RuntimeEffectMaterialLowering.kt`, `GPUPreparedRuntimeEffectChildProgramAuthority.kt` |
-| WGSL/reflection | `.../wgsl/WgslModuleCatalog.kt`, `WgslModuleAbi.kt`, `WgslReflection.kt`, `Wgsl4kReflectionReportConsumer.kt` |
-| Descriptors/shaders | `.../runtimeeffects/*Descriptor.kt`, `.../wgsl/*Wgsl.kt` |
-| Evidence | `integration-tests/gpu-evidence/.../programs/RendererRefusalPrograms.kt`, `.../catalog/GpuEvidenceCatalog.kt` |
+| API/registry | `../kanvas/src/main/kotlin/org/graphiks/kanvas/pipeline/RuntimeEffect.kt`, `../kanvas/src/main/kotlin/org/graphiks/kanvas/pipeline/RuntimeEffectWgsl4kWiring.kt` |
+| Lowering | `../gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/materials/RuntimeEffectMaterialLowering.kt` |
+| WGSL | `../gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/wgsl/` |
+| Mesh consumers | `../kanvas/src/main/kotlin/org/graphiks/kanvas/paint/Shader.kt`, `../kanvas/src/main/kotlin/org/graphiks/kanvas/paint/ColorFilter.kt`, `../kanvas/src/main/kotlin/org/graphiks/kanvas/paint/ImageFilter.kt` |
+| GMs | `../integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/gm/runtime_effect/` |
 
-## Matrice de scénarios
+## W50 — descriptor registry
 
-| Sous-famille | Cas à couvrir | Résultat exigé |
-| --- | --- | --- |
-| Descriptors enregistrés | Un scénario par descriptor, entrées usuelles, bornes de valeurs, uniforme scalaire/vector/matrice/tableau et uniforme non défini. | Même résultat CPU/GPU, ID du descriptor et programme WGSL signalés dans la route. |
-| Frontière built-in/custom | Distinguer les descriptors de `KanvasRuntimeEffectRegistry` des entrées de `KanvasCustomRuntimeEffectRegistry`, qui ne garantit que validation/reflection WGSL. | Un custom descriptor sans comportement Kotlin/CPU associé ne peut pas devenir une scène `Surface` rendue ni un bundle promouvable ; il est refusé avec diagnostic avant pipeline. |
-| Children | Aucun child, shader child, image child, plusieurs children ordonnés, child absent et type incompatible. | Ordre et bindings conservés ; refus avant draw sur child impossible. |
-| Layout/packer | Alignement, padding, offsets, taille finale, ordre des bindings, sampler/texture et tableau aux bornes. | Octets packés égaux au layout réfléchi ; le changement de valeur seule ne recrée pas le pipeline. |
-| WGSL | Parse, reflection et impression déterministe de chaque module généré/enregistré ; entry point, binding ou type invalide. | Parse/diagnostic reproductible ; aucune supposition silencieuse quand wgsl4k est ambigu. |
-| Refus | Effect inconnu, custom effect non enregistré, custom WGSL sans sémantique Kotlin/CPU, uniforme absent/en trop, type faux et WGSL non compatible. | Code stable, zéro pipeline/draw/submission et aucun artefact de réussite. |
+- [ ] Sélectionner au moins trois effets représentatifs : color-only, coordinate
+      dependent et uniform-array/matrix.
+- [ ] Définir pour chacun ID/version, uniform schema, Kotlin/CPU behavior et
+      module WGSL parsé.
+- [ ] Tester lookup, version, kind et descriptor inconnu.
+- [ ] Vérifier que le descriptor est la seule entrée vers la route GPU.
+- [ ] Promouvoir une scène par descriptor et un refus unregistered.
 
-## Assertions de preuve
+## W51 — children
 
-Les tests de rendu passent par `Surface`, conservent les sources WGSL et la
-sortie de reflection dans les diagnostics, comparent CPU/GPU et mesurent
-draw/pipeline/fallback. En cas de comportement ambigu du parser/IR/generator,
-réduire l'entrée, conserver l'évidence et ouvrir un ticket wgsl4k : ne pas
-ajouter une transformation Kanvas non documentée.
+- [ ] Tester shader, color-filter et blender children.
+- [ ] Tester ordre, optional/null child, child kind mismatch et profondeur.
+- [ ] Tester uniform + child + local coordinates dans le même descriptor.
+- [ ] Vérifier que CPU et GPU utilisent la même arborescence sémantique.
 
-## Dépendances et sortie
+## W52 — ABI et reflection
 
-Peut démarrer après le lot 00 et s'exécuter en parallèle avec 10, 30, 40 et 60.
-Il touche le catalogue partagé à l'intégration, donc les commits de scène sont
-rebasés après le lot qui l'a modifié en dernier. Sa sortie est une matrice
-descriptor/layout/refus entièrement exécutable.
+- [ ] Tester scalar/vector/matrix/array alignment et padding.
+- [ ] Tester uniform slab, bindings, group/index et reflection parser.
+- [ ] Tester cache key avec descriptor version, uniforms et children.
+- [ ] Refuser layout/binding mismatch avant pipeline creation.
+- [ ] Vérifier que les dumps n'exposent aucun padding non initialisé.
+
+## W53 — frontières runtime
+
+- [ ] Prouver RuntimeEffect comme Shader, ColorFilter, Blender et ImageFilter
+      pour des descriptors enregistrés compatibles.
+- [ ] Refuser SkSL arbitraire, descriptor absent, kind mismatch et WGSL invalide.
+- [ ] Refuser tout besoin de dynamic compilation ou de VM cachée.
+- [ ] En cas d'ambiguïté `wgsl4k`, produire une reproduction minimale et ouvrir
+      le ticket amont avant de poursuivre.
+
+## Sortie
+
+Le programme est fermé quand un effet enregistré est portable CPU/GPU par son
+descriptor et qu'un effet inconnu ne peut atteindre ni module builder, ni
+pipeline cache, ni submission.
 
 ## Vérification
 
 ```bash
-./gradlew :gpu-renderer:test
-./gradlew :integration-tests:gpu-evidence:test --tests '*Runtime*' --tests '*Wgsl*'
-./gradlew :integration-tests:gpu-evidence:test
+./gradlew :kanvas:test --tests '*RuntimeEffect*'
+./gradlew :gpu-renderer:test --tests '*RuntimeEffect*' --tests '*Wgsl*' --tests '*ShaderAbi*'
+./gradlew :integration-tests:gpu-evidence:test --tests '*RuntimeEffect*'
+./gradlew :integration-tests:skia:test --tests '*Runtime*'
 ```

@@ -1,0 +1,1 @@
+{"attemptId":"attempt-1","diagnostics":["diagnostic.code=unsupported.core_primitive.geometry.invalid"],"stableReasonCode":"unsupported.core_primitive.geometry.invalid","message":"unsupported.core_primitive.geometry.invalid: Core primitive geometry cannot be lowered exactly by the current canonical route.","submissionDelta":0}

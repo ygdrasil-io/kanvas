@@ -150,11 +150,14 @@ internal fun applyDash(
     closed = false,
 ).flatMap { run -> run.points.zipWithNext().flatMap { (start, end) -> listOf(start, end) } }
 
+/** Fixed tessellation used by the native non-AA round-cap outline generator. */
+internal const val ROUND_CAP_TESSELLATION_SEGMENTS = 6
+
 internal fun generateRoundCap(
     center: Pair<Float, Float>,
     normal: Pair<Float, Float>,
     halfW: Float,
-    segments: Int = 6,
+    segments: Int = ROUND_CAP_TESSELLATION_SEGMENTS,
 ): List<Float> {
     val result = mutableListOf<Float>()
     val cx = center.first; val cy = center.second
@@ -301,7 +304,7 @@ internal fun strokeToFillGeometry(
     }
     val effectiveWidth = if (strokeWidth == 0f) 1f else strokeWidth
     val halfWidth = effectiveWidth / 2f
-    val segments = 6
+    val segments = ROUND_CAP_TESSELLATION_SEGMENTS
     val result = mutableListOf<Float>()
     val contourResult = mutableListOf(0)
 

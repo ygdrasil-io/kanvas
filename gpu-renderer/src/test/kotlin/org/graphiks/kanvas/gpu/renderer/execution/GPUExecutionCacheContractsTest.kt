@@ -46,7 +46,7 @@ class GPUExecutionCacheContractsTest {
     @Test
     fun `failed execution cache eviction retains the same entry for retry`() {
         val probe = RetryingCloseProbe(closeFailuresRemaining = 1)
-        val cache = GPUExecutionObjectCache(
+        val cache = GPUExecutionObjectCache<RetryingCloseProbe>(
             domain = GPUExecutionCacheDomain.Module,
             dispose = RetryingCloseProbe::close,
         )
@@ -240,6 +240,84 @@ class GPUExecutionCacheContractsTest {
         assertTrue(created.handle.closed)
     }
 
+    @Test
+    fun `execution cache does not reuse entries across capability identities`() {
+        val cache = GPUExecutionObjectCache<String>(domain = GPUExecutionCacheDomain.Module)
+        val first = cache.getOrCreate(cacheRequest(domain = GPUExecutionCacheDomain.Module, capabilityFingerprint = "caps-a")) { "module-a" }
+        val second = cache.getOrCreate(cacheRequest(domain = GPUExecutionCacheDomain.Module, capabilityFingerprint = "caps-b")) { "module-b" }
+
+        assertEquals("module-a", assertIs<GPUExecutionCacheDecision.Ready<String>>(first).handle)
+        assertEquals("module-b", assertIs<GPUExecutionCacheDecision.Ready<String>>(second).handle)
+        assertEquals(listOf(GPUCacheEventResult.Miss, GPUCacheEventResult.Create), first.cacheEvents.map { it.result })
+        assertEquals(listOf(GPUCacheEventResult.Miss, GPUCacheEventResult.Create), second.cacheEvents.map { it.result })
+    }
+
+    @Test
+    fun `execution cache evicts least recently used entry at deterministic budget`() {
+        val disposed = mutableListOf<String>()
+        val cache = GPUExecutionObjectCache<String>(
+            domain = GPUExecutionCacheDomain.Module,
+            maxEntries = 2,
+            dispose = { disposed += it },
+        )
+        val a = cacheRequest(domain = GPUExecutionCacheDomain.Module, keyHash = "a")
+        val b = cacheRequest(domain = GPUExecutionCacheDomain.Module, keyHash = "b")
+        val c = cacheRequest(domain = GPUExecutionCacheDomain.Module, keyHash = "c")
+        cache.getOrCreate(a) { "a" }
+        cache.getOrCreate(b) { "b" }
+        cache.getOrCreate(a) { error("a should be a hit") }
+        val created = assertIs<GPUExecutionCacheDecision.Ready<String>>(cache.getOrCreate(c) { "c" })
+
+        assertEquals("c", created.handle)
+        assertEquals(listOf("b"), disposed)
+        assertEquals(listOf(GPUCacheEventResult.Miss, GPUCacheEventResult.Evict, GPUCacheEventResult.Create), created.cacheEvents.map { it.result })
+        assertIs<GPUExecutionCacheDecision.Ready<String>>(cache.getOrCreate(b) { "b-recreated" })
+    }
+
+    @Test
+    fun `execution cache reports eviction before creation failure`() {
+        val disposed = mutableListOf<String>()
+        val cache = GPUExecutionObjectCache<String>(
+            domain = GPUExecutionCacheDomain.Module,
+            maxEntries = 1,
+            dispose = { disposed += it },
+        )
+        val first = cacheRequest(domain = GPUExecutionCacheDomain.Module, keyHash = "first")
+        val second = cacheRequest(domain = GPUExecutionCacheDomain.Module, keyHash = "second")
+        cache.getOrCreate(first) { "first" }
+
+        val refused = assertIs<GPUExecutionCacheDecision.Refused>(
+            cache.getOrCreate(second) { error("creation rejected") },
+        )
+
+        assertEquals(listOf("first"), disposed)
+        assertEquals(
+            listOf(GPUCacheEventResult.Miss, GPUCacheEventResult.Evict, GPUCacheEventResult.Failure),
+            refused.cacheEvents.map { it.result },
+        )
+        assertIs<GPUExecutionCacheDecision.Ready<String>>(cache.getOrCreate(second) { "second" })
+    }
+
+    @Test
+    fun `execution cache does not report eviction when disposal fails`() {
+        val probe = RetryingCloseProbe(closeFailuresRemaining = 1)
+        val cache = GPUExecutionObjectCache<RetryingCloseProbe>(
+            domain = GPUExecutionCacheDomain.Module,
+            maxEntries = 1,
+            dispose = RetryingCloseProbe::close,
+        )
+        val first = cacheRequest(domain = GPUExecutionCacheDomain.Module, keyHash = "first")
+        val second = cacheRequest(domain = GPUExecutionCacheDomain.Module, keyHash = "second")
+        cache.getOrCreate(first) { probe }
+
+        val refused = assertIs<GPUExecutionCacheDecision.Refused>(
+            cache.getOrCreate(second) { error("must not create while disposal is pending") },
+        )
+
+        assertEquals(listOf(GPUCacheEventResult.Miss, GPUCacheEventResult.Failure), refused.cacheEvents.map { it.result })
+        assertSame(probe, assertIs<GPUExecutionCacheDecision.Ready<RetryingCloseProbe>>(cache.getOrCreate(first) { error("entry must be retained") }).handle)
+    }
+
     private class CloseProbe : AutoCloseable {
         var closed: Boolean = false
             private set
@@ -296,6 +374,7 @@ class GPUExecutionCacheContractsTest {
         subjectHash: String = "module-subject",
         deviceGeneration: GPUDeviceGenerationID = GPUDeviceGenerationID(7),
         expectedDeviceGeneration: GPUDeviceGenerationID = GPUDeviceGenerationID(7),
+        capabilityFingerprint: String = "capabilities-v1",
     ): GPUExecutionCacheRequest =
         GPUExecutionCacheRequest(
             domain = domain,
@@ -303,6 +382,7 @@ class GPUExecutionCacheContractsTest {
             subjectHash = subjectHash,
             deviceGeneration = deviceGeneration,
             expectedDeviceGeneration = expectedDeviceGeneration,
+            capabilityFingerprint = capabilityFingerprint,
             ownerScope = "GPUResourceProvider",
         )
 }

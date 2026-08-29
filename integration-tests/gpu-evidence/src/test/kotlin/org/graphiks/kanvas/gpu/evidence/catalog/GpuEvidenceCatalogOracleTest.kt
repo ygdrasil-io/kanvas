@@ -3,10 +3,27 @@ package org.graphiks.kanvas.gpu.evidence.catalog
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle
 
 class GpuEvidenceCatalogOracleTest {
+    @Test
+    fun `bounded bitmap oracle preserves literal nearest texels at its integer destination`() {
+        val pixels = oracle("bounded-rgba8-nearest-bitmap")
+
+        assertPixel(pixels, 64, 64, 11, 15, intArrayOf(13, 20, 33, 255))
+        assertPixel(pixels, 64, 64, 12, 16, intArrayOf(17, 34, 51, 255))
+        assertPixel(pixels, 64, 64, 13, 16, intArrayOf(221, 204, 187, 255))
+        assertPixel(pixels, 64, 64, 14, 16, intArrayOf(119, 136, 153, 255))
+        assertPixel(pixels, 64, 64, 12, 17, intArrayOf(68, 85, 102, 255))
+        assertPixel(pixels, 64, 64, 13, 17, intArrayOf(16, 32, 48, 255))
+        assertPixel(pixels, 64, 64, 14, 17, intArrayOf(170, 187, 204, 255))
+        assertPixel(pixels, 64, 64, 15, 18, intArrayOf(13, 20, 33, 255))
+    }
+
     @Test
     fun `translucent overlap oracle matches literal premultiplied src-over pixels`() {
         val pixels = oracle("translucent-card-overlap")
@@ -24,6 +41,17 @@ class GpuEvidenceCatalogOracleTest {
         assertPixel(pixels, 64, 64, 10, 10, intArrayOf(13, 20, 33, 255))
         assertPixel(pixels, 64, 64, 20, 20, intArrayOf(31, 115, 209, 255))
         assertPixel(pixels, 64, 64, 30, 30, intArrayOf(242, 135, 46, 255))
+    }
+
+    @Test
+    fun `restore to count oracle preserves parent child and post restore sentinels`() {
+        val pixels = oracle("canvas-state-restore-to-count")
+
+        assertPixel(pixels, 64, 64, 30, 9, intArrayOf(31, 115, 209, 255))
+        assertPixel(pixels, 64, 64, 15, 21, intArrayOf(242, 135, 46, 255))
+        assertPixel(pixels, 64, 64, 21, 21, intArrayOf(31, 115, 209, 255))
+        assertPixel(pixels, 64, 64, 45, 9, intArrayOf(255, 255, 255, 255))
+        assertPixel(pixels, 64, 64, 7, 9, intArrayOf(13, 20, 33, 255))
     }
 
     @Test
@@ -54,6 +82,112 @@ class GpuEvidenceCatalogOracleTest {
         assertPixel(oracle("sweep-disk"), 64, 64, 7, 8, intArrayOf(0, 0, 0, 0))
         assertPixel(oracle("sweep-disk"), 64, 64, 48, 32, intArrayOf(255, 64, 64, 255))
         assertPixel(oracle("sweep-disk"), 64, 64, 32, 48, intArrayOf(226, 122, 146, 255))
+    }
+
+    @Test
+    fun `sweep stroke oracle samples pixel-center angles across four disjoint bands`() {
+        val pixels = oracle("sweep-gradient-two-stop-stroke-rect")
+
+        assertPixel(pixels, 64, 64, 30, 15, intArrayOf(148, 101, 224, 255))
+        assertPixel(pixels, 64, 64, 30, 48, intArrayOf(223, 76, 149, 255))
+        assertPixel(pixels, 64, 64, 30, 30, intArrayOf(0, 0, 0, 0))
+        assertPixel(pixels, 64, 64, 5, 15, intArrayOf(0, 0, 0, 0))
+    }
+
+    @Test
+    fun `three stop sweep stroke oracle samples each gradient interval across four disjoint bands`() {
+        val pixels = oracle("sweep-gradient-three-stop-stroke-rect")
+
+        assertPixel(pixels, 64, 64, 30, 15, intArrayOf(56, 181, 198, 255))
+        assertPixel(pixels, 64, 64, 30, 48, intArrayOf(184, 170, 97, 255))
+        assertPixel(pixels, 64, 64, 55, 30, intArrayOf(56, 117, 252, 255))
+        assertPixel(pixels, 64, 64, 30, 30, intArrayOf(0, 0, 0, 0))
+        assertPixel(pixels, 64, 64, 5, 15, intArrayOf(0, 0, 0, 0))
+    }
+
+    @Test
+    fun `translated two stop linear stroke oracle rebases its axis across four device bands`() {
+        val pixels = oracle("linear-gradient-two-stop-translated-stroke-rect")
+
+        assertPixel(pixels, 64, 64, 30, 18, intArrayOf(202, 85, 179, 255))
+        assertPixel(pixels, 64, 64, 30, 51, intArrayOf(202, 85, 179, 255))
+        assertPixel(pixels, 64, 64, 31, 33, intArrayOf(0, 0, 0, 0))
+        assertPixel(pixels, 64, 64, 7, 17, intArrayOf(0, 0, 0, 0))
+    }
+
+    @Test
+    fun `translated three stop linear stroke oracle rebases its axis across four device bands`() {
+        val pixels = oracle("linear-gradient-three-stop-translated-stroke-rect")
+
+        assertPixel(pixels, 64, 64, 8, 17, intArrayOf(255, 56, 56, 255))
+        assertPixel(pixels, 64, 64, 59, 17, intArrayOf(56, 112, 255, 255))
+        assertPixel(pixels, 64, 64, 31, 33, intArrayOf(0, 0, 0, 0))
+        assertPixel(pixels, 64, 64, 7, 17, intArrayOf(0, 0, 0, 0))
+    }
+
+    @Test
+    fun `uniform scaled two stop linear stroke oracle scales coverage and rebases its axis`() {
+        val pixels = oracle("linear-gradient-two-stop-uniform-scaled-stroke-rect")
+
+        assertPixel(pixels, 64, 64, 16, 18, intArrayOf(255, 56, 56, 255))
+        assertPixel(pixels, 64, 64, 59, 18, intArrayOf(56, 112, 255, 255))
+        assertPixel(pixels, 64, 64, 30, 36, intArrayOf(0, 0, 0, 0))
+        assertPixel(pixels, 64, 64, 15, 18, intArrayOf(0, 0, 0, 0))
+    }
+
+    @Test
+    fun `uniform scaled two stop linear stroke oracle rejects a degenerate scaled axis`() {
+        assertFailsWith<IllegalArgumentException> {
+            SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle(
+                List(4) { SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle.Rect(0, 0, 1, 1) },
+                SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle.Point(8.0, 16.0),
+                SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle.Point(8.0, 16.0),
+                2,
+                SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle.Point(2.0, 4.0),
+                SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle.Stop(255, 56, 56),
+                SurfaceSrgbScaledTwoStopLinearGradientStrokeCpuOracle.Stop(56, 112, 255),
+            )
+        }
+    }
+
+    @Test
+    fun `uniform scaled three stop linear stroke oracle scales coverage and retains both intervals`() {
+        val pixels = oracle("linear-gradient-three-stop-uniform-scaled-stroke-rect")
+
+        assertPixel(pixels, 64, 64, 16, 18, intArrayOf(255, 56, 56, 255))
+        assertPixel(pixels, 64, 64, 59, 18, intArrayOf(56, 112, 255, 255))
+        val midpointOffset = (18 * 64 + 37) * 4
+        val midpoint = pixels.copyOfRange(midpointOffset, midpointOffset + 4).map { it.toInt() and 0xff }
+        assertNotEquals(intArrayOf(255, 56, 56, 255).toList(), midpoint)
+        assertNotEquals(intArrayOf(56, 112, 255, 255).toList(), midpoint)
+        assertPixel(pixels, 64, 64, 30, 36, intArrayOf(0, 0, 0, 0))
+        assertPixel(pixels, 64, 64, 15, 18, intArrayOf(0, 0, 0, 0))
+    }
+
+    @Test
+    fun `uniform scaled three stop linear stroke oracle rejects a degenerate scaled axis`() {
+        assertFailsWith<IllegalArgumentException> {
+            SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle(
+                List(4) { SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle.Rect(0, 0, 1, 1) },
+                SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle.Point(8.0, 16.0),
+                SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle.Point(8.0, 16.0),
+                2,
+                SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle.Point(2.0, 4.0),
+                SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle.Stop(255, 56, 56),
+                SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle.Stop(56, 220, 120),
+                SurfaceSrgbScaledThreeStopLinearGradientStrokeCpuOracle.Stop(56, 112, 255),
+            )
+        }
+    }
+
+    @Test
+    fun `three stop radial stroke oracle samples pixel-center distance across four disjoint bands`() {
+        val pixels = oracle("radial-gradient-three-stop-stroke-rect")
+
+        assertPixel(pixels, 64, 64, 30, 15, intArrayOf(56, 181, 197, 255))
+        assertPixel(pixels, 64, 64, 30, 48, intArrayOf(56, 189, 186, 255))
+        assertPixel(pixels, 64, 64, 30, 30, intArrayOf(0, 0, 0, 0))
+        assertPixel(pixels, 64, 64, 5, 15, intArrayOf(0, 0, 0, 0))
     }
 
     @Test
@@ -260,6 +394,7 @@ class GpuEvidenceCatalogOracleTest {
         val windingHole = oracle("winding-path-hole")
         val inverseWinding = oracle("inverse-winding-triangle-path")
         val inverseEvenOdd = oracle("inverse-even-odd-path-hole")
+        val bowTie = oracle("even-odd-bow-tie-path")
 
         assertPixel(triangle, 64, 64, 8, 8, orange)
         assertPixel(triangle, 64, 64, 55, 8, background)
@@ -294,6 +429,11 @@ class GpuEvidenceCatalogOracleTest {
         assertPixel(inverseEvenOdd, 64, 64, 30, 30, green)
         assertPixel(inverseEvenOdd, 64, 64, 44, 30, background)
         assertEquals(2320, fillPixelCount(inverseEvenOdd, green))
+
+        assertPixel(bowTie, 64, 64, 16, 16, green)
+        assertPixel(bowTie, 64, 64, 32, 32, background)
+        assertPixel(bowTie, 64, 64, 16, 48, green)
+
     }
 
     @Test

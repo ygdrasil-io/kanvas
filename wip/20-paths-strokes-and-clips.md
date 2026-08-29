@@ -1,92 +1,91 @@
-# WIP 20 — Paths, strokes, coverage et clips
+# WIP 20 — paths, coverage, clips et strokes
 
-> Document temporaire. Ce lot ne remplace pas les limites de complexité
-> décidées par le code ; il les rend observables et testées.
+> Brief d'exécution de `W20` à `W26`. Les routes bornées déjà présentes dans le
+> code servent de point de départ; leur simple présence ne généralise pas le
+> support à de nouvelles géométries.
 
-## Objectif du groupe
+## Fichiers propriétaires
 
-Élargir la couverture de géométrie au-delà du rectangle sans accepter de
-rasterisation approximative. Chaque famille doit prouver son coverage CPU/GPU
-ou garder un refus diagnostiqué, notamment pour AA, stroke et clips complexes.
-
-## Preuve bornée actuelle
-
-Le code, les tests et les artefacts générés/promus vérifiés font autorité pour
-les affirmations ci-dessous ; ce WIP n'est qu'une vue dérivée. Six scènes de
-path fill solides, opaques et non-AA sont actuellement prouvées par la route
-publique native `kanvas.surface.render` et le stencil-cover WebGPU :
-`solid-triangle-path` (1128 pixels, `WINDING`), `solid-concave-path` (1920,
-`WINDING`), `even-odd-path-hole` (1776, `EVEN_ODD`), `winding-path-hole`
-(1776, `WINDING` avec contours signés opposés),
-`inverse-winding-triangle-path` (2968, `INVERSE_WINDING`) et
-`inverse-even-odd-path-hole` (2320, `INVERSE_EVEN_ODD`). La même preuve couvre
-désormais `implicit-closure-triangle-path` (1128, `WINDING`, fermeture
-implicite), `translated-triangle-path` (1128, `WINDING`, translation
-positive `(4,5)`) et `uniform-scaled-triangle-path` (1128, `WINDING`, scale
-uniforme positif `(1.5,1.5)`). Les neuf scènes sont 64×64, utilisent leurs
-bounds littéraux documentés, l'oracle CPU `surface-srgb-path-pixel-center`
-version 2 et sont exactes à `100.0`
-de similarité, avec zéro pixel différent et zéro écart de canal.
-
-Cette preuve couvre les quatre fill types uniquement pour ces formes polygonales
-littérales et leurs target bounds respectifs. Les transforms supplémentaires
-restent limitées à la translation positive et au scale uniforme positif
-explicitement listés ci-dessus. Ne sont pas revendiqués : l'AA, les strokes,
-les contours curves (quadratiques ou cubiques), les oval/circle, les scales
-non uniformes, réfléchis ou composés, et tous les clips (`clipPath`,
-`clipRRect` ou interactions de clip).
-
-La preuve Wave 2 ajoute exactement trois scènes publiques `Surface` natives de
-`clipRRect` hard non-AA, à CTM identité, avec une seule intersection
-`ClipStack.Complex` `RRectOp` (`ClipOp.INTERSECT`, `antiAlias=false`) et des
-consommateurs `DrawRect` opaques non-AA : `clip-rrect-solid` (bleu 2256),
-`clip-rrect-ellipse` (orange 764) et `clip-rrect-two-bands` (bleu 1128,
-orange 1128, dans cet ordre). Elles sont prouvées sur la route
-`kanvas.surface.render`, avec exactitude RGBA8 native et zéro pixel différent.
-Cette preuve ne revendique pas l'AA, `ClipOp.DIFFERENCE`, les clips multiples ou
-imbriqués, les transforms, `clipPath`, les rayons par coin distincts, ni un
-`drawRRect` consommateur sous le clip.
-
-## Code et tests à lire
-
-| Zone | Fichiers principaux |
+| Zone | Fichiers |
 | --- | --- |
-| Path/coverage | `../gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/geometry/PathTessellator.kt`, `GeometryContracts.kt` |
-| Clips | `.../clips/ClipContracts.kt`, `GPUClipCoverageContracts.kt`, `GPUClipExecutionPlan.kt`, `.../execution/GPUCorePrimitivePathStencilNativeRoute.kt` |
-| Stencil/mask | `.../passes/GPUCorePrimitiveCoverageMaskPreparedRoute.kt`, `.../execution/GPUCorePrimitiveCoverageMaskPreparedExecutionRoute.kt` |
-| Strokes | `.../stroke/AdvancedStrokePlan.kt`, `PathEffectChain.kt`, `.../wgsl/StrokeSnippet.kt` |
-| API | `../kanvas/src/main/kotlin/org/graphiks/kanvas/canvas/Canvas.kt` (`drawPath`, `clipPath`, `clipRRect`) |
+| Geometry | `../gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/geometry/` |
+| Clip contracts | `../gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/clips/ClipContracts.kt`, `../gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/clips/GPUClipCoverageContracts.kt`, `../gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/clips/GPUClipExecutionPlan.kt` |
+| Clip mapping | `../kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUClipMapper.kt`, `../kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUClipCoveragePlanner.kt`, `../kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUClipCoverage.kt` |
+| Strokes | `../kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUStroke.kt`, `../gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/stroke/AdvancedStrokePlan.kt`, `../gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/stroke/PathEffectChain.kt` |
+| Evidence | `../integration-tests/gpu-evidence/src/main/kotlin/org/graphiks/kanvas/gpu/evidence/oracle/SurfaceSrgbPathFillCpuOracle.kt`, `../integration-tests/gpu-evidence/src/main/kotlin/org/graphiks/kanvas/gpu/evidence/oracle/SurfaceSrgbClipPathCpuOracle.kt` |
 
-## Matrice de scénarios
+## W20 — path curves
 
-| Sous-famille | Scènes et oracles | Limites/refus contractuels |
-| --- | --- | --- |
-| Fills path | Les neuf scènes `solid-triangle-path`, `solid-concave-path`, `even-odd-path-hole`, `winding-path-hole`, `inverse-winding-triangle-path`, `inverse-even-odd-path-hole`, `implicit-closure-triangle-path`, `translated-triangle-path` et `uniform-scaled-triangle-path` : fills solides opaques non-AA, les quatre fill types (`WINDING`, `EVEN_ODD`, `INVERSE_WINDING`, `INVERSE_EVEN_ODD`), formes polygonales littérales, translation positive et scale uniforme positif, avec oracle pixel-center v2. | La preuve est limitée à ces neuf formes littérales et leurs target bounds ; aucun autre contour ou fill path n'est revendiqué, notamment lignes, courbes quadratiques/cubiques, auto-intersection, oval/circle, AA, strokes, scales non uniformes/réfléchis/composés et autres transforms. |
-| Coverage AA | Aucun cas revendiqué. | Arêtes et positions AA, petites primitives et superpositions restent non revendiquées sans coverage mesurable. |
-| Strokes | Aucun cas revendiqué. | Caps, joins, miter, dash, hairline et path effects restent non revendiqués. |
-| `clipPath` / `clipRRect` | `R` uniquement pour les trois scènes Wave 2 `clip-rrect-solid`, `clip-rrect-ellipse` et `clip-rrect-two-bands` : une intersection hard non-AA à identité et des `DrawRect` opaques non-AA. | `N` pour `clipPath` et toutes les variantes AA, `DIFFERENCE`, multiples/imbriquées, transformées, à rayons distincts ou avec un `drawRRect` consommateur. |
-| Interactions | Path sous clip, stroke sous clip, path translucide, transform + clip + restore et sentinelle post-restore. | Aucun état de stencil/mask ne fuit dans la primitive suivante. |
+- [ ] Ajouter des cas quadratique, cubique, conique abaissable, oval et circle.
+- [ ] Tester fermeture explicite/implicite, segments dégénérés et bounds serrés.
+- [ ] Définir des budgets déterministes de segments, fan et mémoire.
+- [ ] Comparer un oracle CPU indépendant aux pixels GPU.
+- [ ] Refuser avant submission toute courbe dépassant les budgets.
 
-## Preuves à exiger
+## W21 — path topology
 
-Les tests unitaires vérifient tessellation, winding, coverage et calcul de
-bounds. Les scènes `Surface` rendent chaque cas supporté, comparent une image
-de référence adaptée à la famille, et exposent route stencil/mask, nombre de
-passes, bytes d'intermédiaires et fallback. Une référence Skia est requise dès
-qu'un cas est promu comme fidélité Skia ; l'oracle CPU Kanvas seul n'est qu'un
-contrôle interne.
+- [ ] Tester plusieurs contours avec orientations identiques et opposées.
+- [ ] Tester winding, even-odd et leurs variantes inverse.
+- [ ] Tester auto-intersections bornées et sommets partagés.
+- [ ] Vérifier que transform négative/réflexion conserve la sémantique de fill.
+- [ ] Fixer le diagnostic des topologies non déterministes ou hors budget.
 
-## Découpage d'intégration
+## W22 — coverage anti-aliased
 
-Les tests de refus et les oracles peuvent être préparés en parallèle avec les
-lots 30, 40, 50 et 60. Les captures de rendu attendent les garanties state/clip
-rect du lot 10. Ne mélanger qu'une route stencil/mask à la fois pour garder les
-diffs attribuables.
+- [ ] Écrire un oracle de coverage pour arêtes entières, demi-pixel et
+      fractionnaires.
+- [ ] Tester rect, RRect, triangle, courbe, petite primitive et chevauchement.
+- [ ] Vérifier alpha prémultiplié et ordre de composition.
+- [ ] Prouver le comportement sous clip et transform affine.
+- [ ] Refuser les combinaisons dont le format ou le sample count ne garantit pas
+      l'exactness annoncée.
+
+## W23 — clip shapes
+
+- [ ] Tester `clipRRect` et `clipPath` avec consommateurs rect, RRect et path.
+- [ ] Tester clips polygonaux et courbes sous transform affine.
+- [ ] Vérifier le choix scissor, analytic, stencil ou intermediate dans les
+      diagnostics de route.
+- [ ] Vérifier que les bounds du clip ne sont ni élargis ni réutilisés après
+      restore.
+
+## W24 — clip composition
+
+- [ ] Tester `INTERSECT`, `DIFFERENCE`, inverse fill et clip vide.
+- [ ] Tester deux puis trois clips imbriqués avec save/restore.
+- [ ] Tester clip path + RRect + transform dans les deux ordres utiles.
+- [ ] Vérifier depth, edge-fan et intermediate budgets.
+- [ ] Ajouter un refus stable au premier dépassement sans draw partiel.
+
+## W25 — stroke geometry
+
+- [ ] Tester stroke de rect, RRect et path pour butt/round/square caps.
+- [ ] Tester miter/round/bevel joins et limites de miter.
+- [ ] Tester largeurs entières, fractionnaires, hairline et zéro selon contrat.
+- [ ] Tester transform affine, clip, gradient déjà supporté et AA.
+- [ ] Fixer un budget d'expansion et refuser avant allocation excessive.
+
+## W26 — path effects
+
+- [ ] Implémenter et prouver `Dash`, puis `Corner` et `Trim` sur une géométrie
+      bornée.
+- [ ] Implémenter ou refuser explicitement `Discrete`, `Path1D` et `Path2D` après
+      un probe de leurs coûts et besoins de sampling.
+- [ ] Tester la chaîne d'effets, l'ordre, les phases, les paramètres invalides et
+      les transforms.
+- [ ] Vérifier que le résultat abaissé rejoint la même route stroke/coverage.
+
+## Sortie
+
+Chaque vague sort séparément avec un cas rendu, un cas hors limite, un oracle,
+une capture native et une promotion. Les refus GM historiques ne sont retirés
+qu'après preuve de la route qui les remplace.
 
 ## Vérification
 
 ```bash
 ./gradlew :gpu-renderer:test
-./gradlew :integration-tests:gpu-evidence:test --tests '*Path*' --tests '*Clip*' --tests '*Stroke*'
-./gradlew :integration-tests:gpu-evidence:test
+./gradlew :kanvas:test
+./gradlew :integration-tests:gpu-evidence:test --tests '*Path*' --tests '*Clip*' --tests '*Stroke*' --tests '*Coverage*'
+./gradlew :integration-tests:skia:test --tests '*SurfaceRefusalEvidenceTest'
 ```

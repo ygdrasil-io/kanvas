@@ -149,26 +149,31 @@ class GPUClipCoverageSurfaceTest {
     @Test
     fun `public drawColor hard path clip renders through one stencil scope`() {
         requireWebGpu()
+        val background = ColorARGB.of(255, 13, 20, 33)
+        val fill = ColorARGB.of(255, 242, 135, 46)
+        val clipPath = Path {
+            moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close()
+        }.apply { fillType = FillType.WINDING }
         val surface = Surface(64, 64)
         surface.canvas {
-            drawColor(ColorARGB.of(255, 13, 20, 33))
+            drawColor(background)
             save()
-            clipPath(
-                Path {
-                    moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close()
-                }.apply { fillType = FillType.WINDING },
-                ClipOp.INTERSECT,
-                antiAlias = false,
-            )
+            clipPath(clipPath, ClipOp.INTERSECT, antiAlias = false)
             drawRect(
                 RectF32.ofLTRB(0f, 0f, 64f, 64f),
-                Paint.fill(ColorARGB.of(242, 135, 46, 255)).copy(antiAlias = false),
+                Paint.fill(fill).copy(antiAlias = false),
             )
             restore()
         }
 
         val result = surface.render()
         assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertEquals(0, result.stats.opsRefused, result.diagnostics.entries.toString())
+        assertArrayEquals(
+            cubicClipCpuOracle(clipPath, ClipOp.INTERSECT, background, fill, width = 64, height = 64),
+            result.pixels.toByteArray(),
+            "triangle intersect CPU/GPU byte diff",
+        )
         assertEquals(1128, result.pixels.asList().chunked(4).count { pixel ->
             pixel.map { it.toInt() } != listOf(13, 20, 33, 255)
         })
@@ -179,17 +184,14 @@ class GPUClipCoverageSurfaceTest {
         requireWebGpu()
         val background = ColorARGB.of(255, 13, 20, 33)
         val fill = ColorARGB.of(255, 242, 135, 46)
+        val clipPath = Path {
+            moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close()
+        }.apply { fillType = FillType.WINDING }
         val surface = Surface(64, 64)
         surface.canvas {
             drawColor(background)
             save()
-            clipPath(
-                Path {
-                    moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close()
-                }.apply { fillType = FillType.WINDING },
-                ClipOp.DIFFERENCE,
-                antiAlias = false,
-            )
+            clipPath(clipPath, ClipOp.DIFFERENCE, antiAlias = false)
             drawRect(
                 RectF32.ofLTRB(0f, 0f, 64f, 64f),
                 Paint.fill(fill).copy(antiAlias = false),
@@ -199,11 +201,36 @@ class GPUClipCoverageSurfaceTest {
 
         val result = surface.render()
         assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertEquals(0, result.stats.opsRefused, result.diagnostics.entries.toString())
+        assertArrayEquals(
+            cubicClipCpuOracle(clipPath, ClipOp.DIFFERENCE, background, fill, width = 64, height = 64),
+            result.pixels.toByteArray(),
+            "triangle difference CPU/GPU byte diff",
+        )
         assertEquals(2968, result.pixels.asList().chunked(4).count { pixel ->
             pixel.map { it.toInt() } == listOf(242, 135, 46, 255)
         })
         assertRgbaNear(result.pixels, 64, 12, 12, background)
         assertRgbaNear(result.pixels, 64, 60, 60, fill)
+    }
+
+    @Test
+    fun `nested intersect and difference rect clips retain their direct geometry resource refusal`() {
+        requireWebGpu()
+        val background = ColorARGB.of(255, 13, 20, 33)
+        val fill = ColorARGB.of(255, 242, 135, 46)
+        val surface = Surface(64, 64)
+        surface.canvas {
+            drawColor(background)
+            save()
+            clipRect(RectF32.ofLTRB(8f, 8f, 56f, 56f), ClipOp.INTERSECT, antiAlias = false)
+            clipRect(RectF32.ofLTRB(12f, 12f, 56f, 56f), ClipOp.INTERSECT, antiAlias = false)
+            clipRect(RectF32.ofLTRB(40f, 32f, 52f, 44f), ClipOp.DIFFERENCE, antiAlias = false)
+            drawRect(RectF32.ofLTRB(0f, 0f, 64f, 64f), Paint.fill(fill).copy(antiAlias = false))
+            restore()
+        }
+
+        assertTerminal("invalid.preflight.core_primitive_direct_geometry_resources", surface::render)
     }
 
     @Test
@@ -972,6 +999,45 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
+    fun `public hard path clip submits an opaque clamp radial gradient rect`() {
+        requireWebGpu()
+        val background = ColorARGB.of(255, 13, 20, 33)
+        val surface = Surface(64, 64)
+        surface.canvas {
+            drawColor(background)
+            save()
+            clipPath(
+                Path { moveTo(8f, 8f); lineTo(56f, 8f); lineTo(8f, 55f); close() }
+                    .apply { fillType = FillType.WINDING },
+                ClipOp.INTERSECT,
+                antiAlias = false,
+            )
+            drawRect(
+                RectF32.ofLTRB(0f, 0f, 64f, 64f),
+                Paint(
+                    shader = Shader.RadialGradient(
+                        // Center on this exact device pixel center; this locks the native radial
+                        // program to an unambiguous opaque endpoint sample.
+                        Point2F32(24.5f, 24.5f),
+                        24f,
+                        listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                        TileMode.CLAMP,
+                    ),
+                    antiAlias = false,
+                ),
+            )
+            restore()
+        }
+
+        val result = surface.render()
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertEquals(0, result.stats.opsRefused)
+        assertTrue(result.stats.opsDispatched >= 2)
+        assertRgbaNear(result.pixels, 64, 24, 24, ColorARGB.Red, tolerance = 0)
+        assertRgbaNear(result.pixels, 64, 60, 60, background, tolerance = 0)
+    }
+
+    @Test
     fun `public quarter turn clamp gradient rect renders through a uniformly captured hard path clip`() {
         requireWebGpu()
         val background = ColorARGB.of(255, 13, 20, 33)
@@ -1065,7 +1131,7 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `public non uniform scaled hard path clip remains refused with capture provenance`() {
+    fun `public non uniform scaled hard path clip renders at its captured device-space coordinates`() {
         requireWebGpu()
         val triangle = Path().apply {
             moveTo(4f, 4f)
@@ -1078,11 +1144,123 @@ class GPUClipCoverageSurfaceTest {
             save()
             scale(0.75f, 0.5f)
             clipPath(triangle, ClipOp.INTERSECT, antiAlias = false)
-            drawRect(RectF32(0f, 0f, 32f, 32f), Paint.fill(ColorARGB.Red))
+            resetMatrix()
+            drawPath(
+                Path().apply {
+                    moveTo(0f, 0f)
+                    lineTo(32f, 0f)
+                    lineTo(0f, 32f)
+                    close()
+                },
+                Paint.fill(ColorARGB.Red).copy(antiAlias = false),
+            )
             restore()
         }
 
-        assertTerminal("unsupported.clip.path_transform", surface::render)
+        val result = surface.render()
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertRgbaNear(result.pixels, 32, 4, 3, ColorARGB.Red)
+        assertRgbaNear(result.pixels, 32, 22, 3, ColorARGB.Transparent)
+        assertRgbaNear(result.pixels, 32, 4, 16, ColorARGB.Transparent)
+    }
+
+    @Test
+    fun `public skewed hard path clip refuses before submission`() {
+        requireWebGpu()
+        val surface = Surface(32, 32)
+        surface.canvas {
+            save()
+            skew(0.25f, 0f)
+            clipPath(Path().apply { addRect(RectF32(4f, 4f, 28f, 28f)) }, ClipOp.INTERSECT, antiAlias = false)
+            resetMatrix()
+            drawColor(ColorARGB.Red)
+            restore()
+        }
+
+        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> { surface.render() }
+        assertEquals("unsupported.clip.path_transform", failure.diagnostic.code.value)
+    }
+
+    @Test
+    fun `public rotated hard path clip refuses before submission`() {
+        requireWebGpu()
+        val surface = Surface(32, 32)
+        surface.canvas {
+            save()
+            rotate(15f)
+            clipPath(Path().apply { addRect(RectF32(4f, 4f, 28f, 28f)) }, ClipOp.INTERSECT, antiAlias = false)
+            resetMatrix()
+            drawColor(ColorARGB.Red)
+            restore()
+        }
+
+        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> { surface.render() }
+        assertEquals("unsupported.clip.path_transform", failure.diagnostic.code.value)
+    }
+
+    @Test
+    fun `public singular and non finite hard path clip transforms refuse before submission`() {
+        requireWebGpu()
+        val session = requireNotNull(GPUBackendRuntimeFactory.createOrNull())
+        val submissionsBefore = session.runtimeTelemetry.submissions
+        val cases = listOf(
+            "singular" to 0f to "unsupported.transform.affine_singular",
+            "nan" to Float.NaN to "unsupported.transform.non_finite",
+            "infinity" to Float.POSITIVE_INFINITY to "unsupported.transform.non_finite",
+        )
+
+        cases.forEach { (labelAndScale, expectedCode) ->
+            val (label, scaleX) = labelAndScale
+            val surface = Surface(32, 32)
+            surface.canvas {
+                save()
+                scale(scaleX, 1f)
+                clipPath(Path().apply { addRect(RectF32(4f, 4f, 28f, 28f)) }, ClipOp.INTERSECT, antiAlias = false)
+                resetMatrix()
+                drawColor(ColorARGB.Red)
+                restore()
+            }
+
+            val failure = assertFailsWith<GPUPreparedSurfaceTerminalException>(label) { surface.render() }
+            assertEquals(expectedCode, failure.diagnostic.code.value, label)
+            assertEquals(submissionsBefore, session.runtimeTelemetry.submissions, label)
+        }
+    }
+
+    @Test
+    fun `public singular and non finite rect rrect and path clips refuse before submission`() {
+        requireWebGpu()
+        val session = requireNotNull(GPUBackendRuntimeFactory.createOrNull())
+        val submissionsBefore = session.runtimeTelemetry.submissions
+        val scales = listOf(
+            "singular" to 0f to "unsupported.transform.affine_singular",
+            "nan" to Float.NaN to "unsupported.transform.non_finite",
+            "infinity" to Float.POSITIVE_INFINITY to "unsupported.transform.non_finite",
+        )
+        val clipKinds = listOf("rect", "rrect", "path")
+
+        clipKinds.forEach { kind ->
+            scales.forEach { (labelAndScale, expectedCode) ->
+                val (label, scaleX) = labelAndScale
+                val surface = Surface(32, 32)
+                surface.canvas {
+                    save()
+                    scale(scaleX, 1f)
+                    when (kind) {
+                        "rect" -> clipRect(RectF32(4f, 4f, 28f, 28f), ClipOp.INTERSECT, antiAlias = false)
+                        "rrect" -> clipRRect(RRectF32.of(RectF32(4f, 4f, 28f, 28f), radius = 4f), ClipOp.INTERSECT, antiAlias = false)
+                        else -> clipPath(Path().apply { addRect(RectF32(4f, 4f, 28f, 28f)) }, ClipOp.INTERSECT, antiAlias = false)
+                    }
+                    resetMatrix()
+                    drawColor(ColorARGB.Red)
+                    restore()
+                }
+
+                val failure = assertFailsWith<GPUPreparedSurfaceTerminalException>("$kind-$label") { surface.render() }
+                assertEquals(expectedCode, failure.diagnostic.code.value, "$kind-$label")
+                assertEquals(submissionsBefore, session.runtimeTelemetry.submissions, "$kind-$label")
+            }
+        }
     }
 
     @Test

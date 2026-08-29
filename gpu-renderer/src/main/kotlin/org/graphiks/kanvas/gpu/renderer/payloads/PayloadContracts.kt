@@ -14,6 +14,7 @@ import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.collections.immutableSet
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.geometry.GPUPathEdgeFanPayloadContract
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialProgram
 import org.graphiks.kanvas.gpu.renderer.materials.preparedMaterialSrgbToLinear
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
@@ -1163,6 +1164,7 @@ enum class GPUCorePrimitiveCoverageMode {
 enum class GPUCorePrimitiveStrokeLoweringProof {
     SingleSegmentButtV1,
     SingleSegmentSquareV1,
+    SingleSegmentRoundPixelExactR2HorizontalV1,
 }
 
 /** Exact source stroke facts plus the named lowering implementation that consumed them. */
@@ -1688,6 +1690,7 @@ sealed interface GPUDrawSemanticPayload {
         val artifact = snapshot.artifact
         val geometry = snapshot.geometry
         val sampling = snapshot.sampling
+        val routeCapability = snapshot.routeCapability
         val tintPremultipliedRgba: List<Float> = snapshot.tintPremultipliedRgba
         val atlasColorPremultipliedRgba: List<Float>? = snapshot.atlasColorPremultipliedRgba
         val atlasSourceBlend = snapshot.atlasSourceBlend
@@ -2431,14 +2434,30 @@ private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
         }
         val stroke = strokeStyle?.copy(dashIntervals = dashIntervalsSnapshot(strokeStyle.dashIntervals))
         when (geometryMode) {
-            GPUCorePrimitiveGeometryMode.DirectTriangles -> require(stroke == null) {
-                "Direct core triangles cannot retain stroke lowering facts"
+            GPUCorePrimitiveGeometryMode.DirectTriangles -> if (stroke != null) {
+                require(
+                    vertices.size == 8 &&
+                        indices == listOf(0, 1, 2, 0, 2, 3) &&
+                        sourceContourStarts == listOf(0) &&
+                        sourceVertexCount == 2 &&
+                        fillRule == GPUCorePrimitiveFillRule.Winding &&
+                        !inverseFill &&
+                        stroke.join == "miter" &&
+                        stroke.dashIntervals.isEmpty() &&
+                        when (stroke.cap) {
+                            "butt" -> stroke.loweringProof == GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1
+                            "square" -> stroke.loweringProof == GPUCorePrimitiveStrokeLoweringProof.SingleSegmentSquareV1
+                            else -> false
+                        },
+                ) {
+                    "Direct stroke triangles require the exact single-segment butt/square miter lowering proof"
+                }
             }
             GPUCorePrimitiveGeometryMode.StencilEdgeFan -> {
                 require(stroke == null) {
                     "Fill stencil edge fans cannot retain stroke lowering facts"
                 }
-                require(sourceVertexCount <= CORE_PRIMITIVE_STENCIL_EDGE_FAN_SOURCE_VERTEX_BUDGET) {
+                require(sourceVertexCount <= GPUPathEdgeFanPayloadContract.MAX_TRIANGLES.toInt()) {
                     CORE_PRIMITIVE_STENCIL_EDGE_FAN_BUDGET_DIAGNOSTIC
                 }
                 require(sourceContourStarts.hasCanonicalContourLengths(sourceVertexCount)) {
@@ -2472,6 +2491,8 @@ private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
                     when (stroke.loweringProof) {
                         GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1 -> stroke.cap == "butt"
                         GPUCorePrimitiveStrokeLoweringProof.SingleSegmentSquareV1 -> stroke.cap == "square"
+                        GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2HorizontalV1 ->
+                            stroke.cap == "round" && stroke.width == 4f
                     },
                 ) {
                     "Core single-segment stroke cap must match its closed lowering proof"
@@ -2493,7 +2514,6 @@ private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
     }
 }
 
-private const val CORE_PRIMITIVE_STENCIL_EDGE_FAN_SOURCE_VERTEX_BUDGET = 256
 private const val CORE_PRIMITIVE_STENCIL_EDGE_FAN_BUDGET_DIAGNOSTIC =
     "unsupported.core_primitive.stencil_edge_fan_budget"
 

@@ -48,14 +48,19 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
     /**
      * The local clip bounds, expressed in the current coordinate system.
      *
-     * Returns [RectF32.Empty] when the clip is wide-open, the device rect when
-     * clipping to a single axis-aligned rectangle, or [RectF32.Empty] for complex
-     * clip stacks.
+     * Returns the single device-rect clip mapped back through an invertible
+     * scale/translate CTM. Returns [RectF32.Empty] when the clip is wide-open,
+     * complex, or cannot be represented conservatively as a local axis-aligned
+     * rectangle.
      */
     val localClipBounds: RectF32
         get() = when (val clip = currentClip) {
             ClipStack.WideOpen -> RectF32.Empty
-            is ClipStack.DeviceRect -> clip.rect
+            is ClipStack.DeviceRect -> currentTransform
+                .takeIf(Matrix3x3F32::isScaleTranslate)
+                ?.invert()
+                ?.mapAxisAlignedRect(clip.rect)
+                ?: RectF32.Empty
             is ClipStack.Complex -> RectF32.Empty
         }
 
@@ -67,8 +72,12 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
         if (currentClip is ClipStack.WideOpen) return false
         if (currentClip is ClipStack.DeviceRect) {
             val c = (currentClip as ClipStack.DeviceRect).rect
-            return rect.right <= c.left || rect.left >= c.right ||
-                   rect.bottom <= c.top || rect.top >= c.bottom
+            val deviceRect = currentTransform
+                .takeIf(Matrix3x3F32::isScaleTranslate)
+                ?.mapAxisAlignedRect(rect)
+                ?: return false
+            return deviceRect.right <= c.left || deviceRect.left >= c.right ||
+                   deviceRect.bottom <= c.top || deviceRect.top >= c.bottom
         }
         return false
     }
@@ -337,9 +346,12 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
     /**
      * Repeatedly [restore] until the save stack depth reaches [count].
      *
-     * Has no effect if [count] is greater than or equal to [saveCount].
+     * Has no effect if [count] is negative or greater than or equal to
+     * [saveCount]. A negative count is invalid for this public Canvas API and
+     * is deliberately ignored before any state or GPU-recording work occurs.
      */
     fun restoreToCount(count: Int) {
+        if (count < 0) return
         while (saveStack.size > count) restore()
     }
 
@@ -422,7 +434,15 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
         buffer.append(DisplayOp.SetClip(currentRecordedClip))
     }
 
-    private fun captureClipRect(rect: RectF32, op: ClipOp, antiAlias: Boolean): ClipStackOp = when {
+    private fun captureClipRect(rect: RectF32, op: ClipOp, antiAlias: Boolean): ClipStackOp {
+        val transformClass = currentTransform.captureTransformClass()
+        return when {
+        transformClass.isTerminalClipTransformClass() ->
+            ClipStackOp.PathOp(
+                Path().addRect(rect), op, antiAlias,
+                perspectiveCaptureRefusal = transformClass == "perspective",
+                transformClass = transformClass,
+            )
         currentTransform.isScaleTranslate() ->
             ClipStackOp.RectOp(currentTransform.mapAxisAlignedRect(rect), op, antiAlias)
         !currentTransform.hasPerspective() ->
@@ -440,11 +460,25 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
                 perspectiveCaptureRefusal = true,
                 transformClass = "perspective",
             )
+        }
     }
 
-    private fun captureClipRRect(rrect: RRectF32, op: ClipOp, antiAlias: Boolean): ClipStackOp = when {
+    private fun captureClipRRect(rrect: RRectF32, op: ClipOp, antiAlias: Boolean): ClipStackOp {
+        val transformClass = currentTransform.captureTransformClass()
+        return when {
+        transformClass.isTerminalClipTransformClass() ->
+            ClipStackOp.PathOp(
+                Path().addRRect(rrect), op, antiAlias,
+                perspectiveCaptureRefusal = transformClass == "perspective",
+                transformClass = transformClass,
+            )
         currentTransform.isScaleTranslate() ->
-            ClipStackOp.RRectOp(rrect.mapAxisAligned(currentTransform), op, antiAlias)
+            ClipStackOp.RRectOp(
+                rrect = rrect.mapAxisAligned(currentTransform),
+                op = op,
+                antiAlias = antiAlias,
+                transformClass = transformClass,
+            )
         !currentTransform.hasPerspective() ->
             ClipStackOp.PathOp(
                 Path().addRRect(rrect).transform(currentTransform),
@@ -460,16 +494,20 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
                 perspectiveCaptureRefusal = true,
                 transformClass = "perspective",
             )
+        }
     }
 
-    private fun captureClipPath(path: Path, op: ClipOp, antiAlias: Boolean): ClipStackOp =
-        ClipStackOp.PathOp(
-            if (!currentTransform.hasPerspective()) path.transform(currentTransform) else path,
+    private fun captureClipPath(path: Path, op: ClipOp, antiAlias: Boolean): ClipStackOp {
+        val transformClass = currentTransform.captureTransformClass()
+        val terminalCapture = transformClass.isTerminalClipTransformClass()
+        return ClipStackOp.PathOp(
+            if (terminalCapture) path else path.transform(currentTransform),
             op,
             antiAlias,
-            perspectiveCaptureRefusal = currentTransform.hasPerspective(),
-            transformClass = currentTransform.captureTransformClass(),
+            perspectiveCaptureRefusal = transformClass == "perspective",
+            transformClass = transformClass,
         )
+    }
 
     private fun appendClip(
         previous: ClipStack,
@@ -495,10 +533,18 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
 }
 
 private fun Matrix3x3F32.captureTransformClass(): String = when {
+    !floatValues().all(Float::isFinite) -> "non-finite"
     hasPerspective() -> "perspective"
+    sx * sy - kx * ky == 0f -> "singular-affine"
     this == Matrix3x3F32.Identity -> "identity"
     kx == 0f && ky == 0f && sx == 1f && sy == 1f -> "translate"
     kx == 0f && ky == 0f && sx == sy && sx > 0f -> "uniform-positive-scale-translate"
     kx == 0f && ky == 0f && tx == 0f && ty == 0f -> "scale"
+    kx == 0f && ky == 0f -> "scale-translate"
     else -> "affine"
 }
+
+private fun Matrix3x3F32.floatValues(): FloatArray = floatArrayOf(sx, kx, tx, ky, sy, ty, persp0, persp1, persp2)
+
+private fun String.isTerminalClipTransformClass(): Boolean =
+    this == "non-finite" || this == "singular-affine" || this == "perspective"

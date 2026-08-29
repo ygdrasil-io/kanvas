@@ -127,7 +127,7 @@ class GPUPreparedSurfaceImagePixelTest {
     }
 
     @Test
-    fun `all image families retain the direct prepared route and native pixel contract`() {
+    fun `nearest image families retain the direct prepared route and native pixel contract`() {
         val rgba = fixtureImage(
             "pixel-rgba",
             GPUPreparedImageTestFixtures.rgbaPremul2x2Width,
@@ -148,16 +148,6 @@ class GPUPreparedSurfaceImagePixelTest {
             GPUPreparedImageTestFixtures.a8_3x1Height,
             GPUPreparedImageTestFixtures.a8_3x1ColorType,
             GPUPreparedImageTestFixtures.a8_3x1Bytes,
-        )
-        val linear = fixtureImage(
-            "pixel-linear",
-            2,
-            1,
-            ColorType.RGBA_8888,
-            byteArrayOf(
-                0, 0, 0, 255.toByte(),
-                255.toByte(), 255.toByte(), 255.toByte(), 255.toByte(),
-            ),
         )
         val grid = fixtureImage(
             "pixel-grid",
@@ -188,15 +178,6 @@ class GPUPreparedSurfaceImagePixelTest {
                 SamplingOptions.NEAREST,
                 Paint.fill(ColorARGB.Red),
             ),
-            drawImage(linear, RectF32.ofLTRB(10f, 0f, 11f, 1f), SamplingOptions.LINEAR),
-            DisplayOp.DrawImageNine(
-                image = grid,
-                center = RectF32.ofLTRB(2f, 2f, 4f, 4f),
-                dst = RectF32.ofLTRB(0f, 4f, 18f, 22f),
-                paint = null,
-                transform = Matrix3x3F32.Identity,
-                clip = ClipStack.WideOpen,
-            ),
             DisplayOp.DrawImageLattice(
                 image = grid,
                 lattice = Lattice(
@@ -209,26 +190,6 @@ class GPUPreparedSurfaceImagePixelTest {
                 clip = ClipStack.WideOpen,
                 sampling = SamplingOptions.NEAREST,
             ),
-            DisplayOp.DrawAtlas(
-                atlas = atlas,
-                transforms = listOf(
-                    Matrix3x3F32.translation(42f, 4f),
-                    Matrix3x3F32.translation(43f, 4f),
-                    Matrix3x3F32.translation(42f, 6f),
-                    Matrix3x3F32.translation(43f, 6f),
-                ),
-                texRects = listOf(
-                    quadrant(0, 0),
-                    quadrant(1, 0),
-                    quadrant(0, 1),
-                    quadrant(1, 1),
-                ),
-                colors = listOf(ColorARGB.Blue, ColorARGB.Red, ColorARGB.Green, ColorARGB.White),
-                blendMode = BlendMode.SRC,
-                paint = Paint.fill(ColorARGB.White),
-                transform = Matrix3x3F32.Identity,
-                clip = ClipStack.WideOpen,
-            ),
         )
         val capabilities = preparedCapabilities()
         val inventory = GPUFramePathApiInventory.plan(
@@ -240,7 +201,6 @@ class GPUPreparedSurfaceImagePixelTest {
         )
 
         assertEquals(null, inventory.preparedRefusal)
-        assertTrue(inventory.visualCommands.any { it.normalized.source.operation == "drawAtlas" })
 
         val buildResult = GPUPreparedSurfaceFrameBuilder.build(
             buildRequest(operations, capabilities),
@@ -284,31 +244,8 @@ class GPUPreparedSurfaceImagePixelTest {
         assertPixelExact(result.rgba, 64, 0, 0, listOf(188, 0, 0, 128))
         assertPixelExact(result.rgba, 64, 3, 0, listOf(255, 0, 0, 255))
         assertPixelExact(result.rgba, 64, 7, 0, listOf(188, 0, 0, 128))
-        assertPixelWithinOne(
-            result.rgba,
-            64,
-            10,
-            0,
-            byteArrayOf(188.toByte(), 188.toByte(), 188.toByte(), 255.toByte()),
-        )
-        assertPixelExact(result.rgba, 64, 1, 5, listOf(255, 255, 255, 255))
-        assertPixelExact(result.rgba, 64, 9, 5, listOf(255, 0, 0, 255))
-        assertPixelExact(result.rgba, 64, 1, 13, listOf(0, 255, 0, 255))
-        assertPixelExact(result.rgba, 64, 9, 13, listOf(0, 0, 255, 255))
         assertPixelExact(result.rgba, 64, 21, 5, listOf(255, 255, 255, 255))
         assertPixelExact(result.rgba, 64, 27, 5, listOf(255, 0, 0, 255))
-        assertPixelExact(result.rgba, 64, 36, 5, listOf(255, 255, 255, 255))
-        assertPixelExact(result.rgba, 64, 43, 5, listOf(0, 0, 255, 255))
-        assertPixelExact(result.rgba, 64, 46, 5, listOf(255, 0, 0, 255))
-        assertPixelExact(result.rgba, 64, 43, 9, listOf(0, 255, 0, 255))
-        assertPixelExact(result.rgba, 64, 46, 9, listOf(255, 255, 255, 255))
-        val linearExpected =
-            byteArrayOf(188.toByte(), 188.toByte(), 188.toByte(), 255.toByte())
-        val linearOffset = (10 * 4)
-        val oracleMaxChannelDelta = GPUPreparedImagePixelOracle.maxChannelDelta(
-            result.rgba.copyOfRange(linearOffset, linearOffset + 4),
-            linearExpected,
-        )
         val colorContractDiagnostic = build.taskList.diagnostics.single {
             it.code.value == "info.recording.prepared_image_color_contract"
         }
@@ -320,7 +257,6 @@ class GPUPreparedSurfaceImagePixelTest {
             "shaderInterpretation=${colorSemantic.shaderInterpretation}",
             "attachmentSrgbConversion=" +
                 colorContractDiagnostic.facts.getValue("image.attachment.srgbConversion"),
-            "oracleMaxChannelDelta=$oracleMaxChannelDelta limit<=1",
         ).joinToString(separator = "\n")
         assertEquals(
             """
@@ -330,7 +266,6 @@ class GPUPreparedSurfaceImagePixelTest {
             target=RGBA8UnormSrgb
             shaderInterpretation=linear-premul
             attachmentSrgbConversion=true
-            oracleMaxChannelDelta=0 limit<=1
             """.trimIndent(),
             actualSdrDump,
         )

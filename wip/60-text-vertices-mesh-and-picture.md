@@ -1,56 +1,74 @@
-# WIP 60 — Texte, vertices, mesh et picture
+# WIP 60 — vertices, mesh, picture et texte livré
 
-> Document temporaire. Les routes texte/codec non livrées restent dependency-
-> gated. Aucun faux backend de fonte ou de shaping ne doit être créé pour faire
-> passer les tests.
+> Brief d'exécution de `W60` à `W65`. Les routes fonts absentes restent
+> dependency-gated et ne reçoivent aucun substitut temporaire.
 
-## Objectif du groupe
+## Fichiers propriétaires
 
-Rendre observables les opérations Canvas composées qui n'entrent pas dans les
-rectangles ou images simples. Démarrer par les refus stables, puis promouvoir
-seulement les routes dont les ressources, buffers et oracles existent réellement.
-
-## Code et tests à lire
-
-| Zone | Fichiers principaux |
+| Zone | Fichiers |
 | --- | --- |
-| Texte | `../gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/text/TextContracts.kt`, `GlyphAtlasTextureBuilder.kt`, `TextA8AtlasExecutor.kt`, `GPUDrawTextRunExecutor.kt` |
-| Vertices/mesh | `.../vertices/VerticesContracts.kt`, `GPUPreparedVerticesPacker.kt`, `GPUPreparedVerticesRefusalCodes.kt`, `GPUMeshBatcher.kt`, `VerticesExecutor.kt` |
-| Exécution | `.../execution/GPUWgpu4kPreparedTextRenderRunMaterializer.kt`, `GPUWgpu4kPreparedVerticesRenderRunMaterializer.kt` |
-| Shaders | `.../wgsl/PreparedTextA8Shader.kt`, `PreparedVerticesShader.kt`, `VerticesSnippet.kt`, `TextAtlasSnippet.kt` |
-| API | `../kanvas/src/main/kotlin/org/graphiks/kanvas/canvas/Canvas.kt` (`drawText`, `drawString`, `drawPicture`, `drawVertices`, `drawMesh`) |
+| API | `../kanvas/src/main/kotlin/org/graphiks/kanvas/canvas/Canvas.kt`, `../kanvas/src/main/kotlin/org/graphiks/kanvas/paint/Shader.kt` |
+| Vertices WGSL | `../gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/wgsl/PreparedVerticesShader.kt` |
+| Text WGSL | `../gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/wgsl/PreparedTextA8Shader.kt`, `../gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/wgsl/GPUPreparedTextShaderComposer.kt` |
+| Runtime effects | `../kanvas/src/main/kotlin/org/graphiks/kanvas/pipeline/RuntimeEffect.kt` |
+| GMs | `../integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/gm/mesh/`, `../integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/gm/text/` |
 
-## Matrice de scénarios
+## W60 — vertices
 
-| Sous-famille | Scènes rendables à viser | Limites/refus à fixer |
-| --- | --- | --- |
-| Texte basique | Latin simple avec fonte réellement embarquée, baseline, alpha, clip, translation/scale/rotation, glyph manquant et deux frames chaudes. | Fonte absente, variation/CFF/outline non prouvé, script complexe/bidi/shaping réel absent et atlas hors budget. |
-| Glyph atlas | Premier upload, réutilisation, éviction, page pleine, surface close/device loss. | Cache invalidé proprement, telemetry pages/bytes/hits/misses et refus si allocation impossible. |
-| `drawVertices` | Triangle, quad indexé, couleur par sommet, texture, alpha/interpolation et local matrix. | Indices hors plage, buffer vide/malformé, texture absente, taille/budget ou layout incompatible. |
-| `drawMesh` | Mesh sans programme routé par vertices ; mesh avec programme seulement si descriptor/route enregistrés. | Programme arbitraire, blend incompatible et layout non validé refusés avant draw. |
-| `drawPicture` | Picture simple, état isolé, picture vide, replay dans une layer/clip. | Récursion, op non abaissable, ressources invalides et fuite d'état au replay. |
+- [ ] Tester positions seules, colors, texcoords, indices et non-indexed.
+- [ ] Tester blend, image shader, color filter, clip et transform affine.
+- [ ] Vérifier vertex/index buffer bounds, formats et ownership.
+- [ ] Refuser indices hors plage, attributs incohérents et budgets dépassés.
 
-## Preuves à exiger
+## W61 — mesh
 
-Pour texte, fournir la provenance de la fonte et la politique de glyph manquant.
-Pour vertices/mesh, vérifier buffers, indices, interpolation prémultipliée,
-bind groups, uploads et route GPU. Le lot 40 possède les preuves `drawAtlas`.
-Les cas rendables ont oracle/référence,
-readback et diagnostics ; les cas dependency-gated ont un refus explicite sans
-submission. Les GMs texte ne sont promus qu'avec la référence et les assets
-traçables.
+- [ ] Enregistrer un MeshProgram minimal avec CPU semantics et WGSL validé.
+- [ ] Tester uniforms, ShaderChild, ColorFilterChild et BlenderChild.
+- [ ] Tester interpolation, varyings, indices et transforms.
+- [ ] Refuser programme inconnu, kind mismatch, layout invalide et ressources
+      dépassant les budgets.
 
-## Dépendances et sortie
+## W62 — picture
 
-Les refus, validation de buffers et tests de replay commencent après le lot 00
-en parallèle avec les lots 10, 30, 40 et 50. Les rendus texte attendent les
-fonctions dépendantes. Intégrer le catalogue de scènes après les autres
-branches pour limiter les conflits de fichier central.
+- [ ] Tester record/replay d'un draw simple puis d'un état imbriqué.
+- [ ] Tester replay de clip, layer, image et effet déjà supportés.
+- [ ] Vérifier snapshot des ressources et ordre des opérations.
+- [ ] Refuser récursion, ressource expirée et opération non replayable avant
+      exécution partielle.
+
+## W63 — glyphes livrés
+
+- [ ] Rejouer la route actuelle avec la font réellement livrée.
+- [ ] Tester positions, couleurs, alpha, transform bornée et cache glyph.
+- [ ] Vérifier upload atlas, eviction, generation device et dispose.
+- [ ] Promouvoir uniquement les glyph runs dont la provenance font est dans le
+      bundle.
+
+## W64 — dependency gates fonts
+
+- [ ] Tester diagnostics séparés pour shaping, fallback, variable fonts,
+      color fonts et emoji non livrés.
+- [ ] Vérifier qu'aucun fake glyph, font système implicite ou raster temporaire
+      ne contourne le gate.
+- [ ] Exclure ces GMs du burn-down non-font sans les présenter comme supportés.
+
+## W65 — interactions texte livré
+
+- [ ] Pour la seule route livrée, tester clip, transform affine, alpha, gradient
+      supporté et saveLayer.
+- [ ] Vérifier positions et métriques déterministes dans le périmètre livré.
+- [ ] Conserver perspective, shaping et fallback en dependency gate.
+
+## Sortie
+
+Vertices, mesh et picture doivent être classés comme toute autre surface.
+L'achèvement du programme non-font n'exige pas la levée des gates fonts.
 
 ## Vérification
 
 ```bash
-./gradlew :gpu-renderer:test
-./gradlew :integration-tests:gpu-evidence:test --tests '*Text*' --tests '*Vertices*' --tests '*Mesh*'
-./gradlew :integration-tests:gpu-evidence:test
+./gradlew :kanvas:test
+./gradlew :gpu-renderer:test --tests '*Vertices*' --tests '*Mesh*' --tests '*Text*'
+./gradlew :integration-tests:gpu-evidence:test --tests '*Vertices*' --tests '*Mesh*' --tests '*Picture*' --tests '*Text*'
+./gradlew :integration-tests:skia:test --tests '*Mesh*' --tests '*Text*'
 ```

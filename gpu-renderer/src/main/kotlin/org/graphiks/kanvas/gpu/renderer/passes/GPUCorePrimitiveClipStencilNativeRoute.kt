@@ -268,14 +268,18 @@ internal fun sealGPUCorePrimitiveClipStencilNativeRoute(
         )
         val shader = corePrimitiveClipStencilConsumerShaderOrNull(consumer.material, consumer.geometry) ?: return refused(
             "unsupported.native-core-primitive.clip-stencil.consumer-material",
-            "Only solid colors, analytic RRects, and clamp linear gradients are accepted by the bounded clip-stencil route.",
+            "Only solid colors, analytic RRects, and clamp direct gradients are accepted by the bounded clip-stencil route.",
         )
         if (
-            shader == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient &&
+            shader in setOf(
+                GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient,
+                GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient,
+                GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient,
+            ) &&
             stencil.sampleCount != 1
         ) return refused(
             "unsupported.native-core-primitive.clip-stencil.gradient-msaa",
-            "Clamp linear-gradient clip-stencil consumers require the exact single-sample route.",
+            "Clamp direct-gradient clip-stencil consumers require the exact single-sample route.",
         )
         if (consumer.inverseFill != consumerInverseFill || consumer.scissor != stencil.consumer.scissor) return refused(
             "invalid.native-core-primitive.clip-stencil.consumer-authority",

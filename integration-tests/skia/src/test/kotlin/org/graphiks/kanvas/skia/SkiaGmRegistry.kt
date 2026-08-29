@@ -4,26 +4,33 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 
 object SkiaGmRegistry {
-    fun all(): List<SkiaGm> {
-        val gms = mutableListOf<SkiaGm>()
+    data class Entry(val provider: String, val gm: SkiaGm?, val diagnostic: String?)
+
+    fun entries(): List<Entry> {
         val resourceName = "META-INF/services/${SkiaGm::class.qualifiedName}"
         val classLoader = SkiaGm::class.java.classLoader
         val stream = classLoader.getResourceAsStream(resourceName)
             ?: throw IllegalStateException("No $resourceName found")
-        BufferedReader(InputStreamReader(stream)).use { reader ->
-            for (line in reader.lines()) {
-                val className = line.trim()
-                if (className.isEmpty() || className.startsWith("#")) continue
+        return BufferedReader(InputStreamReader(stream)).use { reader -> entries(reader.lineSequence(), classLoader) }
+    }
+
+    internal fun entries(providerLines: Sequence<String>, classLoader: ClassLoader): List<Entry> =
+        providerLines.map { it.trim() }
+            .filter { it.isNotEmpty() && !it.startsWith("#") }
+            .map { className ->
                 try {
                     val clazz = classLoader.loadClass(className)
-                    if (!SkiaGm::class.java.isAssignableFrom(clazz)) continue
-                    val instance = clazz.getDeclaredConstructor().newInstance() as SkiaGm
-                    gms.add(instance)
-                } catch (_: Exception) {
-                    System.err.println("[SKIP] $className")
+                    require(SkiaGm::class.java.isAssignableFrom(clazz)) {
+                        "provider does not implement SkiaGm"
+                    }
+                    Entry(className, clazz.getDeclaredConstructor().newInstance() as SkiaGm, null)
+                } catch (failure: Throwable) {
+                    Entry(className, null, "${failure::class.simpleName}: ${failure.message.orEmpty()}")
                 }
-            }
-        }
+            }.toList()
+
+    fun all(): List<SkiaGm> {
+        val gms = entries().mapNotNull { it.gm }
         require(gms.isNotEmpty()) { "No SkiaGms registered." }
         return gms
     }

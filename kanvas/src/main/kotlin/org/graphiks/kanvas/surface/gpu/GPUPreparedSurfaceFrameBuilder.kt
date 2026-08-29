@@ -1072,7 +1072,9 @@ private fun collectPreparedImageVisuals(
     }
     val visualSources = operations.withIndex().flatMap { indexed ->
         val operationIndex = indexed.index
-        if (operationIndex in elidedOperationIndices) {
+        if (operationIndex in elidedOperationIndices ||
+            operationIndex in mapping.culledCoreOperationIndices
+        ) {
             return@flatMap emptyList()
         }
         when (val operation = indexed.value) {

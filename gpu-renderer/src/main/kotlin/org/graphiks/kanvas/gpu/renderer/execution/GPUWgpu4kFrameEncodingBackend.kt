@@ -211,6 +211,8 @@ internal class GPUWgpu4kFrameEncodingBackend(
     private val canonicalSceneTargetView: GPUTextureView? = null,
     private val onDestinationCopyEncoded: () -> Unit = {},
     private val onSubmission: () -> Unit = {},
+    private val onPreparedImageTextureWriteTexture: () -> Unit = {},
+    private val onPreparedImageTextureUploadScopeEncoded: () -> Unit = {},
 ) : GPUFrameEncodingBackend, AutoCloseable {
     override val encodingMode: GPUFrameEncodingMode = GPUFrameEncodingMode.NativeOperandsRequired
 
@@ -378,7 +380,19 @@ internal class GPUWgpu4kFrameEncodingBackend(
             when (operand) {
                 is GPUPreparedNativeScopeOperand.Render -> encodeRender(operand)
                 is GPUPreparedNativeScopeOperand.TextureUpload ->
-                    encodePreparedImageTextureUpload(queue, operand)
+                    encodePreparedImageTextureUpload(
+                        queue,
+                        operand,
+                        if (operand.uploadRole == "prepared-image") {
+                            onPreparedImageTextureWriteTexture
+                        } else {
+                            {}
+                        },
+                    ).also {
+                        if (operand.uploadRole == "prepared-image") {
+                            onPreparedImageTextureUploadScopeEncoded()
+                        }
+                    }
                 is GPUPreparedNativeScopeOperand.BufferUpload -> Unit
                 is GPUPreparedNativeScopeOperand.Copy -> encodeCopy(operand)
                 is GPUPreparedNativeScopeOperand.Readback -> encodeReadback(operand)
@@ -625,6 +639,7 @@ internal class GPUWgpu4kFrameEncodingBackend(
 internal fun encodePreparedImageTextureUpload(
     queue: GPUQueue,
     upload: GPUPreparedNativeScopeOperand.TextureUpload,
+    onWriteTexture: () -> Unit = {},
 ) {
     val layout = upload.layout
     val bytes = upload.data.bytes()
@@ -644,6 +659,7 @@ internal fun encodePreparedImageTextureUpload(
             height = layout.height.toUInt(),
         ),
     )
+    onWriteTexture()
 }
 
 /**

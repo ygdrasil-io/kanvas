@@ -30,6 +30,10 @@ import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceClass
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceFormat
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometry
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometryClass
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageRouteCapability
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageVertex
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
@@ -44,12 +48,119 @@ import org.graphiks.kanvas.gpu.renderer.resources.buildImageFrameResourcePlanFro
 
 class GPUPreparedImageNativeResourcesTest {
     @Test
-    fun `native keys split upload sampler binding and uniform offsets`() {
+    fun `bounded nearest 1 to 1 resource plan reaches preflight without handles`() {
+        val fixture = fixture(
+            listOf(
+                GPUImageBindingInput(
+                    packetId = "packet.bounded.nearest",
+                    sampling = GPUPreparedImageSampling.Nearest,
+                    routeCapability = GPUPreparedImageRouteCapability.BoundedNearest1To1,
+                    boundedGeometry = boundedGeometry(),
+                ),
+            ),
+        )
+
+        val sealed = assertIs<GPUPreparedImageNativePreflightResult.Sealed>(
+            GPUPreparedImageNativeResourcePreflighter.preflight(fixture.request),
+        )
+
+        assertEquals(
+            GPUPreparedImageRouteCapability.BoundedNearest1To1,
+            sealed.request.resourcePlan.bindingRequests.single().routeCapability,
+        )
+        assertEquals("nearest", sealed.request.resourcePlan.bindingRequests.single().sampler.magFilter)
+    }
+
+    @Test
+    fun `bounded route rejects linear or forged corner geometry before materialization`() {
+        val fixture = fixture(
+            listOf(
+                GPUImageBindingInput(
+                    packetId = "packet.bounded.refusal",
+                    sampling = GPUPreparedImageSampling.Nearest,
+                    routeCapability = GPUPreparedImageRouteCapability.BoundedNearest1To1,
+                    boundedGeometry = boundedGeometry(),
+                ),
+            ),
+        )
+        val binding = fixture.plan.bindingRequests.single()
+        val malformedCorners = binding.copy(
+            boundedGeometry = GPUPreparedImageGeometry(
+                GPUPreparedImageGeometryClass.Rect,
+                listOf(
+                    GPUPreparedImageVertex(4f, 6f, 0f, 0f),
+                    GPUPreparedImageVertex(6f, 7f, 1f, 0f),
+                    GPUPreparedImageVertex(6f, 8f, 1f, 1f),
+                    GPUPreparedImageVertex(3f, 8f, 0f, 1f),
+                ),
+                listOf(0, 1, 2, 0, 2, 3),
+            ),
+        )
+        val linear = binding.copy(sampler = binding.sampler.copy(magFilter = "linear", minFilter = "linear"))
+
+        listOf(malformedCorners, linear).forEach { forged ->
+            val factory = RecordingFactory()
+            val refused = assertIs<GPUPreparedImageNativePreflightResult.Refused>(
+                GPUPreparedImageNativeResourcePreflighter.preflight(
+                    fixture.request.copy(
+                        resourcePlan = fixture.plan.copy(bindingRequests = listOf(forged)),
+                    ),
+                ),
+            )
+
+            assertEquals(GPUPreparedImageRefusalCodes.RECT_GEOMETRY, refused.reasonCode)
+            assertEquals("preflight", refused.facts["boundary"])
+            assertEquals(0, factory.createCalls)
+        }
+    }
+
+    @Test
+    fun `bounded route capability incoherence refuses before native handles`() {
+        val fixture = fixture(
+            listOf(
+                GPUImageBindingInput(
+                    packetId = "packet.bounded.incoherent",
+                    sampling = GPUPreparedImageSampling.Nearest,
+                    routeCapability = GPUPreparedImageRouteCapability.BoundedNearest1To1,
+                    boundedGeometry = boundedGeometry(),
+                ),
+            ),
+        )
+        val incoherent = fixture.plan.bindingRequests.single().copy(
+            sampler = fixture.plan.bindingRequests.single().sampler.copy(
+                preparedImageRouteCapability = GPUPreparedImageRouteCapability.GenericNative,
+            ),
+        )
+
+        val refused = assertIs<GPUPreparedImageNativePreflightResult.Refused>(
+            GPUPreparedImageNativeResourcePreflighter.preflight(
+                fixture.request.copy(resourcePlan = fixture.plan.copy(bindingRequests = listOf(incoherent))),
+            ),
+        )
+
+        assertEquals(GPUPreparedImageRefusalCodes.RECT_GEOMETRY, refused.reasonCode)
+        assertEquals("preflight", refused.facts["boundary"])
+    }
+
+    @Test
+    fun `generic native linear sampler plan reaches native preflight`() {
+        val fixture = fixture(listOf(GPUImageBindingInput("packet.linear", GPUPreparedImageSampling.Linear)))
+
+        val sealed = assertIs<GPUPreparedImageNativePreflightResult.Sealed>(
+            GPUPreparedImageNativeResourcePreflighter.preflight(fixture.request),
+        )
+
+        assertEquals("linear", sealed.request.resourcePlan.bindingRequests.single().sampler.magFilter)
+        assertEquals("linear", sealed.request.resourcePlan.bindingRequests.single().sampler.minFilter)
+    }
+
+    @Test
+    fun `nearest sampler shares binding while uniforms keep distinct offsets`() {
         val fixture = fixture(
             listOf(
                 GPUImageBindingInput("packet.nearest.a", GPUPreparedImageSampling.Nearest),
                 GPUImageBindingInput("packet.nearest.b", GPUPreparedImageSampling.Nearest),
-                GPUImageBindingInput("packet.linear", GPUPreparedImageSampling.Linear),
+                GPUImageBindingInput("packet.nearest.c", GPUPreparedImageSampling.Nearest),
             ),
         )
         val seal = assertIs<GPUPreparedImageNativePreflightResult.Sealed>(
@@ -57,15 +168,15 @@ class GPUPreparedImageNativeResourcesTest {
         )
 
         assertEquals(1, seal.uploadKeys.toSet().size)
-        assertEquals(2, seal.samplerKeysByPacketId.values.toSet().size)
-        assertEquals(2, seal.bindingKeysByPacketId.values.toSet().size)
+        assertEquals(1, seal.samplerKeysByPacketId.values.toSet().size)
+        assertEquals(1, seal.bindingKeysByPacketId.values.toSet().size)
         assertEquals(
             seal.bindingKeysByPacketId.getValue("packet.nearest.a"),
             seal.bindingKeysByPacketId.getValue("packet.nearest.b"),
         )
-        assertNotEquals(
+        assertEquals(
             seal.bindingKeysByPacketId.getValue("packet.nearest.a"),
-            seal.bindingKeysByPacketId.getValue("packet.linear"),
+            seal.bindingKeysByPacketId.getValue("packet.nearest.c"),
         )
         assertTrue(seal.uploadKeys.all { it.deviceGeneration == 7L })
         assertTrue(seal.samplerKeysByPacketId.values.all { it.deviceGeneration == 7L })
@@ -75,20 +186,20 @@ class GPUPreparedImageNativeResourcesTest {
         assertEquals(seal.uploadKeys.single(), resources.uploadKey(fixture.artifactKey))
         assertSame(resources.texture(fixture.artifactKey), resources.texture(fixture.artifactKey))
         assertSame(resources.binding("packet.nearest.a"), resources.binding("packet.nearest.b"))
-        assertNotSame(resources.binding("packet.nearest.a"), resources.binding("packet.linear"))
+        assertSame(resources.binding("packet.nearest.a"), resources.binding("packet.nearest.c"))
         assertEquals(
             listOf(0L, 256L, 512L),
             listOf(
                 resources.dynamicUniformOffset("packet.nearest.a"),
                 resources.dynamicUniformOffset("packet.nearest.b"),
-                resources.dynamicUniformOffset("packet.linear"),
+                resources.dynamicUniformOffset("packet.nearest.c"),
             ),
         )
         assertEquals(1, factory.textureCreates)
         assertEquals(1, factory.textureViewCreates)
-        assertEquals(2, factory.samplerCreates)
+        assertEquals(1, factory.samplerCreates)
         assertEquals(1, factory.uniformBufferCreates)
-        assertEquals(2, factory.bindGroupCreates)
+        assertEquals(1, factory.bindGroupCreates)
         resources.close()
     }
 
@@ -321,7 +432,7 @@ class GPUPreparedImageNativeResourcesTest {
         val fixture = fixture(
             listOf(
                 GPUImageBindingInput("packet.a", GPUPreparedImageSampling.Nearest),
-                GPUImageBindingInput("packet.b", GPUPreparedImageSampling.Linear),
+                GPUImageBindingInput("packet.b", GPUPreparedImageSampling.Nearest),
             ),
         )
         val changedBindings = fixture.plan.bindingRequests.mapIndexed { index, binding ->
@@ -346,7 +457,7 @@ class GPUPreparedImageNativeResourcesTest {
         val fixture = fixture(
             listOf(
                 GPUImageBindingInput("packet.a", GPUPreparedImageSampling.Nearest),
-                GPUImageBindingInput("packet.b", GPUPreparedImageSampling.Linear),
+                GPUImageBindingInput("packet.b", GPUPreparedImageSampling.Nearest),
             ),
         )
         val changedBindings = fixture.plan.bindingRequests.mapIndexed { index, binding ->
@@ -394,7 +505,7 @@ class GPUPreparedImageNativeResourcesTest {
         val fixture = fixture(
             listOf(
                 GPUImageBindingInput("packet.a", GPUPreparedImageSampling.Nearest),
-                GPUImageBindingInput("packet.b", GPUPreparedImageSampling.Linear),
+                GPUImageBindingInput("packet.b", GPUPreparedImageSampling.Nearest),
             ),
         )
         val changedBindings = fixture.plan.bindingRequests.map { binding ->
@@ -417,16 +528,13 @@ class GPUPreparedImageNativeResourcesTest {
     @Test
     fun `partial factory failure closes every created handle once in reverse order`() {
         val fixture = fixture(
-            listOf(
-                GPUImageBindingInput("packet.nearest", GPUPreparedImageSampling.Nearest),
-                GPUImageBindingInput("packet.linear", GPUPreparedImageSampling.Linear),
-            ),
+            listOf(GPUImageBindingInput("packet.nearest", GPUPreparedImageSampling.Nearest)),
         )
         val seal = assertIs<GPUPreparedImageNativePreflightResult.Sealed>(
             GPUPreparedImageNativeResourcePreflighter.preflight(fixture.request),
         )
         val events = mutableListOf<String>()
-        val factory = RecordingFactory(events, failOnSecondBindGroup = true)
+        val factory = RecordingFactory(events, failOnFirstBindGroup = true)
 
         assertFailsWith<IllegalStateException> {
             seal.materialize(factory, factory.bindGroupLayout)
@@ -527,6 +635,17 @@ class GPUPreparedImageNativeResourcesTest {
         ),
     )
 
+    private fun boundedGeometry(): GPUPreparedImageGeometry = GPUPreparedImageGeometry(
+        GPUPreparedImageGeometryClass.Rect,
+        listOf(
+            GPUPreparedImageVertex(4f, 6f, 0f, 0f),
+            GPUPreparedImageVertex(6f, 6f, 1f, 0f),
+            GPUPreparedImageVertex(6f, 8f, 1f, 1f),
+            GPUPreparedImageVertex(4f, 8f, 0f, 1f),
+        ),
+        listOf(0, 1, 2, 0, 2, 3),
+    )
+
     private data class Fixture(
         val artifactKey: GPUImageUploadArtifactKey,
         val plan: GPUImageFrameResourcePlan,
@@ -536,6 +655,7 @@ class GPUPreparedImageNativeResourcesTest {
     private class RecordingFactory(
         private val closeEvents: MutableList<String> = mutableListOf(),
         private val failOnSecondBindGroup: Boolean = false,
+        private val failOnFirstBindGroup: Boolean = false,
         private val failCloseLabels: Set<String> = emptySet(),
     ) : GPUPreparedImageNativeHandleFactory {
         val bindGroupLayout: GPUBindGroupLayout = Proxy.newProxyInstance(
@@ -589,7 +709,9 @@ class GPUPreparedImageNativeResourcesTest {
             sampler: GPUSampler,
         ): GPUBindGroup {
             bindGroupCreates += 1
-            if (failOnSecondBindGroup && bindGroupCreates == 2) error("bind-group failure")
+            if ((failOnFirstBindGroup && bindGroupCreates == 1) ||
+                (failOnSecondBindGroup && bindGroupCreates == 2)
+            ) error("bind-group failure")
             return handle("bind-group.${request.sampler.magFilter}")
         }
 

@@ -1,0 +1,1 @@
+{"attemptId":"attempt-1","diagnostics":["diagnostic.code=unsupported.image.sampling_filter"],"stableReasonCode":"unsupported.image.sampling_filter","message":"unsupported.image.sampling_filter: Prepared Surface operation could not be lowered.","submissionDelta":0}

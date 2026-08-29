@@ -42,6 +42,17 @@ class GPUPreparedImagePayloadTest {
     }
 
     @Test
+    fun `route capability cannot collide in semantic dump or pipeline cache key`() {
+        val generic = payload(routeCapability = GPUPreparedImageRouteCapability.GenericNative)
+        val bounded = payload(routeCapability = GPUPreparedImageRouteCapability.BoundedNearest1To1)
+
+        assertNotEquals(generic.canonicalHash, bounded.canonicalHash)
+        assertNotEquals(generic.stableDumpLine(), bounded.stableDumpLine())
+        assertNotEquals(generic.pipelineKey, bounded.pipelineKey)
+        assertContains(bounded.stableDumpLine(), "routeCapability=BoundedNearest1To1")
+    }
+
+    @Test
     fun `uniform and dynamic facts change semantic identity without specializing the pipeline`() {
         val baseline = payload()
         val alphaOnly = payload(alphaOnly = true)
@@ -147,6 +158,7 @@ class GPUPreparedImagePayloadTest {
     private fun payload(
         bytes: ByteArray = byteArrayOf(1, 2, 3, 4),
         sampling: GPUPreparedImageSampling = GPUPreparedImageSampling.Nearest,
+        routeCapability: GPUPreparedImageRouteCapability = GPUPreparedImageRouteCapability.GenericNative,
         tint: List<Float> = listOf(1f, 1f, 1f, 1f),
         alphaOnly: Boolean = false,
         geometryClass: GPUPreparedImageGeometryClass = GPUPreparedImageGeometryClass.Rect,
@@ -169,6 +181,7 @@ class GPUPreparedImagePayloadTest {
                 listOf(0, 1, 2, 0, 2, 3),
             ),
             sampling = sampling,
+            routeCapability = routeCapability,
             tintPremultipliedRgba = tint,
             atlasColorPremultipliedRgba = atlasColor,
             atlasSourceBlend = atlasSourceBlend,

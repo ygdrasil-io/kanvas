@@ -66,6 +66,7 @@ class FontTelemetrySchemaTest {
     fun `font telemetry PM bundle evidence stays advisory and domain-complete`() {
         val root = projectRoot()
         val advisoryJson = Files.readString(root.resolve("reports/pure-kotlin-text/font-telemetry-pm-bundle.json"))
+        val claimDashboard = Files.readString(root.resolve("reports/pure-kotlin-text/font-claim-dashboard.json"))
         val advisoryMarkdown = Files.readString(
             root.resolve("reports/pure-kotlin-text/2026-06-17-kfont-m12-001-telemetry-pm-bundle.md"),
         )
@@ -76,7 +77,7 @@ class FontTelemetrySchemaTest {
         assertContains(advisoryJson, """"surfaceId": "font-telemetry-schema"""")
         assertContains(advisoryJson, """"classification": "tracked-gap"""")
         assertContains(advisoryJson, """"claimPromotionAllowed": false""")
-        assertContains(advisoryJson, """"pmBundleTask": "pipelineSceneDashboardGate"""")
+        assertContains(advisoryJson, """"validationTask": "validateKfontM12001TelemetryPmEvidence"""")
         assertContains(advisoryJson, """"warningMode": "advisory"""")
         assertContains(advisoryJson, """"domain": "parser"""")
         assertContains(advisoryJson, """"domain": "gpu-text-handoff"""")
@@ -90,6 +91,7 @@ class FontTelemetrySchemaTest {
         assertContains(advisoryJson, "All M12 telemetry domains now have checked-in deterministic producer evidence")
         assertFalse(advisoryJson.contains("KFONT-M12-004 now solely owns"))
         assertFalse(advisoryJson.contains("KFONT-M12-005 still owns"))
+        assertContains(claimDashboard, """"pmBundleTask": "pipelineSceneDashboardGate"""")
         assertContains(advisoryMarkdown, "pipelineSceneDashboardGate")
         assertContains(advisoryMarkdown, "glyph-artifact-metrics.json")
         assertContains(advisoryMarkdown, "glyph-cache-metrics.json")

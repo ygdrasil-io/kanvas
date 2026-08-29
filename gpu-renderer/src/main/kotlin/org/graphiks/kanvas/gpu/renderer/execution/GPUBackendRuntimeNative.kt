@@ -210,10 +210,73 @@ internal fun nativeCorePrimitiveCapabilityFacts(): List<GPUCapabilityFact> = lis
     supportedGPUCapabilityFact(GPUFirstSliceCapabilityName.SCISSOR_NATIVE, "runtime", "core-primitive-direct-native"),
     supportedGPUCapabilityFact(GPUFirstSliceCapabilityName.BOUNDED_CLIP_NATIVE, "runtime", "core-primitive-bounded-clip-native"),
     supportedGPUCapabilityFact(GPUFirstSliceCapabilityName.PATH_FILL_STENCIL_COVER, "runtime", "core-primitive-path-stencil-native"),
+    supportedGPUCapabilityFact(
+        GPUFirstSliceCapabilityName.PATH_HAIRLINE_DIRECT_NATIVE,
+        "runtime",
+        "core-primitive-path-hairline-direct-native",
+    ),
     GPUCapabilityFact("first_slice.mask_blur.native", "runtime", "supported", true, "prepared-top-level-mask-blur"),
     GPUCapabilityFact("first_slice.fill_rect.affine.native", "runtime", "supported", true, "core-primitive-direct-native"),
     GPUCapabilityFact("first_slice.linear_gradient.native", "runtime", "supported", true, "core-primitive-gradient-linear-native"),
+    GPUCapabilityFact(
+        GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_NATIVE,
+        "runtime",
+        "supported",
+        true,
+        "core-primitive-gradient-linear-stroke-3stop-native",
+    ),
+    supportedGPUCapabilityFact(
+        GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_TRANSLATE_NATIVE,
+        "runtime",
+        "core-primitive-gradient-linear-stroke-3stop-translate-native",
+    ),
+    supportedGPUCapabilityFact(
+        GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_UNIFORM_SCALE_NATIVE,
+        "runtime",
+        "core-primitive-gradient-linear-stroke-uniform-scale-native",
+    ),
+    supportedGPUCapabilityFact(
+        GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_THREE_STOP_UNIFORM_SCALE_NATIVE,
+        "runtime",
+        "core-primitive-gradient-linear-stroke-3stop-uniform-scale-native",
+    ),
+    supportedGPUCapabilityFact(
+        GPUFirstSliceCapabilityName.STROKE_RECT_LINEAR_GRADIENT_TRANSLATE_NATIVE,
+        "runtime",
+        "core-primitive-gradient-linear-stroke-translate-native",
+    ),
     GPUCapabilityFact("first_slice.radial_gradient.native", "runtime", "supported", true, "core-primitive-gradient-radial-native"),
+    supportedGPUCapabilityFact(
+        GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_NATIVE,
+        "runtime",
+        "core-primitive-gradient-radial-stroke-2stop-native",
+    ),
+    supportedGPUCapabilityFact(
+        GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE,
+        "runtime",
+        "core-primitive-gradient-radial-stroke-2stop-uniform-scale-native",
+    ),
+    supportedGPUCapabilityFact(
+        GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_NATIVE,
+        "runtime", "core-primitive-gradient-radial-stroke-3stop-native",
+    ),
+    supportedGPUCapabilityFact(
+        GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_UNIFORM_SCALE_NATIVE,
+        "runtime", "core-primitive-gradient-radial-stroke-3stop-uniform-scale-native",
+    ),
+    supportedGPUCapabilityFact(
+        GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE,
+        "runtime", "core-primitive-gradient-sweep-stroke-2stop-native",
+    ),
+    supportedGPUCapabilityFact(
+        GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_UNIFORM_SCALE_NATIVE,
+        "runtime", "core-primitive-gradient-sweep-stroke-2stop-uniform-scale-native",
+    ),
+    supportedGPUCapabilityFact(
+        GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_THREE_STOP_UNIFORM_SCALE_NATIVE,
+        "runtime", "core-primitive-gradient-sweep-stroke-3stop-uniform-scale-native",
+    ),
+    supportedGPUCapabilityFact(GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_THREE_STOP_NATIVE, "runtime", "core-primitive-gradient-sweep-stroke-3stop-native"),
     GPUCapabilityFact("first_slice.sweep_gradient.native", "runtime", "supported", true, "core-primitive-gradient-sweep-native"),
 )
 
@@ -1358,6 +1421,8 @@ private class WgpuBackendSession(
             canonicalSceneTargetView = preparedTarget.view,
             onDestinationCopyEncoded = telemetryRecorder::recordDestinationCopy,
             onSubmission = telemetryRecorder::recordSubmission,
+            onPreparedImageTextureWriteTexture = preparedImageNativeCounters::recordFrameTextureWriteTexture,
+            onPreparedImageTextureUploadScopeEncoded = preparedImageNativeCounters::recordFrameTextureUploadScopeEncoded,
         ))
         val mappingExecutor = Executors.newSingleThreadExecutor { task ->
             Thread(task, "kanvas-prepared-scene-readback").apply { isDaemon = true }
@@ -5757,6 +5822,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
 internal class WgpuExecutionCaches(
     private val deviceGeneration: GPUDeviceGeneration,
+    private val capabilityFingerprint: String = "wgpu-execution-capabilities-v1",
     private val moduleCache: GPUExecutionObjectCache<GPUShaderModule> = GPUExecutionObjectCache(
         domain = GPUExecutionCacheDomain.Module,
         dispose = GPUShaderModule::close,
@@ -6411,6 +6477,7 @@ internal class WgpuExecutionCaches(
             subjectHash = subjectHash,
             deviceGeneration = deviceGeneration,
             expectedDeviceGeneration = deviceGeneration,
+            capabilityFingerprint = capabilityFingerprint,
             ownerScope = "GPUResourceProvider",
         )
 

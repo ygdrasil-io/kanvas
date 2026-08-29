@@ -448,7 +448,7 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
     }
 
     @Test
-    fun `analytic shape has one unique uniform80 src over descriptor and forty six total programs`() {
+    fun `analytic shape has one unique uniform80 src over descriptor and forty eight total programs`() {
         val key = analyticShapeKey()
         val mapped = assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>(
             mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(key),
@@ -465,7 +465,7 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1,
             key.uniformLayout,
         )
-        assertEquals(46, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
+        assertEquals(48, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
         assertTrue(CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES >= GPUWgpu4kCorePrimitivePipelineProgram.entries.size + 1)
         assertEquals(CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_VERTEX_ENTRY_POINT, descriptor.vertex.entryPoint)
         assertEquals(1, descriptor.vertex.buffers.size)
@@ -698,7 +698,7 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
                 mapped.componentIdentity,
             )
         }
-        assertEquals(46, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
+        assertEquals(48, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
         assertTrue(CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES >= GPUWgpu4kCorePrimitivePipelineProgram.entries.size + 1)
     }
 
@@ -856,7 +856,7 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
                 assertEquals(GPUWgpu4kCorePrimitiveBindingPolicy.DynamicUniformRequired, mapped.componentIdentity.bindingPolicy)
             }
         }
-        assertEquals(46, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
+        assertEquals(48, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
         assertTrue(CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES >= GPUWgpu4kCorePrimitivePipelineProgram.entries.size + 1)
     }
 
@@ -1040,6 +1040,26 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
         assertEquals(GPUBlendOperation.Add, requireNotNull(target.blend).color.operation)
         assertEquals(GPUBlendFactor.One, requireNotNull(target.blend).alpha.srcFactor)
         assertEquals(GPUBlendFactor.Zero, requireNotNull(target.blend).alpha.dstFactor)
+    }
+
+    @Test
+    fun `path stencil dst read cover uses the exact dst read bind group component`() {
+        val pathDstReadKey = pathKey(regularCover(), cover = true).copy(
+            blend = GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination(
+                GPUBlendMode.DIFFERENCE,
+                "difference@v1",
+                GPUSourceCoverageEncoding.None,
+            ),
+        )
+
+        val mapped = assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>(
+            mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(pathDstReadKey),
+        )
+        assertEquals(GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverDstRead, mapped.identity.program)
+        assertEquals(
+            corePrimitiveDstReadComponentIdentity("difference"),
+            pathDstReadKey.corePrimitiveNativeComponentIdentityOrNull(),
+        )
     }
 
     @Test

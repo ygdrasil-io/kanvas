@@ -319,9 +319,19 @@ private fun GPUWgpu4kCorePrimitivePipelineCacheKey.hasCompatibleComponentIdentit
         componentIdentity == PRODUCTION_CORE_PRIMITIVE_ANALYTIC_DRRECT_COMPONENT_IDENTITY
     pipelineIdentity.program.isGradient() ->
         componentIdentity.gradientProgramOrNull() == pipelineIdentity.program ||
-            pipelineIdentity.program.isClipStencilLinearGradient() &&
-            componentIdentity.gradientShaderVariantOrNull() ==
-            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient
+            pipelineIdentity.program.isClipStencilGradient() &&
+            componentIdentity.gradientShaderVariantOrNull() == when (pipelineIdentity.program) {
+                GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerLinearGradientRegular,
+                GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerLinearGradientInverse,
+                -> GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient
+                GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerRadialGradientRegular,
+                GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerRadialGradientInverse,
+                -> GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient
+                GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerSweepGradientRegular,
+                GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerSweepGradientInverse,
+                -> GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectSweepGradient
+                else -> null
+            }
     pipelineIdentity.program.isClipStencilProducer() ->
         componentIdentity == PRODUCTION_CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_COMPONENT_IDENTITY
     pipelineIdentity.program.isAnalyticIntersection4() ->

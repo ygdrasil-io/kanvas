@@ -1,9 +1,17 @@
-# WIP — ordre d'exécution de l'élargissement des tests GPU
+# WIP — plan complet de fermeture du renderer Skia GM
 
 > Dossier de travail temporaire. Aucun fichier de `wip/` n'est une source de
 > vérité ni une preuve promue : le code Kotlin, les tests exécutés et les
 > artefacts de preuve vérifiés le sont. Supprimer ce dossier après absorption
 > de chaque lot dans le code, les tests et les preuves promues.
+
+## Plan directeur
+
+Le plan complet, ses contraintes globales, ses vagues ordonnées et ses critères
+de fermeture vivent dans
+[complete-renderer-feature-plan.md](complete-renderer-feature-plan.md).
+Il couvre toute la surface publique non-font actuelle, tout en conservant une
+exécution incrémentale avec une route de production et une PR par vague.
 
 ## Règle de lecture
 
@@ -18,6 +26,7 @@ diff/statistiques et politique de fallback vérifiée.
 
 | Lot | But | Brief |
 | --- | --- | --- |
+| Directeur | Classer toute la surface et ordonner les vagues de fermeture. | [complete-renderer-feature-plan.md](complete-renderer-feature-plan.md) |
 | 00 | Stabiliser le catalogue, les artefacts, les oracles et les refus. | [00-evidence-and-catalog.md](00-evidence-and-catalog.md) |
 | 10 | Tester l'état Canvas et la géométrie rectangulaire déjà basse niveau. | [10-canvas-state-and-basic-geometry.md](10-canvas-state-and-basic-geometry.md) |
 | 20 | Tester path, stroke, coverage et clips non rectangulaires. | [20-paths-strokes-and-clips.md](20-paths-strokes-and-clips.md) |
@@ -25,13 +34,14 @@ diff/statistiques et politique de fallback vérifiée.
 | 40 | Tester images, layers et image filters. | [40-images-layers-and-filters.md](40-images-layers-and-filters.md) |
 | 50 | Tester runtime effects enregistrés, WGSL, reflection et layouts. | [50-runtime-effects-and-wgsl.md](50-runtime-effects-and-wgsl.md) |
 | 60 | Tester texte, vertices, mesh et picture. | [60-text-vertices-mesh-and-picture.md](60-text-vertices-mesh-and-picture.md) |
-| 70 | Tester cycle de vie WebGPU, caches, performance et promotion GM. | [70-webgpu-lifecycle-performance-and-gm.md](70-webgpu-lifecycle-performance-and-gm.md) |
+| 70 | Tester cycle de vie WebGPU, caches, performance et fermeture GM. | [70-webgpu-lifecycle-performance-and-gm.md](70-webgpu-lifecycle-performance-and-gm.md) |
 | Carte | Empêcher toute suppression de WIP avant classification des APIs/types publics. | [coverage-map.md](coverage-map.md) |
 
 Un lot est un inventaire de travail et non l'autorisation d'ajouter des scènes,
-du code ou des captures. Tout travail ultérieur est découpé en petites vagues
-explicitement approuvées, avec IDs de cas exacts et preuves d'acceptation.
-Aucun lot ne constitue, à lui seul, une autorisation de vague.
+du code ou des captures. Chaque ligne `Wxx` du plan directeur devient un plan
+de PR détaillé au moment de son activation, avec IDs exacts, tests qui échouent,
+fichiers touchés et preuves d'acceptation. L'autorisation d'un lot n'autorise
+pas implicitement les lots suivants.
 
 ## Graphe de dépendances
 

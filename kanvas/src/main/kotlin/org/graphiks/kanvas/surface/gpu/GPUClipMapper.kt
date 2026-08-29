@@ -89,6 +89,7 @@ private fun ClipStackOp.toClipElement(): GPUClipCoverageElement = when (this) {
         antiAlias = antiAlias,
         fillRule = GPUClipFillRule.Winding,
         inverseFill = false,
+        transformClass = transformClass,
     )
     is ClipStackOp.PathOp -> {
         val flattened = PathTessellator(

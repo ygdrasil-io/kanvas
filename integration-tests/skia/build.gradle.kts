@@ -130,6 +130,21 @@ tasks.register<JavaExec>("generateSkiaScan") {
     project.findProperty("kanvas.scan.indices")?.let { args("--indices", it.toString()) }
 }
 
+tasks.register<JavaExec>("generateSkiaGmInventory") {
+    group = "verification"
+    description = "Generates deterministic source-derived Skia GM inventory evidence."
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("org.graphiks.kanvas.skia.SkiaGmInventoryKt")
+    val output = project.findProperty("gm.inventoryOutput")?.toString()?.let(::File)
+        ?: rootProject.file("reports/gpu-renderer/evidence/gm-inventory/source-inventory.json")
+    args(output.absolutePath)
+    jvmArgs("--add-opens=java.base/java.lang=ALL-UNNAMED", "--enable-native-access=ALL-UNNAMED")
+    if (org.gradle.internal.os.OperatingSystem.current().isMacOsX) jvmArgs("-XstartOnFirstThread")
+    outputs.file(output)
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<JavaExec>("generateSkiaDashboard") {
     group = "verification"
     description = "Generates Skia GM visual comparison dashboard."

@@ -211,7 +211,15 @@ enum class GPUPreparedMaterialUnsupportedReason(
     ),
     LINEAR_GRADIENT_STOP_COUNT(
         "unsupported.material.mapping.linear_gradient_stop_count",
-        "Prepared linear gradient mapping requires exactly two stops",
+        "Prepared linear gradient mapping exceeds the bounded route stop count",
+    ),
+    RADIAL_GRADIENT_STOP_COUNT(
+        "unsupported.material.radial_gradient_stop_count",
+        "Prepared radial gradient mapping exceeds the bounded route stop count",
+    ),
+    SWEEP_GRADIENT_STOP_COUNT(
+        "unsupported.material.sweep_gradient_stop_count",
+        "Prepared sweep gradient mapping exceeds the bounded route stop count",
     ),
     LINEAR_GRADIENT_NON_FINITE(
         "unsupported.material.mapping.linear_gradient_non_finite",
@@ -276,12 +284,16 @@ enum class GPUPreparedMaterialUnsupportedReason(
  */
 fun GPUMaterialDescriptor.gradientFactsRefusalReasonOrNull(
     deferLinearGradientTileModeToRoute: Boolean = false,
+    allowThreeStopLinearGradient: Boolean = false,
+    allowThreeStopRadialGradient: Boolean = false,
+    allowThreeStopSweepGradient: Boolean = false,
 ): GPUPreparedMaterialUnsupportedReason? =
     when (this) {
         is GPUMaterialDescriptor.LinearGradient -> when {
             tileMode != "clamp" && !deferLinearGradientTileModeToRoute ->
                 GPUPreparedMaterialUnsupportedReason.LINEAR_GRADIENT_TILE_MODE
-            (allStopPositions?.size ?: 2) != 2 -> GPUPreparedMaterialUnsupportedReason.LINEAR_GRADIENT_STOP_COUNT
+            (allStopPositions?.size ?: 2) !in (if (allowThreeStopLinearGradient) 2..3 else 2..2) ->
+                GPUPreparedMaterialUnsupportedReason.LINEAR_GRADIENT_STOP_COUNT
             !linearGradientFactsAreFinite() -> GPUPreparedMaterialUnsupportedReason.LINEAR_GRADIENT_NON_FINITE
             interpolation != "srgb" -> GPUPreparedMaterialUnsupportedReason.GRADIENT_INTERPOLATION
             else -> localMatrix.boundedAffineLocalMatrixRefusalOrNull(allowFullAffine = true)
@@ -289,16 +301,41 @@ fun GPUMaterialDescriptor.gradientFactsRefusalReasonOrNull(
         }
         is GPUMaterialDescriptor.RadialGradient -> when {
             interpolation != "srgb" -> GPUPreparedMaterialUnsupportedReason.GRADIENT_INTERPOLATION
-            localMatrix != IDENTITY_GRADIENT_LOCAL_MATRIX -> GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX
+            !localMatrix.isPositiveUniformScaleTranslateGradientLocalMatrix() ->
+                GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX
+            (allStopPositions?.size ?: 2) !in
+                (if (allowThreeStopRadialGradient) 1..3 else 1..2) ->
+                GPUPreparedMaterialUnsupportedReason.RADIAL_GRADIENT_STOP_COUNT
             else -> null
         }
         is GPUMaterialDescriptor.SweepGradient -> when {
             interpolation != "srgb" -> GPUPreparedMaterialUnsupportedReason.GRADIENT_INTERPOLATION
-            localMatrix != IDENTITY_GRADIENT_LOCAL_MATRIX -> GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX
+            !localMatrix.isPositiveUniformScaleTranslateGradientLocalMatrix() ->
+                GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX
+            (allStopPositions?.size ?: 2) !in
+                (if (allowThreeStopSweepGradient) 1..3 else 1..2) ->
+                GPUPreparedMaterialUnsupportedReason.SWEEP_GRADIENT_STOP_COUNT
             else -> null
         }
         else -> null
     }
+
+/**
+ * Bounded affine subset whose sweep angles remain unchanged: identity or a positive uniform
+ * scale plus translation. Skew, rotation, perspective, singular matrices, and non-finite
+ * values remain outside the local-matrix contract.
+ */
+fun List<Float>.isPositiveUniformScaleTranslateGradientLocalMatrix(): Boolean {
+    if (size != 9 || any { !it.isFinite() }) return false
+    val scale = this[0]
+    return scale > 0f &&
+        this[1] == 0f &&
+        this[3] == 0f &&
+        this[4] == scale &&
+        this[6] == 0f &&
+        this[7] == 0f &&
+        this[8] == 1f
+}
 
 /** Returns the closed refusal reason for image local-matrix facts outside the bounded route. */
 fun GPUMaterialDescriptor.ImageDraw.imageLocalMatrixRefusalReasonOrNull(): GPUPreparedMaterialUnsupportedReason? {
@@ -3148,11 +3185,27 @@ data class GPUOrderingFacts(
 /** Compatibility alias for frame provenance owned by the foundation state package. */
 typealias GPUFrameProvenance = org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 
+/** Closed source identity used by route admission without parsing diagnostic strings. */
+enum class GPUCommandSourceKind {
+    Generic,
+    PublicFillRect,
+    AnalyticStrokeRectBand,
+    AnalyticStrokeRectTranslatedBand,
+    AnalyticStrokeRectTranslatedThreeStopBand,
+    AnalyticStrokeRectUniformScaleBand,
+    AnalyticStrokeRectUniformScaleThreeStopBand,
+    AnalyticStrokeRectUniformScaleSweepTwoStopBand,
+    AnalyticStrokeRectUniformScaleSweepThreeStopBand,
+    AnalyticStrokeRectUniformScaleRadialTwoStopBand,
+    AnalyticStrokeRectUniformScaleRadialThreeStopBand,
+}
+
 /** Source adapter information used by diagnostics and dumps. */
 data class GPUCommandSource(
     val adapter: String,
     val operation: String,
     val frameProvenance: GPUFrameProvenance = GPUFrameProvenance.None,
+    val kind: GPUCommandSourceKind = GPUCommandSourceKind.Generic,
 ) {
     init {
         require(adapter.isNotBlank()) { "GPUCommandSource.adapter must not be blank" }

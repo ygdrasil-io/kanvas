@@ -129,6 +129,21 @@ internal object GPUPreparedSurfaceProductRouter {
                     coverageMeasured = false,
                 ),
                 structuralSteps = execution.evidence.structuralSteps,
+                nativeEvidenceCounters = mapOf(
+                    "preparedImage.textureUploadScope" to
+                        execution.evidence.preparedImageFrameTextureUploadScopesEncoded,
+                    "preparedImage.frameTextureCreations" to
+                        execution.evidence.preparedImageFrameTextureCreations,
+                    "preparedImage.frameSamplerCreations" to
+                        execution.evidence.preparedImageFrameSamplerCreations,
+                    "preparedImage.frameBindGroupCreations" to
+                        execution.evidence.preparedImageFrameBindGroupCreations,
+                    "preparedImage.queueWriteTextureCalls" to
+                        execution.evidence.preparedImageFrameTextureWriteTextureCalls,
+                ),
+                nativeEvidenceScopeKinds = if (
+                    execution.evidence.preparedImageFrameTextureUploadScopesEncoded > 0L
+                ) listOf("Upload") else emptyList(),
             ),
             evidence = execution.evidence,
         )

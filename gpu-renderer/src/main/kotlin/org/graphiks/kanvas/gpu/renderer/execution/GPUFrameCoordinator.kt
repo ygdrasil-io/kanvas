@@ -360,6 +360,8 @@ class GPUPreparedSceneNativeCounters(
     val preparedImageFrameBindGroupCreations: Long = 0L,
     commandsByCommandId: Map<Int, GPUPreparedNativeCommandEncodingCounters> = emptyMap(),
     val destinationCopies: Long = 0L,
+    val preparedImageFrameTextureWriteTextureCalls: Long = 0L,
+    val preparedImageFrameTextureUploadScopesEncoded: Long = 0L,
 ) {
     val commandsByCommandId: Map<Int, GPUPreparedNativeCommandEncodingCounters> =
         immutableMap(commandsByCommandId)
@@ -417,6 +419,10 @@ class GPUPreparedSceneNativeCounters(
         commandsByCommandId: Map<Int, GPUPreparedNativeCommandEncodingCounters> =
             this.commandsByCommandId,
         destinationCopies: Long = this.destinationCopies,
+        preparedImageFrameTextureWriteTextureCalls: Long =
+            this.preparedImageFrameTextureWriteTextureCalls,
+        preparedImageFrameTextureUploadScopesEncoded: Long =
+            this.preparedImageFrameTextureUploadScopesEncoded,
     ): GPUPreparedSceneNativeCounters = GPUPreparedSceneNativeCounters(
         encoders,
         commandBuffers,
@@ -468,6 +474,8 @@ class GPUPreparedSceneNativeCounters(
         preparedImageFrameBindGroupCreations,
         commandsByCommandId,
         destinationCopies,
+        preparedImageFrameTextureWriteTextureCalls,
+        preparedImageFrameTextureUploadScopesEncoded,
     )
 
     operator fun component1(): Long = encoders
@@ -521,6 +529,8 @@ class GPUPreparedSceneNativeCounters(
     operator fun component49(): Map<Int, GPUPreparedNativeCommandEncodingCounters> =
         commandsByCommandId
     operator fun component50(): Long = destinationCopies
+    operator fun component51(): Long = preparedImageFrameTextureWriteTextureCalls
+    operator fun component52(): Long = preparedImageFrameTextureUploadScopesEncoded
 
     override fun equals(other: Any?): Boolean =
         this === other ||
@@ -589,6 +599,8 @@ class GPUPreparedSceneNativeCounters(
         preparedImageFrameBindGroupCreations,
         commandsByCommandId,
         destinationCopies,
+        preparedImageFrameTextureWriteTextureCalls,
+        preparedImageFrameTextureUploadScopesEncoded,
     )
 
     private companion object {
@@ -643,6 +655,8 @@ class GPUPreparedSceneNativeCounters(
             "preparedImageFrameBindGroupCreations",
             "commandsByCommandId",
             "destinationCopies",
+            "preparedImageFrameTextureWriteTextureCalls",
+            "preparedImageFrameTextureUploadScopesEncoded",
         )
     }
 }
@@ -657,6 +671,8 @@ internal fun GPUPreparedSceneNativeCounters.withPreparedImageNativeCounters(
     preparedImageFrameSamplerCreations = counters.frameSamplerCreations,
     preparedImageFrameUniformBufferCreations = counters.frameUniformBufferCreations,
     preparedImageFrameBindGroupCreations = counters.frameBindGroupCreations,
+    preparedImageFrameTextureWriteTextureCalls = counters.frameTextureWriteTextureCalls,
+    preparedImageFrameTextureUploadScopesEncoded = counters.frameTextureUploadScopesEncoded,
 )
 
 /** Render counters whose [draws] and [drawIndexed] values are disjoint native call counts. */

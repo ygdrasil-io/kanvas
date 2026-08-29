@@ -35,6 +35,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometryClass
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageRouteCapability
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageVertex
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedAtlasSourceBlend
 import org.graphiks.kanvas.gpu.renderer.recording.buildPreparedImageGeometry
@@ -62,6 +63,7 @@ import kotlin.math.min
 data class GPUPreparedImageDrawFacts(
     val artifact: GPUPreparedImageUploadArtifact,
     val sampling: GPUPreparedImageSampling,
+    val routeCapability: GPUPreparedImageRouteCapability = GPUPreparedImageRouteCapability.GenericNative,
     val geometry: GPUPreparedImageGeometry,
     val tintPremultipliedRgba: List<Float>,
     val atlasColorPremultipliedRgba: List<Float>? = null,
@@ -147,11 +149,17 @@ internal object GPUPreparedDrawImageLowerer {
             )
         }
         val requestedSampling = requestedImageShader?.sampling
+        val boundedW28 = config.preparedImageRouteCapability ==
+            GPUPreparedImageRouteCapability.BoundedNearest1To1
         val sampling = when (requestedSampling) {
             SamplingOptions.NEAREST -> GPUPreparedImageSampling.Nearest
-            SamplingOptions.LINEAR,
-            null,
-            -> GPUPreparedImageSampling.Linear
+            SamplingOptions.LINEAR -> if (boundedW28) {
+                return GPUPreparedDrawImageLowering.Refused(
+                    GPUPreparedImageRefusalCodes.SAMPLING_FILTER,
+                    mapOf("sourceId" to image.sourceId, "sampling" to "linear", "supportedSampling" to "nearest"),
+                )
+            } else GPUPreparedImageSampling.Linear
+            null -> GPUPreparedImageSampling.Nearest
             is SamplingOptions.Cubic -> return GPUPreparedDrawImageLowering.Refused(
                 GPUPreparedImageRefusalCodes.SAMPLING_CUBIC,
                 mapOf("sourceId" to image.sourceId),
@@ -187,8 +195,57 @@ internal object GPUPreparedDrawImageLowerer {
             )
         }
 
+        val transform = operation.transform
+        val integerTranslation =
+            transform.sx == 1f && transform.sy == 1f && transform.kx == 0f && transform.ky == 0f &&
+                transform.tx.isFinite() && transform.ty.isFinite() &&
+                transform.tx == transform.tx.toInt().toFloat() &&
+                transform.ty == transform.ty.toInt().toFloat()
+        if (boundedW28 && !integerTranslation) {
+            return GPUPreparedDrawImageLowering.Refused(
+                GPUPreparedImageRefusalCodes.AFFINE_SAMPLING,
+                mapOf(
+                    "sourceId" to image.sourceId,
+                    "supportedTransform" to "identity_or_integer_translation",
+                    "sx" to transform.sx.toString(),
+                    "kx" to transform.kx.toString(),
+                    "ky" to transform.ky.toString(),
+                    "sy" to transform.sy.toString(),
+                    "tx" to transform.tx.toString(),
+                    "ty" to transform.ty.toString(),
+                ),
+            )
+        }
+
         val dst = operation.dst
         val src = operation.src
+
+        // W28's distinct capability admits one complete immutable bitmap copied at native
+        // pixel resolution. The generic native route intentionally retains its established
+        // crop, scaling, fractional local-matrix, and grid capabilities.
+        val sourceIsWholeImage =
+            src.left == 0f && src.top == 0f &&
+                src.right == image.width.toFloat() && src.bottom == image.height.toFloat()
+        val destinationIsInteger =
+            listOf(dst.left, dst.top, dst.right, dst.bottom).all { coordinate ->
+                coordinate.isFinite() && coordinate == coordinate.toInt().toFloat()
+            }
+        val destinationIsNativeSize =
+            dst.right - dst.left == image.width.toFloat() &&
+                dst.bottom - dst.top == image.height.toFloat()
+        if (boundedW28 && (!sourceIsWholeImage || !destinationIsInteger || !destinationIsNativeSize)) {
+            return GPUPreparedDrawImageLowering.Refused(
+                GPUPreparedImageRefusalCodes.RECT_GEOMETRY,
+                mapOf(
+                    "sourceId" to image.sourceId,
+                    "supportedSource" to "whole_image",
+                    "supportedDestination" to "integer_1_to_1",
+                    "src" to "${src.left},${src.top},${src.right},${src.bottom}",
+                    "dst" to "${dst.left},${dst.top},${dst.right},${dst.bottom}",
+                    "imageSize" to "${image.width}x${image.height}",
+                ),
+            )
+        }
 
         val dx0 = dst.left
         val dy0 = dst.top
@@ -291,7 +348,12 @@ internal object GPUPreparedDrawImageLowerer {
         )
 
         val gpuSrc = GPURect(sx0, sy0, sx1, sy1)
-        val gpuDst = GPURect(dst.left, dst.top, dst.right, dst.bottom)
+        val gpuDst = GPURect(
+            dst.left + transform.tx,
+            dst.top + transform.ty,
+            dst.right + transform.tx,
+            dst.bottom + transform.ty,
+        )
 
         val minX = transformedCorners.minOf { it.x }
         val minY = transformedCorners.minOf { it.y }
@@ -320,14 +382,10 @@ internal object GPUPreparedDrawImageLowerer {
             imageSourceId = image.sourceId,
             src = gpuSrc,
             dst = gpuDst,
-            transform = GPUTransformFacts.affine(
-                scaleX = operation.transform.sx,
-                skewX = operation.transform.kx,
-                skewY = operation.transform.ky,
-                scaleY = operation.transform.sy,
-                translateX = operation.transform.tx,
-                translateY = operation.transform.ty,
-            ),
+            // Integer translations are folded into dst above. The native image dispatch
+            // consequently receives only an identity transform, which is the contract it
+            // actually materializes rather than a deferred recorder refusal.
+            transform = GPUTransformFacts.identity(),
             clip = operation.clip.toGPUClipFacts(target),
             layer = GPULayerFacts.root(target),
             material = material,
@@ -365,6 +423,7 @@ internal object GPUPreparedDrawImageLowerer {
             preparedImage = GPUPreparedImageDrawFacts(
                 artifact = artifact,
                 sampling = sampling,
+                routeCapability = config.preparedImageRouteCapability,
                 geometry = geometry,
                 tintPremultipliedRgba = tintPremultipliedRgba,
             ),

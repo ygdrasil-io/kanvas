@@ -31,6 +31,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource
+import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSourceKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
@@ -45,6 +46,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.commands.isBoundedNativePathHairline
 import org.graphiks.kanvas.gpu.renderer.state.GPUPathSourceAuthority
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextArtifactRef
@@ -77,6 +79,7 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPU_ANALYTIC_MULTI_RECT_MAX_ELEMEN
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds as GPUClipBounds
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellator
+import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellationBudgetExceeded
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.TileMode
@@ -97,6 +100,7 @@ internal data class GPUOpMapping(
     val stateEvents: List<GPUFramePathStateEvent>,
     val preparedRefusal: GPUPreparedOperationRefusal? = null,
     val culledTextOperationIndices: Set<Int> = emptySet(),
+    val culledCoreOperationIndices: Set<Int> = emptySet(),
     val preparedVerticesInventory: PreparedVerticesFrameInventory? = null,
     val allocatedCommandIds: Set<Int> = emptySet(),
     val commandIdsByOperationIndex: Map<Int, Set<Int>> = emptyMap(),
@@ -129,6 +133,7 @@ internal object GPUOpMapper {
         val visual = mutableListOf<GPUFramePathVisualCommand>()
         val stateEvents = mutableListOf<GPUFramePathStateEvent>()
         val culledTextOperationIndices = linkedSetOf<Int>()
+        val culledCoreOperationIndices = linkedSetOf<Int>()
         val preparedVerticesProvenance = linkedMapOf<Int, GPUFrameProvenance>()
         val preparedVerticesCommandIds = linkedMapOf<Int, Int>()
         val commandIdsByOperationIndex = mutableMapOf<Int, MutableSet<Int>>()
@@ -607,7 +612,32 @@ internal object GPUOpMapper {
                         ),
                     )
                     if (lowered == null) {
+                        culledCoreOperationIndices += operationIndex
                         return@forEachIndexed
+                    }
+                    lowered.geometryRefusal
+                        ?.takeIf { refusal ->
+                            refusal.code == "geometry.path.fan_budget_exceeded" ||
+                                refusal.code == "geometry.path.memory_budget_exceeded" ||
+                                refusal.code == "geometry.path.fan_budget_config_exceeded" ||
+                                refusal.code == "geometry.path.memory_budget_config_exceeded" ||
+                                refusal.code == "geometry.path.fan_budget_config_out_of_int_range" ||
+                                refusal.code == "geometry.path.memory_budget_config_out_of_int_range" ||
+                                refusal.code == "unsupported.core_primitive.path_vertex_budget_config_out_of_int_range"
+                        }
+                        ?.let { refusal ->
+                        return GPUOpMapping(
+                            visualCommands = emptyList(),
+                            stateEvents = stateEvents.toList(),
+                            preparedRefusal = GPUPreparedOperationRefusal(
+                                commandId = paintOrder,
+                                operationIndex = operationIndex,
+                                code = refusal.code,
+                                facts = refusal.refusalFacts,
+                            ),
+                            culledTextOperationIndices = culledTextOperationIndices.toSet(),
+                            culledCoreOperationIndices = culledCoreOperationIndices.toSet(),
+                        )
                     }
                     visual += lowered
                     recordCommandIds(
@@ -636,6 +666,7 @@ internal object GPUOpMapper {
                     facts = binding.facts,
                 ),
                 culledTextOperationIndices = culledTextOperationIndices.toSet(),
+                culledCoreOperationIndices = culledCoreOperationIndices.toSet(),
             )
         }
         val allocatedCommandIds = when (
@@ -651,12 +682,14 @@ internal object GPUOpMapper {
                 stateEvents = stateEvents.toList(),
                 preparedRefusal = authenticated.refusal,
                 culledTextOperationIndices = culledTextOperationIndices.toSet(),
+                culledCoreOperationIndices = culledCoreOperationIndices.toSet(),
             )
         }
         return GPUOpMapping(
             visualCommands = visual.toList(),
             stateEvents = stateEvents.toList(),
             culledTextOperationIndices = culledTextOperationIndices.toSet(),
+            culledCoreOperationIndices = culledCoreOperationIndices.toSet(),
             preparedVerticesInventory = mappedVerticesInventory,
             allocatedCommandIds = allocatedCommandIds,
             commandIdsByOperationIndex = commandIdsByOperationIndex
@@ -751,6 +784,11 @@ internal object GPUOpMapper {
             onGeometryRefusal = { refusal -> loweringRefusal = refusal },
         ) ?: return null
         val geometryRefusal = loweringRefusal ?: operation.coreGeometryRefusalOrNull()
+        // A valid finite primitive with no target-space pixels is a Canvas no-op.
+        // Do this before native-route preparation: analytic routes deliberately
+        // refuse an empty *clip* scissor, but must never turn an off-target draw
+        // into a terminal frame failure.
+        if (geometryRefusal == null && operation.isFullyOutsideTarget(rawNormalized)) return null
         val clipPlan = rawNormalized.clip.coverageRequest?.let { request ->
             GPUClipCoveragePlanner.planForFrameRoute(
                 request,
@@ -856,11 +894,25 @@ internal object GPUOpMapper {
                 else -> null
             }
         } catch (failure: IllegalStateException) {
-            if (!failure.isPathVertexBudgetFailure() || !operation.isCorePathOperation()) throw failure
+            if (!failure.isPathBudgetFailure() || !operation.isCorePathOperation()) throw failure
+            val tessellationBudget = failure as? PathTessellationBudgetExceeded
+            val budgetCode = when (tessellationBudget?.code) {
+                "geometry.path.fan_budget_exceeded",
+                "geometry.path.memory_budget_exceeded",
+                "geometry.path.fan_budget_config_exceeded",
+                "geometry.path.memory_budget_config_exceeded",
+                "geometry.path.fan_budget_config_out_of_int_range",
+                "geometry.path.memory_budget_config_out_of_int_range",
+                "unsupported.core_primitive.path_vertex_budget_config_out_of_int_range",
+                -> tessellationBudget.code
+                else -> "unsupported.core_primitive.path_vertex_budget"
+            }
             loweringRefusal = GPUCorePrimitiveGeometryRefusal(
-                code = "unsupported.core_primitive.path_vertex_budget",
+                code = budgetCode,
                 refusalFacts = mapOf(
                     "maxPathVertices" to config.maxPathVertices.toString(),
+                    "maxPathFanTriangles" to config.maxPathFanTriangles.toString(),
+                    "maxPathGeometryBytes" to config.maxPathGeometryBytes.toString(),
                     "reason" to (failure.message ?: "path_vertex_budget"),
                 ),
             ).also(onGeometryRefusal)
@@ -893,6 +945,11 @@ internal object GPUOpMapper {
             adapter = "kanvas-surface",
             operation = operation.coreSourceOperation(),
             frameProvenance = provenance,
+            kind = if (operation is DisplayOp.DrawRect && !operation.paint.isStroke()) {
+                GPUCommandSourceKind.PublicFillRect
+            } else {
+                GPUCommandSourceKind.Generic
+            },
         )
         return when (command) {
             is NormalizedDrawCommand.FillRect -> command.copy(bounds = targetBounds, ordering = ordering, source = source)
@@ -1123,7 +1180,7 @@ private fun GPUBlendMode.toPaintBlendMode(): BlendMode = when (this) {
     GPUBlendMode.LUMINOSITY -> BlendMode.LUMINOSITY
 }
 
-private fun Throwable.isPathVertexBudgetFailure(): Boolean =
+private fun Throwable.isPathBudgetFailure(): Boolean = this is PathTessellationBudgetExceeded ||
     message?.let { it.startsWith("Path flattened to ") || it.startsWith("Path has ") } == true
 
 private fun DisplayOp.isCorePathOperation(): Boolean = when (this) {
@@ -1260,10 +1317,20 @@ private fun DisplayOp.DrawPath.toPathCommand(
     config: RenderConfig,
     sourceAuthority: GPUPathSourceAuthority = GPUPathSourceAuthority.Unknown,
 ): NormalizedDrawCommand.FillPath {
-    val flattened = PathTessellator(
+    config.pathEdgeFanBudgetRefusalCodeOrNull()?.let { code ->
+        throw PathTessellationBudgetExceeded(
+            code = code,
+            message = "Public Surface path edge-fan configuration is outside the static payload contract",
+        )
+    }
+    val tessellator = PathTessellator(
         tolerance = config.curveTolerance,
         maxVertices = config.maxPathVertices.toInt(),
-    ).flattenWithContours(path.toPathTessellatorData())
+        maxFanTriangles = config.maxPathFanTriangles.toInt(),
+        maxGeometryBytes = config.maxPathGeometryBytes.toInt(),
+    )
+    val flattened = tessellator.flattenWithContours(path.toPathTessellatorData())
+    tessellator.validateStencilEdgeFanBudget(flattened)
     return toNormalizedCommand(
         commandId,
         target,
@@ -1286,7 +1353,7 @@ private fun DisplayOp.DrawPath.directTriangleSourceAuthority(): GPUPathSourceAut
 }
 
 private fun NormalizedDrawCommand.geometryCoverage(): GPUCoverageConsumption = when (this) {
-    is NormalizedDrawCommand.FillPath -> if (isBoundedDirectTriangleFill()) {
+    is NormalizedDrawCommand.FillPath -> if (isBoundedDirectTriangleFill() || isBoundedNativePathHairline()) {
         GPUCoverageConsumption.FullOrScissor
     } else {
         GPUCoverageConsumption.StencilCoverage1x
@@ -1468,14 +1535,21 @@ private fun GPUClipCoveragePlan.Mask.toMaskExecutionPlan(
         it.kind == GPUClipCoverageElementKind.Path &&
             !it.antiAlias &&
             (
-                it.operation == GPUClipCoverageOperation.Intersect ||
-                    (
-                        it.operation == GPUClipCoverageOperation.Difference &&
-                            !it.inverseFill
-                    )
+                    it.operation == GPUClipCoverageOperation.Intersect ||
+                        it.operation == GPUClipCoverageOperation.Difference
             )
     }
     if (singleHardPathClip != null) {
+        when (singleHardPathClip.transformClass) {
+            "non-finite" -> return clipExecutionRefusal(
+                code = "unsupported.transform.non_finite",
+                message = "Path clip capture-time CTM must be finite.",
+            )
+            "singular-affine" -> return clipExecutionRefusal(
+                code = "unsupported.transform.affine_singular",
+                message = "Path clip capture-time affine CTM must be non-singular.",
+            )
+        }
         if (!capabilities.supportsClipCapability(PATH_FILL_STENCIL_COVER)) {
             return clipExecutionRefusal(
                 code = "unsupported.clip.stencil_unavailable",
@@ -1491,7 +1565,7 @@ private fun GPUClipCoveragePlan.Mask.toMaskExecutionPlan(
         if (singleHardPathClip.transformClass !in HARD_PATH_CLIP_TRANSFORM_CLASSES) {
             return clipExecutionRefusal(
                 code = "unsupported.clip.path_transform",
-                message = "Native hard path clips require identity, translation, or positive uniform scale capture-time CTM.",
+                message = "Native hard path clips require identity, translation, or finite non-singular axis scale with optional translation capture-time CTM.",
             )
         }
         val geometry = singleHardPathClip.executionGeometryOrRefusal() as? GPUClipExecutionGeometry.Path
@@ -1588,6 +1662,9 @@ private val HARD_PATH_CLIP_TRANSFORM_CLASSES = setOf(
     "identity",
     "translate",
     "uniform-positive-scale-translate",
+    "scale",
+    "scale-translate",
+    "right-angle-rotation",
 )
 
 private fun GPUClipCoverageElement.executionGeometryOrRefusal(): GPUClipExecutionGeometry? = try {
@@ -1843,6 +1920,16 @@ private fun GPUBounds.clampedTo(target: GPUTargetFacts): GPUBounds = GPUBounds(
     right = ceil(right).coerceIn(0f, target.width.toFloat()),
     bottom = ceil(bottom).coerceIn(0f, target.height.toFloat()),
 )
+
+private fun DisplayOp.isFullyOutsideTarget(command: NormalizedDrawCommand): Boolean = when (this) {
+    is DisplayOp.DrawRect -> !rect.isEmpty && command.bounds.isEmpty
+    is DisplayOp.DrawRRect -> !rrect.rect.isEmpty && command.bounds.isEmpty
+    is DisplayOp.DrawDRRect -> !outer.rect.isEmpty && !inner.rect.isEmpty && command.bounds.isEmpty
+    else -> false
+}
+
+private val GPUBounds.isEmpty: Boolean
+    get() = left >= right || top >= bottom
 
 private fun DisplayOp.transformOrIdentity(): Matrix3x3F32 = when (this) {
     is DisplayOp.DrawColor -> Matrix3x3F32.Identity

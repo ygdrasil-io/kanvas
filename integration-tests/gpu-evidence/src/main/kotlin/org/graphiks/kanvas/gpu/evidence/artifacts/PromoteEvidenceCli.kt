@@ -226,7 +226,18 @@ class PromoteEvidenceCliRunner internal constructor(
             require(request.selection == EvidenceSelection.All) { "selected promotion requires an existing promoted catalog" }
             return null
         }
-        val existing = validateCatalogRoot(promoted, EvidenceSelection.All, null, requirePromotion = true)
+        // Selected artifacts may be stale precisely because this operation replaces
+        // them. Read the existing catalogue and environment without validating those
+        // entries; the fully staged root is independently verified after replacement.
+        require(Files.isRegularFile(promoted.resolve("promotion.json"), NOFOLLOW_LINKS)) {
+            "promoted evidence root requires promotion metadata"
+        }
+        val existingSceneIds = readCatalogEntries(promoted).map(EvidenceCatalogEntry::sceneId)
+        require(existingSceneIds.isNotEmpty()) { "promoted catalog contains no scenes" }
+        val existing = ValidatedCatalogRoot(
+            entriesBySceneId = readCatalogEntries(promoted).associateBy(EvidenceCatalogEntry::sceneId),
+            environmentBytes = Files.readAllBytes(promoted.resolve("environment.json")),
+        )
         if (request.selection == EvidenceSelection.All) {
             require(request.rebaseline) { "destination already contains evidence; use --all --rebaseline with old/new comparison summaries" }
         } else {

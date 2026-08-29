@@ -8,6 +8,10 @@ import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageBindingLayoutTopology
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageRouteCapability
+import org.graphiks.kanvas.gpu.renderer.resources.isBoundedNativeImageGeometry
+import org.graphiks.kanvas.gpu.renderer.resources.isValidForRouteCapability
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUImageFrameResourcePlan
@@ -609,6 +613,19 @@ internal object GPUPreparedImagePlanValidator {
         plan: GPUPreparedImageRenderRunPlan,
         validateUploadProvenance: Boolean,
     ): Pair<String, String>? {
+        if (plan.packets.any { packet ->
+                packet.routeCapability == GPUPreparedImageRouteCapability.BoundedNearest1To1 &&
+                    (packet.sampling != GPUPreparedImageSampling.Nearest ||
+                        !packet.geometry.isBoundedNativeImageGeometry(packet.artifact))
+            } || plan.resources.any { resource ->
+                resource.bindingRequests.any { binding ->
+                    !binding.isValidForRouteCapability(resource.artifactWidth, resource.artifactHeight)
+                }
+            }
+        ) {
+            return GPUPreparedImageRefusalCodes.RECT_GEOMETRY to
+                "Bounded prepared-image packets require nearest whole-image integer 1:1 geometry."
+        }
         val bindingLayoutIdentity = GPUPreparedImageBindingLayoutTopology.IDENTITY
         if (plan.packets.any { packet ->
                 packet.pipelineKey.bindingLayoutHash != bindingLayoutIdentity
