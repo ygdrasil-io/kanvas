@@ -325,6 +325,30 @@ class PathTessellatorTest {
     }
 
     @Test
+    fun `bounded cubic GM curve fits the edge fan payload budget`() {
+        val tessellator = PathTessellator(
+            tolerance = 0.25f,
+            maxVertices = 131_072,
+        )
+        val flattened = tessellator.flattenWithContours(
+            PathData(
+                verbs = listOf(
+                    PathVerb.MoveTo(Point(100f, 0f)),
+                    PathVerb.CubicTo(
+                        c1 = Point(100f, 230f),
+                        c2 = Point(0f, 10f),
+                        p = Point(0f, 240f),
+                    ),
+                ),
+                points = emptyList(),
+            ),
+        )
+
+        assertTrue(flattened.points.size <= GPUPathEdgeFanPayloadContract.MAX_TRIANGLES.toInt())
+        tessellator.validateStencilEdgeFanBudget(flattened)
+    }
+
+    @Test
     fun `rational conic flattens to its exact endpoint within the bounded curve route`() {
         val tessellator = PathTessellator(tolerance = 1f)
         val path = PathData(

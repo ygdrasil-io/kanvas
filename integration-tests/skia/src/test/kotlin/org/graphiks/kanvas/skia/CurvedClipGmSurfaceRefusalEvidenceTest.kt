@@ -4,6 +4,7 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.test.GpuAvailability
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 
 class CurvedClipGmSurfaceRefusalEvidenceTest {
@@ -13,28 +14,24 @@ class CurvedClipGmSurfaceRefusalEvidenceTest {
     }
 
     @Test
-    fun `curved clip GMs expose fresh terminal route facts`() {
+    fun `curved clip GMs expose the cubic route boundary and promotion`() {
         GpuAvailability.requireWebGpu()
-        val expected = mapOf(
-            "clipcubic" to ExpectedTerminalRefusal("geometry.path.fan_budget_exceeded", 17),
-            "clippedcubic" to ExpectedTerminalRefusal("geometry.path.fan_budget_exceeded", 19),
-        )
-        expected.forEach { (name, refusal) ->
-            val gm = requireNotNull(SkiaGmRegistry.all().singleOrNull { it.name == name })
-            val attempt = requireNotNull(SkiaGmRenderer.renderTerminalAttempt(gm)) {
-                "$name unexpectedly rendered"
-            }
-            assertEquals(refusal.diagnostic, attempt.diagnostic.substringBefore(":"), name)
-            assertEquals(refusal.operationCount, attempt.operationCount, name)
-            println(
-                "task6.gm-refusal gm=$name operations=${attempt.operationCount} " +
-                    "diagnostic=${attempt.diagnostic.substringBefore(":")}",
-            )
+        val clipCubic = requireNotNull(SkiaGmRegistry.all().singleOrNull { it.name == "clipcubic" })
+        val refusal = requireNotNull(SkiaGmRenderer.renderTerminalAttempt(clipCubic)) {
+            "clipcubic unexpectedly rendered"
         }
-    }
+        assertEquals("unsupported.stroke.width_invalid", refusal.diagnostic.substringBefore(":"))
+        assertEquals(17, refusal.operationCount)
+        println(
+            "task116.gm-refusal gm=clipcubic operations=${refusal.operationCount} " +
+                "diagnostic=${refusal.diagnostic.substringBefore(":")}",
+        )
 
-    private data class ExpectedTerminalRefusal(
-        val diagnostic: String,
-        val operationCount: Int,
-    )
+        val clippedCubic = requireNotNull(SkiaGmRegistry.all().singleOrNull { it.name == "clippedcubic" })
+        assertNull(
+            SkiaGmRenderer.renderTerminalAttempt(clippedCubic),
+            "clippedcubic should complete through the bounded cubic path route",
+        )
+        println("task116.gm-render gm=clippedcubic route=bounded-cubic-path")
+    }
 }
