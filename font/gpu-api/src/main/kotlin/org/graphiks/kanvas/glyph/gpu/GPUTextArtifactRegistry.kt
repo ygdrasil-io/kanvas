@@ -51,11 +51,6 @@ data class TextGPUArtifactDescriptor(
     val descriptorCompactHash: String
         get() = textGPUArtifactDescriptorCompactHash(this)
 
-    fun noSkLeakageReport(): TextPayloadLeakReport = validateGPUTextNoSkLeakage(
-        payloadKind = "TextGPUArtifactDescriptor",
-        fields = textPayloadLeakageFields(fieldPrefix = "descriptor"),
-    )
-
     fun toCanonicalJson(): String = buildString {
         append("{")
         appendTextArtifactJsonField("artifactName", artifactName, comma = true)
@@ -130,13 +125,6 @@ class TextGPUArtifactRegistry(descriptors: List<TextGPUArtifactDescriptor>) {
     ): TextGPUArtifactUnregisteredRefusal = TextGPUArtifactUnregisteredRefusal(
         artifactName = typeName,
         artifactHash = artifactHash,
-    )
-
-    fun noSkLeakageReport(): TextPayloadLeakReport = validateGPUTextNoSkLeakage(
-        payloadKind = "TextGPUArtifactRegistry",
-        fields = descriptors.flatMapIndexed { index, descriptor ->
-            descriptor.textPayloadLeakageFields(fieldPrefix = "descriptors[$index]")
-        },
     )
 
     fun toCanonicalJson(): String = buildString {
@@ -307,33 +295,6 @@ private fun textGPUArtifactDescriptor(
     budgetDiagnostic = budgetDiagnostic,
     productActivation = false,
 )
-
-private fun TextGPUArtifactDescriptor.textPayloadLeakageFields(fieldPrefix: String): List<TextPayloadField> =
-    buildList {
-        add(TextPayloadField("$fieldPrefix.artifactName", "String", artifactName))
-        add(TextPayloadField("$fieldPrefix.descriptorVersion", "Int", descriptorVersion.toString()))
-        add(TextPayloadField("$fieldPrefix.descriptorCompactHash", "String", descriptorCompactHash))
-        add(TextPayloadField("$fieldPrefix.ownerSubsystem", "String", ownerSubsystem))
-        add(TextPayloadField("$fieldPrefix.keyPreimageFields", "List<String>"))
-        keyPreimageFields.forEachIndexed { index, field ->
-            add(TextPayloadField("$fieldPrefix.keyPreimageFields[$index]", "String", field))
-        }
-        add(TextPayloadField("$fieldPrefix.lifetimeClass", "String", lifetimeClass))
-        add(TextPayloadField("$fieldPrefix.invalidationFacts", "List<String>"))
-        invalidationFacts.forEachIndexed { index, fact ->
-            add(TextPayloadField("$fieldPrefix.invalidationFacts[$index]", "String", fact))
-        }
-        add(TextPayloadField("$fieldPrefix.memoryBudgetClass", "String", memoryBudgetClass))
-        add(TextPayloadField("$fieldPrefix.uploadBudgetClass", "String?", uploadBudgetClass))
-        add(TextPayloadField("$fieldPrefix.supportedRoutes", "List<String>"))
-        supportedRoutes.forEachIndexed { index, route ->
-            add(TextPayloadField("$fieldPrefix.supportedRoutes[$index]", "String", route))
-        }
-        add(TextPayloadField("$fieldPrefix.missingDiagnostic", "String", missingDiagnostic))
-        add(TextPayloadField("$fieldPrefix.staleDiagnostic", "String", staleDiagnostic))
-        add(TextPayloadField("$fieldPrefix.budgetDiagnostic", "String", budgetDiagnostic))
-        add(TextPayloadField("$fieldPrefix.productActivation", "Boolean", productActivation.toString()))
-    }
 
 private fun textGPUArtifactDescriptorCompactHash(descriptor: TextGPUArtifactDescriptor): String =
     "fnv1a64:${textArtifactFnv1a64Hex(descriptor.toDescriptorHashPreimage())}"
