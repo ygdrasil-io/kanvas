@@ -31,6 +31,7 @@ import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathRadialStrokeCp
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathSweepStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathSweepEvenOddHoleStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathLinearGradientStrokeCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathEvenOddLinearGradientStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathDirectTriangleLinearGradientCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathDRRectCpuOracle
@@ -120,6 +121,7 @@ sweepGradientTwoStopStrokeRect(),
         clipPathLinearGradientButtStrokeWinding(),
         clipPathLinearGradientScaledTranslatedButtStrokeWinding(),
         clipPathLinearGradientButtStrokeWindingDifference(),
+        clipPathLinearGradientButtStrokeEvenOddHole(),
         clipPathTranslatedTriangleRadialGradient(),
         clipPathTranslatedTriangleLinearGradient(),
         clipPathUniformScaledTriangleLinearGradient(),
@@ -2137,6 +2139,35 @@ sweepGradientTwoStopStrokeRect(),
             endColor = intArrayOf(0, 0, 255, 255),
             clipInverted = true,
             squareCaps = false,
+        ),
+    )
+
+    private fun clipPathLinearGradientButtStrokeEvenOddHole() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("clip-path-linear-gradient-butt-stroke-even-odd-hole"),
+            "EvenOdd hole with a linear-gradient butt stroke",
+            "Public Kanvas Surface hard non-AA EvenOdd clip with an outer rectangle and inner hole around one opaque two-stop clamp linear-gradient butt-cap miter stroke.",
+            64,
+            64,
+            1L,
+            setOf("clip-path", "linear-gradient", "stroke", "even-odd", "hard-clip", "butt-cap", "kanvas-surface"),
+            EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-clip-path-linear-gradient-even-odd-hole-butt-stroke-device-space", 1),
+            ComparisonPolicy(0, 100.0, 1, "Exact opaque RGBA8 output from independent pixel-center EvenOdd rectangle XOR, butt stroke coverage and clamp linear-gradient interpolation."),
+            emptySet(),
+        ),
+        KanvasScenePrograms.clipPathLinearGradientButtStrokeEvenOddHole(),
+        SurfaceSrgbClipPathEvenOddLinearGradientStrokeCpuOracle(
+            background = intArrayOf(13, 20, 33, 255),
+            outer = SurfaceSrgbClipPathEvenOddLinearGradientStrokeCpuOracle.Rect(3.25, 3.25, 28.75, 28.75),
+            inner = SurfaceSrgbClipPathEvenOddLinearGradientStrokeCpuOracle.Rect(10.25, 10.25, 21.75, 21.75),
+            strokeStart = SurfaceSrgbClipPathEvenOddLinearGradientStrokeCpuOracle.Point(5.25, 8.25),
+            strokeEnd = SurfaceSrgbClipPathEvenOddLinearGradientStrokeCpuOracle.Point(21.25, 20.25),
+            strokeWidth = 4.0,
+            gradientStart = SurfaceSrgbClipPathEvenOddLinearGradientStrokeCpuOracle.Point(0.0, 0.0),
+            gradientEnd = SurfaceSrgbClipPathEvenOddLinearGradientStrokeCpuOracle.Point(32.0, 0.0),
+            startColor = intArrayOf(255, 0, 0, 255),
+            endColor = intArrayOf(0, 0, 255, 255),
         ),
     )
 
