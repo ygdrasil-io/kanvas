@@ -61,6 +61,16 @@ class GpuEvidenceCatalogOracleTest {
     }
 
     @Test
+    fun `local sweep matrix oracle rebases angular sampling without changing coverage`() {
+        val pixels = oracle("clip-path-local-sweep-matrix-stroke")
+
+        assertPixel(pixels, 64, 64, 7, 7, intArrayOf(161, 0, 210, 255))
+        assertPixel(pixels, 64, 64, 15, 15, intArrayOf(113, 0, 236, 255))
+        assertPixel(pixels, 64, 64, 18, 16, intArrayOf(26, 0, 254, 255))
+        assertPixel(pixels, 64, 64, 20, 20, intArrayOf(13, 20, 33, 255))
+    }
+
+    @Test
     fun `bounded bitmap oracle preserves literal nearest texels at its integer destination`() {
         val pixels = oracle("bounded-rgba8-nearest-bitmap")
 
