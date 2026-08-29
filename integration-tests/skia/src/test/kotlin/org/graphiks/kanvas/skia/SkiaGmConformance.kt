@@ -4,6 +4,7 @@ enum class GmConformanceScope(val wireName: String) {
     ELIGIBLE("eligible"),
     EXCLUDED_FONT("excluded-font"),
     EXCLUDED_CODEC("excluded-codec"),
+    QUARANTINED_RESOURCE_LIMIT("quarantined-resource-limit"),
     ACCEPTED_SKIA_GAP("accepted-skia-gap"),
 }
 
@@ -18,7 +19,9 @@ data class GmConformanceDecision(
             GmConformanceScope.EXCLUDED_FONT,
             GmConformanceScope.EXCLUDED_CODEC,
             -> require(!reason.isNullOrBlank() && owner == null)
-            GmConformanceScope.ACCEPTED_SKIA_GAP ->
+            GmConformanceScope.ACCEPTED_SKIA_GAP,
+            GmConformanceScope.QUARANTINED_RESOURCE_LIMIT,
+            ->
                 require(!reason.isNullOrBlank() && !owner.isNullOrBlank())
         }
     }
@@ -31,6 +34,8 @@ data class GmConformanceDecision(
 object SkiaGmConformance {
     private const val CODEC_REASON = "direct-codec-decode-or-encode"
     private const val FONT_REASON = "direct-font-output"
+    private const val QUARANTINE_REASON = "legacy-snapshot-262144-draw-rects-not-practically-renderable"
+    private const val QUARANTINE_OWNER = "legacy-renderer-remediation"
 
     private val excludedCodecGmNames = setOf(
         "clip_shader_difference", "clip_shader_layer", "clip_shader_persp", "clip_shader",
@@ -49,6 +54,14 @@ object SkiaGmConformance {
         "mesh_with_effects", "mesh_with_image", "mesh_with_paint_color", "mesh_with_paint_image",
     )
 
+    private val quarantinedResourceLimits = mapOf(
+        "jpg-color-cube" to GmConformanceDecision(
+            GmConformanceScope.QUARANTINED_RESOURCE_LIMIT,
+            reason = QUARANTINE_REASON,
+            owner = QUARANTINE_OWNER,
+        ),
+    )
+
     private val acceptedSkiaGaps = emptyMap<String, GmConformanceDecision>()
 
     fun decisionFor(
@@ -59,6 +72,7 @@ object SkiaGmConformance {
             GmConformanceDecision(GmConformanceScope.EXCLUDED_CODEC, CODEC_REASON)
         gm.renderFamily == RenderFamily.TEXT || GmExternalDependency.FONT in observedDependencies ->
             GmConformanceDecision(GmConformanceScope.EXCLUDED_FONT, FONT_REASON)
+        gm.name in quarantinedResourceLimits -> quarantinedResourceLimits.getValue(gm.name)
         gm.name in acceptedSkiaGaps -> acceptedSkiaGaps.getValue(gm.name)
         else -> GmConformanceDecision(GmConformanceScope.ELIGIBLE)
     }

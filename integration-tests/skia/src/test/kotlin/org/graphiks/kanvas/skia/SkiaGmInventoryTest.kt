@@ -145,6 +145,37 @@ class SkiaGmInventoryTest {
     }
 
     @Test
+    fun `v3 json exports quarantined resource metadata and summary count`() {
+        val row = SkiaGmInventoryRow(
+            name = "jpg-color-cube",
+            family = "IMAGE",
+            referenceName = "jpg-color-cube",
+            referenceAvailable = true,
+            renderAvailable = false,
+            attempted = false,
+            terminalFailure = false,
+            score = null,
+            operationCount = 0,
+            route = "excluded:quarantined-resource-limit",
+            firstDiagnostic = "excluded:quarantined-resource-limit",
+            referenceStatus = "trusted",
+            conformanceDecision = GmConformanceDecision(
+                GmConformanceScope.QUARANTINED_RESOURCE_LIMIT,
+                reason = "legacy-snapshot-262144-draw-rects-not-practically-renderable",
+                owner = "legacy-renderer-remediation",
+            ),
+        )
+
+        val json = renderSkiaGmInventoryJson(listOf(row))
+
+        assertTrue("\"conformanceScope\": \"quarantined-resource-limit\"" in json)
+        assertTrue("\"conformanceReason\": \"legacy-snapshot-262144-draw-rects-not-practically-renderable\"" in json)
+        assertTrue("\"conformanceOwner\": \"legacy-renderer-remediation\"" in json)
+        assertTrue("\"mustAttemptCount\": 0" in json)
+        assertTrue("\"byScope\": {\"quarantined-resource-limit\": 1}" in json)
+    }
+
+    @Test
     fun `score parser rejects duplicate and orphan rows`() {
         val root = Files.createTempDirectory("gm-scores").toFile()
         val duplicate = root.resolve("duplicate.properties").apply { writeText("a=1\na=2\n") }

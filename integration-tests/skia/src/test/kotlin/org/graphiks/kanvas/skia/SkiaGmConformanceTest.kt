@@ -48,6 +48,19 @@ class SkiaGmConformanceTest {
     }
 
     @Test
+    fun `quarantined resource limit requires reason and owner`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            GmConformanceDecision(GmConformanceScope.QUARANTINED_RESOURCE_LIMIT, reason = "reason")
+        }
+        val decision = GmConformanceDecision(
+            GmConformanceScope.QUARANTINED_RESOURCE_LIMIT,
+            reason = "legacy-snapshot-262144-draw-rects-not-practically-renderable",
+            owner = "legacy-renderer-remediation",
+        )
+        assertFalse(decision.mustAttempt)
+    }
+
+    @Test
     fun `blocking cost remains eligible`() {
         assertEquals(
             GmConformanceScope.ELIGIBLE,
@@ -113,6 +126,24 @@ class SkiaGmConformanceTest {
         assertFalse(evidence.attempted)
         assertEquals(InventorySetupState.NOT_ATTEMPTED, evidence.setupState)
         assertEquals(0, surface.renderCalls)
+    }
+
+    @Test
+    fun `jpg color cube is statically quarantined before surface creation`() {
+        var surfaceCreated = false
+
+        val evidence = captureInventoryEvidence(ConformanceProbeGm(name = "jpg-color-cube")) {
+            surfaceCreated = true
+            ConformanceSurface()
+        }
+
+        assertEquals(GmConformanceScope.QUARANTINED_RESOURCE_LIMIT, evidence.conformanceDecision.scope)
+        assertEquals("legacy-snapshot-262144-draw-rects-not-practically-renderable", evidence.conformanceDecision.reason)
+        assertEquals("legacy-renderer-remediation", evidence.conformanceDecision.owner)
+        assertFalse(evidence.attempted)
+        assertEquals(InventorySetupState.NOT_ATTEMPTED, evidence.setupState)
+        assertEquals("excluded:quarantined-resource-limit", evidence.route)
+        assertFalse(surfaceCreated)
     }
 
     @Test
