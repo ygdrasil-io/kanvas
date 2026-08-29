@@ -175,6 +175,40 @@ object KanvasScenePrograms {
         restore()
     })
 
+    /** Three-stop sweep gradients remain outside the bounded native stroke mapping. */
+    fun threeStopSweepStrokeUnderWindingRefusal() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        save()
+        clipPath(
+            Path {
+                moveTo(7.25f, 6.25f)
+                lineTo(30.25f, 6.25f)
+                lineTo(7.25f, 29.25f)
+                close()
+            }.apply { fillType = FillType.WINDING },
+            ClipOp.INTERSECT,
+            antiAlias = false,
+        )
+        drawPath(
+            Path { moveTo(5.25f, 8.25f); lineTo(21.25f, 20.25f) },
+            Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                shader = Shader.SweepGradient(
+                    Point2F32(16f, 16f),
+                    0f,
+                    360f,
+                    listOf(
+                        GradientStop(0f, ColorARGB.Red),
+                        GradientStop(.5f, ColorARGB.Green),
+                        GradientStop(1f, ColorARGB.Blue),
+                    ),
+                ),
+                antiAlias = false,
+                strokeCap = StrokeCap.BUTT,
+                strokeJoin = StrokeJoin.MITER,
+            ),
+        )
+        restore()
+    })
+
     fun basicPrimitivesValidAlpha() = KanvasSurfaceProgram(ROUTE_ID, record = {
         clear(ColorARGB.Transparent)
         drawColor(ColorARGB.fromRGBA(13f / 255f, 20f / 255f, 33f / 255f, .5f))
