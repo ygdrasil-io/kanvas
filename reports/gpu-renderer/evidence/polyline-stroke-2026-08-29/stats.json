@@ -1,0 +1,19 @@
+{
+  "feature": "bounded_open_polyline_butt_miter_stroke",
+  "sourcePointRange": { "min": 3, "max": 8 },
+  "stroke": {
+    "caps": ["butt"],
+    "joins": ["miter"],
+    "antiAlias": false,
+    "dash": false,
+    "pathEffect": false,
+    "widthPx": { "min": 0.5, "max": 64.0 }
+  },
+  "transformPolicy": ["identity", "translation", "uniform_positive_scale"],
+  "route": "native.path_stroke.stencil_cover",
+  "proof": "MultiSegmentButtMiterV1",
+  "plannerTest": "GPUFramePathApiInventoryTest.bounded open polyline butt miter stroke reaches native stencil cover",
+  "cpuOracle": "explicit_refusal_not_available",
+  "gpuCapture": "not_produced",
+  "gmPromotion": "none"
+}
