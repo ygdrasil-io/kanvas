@@ -3176,6 +3176,37 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `bounded vertical dashed butt stroke admits the second proven phase`() {
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(16f, 4f)
+                        lineTo(16f, 28f)
+                    },
+                    Paint.stroke(ColorARGB.Red, 4f).copy(
+                        antiAlias = false,
+                        strokeCap = StrokeCap.BUTT,
+                        strokeJoin = StrokeJoin.MITER,
+                        pathEffect = PathEffect.Dash(floatArrayOf(8f, 4f), phase = 4f),
+                    ),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER),
+        )
+
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+        val semantic = gatheredSemantic(inventory) as GPUDrawSemanticPayload.CorePrimitive
+        val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
+        assertEquals(GPUCorePrimitiveStrokeLoweringProof.VerticalDashedButtMiterV1, geometry.strokeStyle?.loweringProof)
+        assertEquals(4f, geometry.strokeStyle?.dashPhase)
+    }
+
+    @Test
     fun `nearby dashed stroke remains refused outside the fixed proof`() {
         val inventory = GPUFramePathApiInventory.plan(
             operations = listOf(
