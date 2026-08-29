@@ -73,7 +73,7 @@ class GpuEvidenceCatalogTest {
     }
 
     @Test
-    fun `catalog separates one hundred eighteen public surface renders from nine refusals`() {
+    fun `catalog separates one hundred nineteen public surface renders from nine refusals`() {
         val cases = GpuEvidenceCatalog.cases
 
         assertEquals(
@@ -127,6 +127,7 @@ class GpuEvidenceCatalogTest {
                 "clip-path-sweep-butt-stroke-even-odd-hole",
                 "clip-path-sweep-square-stroke-scaled-translated-inverse-even-odd-difference-hole",
                 "clip-path-sweep-butt-stroke-inverse-winding",
+                "clip-path-sweep-square-stroke-right-angle-winding",
                 "clip-path-translated-triangle-radial-gradient",
                 "clip-path-translated-triangle-linear-gradient",
                 "clip-path-uniform-scaled-triangle-linear-gradient",
@@ -237,6 +238,7 @@ class GpuEvidenceCatalogTest {
                 "clip-path-sweep-butt-stroke-even-odd-hole",
                 "clip-path-sweep-square-stroke-scaled-translated-inverse-even-odd-difference-hole",
                 "clip-path-sweep-butt-stroke-inverse-winding",
+                "clip-path-sweep-square-stroke-right-angle-winding",
                 "clip-path-translated-triangle-radial-gradient",
                 "clip-path-translated-triangle-linear-gradient",
                 "clip-path-uniform-scaled-triangle-linear-gradient",
@@ -296,11 +298,11 @@ class GpuEvidenceCatalogTest {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            List(118) { "kanvas.surface.render" },
+            List(119) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
-        assertEquals(118, GpuEvidenceCatalog.renderCases.size)
-        assertEquals(127, GpuEvidenceCatalog.cases.size)
+        assertEquals(119, GpuEvidenceCatalog.renderCases.size)
+        assertEquals(128, GpuEvidenceCatalog.cases.size)
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
 
         val solid = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "solid-card-stack" })
@@ -487,6 +489,7 @@ class GpuEvidenceCatalogTest {
                 "clip-path-sweep-butt-stroke-even-odd-hole",
                 "clip-path-sweep-square-stroke-scaled-translated-inverse-even-odd-difference-hole",
                 "clip-path-sweep-butt-stroke-inverse-winding",
+                "clip-path-sweep-square-stroke-right-angle-winding",
                 "clip-path-translated-triangle-radial-gradient",
                 "clip-path-translated-triangle-linear-gradient",
                 "clip-path-uniform-scaled-triangle-linear-gradient",
@@ -638,6 +641,7 @@ class GpuEvidenceCatalogTest {
                 "clip-path-sweep-butt-stroke-even-odd-hole" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-sweep-even-odd-hole-butt-stroke-device-space", 1),
                 "clip-path-sweep-square-stroke-scaled-translated-inverse-even-odd-difference-hole" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-sweep-scaled-translated-inverse-even-odd-difference-hole-device-space", 1),
                 "clip-path-sweep-butt-stroke-inverse-winding" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-sweep-inverse-winding-butt-stroke-device-space", 1),
+                "clip-path-sweep-square-stroke-right-angle-winding" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-sweep-right-angle-winding-device-space", 1),
                 "clip-path-translated-triangle-radial-gradient" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-radial-gradient-device-space", 1),
                 "clip-path-translated-triangle-linear-gradient" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-linear-gradient-device-space", 1),
                 "clip-path-uniform-scaled-triangle-linear-gradient" to OraclePolicy.GeneratedCpu("surface-srgb-clip-path-linear-gradient-device-space", 1),
@@ -763,6 +767,7 @@ class GpuEvidenceCatalogTest {
                 "clip-path-sweep-butt-stroke-even-odd-hole" to ComparisonPolicy(1, 100.0, 1, "Independent pixel-center EvenOdd rectangle XOR, butt stroke distance and full-turn linear-light sweep interpolation."),
                 "clip-path-sweep-square-stroke-scaled-translated-inverse-even-odd-difference-hole" to ComparisonPolicy(1, 100.0, 1, "Independent transformed device-space inverse EvenOdd Difference shell, square stroke distance and inverse-transformed full-turn linear-light sweep interpolation."),
                 "clip-path-sweep-butt-stroke-inverse-winding" to ComparisonPolicy(1, 100.0, 1, "Independent pixel-center inverse Winding triangle membership, butt stroke distance and full-turn linear-light sweep interpolation."),
+                "clip-path-sweep-square-stroke-right-angle-winding" to ComparisonPolicy(1, 100.0, 1, "Independent right-angle device-space Winding triangle, square stroke distance and quarter-turn-adjusted linear-light sweep interpolation."),
                 "clip-path-translated-triangle-radial-gradient" to ComparisonPolicy(1, 100.0, 1, "Independent double-precision oracle with translated device-space geometry."),
                 "clip-path-translated-triangle-linear-gradient" to ComparisonPolicy(1, 100.0, 1, "Independent device-space pixel-center winding clip and linear-light clamp gradient oracle."),
                 "clip-path-uniform-scaled-triangle-linear-gradient" to ComparisonPolicy(1, 100.0, 1, "Independent device-space pixel-center winding clip and linear-light clamp gradient oracle."),

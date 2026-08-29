@@ -18,6 +18,7 @@ class SurfaceSrgbClipPathSweepStrokeCpuOracle(
     private val clipInverted: Boolean = false,
     private val shaderScale: Double = 1.0,
     private val squareCaps: Boolean = true,
+    private val shaderAngleOffset: Double = 0.0,
 ) : CpuOracle {
     data class Point(val x: Double, val y: Double)
 
@@ -47,6 +48,7 @@ class SurfaceSrgbClipPathSweepStrokeCpuOracle(
         require(shaderScale.isFinite() && shaderScale > 0.0) {
             "shader scale must be finite and positive"
         }
+        require(shaderAngleOffset.isFinite()) { "shader angle offset must be finite" }
     }
 
     override fun render(width: Int, height: Int): ByteArray {
@@ -64,7 +66,8 @@ class SurfaceSrgbClipPathSweepStrokeCpuOracle(
                     (py + shaderTranslation.y) / shaderScale - center.y,
                     (px + shaderTranslation.x) / shaderScale - center.x,
                 ) / fullTurn
-                val t = (rawTurn - kotlin.math.floor(rawTurn)).coerceIn(0.0, 1.0)
+                val shiftedTurn = rawTurn - shaderAngleOffset
+                val t = (shiftedTurn - kotlin.math.floor(shiftedTurn)).coerceIn(0.0, 1.0)
                 SurfaceSrgbOracleMath.storeSrgb(
                     SurfaceSrgbOracleMath.LinearPremul(
                         start.red + (end.red - start.red) * t,
