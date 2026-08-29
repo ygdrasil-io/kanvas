@@ -1070,6 +1070,80 @@ class GPUFramePathApiInventoryNativeSmokeTest {
     }
 
     @Test
+    fun `public canvas translated path clip snapshot renders natively after transform reset`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        val capabilities = requireNotNull(backend.capabilities)
+        val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(RenderConfig.DEFAULT.mapPreparedGpuColorConfig())
+        val targetBounds = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, 32, 32)
+        val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.public-clip-translated-intersect")
+        val localTriangle = Path().apply {
+            moveTo(4.25f, 4.25f)
+            lineTo(27.25f, 4.25f)
+            lineTo(4.25f, 27.25f)
+            close()
+        }
+        val surface = Surface(32, 32)
+        surface.canvas {
+            translate(3f, 2f)
+            clipPath(localTriangle, ClipOp.INTERSECT, antiAlias = false)
+            resetMatrix()
+            drawRect(RectF32.ofLTRB(0f, 0f, 32f, 32f), Paint.fill(ColorARGB.Red).copy(antiAlias = false))
+        }
+        val operations = surface.snapshotOps()
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = operations,
+            target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+            deviceGeneration = backend.deviceGeneration,
+        )
+        val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(
+            inventory.visualCommands.single().clipExecutionPlan,
+        )
+        assertEquals("translate", execution.pathTransformClass)
+        assertEquals(GPUClipStencilOperation.IncrementWrap, execution.producer.frontPassOperation)
+        assertEquals(GPUClipStencilOperation.DecrementWrap, execution.producer.backPassOperation)
+        assertEquals(GPUClipStencilCompare.NotEqual, execution.consumer.compare)
+        val geometry = assertIs<GPUClipExecutionGeometry.Path>(execution.producer.geometry)
+        assertEquals(
+            listOf(7.25f, 6.25f, 30.25f, 6.25f, 7.25f, 29.25f, 7.25f, 6.25f),
+            geometry.vertices,
+        )
+
+        val preparation = GPUFramePathApiInventory.prepareNativeTaskList(
+            inventory,
+            capabilities,
+            targetBounds,
+            readbackId,
+        )
+        val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            preparation,
+            (preparation as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}; facts=${it.facts}"
+            },
+        ).taskList
+        val session = backend.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(32, 32, colorMapping.physicalFormat, colorMapping.interpretation),
+        )
+        try {
+            val completed = session.renderFrame(
+                prepared,
+                GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
+            ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+            assertEquals(GPUFrameStructuralOutcome.Succeeded, completed.outcome)
+            val gpu = assertIs<GPUSceneFrameOutput.ReadbackRgba>(completed.output).bytes
+            assertContentEquals(deterministicTranslatedWindingIntersectTriangleOracle(), gpu)
+            assertEquals(1L, session.nativeCounters().submits)
+            assertEquals(1L, session.nativeCounters().readbackCopies)
+        } finally {
+            session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
     fun `uniform scaled translated hard path clip retains device geometry and winding stencil state natively`() {
         val backend = GPUBackendRuntimeNativeFactory.createOrNull()
         assumeTrue(backend != null)
