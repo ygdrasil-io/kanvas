@@ -2713,14 +2713,14 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
             kotlin.math.abs(end.first - start.first) + kotlin.math.abs(end.second - start.second) >= strokeWidth
     }
 
-    /** First bounded scaled round-cap lane: width four, horizontal, scale exactly two. */
+    /** Bounded scaled round-cap lane: width four, axis aligned, scale exactly two. */
     private fun NormalizedDrawCommand.FillPath.matchesUniformScaledRoundCapV1(): Boolean {
         if (!(transform.isUniformPositiveScale() || transform.isUniformPositiveScaleTranslate())) return false
         if (transform.scaleX != 2f || strokeWidth != 4f || tessellatedVertices.size != 4) return false
         val start = transform.mapPathPoint(tessellatedVertices[0], tessellatedVertices[1])
         val end = transform.mapPathPoint(tessellatedVertices[2], tessellatedVertices[3])
-        val horizontal = start.second == end.second && end.first - start.first >= 8f
-        val vertical = start.first == end.first && end.second - start.second >= 8f
+        val horizontal = start.second == end.second && kotlin.math.abs(end.first - start.first) >= 8f
+        val vertical = start.first == end.first && kotlin.math.abs(end.second - start.second) >= 8f
         return start.first.isIntegralDeviceCoordinate() && start.second.isIntegralDeviceCoordinate() &&
             end.first.isIntegralDeviceCoordinate() && end.second.isIntegralDeviceCoordinate() &&
             (horizontal || vertical)
