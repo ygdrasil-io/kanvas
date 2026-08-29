@@ -175,8 +175,10 @@ private fun GPUCorePrimitiveGeometry.TriangulatedPath.isExactSingleSegmentStroke
         !stroke.miterLimit.isFinite() || stroke.miterLimit < 1f ||
         stroke.join != "miter" ||
         (stroke.dashIntervals.isNotEmpty() &&
-            !(stroke.loweringProof == GPUCorePrimitiveStrokeLoweringProof.HorizontalDashedButtMiterV1 &&
-                stroke.dashIntervals == listOf(8f, 4f) && isBoundedHorizontalDashedPhase(stroke.dashPhase)))
+            !(stroke.loweringProof in setOf(
+                GPUCorePrimitiveStrokeLoweringProof.HorizontalDashedButtMiterV1,
+                GPUCorePrimitiveStrokeLoweringProof.VerticalDashedButtMiterV1,
+            ) && stroke.dashIntervals == listOf(8f, 4f) && isBoundedHorizontalDashedPhase(stroke.dashPhase)))
     ) return false
     return when (stroke.loweringProof) {
         GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1 ->
@@ -188,6 +190,9 @@ private fun GPUCorePrimitiveGeometry.TriangulatedPath.isExactSingleSegmentStroke
         GPUCorePrimitiveStrokeLoweringProof.MultiSegmentButtMiterV1 ->
             sourceVertexCount in 3..8 && stroke.cap == "butt" && stroke.join == "miter"
         GPUCorePrimitiveStrokeLoweringProof.HorizontalDashedButtMiterV1 ->
+            sourceVertexCount == 2 && stroke.cap == "butt" && stroke.join == "miter" &&
+                stroke.dashIntervals == listOf(8f, 4f) && isBoundedHorizontalDashedPhase(stroke.dashPhase)
+        GPUCorePrimitiveStrokeLoweringProof.VerticalDashedButtMiterV1 ->
             sourceVertexCount == 2 && stroke.cap == "butt" && stroke.join == "miter" &&
                 stroke.dashIntervals == listOf(8f, 4f) && isBoundedHorizontalDashedPhase(stroke.dashPhase)
     }
