@@ -3678,6 +3678,39 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `translated reverse horizontal round cap reaches native preparation`() {
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(26f, 16f)
+                        lineTo(6f, 16f)
+                    },
+                    Paint.stroke(ColorARGB.Red, 4f).copy(
+                        antiAlias = false,
+                        strokeCap = StrokeCap.ROUND,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.translation(3f, 2f),
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER),
+        )
+
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+        val semantic = gatheredSemantic(inventory) as GPUDrawSemanticPayload.CorePrimitive
+        val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
+        assertEquals(GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan, geometry.geometryMode)
+        assertEquals(
+            GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2ReverseHorizontalV1,
+            geometry.strokeStyle?.loweringProof,
+        )
+    }
+
+    @Test
     fun `quarter turn round cap reaches native preparation`() {
         val inventory = GPUFramePathApiInventory.plan(
             operations = listOf(

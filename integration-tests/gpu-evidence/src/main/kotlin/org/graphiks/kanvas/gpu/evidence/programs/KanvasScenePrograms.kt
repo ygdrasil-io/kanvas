@@ -1859,6 +1859,23 @@ object KanvasScenePrograms {
         )
     })
 
+    /** The reversed horizontal radius-two round-cap route under an integral translation. */
+    fun translatedReverseHorizontalRoundCapStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        save()
+        translate(3f, 2f)
+        drawPath(
+            Path {
+                moveTo(26f, 16f)
+                lineTo(6f, 16f)
+            },
+            Paint.stroke(ColorARGB.Red, 4f).copy(
+                antiAlias = false,
+                strokeCap = StrokeCap.ROUND,
+            ),
+        )
+        restore()
+    })
+
     fun scaledTranslatedHorizontalHairline() = KanvasSurfaceProgram(ROUTE_ID, record = {
         save()
         translate(2f, 3f)
