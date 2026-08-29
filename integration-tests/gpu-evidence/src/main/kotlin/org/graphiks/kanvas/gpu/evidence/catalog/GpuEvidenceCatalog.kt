@@ -28,6 +28,7 @@ import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathLinearGradientCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathRadialGradientCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathRadialStrokeCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathSweepStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathDirectTriangleLinearGradientCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathDRRectCpuOracle
@@ -101,6 +102,7 @@ sweepGradientTwoStopStrokeRect(),
         clipPathTranslatedTriangleRadialGradientStroke(),
         clipPathLocalRadialMatrixStroke(),
         clipPathRightAngleRadialSquareStroke(),
+        clipPathSweepSquareStroke(),
         clipPathTranslatedTriangleRadialGradient(),
         clipPathTranslatedTriangleLinearGradient(),
         clipPathUniformScaledTriangleLinearGradient(),
@@ -1616,6 +1618,37 @@ sweepGradientTwoStopStrokeRect(),
             startColor = intArrayOf(255, 0, 0, 255),
             endColor = intArrayOf(0, 0, 255, 255),
             squareCaps = true,
+        ),
+    )
+
+    private fun clipPathSweepSquareStroke() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("clip-path-sweep-square-stroke"),
+            "Sweep gradient square stroke inside hard path clip",
+            "Public Kanvas Surface hard non-AA Winding triangle clip with one opaque full-turn two-stop sweep square-cap miter stroke.",
+            64,
+            64,
+            1L,
+            setOf("clip-path", "sweep-gradient", "stroke", "hard-clip", "square-cap", "kanvas-surface"),
+            EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-clip-path-sweep-stroke-device-space", 1),
+            ComparisonPolicy(1, 100.0, 1, "Independent pixel-center winding clip, square stroke distance and full-turn linear-light sweep interpolation."),
+            emptySet(),
+        ),
+        KanvasScenePrograms.clipPathSweepSquareStroke(),
+        SurfaceSrgbClipPathSweepStrokeCpuOracle(
+            background = intArrayOf(13, 20, 33, 255),
+            points = listOf(
+                SurfaceSrgbClipPathSweepStrokeCpuOracle.Point(7.25, 6.25),
+                SurfaceSrgbClipPathSweepStrokeCpuOracle.Point(30.25, 6.25),
+                SurfaceSrgbClipPathSweepStrokeCpuOracle.Point(7.25, 29.25),
+            ),
+            strokeStart = SurfaceSrgbClipPathSweepStrokeCpuOracle.Point(5.25, 8.25),
+            strokeEnd = SurfaceSrgbClipPathSweepStrokeCpuOracle.Point(21.25, 20.25),
+            strokeWidth = 4.0,
+            center = SurfaceSrgbClipPathSweepStrokeCpuOracle.Point(16.0, 16.0),
+            startColor = intArrayOf(255, 0, 0, 255),
+            endColor = intArrayOf(0, 0, 255, 255),
         ),
     )
 

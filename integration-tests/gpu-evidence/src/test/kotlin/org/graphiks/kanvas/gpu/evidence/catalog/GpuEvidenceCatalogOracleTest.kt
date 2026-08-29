@@ -51,6 +51,16 @@ class GpuEvidenceCatalogOracleTest {
     }
 
     @Test
+    fun `sweep stroke oracle combines angular sampling with winding clip`() {
+        val pixels = oracle("clip-path-sweep-square-stroke")
+
+        assertPixel(pixels, 64, 64, 7, 7, intArrayOf(165, 0, 207, 255))
+        assertPixel(pixels, 64, 64, 16, 15, intArrayOf(99, 0, 240, 255))
+        assertPixel(pixels, 64, 64, 18, 16, intArrayOf(251, 0, 50, 255))
+        assertPixel(pixels, 64, 64, 20, 12, intArrayOf(13, 20, 33, 255))
+    }
+
+    @Test
     fun `bounded bitmap oracle preserves literal nearest texels at its integer destination`() {
         val pixels = oracle("bounded-rgba8-nearest-bitmap")
 
