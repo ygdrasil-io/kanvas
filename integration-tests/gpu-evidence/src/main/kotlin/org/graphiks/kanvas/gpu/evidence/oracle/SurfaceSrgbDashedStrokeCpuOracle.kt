@@ -12,6 +12,10 @@ class SurfaceSrgbDashedStrokeCpuOracle(
     dashIntervals: List<Double>,
     private val dashPhase: Double,
     private val color: IntArray,
+    private val clipLeft: Int? = null,
+    private val clipTop: Int? = null,
+    private val clipRight: Int? = null,
+    private val clipBottom: Int? = null,
 ) : CpuOracle {
     private val intervals = dashIntervals.toList()
     private val dx = strokeEndX - strokeStartX
@@ -31,13 +35,23 @@ class SurfaceSrgbDashedStrokeCpuOracle(
             "dash pattern must contain a positive interval"
         }
         require(color.size == 4 && color.all { it in 0..255 }) { "color must be RGBA byte channels" }
+        require(listOf(clipLeft, clipTop, clipRight, clipBottom).all { it == null } ||
+            listOf(clipLeft, clipTop, clipRight, clipBottom).all { it != null }) {
+            "clip bounds must be fully specified or absent"
+        }
+        if (clipLeft != null) {
+            require(clipLeft >= 0 && clipTop!! >= 0 && clipRight!! > clipLeft && clipBottom!! > clipTop) {
+                "clip bounds must be a non-empty device rectangle"
+            }
+        }
     }
 
     override fun render(width: Int, height: Int): ByteArray {
-        require(width > 0 && height > 0)
+            require(width > 0 && height > 0)
         val halfWidthSquared = (strokeWidth / 2.0) * (strokeWidth / 2.0)
         return ByteArray(width * height * 4).also { output ->
             for (y in 0 until height) for (x in 0 until width) {
+                if (clipLeft != null && (x < clipLeft || x >= clipRight!! || y < clipTop!! || y >= clipBottom!!)) continue
                 val px = x + 0.5
                 val py = y + 0.5
                 val projection = ((px - strokeStartX) * dx + (py - strokeStartY) * dy) / lengthSquared
