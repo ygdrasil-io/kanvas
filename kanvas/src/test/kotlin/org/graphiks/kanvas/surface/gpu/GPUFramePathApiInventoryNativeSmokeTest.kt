@@ -1670,6 +1670,98 @@ class GPUFramePathApiInventoryNativeSmokeTest {
     }
 
     @Test
+    fun `half turn rotated diagonal butt miter stroke under winding path clip renders natively`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null)
+        backend!!
+        val capabilities = requireNotNull(backend.capabilities)
+        val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(RenderConfig.DEFAULT.mapPreparedGpuColorConfig())
+        val targetBounds = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, 32, 32)
+        val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.stroke-diagonal-half-turn-clip")
+        val clipPath = Path().apply {
+            moveTo(3.25f, 3.25f)
+            lineTo(28.75f, 3.25f)
+            lineTo(28.75f, 28.75f)
+            close()
+        }
+        val strokePath = Path().apply {
+            // Local endpoints (8.25,8.25)->(20.25,14.25) rotate 180 degrees around
+            // (16,10) to device endpoints (23.75,11.75)->(11.75,5.75).
+            moveTo(8.25f, 8.25f)
+            lineTo(20.25f, 14.25f)
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    strokePath,
+                    Paint.stroke(ColorARGB.Red, 4f).copy(
+                        antiAlias = false,
+                        strokeCap = StrokeCap.BUTT,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.rotation(180f, pivotX = 16f, pivotY = 10f),
+                    ClipStack.Complex(
+                        listOf(
+                            ClipStackOp.PathOp(
+                                clipPath,
+                                ClipOp.INTERSECT,
+                                antiAlias = false,
+                                transformClass = "right-angle-rotation",
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+            deviceGeneration = backend.deviceGeneration,
+        )
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+        val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(
+            inventory.visualCommands.single().clipExecutionPlan,
+        )
+        assertEquals("right-angle-rotation", execution.pathTransformClass)
+        assertEquals(GPUClipStencilOperation.IncrementWrap, execution.producer.frontPassOperation)
+        assertEquals(GPUClipStencilOperation.DecrementWrap, execution.producer.backPassOperation)
+        assertEquals(GPUClipStencilCompare.NotEqual, execution.consumer.compare)
+        val clipGeometry = assertIs<GPUClipExecutionGeometry.Path>(execution.producer.geometry)
+        assertEquals(
+            listOf(3.25f, 3.25f, 28.75f, 3.25f, 28.75f, 28.75f, 3.25f, 3.25f),
+            clipGeometry.vertices,
+        )
+        val preparation = GPUFramePathApiInventory.prepareNativeTaskList(
+            inventory,
+            capabilities,
+            targetBounds,
+            readbackId,
+        )
+        val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            preparation,
+            (preparation as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}; facts=${it.facts}"
+            },
+        ).taskList
+        val session = backend.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(32, 32, colorMapping.physicalFormat, colorMapping.interpretation),
+        )
+        try {
+            val completed = session.renderFrame(
+                prepared,
+                GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
+            ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+            assertEquals(GPUFrameStructuralOutcome.Succeeded, completed.outcome)
+            val gpu = assertIs<GPUSceneFrameOutput.ReadbackRgba>(completed.output).bytes
+            assertContentEquals(deterministicHalfTurnDiagonalButtMiterWindingClipOracle(), gpu)
+            assertEquals(1L, session.nativeCounters().submits)
+            assertEquals(1L, session.nativeCounters().readbackCopies)
+        } finally {
+            session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
     fun `non right angle rotated diagonal stroke remains explicitly refused`() {
         val backend = GPUBackendRuntimeNativeFactory.createOrNull()
         assumeTrue(backend != null)
@@ -2606,6 +2698,49 @@ class GPUFramePathApiInventoryNativeSmokeTest {
             val clipBy = 27.25f
             val clipCx = 4.75f
             val clipCy = 4.25f
+            val denominator = (clipBy - clipCy) * (clipAx - clipCx) +
+                (clipCx - clipBx) * (clipAy - clipCy)
+            for (y in 0 until 32) {
+                for (x in 0 until 32) {
+                    val px = x + 0.5f
+                    val py = y + 0.5f
+                    val u = ((clipBy - clipCy) * (px - clipCx) +
+                        (clipCx - clipBx) * (py - clipCy)) / denominator
+                    val v = ((clipCy - clipAy) * (px - clipCx) +
+                        (clipAx - clipCx) * (py - clipCy)) / denominator
+                    if (u < 0f || v < 0f || u + v > 1f) continue
+                    val projection = ((px - strokeAx) * strokeDx + (py - strokeAy) * strokeDy) /
+                        strokeLengthSquared
+                    if (projection < 0f || projection > 1f) continue
+                    val closestX = strokeAx + projection * strokeDx
+                    val closestY = strokeAy + projection * strokeDy
+                    val distanceX = px - closestX
+                    val distanceY = py - closestY
+                    if (distanceX * distanceX + distanceY * distanceY > halfWidthSquared) continue
+                    val offset = (y * 32 + x) * 4
+                    rgba[offset] = 0xff.toByte()
+                    rgba[offset + 3] = 0xff.toByte()
+                }
+            }
+        }
+
+    /** Independent device-space oracle for the half-turn rotated diagonal stroke and clip. */
+    private fun deterministicHalfTurnDiagonalButtMiterWindingClipOracle(): ByteArray =
+        ByteArray(32 * 32 * 4).also { rgba ->
+            val strokeAx = 23.75f
+            val strokeAy = 11.75f
+            val strokeBx = 11.75f
+            val strokeBy = 5.75f
+            val strokeDx = strokeBx - strokeAx
+            val strokeDy = strokeBy - strokeAy
+            val strokeLengthSquared = strokeDx * strokeDx + strokeDy * strokeDy
+            val halfWidthSquared = 2f * 2f
+            val clipAx = 3.25f
+            val clipAy = 3.25f
+            val clipBx = 28.75f
+            val clipBy = 3.25f
+            val clipCx = 28.75f
+            val clipCy = 28.75f
             val denominator = (clipBy - clipCy) * (clipAx - clipCx) +
                 (clipCx - clipBx) * (clipAy - clipCy)
             for (y in 0 until 32) {
