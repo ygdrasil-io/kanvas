@@ -3097,6 +3097,42 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `zero length butt and square strokes refuse before native preparation`() {
+        listOf(StrokeCap.BUTT, StrokeCap.SQUARE).forEach { cap ->
+            val inventory = GPUFramePathApiInventory.plan(
+                operations = listOf(
+                    DisplayOp.DrawPath(
+                        Path().apply {
+                            moveTo(10f, 10f)
+                            lineTo(10f, 10f)
+                        },
+                        Paint.stroke(ColorARGB.Red, 4f).copy(
+                            antiAlias = false,
+                            strokeCap = cap,
+                            strokeJoin = StrokeJoin.MITER,
+                        ),
+                        Matrix3x3F32.Identity,
+                        ClipStack.WideOpen,
+                    ),
+                ),
+                target = target(),
+                config = RenderConfig.DEFAULT,
+            )
+
+            val refused = gatherRefusal(inventory)
+
+            assertEquals("unsupported.core_primitive.stroke.complex_exact_lowering", refused.code, "cap=$cap")
+            assertEquals("1", refused.facts["pointCount"], "cap=$cap")
+            assertEquals(cap.name.lowercase(), refused.facts["cap"], "cap=$cap")
+            assertTrue(
+                inventory.recording.analysis.records.single().routeDecisionLabel !=
+                    "native.path_stroke.stencil_cover",
+                "cap=$cap",
+            )
+        }
+    }
+
+    @Test
     fun `single segment round joins and widths outside the fixed budget refuse`() {
         val path = Path().apply {
             moveTo(4f, 8f)
