@@ -81,6 +81,16 @@ class GpuEvidenceCatalogOracleTest {
     }
 
     @Test
+    fun `inverse even odd sweep stroke oracle paints only the hole overlap`() {
+        val pixels = oracle("clip-path-sweep-square-stroke-inverse-even-odd-hole")
+
+        assertPixel(pixels, 64, 64, 7, 7, intArrayOf(13, 20, 33, 255))
+        assertPixel(pixels, 64, 64, 10, 10, intArrayOf(165, 0, 207, 255))
+        assertPixel(pixels, 64, 64, 15, 15, intArrayOf(165, 0, 207, 255))
+        assertPixel(pixels, 64, 64, 22, 20, intArrayOf(13, 20, 33, 255))
+    }
+
+    @Test
     fun `bounded bitmap oracle preserves literal nearest texels at its integer destination`() {
         val pixels = oracle("bounded-rgba8-nearest-bitmap")
 

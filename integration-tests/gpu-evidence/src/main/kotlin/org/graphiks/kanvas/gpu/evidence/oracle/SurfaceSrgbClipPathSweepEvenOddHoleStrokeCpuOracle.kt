@@ -15,6 +15,7 @@ class SurfaceSrgbClipPathSweepEvenOddHoleStrokeCpuOracle(
     private val center: Point,
     private val startColor: IntArray,
     private val endColor: IntArray,
+    private val inverse: Boolean = false,
 ) : CpuOracle {
     data class Point(val x: Double, val y: Double)
     data class Rect(val left: Double, val top: Double, val right: Double, val bottom: Double)
@@ -71,8 +72,10 @@ class SurfaceSrgbClipPathSweepEvenOddHoleStrokeCpuOracle(
         return output
     }
 
-    private fun containsEvenOdd(x: Double, y: Double): Boolean =
-        outer.contains(x, y).xor(inner.contains(x, y))
+    private fun containsEvenOdd(x: Double, y: Double): Boolean {
+        val evenOdd = outer.contains(x, y).xor(inner.contains(x, y))
+        return if (inverse) !evenOdd else evenOdd
+    }
 
     private fun coversSquareStroke(x: Double, y: Double, halfWidthSquared: Double): Boolean {
         val projection = ((x - strokeStart.x) * dx + (y - strokeStart.y) * dy) / lengthSquared
@@ -88,4 +91,3 @@ class SurfaceSrgbClipPathSweepEvenOddHoleStrokeCpuOracle(
     private fun Rect.contains(x: Double, y: Double): Boolean =
         x > left && x < right && y > top && y < bottom
 }
-
