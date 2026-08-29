@@ -1247,7 +1247,8 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
             !matchesPixelExactRoundCapR2HorizontalV1() &&
             !matchesPixelExactRoundCapR2VerticalV1() &&
             !matchesPixelExactRoundCapR2QuarterTurnV1() &&
-            !matchesPixelExactRoundCapR2HalfTurnV1() ->
+            !matchesPixelExactRoundCapR2HalfTurnV1() &&
+            !matchesPixelExactRoundCapR2NegativeQuarterTurnV1() ->
             "unsupported.core_primitive.stroke.round_cap_pixel_exact_lowering"
         strokeJoin != "miter" -> "unsupported.core_primitive.stroke.join_exact_lowering"
         !strokeMiterLimit.isFinite() || strokeMiterLimit < 1f ->
@@ -1376,6 +1377,8 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
                     GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2QuarterTurnV1
                 strokeCap == "round" && matchesPixelExactRoundCapR2HalfTurnV1() ->
                     GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2HalfTurnV1
+                strokeCap == "round" && matchesPixelExactRoundCapR2NegativeQuarterTurnV1() ->
+                    GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2NegativeQuarterTurnV1
                 else -> GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1
             },
         ),
@@ -1470,6 +1473,18 @@ private fun NormalizedDrawCommand.FillPath.matchesPixelExactRoundCapR2HalfTurnV1
         kotlin.math.abs(end.first - start.first) + kotlin.math.abs(end.second - start.second) >= strokeWidth
 }
 
+private fun NormalizedDrawCommand.FillPath.matchesPixelExactRoundCapR2NegativeQuarterTurnV1(): Boolean {
+    if (!transform.isExactNegativeQuarterTurnPathRotation()) return false
+    if (strokeWidth != 4f || tessellatedVertices.size != 4) return false
+    val start = transform.map(tessellatedVertices[0], tessellatedVertices[1])
+    val end = transform.map(tessellatedVertices[2], tessellatedVertices[3])
+    val integral = listOf(start.first, start.second, end.first, end.second)
+        .all { it.isIntegralDeviceCoordinate() }
+    val axisAligned = start.first == end.first || start.second == end.second
+    return integral && axisAligned &&
+        kotlin.math.abs(end.first - start.first) + kotlin.math.abs(end.second - start.second) >= strokeWidth
+}
+
 private fun Float.isIntegralDeviceCoordinate(): Boolean = isFinite() && floor(this) == this
 
 private fun org.graphiks.kanvas.gpu.renderer.commands.GPUBounds.toPixelCoverBounds(
@@ -1519,6 +1534,11 @@ private fun GPUTransformFacts.isExactQuarterTurnPathRotation(): Boolean =
     type == GPUTransformType.Affine &&
         translateX.isFinite() && translateY.isFinite() &&
         scaleX == 0f && scaleY == 0f && skewX == -1f && skewY == 1f
+
+private fun GPUTransformFacts.isExactNegativeQuarterTurnPathRotation(): Boolean =
+    type == GPUTransformType.Affine &&
+        translateX.isFinite() && translateY.isFinite() &&
+        scaleX == 0f && scaleY == 0f && skewX == 1f && skewY == -1f
 
 private fun GPUTransformFacts.isExactHalfTurnPathRotation(): Boolean =
     (type == GPUTransformType.Scale || type == GPUTransformType.Affine) &&
