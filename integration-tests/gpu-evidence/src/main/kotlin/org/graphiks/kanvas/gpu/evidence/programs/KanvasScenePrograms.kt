@@ -1524,6 +1524,22 @@ object KanvasScenePrograms {
         )
     })
 
+    fun scissoredRoundCapStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        save()
+        clipRect(RectF32.ofLTRB(5f, 14f, 18f, 19f), antiAlias = false)
+        drawPath(
+            Path {
+                moveTo(6f, 16f)
+                lineTo(26f, 16f)
+            },
+            Paint.stroke(ColorARGB.Red, 4f).copy(
+                antiAlias = false,
+                strokeCap = StrokeCap.ROUND,
+            ),
+        )
+        restore()
+    })
+
     fun linearGradientLanes() = KanvasSurfaceProgram(ROUTE_ID, record = {
         drawRect(
             RectF32.ofLTRB(8f, 16f, 56f, 48f),

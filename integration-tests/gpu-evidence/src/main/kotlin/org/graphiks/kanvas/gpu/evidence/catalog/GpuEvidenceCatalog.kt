@@ -22,6 +22,7 @@ import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbUniformScaledTwoStopRa
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbUniformScaledThreeStopRadialGradientStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbThreeStopSweepGradientStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRoundCapStrokeCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRoundCapStrokeScissorCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathCpuOracle
@@ -55,6 +56,7 @@ object GpuEvidenceCatalog {
         strokeRectOutline(),
         translatedStrokeRectOutline(),
         roundCapStroke(),
+        scissoredRoundCapStroke(),
         linearGradientLanes(),
         linearGradientThreeStops(),
         radialSwatch(),
@@ -532,6 +534,34 @@ sweepGradientTwoStopStrokeRect(),
         ),
         KanvasScenePrograms.roundCapStroke(),
         SurfaceSrgbRoundCapStrokeCpuOracle(6.0, 26.0, 16.0, 2.0, intArrayOf(255, 0, 0, 255)),
+    )
+
+    private fun scissoredRoundCapStroke(): EvidenceCase = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("scissored-round-cap-stroke"),
+            "Scissored round-cap path stroke",
+            "Public Kanvas Surface non-AA integral-grid horizontal radius-two round-cap stroke constrained by an integral device scissor.",
+            32,
+            32,
+            1L,
+            setOf("path-stroke", "round-cap", "scissor", "kanvas-surface"),
+            EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke-scissor", 2),
+            ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent round-cap union intersected with the integral device scissor."),
+            emptySet(),
+        ),
+        KanvasScenePrograms.scissoredRoundCapStroke(),
+        SurfaceSrgbRoundCapStrokeScissorCpuOracle(
+            startX = 6.0,
+            endX = 26.0,
+            centerY = 16.0,
+            radius = 2.0,
+            color = intArrayOf(255, 0, 0, 255),
+            clipLeft = 5,
+            clipTop = 14,
+            clipRight = 18,
+            clipBottom = 19,
+        ),
     )
 
     private fun linearGradientLanes(): EvidenceCase {
