@@ -13,8 +13,12 @@ class NativePathHairlineContractTest {
     }
 
     @Test
-    fun `rejects scale antialiasing and diagonal hairlines`() {
-        assertFalse(command(listOf(4f, 8f, 20f, 8f), transform = GPUTransformFacts.scale(2f, 2f))
+    fun `accepts uniform positive scale and rejects other scale variants`() {
+        assertTrue(command(listOf(4f, 8f, 20f, 8f), transform = GPUTransformFacts.scale(2f, 2f))
+            .isBoundedNativePathHairline())
+        assertFalse(command(listOf(4f, 8f, 20f, 8f), transform = GPUTransformFacts.scale(2f, 1f))
+            .isBoundedNativePathHairline())
+        assertFalse(command(listOf(4f, 8f, 20f, 8f), transform = GPUTransformFacts.scale(-2f, -2f))
             .isBoundedNativePathHairline())
         assertFalse(command(listOf(4f, 8f, 20f, 8f), antiAlias = true)
             .isBoundedNativePathHairline())
