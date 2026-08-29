@@ -1778,6 +1778,24 @@ object KanvasScenePrograms {
         restore()
     })
 
+    /** The radius-two round-cap route after an exact half-turn rotation. */
+    fun halfTurnRoundCapStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        save()
+        translate(28f, 24f)
+        rotate(180f)
+        drawPath(
+            Path {
+                moveTo(8f, 4f)
+                lineTo(8f, 16f)
+            },
+            Paint.stroke(ColorARGB.Red, 4f).copy(
+                antiAlias = false,
+                strokeCap = StrokeCap.ROUND,
+            ),
+        )
+        restore()
+    })
+
     fun scaledTranslatedHorizontalHairline() = KanvasSurfaceProgram(ROUTE_ID, record = {
         save()
         translate(2f, 3f)

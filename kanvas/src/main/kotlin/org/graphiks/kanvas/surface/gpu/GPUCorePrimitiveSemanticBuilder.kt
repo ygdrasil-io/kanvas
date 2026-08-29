@@ -1246,7 +1246,8 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
         strokeCap == "round" &&
             !matchesPixelExactRoundCapR2HorizontalV1() &&
             !matchesPixelExactRoundCapR2VerticalV1() &&
-            !matchesPixelExactRoundCapR2QuarterTurnV1() ->
+            !matchesPixelExactRoundCapR2QuarterTurnV1() &&
+            !matchesPixelExactRoundCapR2HalfTurnV1() ->
             "unsupported.core_primitive.stroke.round_cap_pixel_exact_lowering"
         strokeJoin != "miter" -> "unsupported.core_primitive.stroke.join_exact_lowering"
         !strokeMiterLimit.isFinite() || strokeMiterLimit < 1f ->
@@ -1373,6 +1374,8 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
                     GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2VerticalV1
                 strokeCap == "round" && matchesPixelExactRoundCapR2QuarterTurnV1() ->
                     GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2QuarterTurnV1
+                strokeCap == "round" && matchesPixelExactRoundCapR2HalfTurnV1() ->
+                    GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2HalfTurnV1
                 else -> GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1
             },
         ),
@@ -1445,6 +1448,18 @@ private fun NormalizedDrawCommand.FillPath.matchesPixelExactRoundCapR2VerticalV1
 
 private fun NormalizedDrawCommand.FillPath.matchesPixelExactRoundCapR2QuarterTurnV1(): Boolean {
     if (!transform.isExactQuarterTurnPathRotation()) return false
+    if (strokeWidth != 4f || tessellatedVertices.size != 4) return false
+    val start = transform.map(tessellatedVertices[0], tessellatedVertices[1])
+    val end = transform.map(tessellatedVertices[2], tessellatedVertices[3])
+    val integral = listOf(start.first, start.second, end.first, end.second)
+        .all { it.isIntegralDeviceCoordinate() }
+    val axisAligned = start.first == end.first || start.second == end.second
+    return integral && axisAligned &&
+        kotlin.math.abs(end.first - start.first) + kotlin.math.abs(end.second - start.second) >= strokeWidth
+}
+
+private fun NormalizedDrawCommand.FillPath.matchesPixelExactRoundCapR2HalfTurnV1(): Boolean {
+    if (!transform.isExactHalfTurnPathRotation()) return false
     if (strokeWidth != 4f || tessellatedVertices.size != 4) return false
     val start = transform.map(tessellatedVertices[0], tessellatedVertices[1])
     val end = transform.map(tessellatedVertices[2], tessellatedVertices[3])
