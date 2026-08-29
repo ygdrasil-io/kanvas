@@ -11,6 +11,16 @@ import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbScaledThreeStopLinearG
 
 class GpuEvidenceCatalogOracleTest {
     @Test
+    fun `radial stroke oracle combines winding clip butt coverage and linear light gradient`() {
+        val pixels = oracle("clip-path-triangle-radial-stroke")
+
+        assertPixel(pixels, 64, 64, 7, 7, intArrayOf(137, 0, 225, 255))
+        assertPixel(pixels, 64, 64, 15, 15, intArrayOf(250, 0, 59, 255))
+        assertPixel(pixels, 64, 64, 18, 18, intArrayOf(13, 20, 33, 255))
+        assertPixel(pixels, 64, 64, 20, 20, intArrayOf(13, 20, 33, 255))
+    }
+
+    @Test
     fun `bounded bitmap oracle preserves literal nearest texels at its integer destination`() {
         val pixels = oracle("bounded-rgba8-nearest-bitmap")
 
