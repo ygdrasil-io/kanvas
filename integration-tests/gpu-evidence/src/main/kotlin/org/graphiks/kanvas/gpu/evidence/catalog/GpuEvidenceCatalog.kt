@@ -101,6 +101,23 @@ object GpuEvidenceCatalog {
     val cases: List<EvidenceCase> = renderCases + refusalCases
     val catalog = EvidenceSceneCatalog(cases.map(EvidenceCase::descriptor))
 
+    /**
+     * The execution boundary is intentionally part of the code-level source
+     * of truth.  A low-level recorder refusal can document a former bundle,
+     * but it cannot become a public Kanvas Surface support claim.
+     */
+    init {
+        require(renderCases.all { it.executionBoundary == EvidenceExecutionBoundary.PublicSurface })
+        require(renderCases.all { it.program is org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram })
+        require(refusalCases.filter { it.executionBoundary == EvidenceExecutionBoundary.PublicSurface }
+            .all { it.program is org.graphiks.kanvas.gpu.evidence.programs.KanvasSurfaceProgram })
+        require(refusalCases.filter { it.executionBoundary == EvidenceExecutionBoundary.HistoricalStandaloneRefusal }
+            .all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
+        require(cases.map { it.descriptor.id }.toSet().size == cases.size) {
+            "GPU evidence catalogue scene ids must be unique across all execution boundaries"
+        }
+    }
+
     private fun solidCardStack(): EvidenceCase {
         return EvidenceCase(
             descriptor = EvidenceSceneDescriptor(
@@ -327,6 +344,7 @@ object GpuEvidenceCatalog {
         ),
         RendererRefusalPrograms.unregisteredRuntimeEffect(GPUCustomRuntimeEffectID("gpu-evidence.unregistered")),
         null,
+        EvidenceExecutionBoundary.HistoricalStandaloneRefusal,
     )
 
     private fun aggregateMemoryBudgetRefusal(): EvidenceCase = EvidenceCase(
@@ -337,6 +355,7 @@ object GpuEvidenceCatalog {
         ),
         RendererRefusalPrograms.aggregateMemoryBudget(),
         null,
+        EvidenceExecutionBoundary.HistoricalStandaloneRefusal,
     )
 
     private fun repeatGradientRendered() = gradientCase(
