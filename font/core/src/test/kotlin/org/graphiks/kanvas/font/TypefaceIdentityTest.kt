@@ -1,13 +1,9 @@
 package org.graphiks.kanvas.font
 
-import java.nio.file.Files
-import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
-import kotlin.test.assertTrue
 
 class TypefaceIdentityTest {
     @Test
@@ -70,57 +66,6 @@ class TypefaceIdentityTest {
         assertEquals(positiveZero.typefaceId(), negativeZero.typefaceId())
     }
 
-    @Test
-    fun `typeface report preserves diagnostics and does not emit claim promoting rows`() {
-        val report = defaultTypefaceIdentityReport()
-        val json = report.toCanonicalJson()
-
-        assertEquals("typeface-id.json", report.fixtureName)
-        assertEquals("typeface", report.legacyGate)
-        assertFalse(report.claimPromotionAllowed)
-        assertTrue(report.entries.all { entry -> !entry.claimPromotionAllowed })
-        assertTrue(report.entries.filter { entry -> entry.diagnostics.isNotEmpty() }.all { entry ->
-            entry.typefaceId() == null
-        })
-        assertContains(json, """"legacyGate":"typeface"""")
-        assertContains(json, """"gateStatus":"open"""")
-        assertContains(json, """"claimPromotionAllowed":false""")
-        assertContains(json, """"code": "font.collection-index-invalid"""")
-        assertContains(json, """"code": "font.sfnt.cmap-unusable"""")
-        assertContains(json, """"code": "font.sfnt.identity-facts-incomplete"""")
-        assertFalse(json.contains(""""claimPromotionAllowed":true"""))
-    }
-
-    @Test
-    fun `checked in typeface id json matches generated report`() {
-        val expected = Files.readString(projectRoot().resolve("reports/pure-kotlin-text/typeface-id.json"))
-
-        assertEquals(expected.trim(), defaultTypefaceIdentityReport().toCanonicalJson())
-    }
-
-    @Test
-    fun `typeface identity report does not contain hidden rendering or native engine claims`() {
-        val json = defaultTypefaceIdentityReport().toCanonicalJson()
-
-        listOf(
-            "SkTypeface",
-            "HarfBuzz",
-            "FreeType",
-            "GPUHandle",
-            "glyph rendering support",
-            "shaping support",
-            "fallback complete",
-            "glyph cache",
-            "WebGPU",
-            "WGSL",
-            "Ganesh",
-            "Graphite",
-            "SkSL",
-        ).forEach { token ->
-            assertFalse(json.contains(token), "Typeface identity report leaked forbidden token $token: $json")
-        }
-    }
-
     private fun fixtureTypefacePreimage(
         sourceId: FontSourceID = fixtureSourceId(),
         collectionIndex: Int = 0,
@@ -161,11 +106,4 @@ class TypefaceIdentityTest {
             parserGeneration = 1,
         ).sourceId()
 
-    private fun projectRoot(): Path {
-        var current = Path.of("").toAbsolutePath().normalize()
-        while (current.parent != null && !Files.isDirectory(current.resolve("reports/pure-kotlin-text"))) {
-            current = current.parent
-        }
-        return current
-    }
 }

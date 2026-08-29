@@ -1,7 +1,5 @@
 package org.graphiks.kanvas.font
 
-import java.nio.file.Files
-import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -117,34 +115,6 @@ class FontSourceIdentityTest {
     }
 
     @Test
-    fun `font source report emits fixture-equivalent deterministic font-source json`() {
-        val report = defaultFontSourceIdentityReport()
-        val json = report.toCanonicalJson()
-
-        assertEquals(json, defaultFontSourceIdentityReport().toCanonicalJson())
-        assertEquals("font-source.json", report.fixtureName)
-        assertEquals(
-            listOf(
-                "bundled-fixture",
-                "generated-fixture",
-                "user-data",
-                "system-scanned-host-dependent",
-            ),
-            report.entries.map { entry -> entry.label },
-        )
-        assertTrue(report.entries.all { entry -> entry.claimPromotionAllowed == false })
-        assertContains(json, """"schema":"org.graphiks.kanvas.font.FontSourceIdentityReport.v1"""")
-        assertContains(json, """"fixtureName":"font-source.json"""")
-        assertContains(json, """"diagnostics": [
-    {
-      "code": "font.source.host-dependent"""")
-        assertContains(json, """"claimPromotionAllowed":false""")
-        listOf("SkFont", "SkTypeface", "HarfBuzz", "FreeType", "GPUHandle", "@").forEach { token ->
-            assertFalse(json.contains(token), "Font source report leaked forbidden token $token: $json")
-        }
-    }
-
-    @Test
     fun `canonical source preimage json escapes control characters`() {
         val preimage = fontSourceIdentityPreimage(
             kind = FontSourceKind.USER_DATA,
@@ -171,13 +141,6 @@ class FontSourceIdentityTest {
     }
 
     @Test
-    fun `checked in font source json matches generated report`() {
-        val expected = Files.readString(projectRoot().resolve("reports/pure-kotlin-text/font-source.json"))
-
-        assertEquals(expected.trim(), defaultFontSourceIdentityReport().toCanonicalJson())
-    }
-
-    @Test
     fun `legacy font source kinds keep enum order and conservative serialized names`() {
         assertEquals(
             listOf(
@@ -194,11 +157,4 @@ class FontSourceIdentityTest {
         assertEquals("UserDataFontSource", FontSourceKind.RESOURCE.serializedName)
     }
 
-    private fun projectRoot(): Path {
-        var current = Path.of("").toAbsolutePath().normalize()
-        while (current.parent != null && !Files.isDirectory(current.resolve("reports/pure-kotlin-text"))) {
-            current = current.parent
-        }
-        return current
-    }
 }

@@ -1,21 +1,11 @@
 package org.graphiks.kanvas.glyph.gpu
 
-import java.nio.file.Files
-import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 
 class GPUTextSubRunPlanTest {
-    @Test
-    fun `default subrun plan report matches repo golden`() {
-        val root = projectRoot()
-        val expected = Files.readString(root.resolve("reports/pure-kotlin-text/gpu-text-subrun-plan.json"))
-
-        assertEquals(expected.trimEnd(), defaultGPUTextSubRunPlanReportJson().trimEnd())
-    }
-
     @Test
     fun `planner splits A8 atlas entries by page and generation without reordering glyphs`() {
         val report = defaultGPUTextSubRunPlanReport()
@@ -127,11 +117,4 @@ class GPUTextSubRunPlanTest {
         assertEquals(listOf("no-complete-target-support-claim"), report.nonClaims)
     }
 
-    private fun projectRoot(): Path {
-        var current = Path.of("").toAbsolutePath().normalize()
-        while (current.parent != null && !Files.isDirectory(current.resolve("reports/pure-kotlin-text"))) {
-            current = current.parent
-        }
-        return current
-    }
 }

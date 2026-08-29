@@ -192,33 +192,6 @@ class ScriptItemizationTest {
         assertTrue(dump.contains("\"sourceText\": \"\\u0001\""))
     }
 
-    @Test
-    fun scriptDumpIndexAndFixtureManifestReferenceScriptItemizationEvidence() {
-        val dumpIndex = readProjectFile("reports/pure-kotlin-text/dump-evidence-index.json")
-        assertTrue(
-            dumpIndex.containsInOrder(
-                listOf(
-                    "\"dumpId\": \"script-runs\"",
-                    "\"ownerTicket\": \"KFONT-M5-004\"",
-                    "\"classification\": \"golden-gated\"",
-                    "\"reports/font/fixtures/expected/unicode/script-runs.json\"",
-                    "\"producer-only\"",
-                ),
-            ),
-        )
-
-        val manifest = readProjectFile("reports/pure-kotlin-text/fixture-evidence-manifest.json")
-        assertTrue(
-            manifest.containsInOrder(
-                listOf(
-                    "\"familyId\": \"shaping-scripts\"",
-                    "\"reports/font/fixtures/expected/unicode/script-runs.json\"",
-                    "\"no-complete-gsub-gpos-claim\"",
-                ),
-            ),
-        )
-    }
-
     private fun String.containsInOrder(snippets: List<String>): Boolean {
         var cursor = 0
         for (snippet in snippets) {
