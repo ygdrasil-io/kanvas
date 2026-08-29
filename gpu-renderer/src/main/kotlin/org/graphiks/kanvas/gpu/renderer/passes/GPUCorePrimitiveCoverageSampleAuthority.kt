@@ -191,6 +191,8 @@ private fun GPUCorePrimitiveGeometry.TriangulatedPath.isExactSingleSegmentStroke
             stroke.cap == "round" && stroke.width == 4f
         GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2ReverseVerticalV1 ->
             stroke.cap == "round" && stroke.width == 4f
+        GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2ReverseHorizontalV1 ->
+            stroke.cap == "round" && stroke.width == 4f
         GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2QuarterTurnV1 ->
             stroke.cap == "round" && stroke.width == 4f
         GPUCorePrimitiveStrokeLoweringProof.SingleSegmentRoundPixelExactR2HalfTurnV1 ->
