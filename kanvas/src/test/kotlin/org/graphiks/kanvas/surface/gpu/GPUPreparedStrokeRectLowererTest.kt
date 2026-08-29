@@ -183,6 +183,57 @@ class GPUPreparedStrokeRectLowererTest {
     }
 
     @Test
+    fun `three stop clamp radial gradient stroke requires its dedicated capability`() {
+        val shader = Shader.RadialGradient(Point2F32(32.5f, 32.5f), 23.5f, listOf(
+            org.graphiks.kanvas.paint.GradientStop(0f, ColorARGB.Red),
+            org.graphiks.kanvas.paint.GradientStop(.5f, ColorARGB.Green),
+            org.graphiks.kanvas.paint.GradientStop(1f, ColorARGB.Blue),
+        ))
+        fun lower(capability: Boolean) = GPUPreparedStrokeRectLowerer.lower(
+            strokeRect(bounds = RectF32.ofLTRB(8f,16f,56f,48f), paint = Paint.stroke(ColorARGB.Transparent,4f).copy(shader=shader, antiAlias=false)),
+            GPUDrawCommandID(0),0,GPUFrameProvenance.None,target(),RenderConfig.DEFAULT,
+            capabilities(withThreeStopStrokeRadialGradient = capability),
+        )
+        assertEquals("unsupported.stroke.rect_radial_gradient_three_stop_capability", assertIs<GPUPreparedStrokeRectLowering.Refused>(lower(false)).code)
+        assertEquals(4, assertIs<GPUPreparedStrokeRectLowering.Ready>(lower(true)).commands.size)
+    }
+
+    @Test
+    fun `three stop radial stroke rejects every material contract escape`() {
+        val stops = listOf(org.graphiks.kanvas.paint.GradientStop(0f, ColorARGB.Red), org.graphiks.kanvas.paint.GradientStop(.5f, ColorARGB.Green), org.graphiks.kanvas.paint.GradientStop(1f, ColorARGB.Blue))
+        fun op(shader: Shader, aa: Boolean = false, matrix: Matrix3x3F32 = Matrix3x3F32.Identity) = strokeRect(
+            paint = Paint.stroke(ColorARGB.Transparent, 4f).copy(shader = shader, antiAlias = aa), transform = matrix,
+        )
+        val radial = Shader.RadialGradient(Point2F32(32f,32f), 16f, stops)
+        val cases = listOf(
+            Triple(op(Shader.RadialGradient(Point2F32(32f,32f),16f,stops.take(2))), target(), "unsupported.stroke.rect_radial_gradient_two_stop_capability"),
+            Triple(op(Shader.RadialGradient(Point2F32(32f,32f),16f,stops + org.graphiks.kanvas.paint.GradientStop(1f,ColorARGB.White))), target(), "unsupported.stroke.rect_gradient_stop_count"),
+            Triple(op(Shader.RadialGradient(Point2F32(32f,32f),16f,stops, org.graphiks.kanvas.paint.TileMode.REPEAT)), target(), "unsupported.stroke.rect_gradient_tile_mode"),
+            Triple(op(radial, true), target(), "unsupported.stroke.rect_anti_alias"),
+            Triple(op(radial, matrix=Matrix3x3F32.translation(1f,0f)), target(), "unsupported.stroke.rect_transform"),
+            Triple(op(radial), target("rgba8unorm"), "unsupported.stroke.rect_gradient_target"),
+            Triple(op(Shader.WithLocalMatrix(radial, Matrix3x3F32.translation(1f,0f))), target(), "unsupported.stroke.rect_material"),
+            Triple(strokeRect(paint=Paint.stroke(ColorARGB.Transparent,4f).copy(shader=radial, colorFilter=ColorFilter.HighContrast, antiAlias=false)), target(), "unsupported.stroke.rect_material"),
+        )
+        cases.forEach { (operation, target, code) ->
+            assertEquals(code, assertIs<GPUPreparedStrokeRectLowering.Refused>(GPUPreparedStrokeRectLowerer.lower(operation,GPUDrawCommandID(0),0,GPUFrameProvenance.None,target,RenderConfig.DEFAULT,capabilities(withThreeStopStrokeRadialGradient=true))).code)
+        }
+    }
+
+    @Test
+    fun `radial stroke rejects malformed stop positions before bands`() {
+        val invalid = listOf(Float.NaN, -0.1f, 1.1f, .5f)
+        invalid.forEach { middle ->
+            val positions = if (middle == .5f) listOf(0f, 0f, 1f) else listOf(0f, middle, 1f)
+            val shader = Shader.RadialGradient(Point2F32(32f,32f),16f,positions.mapIndexed { index, p -> org.graphiks.kanvas.paint.GradientStop(p, if(index == 0) ColorARGB.Red else ColorARGB.Blue) })
+            val refused = assertIs<GPUPreparedStrokeRectLowering.Refused>(GPUPreparedStrokeRectLowerer.lower(
+                strokeRect(paint=Paint.stroke(ColorARGB.Transparent,4f).copy(shader=shader,antiAlias=false)), GPUDrawCommandID(0),0,GPUFrameProvenance.None,target(),RenderConfig.DEFAULT,capabilities(withThreeStopStrokeRadialGradient=true),
+            ))
+            assertEquals("unsupported.stroke.rect_material", refused.code)
+        }
+    }
+
+    @Test
     fun `two stop full sweep gradient stroke lowers to four bands only with dedicated capability`() {
         val lowered = assertIs<GPUPreparedStrokeRectLowering.Ready>(GPUPreparedStrokeRectLowerer.lower(
             strokeRect(bounds = RectF32.ofLTRB(8f, 16f, 56f, 48f), paint = Paint.stroke(ColorARGB.Transparent, 4f).copy(
@@ -559,7 +610,7 @@ class GPUPreparedStrokeRectLowererTest {
                         gradientStops() + org.graphiks.kanvas.paint.GradientStop(1f, ColorARGB.Blue),
                     ),
                 ),
-            ) to "unsupported.stroke.rect_gradient_stop_count",
+            ) to "unsupported.stroke.rect_radial_gradient_three_stop_capability",
             "sweep gradient stroke material" to strokeRect(
                 paint = strokePaint.copy(
                     shader = Shader.SweepGradient(Point2F32(32f, 32f), stops = gradientStops()),
@@ -758,6 +809,7 @@ class GPUPreparedStrokeRectLowererTest {
         withThreeStopStrokeGradient: Boolean = false,
         withTwoStopStrokeRadialGradient: Boolean = false,
         withTwoStopStrokeSweepGradient: Boolean = false,
+        withThreeStopStrokeRadialGradient: Boolean = false,
     ) = GPUCapabilities(
         implementation = GPUImplementationIdentity(
             facadeName = "test", implementationName = "fake", adapterName = "mock", deviceName = "mock",
@@ -794,6 +846,10 @@ class GPUPreparedStrokeRectLowererTest {
             if (withTwoStopStrokeSweepGradient) add(GPUCapabilityFact(
                 GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE, "test", "supported", true,
                 "test:stroke-rect-sweep-gradient-two-stop",
+            ))
+            if (withThreeStopStrokeRadialGradient) add(GPUCapabilityFact(
+                GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_NATIVE, "test", "supported", true,
+                "test:stroke-rect-radial-gradient-three-stop",
             ))
         },
         knownUnsupportedFacts = emptyList(),

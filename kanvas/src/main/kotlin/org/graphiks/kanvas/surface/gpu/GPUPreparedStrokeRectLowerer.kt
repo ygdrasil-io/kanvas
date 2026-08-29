@@ -127,7 +127,7 @@ internal object GPUPreparedStrokeRectLowerer {
                     )
                 }
                 when {
-                    shader.stops.size != 2 -> return refused(
+                    shader.stops.size !in 2..3 -> return refused(
                         "unsupported.stroke.rect_gradient_stop_count",
                         operationIndex,
                         mapOf("stopCount" to shader.stops.size.toString()),
@@ -142,7 +142,14 @@ internal object GPUPreparedStrokeRectLowerer {
                         operationIndex,
                         mapOf("targetFormat" to target.colorFormat),
                     )
-                    !capabilities.hasSupportedFact(
+                    shader.stops.size == 3 && !capabilities.hasSupportedFact(
+                        GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_NATIVE,
+                    ) -> return refused(
+                        "unsupported.stroke.rect_radial_gradient_three_stop_capability",
+                        operationIndex,
+                        mapOf("capability" to GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_NATIVE),
+                    )
+                    shader.stops.size == 2 && !capabilities.hasSupportedFact(
                         GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_NATIVE,
                     ) -> return refused(
                         "unsupported.stroke.rect_radial_gradient_two_stop_capability",
@@ -395,12 +402,13 @@ private fun Shader.RadialGradient.isAdmittedStrokeRadialGradient(): Boolean =
     tileMode == TileMode.CLAMP &&
         interpolation == ColorSpaceInterpolation.SRGB &&
         center.x.isFinite() && center.y.isFinite() && radius.isFinite() && radius > 0f &&
-        stops.size == 2 &&
+        stops.size in 2..3 &&
         stops.first().position == 0f && stops.last().position == 1f &&
         stops.all { stop ->
-            stop.color.r.isFinite() && stop.color.g.isFinite() &&
+            stop.position.isFinite() && stop.position in 0f..1f &&
+                stop.color.r.isFinite() && stop.color.g.isFinite() &&
                 stop.color.b.isFinite() && stop.color.a.isFinite()
-        }
+        } && stops.zipWithNext().all { (left, right) -> left.position < right.position }
 
 private fun Shader.SweepGradient.isAdmittedStrokeSweepGradient(): Boolean =
     tileMode == TileMode.CLAMP && interpolation == ColorSpaceInterpolation.SRGB &&

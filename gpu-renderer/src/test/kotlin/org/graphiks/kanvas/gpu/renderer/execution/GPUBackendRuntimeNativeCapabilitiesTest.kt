@@ -39,6 +39,8 @@ class GPUBackendRuntimeNativeCapabilitiesTest {
         listOf(
             GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_TWO_STOP_NATIVE to
                 "core-primitive-gradient-radial-stroke-2stop-native",
+            GPUFirstSliceCapabilityName.STROKE_RECT_RADIAL_GRADIENT_THREE_STOP_NATIVE to
+                "core-primitive-gradient-radial-stroke-3stop-native",
             GPUFirstSliceCapabilityName.STROKE_RECT_SWEEP_GRADIENT_TWO_STOP_NATIVE to
                 "core-primitive-gradient-sweep-stroke-2stop-native",
         ).forEach { (name, label) ->
