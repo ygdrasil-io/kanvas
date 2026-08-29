@@ -993,6 +993,22 @@ private fun Shader.toPreparedMaterial(
                         ),
                     )
                 }
+            } else if (source is GPUMaterialDescriptor.RadialGradient) {
+                val composed = source.localMatrix.composeGradientLocalMatrix(matrix)
+                if (composed == null || !composed.isPositiveUniformScaleTranslateGradientLocalMatrix()) {
+                    mapper.descriptorAssembly.preparedUnsupported(
+                        reason = GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX,
+                        originalKind = GPUMaterialKind.RadialGradient,
+                        source = source,
+                    )
+                } else {
+                    source.copy().withGradientFacts(
+                        GPUMaterialDescriptor.GradientFacts(
+                            interpolation = source.interpolation,
+                            localMatrix = composed,
+                        ),
+                    )
+                }
             } else {
                 mapper.descriptorAssembly.preparedUnsupported(
                     reason = GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX,

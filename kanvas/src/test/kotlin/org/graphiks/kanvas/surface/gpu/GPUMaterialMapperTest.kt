@@ -174,6 +174,35 @@ class GPUMaterialMapperTest {
     }
 
     @Test
+    fun `prepared radial gradient admits bounded uniform scale translate local matrix`() {
+        val descriptor = assertIs<GPUMaterialDescriptor.RadialGradient>(
+            Paint(
+                shader = Shader.WithLocalMatrix(
+                    Shader.RadialGradient(
+                        center = Point2F32(10f, 20f),
+                        radius = 30f,
+                        stops = listOf(
+                            GradientStop(0f, ColorARGB.Red),
+                            GradientStop(1f, ColorARGB.Blue),
+                        ),
+                        tileMode = TileMode.CLAMP,
+                    ),
+                    Matrix3x3F32.of(
+                        1.5f, 0f, 1.25f,
+                        0f, 1.5f, -0.75f,
+                        0f, 0f, 1f,
+                    ),
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+
+        assertEquals(
+            listOf(1.5f, 0f, 1.25f, 0f, 1.5f, -0.75f, 0f, 0f, 1f),
+            descriptor.localMatrix,
+        )
+    }
+
+    @Test
     fun `three stop admission keeps repeat refused while retaining two stop repeat and clamp`() {
         val twoStops = listOf(
             GradientStop(0f, ColorARGB.Red),
