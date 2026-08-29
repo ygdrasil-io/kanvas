@@ -16,6 +16,7 @@ class SurfaceSrgbClipPathSweepEvenOddHoleStrokeCpuOracle(
     private val startColor: IntArray,
     private val endColor: IntArray,
     private val inverse: Boolean = false,
+    private val squareCaps: Boolean = true,
 ) : CpuOracle {
     data class Point(val x: Double, val y: Double)
     data class Rect(val left: Double, val top: Double, val right: Double, val bottom: Double)
@@ -79,7 +80,7 @@ class SurfaceSrgbClipPathSweepEvenOddHoleStrokeCpuOracle(
 
     private fun coversSquareStroke(x: Double, y: Double, halfWidthSquared: Double): Boolean {
         val projection = ((x - strokeStart.x) * dx + (y - strokeStart.y) * dy) / lengthSquared
-        val capExtension = sqrt(halfWidthSquared / lengthSquared)
+        val capExtension = if (squareCaps) sqrt(halfWidthSquared / lengthSquared) else 0.0
         if (projection !in -capExtension..(1.0 + capExtension)) return false
         val closestX = strokeStart.x + projection * dx
         val closestY = strokeStart.y + projection * dy
