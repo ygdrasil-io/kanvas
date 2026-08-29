@@ -691,6 +691,34 @@ object KanvasScenePrograms {
         restore()
     })
 
+    fun clipPathSweepSquareStrokeEvenOddHole() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        save()
+        clipPath(
+            Path {}.apply {
+                fillType = FillType.EVEN_ODD
+                addRect(RectF32.ofLTRB(3.25f, 3.25f, 28.75f, 28.75f))
+                addRect(RectF32.ofLTRB(10.25f, 10.25f, 21.75f, 21.75f))
+            },
+            ClipOp.INTERSECT,
+            antiAlias = false,
+        )
+        drawPath(
+            Path { moveTo(5.25f, 8.25f); lineTo(21.25f, 20.25f) },
+            Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                shader = Shader.SweepGradient(
+                    Point2F32(16f, 16f),
+                    0f,
+                    360f,
+                    listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                ),
+                antiAlias = false,
+                strokeCap = StrokeCap.SQUARE,
+            ),
+        )
+        restore()
+    })
+
     fun clipPathTranslatedTriangleRadialGradient() = clipPathTriangleRadialGradientScene {
         translate(2f, 0f)
     }

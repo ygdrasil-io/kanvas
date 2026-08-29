@@ -29,6 +29,7 @@ import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathLinearGradient
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathRadialGradientCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathRadialStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathSweepStrokeCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathSweepEvenOddHoleStrokeCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathDirectTriangleLinearGradientCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathRRectCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbClipPathDRRectCpuOracle
@@ -104,6 +105,7 @@ sweepGradientTwoStopStrokeRect(),
         clipPathRightAngleRadialSquareStroke(),
         clipPathSweepSquareStroke(),
         clipPathLocalSweepMatrixStroke(),
+        clipPathSweepSquareStrokeEvenOddHole(),
         clipPathTranslatedTriangleRadialGradient(),
         clipPathTranslatedTriangleLinearGradient(),
         clipPathUniformScaledTriangleLinearGradient(),
@@ -1682,6 +1684,34 @@ sweepGradientTwoStopStrokeRect(),
             startColor = intArrayOf(255, 0, 0, 255),
             endColor = intArrayOf(0, 0, 255, 255),
             shaderTranslation = SurfaceSrgbClipPathSweepStrokeCpuOracle.Point(1.25, -0.75),
+        ),
+    )
+
+    private fun clipPathSweepSquareStrokeEvenOddHole() = EvidenceCase(
+        EvidenceSceneDescriptor(
+            EvidenceSceneId("clip-path-sweep-square-stroke-even-odd-hole"),
+            "Sweep square stroke through an EvenOdd hard-clip hole",
+            "Public Kanvas Surface hard non-AA EvenOdd clip with an outer rectangle and inner hole around one opaque full-turn two-stop sweep square-cap miter stroke.",
+            64,
+            64,
+            1L,
+            setOf("clip-path", "sweep-gradient", "stroke", "even-odd", "hard-clip", "square-cap", "kanvas-surface"),
+            EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-clip-path-sweep-even-odd-hole-stroke-device-space", 1),
+            ComparisonPolicy(1, 100.0, 1, "Independent pixel-center EvenOdd rectangle XOR, square stroke distance and full-turn linear-light sweep interpolation."),
+            emptySet(),
+        ),
+        KanvasScenePrograms.clipPathSweepSquareStrokeEvenOddHole(),
+        SurfaceSrgbClipPathSweepEvenOddHoleStrokeCpuOracle(
+            background = intArrayOf(13, 20, 33, 255),
+            outer = SurfaceSrgbClipPathSweepEvenOddHoleStrokeCpuOracle.Rect(3.25, 3.25, 28.75, 28.75),
+            inner = SurfaceSrgbClipPathSweepEvenOddHoleStrokeCpuOracle.Rect(10.25, 10.25, 21.75, 21.75),
+            strokeStart = SurfaceSrgbClipPathSweepEvenOddHoleStrokeCpuOracle.Point(5.25, 8.25),
+            strokeEnd = SurfaceSrgbClipPathSweepEvenOddHoleStrokeCpuOracle.Point(21.25, 20.25),
+            strokeWidth = 4.0,
+            center = SurfaceSrgbClipPathSweepEvenOddHoleStrokeCpuOracle.Point(16.0, 16.0),
+            startColor = intArrayOf(255, 0, 0, 255),
+            endColor = intArrayOf(0, 0, 255, 255),
         ),
     )
 
