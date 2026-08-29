@@ -927,6 +927,37 @@ object KanvasScenePrograms {
         restore()
     })
 
+    fun clipPathSweepSquareStrokeRightAngleWinding() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        save()
+        clipPath(
+            Path {
+                moveTo(6.875f, 5.875f)
+                lineTo(24.875f, 5.875f)
+                lineTo(6.875f, 23.875f)
+                close()
+            }.apply { fillType = FillType.WINDING },
+            ClipOp.INTERSECT,
+            antiAlias = false,
+        )
+        rotate(90f, 16f, 16f)
+        drawPath(
+            Path { moveTo(4.125f, 4.125f); lineTo(12.125f, 8.625f) },
+            Paint.stroke(ColorARGB.Transparent, 2f).copy(
+                shader = Shader.SweepGradient(
+                    Point2F32(16f, 16f),
+                    0f,
+                    360f,
+                    listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                ),
+                antiAlias = false,
+                strokeCap = StrokeCap.SQUARE,
+                strokeJoin = StrokeJoin.MITER,
+            ),
+        )
+        restore()
+    })
+
     fun clipPathTranslatedTriangleRadialGradient() = clipPathTriangleRadialGradientScene {
         translate(2f, 0f)
     }

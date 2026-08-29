@@ -158,6 +158,15 @@ class GpuEvidenceCatalogOracleTest {
     }
 
     @Test
+    fun `right angle sweep oracle keeps the rotated stroke outside the winding clip`() {
+        val pixels = oracle("clip-path-sweep-square-stroke-right-angle-winding")
+
+        assertPixel(pixels, 64, 64, 24, 8, intArrayOf(13, 20, 33, 255))
+        assertPixel(pixels, 64, 64, 23, 12, intArrayOf(13, 20, 33, 255))
+        assertPixel(pixels, 64, 64, 7, 7, intArrayOf(13, 20, 33, 255))
+    }
+
+    @Test
     fun `bounded bitmap oracle preserves literal nearest texels at its integer destination`() {
         val pixels = oracle("bounded-rgba8-nearest-bitmap")
 
