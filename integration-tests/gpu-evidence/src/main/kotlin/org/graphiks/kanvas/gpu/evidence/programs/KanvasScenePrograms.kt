@@ -805,6 +805,36 @@ object KanvasScenePrograms {
         restore()
     })
 
+    fun clipPathSweepSquareStrokeWindingDifference() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawColor(BACKGROUND)
+        save()
+        clipPath(
+            Path {
+                moveTo(7.25f, 6.25f)
+                lineTo(30.25f, 6.25f)
+                lineTo(7.25f, 29.25f)
+                close()
+            }.apply { fillType = FillType.WINDING },
+            ClipOp.DIFFERENCE,
+            antiAlias = false,
+        )
+        drawPath(
+            Path { moveTo(5.25f, 8.25f); lineTo(21.25f, 20.25f) },
+            Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                shader = Shader.SweepGradient(
+                    Point2F32(16f, 16f),
+                    0f,
+                    360f,
+                    listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                ),
+                antiAlias = false,
+                strokeCap = StrokeCap.SQUARE,
+                strokeJoin = StrokeJoin.MITER,
+            ),
+        )
+        restore()
+    })
+
     fun clipPathSweepSquareStrokeScaledTranslatedInverseWinding() = KanvasSurfaceProgram(ROUTE_ID, record = {
         drawColor(BACKGROUND)
         save()
