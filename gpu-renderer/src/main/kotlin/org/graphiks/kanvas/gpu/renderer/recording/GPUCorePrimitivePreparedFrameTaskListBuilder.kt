@@ -946,7 +946,8 @@ private fun GPUDrawSemanticPayload.CorePrimitive.hasExactHardPathClipConsumerGeo
 
 private fun GPUDrawSemanticPayload.CorePrimitive.hasExactClampGradientHardPathClipConsumerGeometry(): Boolean =
     hasExactDirectTrianglePathConsumerGeometry() ||
-        hasExactDirectTriangleRectGradientConsumerGeometry()
+        hasExactDirectTriangleRectGradientConsumerGeometry() ||
+        hasExactDirectStrokePathConsumerGeometry()
 
 private fun pathStencilGeometryBytes(
     semantic: GPUDrawSemanticPayload.CorePrimitive,
@@ -2267,7 +2268,8 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                                 semantic.geometry is GPUCorePrimitiveGeometry.DRRect
                         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectLinearGradient ->
                             packet.renderStepId.value == "linear.gradient.fill" ||
-                                semantic.hasExactDirectTrianglePathConsumerGeometry()
+                                semantic.hasExactDirectTrianglePathConsumerGeometry() ||
+                                semantic.hasExactDirectStrokePathConsumerGeometry()
                         GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectRadialGradient ->
                             packet.renderStepId.value == "radial.gradient.fill"
                         else -> false
