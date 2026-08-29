@@ -2459,7 +2459,7 @@ private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
                 require(stroke == null) {
                     "Fill stencil edge fans cannot retain stroke lowering facts"
                 }
-                require(sourceVertexCount <= GPUPathEdgeFanPayloadContract.MAX_TRIANGLES.toInt()) {
+                require(sourceVertexCount <= GPUPathEdgeFanPayloadContract.MAX_SOURCE_VERTICES.toInt()) {
                     CORE_PRIMITIVE_STENCIL_EDGE_FAN_BUDGET_DIAGNOSTIC
                 }
                 require(sourceContourStarts.hasCanonicalContourLengths(sourceVertexCount)) {
@@ -2480,7 +2480,11 @@ private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
                 require(stroke != null) {
                     "Stroke stencil edge fans require exact stroke lowering facts"
                 }
-                require(sourceContourStarts == listOf(0) && sourceVertexCount in 2..8) {
+                require(sourceContourStarts == listOf(0) &&
+                    ((stroke.loweringProof == GPUCorePrimitiveStrokeLoweringProof.MultiSegmentButtMiterV1 &&
+                        sourceVertexCount in 3..8) ||
+                        (stroke.loweringProof != GPUCorePrimitiveStrokeLoweringProof.MultiSegmentButtMiterV1 &&
+                            sourceVertexCount == 2))) {
                     "Core bounded stroke proof requires one two-to-eight-vertex source contour"
                 }
                 require(fillRule == GPUCorePrimitiveFillRule.Winding && !inverseFill) {
