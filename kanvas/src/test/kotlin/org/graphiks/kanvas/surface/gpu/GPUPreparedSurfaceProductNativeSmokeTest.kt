@@ -21,6 +21,7 @@ import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.SamplingOptions
@@ -79,6 +80,49 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
         assertEquals(listOf(31, 115, 209, 255), pixelAt(pixels, 64, 50, 20))
         assertEquals(1128, opaqueFillPixels)
         assertEquals(0, result.stats.opsRefused)
+    }
+
+    @Test
+    fun `public Surface horizontal dashed butt stroke executes the bounded native dash route`() {
+        val surface = Surface(width = 32, height = 32, format = PixelFormat.RGBA8)
+        surface.canvas {
+            drawPath(
+                Path().apply {
+                    moveTo(4f, 16f)
+                    lineTo(28f, 16f)
+                },
+                Paint.stroke(ColorARGB.Red, 4f).copy(
+                    antiAlias = false,
+                    pathEffect = PathEffect.Dash(floatArrayOf(8f, 4f), phase = 0f),
+                ),
+            )
+        }
+        val decisions = mutableListOf<GPUPreparedSurfaceRouteDecision>()
+        val result = GPUPreparedSurfaceProductEntry.render(
+            operations = surface.snapshotOps(),
+            width = surface.width,
+            height = surface.height,
+            format = surface.format,
+            config = surface.config,
+            executionPort = GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceNativeBackendPortFactory),
+            trace = GPUPreparedSurfaceRouteTrace(decisions::add),
+        )
+
+        val evidence = assertIs<GPUPreparedSurfaceRouteDecision.Prepared>(decisions.single()).evidence
+        val pixels = result.pixels.toByteArray()
+        var redPixels = 0
+        for (y in 0 until 32) for (x in 0 until 32) {
+            if (pixelAt(pixels, 32, x, y) == listOf(255, 0, 0, 255)) redPixels++
+        }
+        assertEquals(64, redPixels)
+        assertEquals(listOf(255, 0, 0, 255), pixelAt(pixels, 32, 4, 15))
+        assertEquals(listOf(0, 0, 0, 0), pixelAt(pixels, 32, 12, 15))
+        assertEquals(listOf(255, 0, 0, 255), pixelAt(pixels, 32, 16, 15))
+        assertEquals(0, result.stats.opsRefused)
+        assertTrue(evidence.draws + evidence.drawIndexed > 0L)
+        assertTrue(evidence.pipelineBinds > 0L)
+        assertTrue(evidence.submits > 0L)
+        assertTrue(evidence.readbackCopies > 0L)
     }
 
     private fun pixelAt(bytes: ByteArray, width: Int, x: Int, y: Int): List<Int> {
