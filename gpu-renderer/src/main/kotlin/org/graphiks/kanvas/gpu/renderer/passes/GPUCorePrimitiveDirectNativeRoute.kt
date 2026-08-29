@@ -8,7 +8,9 @@ import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveStrokeLoweringProof
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 
 /** Pure, handle-free geometry route shared by recording and execution validation. */
@@ -232,9 +234,9 @@ internal fun validateCorePrimitiveDirectNativeRoute(
                 "unsupported.native-core-primitive.geometry",
                 "Stencil edge fans require the later stencil-cover route.",
             )
-            geometry.strokeStyle != null -> refused(
+            geometry.strokeStyle != null && !geometry.isExactDirectStrokePathConsumerGeometry() -> refused(
                 "unsupported.native-core-primitive.geometry",
-                "Direct triangles may not retain stroke lowering state.",
+                "Direct triangles may retain stroke lowering state only for the exact native clip consumer proof.",
             )
             else -> accepted(
                 FloatArray(geometry.vertices.size) { index -> geometry.vertices[index] },
@@ -242,6 +244,20 @@ internal fun validateCorePrimitiveDirectNativeRoute(
             )
         }
     }
+}
+
+private fun GPUCorePrimitiveGeometry.TriangulatedPath.isExactDirectStrokePathConsumerGeometry(): Boolean {
+    val stroke = strokeStyle ?: return false
+    return geometryMode == GPUCorePrimitiveGeometryMode.DirectTriangles &&
+        vertices.size == 8 &&
+        indices == listOf(0, 1, 2, 0, 2, 3) &&
+        sourceContourStarts == listOf(0) &&
+        sourceVertexCount == 2 &&
+        fillRule == GPUCorePrimitiveFillRule.Winding &&
+        !inverseFill &&
+        stroke.cap == "butt" &&
+        stroke.join == "miter" &&
+        stroke.loweringProof == GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1
 }
 
 private val QUAD_INDICES = intArrayOf(0, 2, 1, 0, 3, 2)
