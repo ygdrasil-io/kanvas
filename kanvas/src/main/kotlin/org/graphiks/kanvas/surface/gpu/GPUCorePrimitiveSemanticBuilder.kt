@@ -12,6 +12,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.commands.isPositiveUniformScaleTranslateGradientLocalMatrix
 import org.graphiks.kanvas.gpu.renderer.commands.isBoundedNativePathHairline
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.geometry.FlattenedPath
@@ -878,7 +879,7 @@ private fun GPUFramePathVisualCommand.isExactHardPathClipStrokeSweepGradientCand
         sweepSpan.isFinite() && sweepSpan > 0f && sweepSpan <= 360f &&
         (gradient.allStopPositions?.size ?: 2) == 2 &&
         (gradient.allStopColors?.size ?: 8) == 8 &&
-        gradient.localMatrix == listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f) &&
+        gradient.localMatrix.isPositiveUniformScaleTranslateGradientLocalMatrix() &&
         stencilClip.sampleCount == 1
 }
 

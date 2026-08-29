@@ -1970,7 +1970,7 @@ class GPUFramePathApiInventoryTest {
                     Matrix3x3F32.translation(1f, 0f),
                 ),
                 false,
-                "unsupported.material.mapping.local_matrix",
+                "unsupported.material.sweep_gradient_stop_count",
             ),
         )
         cases.forEach { (shader, antiAlias, expectedCode) ->
@@ -2486,6 +2486,90 @@ class GPUFramePathApiInventoryTest {
                 "${diagnostic.code.value}: ${diagnostic.message}; facts=${diagnostic.facts}"
             },
         )
+    }
+
+    @Test
+    fun `translated local sweep matrix reaches the hard path clip stroke stencil route`() {
+        val capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER)
+        val clipPath = Path().apply {
+            moveTo(3f, 3f)
+            lineTo(29f, 3f)
+            lineTo(3f, 29f)
+            close()
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply {
+                        moveTo(5.25f, 8.25f)
+                        lineTo(21.25f, 20.25f)
+                    },
+                    Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                        shader = Shader.WithLocalMatrix(
+                            Shader.SweepGradient(
+                                Point2F32(16f, 16f),
+                                0f,
+                                360f,
+                                listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                                TileMode.CLAMP,
+                            ),
+                            Matrix3x3F32.translation(1.25f, -0.75f),
+                        ),
+                        antiAlias = false,
+                        strokeCap = StrokeCap.SQUARE,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.Identity,
+                    ClipStack.Complex(listOf(ClipStackOp.PathOp(clipPath, ClipOp.INTERSECT, antiAlias = false))),
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+        )
+
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+    }
+
+    @Test
+    fun `rotated and nonuniform local sweep matrices remain refused before hard path clip recording`() {
+        listOf(
+            Matrix3x3F32.rotation(90f),
+            Matrix3x3F32.scaling(2f, 1f),
+        ).forEach { localMatrix ->
+            val inventory = GPUFramePathApiInventory.plan(
+                operations = listOf(
+                    DisplayOp.DrawPath(
+                        Path().apply {
+                            moveTo(5.25f, 8.25f)
+                            lineTo(21.25f, 20.25f)
+                        },
+                        Paint.stroke(ColorARGB.Transparent, 4f).copy(
+                            shader = Shader.WithLocalMatrix(
+                                Shader.SweepGradient(
+                                    Point2F32(16f, 16f),
+                                    stops = listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                                ),
+                                localMatrix,
+                            ),
+                            antiAlias = false,
+                            strokeCap = StrokeCap.SQUARE,
+                            strokeJoin = StrokeJoin.MITER,
+                        ),
+                        Matrix3x3F32.Identity,
+                        ClipStack.WideOpen,
+                    ),
+                ),
+                target = target(),
+                config = RenderConfig.DEFAULT,
+                capabilities = capabilitiesWith(PATH_FILL_STENCIL_COVER),
+            )
+
+            assertEquals(
+                "refused.unsupported.material.mapping.local_matrix",
+                inventory.recording.analysis.records.single().routeDecisionLabel,
+            )
+        }
     }
 
     @Test
