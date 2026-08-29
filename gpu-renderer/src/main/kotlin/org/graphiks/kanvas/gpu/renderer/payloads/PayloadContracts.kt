@@ -1167,7 +1167,7 @@ enum class GPUCorePrimitiveStrokeLoweringProof {
     SingleSegmentRoundPixelExactR2HorizontalV1,
     /** Bounded open polyline, butt caps and miter joins, lowered to a stroke edge fan. */
     MultiSegmentButtMiterV1,
-    /** One integral horizontal segment with the fixed [8,4] butt/miter dash proof. */
+    /** One integral horizontal segment with the [8,4] butt/miter dash proof at phase 0 or 4. */
     HorizontalDashedButtMiterV1,
 }
 
@@ -2495,7 +2495,7 @@ private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
                 require(
                     stroke.dashIntervals.isEmpty() ||
                         (stroke.loweringProof == GPUCorePrimitiveStrokeLoweringProof.HorizontalDashedButtMiterV1 &&
-                            stroke.dashIntervals == listOf(8f, 4f) && stroke.dashPhase == 0f),
+                            stroke.dashIntervals == listOf(8f, 4f) && isBoundedHorizontalDashedPhase(stroke.dashPhase)),
                 ) { "Core stroke proof does not support this dash pattern" }
                 require(
                     when (stroke.loweringProof) {

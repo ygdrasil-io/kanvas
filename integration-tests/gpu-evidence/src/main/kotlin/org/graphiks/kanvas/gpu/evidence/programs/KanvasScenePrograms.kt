@@ -1943,6 +1943,19 @@ object KanvasScenePrograms {
         restore()
     })
 
+    /** The bounded [8,4] dash route with the second admitted phase (4px). */
+    fun phaseShiftedHorizontalDashedButtMiterStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
+        drawPath(
+            Path { moveTo(4f, 16f); lineTo(28f, 16f) },
+            Paint.stroke(ColorARGB.Red, 4f).copy(
+                antiAlias = false,
+                strokeCap = StrokeCap.BUTT,
+                strokeJoin = StrokeJoin.MITER,
+                pathEffect = PathEffect.Dash(floatArrayOf(8f, 4f), phase = 4f),
+            ),
+        )
+    })
+
     fun scissoredRoundCapStroke() = KanvasSurfaceProgram(ROUTE_ID, record = {
         save()
         clipRect(RectF32.ofLTRB(5f, 14f, 18f, 19f), antiAlias = false)

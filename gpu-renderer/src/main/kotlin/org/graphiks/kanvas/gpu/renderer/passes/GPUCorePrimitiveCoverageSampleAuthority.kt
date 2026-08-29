@@ -11,6 +11,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveStrokeLoweringProof
+import org.graphiks.kanvas.gpu.renderer.payloads.isBoundedHorizontalDashedPhase
 
 /** Pure authority for the exact CorePrimitive coverage/sample lanes promoted by the renderer. */
 internal sealed interface GPUCorePrimitiveCoverageSampleAuthority {
@@ -175,7 +176,7 @@ private fun GPUCorePrimitiveGeometry.TriangulatedPath.isExactSingleSegmentStroke
         stroke.join != "miter" ||
         (stroke.dashIntervals.isNotEmpty() &&
             !(stroke.loweringProof == GPUCorePrimitiveStrokeLoweringProof.HorizontalDashedButtMiterV1 &&
-                stroke.dashIntervals == listOf(8f, 4f) && stroke.dashPhase == 0f))
+                stroke.dashIntervals == listOf(8f, 4f) && isBoundedHorizontalDashedPhase(stroke.dashPhase)))
     ) return false
     return when (stroke.loweringProof) {
         GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1 ->
@@ -188,7 +189,7 @@ private fun GPUCorePrimitiveGeometry.TriangulatedPath.isExactSingleSegmentStroke
             sourceVertexCount in 3..8 && stroke.cap == "butt" && stroke.join == "miter"
         GPUCorePrimitiveStrokeLoweringProof.HorizontalDashedButtMiterV1 ->
             sourceVertexCount == 2 && stroke.cap == "butt" && stroke.join == "miter" &&
-                stroke.dashIntervals == listOf(8f, 4f) && stroke.dashPhase == 0f
+                stroke.dashIntervals == listOf(8f, 4f) && isBoundedHorizontalDashedPhase(stroke.dashPhase)
     }
 }
 
