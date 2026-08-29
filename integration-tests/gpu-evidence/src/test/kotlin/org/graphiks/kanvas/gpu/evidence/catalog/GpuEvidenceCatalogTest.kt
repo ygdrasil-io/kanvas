@@ -73,7 +73,7 @@ class GpuEvidenceCatalogTest {
     }
 
     @Test
-    fun `catalog separates one hundred forty-nine public surface renders from nine refusals`() {
+    fun `catalog separates one hundred fifty public surface renders from nine refusals`() {
         val cases = GpuEvidenceCatalog.cases
 
         assertEquals(
@@ -98,6 +98,7 @@ class GpuEvidenceCatalogTest {
                 "scaled-butt-miter-stroke",
                 "scaled-translated-butt-miter-stroke",
                 "scaled-translated-diagonal-butt-miter-stroke",
+                "scaled-translated-diagonal-square-miter-stroke",
                 "scissored-round-cap-stroke",
                 "translated-scissored-round-cap-stroke",
                 "scissored-diagonal-butt-stroke",
@@ -239,6 +240,7 @@ class GpuEvidenceCatalogTest {
                 "scaled-butt-miter-stroke",
                 "scaled-translated-butt-miter-stroke",
                 "scaled-translated-diagonal-butt-miter-stroke",
+                "scaled-translated-diagonal-square-miter-stroke",
                 "scissored-round-cap-stroke",
                 "translated-scissored-round-cap-stroke",
                 "scissored-diagonal-butt-stroke",
@@ -358,11 +360,11 @@ class GpuEvidenceCatalogTest {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            List(149) { "kanvas.surface.render" },
+            List(150) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
-        assertEquals(149, GpuEvidenceCatalog.renderCases.size)
-        assertEquals(158, GpuEvidenceCatalog.cases.size)
+        assertEquals(150, GpuEvidenceCatalog.renderCases.size)
+        assertEquals(159, GpuEvidenceCatalog.cases.size)
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
 
         val solid = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "solid-card-stack" })
@@ -520,6 +522,7 @@ class GpuEvidenceCatalogTest {
             "scaled-butt-miter-stroke",
             "scaled-translated-butt-miter-stroke",
             "scaled-translated-diagonal-butt-miter-stroke",
+            "scaled-translated-diagonal-square-miter-stroke",
             "scissored-round-cap-stroke",
             "translated-scissored-round-cap-stroke",
             "scissored-diagonal-butt-stroke",
@@ -680,6 +683,7 @@ class GpuEvidenceCatalogTest {
                 "scaled-butt-miter-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-solid-stroke", 2),
                 "scaled-translated-butt-miter-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-solid-stroke", 2),
                 "scaled-translated-diagonal-butt-miter-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-solid-stroke", 2),
+                "scaled-translated-diagonal-square-miter-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-solid-stroke", 2),
                 "scissored-round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke-scissor", 2),
                 "translated-scissored-round-cap-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-round-cap-stroke-translated-scissor", 2),
                 "scissored-diagonal-butt-stroke" to OraclePolicy.GeneratedCpu("surface-srgb-diagonal-butt-stroke-scissor", 2),
@@ -836,6 +840,7 @@ class GpuEvidenceCatalogTest {
                 "scaled-butt-miter-stroke" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent transformed device-space stroke oracle."),
                 "scaled-translated-butt-miter-stroke" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent translated device-space stroke oracle."),
                 "scaled-translated-diagonal-butt-miter-stroke" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent transformed finite-segment oracle."),
+                "scaled-translated-diagonal-square-miter-stroke" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent transformed tangent-extended stroke oracle."),
                 "scissored-round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent round-cap union intersected with the integral device scissor."),
                 "translated-scissored-round-cap-stroke" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from an independent translated round-cap union intersected with the integral device scissor."),
                 "scissored-diagonal-butt-stroke" to ComparisonPolicy(0, 100.0, 1, "Exact transparent RGBA8 output from independent diagonal stroke coverage intersected with the integral device scissor."),
