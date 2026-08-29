@@ -45,6 +45,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectRouteAuthor
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceFamily
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveStrokeLoweringProof
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitivePreparedFrameResult
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
@@ -2488,6 +2489,44 @@ class GPUFramePathApiInventoryTest {
                 "${diagnostic.code.value}: ${diagnostic.message}; facts=${diagnostic.facts}"
             },
         )
+    }
+
+    @Test
+    fun `bounded anti aliased horizontal stroke crosses native preparation with MSAA`() {
+        val capabilities = completeMsaaCapabilities()
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    Path().apply { moveTo(4f, 8f); lineTo(28f, 8f) },
+                    Paint.stroke(ColorARGB.Red, 4f).copy(
+                        antiAlias = true,
+                        strokeCap = StrokeCap.BUTT,
+                        strokeJoin = StrokeJoin.MITER,
+                    ),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+        )
+        assertEquals("native.path_stroke.stencil_cover", inventory.recording.analysis.records.single().routeDecisionLabel)
+        val preparation = GPUFramePathApiInventory.prepareNativeTaskList(
+            inventory, capabilities, GPUPixelBounds(0, 0, 32, 32),
+        )
+        val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            preparation,
+            (preparation as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}"
+            },
+        ).taskList
+        val render = prepared.tasks.filterIsInstance<GPUTask.Render>().single()
+        assertEquals(GPUSamplePlan.MultisampleFrame(4), render.samplePlan)
+        assertTrue(render.drawPackets.any { packet ->
+            (packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive)?.coverageMode ==
+                GPUCorePrimitiveCoverageMode.StencilAA
+        })
     }
 
     @Test
@@ -5400,7 +5439,13 @@ class GPUFramePathApiInventoryTest {
             base.facts,
             base.knownUnsupportedFacts,
             "complete-msaa",
-            base.limits,
+            GPULimits(
+                maxTextureDimension2D = 8192,
+                copyBytesPerRowAlignment = 256,
+                minUniformBufferOffsetAlignment = 256,
+                maxBufferSize = 1L shl 30,
+                maxDynamicUniformBuffersPerPipelineLayout = 1,
+            ),
             emptySet<Any>(),
             null,
             formatSupport,

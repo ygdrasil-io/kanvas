@@ -2551,7 +2551,7 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
             } &&
             tessellatedVertices.chunked(2).let { points -> points.first() != points.last() } &&
             strokeWidth.isFinite() && strokeWidth in 0.5f..64f &&
-            !antiAlias &&
+            (!antiAlias || matchesHorizontalAntiAliasedButtMiterV1()) &&
             ((dashIntervals == null || dashIntervals.isEmpty()) && pathEffectKind == null ||
                 matchesHorizontalDashedButtMiterV1()) &&
             (
@@ -2579,6 +2579,21 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
             startY == endY && endX - startX >= 12f
     }
 
+    /** The first native StencilAA/MSAA stroke lane: one horizontal width-four segment. */
+    private fun NormalizedDrawCommand.FillPath.matchesHorizontalAntiAliasedButtMiterV1(): Boolean {
+        if (!antiAlias || pathEffectKind != null || dashIntervals?.isNotEmpty() == true ||
+            strokeWidth != 4f || strokeCap != "butt" || strokeJoin != "miter" ||
+            tessellatedVertices.size != 4 || transform.type !in setOf(GPUTransformType.Identity, GPUTransformType.Translate)
+        ) return false
+        val startX = tessellatedVertices[0] + transform.translateX
+        val startY = tessellatedVertices[1] + transform.translateY
+        val endX = tessellatedVertices[2] + transform.translateX
+        val endY = tessellatedVertices[3] + transform.translateY
+        return startX.isIntegralOrHalfDeviceCoordinate() && startY.isIntegralOrHalfDeviceCoordinate() &&
+            endX.isIntegralOrHalfDeviceCoordinate() && endY.isIntegralOrHalfDeviceCoordinate() &&
+            startY == endY && endX - startX >= 4f
+    }
+
     private fun NormalizedDrawCommand.FillPath.matchesPixelExactRoundCapR2HorizontalV1(): Boolean {
         if (transform.type !in setOf(GPUTransformType.Identity, GPUTransformType.Translate)) return false
         if (strokeWidth != 4f || tessellatedVertices.size != 4) return false
@@ -2592,6 +2607,9 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
     }
 
     private fun Float.isIntegralDeviceCoordinate(): Boolean = isFinite() && floor(this) == this
+
+    private fun Float.isIntegralOrHalfDeviceCoordinate(): Boolean =
+        isFinite() && floor(this * 2f) == this * 2f
 
     /**
      * The bounded direct-triangle path consumer shares the same device-space gradient lowering

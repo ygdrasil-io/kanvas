@@ -1298,7 +1298,7 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
         else -> null
     }
     if (
-        clip.executionPlan is GPUClipExecutionPlan.StencilCoverage &&
+        !antiAlias && clip.executionPlan is GPUClipExecutionPlan.StencilCoverage &&
             exactSingleSegment &&
             strokeCap in setOf("butt", "square") &&
             strokeJoin == "miter" &&
