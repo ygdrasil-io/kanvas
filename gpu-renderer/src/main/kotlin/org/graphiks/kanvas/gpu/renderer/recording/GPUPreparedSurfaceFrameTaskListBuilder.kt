@@ -1227,6 +1227,8 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                             GPUImageBindingInput(
                                 packetId = packetForSemantic(packets, semantic).packetId.value,
                                 sampling = semantic.sampling,
+                                routeCapability = semantic.routeCapability,
+                                boundedGeometry = semantic.geometry,
                             )
                         },
                         bindingLayoutHash = GPUPreparedImageBindingLayoutTopology.IDENTITY,

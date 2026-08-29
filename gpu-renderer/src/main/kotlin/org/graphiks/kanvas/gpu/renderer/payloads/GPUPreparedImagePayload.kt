@@ -14,6 +14,16 @@ enum class GPUPreparedImageGeometryClass { Rect, Quad }
 /** Closed sampler selection; sampler descriptors are deliberately not pipeline-key axes. */
 enum class GPUPreparedImageSampling { Nearest, Linear }
 
+/**
+ * Declares the image capability selected by a caller before Surface lowering.
+ *
+ * The generic route retains the native linear/scaled image implementation.
+ * W28 selects [BoundedNearest1To1] so its evidence is limited to the narrower
+ * whole-image, integer 1:1, nearest contract rather than redefining that
+ * generic route.
+ */
+enum class GPUPreparedImageRouteCapability { GenericNative, BoundedNearest1To1 }
+
 /** Closed source blend choices for alpha-atlas colorization. */
 enum class GPUPreparedAtlasSourceBlend { Src, Dst, SrcOver, Plus, Modulate }
 
@@ -48,6 +58,7 @@ data class GPUPreparedImagePipelineKey(
     val destinationBlendState: String,
     val targetFormat: String,
     val bindingLayoutHash: String,
+    val routeCapability: GPUPreparedImageRouteCapability = GPUPreparedImageRouteCapability.GenericNative,
 )
 
 /** Input gathered after image preparation and before any native resource is materialized. */
@@ -56,6 +67,7 @@ data class GPUPreparedImagePayloadInput(
     val artifact: GPUPreparedImageUploadArtifact,
     val geometry: GPUPreparedImageGeometry,
     val sampling: GPUPreparedImageSampling,
+    val routeCapability: GPUPreparedImageRouteCapability = GPUPreparedImageRouteCapability.GenericNative,
     val tintPremultipliedRgba: List<Float>,
     val atlasColorPremultipliedRgba: List<Float>?,
     val atlasSourceBlend: GPUPreparedAtlasSourceBlend?,
@@ -71,6 +83,7 @@ internal class GPUPreparedImagePayloadSnapshot(input: GPUPreparedImagePayloadInp
     val artifact: GPUPreparedImageUploadArtifact = input.artifact
     val geometry: GPUPreparedImageGeometry = input.geometry
     val sampling: GPUPreparedImageSampling = input.sampling
+    val routeCapability: GPUPreparedImageRouteCapability = input.routeCapability
     val tintPremultipliedRgba: List<Float> = immutableList(input.tintPremultipliedRgba)
     val atlasColorPremultipliedRgba: List<Float>? = input.atlasColorPremultipliedRgba?.let(::immutableList)
     val atlasSourceBlend: GPUPreparedAtlasSourceBlend? = input.atlasSourceBlend
@@ -89,6 +102,7 @@ internal class GPUPreparedImagePayloadSnapshot(input: GPUPreparedImagePayloadInp
         artifact = artifact,
         geometry = geometry,
         sampling = sampling,
+        routeCapability = routeCapability,
         tintPremultipliedRgba = tintPremultipliedRgba,
         atlasColorPremultipliedRgba = atlasColorPremultipliedRgba,
         atlasSourceBlend = atlasSourceBlend,
@@ -142,6 +156,7 @@ internal fun GPUPreparedImagePayloadInput.pipelineKey(): GPUPreparedImagePipelin
     destinationBlendState = blendPlanIdentity,
     targetFormat = GPU_PREPARED_IMAGE_TARGET_FORMAT,
     bindingLayoutHash = GPUPreparedImageBindingLayoutTopology.IDENTITY,
+    routeCapability = routeCapability,
 )
 
 internal fun GPUPreparedImagePayloadInput.canonicalHash(): String = preparedImageSha256Hex(
@@ -170,6 +185,7 @@ internal fun GPUPreparedImagePayloadInput.canonicalHash(): String = preparedImag
         }
         append("indices=").append(geometry.indices.joinToString(",")).append(';')
         append("sampling=").append(sampling.name).append(';')
+        append("routeCapability=").append(routeCapability.name).append(';')
         append("tint=").append(tintPremultipliedRgba.joinToString(",") { it.toRawBits().toString() }).append(';')
         append("atlasColor=").append(atlasColorPremultipliedRgba?.joinToString(",") { it.toRawBits().toString() } ?: "none").append(';')
         append("atlasSourceBlend=").append(atlasSourceBlend?.name ?: "none").append(';')
@@ -196,7 +212,7 @@ internal fun GPUPreparedImagePayloadInput.stableDumpLine(canonicalHash: String):
         geometry.vertices.mapIndexed { index, vertex ->
             "vertex$index=${vertex.x.toRawBits()},${vertex.y.toRawBits()},${vertex.u.toRawBits()},${vertex.v.toRawBits()}"
         }.joinToString(" ") + " indices=${geometry.indices.joinToString(",")} " +
-        "sampling=${sampling.name} tint=${tintPremultipliedRgba.joinToString(",") { it.toRawBits().toString() }} " +
+        "sampling=${sampling.name} routeCapability=${routeCapability.name} tint=${tintPremultipliedRgba.joinToString(",") { it.toRawBits().toString() }} " +
         "atlasColor=${atlasColorPremultipliedRgba?.joinToString(",") { it.toRawBits().toString() } ?: "none"} " +
         "atlasBlend=${atlasSourceBlend?.name ?: "none"} " +
         "blend=$blendPlanIdentity target=$targetBounds scissor=$scissorBounds provenance=${frameProvenance.annotationValue}"

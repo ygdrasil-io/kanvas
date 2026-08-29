@@ -59,12 +59,13 @@ class GpuEvidenceCatalogTest {
     }
 
     @Test
-    fun `catalog separates eighty five public surface renders from seven refusals`() {
+    fun `catalog separates eighty six public surface renders from eight refusals`() {
         val cases = GpuEvidenceCatalog.cases
 
         assertEquals(
             listOf(
                 "solid-card-stack",
+                "bounded-rgba8-nearest-bitmap",
                 "separable-blur-rect",
                 "translucent-card-overlap",
                 "scissor-overlay",
@@ -147,12 +148,14 @@ class GpuEvidenceCatalogTest {
                 "custom-runtime-effect-unregistered-refusal",
                 "aggregate-memory-budget-refusal",
                 "bounded-save-layer-restore-blend-refusal",
+                "bounded-bitmap-linear-refusal",
             ),
             cases.map { it.descriptor.id.value },
         )
         assertEquals(
             listOf(
                 "solid-card-stack",
+                "bounded-rgba8-nearest-bitmap",
                 "separable-blur-rect",
                 "translucent-card-overlap",
                 "scissor-overlay",
@@ -232,7 +235,7 @@ class GpuEvidenceCatalogTest {
             GpuEvidenceCatalog.renderCases.map { it.descriptor.id.value },
         )
         assertEquals(
-            listOf("linear-gradient-three-stops", "basic-primitives-empty-rect-refusal", "perspective-transform-refusal", "reflected-path-topology-refusal", "custom-runtime-effect-unregistered-refusal", "aggregate-memory-budget-refusal", "bounded-save-layer-restore-blend-refusal"),
+            listOf("linear-gradient-three-stops", "basic-primitives-empty-rect-refusal", "perspective-transform-refusal", "reflected-path-topology-refusal", "custom-runtime-effect-unregistered-refusal", "aggregate-memory-budget-refusal", "bounded-save-layer-restore-blend-refusal", "bounded-bitmap-linear-refusal"),
             GpuEvidenceCatalog.refusalCases.map { it.descriptor.id.value },
         )
         assertTrue(GpuEvidenceCatalog.renderCases.all { it.program is KanvasSurfaceProgram })
@@ -240,11 +243,11 @@ class GpuEvidenceCatalogTest {
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.program is SceneProgram || it.program is KanvasSurfaceProgram })
         assertTrue(GpuEvidenceCatalog.refusalCases.all { it.descriptor.expectation is EvidenceExpectation.ShouldRefuse })
         assertEquals(
-            List(85) { "kanvas.surface.render" },
+            List(86) { "kanvas.surface.render" },
             GpuEvidenceCatalog.renderCases.map { assertIs<KanvasSurfaceProgram>(it.program).routeId },
         )
-        assertEquals(85, GpuEvidenceCatalog.renderCases.size)
-        assertEquals(92, GpuEvidenceCatalog.cases.size)
+        assertEquals(86, GpuEvidenceCatalog.renderCases.size)
+        assertEquals(94, GpuEvidenceCatalog.cases.size)
         assertEquals(cases.size, cases.map { it.descriptor.id }.toSet().size)
 
         val solid = assertNotNull(cases.firstOrNull { it.descriptor.id.value == "solid-card-stack" })
@@ -365,6 +368,7 @@ class GpuEvidenceCatalogTest {
     fun `catalog locks exact product routes policies and oracle identities`() {
         val expectedRenderIds = listOf(
             "solid-card-stack",
+            "bounded-rgba8-nearest-bitmap",
             "separable-blur-rect",
             "translucent-card-overlap",
             "scissor-overlay",
@@ -463,6 +467,7 @@ class GpuEvidenceCatalogTest {
                 "perspective-transform-refusal" to "kanvas.surface.render",
                 "reflected-path-topology-refusal" to "kanvas.surface.render",
                 "bounded-save-layer-restore-blend-refusal" to "kanvas.surface.render",
+                "bounded-bitmap-linear-refusal" to "kanvas.surface.render",
             ),
             GpuEvidenceCatalog.refusalCases.filter { it.program is KanvasSurfaceProgram }.associate { evidenceCase ->
                 evidenceCase.descriptor.id.value to assertIs<KanvasSurfaceProgram>(evidenceCase.program).routeId
@@ -472,6 +477,7 @@ class GpuEvidenceCatalogTest {
         assertEquals(
             mapOf(
                 "solid-card-stack" to OraclePolicy.GeneratedCpu("reference-raster-rect-src-over", 1),
+                "bounded-rgba8-nearest-bitmap" to OraclePolicy.GeneratedCpu("surface-srgb-bitmap-nearest", 1),
                 "separable-blur-rect" to OraclePolicy.GeneratedCpu("surface-srgb-mask-blur-normal-decal", 2),
                 "translucent-card-overlap" to OraclePolicy.GeneratedCpu("surface-srgb-linear-premul-src-over", 2),
                 "scissor-overlay" to OraclePolicy.GeneratedCpu("reference-raster-scissor-intersections", 1),
@@ -564,6 +570,7 @@ class GpuEvidenceCatalogTest {
         assertEquals(
             mapOf(
                 "solid-card-stack" to ComparisonPolicy(0, 100.0, 1, "Exact integer RGBA8 output from opaque SrcOver rectangles."),
+                "bounded-rgba8-nearest-bitmap" to ComparisonPolicy(0, 100.0, 1, "Independent literal RGBA8 nearest oracle; opaque texels and integer placement require exact bytes."),
                 "separable-blur-rect" to ComparisonPolicy(2, 99.0, 1, "Bounded GPU floating-point rounding is allowed after the independently quantized vertical mask stage."),
                 "translucent-card-overlap" to ComparisonPolicy(1, 100.0, 1, "Hardware rgba8unorm nearest quantization may differ from the independent linear-premultiplied sRGB oracle by one RGB byte; alpha remains exact and delta 2 remains a failure."),
                 "scissor-overlay" to ComparisonPolicy(0, 100.0, 1, "Exact integer RGBA8 output from literal scissor intersections."),

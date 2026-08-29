@@ -22,6 +22,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUImageFrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUSamplerDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureViewDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.preparedImageDescriptorHash
+import org.graphiks.kanvas.gpu.renderer.resources.isValidForRouteCapability
 
 data class GPUPreparedImageUploadKey(
     val artifactKey: GPUImageUploadArtifactKey,
@@ -147,6 +148,12 @@ internal object GPUPreparedImageNativeResourcePreflighter {
         bindingLayoutIdentity: String,
     ): String? {
         val plan = request.resourcePlan
+        if (plan.bindingRequests.any { binding ->
+                !binding.isValidForRouteCapability(plan.artifactWidth, plan.artifactHeight)
+            }
+        ) {
+            return GPUPreparedImageRefusalCodes.RECT_GEOMETRY
+        }
         if (plan.bindingRequests.any { binding ->
                 binding.bindingLayoutHash != bindingLayoutIdentity
             }
@@ -558,6 +565,7 @@ private fun GPUSamplerDescriptor.preparedImageSamplerHash(): String = preparedIm
     compareMode,
     maxAnisotropy.toString(),
     capabilityRequirements.sorted().joinToString("+"),
+    preparedImageRouteCapability.name,
 )
 
 private fun preparedImageHash(vararg tokens: String): String =

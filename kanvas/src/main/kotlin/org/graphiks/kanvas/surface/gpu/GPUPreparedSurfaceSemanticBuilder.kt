@@ -267,6 +267,7 @@ internal object GPUPreparedSurfaceSemanticBuilder {
                         artifact = artifact,
                         geometry = preparedImage.geometry,
                         sampling = preparedImage.sampling,
+                        routeCapability = preparedImage.routeCapability,
                         tintPremultipliedRgba = preparedImage.tintPremultipliedRgba,
                         atlasColorPremultipliedRgba =
                             preparedImage.atlasColorPremultipliedRgba,

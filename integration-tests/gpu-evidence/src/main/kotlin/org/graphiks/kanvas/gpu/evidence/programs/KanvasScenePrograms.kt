@@ -5,10 +5,14 @@ import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.pipeline.ClipOp
+import org.graphiks.kanvas.image.Image
+import org.graphiks.kanvas.surface.RenderConfig
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageRouteCapability
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
@@ -27,6 +31,43 @@ object KanvasScenePrograms {
         drawColor(BACKGROUND)
         drawRect(RectF32.ofLTRB(8f, 10f, 56f, 34f), Paint.fill(ColorARGB.fromRGBA(31f / 255f, 115f / 255f, 209f / 255f)))
         drawRect(RectF32.ofLTRB(14f, 38f, 50f, 54f), Paint.fill(ColorARGB.fromRGBA(242f / 255f, 135f / 255f, 46f / 255f)))
+    })
+
+    /** One immutable known-pixel RGBA8 image under the only native sampler: nearest/clamp. */
+    fun boundedRgba8NearestBitmap() = KanvasSurfaceProgram(
+        ROUTE_ID,
+        renderConfig = RenderConfig(
+            preparedImageRouteCapability = GPUPreparedImageRouteCapability.BoundedNearest1To1,
+        ),
+        record = {
+        drawColor(BACKGROUND)
+        drawImage(
+            Image.fromPixels(
+                width = 3,
+                height = 2,
+                pixels = byteArrayOf(
+                    17, 34, 51, 255.toByte(), 221.toByte(), 204.toByte(), 187.toByte(), 255.toByte(), 119, 136.toByte(), 153.toByte(), 255.toByte(),
+                    68, 85, 102, 255.toByte(), 16, 32, 48, 255.toByte(), 170.toByte(), 187.toByte(), 204.toByte(), 255.toByte(),
+                ),
+                sourceId = "gpu-evidence.bounded-rgba8-nearest-bitmap",
+            ),
+            RectF32.ofLTRB(12f, 16f, 15f, 18f),
+            SamplingOptions.NEAREST,
+        )
+    })
+
+    /** Filtering is deliberately terminal before the image can reach native submission. */
+    fun boundedBitmapLinearRefusal() = KanvasSurfaceProgram(
+        ROUTE_ID,
+        renderConfig = RenderConfig(
+            preparedImageRouteCapability = GPUPreparedImageRouteCapability.BoundedNearest1To1,
+        ),
+        record = {
+        drawImage(
+            Image.fromPixels(1, 1, byteArrayOf(255.toByte(), 255.toByte(), 255.toByte(), 255.toByte()), sourceId = "gpu-evidence.bounded-bitmap-linear-refusal"),
+            RectF32.ofLTRB(12f, 16f, 13f, 17f),
+            SamplingOptions.LINEAR,
+        )
     })
 
     fun basicPrimitivesValidAlpha() = KanvasSurfaceProgram(ROUTE_ID, record = {

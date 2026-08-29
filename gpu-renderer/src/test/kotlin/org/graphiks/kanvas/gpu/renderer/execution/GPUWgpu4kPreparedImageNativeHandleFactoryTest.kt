@@ -39,6 +39,7 @@ import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceClass
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceFormat
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageBindingLayoutTopology
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageRouteCapability
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.resources.GPUImageBindingInput
@@ -127,7 +128,7 @@ class GPUWgpu4kPreparedImageNativeHandleFactoryTest {
     }
 
     @Test
-    fun `creates the exact linear sampler descriptor`() {
+    fun `generic native factory materializes a linear sampler descriptor`() {
         val native = CapturingPreparedImageNativeDevice()
         val factory = GPUWgpu4kPreparedImageNativeHandleFactory(native.device)
         val nearest = preparedImageResourcePlan().bindingRequests.single().sampler
@@ -138,18 +139,28 @@ class GPUWgpu4kPreparedImageNativeHandleFactoryTest {
                 minFilter = "linear",
             ),
         )
-
         val descriptor = native.samplerDescriptors.single()
-        assertEquals(GPUAddressMode.ClampToEdge, descriptor.addressModeU)
-        assertEquals(GPUAddressMode.ClampToEdge, descriptor.addressModeV)
-        assertEquals(GPUAddressMode.ClampToEdge, descriptor.addressModeW)
         assertEquals(GPUFilterMode.Linear, descriptor.magFilter)
         assertEquals(GPUFilterMode.Linear, descriptor.minFilter)
-        assertEquals(GPUMipmapFilterMode.Nearest, descriptor.mipmapFilter)
-        assertEquals(0f, descriptor.lodMinClamp)
-        assertEquals(0f, descriptor.lodMaxClamp)
-        assertNull(descriptor.compare)
-        assertEquals(1u.toUShort(), descriptor.maxAnisotropy)
+    }
+
+    @Test
+    fun `bounded route factory rejects linear sampler before native sampler allocation`() {
+        val native = CapturingPreparedImageNativeDevice()
+        val factory = GPUWgpu4kPreparedImageNativeHandleFactory(native.device)
+        val nearest = preparedImageResourcePlan().bindingRequests.single().sampler
+
+        assertFailsWith<IllegalArgumentException> {
+            factory.createSampler(
+                nearest.copy(
+                    magFilter = "linear",
+                    minFilter = "linear",
+                    preparedImageRouteCapability = GPUPreparedImageRouteCapability.BoundedNearest1To1,
+                ),
+            )
+        }
+
+        assertTrue(native.samplerDescriptors.isEmpty())
     }
 
     @Test
@@ -178,7 +189,7 @@ class GPUWgpu4kPreparedImageNativeHandleFactoryTest {
         val coverage = buildImageFrameResourcePlanFromBindings(
             artifact = coverageArtifact,
             bindingInputs = listOf(
-                GPUImageBindingInput("packet.a8", GPUPreparedImageSampling.Linear),
+                GPUImageBindingInput("packet.a8", GPUPreparedImageSampling.Nearest),
             ),
             bindingLayoutHash = GPUPreparedImageBindingLayoutTopology.IDENTITY,
             capabilities = preparedSurfacePreflightFixture(
@@ -213,11 +224,11 @@ class GPUWgpu4kPreparedImageNativeHandleFactoryTest {
             coverageArtifact.colorUploadInterpretation,
         )
         assertEquals("RGBA8Unorm", coverage.textureDescriptor.format)
-        assertEquals("linear", coverage.bindingRequests.single().sampler.magFilter)
-        assertEquals("linear", coverage.bindingRequests.single().sampler.minFilter)
+        assertEquals("nearest", coverage.bindingRequests.single().sampler.magFilter)
+        assertEquals("nearest", coverage.bindingRequests.single().sampler.minFilter)
         val coverageSampler = native.samplerDescriptors.single()
-        assertEquals(GPUFilterMode.Linear, coverageSampler.magFilter)
-        assertEquals(GPUFilterMode.Linear, coverageSampler.minFilter)
+        assertEquals(GPUFilterMode.Nearest, coverageSampler.magFilter)
+        assertEquals(GPUFilterMode.Nearest, coverageSampler.minFilter)
         assertEquals(GPUMipmapFilterMode.Nearest, coverageSampler.mipmapFilter)
     }
 

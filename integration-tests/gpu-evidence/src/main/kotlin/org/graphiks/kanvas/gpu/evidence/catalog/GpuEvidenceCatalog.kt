@@ -5,6 +5,7 @@ import org.graphiks.kanvas.gpu.evidence.oracle.ReferenceRaster
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbSeparableMaskBlurCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbOracleMath
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbSrcOverCpuOracle
+import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbBitmapNearestCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbSaveLayerSrcOverOpacityCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbGradientCpuOracle
 import org.graphiks.kanvas.gpu.evidence.oracle.SurfaceSrgbLinearGradientStrokeBandsCpuOracle
@@ -27,6 +28,7 @@ import org.graphiks.kanvas.gpu.renderer.runtimeeffects.GPUCustomRuntimeEffectID
 object GpuEvidenceCatalog {
     val renderCases: List<EvidenceCase> = listOf(
         solidCardStack(),
+        boundedRgba8NearestBitmap(),
         separableBlurRect(),
         translucentCardOverlap(),
         scissorOverlay(),
@@ -120,6 +122,7 @@ object GpuEvidenceCatalog {
         unregisteredRuntimeEffectRefusal(),
         aggregateMemoryBudgetRefusal(),
         boundedSaveLayerRestoreBlendRefusal(),
+        boundedBitmapLinearRefusal(),
     )
     val cases: List<EvidenceCase> = renderCases + refusalCases
     val catalog = EvidenceSceneCatalog(cases.map(EvidenceCase::descriptor))
@@ -157,6 +160,42 @@ object GpuEvidenceCatalog {
             }.rgba() },
         )
     }
+
+    private fun boundedRgba8NearestBitmap() = EvidenceCase(
+        descriptor = EvidenceSceneDescriptor(
+            EvidenceSceneId("bounded-rgba8-nearest-bitmap"),
+            "Bounded RGBA8 nearest bitmap",
+            "Public Kanvas Surface renders one immutable known-pixel RGBA8 bitmap at an integer destination through the native nearest/clamp texture route.",
+            64,
+            64,
+            1L,
+            setOf("bitmap", "rgba8", "nearest", "integer-translation", "src-over", "kanvas-surface"),
+            EvidenceExpectation.ShouldRender,
+            OraclePolicy.GeneratedCpu("surface-srgb-bitmap-nearest", 1),
+            ComparisonPolicy(0, 100.0, 1, "Independent literal RGBA8 nearest oracle; opaque texels and integer placement require exact bytes."),
+            emptySet(),
+        ),
+        program = KanvasScenePrograms.boundedRgba8NearestBitmap(),
+        oracle = SurfaceSrgbBitmapNearestCpuOracle(),
+    )
+
+    private fun boundedBitmapLinearRefusal() = EvidenceCase(
+        descriptor = EvidenceSceneDescriptor(
+            EvidenceSceneId("bounded-bitmap-linear-refusal"),
+            "Bounded bitmap linear refusal",
+            "Public Kanvas Surface refuses linear bitmap filtering before the nearest-only native sampler can be submitted.",
+            64,
+            64,
+            1L,
+            setOf("bitmap", "linear", "refusal", "kanvas-surface"),
+            EvidenceExpectation.ShouldRefuse("unsupported.image.sampling_filter"),
+            OraclePolicy.StableRefusal,
+            null,
+            emptySet(),
+        ),
+        program = KanvasScenePrograms.boundedBitmapLinearRefusal(),
+        oracle = null,
+    )
 
     private fun basicPrimitivesValidAlpha() = EvidenceCase(
         descriptor = EvidenceSceneDescriptor(

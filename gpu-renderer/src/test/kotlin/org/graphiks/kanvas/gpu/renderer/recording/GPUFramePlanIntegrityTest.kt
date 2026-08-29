@@ -65,6 +65,10 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUMaterialPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadGatherPlan
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUSolidPayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingSlot
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometry
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometryClass
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageRouteCapability
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageVertex
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadSlot
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUColorGlyphLayerPayloadInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUColorGlyphPayloadGatherer
@@ -1309,6 +1313,75 @@ class GPUFramePlanIntegrityTest {
         assertTrue(dump.contains("sourceBytesPerRow=4"), dump)
         assertTrue(dump.contains("payloadSha256=$logicalHash"), dump)
         assertFalse(dump.contains("payloadSha256=$paddedHash"), dump)
+    }
+
+    @Test
+    fun `prepared image binding capability and geometry change frame canonical identity`() {
+        val artifact = assertIs<GPUPreparedImageArtifactResult.Ready>(
+            GPUPreparedImageArtifactFactory.prepare(
+                GPUPreparedImageSourceInput(
+                    sourceClass = GPUPreparedImageSourceClass.DecodedCpu,
+                    sourceId = "frame-plan-capability",
+                    width = 1,
+                    height = 2,
+                    sourceFormat = GPUPreparedImageSourceFormat.Rgba8,
+                    alphaType = AlphaType.PREMUL,
+                    sourceRowBytes = 4,
+                    profile = GPUPreparedImageProfile.Srgb,
+                    orientation = GPUPreparedImageOrientation.AppliedIdentity,
+                    provenance = GPUPreparedImageProvenance.CallerPixels,
+                    sourceGeneration = 1,
+                    pixelBytes = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8),
+                ),
+            ),
+        ).artifact
+        val generic = buildPreparedImageFrameResourcePlan(
+            artifact = artifact,
+            packetIds = listOf("packet.capability"),
+            bindingLayoutHash = "layout.capability",
+            capabilities = integrityCapabilities(),
+            frameIdentity = "frame.capability",
+        )
+        val binding = generic.bindingRequests.single()
+        val bounded = generic.copy(
+            bindingRequests = listOf(
+                binding.copy(
+                    routeCapability = GPUPreparedImageRouteCapability.BoundedNearest1To1,
+                    boundedGeometry = GPUPreparedImageGeometry(
+                        GPUPreparedImageGeometryClass.Rect,
+                        listOf(
+                            GPUPreparedImageVertex(0f, 0f, 0f, 0f),
+                            GPUPreparedImageVertex(1f, 0f, 1f, 0f),
+                            GPUPreparedImageVertex(1f, 2f, 1f, 1f),
+                            GPUPreparedImageVertex(0f, 2f, 0f, 1f),
+                        ),
+                        listOf(0, 1, 2, 0, 2, 3),
+                    ),
+                    sampler = binding.sampler.copy(
+                        preparedImageRouteCapability =
+                            GPUPreparedImageRouteCapability.BoundedNearest1To1,
+                    ),
+                ),
+            ),
+        )
+        fun plan(resourcePlan: org.graphiks.kanvas.gpu.renderer.resources.GPUImageFrameResourcePlan) =
+            framePlan(
+                GPUFrameStep.UploadResourceStep(
+                    staging = resourcePlan.stagingRef,
+                    destination = resourcePlan.frameTextureRef,
+                    layout = resourcePlan.uploadTaskLayout,
+                    sourceTaskIds = listOf(GPUTaskID("task.upload.capability")),
+                    textureResourcePlan = resourcePlan,
+                ),
+            )
+
+        val genericPlan = plan(generic)
+        val boundedPlan = plan(bounded)
+
+        assertNotEquals(genericPlan.stableHash(), boundedPlan.stableHash())
+        assertNotEquals(genericPlan.dumpLines(), boundedPlan.dumpLines())
+        assertEquals(genericPlan.stableHash(), plan(generic).stableHash())
+        assertEquals(boundedPlan.stableHash(), plan(bounded).stableHash())
     }
 
     private fun renderPlan(

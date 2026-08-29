@@ -121,13 +121,13 @@ class KanvasSurfaceEvidenceExecutor(
         null,
         "Completed",
         "rendered",
-        emptyList(),
+        result.nativeEvidenceScopeKinds,
         result.structuralSteps.map { StructuralEventEvidence(it, "Completed", null) },
         mapOf(
             "queue.submit" to delta.submissions,
             "render.draw" to result.stats.drawCallCount.toLong(),
             "render.pipelineBind" to result.stats.pipelineCount.toLong(),
-        ),
+        ) + result.nativeEvidenceCounters,
         delta,
     )
 }

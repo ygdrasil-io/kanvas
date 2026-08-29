@@ -40,6 +40,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometryClass
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImagePayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImagePayloadInput
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageRouteCapability
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageVertex
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageUploadLayout
@@ -52,6 +53,63 @@ import org.graphiks.kanvas.gpu.renderer.resources.buildImageFrameResourcePlanFro
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 
 class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
+    @Test
+    fun `bounded capability materializer accepts nearest and refuses linear before native handles`() {
+        val artifact = preparedImageArtifact(pixelSeed = 53)
+        val geometry = boundedGeometryForMaterializer()
+        val resource = buildImageFrameResourcePlanFromBindings(
+            artifact = artifact,
+            bindingInputs = listOf(
+                GPUImageBindingInput(
+                    packetId = "packet.bounded.materializer",
+                    sampling = GPUPreparedImageSampling.Nearest,
+                    routeCapability = GPUPreparedImageRouteCapability.BoundedNearest1To1,
+                    boundedGeometry = geometry,
+                ),
+            ),
+            bindingLayoutHash = "prepared-image.group0.dynamic-uniform-texture-sampler.v1",
+            capabilities = preparedImageCapabilities(),
+            frameIdentity = "frame.bounded.materializer",
+        )
+        val nearestPlan = preparedImageRenderRunPlan(
+            sourceScopeIndices = listOf(1, 2),
+            packets = listOf(boundedPreparedImageSemantic(artifact, GPUPreparedImageSampling.Nearest, geometry)),
+            resources = listOf(resource),
+            uniformAllocations = resource.bindingRequests.map { it.uniformAllocation },
+        )
+        val readyDevice = RecordingPreparedImageDevice()
+        val readyCache = GPUWgpu4kPreparedImageSessionCache(readyDevice.device, GPUDeviceGenerationID(251))
+        val ready = assertIs<GPUPreparedRenderRunMaterialization.Ready>(
+            GPUWgpu4kPreparedImageRenderRunMaterializer(
+                readyCache,
+                GPUWgpu4kPreparedImageNativeHandleFactory(readyDevice.device),
+                preparedImageCapabilities(),
+            ).materializeAcceptedRun(nearestPlan, GPUDeviceGenerationID(251)),
+        )
+        ready.ownedResources.forEach(AutoCloseable::close)
+        readyCache.close()
+
+        val refusedDevice = RecordingPreparedImageDevice()
+        val refusedCache = GPUWgpu4kPreparedImageSessionCache(refusedDevice.device, GPUDeviceGenerationID(252))
+        val refusal = assertIs<GPUPreparedRenderRunMaterialization.Refused>(
+            GPUWgpu4kPreparedImageRenderRunMaterializer(
+                refusedCache,
+                GPUWgpu4kPreparedImageNativeHandleFactory(refusedDevice.device),
+                preparedImageCapabilities(),
+            ).materializeAcceptedRun(
+                nearestPlan.copy(
+                    packets = listOf(
+                        boundedPreparedImageSemantic(artifact, GPUPreparedImageSampling.Linear, geometry),
+                    ),
+                ),
+                GPUDeviceGenerationID(252),
+            ),
+        )
+        assertEquals(GPUPreparedImageRefusalCodes.RECT_GEOMETRY, refusal.code)
+        assertEquals(0, refusedDevice.handleCreates)
+        refusedCache.close()
+    }
+
     @Test
     fun `texture limit refuses through the real materializer before exact factory or device allocation`() {
         val generation = GPUDeviceGenerationID(171)
@@ -237,7 +295,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
             bindingInputs = listOf(
                 GPUImageBindingInput("packet.nearest.a", GPUPreparedImageSampling.Nearest),
                 GPUImageBindingInput("packet.nearest.b", GPUPreparedImageSampling.Nearest),
-                GPUImageBindingInput("packet.linear", GPUPreparedImageSampling.Linear),
+                GPUImageBindingInput("packet.nearest.c", GPUPreparedImageSampling.Nearest),
             ),
             bindingLayoutHash =
                 "prepared-image.group0.dynamic-uniform-texture-sampler.v1",
@@ -247,7 +305,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
         val allocations = listOf(
             GPUPreparedImageUniformAllocation("packet.nearest.a", 0L, 112L),
             GPUPreparedImageUniformAllocation("packet.nearest.b", 256L, 112L),
-            GPUPreparedImageUniformAllocation("packet.linear", 512L, 112L),
+            GPUPreparedImageUniformAllocation("packet.nearest.c", 512L, 112L),
         )
         val result = GPUWgpu4kPreparedImageRenderRunMaterializer(
             cache,
@@ -260,7 +318,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
                     packets = listOf(
                         preparedImageSemantic(artifact, GPUPreparedImageSampling.Nearest, 1f),
                         preparedImageSemantic(artifact, GPUPreparedImageSampling.Nearest, 5f),
-                        preparedImageSemantic(artifact, GPUPreparedImageSampling.Linear, 9f),
+                        preparedImageSemantic(artifact, GPUPreparedImageSampling.Nearest, 9f),
                     ),
                     resources = listOf(resource),
                     uniformAllocations = allocations,
@@ -313,17 +371,17 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
             drawEntries[1].uniformBytes().toList(),
         )
         assertSame(drawEntries[0].bindGroup.bindGroup, drawEntries[1].bindGroup.bindGroup)
-        assertNotSame(drawEntries[0].bindGroup.bindGroup, drawEntries[2].bindGroup.bindGroup)
+        assertSame(drawEntries[0].bindGroup.bindGroup, drawEntries[2].bindGroup.bindGroup)
         assertTrue(drawEntries.drop(1).all {
             it.pipeline.pipeline === drawEntries.first().pipeline.pipeline
         })
         assertEquals(1, nativeDevice.pipelineCreates)
-        assertEquals(listOf("nearest", "linear"), factory.samplerFilters)
+        assertEquals(listOf("nearest"), factory.samplerFilters)
         assertEquals(1, factory.textureCreates)
         assertEquals(1, factory.textureViewCreates)
-        assertEquals(2, factory.samplerCreates)
+        assertEquals(1, factory.samplerCreates)
         assertEquals(1, factory.uniformBufferCreates)
-        assertEquals(2, factory.bindGroupCreates)
+        assertEquals(1, factory.bindGroupCreates)
 
         result.ownedResources.single().close()
         result.ownedResources.single().close()
@@ -932,7 +990,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
             artifact = artifact,
             bindingInputs = listOf(
                 GPUImageBindingInput("packet.first", GPUPreparedImageSampling.Nearest),
-                GPUImageBindingInput("packet.second", GPUPreparedImageSampling.Linear),
+                GPUImageBindingInput("packet.second", GPUPreparedImageSampling.Nearest),
             ),
             bindingLayoutHash =
                 "prepared-image.group0.dynamic-uniform-texture-sampler.v1",
@@ -957,7 +1015,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
                 sourceScopeIndices = listOf(1, 2),
                 packets = listOf(
                     preparedImageSemantic(artifact, GPUPreparedImageSampling.Nearest, 1f),
-                    preparedImageSemantic(artifact, GPUPreparedImageSampling.Linear, 9f),
+                    preparedImageSemantic(artifact, GPUPreparedImageSampling.Nearest, 9f),
                 ),
                 resources = listOf(resource),
                 uniformAllocations = resource.bindingRequests.map { it.uniformAllocation },
@@ -975,11 +1033,11 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
                 sourceScopeIndices = listOf(1, 2, 3),
                 packets = listOf(
                     preparedImageSemantic(artifact, GPUPreparedImageSampling.Nearest, 1f),
-                    preparedImageSemantic(artifact, GPUPreparedImageSampling.Linear, 9f),
+                    preparedImageSemantic(artifact, GPUPreparedImageSampling.Nearest, 9f),
                 ),
                 resources = listOf(
                     preparedImageResource(artifact, "packet.one"),
-                    preparedImageResource(artifact, "packet.two", GPUPreparedImageSampling.Linear),
+                    preparedImageResource(artifact, "packet.two"),
                 ),
                 uniformAllocations = listOf(
                     GPUPreparedImageUniformAllocation("packet.one", 0L, 112L),
@@ -1245,6 +1303,39 @@ private fun preparedImageSemantic(
             frameProvenance = GPUFrameProvenance.GmContent,
         ),
     )
+
+private fun boundedPreparedImageSemantic(
+    artifact: org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedImageUploadArtifact,
+    sampling: GPUPreparedImageSampling,
+    geometry: GPUPreparedImageGeometry,
+): GPUDrawSemanticPayload.SampledImage =
+    GPUPreparedImagePayloadGatherer().gatherSemantic(
+        GPUPreparedImagePayloadInput(
+            payloadRef = GPUDrawPayloadRef(251, "image.draw.texture_upload"),
+            artifact = artifact,
+            geometry = geometry,
+            sampling = sampling,
+            routeCapability = GPUPreparedImageRouteCapability.BoundedNearest1To1,
+            tintPremultipliedRgba = listOf(1f, 1f, 1f, 1f),
+            atlasColorPremultipliedRgba = null,
+            atlasSourceBlend = null,
+            targetBounds = GPUPixelBounds(0, 0, 16, 16),
+            scissorBounds = GPUPixelBounds(0, 0, 16, 16),
+            blendPlanIdentity = "SrcOver",
+            frameProvenance = GPUFrameProvenance.GmContent,
+        ),
+    )
+
+private fun boundedGeometryForMaterializer(): GPUPreparedImageGeometry = GPUPreparedImageGeometry(
+    GPUPreparedImageGeometryClass.Rect,
+    listOf(
+        GPUPreparedImageVertex(4f, 6f, 0f, 0f),
+        GPUPreparedImageVertex(6f, 6f, 1f, 0f),
+        GPUPreparedImageVertex(6f, 8f, 1f, 1f),
+        GPUPreparedImageVertex(4f, 8f, 0f, 1f),
+    ),
+    listOf(0, 1, 2, 0, 2, 3),
+)
 
 internal fun preparedImageCapabilities() = GPUCapabilities(
     implementation = GPUImplementationIdentity("GPU", "test", "adapter", "device"),

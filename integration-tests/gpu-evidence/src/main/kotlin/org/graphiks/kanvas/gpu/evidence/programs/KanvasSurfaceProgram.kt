@@ -5,6 +5,7 @@ import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.evidence.runner.EvidenceProgram
 import org.graphiks.kanvas.gpu.evidence.runner.KanvasSurfaceRenderSession
 import org.graphiks.kanvas.surface.Surface
+import org.graphiks.kanvas.surface.RenderConfig
 
 /** Test-harness inspection seam for the real default Surface recording session. */
 internal interface KanvasSurfaceRecordedSession : KanvasSurfaceRenderSession {
@@ -15,8 +16,9 @@ internal interface KanvasSurfaceRecordedSession : KanvasSurfaceRenderSession {
 class KanvasSurfaceProgram(
     val routeId: String,
     private val record: Canvas.() -> Unit,
+    private val renderConfig: RenderConfig = RenderConfig.DEFAULT,
     internal val sessionFactory: (Int, Int, Canvas.() -> Unit) -> KanvasSurfaceRenderSession =
-        { width, height, commands -> Surface(width, height).let { surface ->
+        { width, height, commands -> Surface(width, height, config = renderConfig).let { surface ->
             surface.canvas(commands)
             object : KanvasSurfaceRecordedSession {
                 override fun render() = surface.render()

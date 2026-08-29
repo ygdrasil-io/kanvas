@@ -16,6 +16,8 @@ internal data class GPUPreparedImageNativeCounterSnapshot(
     val frameSamplerCreations: Long = 0L,
     val frameUniformBufferCreations: Long = 0L,
     val frameBindGroupCreations: Long = 0L,
+    val frameTextureWriteTextureCalls: Long = 0L,
+    val frameTextureUploadScopesEncoded: Long = 0L,
 )
 
 internal class GPUPreparedImageNativeCounterRecorder {
@@ -26,6 +28,8 @@ internal class GPUPreparedImageNativeCounterRecorder {
     private val frameSamplerCreations = AtomicLong(0L)
     private val frameUniformBufferCreations = AtomicLong(0L)
     private val frameBindGroupCreations = AtomicLong(0L)
+    private val frameTextureWriteTextureCalls = AtomicLong(0L)
+    private val frameTextureUploadScopesEncoded = AtomicLong(0L)
 
     fun recordPipelineCreation() {
         pipelineCreations.incrementAndGet()
@@ -55,6 +59,15 @@ internal class GPUPreparedImageNativeCounterRecorder {
         frameBindGroupCreations.incrementAndGet()
     }
 
+    fun recordFrameTextureWriteTexture() {
+        frameTextureWriteTextureCalls.incrementAndGet()
+    }
+
+    /** Records the successfully encoded prepared-image TextureUpload scope itself. */
+    fun recordFrameTextureUploadScopeEncoded() {
+        frameTextureUploadScopesEncoded.incrementAndGet()
+    }
+
     fun snapshot(): GPUPreparedImageNativeCounterSnapshot =
         GPUPreparedImageNativeCounterSnapshot(
             pipelineCreations = pipelineCreations.get(),
@@ -64,5 +77,7 @@ internal class GPUPreparedImageNativeCounterRecorder {
             frameSamplerCreations = frameSamplerCreations.get(),
             frameUniformBufferCreations = frameUniformBufferCreations.get(),
             frameBindGroupCreations = frameBindGroupCreations.get(),
+            frameTextureWriteTextureCalls = frameTextureWriteTextureCalls.get(),
+            frameTextureUploadScopesEncoded = frameTextureUploadScopesEncoded.get(),
         )
 }

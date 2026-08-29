@@ -17,6 +17,7 @@ import org.graphiks.kanvas.gpu.renderer.collections.immutableMap
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageMaskProducerUniformSlabSeal
@@ -39,6 +40,9 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageBindingLayoutTo
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageRouteCapability
+import org.graphiks.kanvas.gpu.renderer.resources.isBoundedNativeImageGeometry
+import org.graphiks.kanvas.gpu.renderer.resources.isValidForRouteCapability
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameReadbackRequest
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
@@ -4362,6 +4366,21 @@ internal class GPUPreparedSurfaceNativePreflight(
         uploads: List<Triple<Int, GPUFrameStep.UploadResourceStep, GPUImageFrameResourcePlan>>,
         shaderContract: GPUPreparedImageShaderContract,
     ): GPUPreparedSurfaceNativePreflightResult.Refused? {
+        if (imagePackets.any { (_, semantic) ->
+                semantic.routeCapability == GPUPreparedImageRouteCapability.BoundedNearest1To1 &&
+                    (semantic.sampling != GPUPreparedImageSampling.Nearest ||
+                        !semantic.geometry.isBoundedNativeImageGeometry(semantic.artifact))
+            } || uploads.any { (_, _, plan) ->
+                plan.bindingRequests.any { binding ->
+                    !binding.isValidForRouteCapability(plan.artifactWidth, plan.artifactHeight)
+                }
+            }
+        ) {
+            return refused(
+                GPUPreparedImageRefusalCodes.RECT_GEOMETRY,
+                "Bounded prepared-image capability requires nearest whole-image integer 1:1 geometry.",
+            )
+        }
         val artifactEvidenceByIdentity =
             IdentityHashMap<GPUPreparedImageUploadArtifact, GPUPreparedSurfaceArtifactByteEvidence>()
         val renderBindingList = framePlan.steps

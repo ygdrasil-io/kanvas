@@ -410,6 +410,14 @@ internal class GPUFrameExecutor(
                     GPUFrameStructuralPhase.Encoding,
                     GPUFrameStructuralEventKind.ScopeEncoded,
                     counter = GPUFrameStructuralCounter.EncoderScope,
+                    additionalCounters = if (
+                        (consumedNativePayload?.scopeOperands?.get(index) as?
+                            GPUPreparedNativeScopeOperand.TextureUpload)?.uploadRole == "prepared-image"
+                    ) {
+                        listOf(GPUFrameStructuralCounter.PreparedImageTextureUploadScope)
+                    } else {
+                        emptyList()
+                    },
                     label = scope.scopeLabel,
                 )
             }
