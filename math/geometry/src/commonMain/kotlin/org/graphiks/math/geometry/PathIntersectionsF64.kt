@@ -114,7 +114,10 @@ internal fun intersectPathEdgesF64(first: PathInputEdgeF64, second: PathInputEdg
 
 internal fun splitPathEdgesF64(edges: List<PathInputEdgeF64>, limits: PathOpsLimitsI32): List<PathSplitEdgeF64> {
     validatePathInputEdgesF64(edges)
-    val registry = PathIntersectionRegistryF64(edges.size, limits.maxIntersections)
+    val registry = PathIntersectionRegistryF64(
+        edgeCount = edges.size,
+        maxStoredNodes = maximumStoredIntersectionNodesI32(edges.size, limits),
+    )
 
     edges.indices.forEach { firstIndex ->
         for (secondIndex in firstIndex + 1 until edges.size) {
@@ -132,6 +135,7 @@ internal fun splitPathEdgesF64(edges: List<PathInputEdgeF64>, limits: PathOpsLim
     val nodes = registry.nodes
     val rootByNode = nodes.indices.associateWith { registry.rootOf(it) }
     val nodesByRoot = nodes.indices.groupBy { rootByNode.getValue(it) }
+    if (nodesByRoot.size > limits.maxIntersections) throw IllegalStateException("path-intersection-limit")
 
     val identityByRoot = nodesByRoot.mapValues { (_, rootNodes) ->
         pathIntersectionIdentityF64(rootNodes, nodes, edges)
@@ -188,9 +192,15 @@ private fun validatePathInputEdgesF64(edges: List<PathInputEdgeF64>) {
 private fun hasEndpointIdentityF64(identity: PathVertexIdentityF64, edgeId: Int, parameter: Double): Boolean =
     edgeId in identity.incidentEdgeIds && identity.parameterByEdgeId[edgeId]?.let { samePathParameterF64(it, parameter) } == true
 
+private fun maximumStoredIntersectionNodesI32(edgeCount: Int, limits: PathOpsLimitsI32): Int {
+    // Every source edge reserves one split edge, and each stored cut can add one more.
+    // Two half-edges per split edge make this a conservative cap before arrangement construction.
+    return (limits.maxHalfEdges / 2 - edgeCount).coerceAtLeast(0)
+}
+
 private data class PathIntersectionNodeF64(
     val edgeIndex: Int,
-    val parameter: Double,
+    var parameter: Double,
 )
 
 private data class PathEdgeCutF64(
@@ -199,23 +209,16 @@ private data class PathEdgeCutF64(
     val isIntersection: Boolean,
 )
 
-private class PathIntersectionRegistryF64(edgeCount: Int, private val maxIntersections: Int) {
+private class PathIntersectionRegistryF64(edgeCount: Int, private val maxStoredNodes: Int) {
     val nodes = mutableListOf<PathIntersectionNodeF64>()
     private val nodesByEdge = List(edgeCount) { mutableListOf<Int>() }
     private val unionFind = PathUnionFindI32()
-    private var componentCount = 0
 
     fun addIntersection(firstEdgeIndex: Int, firstParameter: Double, secondEdgeIndex: Int, secondParameter: Double) {
         val firstNode = internedNode(firstEdgeIndex, firstParameter)
         val secondNode = internedNode(secondEdgeIndex, secondParameter)
-        val firstRoot = firstNode?.let { unionFind.find(it) }
-        val secondRoot = secondNode?.let { unionFind.find(it) }
-        val componentDelta = when {
-            firstNode == null && secondNode == null -> 1
-            firstRoot != null && secondRoot != null && firstRoot != secondRoot -> -1
-            else -> 0
-        }
-        if (componentCount + componentDelta > maxIntersections) throw IllegalStateException("path-intersection-limit")
+        val newNodeCount = (if (firstNode == null) 1 else 0) + (if (secondNode == null) 1 else 0)
+        if (nodes.size > maxStoredNodes - newNodeCount) throw IllegalStateException("path-intersection-storage-limit")
 
         val resolvedFirstNode = firstNode ?: addNode(firstEdgeIndex, firstParameter)
         val resolvedSecondNode = secondNode ?: addNode(secondEdgeIndex, secondParameter)
@@ -223,7 +226,6 @@ private class PathIntersectionRegistryF64(edgeCount: Int, private val maxInterse
         val resolvedSecondRoot = unionFind.find(resolvedSecondNode)
         if (resolvedFirstRoot != resolvedSecondRoot) {
             unionFind.union(resolvedFirstRoot, resolvedSecondRoot)
-            componentCount -= 1
         }
     }
 
@@ -231,9 +233,13 @@ private class PathIntersectionRegistryF64(edgeCount: Int, private val maxInterse
 
     private fun internedNode(edgeIndex: Int, parameter: Double): Int? {
         val snappedParameter = snapParameterF64(parameter)
-        return nodesByEdge[edgeIndex].firstOrNull { nodeIndex ->
+        val nodeIndex = nodesByEdge[edgeIndex].firstOrNull { nodeIndex ->
             samePathParameterF64(nodes[nodeIndex].parameter, snappedParameter)
         }
+        if (nodeIndex != null) {
+            nodes[nodeIndex].parameter = canonicalParameterF64(listOf(nodes[nodeIndex].parameter, snappedParameter))
+        }
+        return nodeIndex
     }
 
     private fun addNode(edgeIndex: Int, parameter: Double): Int {
@@ -241,7 +247,6 @@ private class PathIntersectionRegistryF64(edgeCount: Int, private val maxInterse
         nodes += PathIntersectionNodeF64(edgeIndex, snapParameterF64(parameter))
         nodesByEdge[edgeIndex] += nodeIndex
         unionFind.add()
-        componentCount += 1
         return nodeIndex
     }
 }

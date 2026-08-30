@@ -347,6 +347,33 @@ class PathIntersectionsF64Test {
         assertEquals(128, oneIntersection.size)
         assertEquals("path-intersection-limit", error.message)
     }
+
+    @Test
+    fun `intersection budget is applied after order independent canonical unions`() {
+        val edges = numericallyConcurrentPathEdgesF64()
+        val permutations = listOf(
+            listOf(edges[0], edges[1], edges[2]),
+            listOf(edges[0], edges[2], edges[1]),
+            listOf(edges[1], edges[0], edges[2]),
+            listOf(edges[1], edges[2], edges[0]),
+            listOf(edges[2], edges[0], edges[1]),
+            listOf(edges[2], edges[1], edges[0]),
+        )
+
+        val splitByPermutation = permutations.map { permutation ->
+            splitPathEdgesF64(permutation, PathOpsLimitsI32(maxIntersections = 1))
+        }
+        val snapshot = canonicalSplitEdgesF64(splitByPermutation.first())
+
+        splitByPermutation.forEach { split ->
+            assertEquals(snapshot, canonicalSplitEdgesF64(split))
+            val intersectionIdentities = split.flatMap { edge ->
+                listOf(edge.startIdentity, edge.endIdentity)
+            }.filter { it.incidentEdgeIds == listOf(0, 1, 2) }
+            assertTrue(intersectionIdentities.isNotEmpty())
+            assertEquals(1, intersectionIdentities.distinct().size)
+        }
+    }
 }
 
 private fun inputEdgeF64(
@@ -379,6 +406,12 @@ private fun concurrentPathEdgesF64(count: Int): List<PathInputEdgeF64> = List(co
         Point2F64(1.0, index.toDouble()),
     )
 }
+
+private fun numericallyConcurrentPathEdgesF64(): List<PathInputEdgeF64> = listOf(
+    inputEdgeF64(0, Point2F64(0.0, 0.0), Point2F64(-171_000_000_000.0, -93_000_000_000.0)),
+    inputEdgeF64(1, Point2F64(-150_000_000_000.0, -78_000_000_000.0), Point2F64(36_000_000_000.0, 16_000_000_000.0)),
+    inputEdgeF64(2, Point2F64(-55_000_000_000.0, -11_000_000_000.0), Point2F64(-59_000_000_000.0, -51_000_000_000.0)),
+)
 
 private data class SplitEdgeSnapshotF64(
     val sourceId: Int,
