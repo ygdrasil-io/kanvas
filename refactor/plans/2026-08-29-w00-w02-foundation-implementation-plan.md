@@ -426,6 +426,15 @@ rtk git commit -m "feat(math): add immutable path geometry"
 
 ## Task 5 — Déplacer analyses, régions, mesures et opérations neutres dans `:math`
 
+> **Amendement approuvé le 2026-08-30 :** l'implémentation initiale a révélé
+> qu'un moteur topologique robuste manquait au plan. La spec
+> [`2026-08-30-math-path-topology-engine-design.md`](../specs/2026-08-30-math-path-topology-engine-design.md)
+> et le plan détaillé
+> [`2026-08-30-math-path-topology-engine-implementation-plan.md`](2026-08-30-math-path-topology-engine-implementation-plan.md)
+> remplacent les étapes algorithmiques simplifiées ci-dessous. Task 6 ne
+> commence qu'après les six sous-tâches, leurs reviews indépendantes et la
+> fermeture des huit findings Task 5.
+
 **Fichiers :**
 
 - Créer `math/geometry/src/commonMain/kotlin/org/graphiks/math/geometry/PathAnalysisF32.kt`.

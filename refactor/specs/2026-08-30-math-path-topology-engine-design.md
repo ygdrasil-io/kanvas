@@ -1,7 +1,7 @@
 # Moteur topologique robuste pour les paths de `:math`
 
 Date : 2026-08-30  
-Statut : design validé en conversation, en attente de revue du document  
+Statut : validé par l'utilisateur le 2026-08-30  
 Périmètre : `:math:geometry`, Task 5 du plan W0–W2  
 Hors périmètre : façades Kanvas, renderer GPU, font, codec et conservation des
 verbes courbes dans le résultat d'une opération booléenne
@@ -53,6 +53,7 @@ La frontière publique conserve :
 - `PathAnalysisF32` ;
 - `PathMeasureF32` ;
 - `PathLocationF32` ;
+- `PathTopologyI32` ;
 - `RegionF32`.
 
 Le noyau introduit des composants internes nommés explicitement :
@@ -68,8 +69,9 @@ Le noyau introduit des composants internes nommés explicitement :
 Les enums sans valeur de coordonnée, comme `PathBooleanOp`,
 `RegionBooleanOp` et `ContourOrientation`, ne reçoivent pas de suffixe.
 Les noms numériques ambigus existants introduits par Task 5 sont renommés ou
-internalisés ; aucun nouveau `Point`, `Edge`, `Segment`, `Tolerance` ou
-`Epsilon` générique n'est ajouté dans `:math`.
+internalisés : `PathTopology` devient `PathTopologyI32` et les records privés
+de mesure portent `F64`. Aucun nouveau `Point`, `Edge`, `Segment`, `Tolerance`
+ou `Epsilon` générique n'est ajouté dans `:math`.
 
 ## 4. Frontière publique `F32`
 
@@ -193,6 +195,13 @@ topologiquement démontrée ; aucune grille décimale globale ou conversion en
 Après découpe aux intersections, chaque segment produit deux demi-arêtes.
 Les sorties d'un sommet sont ordonnées angulairement avec les prédicats
 robustes. Les cycles obtenus définissent les faces bornées et la face externe.
+
+Les composantes connexes disjointes sont ensuite raccordées dans une forêt de
+confinement. Une composante externe hérite des winding de la face qui la
+contient ; les composantes racines héritent de winding nuls. Le témoin de
+confinement est dérivé d'un sommet extrémal et d'un secteur incident certifié,
+sans déplacement epsilon arbitraire. Cette étape rend la propagation correcte
+pour les trous et îlots dont les frontières ne partagent aucun sommet.
 
 La classification n'échantillonne pas arbitrairement un point proche d'une
 arête. Les winding des deux opérandes sont propagés depuis la face externe :

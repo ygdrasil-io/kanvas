@@ -20,6 +20,7 @@ Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :
 - [Spec architecturale](specs/2026-08-29-skia-renderer-remediation-design.md)
 - [Moteur topologique robuste des paths dans `:math`](specs/2026-08-30-math-path-topology-engine-design.md)
 - [Plan d'implémentation W0–W2](plans/2026-08-29-w00-w02-foundation-implementation-plan.md)
+- [Plan du moteur topologique robuste](plans/2026-08-30-math-path-topology-engine-implementation-plan.md)
 - [Baseline de vérité W00](waves/W00-truth-baseline/status.md) — gate stricte
   non atteinte en raison de la quarantaine temporaire `jpg-color-cube`.
 
