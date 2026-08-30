@@ -212,6 +212,173 @@ class PathIntersectionsF64Test {
     }
 
     @Test
+    fun `splitting retains a tangent endpoint contact`() {
+        val split = splitPathEdgesF64(
+            listOf(
+                inputEdgeF64(0, Point2F64(0.0, 0.0), Point2F64(1.0, 0.0)),
+                inputEdgeF64(1, Point2F64(1.0, 0.0), Point2F64(1.0, 1.0)),
+            ),
+            PathOpsLimitsI32(),
+        )
+
+        val contactIdentities = split.flatMap { edge ->
+            listOf(edge.start to edge.startIdentity, edge.end to edge.endIdentity)
+        }.filter { (point, _) -> point == Point2F64(1.0, 0.0) }.map { it.second }
+
+        assertEquals(2, split.size)
+        assertEquals(1, contactIdentities.distinct().size)
+        assertEquals(listOf(0, 1), contactIdentities.first().incidentEdgeIds)
+    }
+
+    @Test
+    fun `splitting keeps a one e minus sixteen gap disjoint`() {
+        val split = splitPathEdgesF64(
+            listOf(
+                inputEdgeF64(0, Point2F64(0.0, 0.0), Point2F64(1.0, 0.0)),
+                inputEdgeF64(1, Point2F64(-1.0, 0.0), Point2F64(-1e-16, 0.0)),
+            ),
+            PathOpsLimitsI32(),
+        )
+
+        assertEquals(2, split.size)
+        assertEquals(mapOf(0 to 1, 1 to 1), split.groupingBy { it.sourceId }.eachCount())
+    }
+
+    @Test
+    fun `splitting retains collinear overlap boundaries`() {
+        val split = splitPathEdgesF64(
+            listOf(
+                inputEdgeF64(0, Point2F64(0.0, 0.0), Point2F64(10.0, 0.0)),
+                inputEdgeF64(1, Point2F64(4.0, 0.0), Point2F64(12.0, 0.0)),
+            ),
+            PathOpsLimitsI32(),
+        )
+
+        assertEquals(4, split.size)
+        assertEquals(mapOf(0 to 2, 1 to 2), split.groupingBy { it.sourceId }.eachCount())
+        assertTrue(split.any { it.start == Point2F64(4.0, 0.0) || it.end == Point2F64(4.0, 0.0) })
+        assertTrue(split.any { it.start == Point2F64(10.0, 0.0) || it.end == Point2F64(10.0, 0.0) })
+    }
+
+    @Test
+    fun `splitting retains a proper crossing`() {
+        val split = splitPathEdgesF64(
+            listOf(
+                inputEdgeF64(0, Point2F64(0.0, 0.0), Point2F64(2.0, 2.0)),
+                inputEdgeF64(1, Point2F64(0.0, 2.0), Point2F64(2.0, 0.0)),
+            ),
+            PathOpsLimitsI32(),
+        )
+
+        val crossingIdentities = split.flatMap { edge ->
+            listOf(edge.start to edge.startIdentity, edge.end to edge.endIdentity)
+        }.filter { (point, _) -> point == Point2F64(1.0, 1.0) }.map { it.second }
+
+        assertEquals(4, split.size)
+        assertEquals(mapOf(0 to 2, 1 to 2), split.groupingBy { it.sourceId }.eachCount())
+        assertEquals(1, crossingIdentities.distinct().size)
+        assertEquals(listOf(0, 1), crossingIdentities.first().incidentEdgeIds)
+    }
+
+    @Test
+    fun `mixed disjoint touching crossing and overlapping boxes retain canonical splits through permutations`() {
+        val edges = listOf(
+            inputEdgeF64(0, Point2F64(0.0, 0.0), Point2F64(10.0, 0.0)),
+            inputEdgeF64(1, Point2F64(10.0, 0.0), Point2F64(10.0, 3.0)),
+            inputEdgeF64(2, Point2F64(5.0, -2.0), Point2F64(5.0, 2.0)),
+            inputEdgeF64(3, Point2F64(3.0, 0.0), Point2F64(7.0, 0.0)),
+            inputEdgeF64(4, Point2F64(20.0, 20.0), Point2F64(24.0, 24.0)),
+            inputEdgeF64(5, Point2F64(20.0, 21.0), Point2F64(24.0, 25.0)),
+            inputEdgeF64(6, Point2F64(30.0, 0.0), Point2F64(32.0, 0.0)),
+        )
+        val splits = testedInputEdgeOrdersF64(edges).map { order ->
+            splitPathEdgesF64(order, PathOpsLimitsI32())
+        }
+        val expected = canonicalSplitEdgesF64(splits.first())
+
+        splits.forEach { split ->
+            assertEquals(expected, canonicalSplitEdgesF64(split))
+            assertEquals(listOf(0, 1), identitiesAtPointF64(split, Point2F64(10.0, 0.0)).distinct().single().incidentEdgeIds)
+            assertEquals(listOf(0, 2, 3), identitiesAtPointF64(split, Point2F64(5.0, 0.0)).distinct().single().incidentEdgeIds)
+            assertEquals(listOf(0, 3), identitiesAtPointF64(split, Point2F64(3.0, 0.0)).distinct().single().incidentEdgeIds)
+            assertEquals(listOf(0, 3), identitiesAtPointF64(split, Point2F64(7.0, 0.0)).distinct().single().incidentEdgeIds)
+        }
+    }
+
+    @Test
+    fun `adjacent non collinear contour edges retain their known shared identity through permutations`() {
+        val edges = openContourInputEdgesF64(
+            listOf(
+                Point2F64(0.0, 0.0),
+                Point2F64(1.0, 0.0),
+                Point2F64(1.0, 1.0),
+            ),
+        )
+        val splits = testedInputEdgeOrdersF64(edges).map { order -> splitPathEdgesF64(order, PathOpsLimitsI32()) }
+        val expected = canonicalSplitEdgesF64(splits.first())
+
+        splits.forEach { split ->
+            val shared = identitiesAtPointF64(split, Point2F64(1.0, 0.0)).distinct().single()
+            assertEquals(expected, canonicalSplitEdgesF64(split))
+            assertEquals(2, split.size)
+            assertEquals(listOf(0, 1), shared.incidentEdgeIds)
+            assertEquals(mapOf(0 to 1.0, 1 to 0.0), shared.parameterByEdgeId)
+        }
+    }
+
+    @Test
+    fun `nonadjacent self crossing contour edges still split through permutations`() {
+        val edges = closedContourInputEdgesF64(
+            listOf(
+                Point2F64(0.0, 0.0),
+                Point2F64(2.0, 2.0),
+                Point2F64(0.0, 2.0),
+                Point2F64(2.0, 0.0),
+            ),
+        )
+        val splits = testedInputEdgeOrdersF64(edges).map { order -> splitPathEdgesF64(order, PathOpsLimitsI32()) }
+        val expected = canonicalSplitEdgesF64(splits.first())
+
+        splits.forEach { split ->
+            val crossing = identitiesAtPointF64(split, Point2F64(1.0, 1.0)).distinct().single()
+            assertEquals(expected, canonicalSplitEdgesF64(split))
+            assertEquals(mapOf(0 to 2, 1 to 1, 2 to 2, 3 to 1), split.groupingBy { it.sourceId }.eachCount())
+            assertEquals(listOf(0, 2), crossing.incidentEdgeIds)
+        }
+    }
+
+    @Test
+    fun `collinear contiguous and reversed contour edges retain normal split semantics`() {
+        val contiguous = openContourInputEdgesF64(
+            listOf(
+                Point2F64(0.0, 0.0),
+                Point2F64(1.0, 0.0),
+                Point2F64(2.0, 0.0),
+            ),
+        )
+        val contact = assertIs<PathIntersectionF64.PointF64>(intersectPathEdgesF64(contiguous[0], contiguous[1]))
+        val contiguousSplits = testedInputEdgeOrdersF64(contiguous).map { order -> splitPathEdgesF64(order, PathOpsLimitsI32()) }
+        val contiguousExpected = canonicalSplitEdgesF64(contiguousSplits.first())
+
+        assertEquals(Point2F64(1.0, 0.0), contact.point)
+        contiguousSplits.forEach { split ->
+            assertEquals(contiguousExpected, canonicalSplitEdgesF64(split))
+            assertEquals(2, split.size)
+            assertEquals(listOf(0, 1), identitiesAtPointF64(split, Point2F64(1.0, 0.0)).distinct().single().incidentEdgeIds)
+        }
+
+        val reversed = closedContourInputEdgesF64(listOf(Point2F64(0.0, 0.0), Point2F64(1.0, 0.0)))
+        assertIs<PathIntersectionF64.OverlapF64>(intersectPathEdgesF64(reversed[0], reversed[1]))
+        val reversedSplits = testedInputEdgeOrdersF64(reversed).map { order -> splitPathEdgesF64(order, PathOpsLimitsI32()) }
+        val reversedExpected = canonicalSplitEdgesF64(reversedSplits.first())
+
+        reversedSplits.forEach { split ->
+            assertEquals(reversedExpected, canonicalSplitEdgesF64(split))
+            assertEquals(mapOf(0 to 1, 1 to 1), split.groupingBy { it.sourceId }.eachCount())
+        }
+    }
+
+    @Test
     fun `collinear contact is represented by a point`() {
         val intersection = assertIs<PathIntersectionF64.PointF64>(
             intersectPathEdgesF64(
@@ -1031,6 +1198,60 @@ private fun inputEdgeF64(
     end = end,
     windingDelta = 1,
 )
+
+private fun openContourInputEdgesF64(points: List<Point2F64>): List<PathInputEdgeF64> {
+    require(points.size >= 2)
+    val identities = points.indices.map { vertexIndex ->
+        val incidentEdgeIds = when (vertexIndex) {
+            0 -> listOf(0)
+            points.lastIndex -> listOf(points.lastIndex - 1)
+            else -> listOf(vertexIndex - 1, vertexIndex)
+        }
+        PathVertexIdentityF64(
+            incidentEdgeIds = incidentEdgeIds,
+            parameterByEdgeId = incidentEdgeIds.associateWith { edgeId -> if (edgeId == vertexIndex) 0.0 else 1.0 },
+            originalPointF32 = Point2F32(points[vertexIndex].x.toFloat(), points[vertexIndex].y.toFloat()),
+        )
+    }
+    return points.zipWithNext().mapIndexed { edgeIndex, (start, end) ->
+        PathInputEdgeF64(
+            id = edgeIndex,
+            operand = PathOperand.FIRST,
+            contourIndex = 0,
+            startIdentity = identities[edgeIndex],
+            endIdentity = identities[edgeIndex + 1],
+            start = start,
+            end = end,
+            windingDelta = 1,
+        )
+    }
+}
+
+private fun closedContourInputEdgesF64(points: List<Point2F64>): List<PathInputEdgeF64> {
+    require(points.size >= 2)
+    val identities = points.indices.map { vertexIndex ->
+        val previousEdgeId = if (vertexIndex == 0) points.lastIndex else vertexIndex - 1
+        val nextEdgeId = vertexIndex
+        val incidentEdgeIds = listOf(previousEdgeId, nextEdgeId).sorted()
+        PathVertexIdentityF64(
+            incidentEdgeIds = incidentEdgeIds,
+            parameterByEdgeId = mapOf(previousEdgeId to 1.0, nextEdgeId to 0.0),
+            originalPointF32 = Point2F32(points[vertexIndex].x.toFloat(), points[vertexIndex].y.toFloat()),
+        )
+    }
+    return points.indices.map { edgeIndex ->
+        PathInputEdgeF64(
+            id = edgeIndex,
+            operand = PathOperand.FIRST,
+            contourIndex = 0,
+            startIdentity = identities[edgeIndex],
+            endIdentity = identities[(edgeIndex + 1) % points.size],
+            start = points[edgeIndex],
+            end = points[(edgeIndex + 1) % points.size],
+            windingDelta = 1,
+        )
+    }
+}
 
 private fun fourEdgesWithThreeDistinctCrossingsF64(): List<PathInputEdgeF64> = listOf(
     inputEdgeF64(0, Point2F64(-2.0, 0.0), Point2F64(2.0, 0.0)),

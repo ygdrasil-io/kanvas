@@ -158,10 +158,17 @@ internal fun splitPathEdgesF64(edges: List<PathInputEdgeF64>, limits: PathOpsLim
         maxInteriorCuts = maximumSplitEdges - baseSplitEdges,
         maxCandidateProbes = limits.maxCandidateProbes,
     )
+    val broadPhase = PathEdgeAabbIndexF64(canonicalEdges)
 
     canonicalEdges.indices.forEach { firstIndex ->
-        for (secondIndex in firstIndex + 1 until canonicalEdges.size) {
-            when (val intersection = intersectPathEdgesF64(canonicalEdges[firstIndex], canonicalEdges[secondIndex])) {
+        broadPhase.candidateIndexesAfter(firstIndex).forEach { secondIndex ->
+            val first = canonicalEdges[firstIndex]
+            val second = canonicalEdges[secondIndex]
+            // The broad phase emits the retained second indices in this exact canonical order.
+            // It rejects only strictly disjoint closed AABBs; endpoint/tangent/overlap contacts
+            // continue through the robust kernel unchanged.
+            if (pathEdgesShareOnlyKnownNonCollinearEndpointF64(first, second)) return@forEach
+            when (val intersection = intersectPathEdgesF64(first, second)) {
                 is PathIntersectionF64.PointF64 -> registry.addIntersection(
                     firstIndex,
                     intersection.firstT,
@@ -250,6 +257,149 @@ internal fun splitPathEdgesF64(edges: List<PathInputEdgeF64>, limits: PathOpsLim
             }
         }
     }
+}
+
+private data class PathEdgeAabbF64(
+    val edgeIndex: Int,
+    val minimumX: Double,
+    val maximumX: Double,
+    val minimumY: Double,
+    val maximumY: Double,
+)
+
+private data class PathEndpointRelationF64(
+    val firstPoint: Point2F64,
+    val firstIdentity: PathVertexIdentityF64,
+    val secondPoint: Point2F64,
+    val secondIdentity: PathVertexIdentityF64,
+)
+
+private fun pathEdgesShareOnlyKnownNonCollinearEndpointF64(
+    first: PathInputEdgeF64,
+    second: PathInputEdgeF64,
+): Boolean {
+    if (!first.start.isFinite() || !first.end.isFinite() || !second.start.isFinite() || !second.end.isFinite()) {
+        return false
+    }
+    if (sameTopologicalPointF64(first.start, first.end) || sameTopologicalPointF64(second.start, second.end)) {
+        return false
+    }
+    val concreteEndpointRelations = listOf(
+        PathEndpointRelationF64(first.start, first.startIdentity, second.start, second.startIdentity),
+        PathEndpointRelationF64(first.start, first.startIdentity, second.end, second.endIdentity),
+        PathEndpointRelationF64(first.end, first.endIdentity, second.start, second.startIdentity),
+        PathEndpointRelationF64(first.end, first.endIdentity, second.end, second.endIdentity),
+    ).filter { relation -> sameTopologicalPointF64(relation.firstPoint, relation.secondPoint) }
+    if (concreteEndpointRelations.size != 1) return false
+    val relation = concreteEndpointRelations.single()
+    if (relation.firstIdentity != relation.secondIdentity) return false
+    return OrientationPredicateF64.sign(first.start, first.end, second.start) != 0 ||
+        OrientationPredicateF64.sign(first.start, first.end, second.end) != 0
+}
+
+private class PathEdgeAabbIndexF64(edges: List<PathInputEdgeF64>) {
+    private class Node(
+        val minimumX: Double,
+        val maximumX: Double,
+        val minimumY: Double,
+        val maximumY: Double,
+        val edgeIndex: Int?,
+        val left: Node? = null,
+        val right: Node? = null,
+    )
+
+    private val boxesByEdgeIndex: List<PathEdgeAabbF64?> = edges.mapIndexed(::pathEdgeAabbF64)
+    private val nonFiniteEdgeIndexes: List<Int> = boxesByEdgeIndex.indices.filter { boxesByEdgeIndex[it] == null }
+    private val root: Node? = buildNodeF64(boxesByEdgeIndex.filterNotNull().sortedWith(::comparePathEdgeAabbsF64))
+
+    fun candidateIndexesAfter(firstIndex: Int): List<Int> {
+        val candidates = mutableListOf<Int>()
+        val first = boxesByEdgeIndex[firstIndex]
+        if (first == null) {
+            for (secondIndex in firstIndex + 1 until boxesByEdgeIndex.size) candidates += secondIndex
+        } else {
+            collectOverlappingIndexesF64(root, first, candidates)
+            nonFiniteEdgeIndexes.forEach { secondIndex ->
+                if (secondIndex > firstIndex) candidates += secondIndex
+            }
+        }
+        candidates.sort()
+        return buildList(candidates.size) {
+            var previousIndex = -1
+            candidates.forEach { secondIndex ->
+                if (secondIndex > firstIndex && secondIndex != previousIndex) {
+                    add(secondIndex)
+                    previousIndex = secondIndex
+                }
+            }
+        }
+    }
+
+    private fun buildNodeF64(boxes: List<PathEdgeAabbF64>): Node? = buildNodeF64(boxes, 0, boxes.size)
+
+    private fun buildNodeF64(boxes: List<PathEdgeAabbF64>, fromIndex: Int, untilIndex: Int): Node? {
+        if (fromIndex >= untilIndex) return null
+        if (untilIndex - fromIndex == 1) {
+            val box = boxes[fromIndex]
+            return Node(box.minimumX, box.maximumX, box.minimumY, box.maximumY, box.edgeIndex)
+        }
+        val middleIndex = (fromIndex + untilIndex) ushr 1
+        val left = checkNotNull(buildNodeF64(boxes, fromIndex, middleIndex))
+        val right = checkNotNull(buildNodeF64(boxes, middleIndex, untilIndex))
+        return Node(
+            minimumX = min(left.minimumX, right.minimumX),
+            maximumX = max(left.maximumX, right.maximumX),
+            minimumY = min(left.minimumY, right.minimumY),
+            maximumY = max(left.maximumY, right.maximumY),
+            edgeIndex = null,
+            left = left,
+            right = right,
+        )
+    }
+
+    private fun collectOverlappingIndexesF64(
+        node: Node?,
+        query: PathEdgeAabbF64,
+        candidates: MutableList<Int>,
+    ) {
+        node ?: return
+        if (query.maximumX < node.minimumX || node.maximumX < query.minimumX ||
+            query.maximumY < node.minimumY || node.maximumY < query.minimumY
+        ) return
+        node.edgeIndex?.let { candidates += it } ?: run {
+            collectOverlappingIndexesF64(node.left, query, candidates)
+            collectOverlappingIndexesF64(node.right, query, candidates)
+        }
+    }
+}
+
+private fun pathEdgeAabbF64(edgeIndex: Int, edge: PathInputEdgeF64): PathEdgeAabbF64? {
+    if (!edge.start.isFinite() || !edge.end.isFinite()) return null
+    val startX = canonicalTopologicalCoordinateF64(edge.start.x)
+    val startY = canonicalTopologicalCoordinateF64(edge.start.y)
+    val endX = canonicalTopologicalCoordinateF64(edge.end.x)
+    val endY = canonicalTopologicalCoordinateF64(edge.end.y)
+    return PathEdgeAabbF64(
+        edgeIndex = edgeIndex,
+        minimumX = min(startX, endX),
+        maximumX = max(startX, endX),
+        minimumY = min(startY, endY),
+        maximumY = max(startY, endY),
+    )
+}
+
+private fun comparePathEdgeAabbsF64(first: PathEdgeAabbF64, second: PathEdgeAabbF64): Int {
+    comparePathEdgeAabbCoordinatesF64(first.minimumX, second.minimumX).takeIf { it != 0 }?.let { return it }
+    comparePathEdgeAabbCoordinatesF64(first.minimumY, second.minimumY).takeIf { it != 0 }?.let { return it }
+    comparePathEdgeAabbCoordinatesF64(first.maximumX, second.maximumX).takeIf { it != 0 }?.let { return it }
+    comparePathEdgeAabbCoordinatesF64(first.maximumY, second.maximumY).takeIf { it != 0 }?.let { return it }
+    return first.edgeIndex.compareTo(second.edgeIndex)
+}
+
+private fun comparePathEdgeAabbCoordinatesF64(first: Double, second: Double): Int = when {
+    first == second -> 0
+    first < second -> -1
+    else -> 1
 }
 
 private fun validatePathInputEdgesF64(edges: List<PathInputEdgeF64>) {
