@@ -32,6 +32,28 @@ class PathIntersectionsF64Test {
     }
 
     @Test
+    fun `an intersection one e minus sixteen from an endpoint stays interior and splits`() {
+        val first = inputEdgeF64(0, Point2F64(0.0, 0.0), Point2F64(1.0, 0.0))
+        val second = inputEdgeF64(1, Point2F64(1e-16, -1.0), Point2F64(1e-16, 1.0))
+
+        val intersection = assertIs<PathIntersectionF64.PointF64>(intersectPathEdgesF64(first, second))
+        val split = splitPathEdgesF64(listOf(first, second), PathOpsLimitsI32())
+        val interiorIdentities = split.flatMap { edge ->
+            listOf(edge.start to edge.startIdentity, edge.end to edge.endIdentity)
+        }.filter { (point, _) -> point == Point2F64(1e-16, 0.0) }.map { it.second }
+
+        assertEquals(Point2F64(1e-16, 0.0), intersection.point)
+        assertEquals(1e-16, intersection.firstT)
+        assertEquals(0.5, intersection.secondT)
+        assertEquals(2, split.count { it.sourceId == first.id })
+        assertEquals(first.startIdentity, split.single { it.sourceId == first.id && it.start == first.start }.startIdentity)
+        assertEquals(1, interiorIdentities.distinct().size)
+        assertEquals(listOf(0, 1), interiorIdentities.first().incidentEdgeIds)
+        assertEquals(mapOf(0 to 1e-16, 1 to 0.5), interiorIdentities.first().parameterByEdgeId)
+        assertNull(interiorIdentities.first().originalPointF32)
+    }
+
+    @Test
     fun `shared endpoints keep endpoint parameters after translation`() {
         listOf(0.0, 3_000.0, 1e12).forEach { translation ->
             val first = inputEdgeF64(0, Point2F64(translation, translation), Point2F64(translation + 1.0, translation))
@@ -75,6 +97,8 @@ class PathIntersectionsF64Test {
             }.filter { (point, _) -> point == Point2F64(translation, translation) }.map { it.second }
 
             assertEquals(8, split.size)
+            assertEquals(mapOf(0 to 2, 1 to 2, 2 to 2, 3 to 2), split.groupingBy { it.sourceId }.eachCount())
+            assertEquals(8, intersectionIdentities.size)
             assertEquals(1, intersectionIdentities.distinct().size)
             val identity = intersectionIdentities.first()
             assertEquals(listOf(0, 1, 2, 3), identity.incidentEdgeIds)
@@ -89,10 +113,59 @@ class PathIntersectionsF64Test {
         val second = inputEdgeF64(1, Point2F64(1.0, 0.0), Point2F64(1.0, 1.0))
 
         val split = splitPathEdgesF64(listOf(first, second), PathOpsLimitsI32())
+        val intersectionIdentities = split.flatMap { edge ->
+            listOf(edge.start to edge.startIdentity, edge.end to edge.endIdentity)
+        }.filter { (point, _) -> point == Point2F64(1.0, 0.0) }.map { it.second }
 
         assertEquals(first.startIdentity, split.single { it.sourceId == 0 && it.start == first.start }.startIdentity)
         assertEquals(first.endIdentity, split.single { it.sourceId == 0 && it.end == first.end }.endIdentity)
         assertEquals(second.endIdentity, split.single { it.sourceId == 1 && it.end == second.end }.endIdentity)
+        assertEquals(3, intersectionIdentities.size)
+        assertEquals(1, intersectionIdentities.distinct().size)
+        assertEquals(
+            PathVertexIdentityF64(
+                incidentEdgeIds = listOf(0, 1),
+                parameterByEdgeId = mapOf(0 to 0.5, 1 to 0.0),
+                originalPointF32 = Point2F32(1f, 0f),
+            ),
+            intersectionIdentities.first(),
+        )
+    }
+
+    @Test
+    fun `splitting rejects duplicate source ids across operands`() {
+        val error = assertFailsWith<IllegalArgumentException> {
+            splitPathEdgesF64(
+                listOf(
+                    inputEdgeF64(0, Point2F64(0.0, 0.0), Point2F64(2.0, 0.0), PathOperand.FIRST),
+                    inputEdgeF64(0, Point2F64(1.0, -1.0), Point2F64(1.0, 1.0), PathOperand.SECOND),
+                ),
+                PathOpsLimitsI32(),
+            )
+        }
+
+        assertEquals("path-edge-id-duplicate", error.message)
+    }
+
+    @Test
+    fun `splitting rejects malformed source endpoint identities`() {
+        val edge = inputEdgeF64(0, Point2F64(0.0, 0.0), Point2F64(1.0, 0.0))
+        val malformedStart = edge.copy(
+            startIdentity = PathVertexIdentityF64(listOf(0), mapOf(0 to 1e-16), Point2F32(0f, 0f)),
+        )
+        val malformedEnd = edge.copy(
+            endIdentity = PathVertexIdentityF64(emptyList(), emptyMap(), Point2F32(1f, 0f)),
+        )
+
+        val startError = assertFailsWith<IllegalArgumentException> {
+            splitPathEdgesF64(listOf(malformedStart), PathOpsLimitsI32())
+        }
+        val endError = assertFailsWith<IllegalArgumentException> {
+            splitPathEdgesF64(listOf(malformedEnd), PathOpsLimitsI32())
+        }
+
+        assertEquals("path-edge-start-identity", startError.message)
+        assertEquals("path-edge-end-identity", endError.message)
     }
 
     @Test
@@ -101,6 +174,16 @@ class PathIntersectionsF64Test {
             intersectPathEdgesF64(
                 inputEdgeF64(0, Point2F64(0.0, 0.0), Point2F64(2.0, 0.0)),
                 inputEdgeF64(1, Point2F64(3.0, 0.0), Point2F64(5.0, 0.0)),
+            ),
+        )
+    }
+
+    @Test
+    fun `collinear segments separated by one e minus sixteen remain disjoint`() {
+        assertNull(
+            intersectPathEdgesF64(
+                inputEdgeF64(0, Point2F64(0.0, 0.0), Point2F64(1.0, 0.0)),
+                inputEdgeF64(1, Point2F64(-1.0, 0.0), Point2F64(-1e-16, 0.0)),
             ),
         )
     }
@@ -166,11 +249,10 @@ class PathIntersectionsF64Test {
 
     @Test
     fun `splitting an overlap emits each nonzero contributor subedge once`() {
+        val first = inputEdgeF64(0, Point2F64(0.0, 0.0), Point2F64(10.0, 0.0)).copy(windingDelta = 2)
+        val second = inputEdgeF64(1, Point2F64(4.0, 0.0), Point2F64(12.0, 0.0), PathOperand.SECOND).copy(windingDelta = -3)
         val split = splitPathEdgesF64(
-            listOf(
-                inputEdgeF64(0, Point2F64(0.0, 0.0), Point2F64(10.0, 0.0)),
-                inputEdgeF64(1, Point2F64(4.0, 0.0), Point2F64(12.0, 0.0), PathOperand.SECOND),
-            ),
+            listOf(first, second),
             PathOpsLimitsI32(),
         )
 
@@ -183,7 +265,59 @@ class PathIntersectionsF64Test {
             ),
             split.map { Triple(it.sourceId, it.start, it.end) },
         )
+        assertEquals(
+            listOf(
+                Triple(0, PathOperand.FIRST, 2),
+                Triple(0, PathOperand.FIRST, 2),
+                Triple(1, PathOperand.SECOND, -3),
+                Triple(1, PathOperand.SECOND, -3),
+            ),
+            split.map { Triple(it.sourceId, it.operand, it.windingDelta) },
+        )
+        val overlapStart = split.single { it.sourceId == 0 && it.end == Point2F64(4.0, 0.0) }.endIdentity
+        val overlapEnd = split.single { it.sourceId == 0 && it.end == Point2F64(10.0, 0.0) }.endIdentity
+        assertEquals(overlapStart, split.single { it.sourceId == 1 && it.start == Point2F64(4.0, 0.0) }.startIdentity)
+        assertEquals(overlapEnd, split.single { it.sourceId == 1 && it.end == Point2F64(10.0, 0.0) }.endIdentity)
+        assertEquals(PathVertexIdentityF64(listOf(0, 1), mapOf(0 to 0.4, 1 to 0.0), Point2F32(4f, 0f)), overlapStart)
+        assertEquals(PathVertexIdentityF64(listOf(0, 1), mapOf(0 to 1.0, 1 to 0.75), Point2F32(10f, 0f)), overlapEnd)
         assertTrue(split.all { it.start != it.end })
+    }
+
+    @Test
+    fun `splitting has the same canonical result after input permutation`() {
+        val edges = listOf(
+            inputEdgeF64(0, Point2F64(0.0, 0.0), Point2F64(10.0, 0.0)),
+            inputEdgeF64(1, Point2F64(4.0, 0.0), Point2F64(12.0, 0.0), PathOperand.SECOND),
+            inputEdgeF64(2, Point2F64(6.0, -2.0), Point2F64(6.0, 2.0), PathOperand.SECOND),
+        )
+
+        val ordered = canonicalSplitEdgesF64(splitPathEdgesF64(edges, PathOpsLimitsI32()))
+        val permuted = canonicalSplitEdgesF64(splitPathEdgesF64(listOf(edges[2], edges[0], edges[1]), PathOpsLimitsI32()))
+
+        assertEquals(ordered, permuted)
+    }
+
+    @Test
+    fun `nearby independent crossings retain distinct identities`() {
+        val firstCenter = Point2F64(0.0, 0.0)
+        val secondCenter = Point2F64(1e-16, 0.0)
+        val split = splitPathEdgesF64(
+            listOf(
+                inputEdgeF64(0, Point2F64(-2e-17, 0.0), Point2F64(2e-17, 0.0)),
+                inputEdgeF64(1, Point2F64(0.0, -2e-17), Point2F64(0.0, 2e-17)),
+                inputEdgeF64(2, Point2F64(8e-17, 0.0), Point2F64(12e-17, 0.0)),
+                inputEdgeF64(3, Point2F64(1e-16, -2e-17), Point2F64(1e-16, 2e-17)),
+            ),
+            PathOpsLimitsI32(),
+        )
+        val firstIdentities = identitiesAtPointF64(split, firstCenter)
+        val secondIdentities = identitiesAtPointF64(split, secondCenter)
+
+        assertEquals(1, firstIdentities.distinct().size)
+        assertEquals(1, secondIdentities.distinct().size)
+        assertEquals(listOf(0, 1), firstIdentities.first().incidentEdgeIds)
+        assertEquals(listOf(2, 3), secondIdentities.first().incidentEdgeIds)
+        assertTrue(firstIdentities.first() != secondIdentities.first())
     }
 
     @Test
@@ -192,6 +326,25 @@ class PathIntersectionsF64Test {
             splitPathEdgesF64(fourEdgesWithThreeDistinctCrossingsF64(), PathOpsLimitsI32(maxIntersections = 2))
         }
 
+        assertEquals("path-intersection-limit", error.message)
+    }
+
+    @Test
+    fun `intersection budget permits one large canonical crossing and rejects a distinct one`() {
+        val concurrent = concurrentPathEdgesF64(64)
+
+        val oneIntersection = splitPathEdgesF64(concurrent, PathOpsLimitsI32(maxIntersections = 1))
+        val error = assertFailsWith<IllegalStateException> {
+            splitPathEdgesF64(
+                concurrent + listOf(
+                    inputEdgeF64(64, Point2F64(9.0, -1.0), Point2F64(11.0, 1.0)),
+                    inputEdgeF64(65, Point2F64(9.0, 1.0), Point2F64(11.0, -1.0)),
+                ),
+                PathOpsLimitsI32(maxIntersections = 1),
+            )
+        }
+
+        assertEquals(128, oneIntersection.size)
         assertEquals("path-intersection-limit", error.message)
     }
 }
@@ -218,6 +371,48 @@ private fun fourEdgesWithThreeDistinctCrossingsF64(): List<PathInputEdgeF64> = l
     inputEdgeF64(2, Point2F64(0.0, -1.0), Point2F64(0.0, 1.0)),
     inputEdgeF64(3, Point2F64(1.0, -1.0), Point2F64(1.0, 1.0)),
 )
+
+private fun concurrentPathEdgesF64(count: Int): List<PathInputEdgeF64> = List(count) { index ->
+    inputEdgeF64(
+        index,
+        Point2F64(-1.0, -index.toDouble()),
+        Point2F64(1.0, index.toDouble()),
+    )
+}
+
+private data class SplitEdgeSnapshotF64(
+    val sourceId: Int,
+    val operand: PathOperand,
+    val windingDelta: Int,
+    val start: Point2F64,
+    val end: Point2F64,
+    val startIdentity: PathVertexIdentityF64,
+    val endIdentity: PathVertexIdentityF64,
+)
+
+private fun canonicalSplitEdgesF64(edges: List<PathSplitEdgeF64>): List<SplitEdgeSnapshotF64> = edges
+    .sortedWith(
+        compareBy<PathSplitEdgeF64> { it.sourceId }
+            .thenBy { it.start.x }
+            .thenBy { it.start.y }
+            .thenBy { it.end.x }
+            .thenBy { it.end.y },
+    )
+    .map { edge ->
+        SplitEdgeSnapshotF64(
+            sourceId = edge.sourceId,
+            operand = edge.operand,
+            windingDelta = edge.windingDelta,
+            start = edge.start,
+            end = edge.end,
+            startIdentity = edge.startIdentity,
+            endIdentity = edge.endIdentity,
+        )
+    }
+
+private fun identitiesAtPointF64(edges: List<PathSplitEdgeF64>, point: Point2F64): List<PathVertexIdentityF64> = edges.flatMap { edge ->
+    listOf(edge.start to edge.startIdentity, edge.end to edge.endIdentity)
+}.filter { (candidate, _) -> candidate == point }.map { it.second }
 
 private fun assertWithinFourUlpsF64(expected: Double, actual: Double) {
     assertTrue(abs(expected.toBits() - actual.toBits()) <= 4L, "Expected $expected within four ULPs, got $actual")

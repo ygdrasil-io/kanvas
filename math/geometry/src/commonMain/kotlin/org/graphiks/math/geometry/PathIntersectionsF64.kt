@@ -113,45 +113,25 @@ internal fun intersectPathEdgesF64(first: PathInputEdgeF64, second: PathInputEdg
 }
 
 internal fun splitPathEdgesF64(edges: List<PathInputEdgeF64>, limits: PathOpsLimitsI32): List<PathSplitEdgeF64> {
-    val nodes = mutableListOf<PathIntersectionNodeF64>()
-    val unionFind = PathUnionFindI32()
-
-    fun addNode(edgeIndex: Int, parameter: Double): Int {
-        val index = nodes.size
-        nodes += PathIntersectionNodeF64(edgeIndex, snapParameterF64(parameter))
-        unionFind.add()
-        return index
-    }
-    fun addIntersection(firstIndex: Int, firstT: Double, secondIndex: Int, secondT: Double) {
-        val firstNode = addNode(firstIndex, firstT)
-        val secondNode = addNode(secondIndex, secondT)
-        unionFind.union(firstNode, secondNode)
-    }
+    validatePathInputEdgesF64(edges)
+    val registry = PathIntersectionRegistryF64(edges.size, limits.maxIntersections)
 
     edges.indices.forEach { firstIndex ->
         for (secondIndex in firstIndex + 1 until edges.size) {
             when (val intersection = intersectPathEdgesF64(edges[firstIndex], edges[secondIndex])) {
-                is PathIntersectionF64.PointF64 -> addIntersection(firstIndex, intersection.firstT, secondIndex, intersection.secondT)
+                is PathIntersectionF64.PointF64 -> registry.addIntersection(firstIndex, intersection.firstT, secondIndex, intersection.secondT)
                 is PathIntersectionF64.OverlapF64 -> {
-                    addIntersection(firstIndex, intersection.firstRange.start, secondIndex, parameterAtPointF64(intersection.start, edges[secondIndex]))
-                    addIntersection(firstIndex, intersection.firstRange.endInclusive, secondIndex, parameterAtPointF64(intersection.end, edges[secondIndex]))
+                    registry.addIntersection(firstIndex, intersection.firstRange.start, secondIndex, parameterAtPointF64(intersection.start, edges[secondIndex]))
+                    registry.addIntersection(firstIndex, intersection.firstRange.endInclusive, secondIndex, parameterAtPointF64(intersection.end, edges[secondIndex]))
                 }
                 null -> Unit
             }
         }
     }
 
-    nodes.indices.groupBy { nodes[it].edgeIndex }.values.forEach { edgeNodes ->
-        edgeNodes.sortedBy { nodes[it].parameter }.zipWithNext().forEach { (firstNode, secondNode) ->
-            if (PathPredicatesF64.almostEqualUlps(nodes[firstNode].parameter, nodes[secondNode].parameter)) {
-                unionFind.union(firstNode, secondNode)
-            }
-        }
-    }
-
-    val rootByNode = nodes.indices.associateWith { unionFind.find(it) }
+    val nodes = registry.nodes
+    val rootByNode = nodes.indices.associateWith { registry.rootOf(it) }
     val nodesByRoot = nodes.indices.groupBy { rootByNode.getValue(it) }
-    if (nodesByRoot.size > limits.maxIntersections) throw IllegalStateException("path-intersection-limit")
 
     val identityByRoot = nodesByRoot.mapValues { (_, rootNodes) ->
         pathIntersectionIdentityF64(rootNodes, nodes, edges)
@@ -190,6 +170,24 @@ internal fun splitPathEdgesF64(edges: List<PathInputEdgeF64>, limits: PathOpsLim
     }
 }
 
+private fun validatePathInputEdgesF64(edges: List<PathInputEdgeF64>) {
+    val edgeIds = mutableSetOf<Int>()
+    edges.forEach { edge ->
+        if (!edgeIds.add(edge.id)) throw IllegalArgumentException("path-edge-id-duplicate")
+    }
+    edges.forEach { edge ->
+        if (!hasEndpointIdentityF64(edge.startIdentity, edge.id, 0.0)) {
+            throw IllegalArgumentException("path-edge-start-identity")
+        }
+        if (!hasEndpointIdentityF64(edge.endIdentity, edge.id, 1.0)) {
+            throw IllegalArgumentException("path-edge-end-identity")
+        }
+    }
+}
+
+private fun hasEndpointIdentityF64(identity: PathVertexIdentityF64, edgeId: Int, parameter: Double): Boolean =
+    edgeId in identity.incidentEdgeIds && identity.parameterByEdgeId[edgeId]?.let { samePathParameterF64(it, parameter) } == true
+
 private data class PathIntersectionNodeF64(
     val edgeIndex: Int,
     val parameter: Double,
@@ -200,6 +198,53 @@ private data class PathEdgeCutF64(
     val identity: PathVertexIdentityF64,
     val isIntersection: Boolean,
 )
+
+private class PathIntersectionRegistryF64(edgeCount: Int, private val maxIntersections: Int) {
+    val nodes = mutableListOf<PathIntersectionNodeF64>()
+    private val nodesByEdge = List(edgeCount) { mutableListOf<Int>() }
+    private val unionFind = PathUnionFindI32()
+    private var componentCount = 0
+
+    fun addIntersection(firstEdgeIndex: Int, firstParameter: Double, secondEdgeIndex: Int, secondParameter: Double) {
+        val firstNode = internedNode(firstEdgeIndex, firstParameter)
+        val secondNode = internedNode(secondEdgeIndex, secondParameter)
+        val firstRoot = firstNode?.let { unionFind.find(it) }
+        val secondRoot = secondNode?.let { unionFind.find(it) }
+        val componentDelta = when {
+            firstNode == null && secondNode == null -> 1
+            firstRoot != null && secondRoot != null && firstRoot != secondRoot -> -1
+            else -> 0
+        }
+        if (componentCount + componentDelta > maxIntersections) throw IllegalStateException("path-intersection-limit")
+
+        val resolvedFirstNode = firstNode ?: addNode(firstEdgeIndex, firstParameter)
+        val resolvedSecondNode = secondNode ?: addNode(secondEdgeIndex, secondParameter)
+        val resolvedFirstRoot = unionFind.find(resolvedFirstNode)
+        val resolvedSecondRoot = unionFind.find(resolvedSecondNode)
+        if (resolvedFirstRoot != resolvedSecondRoot) {
+            unionFind.union(resolvedFirstRoot, resolvedSecondRoot)
+            componentCount -= 1
+        }
+    }
+
+    fun rootOf(node: Int): Int = unionFind.find(node)
+
+    private fun internedNode(edgeIndex: Int, parameter: Double): Int? {
+        val snappedParameter = snapParameterF64(parameter)
+        return nodesByEdge[edgeIndex].firstOrNull { nodeIndex ->
+            samePathParameterF64(nodes[nodeIndex].parameter, snappedParameter)
+        }
+    }
+
+    private fun addNode(edgeIndex: Int, parameter: Double): Int {
+        val nodeIndex = nodes.size
+        nodes += PathIntersectionNodeF64(edgeIndex, snapParameterF64(parameter))
+        nodesByEdge[edgeIndex] += nodeIndex
+        unionFind.add()
+        componentCount += 1
+        return nodeIndex
+    }
+}
 
 private class PathUnionFindI32 {
     private val parents = mutableListOf<Int>()
@@ -241,7 +286,7 @@ private fun intersectCollinearPathEdgesF64(first: PathInputEdgeF64, second: Path
     val secondEndOnFirst = unboundedParameterAtPointF64(second.end, first)
     val firstStart = max(0.0, min(secondStartOnFirst, secondEndOnFirst))
     val firstEnd = min(1.0, max(secondStartOnFirst, secondEndOnFirst))
-    if (firstStart > firstEnd && !PathPredicatesF64.almostEqualUlps(firstStart, firstEnd)) return null
+    if (firstStart > firstEnd && !samePathParameterF64(firstStart, firstEnd)) return null
 
     val startT = snapParameterF64(firstStart)
     val endT = snapParameterF64(firstEnd)
@@ -249,7 +294,7 @@ private fun intersectCollinearPathEdgesF64(first: PathInputEdgeF64, second: Path
     val end = pointAtPathParameterF64(first, endT)
     val secondStart = parameterAtPointF64(start, second)
     val secondEnd = parameterAtPointF64(end, second)
-    if (PathPredicatesF64.almostEqualUlps(startT, endT)) {
+    if (samePathParameterF64(startT, endT)) {
         return PathIntersectionF64.PointF64(start, startT, secondStart)
     }
     return PathIntersectionF64.OverlapF64(
@@ -317,7 +362,7 @@ private fun List<PathEdgeCutF64>.groupByEquivalentParametersF64(): List<List<Pat
     val groups = mutableListOf<MutableList<PathEdgeCutF64>>()
     forEach { cut ->
         val previous = groups.lastOrNull()
-        if (previous != null && PathPredicatesF64.almostEqualUlps(previous.last().parameter, cut.parameter)) {
+        if (previous != null && samePathParameterF64(previous.last().parameter, cut.parameter)) {
             previous += cut
         } else {
             groups += mutableListOf(cut)
@@ -356,10 +401,13 @@ private fun canonicalParameterF64(parameters: List<Double>): Double = when {
 }
 
 private fun snapParameterF64(parameter: Double): Double = when {
-    PathPredicatesF64.almostEqualUlps(parameter, 0.0) -> 0.0
-    PathPredicatesF64.almostEqualUlps(parameter, 1.0) -> 1.0
+    samePathParameterF64(parameter, 0.0) -> 0.0
+    samePathParameterF64(parameter, 1.0) -> 1.0
     else -> parameter
 }
+
+private fun samePathParameterF64(first: Double, second: Double): Boolean =
+    PathPredicatesF64.almostEqualUlps(first, second, maxUlps = 16, nearZeroMaxUlps = 0)
 
 private fun crossF64(firstX: Double, firstY: Double, secondX: Double, secondY: Double): Double =
     firstX * secondY - firstY * secondX
