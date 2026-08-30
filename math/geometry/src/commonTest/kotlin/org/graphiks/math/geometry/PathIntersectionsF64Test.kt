@@ -374,6 +374,48 @@ class PathIntersectionsF64Test {
             assertEquals(1, intersectionIdentities.distinct().size)
         }
     }
+
+    @Test
+    fun `nontransitive ULP parameter chains have one canonical intersection in either order`() {
+        val edges = nontransitivelyNumericallyConcurrentPathEdgesF64()
+        val splitByPermutation = listOf(
+            listOf(edges[0], edges[1], edges[2], edges[3]),
+            listOf(edges[0], edges[1], edges[3], edges[2]),
+        ).map { permutation ->
+            splitPathEdgesF64(permutation, PathOpsLimitsI32(maxIntersections = 1))
+        }
+        val snapshot = canonicalSplitEdgesF64(splitByPermutation.first())
+
+        splitByPermutation.forEach { split ->
+            assertEquals(snapshot, canonicalSplitEdgesF64(split))
+            assertEquals(mapOf(0 to 2, 1 to 2, 2 to 2, 3 to 2), split.groupingBy { it.sourceId }.eachCount())
+            val identities = split.flatMap { edge ->
+                listOf(edge.startIdentity, edge.endIdentity)
+            }.filter { it.incidentEdgeIds == listOf(0, 1, 2, 3) }
+            assertEquals(8, identities.size)
+            assertEquals(1, identities.distinct().size)
+        }
+    }
+
+    @Test
+    fun `shared endpoints fit an exact four half edge budget`() {
+        val first = inputEdgeF64(0, Point2F64(0.0, 0.0), Point2F64(1.0, 0.0))
+        val second = inputEdgeF64(1, Point2F64(1.0, 0.0), Point2F64(1.0, 1.0))
+
+        val split = splitPathEdgesF64(listOf(first, second), PathOpsLimitsI32(maxHalfEdges = 4))
+
+        assertEquals(
+            listOf(
+                Triple(0, Point2F64(0.0, 0.0), Point2F64(1.0, 0.0)),
+                Triple(1, Point2F64(1.0, 0.0), Point2F64(1.0, 1.0)),
+            ),
+            split.map { Triple(it.sourceId, it.start, it.end) },
+        )
+        val sharedIdentities = identitiesAtPointF64(split, Point2F64(1.0, 0.0))
+        assertEquals(1, sharedIdentities.distinct().size)
+        assertEquals(listOf(0, 1), sharedIdentities.first().incidentEdgeIds)
+        assertEquals(mapOf(0 to 1.0, 1 to 0.0), sharedIdentities.first().parameterByEdgeId)
+    }
 }
 
 private fun inputEdgeF64(
@@ -411,6 +453,13 @@ private fun numericallyConcurrentPathEdgesF64(): List<PathInputEdgeF64> = listOf
     inputEdgeF64(0, Point2F64(0.0, 0.0), Point2F64(-171_000_000_000.0, -93_000_000_000.0)),
     inputEdgeF64(1, Point2F64(-150_000_000_000.0, -78_000_000_000.0), Point2F64(36_000_000_000.0, 16_000_000_000.0)),
     inputEdgeF64(2, Point2F64(-55_000_000_000.0, -11_000_000_000.0), Point2F64(-59_000_000_000.0, -51_000_000_000.0)),
+)
+
+private fun nontransitivelyNumericallyConcurrentPathEdgesF64(): List<PathInputEdgeF64> = listOf(
+    inputEdgeF64(0, Point2F64(0.0, 0.0), Point2F64(-171_000_000_000.0, -93_000_000_000.0)),
+    inputEdgeF64(1, Point2F64(1_415_330_052_664.0, 1_622_017_207_416.0), Point2F64(-952_434_877_576.0, -1_036_324_355_144.0)),
+    inputEdgeF64(2, Point2F64(-55_000_000_000.0, -11_000_000_000.0), Point2F64(-59_000_000_000.0, -51_000_000_000.0)),
+    inputEdgeF64(3, Point2F64(-75_807_216_848.0, -42_008_068_428.0), Point2F64(3_681_567_830_732.0, 2_157_224_384_077.0)),
 )
 
 private data class SplitEdgeSnapshotF64(

@@ -116,7 +116,7 @@ internal fun splitPathEdgesF64(edges: List<PathInputEdgeF64>, limits: PathOpsLim
     validatePathInputEdgesF64(edges)
     val registry = PathIntersectionRegistryF64(
         edgeCount = edges.size,
-        maxStoredNodes = maximumStoredIntersectionNodesI32(edges.size, limits),
+        maxStoredInteriorNodes = maximumStoredInteriorIntersectionNodesI32(edges.size, limits),
     )
 
     edges.indices.forEach { firstIndex ->
@@ -146,10 +146,18 @@ internal fun splitPathEdgesF64(edges: List<PathInputEdgeF64>, limits: PathOpsLim
             PathEdgeCutF64(1.0, edges[edgeIndex].endIdentity, false),
         )
     }
-    nodes.indices.forEach { nodeIndex ->
+    nodes.indices.groupBy { nodeIndex ->
         val node = nodes[nodeIndex]
-        val root = rootByNode.getValue(nodeIndex)
-        cutsByEdge[node.edgeIndex] += PathEdgeCutF64(node.parameter, identityByRoot.getValue(root), true)
+        node.edgeIndex to rootByNode.getValue(nodeIndex)
+    }.forEach { (edgeAndRoot, _) ->
+        val edgeIndex = edgeAndRoot.first
+        val root = edgeAndRoot.second
+        val identity = identityByRoot.getValue(root)
+        cutsByEdge[edgeIndex] += PathEdgeCutF64(
+            parameter = identity.parameterByEdgeId.getValue(edges[edgeIndex].id),
+            identity = identity,
+            isIntersection = true,
+        )
     }
 
     return buildList {
@@ -192,9 +200,9 @@ private fun validatePathInputEdgesF64(edges: List<PathInputEdgeF64>) {
 private fun hasEndpointIdentityF64(identity: PathVertexIdentityF64, edgeId: Int, parameter: Double): Boolean =
     edgeId in identity.incidentEdgeIds && identity.parameterByEdgeId[edgeId]?.let { samePathParameterF64(it, parameter) } == true
 
-private fun maximumStoredIntersectionNodesI32(edgeCount: Int, limits: PathOpsLimitsI32): Int {
-    // Every source edge reserves one split edge, and each stored cut can add one more.
-    // Two half-edges per split edge make this a conservative cap before arrangement construction.
+private fun maximumStoredInteriorIntersectionNodesI32(edgeCount: Int, limits: PathOpsLimitsI32): Int {
+    // Each source edge starts as one split edge; every interior canonical cut adds at most one.
+    // Endpoints do not add subedges, and the registry separately stores at most two of them per source edge.
     return (limits.maxHalfEdges / 2 - edgeCount).coerceAtLeast(0)
 }
 
@@ -209,19 +217,38 @@ private data class PathEdgeCutF64(
     val isIntersection: Boolean,
 )
 
-private class PathIntersectionRegistryF64(edgeCount: Int, private val maxStoredNodes: Int) {
+private data class PathParameterClusterF64(
+    val nodeIndex: Int,
+    var minimumParameter: Double,
+    var maximumParameter: Double,
+)
+
+private data class PathIntersectionNodePlanF64(
+    val edgeIndex: Int,
+    val parameter: Double,
+    val insertionIndex: Int,
+    val matchingClusterIndices: List<Int>,
+) {
+    val requiresNode: Boolean get() = matchingClusterIndices.isEmpty()
+    val isInterior: Boolean get() = parameter != 0.0 && parameter != 1.0
+}
+
+private class PathIntersectionRegistryF64(edgeCount: Int, private val maxStoredInteriorNodes: Int) {
     val nodes = mutableListOf<PathIntersectionNodeF64>()
-    private val nodesByEdge = List(edgeCount) { mutableListOf<Int>() }
+    private val clustersByEdge = List(edgeCount) { mutableListOf<PathParameterClusterF64>() }
     private val unionFind = PathUnionFindI32()
+    private var storedInteriorNodeCount = 0
 
     fun addIntersection(firstEdgeIndex: Int, firstParameter: Double, secondEdgeIndex: Int, secondParameter: Double) {
-        val firstNode = internedNode(firstEdgeIndex, firstParameter)
-        val secondNode = internedNode(secondEdgeIndex, secondParameter)
-        val newNodeCount = (if (firstNode == null) 1 else 0) + (if (secondNode == null) 1 else 0)
-        if (nodes.size > maxStoredNodes - newNodeCount) throw IllegalStateException("path-intersection-storage-limit")
+        val firstPlan = nodePlan(firstEdgeIndex, firstParameter)
+        val secondPlan = nodePlan(secondEdgeIndex, secondParameter)
+        val newInteriorNodeCount = listOf(firstPlan, secondPlan).count { plan -> plan.requiresNode && plan.isInterior }
+        if (storedInteriorNodeCount > maxStoredInteriorNodes - newInteriorNodeCount) {
+            throw IllegalStateException("path-intersection-storage-limit")
+        }
 
-        val resolvedFirstNode = firstNode ?: addNode(firstEdgeIndex, firstParameter)
-        val resolvedSecondNode = secondNode ?: addNode(secondEdgeIndex, secondParameter)
+        val resolvedFirstNode = resolveNode(firstPlan)
+        val resolvedSecondNode = resolveNode(secondPlan)
         val resolvedFirstRoot = unionFind.find(resolvedFirstNode)
         val resolvedSecondRoot = unionFind.find(resolvedSecondNode)
         if (resolvedFirstRoot != resolvedSecondRoot) {
@@ -231,25 +258,69 @@ private class PathIntersectionRegistryF64(edgeCount: Int, private val maxStoredN
 
     fun rootOf(node: Int): Int = unionFind.find(node)
 
-    private fun internedNode(edgeIndex: Int, parameter: Double): Int? {
+    private fun nodePlan(edgeIndex: Int, parameter: Double): PathIntersectionNodePlanF64 {
         val snappedParameter = snapParameterF64(parameter)
-        val nodeIndex = nodesByEdge[edgeIndex].firstOrNull { nodeIndex ->
-            samePathParameterF64(nodes[nodeIndex].parameter, snappedParameter)
+        val clusters = clustersByEdge[edgeIndex]
+        val insertionIndex = insertionIndexForPathParameterF64(clusters, snappedParameter)
+        val matchingClusterIndices = buildList {
+            if (insertionIndex > 0 && parameterConnectsClusterF64(snappedParameter, clusters[insertionIndex - 1])) {
+                add(insertionIndex - 1)
+            }
+            if (insertionIndex < clusters.size && parameterConnectsClusterF64(snappedParameter, clusters[insertionIndex])) {
+                add(insertionIndex)
+            }
         }
-        if (nodeIndex != null) {
-            nodes[nodeIndex].parameter = canonicalParameterF64(listOf(nodes[nodeIndex].parameter, snappedParameter))
-        }
-        return nodeIndex
+        return PathIntersectionNodePlanF64(edgeIndex, snappedParameter, insertionIndex, matchingClusterIndices)
     }
 
-    private fun addNode(edgeIndex: Int, parameter: Double): Int {
+    private fun resolveNode(plan: PathIntersectionNodePlanF64): Int {
+        val clusters = clustersByEdge[plan.edgeIndex]
+        if (plan.requiresNode) return addNode(plan.edgeIndex, plan.parameter, plan.insertionIndex)
+
+        val primaryCluster = clusters[plan.matchingClusterIndices.first()]
+        val mergedClusters = plan.matchingClusterIndices.map { clusterIndex -> clusters[clusterIndex] }
+        val minimumParameter = canonicalParameterF64(mergedClusters.map { it.minimumParameter } + plan.parameter)
+        val maximumParameter = maxOf(mergedClusters.maxOf { it.maximumParameter }, plan.parameter)
+        mergedClusters.drop(1).forEach { cluster ->
+            unionFind.union(primaryCluster.nodeIndex, cluster.nodeIndex)
+        }
+        primaryCluster.minimumParameter = minimumParameter
+        primaryCluster.maximumParameter = maximumParameter
+        nodes[primaryCluster.nodeIndex].parameter = minimumParameter
+        plan.matchingClusterIndices.drop(1).asReversed().forEach { clusterIndex ->
+            clusters.removeAt(clusterIndex)
+        }
+        return primaryCluster.nodeIndex
+    }
+
+    private fun addNode(edgeIndex: Int, parameter: Double, insertionIndex: Int): Int {
         val nodeIndex = nodes.size
-        nodes += PathIntersectionNodeF64(edgeIndex, snapParameterF64(parameter))
-        nodesByEdge[edgeIndex] += nodeIndex
+        nodes += PathIntersectionNodeF64(edgeIndex, parameter)
+        clustersByEdge[edgeIndex].add(insertionIndex, PathParameterClusterF64(nodeIndex, parameter, parameter))
+        if (parameter != 0.0 && parameter != 1.0) storedInteriorNodeCount += 1
         unionFind.add()
         return nodeIndex
     }
 }
+
+private fun insertionIndexForPathParameterF64(clusters: List<PathParameterClusterF64>, parameter: Double): Int {
+    var lower = 0
+    var upper = clusters.size
+    while (lower < upper) {
+        val middle = (lower + upper) ushr 1
+        if (clusters[middle].minimumParameter <= parameter) {
+            lower = middle + 1
+        } else {
+            upper = middle
+        }
+    }
+    return lower
+}
+
+private fun parameterConnectsClusterF64(parameter: Double, cluster: PathParameterClusterF64): Boolean =
+    parameter in cluster.minimumParameter..cluster.maximumParameter ||
+        samePathParameterF64(parameter, cluster.minimumParameter) ||
+        samePathParameterF64(parameter, cluster.maximumParameter)
 
 private class PathUnionFindI32 {
     private val parents = mutableListOf<Int>()
