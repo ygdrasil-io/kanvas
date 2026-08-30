@@ -341,15 +341,10 @@ private fun pointOnCubicF64(point: Point2F64, start: Point2F64, control1: Point2
             matches(candidate.parameter, xCritical = candidate.critical, yCritical = false)
         }
     }
-    return candidatesX.values.any { xCandidate ->
-        candidatesY.values.any { yCandidate ->
-            PathPredicatesF64.almostEqualUlps(xCandidate.parameter, yCandidate.parameter, maxUlps = 32) &&
-                matches(
-                    (xCandidate.parameter + yCandidate.parameter) * 0.5,
-                    xCritical = xCandidate.critical,
-                    yCritical = yCandidate.critical,
-                )
-        }
+    return candidatesX.values.any { candidate ->
+        matches(candidate.parameter, xCritical = candidate.critical, yCritical = false)
+    } || candidatesY.values.any { candidate ->
+        matches(candidate.parameter, xCritical = false, yCritical = candidate.critical)
     }
 }
 

@@ -129,6 +129,27 @@ class PathAnalysisF32Test {
     }
 
     @Test
+    fun `contains keeps a high dynamic cubic boundary outside when one coordinate loses its target`() {
+        val h = 2.0.pow(-20).toFloat()
+        val a = (12.0 * 2.0.pow(100)).toFloat()
+        val b = (12.0 * 2.0.pow(120)).toFloat()
+        val l = 2.0.pow(20).toFloat()
+        val p0 = a / 4f - b / 8f
+        val p1 = b / 8f - a / 12f
+        val p2 = -b / 8f - a / 12f
+        val p3 = b / 8f + a / 4f
+        val boundary = Point2F32(a * h * h + b * h * h * h, 6f)
+        fun path(fillRule: FillRule): PathF32 = PathBuilder(fillRule)
+            .moveTo(p0, -3f * l)
+            .cubicTo(p1, -l, p2, l, p3, 3f * l)
+            .close()
+            .build()
+
+        assertFalse(PathAnalysisF32.contains(path(FillRule.WINDING), boundary))
+        assertFalse(PathAnalysisF32.contains(path(FillRule.INVERSE_WINDING), boundary))
+    }
+
+    @Test
     fun `contains does not turn a distant high dynamic cubic point into a boundary`() {
         fun path(fillRule: FillRule): PathF32 {
             val maximum = Float.MAX_VALUE
