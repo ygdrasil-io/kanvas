@@ -186,7 +186,10 @@ selon la politique ULP qui snap les paramètres d'endpoint du noyau; les
 contacts inclusifs, un overflow intermédiaire de span et toute incertitude
 restent donc candidats. La construction persistante est linéaire; chaque
 visite de nœud, comparaison de bounds, émission de candidat et classification
-de paire est débitée avant action du même budget global.
+de paire est débitée avant action du même budget global. La pré-classification
+d'une paire est elle aussi débitée avant de construire ses relations endpoint,
+de les filtrer ou d'appeler un prédicat d'orientation; le noyau normal et les
+incidences d'un no-op conservent leurs débits distincts.
 
 Une surcharge interne permet aux tests d'exercer chaque limite sans exposer
 l'organisation du moteur. Une modification ultérieure de ces valeurs exige
@@ -276,11 +279,13 @@ le zéro signé d'un endpoint non modifié.
 Deux segments finis non dégénérés qui partagent exactement une seule identité
 endpoint concrète et dont les porteurs sont prouvés non colinéaires n'ajoutent
 pas une nouvelle composante d'intersection : l'identité existe déjà et ne
-consomme donc pas `maxIntersections`. Ce no-op consomme néanmoins les deux
-unités minimales de travail correspondant à ses incidences entrantes, en plus
-du travail de broad phase déjà débité; un budget candidat trop petit conserve
-ainsi la même erreur `path-candidate-limit`. Les cas colinéaires, incertains,
-réversés ou ne partageant que des coordonnées suivent le noyau normal.
+consomme donc pas `maxIntersections`. Avant même d'examiner leurs relations ou
+leurs orientations, la pré-classification de la paire est débitée; ce no-op
+consomme ensuite les deux unités minimales de travail correspondant à ses
+incidences entrantes. Ces débits restent distincts de l'émission broad phase
+et du noyau normal, afin qu'un budget candidat trop petit conserve l'erreur
+`path-candidate-limit`. Les cas colinéaires, incertains, réversés ou ne
+partageant que des coordonnées suivent le noyau normal.
 
 ## 7. Arrangement planaire et classification
 
@@ -314,16 +319,29 @@ est retiré seulement si son aire normalisée absolue est au plus `tolerance² =
 La validation porte sur l'ensemble des frontières projetées, jamais sur un
 cycle isolé. Elle associe chaque arête projetée au pont d'arête `F64` réel qui
 lui correspond, puis utilise le même broad phase déterministe et budgété pour
-chercher tout contact nouveau. Un croisement ou une jonction non-adjacente
-nouvelle échoue. Un contact endpoint-endpoint ou un chevauchement colinéaire
-partiel ne crée aucune face `F32` et est donc une modification d'aire nulle.
-En revanche, lorsque deux cycles deviennent exactement le même cycle projeté
-(après suppression exacte des sommets `F32` colinéaires de comparaison) avec
-orientations opposées, leur double-aire nette `F64` est calculée par
-expansion : si elle dépasse `2^-45`, notamment pour un outer/hole devenu un
-même cycle, l'opération échoue explicitement par
-`IllegalStateException("path-f32-projection-collapse")` au lieu de retourner
-un path incohérent.
+chercher tout contact non-adjacent. Le pont source est classifié par le noyau
+robuste avant son image `F32` : un point projeté doit être soutenu par un point
+ou un overlap source, et un overlap projeté par un overlap source. Une paire de
+cycles déjà en contact dans le domaine source peut conserver les contacts de
+lattice voisins générés par l'aplatissement d'une tangence, mais cette preuve
+de composante ne rend jamais sûr un contact entre cycles source-disjoints. Une
+jonction, un croisement ou un overlap partiel nouveau entre cycles source-
+disjoints échoue si les cycles ne sont pas exactement le même cycle projeté;
+un contact nouveau non-adjacent au sein d'un cycle compare au préalable son
+aire double normalisée source et projetée et échoue lorsque la perte dépasse
+la tolérance.
+
+Les cycles projetés sont groupés avec une clé structurelle `F32`, indépendante
+de la rotation et de l'orientation, après normalisation des zéros signés et
+suppression exacte des sommets colinéaires. La multiplicité et l'orientation
+de chaque membre sont conservées. Pour chaque groupe, des expansions calculent
+à la fois la modification signée agrégée des doubles-aires source/projetées et
+l'étendue cumulée des frontières source; l'une ou l'autre supérieure à `2^-45`
+fait échouer par `IllegalStateException("path-f32-projection-collapse")`. Ce
+calcul global détecte notamment trois cycles `+,-,+` dont chaque paire serait
+sous le seuil, ainsi qu'un outer/hole devenu un même cycle. Un groupe entier
+dont la modification exacte reste au plus au seuil peut être retiré sans
+retourner un path incohérent.
 
 Ce même flux unaire fournit `simplify` et `asWinding`.
 

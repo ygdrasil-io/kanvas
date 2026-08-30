@@ -187,7 +187,7 @@ internal fun splitPathEdgesF64(
         // The broad phase emits the retained second indices in this exact canonical order.
         // It rejects only AABB gaps that cannot reach the kernel's endpoint-snap policy;
         // endpoint/tangent/overlap contacts continue through the robust kernel unchanged.
-        if (pathEdgesShareOnlyKnownNonCollinearEndpointF64(first, second)) {
+        if (pathEdgesShareOnlyKnownNonCollinearEndpointF64(first, second, candidateWorkBudget)) {
             registry.consumeKnownEndpointNoOpCandidateWorkF64()
             return@forEachPathEdgeCandidatePairF64
         }
@@ -308,7 +308,13 @@ private data class PathEndpointRelationF64(
 private fun pathEdgesShareOnlyKnownNonCollinearEndpointF64(
     first: PathInputEdgeF64,
     second: PathInputEdgeF64,
+    candidateWorkBudget: PathCandidateWorkBudgetI32,
 ): Boolean {
+    // Candidate emission merely hands this pair to the topology stage. Debit its
+    // preclassification separately before allocating endpoint relations, filtering them, or
+    // invoking an exact orientation predicate; a normal kernel classification has its own debit
+    // below, while the proven no-op subsequently pays its two incoming incidences.
+    candidateWorkBudget.consume()
     if (!first.start.isFinite() || !first.end.isFinite() || !second.start.isFinite() || !second.end.isFinite()) {
         return false
     }

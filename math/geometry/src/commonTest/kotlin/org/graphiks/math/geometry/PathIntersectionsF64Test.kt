@@ -302,6 +302,46 @@ class PathIntersectionsF64Test {
     }
 
     @Test
+    fun `AABB preserves kernel snap contacts across Y negative zero and exponent boundaries`() {
+        val nextUpOne = Double.fromBits(1.0.toBits() + 1L)
+        val nextAfterNegativeOne = -Double.fromBits(1.0.toBits() - 1L)
+        val minimumNormal = Double.fromBits(0x0010_0000_0000_0000L)
+        val nextMinimumNormal = Double.fromBits(minimumNormal.toBits() + 1L)
+        val cases = listOf(
+            Triple(
+                inputEdgeF64(0, Point2F64(0.0, 0.0), Point2F64(0.0, 1.0)),
+                inputEdgeF64(1, Point2F64(0.0, nextUpOne), Point2F64(0.0, 2.0)),
+                Point2F64(0.0, 1.0),
+            ),
+            Triple(
+                inputEdgeF64(0, Point2F64(-2.0, 0.0), Point2F64(-1.0, 0.0)),
+                inputEdgeF64(1, Point2F64(nextAfterNegativeOne, 0.0), Point2F64(0.0, 0.0)),
+                Point2F64(-1.0, 0.0),
+            ),
+            Triple(
+                inputEdgeF64(0, Point2F64(-1.0, 0.0), Point2F64(-0.0, 0.0)),
+                inputEdgeF64(1, Point2F64(0.0, 0.0), Point2F64(1.0, 0.0)),
+                Point2F64(0.0, 0.0),
+            ),
+            Triple(
+                inputEdgeF64(0, Point2F64(0.0, 0.0), Point2F64(minimumNormal, 0.0)),
+                inputEdgeF64(1, Point2F64(nextMinimumNormal, 0.0), Point2F64(minimumNormal * 2.0, 0.0)),
+                Point2F64(minimumNormal, 0.0),
+            ),
+        )
+
+        cases.forEach { (first, second, contact) ->
+            val direct = assertIs<PathIntersectionF64.PointF64>(intersectPathEdgesF64(first, second))
+            val split = splitPathEdgesF64(listOf(first, second), PathOpsLimitsI32())
+            val identities = identitiesAtPointF64(split, contact).distinct()
+
+            assertEquals(contact, direct.point)
+            assertEquals(1, identities.size)
+            assertEquals(listOf(0, 1), identities.single().incidentEdgeIds)
+        }
+    }
+
+    @Test
     fun `overlapping nonintersecting AABBs consume the candidate work budget in every order`() {
         val edges = overlappingAabbNonintersectingPathEdgesF64(count = 128)
         val orders = listOf(edges, edges.reversed(), edges.drop(47) + edges.take(47))
@@ -334,6 +374,27 @@ class PathIntersectionsF64Test {
             splitPathEdgesF64(edges, PathOpsLimitsI32(maxCandidateProbes = 1))
         }
         val split = splitPathEdgesF64(edges, PathOpsLimitsI32(maxCandidateProbes = 64))
+        val shared = identitiesAtPointF64(split, Point2F64(1.0, 0.0)).distinct().single()
+
+        assertEquals("path-candidate-limit", error.message)
+        assertEquals(listOf(0, 1), shared.incidentEdgeIds)
+        assertEquals(mapOf(0 to 1.0, 1 to 0.0), shared.parameterByEdgeId)
+    }
+
+    @Test
+    fun `known endpoint no op debits classification before examining its relation`() {
+        val edges = openContourInputEdgesF64(
+            listOf(
+                Point2F64(0.0, 0.0),
+                Point2F64(1.0, 0.0),
+                Point2F64(1.0, 1.0),
+            ),
+        )
+
+        val error = assertFailsWith<IllegalStateException> {
+            splitPathEdgesF64(edges, PathOpsLimitsI32(maxCandidateProbes = 9))
+        }
+        val split = splitPathEdgesF64(edges, PathOpsLimitsI32(maxCandidateProbes = 10))
         val shared = identitiesAtPointF64(split, Point2F64(1.0, 0.0)).distinct().single()
 
         assertEquals("path-candidate-limit", error.message)

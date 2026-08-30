@@ -323,6 +323,107 @@ class PathOpsF32Test {
     }
 
     @Test
+    fun `projection rejects a new F32 endpoint contact between source disjoint contours`() {
+        val epsilon = 2.0.pow(-25)
+        val normalization = affineProjectionNormalizationF64()
+        val first = affineProjectionContourF64(
+            0.0 to 0.0,
+            1.0 to 0.0,
+            1.0 to 1.0,
+            0.0 to 1.0,
+        )
+        val second = affineProjectionContourF64(
+            1.0 + epsilon to 1.0 + epsilon,
+            2.0 + epsilon to 1.0 + epsilon,
+            2.0 + epsilon to 2.0 + epsilon,
+            1.0 + epsilon to 2.0 + epsilon,
+        )
+
+        assertTrue(PathAnalysisF32.bounds(projectContoursF64ToPathF32(listOf(first), normalization, FillRule.WINDING)) != null)
+        assertTrue(PathAnalysisF32.bounds(projectContoursF64ToPathF32(listOf(second), normalization, FillRule.WINDING)) != null)
+        val error = assertFailsWith<IllegalStateException> {
+            projectContoursF64ToPathF32(listOf(first, second), normalization, FillRule.WINDING)
+        }
+
+        assertEquals("path-f32-projection-collapse", error.message)
+    }
+
+    @Test
+    fun `projection rejects a new F32 partial edge overlap between source disjoint contours`() {
+        val epsilon = 2.0.pow(-25)
+        val normalization = affineProjectionNormalizationF64()
+        val first = affineProjectionContourF64(
+            0.0 to 0.5,
+            2.0 to 0.5,
+            2.0 to 1.5,
+            0.0 to 1.5,
+        )
+        val second = affineProjectionContourF64(
+            2.0 + epsilon to 0.5,
+            3.0 + epsilon to 0.5,
+            3.0 + epsilon to 1.5,
+            2.0 + epsilon to 1.5,
+        )
+
+        assertTrue(PathAnalysisF32.bounds(projectContoursF64ToPathF32(listOf(first), normalization, FillRule.WINDING)) != null)
+        assertTrue(PathAnalysisF32.bounds(projectContoursF64ToPathF32(listOf(second), normalization, FillRule.WINDING)) != null)
+        val error = assertFailsWith<IllegalStateException> {
+            projectContoursF64ToPathF32(listOf(first, second), normalization, FillRule.WINDING)
+        }
+
+        assertEquals("path-f32-projection-collapse", error.message)
+    }
+
+    @Test
+    fun `projection rejects a significant narrow bridge whose nonadjacent edges merge`() {
+        val epsilon = 2.0.pow(-25)
+        val contour = affineProjectionContourF64(
+            0.0 to 0.0,
+            3.0 to 0.0,
+            3.0 to 1.0,
+            1.0 + epsilon to 1.0,
+            1.0 + epsilon to 2.0,
+            3.0 to 2.0,
+            3.0 to 3.0,
+            0.0 to 3.0,
+            0.0 to 2.0,
+            1.0 to 2.0,
+            1.0 to 1.0,
+            0.0 to 1.0,
+        )
+
+        assertTrue(epsilon / 9.0 > 2.0.pow(-46))
+        val error = assertFailsWith<IllegalStateException> {
+            projectContoursF64ToPathF32(listOf(contour), affineProjectionNormalizationF64(), FillRule.WINDING)
+        }
+
+        assertEquals("path-f32-projection-collapse", error.message)
+    }
+
+    @Test
+    fun `projection aggregates three coincident F32 cycles beyond the area tolerance`() {
+        val d = 3.0 * 2.0.pow(-50)
+        val normalization = PathNormalizationF64(origin = Point2F64(1.5, 1.5), scale = 1.0)
+        val outer = nestedProjectionSquareF64(0.0, reverse = false)
+        val hole = nestedProjectionSquareF64(d, reverse = true)
+        val island = nestedProjectionSquareF64(2.0 * d, reverse = false)
+        val threshold = 2.0.pow(-45)
+
+        assertTrue(8.0 * d - 8.0 * d * d < threshold)
+        assertTrue(16.0 * d - 32.0 * d * d > threshold)
+        assertTrue(
+            PathAnalysisF32.bounds(
+                projectContoursF64ToPathF32(listOf(outer, hole), normalization, FillRule.WINDING),
+            ) != null,
+        )
+        val error = assertFailsWith<IllegalStateException> {
+            projectContoursF64ToPathF32(listOf(outer, hole, island), normalization, FillRule.WINDING)
+        }
+
+        assertEquals("path-f32-projection-collapse", error.message)
+    }
+
+    @Test
     fun `projection drops only a collapsed contour at or below the real area tolerance`() {
         val result = projectContoursF64ToPathF32(
             contours = listOf(collapsedTriangleContourF64(height = 3.0 * 2.0.pow(-24))),
@@ -333,6 +434,18 @@ class PathOpsF32Test {
         assertEquals(FillRule.WINDING, result.fillRule)
         assertEquals(null, PathAnalysisF32.bounds(result))
         assertFalse(PathAnalysisF32.contains(result, Point2F32(0f, 0f)))
+    }
+
+    @Test
+    fun `projection drops a collapsed contour at the exact real area tolerance`() {
+        val result = projectContoursF64ToPathF32(
+            contours = listOf(collapsedTriangleContourF64(height = 2.0.pow(-22))),
+            normalization = projectionCollapseNormalizationF64(),
+            fillRule = FillRule.WINDING,
+        )
+
+        assertEquals(FillRule.WINDING, result.fillRule)
+        assertEquals(null, PathAnalysisF32.bounds(result))
     }
 
     @Test
@@ -713,6 +826,25 @@ class PathOpsF32Test {
             Point2F64(0.0, height),
         ),
     )
+
+    private fun affineProjectionContourF64(vararg points: Pair<Double, Double>): PathContourF64 = contourF64(
+        points.map { (x, y) -> Point2F64((x - 1.5) / 3.0, (y - 1.5) / 3.0) },
+    )
+
+    private fun affineProjectionNormalizationF64(): PathNormalizationF64 = PathNormalizationF64(
+        origin = Point2F64(1.5, 1.5),
+        scale = 1.0 / 3.0,
+    )
+
+    private fun nestedProjectionSquareF64(inset: Double, reverse: Boolean): PathContourF64 {
+        val points = listOf(
+            Point2F64(-0.5 + inset, -0.5 + inset),
+            Point2F64(0.5 - inset, -0.5 + inset),
+            Point2F64(0.5 - inset, 0.5 - inset),
+            Point2F64(-0.5 + inset, 0.5 - inset),
+        )
+        return contourF64(if (reverse) points.asReversed() else points)
+    }
 
     private fun projectionCollapseNormalizationF64(): PathNormalizationF64 {
         // A power-of-two F32 spacing keeps this internal normalized fixture bit-identical on
