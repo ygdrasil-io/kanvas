@@ -312,21 +312,44 @@ private fun pointOnQuadF64(point: Point2F64, start: Point2F64, control: Point2F6
 
 private fun pointOnCubicF64(point: Point2F64, start: Point2F64, control1: Point2F64, control2: Point2F64, end: Point2F64): Boolean {
     if (start == point || end == point) return true
-    val candidatesX = cubicRootsF64(
+    val xCoordinates = doubleArrayOf(start.x, control1.x, control2.x, end.x)
+    val yCoordinates = doubleArrayOf(start.y, control1.y, control2.y, end.y)
+    val candidatesX = cubicRootCandidatesF64(
         -start.x + 3.0 * control1.x - 3.0 * control2.x + end.x,
         3.0 * (start.x - 2.0 * control1.x + control2.x),
         3.0 * (control1.x - start.x),
         start.x - point.x,
     )
-    val candidatesY = cubicRootsF64(
+    val candidatesY = cubicRootCandidatesF64(
         -start.y + 3.0 * control1.y - 3.0 * control2.y + end.y,
         3.0 * (start.y - 2.0 * control1.y + control2.y),
         3.0 * (control1.y - start.y),
         start.y - point.y,
     )
-    val candidates = (candidatesX + candidatesY).distinct()
-    return candidates.any { t ->
-        t in 0.0..1.0 && cubicPointMatchesF64(point, start, control1, control2, end, t)
+
+    fun matches(t: Double, xCritical: Boolean, yCritical: Boolean): Boolean =
+        cubicPointMatchesF64(point, xCoordinates, yCoordinates, t, xCritical, yCritical)
+
+    if (candidatesX.unconstrained && candidatesY.unconstrained) return false
+    if (candidatesX.unconstrained) {
+        return candidatesY.values.any { candidate ->
+            matches(candidate.parameter, xCritical = false, yCritical = candidate.critical)
+        }
+    }
+    if (candidatesY.unconstrained) {
+        return candidatesX.values.any { candidate ->
+            matches(candidate.parameter, xCritical = candidate.critical, yCritical = false)
+        }
+    }
+    return candidatesX.values.any { xCandidate ->
+        candidatesY.values.any { yCandidate ->
+            PathPredicatesF64.almostEqualUlps(xCandidate.parameter, yCandidate.parameter, maxUlps = 32) &&
+                matches(
+                    (xCandidate.parameter + yCandidate.parameter) * 0.5,
+                    xCritical = xCandidate.critical,
+                    yCritical = yCandidate.critical,
+                )
+        }
     }
 }
 
@@ -360,8 +383,20 @@ private fun quadraticRootsF64(a: Double, b: Double, c: Double): List<Double> {
     return if (q == 0.0) listOf(-b / (2.0 * a)) else listOf(q / a, c / q)
 }
 
-private fun cubicRootsF64(a: Double, b: Double, c: Double, d: Double): List<Double> {
-    if (a == 0.0) return quadraticRootsF64(b, c, d)
+private data class CubicRootCandidateF64(val parameter: Double, val critical: Boolean)
+
+private data class CubicRootCandidatesF64(val values: List<CubicRootCandidateF64>, val unconstrained: Boolean)
+
+private fun cubicRootCandidatesF64(a: Double, b: Double, c: Double, d: Double): CubicRootCandidatesF64 {
+    if (a == 0.0) {
+        if (b == 0.0 && c == 0.0) {
+            return CubicRootCandidatesF64(emptyList(), unconstrained = d == 0.0)
+        }
+        return CubicRootCandidatesF64(
+            quadraticRootsF64(b, c, d).filter { it in 0.0..1.0 }.map { CubicRootCandidateF64(it, critical = false) },
+            unconstrained = false,
+        )
+    }
     fun valueAt(t: Double): Double = ((a * t + b) * t + c) * t + d
 
     val critical = quadraticRootsF64(3.0 * a, 2.0 * b, c).filter { it in 0.0..1.0 }.sorted()
@@ -370,7 +405,7 @@ private fun cubicRootsF64(a: Double, b: Double, c: Double, d: Double): List<Doub
         addAll(critical)
         add(1.0)
     }.distinct()
-    val roots = partitions.toMutableList()
+    val roots = critical.map { CubicRootCandidateF64(it, critical = true) }.toMutableList()
     partitions.zipWithNext().forEach { (start, end) ->
         var low = start
         var high = end
@@ -392,9 +427,9 @@ private fun cubicRootsF64(a: Double, b: Double, c: Double, d: Double): List<Doub
                 high = middle
             }
         }
-        roots += (low + high) * 0.5
+        roots += CubicRootCandidateF64((low + high) * 0.5, critical = false)
     }
-    return roots.distinct()
+    return CubicRootCandidatesF64(roots.distinctBy { it.parameter }, unconstrained = false)
 }
 
 private fun quadPointMatchesF64(point: Point2F64, start: Point2F64, control: Point2F64, end: Point2F64, t: Double): Boolean {
@@ -411,20 +446,49 @@ private fun quadPointMatchesF64(point: Point2F64, start: Point2F64, control: Poi
 
 private fun cubicPointMatchesF64(
     point: Point2F64,
-    start: Point2F64,
-    control1: Point2F64,
-    control2: Point2F64,
-    end: Point2F64,
+    xCoordinates: DoubleArray,
+    yCoordinates: DoubleArray,
     t: Double,
+    xCritical: Boolean,
+    yCritical: Boolean,
 ): Boolean {
-    val u = 1.0 - t
-    val weights = doubleArrayOf(u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t)
-    return bezierPointMatchesF64(
-        point,
-        doubleArrayOf(start.x, control1.x, control2.x, end.x),
-        doubleArrayOf(start.y, control1.y, control2.y, end.y),
-        weights,
-        errorFactor = 32.0,
+    val weights = cubicBernsteinWeightsF64(t)
+    return cubicCoordinateMatchesF64(xCoordinates, point.x, weights, xCritical) &&
+        cubicCoordinateMatchesF64(yCoordinates, point.y, weights, yCritical)
+}
+
+private fun cubicCoordinateMatchesF64(
+    coordinates: DoubleArray,
+    target: Double,
+    weights: Array<DoubleArray>,
+    critical: Boolean,
+): Boolean {
+    var residual = doubleArrayOf()
+    coordinates.indices.forEach { index ->
+        val difference = ExpansionF64.twoDiff(coordinates[index], target)
+        val weightedDifference = ExpansionF64.product(difference, weights[index])
+        residual = ExpansionF64.expansionSum(residual, weightedDifference)
+    }
+    val coordinateScale = coordinates.maxOf(::abs)
+    val errorBound = if (critical) {
+        128.0 * PathPredicatesF64.EPSILON_F64 * PathPredicatesF64.EPSILON_F64 * coordinateScale
+    } else {
+        64.0 * PathPredicatesF64.EPSILON_F64 * coordinateScale
+    }
+    return abs(residual.sum()) <= errorBound
+}
+
+private fun cubicBernsteinWeightsF64(t: Double): Array<DoubleArray> {
+    val tExpansion = doubleArrayOf(t)
+    val uExpansion = ExpansionF64.twoDiff(1.0, t)
+    val uSquared = ExpansionF64.product(uExpansion, uExpansion)
+    val tSquared = ExpansionF64.product(tExpansion, tExpansion)
+    val three = doubleArrayOf(3.0)
+    return arrayOf(
+        ExpansionF64.product(uSquared, uExpansion),
+        ExpansionF64.product(ExpansionF64.product(three, uSquared), tExpansion),
+        ExpansionF64.product(ExpansionF64.product(three, uExpansion), tSquared),
+        ExpansionF64.product(tSquared, tExpansion),
     )
 }
 
@@ -507,7 +571,7 @@ private fun includeCubicExtrema(a: Point2F64, c1: Point2F64, c2: Point2F64, b: P
 }
 
 /** Returns an exact expansion sign for the contour's signed area. */
-private fun signedAreaSignF64(points: List<Point2F64>): Int {
+internal fun signedAreaSignF64(points: List<Point2F64>): Int {
     var exactSum = doubleArrayOf()
     points.zipWithNext().forEach { (first, second) ->
         val cross = ExpansionF64.expansionDiff(

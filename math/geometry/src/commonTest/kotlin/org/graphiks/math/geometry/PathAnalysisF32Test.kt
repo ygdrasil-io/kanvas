@@ -129,6 +129,22 @@ class PathAnalysisF32Test {
     }
 
     @Test
+    fun `contains does not turn a distant high dynamic cubic point into a boundary`() {
+        fun path(fillRule: FillRule): PathF32 {
+            val maximum = Float.MAX_VALUE
+            return PathBuilder(fillRule)
+                .moveTo(maximum, maximum)
+                .cubicTo(-maximum, -maximum, maximum, maximum, -maximum, -maximum)
+                .close()
+                .build()
+        }
+        val point = Point2F32(1e20f, 2e20f)
+
+        assertFalse(PathAnalysisF32.contains(path(FillRule.WINDING), point))
+        assertTrue(PathAnalysisF32.contains(path(FillRule.INVERSE_WINDING), point))
+    }
+
+    @Test
     fun `contains keeps a micro scale rectangle interior inside`() {
         val microRect = PathBuilder().addRect(RectF32.ofLTRB(0f, 0f, 1e-14f, 1e-14f)).build()
 
@@ -225,6 +241,22 @@ class PathAnalysisF32Test {
             .build()
 
         assertEquals(ContourOrientation.CLOCKWISE, PathAnalysisF32.topology(path).orientation)
+    }
+
+    @Test
+    fun `signed area keeps the exact negative sign when rounded crosses are positive`() {
+        // The exact shoelace sum for these IEEE-754 literals is negative; summing rounded
+        // per-edge crosses first produces a positive result.
+        val a = Point2F64(-0.5000000000000022, -0.5000000000000022)
+        val b = Point2F64(0.4999999999999989, 0.49999999999999895)
+        val c = Point2F64(0.49999999999999895, 0.499999999999999)
+        val roundedCrossSum =
+            (a.x * b.y - a.y * b.x) +
+                (b.x * c.y - b.y * c.x) +
+                (c.x * a.y - c.y * a.x)
+
+        assertTrue(roundedCrossSum > 0.0)
+        assertEquals(-1, signedAreaSignF64(listOf(a, b, c, a)))
     }
 
     @Test
