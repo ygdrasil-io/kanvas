@@ -287,22 +287,21 @@ private data class PathParameterIntervalKeyF64(
 )
 
 private class PathEdgeComponentIndexF64 {
-    private val componentsByInterval = mutableMapOf<PathParameterIntervalKeyF64, PathComponentIdIndexF64>()
+    private val componentsByInterval = PathParameterIntervalIndexF64()
 
     // A direct incidence stores an exact ordered-ULP interval with width strictly below sixteen.
     // A query can therefore enumerate the fixed 31 * 16 possible (minimum, width) signatures
-    // around its parameter. Each signature supplies its deterministic lowest-id representative
-    // from an AVL in O(log C), rather than scanning a bucket of unbounded occupancy. The AVL
-    // retains other live components with the same signature so removal promotes the next one.
-    // The direct predicate remains the semantic gate: this index only proposes candidates.
+    // around its parameter. An outer AVL orders these exact signatures; each signature supplies
+    // its deterministic lowest-id representative from an inner AVL in O(log C), rather than
+    // scanning a bucket of unbounded occupancy. The inner AVL retains other live components with
+    // the same signature so removal promotes the next one. The direct predicate remains the
+    // semantic gate: this index only proposes candidates.
     fun matching(edgeIndex: Int, parameter: Double): List<PathIntersectionComponentF64> {
         val key = orderedPathParameterBitsF64(parameter)
         return buildList {
             for (minimumOffset in -15L..15L) {
                 for (width in 0..15) {
-                    val component = componentsByInterval[
-                        PathParameterIntervalKeyF64(key + minimumOffset, width),
-                    ]?.first()
+                    val component = componentsByInterval.first(PathParameterIntervalKeyF64(key + minimumOffset, width))
                     val incidence = component?.incidencesByEdge?.get(edgeIndex)
                     if (incidence != null && mergeDirectPathIncidenceF64(incidence, parameter) != null) {
                         add(component)
@@ -313,16 +312,11 @@ private class PathEdgeComponentIndexF64 {
     }
 
     fun add(component: PathIntersectionComponentF64, incidence: PathComponentIncidenceF64) {
-        componentsByInterval.getOrPut(pathParameterIntervalKeyF64(incidence)) { PathComponentIdIndexF64() }
-            .add(component)
+        componentsByInterval.add(pathParameterIntervalKeyF64(incidence), component)
     }
 
     fun remove(component: PathIntersectionComponentF64, incidence: PathComponentIncidenceF64) {
-        val key = pathParameterIntervalKeyF64(incidence)
-        componentsByInterval[key]?.let { indexedComponents ->
-            indexedComponents.remove(component)
-            if (indexedComponents.isEmpty()) componentsByInterval.remove(key)
-        }
+        componentsByInterval.remove(pathParameterIntervalKeyF64(incidence), component)
     }
 }
 
@@ -339,6 +333,134 @@ private fun pathParameterIntervalKeyF64(incidence: PathComponentIncidenceF64): P
         minimumBits = minimumBits,
         width = (maximumBits - minimumBits).toInt(),
     )
+}
+
+private class PathParameterIntervalIndexF64 {
+    private class Node(
+        val key: PathParameterIntervalKeyF64,
+        val components: PathComponentIdIndexF64 = PathComponentIdIndexF64(),
+        var left: Node? = null,
+        var right: Node? = null,
+        var height: Int = 1,
+    )
+
+    private var root: Node? = null
+
+    fun first(key: PathParameterIntervalKeyF64): PathIntersectionComponentF64? {
+        var node = root
+        while (node != null) {
+            val comparison = comparePathParameterIntervalKeysF64(key, node.key)
+            if (comparison == 0) return node.components.first()
+            node = if (comparison < 0) node.left else node.right
+        }
+        return null
+    }
+
+    fun add(key: PathParameterIntervalKeyF64, component: PathIntersectionComponentF64) {
+        root = add(root, key, component)
+    }
+
+    fun remove(key: PathParameterIntervalKeyF64, component: PathIntersectionComponentF64) {
+        root = remove(root, key, component)
+    }
+
+    private fun add(
+        node: Node?,
+        key: PathParameterIntervalKeyF64,
+        component: PathIntersectionComponentF64,
+    ): Node = when {
+        node == null -> Node(key).also { it.components.add(component) }
+        comparePathParameterIntervalKeysF64(key, node.key) < 0 -> {
+            node.left = add(node.left, key, component)
+            rebalance(node)
+        }
+        comparePathParameterIntervalKeysF64(key, node.key) > 0 -> {
+            node.right = add(node.right, key, component)
+            rebalance(node)
+        }
+        else -> node.also { it.components.add(component) }
+    }
+
+    private fun remove(
+        node: Node?,
+        key: PathParameterIntervalKeyF64,
+        component: PathIntersectionComponentF64,
+    ): Node? {
+        node ?: return null
+        return when {
+            comparePathParameterIntervalKeysF64(key, node.key) < 0 -> {
+                node.left = remove(node.left, key, component)
+                rebalance(node)
+            }
+            comparePathParameterIntervalKeysF64(key, node.key) > 0 -> {
+                node.right = remove(node.right, key, component)
+                rebalance(node)
+            }
+            else -> {
+                node.components.remove(component)
+                if (node.components.isEmpty()) join(node.left, node.right) else node
+            }
+        }
+    }
+
+    private fun join(left: Node?, right: Node?): Node? = when {
+        left == null -> right
+        right == null -> left
+        nodeHeight(left) >= nodeHeight(right) -> {
+            left.right = join(left.right, right)
+            rebalance(left)
+        }
+        else -> {
+            right.left = join(left, right.left)
+            rebalance(right)
+        }
+    }
+
+    private fun rebalance(node: Node): Node {
+        node.height = max(nodeHeight(node.left), nodeHeight(node.right)) + 1
+        val balance = nodeHeight(node.left) - nodeHeight(node.right)
+        return when {
+            balance > 1 && nodeHeight(node.left?.left) >= nodeHeight(node.left?.right) -> rotateRight(node)
+            balance > 1 -> {
+                node.left = rotateLeft(checkNotNull(node.left))
+                rotateRight(node)
+            }
+            balance < -1 && nodeHeight(node.right?.right) >= nodeHeight(node.right?.left) -> rotateLeft(node)
+            balance < -1 -> {
+                node.right = rotateRight(checkNotNull(node.right))
+                rotateLeft(node)
+            }
+            else -> node
+        }
+    }
+
+    private fun rotateLeft(node: Node): Node {
+        val pivot = checkNotNull(node.right)
+        node.right = pivot.left
+        pivot.left = node
+        node.height = max(nodeHeight(node.left), nodeHeight(node.right)) + 1
+        pivot.height = max(nodeHeight(pivot.left), nodeHeight(pivot.right)) + 1
+        return pivot
+    }
+
+    private fun rotateRight(node: Node): Node {
+        val pivot = checkNotNull(node.left)
+        node.left = pivot.right
+        pivot.right = node
+        node.height = max(nodeHeight(node.left), nodeHeight(node.right)) + 1
+        pivot.height = max(nodeHeight(pivot.left), nodeHeight(pivot.right)) + 1
+        return pivot
+    }
+
+    private fun nodeHeight(node: Node?): Int = node?.height ?: 0
+}
+
+private fun comparePathParameterIntervalKeysF64(
+    first: PathParameterIntervalKeyF64,
+    second: PathParameterIntervalKeyF64,
+): Int {
+    val minimum = first.minimumBits.compareTo(second.minimumBits)
+    return if (minimum != 0) minimum else first.width.compareTo(second.width)
 }
 
 private class PathComponentIdIndexF64 {
