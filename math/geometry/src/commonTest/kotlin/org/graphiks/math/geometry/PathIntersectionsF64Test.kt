@@ -416,6 +416,61 @@ class PathIntersectionsF64Test {
         assertEquals(listOf(0, 1), sharedIdentities.first().incidentEdgeIds)
         assertEquals(mapOf(0 to 1.0, 1 to 0.0), sharedIdentities.first().parameterByEdgeId)
     }
+
+    @Test
+    fun `numerically concurrent intersections fit exact half edge capacity in every order`() {
+        val permutations = inputEdgePermutationsF64(nontransitivelyNumericallyConcurrentPathEdgesF64())
+
+        listOf(16, 22).forEach { maxHalfEdges ->
+            val splits = permutations.map { permutation ->
+                splitPathEdgesF64(
+                    permutation,
+                    PathOpsLimitsI32(maxIntersections = 1, maxHalfEdges = maxHalfEdges),
+                )
+            }
+            val snapshot = canonicalSplitEdgesF64(splits.first())
+
+            splits.forEach { split ->
+                assertEquals(snapshot, canonicalSplitEdgesF64(split))
+                assertEquals(8, split.size)
+                assertEquals(mapOf(0 to 2, 1 to 2, 2 to 2, 3 to 2), split.groupingBy { it.sourceId }.eachCount())
+            }
+        }
+    }
+
+    @Test
+    fun `direct ULP clusters preserve distinct crossings along one carrier`() {
+        val edges = carrierWithDirectUlpChainCrossingsF64()
+        val splits = inputEdgePermutationsF64(edges).map { permutation ->
+            splitPathEdgesF64(
+                permutation,
+                PathOpsLimitsI32(maxIntersections = 2, maxHalfEdges = 20),
+            )
+        }
+        val snapshot = canonicalSplitEdgesF64(splits.first())
+        val firstPoint = Point2F64(Double.fromBits(0.5.toBits()), 0.0)
+        val lastPoint = Point2F64(Double.fromBits(0.5.toBits() + 30L), 0.0)
+
+        splits.forEach { split ->
+            assertEquals(snapshot, canonicalSplitEdgesF64(split))
+            assertEquals(9, split.size)
+            assertTrue(split.count { it.sourceId == 0 } >= 3)
+            val firstIdentity = identitiesAtPointF64(split, firstPoint).distinct().single()
+            val lastIdentity = identitiesAtPointF64(split, lastPoint).distinct().single()
+            assertEquals(listOf(0, 1, 2), firstIdentity.incidentEdgeIds)
+            assertEquals(listOf(0, 3), lastIdentity.incidentEdgeIds)
+            assertTrue(firstIdentity != lastIdentity)
+        }
+
+        val error = assertFailsWith<IllegalStateException> {
+            splitPathEdgesF64(
+                edges,
+                PathOpsLimitsI32(maxIntersections = 1, maxHalfEdges = 20),
+            )
+        }
+
+        assertEquals("path-intersection-limit", error.message)
+    }
 }
 
 private fun inputEdgeF64(
@@ -461,6 +516,21 @@ private fun nontransitivelyNumericallyConcurrentPathEdgesF64(): List<PathInputEd
     inputEdgeF64(2, Point2F64(-55_000_000_000.0, -11_000_000_000.0), Point2F64(-59_000_000_000.0, -51_000_000_000.0)),
     inputEdgeF64(3, Point2F64(-75_807_216_848.0, -42_008_068_428.0), Point2F64(3_681_567_830_732.0, 2_157_224_384_077.0)),
 )
+
+private fun carrierWithDirectUlpChainCrossingsF64(): List<PathInputEdgeF64> = listOf(
+    inputEdgeF64(0, Point2F64(0.0, 0.0), Point2F64(1.0, 0.0)),
+    inputEdgeF64(1, Point2F64(Double.fromBits(0.5.toBits()), -1.0), Point2F64(Double.fromBits(0.5.toBits()), 1.0)),
+    inputEdgeF64(2, Point2F64(Double.fromBits(0.5.toBits() + 15L), -1.0), Point2F64(Double.fromBits(0.5.toBits() + 15L), 1.0)),
+    inputEdgeF64(3, Point2F64(Double.fromBits(0.5.toBits() + 30L), -1.0), Point2F64(Double.fromBits(0.5.toBits() + 30L), 1.0)),
+)
+
+private fun inputEdgePermutationsF64(edges: List<PathInputEdgeF64>): List<List<PathInputEdgeF64>> = when {
+    edges.isEmpty() -> listOf(emptyList())
+    else -> edges.indices.flatMap { index ->
+        val remaining = edges.toMutableList().also { it.removeAt(index) }
+        inputEdgePermutationsF64(remaining).map { permutation -> listOf(edges[index]) + permutation }
+    }
+}
 
 private data class SplitEdgeSnapshotF64(
     val sourceId: Int,
