@@ -142,6 +142,66 @@ class PathArrangementF64Test {
     }
 
     @Test
+    fun `difference inherits the weighted winding of a containing theta face`() {
+        val split = splitPathEdgesF64(
+            closedContourEdgesF64(
+                trianglePointsF64(0.0, 0.0, 10.0, 0.0, 5.0, 10.0),
+                PathOperand.FIRST,
+                0,
+            ) +
+                closedContourEdgesF64(
+                    trianglePointsF64(0.0, 0.0, 10.0, 0.0, 5.0, 6.0),
+                    PathOperand.FIRST,
+                    10,
+                ) +
+                closedContourEdgesF64(
+                    squarePointsF64(4.0, 1.0, 6.0, 3.0),
+                    PathOperand.SECOND,
+                    20,
+                ),
+            PathOpsLimitsI32(),
+        )
+
+        val result = projectContoursF64ToPathF32(
+            PathArrangementF64.build(split, PathOpsLimitsI32())
+                .boundary(FillRule.WINDING, FillRule.WINDING, PathBooleanOp.DIFFERENCE),
+        )
+
+        assertFalse(PathAnalysisF32.contains(result, Point2F32(5f, 2f)))
+        assertTrue(PathAnalysisF32.contains(result, Point2F32(3f, 5f)))
+        assertTrue(PathAnalysisF32.contains(result, Point2F32(5f, 8f)))
+        assertFalse(PathAnalysisF32.contains(result, Point2F32(11f, 2f)))
+    }
+
+    @Test
+    fun `canonical contour retains an exact nonzero area after rounded shoelace cancellation`() {
+        val first = Point2F64(-0.49999999999999445, -0.49999999999999445)
+        val second = Point2F64(0.49999999999999445, 0.4999999999999951)
+        val third = Point2F64(0.4999999999999999, 0.5000000000000006)
+        val inputPoints = listOf(first, second, third)
+
+        assertEquals(-1, signedAreaSignF64(inputPoints + inputPoints.first()))
+        assertEquals(0.0, signedAreaF64(inputPoints))
+
+        val contour = PathArrangementF64.build(
+            splitPathEdgesF64(
+                closedContourEdgesF64(inputPoints, PathOperand.FIRST, 0),
+                PathOpsLimitsI32(),
+            ),
+            PathOpsLimitsI32(),
+        ).unaryBoundary(FillRule.WINDING).single()
+        val outputPoints = contour.vertices.map { it.point }
+
+        assertEquals(3, outputPoints.size)
+        assertEquals(inputPoints.toSet(), outputPoints.toSet())
+        assertEquals(1, signedAreaSignF64(outputPoints + outputPoints.first()))
+        assertEquals(first.x, outputPoints.minOf { it.x })
+        assertEquals(third.x, outputPoints.maxOf { it.x })
+        assertEquals(first.y, outputPoints.minOf { it.y })
+        assertEquals(third.y, outputPoints.maxOf { it.y })
+    }
+
+    @Test
     fun `all boolean operations follow their truth tables after canonical splitting`() {
         val first = trianglePointsF64(0.0, 0.0, 8.0, 0.0, 4.0, 8.0)
         val second = trianglePointsF64(2.0, -1.0, 10.0, -1.0, 6.0, 7.0)

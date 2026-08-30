@@ -1,7 +1,5 @@
 package org.graphiks.math.geometry
 
-import kotlin.math.abs
-
 internal data class PathVertexF64(
     val id: Int,
     val point: Point2F64,
@@ -135,7 +133,8 @@ internal class PathArrangementF64 private constructor(
 
         return contours.sortedWith(
             Comparator { first, second ->
-                compareValues(second.absoluteArea, first.absoluteArea).takeIf { it != 0 }
+                compareAbsoluteExpansionsF64(second.signedDoubleAreaExpansion, first.signedDoubleAreaExpansion)
+                    .takeIf { it != 0 }
                     ?: compareContourStartF64(first.vertexIds.first(), second.vertexIds.first(), vertices)
             },
         ).map { it.contour }
@@ -260,7 +259,7 @@ internal class PathArrangementF64 private constructor(
 
             val mutableFaces = enumerateArrangementFacesF64(mutableHalfEdges)
             val components = arrangementComponentsF64(pathEdges, vertices, outgoing, mutableHalfEdges, mutableFaces)
-            propagateArrangementWindingsF64(components, pathEdges, vertices, mutableHalfEdges, mutableFaces)
+            propagateArrangementWindingsF64(components, vertices, mutableHalfEdges, mutableFaces)
 
             val halfEdges = mutableHalfEdges.map { halfEdge ->
                 PathHalfEdgeF64(
@@ -322,7 +321,6 @@ private class PathMutableFaceI32(
 private class PathArrangementComponentI32(
     val id: Int,
     val vertexIds: List<Int>,
-    val edgeIndices: MutableList<Int>,
     val faceIds: MutableList<Int> = mutableListOf(),
     var witnessVertexId: Int = -1,
     var externalSectorWitness: PathExternalSectorWitnessI32? = null,
@@ -368,7 +366,7 @@ private class PathArrangementDisjointSetI32(size: Int) {
 private data class PathCanonicalContourF64(
     val contour: PathContourF64,
     val vertexIds: List<Int>,
-    val absoluteArea: Double,
+    val signedDoubleAreaExpansion: DoubleArray,
 )
 
 private fun addArrangementVertexSeedF64(
@@ -427,17 +425,10 @@ private fun arrangementComponentsF64(
             verticesByRoot.getOrPut(disjointSet.find(vertexId)) { mutableListOf() } += vertexId
         }
     }
-    val edgeIndicesByRoot = linkedMapOf<Int, MutableList<Int>>()
-    pathEdges.forEachIndexed { edgeIndex, edge ->
-        val root = disjointSet.find(edge.startVertexId)
-        if (root != disjointSet.find(edge.endVertexId)) pathArrangementInconsistentF64()
-        edgeIndicesByRoot.getOrPut(root) { mutableListOf() } += edgeIndex
-    }
-    val components = verticesByRoot.entries.map { (root, vertexIds) ->
+    val components = verticesByRoot.entries.map { (_, vertexIds) ->
         PathArrangementComponentI32(
             id = -1,
             vertexIds = vertexIds.sorted(),
-            edgeIndices = edgeIndicesByRoot.getValue(root),
         )
     }.sortedWith(
         Comparator { first, second ->
@@ -448,7 +439,7 @@ private fun arrangementComponentsF64(
             compareVerticesF64(firstVertex, secondVertex, vertices)
         },
     ).mapIndexed { index, component ->
-        PathArrangementComponentI32(index, component.vertexIds, component.edgeIndices)
+        PathArrangementComponentI32(index, component.vertexIds)
     }
     val componentByRoot = mutableMapOf<Int, PathArrangementComponentI32>()
     components.forEach { component -> componentByRoot[disjointSet.find(component.vertexIds.first())] = component }
@@ -513,35 +504,41 @@ private fun PathArrangementComponentI32.externalSectorWitnessPointF64(
 
 private fun propagateArrangementWindingsF64(
     components: List<PathArrangementComponentI32>,
-    pathEdges: List<PathEdgeF64>,
     vertices: List<PathVertexF64>,
     halfEdges: List<PathMutableHalfEdgeF64>,
     faces: List<PathMutableFaceI32>,
 ) {
     val parentByComponent = IntArray(components.size) { -1 }
+    val parentFaceByComponent = IntArray(components.size) { -1 }
     components.forEach { component ->
         var immediateParent = -1
+        var immediateParentFaceId = -1
         components.forEach { candidate ->
-            if (
-                candidate.id == component.id ||
-                !componentContainsWitnessF64(candidate, component, pathEdges, vertices)
-            ) {
-                return@forEach
-            }
+            if (candidate.id == component.id) return@forEach
+            val candidateContainingFaceId = containingFaceForWitnessF64(
+                candidate,
+                component,
+                vertices,
+                halfEdges,
+                faces,
+            ) ?: return@forEach
             if (immediateParent == -1) {
                 immediateParent = candidate.id
+                immediateParentFaceId = candidateContainingFaceId
                 return@forEach
             }
             val currentParent = components[immediateParent]
             when {
-                componentContainsWitnessF64(currentParent, candidate, pathEdges, vertices) -> {
+                containingFaceForWitnessF64(currentParent, candidate, vertices, halfEdges, faces) != null -> {
                     immediateParent = candidate.id
+                    immediateParentFaceId = candidateContainingFaceId
                 }
-                componentContainsWitnessF64(candidate, currentParent, pathEdges, vertices) -> Unit
+                containingFaceForWitnessF64(candidate, currentParent, vertices, halfEdges, faces) != null -> Unit
                 else -> pathArrangementInconsistentF64()
             }
         }
         parentByComponent[component.id] = immediateParent
+        parentFaceByComponent[component.id] = immediateParentFaceId
     }
 
     val children = List(components.size) { mutableListOf<Int>() }
@@ -557,21 +554,17 @@ private fun propagateArrangementWindingsF64(
         val component = components[componentId]
         val parent = parentByComponent[componentId]
         val initialWinding = if (parent < 0) {
+            if (parentFaceByComponent[componentId] != -1) pathArrangementInconsistentF64()
             PathArrangementWindingI32(0, 0)
         } else {
             val parentComponent = components[parent]
-            val witness = component.externalSectorWitnessPointF64(vertices)
-            val relative = componentWindingAtWitnessF64(parentComponent, witness, pathEdges, vertices)
-            val parentExternal = faces[parentComponent.externalFaceId]
-            val inherited = PathArrangementWindingI32(
-                first = parentExternal.firstWinding.requireNotNullArrangementI32().checkedAddI32(relative.first),
-                second = parentExternal.secondWinding.requireNotNullArrangementI32().checkedAddI32(relative.second),
+            val containingFaceId = parentFaceByComponent[componentId]
+            if (containingFaceId !in parentComponent.faceIds) pathArrangementInconsistentF64()
+            val containingFace = faces[containingFaceId]
+            PathArrangementWindingI32(
+                first = containingFace.firstWinding.requireNotNullArrangementI32(),
+                second = containingFace.secondWinding.requireNotNullArrangementI32(),
             )
-            if (parentComponent.faceIds.none { faceId ->
-                    faces[faceId].firstWinding == inherited.first && faces[faceId].secondWinding == inherited.second
-                }
-            ) pathArrangementInconsistentF64()
-            inherited
         }
         propagateComponentWindingF64(component, initialWinding, halfEdges, faces)
         propagatedCount += 1
@@ -626,64 +619,49 @@ private fun assignFaceWindingF64(face: PathMutableFaceI32, winding: PathArrangem
     }
 }
 
-private fun componentContainsWitnessF64(
+private fun containingFaceForWitnessF64(
     component: PathArrangementComponentI32,
     witnessComponent: PathArrangementComponentI32,
-    pathEdges: List<PathEdgeF64>,
     vertices: List<PathVertexF64>,
-): Boolean = componentContainsPointF64(
-    component,
-    witnessComponent.externalSectorWitnessPointF64(vertices),
-    pathEdges,
-    vertices,
-)
+    halfEdges: List<PathMutableHalfEdgeF64>,
+    faces: List<PathMutableFaceI32>,
+): Int? {
+    val point = witnessComponent.externalSectorWitnessPointF64(vertices)
+    val matchingFaceIds = component.faceIds.filter { faceId ->
+        faceId != component.externalFaceId &&
+            faceBoundaryContainsPointF64(faces[faceId], point, halfEdges, vertices)
+    }
+    if (matchingFaceIds.size > 1) pathArrangementInconsistentF64()
+    return matchingFaceIds.singleOrNull()
+}
 
-private fun componentContainsPointF64(
-    component: PathArrangementComponentI32,
+private fun faceBoundaryContainsPointF64(
+    face: PathMutableFaceI32,
     point: Point2F64,
-    pathEdges: List<PathEdgeF64>,
+    halfEdges: List<PathMutableHalfEdgeF64>,
     vertices: List<PathVertexF64>,
 ): Boolean {
-    var inside = false
-    component.edgeIndices.forEach { edgeIndex ->
-        val edge = pathEdges[edgeIndex]
-        val start = vertices[edge.startVertexId].point
-        val end = vertices[edge.endVertexId].point
-        // `point` anchors an already-certified left-ray sector of another component. Components
-        // must be disjoint, so equality with this boundary is an inconsistency rather than a cue
-        // to offset the witness by an arbitrary epsilon.
+    var winding = 0L
+    face.boundaryHalfEdgeIds.forEach { halfEdgeId ->
+        val halfEdge = halfEdges[halfEdgeId]
+        val start = vertices[halfEdge.originVertexId].point
+        val end = vertices[halfEdge.destinationVertexId].point
+        // The child witness is an exact vertex of a separate component. Its certified external
+        // sector is therefore wholly within one parent face unless it lies on a parent boundary;
+        // that contact must already have been split into the same component by Task 3.
         if (PathPredicatesF64.onSegment(point, start, end)) pathArrangementInconsistentF64()
-        if (crossesRightRayF64(start, end, point)) inside = !inside
-    }
-    return inside
-}
-
-private fun componentWindingAtWitnessF64(
-    component: PathArrangementComponentI32,
-    point: Point2F64,
-    pathEdges: List<PathEdgeF64>,
-    vertices: List<PathVertexF64>,
-): PathArrangementWindingI32 {
-    var first = 0L
-    var second = 0L
-    component.edgeIndices.forEach { edgeIndex ->
-        val edge = pathEdges[edgeIndex]
-        val start = vertices[edge.startVertexId].point
-        val end = vertices[edge.endVertexId].point
-        if (PathPredicatesF64.onSegment(point, start, end)) pathArrangementInconsistentF64()
-        if (crossesRightRayF64(start, end, point)) {
-            val direction = if (end.y > start.y) 1L else -1L
-            first += direction * edge.firstWindingDelta.toLong()
-            second += direction * edge.secondWindingDelta.toLong()
+        // The half-open vertical intervals count an incident vertex exactly once. Together with
+        // the exact orientation sign, this is a certified boundary winding rather than a sample.
+        val startAtOrBelow = start.y <= point.y
+        val endAbove = end.y > point.y
+        val endAtOrBelow = end.y <= point.y
+        if (startAtOrBelow && endAbove && OrientationPredicateF64.sign(start, end, point) > 0) {
+            winding += 1L
+        } else if (!startAtOrBelow && endAtOrBelow && OrientationPredicateF64.sign(start, end, point) < 0) {
+            winding -= 1L
         }
     }
-    return PathArrangementWindingI32(first.toArrangementI32(), second.toArrangementI32())
-}
-
-private fun crossesRightRayF64(start: Point2F64, end: Point2F64, point: Point2F64): Boolean {
-    if ((start.y > point.y) == (end.y > point.y)) return false
-    val side = OrientationPredicateF64.sign(start, end, point)
-    return if (end.y > start.y) side > 0 else side < 0
+    return winding != 0L
 }
 
 private fun canonicalContourF64(
@@ -715,14 +693,12 @@ private fun canonicalContourF64(
     if (vertexIds.size < 3) return null
     val points = vertexIds.map { vertices[it].point }
     val closedPoints = points + points.first()
-    if (signedAreaSignF64(closedPoints) == 0) return null
+    val signedDoubleAreaExpansion = signedDoubleAreaExpansionF64(closedPoints)
+    if (ExpansionF64.sign(signedDoubleAreaExpansion) == 0) return null
     val firstIndex = vertexIds.indices.minWithOrNull(
         Comparator { first, second -> compareContourStartF64(vertexIds[first], vertexIds[second], vertices) },
     ) ?: return null
     val rotatedIds = vertexIds.drop(firstIndex) + vertexIds.take(firstIndex)
-    val rotatedPoints = rotatedIds.map { vertices[it].point }
-    val area = abs(signedAreaValueF64(rotatedPoints))
-    if (!area.isFinite() || area == 0.0) pathArrangementInconsistentF64()
     return PathCanonicalContourF64(
         contour = PathContourF64(
             rotatedIds.map { vertexId ->
@@ -731,15 +707,20 @@ private fun canonicalContourF64(
             },
         ),
         vertexIds = rotatedIds,
-        absoluteArea = area,
+        signedDoubleAreaExpansion = signedDoubleAreaExpansion,
     )
 }
 
-private fun signedAreaValueF64(points: List<Point2F64>): Double = points.indices.sumOf { index ->
-    val first = points[index]
-    val second = points[(index + 1) % points.size]
-    first.x * second.y - first.y * second.x
-} * 0.5
+private fun compareAbsoluteExpansionsF64(first: DoubleArray, second: DoubleArray): Int {
+    val firstSign = ExpansionF64.sign(first)
+    val secondSign = ExpansionF64.sign(second)
+    if (firstSign == 0 || secondSign == 0) pathArrangementInconsistentF64()
+    val firstAbsolute = if (firstSign > 0) first else first.negatedExpansionF64()
+    val secondAbsolute = if (secondSign > 0) second else second.negatedExpansionF64()
+    return ExpansionF64.sign(ExpansionF64.expansionDiff(firstAbsolute, secondAbsolute))
+}
+
+private fun DoubleArray.negatedExpansionF64(): DoubleArray = DoubleArray(size) { index -> -this[index] }
 
 private fun compareOutgoingHalfEdgesF64(
     firstId: Int,

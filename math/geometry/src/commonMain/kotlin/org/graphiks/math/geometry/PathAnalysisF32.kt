@@ -565,8 +565,8 @@ private fun includeCubicExtrema(a: Point2F64, c1: Point2F64, c2: Point2F64, b: P
     (roots(a.x, c1.x, c2.x, b.x) + roots(a.y, c1.y, c2.y, b.y)).distinct().filter { it > 0.0 && it < 1.0 }.forEach { include(point(it)) }
 }
 
-/** Returns an exact expansion sign for the contour's signed area. */
-internal fun signedAreaSignF64(points: List<Point2F64>): Int {
+/** Returns an exact expansion of twice the contour's signed area. */
+internal fun signedDoubleAreaExpansionF64(points: List<Point2F64>): DoubleArray {
     var exactSum = doubleArrayOf()
     points.zipWithNext().forEach { (first, second) ->
         val cross = ExpansionF64.expansionDiff(
@@ -575,8 +575,11 @@ internal fun signedAreaSignF64(points: List<Point2F64>): Int {
         )
         exactSum = ExpansionF64.expansionSum(exactSum, cross)
     }
-    return ExpansionF64.sign(exactSum)
+    return exactSum
 }
+
+/** Returns an exact expansion sign for the contour's signed area. */
+internal fun signedAreaSignF64(points: List<Point2F64>): Int = ExpansionF64.sign(signedDoubleAreaExpansionF64(points))
 
 internal fun FillRule.isInverse(): Boolean = this == FillRule.INVERSE_WINDING || this == FillRule.INVERSE_EVEN_ODD
 
