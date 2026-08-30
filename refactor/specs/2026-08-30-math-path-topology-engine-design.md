@@ -155,14 +155,24 @@ convergence, pas une autorisation de retourner une approximation non bornée.
 ### 5.3 Limites
 
 `PathOpsLimitsI32` centralise des limites testables : profondeur, nombre
-d'arêtes aplaties, intersections, sommets et demi-arêtes. Les valeurs par
-défaut sont :
+d'arêtes aplaties, intersections, sommets, demi-arêtes et travail de recherche
+de candidats. Les valeurs par défaut sont :
 
 - profondeur de subdivision : 32 ;
 - arêtes aplaties par opérande : 65 536 ;
 - intersections : 262 144 ;
 - sommets : 262 144 ;
-- demi-arêtes : 1 048 576.
+- demi-arêtes : 1 048 576 ;
+- probes de candidats : 16 777 216 (`2^24`).
+
+`maxCandidateProbes` est un budget global de CPU (travail), distinct des
+limites de résultat et de mémoire. `2^24` vaut 64 fois la limite par défaut
+d'intersections et 16 fois celle des demi-arêtes : il laisse de la marge aux
+événements numériques denses sans autoriser une recherche non bornée. Chaque
+pop brut d'un index de candidats, doublons inclus, et chaque contrôle ou mise
+à jour d'incidence commune consomme une unité avant l'action. À épuisement, le
+moteur échoue de façon déterministe par
+`IllegalStateException("path-candidate-limit")`.
 
 Une surcharge interne permet aux tests d'exercer chaque limite sans exposer
 l'organisation du moteur. Une modification ultérieure de ces valeurs exige
@@ -189,6 +199,49 @@ calculée est canonisée par les identités de ses arêtes incidentes et leurs
 paramètres ordonnés. Le clustering reste local à une même intersection
 topologiquement démontrée ; aucune grille décimale globale ou conversion en
 `Int` n'est utilisée.
+
+Pour chaque événement de paire, le noyau construit d'abord un profil entrant
+éphémère de ses deux incidences et de son témoin homogène exact éventuel. Il
+énumère tous les membres des signatures ULP directes compatibles des deux
+arêtes, ainsi que tous les membres du témoin exact : une signature directe a
+un voisinage fixe de `31 × 16`, mais son AVL interne est multi-valeur. Les
+993 flux au plus (`2 × 496 + 1`) sont parcourus dans l'ordre d'une clé
+sémantique d'arête/événement indépendante des IDs source; les zéros signés
+sont normalisés. Le flux exact, lorsqu'il existe, est d'abord parcouru dans
+son ordre sémantique, puis les 992 flux directs sont fusionnés par un heap de
+taille fixe. Un marqueur par composante et par événement déduplique l'action,
+mais jamais le coût : chaque pop brut, même dupliqué, reste compté. Les
+occurrences qui ont la même clé sémantique sont un lot automorphe : toutes sont
+évaluées avant le commit atomique et les prédicats directs/exacts ne lisent que
+leur profil canonique, de sorte que l'ordre de liste ou une renumérotation
+bijective ne choisit pas une partition différente. Les IDs restent de la
+provenance de sortie, jamais un tie-break topologique. La clé de composante est
+reconstruite à chaque commit depuis toutes ses incidences, son witness et son
+point canonique; l'ID interne ne départage que deux occurrences dont ce profil
+complet est automorphe et n'influence donc aucune décision sémantique.
+
+Chaque candidat est d'abord comparé au profil entrant entier. Les témoins
+exacts égaux ont priorité et se ferment transitivement. L'accumulateur
+éphémère commence au profil entrant; un candidat direct n'est accepté que si
+toutes ses incidences communes conservent un diamètre strictement inférieur à
+16 ULP dans cet accumulateur. Le lot accepté est ensuite écrit en une seule
+mutation persistante. Cette fermeture atomique choisit volontairement une
+identité unique pour un pont ULP compatible sur ses deux incidences, sans
+autoriser la chaîne transitive `0/15/30`, car son intervalle accumulé aurait
+alors un diamètre de 30 ULP.
+
+L'index est une accélération de candidats, non une preuve de fusion : chaque
+union est justifiée soit par un témoin exact égal, soit par les incidences
+communes compatibles. Les witnesses exacts ont eux aussi un AVL multi-valeur;
+en cas de conflit de paramètres sous un même witness, un endpoint exact a
+priorité, sinon le paramètre et la clé canonique minimaux retiennent une seule
+coupe. Le lookup d'un événement coûte `O(log C + b_j)`, où `b_j` compte les
+membres bruts visités; le filtrage et la fusion ont en plus leur coût explicite
+de parcours des incidences communes et de mise à jour des AVL. Chaque telle
+inspection est débitée du même budget global avant lecture. L'état persistant
+reste `O(E + I + C)`; la mémoire temporaire ne retient que le heap fixe et les
+`k` composantes acceptées, dont toutes sauf le winner sont ensuite supprimées
+destructivement.
 
 ## 7. Arrangement planaire et classification
 

@@ -15,7 +15,7 @@
 - Tout type numérique de `:math` porte `F32`, `F64`, `I32` ou `I64`; les enums sans valeur numérique restent non suffixés.
 - L'API publique de path reste en `F32`; tous les calculs géométriques intermédiaires du nouveau noyau sont en `F64`.
 - Tolérance normalisée de flattening : `2.0.pow(-23)`; profondeur maximale par défaut : 32.
-- Limites par défaut : 65 536 arêtes aplaties par opérande, 262 144 intersections, 262 144 sommets et 1 048 576 demi-arêtes.
+- Limites par défaut : 65 536 arêtes aplaties par opérande, 262 144 intersections, 262 144 sommets, 1 048 576 demi-arêtes et 16 777 216 probes candidats (`2^24`). Ce dernier est un budget global de travail séparé des résultats et de la mémoire.
 - Les prédicats d'orientation ambigus utilisent une expansion arithmétique exacte; aucune grille décimale globale ni clé `Int` quantifiée n'est autorisée.
 - Les opérations binaires refusent les coordonnées non finies et les inverse fills; `simplify` et `asWinding` conservent le caractère inverse.
 - Les points de frontière sont hors de `contains`; les contours ouverts sont fermés implicitement seulement pour le fill.
@@ -93,6 +93,7 @@ internal data class PathOpsLimitsI32(
     val maxIntersections: Int = 262_144,
     val maxVertices: Int = 262_144,
     val maxHalfEdges: Int = 1_048_576,
+    val maxCandidateProbes: Int = 16_777_216,
 )
 
 internal data class PathNormalizationF64(
@@ -527,7 +528,7 @@ Expected: compilation failure because the intersection kernel does not exist.
 
 - [ ] **Step 5: Implémenter les intersections et le découpage canonique**
 
-Utiliser les signes d'orientation robustes pour la classification, calculer en `Double` les paramètres des croisements propres, ordonner les intervalles projetés des recouvrements colinéaires et réutiliser l'identité d'un endpoint lorsqu'un paramètre vaut 0 ou 1. Construire les identités par union-find locale : deux événements sont réunis seulement s'ils partagent une arête source avec le même paramètre prouvé par ULP, ou un endpoint commun. L'identité finale contient les ids d'arêtes incidentes triés et un paramètre canonique par arête; elle réunit ainsi un croisement à quatre arêtes sans clustering spatial global. Ne jamais employer de coordonnées arrondies en string ni de clés de coordonnées `Int`.
+Utiliser les signes d'orientation robustes pour la classification, calculer en `Double` les paramètres des croisements propres, ordonner les intervalles projetés des recouvrements colinéaires et réutiliser l'identité d'un endpoint lorsqu'un paramètre vaut 0 ou 1. Pour un événement, former un profil entrant atomique, parcourir d'abord le witness exact multi-valeur puis fusionner les `2 × (31 × 16)` flux directs AVL; un marqueur persistant par événement déduplique l'action sans masquer les pops bruts. Fermer les candidats contre l'accumulateur éphémère avant une mutation persistante unique. La clé de choix est géométrique/provenance canonique, jamais un ID source; normaliser `-0.0`, conserver operand, contour, winding, endpoints et sens, et traiter les égalités de clé comme un lot automorphe. Un témoin exact égal est plus fort qu'une compatibilité ULP; résoudre son conflit de paramètre par endpoint, puis paramètre/clé canoniques. Compter avant action chaque pop brut (doublons inclus) et chaque contrôle ou mise à jour d'incidence commune contre `maxCandidateProbes`, qui échoue par `path-candidate-limit`. La recherche de candidats est `O(log C + b_j)`, le filtrage/fusion a son coût explicite d'incidences et d'AVL, l'état persistant est `O(E + I + C)`, et seuls les `k` candidats acceptés — amortis par les suppressions destructives sauf le winner — sont matérialisés. L'identité finale contient les ids d'arêtes incidentes triés et un paramètre canonique par arête; elle réunit ainsi un croisement à quatre arêtes sans clustering spatial global. Ne jamais employer de coordonnées arrondies en string ni de clés de coordonnées `Int`.
 
 - [ ] **Step 6: Vérifier JVM et JS**
 

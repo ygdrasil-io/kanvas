@@ -13,6 +13,7 @@ class PathPredicatesF32Test {
 
         assertEquals(32, limits.maxSubdivisionDepth)
         assertEquals(65_536, limits.maxFlattenedEdgesPerOperand)
+        assertEquals(16_777_216, limits.maxCandidateProbes)
         assertTrue(limits.maxHalfEdges >= limits.maxVertices * 2)
         assertFailsWith<IllegalArgumentException> {
             PathOpsLimitsI32(maxSubdivisionDepth = 0)
@@ -28,6 +29,12 @@ class PathPredicatesF32Test {
         }
         assertFailsWith<IllegalArgumentException> {
             PathOpsLimitsI32(maxHalfEdges = 0)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            PathOpsLimitsI32(maxCandidateProbes = 0)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            PathOpsLimitsI32(maxCandidateProbes = -1)
         }
     }
 
