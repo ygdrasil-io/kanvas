@@ -320,19 +320,27 @@ La validation porte sur l'ensemble des frontières projetées, jamais sur un
 cycle isolé. Elle associe chaque arête projetée au pont d'arête `F64` réel qui
 lui correspond, puis utilise le même broad phase déterministe et budgété pour
 chercher tout contact non-adjacent. Le pont source est classifié par le noyau
-robuste avant son image `F32` : un point projeté doit être soutenu par un point
-ou un overlap source, et un overlap projeté par un overlap source; la classe
-ne suffit pas, car le locus projeté doit aussi contenir l'image F32 du locus
-source correspondant. Une
-tangence source crée un token local formé des deux ponts source, de sa classe
-Point/Overlap et de son ancre exacte reprojetée sur la lattice `F32`. Ce token
-peut autoriser un contact `F32` voisin seulement si son locus de contact
-contient l'ancre (ou y est relié par des loci de contact exacts) et si les deux
-runs de ponts avancent chacun d'au plus une arête adjacente à chaque pas. Il
-n'existe donc aucun cache ou whitelist par paire de contours : un contact
-source à gauche ne peut jamais autoriser un endpoint ou overlap projeté
-distant à droite. La marche locale est de degré fixe, emploie les prédicats de
-lignes robustes et débite le budget candidat avant chaque voisin/relation.
+robuste avant son image `F32`. L'ordre partiel des relations est strict :
+`Point F32 <- Point F64 | Overlap F64`, tandis que
+`Overlap F32 <- Overlap F64` seulement. La classe ne suffit pas : pour un
+witness `Overlap`, chaque endpoint du contact `F32` et les deux ponts source
+localement mappés doivent appartenir à l'intervalle source exact et à son image
+sur la lattice `F32`.
+
+Un witness source `Point` ne conserve donc jamais un `Overlap F32`. Une
+tangence aplatie qui arrondit temporairement des fragments colinéaires est
+normalisée *comme relation de validation* en son unique `Point F32`, mais
+seulement avec un certificat direct : les deux ponts source du candidat et les
+deux ponts incidents au witness poursuivent des branches opposées et robustement
+non parallèles autour du point exact, et le contact arrondi reste sur sa
+coordonnée normale `F32`. Des rails source parallèles, même de part et d'autre
+du witness, sont un long overlap nouveau et échouent. L'intervalle brut ne
+survit pas comme relation `Overlap`. Il n'existe aucun
+cache par paire de contours, aucune BFS et aucune fermeture transitive : un
+contact source à gauche ne peut jamais autoriser un endpoint ou overlap projeté
+distant à droite. Toute préimage ou relation locale ambiguë échoue
+conservativement par `path-f32-projection-collapse`; chaque comparaison ou
+prédicat de ce certificat débite d'abord le budget candidat.
 Une jonction, un croisement ou un overlap partiel nouveau entre cycles source-
 disjoints échoue si les cycles ne sont pas exactement le même cycle projeté;
 un contact nouveau non-adjacent au sein d'un cycle dérive d'abord ses préimages
@@ -347,7 +355,11 @@ de la rotation et de l'orientation, après normalisation des zéros signés et
 suppression exacte des sommets colinéaires. Toute rotation est départagée par
 la séquence cyclique complète (rotation minimale linéaire de Booth, dans les
 deux sens), y compris lorsqu'un minimum est répété; la multiplicité et
-l'orientation de chaque membre restent séparées de cette clé. Pour chaque
+l'orientation de chaque membre restent séparées de cette clé. Booth débite le
+budget immédiatement avant chaque comparaison réelle de points (jamais une
+réservation fixe `2n`), ce qui conserve son coût `O(n)` et rend la frontière de
+budget identique sur JVM et JS; ses index cycliques et incréments sont calculés
+en arithmétique élargie avant le retour à `Int`. Pour chaque
 groupe, des expansions calculent
 à la fois la modification signée agrégée des doubles-aires source/projetées et
 l'étendue cumulée des frontières source; l'une ou l'autre supérieure à `2^-45`

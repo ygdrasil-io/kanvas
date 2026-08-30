@@ -137,6 +137,20 @@ class PathOpsF32Test {
         )
 
     @Test
+    fun `source point tangency stays a point while projected overlap artifacts are rejected`() {
+        val tangentCase = pathOpCasesF32().single { it.name == "tangent ovals" }
+        val transform = translationTransformF32
+        val first = transformPathF32(tangentCase.first, transform)
+        val second = transformPathF32(tangentCase.second, transform)
+        val union = PathOpsF32.op(first, second, PathBooleanOp.UNION)
+
+        assertTrue(PathAnalysisF32.contains(union, Point2F32(3_003f, 3_005f)))
+        assertTrue(PathAnalysisF32.contains(union, Point2F32(3_017f, 3_005f)))
+        assertFalse(PathAnalysisF32.contains(union, Point2F32(3_010f, 3_005f)))
+        assertFalse(PathAnalysisF32.contains(union, Point2F32(3_010f, 2_999f)))
+    }
+
+    @Test
     fun `metamorphic collinear rectangles preserve DIFFERENCE across transforms`() =
         assertMetamorphicOperationAcrossTransformsF32("collinear rectangles", PathBooleanOp.DIFFERENCE)
 
@@ -452,6 +466,79 @@ class PathOpsF32Test {
     }
 
     @Test
+    fun `projection rejects an F32 overlap supported only by a source point`() {
+        val epsilon = 2.0.pow(-25)
+        val first = affineProjectionContourF64(
+            0.0 to 0.0,
+            32.0 to 0.0,
+            32.0 to 1.0,
+            0.0 to 1.0,
+        )
+        val second = affineProjectionContourF64(
+            0.0 to 1.0,
+            32.0 to 1.0 + epsilon,
+            32.0 to 3.0,
+            0.0 to 3.0,
+        )
+
+        val error = assertFailsWith<IllegalStateException> {
+            projectContoursF64ToPathF32(listOf(first, second), affineProjectionNormalizationF64(), FillRule.WINDING)
+        }
+
+        assertEquals("path-f32-projection-collapse", error.message)
+    }
+
+    @Test
+    fun `projection rejects a long two sided F32 overlap supported only by a source point`() {
+        val epsilon = 2.0.pow(-27)
+        val left = affineProjectionContourF64(
+            10.0 to 0.0,
+            10.0 - epsilon to 1.0,
+            10.0 - epsilon to 32.0,
+            9.0 to 32.0,
+            9.0 to 0.0,
+        )
+        val right = affineProjectionContourF64(
+            10.0 to 0.0,
+            10.0 + epsilon to 1.0,
+            10.0 + epsilon to 32.0,
+            11.0 to 32.0,
+            11.0 to 0.0,
+        )
+
+        val error = assertFailsWith<IllegalStateException> {
+            projectContoursF64ToPathF32(listOf(left, right), affineProjectionNormalizationF64(), FillRule.WINDING)
+        }
+
+        assertEquals("path-f32-projection-collapse", error.message)
+    }
+
+    @Test
+    fun `projection rejects an F32 overlap walk beyond its source overlap`() {
+        val first = subdividedProjectionTopRectangleF64()
+        val sourceDisjoint = projectionOverlapWalkContourF64(sourceOverlap = false)
+        val adjacentSourceOverlap = projectionOverlapWalkContourF64(sourceOverlap = true)
+
+        val sourceDisjointError = assertFailsWith<IllegalStateException> {
+            projectContoursF64ToPathF32(
+                listOf(first, sourceDisjoint),
+                affineProjectionNormalizationF64(),
+                FillRule.WINDING,
+            )
+        }
+        assertEquals("path-f32-projection-collapse", sourceDisjointError.message)
+
+        val adjacentWalkError = assertFailsWith<IllegalStateException> {
+            projectContoursF64ToPathF32(
+                listOf(first, adjacentSourceOverlap),
+                affineProjectionNormalizationF64(),
+                FillRule.WINDING,
+            )
+        }
+        assertEquals("path-f32-projection-collapse", adjacentWalkError.message)
+    }
+
+    @Test
     fun `projection rejects a compensated significant narrow bridge`() {
         val epsilon = 2.0.pow(-25)
         val contour = affineProjectionContourF64(
@@ -504,6 +591,29 @@ class PathOpsF32Test {
 
         assertMembershipEquivalentF32(baseline, rotatedResult, probes)
         assertMembershipEquivalentF32(baseline, reversedResult, probes)
+    }
+
+    @Test
+    fun `weak ten vertex cycle charges Booth comparisons at the exact boundary`() {
+        val weak = weakBoothCycleF64(rotation = 0, reverse = false)
+        val rotated = weakBoothCycleF64(rotation = 3, reverse = false)
+        val reversed = weakBoothCycleF64(rotation = 0, reverse = true)
+        val normalization = PathNormalizationF64(origin = Point2F64(0.0, 0.0), scale = 1.0)
+        val weakVertices = weak.vertices.map { it.point.toPoint2F32() }
+
+        val error = assertFailsWith<IllegalStateException> {
+            pathOperationRotationIndexF32(weakVertices, PathCandidateWorkBudgetI32(20))
+        }
+        assertEquals("path-candidate-limit", error.message)
+        assertEquals(4, pathOperationRotationIndexF32(weakVertices, PathCandidateWorkBudgetI32(21)))
+
+        val canonical = projectContoursF64ToPathF32(listOf(weak), normalization, FillRule.WINDING)
+        val rotatedCanonical = projectContoursF64ToPathF32(listOf(rotated), normalization, FillRule.WINDING)
+        val reversedCanonical = projectContoursF64ToPathF32(listOf(reversed), normalization, FillRule.WINDING)
+        val probes = listOf(Point2F32(0.1f, 0.1f), Point2F32(0.9f, 0.1f), Point2F32(2f, 2f))
+
+        assertMembershipEquivalentF32(canonical, rotatedCanonical, probes)
+        assertMembershipEquivalentF32(canonical, reversedCanonical, probes)
     }
 
     @Test
@@ -1032,6 +1142,36 @@ class PathOpsF32Test {
             Point2F64(0.5, 0.5),
             Point2F64(-0.5, 0.5),
         )
+        val oriented = if (reverse) points.asReversed() else points
+        val normalizedRotation = rotation.mod(oriented.size)
+        return contourF64(oriented.drop(normalizedRotation) + oriented.take(normalizedRotation))
+    }
+
+    private fun subdividedProjectionTopRectangleF64(): PathContourF64 {
+        val points = mutableListOf(0.0 to 0.0, 32.0 to 0.0, 32.0 to 1.0)
+        for (x in 31 downTo 0) {
+            points += x.toDouble() to 1.0
+        }
+        return affineProjectionContourF64(*points.toTypedArray())
+    }
+
+    private fun projectionOverlapWalkContourF64(sourceOverlap: Boolean): PathContourF64 {
+        val epsilon = 2.0.pow(-25)
+        val points = mutableListOf(0.0 to if (sourceOverlap) 1.0 else 1.0 + epsilon)
+        points += 1.0 to 1.0
+        for (x in 2..32) {
+            points += x.toDouble() to 1.0 + epsilon
+        }
+        points += 32.0 to 3.0
+        points += 0.0 to 3.0
+        return affineProjectionContourF64(*points.toTypedArray())
+    }
+
+    private fun weakBoothCycleF64(rotation: Int, reverse: Boolean): PathContourF64 {
+        val a = Point2F64(0.0, 0.0)
+        val b = Point2F64(0.0, 1.0)
+        val c = Point2F64(1.0, 0.0)
+        val points = listOf(b, c, b, c, a, b, c, b, c, a)
         val oriented = if (reverse) points.asReversed() else points
         val normalizedRotation = rotation.mod(oriented.size)
         return contourF64(oriented.drop(normalizedRotation) + oriented.take(normalizedRotation))
