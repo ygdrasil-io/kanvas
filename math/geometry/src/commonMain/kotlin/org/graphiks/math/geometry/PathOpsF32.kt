@@ -11,8 +11,8 @@ public object PathOpsF32 {
     /**
      * Combines two finite paths and returns finite [PathF32] geometry.
      *
-     * Rectangle inputs retain exact rectangular region geometry. Other paths
-     * use the fixed flattening policy of [PathAnalysisF32] followed by a
+ * Rectangle inputs retain exact rectangular region geometry. Other paths
+ * use adaptive shared flattening followed by a
      * deterministic edge arrangement; inverse fills are unbounded and are
      * therefore rejected for this finite-returning operation.
      */
@@ -49,7 +49,7 @@ private fun pathFromRegion(region: RegionF32, fillRule: FillRule): PathF32 {
 private data class Edge(val start: Point2F32, val end: Point2F32)
 
 private fun arrangement(first: PathF32, second: PathF32, operation: PathBooleanOp): PathF32 {
-    val edges = (flattenedContours(first) + flattenedContours(second)).flatMap { it.edges }.map { Edge(it.first, it.second) }.filter { it.start != it.end }
+    val edges = (flattenedEdgesF32(first) + flattenedEdgesF32(second)).filter { it.start != it.end }
     if (edges.isEmpty()) return PathBuilder(first.fillRule).build()
     val selected = linkedMapOf<Pair<String, String>, Edge>()
     edges.forEach { edge ->
@@ -87,6 +87,15 @@ private fun arrangement(first: PathF32, second: PathF32, operation: PathBooleanO
         if (pointKey(current) == pointKey(firstEdge.start)) builder.close()
     }
     return builder.build()
+}
+
+private fun flattenedEdgesF32(path: PathF32): List<Edge> {
+    val normalization = pathNormalizationF64(listOf(path))
+    return PathFlattenerF64.flatten(NormalizedPathF64(path, normalization), closeForFill = true).flatMap { contour ->
+        contour.points.zipWithNext().map { (first, second) ->
+            Edge(normalization.denormalize(first.point), normalization.denormalize(second.point))
+        }
+    }
 }
 
 private fun PathBooleanOp.apply(a: Boolean, b: Boolean): Boolean = when (this) {

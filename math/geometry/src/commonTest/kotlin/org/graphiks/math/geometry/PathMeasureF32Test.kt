@@ -42,4 +42,33 @@ class PathMeasureF32Test {
         assertEquals(2, segment.segmentCount)
         assertNotNull(PathAnalysisF32.line(segment))
     }
+
+    @Test
+    fun `measures a large finite diagonal without overflow`() {
+        val measure = PathMeasureF32(PathBuilder().moveTo(0f, 0f).lineTo(2e19f, 2e19f).build())
+
+        assertTrue(measure.length.isFinite())
+        assertTrue(measure.length > 2.8e19f)
+    }
+
+    @Test
+    fun `curve position uses the analytic tangent`() {
+        val measure = PathMeasureF32(
+            PathBuilder().moveTo(0f, 0f).quadTo(1f, 1f, 2f, 0f).build(),
+        )
+
+        val location = requireNotNull(measure.position(measure.length / 2f))
+
+        assertTrue(PathPredicatesF32.almostEqualUlps(location.point.x, 1f, 4))
+        assertTrue(PathPredicatesF32.almostEqualUlps(location.point.y, 0.5f, 4))
+        assertTrue(PathPredicatesF32.almostEqualUlps(location.tangent.x, 1f, 4))
+        assertTrue(PathPredicatesF32.almostEqualUlps(location.tangent.y, 0f, 4))
+    }
+
+    @Test
+    fun `segment orders its clamped distance interval`() {
+        val measure = PathMeasureF32(PathBuilder().moveTo(0f, 0f).lineTo(10f, 0f).build())
+
+        assertEquals(measure.segment(2f, 8f), measure.segment(8f, 2f))
+    }
 }
