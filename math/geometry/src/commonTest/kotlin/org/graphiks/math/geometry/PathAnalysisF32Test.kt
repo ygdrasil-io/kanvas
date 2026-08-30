@@ -1,6 +1,7 @@
 package org.graphiks.math.geometry
 
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.pow
 import kotlin.math.sin
@@ -29,23 +30,24 @@ class PathAnalysisF32Test {
     fun `bounds include rotated elliptical arc extrema`() {
         val radiusX = 9f
         val radiusY = 4f
-        val rotation = (PI / 6.0).toFloat()
-        val startX = radiusX * cos(rotation)
-        val startY = radiusX * sin(rotation)
+        val rotationDegrees = 30f
+        val rotationRadians = rotationDegrees.toDouble() * PI / 180.0
+        val startX = (radiusX * cos(rotationRadians)).toFloat()
+        val startY = (radiusX * sin(rotationRadians)).toFloat()
         val path = PathBuilder()
             .moveTo(startX, startY)
-            .arcTo(radiusX, radiusY, rotation * 180f / PI.toFloat(), false, true, -startX, -startY)
-            .arcTo(radiusX, radiusY, rotation * 180f / PI.toFloat(), false, true, startX, startY)
+            .arcTo(radiusX, radiusY, rotationDegrees, false, true, -startX, -startY)
+            .arcTo(radiusX, radiusY, rotationDegrees, false, true, startX, startY)
             .build()
 
         val bounds = requireNotNull(PathAnalysisF32.bounds(path))
-        val expectedX = sqrt((radiusX * cos(rotation)).pow(2) + (radiusY * sin(rotation)).pow(2))
-        val expectedY = sqrt((radiusX * sin(rotation)).pow(2) + (radiusY * cos(rotation)).pow(2))
+        val expectedX = sqrt((radiusX * cos(rotationRadians)).pow(2) + (radiusY * sin(rotationRadians)).pow(2))
+        val expectedY = sqrt((radiusX * sin(rotationRadians)).pow(2) + (radiusY * cos(rotationRadians)).pow(2))
 
-        assertTrue(PathPredicatesF32.almostEqualUlps(bounds.left, -expectedX, 2))
-        assertTrue(PathPredicatesF32.almostEqualUlps(bounds.right, expectedX, 2))
-        assertTrue(PathPredicatesF32.almostEqualUlps(bounds.top, -expectedY, 2))
-        assertTrue(PathPredicatesF32.almostEqualUlps(bounds.bottom, expectedY, 2))
+        assertTrue(abs(bounds.left + expectedX) < 1e-3)
+        assertTrue(abs(bounds.right - expectedX) < 1e-3)
+        assertTrue(abs(bounds.top + expectedY) < 1e-3)
+        assertTrue(abs(bounds.bottom - expectedY) < 1e-3)
     }
 
     @Test
@@ -61,6 +63,16 @@ class PathAnalysisF32Test {
 
         assertEquals(-50f, bounds.left)
         assertEquals(-50f, bounds.top)
+    }
+
+    @Test
+    fun `bounds retain finite quadratic and cubic extrema near Float maximum`() {
+        val maximum = Float.MAX_VALUE
+        val quadratic = PathBuilder().moveTo(maximum, 0f).quadTo(-maximum, 0f, maximum, 0f).build()
+        val cubic = PathBuilder().moveTo(maximum, 0f).cubicTo(-maximum, 0f, -maximum, 0f, maximum, 0f).build()
+
+        assertEquals(0f, requireNotNull(PathAnalysisF32.bounds(quadratic)).left)
+        assertEquals(-maximum / 2f, requireNotNull(PathAnalysisF32.bounds(cubic)).left)
     }
 
     @Test
@@ -93,6 +105,19 @@ class PathAnalysisF32Test {
 
         val inverse = PathBuilder(FillRule.INVERSE_WINDING).addRect(RectF32.ofLTRB(0f, 0f, 10f, 10f)).build()
         assertFalse(PathAnalysisF32.contains(inverse, Point2F32(0f, 5f)))
+    }
+
+    @Test
+    fun `contains keeps a non dyadic quadratic boundary outside for normal and inverse fill`() {
+        fun path(fillRule: FillRule): PathF32 = PathBuilder(fillRule)
+            .moveTo(0f, 0f)
+            .quadTo(0f, 9f, 9f, 0f)
+            .close()
+            .build()
+        val boundary = Point2F32(1f, 4f)
+
+        assertFalse(PathAnalysisF32.contains(path(FillRule.WINDING), boundary))
+        assertFalse(PathAnalysisF32.contains(path(FillRule.INVERSE_WINDING), boundary))
     }
 
     @Test
@@ -130,6 +155,46 @@ class PathAnalysisF32Test {
         assertNull(PathAnalysisF32.rect(retraced))
         assertNull(PathAnalysisF32.oval(noncanonicalOval))
         assertNull(PathAnalysisF32.rrect(wrongArc))
+    }
+
+    @Test
+    fun `rounded rectangle recognizer rejects overlapping raw corner radii`() {
+        val overlapping = PathBuilder()
+            .moveTo(8f, 0f).lineTo(2f, 0f)
+            .arcTo(8f, 8f, 0f, false, true, 10f, 8f)
+            .lineTo(10f, 2f).arcTo(8f, 8f, 0f, false, true, 2f, 10f)
+            .lineTo(8f, 10f).arcTo(8f, 8f, 0f, false, true, 0f, 2f)
+            .lineTo(0f, 8f).arcTo(8f, 8f, 0f, false, true, 8f, 0f)
+            .close()
+            .build()
+
+        assertNull(PathAnalysisF32.rrect(overlapping))
+    }
+
+    @Test
+    fun `topology keeps a nonzero orientation through product cancellation`() {
+        val epsilon = 2.0.pow(-23).toFloat()
+        val path = PathBuilder()
+            .moveTo(0f, 0f)
+            .lineTo(1f + epsilon, 1f + 2f * epsilon)
+            .lineTo(1f, 1f + epsilon)
+            .close()
+            .build()
+
+        assertEquals(ContourOrientation.CLOCKWISE, PathAnalysisF32.topology(path).orientation)
+    }
+
+    @Test
+    fun `convexity keeps nearly collinear turns deterministic`() {
+        val path = PathBuilder()
+            .moveTo(0f, 0f)
+            .lineTo(1e20f, 1e20f + 3e13f)
+            .lineTo(2e20f, 2e20f)
+            .lineTo(2e20f, 0f)
+            .close()
+            .build()
+
+        assertTrue(PathAnalysisF32.isConvex(path))
     }
 
     @Test

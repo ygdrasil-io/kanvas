@@ -32,7 +32,9 @@ public class PathMeasureF32(path: PathF32, forceClosed: Boolean = false) {
     public val isClosed: Boolean get() = contours.getOrNull(contourIndex)?.closed ?: false
 
     /** Clamps [distance] to the current contour and returns its point and normalized tangent. */
-    public fun position(distance: Float): PathLocationF32? {
+    public fun position(distance: Float): PathLocationF32? = positionF64(distance.toDouble())
+
+    private fun positionF64(distance: Double): PathLocationF32? {
         val contour = contours.getOrNull(contourIndex) ?: return null
         if (contour.segments.isEmpty()) return null
         var remaining = clampDistanceF64(distance, contour.length)
@@ -46,13 +48,13 @@ public class PathMeasureF32(path: PathF32, forceClosed: Boolean = false) {
     /** Returns a line representation of the requested current-contour interval. */
     public fun segment(startDistance: Float, stopDistance: Float, startWithMoveTo: Boolean = true): PathF32? {
         val contour = contours.getOrNull(contourIndex) ?: return null
-        val firstDistance = clampDistanceF64(startDistance, contour.length)
-        val secondDistance = clampDistanceF64(stopDistance, contour.length)
+        val firstDistance = clampDistanceF64(startDistance.toDouble(), contour.length)
+        val secondDistance = clampDistanceF64(stopDistance.toDouble(), contour.length)
         val start = min(firstDistance, secondDistance)
         val stop = max(firstDistance, secondDistance)
         if (start >= stop) return null
-        val startLocation = position(start.toFloat()) ?: return null
-        val stopLocation = position(stop.toFloat()) ?: return null
+        val startLocation = positionF64(start) ?: return null
+        val stopLocation = positionF64(stop) ?: return null
         val builder = PathBuilder()
         if (startWithMoveTo) builder.moveTo(startLocation.point.x, startLocation.point.y)
         return builder.lineTo(stopLocation.point.x, stopLocation.point.y).build()
@@ -178,10 +180,10 @@ private fun sourceGeometryF64(path: PathF32): Map<Int, SourceGeometryF64> {
     return geometry
 }
 
-private fun clampDistanceF64(distance: Float, length: Double): Double = when {
-    distance.isNaN() || distance <= 0f -> 0.0
-    distance == Float.POSITIVE_INFINITY -> length
-    else -> distance.toDouble().coerceIn(0.0, length)
+private fun clampDistanceF64(distance: Double, length: Double): Double = when {
+    distance.isNaN() || distance <= 0.0 -> 0.0
+    distance == Double.POSITIVE_INFINITY -> length
+    else -> distance.coerceIn(0.0, length)
 }
 
 private fun roundedF32(value: Double): Float = Float.fromBits(value.toFloat().toRawBits())

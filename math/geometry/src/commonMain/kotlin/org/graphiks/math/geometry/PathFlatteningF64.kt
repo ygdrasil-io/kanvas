@@ -61,7 +61,7 @@ internal object PathFlattenerF64 {
         }
         fun flattenQuad(start: Point2F64, control: Point2F64, end: Point2F64, sourceSegmentIndex: Int) {
             fun recurse(a: Point2F64, c: Point2F64, b: Point2F64, t0: Double, t1: Double, depth: Int) {
-                if (pointToLineDistanceF64(c, a, b) <= policy.tolerance) {
+                if (pointToSegmentDistanceF64(c, a, b) <= policy.tolerance) {
                     incrementEdges()
                     add(b, sourceSegmentIndex, t1, if (t1 == 1.0) current else null)
                     return
@@ -78,7 +78,7 @@ internal object PathFlattenerF64 {
         }
         fun flattenCubic(start: Point2F64, control1: Point2F64, control2: Point2F64, end: Point2F64, sourceSegmentIndex: Int) {
             fun recurse(a: Point2F64, c1: Point2F64, c2: Point2F64, b: Point2F64, t0: Double, t1: Double, depth: Int) {
-                if (max(pointToLineDistanceF64(c1, a, b), pointToLineDistanceF64(c2, a, b)) <= policy.tolerance) {
+                if (max(pointToSegmentDistanceF64(c1, a, b), pointToSegmentDistanceF64(c2, a, b)) <= policy.tolerance) {
                     incrementEdges()
                     add(b, sourceSegmentIndex, t1, if (t1 == 1.0) current else null)
                     return
@@ -100,7 +100,7 @@ internal object PathFlattenerF64 {
             fun recurse(a: Point2F64, b: Point2F64, t0: Double, t1: Double, depth: Int) {
                 val split = (t0 + t1) * 0.5
                 val middle = arc.pointAt(split)
-                if (pointToLineDistanceF64(middle, a, b) <= policy.tolerance) {
+                if (pointToSegmentDistanceF64(middle, a, b) <= policy.tolerance) {
                     incrementEdges()
                     add(if (t1 == 1.0) end else b, sourceSegmentIndex, t1, if (t1 == 1.0) current else null)
                     return
@@ -191,10 +191,11 @@ private fun midpointF64(first: Point2F64, second: Point2F64): Point2F64 = Point2
     first.y * 0.5 + second.y * 0.5,
 )
 
-private fun pointToLineDistanceF64(point: Point2F64, start: Point2F64, end: Point2F64): Double {
+private fun pointToSegmentDistanceF64(point: Point2F64, start: Point2F64, end: Point2F64): Double {
     val deltaX = end.x - start.x
     val deltaY = end.y - start.y
-    val length = stableHypotF64(deltaX, deltaY)
-    return if (length == 0.0) stableHypotF64(point.x - start.x, point.y - start.y) else
-        abs(deltaX * (start.y - point.y) - (start.x - point.x) * deltaY) / length
+    val lengthSquared = deltaX * deltaX + deltaY * deltaY
+    if (lengthSquared == 0.0) return stableHypotF64(point.x - start.x, point.y - start.y)
+    val projection = (((point.x - start.x) * deltaX + (point.y - start.y) * deltaY) / lengthSquared).coerceIn(0.0, 1.0)
+    return stableHypotF64(point.x - (start.x + projection * deltaX), point.y - (start.y + projection * deltaY))
 }

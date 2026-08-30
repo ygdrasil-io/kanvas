@@ -71,4 +71,15 @@ class PathMeasureF32Test {
 
         assertEquals(measure.segment(2f, 8f), measure.segment(8f, 2f))
     }
+
+    @Test
+    fun `segment preserves the F64 clamped endpoint after a large first edge`() {
+        val measure = PathMeasureF32(
+            PathBuilder().moveTo(0f, 0f).lineTo(1e8f, 0f).lineTo(1e8f, 10f).build(),
+        )
+
+        val segment = requireNotNull(measure.segment(0f, Float.POSITIVE_INFINITY))
+
+        assertEquals(Point2F32(1e8f, 10f), requireNotNull(PathAnalysisF32.line(segment)).end)
+    }
 }

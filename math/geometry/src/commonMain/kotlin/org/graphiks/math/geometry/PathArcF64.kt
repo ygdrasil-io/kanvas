@@ -88,17 +88,16 @@ internal fun arcCenterF64(arc: ArcEndpointF64): ArcCenterF64? {
         !arc.xAxisRotationDegrees.isFinite() || radiusX == 0.0 || radiusY == 0.0 || arc.start == arc.end
     ) return null
 
-    val rotationRadians = arc.xAxisRotationDegrees * PI / 180.0
+    val rotationDegrees = arc.xAxisRotationDegrees % 360.0
+    val rotationRadians = rotationDegrees * PI / 180.0
     val cosRotation = cos(rotationRadians)
     val sinRotation = sin(rotationRadians)
     val halfDeltaX = (arc.start.x - arc.end.x) * 0.5
     val halfDeltaY = (arc.start.y - arc.end.y) * 0.5
     val startX = cosRotation * halfDeltaX + sinRotation * halfDeltaY
     val startY = -sinRotation * halfDeltaX + cosRotation * halfDeltaY
-    val rawLambda = startX * startX / (radiusX * radiusX) + startY * startY / (radiusY * radiusY)
-    if (!rawLambda.isFinite()) return null
-    val isUnitRadiusWithinF32Precision = abs(rawLambda - 1.0) <= PathPredicatesF32.EPSILON_F32.toDouble()
-    val lambda = if (isUnitRadiusWithinF32Precision) 1.0 else rawLambda
+    val lambda = startX * startX / (radiusX * radiusX) + startY * startY / (radiusY * radiusY)
+    if (!lambda.isFinite()) return null
     if (lambda > 1.0) {
         val correction = sqrt(lambda)
         radiusX *= correction
@@ -112,7 +111,7 @@ internal fun arcCenterF64(arc: ArcEndpointF64): ArcCenterF64? {
     val denominator = radiusXSquared * startYSquared + radiusYSquared * startXSquared
     val numerator = radiusXSquared * radiusYSquared - radiusXSquared * startYSquared - radiusYSquared * startXSquared
     val sign = if (arc.largeArc == arc.sweep) -1.0 else 1.0
-    val factor = if (denominator == 0.0 || isUnitRadiusWithinF32Precision) 0.0 else sign * sqrt(max(0.0, numerator / denominator))
+    val factor = if (denominator == 0.0) 0.0 else sign * sqrt(max(0.0, numerator / denominator))
     val centerXPrime = factor * radiusX * startY / radiusY
     val centerYPrime = -factor * radiusY * startX / radiusX
     val center = Point2F64(
