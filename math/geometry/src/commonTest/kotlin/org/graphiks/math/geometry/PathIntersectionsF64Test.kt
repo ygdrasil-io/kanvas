@@ -619,6 +619,102 @@ class PathIntersectionsF64Test {
     }
 
     @Test
+    fun `many near ULP clusters retain canonical cuts and exact limits`() {
+        val edges = manyNearUlpCarrierCrossingsF64()
+        val splits = testedInputEdgeOrdersF64(edges).map { permutation ->
+            splitPathEdgesF64(
+                permutation,
+                PathOpsLimitsI32(maxIntersections = 8, maxHalfEdges = 82),
+            )
+        }
+        val snapshot = canonicalSplitEdgesF64(splits.first())
+        val middle = 0.5
+        val middleBits = middle.toBits()
+
+        splits.forEach { split ->
+            assertEquals(snapshot, canonicalSplitEdgesF64(split))
+            assertEquals(41, split.size)
+            assertEquals(
+                buildMap {
+                    put(0, 9)
+                    (1..16).forEach { edgeId -> put(edgeId, 2) }
+                },
+                split.groupingBy { it.sourceId }.eachCount(),
+            )
+
+            val identities = split.flatMap { edge ->
+                listOf(edge.start to edge.startIdentity, edge.end to edge.endIdentity)
+            }.filter { (_, identity) -> identity.incidentEdgeIds.size > 1 }
+                .groupBy { (_, identity) -> identity }
+            assertEquals(8, identities.size)
+
+            (0 until 8).forEach { clusterIndex ->
+                val firstEdgeId = clusterIndex * 2 + 1
+                val secondEdgeId = firstEdgeId + 1
+                val expectedPoint = Point2F64(Double.fromBits(middleBits + clusterIndex * 30L), 0.0)
+                val identity = identities.keys.single { candidate ->
+                    candidate.incidentEdgeIds == listOf(0, firstEdgeId, secondEdgeId)
+                }
+                val endpoints = identities.getValue(identity)
+
+                assertEquals(setOf(expectedPoint), endpoints.map { it.first }.toSet())
+                assertEquals(expectedPoint.x, identity.parameterByEdgeId.getValue(0))
+                assertEquals(0.5, identity.parameterByEdgeId.getValue(firstEdgeId))
+                assertEquals(0.5, identity.parameterByEdgeId.getValue(secondEdgeId))
+            }
+        }
+
+        val intersectionError = assertFailsWith<IllegalStateException> {
+            splitPathEdgesF64(edges, PathOpsLimitsI32(maxIntersections = 7, maxHalfEdges = 82))
+        }
+        val halfEdgeError = assertFailsWith<IllegalStateException> {
+            splitPathEdgesF64(edges, PathOpsLimitsI32(maxIntersections = 8, maxHalfEdges = 80))
+        }
+
+        assertEquals("path-intersection-limit", intersectionError.message)
+        assertEquals("path-half-edge-limit", halfEdgeError.message)
+    }
+
+    @Test
+    fun `conflicting ULP bridges retain independent canonical intersections`() {
+        val edges = conflictingUlpBridgePathEdgesF64()
+        val splits = testedInputEdgeOrdersF64(edges).map { permutation ->
+            splitPathEdgesF64(
+                permutation,
+                PathOpsLimitsI32(maxIntersections = 2, maxHalfEdges = 16),
+            )
+        }
+        val snapshot = canonicalSplitEdgesF64(splits.first())
+
+        splits.forEach { split ->
+            assertEquals(snapshot, canonicalSplitEdgesF64(split))
+            assertEquals(8, split.size)
+            assertEquals(mapOf(0 to 1, 1 to 2, 2 to 2, 4 to 3), split.groupingBy { it.sourceId }.eachCount())
+            val identities = split.flatMap { edge ->
+                listOf(edge.start to edge.startIdentity, edge.end to edge.endIdentity)
+            }.filter { (_, identity) -> identity.incidentEdgeIds.size > 1 }
+                .groupBy { (_, identity) -> identity.incidentEdgeIds }
+
+            assertEquals(setOf(listOf(0, 2, 4), listOf(1, 4)), identities.keys)
+            identities.values.forEach { endpoints ->
+                assertEquals(1, endpoints.map { it.first }.toSet().size)
+                assertEquals(1, endpoints.map { it.second }.distinct().size)
+            }
+        }
+
+        val error = assertFailsWith<IllegalStateException> {
+            splitPathEdgesF64(edges, PathOpsLimitsI32(maxIntersections = 1, maxHalfEdges = 16))
+        }
+
+        val halfEdgeError = assertFailsWith<IllegalStateException> {
+            splitPathEdgesF64(edges, PathOpsLimitsI32(maxIntersections = 2, maxHalfEdges = 14))
+        }
+
+        assertEquals("path-intersection-limit", error.message)
+        assertEquals("path-half-edge-limit", halfEdgeError.message)
+    }
+
+    @Test
     fun `proper crossings reject a half edge limit below their final split output`() {
         val edges = listOf(
             inputEdgeF64(0, Point2F64(-1.0, -1.0), Point2F64(1.0, 1.0)),
@@ -725,6 +821,7 @@ class PathIntersectionsF64Test {
         )
         assertEquals("path-intersection-limit", limitError.message)
     }
+
 }
 
 private fun inputEdgeF64(
@@ -852,6 +949,31 @@ private fun chainFirstCoincidentCarriersWithUlpCrossingsF64(): List<PathInputEdg
     inputEdgeF64(0, Point2F64(Double.fromBits(0.5.toBits() + 15L), -1.0), Point2F64(Double.fromBits(0.5.toBits() + 15L), 1.0)),
     inputEdgeF64(1, Point2F64(Double.fromBits(0.5.toBits() + 30L), -1.0), Point2F64(Double.fromBits(0.5.toBits() + 30L), 1.0)),
 )
+
+private fun conflictingUlpBridgePathEdgesF64(): List<PathInputEdgeF64> {
+    val middle = 0.5
+    val ulp = Double.fromBits(middle.toBits() + 1L) - middle
+    val firstX = Double.fromBits(middle.toBits())
+    val secondX = Double.fromBits(middle.toBits() + 15L)
+    val upperY = 60.0 * ulp
+    return listOf(
+        inputEdgeF64(0, Point2F64(secondX, upperY), Point2F64(secondX + 1.0, upperY)),
+        inputEdgeF64(1, Point2F64(firstX, -1.0), Point2F64(firstX, 34.0 * ulp)),
+        inputEdgeF64(2, Point2F64(secondX, -2.0), Point2F64(secondX, 2.0)),
+        inputEdgeF64(4, Point2F64(0.0, 0.0), Point2F64(1.0, 0.0)),
+    )
+}
+
+private fun manyNearUlpCarrierCrossingsF64(): List<PathInputEdgeF64> {
+    val middle = 0.5
+    val middleBits = middle.toBits()
+    return listOf(
+        inputEdgeF64(0, Point2F64(0.0, 0.0), Point2F64(1.0, 0.0)),
+    ) + List(16) { index ->
+        val x = Double.fromBits(middleBits + index * 15L)
+        inputEdgeF64(index + 1, Point2F64(x, -1.0), Point2F64(x, 1.0))
+    }
+}
 
 private fun testedInputEdgeOrdersF64(edges: List<PathInputEdgeF64>): List<List<PathInputEdgeF64>> = (
     edges.indices.map { offset -> edges.drop(offset) + edges.take(offset) } +
