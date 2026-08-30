@@ -109,7 +109,12 @@ public class Line2F64(source: Array<Point2F64>) {
         val tiniest = min(min(min(pts[0].x, pts[0].y), pts[1].x), pts[1].y)
         var largest = max(max(max(pts[0].x, pts[0].y), pts[1].x), pts[1].y)
         largest = max(largest, -tiniest)
-        return PathPredicatesF64.almostEqualUlps(largest, largest + dist, maxUlps = 256)
+        return PathPredicatesF64.almostEqualUlps(
+            largest,
+            largest + dist,
+            maxUlps = 256,
+            nearZeroMaxUlps = 1_024,
+        )
     }
 
     override fun equals(other: Any?): Boolean {

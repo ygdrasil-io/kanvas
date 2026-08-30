@@ -14,10 +14,13 @@ internal object PathPredicatesF64 {
             point.y in min(start.y, end.y)..max(start.y, end.y)
     }
 
-    fun almostEqualUlps(a: Double, b: Double, maxUlps: Int = 16): Boolean {
-        if (maxUlps < 0 || !a.isFinite() || !b.isFinite()) return false
+    fun almostEqualUlps(a: Double, b: Double, maxUlps: Int = 16): Boolean =
+        almostEqualUlps(a, b, maxUlps, nearZeroMaxUlps = maxUlps)
+
+    fun almostEqualUlps(a: Double, b: Double, maxUlps: Int, nearZeroMaxUlps: Int): Boolean {
+        if (maxUlps < 0 || nearZeroMaxUlps < 0 || !a.isFinite() || !b.isFinite()) return false
         if (a == b) return true
-        val nearZeroLimit = EPSILON_F64 * maxUlps / 2.0
+        val nearZeroLimit = EPSILON_F64 * nearZeroMaxUlps / 2.0
         if (abs(a) <= nearZeroLimit && abs(b) <= nearZeroLimit) return true
         if ((a < 0.0) != (b < 0.0)) return false
         return abs(orderedBits(a) - orderedBits(b)) < maxUlps.toLong()
