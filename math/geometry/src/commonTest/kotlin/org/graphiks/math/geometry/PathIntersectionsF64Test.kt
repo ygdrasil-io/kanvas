@@ -451,6 +451,68 @@ class PathIntersectionsF64Test {
     }
 
     @Test
+    fun `signed zero pseudo edge is topologically degenerate with canonical emitted geometry`() {
+        val vertical = inputEdgeF64(1, Point2F64(0.0, -1.0), Point2F64(0.0, 1.0))
+        val positiveZero = inputEdgeF64(0, Point2F64(0.0, 0.0), Point2F64(0.0, 0.0))
+        val signedZero = inputEdgeF64(0, Point2F64(0.0, 0.0), Point2F64(-0.0, 0.0))
+        val limits = PathOpsLimitsI32(maxIntersections = 1, maxHalfEdges = 4)
+
+        val positiveSplit = splitPathEdgesF64(listOf(positiveZero, vertical), limits)
+        val signedSplit = splitPathEdgesF64(listOf(signedZero, vertical), limits)
+        val signedIntersection = assertIs<PathIntersectionF64.PointF64>(intersectPathEdgesF64(signedZero, vertical))
+        val signedEndpoints = signedSplit.flatMap { edge ->
+            listOf(edge.start to edge.startIdentity, edge.end to edge.endIdentity)
+        }.filter { (point, _) -> point == Point2F64(0.0, 0.0) }
+
+        assertEquals(canonicalSplitEdgesF64(positiveSplit), canonicalSplitEdgesF64(signedSplit))
+        assertEquals(2, signedSplit.size)
+        assertEquals(setOf(1), signedSplit.map { it.sourceId }.toSet())
+        assertEquals(Point2F64(0.0, 0.0), signedIntersection.point)
+        assertEquals(0.0, signedIntersection.firstT)
+        assertEquals(0.5, signedIntersection.secondT)
+        assertEquals(2, signedEndpoints.size)
+        assertEquals(setOf(Point2F64(0.0, 0.0)), signedEndpoints.map { it.first }.toSet())
+        assertEquals(1, signedEndpoints.map { it.second }.distinct().size)
+        assertEquals(listOf(0, 1), signedEndpoints.first().second.incidentEdgeIds)
+        assertEquals(mapOf(0 to 0.0, 1 to 0.5), signedEndpoints.first().second.parameterByEdgeId)
+    }
+
+    @Test
+    fun `high degree concurrence charges candidate work before unbounded profile rebuilding`() {
+        val edges = concurrentPathEdgesF64(64)
+        val orders = listOf(
+            edges,
+            edges.reversed(),
+            edges.drop(17) + edges.take(17),
+        )
+        val sufficientLimits = PathOpsLimitsI32(
+            maxIntersections = 1,
+            maxCandidateProbes = 1_000_000,
+        )
+        val expected = canonicalSplitEdgesF64(splitPathEdgesF64(orders.first(), sufficientLimits))
+
+        orders.forEach { order ->
+            val error = assertFailsWith<IllegalStateException> {
+                splitPathEdgesF64(
+                    order,
+                    PathOpsLimitsI32(maxIntersections = 1, maxCandidateProbes = 20_000),
+                )
+            }
+
+            assertEquals("path-candidate-limit", error.message)
+        }
+        orders.forEach { order ->
+            val split = splitPathEdgesF64(order, sufficientLimits)
+            val identities = split.flatMap { edge -> listOf(edge.startIdentity, edge.endIdentity) }
+                .filter { identity -> identity.incidentEdgeIds == (0 until 64).toList() }
+
+            assertEquals(expected, canonicalSplitEdgesF64(split))
+            assertEquals(128, split.size)
+            assertEquals(1, identities.distinct().size)
+        }
+    }
+
+    @Test
     fun `candidate probe limit fails deterministically across input orders and source relabeling`() {
         listOf(
             sameDirectSignatureFiveEdgePathEdgesF64() to allIntPermutationsF64((0..4).toList()),

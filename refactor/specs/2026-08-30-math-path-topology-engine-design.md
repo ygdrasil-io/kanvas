@@ -169,8 +169,11 @@ de candidats. Les valeurs par défaut sont :
 limites de résultat et de mémoire. `2^24` vaut 64 fois la limite par défaut
 d'intersections et 16 fois celle des demi-arêtes : il laisse de la marge aux
 événements numériques denses sans autoriser une recherche non bornée. Chaque
-pop brut d'un index de candidats, doublons inclus, et chaque contrôle ou mise
-à jour d'incidence commune consomme une unité avant l'action. À épuisement, le
+pop brut d'un index de candidats, doublons inclus, ainsi que chaque inspection,
+comparaison, copie ou mise à jour d'incidence de profil/index consomme une
+unité avant l'action, y compris pour une incidence non commune. La
+réconciliation exacte des paramètres, les copies d'accumulateur et les
+retraits/réinsertions d'index sont soumis au même compteur. À épuisement, le
 moteur échoue de façon déterministe par
 `IllegalStateException("path-candidate-limit")`.
 
@@ -207,21 +210,27 @@ arêtes, ainsi que tous les membres du témoin exact : une signature directe a
 un voisinage fixe de `31 × 16`, mais son AVL interne est multi-valeur. Les
 993 flux au plus (`2 × 496 + 1`) sont parcourus dans l'ordre d'une clé
 sémantique d'arête/événement indépendante des IDs source; les zéros signés
-sont normalisés. Le flux exact, lorsqu'il existe, est d'abord parcouru dans
-son ordre sémantique, puis les 992 flux directs sont fusionnés par un heap de
-taille fixe. Un marqueur par composante et par événement déduplique l'action,
-mais jamais le coût : chaque pop brut, même dupliqué, reste compté. Les
-occurrences qui ont la même clé sémantique sont un lot automorphe : toutes sont
-évaluées avant le commit atomique et les prédicats directs/exacts ne lisent que
-leur profil canonique, de sorte que l'ordre de liste ou une renumérotation
-bijective ne choisit pas une partition différente. Les IDs restent de la
-provenance de sortie, jamais un tie-break topologique. La clé de composante est
-reconstruite à chaque commit depuis toutes ses incidences, son witness et son
-point canonique; l'ID interne ne départage que deux occurrences dont ce profil
-complet est automorphe et n'influence donc aucune décision sémantique.
+sont normalisés pour toute décision géométrique et tout point `F64` émis. Le
+flux exact, lorsqu'il existe, est d'abord parcouru dans son ordre sémantique,
+puis les 992 flux directs sont fusionnés par un heap de taille fixe. Un
+marqueur par composante et par événement déduplique l'action, mais jamais le
+coût : chaque pop brut, même dupliqué, reste compté.
+
+Le comparateur de heap/AVL emploie un rang d'événement de naissance immuable,
+de taille constante : rang d'arête pré-calculé, paramètres ordonnés, point
+canonique et witness éventuel. Il ne parcourt jamais le profil mutable d'une
+composante. Les arêtes à clé égale reçoivent le même rang et forment un lot
+automorphe; tous ses membres restent évalués avant le commit atomique. Les IDs
+restent donc de la provenance de sortie, jamais un tie-break topologique; ils
+ne départagent que le stockage de membres sémantiquement égaux.
 
 Chaque candidat est d'abord comparé au profil entrant entier. Les témoins
-exacts égaux ont priorité et se ferment transitivement. L'accumulateur
+exacts égaux ont priorité et se ferment transitivement. Avant de copier un
+accumulateur, une concurrence exacte répétée parcourt le domaine candidat
+complet et ne devient un no-op que si son unique candidat éligible possède déjà
+le même witness/point canoniques et les deux incidences entrantes. Cette garde
+ne masque donc ni une incidence nouvelle, ni un élargissement, ni un autre
+candidat direct; ses pops et contrôles sont budgétés. Sinon l'accumulateur
 éphémère commence au profil entrant; un candidat direct n'est accepté que si
 toutes ses incidences communes conservent un diamètre strictement inférieur à
 16 ULP dans cet accumulateur. Le lot accepté est ensuite écrit en une seule
@@ -236,12 +245,22 @@ communes compatibles. Les witnesses exacts ont eux aussi un AVL multi-valeur;
 en cas de conflit de paramètres sous un même witness, un endpoint exact a
 priorité, sinon le paramètre et la clé canonique minimaux retiennent une seule
 coupe. Le lookup d'un événement coûte `O(log C + b_j)`, où `b_j` compte les
-membres bruts visités; le filtrage et la fusion ont en plus leur coût explicite
-de parcours des incidences communes et de mise à jour des AVL. Chaque telle
-inspection est débitée du même budget global avant lecture. L'état persistant
-reste `O(E + I + C)`; la mémoire temporaire ne retient que le heap fixe et les
-`k` composantes acceptées, dont toutes sauf le winner sont ensuite supprimées
-destructivement.
+membres bruts visités : le facteur de 993 flux et les comparaisons de heap sont
+constants relativement à `C` et au degré. Le filtrage, la fermeture et le
+commit ont leur coût explicite `q_j` d'incidences inspectées/copiées/mises à
+jour; chaque unité est débitée avant lecture ou écriture. L'état persistant
+reste `O(E + I + C)`. La mémoire temporaire est le heap fixe, le profil entrant
+et l'accumulateur de fermeture, plus `k` composants acceptés; l'accumulateur
+contient au plus `O(min(I, R_j))` incidences, où `R_j` est le budget restant au
+début de sa construction, car chaque copie ou insertion consomme une unité.
+Les `k` composants acceptés sont eux-mêmes amortis par les suppressions
+destructives sauf le winner.
+
+L'égalité générée de `Point2F64` reste bit-à-bit. Le noyau ne la modifie pas :
+il canonicalise seulement les coordonnées `-0.0` en `+0.0` dans la géométrie
+topologique et les points émis. Les identités endpoint et leur
+`originalPointF32` conservent au contraire leur provenance exacte, y compris
+le zéro signé d'un endpoint non modifié.
 
 ## 7. Arrangement planaire et classification
 

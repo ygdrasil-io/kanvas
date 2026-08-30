@@ -23,6 +23,25 @@ internal data class PathInputEdgeF64(
     val windingDelta: Int,
 )
 
+// `Point2F64` intentionally keeps its generated bitwise equality: public value/provenance users
+// can still distinguish signed-zero payloads where that matters. Path topology instead has one
+// geometric zero. Canonicalize only the F64 geometry carried through predicates, cuts and emitted
+// split points; retain the original vertex identities so untouched F32 provenance is not rewritten.
+private fun canonicalTopologicalCoordinateF64(value: Double): Double = if (value == 0.0) 0.0 else value
+
+private fun canonicalTopologicalPointF64(point: Point2F64): Point2F64 = Point2F64(
+    x = canonicalTopologicalCoordinateF64(point.x),
+    y = canonicalTopologicalCoordinateF64(point.y),
+)
+
+private fun sameTopologicalPointF64(first: Point2F64, second: Point2F64): Boolean =
+    first.x == second.x && first.y == second.y
+
+private fun canonicalTopologicalPathInputEdgeF64(edge: PathInputEdgeF64): PathInputEdgeF64 = edge.copy(
+    start = canonicalTopologicalPointF64(edge.start),
+    end = canonicalTopologicalPointF64(edge.end),
+)
+
 internal sealed interface PathIntersectionF64 {
     data class PointF64(
         val point: Point2F64,
@@ -52,24 +71,33 @@ internal data class PathSplitEdgeF64(
     val windingDelta: Int,
 )
 
-internal fun intersectPathEdgesF64(first: PathInputEdgeF64, second: PathInputEdgeF64): PathIntersectionF64? {
+internal fun intersectPathEdgesF64(firstInput: PathInputEdgeF64, secondInput: PathInputEdgeF64): PathIntersectionF64? {
+    // The topology treats both IEEE signed zero encodings as the same coordinate. Keep the
+    // endpoint identities themselves untouched for F32 provenance, but perform every geometric
+    // decision and emit every F64 point from this canonical geometry.
+    val first = canonicalTopologicalPathInputEdgeF64(firstInput)
+    val second = canonicalTopologicalPathInputEdgeF64(secondInput)
     if (!first.start.isFinite() || !first.end.isFinite() || !second.start.isFinite() || !second.end.isFinite()) return null
 
-    val firstDegenerate = first.start == first.end
-    val secondDegenerate = second.start == second.end
+    val firstDegenerate = sameTopologicalPointF64(first.start, first.end)
+    val secondDegenerate = sameTopologicalPointF64(second.start, second.end)
     if (firstDegenerate && secondDegenerate) {
-        return if (first.start == second.start) PathIntersectionF64.PointF64(first.start, 0.0, 0.0) else null
+        return if (sameTopologicalPointF64(first.start, second.start)) {
+            PathIntersectionF64.PointF64(canonicalTopologicalPointF64(first.start), 0.0, 0.0)
+        } else {
+            null
+        }
     }
     if (firstDegenerate) {
         return if (PathPredicatesF64.onSegment(first.start, second.start, second.end)) {
-            PathIntersectionF64.PointF64(first.start, 0.0, parameterAtPointF64(first.start, second))
+            PathIntersectionF64.PointF64(canonicalTopologicalPointF64(first.start), 0.0, parameterAtPointF64(first.start, second))
         } else {
             null
         }
     }
     if (secondDegenerate) {
         return if (PathPredicatesF64.onSegment(second.start, first.start, first.end)) {
-            PathIntersectionF64.PointF64(second.start, parameterAtPointF64(second.start, first), 0.0)
+            PathIntersectionF64.PointF64(canonicalTopologicalPointF64(second.start), parameterAtPointF64(second.start, first), 0.0)
         } else {
             null
         }
@@ -85,7 +113,7 @@ internal fun intersectPathEdgesF64(first: PathInputEdgeF64, second: PathInputEdg
     }
 
     fun endpointIntersection(point: Point2F64, firstT: Double, secondT: Double): PathIntersectionF64.PointF64 =
-        PathIntersectionF64.PointF64(point, snapParameterF64(firstT), snapParameterF64(secondT))
+        PathIntersectionF64.PointF64(canonicalTopologicalPointF64(point), snapParameterF64(firstT), snapParameterF64(secondT))
 
     if (firstStartSide == 0 && PathPredicatesF64.onSegment(second.start, first.start, first.end)) {
         return endpointIntersection(second.start, parameterAtPointF64(second.start, first), 0.0)
@@ -118,9 +146,9 @@ internal fun intersectPathEdgesF64(first: PathInputEdgeF64, second: PathInputEdg
 
 internal fun splitPathEdgesF64(edges: List<PathInputEdgeF64>, limits: PathOpsLimitsI32): List<PathSplitEdgeF64> {
     validatePathInputEdgesF64(edges)
-    val canonicalEdges = canonicalPathInputEdgesF64(edges)
+    val canonicalEdges = canonicalPathInputEdgesF64(edges).map(::canonicalTopologicalPathInputEdgeF64)
     val maximumSplitEdges = limits.maxHalfEdges / 2
-    val baseSplitEdges = canonicalEdges.count { edge -> edge.start != edge.end }
+    val baseSplitEdges = canonicalEdges.count { edge -> !sameTopologicalPointF64(edge.start, edge.end) }
     if (baseSplitEdges > maximumSplitEdges) throw IllegalStateException("path-half-edge-limit")
     // Storage invariant: an interior incidence is a canonical cut, never a pair event, and can
     // add at most one split edge. Reserving only the final split-edge slack therefore bounds all
@@ -194,7 +222,7 @@ internal fun splitPathEdgesF64(edges: List<PathInputEdgeF64>, limits: PathOpsLim
         canonicalCutsByEdge[edgeIndex].zipWithNext().forEach { (startCut, endCut) ->
             val start = pointAtPathCutF64(edge, startCut)
             val end = pointAtPathCutF64(edge, endCut)
-            if (start != end) {
+            if (!sameTopologicalPointF64(start, end)) {
                 // Compare in split-edge units before incrementing: this is exactly the final
                 // 2 * splitEdges.size half-edge budget without an overflowing multiplication.
                 if (splitEdgeCount >= maximumSplitEdges) throw IllegalStateException("path-half-edge-limit")
@@ -208,7 +236,7 @@ internal fun splitPathEdgesF64(edges: List<PathInputEdgeF64>, limits: PathOpsLim
             canonicalCutsByEdge[edgeIndex].zipWithNext().forEach { (startCut, endCut) ->
                 val start = pointAtPathCutF64(edge, startCut)
                 val end = pointAtPathCutF64(edge, endCut)
-                if (start == end) return@forEach
+                if (sameTopologicalPointF64(start, end)) return@forEach
                 splitEdges +=
                     PathSplitEdgeF64(
                         sourceId = edge.id,
@@ -262,16 +290,7 @@ private data class PathComponentProfileF64(
     var exactWitness: PathExactIntersectionWitnessF64?,
     var canonicalPoint: Point2F64,
     val incidencesByEdge: MutableMap<Int, PathComponentIncidenceF64>,
-) {
-    fun copyF64(): PathComponentProfileF64 = PathComponentProfileF64(
-        exactWitness = exactWitness,
-        canonicalPoint = canonicalPoint,
-        incidencesByEdge = incidencesByEdge.toMutableMap(),
-    )
-
-    fun containsAllF64(other: PathComponentProfileF64): Boolean =
-        other.incidencesByEdge.keys.all { it in incidencesByEdge }
-}
+)
 
 private fun mergeDirectPathIncidencesF64(
     first: PathComponentIncidenceF64,
@@ -372,7 +391,7 @@ private data class PathEdgeSemanticKeyF64(
 )
 
 private data class PathEventIncidenceOrderKeyF64(
-    val edge: PathEdgeSemanticKeyF64,
+    val edgeRank: Int,
     val parameter: Long,
 )
 
@@ -384,18 +403,9 @@ private data class PathEventOrderKeyF64(
     val exactWitness: PathExactIntersectionWitnessF64?,
 )
 
-private data class PathComponentIncidenceOrderKeyF64(
-    val edge: PathEdgeSemanticKeyF64,
-    val minimum: Long,
-    val maximum: Long,
-    val parameter: Long,
-)
-
 private data class PathComponentOrderKeyF64(
-    val incidences: List<PathComponentIncidenceOrderKeyF64>,
-    val exactWitness: PathExactIntersectionWitnessF64?,
-    val pointX: Long,
-    val pointY: Long,
+    // Immutable birth-event rank. It is constant-size and never incorporates the mutable
+    // incidence map, so AVL/heap comparisons stay O(1) with respect to component degree.
     val firstEvent: PathEventOrderKeyF64,
 )
 
@@ -422,15 +432,15 @@ private fun pathEndpointProvenanceKeyF64(identity: PathVertexIdentityF64): PathE
 }
 
 private fun pathEventOrderKeyF64(
-    firstEdge: PathEdgeSemanticKeyF64,
+    firstEdgeRank: Int,
     firstParameter: Double,
-    secondEdge: PathEdgeSemanticKeyF64,
+    secondEdgeRank: Int,
     secondParameter: Double,
     point: Point2F64,
     exactWitness: PathExactIntersectionWitnessF64?,
 ): PathEventOrderKeyF64 {
-    val first = PathEventIncidenceOrderKeyF64(firstEdge, orderedPathFloatingBitsF64(firstParameter))
-    val second = PathEventIncidenceOrderKeyF64(secondEdge, orderedPathFloatingBitsF64(secondParameter))
+    val first = PathEventIncidenceOrderKeyF64(firstEdgeRank, orderedPathFloatingBitsF64(firstParameter))
+    val second = PathEventIncidenceOrderKeyF64(secondEdgeRank, orderedPathFloatingBitsF64(secondParameter))
     return if (comparePathEventIncidencesF64(first, second) <= 0) {
         PathEventOrderKeyF64(
             first = first,
@@ -450,24 +460,20 @@ private fun pathEventOrderKeyF64(
     }
 }
 
-private fun pathComponentOrderKeyF64(
-    firstEvent: PathEventOrderKeyF64,
-    profile: PathComponentProfileF64,
-    edgeKeys: List<PathEdgeSemanticKeyF64>,
-): PathComponentOrderKeyF64 = PathComponentOrderKeyF64(
-    incidences = profile.incidencesByEdge.entries.map { (edgeIndex, incidence) ->
-        PathComponentIncidenceOrderKeyF64(
-            edge = edgeKeys[edgeIndex],
-            minimum = orderedPathFloatingBitsF64(incidence.minimumParameter),
-            maximum = orderedPathFloatingBitsF64(incidence.maximumParameter),
-            parameter = orderedPathFloatingBitsF64(incidence.parameter),
-        )
-    }.sortedWith(Comparator(::comparePathComponentIncidencesF64)),
-    exactWitness = profile.exactWitness,
-    pointX = orderedPathFloatingBitsF64(profile.canonicalPoint.x),
-    pointY = orderedPathFloatingBitsF64(profile.canonicalPoint.y),
-    firstEvent = firstEvent,
-)
+private fun pathComponentOrderKeyF64(firstEvent: PathEventOrderKeyF64): PathComponentOrderKeyF64 =
+    PathComponentOrderKeyF64(firstEvent)
+
+private fun pathEdgeSemanticRanksF64(edgeKeys: List<PathEdgeSemanticKeyF64>): List<Int> {
+    if (edgeKeys.isEmpty()) return emptyList()
+    val ranks = MutableList(edgeKeys.size) { 0 }
+    var currentRank = 0
+    ranks[0] = currentRank
+    for (index in 1 until edgeKeys.size) {
+        if (comparePathEdgeSemanticKeysF64(edgeKeys[index - 1], edgeKeys[index]) != 0) currentRank += 1
+        ranks[index] = currentRank
+    }
+    return ranks
+}
 
 private fun comparePathInputEdgesSemanticallyF64(first: PathInputEdgeF64, second: PathInputEdgeF64): Int =
     comparePathEdgeSemanticKeysF64(pathEdgeSemanticKeyF64(first), pathEdgeSemanticKeyF64(second))
@@ -501,7 +507,7 @@ private fun comparePathEndpointProvenanceKeysF64(
 private fun comparePathEventIncidencesF64(
     first: PathEventIncidenceOrderKeyF64,
     second: PathEventIncidenceOrderKeyF64,
-): Int = comparePathEdgeSemanticKeysF64(first.edge, second.edge)
+): Int = compareValues(first.edgeRank, second.edgeRank)
     .takeIf { it != 0 } ?: compareValues(first.parameter, second.parameter)
 
 private fun comparePathEventOrderKeysF64(first: PathEventOrderKeyF64, second: PathEventOrderKeyF64): Int {
@@ -517,33 +523,8 @@ private fun comparePathEventOrderKeysF64(first: PathEventOrderKeyF64, second: Pa
     }
 }
 
-private fun comparePathComponentIncidencesF64(
-    first: PathComponentIncidenceOrderKeyF64,
-    second: PathComponentIncidenceOrderKeyF64,
-): Int {
-    comparePathEdgeSemanticKeysF64(first.edge, second.edge).takeIf { it != 0 }?.let { return it }
-    compareValues(first.minimum, second.minimum).takeIf { it != 0 }?.let { return it }
-    compareValues(first.maximum, second.maximum).takeIf { it != 0 }?.let { return it }
-    return compareValues(first.parameter, second.parameter)
-}
-
-private fun comparePathComponentOrderKeysF64(first: PathComponentOrderKeyF64, second: PathComponentOrderKeyF64): Int {
-    compareValues(first.incidences.size, second.incidences.size).takeIf { it != 0 }?.let { return it }
-    first.incidences.indices.forEach { index ->
-        comparePathComponentIncidencesF64(first.incidences[index], second.incidences[index])
-            .takeIf { it != 0 }?.let { return it }
-    }
-    when {
-        first.exactWitness == null && second.exactWitness != null -> return -1
-        first.exactWitness != null && second.exactWitness == null -> return 1
-        first.exactWitness != null && second.exactWitness != null -> {
-            comparePathExactWitnessesF64(first.exactWitness, second.exactWitness).takeIf { it != 0 }?.let { return it }
-        }
-    }
-    compareValues(first.pointX, second.pointX).takeIf { it != 0 }?.let { return it }
-    compareValues(first.pointY, second.pointY).takeIf { it != 0 }?.let { return it }
-    return comparePathEventOrderKeysF64(first.firstEvent, second.firstEvent)
-}
+private fun comparePathComponentOrderKeysF64(first: PathComponentOrderKeyF64, second: PathComponentOrderKeyF64): Int =
+    comparePathEventOrderKeysF64(first.firstEvent, second.firstEvent)
 
 private fun comparePathIntersectionComponentSemanticallyF64(
     first: PathIntersectionComponentF64,
@@ -555,13 +536,11 @@ private fun comparePathIntersectionComponentsF64(
     second: PathIntersectionComponentF64,
 ): Int = comparePathIntersectionComponentSemanticallyF64(first, second)
     .takeIf { it != 0 } ?: compareValues(first.id, second.id)
-// `id` is a storage/cursor tie-break only. `orderKey` is rebuilt after every committed profile
-// update from every non-ID observable incidence, witness and canonical point. Equal edge keys
-// have identical directed geometry, operand/contour, winding and endpoint provenance as observed
-// by this intersection stage, so exchanging them only renames their output provenance. Equal
-// component keys therefore form an automorphic candidate class: all members are evaluated before
-// the one atomic commit, and every direct/exact predicate sees the same profile. Source IDs never
-// participate before that storage-only orbit.
+// `id` is a storage/cursor tie-break only. `orderKey` is the immutable canonical birth-event
+// rank, formed from precomputed edge ranks, parameters, canonical point and exact witness. Equal
+// ranks mean equal semantic event keys; their edges are an automorphic key batch and every member
+// is still evaluated before the atomic commit. Mutable component incidence maps are deliberately
+// excluded, so neither an AVL nor the fixed candidate heap performs degree-dependent comparison.
 
 private fun orderedPathFloatingBitsF64(value: Double): Long {
     val bits = if (value == 0.0) 0L else value.toRawBits()
@@ -848,12 +827,47 @@ private class PathIntersectionRegistryF64(
     // never raw pair events or profile subsets.
     private val componentsByEdge = List(edges.size) { PathEdgeComponentIndexF64() }
     private val edgeKeys = edges.map(::pathEdgeSemanticKeyF64)
+    // Equal semantic keys intentionally receive the same rank. Such edges are the automorphic
+    // batch described by the event-key invariant; source IDs never determine their rank.
+    private val edgeSemanticRanks = pathEdgeSemanticRanksF64(edgeKeys)
     private val exactLines = edges.map(::exactPathLineF64)
     private val exactComponentsByWitness = PathExactWitnessIndexF64()
     private var nextComponentId = 0
     private var nextCandidateEpoch = 0L
     private var interiorCutCount = 0
     private var remainingCandidateProbes = maxCandidateProbes
+
+    private fun incomingProfileF64(
+        firstEdgeIndex: Int,
+        firstParameter: Double,
+        secondEdgeIndex: Int,
+        secondParameter: Double,
+        exactWitness: PathExactIntersectionWitnessF64?,
+        canonicalPoint: Point2F64,
+    ): PathComponentProfileF64 {
+        val incidences = mutableMapOf<Int, PathComponentIncidenceF64>()
+        // The two incoming incidences are temporary state too: debit before each insertion so a
+        // tiny global work budget fails before allocating an arbitrarily large later profile.
+        consumeCandidateWorkF64()
+        incidences[firstEdgeIndex] = PathComponentIncidenceF64(firstParameter)
+        consumeCandidateWorkF64()
+        incidences[secondEdgeIndex] = PathComponentIncidenceF64(secondParameter)
+        consumeCandidateWorkF64()
+        consumeCandidateWorkF64()
+        return PathComponentProfileF64(exactWitness, canonicalTopologicalPointF64(canonicalPoint), incidences)
+    }
+
+    private fun copyProfileWithBudgetF64(source: PathComponentProfileF64): PathComponentProfileF64 {
+        val copied = mutableMapOf<Int, PathComponentIncidenceF64>()
+        val iterator = source.incidencesByEdge.entries.iterator()
+        while (iterator.hasNext()) {
+            consumeCandidateWorkF64()
+            val entry = iterator.next()
+            copied[entry.key] = entry.value
+        }
+        consumeCandidateWorkF64()
+        return PathComponentProfileF64(source.exactWitness, source.canonicalPoint, copied)
+    }
 
     fun addIntersection(
         firstEdgeIndex: Int,
@@ -870,24 +884,33 @@ private class PathIntersectionRegistryF64(
         } else {
             null
         }
-        val incomingPoint = incomingWitness?.canonicalPoint() ?: point
-        val incoming = PathComponentProfileF64(
+        val incomingPoint = canonicalTopologicalPointF64(incomingWitness?.canonicalPoint() ?: point)
+        val incoming = incomingProfileF64(
+            firstEdgeIndex = firstEdgeIndex,
+            firstParameter = snappedFirstParameter,
+            secondEdgeIndex = secondEdgeIndex,
+            secondParameter = snappedSecondParameter,
             exactWitness = incomingWitness,
             canonicalPoint = incomingPoint,
-            incidencesByEdge = mutableMapOf(
-                firstEdgeIndex to PathComponentIncidenceF64(snappedFirstParameter),
-                secondEdgeIndex to PathComponentIncidenceF64(snappedSecondParameter),
-            ),
         )
         val eventKey = pathEventOrderKeyF64(
-            firstEdge = edgeKeys[firstEdgeIndex],
+            firstEdgeRank = edgeSemanticRanks[firstEdgeIndex],
             firstParameter = snappedFirstParameter,
-            secondEdge = edgeKeys[secondEdgeIndex],
+            secondEdgeRank = edgeSemanticRanks[secondEdgeIndex],
             secondParameter = snappedSecondParameter,
             point = incomingPoint,
             exactWitness = incomingWitness,
         )
-        val accumulator = incoming.copyF64()
+        if (isRepeatedExactConcurrencyNoOpF64(
+                firstEdgeIndex = firstEdgeIndex,
+                firstParameter = snappedFirstParameter,
+                secondEdgeIndex = secondEdgeIndex,
+                secondParameter = snappedSecondParameter,
+                incoming = incoming,
+            )
+        ) return
+
+        val accumulator = copyProfileWithBudgetF64(incoming)
         val accepted = mutableListOf<PathIntersectionComponentF64>()
 
         forEachMatchingComponentF64(
@@ -905,6 +928,7 @@ private class PathIntersectionRegistryF64(
                 return@forEachMatchingComponentF64
             }
             check(mergeComponentIntoProfileF64(accumulator, candidate, exactMatch))
+            consumeCandidateWorkF64()
             accepted += candidate
         }
         commitAtomicProfileF64(eventKey, incoming, accumulator, accepted)
@@ -955,6 +979,43 @@ private class PathIntersectionRegistryF64(
         }
     }
 
+    // A repeated exact concurrence can be a real no-op only after the complete candidate domain
+    // has been exhausted: a direct-only candidate compatible with N could otherwise still belong
+    // to the atomic closure. This probe retains at most one eligible component and never builds
+    // an accumulator. Its final predicate reads only the canonical point/witness and N's two
+    // incidences; all raw pops and all compatibility inspections are already budgeted by the
+    // normal candidate iterator.
+    private fun isRepeatedExactConcurrencyNoOpF64(
+        firstEdgeIndex: Int,
+        firstParameter: Double,
+        secondEdgeIndex: Int,
+        secondParameter: Double,
+        incoming: PathComponentProfileF64,
+    ): Boolean {
+        val incomingWitness = incoming.exactWitness ?: return false
+        var onlyEligible: PathIntersectionComponentF64? = null
+        var hasAnotherEligible = false
+        forEachMatchingComponentF64(
+            firstEdgeIndex = firstEdgeIndex,
+            firstParameter = firstParameter,
+            secondEdgeIndex = secondEdgeIndex,
+            secondParameter = secondParameter,
+            incomingWitness = incomingWitness,
+        ) { candidate ->
+            val exactMatch = exactMatchF64(candidate, incomingWitness)
+            if (!exactMatch && !isCompatibleWithProfileF64(candidate, incoming, requireSharedIncidence = true)) {
+                return@forEachMatchingComponentF64
+            }
+            if (onlyEligible == null) {
+                onlyEligible = candidate
+            } else {
+                hasAnotherEligible = true
+            }
+        }
+        val component = onlyEligible ?: return false
+        return !hasAnotherEligible && componentAlreadyRepresentsIncomingF64(component, incoming)
+    }
+
     private fun nextCandidateEpochF64(): Long {
         if (nextCandidateEpoch == Long.MAX_VALUE) {
             activeComponentsById.values.forEach { component -> component.lastCandidateEpoch = Long.MIN_VALUE }
@@ -973,6 +1034,69 @@ private class PathIntersectionRegistryF64(
         action(component)
     }
 
+    private fun profileContainsAllWithBudgetF64(
+        profile: PathComponentProfileF64,
+        incoming: PathComponentProfileF64,
+    ): Boolean {
+        val iterator = incoming.incidencesByEdge.entries.iterator()
+        while (iterator.hasNext()) {
+            consumeCandidateWorkF64()
+            val incomingEntry = iterator.next()
+            if (incomingEntry.key !in profile.incidencesByEdge) return false
+        }
+        return true
+    }
+
+    private fun countInteriorCutsWithBudgetF64(incidences: Map<Int, PathComponentIncidenceF64>): Int {
+        var count = 0
+        val iterator = incidences.entries.iterator()
+        while (iterator.hasNext()) {
+            consumeCandidateWorkF64()
+            val entry = iterator.next()
+            if (isInteriorCutF64(entry.key, entry.value.parameter)) count += 1
+        }
+        return count
+    }
+
+    private fun copyProfileIncidencesIntoComponentF64(
+        profile: PathComponentProfileF64,
+        component: PathIntersectionComponentF64,
+    ) {
+        val iterator = profile.incidencesByEdge.entries.iterator()
+        while (iterator.hasNext()) {
+            consumeCandidateWorkF64()
+            val entry = iterator.next()
+            component.incidencesByEdge[entry.key] = entry.value
+        }
+    }
+
+    private fun clearComponentIncidencesWithBudgetF64(component: PathIntersectionComponentF64) {
+        while (component.incidencesByEdge.isNotEmpty()) {
+            consumeCandidateWorkF64()
+            val iterator = component.incidencesByEdge.entries.iterator()
+            iterator.next()
+            iterator.remove()
+        }
+    }
+
+    private fun removeComponentIncidencesFromIndexF64(component: PathIntersectionComponentF64) {
+        val iterator = component.incidencesByEdge.entries.iterator()
+        while (iterator.hasNext()) {
+            consumeCandidateWorkF64()
+            val entry = iterator.next()
+            removeComponentForEdgeF64(entry.key, component, entry.value)
+        }
+    }
+
+    private fun insertComponentIncidencesIntoIndexF64(component: PathIntersectionComponentF64) {
+        val iterator = component.incidencesByEdge.entries.iterator()
+        while (iterator.hasNext()) {
+            consumeCandidateWorkF64()
+            val entry = iterator.next()
+            insertComponentForEdgeF64(entry.key, component, entry.value)
+        }
+    }
+
     // The candidate cursors are still live while this method runs, so all index mutation is
     // deferred here. Accepted storage is O(k): every entry other than the surviving winner is a
     // destructive component removal, and the no-merge case contains one component only.
@@ -982,66 +1106,63 @@ private class PathIntersectionRegistryF64(
         profile: PathComponentProfileF64,
         accepted: List<PathIntersectionComponentF64>,
     ) {
-        check(profile.containsAllF64(incoming))
+        check(profileContainsAllWithBudgetF64(profile, incoming))
         if (accepted.isEmpty()) {
-            val interiorCuts = profile.incidencesByEdge.count { (edgeIndex, incidence) ->
-                isInteriorCutF64(edgeIndex, incidence.parameter)
-            }
+            val interiorCuts = countInteriorCutsWithBudgetF64(profile.incidencesByEdge)
             ensureInteriorCutCapacityF64(interiorCuts)
+            consumeCandidateWorkF64()
             val component = PathIntersectionComponentF64(
                 id = nextComponentId++,
-                orderKey = pathComponentOrderKeyF64(eventKey, profile, edgeKeys),
+                orderKey = pathComponentOrderKeyF64(eventKey),
                 exactWitness = profile.exactWitness,
                 canonicalPoint = profile.canonicalPoint,
             )
-            component.incidencesByEdge.putAll(profile.incidencesByEdge)
+            copyProfileIncidencesIntoComponentF64(profile, component)
+            consumeCandidateWorkF64()
             activeComponentsById[component.id] = component
-            component.incidencesByEdge.keys.forEach { edgeIndex -> insertComponentForEdgeF64(edgeIndex, component) }
+            insertComponentIncidencesIntoIndexF64(component)
             interiorCutCount += interiorCuts
             registerExactComponentF64(component)
             return
         }
 
         val winner = accepted.minWith(Comparator(::comparePathIntersectionComponentsF64))
-        // A repeated pair inside an already closed component is semantically a no-op. In
-        // particular, an n-way exact concurrence produces n * (n - 1) / 2 kernel events, but
-        // only its first n - 1 events enlarge the persistent component. This is proved from the
-        // two-incidence incoming profile rather than by comparing the whole high-degree map: the
-        // latter would be an unbudgeted O(degree) scan. Keeping the existing index entries avoids
-        // rebuilding its O(n) direct incidences for every redundant pair, while the checks below
-        // still charge every shared incidence before inspecting it.
+        // Exact n-way no-ops have already returned through the preflight above, before an
+        // accumulator copy. This fallback retains the same semantic no-op for direct events;
+        // its profile work is charged and therefore cannot hide a degree-dependent allocation.
         if (accepted.size == 1 && componentAlreadyRepresentsIncomingF64(winner, incoming)) return
-        val removedInteriorCuts = accepted.sumOf { component ->
-            component.incidencesByEdge.count { (edgeIndex, incidence) ->
-                isInteriorCutF64(edgeIndex, incidence.parameter)
-            }
+        var removedInteriorCuts = 0
+        accepted.forEach { component ->
+            removedInteriorCuts += countInteriorCutsWithBudgetF64(component.incidencesByEdge)
         }
-        val profileInteriorCuts = profile.incidencesByEdge.count { (edgeIndex, incidence) ->
-            isInteriorCutF64(edgeIndex, incidence.parameter)
-        }
+        val profileInteriorCuts = countInteriorCutsWithBudgetF64(profile.incidencesByEdge)
         ensureInteriorCutCapacityF64(max(0, profileInteriorCuts - removedInteriorCuts))
 
         accepted.forEach { component ->
             unregisterExactComponentF64(component)
-            component.incidencesByEdge.forEach { (edgeIndex, incidence) ->
-                componentsByEdge[edgeIndex].remove(component, incidence)
-            }
+            removeComponentIncidencesFromIndexF64(component)
+            consumeCandidateWorkF64()
             activeComponentsById.remove(component.id)
         }
         interiorCutCount += profileInteriorCuts - removedInteriorCuts
-        winner.incidencesByEdge.clear()
-        winner.incidencesByEdge.putAll(profile.incidencesByEdge)
+        clearComponentIncidencesWithBudgetF64(winner)
+        copyProfileIncidencesIntoComponentF64(profile, winner)
+        consumeCandidateWorkF64()
         winner.exactWitness = profile.exactWitness
+        consumeCandidateWorkF64()
         winner.canonicalPoint = profile.canonicalPoint
         var firstEvent = eventKey
         accepted.forEach { component ->
+            consumeCandidateWorkF64()
             if (comparePathEventOrderKeysF64(component.orderKey.firstEvent, firstEvent) < 0) {
                 firstEvent = component.orderKey.firstEvent
             }
         }
-        winner.orderKey = pathComponentOrderKeyF64(firstEvent, profile, edgeKeys)
+        consumeCandidateWorkF64()
+        winner.orderKey = pathComponentOrderKeyF64(firstEvent)
+        consumeCandidateWorkF64()
         activeComponentsById[winner.id] = winner
-        winner.incidencesByEdge.keys.forEach { edgeIndex -> insertComponentForEdgeF64(edgeIndex, winner) }
+        insertComponentIncidencesIntoIndexF64(winner)
         registerExactComponentF64(winner)
     }
 
@@ -1049,7 +1170,11 @@ private class PathIntersectionRegistryF64(
         component: PathIntersectionComponentF64,
         incoming: PathComponentProfileF64,
     ): Boolean {
-        if (canonicalPointF64(incoming.canonicalPoint, component.canonicalPoint) != component.canonicalPoint) return false
+        consumeCandidateWorkF64()
+        if (!sameTopologicalPointF64(canonicalPointF64(incoming.canonicalPoint, component.canonicalPoint), component.canonicalPoint)) {
+            return false
+        }
+        consumeCandidateWorkF64()
         val mergedWitness = canonicalExactWitnessF64(incoming.exactWitness, component.exactWitness)
         val componentWitness = component.exactWitness
         if (mergedWitness != null && (componentWitness == null ||
@@ -1058,9 +1183,13 @@ private class PathIntersectionRegistryF64(
         if (mergedWitness == null && componentWitness != null) return false
 
         val exactPriority = exactMatchF64(component, incoming.exactWitness)
-        for ((edgeIndex, incomingIncidence) in incoming.incidencesByEdge) {
-            val componentIncidence = component.incidencesByEdge[edgeIndex] ?: return false
+        val iterator = incoming.incidencesByEdge.entries.iterator()
+        while (iterator.hasNext()) {
             consumeCandidateWorkF64()
+            val incomingEntry = iterator.next()
+            val edgeIndex = incomingEntry.key
+            val incomingIncidence = incomingEntry.value
+            val componentIncidence = component.incidencesByEdge[edgeIndex] ?: return false
             val mergedIncidence = mergeDirectPathIncidencesF64(incomingIncidence, componentIncidence)
                 ?: if (exactPriority) mergeExactPathIncidencesF64(incomingIncidence, componentIncidence) else return false
             if (mergedIncidence != componentIncidence) return false
@@ -1075,7 +1204,7 @@ private class PathIntersectionRegistryF64(
     }
 
     private fun isInteriorCutF64(edgeIndex: Int, parameter: Double): Boolean =
-        edges[edgeIndex].start != edges[edgeIndex].end && parameter != 0.0 && parameter != 1.0
+        !sameTopologicalPointF64(edges[edgeIndex].start, edges[edgeIndex].end) && parameter != 0.0 && parameter != 1.0
 
     private class PathCandidateStreamF64(
         val ordinal: Int,
@@ -1084,8 +1213,11 @@ private class PathIntersectionRegistryF64(
     )
 
     private fun consumeCandidateWorkF64() {
-        if (remainingCandidateProbes <= 0) throw IllegalStateException("path-candidate-limit")
-        remainingCandidateProbes -= 1
+        // The configured I32 is positive and this subtracts only after observing a positive
+        // remainder, so it cannot wrap while enforcing the deterministic global work budget.
+        val remaining = remainingCandidateProbes
+        if (remaining <= 0) throw IllegalStateException("path-candidate-limit")
+        remainingCandidateProbes = remaining - 1
     }
 
     private fun directComponentCursorsF64(edgeIndex: Int, parameter: Double): List<PathComponentCursorF64> =
@@ -1104,9 +1236,15 @@ private class PathIntersectionRegistryF64(
         requireSharedIncidence: Boolean,
     ): Boolean {
         var hasSharedIncidence = false
-        for ((edgeIndex, componentIncidence) in component.incidencesByEdge) {
-            val profileIncidence = profile.incidencesByEdge[edgeIndex] ?: continue
+        val iterator = component.incidencesByEdge.entries.iterator()
+        while (iterator.hasNext()) {
+            // Debit before reading either side. Non-common incidences are still a real scan and
+            // are the high-degree blocker case that the global work budget must bound.
             consumeCandidateWorkF64()
+            val componentEntry = iterator.next()
+            val edgeIndex = componentEntry.key
+            val componentIncidence = componentEntry.value
+            val profileIncidence = profile.incidencesByEdge[edgeIndex] ?: continue
             if (mergeDirectPathIncidencesF64(componentIncidence, profileIncidence) == null) return false
             hasSharedIncidence = true
         }
@@ -1118,13 +1256,19 @@ private class PathIntersectionRegistryF64(
         component: PathIntersectionComponentF64,
         exactPriority: Boolean,
     ): Boolean {
-        for ((edgeIndex, componentIncidence) in component.incidencesByEdge) {
+        val iterator = component.incidencesByEdge.entries.iterator()
+        while (iterator.hasNext()) {
+            // As above, charge absent incidences too: copying one into the accumulator is work
+            // and makes temporary state O(min(I, remaining candidate work)).
+            consumeCandidateWorkF64()
+            val componentEntry = iterator.next()
+            val edgeIndex = componentEntry.key
+            val componentIncidence = componentEntry.value
             val profileIncidence = profile.incidencesByEdge[edgeIndex]
             if (profileIncidence == null) {
                 profile.incidencesByEdge[edgeIndex] = componentIncidence
                 continue
             }
-            consumeCandidateWorkF64()
             val merged = mergeDirectPathIncidencesF64(profileIncidence, componentIncidence)
             when {
                 merged != null -> profile.incidencesByEdge[edgeIndex] = merged
@@ -1133,7 +1277,9 @@ private class PathIntersectionRegistryF64(
                 else -> return false
             }
         }
+        consumeCandidateWorkF64()
         profile.exactWitness = canonicalExactWitnessF64(profile.exactWitness, component.exactWitness)
+        consumeCandidateWorkF64()
         profile.canonicalPoint = canonicalPointF64(profile.canonicalPoint, component.canonicalPoint)
         return true
     }
@@ -1146,6 +1292,7 @@ private class PathIntersectionRegistryF64(
         // single cut without widening its ULP interval: an exact endpoint wins, otherwise the
         // least canonical parameter wins. This is deterministic on JVM and JS and cannot turn a
         // direct 0/15/30 chain into a 30-ULP interval.
+        consumeCandidateWorkF64()
         val parameter = when {
             first.parameter == 0.0 || second.parameter == 0.0 -> 0.0
             first.parameter == 1.0 || second.parameter == 1.0 -> 1.0
@@ -1218,17 +1365,36 @@ private class PathIntersectionRegistryF64(
         incomingWitness: PathExactIntersectionWitnessF64?,
     ): Boolean = incomingWitness != null && component.exactWitness?.samePoint(incomingWitness) == true
 
-    private fun insertComponentForEdgeF64(edgeIndex: Int, component: PathIntersectionComponentF64) {
-        val incidence = component.incidencesByEdge.getValue(edgeIndex)
+    private fun insertComponentForEdgeF64(
+        edgeIndex: Int,
+        component: PathIntersectionComponentF64,
+        incidence: PathComponentIncidenceF64,
+    ) {
+        consumeCandidateWorkF64()
         componentsByEdge[edgeIndex].add(component, incidence)
     }
 
+    private fun removeComponentForEdgeF64(
+        edgeIndex: Int,
+        component: PathIntersectionComponentF64,
+        incidence: PathComponentIncidenceF64,
+    ) {
+        consumeCandidateWorkF64()
+        componentsByEdge[edgeIndex].remove(component, incidence)
+    }
+
     private fun registerExactComponentF64(component: PathIntersectionComponentF64) {
-        component.exactWitness?.let { witness -> exactComponentsByWitness.insert(witness, component) }
+        component.exactWitness?.let { witness ->
+            consumeCandidateWorkF64()
+            exactComponentsByWitness.insert(witness, component)
+        }
     }
 
     private fun unregisterExactComponentF64(component: PathIntersectionComponentF64) {
-        component.exactWitness?.let { witness -> exactComponentsByWitness.remove(witness, component) }
+        component.exactWitness?.let { witness ->
+            consumeCandidateWorkF64()
+            exactComponentsByWitness.remove(witness, component)
+        }
     }
 }
 
@@ -1435,13 +1601,16 @@ private fun exactQuotientF64(numerator: DoubleArray, denominator: DoubleArray): 
 }
 
 private fun exactPathLineF64(edge: PathInputEdgeF64): PathExactLineF64? {
-    if (!edge.start.isFinite() || !edge.end.isFinite() || edge.start == edge.end) return null
+    val canonicalEdge = canonicalTopologicalPathInputEdgeF64(edge)
+    if (!canonicalEdge.start.isFinite() || !canonicalEdge.end.isFinite() ||
+        sameTopologicalPointF64(canonicalEdge.start, canonicalEdge.end)
+    ) return null
     return PathExactLineF64(
-        a = ExpansionF64.twoDiff(edge.start.y, edge.end.y),
-        b = ExpansionF64.twoDiff(edge.end.x, edge.start.x),
+        a = ExpansionF64.twoDiff(canonicalEdge.start.y, canonicalEdge.end.y),
+        b = ExpansionF64.twoDiff(canonicalEdge.end.x, canonicalEdge.start.x),
         c = ExpansionF64.expansionDiff(
-            ExpansionF64.product(doubleArrayOf(edge.start.x), doubleArrayOf(edge.end.y)),
-            ExpansionF64.product(doubleArrayOf(edge.start.y), doubleArrayOf(edge.end.x)),
+            ExpansionF64.product(doubleArrayOf(canonicalEdge.start.x), doubleArrayOf(canonicalEdge.end.y)),
+            ExpansionF64.product(doubleArrayOf(canonicalEdge.start.y), doubleArrayOf(canonicalEdge.end.x)),
         ),
     )
 }
@@ -1581,13 +1750,17 @@ private fun List<PathEdgeCutF64>.groupByEquivalentParametersF64(): List<List<Pat
 }
 
 private fun pointAtPathCutF64(edge: PathInputEdgeF64, cut: PathEdgeCutF64): Point2F64 =
-    cut.canonicalPoint ?: pointAtPathParameterF64(edge, cut.parameter)
+    canonicalTopologicalPointF64(cut.canonicalPoint ?: pointAtPathParameterF64(edge, cut.parameter))
 
-private fun canonicalPointF64(first: Point2F64, second: Point2F64): Point2F64 = when {
-    first.x < second.x -> first
-    first.x > second.x -> second
-    first.y <= second.y -> first
-    else -> second
+private fun canonicalPointF64(first: Point2F64, second: Point2F64): Point2F64 {
+    val canonicalFirst = canonicalTopologicalPointF64(first)
+    val canonicalSecond = canonicalTopologicalPointF64(second)
+    return when {
+        canonicalFirst.x < canonicalSecond.x -> canonicalFirst
+        canonicalFirst.x > canonicalSecond.x -> canonicalSecond
+        canonicalFirst.y <= canonicalSecond.y -> canonicalFirst
+        else -> canonicalSecond
+    }
 }
 
 private fun parameterAtPointF64(point: Point2F64, edge: PathInputEdgeF64): Double {
@@ -1604,14 +1777,17 @@ private fun unboundedParameterAtPointF64(point: Point2F64, edge: PathInputEdgeF6
     }
 }
 
-private fun pointAtPathParameterF64(edge: PathInputEdgeF64, parameter: Double): Point2F64 = when (parameter) {
-    0.0 -> edge.start
-    1.0 -> edge.end
-    else -> Point2F64(
-        edge.start.x + (edge.end.x - edge.start.x) * parameter,
-        edge.start.y + (edge.end.y - edge.start.y) * parameter,
+private fun pointAtPathParameterF64(edge: PathInputEdgeF64, parameter: Double): Point2F64 =
+    canonicalTopologicalPointF64(
+        when (parameter) {
+            0.0 -> edge.start
+            1.0 -> edge.end
+            else -> Point2F64(
+                edge.start.x + (edge.end.x - edge.start.x) * parameter,
+                edge.start.y + (edge.end.y - edge.start.y) * parameter,
+            )
+        },
     )
-}
 
 private fun canonicalParameterF64(parameters: List<Double>): Double = when {
     parameters.any { it == 0.0 } -> 0.0
