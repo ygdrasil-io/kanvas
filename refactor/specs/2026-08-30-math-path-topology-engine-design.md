@@ -321,20 +321,34 @@ cycle isolé. Elle associe chaque arête projetée au pont d'arête `F64` réel 
 lui correspond, puis utilise le même broad phase déterministe et budgété pour
 chercher tout contact non-adjacent. Le pont source est classifié par le noyau
 robuste avant son image `F32` : un point projeté doit être soutenu par un point
-ou un overlap source, et un overlap projeté par un overlap source. Une paire de
-cycles déjà en contact dans le domaine source peut conserver les contacts de
-lattice voisins générés par l'aplatissement d'une tangence, mais cette preuve
-de composante ne rend jamais sûr un contact entre cycles source-disjoints. Une
-jonction, un croisement ou un overlap partiel nouveau entre cycles source-
+ou un overlap source, et un overlap projeté par un overlap source; la classe
+ne suffit pas, car le locus projeté doit aussi contenir l'image F32 du locus
+source correspondant. Une
+tangence source crée un token local formé des deux ponts source, de sa classe
+Point/Overlap et de son ancre exacte reprojetée sur la lattice `F32`. Ce token
+peut autoriser un contact `F32` voisin seulement si son locus de contact
+contient l'ancre (ou y est relié par des loci de contact exacts) et si les deux
+runs de ponts avancent chacun d'au plus une arête adjacente à chaque pas. Il
+n'existe donc aucun cache ou whitelist par paire de contours : un contact
+source à gauche ne peut jamais autoriser un endpoint ou overlap projeté
+distant à droite. La marche locale est de degré fixe, emploie les prédicats de
+lignes robustes et débite le budget candidat avant chaque voisin/relation.
+Une jonction, un croisement ou un overlap partiel nouveau entre cycles source-
 disjoints échoue si les cycles ne sont pas exactement le même cycle projeté;
-un contact nouveau non-adjacent au sein d'un cycle compare au préalable son
-aire double normalisée source et projetée et échoue lorsque la perte dépasse
-la tolérance.
+un contact nouveau non-adjacent au sein d'un cycle dérive d'abord ses préimages
+source exactes. Pour un Point, les deux arcs source fermés par la corde de
+contact sont évalués; pour un Overlap, les deux endpoints et les bords de la
+bande locale le sont. Chaque double-aire absolue est additionnée sans signe;
+une préimage ambiguë échoue conservativement. Une variation d'aire distante
+de signe opposé ne peut donc pas autoriser la perte du pont local.
 
 Les cycles projetés sont groupés avec une clé structurelle `F32`, indépendante
 de la rotation et de l'orientation, après normalisation des zéros signés et
-suppression exacte des sommets colinéaires. La multiplicité et l'orientation
-de chaque membre sont conservées. Pour chaque groupe, des expansions calculent
+suppression exacte des sommets colinéaires. Toute rotation est départagée par
+la séquence cyclique complète (rotation minimale linéaire de Booth, dans les
+deux sens), y compris lorsqu'un minimum est répété; la multiplicité et
+l'orientation de chaque membre restent séparées de cette clé. Pour chaque
+groupe, des expansions calculent
 à la fois la modification signée agrégée des doubles-aires source/projetées et
 l'étendue cumulée des frontières source; l'une ou l'autre supérieure à `2^-45`
 fait échouer par `IllegalStateException("path-f32-projection-collapse")`. Ce

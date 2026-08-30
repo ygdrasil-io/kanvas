@@ -106,9 +106,36 @@ private data class ProjectedCycleKeyF32(
     val vertices: List<Point2F32>,
 )
 
-private data class ProjectedContourPairI32(
+private enum class ProjectedSourceContactKindF32 { POINT, OVERLAP }
+
+// This is a local proof, never a contour-pair permission.  The source edge neighbourhood and
+// the exact source contact's F32 anchor must both match before it can justify a nearby rounded
+// tangent/collinearity contact.
+private data class ProjectedSourceContactAnchorF32(
     val firstContourIndex: Int,
+    val firstEdgeIndex: Int,
     val secondContourIndex: Int,
+    val secondEdgeIndex: Int,
+    val kind: ProjectedSourceContactKindF32,
+    val anchors: List<Point2F32>,
+)
+
+private data class ProjectedBoundaryContactF64(
+    val first: ProjectedBoundaryEdgeF64,
+    val second: ProjectedBoundaryEdgeF64,
+    val intersection: PathIntersectionF64,
+)
+
+// Edge IDs are canonical semantic identities supplied by the projected boundary builder, not
+// reconstructed coordinate keys. They keep a local contact walk finite without quantizing F32.
+private data class ProjectedBoundaryContactPairKeyF64(
+    val firstEdgeId: Int,
+    val secondEdgeId: Int,
+)
+
+private data class ProjectedContactPreimageF64(
+    val vertexIndex: Int,
+    val point: Point2F64,
 )
 
 private fun unaryResultF32(path: PathF32, limits: PathOpsLimitsI32, outputFillRule: FillRule): PathF32 {
@@ -339,16 +366,18 @@ private fun validateProjectedContourSetF64(
     }
     val edges = projectedBoundaryEdgesF64(contours)
     if (edges.size >= 2) {
-        val sourceContactContourPairs = projectedContourPairsWithSourceContactF64(
+        val sourceContactAnchors = projectedSourceContactAnchorsF64(
             edges,
             contours,
+            normalization,
             candidateWorkBudget,
         )
         validateProjectedBoundaryContactsF64(
             edges,
             contours,
             cycleKeys,
-            sourceContactContourPairs,
+            sourceContactAnchors,
+            normalization,
             candidateWorkBudget,
         )
     }
@@ -362,9 +391,11 @@ private fun validateProjectedBoundaryContactsF64(
     edges: List<ProjectedBoundaryEdgeF64>,
     contours: List<ProjectedPathContourF32>,
     cycleKeys: List<ProjectedCycleKeyF32>,
-    sourceContactContourPairs: Set<ProjectedContourPairI32>,
+    sourceContactAnchors: List<ProjectedSourceContactAnchorF32>,
+    normalization: PathNormalizationF64,
     candidateWorkBudget: PathCandidateWorkBudgetI32,
 ): Unit {
+    var accumulatedLocalLoss = doubleArrayOf()
     forEachPathEdgeCandidatePairF64(edges.map(ProjectedBoundaryEdgeF64::projected), candidateWorkBudget) { firstIndex, secondIndex ->
         val first = edges[firstIndex]
         val second = edges[secondIndex]
@@ -378,10 +409,22 @@ private fun validateProjectedBoundaryContactsF64(
         candidateWorkBudget.consume()
         val projectedIntersection = intersectPathEdgesF64(first.projected, second.projected)
             ?: return@forEachPathEdgeCandidatePairF64
-        val contourPair = projectedContourPairI32(first.contourIndex, second.contourIndex)
         if (
-            sourceIntersectionBacksProjectedContactF64(sourceIntersection, projectedIntersection) ||
-                (contourPair != null && contourPair in sourceContactContourPairs)
+            sourceIntersectionBacksProjectedContactF64(
+                sourceIntersection,
+                projectedIntersection,
+                normalization,
+                candidateWorkBudget,
+            ) ||
+                projectedContactHasLocalSourceAuthorizationF64(
+                    first,
+                    second,
+                    projectedIntersection,
+                    edges,
+                    contours,
+                    sourceContactAnchors,
+                    candidateWorkBudget,
+                )
         ) {
             return@forEachPathEdgeCandidatePairF64
         }
@@ -396,61 +439,385 @@ private fun validateProjectedBoundaryContactsF64(
             return@forEachPathEdgeCandidatePairF64
         }
 
-        // A non-adjacent edge contact within one contour can erase a narrow face even though no
-        // cross-contour winding sum changes. Compare the source normalized contour to its actual
-        // F32 image; a material loss is not an allowed projection simplification.
-        if (projectedContourModificationIsSignificantF64(contours[first.contourIndex])) {
+        // A new same-contour contact can erase a narrow face while an unrelated distant rounding
+        // change cancels the contour's signed total area.  Measure only the local loop/strip
+        // identified by this contact and add absolute losses, never a globally cancellable sum.
+        val localLoss = projectedContactLocalLossF64(
+            first,
+            second,
+            projectedIntersection,
+            contours[first.contourIndex],
+            candidateWorkBudget,
+        ) ?: throw IllegalStateException("path-f32-projection-collapse")
+        candidateWorkBudget.consume()
+        accumulatedLocalLoss = ExpansionF64.expansionSum(accumulatedLocalLoss, localLoss)
+        if (isTopologicallySignificantAreaF64(accumulatedLocalLoss)) {
             throw IllegalStateException("path-f32-projection-collapse")
         }
     }
+    if (isTopologicallySignificantAreaF64(accumulatedLocalLoss)) {
+        throw IllegalStateException("path-f32-projection-collapse")
+    }
 }
 
-private fun projectedContourPairsWithSourceContactF64(
+private fun projectedSourceContactAnchorsF64(
     edges: List<ProjectedBoundaryEdgeF64>,
     contours: List<ProjectedPathContourF32>,
+    normalization: PathNormalizationF64,
     candidateWorkBudget: PathCandidateWorkBudgetI32,
-): Set<ProjectedContourPairI32> {
-    val result = linkedSetOf<ProjectedContourPairI32>()
+): List<ProjectedSourceContactAnchorF32> {
+    val anchors = linkedSetOf<ProjectedSourceContactAnchorF32>()
     forEachPathEdgeCandidatePairF64(edges.map(ProjectedBoundaryEdgeF64::projected), candidateWorkBudget) { firstIndex, secondIndex ->
         val first = edges[firstIndex]
         val second = edges[secondIndex]
         if (projectedBoundaryEdgesAreAdjacentF64(first, second, contours)) return@forEachPathEdgeCandidatePairF64
-        // Evaluate the source relation before the F32 image. A source contact elsewhere between
-        // the same two selected contours proves their intended tangent/overlap topology, so a
-        // neighboring F32 lattice contact produced by flattening is not a new component merge.
+        if (first.contourIndex == second.contourIndex) return@forEachPathEdgeCandidatePairF64
         candidateWorkBudget.consume()
         val sourceIntersection = intersectPathEdgesF64(first.source, second.source)
+            ?: return@forEachPathEdgeCandidatePairF64
         candidateWorkBudget.consume()
         intersectPathEdgesF64(first.projected, second.projected)
             ?: return@forEachPathEdgeCandidatePairF64
-        if (sourceIntersection != null) {
-            projectedContourPairI32(first.contourIndex, second.contourIndex)?.let(result::add)
+        val anchor = projectedSourceContactAnchorF32(first, second, sourceIntersection, normalization, candidateWorkBudget)
+            ?: return@forEachPathEdgeCandidatePairF64
+        candidateWorkBudget.consume()
+        anchors += anchor
+    }
+    return anchors.toList()
+}
+
+private fun projectedSourceContactAnchorF32(
+    first: ProjectedBoundaryEdgeF64,
+    second: ProjectedBoundaryEdgeF64,
+    sourceIntersection: PathIntersectionF64,
+    normalization: PathNormalizationF64,
+    candidateWorkBudget: PathCandidateWorkBudgetI32,
+): ProjectedSourceContactAnchorF32? {
+    if (first.contourIndex == second.contourIndex) return null
+    val anchors = when (sourceIntersection) {
+        is PathIntersectionF64.PointF64 -> listOf(sourceIntersection.point)
+        is PathIntersectionF64.OverlapF64 -> listOf(sourceIntersection.start, sourceIntersection.end)
+    }.map { point ->
+        candidateWorkBudget.consume()
+        val projected = canonicalProjectedPointF32(normalization.denormalize(point))
+        if (!projected.isFinite()) throw IllegalStateException("path-f32-projection-collapse")
+        projected
+    }.distinct()
+    if (anchors.isEmpty()) return null
+    val kind = when (sourceIntersection) {
+        is PathIntersectionF64.PointF64 -> ProjectedSourceContactKindF32.POINT
+        is PathIntersectionF64.OverlapF64 -> ProjectedSourceContactKindF32.OVERLAP
+    }
+    return if (first.contourIndex < second.contourIndex) {
+        ProjectedSourceContactAnchorF32(
+            first.contourIndex,
+            first.edgeIndex,
+            second.contourIndex,
+            second.edgeIndex,
+            kind,
+            anchors,
+        )
+    } else {
+        ProjectedSourceContactAnchorF32(
+            second.contourIndex,
+            second.edgeIndex,
+            first.contourIndex,
+            first.edgeIndex,
+            kind,
+            anchors,
+        )
+    }
+}
+
+private fun projectedContactHasLocalSourceAuthorizationF64(
+    first: ProjectedBoundaryEdgeF64,
+    second: ProjectedBoundaryEdgeF64,
+    projectedIntersection: PathIntersectionF64,
+    edges: List<ProjectedBoundaryEdgeF64>,
+    contours: List<ProjectedPathContourF32>,
+    sourceContactAnchors: List<ProjectedSourceContactAnchorF32>,
+    candidateWorkBudget: PathCandidateWorkBudgetI32,
+): Boolean {
+    if (first.contourIndex == second.contourIndex) return false
+    val candidate = canonicalProjectedBoundaryContactF64(first, second, projectedIntersection)
+    for (anchor in sourceContactAnchors) {
+        candidateWorkBudget.consume()
+        if (
+            anchor.firstContourIndex != candidate.first.contourIndex ||
+                anchor.secondContourIndex != candidate.second.contourIndex
+        ) {
+            continue
+        }
+        if (anchor.kind == ProjectedSourceContactKindF32.OVERLAP && projectedIntersection !is PathIntersectionF64.OverlapF64) {
+            continue
+        }
+        if (
+            projectedContactSharesLocalSourceAnchorComponentF64(
+                candidate,
+                anchor,
+                edges,
+                contours,
+                candidateWorkBudget,
+            )
+        ) {
+            return true
         }
     }
+    return false
+}
+
+private fun canonicalProjectedBoundaryContactF64(
+    first: ProjectedBoundaryEdgeF64,
+    second: ProjectedBoundaryEdgeF64,
+    intersection: PathIntersectionF64,
+): ProjectedBoundaryContactF64 = if (first.contourIndex < second.contourIndex) {
+    ProjectedBoundaryContactF64(first, second, intersection)
+} else {
+    ProjectedBoundaryContactF64(second, first, intersection)
+}
+
+private fun projectedContactSharesLocalSourceAnchorComponentF64(
+    candidate: ProjectedBoundaryContactF64,
+    anchor: ProjectedSourceContactAnchorF32,
+    edges: List<ProjectedBoundaryEdgeF64>,
+    contours: List<ProjectedPathContourF32>,
+    candidateWorkBudget: PathCandidateWorkBudgetI32,
+): Boolean {
+    // This fixed-degree walk is restricted to one contour pair. Each step advances both source
+    // bridge runs by at most one projected edge and requires the exact F32 contact loci to meet.
+    // A rounded tangent can therefore reach its source anchor through its local contact run, but
+    // a remote contact on the same two contours cannot borrow that permission. Unlike a global
+    // contact cache, it retains no pair list and every candidate relation is debited first.
+    val visited = mutableSetOf(projectedBoundaryContactPairKeyF64(candidate))
+    val pending = ArrayDeque<ProjectedBoundaryContactF64>()
+    pending += candidate
+    while (pending.isNotEmpty()) {
+        val current = pending.removeFirst()
+        if (projectedContactIsSourceAnchorF64(current, anchor, candidateWorkBudget)) return true
+        for (firstOffset in -1..1) {
+            for (secondOffset in -1..1) {
+                candidateWorkBudget.consume()
+                val nextFirst = projectedBoundaryEdgeOffsetF64(current.first, firstOffset, contours, edges)
+                val nextSecond = projectedBoundaryEdgeOffsetF64(current.second, secondOffset, contours, edges)
+                val nextKey = ProjectedBoundaryContactPairKeyF64(nextFirst.projected.id, nextSecond.projected.id)
+                if (!visited.add(nextKey)) continue
+                candidateWorkBudget.consume()
+                val nextIntersection = intersectPathEdgesF64(nextFirst.projected, nextSecond.projected) ?: continue
+                candidateWorkBudget.consume()
+                if (!projectedContactLociTouchF64(current.intersection, nextIntersection)) continue
+                pending += ProjectedBoundaryContactF64(nextFirst, nextSecond, nextIntersection)
+            }
+        }
+    }
+    return false
+}
+
+private fun projectedBoundaryContactPairKeyF64(contact: ProjectedBoundaryContactF64): ProjectedBoundaryContactPairKeyF64 =
+    ProjectedBoundaryContactPairKeyF64(contact.first.projected.id, contact.second.projected.id)
+
+private fun projectedBoundaryEdgeOffsetF64(
+    edge: ProjectedBoundaryEdgeF64,
+    offset: Int,
+    contours: List<ProjectedPathContourF32>,
+    edges: List<ProjectedBoundaryEdgeF64>,
+): ProjectedBoundaryEdgeF64 {
+    val edgeCount = contours[edge.contourIndex].vertices.size
+    val offsetIndex = (edge.edgeIndex + offset).mod(edgeCount)
+    val contourFirstEdgeId = edge.projected.id - edge.edgeIndex
+    val result = edges[contourFirstEdgeId + offsetIndex]
+    check(result.contourIndex == edge.contourIndex && result.edgeIndex == offsetIndex)
     return result
 }
 
-private fun projectedContourPairI32(firstContourIndex: Int, secondContourIndex: Int): ProjectedContourPairI32? = when {
-    firstContourIndex == secondContourIndex -> null
-    firstContourIndex < secondContourIndex -> ProjectedContourPairI32(firstContourIndex, secondContourIndex)
-    else -> ProjectedContourPairI32(secondContourIndex, firstContourIndex)
+private fun projectedContactIsSourceAnchorF64(
+    contact: ProjectedBoundaryContactF64,
+    anchor: ProjectedSourceContactAnchorF32,
+    candidateWorkBudget: PathCandidateWorkBudgetI32,
+): Boolean =
+    contact.first.edgeIndex == anchor.firstEdgeIndex &&
+        contact.second.edgeIndex == anchor.secondEdgeIndex &&
+        projectedIntersectionContainsSourceAnchorF64(contact.intersection, anchor.anchors, candidateWorkBudget)
+
+private fun projectedContactLociTouchF64(first: PathIntersectionF64, second: PathIntersectionF64): Boolean {
+    val firstPoints = projectedContactLatticeBoundaryPointsF64(first)
+    val secondPoints = projectedContactLatticeBoundaryPointsF64(second)
+    return firstPoints.any { point -> projectedIntersectionLatticeContainsPointF64(second, point) } ||
+        secondPoints.any { point -> projectedIntersectionLatticeContainsPointF64(first, point) }
+}
+
+private fun projectedContactBoundaryPointsF64(intersection: PathIntersectionF64): List<Point2F64> = when (intersection) {
+    is PathIntersectionF64.PointF64 -> listOf(intersection.point)
+    is PathIntersectionF64.OverlapF64 -> listOf(intersection.start, intersection.end)
+}
+
+private fun projectedContactLatticeBoundaryPointsF64(intersection: PathIntersectionF64): List<Point2F64> =
+    projectedContactBoundaryPointsF64(intersection).map { point -> projectedLatticePointF32(point).toPoint2F64() }
+
+private fun projectedIntersectionLatticeContainsPointF64(intersection: PathIntersectionF64, point: Point2F64): Boolean = when (intersection) {
+    is PathIntersectionF64.PointF64 -> samePathOperationPointF64(projectedLatticePointF32(intersection.point).toPoint2F64(), point)
+    is PathIntersectionF64.OverlapF64 -> {
+        val endpoints = projectedContactLatticeBoundaryPointsF64(intersection)
+        PathPredicatesF64.onSegment(point, endpoints.first(), endpoints.last())
+    }
+}
+
+private fun projectedIntersectionContainsSourceAnchorF64(
+    projectedIntersection: PathIntersectionF64,
+    anchors: List<Point2F32>,
+    candidateWorkBudget: PathCandidateWorkBudgetI32,
+): Boolean = anchors.any { anchor ->
+    candidateWorkBudget.consume()
+    val point = canonicalProjectedPointF32(anchor).toPoint2F64()
+    when (projectedIntersection) {
+        is PathIntersectionF64.PointF64 -> samePathOperationPointF64(projectedLatticePointF32(projectedIntersection.point).toPoint2F64(), point)
+        is PathIntersectionF64.OverlapF64 -> {
+            val endpoints = projectedContactLatticeBoundaryPointsF64(projectedIntersection)
+            PathPredicatesF64.onSegment(point, endpoints.first(), endpoints.last())
+        }
+    }
 }
 
 private fun sourceIntersectionBacksProjectedContactF64(
     source: PathIntersectionF64?,
     projected: PathIntersectionF64,
-): Boolean = when (projected) {
-    is PathIntersectionF64.PointF64 -> source is PathIntersectionF64.PointF64 || source is PathIntersectionF64.OverlapF64
-    is PathIntersectionF64.OverlapF64 -> source is PathIntersectionF64.OverlapF64
+    normalization: PathNormalizationF64,
+    candidateWorkBudget: PathCandidateWorkBudgetI32,
+): Boolean = when (source) {
+    null -> false
+    is PathIntersectionF64.PointF64 -> {
+        if (projected !is PathIntersectionF64.PointF64) return false
+        candidateWorkBudget.consume()
+        val anchor = canonicalProjectedPointF32(normalization.denormalize(source.point))
+        if (!anchor.isFinite()) throw IllegalStateException("path-f32-projection-collapse")
+        projectedIntersectionContainsSourceAnchorF64(projected, listOf(anchor), candidateWorkBudget)
+    }
+    is PathIntersectionF64.OverlapF64 -> {
+        candidateWorkBudget.consume()
+        val start = canonicalProjectedPointF32(normalization.denormalize(source.start))
+        candidateWorkBudget.consume()
+        val end = canonicalProjectedPointF32(normalization.denormalize(source.end))
+        if (!start.isFinite() || !end.isFinite()) throw IllegalStateException("path-f32-projection-collapse")
+        val sourceLocusStart = start.toPoint2F64()
+        val sourceLocusEnd = end.toPoint2F64()
+        projectedContactLatticeBoundaryPointsF64(projected).all { point ->
+            candidateWorkBudget.consume()
+            PathPredicatesF64.onSegment(point, sourceLocusStart, sourceLocusEnd)
+        }
+    }
 }
 
-private fun projectedContourModificationIsSignificantF64(contour: ProjectedPathContourF32): Boolean =
-    isTopologicallySignificantAreaF64(
-        ExpansionF64.expansionDiff(
-            contour.originalSignedDoubleAreaExpansionF64,
-            contour.normalizedSignedDoubleAreaExpansionF64,
-        ),
+private fun projectedContactLocalLossF64(
+    first: ProjectedBoundaryEdgeF64,
+    second: ProjectedBoundaryEdgeF64,
+    projectedIntersection: PathIntersectionF64,
+    contour: ProjectedPathContourF32,
+    candidateWorkBudget: PathCandidateWorkBudgetI32,
+): DoubleArray? = when (projectedIntersection) {
+    is PathIntersectionF64.PointF64 -> projectedPointContactLocalLossF64(
+        first,
+        second,
+        projectedIntersection.point,
+        contour,
+        candidateWorkBudget,
     )
+    is PathIntersectionF64.OverlapF64 -> projectedOverlapContactLocalLossF64(
+        first,
+        second,
+        projectedIntersection,
+        contour,
+        candidateWorkBudget,
+    )
+}
+
+private fun projectedPointContactLocalLossF64(
+    first: ProjectedBoundaryEdgeF64,
+    second: ProjectedBoundaryEdgeF64,
+    projectedPoint: Point2F64,
+    contour: ProjectedPathContourF32,
+    candidateWorkBudget: PathCandidateWorkBudgetI32,
+): DoubleArray? {
+    val firstPreimage = projectedContactPreimageF64(first, projectedPoint, contour) ?: return null
+    val secondPreimage = projectedContactPreimageF64(second, projectedPoint, contour) ?: return null
+    if (firstPreimage.vertexIndex == secondPreimage.vertexIndex) return doubleArrayOf()
+    val vertices = exactSourceContourVerticesF64(contour, candidateWorkBudget) ?: return null
+    val firstArc = sourceContourArcF64(vertices, firstPreimage.vertexIndex, secondPreimage.vertexIndex, candidateWorkBudget)
+    val secondArc = sourceContourArcF64(vertices, secondPreimage.vertexIndex, firstPreimage.vertexIndex, candidateWorkBudget)
+    val firstArea = absolutePathOperationExpansionF64(signedDoubleAreaExpansionF64(firstArc + firstArc.first()))
+    val secondArea = absolutePathOperationExpansionF64(signedDoubleAreaExpansionF64(secondArc + secondArc.first()))
+    // The projected identification closes both source arcs at the new point.  Keep both
+    // non-negative loop losses: selecting the smaller one would let a distant opposite-area
+    // change conceal the significant complementary loop that the F32 contact also identifies.
+    candidateWorkBudget.consume()
+    return ExpansionF64.expansionSum(firstArea, secondArea)
+}
+
+private fun projectedOverlapContactLocalLossF64(
+    first: ProjectedBoundaryEdgeF64,
+    second: ProjectedBoundaryEdgeF64,
+    projectedOverlap: PathIntersectionF64.OverlapF64,
+    contour: ProjectedPathContourF32,
+    candidateWorkBudget: PathCandidateWorkBudgetI32,
+): DoubleArray? {
+    val firstStart = projectedContactPreimageF64(first, projectedOverlap.start, contour) ?: return null
+    val firstEnd = projectedContactPreimageF64(first, projectedOverlap.end, contour) ?: return null
+    val secondStart = projectedContactPreimageF64(second, projectedOverlap.start, contour) ?: return null
+    val secondEnd = projectedContactPreimageF64(second, projectedOverlap.end, contour) ?: return null
+    val strip = listOf(firstStart.point, firstEnd.point, secondEnd.point, secondStart.point)
+    candidateWorkBudget.consume()
+    return absolutePathOperationExpansionF64(signedDoubleAreaExpansionF64(strip + strip.first()))
+}
+
+private fun projectedContactPreimageF64(
+    edge: ProjectedBoundaryEdgeF64,
+    projectedPoint: Point2F64,
+    contour: ProjectedPathContourF32,
+): ProjectedContactPreimageF64? {
+    val edgeCount = contour.vertices.size
+    val startIndex = edge.edgeIndex
+    val endIndex = (edge.edgeIndex + 1) % edgeCount
+    if (
+        samePathOperationPointF64(edge.projected.start, projectedPoint) &&
+            samePathOperationPointF64(contour.sourceFirstVertices[startIndex], contour.sourceLastVertices[startIndex])
+    ) {
+        return ProjectedContactPreimageF64(startIndex, edge.source.start)
+    }
+    if (
+        samePathOperationPointF64(edge.projected.end, projectedPoint) &&
+            samePathOperationPointF64(contour.sourceFirstVertices[endIndex], contour.sourceLastVertices[endIndex])
+    ) {
+        return ProjectedContactPreimageF64(endIndex, edge.source.end)
+    }
+    return null
+}
+
+private fun exactSourceContourVerticesF64(
+    contour: ProjectedPathContourF32,
+    candidateWorkBudget: PathCandidateWorkBudgetI32,
+): List<Point2F64>? {
+    contour.sourceFirstVertices.indices.forEach { index ->
+        candidateWorkBudget.consume()
+        if (!samePathOperationPointF64(contour.sourceFirstVertices[index], contour.sourceLastVertices[index])) {
+            return null
+        }
+    }
+    return contour.sourceFirstVertices
+}
+
+private fun sourceContourArcF64(
+    vertices: List<Point2F64>,
+    startIndex: Int,
+    endIndex: Int,
+    candidateWorkBudget: PathCandidateWorkBudgetI32,
+): List<Point2F64> {
+    val result = mutableListOf<Point2F64>()
+    var index = startIndex
+    do {
+        candidateWorkBudget.consume()
+        result += vertices[index]
+        index = (index + 1) % vertices.size
+    } while (index != (endIndex + 1) % vertices.size)
+    return result
+}
 
 private fun validateProjectedCycleGroupsF64(
     contours: List<ProjectedPathContourF32>,
@@ -610,10 +977,21 @@ private fun canonicalProjectedCycleForEqualityF32(
     return rotatePathOperationVerticesF32(reduced, firstIndex)
 }
 
-private fun canonicalProjectedPointF32(point: Point2F32): Point2F32 = Point2F32(
-    x = if (point.x == 0f) 0f else point.x,
-    y = if (point.y == 0f) 0f else point.y,
+private fun projectedLatticePointF32(point: Point2F32): Point2F32 = Point2F32(
+    x = Float.fromBits(point.x.toRawBits()),
+    y = Float.fromBits(point.y.toRawBits()),
 )
+
+private fun projectedLatticePointF32(point: Point2F64): Point2F32 =
+    projectedLatticePointF32(Point2F32(point.x.toFloat(), point.y.toFloat()))
+
+private fun canonicalProjectedPointF32(point: Point2F32): Point2F32 {
+    val latticePoint = projectedLatticePointF32(point)
+    return Point2F32(
+        x = if (latticePoint.x == 0f) 0f else latticePoint.x,
+        y = if (latticePoint.y == 0f) 0f else latticePoint.y,
+    )
+}
 
 private fun projectedMiddlePointIsCollinearF32(
     previous: Point2F32,
@@ -703,23 +1081,51 @@ private fun compareAbsoluteAreasF64(first: DoubleArray, second: DoubleArray): In
 
 private fun DoubleArray.negatedPathOperationExpansionF64(): DoubleArray = DoubleArray(size) { index -> -this[index] }
 
-private fun pathOperationRotationIndexF32(vertices: List<Point2F32>): Int = vertices.indices
-    .minWithOrNull(
-        Comparator { firstIndex, secondIndex ->
-            comparePathOperationPointsF32(vertices[firstIndex], vertices[secondIndex])
-        },
-    ) ?: 0
+private fun pathOperationRotationIndexF32(vertices: List<Point2F32>): Int =
+    minimalPathOperationRotationIndexF32(vertices) { first, second ->
+        comparePathOperationPointsF32(first, second)
+    }
 
 private fun pathOperationRotationIndexF32(
     vertices: List<Point2F32>,
     candidateWorkBudget: PathCandidateWorkBudgetI32,
 ): Int {
-    var result = 0
-    for (index in 1 until vertices.size) {
+    // Booth compares no more than two complete cycle lengths. Reserve that whole fixed bound
+    // before inspecting the sequence so equal rotations consume the same deterministic budget.
+    repeat(vertices.size * 2) {
         candidateWorkBudget.consume()
-        if (comparePathOperationPointsF32(vertices[index], vertices[result]) < 0) result = index
     }
-    return result
+    return minimalPathOperationRotationIndexF32(vertices) { first, second ->
+        comparePathOperationPointsF32(first, second)
+    }
+}
+
+private fun minimalPathOperationRotationIndexF32(
+    vertices: List<Point2F32>,
+    compare: (Point2F32, Point2F32) -> Int,
+): Int {
+    if (vertices.size < 2) return 0
+    var first = 0
+    var second = 1
+    var offset = 0
+    val size = vertices.size
+    while (first < size && second < size && offset < size) {
+        val comparison = compare(vertices[(first + offset) % size], vertices[(second + offset) % size])
+        when {
+            comparison == 0 -> offset += 1
+            comparison > 0 -> {
+                first += offset + 1
+                if (first == second) first += 1
+                offset = 0
+            }
+            else -> {
+                second += offset + 1
+                if (first == second) second += 1
+                offset = 0
+            }
+        }
+    }
+    return minOf(first, second).coerceAtMost(size - 1)
 }
 
 private fun rotatePathOperationVerticesF32(vertices: List<Point2F32>, firstIndex: Int): MutableList<Point2F32> {

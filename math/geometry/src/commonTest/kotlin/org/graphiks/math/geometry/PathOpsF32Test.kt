@@ -401,6 +401,167 @@ class PathOpsF32Test {
     }
 
     @Test
+    fun `projection rejects a remote F32 endpoint despite a real contact on the contour pair`() {
+        val epsilon = 2.0.pow(-25)
+        val first = affineProjectionContourF64(
+            0.0 to 0.0,
+            3.0 to 0.0,
+            3.0 to 1.0,
+            0.0 to 1.0,
+        )
+        val second = affineProjectionContourF64(
+            0.0 to 1.0,
+            0.75 to 1.5,
+            2.25 to 1.5,
+            3.0 to 1.0 + epsilon,
+            3.0 to 3.0 + epsilon / 4.0,
+            0.0 to 3.0,
+        )
+
+        val error = assertFailsWith<IllegalStateException> {
+            projectContoursF64ToPathF32(listOf(first, second), affineProjectionNormalizationF64(), FillRule.WINDING)
+        }
+
+        assertEquals("path-f32-projection-collapse", error.message)
+    }
+
+    @Test
+    fun `projection rejects a remote F32 partial overlap despite a real contact on the contour pair`() {
+        val epsilon = 2.0.pow(-25)
+        val first = affineProjectionContourF64(
+            0.0 to 0.0,
+            3.0 to 0.0,
+            3.0 to 1.0,
+            0.0 to 1.0,
+        )
+        val second = affineProjectionContourF64(
+            0.0 to 1.0,
+            0.75 to 1.5,
+            2.25 to 1.5,
+            3.0 + epsilon to 0.5,
+            3.0 + epsilon to 1.0 + epsilon,
+            3.0 to 3.0 + epsilon / 4.0,
+            0.0 to 3.0,
+        )
+
+        val error = assertFailsWith<IllegalStateException> {
+            projectContoursF64ToPathF32(listOf(first, second), affineProjectionNormalizationF64(), FillRule.WINDING)
+        }
+
+        assertEquals("path-f32-projection-collapse", error.message)
+    }
+
+    @Test
+    fun `projection rejects a compensated significant narrow bridge`() {
+        val epsilon = 2.0.pow(-25)
+        val contour = affineProjectionContourF64(
+            0.0 to 0.0,
+            3.0 to 0.0,
+            3.0 to 1.0,
+            1.0 + epsilon to 1.0,
+            1.0 + epsilon to 2.0,
+            3.0 to 2.0,
+            3.0 to 3.0 - 2.0 * epsilon / 3.0,
+            0.0 to 3.0,
+            0.0 to 2.0,
+            1.0 to 2.0,
+            1.0 to 1.0,
+            0.0 to 1.0,
+        )
+
+        assertTrue(epsilon / 9.0 > 2.0.pow(-46))
+        val error = assertFailsWith<IllegalStateException> {
+            projectContoursF64ToPathF32(listOf(contour), affineProjectionNormalizationF64(), FillRule.WINDING)
+        }
+
+        assertEquals("path-f32-projection-collapse", error.message)
+    }
+
+    @Test
+    fun `projection gives repeated minimum cycles the same budgeted result after rotation and reversal`() {
+        val normalization = PathNormalizationF64(origin = Point2F64(0.0, 0.0), scale = 1.0)
+        val first = repeatedMinimumCycleF64(rotation = 0, reverse = false)
+        val rotated = repeatedMinimumCycleF64(rotation = 1, reverse = false)
+        val reversedFirst = repeatedMinimumCycleF64(rotation = 0, reverse = true)
+        val reversed = repeatedMinimumCycleF64(rotation = 1, reverse = true)
+        val budget = 1_060
+
+        val baselineFailure = projectionFailureMessageF32(listOf(first, first), normalization, budget)
+        assertEquals("path-candidate-limit", baselineFailure)
+        assertEquals(
+            baselineFailure,
+            projectionFailureMessageF32(listOf(first, rotated), normalization, budget),
+        )
+        assertEquals(
+            baselineFailure,
+            projectionFailureMessageF32(listOf(reversedFirst, reversed), normalization, budget),
+        )
+
+        val baseline = projectContoursF64ToPathF32(listOf(first, first), normalization, FillRule.WINDING)
+        val rotatedResult = projectContoursF64ToPathF32(listOf(first, rotated), normalization, FillRule.WINDING)
+        val reversedResult = projectContoursF64ToPathF32(listOf(reversedFirst, reversed), normalization, FillRule.WINDING)
+        val probes = listOf(Point2F32(0.5f, 0.25f), Point2F32(1.5f, 0.25f), Point2F32(3f, 3f))
+
+        assertMembershipEquivalentF32(baseline, rotatedResult, probes)
+        assertMembershipEquivalentF32(baseline, reversedResult, probes)
+    }
+
+    @Test
+    fun `projection group permits exact threshold and rejects above threshold across rotations`() {
+        val normalization = PathNormalizationF64(origin = Point2F64(1.5, 1.5), scale = 1.0)
+        val outer = projectionInsetRectangleF64(bottomInset = 0.0, reverse = false, rotation = 0)
+        val exact = projectionInsetRectangleF64(bottomInset = 2.0.pow(-46), reverse = true, rotation = 1)
+        val rotatedExact = projectionInsetRectangleF64(bottomInset = 2.0.pow(-46), reverse = true, rotation = 2)
+        val reversedOuter = projectionInsetRectangleF64(bottomInset = 0.0, reverse = true, rotation = 3)
+        val reversedExact = projectionInsetRectangleF64(bottomInset = 2.0.pow(-46), reverse = false, rotation = 2)
+        val above = projectionInsetRectangleF64(bottomInset = 2.0.pow(-45), reverse = true, rotation = 3)
+        val threshold = doubleArrayOf(2.0.pow(-45))
+        val exactDifference = ExpansionF64.expansionSum(
+            signedDoubleAreaExpansionF64(outer.vertices.map { it.point } + outer.vertices.first().point),
+            signedDoubleAreaExpansionF64(exact.vertices.map { it.point } + exact.vertices.first().point),
+        )
+
+        assertEquals(0, ExpansionF64.sign(ExpansionF64.expansionDiff(exactDifference, threshold)))
+        val exactResult = projectContoursF64ToPathF32(listOf(outer, exact), normalization, FillRule.WINDING)
+        val rotatedResult = projectContoursF64ToPathF32(listOf(outer, rotatedExact), normalization, FillRule.WINDING)
+        val reversedResult = projectContoursF64ToPathF32(listOf(reversedOuter, reversedExact), normalization, FillRule.WINDING)
+        assertMembershipEquivalentF32(
+            exactResult,
+            rotatedResult,
+            listOf(Point2F32(1.5f, 1.5f), Point2F32(0f, 0f)),
+        )
+        assertMembershipEquivalentF32(
+            exactResult,
+            reversedResult,
+            listOf(Point2F32(1.5f, 1.5f), Point2F32(0f, 0f)),
+        )
+
+        val error = assertFailsWith<IllegalStateException> {
+            projectContoursF64ToPathF32(listOf(outer, above), normalization, FillRule.WINDING)
+        }
+        assertEquals("path-f32-projection-collapse", error.message)
+    }
+
+    @Test
+    fun `projection group rejects cumulative all same orientation loss`() {
+        val normalization = PathNormalizationF64(origin = Point2F64(1.5, 1.5), scale = 1.0)
+        val d = 2.0.pow(-47)
+        val error = assertFailsWith<IllegalStateException> {
+            projectContoursF64ToPathF32(
+                listOf(
+                    projectionInsetRectangleF64(bottomInset = 0.0, reverse = false, rotation = 0),
+                    projectionInsetRectangleF64(bottomInset = d, reverse = false, rotation = 1),
+                    projectionInsetRectangleF64(bottomInset = 2.0 * d, reverse = false, rotation = 2),
+                ),
+                normalization,
+                FillRule.WINDING,
+            )
+        }
+
+        assertEquals("path-f32-projection-collapse", error.message)
+    }
+
+    @Test
     fun `projection aggregates three coincident F32 cycles beyond the area tolerance`() {
         val d = 3.0 * 2.0.pow(-50)
         val normalization = PathNormalizationF64(origin = Point2F64(1.5, 1.5), scale = 1.0)
@@ -844,6 +1005,52 @@ class PathOpsF32Test {
             Point2F64(-0.5 + inset, 0.5 - inset),
         )
         return contourF64(if (reverse) points.asReversed() else points)
+    }
+
+    private fun repeatedMinimumCycleF64(rotation: Int, reverse: Boolean): PathContourF64 {
+        val points = listOf(
+            Point2F64(0.0, 0.0),
+            Point2F64(1.0, 0.0),
+            Point2F64(1.0, 1.0),
+            Point2F64(0.0, 0.0),
+            Point2F64(2.0, 0.0),
+            Point2F64(2.0, 1.0),
+        )
+        val oriented = if (reverse) points.asReversed() else points
+        val normalizedRotation = rotation.mod(oriented.size)
+        return contourF64(oriented.drop(normalizedRotation) + oriented.take(normalizedRotation))
+    }
+
+    private fun projectionInsetRectangleF64(
+        bottomInset: Double,
+        reverse: Boolean,
+        rotation: Int,
+    ): PathContourF64 {
+        val points = listOf(
+            Point2F64(-0.5, -0.5 + bottomInset),
+            Point2F64(0.5, -0.5 + bottomInset),
+            Point2F64(0.5, 0.5),
+            Point2F64(-0.5, 0.5),
+        )
+        val oriented = if (reverse) points.asReversed() else points
+        val normalizedRotation = rotation.mod(oriented.size)
+        return contourF64(oriented.drop(normalizedRotation) + oriented.take(normalizedRotation))
+    }
+
+    private fun projectionFailureMessageF32(
+        contours: List<PathContourF64>,
+        normalization: PathNormalizationF64,
+        maxCandidateProbes: Int,
+    ): String? = try {
+        projectContoursF64ToPathF32(
+            contours = contours,
+            normalization = normalization,
+            fillRule = FillRule.WINDING,
+            candidateWorkBudget = PathCandidateWorkBudgetI32(maxCandidateProbes),
+        )
+        null
+    } catch (error: IllegalStateException) {
+        error.message
     }
 
     private fun projectionCollapseNormalizationF64(): PathNormalizationF64 {
