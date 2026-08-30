@@ -281,6 +281,87 @@ class PathIntersectionsF64Test {
     }
 
     @Test
+    fun `AABB keeps a one ULP endpoint contact recognized by the robust kernel`() {
+        val first = inputEdgeF64(0, Point2F64(0.0, 0.0), Point2F64(1.0, 0.0))
+        val second = inputEdgeF64(
+            1,
+            Point2F64(Double.fromBits(1.0.toBits() + 1L), 0.0),
+            Point2F64(2.0, 0.0),
+        )
+
+        val direct = assertIs<PathIntersectionF64.PointF64>(intersectPathEdgesF64(first, second))
+        val split = splitPathEdgesF64(listOf(first, second), PathOpsLimitsI32())
+        val contactIdentities = identitiesAtPointF64(split, Point2F64(1.0, 0.0)).distinct()
+
+        assertEquals(Point2F64(1.0, 0.0), direct.point)
+        assertEquals(1.0, direct.firstT)
+        assertEquals(0.0, direct.secondT)
+        assertEquals(1, contactIdentities.size)
+        assertEquals(listOf(0, 1), contactIdentities.single().incidentEdgeIds)
+        assertEquals(mapOf(0 to 1.0, 1 to 0.0), contactIdentities.single().parameterByEdgeId)
+    }
+
+    @Test
+    fun `overlapping nonintersecting AABBs consume the candidate work budget in every order`() {
+        val edges = overlappingAabbNonintersectingPathEdgesF64(count = 128)
+        val orders = listOf(edges, edges.reversed(), edges.drop(47) + edges.take(47))
+        val sufficientLimits = PathOpsLimitsI32(maxCandidateProbes = 1_000_000)
+        val expected = canonicalSplitEdgesF64(splitPathEdgesF64(orders.first(), sufficientLimits))
+
+        orders.forEach { order ->
+            val error = assertFailsWith<IllegalStateException> {
+                splitPathEdgesF64(order, PathOpsLimitsI32(maxCandidateProbes = 1))
+            }
+            assertEquals("path-candidate-limit", error.message)
+
+            val split = splitPathEdgesF64(order, sufficientLimits)
+            assertEquals(expected, canonicalSplitEdgesF64(split))
+            assertEquals((0 until 128).toList(), split.map { it.sourceId })
+        }
+    }
+
+    @Test
+    fun `known non collinear endpoints retain their candidate work limit`() {
+        val edges = openContourInputEdgesF64(
+            listOf(
+                Point2F64(0.0, 0.0),
+                Point2F64(1.0, 0.0),
+                Point2F64(1.0, 1.0),
+            ),
+        )
+
+        val error = assertFailsWith<IllegalStateException> {
+            splitPathEdgesF64(edges, PathOpsLimitsI32(maxCandidateProbes = 1))
+        }
+        val split = splitPathEdgesF64(edges, PathOpsLimitsI32(maxCandidateProbes = 64))
+        val shared = identitiesAtPointF64(split, Point2F64(1.0, 0.0)).distinct().single()
+
+        assertEquals("path-candidate-limit", error.message)
+        assertEquals(listOf(0, 1), shared.incidentEdgeIds)
+        assertEquals(mapOf(0 to 1.0, 1 to 0.0), shared.parameterByEdgeId)
+    }
+
+    @Test
+    fun `known endpoint identities do not consume a distinct intersection limit`() {
+        val knownEndpointEdges = openContourInputEdgesF64(
+            listOf(
+                Point2F64(0.0, 0.0),
+                Point2F64(1.0, 0.0),
+                Point2F64(1.0, 1.0),
+            ),
+        )
+        val crossing = inputEdgeF64(2, Point2F64(0.5, -1.0), Point2F64(0.5, 1.0))
+
+        val split = splitPathEdgesF64(
+            knownEndpointEdges + crossing,
+            PathOpsLimitsI32(maxIntersections = 1, maxCandidateProbes = 256),
+        )
+
+        assertEquals(listOf(0, 1), identitiesAtPointF64(split, Point2F64(1.0, 0.0)).distinct().single().incidentEdgeIds)
+        assertEquals(listOf(0, 2), identitiesAtPointF64(split, Point2F64(0.5, 0.0)).distinct().single().incidentEdgeIds)
+    }
+
+    @Test
     fun `mixed disjoint touching crossing and overlapping boxes retain canonical splits through permutations`() {
         val edges = listOf(
             inputEdgeF64(0, Point2F64(0.0, 0.0), Point2F64(10.0, 0.0)),
@@ -1352,6 +1433,15 @@ private fun denseGridPathEdgesF64(linesPerDirection: Int): List<PathInputEdgeF64
             end = Point2F64(index.toDouble(), linesPerDirection.toDouble()),
         )
     }
+
+private fun overlappingAabbNonintersectingPathEdgesF64(count: Int): List<PathInputEdgeF64> = List(count) { index ->
+    val offset = index.toDouble() / (count * 2).toDouble()
+    inputEdgeF64(
+        id = index,
+        start = Point2F64(0.0, offset),
+        end = Point2F64(1.0, 1.0 + offset),
+    )
+}
 
 private fun exactConcurrentInputEdgeF64(id: Int, directionX: Double, directionY: Double): PathInputEdgeF64 {
     val startScale = (id + 1).toDouble()

@@ -37,6 +37,22 @@ private fun canonicalTopologicalPointF64(point: Point2F64): Point2F64 = Point2F6
 private fun sameTopologicalPointF64(first: Point2F64, second: Point2F64): Boolean =
     first.x == second.x && first.y == second.y
 
+// One operation owns this work budget across its broad phase and intersection registry.  Every
+// candidate-facing action consumes before it executes, so a dense AABB workload cannot evade the
+// same deterministic `path-candidate-limit` that bounds the registry's profile work.
+internal class PathCandidateWorkBudgetI32(maxCandidateProbes: Int) {
+    private var remaining: Int = maxCandidateProbes
+
+    init {
+        require(maxCandidateProbes > 0)
+    }
+
+    fun consume() {
+        if (remaining <= 0) throw IllegalStateException("path-candidate-limit")
+        remaining -= 1
+    }
+}
+
 private fun canonicalTopologicalPathInputEdgeF64(edge: PathInputEdgeF64): PathInputEdgeF64 = edge.copy(
     start = canonicalTopologicalPointF64(edge.start),
     end = canonicalTopologicalPointF64(edge.end),
@@ -144,7 +160,14 @@ internal fun intersectPathEdgesF64(firstInput: PathInputEdgeF64, secondInput: Pa
     return PathIntersectionF64.PointF64(pointAtPathParameterF64(first, firstT), firstT, secondT)
 }
 
-internal fun splitPathEdgesF64(edges: List<PathInputEdgeF64>, limits: PathOpsLimitsI32): List<PathSplitEdgeF64> {
+internal fun splitPathEdgesF64(edges: List<PathInputEdgeF64>, limits: PathOpsLimitsI32): List<PathSplitEdgeF64> =
+    splitPathEdgesF64(edges, limits, PathCandidateWorkBudgetI32(limits.maxCandidateProbes))
+
+internal fun splitPathEdgesF64(
+    edges: List<PathInputEdgeF64>,
+    limits: PathOpsLimitsI32,
+    candidateWorkBudget: PathCandidateWorkBudgetI32,
+): List<PathSplitEdgeF64> {
     validatePathInputEdgesF64(edges)
     val canonicalEdges = canonicalPathInputEdgesF64(edges).map(::canonicalTopologicalPathInputEdgeF64)
     val maximumSplitEdges = limits.maxHalfEdges / 2
@@ -156,47 +179,47 @@ internal fun splitPathEdgesF64(edges: List<PathInputEdgeF64>, limits: PathOpsLim
     val registry = PathIntersectionRegistryF64(
         edges = canonicalEdges,
         maxInteriorCuts = maximumSplitEdges - baseSplitEdges,
-        maxCandidateProbes = limits.maxCandidateProbes,
+        candidateWorkBudget = candidateWorkBudget,
     )
-    val broadPhase = PathEdgeAabbIndexF64(canonicalEdges)
-
-    canonicalEdges.indices.forEach { firstIndex ->
-        broadPhase.candidateIndexesAfter(firstIndex).forEach { secondIndex ->
-            val first = canonicalEdges[firstIndex]
-            val second = canonicalEdges[secondIndex]
-            // The broad phase emits the retained second indices in this exact canonical order.
-            // It rejects only strictly disjoint closed AABBs; endpoint/tangent/overlap contacts
-            // continue through the robust kernel unchanged.
-            if (pathEdgesShareOnlyKnownNonCollinearEndpointF64(first, second)) return@forEach
-            when (val intersection = intersectPathEdgesF64(first, second)) {
-                is PathIntersectionF64.PointF64 -> registry.addIntersection(
+    forEachPathEdgeCandidatePairF64(canonicalEdges, candidateWorkBudget) { firstIndex, secondIndex ->
+        val first = canonicalEdges[firstIndex]
+        val second = canonicalEdges[secondIndex]
+        // The broad phase emits the retained second indices in this exact canonical order.
+        // It rejects only AABB gaps that cannot reach the kernel's endpoint-snap policy;
+        // endpoint/tangent/overlap contacts continue through the robust kernel unchanged.
+        if (pathEdgesShareOnlyKnownNonCollinearEndpointF64(first, second)) {
+            registry.consumeKnownEndpointNoOpCandidateWorkF64()
+            return@forEachPathEdgeCandidatePairF64
+        }
+        candidateWorkBudget.consume()
+        when (val intersection = intersectPathEdgesF64(first, second)) {
+            is PathIntersectionF64.PointF64 -> registry.addIntersection(
+                firstIndex,
+                intersection.firstT,
+                secondIndex,
+                intersection.secondT,
+                intersection.point,
+                hasUniqueCarrierIntersection = true,
+            )
+            is PathIntersectionF64.OverlapF64 -> {
+                registry.addIntersection(
                     firstIndex,
-                    intersection.firstT,
+                    intersection.firstStartParameter,
                     secondIndex,
-                    intersection.secondT,
-                    intersection.point,
-                    hasUniqueCarrierIntersection = true,
+                    intersection.secondStartParameter,
+                    intersection.start,
+                    hasUniqueCarrierIntersection = false,
                 )
-                is PathIntersectionF64.OverlapF64 -> {
-                    registry.addIntersection(
-                        firstIndex,
-                        intersection.firstStartParameter,
-                        secondIndex,
-                        intersection.secondStartParameter,
-                        intersection.start,
-                        hasUniqueCarrierIntersection = false,
-                    )
-                    registry.addIntersection(
-                        firstIndex,
-                        intersection.firstEndParameter,
-                        secondIndex,
-                        intersection.secondEndParameter,
-                        intersection.end,
-                        hasUniqueCarrierIntersection = false,
-                    )
-                }
-                null -> Unit
+                registry.addIntersection(
+                    firstIndex,
+                    intersection.firstEndParameter,
+                    secondIndex,
+                    intersection.secondEndParameter,
+                    intersection.end,
+                    hasUniqueCarrierIntersection = false,
+                )
             }
+            null -> Unit
         }
     }
     val components = registry.components
@@ -260,11 +283,19 @@ internal fun splitPathEdgesF64(edges: List<PathInputEdgeF64>, limits: PathOpsLim
 }
 
 private data class PathEdgeAabbF64(
-    val edgeIndex: Int,
     val minimumX: Double,
     val maximumX: Double,
     val minimumY: Double,
     val maximumY: Double,
+    val maximumSpan: Double,
+)
+
+private data class PathAabbBoundsF64(
+    val minimumX: Double,
+    val maximumX: Double,
+    val minimumY: Double,
+    val maximumY: Double,
+    val maximumSpan: Double,
 )
 
 private data class PathEndpointRelationF64(
@@ -299,107 +330,181 @@ private fun pathEdgesShareOnlyKnownNonCollinearEndpointF64(
 
 private class PathEdgeAabbIndexF64(edges: List<PathInputEdgeF64>) {
     private class Node(
-        val minimumX: Double,
-        val maximumX: Double,
-        val minimumY: Double,
-        val maximumY: Double,
-        val edgeIndex: Int?,
+        val fromIndex: Int,
+        val untilIndex: Int,
+        val bounds: PathAabbBoundsF64?,
+        val hasNonFiniteEdge: Boolean,
         val left: Node? = null,
         val right: Node? = null,
     )
 
-    private val boxesByEdgeIndex: List<PathEdgeAabbF64?> = edges.mapIndexed(::pathEdgeAabbF64)
-    private val nonFiniteEdgeIndexes: List<Int> = boxesByEdgeIndex.indices.filter { boxesByEdgeIndex[it] == null }
-    private val root: Node? = buildNodeF64(boxesByEdgeIndex.filterNotNull().sortedWith(::comparePathEdgeAabbsF64))
+    private val boxesByEdgeIndex: List<PathEdgeAabbF64?> = edges.map(::pathEdgeAabbF64)
+    private val root: Node? = buildNodeF64(0, boxesByEdgeIndex.size)
 
-    fun candidateIndexesAfter(firstIndex: Int): List<Int> {
-        val candidates = mutableListOf<Int>()
+    fun forEachCandidateIndexAfter(
+        firstIndex: Int,
+        candidateWorkBudget: PathCandidateWorkBudgetI32,
+        action: (Int) -> Unit,
+    ) {
+        if (firstIndex + 1 >= boxesByEdgeIndex.size) return
         val first = boxesByEdgeIndex[firstIndex]
         if (first == null) {
-            for (secondIndex in firstIndex + 1 until boxesByEdgeIndex.size) candidates += secondIndex
-        } else {
-            collectOverlappingIndexesF64(root, first, candidates)
-            nonFiniteEdgeIndexes.forEach { secondIndex ->
-                if (secondIndex > firstIndex) candidates += secondIndex
+            for (secondIndex in firstIndex + 1 until boxesByEdgeIndex.size) {
+                candidateWorkBudget.consume()
+                action(secondIndex)
             }
+            return
         }
-        candidates.sort()
-        return buildList(candidates.size) {
-            var previousIndex = -1
-            candidates.forEach { secondIndex ->
-                if (secondIndex > firstIndex && secondIndex != previousIndex) {
-                    add(secondIndex)
-                    previousIndex = secondIndex
-                }
-            }
-        }
+        visitCandidateNodeF64(root, firstIndex, first, candidateWorkBudget, action)
     }
 
-    private fun buildNodeF64(boxes: List<PathEdgeAabbF64>): Node? = buildNodeF64(boxes, 0, boxes.size)
-
-    private fun buildNodeF64(boxes: List<PathEdgeAabbF64>, fromIndex: Int, untilIndex: Int): Node? {
+    private fun buildNodeF64(fromIndex: Int, untilIndex: Int): Node? {
         if (fromIndex >= untilIndex) return null
         if (untilIndex - fromIndex == 1) {
-            val box = boxes[fromIndex]
-            return Node(box.minimumX, box.maximumX, box.minimumY, box.maximumY, box.edgeIndex)
+            val box = boxesByEdgeIndex[fromIndex]
+            return Node(
+                fromIndex = fromIndex,
+                untilIndex = untilIndex,
+                bounds = box?.toPathAabbBoundsF64(),
+                hasNonFiniteEdge = box == null,
+            )
         }
         val middleIndex = (fromIndex + untilIndex) ushr 1
-        val left = checkNotNull(buildNodeF64(boxes, fromIndex, middleIndex))
-        val right = checkNotNull(buildNodeF64(boxes, middleIndex, untilIndex))
+        val left = checkNotNull(buildNodeF64(fromIndex, middleIndex))
+        val right = checkNotNull(buildNodeF64(middleIndex, untilIndex))
         return Node(
-            minimumX = min(left.minimumX, right.minimumX),
-            maximumX = max(left.maximumX, right.maximumX),
-            minimumY = min(left.minimumY, right.minimumY),
-            maximumY = max(left.maximumY, right.maximumY),
-            edgeIndex = null,
+            fromIndex = fromIndex,
+            untilIndex = untilIndex,
+            bounds = unionPathAabbBoundsF64(left.bounds, right.bounds),
+            hasNonFiniteEdge = left.hasNonFiniteEdge || right.hasNonFiniteEdge,
             left = left,
             right = right,
         )
     }
 
-    private fun collectOverlappingIndexesF64(
+    private fun visitCandidateNodeF64(
         node: Node?,
+        firstIndex: Int,
         query: PathEdgeAabbF64,
-        candidates: MutableList<Int>,
+        candidateWorkBudget: PathCandidateWorkBudgetI32,
+        action: (Int) -> Unit,
     ) {
         node ?: return
-        if (query.maximumX < node.minimumX || node.maximumX < query.minimumX ||
-            query.maximumY < node.minimumY || node.maximumY < query.minimumY
-        ) return
-        node.edgeIndex?.let { candidates += it } ?: run {
-            collectOverlappingIndexesF64(node.left, query, candidates)
-            collectOverlappingIndexesF64(node.right, query, candidates)
+        candidateWorkBudget.consume()
+        if (node.untilIndex <= firstIndex + 1) return
+        node.bounds?.let { bounds ->
+            candidateWorkBudget.consume()
+            if (!node.hasNonFiniteEdge && pathAabbGapIsProvablyDisjointF64(query, bounds)) return
+        }
+        if (node.left == null && node.right == null) {
+            val secondIndex = node.fromIndex
+            if (secondIndex <= firstIndex) return
+            val second = boxesByEdgeIndex[secondIndex]
+            if (second != null) {
+                candidateWorkBudget.consume()
+                if (pathAabbGapIsProvablyDisjointF64(query, second.toPathAabbBoundsF64())) return
+            }
+            candidateWorkBudget.consume()
+            action(secondIndex)
+            return
+        }
+        visitCandidateNodeF64(node.left, firstIndex, query, candidateWorkBudget, action)
+        visitCandidateNodeF64(node.right, firstIndex, query, candidateWorkBudget, action)
+    }
+}
+
+// This is the only broad-phase pair enumerator used by topology consumers.  Its index is built
+// over canonical semantic positions and its left-to-right traversal emits the same `i, j` order
+// as the former nested loop after conservative culling, without materializing or sorting pairs.
+internal fun forEachPathEdgeCandidatePairF64(
+    edges: List<PathInputEdgeF64>,
+    candidateWorkBudget: PathCandidateWorkBudgetI32,
+    action: (firstIndex: Int, secondIndex: Int) -> Unit,
+) {
+    val broadPhase = PathEdgeAabbIndexF64(edges)
+    edges.indices.forEach { firstIndex ->
+        broadPhase.forEachCandidateIndexAfter(firstIndex, candidateWorkBudget) { secondIndex ->
+            action(firstIndex, secondIndex)
         }
     }
 }
 
-private fun pathEdgeAabbF64(edgeIndex: Int, edge: PathInputEdgeF64): PathEdgeAabbF64? {
+private fun pathEdgeAabbF64(edge: PathInputEdgeF64): PathEdgeAabbF64? {
     if (!edge.start.isFinite() || !edge.end.isFinite()) return null
     val startX = canonicalTopologicalCoordinateF64(edge.start.x)
     val startY = canonicalTopologicalCoordinateF64(edge.start.y)
     val endX = canonicalTopologicalCoordinateF64(edge.end.x)
     val endY = canonicalTopologicalCoordinateF64(edge.end.y)
     return PathEdgeAabbF64(
-        edgeIndex = edgeIndex,
         minimumX = min(startX, endX),
         maximumX = max(startX, endX),
         minimumY = min(startY, endY),
         maximumY = max(startY, endY),
+        maximumSpan = max(abs(endX - startX), abs(endY - startY)),
     )
 }
 
-private fun comparePathEdgeAabbsF64(first: PathEdgeAabbF64, second: PathEdgeAabbF64): Int {
-    comparePathEdgeAabbCoordinatesF64(first.minimumX, second.minimumX).takeIf { it != 0 }?.let { return it }
-    comparePathEdgeAabbCoordinatesF64(first.minimumY, second.minimumY).takeIf { it != 0 }?.let { return it }
-    comparePathEdgeAabbCoordinatesF64(first.maximumX, second.maximumX).takeIf { it != 0 }?.let { return it }
-    comparePathEdgeAabbCoordinatesF64(first.maximumY, second.maximumY).takeIf { it != 0 }?.let { return it }
-    return first.edgeIndex.compareTo(second.edgeIndex)
+private fun PathEdgeAabbF64.toPathAabbBoundsF64(): PathAabbBoundsF64 = PathAabbBoundsF64(
+    minimumX = minimumX,
+    maximumX = maximumX,
+    minimumY = minimumY,
+    maximumY = maximumY,
+    maximumSpan = maximumSpan,
+)
+
+private fun unionPathAabbBoundsF64(first: PathAabbBoundsF64?, second: PathAabbBoundsF64?): PathAabbBoundsF64? = when {
+    first == null -> second
+    second == null -> first
+    else -> PathAabbBoundsF64(
+        minimumX = min(first.minimumX, second.minimumX),
+        maximumX = max(first.maximumX, second.maximumX),
+        minimumY = min(first.minimumY, second.minimumY),
+        maximumY = max(first.maximumY, second.maximumY),
+        maximumSpan = max(first.maximumSpan, second.maximumSpan),
+    )
 }
 
-private fun comparePathEdgeAabbCoordinatesF64(first: Double, second: Double): Int = when {
-    first == second -> 0
-    first < second -> -1
-    else -> 1
+// `intersectPathEdgesF64` snaps a parameter to one only through
+// `samePathParameterF64`.  A strict box gap is therefore cullable only when that gap cannot
+// become such an endpoint parameter on either carrier.  The subtree's maximum L-infinity span
+// is intentionally conservative: it may retain false positives, but never filters a contact the
+// robust kernel can canonicalize.
+private fun pathAabbGapIsProvablyDisjointF64(first: PathEdgeAabbF64, second: PathAabbBoundsF64): Boolean =
+    pathAabbAxisGapIsProvablyDisjointF64(
+        first.minimumX,
+        first.maximumX,
+        second.minimumX,
+        second.maximumX,
+        max(first.maximumSpan, second.maximumSpan),
+    ) || pathAabbAxisGapIsProvablyDisjointF64(
+        first.minimumY,
+        first.maximumY,
+        second.minimumY,
+        second.maximumY,
+        max(first.maximumSpan, second.maximumSpan),
+    )
+
+private fun pathAabbAxisGapIsProvablyDisjointF64(
+    firstMinimum: Double,
+    firstMaximum: Double,
+    secondMinimum: Double,
+    secondMaximum: Double,
+    maximumCarrierSpan: Double,
+): Boolean {
+    val gap = when {
+        firstMaximum < secondMinimum -> secondMinimum - firstMaximum
+        secondMaximum < firstMinimum -> firstMinimum - secondMaximum
+        else -> return false
+    }
+    return !pathAabbGapMaySnapToEndpointF64(gap, maximumCarrierSpan)
+}
+
+private fun pathAabbGapMaySnapToEndpointF64(gap: Double, maximumCarrierSpan: Double): Boolean {
+    // Overflow while forming a finite-coordinate carrier span is not a proof of separation.
+    // Keep that pair for the robust kernel rather than inventing a finite absolute tolerance.
+    if (gap <= 0.0 || !gap.isFinite() || !maximumCarrierSpan.isFinite() || maximumCarrierSpan <= 0.0) return true
+    val parameter = 1.0 + gap / maximumCarrierSpan
+    return parameter.isFinite() && samePathParameterF64(1.0, parameter)
 }
 
 private fun validatePathInputEdgesF64(edges: List<PathInputEdgeF64>) {
@@ -966,7 +1071,7 @@ private class PathComponentIdIndexF64 {
 private class PathIntersectionRegistryF64(
     private val edges: List<PathInputEdgeF64>,
     private val maxInteriorCuts: Int,
-    maxCandidateProbes: Int,
+    private val candidateWorkBudget: PathCandidateWorkBudgetI32,
 ) {
     private val activeComponentsById = linkedMapOf<Int, PathIntersectionComponentF64>()
     val components: List<PathIntersectionComponentF64>
@@ -985,7 +1090,14 @@ private class PathIntersectionRegistryF64(
     private var nextComponentId = 0
     private var nextCandidateEpoch = 0L
     private var interiorCutCount = 0
-    private var remainingCandidateProbes = maxCandidateProbes
+
+    // A geometrically proven endpoint identity needs no new component and therefore must not
+    // consume `maxIntersections`. It still represents the same two incoming incidences that a
+    // normal pair would establish, so it spends that minimal candidate work before the no-op.
+    fun consumeKnownEndpointNoOpCandidateWorkF64() {
+        candidateWorkBudget.consume()
+        candidateWorkBudget.consume()
+    }
 
     private fun incomingProfileF64(
         firstEdgeIndex: Int,
@@ -1363,11 +1475,7 @@ private class PathIntersectionRegistryF64(
     )
 
     private fun consumeCandidateWorkF64() {
-        // The configured I32 is positive and this subtracts only after observing a positive
-        // remainder, so it cannot wrap while enforcing the deterministic global work budget.
-        val remaining = remainingCandidateProbes
-        if (remaining <= 0) throw IllegalStateException("path-candidate-limit")
-        remainingCandidateProbes = remaining - 1
+        candidateWorkBudget.consume()
     }
 
     private fun directComponentCursorsF64(edgeIndex: Int, parameter: Double): List<PathComponentCursorF64> =

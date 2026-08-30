@@ -177,6 +177,17 @@ retraits/réinsertions d'index sont soumis au même compteur. À épuisement, le
 moteur échoue de façon déterministe par
 `IllegalStateException("path-candidate-limit")`.
 
+Le broad phase des arêtes est un arbre AABB équilibré sur les intervalles de
+l'ordre sémantique canonique. Une requête visite ses sous-arbres de gauche à
+droite et émet ainsi les seules paires `i, j` conservées avec `j > i` dans le
+même ordre que le scan imbriqué de référence, sans liste de paires ni tri par
+`i`. Une AABB ne peut être rejetée que si son écart d'axe reste séparé même
+selon la politique ULP qui snap les paramètres d'endpoint du noyau; les
+contacts inclusifs, un overflow intermédiaire de span et toute incertitude
+restent donc candidats. La construction persistante est linéaire; chaque
+visite de nœud, comparaison de bounds, émission de candidat et classification
+de paire est débitée avant action du même budget global.
+
 Une surcharge interne permet aux tests d'exercer chaque limite sans exposer
 l'organisation du moteur. Une modification ultérieure de ces valeurs exige
 une preuve comportementale et mémoire ; elle ne change pas le résultat d'une
@@ -262,6 +273,15 @@ topologique et les points émis. Les identités endpoint et leur
 `originalPointF32` conservent au contraire leur provenance exacte, y compris
 le zéro signé d'un endpoint non modifié.
 
+Deux segments finis non dégénérés qui partagent exactement une seule identité
+endpoint concrète et dont les porteurs sont prouvés non colinéaires n'ajoutent
+pas une nouvelle composante d'intersection : l'identité existe déjà et ne
+consomme donc pas `maxIntersections`. Ce no-op consomme néanmoins les deux
+unités minimales de travail correspondant à ses incidences entrantes, en plus
+du travail de broad phase déjà débité; un budget candidat trop petit conserve
+ainsi la même erreur `path-candidate-limit`. Les cas colinéaires, incertains,
+réversés ou ne partageant que des coordonnées suivent le noyau normal.
+
 ## 7. Arrangement planaire et classification
 
 Après découpe aux intersections, chaque segment produit deux demi-arêtes.
@@ -285,12 +305,25 @@ arête appartient à la frontière de sortie si ses deux faces ont des états de
 sélection différents. Les cycles sont simplifiés uniquement par suppression
 des doublons et points colinéaires dont l'équivalence est démontrée.
 
-La projection finale `F64` vers `F32` supprime les sommets adjacents devenus
+La projection finale `F64` vers `F32` arrondit explicitement sur la même
+grille IEEE-754 sur JVM et JS, supprime les sommets adjacents devenus
 identiques, puis recalcule aire et orientation des cycles. Un cycle dégénéré
-est retiré. Si deux frontières topologiquement distinctes deviennent
-indiscernables en `F32` et que leur fusion changerait l'appartenance au-delà de
-la tolérance promise, l'opération échoue explicitement au lieu de retourner un
-path incohérent.
+est retiré seulement si son aire normalisée absolue est au plus `tolerance² =
+2^-46`; l'implémentation compare donc exactement la double-aire à `2^-45`.
+
+La validation porte sur l'ensemble des frontières projetées, jamais sur un
+cycle isolé. Elle associe chaque arête projetée au pont d'arête `F64` réel qui
+lui correspond, puis utilise le même broad phase déterministe et budgété pour
+chercher tout contact nouveau. Un croisement ou une jonction non-adjacente
+nouvelle échoue. Un contact endpoint-endpoint ou un chevauchement colinéaire
+partiel ne crée aucune face `F32` et est donc une modification d'aire nulle.
+En revanche, lorsque deux cycles deviennent exactement le même cycle projeté
+(après suppression exacte des sommets `F32` colinéaires de comparaison) avec
+orientations opposées, leur double-aire nette `F64` est calculée par
+expansion : si elle dépasse `2^-45`, notamment pour un outer/hole devenu un
+même cycle, l'opération échoue explicitement par
+`IllegalStateException("path-f32-projection-collapse")` au lieu de retourner
+un path incohérent.
 
 Ce même flux unaire fournit `simplify` et `asWinding`.
 

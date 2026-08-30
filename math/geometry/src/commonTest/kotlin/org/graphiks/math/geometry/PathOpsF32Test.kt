@@ -1,5 +1,6 @@
 package org.graphiks.math.geometry
 
+import kotlin.math.pow
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -250,6 +251,101 @@ class PathOpsF32Test {
                 )
             }
         }
+    }
+
+    @Test
+    fun `public intersection reports projection collapse for a significant e30 triangle`() {
+        val anchor = 1e30f
+        val anchorBits = anchor.toRawBits()
+        fun coordinate(offsetUlps: Int): Float = Float.fromBits(anchorBits + offsetUlps)
+        fun polygon(offsets: List<Pair<Int, Int>>): PathF32 {
+            val builder = PathBuilder()
+            offsets.forEachIndexed { index, (xOffset, yOffset) ->
+                if (index == 0) {
+                    builder.moveTo(coordinate(xOffset), coordinate(yOffset))
+                } else {
+                    builder.lineTo(coordinate(xOffset), coordinate(yOffset))
+                }
+            }
+            return builder.close().build()
+        }
+
+        val first = polygon(listOf(0 to 0, 10 to 0, 0 to 10))
+        val second = polygon(listOf(-10 to -10, 10 to -10, 7 to -5, -9 to 7, -10 to 10))
+
+        val error = assertFailsWith<IllegalStateException> {
+            PathOpsF32.op(first, second, PathBooleanOp.INTERSECT)
+        }
+
+        assertEquals("path-f32-projection-collapse", error.message)
+    }
+
+    @Test
+    fun `projection rejects significant outer and hole boundaries that become one F32 cycle`() {
+        val normalization = projectionCollapseNormalizationF64()
+        val outer = contourF64(
+            listOf(
+                Point2F64(-0.5, -0.5),
+                Point2F64(0.5, -0.5),
+                Point2F64(0.5, 0.5),
+                Point2F64(-0.5, 0.5),
+            ),
+        )
+        val hole = contourF64(
+            listOf(
+                Point2F64(-0.4375, -0.4375),
+                Point2F64(-0.4375, 0.4375),
+                Point2F64(0.4375, 0.4375),
+                Point2F64(0.4375, -0.4375),
+                Point2F64(0.0, -0.45),
+            ),
+        )
+        val ringDoubleArea = ExpansionF64.expansionSum(
+            signedDoubleAreaExpansionF64(outer.vertices.map { it.point } + outer.vertices.first().point),
+            signedDoubleAreaExpansionF64(hole.vertices.map { it.point } + hole.vertices.first().point),
+        )
+
+        assertTrue(ExpansionF64.sign(ringDoubleArea) > 0)
+        assertTrue(
+            ExpansionF64.sign(
+                ExpansionF64.expansionDiff(ringDoubleArea, doubleArrayOf(2.0.pow(-45))),
+            ) > 0,
+        )
+        val projectedOuter = projectContoursF64ToPathF32(listOf(outer), normalization, FillRule.WINDING)
+        val projectedHole = projectContoursF64ToPathF32(listOf(hole), normalization, FillRule.WINDING)
+        assertTrue(PathAnalysisF32.bounds(projectedOuter) != null)
+        assertTrue(PathAnalysisF32.bounds(projectedHole) != null)
+        val error = assertFailsWith<IllegalStateException> {
+            projectContoursF64ToPathF32(listOf(outer, hole), normalization, FillRule.WINDING)
+        }
+
+        assertEquals("path-f32-projection-collapse", error.message)
+    }
+
+    @Test
+    fun `projection drops only a collapsed contour at or below the real area tolerance`() {
+        val result = projectContoursF64ToPathF32(
+            contours = listOf(collapsedTriangleContourF64(height = 3.0 * 2.0.pow(-24))),
+            normalization = projectionCollapseNormalizationF64(),
+            fillRule = FillRule.WINDING,
+        )
+
+        assertEquals(FillRule.WINDING, result.fillRule)
+        assertEquals(null, PathAnalysisF32.bounds(result))
+        assertFalse(PathAnalysisF32.contains(result, Point2F32(0f, 0f)))
+    }
+
+    @Test
+    fun `projection rejects a collapsed contour above the real area tolerance`() {
+        val error = assertFailsWith<IllegalStateException> {
+            projectContoursF64ToPathF32(
+                contours = listOf(collapsedTriangleContourF64(height = 5.0 * 2.0.pow(-24))),
+                normalization = projectionCollapseNormalizationF64(),
+                fillRule = FillRule.WINDING,
+            )
+        }
+
+        assertEquals("path-f32-projection-collapse", error.message)
     }
 
     @Test
@@ -605,6 +701,28 @@ class PathOpsF32Test {
         .build()
 
     private fun emptyPathF32(): PathF32 = PathBuilder().build()
+
+    private fun contourF64(points: List<Point2F64>): PathContourF64 = PathContourF64(
+        points.map { point -> PathContourVertexF64(point, originalPointF32 = null) },
+    )
+
+    private fun collapsedTriangleContourF64(height: Double): PathContourF64 = contourF64(
+        listOf(
+            Point2F64(0.0, 0.0),
+            Point2F64(2.0.pow(-23), 0.0),
+            Point2F64(0.0, height),
+        ),
+    )
+
+    private fun projectionCollapseNormalizationF64(): PathNormalizationF64 {
+        // A power-of-two F32 spacing keeps this internal normalized fixture bit-identical on
+        // JVM and JS. The public large-coordinate regression above separately covers 1e30f.
+        val ulp = 2.0.pow(-23)
+        return PathNormalizationF64(
+            origin = Point2F64(1.0 + 2.0 * ulp, 1.0 + 2.0 * ulp),
+            scale = 1.0 / (4.0 * ulp),
+        )
+    }
 
     private fun overlappingRectanglesF32(): Pair<PathF32, PathF32> =
         PathBuilder().addRect(RectF32.ofLTRB(0f, 0f, 10f, 10f)).build() to

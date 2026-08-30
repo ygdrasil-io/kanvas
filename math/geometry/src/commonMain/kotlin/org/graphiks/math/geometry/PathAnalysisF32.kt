@@ -81,6 +81,7 @@ public object PathAnalysisF32 {
     /** Tests fill membership using the path's fill rule. Points on a boundary are outside. */
     public fun contains(path: PathF32, point: Point2F32): Boolean {
         if (!point.isFinite()) return false
+        if (path.isLineOnlyF32()) return containsLineOnlyPathF32(path, point)
         if (isSourceBoundaryF64(path, point.toPoint2F64())) return false
         val normalization = pathNormalizationF64(listOf(path))
         val normalizedPoint = normalization.normalize(point)
@@ -243,6 +244,88 @@ public object PathAnalysisF32 {
         }
         return PathTopologyI32(contours.size, contours.count { it.closed }, orientation, path.fillRule.isInverse())
     }
+}
+
+private fun PathF32.isLineOnlyF32(): Boolean {
+    var lineOnly = true
+    forEach { segment ->
+        if (segment !is PathSegmentF32.MoveTo && segment !is PathSegmentF32.LineTo && segment != PathSegmentF32.Close) {
+            lineOnly = false
+        }
+    }
+    return lineOnly
+}
+
+private fun containsLineOnlyPathF32(path: PathF32, point: Point2F32): Boolean {
+    val normalization = pathNormalizationF64(listOf(path))
+    val sourcePoint = point.toPoint2F64()
+    val normalizedPoint = normalization.normalize(point)
+    var contourStart = Point2F32.Origin
+    var current = Point2F32.Origin
+    var started = false
+    var closed = false
+    var boundary = false
+    var winding = 0
+
+    fun traverse(start: Point2F32, end: Point2F32) {
+        if (boundary) return
+        val sourceStart = start.toPoint2F64()
+        val sourceEnd = end.toPoint2F64()
+        if (PathPredicatesF64.onSegment(sourcePoint, sourceStart, sourceEnd)) {
+            boundary = true
+            return
+        }
+        val normalizedStart = normalization.normalize(start)
+        val normalizedEnd = normalization.normalize(end)
+        if (PathPredicatesF64.onSegment(normalizedPoint, normalizedStart, normalizedEnd)) {
+            boundary = true
+            return
+        }
+        if (
+            normalizedStart.y != normalizedEnd.y &&
+            normalizedPoint.y >= min(normalizedStart.y, normalizedEnd.y) &&
+            normalizedPoint.y < max(normalizedStart.y, normalizedEnd.y)
+        ) {
+            val x = normalizedStart.x +
+                (normalizedPoint.y - normalizedStart.y) * (normalizedEnd.x - normalizedStart.x) /
+                    (normalizedEnd.y - normalizedStart.y)
+            if (x > normalizedPoint.x) winding += if (normalizedEnd.y > normalizedStart.y) 1 else -1
+        }
+    }
+
+    fun finishContour() {
+        if (started && !closed && current != contourStart) traverse(current, contourStart)
+    }
+
+    for (segment in path) {
+        if (boundary) return false
+        when (segment) {
+            is PathSegmentF32.MoveTo -> {
+                finishContour()
+                contourStart = segment.point
+                current = segment.point
+                started = true
+                closed = false
+            }
+            is PathSegmentF32.LineTo -> if (started) {
+                traverse(current, segment.point)
+                current = segment.point
+            }
+            PathSegmentF32.Close -> if (started) {
+                if (current != contourStart) traverse(current, contourStart)
+                current = contourStart
+                closed = true
+            }
+            else -> error("line-only path contains a curve")
+        }
+    }
+    finishContour()
+    if (boundary) return false
+    val inside = when (path.fillRule) {
+        FillRule.WINDING, FillRule.INVERSE_WINDING -> winding != 0
+        FillRule.EVEN_ODD, FillRule.INVERSE_EVEN_ODD -> winding % 2 != 0
+    }
+    return if (path.fillRule.isInverse()) !inside else inside
 }
 
 private fun isSourceBoundaryF64(path: PathF32, point: Point2F64): Boolean {

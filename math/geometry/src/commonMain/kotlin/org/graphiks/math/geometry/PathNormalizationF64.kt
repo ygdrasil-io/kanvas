@@ -20,10 +20,14 @@ internal data class PathNormalizationF64(
     )
 
     fun denormalize(point: Point2F64): Point2F32 = Point2F32(
-        (point.x / scale + origin.x).toFloat(),
-        (point.y / scale + origin.y).toFloat(),
+        roundedNormalizedCoordinateF32(point.x / scale + origin.x),
+        roundedNormalizedCoordinateF32(point.y / scale + origin.y),
     )
 }
+
+// Kotlin/JS represents `Float` values with JavaScript numbers at some call boundaries. Rebuild
+// through the raw IEEE-754 payload so the normalization boundary has the same F32 lattice as JVM.
+private fun roundedNormalizedCoordinateF32(value: Double): Float = Float.fromBits(value.toFloat().toRawBits())
 
 internal fun pathNormalizationF64(paths: List<PathF32>): PathNormalizationF64 {
     var left = Double.POSITIVE_INFINITY
