@@ -174,10 +174,10 @@ public object PathAnalysisF32 {
         val topRight = arcs[0].radius.toCornerRadii()
         val bottomRight = arcs[1].radius.toCornerRadii()
         val bottomLeft = arcs[2].radius.toCornerRadii()
-        val width = bounds.right - bounds.left
-        val height = bounds.bottom - bounds.top
-        if (topLeft.x + topRight.x > width || bottomLeft.x + bottomRight.x > width ||
-            topLeft.y + bottomLeft.y > height || topRight.y + bottomRight.y > height
+        val width = bounds.right.toDouble() - bounds.left.toDouble()
+        val height = bounds.bottom.toDouble() - bounds.top.toDouble()
+        if (topLeft.x.toDouble() + topRight.x.toDouble() > width || bottomLeft.x.toDouble() + bottomRight.x.toDouble() > width ||
+            topLeft.y.toDouble() + bottomLeft.y.toDouble() > height || topRight.y.toDouble() + bottomRight.y.toDouble() > height
         ) return null
         val expected = listOf(
             move == Point2F32(bounds.left + topLeft.x, bounds.top),
@@ -255,7 +255,7 @@ private fun isSourceBoundaryF64(path: PathF32, point: Point2F64): Boolean {
                     current = segment.point.toPoint2F64()
                     contourStart = current
                     started = true
-                    pointsAlmostEqualF64(current, point)
+                    false
                 }
                 is PathSegmentF32.LineTo -> if (started) {
                     val end = segment.point.toPoint2F64()
@@ -301,17 +301,17 @@ private fun isSourceBoundaryF64(path: PathF32, point: Point2F64): Boolean {
 }
 
 private fun pointOnQuadF64(point: Point2F64, start: Point2F64, control: Point2F64, end: Point2F64): Boolean {
-    if (pointsAlmostEqualF64(start, point) || pointsAlmostEqualF64(end, point)) return true
+    if (start == point || end == point) return true
     val candidatesX = quadraticRootsF64(start.x - 2.0 * control.x + end.x, 2.0 * (control.x - start.x), start.x - point.x)
     val candidatesY = quadraticRootsF64(start.y - 2.0 * control.y + end.y, 2.0 * (control.y - start.y), start.y - point.y)
-    val candidates = if (candidatesX.isNotEmpty()) candidatesX else candidatesY
+    val candidates = (candidatesX + candidatesY).distinct()
     return candidates.any { t ->
-        t in 0.0..1.0 && pointsAlmostEqualF64(quadPointAtF64(start, control, end, t), point)
+        t in 0.0..1.0 && quadPointMatchesF64(point, start, control, end, t)
     }
 }
 
 private fun pointOnCubicF64(point: Point2F64, start: Point2F64, control1: Point2F64, control2: Point2F64, end: Point2F64): Boolean {
-    if (pointsAlmostEqualF64(start, point) || pointsAlmostEqualF64(end, point)) return true
+    if (start == point || end == point) return true
     val candidatesX = cubicRootsF64(
         -start.x + 3.0 * control1.x - 3.0 * control2.x + end.x,
         3.0 * (start.x - 2.0 * control1.x + control2.x),
@@ -324,14 +324,14 @@ private fun pointOnCubicF64(point: Point2F64, start: Point2F64, control1: Point2
         3.0 * (control1.y - start.y),
         start.y - point.y,
     )
-    val candidates = if (candidatesX.isNotEmpty()) candidatesX else candidatesY
+    val candidates = (candidatesX + candidatesY).distinct()
     return candidates.any { t ->
-        t in 0.0..1.0 && pointsAlmostEqualF64(cubicPointAtF64(start, control1, control2, end, t), point)
+        t in 0.0..1.0 && cubicPointMatchesF64(point, start, control1, control2, end, t)
     }
 }
 
 private fun pointOnArcF64(point: Point2F64, arc: ArcEndpointF64): Boolean {
-    if (pointsAlmostEqualF64(arc.start, point) || pointsAlmostEqualF64(arc.end, point)) return true
+    if (arc.start == point || arc.end == point) return true
     val center = arcCenterF64(arc) ?: return PathPredicatesF64.onSegment(point, arc.start, arc.end)
     val deltaX = point.x - center.center.x
     val deltaY = point.y - center.center.y
@@ -348,7 +348,7 @@ private fun pointOnArcF64(point: Point2F64, arc: ArcEndpointF64): Boolean {
     if (distance > abs(center.sweepAngle)) return false
     val signedDistance = if (center.sweepAngle >= 0.0) distance else -distance
     val t = if (center.sweepAngle == 0.0) 0.0 else signedDistance / center.sweepAngle
-    return t in 0.0..1.0 && pointsAlmostEqualF64(center.pointAt(t), point)
+    return t in 0.0..1.0 && arcPointMatchesF64(center, point, t)
 }
 
 private fun quadraticRootsF64(a: Double, b: Double, c: Double): List<Double> {
@@ -370,7 +370,7 @@ private fun cubicRootsF64(a: Double, b: Double, c: Double, d: Double): List<Doub
         addAll(critical)
         add(1.0)
     }.distinct()
-    val roots = partitions.filter { valueAt(it) == 0.0 }.toMutableList()
+    val roots = partitions.toMutableList()
     partitions.zipWithNext().forEach { (start, end) ->
         var low = start
         var high = end
@@ -397,25 +397,71 @@ private fun cubicRootsF64(a: Double, b: Double, c: Double, d: Double): List<Doub
     return roots.distinct()
 }
 
-private fun quadPointAtF64(start: Point2F64, control: Point2F64, end: Point2F64, t: Double): Point2F64 {
+private fun quadPointMatchesF64(point: Point2F64, start: Point2F64, control: Point2F64, end: Point2F64, t: Double): Boolean {
     val u = 1.0 - t
-    return Point2F64(
-        u * u * start.x + 2.0 * u * t * control.x + t * t * end.x,
-        u * u * start.y + 2.0 * u * t * control.y + t * t * end.y,
+    val weights = doubleArrayOf(u * u, 2.0 * u * t, t * t)
+    return bezierPointMatchesF64(
+        point,
+        doubleArrayOf(start.x, control.x, end.x),
+        doubleArrayOf(start.y, control.y, end.y),
+        weights,
+        errorFactor = 16.0,
     )
 }
 
-private fun cubicPointAtF64(start: Point2F64, control1: Point2F64, control2: Point2F64, end: Point2F64, t: Double): Point2F64 {
+private fun cubicPointMatchesF64(
+    point: Point2F64,
+    start: Point2F64,
+    control1: Point2F64,
+    control2: Point2F64,
+    end: Point2F64,
+    t: Double,
+): Boolean {
     val u = 1.0 - t
-    return Point2F64(
-        u * u * u * start.x + 3.0 * u * u * t * control1.x + 3.0 * u * t * t * control2.x + t * t * t * end.x,
-        u * u * u * start.y + 3.0 * u * u * t * control1.y + 3.0 * u * t * t * control2.y + t * t * t * end.y,
+    val weights = doubleArrayOf(u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t)
+    return bezierPointMatchesF64(
+        point,
+        doubleArrayOf(start.x, control1.x, control2.x, end.x),
+        doubleArrayOf(start.y, control1.y, control2.y, end.y),
+        weights,
+        errorFactor = 32.0,
     )
 }
 
-private fun pointsAlmostEqualF64(first: Point2F64, second: Point2F64): Boolean =
-    PathPredicatesF64.almostEqualUlps(first.x, second.x, maxUlps = 64) &&
-        PathPredicatesF64.almostEqualUlps(first.y, second.y, maxUlps = 64)
+private fun bezierPointMatchesF64(
+    point: Point2F64,
+    xCoordinates: DoubleArray,
+    yCoordinates: DoubleArray,
+    weights: DoubleArray,
+    errorFactor: Double,
+): Boolean {
+    fun residualMatches(coordinates: DoubleArray, target: Double): Boolean {
+        val terms = DoubleArray(coordinates.size) { index -> weights[index] * (coordinates[index] - target) }
+        val residual = terms.sum()
+        val magnitude = terms.sumOf(::abs)
+        return abs(residual) <= errorFactor * PathPredicatesF64.EPSILON_F64 * magnitude
+    }
+    return residualMatches(xCoordinates, point.x) && residualMatches(yCoordinates, point.y)
+}
+
+private fun arcPointMatchesF64(center: ArcCenterF64, point: Point2F64, t: Double): Boolean {
+    val angle = center.startAngle + center.sweepAngle * t
+    val cosAngle = cos(angle)
+    val sinAngle = sin(angle)
+    val cosRotation = cos(center.rotationRadians)
+    val sinRotation = sin(center.rotationRadians)
+    fun residualMatches(vararg terms: Double): Boolean =
+        abs(terms.sum()) <= 64.0 * PathPredicatesF64.EPSILON_F64 * terms.sumOf(::abs)
+    return residualMatches(
+        center.center.x - point.x,
+        center.radiusX * cosRotation * cosAngle,
+        -center.radiusY * sinRotation * sinAngle,
+    ) && residualMatches(
+        center.center.y - point.y,
+        center.radiusX * sinRotation * cosAngle,
+        center.radiusY * cosRotation * sinAngle,
+    )
+}
 
 private fun positiveAngleForBoundaryF64(angle: Double): Double {
     val result = angle % (2.0 * kotlin.math.PI)
@@ -460,19 +506,8 @@ private fun includeCubicExtrema(a: Point2F64, c1: Point2F64, c2: Point2F64, b: P
     (roots(a.x, c1.x, c2.x, b.x) + roots(a.y, c1.y, c2.y, b.y)).distinct().filter { it > 0.0 && it < 1.0 }.forEach { include(point(it)) }
 }
 
-/** Returns an area sign, using an expansion when the floating sum is ambiguous. */
+/** Returns an exact expansion sign for the contour's signed area. */
 private fun signedAreaSignF64(points: List<Point2F64>): Int {
-    var sum = 0.0
-    var magnitude = 0.0
-    points.zipWithNext().forEach { (first, second) ->
-        val cross = first.x * second.y - first.y * second.x
-        sum += cross
-        magnitude += abs(cross)
-    }
-    val errorBound = (points.size + 1).toDouble() * PathPredicatesF64.EPSILON_F64 * magnitude
-    if (sum > errorBound) return 1
-    if (sum < -errorBound) return -1
-
     var exactSum = doubleArrayOf()
     points.zipWithNext().forEach { (first, second) ->
         val cross = ExpansionF64.expansionDiff(

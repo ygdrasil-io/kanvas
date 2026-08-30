@@ -1,11 +1,9 @@
 package org.graphiks.math.geometry
 
 import kotlin.math.PI
-import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.pow
 import kotlin.math.sin
-import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -32,8 +30,8 @@ class PathAnalysisF32Test {
         val radiusY = 4f
         val rotationDegrees = 30f
         val rotationRadians = rotationDegrees.toDouble() * PI / 180.0
-        val startX = (radiusX * cos(rotationRadians)).toFloat()
-        val startY = (radiusX * sin(rotationRadians)).toFloat()
+        val startX = Float.fromBits((radiusX * cos(rotationRadians)).toFloat().toRawBits())
+        val startY = Float.fromBits((radiusX * sin(rotationRadians)).toFloat().toRawBits())
         val path = PathBuilder()
             .moveTo(startX, startY)
             .arcTo(radiusX, radiusY, rotationDegrees, false, true, -startX, -startY)
@@ -41,13 +39,11 @@ class PathAnalysisF32Test {
             .build()
 
         val bounds = requireNotNull(PathAnalysisF32.bounds(path))
-        val expectedX = sqrt((radiusX * cos(rotationRadians)).pow(2) + (radiusY * sin(rotationRadians)).pow(2))
-        val expectedY = sqrt((radiusX * sin(rotationRadians)).pow(2) + (radiusY * cos(rotationRadians)).pow(2))
-
-        assertTrue(abs(bounds.left + expectedX) < 1e-3)
-        assertTrue(abs(bounds.right - expectedX) < 1e-3)
-        assertTrue(abs(bounds.top + expectedY) < 1e-3)
-        assertTrue(abs(bounds.bottom - expectedY) < 1e-3)
+        // SVG endpoint conversion of the rounded F32 endpoints, derived independently of arcCenterF64.
+        assertTrue(PathPredicatesF32.almostEqualUlps(bounds.left, -8.04649f, 2), "left=${bounds.left}")
+        assertTrue(PathPredicatesF32.almostEqualUlps(bounds.right, 8.04649f, 2), "right=${bounds.right}")
+        assertTrue(PathPredicatesF32.almostEqualUlps(bounds.top, -5.678478f, 2), "top=${bounds.top}")
+        assertTrue(PathPredicatesF32.almostEqualUlps(bounds.bottom, 5.678478f, 2), "bottom=${bounds.bottom}")
     }
 
     @Test
@@ -121,6 +117,35 @@ class PathAnalysisF32Test {
     }
 
     @Test
+    fun `contains keeps a tangent cubic boundary outside for normal and inverse fill`() {
+        fun path(fillRule: FillRule): PathF32 = PathBuilder(fillRule)
+            .moveTo(490f, 245f)
+            .cubicTo(105f, 28f, -180f, -69f, 135f, 54f)
+            .close()
+            .build()
+
+        assertFalse(PathAnalysisF32.contains(path(FillRule.WINDING), Point2F32.Origin))
+        assertFalse(PathAnalysisF32.contains(path(FillRule.INVERSE_WINDING), Point2F32.Origin))
+    }
+
+    @Test
+    fun `contains keeps a micro scale rectangle interior inside`() {
+        val microRect = PathBuilder().addRect(RectF32.ofLTRB(0f, 0f, 1e-14f, 1e-14f)).build()
+
+        assertTrue(PathAnalysisF32.contains(microRect, Point2F32(5e-15f, 5e-15f)))
+    }
+
+    @Test
+    fun `contains ignores an isolated move when evaluating inverse fill`() {
+        val path = PathBuilder(FillRule.INVERSE_WINDING)
+            .moveTo(100f, 100f)
+            .addRect(RectF32.ofLTRB(0f, 0f, 10f, 10f))
+            .build()
+
+        assertTrue(PathAnalysisF32.contains(path, Point2F32(100f, 100f)))
+    }
+
+    @Test
     fun `recognizes canonical shapes and line without mutable out parameters`() {
         val rect = RectF32.ofLTRB(1f, 2f, 9f, 8f)
         val rrect = RRectF32.of(rect, radius = 2f)
@@ -172,12 +197,30 @@ class PathAnalysisF32Test {
     }
 
     @Test
-    fun `topology keeps a nonzero orientation through product cancellation`() {
+    fun `rounded rectangle recognizer rejects ULP overlapping radii`() {
+        val half = 0.5f
+        val nextHalf = Float.fromBits(half.toRawBits() + 1)
+        val topLineEnd = Float.fromBits(half.toRawBits() - 2)
+        val raw = PathBuilder()
+            .moveTo(half, 0f).lineTo(topLineEnd, 0f)
+            .arcTo(nextHalf, half, 0f, false, true, 1f, half)
+            .lineTo(1f, half).arcTo(half, half, 0f, false, true, half, 1f)
+            .lineTo(half, 1f).arcTo(half, half, 0f, false, true, 0f, half)
+            .lineTo(0f, half).arcTo(half, half, 0f, false, true, half, 0f)
+            .close()
+            .build()
+
+        assertNull(PathAnalysisF32.rrect(raw))
+    }
+
+    @Test
+    fun `topology keeps a nonzero orientation through normalized F32 product cancellation`() {
         val epsilon = 2.0.pow(-23).toFloat()
+        val scale = 3f
         val path = PathBuilder()
             .moveTo(0f, 0f)
-            .lineTo(1f + epsilon, 1f + 2f * epsilon)
-            .lineTo(1f, 1f + epsilon)
+            .lineTo(scale * (1f + epsilon), scale * (1f + 2f * epsilon))
+            .lineTo(scale, scale * (1f + epsilon))
             .close()
             .build()
 
