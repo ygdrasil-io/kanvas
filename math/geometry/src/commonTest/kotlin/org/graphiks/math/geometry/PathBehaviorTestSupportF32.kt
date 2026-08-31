@@ -14,6 +14,13 @@ internal data class PathOpCaseF32(
     val first: PathF32,
     val second: PathF32,
     val probes: List<Point2F32>,
+    /** Hand-checked operand memberships for probes whose topology is intentionally delicate. */
+    val literalOperandMemberships: List<PathOperandMembershipF32>? = null,
+)
+
+internal data class PathOperandMembershipF32(
+    val inFirst: Boolean,
+    val inSecond: Boolean,
 )
 
 internal fun transformPointF32(point: Point2F32, transform: AffineTransformF32): Point2F32 = Point2F32(
@@ -94,18 +101,18 @@ internal fun pathOpCasesF32(): List<PathOpCaseF32> = listOf(
         name = "tangent ovals",
         first = PathBuilder().addOval(RectF32.ofLTRB(0f, 0f, 10f, 10f)).build(),
         second = PathBuilder().addOval(RectF32.ofLTRB(10f, 0f, 20f, 10f)).build(),
-        // The explicit probes below cover every semantic region. A compact grid avoids spending
-        // most of this metamorphic regression rescanning 8,192 flattened output edges at
-        // redundant points while still sampling both interiors and the exterior.
-        gridSteps = 4,
+        // These are deliberately away from the tangent and from every curve boundary.  Their
+        // memberships are literal geometric facts, rather than a second query through the
+        // flattened operands that the operation itself uses.
         interiorProbes = listOf(
-            Point2F32(-1f, -1f),
+            Point2F32(-2f, 5f),
             Point2F32(3f, 5f),
             Point2F32(17f, 5f),
-            // This is the shared tangent boundary. PathAnalysisF32 classifies boundaries outside;
-            // the metamorphic assertion therefore checks that classification remains stable.
-            Point2F32(10f, 5f),
-            Point2F32(10f, 4f),
+        ),
+        literalOperandMemberships = listOf(
+            PathOperandMembershipF32(inFirst = false, inSecond = false),
+            PathOperandMembershipF32(inFirst = true, inSecond = false),
+            PathOperandMembershipF32(inFirst = false, inSecond = true),
         ),
     ),
     pathOpCaseF32(
@@ -179,22 +186,34 @@ internal fun assertMetamorphicMembershipF32(
 ) {
     val base = PathOpsF32.op(case.first, case.second, operation)
     val baseMembership = case.probes.map { point -> PathAnalysisF32.contains(base, point) }
-    if (case.name == "tangent ovals") {
-        val tangentIndex = case.probes.indexOf(Point2F32(10f, 5f))
-        check(tangentIndex >= 0)
-        assertEquals(false, baseMembership[tangentIndex], "tangent boundary must remain outside")
-    }
     transforms.forEach { transform ->
+        val transformedFirst = transformPathF32(case.first, transform)
+        val transformedSecond = transformPathF32(case.second, transform)
         val transformed = PathOpsF32.op(
-            transformPathF32(case.first, transform),
-            transformPathF32(case.second, transform),
+            transformedFirst,
+            transformedSecond,
             operation,
         )
         case.probes.forEachIndexed { index, point ->
+            val transformedPointF32 = transformPointF32(point, transform)
+            val expected = case.literalOperandMemberships
+                ?.get(index)
+                ?.let { membershipF32 -> expectedMembership(operation, membershipF32.inFirst, membershipF32.inSecond) }
+                ?: expectedMembership(
+                    operation,
+                    PathAnalysisF32.contains(transformedFirst, transformedPointF32),
+                    PathAnalysisF32.contains(transformedSecond, transformedPointF32),
+                )
+            assertEquals(expected, baseMembership[index], "${case.name} $operation base truth table at $point")
             assertEquals(
                 baseMembership[index],
-                PathAnalysisF32.contains(transformed, transformPointF32(point, transform)),
+                PathAnalysisF32.contains(transformed, transformedPointF32),
                 "${case.name} $operation at $point with $transform",
+            )
+            assertEquals(
+                expected,
+                PathAnalysisF32.contains(transformed, transformedPointF32),
+                "${case.name} $operation truth table at $point with $transform",
             )
         }
     }
@@ -206,7 +225,11 @@ private fun pathOpCaseF32(
     second: PathF32,
     gridSteps: Int = 12,
     interiorProbes: List<Point2F32>,
+    literalOperandMemberships: List<PathOperandMembershipF32>? = null,
 ): PathOpCaseF32 {
+    literalOperandMemberships?.let { membershipsF32 ->
+        require(membershipsF32.size == interiorProbes.size)
+    }
     val firstBounds = checkNotNull(PathAnalysisF32.bounds(first))
     val secondBounds = checkNotNull(PathAnalysisF32.bounds(second))
     val bounds = RectF32.ofLTRB(
@@ -219,6 +242,11 @@ private fun pathOpCaseF32(
         name = name,
         first = first,
         second = second,
-        probes = probeGridF32(bounds, steps = gridSteps) + interiorProbes,
+        probes = if (literalOperandMemberships == null) {
+            probeGridF32(bounds, steps = gridSteps) + interiorProbes
+        } else {
+            interiorProbes
+        },
+        literalOperandMemberships = literalOperandMemberships,
     )
 }

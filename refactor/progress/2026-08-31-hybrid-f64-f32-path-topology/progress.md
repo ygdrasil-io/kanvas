@@ -22,3 +22,20 @@ adjacentes, les tests full-pipeline et le budget sont transférés à Task 2; le
 claims/endpoints et le `Drop` de contour complet à Task 3; la frontière globale
 de complexité/budget à Task 5. Task 1 est donc close procéduralement avec findings
 parqués, pas approuvée comme état final autonome.
+
+## Task 2 — Hybrid F64/F32 projected contacts and arrangement
+
+Completed 2026-08-31. `PathOpsF32` binary and unary paths now use the authoritative route
+`source topology -> hybrid topology -> PathArrangementF64F32 -> hybrid trace writer`; the old
+legacy arrangement adapter has no common-main caller. The exact registry exports canonical n-way
+overlap components with strict interior incidences, point authority is local to its exact witness,
+and unsupported adjacent/backtracking projected relations reject. The single hybrid DCEL embeds
+on lifted F32 representatives while ordering rays in source F64 and aggregating operand winding.
+
+Task-2 tests cover all tangent-operation transforms with literal probes, local/absent/distant
+point witness cases, backtracking, n-way relabeling, signed zero, arrangement authority and the
+candidate-budget boundary/permutation. Focused JVM verification passed 85 tests; complete JS
+verification passed 299 tests; `git diff --check` passed. New hybrid maps, arrays, pair work,
+sorts, containment, writer work and immutable conversion preflight deterministically. The
+historical source-topology debit audit remains explicitly carried to Task 5 under breaker ruling
+9; details and exact lines are in `task-2-report.md`.

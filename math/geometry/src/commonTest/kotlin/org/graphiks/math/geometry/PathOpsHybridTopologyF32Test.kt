@@ -8,6 +8,162 @@ import kotlin.test.assertTrue
 
 class PathOpsHybridTopologyF32Test {
     @Test
+    fun `point witness permits only its two local projected branches through the hybrid arrangement`() {
+        val e = 2.0.pow(-25)
+        val lower = normalizedContourF64(
+            0.0 to 1.0,
+            1.0 to 1.0 - e,
+            2.0 to -1.0,
+            0.0 to -1.0,
+        )
+        val upper = normalizedContourF64(
+            0.0 to 1.0,
+            1.0 to 1.0 + e,
+            2.0 to 3.0,
+            0.0 to 3.0,
+        )
+
+        val result = projectTogetherF64(lower, upper)
+
+        assertTrue(PathAnalysisF32.contains(result, Point2F32(1f, 0f)))
+        assertTrue(PathAnalysisF32.contains(result, Point2F32(1f, 2f)))
+    }
+
+    @Test
+    fun `same projected branches without their exact source witness reject`() {
+        val e = 2.0.pow(-25)
+        val lower = normalizedContourF64(
+            0.0 to 1.0 - e,
+            1.0 to 1.0 - e,
+            2.0 to -1.0,
+            0.0 to -1.0,
+        )
+        val upper = normalizedContourF64(
+            0.0 to 1.0 + e,
+            1.0 to 1.0 + e,
+            2.0 to 3.0,
+            0.0 to 3.0,
+        )
+
+        val error = assertFailsWith<IllegalStateException> { projectTogetherF64(lower, upper) }
+
+        assertEquals("path-f32-projection-collapse", error.message)
+    }
+
+    @Test
+    fun `adjacent backtracking projected overlap without exact proof rejects`() {
+        // These are distinct F64 rays at the shared vertex, but both y offsets round to the
+        // same F32 zero rail.  The only exact contact is the adjacent endpoint.
+        val e = 2.0.pow(-150)
+        val contour = normalizedContourF64(
+            0.0 to 0.0,
+            2.0 to e,
+            0.0 to 2.0 * e,
+            0.0 to -1.0,
+        )
+
+        val error = assertFailsWith<IllegalStateException> { projectOneF64(contour) }
+
+        assertEquals("path-f32-projection-collapse", error.message)
+    }
+
+    @Test
+    fun `exact n way overlap aggregates ties independently of fixture relabeling`() {
+        val first = normalizedContourF64(0.0 to 0.0, 2.0 to 0.0, 2.0 to 2.0, 0.0 to 2.0)
+        val second = normalizedContourF64(0.0 to 0.0, 2.0 to 0.0, 2.0 to 2.0, 0.0 to 2.0)
+        val third = normalizedContourF64(0.0 to 0.0, 2.0 to 0.0, 2.0 to 2.0, 0.0 to 2.0)
+        val probes = listOf(Point2F32(1f, 1f), Point2F32(3f, 1f))
+
+        val results = listOf(
+            projectTogetherF64(first, second, third),
+            projectTogetherF64(third, first, second),
+            projectTogetherF64(second, third, first),
+        )
+
+        results.forEach { result ->
+            assertEquals(true, PathAnalysisF32.contains(result, probes[0]))
+            assertEquals(false, PathAnalysisF32.contains(result, probes[1]))
+        }
+    }
+
+    @Test
+    fun `hybrid representative preserves the semantic signed zero original bits`() {
+        val source = PathBuilder()
+            .moveTo(-0.0f, -0.0f)
+            .lineTo(2.0f, -0.0f)
+            .lineTo(0.0f, 2.0f)
+            .close()
+            .build()
+
+        val result = PathOpsF32.simplify(source)
+        val verticesF32 = pathVerticesF32(result)
+
+        assertTrue(verticesF32.any { pointF32 -> pointF32.x.toRawBits() == (-0.0f).toRawBits() })
+        assertTrue(verticesF32.any { pointF32 -> pointF32.y.toRawBits() == (-0.0f).toRawBits() })
+    }
+
+    @Test
+    fun `hybrid arrangement debits the exact candidate budget frontier deterministically`() {
+        val first = PathBuilder().addRect(RectF32.ofLTRB(0f, 0f, 2f, 2f)).build()
+        val second = PathBuilder().addRect(RectF32.ofLTRB(1f, 0f, 3f, 2f)).build()
+        val requiredBudgetI32 = firstSuccessfulHybridBudgetI32(first, second)
+
+        val belowError = assertFailsWith<IllegalStateException> {
+            PathOpsF32.op(
+                first,
+                second,
+                PathBooleanOp.UNION,
+                PathOpsLimitsI32(maxCandidateProbes = requiredBudgetI32 - 1),
+            )
+        }
+        val atBoundary = PathOpsF32.op(
+            first,
+            second,
+            PathBooleanOp.UNION,
+            PathOpsLimitsI32(maxCandidateProbes = requiredBudgetI32),
+        )
+
+        assertEquals("path-candidate-limit", belowError.message)
+        assertTrue(PathAnalysisF32.contains(atBoundary, Point2F32(.5f, 1f)))
+        assertTrue(PathAnalysisF32.contains(atBoundary, Point2F32(2.5f, 1f)))
+    }
+
+    @Test
+    fun `hybrid budget frontier is invariant when canonical inputs are permuted`() {
+        val left = PathBuilder().addRect(RectF32.ofLTRB(0f, 0f, 2f, 2f)).build()
+        val right = PathBuilder().addRect(RectF32.ofLTRB(1f, 0f, 3f, 2f)).build()
+        val forwardBudgetI32 = firstSuccessfulHybridBudgetI32(left, right)
+        val reverseBudgetI32 = firstSuccessfulHybridBudgetI32(right, left)
+
+        val belowError = assertFailsWith<IllegalStateException> {
+            PathOpsF32.op(
+                right,
+                left,
+                PathBooleanOp.UNION,
+                PathOpsLimitsI32(maxCandidateProbes = reverseBudgetI32 - 1),
+            )
+        }
+        val forward = PathOpsF32.op(
+            left,
+            right,
+            PathBooleanOp.UNION,
+            PathOpsLimitsI32(maxCandidateProbes = forwardBudgetI32),
+        )
+        val reverse = PathOpsF32.op(
+            right,
+            left,
+            PathBooleanOp.UNION,
+            PathOpsLimitsI32(maxCandidateProbes = reverseBudgetI32),
+        )
+
+        assertEquals(forwardBudgetI32, reverseBudgetI32)
+        assertEquals("path-candidate-limit", belowError.message)
+        listOf(Point2F32(.5f, 1f), Point2F32(1.5f, 1f), Point2F32(2.5f, 1f)).forEach { probeF32 ->
+            assertEquals(PathAnalysisF32.contains(forward, probeF32), PathAnalysisF32.contains(reverse, probeF32))
+        }
+    }
+
+    @Test
     fun `collinear subdivision crossing remains observable through the public operation`() {
         val first = PathBuilder()
             .moveTo(0f, 0f)
@@ -37,7 +193,7 @@ class PathOpsHybridTopologyF32Test {
     }
 
     @Test
-    fun `an F64 point witness never certifies an F32 overlap`() {
+    fun `distant point witness on the same source spans never certifies an F32 overlap`() {
         val e = 2.0.pow(-25)
         val lower = normalizedContourF64(
             0.0 to 1.0, 1.0 to 1.0 - e, 2.0 to 1.0 - e / 2.0,
@@ -139,7 +295,7 @@ private data class ProjectionSourceLocationF64(
 )
 
 private data class TracedProjectionContourF64(
-    val contourF64: PathContourF64,
+    val pointsF64: List<Point2F64>,
     val sourceLocationsF64: List<ProjectionSourceLocationF64>,
 )
 
@@ -157,11 +313,7 @@ private fun normalizedContourWithSourceLocationsF64(
 ): TracedProjectionContourF64 {
     require(sourceLocationsF64.size == coordinatesF64.size)
     return TracedProjectionContourF64(
-        contourF64 = PathContourF64(
-            coordinatesF64.map { (xF64, yF64) ->
-                PathContourVertexF64(Point2F64(xF64, yF64), originalPointF32 = null)
-            },
-        ),
+        pointsF64 = coordinatesF64.map { (xF64, yF64) -> Point2F64(xF64, yF64) },
         sourceLocationsF64 = sourceLocationsF64,
     )
 }
@@ -175,19 +327,17 @@ private fun projectTogetherF64(vararg contoursF64: TracedProjectionContourF64): 
 private fun projectTracedContoursF64(contoursF64: List<TracedProjectionContourF64>): PathF32 {
     val limitsI32 = PathOpsLimitsI32()
     val edgesF64 = mutableListOf<PathInputEdgeF64>()
-    val inputEdgeIdsByContourI32 = mutableListOf<List<Int>>()
     contoursF64.forEachIndexed { contourIndexI32, tracedContourF64 ->
-        val verticesF64 = tracedContourF64.contourF64.vertices
+        val verticesF64 = tracedContourF64.pointsF64
         val sourceLocationsF64 = tracedContourF64.sourceLocationsF64
         val firstEdgeIdI32 = edgesF64.size
-        inputEdgeIdsByContourI32 += verticesF64.indices.map { firstEdgeIdI32 + it }
         verticesF64.indices.forEach { vertexIndexI32 ->
             val edgeIdI32 = firstEdgeIdI32 + vertexIndexI32
             val previousEdgeIdI32 = firstEdgeIdI32 + (vertexIndexI32 - 1 + verticesF64.size) % verticesF64.size
             val identityF64 = PathVertexIdentityF64(
                 incidentEdgeIds = listOf(previousEdgeIdI32, edgeIdI32).sorted(),
                 parameterByEdgeId = mapOf(previousEdgeIdI32 to 1.0, edgeIdI32 to 0.0),
-                originalPointF32 = verticesF64[vertexIndexI32].originalPointF32,
+                originalPointF32 = null,
             )
             val nextIndexI32 = (vertexIndexI32 + 1) % verticesF64.size
             edgesF64 += PathInputEdgeF64(
@@ -207,41 +357,20 @@ private fun projectTracedContoursF64(contoursF64: List<TracedProjectionContourF6
                 startIdentityF64 = identityF64,
                 endIdentityF64 = PathVertexIdentityF64(
                     incidentEdgeIds = listOf(edgeIdI32, firstEdgeIdI32 + nextIndexI32).sorted(),
-                    parameterByEdgeId = mapOf(edgeIdI32 to 1.0, firstEdgeIdI32 + nextIndexI32 to 0.0),
-                    originalPointF32 = verticesF64[nextIndexI32].originalPointF32,
+                parameterByEdgeId = mapOf(edgeIdI32 to 1.0, firstEdgeIdI32 + nextIndexI32 to 0.0),
+                    originalPointF32 = null,
                 ),
-                startPointF64 = verticesF64[vertexIndexI32].point,
-                endPointF64 = verticesF64[nextIndexI32].point,
+                startPointF64 = verticesF64[vertexIndexI32],
+                endPointF64 = verticesF64[nextIndexI32],
                 windingDeltaI32 = 1,
             )
         }
     }
-    val candidateWorkBudgetI32 = PathCandidateWorkBudgetI32(limitsI32.maxCandidateProbes)
-    val topologyF64 = splitPathSourceTopologyF64(edgesF64, limitsI32, candidateWorkBudgetI32)
-    val sectionsByInputEdgeIdI32 = topologyF64.toPathSplitEdgesF64ForLegacyArrangement(candidateWorkBudgetI32)
-        .groupBy(PathSplitEdgeF64::sourceId)
-    val tracedContoursF64 = inputEdgeIdsByContourI32.map { inputEdgeIdsI32 ->
-        PathContourF64(
-            inputEdgeIdsI32.flatMap { inputEdgeIdI32 ->
-                sectionsByInputEdgeIdI32.getValue(inputEdgeIdI32)
-                    .sortedBy(PathSplitEdgeF64::sourceStartParameterF64)
-                    .map { sectionF64 ->
-                        val provenanceF64 = sectionF64.legacySectionProvenanceF64
-                            ?: throw IllegalStateException("path-arrangement-inconsistent")
-                        PathContourVertexF64(
-                            point = sectionF64.start,
-                            originalPointF32 = sectionF64.startIdentity.originalPointF32,
-                            legacySectionProvenancesF64 = listOf(provenanceF64),
-                        )
-                    }
-            },
-        )
-    }
-    return projectContoursF64ToPathF32(
-        contours = tracedContoursF64,
-        normalization = identityNormalizationF64,
+    return projectSourceEdgesThroughHybridF64F32(
+        edgesF64 = edgesF64,
+        normalizationF64 = identityNormalizationF64,
         fillRule = FillRule.WINDING,
-        candidateWorkBudget = candidateWorkBudgetI32,
+        limitsI32 = limitsI32,
     )
 }
 
@@ -260,4 +389,38 @@ private fun projectUnderThresholdWitnessFixtureF32(): PathF32 {
         -scaleF64 to -scaleF64,
     )
     return projectTogetherF64(runF64, touchF64)
+}
+
+private fun pathVerticesF32(path: PathF32): List<Point2F32> = buildList {
+    path.forEach { segmentF32 ->
+        when (segmentF32) {
+            is PathSegmentF32.MoveTo -> add(segmentF32.point)
+            is PathSegmentF32.LineTo -> add(segmentF32.point)
+            is PathSegmentF32.QuadTo -> add(segmentF32.point)
+            is PathSegmentF32.CubicTo -> add(segmentF32.point)
+            is PathSegmentF32.ArcTo -> add(segmentF32.point)
+            PathSegmentF32.Close -> Unit
+        }
+    }
+}
+
+private fun firstSuccessfulHybridBudgetI32(first: PathF32, second: PathF32): Int {
+    var lowerI32 = 1
+    var upperI32 = 16_384
+    while (lowerI32 < upperI32) {
+        val middleI32 = lowerI32 + (upperI32 - lowerI32) / 2
+        try {
+            PathOpsF32.op(
+                first,
+                second,
+                PathBooleanOp.UNION,
+                PathOpsLimitsI32(maxCandidateProbes = middleI32),
+            )
+            upperI32 = middleI32
+        } catch (error: IllegalStateException) {
+            if (error.message != "path-candidate-limit") throw error
+            lowerI32 = middleI32 + 1
+        }
+    }
+    return lowerI32
 }

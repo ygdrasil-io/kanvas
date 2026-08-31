@@ -31,7 +31,7 @@ public object PathOpsF32 {
 
         val normalization = pathNormalizationF64(listOf(first, second))
         val candidateWorkBudget = PathCandidateWorkBudgetI32(limits.maxCandidateProbes)
-        val arrangement = buildArrangementF64(
+        val arrangementF64F32 = buildHybridArrangementF64F32(
             inputs = listOf(
                 PathOperandInputF32(PathOperand.FIRST, first),
                 PathOperandInputF32(PathOperand.SECOND, second),
@@ -40,13 +40,11 @@ public object PathOpsF32 {
             limits = limits,
             candidateWorkBudget = candidateWorkBudget,
         )
-        val result = projectContoursF64ToPathF32(
-            contours = arrangement.boundary(first.fillRule, second.fillRule, op),
-            normalization = normalization,
+        return writeHybridBoundaryTracesF64F32(
+            tracesF64F32 = arrangementF64F32.boundary(first.fillRule, second.fillRule, op),
             fillRule = FillRule.WINDING,
             candidateWorkBudget = candidateWorkBudget,
         )
-        return result
     }
 
     internal fun simplify(path: PathF32, limits: PathOpsLimitsI32): PathF32 =
@@ -172,31 +170,109 @@ private fun unaryResultF32(path: PathF32, limits: PathOpsLimitsI32, outputFillRu
     validateFinitePathF32(path)
     val normalization = pathNormalizationF64(listOf(path))
     val candidateWorkBudget = PathCandidateWorkBudgetI32(limits.maxCandidateProbes)
-    val arrangement = buildArrangementF64(
+    val arrangementF64F32 = buildHybridArrangementF64F32(
         inputs = listOf(PathOperandInputF32(PathOperand.FIRST, path)),
         normalization = normalization,
         limits = limits,
         candidateWorkBudget = candidateWorkBudget,
     )
-    return projectContoursF64ToPathF32(
-        contours = arrangement.unaryBoundary(path.fillRule),
-        normalization = normalization,
+    return writeHybridBoundaryTracesF64F32(
+        tracesF64F32 = arrangementF64F32.unaryBoundary(path.fillRule),
         fillRule = outputFillRule,
         candidateWorkBudget = candidateWorkBudget,
     )
 }
 
-private fun buildArrangementF64(
+private fun buildHybridArrangementF64F32(
     inputs: List<PathOperandInputF32>,
     normalization: PathNormalizationF64,
     limits: PathOpsLimitsI32,
     candidateWorkBudget: PathCandidateWorkBudgetI32,
-): PathArrangementF64 {
-    val edges = inputEdgesF64(inputs, normalization, limits)
-    val topologyF64 = splitPathSourceTopologyF64(edges, limits, candidateWorkBudget)
-    val splitEdges = topologyF64.toPathSplitEdgesF64ForLegacyArrangement(candidateWorkBudget)
-    val arrangement = PathArrangementF64.build(splitEdges, limits)
-    return arrangement
+): PathArrangementF64F32 {
+    try {
+        val edgesF64 = inputEdgesF64(inputs, normalization, limits)
+        val sourceTopologyF64 = splitPathSourceTopologyF64(edgesF64, limits, candidateWorkBudget)
+        val topologyF64F32 = buildPathHybridTopologyF64F32(
+            sourceTopologyF64 = sourceTopologyF64,
+            normalizationF64 = normalization,
+            limitsI32 = limits,
+            candidateWorkBudgetI32 = candidateWorkBudget,
+        )
+        return PathArrangementF64F32.build(topologyF64F32, limits, candidateWorkBudget)
+    } catch (error: IllegalStateException) {
+        // A hybrid invariant can only fail after an exact source topology was accepted.  The
+        // public contract therefore reports the conservative projection outcome rather than an
+        // implementation-detail DCEL error.
+        if (error.message == "path-arrangement-inconsistent") {
+            throw IllegalStateException("path-f32-projection-collapse")
+        }
+        throw error
+    }
+}
+
+// A single production fixture entry point for precise F64 source inputs.  It follows exactly
+// the public route after flattening: source topology -> hybrid topology -> hybrid DCEL -> writer.
+// Tests may construct numerical source edges, but cannot rebuild or inspect any arrangement.
+internal fun projectSourceEdgesThroughHybridF64F32(
+    edgesF64: List<PathInputEdgeF64>,
+    normalizationF64: PathNormalizationF64,
+    fillRule: FillRule,
+    limitsI32: PathOpsLimitsI32 = PathOpsLimitsI32(),
+): PathF32 {
+    try {
+        val candidateWorkBudgetI32 = PathCandidateWorkBudgetI32(limitsI32.maxCandidateProbes)
+        val sourceTopologyF64 = splitPathSourceTopologyF64(edgesF64, limitsI32, candidateWorkBudgetI32)
+        val topologyF64F32 = buildPathHybridTopologyF64F32(
+            sourceTopologyF64 = sourceTopologyF64,
+            normalizationF64 = normalizationF64,
+            limitsI32 = limitsI32,
+            candidateWorkBudgetI32 = candidateWorkBudgetI32,
+        )
+        val arrangementF64F32 = PathArrangementF64F32.build(topologyF64F32, limitsI32, candidateWorkBudgetI32)
+        return writeHybridBoundaryTracesF64F32(
+            tracesF64F32 = arrangementF64F32.unaryBoundary(fillRule),
+            fillRule = fillRule,
+            candidateWorkBudget = candidateWorkBudgetI32,
+        )
+    } catch (error: IllegalStateException) {
+        if (error.message == "path-arrangement-inconsistent") {
+            throw IllegalStateException("path-f32-projection-collapse")
+        }
+        throw error
+    }
+}
+
+// Temporary Task-2 writer bridge.  It consumes the already selected hybrid half-edge traces;
+// it neither finds contacts nor rewrites a run, so the hybrid DCEL remains the sole authority.
+private fun writeHybridBoundaryTracesF64F32(
+    tracesF64F32: List<PathBoundaryTraceF64F32>,
+    fillRule: FillRule,
+    candidateWorkBudget: PathCandidateWorkBudgetI32,
+): PathF32 {
+    val vertexCountI64 = tracesF64F32.sumOf { traceF64F32 -> traceF64F32.halfEdgesF64F32.size.toLong() }
+    // The temporary writer only walks the immutable traces selected by the hybrid DCEL.  Reserve
+    // every point/area/builder pass up front from those canonical trace lengths; it must not add
+    // traversal-order-dependent debits while it serializes the public PathF32.
+    candidateWorkBudget.consumePreflightI64(vertexCountI64 * 5L + tracesF64F32.size.toLong() * 3L)
+    val builder = PathBuilder(fillRule)
+    tracesF64F32.forEach { traceF64F32 ->
+        val halfEdgesF64F32 = traceF64F32.halfEdgesF64F32
+        if (halfEdgesF64F32.size < 3) throw IllegalStateException("path-f32-projection-collapse")
+        val pointsF32 = halfEdgesF64F32.map { halfEdgeF64F32 ->
+            halfEdgeF64F32.originVertexF64F32.representativePointF32
+        }
+        if (pointsF32.zipWithNext().any { (firstF32, secondF32) -> firstF32.x == secondF32.x && firstF32.y == secondF32.y }) {
+            throw IllegalStateException("path-f32-projection-collapse")
+        }
+        val areaF64 = signedDoubleAreaExpansionF64(pointsF32.map(Point2F32::toPoint2F64) + pointsF32.first().toPoint2F64())
+        if (ExpansionF64.sign(areaF64) == 0) throw IllegalStateException("path-f32-projection-collapse")
+        builder.moveTo(pointsF32.first().x, pointsF32.first().y)
+        pointsF32.drop(1).forEach { pointF32 ->
+            builder.lineTo(pointF32.x, pointF32.y)
+        }
+        builder.close()
+    }
+    return builder.build()
 }
 
 private fun inputEdgesF64(

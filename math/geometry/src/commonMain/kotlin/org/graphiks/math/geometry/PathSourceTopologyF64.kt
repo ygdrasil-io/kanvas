@@ -53,8 +53,19 @@ internal sealed interface PathContactWitnessF64 {
         val firstEndParameterF64: Double,
         val secondStartParameterF64: Double,
         val secondEndParameterF64: Double,
+        /** Every exact carrier incidence in the canonical overlap component. */
+        val incidencesF64: List<PathOverlapWitnessIncidenceF64>,
+        /** All exact endpoint identities; the legacy scalar fields are compatibility only. */
+        val startVertexIdentitiesF64: List<PathVertexIdentityF64>,
+        val endVertexIdentitiesF64: List<PathVertexIdentityF64>,
     ) : PathContactWitnessF64
 }
+
+internal data class PathOverlapWitnessIncidenceF64(
+    val sourceSpanIdsI64: List<Long>,
+    val startParameterF64: Double,
+    val endParameterF64: Double,
+)
 
 // Temporary Task-1 bridge. It follows a source section to a legacy boundary half-edge and is
 // intentionally deleted with the legacy arrangement in Task 4.
@@ -85,6 +96,12 @@ private data class PathSourceSectionReferenceF64(
 private data class PathSourceTopologyIndexF64(
     val sectionsByInputEdgeIdI32: Map<Int, List<PathSourceSectionReferenceF64>>,
     val spanIdsByEndpointIdentityF64: Map<PathVertexIdentityF64, List<Long>>,
+    val endpointIdentitiesByInputAndParameterF64: Map<PathSourceEndpointParameterKeyF64, Set<PathVertexIdentityF64>>,
+)
+
+private data class PathSourceEndpointParameterKeyF64(
+    val inputEdgeIdI32: Int,
+    val parameterBitsI64: Long,
 )
 
 private data class PathLegacySectionProvenanceIndexF64(
@@ -120,6 +137,9 @@ private sealed interface PathUnidentifiedContactWitnessF64 {
         val firstEndParameterF64: Double,
         val secondStartParameterF64: Double,
         val secondEndParameterF64: Double,
+        val incidencesF64: List<PathOverlapWitnessIncidenceF64>,
+        val startVertexIdentitiesF64: List<PathVertexIdentityF64>,
+        val endVertexIdentitiesF64: List<PathVertexIdentityF64>,
     ) : PathUnidentifiedContactWitnessF64
 }
 
@@ -145,8 +165,13 @@ private fun buildPathSourceTopologyIndexF64(
     spansF64: List<PathSourceSpanF64>,
     candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
 ): PathSourceTopologyIndexF64 {
+    // The exact index owns three canonical maps. Reserve their construction before any source
+    // section is inserted; the later per-entry historical debits remain part of Task 5's global
+    // frontier audit.
+    preflightSourceTopologyLinearF64(3L, candidateWorkBudgetI32)
     val sectionsByInputEdgeIdI32 = mutableMapOf<Int, MutableList<PathSourceSectionReferenceF64>>()
     val spanIdsByEndpointIdentityF64 = mutableMapOf<PathVertexIdentityF64, MutableSet<Long>>()
+    val endpointIdentitiesByInputAndParameterF64 = mutableMapOf<PathSourceEndpointParameterKeyF64, MutableSet<PathVertexIdentityF64>>()
     spansF64.forEach { spanF64 ->
         listOfNotNull(
             spanF64.startLocationF64.vertexIdentityF64,
@@ -159,23 +184,61 @@ private fun buildPathSourceTopologyIndexF64(
             candidateWorkBudgetI32.consume()
             sectionsByInputEdgeIdI32.getOrPut(sectionF64.inputEdgeIdI32) { mutableListOf() } +=
                 PathSourceSectionReferenceF64(spanF64, sectionF64)
+            addSourceEndpointIdentityF64(
+                endpointIdentitiesByInputAndParameterF64,
+                sectionF64.inputEdgeIdI32,
+                sectionF64.startParameterF64,
+                sectionF64.startIdentityF64,
+                candidateWorkBudgetI32,
+            )
+            addSourceEndpointIdentityF64(
+                endpointIdentitiesByInputAndParameterF64,
+                sectionF64.inputEdgeIdI32,
+                sectionF64.endParameterF64,
+                sectionF64.endIdentityF64,
+                candidateWorkBudgetI32,
+            )
         }
     }
     return PathSourceTopologyIndexF64(
         sectionsByInputEdgeIdI32 = sectionsByInputEdgeIdI32.mapValues { (_, referencesF64) ->
-            referencesF64.sortedWith(
-                Comparator { firstF64, secondF64 ->
-                    compareSourceParametersF64(
-                        firstF64.sectionF64.startParameterF64,
-                        secondF64.sectionF64.startParameterF64,
-                        candidateWorkBudgetI32,
-                    )
-                },
-            )
+            sortedSourceTopologyF64(referencesF64, candidateWorkBudgetI32) { firstF64, secondF64 ->
+                compareSourceParametersWithoutBudgetF64(
+                    firstF64.sectionF64.startParameterF64,
+                    secondF64.sectionF64.startParameterF64,
+                )
+            }
         },
-        spanIdsByEndpointIdentityF64 = spanIdsByEndpointIdentityF64.mapValues { (_, idsI64) -> idsI64.sorted() },
+        spanIdsByEndpointIdentityF64 = spanIdsByEndpointIdentityF64.mapValues { (_, idsI64) ->
+            sortedSourceTopologyF64(idsI64.toList(), candidateWorkBudgetI32) { firstI64, secondI64 -> firstI64.compareTo(secondI64) }
+        },
+        endpointIdentitiesByInputAndParameterF64 = endpointIdentitiesByInputAndParameterF64,
     )
 }
+
+private fun addSourceEndpointIdentityF64(
+    identitiesF64: MutableMap<PathSourceEndpointParameterKeyF64, MutableSet<PathVertexIdentityF64>>,
+    inputEdgeIdI32: Int,
+    parameterF64: Double,
+    identityF64: PathVertexIdentityF64,
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+) {
+    // The topology's endpoint snap has a fixed sixteen-ULP policy.  Materialize that finite
+    // neighbourhood once in the authoritative index, so witness recovery is one exact map
+    // lookup rather than a parameter scan through source sections.
+    val parameterBitsI64 = canonicalSourceParameterBitsI64(parameterF64)
+    candidateWorkBudgetI32.consumePreflightI64(33L)
+    (-16L..16L).forEach { offsetI64 ->
+        val keyF64 = PathSourceEndpointParameterKeyF64(
+            inputEdgeIdI32 = inputEdgeIdI32,
+            parameterBitsI64 = parameterBitsI64 + offsetI64,
+        )
+        identitiesF64.getOrPut(keyF64) { linkedSetOf() } += identityF64
+    }
+}
+
+private fun canonicalSourceParameterBitsI64(parameterF64: Double): Long =
+    if (parameterF64 == 0.0) 0L else parameterF64.toRawBits()
 
 private fun mergeSourceSpansF64(
     splitEdgesF64: List<PathSplitEdgeF64>,
@@ -183,11 +246,7 @@ private fun mergeSourceSpansF64(
 ): List<PathUnidentifiedSourceSpanF64> {
     // Labels reconnect the declared source chain only. They are excluded from the later semantic
     // sort that assigns the I64 source-span identity.
-    val groupedEdgesF64 = splitEdgesF64.sortedWith(
-        Comparator { firstF64, secondF64 ->
-            compareSourceSpanGroupingEdgesF64(firstF64, secondF64, candidateWorkBudgetI32)
-        },
-    )
+    val groupedEdgesF64 = sortedSourceTopologyF64(splitEdgesF64, candidateWorkBudgetI32, ::compareSourceSpanGroupingEdgesWithoutBudgetF64)
     val spansF64 = mutableListOf<PathUnidentifiedSourceSpanF64>()
     var indexI32 = 0
     while (indexI32 < groupedEdgesF64.size) {
@@ -239,82 +298,44 @@ private fun canMergeSourceSectionsF64(
     return !nextF64.startIsExactEventF64
 }
 
-private fun compareSourceSpanGroupingEdgesF64(
-    firstF64: PathSplitEdgeF64,
-    secondF64: PathSplitEdgeF64,
-    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
-): Int {
-    candidateWorkBudgetI32.consume()
-    firstF64.operand.ordinal.compareTo(secondF64.operand.ordinal).takeIf { it != 0 }?.let { return it }
-    candidateWorkBudgetI32.consume()
-    firstF64.contourIndexI32.compareTo(secondF64.contourIndexI32).takeIf { it != 0 }?.let { return it }
-    candidateWorkBudgetI32.consume()
-    firstF64.sourceSegmentIndexI32.compareTo(secondF64.sourceSegmentIndexI32).takeIf { it != 0 }?.let { return it }
-    return compareSourceParametersF64(
-        firstF64.sourceStartParameterF64,
-        secondF64.sourceStartParameterF64,
-        candidateWorkBudgetI32,
-    )
-}
-
 private fun assignSourceSpanIdsF64(
     spansF64: List<PathUnidentifiedSourceSpanF64>,
     candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
 ): List<PathSourceSpanF64> {
-    val orderedF64 = spansF64.sortedWith(
-        Comparator { firstF64, secondF64 ->
-            compareSourceSpansSemanticallyF64(firstF64, secondF64, candidateWorkBudgetI32)
-        },
-    )
+    val orderedF64 = sortedSourceTopologyF64(spansF64, candidateWorkBudgetI32, ::compareSourceSpansSemanticallyWithoutBudgetF64)
+    preflightSourceTopologyLinearF64(orderedF64.size.toLong() * 3L, candidateWorkBudgetI32)
+    val identifiedF64 = ArrayList<PathSourceSpanF64>(orderedF64.size)
+    var cursorI32 = 0
     var nextIdI64 = 0L
-    var previousF64: PathUnidentifiedSourceSpanF64? = null
-    return orderedF64.map { spanF64 ->
-        val previous = previousF64
-        if (previous != null) {
-            candidateWorkBudgetI32.consume()
-            if (compareSourceSpansSemanticallyF64(previous, spanF64, candidateWorkBudgetI32) != 0) nextIdI64 += 1L
+    while (cursorI32 < orderedF64.size) {
+        val componentStartI32 = cursorI32
+        cursorI32 += 1
+        while (
+            cursorI32 < orderedF64.size &&
+                compareSourceSpansSemanticallyWithoutBudgetF64(orderedF64[componentStartI32], orderedF64[cursorI32]) == 0
+        ) {
+            cursorI32 += 1
         }
-        previousF64 = spanF64
-        PathSourceSpanF64(
-            sourceSpanIdI64 = nextIdI64,
-            operand = spanF64.operand,
-            contourIndexI32 = spanF64.contourIndexI32,
-            startLocationF64 = spanF64.startLocationF64,
-            endLocationF64 = spanF64.endLocationF64,
-            startPointF64 = spanF64.startPointF64,
-            endPointF64 = spanF64.endPointF64,
-            flattenedSectionsF64 = spanF64.flattenedSectionsF64,
-            windingDeltaI32 = spanF64.windingDeltaI32,
-        )
+        // A semantic multiset component receives a contiguous I64 range only after all equal
+        // members are known.  Its arbitrary storage member order is never consulted as a
+        // geometric tie-breaker: downstream topology aggregates the complete component.
+        for (componentIndexI32 in componentStartI32 until cursorI32) {
+            candidateWorkBudgetI32.consume()
+            val spanF64 = orderedF64[componentIndexI32]
+            identifiedF64 += PathSourceSpanF64(
+                sourceSpanIdI64 = nextIdI64++,
+                operand = spanF64.operand,
+                contourIndexI32 = spanF64.contourIndexI32,
+                startLocationF64 = spanF64.startLocationF64,
+                endLocationF64 = spanF64.endLocationF64,
+                startPointF64 = spanF64.startPointF64,
+                endPointF64 = spanF64.endPointF64,
+                flattenedSectionsF64 = spanF64.flattenedSectionsF64,
+                windingDeltaI32 = spanF64.windingDeltaI32,
+            )
+        }
     }
-}
-
-private fun compareSourceSpansSemanticallyF64(
-    firstF64: PathUnidentifiedSourceSpanF64,
-    secondF64: PathUnidentifiedSourceSpanF64,
-    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
-): Int {
-    comparePointsSemanticallyF64(firstF64.startPointF64, secondF64.startPointF64, candidateWorkBudgetI32)
-        .takeIf { it != 0 }?.let { return it }
-    comparePointsSemanticallyF64(firstF64.endPointF64, secondF64.endPointF64, candidateWorkBudgetI32)
-        .takeIf { it != 0 }?.let { return it }
-    candidateWorkBudgetI32.consume()
-    firstF64.windingDeltaI32.compareTo(secondF64.windingDeltaI32).takeIf { it != 0 }?.let { return it }
-    candidateWorkBudgetI32.consume()
-    firstF64.flattenedSectionsF64.size.compareTo(secondF64.flattenedSectionsF64.size).takeIf { it != 0 }?.let { return it }
-    firstF64.flattenedSectionsF64.indices.forEach { indexI32 ->
-        val firstSectionF64 = firstF64.flattenedSectionsF64[indexI32]
-        val secondSectionF64 = secondF64.flattenedSectionsF64[indexI32]
-        comparePointsSemanticallyF64(firstSectionF64.startPointF64, secondSectionF64.startPointF64, candidateWorkBudgetI32)
-            .takeIf { it != 0 }?.let { return it }
-        comparePointsSemanticallyF64(firstSectionF64.endPointF64, secondSectionF64.endPointF64, candidateWorkBudgetI32)
-            .takeIf { it != 0 }?.let { return it }
-        compareSourceParametersF64(firstSectionF64.startParameterF64, secondSectionF64.startParameterF64, candidateWorkBudgetI32)
-            .takeIf { it != 0 }?.let { return it }
-        compareSourceParametersF64(firstSectionF64.endParameterF64, secondSectionF64.endParameterF64, candidateWorkBudgetI32)
-            .takeIf { it != 0 }?.let { return it }
-    }
-    return 0
+    return identifiedF64
 }
 
 private fun buildContactWitnessesF64(
@@ -322,47 +343,66 @@ private fun buildContactWitnessesF64(
     sourceTopologyIndexF64: PathSourceTopologyIndexF64,
     candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
 ): List<PathUnidentifiedContactWitnessF64> {
+    preflightSourceTopologyLinearF64(splitTopologyF64.overlapContactsF64.size.toLong(), candidateWorkBudgetI32)
     val overlapsF64 = splitTopologyF64.overlapContactsF64.map { contactF64 ->
-        val startIdentityF64 = sourceEndpointIdentityF64(
-            sourceTopologyIndexF64,
-            contactF64.firstInputEdgeIdI32,
-            contactF64.firstStartParameterF64,
-            candidateWorkBudgetI32,
-        )
-        val endIdentityF64 = sourceEndpointIdentityF64(
-            sourceTopologyIndexF64,
-            contactF64.firstInputEdgeIdI32,
-            contactF64.firstEndParameterF64,
-            candidateWorkBudgetI32,
-        )
-        val firstSourceSpanIdsI64 = traversedSourceSpanIdsF64(
-            sourceTopologyIndexF64,
-            contactF64.firstInputEdgeIdI32,
-            contactF64.firstStartParameterF64,
-            contactF64.firstEndParameterF64,
-            candidateWorkBudgetI32,
-        )
-        val secondSourceSpanIdsI64 = traversedSourceSpanIdsF64(
-            sourceTopologyIndexF64,
-            contactF64.secondInputEdgeIdI32,
-            contactF64.secondStartParameterF64,
-            contactF64.secondEndParameterF64,
-            candidateWorkBudgetI32,
-        )
-        if (firstSourceSpanIdsI64.isEmpty() || secondSourceSpanIdsI64.isEmpty()) {
+        val canonicalIncidencesF64 = contactF64.incidencesF64
+        if (canonicalIncidencesF64.size < 2) throw IllegalStateException("path-arrangement-inconsistent")
+        val startIdentitiesF64 = linkedSetOf<PathVertexIdentityF64>()
+        val endIdentitiesF64 = linkedSetOf<PathVertexIdentityF64>()
+        preflightSourceTopologyLinearF64(canonicalIncidencesF64.size.toLong() * 4L, candidateWorkBudgetI32)
+        canonicalIncidencesF64.forEach { incidenceF64 ->
+            startIdentitiesF64 += sourceEndpointIdentityF64(
+                sourceTopologyIndexF64,
+                incidenceF64.inputEdgeIdI32,
+                incidenceF64.startParameterF64,
+                candidateWorkBudgetI32,
+            )
+            endIdentitiesF64 += sourceEndpointIdentityF64(
+                sourceTopologyIndexF64,
+                incidenceF64.inputEdgeIdI32,
+                incidenceF64.endParameterF64,
+                candidateWorkBudgetI32,
+            )
+        }
+        val startIdentityF64 = startIdentitiesF64.firstOrNull() ?: throw IllegalStateException("path-arrangement-inconsistent")
+        val endIdentityF64 = endIdentitiesF64.firstOrNull() ?: throw IllegalStateException("path-arrangement-inconsistent")
+        val incidencesF64 = canonicalIncidencesF64.map { incidenceF64 ->
+            PathOverlapWitnessIncidenceF64(
+                sourceSpanIdsI64 = traversedSourceSpanIdsF64(
+                    sourceTopologyIndexF64,
+                    incidenceF64.inputEdgeIdI32,
+                    incidenceF64.startParameterF64,
+                    incidenceF64.endParameterF64,
+                    candidateWorkBudgetI32,
+                ),
+                startParameterF64 = incidenceF64.startParameterF64,
+                endParameterF64 = incidenceF64.endParameterF64,
+            )
+        }
+        if (incidencesF64.any { incidenceF64 -> incidenceF64.sourceSpanIdsI64.isEmpty() }) {
             throw IllegalStateException("path-arrangement-inconsistent")
         }
+        val firstIncidenceF64 = incidencesF64.first()
+        preflightSourceTopologyLinearF64(incidencesF64.size.toLong() * 2L, candidateWorkBudgetI32)
+        val secondarySpanIdsI64 = incidencesF64.drop(1).flatMap(PathOverlapWitnessIncidenceF64::sourceSpanIdsI64).distinct()
+        val secondIncidenceF64 = sortedSourceTopologyF64(
+            secondarySpanIdsI64,
+            candidateWorkBudgetI32,
+        ) { firstI64, secondI64 -> firstI64.compareTo(secondI64) }
         PathUnidentifiedContactWitnessF64.OverlapF64(
             startVertexIdentityF64 = startIdentityF64,
             endVertexIdentityF64 = endIdentityF64,
             startPointF64 = contactF64.startPointF64,
             endPointF64 = contactF64.endPointF64,
-            firstSourceSpanIdsI64 = firstSourceSpanIdsI64,
-            secondSourceSpanIdsI64 = secondSourceSpanIdsI64,
-            firstStartParameterF64 = contactF64.firstStartParameterF64,
-            firstEndParameterF64 = contactF64.firstEndParameterF64,
-            secondStartParameterF64 = contactF64.secondStartParameterF64,
-            secondEndParameterF64 = contactF64.secondEndParameterF64,
+            firstSourceSpanIdsI64 = firstIncidenceF64.sourceSpanIdsI64,
+            secondSourceSpanIdsI64 = secondIncidenceF64,
+            firstStartParameterF64 = firstIncidenceF64.startParameterF64,
+            firstEndParameterF64 = firstIncidenceF64.endParameterF64,
+            secondStartParameterF64 = incidencesF64[1].startParameterF64,
+            secondEndParameterF64 = incidencesF64[1].endParameterF64,
+            incidencesF64 = incidencesF64,
+            startVertexIdentitiesF64 = startIdentitiesF64.toList(),
+            endVertexIdentitiesF64 = endIdentitiesF64.toList(),
         )
     }
     val pointsF64 = splitTopologyF64.pointContactsF64.map { contactF64 ->
@@ -385,15 +425,10 @@ private fun sourceEndpointIdentityF64(
     parameterF64: Double,
     candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
 ): PathVertexIdentityF64 {
-    val sectionsF64 = sourceTopologyIndexF64.sectionsByInputEdgeIdI32.getValue(inputEdgeIdI32)
-    sectionsF64.forEach { referenceF64 ->
-        val sectionF64 = referenceF64.sectionF64
-        candidateWorkBudgetI32.consume()
-        if (sameSourceParameterF64(sectionF64.startParameterF64, parameterF64)) return sectionF64.startIdentityF64
-        candidateWorkBudgetI32.consume()
-        if (sameSourceParameterF64(sectionF64.endParameterF64, parameterF64)) return sectionF64.endIdentityF64
-    }
-    throw IllegalStateException("path-arrangement-inconsistent")
+    candidateWorkBudgetI32.consume()
+    return sourceTopologyIndexF64.endpointIdentitiesByInputAndParameterF64[
+        PathSourceEndpointParameterKeyF64(inputEdgeIdI32, canonicalSourceParameterBitsI64(parameterF64))
+    ]?.singleOrNull() ?: throw IllegalStateException("path-arrangement-inconsistent")
 }
 
 private fun traversedSourceSpanIdsF64(
@@ -412,30 +447,28 @@ private fun traversedSourceSpanIdsF64(
         candidateWorkBudgetI32.consume()
         val sectionMinimumF64 = minOf(sectionF64.startParameterF64, sectionF64.endParameterF64)
         val sectionMaximumF64 = maxOf(sectionF64.startParameterF64, sectionF64.endParameterF64)
-        if (sectionMinimumF64 <= maximumF64 && sectionMaximumF64 >= minimumF64) {
+        // Only a strict source-interval interior belongs to an overlap component.  Endpoints
+        // remain PointF64 events and may not inflate an overlap's incidence list.
+        if (sectionMinimumF64 < maximumF64 && sectionMaximumF64 > minimumF64) {
             candidateWorkBudgetI32.consume()
             traversedSpanIdsI64 += referenceF64.sourceSpanF64.sourceSpanIdI64
         }
     }
-    return traversedSpanIdsI64.sorted()
+    return sortedSourceTopologyF64(traversedSpanIdsI64.toList(), candidateWorkBudgetI32) { firstI64, secondI64 -> firstI64.compareTo(secondI64) }
 }
 
 private fun assignContactWitnessIdsF64(
     contactsF64: List<PathUnidentifiedContactWitnessF64>,
     candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
 ): List<PathContactWitnessF64> {
-    val orderedF64 = contactsF64.sortedWith(
-        Comparator { firstF64, secondF64 ->
-            compareContactWitnessesSemanticallyF64(firstF64, secondF64, candidateWorkBudgetI32)
-        },
-    )
+    val orderedF64 = sortedSourceTopologyF64(contactsF64, candidateWorkBudgetI32, ::compareContactWitnessesSemanticallyWithoutBudgetF64)
     var nextIdI64 = 0L
     var previousF64: PathUnidentifiedContactWitnessF64? = null
     return orderedF64.map { contactF64 ->
         val previous = previousF64
         if (previous != null) {
             candidateWorkBudgetI32.consume()
-            if (compareContactWitnessesSemanticallyF64(previous, contactF64, candidateWorkBudgetI32) != 0) nextIdI64 += 1L
+            if (compareContactWitnessesSemanticallyWithoutBudgetF64(previous, contactF64) != 0) nextIdI64 += 1L
         }
         previousF64 = contactF64
         when (contactF64) {
@@ -457,6 +490,9 @@ private fun assignContactWitnessIdsF64(
                 firstEndParameterF64 = contactF64.firstEndParameterF64,
                 secondStartParameterF64 = contactF64.secondStartParameterF64,
                 secondEndParameterF64 = contactF64.secondEndParameterF64,
+                incidencesF64 = contactF64.incidencesF64,
+                startVertexIdentitiesF64 = contactF64.startVertexIdentitiesF64,
+                endVertexIdentitiesF64 = contactF64.endVertexIdentitiesF64,
             )
         }
     }
@@ -487,8 +523,9 @@ private fun buildPathLegacySectionProvenanceIndexF64(
         when (contactF64) {
             is PathContactWitnessF64.PointF64 -> addWitnessForSpans(contactF64.incidentSourceSpanIdsI64)
             is PathContactWitnessF64.OverlapF64 -> {
-                addWitnessForSpans(contactF64.firstSourceSpanIdsI64)
-                addWitnessForSpans(contactF64.secondSourceSpanIdsI64)
+                contactF64.incidencesF64.forEach { incidenceF64 ->
+                    addWitnessForSpans(incidenceF64.sourceSpanIdsI64)
+                }
             }
         }
     }
@@ -503,42 +540,6 @@ private fun buildPathLegacySectionProvenanceIndexF64(
         witnessesBySourceSpanIdI64[sourceSpanIdI64] = witnessesF64
     }
     return PathLegacySectionProvenanceIndexF64(witnessesBySourceSpanIdI64)
-}
-
-private fun compareContactWitnessesSemanticallyF64(
-    firstF64: PathUnidentifiedContactWitnessF64,
-    secondF64: PathUnidentifiedContactWitnessF64,
-    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
-): Int = when {
-    firstF64 is PathUnidentifiedContactWitnessF64.PointF64 && secondF64 is PathUnidentifiedContactWitnessF64.PointF64 ->
-        comparePointsSemanticallyF64(firstF64.pointF64, secondF64.pointF64, candidateWorkBudgetI32)
-    firstF64 is PathUnidentifiedContactWitnessF64.PointF64 -> -1
-    secondF64 is PathUnidentifiedContactWitnessF64.PointF64 -> 1
-    firstF64 is PathUnidentifiedContactWitnessF64.OverlapF64 && secondF64 is PathUnidentifiedContactWitnessF64.OverlapF64 -> {
-        comparePointsSemanticallyF64(firstF64.startPointF64, secondF64.startPointF64, candidateWorkBudgetI32)
-            .takeIf { it != 0 } ?: comparePointsSemanticallyF64(
-            firstF64.endPointF64,
-            secondF64.endPointF64,
-            candidateWorkBudgetI32,
-        ).takeIf { it != 0 } ?: compareSourceParametersF64(
-            firstF64.firstStartParameterF64,
-            secondF64.firstStartParameterF64,
-            candidateWorkBudgetI32,
-        ).takeIf { it != 0 } ?: compareSourceParametersF64(
-            firstF64.firstEndParameterF64,
-            secondF64.firstEndParameterF64,
-            candidateWorkBudgetI32,
-        ).takeIf { it != 0 } ?: compareSourceParametersF64(
-            firstF64.secondStartParameterF64,
-            secondF64.secondStartParameterF64,
-            candidateWorkBudgetI32,
-        ).takeIf { it != 0 } ?: compareSourceParametersF64(
-            firstF64.secondEndParameterF64,
-            secondF64.secondEndParameterF64,
-            candidateWorkBudgetI32,
-        )
-    }
-    else -> 0
 }
 
 // TODO(Task 4): delete once PathArrangementF64F32 consumes [PathSourceTopologyF64] directly.
@@ -654,35 +655,100 @@ private fun PathSplitEdgeF64.endLocationF64(): PathSourceLocationF64 = PathSourc
     vertexIdentityF64 = endIdentity,
 )
 
-private fun comparePointsSemanticallyF64(
-    firstF64: Point2F64,
-    secondF64: Point2F64,
-    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
-): Int {
-    candidateWorkBudgetI32.consume()
-    when {
-        firstF64.x < secondF64.x -> return -1
-        firstF64.x > secondF64.x -> return 1
-    }
-    candidateWorkBudgetI32.consume()
-    return when {
-        firstF64.y < secondF64.y -> -1
-        firstF64.y > secondF64.y -> 1
-        else -> 0
-    }
+// Sort comparators are intentionally pure.  Their whole worst-case cost is debited by
+// [sortedSourceTopologyF64] before Kotlin/JVM or Kotlin/JS is allowed to invoke one.
+private fun comparePointsSemanticallyWithoutBudgetF64(firstF64: Point2F64, secondF64: Point2F64): Int = when {
+    firstF64.x < secondF64.x -> -1
+    firstF64.x > secondF64.x -> 1
+    firstF64.y < secondF64.y -> -1
+    firstF64.y > secondF64.y -> 1
+    else -> 0
 }
 
-private fun compareSourceParametersF64(
-    firstF64: Double,
-    secondF64: Double,
-    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+private fun compareSourceParametersWithoutBudgetF64(firstF64: Double, secondF64: Double): Int = when {
+    firstF64 < secondF64 -> -1
+    firstF64 > secondF64 -> 1
+    else -> 0
+}
+
+private fun compareSourceSpanGroupingEdgesWithoutBudgetF64(firstF64: PathSplitEdgeF64, secondF64: PathSplitEdgeF64): Int {
+    firstF64.operand.ordinal.compareTo(secondF64.operand.ordinal).takeIf { it != 0 }?.let { return it }
+    firstF64.contourIndexI32.compareTo(secondF64.contourIndexI32).takeIf { it != 0 }?.let { return it }
+    firstF64.sourceSegmentIndexI32.compareTo(secondF64.sourceSegmentIndexI32).takeIf { it != 0 }?.let { return it }
+    return compareSourceParametersWithoutBudgetF64(firstF64.sourceStartParameterF64, secondF64.sourceStartParameterF64)
+}
+
+private fun compareSourceSpansSemanticallyWithoutBudgetF64(
+    firstF64: PathUnidentifiedSourceSpanF64,
+    secondF64: PathUnidentifiedSourceSpanF64,
 ): Int {
-    candidateWorkBudgetI32.consume()
-    return when {
-        firstF64 < secondF64 -> -1
-        firstF64 > secondF64 -> 1
-        else -> 0
+    comparePointsSemanticallyWithoutBudgetF64(firstF64.startPointF64, secondF64.startPointF64)
+        .takeIf { it != 0 }?.let { return it }
+    comparePointsSemanticallyWithoutBudgetF64(firstF64.endPointF64, secondF64.endPointF64)
+        .takeIf { it != 0 }?.let { return it }
+    firstF64.windingDeltaI32.compareTo(secondF64.windingDeltaI32).takeIf { it != 0 }?.let { return it }
+    firstF64.flattenedSectionsF64.size.compareTo(secondF64.flattenedSectionsF64.size).takeIf { it != 0 }?.let { return it }
+    firstF64.flattenedSectionsF64.indices.forEach { indexI32 ->
+        val firstSectionF64 = firstF64.flattenedSectionsF64[indexI32]
+        val secondSectionF64 = secondF64.flattenedSectionsF64[indexI32]
+        comparePointsSemanticallyWithoutBudgetF64(firstSectionF64.startPointF64, secondSectionF64.startPointF64)
+            .takeIf { it != 0 }?.let { return it }
+        comparePointsSemanticallyWithoutBudgetF64(firstSectionF64.endPointF64, secondSectionF64.endPointF64)
+            .takeIf { it != 0 }?.let { return it }
+        compareSourceParametersWithoutBudgetF64(firstSectionF64.startParameterF64, secondSectionF64.startParameterF64)
+            .takeIf { it != 0 }?.let { return it }
+        compareSourceParametersWithoutBudgetF64(firstSectionF64.endParameterF64, secondSectionF64.endParameterF64)
+            .takeIf { it != 0 }?.let { return it }
     }
+    return 0
+}
+
+private fun compareContactWitnessesSemanticallyWithoutBudgetF64(
+    firstF64: PathUnidentifiedContactWitnessF64,
+    secondF64: PathUnidentifiedContactWitnessF64,
+): Int = when {
+    firstF64 is PathUnidentifiedContactWitnessF64.PointF64 && secondF64 is PathUnidentifiedContactWitnessF64.PointF64 ->
+        comparePointsSemanticallyWithoutBudgetF64(firstF64.pointF64, secondF64.pointF64)
+    firstF64 is PathUnidentifiedContactWitnessF64.PointF64 -> -1
+    secondF64 is PathUnidentifiedContactWitnessF64.PointF64 -> 1
+    firstF64 is PathUnidentifiedContactWitnessF64.OverlapF64 && secondF64 is PathUnidentifiedContactWitnessF64.OverlapF64 -> {
+        comparePointsSemanticallyWithoutBudgetF64(firstF64.startPointF64, secondF64.startPointF64)
+            .takeIf { it != 0 } ?: comparePointsSemanticallyWithoutBudgetF64(firstF64.endPointF64, secondF64.endPointF64)
+            .takeIf { it != 0 } ?: compareSourceParametersWithoutBudgetF64(firstF64.firstStartParameterF64, secondF64.firstStartParameterF64)
+            .takeIf { it != 0 } ?: compareSourceParametersWithoutBudgetF64(firstF64.firstEndParameterF64, secondF64.firstEndParameterF64)
+            .takeIf { it != 0 } ?: compareSourceParametersWithoutBudgetF64(firstF64.secondStartParameterF64, secondF64.secondStartParameterF64)
+            .takeIf { it != 0 } ?: compareSourceParametersWithoutBudgetF64(firstF64.secondEndParameterF64, secondF64.secondEndParameterF64)
+    }
+    else -> 0
+}
+
+private fun <T> sortedSourceTopologyF64(
+    valuesF64: List<T>,
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+    compare: (T, T) -> Int,
+): List<T> {
+    val sizeI32 = valuesF64.size
+    candidateWorkBudgetI32.consumePreflightI64(sourceTopologySortCostI64F32(sizeI32) + sizeI32.toLong())
+    return valuesF64.sortedWith(Comparator(compare))
+}
+
+private fun sourceTopologySortCostI64F32(sizeI32: Int): Long {
+    if (sizeI32 < 2) return 0L
+    var widthI64 = 1L
+    var levelsI64 = 0L
+    val sizeI64 = sizeI32.toLong()
+    while (widthI64 < sizeI64) {
+        widthI64 = widthI64 shl 1
+        levelsI64 += 1L
+    }
+    return sizeI64 * levelsI64
+}
+
+private fun preflightSourceTopologyLinearF64(
+    unitsI64: Long,
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+) {
+    candidateWorkBudgetI32.consumePreflightI64(unitsI64)
 }
 
 private fun sameSourceParameterF64(firstF64: Double, secondF64: Double): Boolean =

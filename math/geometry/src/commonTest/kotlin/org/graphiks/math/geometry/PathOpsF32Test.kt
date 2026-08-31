@@ -93,12 +93,12 @@ class PathOpsF32Test {
         assertMetamorphicOperationAtTransformF32("tangent ovals", PathBooleanOp.UNION, smallScaleTransformF32)
 
     @Test
-    fun `tangent ovals reject a PointF64 promoted to F32 overlap for UNION at translation`() =
-        assertConservativeProjectedOverlapRejectionF32("tangent ovals", PathBooleanOp.UNION, translationTransformF32)
+    fun `tangent ovals preserve UNION at translation instead of rejecting their local point witness`() =
+        assertMetamorphicOperationAtTransformF32("tangent ovals", PathBooleanOp.UNION, translationTransformF32)
 
     @Test
-    fun `tangent ovals reject a PointF64 promoted to F32 overlap for UNION at large scale`() =
-        assertConservativeProjectedOverlapRejectionF32(
+    fun `tangent ovals preserve UNION at large scale instead of rejecting their local point witness`() =
+        assertMetamorphicOperationAtTransformF32(
             "tangent ovals",
             PathBooleanOp.UNION,
             largeScaleTranslationTransformF32,
@@ -109,12 +109,12 @@ class PathOpsF32Test {
         assertMetamorphicOperationAtTransformF32("tangent ovals", PathBooleanOp.XOR, smallScaleTransformF32)
 
     @Test
-    fun `tangent ovals reject a PointF64 promoted to F32 overlap for XOR at translation`() =
-        assertConservativeProjectedOverlapRejectionF32("tangent ovals", PathBooleanOp.XOR, translationTransformF32)
+    fun `tangent ovals preserve XOR at translation instead of rejecting their local point witness`() =
+        assertMetamorphicOperationAtTransformF32("tangent ovals", PathBooleanOp.XOR, translationTransformF32)
 
     @Test
-    fun `tangent ovals reject a PointF64 promoted to F32 overlap for XOR at large scale`() =
-        assertConservativeProjectedOverlapRejectionF32(
+    fun `tangent ovals preserve XOR at large scale instead of rejecting their local point witness`() =
+        assertMetamorphicOperationAtTransformF32(
             "tangent ovals",
             PathBooleanOp.XOR,
             largeScaleTranslationTransformF32,
@@ -143,10 +143,6 @@ class PathOpsF32Test {
             PathBooleanOp.REVERSE_DIFFERENCE,
             largeScaleTranslationTransformF32,
         )
-
-    @Test
-    fun `source point tangency rejects its nonzero projected overlap atomically`() =
-        assertConservativeProjectedOverlapRejectionF32("tangent ovals", PathBooleanOp.UNION, translationTransformF32)
 
     @Test
     fun `metamorphic collinear rectangles preserve DIFFERENCE across transforms`() =

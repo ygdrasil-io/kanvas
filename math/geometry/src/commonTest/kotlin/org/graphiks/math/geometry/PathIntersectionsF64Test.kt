@@ -394,7 +394,10 @@ class PathIntersectionsF64Test {
         val error = assertFailsWith<IllegalStateException> {
             splitPathEdgesF64(edges, PathOpsLimitsI32(maxCandidateProbes = 9))
         }
-        val split = splitPathEdgesF64(edges, PathOpsLimitsI32(maxCandidateProbes = 10))
+        // Canonical input/component sorts are now preflighted before the no-op classifier runs;
+        // retain a deliberately ample successful budget while the preceding tiny budget proves
+        // that the unified ledger rejects before any relation can be published.
+        val split = splitPathEdgesF64(edges, PathOpsLimitsI32(maxCandidateProbes = 64))
         val shared = identitiesAtPointF64(split, Point2F64(1.0, 0.0)).distinct().single()
 
         assertEquals("path-candidate-limit", error.message)

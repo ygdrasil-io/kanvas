@@ -85,6 +85,18 @@ internal class PathCandidateWorkBudgetI32(maxCandidateProbes: Int) {
     fun requireRemainingAtLeast(units: Long) {
         if (units > remaining.toLong()) throw IllegalStateException("path-candidate-limit")
     }
+
+    /**
+     * Debits a statically derived unit count before a deterministic pass begins.  In particular,
+     * callers must use this for a sort's worst-case comparison bound instead of charging from a
+     * JVM- or JS-specific comparator callback.
+     */
+    fun consumePreflightI64(unitsI64: Long) {
+        require(unitsI64 >= 0L)
+        requireRemainingAtLeast(unitsI64)
+        remaining -= unitsI64.toInt()
+    }
+
 }
 
 private fun canonicalTopologicalPathInputEdgeF64(edge: PathInputEdgeF64): PathInputEdgeF64 = edge.copy(
@@ -136,15 +148,23 @@ internal data class PathRegistryPointContactF64(
     val vertexIdentityF64: PathVertexIdentityF64,
 )
 
+/** One exact carrier incidence in a canonical overlap component. */
+internal data class PathRegistryOverlapIncidenceF64(
+    val inputEdgeIdI32: Int,
+    // These parameters are paired with the component start/end, not with an arbitrary raw pair.
+    val startParameterF64: Double,
+    val endParameterF64: Double,
+)
+
+/**
+ * A canonical exact overlap component.  The registry aggregates all source-carrier incidences
+ * with the same exact interval before source topology asks for identities; it never exports a
+ * pairwise contact that downstream code would have to rediscover or join by coordinates.
+ */
 internal data class PathRegistryOverlapContactF64(
-    val firstInputEdgeIdI32: Int,
-    val secondInputEdgeIdI32: Int,
     val startPointF64: Point2F64,
     val endPointF64: Point2F64,
-    val firstStartParameterF64: Double,
-    val firstEndParameterF64: Double,
-    val secondStartParameterF64: Double,
-    val secondEndParameterF64: Double,
+    val incidencesF64: List<PathRegistryOverlapIncidenceF64>,
 )
 
 internal data class PathSplitTopologyF64(
@@ -241,7 +261,7 @@ internal fun splitPathTopologyF64(
     candidateWorkBudget: PathCandidateWorkBudgetI32,
 ): PathSplitTopologyF64 {
     validatePathInputEdgesF64(edges)
-    val canonicalEdges = canonicalPathInputEdgesF64(edges).map(::canonicalTopologicalPathInputEdgeF64)
+    val canonicalEdges = canonicalPathInputEdgesF64(edges, candidateWorkBudget).map(::canonicalTopologicalPathInputEdgeF64)
     val maximumSplitEdges = limits.maxHalfEdges / 2
     val baseSplitEdges = canonicalEdges.count { edge -> !sameTopologicalPointF64(edge.start, edge.end) }
     if (baseSplitEdges > maximumSplitEdges) throw IllegalStateException("path-half-edge-limit")
@@ -359,23 +379,23 @@ internal fun splitPathTopologyF64(
             }
     }
     }
-    val pointContactsF64 = components.map { component ->
+    candidateWorkBudget.consumePreflightI64(components.size.toLong())
+    val pointContactInputsF64 = components.map { component ->
         candidateWorkBudget.consume()
         PathRegistryPointContactF64(
             pointF64 = component.canonicalPoint,
             vertexIdentityF64 = identityByComponent.getValue(component),
         )
-    }.sortedWith(
-        Comparator { first, second ->
-            candidateWorkBudget.consume()
-            comparePathTopologicalCoordinateF64(first.pointF64.x, second.pointF64.x).takeIf { it != 0 }
-                ?: comparePathTopologicalCoordinateF64(first.pointF64.y, second.pointF64.y)
-        },
-    )
+    }
+    val pointContactsF64 = sortedRegistryF64(pointContactInputsF64, candidateWorkBudget) { first, second ->
+        comparePathTopologicalCoordinateF64(first.pointF64.x, second.pointF64.x).takeIf { it != 0 }
+            ?: comparePathTopologicalCoordinateF64(first.pointF64.y, second.pointF64.y)
+    }
+    val overlapContactsF64 = registry.overlapContactsF64()
     return PathSplitTopologyF64(
         splitEdgesF64 = splitEdgesF64,
         pointContactsF64 = pointContactsF64,
-        overlapContactsF64 = registry.overlapContactsF64(),
+        overlapContactsF64 = overlapContactsF64,
     )
 }
 
@@ -666,8 +686,10 @@ private fun validatePathInputEdgesF64(edges: List<PathInputEdgeF64>) {
     }
 }
 
-private fun canonicalPathInputEdgesF64(edges: List<PathInputEdgeF64>): List<PathInputEdgeF64> =
-    edges.sortedWith(Comparator(::comparePathInputEdgesSemanticallyF64))
+private fun canonicalPathInputEdgesF64(
+    edges: List<PathInputEdgeF64>,
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+): List<PathInputEdgeF64> = sortedRegistryF64(edges, candidateWorkBudgetI32, ::comparePathInputEdgesSemanticallyF64)
 
 private fun hasEndpointIdentityF64(identity: PathVertexIdentityF64, edgeId: Int, parameter: Double): Boolean =
     edgeId in identity.incidentEdgeIds && identity.parameterByEdgeId[edgeId]?.let { samePathParameterF64(it, parameter) } == true
@@ -778,8 +800,6 @@ private data class PathEndpointProvenanceKeyF64(
 )
 
 private data class PathEdgeSemanticKeyF64(
-    val operandOrdinal: Int,
-    val contourIndex: Int,
     val startX: Long,
     val startY: Long,
     val endX: Long,
@@ -809,8 +829,6 @@ private data class PathComponentOrderKeyF64(
 )
 
 private fun pathEdgeSemanticKeyF64(edge: PathInputEdgeF64): PathEdgeSemanticKeyF64 = PathEdgeSemanticKeyF64(
-    operandOrdinal = edge.operand.ordinal,
-    contourIndex = edge.contourIndex,
     startX = orderedPathFloatingBitsF64(edge.start.x),
     startY = orderedPathFloatingBitsF64(edge.start.y),
     endX = orderedPathFloatingBitsF64(edge.end.x),
@@ -878,8 +896,6 @@ private fun comparePathInputEdgesSemanticallyF64(first: PathInputEdgeF64, second
     comparePathEdgeSemanticKeysF64(pathEdgeSemanticKeyF64(first), pathEdgeSemanticKeyF64(second))
 
 private fun comparePathEdgeSemanticKeysF64(first: PathEdgeSemanticKeyF64, second: PathEdgeSemanticKeyF64): Int {
-    compareValues(first.operandOrdinal, second.operandOrdinal).takeIf { it != 0 }?.let { return it }
-    compareValues(first.contourIndex, second.contourIndex).takeIf { it != 0 }?.let { return it }
     compareValues(first.startX, second.startX).takeIf { it != 0 }?.let { return it }
     compareValues(first.startY, second.startY).takeIf { it != 0 }?.let { return it }
     compareValues(first.endX, second.endX).takeIf { it != 0 }?.let { return it }
@@ -1212,6 +1228,72 @@ private class PathComponentIdIndexF64 {
     }
 }
 
+private fun canonicalRegistryOverlapContactF64(
+    startPointF64: Point2F64,
+    endPointF64: Point2F64,
+    incidencesF64: List<PathRegistryOverlapIncidenceF64>,
+): PathRegistryOverlapContactF64 {
+    val start = canonicalTopologicalPointF64(startPointF64)
+    val end = canonicalTopologicalPointF64(endPointF64)
+    return if (compareRegistryPointsF64(start, end) <= 0) {
+        PathRegistryOverlapContactF64(start, end, incidencesF64)
+    } else {
+        PathRegistryOverlapContactF64(
+            startPointF64 = end,
+            endPointF64 = start,
+            incidencesF64 = incidencesF64.map { incidenceF64 ->
+                incidenceF64.copy(
+                    startParameterF64 = incidenceF64.endParameterF64,
+                    endParameterF64 = incidenceF64.startParameterF64,
+                )
+            },
+        )
+    }
+}
+
+private fun compareRegistryOverlapComponentsF64(
+    firstF64: PathRegistryOverlapContactF64,
+    secondF64: PathRegistryOverlapContactF64,
+): Int = compareRegistryOverlapGeometryF64(firstF64, secondF64)
+
+private fun compareRegistryOverlapGeometryF64(
+    firstF64: PathRegistryOverlapContactF64,
+    secondF64: PathRegistryOverlapContactF64,
+): Int = compareRegistryPointsF64(firstF64.startPointF64, secondF64.startPointF64)
+    .takeIf { it != 0 } ?: compareRegistryPointsF64(firstF64.endPointF64, secondF64.endPointF64)
+
+private fun compareRegistryOverlapIncidencesF64(
+    firstF64: PathRegistryOverlapIncidenceF64,
+    secondF64: PathRegistryOverlapIncidenceF64,
+): Int = comparePathTopologicalCoordinateF64(firstF64.startParameterF64, secondF64.startParameterF64)
+    .takeIf { it != 0 } ?: comparePathTopologicalCoordinateF64(firstF64.endParameterF64, secondF64.endParameterF64)
+
+private fun compareRegistryPointsF64(firstF64: Point2F64, secondF64: Point2F64): Int =
+    comparePathTopologicalCoordinateF64(firstF64.x, secondF64.x).takeIf { it != 0 }
+        ?: comparePathTopologicalCoordinateF64(firstF64.y, secondF64.y)
+
+private fun <T> sortedRegistryF64(
+    valuesF64: List<T>,
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+    compare: (T, T) -> Int,
+): List<T> {
+    val sizeI32 = valuesF64.size
+    candidateWorkBudgetI32.consumePreflightI64(registrySortCostI64F32(sizeI32) + sizeI32.toLong())
+    return valuesF64.sortedWith(Comparator(compare))
+}
+
+private fun registrySortCostI64F32(sizeI32: Int): Long {
+    if (sizeI32 < 2) return 0L
+    var widthI64 = 1L
+    var levelsI64 = 0L
+    val sizeI64 = sizeI32.toLong()
+    while (widthI64 < sizeI64) {
+        widthI64 = widthI64 shl 1
+        levelsI64 += 1L
+    }
+    return sizeI64 * levelsI64
+}
+
 private class PathIntersectionRegistryF64(
     private val edges: List<PathInputEdgeF64>,
     private val maxInteriorCuts: Int,
@@ -1220,7 +1302,11 @@ private class PathIntersectionRegistryF64(
     private val activeComponentsById = linkedMapOf<Int, PathIntersectionComponentF64>()
     private val overlapContacts = mutableListOf<PathRegistryOverlapContactF64>()
     val components: List<PathIntersectionComponentF64>
-        get() = activeComponentsById.values.sortedWith(Comparator(::comparePathIntersectionComponentsF64))
+        get() {
+            candidateWorkBudget.consumePreflightI64(activeComponentsById.size.toLong())
+            val valuesF64 = activeComponentsById.values.toList()
+            return sortedRegistryF64(valuesF64, candidateWorkBudget, ::comparePathIntersectionComponentsF64)
+        }
     // Pair enumeration opens two fixed 31 * 16 direct-signature cursor sets and one exact-witness
     // cursor. The exact stream is consumed first as the stronger proof, then the direct streams
     // are merged before any index mutation; persistent state is canonical components/incidences,
@@ -1252,29 +1338,57 @@ private class PathIntersectionRegistryF64(
         val firstEdgeF64 = edges[firstEdgeIndex]
         val secondEdgeF64 = edges[secondEdgeIndex]
         candidateWorkBudget.consume()
-        val contactF64 = PathRegistryOverlapContactF64(
-            firstInputEdgeIdI32 = firstEdgeF64.idI32,
-            secondInputEdgeIdI32 = secondEdgeF64.idI32,
+        // The canonical pair always creates two incidence records; reserve the contact/list and
+        // the possible reversed-incidence copy before publishing either one.
+        candidateWorkBudget.consumePreflightI64(4L)
+        val contactF64 = canonicalRegistryOverlapContactF64(
             startPointF64 = intersectionF64.start,
             endPointF64 = intersectionF64.end,
-            firstStartParameterF64 = sourceParameterAtEdgeCutF64(firstEdgeF64, intersectionF64.firstStartParameter),
-            firstEndParameterF64 = sourceParameterAtEdgeCutF64(firstEdgeF64, intersectionF64.firstEndParameter),
-            secondStartParameterF64 = sourceParameterAtEdgeCutF64(secondEdgeF64, intersectionF64.secondStartParameter),
-            secondEndParameterF64 = sourceParameterAtEdgeCutF64(secondEdgeF64, intersectionF64.secondEndParameter),
+            incidencesF64 = listOf(
+                PathRegistryOverlapIncidenceF64(
+                    inputEdgeIdI32 = firstEdgeF64.idI32,
+                    startParameterF64 = sourceParameterAtEdgeCutF64(firstEdgeF64, intersectionF64.firstStartParameter),
+                    endParameterF64 = sourceParameterAtEdgeCutF64(firstEdgeF64, intersectionF64.firstEndParameter),
+                ),
+                PathRegistryOverlapIncidenceF64(
+                    inputEdgeIdI32 = secondEdgeF64.idI32,
+                    startParameterF64 = sourceParameterAtEdgeCutF64(secondEdgeF64, intersectionF64.secondStartParameter),
+                    endParameterF64 = sourceParameterAtEdgeCutF64(secondEdgeF64, intersectionF64.secondEndParameter),
+                ),
+            ),
         )
         candidateWorkBudget.consume()
         overlapContacts += contactF64
     }
 
-    fun overlapContactsF64(): List<PathRegistryOverlapContactF64> = overlapContacts.sortedWith(
-        Comparator { firstF64, secondF64 ->
-            candidateWorkBudget.consume()
-            comparePathTopologicalCoordinateF64(firstF64.startPointF64.x, secondF64.startPointF64.x).takeIf { it != 0 }
-                ?: comparePathTopologicalCoordinateF64(firstF64.startPointF64.y, secondF64.startPointF64.y).takeIf { it != 0 }
-                ?: comparePathTopologicalCoordinateF64(firstF64.endPointF64.x, secondF64.endPointF64.x).takeIf { it != 0 }
-                ?: comparePathTopologicalCoordinateF64(firstF64.endPointF64.y, secondF64.endPointF64.y)
-        },
-    )
+    fun overlapContactsF64(): List<PathRegistryOverlapContactF64> {
+        val orderedF64 = sortedRegistryF64(overlapContacts, candidateWorkBudget, ::compareRegistryOverlapComponentsF64)
+        if (orderedF64.isEmpty()) return emptyList()
+        candidateWorkBudget.consumePreflightI64(orderedF64.size.toLong() * 3L)
+        val componentsF64 = ArrayList<PathRegistryOverlapContactF64>(orderedF64.size)
+        var cursorI32 = 0
+        while (cursorI32 < orderedF64.size) {
+            val firstF64 = orderedF64[cursorI32]
+            val incidencesF64 = ArrayList<PathRegistryOverlapIncidenceF64>()
+            while (
+                cursorI32 < orderedF64.size &&
+                    compareRegistryOverlapGeometryF64(firstF64, orderedF64[cursorI32]) == 0
+            ) {
+                incidencesF64 += orderedF64[cursorI32].incidencesF64
+                cursorI32 += 1
+            }
+            componentsF64 += PathRegistryOverlapContactF64(
+                startPointF64 = firstF64.startPointF64,
+                endPointF64 = firstF64.endPointF64,
+                incidencesF64 = sortedRegistryF64(
+                    incidencesF64,
+                    candidateWorkBudget,
+                    ::compareRegistryOverlapIncidencesF64,
+                ),
+            )
+        }
+        return componentsF64
+    }
 
     private fun incomingProfileF64(
         firstEdgeIndex: Int,
