@@ -16,7 +16,7 @@ public class PathMeasureF32(path: PathF32, forceClosed: Boolean = false) {
         .flatten(NormalizedPathF64(path, normalization))
         .map { contour ->
             val segments = contour.points.zipWithNext().map { (first, second) ->
-                MeasuredSegmentF64(first, second, sourceGeometry[second.sourceSegmentIndex], normalization.scale)
+                MeasuredSegmentF64(first, second, sourceGeometry[second.sourceSegmentIndexI32], normalization.scale)
             }.toMutableList()
             if ((contour.closed || forceClosed) && contour.points.size > 1 && contour.points.last().point != contour.points.first().point) {
                 segments += MeasuredSegmentF64(contour.points.last(), contour.points.first(), null, normalization.scale)
@@ -81,7 +81,7 @@ private data class MeasuredSegmentF64(
             first.point.x + (second.point.x - first.point.x) * fraction,
             first.point.y + (second.point.y - first.point.y) * fraction,
         )
-        val t = first.t + (second.t - first.t) * fraction
+        val t = first.parameterF64 + (second.parameterF64 - first.parameterF64) * fraction
         val derivative = geometry?.derivativeAt(t) ?: Vector2F64(second.point.x - first.point.x, second.point.y - first.point.y)
         val tangentLength = stableHypotF64(derivative.x, derivative.y)
         val tangent = if (tangentLength == 0.0) Point2F32(0f, 0f) else Point2F32(

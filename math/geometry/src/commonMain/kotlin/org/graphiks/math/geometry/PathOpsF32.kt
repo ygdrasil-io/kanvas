@@ -68,6 +68,8 @@ private data class PathOperandInputF32(
 private data class PathInputVertexF64(
     val id: Int,
     val point: Point2F64,
+    val sourceSegmentIndexI32: Int,
+    val parameterF64: Double,
     val originalPointF32: Point2F32?,
 )
 
@@ -86,6 +88,12 @@ private data class ProjectedPathContourF32(
     val signedDoubleAreaExpansionF64: DoubleArray,
     val normalizedSignedDoubleAreaExpansionF64: DoubleArray,
 )
+
+private sealed interface ProjectedContourResultF32 {
+    data class Retained(val contour: ProjectedPathContourF32) : ProjectedContourResultF32
+
+    data object Drop : ProjectedContourResultF32
+}
 
 private val projectionAreaToleranceF64: Double = 2.0.pow(-46)
 // `signedDoubleAreaExpansionF64` represents twice the signed area. This is exactly
@@ -184,6 +192,8 @@ private fun inputEdgesF64(
                 PathInputVertexF64(
                     id = vertices.size,
                     point = point.point,
+                    sourceSegmentIndexI32 = point.sourceSegmentIndexI32,
+                    parameterF64 = point.parameterF64,
                     originalPointF32 = point.originalPointF32,
                 ).also(vertices::add)
             }
@@ -218,6 +228,9 @@ private fun inputEdgesF64(
             id = edgeId,
             operand = edge.operand,
             contourIndex = edge.contourIndex,
+            sourceSegmentIndexI32 = edge.end.sourceSegmentIndexI32,
+            sourceStartParameterF64 = edge.start.parameterF64,
+            sourceEndParameterF64 = edge.end.parameterF64,
             startIdentity = identitiesByVertexId.getValue(edge.start.id),
             endIdentity = identitiesByVertexId.getValue(edge.end.id),
             start = edge.start.point,
@@ -253,26 +266,44 @@ internal fun projectContoursF64ToPathF32(
     candidateWorkBudget: PathCandidateWorkBudgetI32 =
         PathCandidateWorkBudgetI32(PathOpsLimitsI32().maxCandidateProbes),
 ): PathF32 {
-    val uncanonicalProjected = contours.mapNotNull { contour -> projectUncanonicalContourF32(contour, normalization) }
-    val compactionEdges = projectedBoundaryEdgesF64(uncanonicalProjected)
-    val pointWitnesses = if (compactionEdges.size < 2) {
-        emptyList()
+    val uncanonicalProjected = contours.mapNotNull { contour ->
+        when (val result = projectUncanonicalContourF32(contour, normalization)) {
+            is ProjectedContourResultF32.Retained -> result.contour
+            ProjectedContourResultF32.Drop -> null
+        }
+    }
+    // TODO(Task 3): delete the late-projection adapter once the hybrid DCEL writes its boundary
+    // trace directly.  The legacy compactor remains only for original PathF32 provenance; raw
+    // F64 contours have no authority to remove a witness after projection.
+    val hasUnsafeSyntheticWitnesses = contours.size > 1 && contours.all { contour ->
+        contour.vertices.all { vertex -> vertex.originalPointF32 == null }
+    }
+    val legacyProjected = if (hasUnsafeSyntheticWitnesses) {
+        uncanonicalProjected
     } else {
-        projectedSourceContactAnchorsF64(
-            edges = compactionEdges,
+        val compactionEdges = projectedBoundaryEdgesF64(uncanonicalProjected)
+        val pointWitnesses = if (compactionEdges.size < 2) {
+            emptyList()
+        } else {
+            projectedSourceContactAnchorsF64(
+                edges = compactionEdges,
+                contours = uncanonicalProjected,
+                normalization = normalization,
+                candidateWorkBudget = candidateWorkBudget,
+            )
+        }
+        compactProjectedPointWitnessRunsF64(
             contours = uncanonicalProjected,
+            pointWitnesses = pointWitnesses,
             normalization = normalization,
             candidateWorkBudget = candidateWorkBudget,
         )
     }
-    val compactedProjected = compactProjectedPointWitnessRunsF64(
-        contours = uncanonicalProjected,
-        pointWitnesses = pointWitnesses,
-        normalization = normalization,
-        candidateWorkBudget = candidateWorkBudget,
-    )
-    val projected = compactedProjected.mapNotNull { contour ->
+    val projected = legacyProjected.mapNotNull { contour ->
         projectContourF32(contour, normalization, candidateWorkBudget)
+    }
+    if (hasUnsafeSyntheticWitnesses) {
+        rejectProjectedRunsThatConsumeDistinctWitnessesF64(projected)
     }
     validateProjectedContourSetF64(projected, normalization, candidateWorkBudget)
     val ordered = projected
@@ -302,12 +333,12 @@ internal fun projectContoursF64ToPathF32(
 private fun projectUncanonicalContourF32(
     contour: PathContourF64,
     normalization: PathNormalizationF64,
-): ProjectedPathContourF32? {
-    if (contour.vertices.isEmpty()) return null
+): ProjectedContourResultF32 {
+    if (contour.vertices.isEmpty()) return ProjectedContourResultF32.Drop
     val originalPoints = contour.vertices.map { it.point }
     val originalArea = signedDoubleAreaExpansionF64(originalPoints + originalPoints.first())
     val originalSign = ExpansionF64.sign(originalArea)
-    if (originalSign == 0) return null
+    if (originalSign == 0) return ProjectedContourResultF32.Drop
 
     var vertices = mutableListOf<Point2F32>()
     var sourceFirstVertices = mutableListOf<Point2F64>()
@@ -332,11 +363,11 @@ private fun projectUncanonicalContourF32(
         sourceFirstVertices.removeAt(sourceFirstVertices.lastIndex)
         sourceLastVertices.removeAt(sourceLastVertices.lastIndex)
     }
-    if (vertices.size < 3) return projectionCollapseOrDropF32(originalArea)
+    if (vertices.size < 3) return projectionCollapseOrDropResultF32(originalArea)
 
     var projectedArea = signedDoubleAreaExpansionF64(vertices.map(Point2F32::toPoint2F64) + vertices.first().toPoint2F64())
     var projectedSign = ExpansionF64.sign(projectedArea)
-    if (projectedSign == 0) return projectionCollapseOrDropF32(originalArea)
+    if (projectedSign == 0) return projectionCollapseOrDropResultF32(originalArea)
     if (projectedSign != originalSign) {
         vertices = vertices.asReversed().toMutableList()
         val reversedSourceFirstVertices = sourceLastVertices.asReversed().toMutableList()
@@ -359,8 +390,8 @@ private fun projectUncanonicalContourF32(
         sourceFirstVertices = sourceFirstVertices,
         sourceLastVertices = sourceLastVertices,
         normalization = normalization,
-    )
-    return result
+    ) ?: return projectionCollapseOrDropResultF32(originalArea)
+    return ProjectedContourResultF32.Retained(result)
 }
 
 private fun projectContourF32(
@@ -571,7 +602,12 @@ private fun projectedPathContourF32(
     normalization: PathNormalizationF64,
 ): ProjectedPathContourF32? {
     check(vertices.size == sourceFirstVertices.size && vertices.size == sourceLastVertices.size)
-    if (vertices.size < 3) return projectionCollapseOrDropF32(originalSignedDoubleAreaExpansionF64)
+    if (vertices.size < 3) {
+        if (isTopologicallySignificantAreaF64(originalSignedDoubleAreaExpansionF64)) {
+            throw IllegalStateException("path-f32-projection-collapse")
+        }
+        return null
+    }
     val originalSign = ExpansionF64.sign(originalSignedDoubleAreaExpansionF64)
     if (originalSign == 0) return null
     val projectedArea = signedDoubleAreaExpansionF64(vertices.map(Point2F32::toPoint2F64) + vertices.first().toPoint2F64())
@@ -621,6 +657,44 @@ private fun validateProjectedContourSetF64(
     // only after all of its coincident cycles are aggregated, even when each pair is below the
     // promised area tolerance.
     validateProjectedCycleGroupsF64(contours, cycleKeys, normalization, candidateWorkBudget)
+}
+
+// A projected vertex can cover a run of several source vertices.  A later compaction used to
+// replace such a run with a chord, which could silently consume two exact Point witnesses.  The
+// transitional writer cannot represent that claim safely, so reject it before validation.  A
+// genuinely dropped contour never reaches this check.
+private fun rejectProjectedRunsThatConsumeDistinctWitnessesF64(
+    contours: List<ProjectedPathContourF32>,
+) {
+    val edges = projectedBoundaryEdgesF64(contours)
+    if (edges.size < 2) return
+    val witnessesByContour = mutableMapOf<Int, MutableSet<Point2F64>>()
+    edges.indices.forEach { firstIndex ->
+        for (secondIndex in firstIndex + 1 until edges.size) {
+            val first = edges[firstIndex]
+            val second = edges[secondIndex]
+            if (first.contourIndex == second.contourIndex) continue
+            val sourceWitness = intersectPathEdgesF64(first.source, second.source) as? PathIntersectionF64.PointF64 ?: continue
+            if (intersectPathEdgesF64(first.projected, second.projected) == null) continue
+            witnessesByContour.getOrPut(first.contourIndex) { linkedSetOf() } += sourceWitness.point
+            witnessesByContour.getOrPut(second.contourIndex) { linkedSetOf() } += sourceWitness.point
+        }
+    }
+    contours.forEachIndexed { contourIndex, contour ->
+        val contourWitnesses = witnessesByContour[contourIndex].orEmpty()
+        contour.vertices.indices.forEach { vertexIndex ->
+            val previous = contour.vertices[(vertexIndex + contour.vertices.size - 1) % contour.vertices.size].toPoint2F64()
+            val current = contour.vertices[vertexIndex].toPoint2F64()
+            val next = contour.vertices[(vertexIndex + 1) % contour.vertices.size].toPoint2F64()
+            if (
+                contourWitnesses.size > 1 &&
+                    OrientationPredicateF64.sign(previous, current, next) == 0 &&
+                    PathPredicatesF64.onSegment(current, previous, next)
+            ) {
+                throw IllegalStateException("path-f32-projection-collapse")
+            }
+        }
+    }
 }
 
 private fun validateProjectedBoundaryContactsF64(
@@ -1323,11 +1397,11 @@ private fun projectedBoundaryEdgesAreAdjacentF64(
     return difference == 1 || difference == edgeCount - 1
 }
 
-private fun projectionCollapseOrDropF32(originalArea: DoubleArray): Nothing? {
+private fun projectionCollapseOrDropResultF32(originalArea: DoubleArray): ProjectedContourResultF32 {
     if (isTopologicallySignificantAreaF64(originalArea)) {
         throw IllegalStateException("path-f32-projection-collapse")
     }
-    return null
+    return ProjectedContourResultF32.Drop
 }
 
 private fun isTopologicallySignificantAreaF64(area: DoubleArray): Boolean {

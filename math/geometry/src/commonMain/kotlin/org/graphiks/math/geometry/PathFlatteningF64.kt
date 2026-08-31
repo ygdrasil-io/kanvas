@@ -16,8 +16,8 @@ internal data class PathFlatteningPolicyF64(
 
 internal data class FlattenedPointF64(
     val point: Point2F64,
-    val sourceSegmentIndex: Int,
-    val t: Double,
+    val sourceSegmentIndexI32: Int,
+    val parameterF64: Double,
     val originalPointF32: Point2F32?,
 )
 
@@ -41,8 +41,8 @@ internal object PathFlattenerF64 {
         var closed = false
         var emittedEdges = 0
 
-        fun add(point: Point2F64, sourceSegmentIndex: Int, t: Double, originalPoint: Point2F32?) {
-            points += FlattenedPointF64(point, sourceSegmentIndex, t, originalPoint)
+        fun add(point: Point2F64, sourceSegmentIndexI32: Int, parameterF64: Double, originalPoint: Point2F32?) {
+            points += FlattenedPointF64(point, sourceSegmentIndexI32, parameterF64, originalPoint)
         }
         fun incrementEdges() {
             emittedEdges += 1

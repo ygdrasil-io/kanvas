@@ -122,12 +122,12 @@ private fun maximumNormalizedChordErrorF64(
     normalization: PathNormalizationF64,
     scale: Float,
 ): Double = contour.points.zipWithNext().maxOf { (first, second) ->
-    if (first.sourceSegmentIndex != second.sourceSegmentIndex) 0.0 else {
-        val sourcePoint = when (first.sourceSegmentIndex) {
-            1 -> cubicPointF64((first.t + second.t) * 0.5, scale.toDouble())
+    if (first.sourceSegmentIndexI32 != second.sourceSegmentIndexI32) 0.0 else {
+        val sourcePoint = when (first.sourceSegmentIndexI32) {
+            1 -> cubicPointF64((first.parameterF64 + second.parameterF64) * 0.5, scale.toDouble())
             2 -> Point2F64(
-                scale.toDouble() * (0.5 + 0.5 * kotlin.math.cos(PI * (first.t + second.t) * 0.5)),
-                scale.toDouble() * 0.5 * kotlin.math.sin(PI * (first.t + second.t) * 0.5),
+                scale.toDouble() * (0.5 + 0.5 * kotlin.math.cos(PI * (first.parameterF64 + second.parameterF64) * 0.5)),
+                scale.toDouble() * 0.5 * kotlin.math.sin(PI * (first.parameterF64 + second.parameterF64) * 0.5),
             )
             else -> error("Unexpected source segment")
         }
@@ -168,7 +168,7 @@ private fun chordErrorAtF64(
     evaluate: (Double) -> Point2F64,
 ): Double {
     val (first, second) = contour.points.zipWithNext().first { (first, second) ->
-        first.sourceSegmentIndex == 1 && second.sourceSegmentIndex == 1 && t in first.t..second.t
+        first.sourceSegmentIndexI32 == 1 && second.sourceSegmentIndexI32 == 1 && t in first.parameterF64..second.parameterF64
     }
     val point = evaluate(t)
     val normalizedPoint = Point2F64(

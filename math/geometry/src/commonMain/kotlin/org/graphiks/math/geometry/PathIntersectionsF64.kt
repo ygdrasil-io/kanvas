@@ -16,12 +16,21 @@ internal data class PathInputEdgeF64(
     val id: Int,
     val operand: PathOperand,
     val contourIndex: Int,
+    val sourceSegmentIndexI32: Int = -1,
+    val sourceStartParameterF64: Double = 0.0,
+    val sourceEndParameterF64: Double = 1.0,
     val startIdentity: PathVertexIdentityF64,
     val endIdentity: PathVertexIdentityF64,
     val start: Point2F64,
     val end: Point2F64,
     val windingDelta: Int,
 )
+
+internal fun sourceParameterAtEdgeCutF64(
+    edgeF64: PathInputEdgeF64,
+    edgeParameterF64: Double,
+): Double = edgeF64.sourceStartParameterF64 +
+    (edgeF64.sourceEndParameterF64 - edgeF64.sourceStartParameterF64) * edgeParameterF64
 
 // `Point2F64` intentionally keeps its generated bitwise equality: public value/provenance users
 // can still distinguish signed-zero payloads where that matters. Path topology instead has one
@@ -86,6 +95,10 @@ internal sealed interface PathIntersectionF64 {
 internal data class PathSplitEdgeF64(
     val sourceId: Int,
     val operand: PathOperand,
+    val contourIndexI32: Int = 0,
+    val sourceSegmentIndexI32: Int = -1,
+    val sourceStartParameterF64: Double = 0.0,
+    val sourceEndParameterF64: Double = 1.0,
     val startIdentity: PathVertexIdentityF64,
     val endIdentity: PathVertexIdentityF64,
     val start: Point2F64,
@@ -277,6 +290,10 @@ internal fun splitPathEdgesF64(
                     PathSplitEdgeF64(
                         sourceId = edge.id,
                         operand = edge.operand,
+                        contourIndexI32 = edge.contourIndex,
+                        sourceSegmentIndexI32 = edge.sourceSegmentIndexI32,
+                        sourceStartParameterF64 = sourceParameterAtEdgeCutF64(edge, startCut.parameter),
+                        sourceEndParameterF64 = sourceParameterAtEdgeCutF64(edge, endCut.parameter),
                         startIdentity = startCut.identity,
                         endIdentity = endCut.identity,
                         start = start,
