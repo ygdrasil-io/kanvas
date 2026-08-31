@@ -1,6 +1,6 @@
 # Task 2 fix round 2 — Sol quality re-review
 
-Base : `2eae107ba`  
+Base : `2eae107ba`
 Head : `edc761be3`
 
 ## Verdict
