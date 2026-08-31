@@ -476,6 +476,83 @@ class PathOpsHybridTopologyF32Test {
     }
 
     @Test
+    fun `one public n way contact commits all pair relations atomically`() {
+        // One contour meets two independently closed contours at the same exact public vertex.
+        // The three probes are strictly inside their sectors, so they expose a lost pair relation
+        // without inspecting aliases, claims, vertices, or the DCEL.
+        val firstF32 = PathBuilder()
+            .moveTo(0f, 0f)
+            .lineTo(-2f, 1f)
+            .lineTo(-2f, -1f)
+            .close()
+            .build()
+        val secondF32 = PathBuilder()
+            .moveTo(0f, 0f)
+            .lineTo(2f, 2f)
+            .lineTo(2f, 1f)
+            .close()
+            .moveTo(0f, 0f)
+            .lineTo(2f, -1f)
+            .lineTo(2f, -2f)
+            .close()
+            .build()
+        val firstBefore = firstF32.toList()
+        val secondBefore = secondF32.toList()
+
+        val resultF32 = PathOpsF32.op(firstF32, secondF32, PathBooleanOp.UNION)
+
+        listOf(
+            Point2F32(-1.5f, 0f),
+            Point2F32(1.5f, 1.4f),
+            Point2F32(1.5f, -1.4f),
+        ).forEach { probeF32 ->
+            assertTrue(PathAnalysisF32.contains(resultF32, probeF32), "missing $probeF32")
+        }
+        assertEquals(firstBefore, firstF32.toList())
+        assertEquals(secondBefore, secondF32.toList())
+    }
+
+    @Test
+    fun `two public disjoint contacts on one segment stay independent under input permutations`() {
+        val mainF32 = PathBuilder()
+            .addRect(RectF32.ofLTRB(0f, 0f, 4f, 2f))
+            .build()
+        fun touchesF32(reverseContours: Boolean): PathF32 = PathBuilder().also { builderF32 ->
+            val anchorsF32 = if (reverseContours) listOf(3f, 1f) else listOf(1f, 3f)
+            anchorsF32.forEach { anchorF32 ->
+                builderF32
+                    .moveTo(anchorF32, 0f)
+                    .lineTo(anchorF32 - .5f, -1f)
+                    .lineTo(anchorF32 + .5f, -1f)
+                    .close()
+            }
+        }.build()
+
+        val firstTouchesF32 = touchesF32(reverseContours = false)
+        val reversedTouchesF32 = touchesF32(reverseContours = true)
+        val mainBefore = mainF32.toList()
+        val touchesBefore = firstTouchesF32.toList()
+        val variantsF32 = listOf(
+            PathOpsF32.op(mainF32, firstTouchesF32, PathBooleanOp.UNION),
+            PathOpsF32.op(reversedTouchesF32, mainF32, PathBooleanOp.UNION),
+        )
+
+        variantsF32.forEach { resultF32 ->
+            listOf(
+                Point2F32(2f, 1f),
+                Point2F32(1f, -.5f),
+                Point2F32(3f, -.5f),
+            ).forEach { probeF32 ->
+                assertTrue(PathAnalysisF32.contains(resultF32, probeF32), "missing $probeF32")
+            }
+            assertFalse(PathAnalysisF32.contains(resultF32, Point2F32(2f, -.5f)))
+        }
+        assertEquals(variantsF32.first(), variantsF32.last())
+        assertEquals(mainBefore, mainF32.toList())
+        assertEquals(touchesBefore, firstTouchesF32.toList())
+    }
+
+    @Test
     fun `public finite extreme and subnormal translation keep a finite deterministic result`() {
         val extremeF32 = PathBuilder()
             .addRect(RectF32.ofLTRB(0f, 0f, Float.MAX_VALUE, 1f))

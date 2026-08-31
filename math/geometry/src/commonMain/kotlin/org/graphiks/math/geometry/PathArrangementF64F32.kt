@@ -3,6 +3,16 @@ package org.graphiks.math.geometry
 import org.graphiks.math.vector.Vector2F64
 import kotlin.math.pow
 
+/** The only permitted disposition for a selected boundary that contains a collapsed incidence. */
+internal enum class PathBoundaryDisposition { KEEP, DROP, REJECT }
+
+/**
+ * Explicit provenance for the degenerate no-face case.  `UNPROVEN` is deliberately distinct
+ * from `UNSELECTED`: an absent F32 carrier cannot itself establish that a source contour was not
+ * selected.
+ */
+private enum class PathCollapsedOnlySelectionProofF64F32 { SELECTED, UNSELECTED, UNPROVEN }
+
 internal data class PathHybridHalfEdgeF64F32(
     val idI32: Int,
     val originVertexIndexI32: Int,
@@ -51,18 +61,52 @@ internal class PathArrangementF64F32 private constructor(
         firstFillRule: FillRule,
         secondFillRule: FillRule,
         operation: PathBooleanOp,
-    ): List<PathBoundaryTraceF64F32> = extractBoundaryF64F32 { faceI32 ->
-        operation.selectsHybridF64F32(
-            faceI32.firstWindingI32.isFilledHybridF64F32(firstFillRule),
-            faceI32.secondWindingI32.isFilledHybridF64F32(secondFillRule),
-        )
-    }
+    ): List<PathBoundaryTraceF64F32> = extractBoundaryF64F32(
+        selectsFace = { faceI32 ->
+            operation.selectsHybridF64F32(
+                faceI32.firstWindingI32.isFilledHybridF64F32(firstFillRule),
+                faceI32.secondWindingI32.isFilledHybridF64F32(secondFillRule),
+            )
+        },
+        collapsedOnlySelectionProofF64F32 = { operand ->
+            val firstFilled = operand == PathOperand.FIRST
+            val secondFilled = operand == PathOperand.SECOND
+            if (operation.selectsHybridF64F32(firstFilled, secondFilled)) {
+                PathCollapsedOnlySelectionProofF64F32.SELECTED
+            } else {
+                PathCollapsedOnlySelectionProofF64F32.UNSELECTED
+            }
+        },
+    )
 
-    fun unaryBoundary(fillRule: FillRule): List<PathBoundaryTraceF64F32> =
-        extractBoundaryF64F32 { faceI32 -> faceI32.firstWindingI32.isFilledHybridF64F32(fillRule) }
+    fun unaryBoundary(fillRule: FillRule): List<PathBoundaryTraceF64F32> = extractBoundaryF64F32(
+        selectsFace = { faceI32 -> faceI32.firstWindingI32.isFilledHybridF64F32(fillRule) },
+        collapsedOnlySelectionProofF64F32 = { operand ->
+            if (operand == PathOperand.FIRST && 1.isFilledHybridF64F32(fillRule)) {
+                PathCollapsedOnlySelectionProofF64F32.SELECTED
+            } else {
+                PathCollapsedOnlySelectionProofF64F32.UNSELECTED
+            }
+        },
+    )
 
-    private fun extractBoundaryF64F32(selectsFace: (PathHybridFaceI32) -> Boolean): List<PathBoundaryTraceF64F32> {
-        if (halfEdgesF64F32.isEmpty()) return emptyList()
+    private fun extractBoundaryF64F32(
+        selectsFace: (PathHybridFaceI32) -> Boolean,
+        collapsedOnlySelectionProofF64F32: (PathOperand) -> PathCollapsedOnlySelectionProofF64F32,
+    ): List<PathBoundaryTraceF64F32> {
+        if (halfEdgesF64F32.isEmpty()) {
+            val collapsedOnlyDispositionF64F32 = classifyCollapsedOnlyBoundaryF64F32(
+                sourceSpansByIdI64 = sourceSpansByIdI64,
+                collapsedIncidencesF64F32 = collapsedIncidencesF64F32,
+                collapsedOnlySelectionProofF64F32 = collapsedOnlySelectionProofF64F32,
+                candidateWorkBudgetI32 = candidateWorkBudgetI32,
+            )
+            when (collapsedOnlyDispositionF64F32) {
+                PathBoundaryDisposition.KEEP,
+                PathBoundaryDisposition.DROP -> return emptyList()
+                PathBoundaryDisposition.REJECT -> throw IllegalStateException("path-f32-projection-collapse")
+            }
+        }
         preflightArrangementF64F32(
             checkedPathWorkAddI64(
                 checkedPathWorkAddI64(
@@ -83,13 +127,34 @@ internal class PathArrangementF64F32 private constructor(
                 selected[if (leftSelected) halfEdgeF64F32.idI32 else halfEdgeF64F32.twinIndexI32] = true
             }
         }
-        classifySelectedCollapsedContinuationsF64F32(
+        // A fully collapsed sibling has no selected half-edge.  The absence of that half-edge
+        // is not proof that the source contour was unselected, so it may never be silently
+        // dropped while a retained trace is emitted.  Reject the indeterminate relation only
+        // after the real F32 faces have been selected.
+        if (
+            classifyUnprovenFullyCollapsedContoursF64F32(
+                sourceSpansByIdI64 = sourceSpansByIdI64,
+                collapsedIncidencesF64F32 = collapsedIncidencesF64F32,
+                candidateWorkBudgetI32 = candidateWorkBudgetI32,
+            ) == PathBoundaryDisposition.REJECT
+        ) {
+            throw IllegalStateException("path-f32-projection-collapse")
+        }
+        val collapsedDispositionF64F32 = classifySelectedCollapsedContinuationsF64F32(
             selectedI32 = selected,
             halfEdgesF64F32 = halfEdgesF64F32,
             traceSpanByHalfEdgeI32 = traceSpanByHalfEdgeI32,
+            sourceSpansByIdI64 = sourceSpansByIdI64,
             collapsedIncidencesF64F32 = collapsedIncidencesF64F32,
             candidateWorkBudgetI32 = candidateWorkBudgetI32,
         )
+        when (collapsedDispositionF64F32) {
+            PathBoundaryDisposition.KEEP,
+            // A whole selected contour can be dropped only because it has no remaining F32
+            // carrier to emit.  Sibling selected traces continue through the normal writer path.
+            PathBoundaryDisposition.DROP -> Unit
+            PathBoundaryDisposition.REJECT -> throw IllegalStateException("path-f32-projection-collapse")
+        }
         if (selected.none { it }) return emptyList()
 
         val outgoing = List(verticesF64F32.size) { mutableListOf<Int>() }
@@ -251,10 +316,11 @@ internal class PathArrangementF64F32 private constructor(
                     }
                 }
             }
-            // The hybrid topology admitted only intrinsic, witness-free flattening collapses.
-            // Their endpoints are an exact adjacent source relation, not a coordinate-derived
-            // alias; join precisely that pair so the following carrier sections remain one
-            // continuous F32 contour.  Every collapsed carrier is consumed explicitly below.
+            // A collapsed carrier is retained through face winding.  Its endpoints are joined
+            // only as a provisional exact source-incidence relation so the surrounding carriers
+            // can be classified in one arrangement; this is never a coordinate-derived alias.
+            // `extractBoundaryF64F32` makes the final KEEP/DROP/REJECT decision after face
+            // selection and before any empty result or trace reaches the writer.
             preflightArrangementF64F32(
                 checkedPathWorkMultiplyI64(topologyF64F32.collapsedIncidencesF64F32.size.toLong(), 3L),
                 candidateWorkBudgetI32,
@@ -1304,8 +1370,8 @@ private data class PathSourceContourKeyF64F32(
 /**
  * A zero-area F32 trace cannot disappear just because the DCEL has no visible face.  It may drop
  * only when every source carrier of exactly one source contour is represented (including an
- * explicitly consumed intrinsic collapse) and that contour's exact normalized double area is at
- * most 2^-45.  All partial, mixed, or significant losses reject before the writer sees a trace.
+ * explicitly recorded collapse) and that contour's exact normalized double area is at most
+ * 2^-45.  All partial, mixed, or significant losses reject before the writer sees a trace.
  */
 private fun zeroAreaTraceDispositionF64F32(
     rawHalfEdgeIndicesI32: List<Int>,
@@ -1353,10 +1419,10 @@ private fun zeroAreaTraceDispositionF64F32(
     if (representedCarrierKeysF64F32 != expectedCarrierKeysF64F32) {
         throw IllegalStateException("path-f32-projection-collapse")
     }
-    return if (sourceContourDoubleAreaWithinCollapseToleranceF64(sourceSpansF64)) {
-        PathCanonicalTraceDispositionF64F32.Drop
-    } else {
-        throw IllegalStateException("path-f32-projection-collapse")
+    return when (sourceContourBoundaryDispositionF64F32(sourceSpansF64)) {
+        PathBoundaryDisposition.DROP -> PathCanonicalTraceDispositionF64F32.Drop
+        PathBoundaryDisposition.KEEP,
+        PathBoundaryDisposition.REJECT -> throw IllegalStateException("path-f32-projection-collapse")
     }
 }
 
@@ -1370,24 +1436,27 @@ private fun PathSourceSpanF64.toSourceContourKeyF64F32(): PathSourceContourKeyF6
     PathSourceContourKeyF64F32(operand, contourIndexI32)
 
 /**
- * A collapsed carrier has no half-edge, but it is still classified at the boundary vertex.  A
- * selected source span may keep such a carrier only as the exact internal continuation proven by
- * topology: both adjacent sections must remain on the selected boundary, and its F64 incoming /
- * outgoing directions and winding must remain non-degenerate.  Otherwise omission would turn a
- * local loss of dimension into a partial contour, so reject before trace extraction.
+ * A collapsed carrier has no half-edge, but it remains part of winding until face selection.
+ * A selected contour may omit it only when the two *actual adjacent source rays* are one exact
+ * straight continuation.  A one-sided, curved, cusp, seam, or zero ray would change closure,
+ * orientation, or winding, so it rejects atomically before trace extraction.
  */
 private fun classifySelectedCollapsedContinuationsF64F32(
     selectedI32: BooleanArray,
     halfEdgesF64F32: List<PathHybridHalfEdgeF64F32>,
     traceSpanByHalfEdgeI32: Map<Int, PathArrangementTraceSpanF64F32>,
+    sourceSpansByIdI64: Map<Long, PathSourceSpanF64>,
     collapsedIncidencesF64F32: List<PathCollapsedIncidenceF64F32>,
     candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
-) {
-    if (collapsedIncidencesF64F32.isEmpty()) return
+): PathBoundaryDisposition {
+    if (collapsedIncidencesF64F32.isEmpty()) return PathBoundaryDisposition.KEEP
     preflightArrangementF64F32(
         checkedPathWorkAddI64(
-            checkedPathWorkMultiplyI64(halfEdgesF64F32.size.toLong(), 4L),
-            checkedPathWorkMultiplyI64(collapsedIncidencesF64F32.size.toLong(), 12L),
+            checkedPathWorkAddI64(
+                checkedPathWorkMultiplyI64(halfEdgesF64F32.size.toLong(), 5L),
+                checkedPathWorkMultiplyI64(collapsedIncidencesF64F32.size.toLong(), 16L),
+            ),
+            checkedPathWorkMultiplyI64(sourceSpansByIdI64.size.toLong(), 2L),
         ),
         candidateWorkBudgetI32,
     )
@@ -1403,24 +1472,163 @@ private fun classifySelectedCollapsedContinuationsF64F32(
     collapsedIncidencesF64F32.forEach { collapsedF64F32 ->
         val sourceSpanF64 = collapsedF64F32.sourceSpanF64
         if (sourceSpanF64.sourceSpanIdI64 !in selectedSourceSpanIdsI64) return@forEach
-        if (sourceSpanF64.windingDeltaI32 == 0) throw IllegalStateException("path-f32-projection-collapse")
-        val incomingDirectionF64 = collapsedF64F32.incomingDirectionF64
-        val outgoingDirectionF64 = collapsedF64F32.outgoingDirectionF64
-        val incomingLengthSquaredF64 = incomingDirectionF64.x * incomingDirectionF64.x + incomingDirectionF64.y * incomingDirectionF64.y
-        val outgoingLengthSquaredF64 = outgoingDirectionF64.x * outgoingDirectionF64.x + outgoingDirectionF64.y * outgoingDirectionF64.y
-        if (incomingLengthSquaredF64 == 0.0 || outgoingLengthSquaredF64 == 0.0) {
-            throw IllegalStateException("path-f32-projection-collapse")
+        if (sourceSpansByIdI64[sourceSpanF64.sourceSpanIdI64] != sourceSpanF64) {
+            throw IllegalStateException("path-arrangement-inconsistent")
         }
-        val transitionDotF64 = incomingDirectionF64.x * outgoingDirectionF64.x +
-            incomingDirectionF64.y * outgoingDirectionF64.y
-        if (transitionDotF64 >= 0.0) throw IllegalStateException("path-f32-projection-collapse")
         val sectionIndexI32 = collapsedF64F32.sectionIndexI32
         val previousKeyF64F32 = PathHybridCarrierKeyF64F32(sourceSpanF64.sourceSpanIdI64, sectionIndexI32 - 1)
         val nextKeyF64F32 = PathHybridCarrierKeyF64F32(sourceSpanF64.sourceSpanIdI64, sectionIndexI32 + 1)
-        if (previousKeyF64F32 !in selectedCarrierKeysF64F32 || nextKeyF64F32 !in selectedCarrierKeysF64F32) {
-            throw IllegalStateException("path-f32-projection-collapse")
+        val previousSelected = previousKeyF64F32 in selectedCarrierKeysF64F32
+        val nextSelected = nextKeyF64F32 in selectedCarrierKeysF64F32
+        // This collapse belongs to an unselected piece of the source contour.  It is not a
+        // selected boundary dependency and is ignored only at emission, never earlier.
+        if (!previousSelected && !nextSelected) return@forEach
+        if (
+            sourceSpanF64.windingDeltaI32 == 0 ||
+                !previousSelected ||
+                !nextSelected ||
+                !isStraightCollapsedContinuationF64F32(collapsedF64F32)
+        ) {
+            return PathBoundaryDisposition.REJECT
         }
     }
+    return PathBoundaryDisposition.KEEP
+}
+
+/**
+ * Finds complete source contours for which every carrier collapsed.  This deliberately says
+ * nothing about selection: callers must supply a separate face/operation proof before choosing
+ * `DROP` or `REJECT` from exact source area.
+ */
+private data class PathFullyCollapsedSourceContoursF64F32(
+    val sourceContourCountI32: Int,
+    val fullyCollapsedContoursF64: List<List<PathSourceSpanF64>>,
+)
+
+private fun fullyCollapsedSourceContoursF64F32(
+    sourceSpansByIdI64: Map<Long, PathSourceSpanF64>,
+    collapsedIncidencesF64F32: List<PathCollapsedIncidenceF64F32>,
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+): PathFullyCollapsedSourceContoursF64F32 {
+    if (collapsedIncidencesF64F32.isEmpty()) {
+        return PathFullyCollapsedSourceContoursF64F32(
+            sourceContourCountI32 = 0,
+            fullyCollapsedContoursF64 = emptyList(),
+        )
+    }
+    preflightArrangementF64F32(
+        checkedPathWorkAddI64(
+            checkedPathWorkMultiplyI64(sourceSpansByIdI64.size.toLong(), 5L),
+            checkedPathWorkMultiplyI64(collapsedIncidencesF64F32.size.toLong(), 6L),
+        ),
+        candidateWorkBudgetI32,
+    )
+    var carrierCountI64 = 0L
+    sourceSpansByIdI64.values.forEach { sourceSpanF64 ->
+        carrierCountI64 = checkedPathWorkAddI64(carrierCountI64, sourceSpanF64.flattenedSectionsF64.size.toLong())
+    }
+    preflightArrangementF64F32(carrierCountI64, candidateWorkBudgetI32)
+    val collapsedCarrierKeysF64F32 = collapsedIncidencesF64F32.mapTo(mutableSetOf()) { collapsedF64F32 ->
+        collapsedF64F32.toHybridCarrierKeyF64F32()
+    }
+    val sourceSpansByContourF64F32 = mutableMapOf<PathSourceContourKeyF64F32, MutableList<PathSourceSpanF64>>()
+    sourceSpansByIdI64.values.forEach { sourceSpanF64 ->
+        sourceSpansByContourF64F32.getOrPut(sourceSpanF64.toSourceContourKeyF64F32()) { mutableListOf() } += sourceSpanF64
+    }
+    val fullyCollapsedContoursF64 = mutableListOf<List<PathSourceSpanF64>>()
+    sourceSpansByContourF64F32.values.forEach { sourceSpansF64 ->
+        var allCollapsed = true
+        sourceSpansF64.forEach { sourceSpanF64 ->
+            sourceSpanF64.flattenedSectionsF64.indices.forEach { sectionIndexI32 ->
+                if (PathHybridCarrierKeyF64F32(sourceSpanF64.sourceSpanIdI64, sectionIndexI32) !in collapsedCarrierKeysF64F32) {
+                    allCollapsed = false
+                }
+            }
+        }
+        if (allCollapsed) {
+            fullyCollapsedContoursF64 += sourceSpansF64
+        }
+    }
+    return PathFullyCollapsedSourceContoursF64F32(
+        sourceContourCountI32 = sourceSpansByContourF64F32.size,
+        fullyCollapsedContoursF64 = fullyCollapsedContoursF64,
+    )
+}
+
+/**
+ * With no F32 half-edge, a sole source contour can be selected or unselected by the operation
+ * itself.  Multiple wholly collapsed contours are deliberately `UNPROVEN`: their relative
+ * winding is absent from the F32 face graph, so treating any sibling as a DROP would be an
+ * authority decision made from missing topology.
+ */
+private fun classifyCollapsedOnlyBoundaryF64F32(
+    sourceSpansByIdI64: Map<Long, PathSourceSpanF64>,
+    collapsedIncidencesF64F32: List<PathCollapsedIncidenceF64F32>,
+    collapsedOnlySelectionProofF64F32: (PathOperand) -> PathCollapsedOnlySelectionProofF64F32,
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+): PathBoundaryDisposition {
+    val collapsedContoursF64F32 = fullyCollapsedSourceContoursF64F32(
+        sourceSpansByIdI64 = sourceSpansByIdI64,
+        collapsedIncidencesF64F32 = collapsedIncidencesF64F32,
+        candidateWorkBudgetI32 = candidateWorkBudgetI32,
+    )
+    val fullyCollapsedContoursF64 = collapsedContoursF64F32.fullyCollapsedContoursF64
+    if (fullyCollapsedContoursF64.isEmpty()) return PathBoundaryDisposition.KEEP
+    if (collapsedContoursF64F32.sourceContourCountI32 != 1 || fullyCollapsedContoursF64.size != 1) {
+        return PathBoundaryDisposition.REJECT
+    }
+    val sourceSpansF64 = fullyCollapsedContoursF64.single()
+    val proofF64F32 = collapsedOnlySelectionProofF64F32(sourceSpansF64.first().operand)
+    return when (proofF64F32) {
+        PathCollapsedOnlySelectionProofF64F32.SELECTED -> sourceContourBoundaryDispositionF64F32(sourceSpansF64)
+        PathCollapsedOnlySelectionProofF64F32.UNSELECTED -> PathBoundaryDisposition.KEEP
+        PathCollapsedOnlySelectionProofF64F32.UNPROVEN -> PathBoundaryDisposition.REJECT
+    }
+}
+
+/**
+ * Once a real face has been selected, an entirely collapsed sibling still has no incident
+ * selected half-edge.  That absence is not a proof of non-selection, so reject before a retained
+ * output can become partial; this path deliberately never returns `DROP`.
+ */
+private fun classifyUnprovenFullyCollapsedContoursF64F32(
+    sourceSpansByIdI64: Map<Long, PathSourceSpanF64>,
+    collapsedIncidencesF64F32: List<PathCollapsedIncidenceF64F32>,
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+): PathBoundaryDisposition = if (
+    fullyCollapsedSourceContoursF64F32(
+        sourceSpansByIdI64 = sourceSpansByIdI64,
+        collapsedIncidencesF64F32 = collapsedIncidencesF64F32,
+        candidateWorkBudgetI32 = candidateWorkBudgetI32,
+    ).fullyCollapsedContoursF64.isEmpty()
+) {
+    PathBoundaryDisposition.KEEP
+} else {
+    PathBoundaryDisposition.REJECT
+}
+
+/** True source rays, viewed from the collapsed F32 vertex, must form one straight continuation. */
+private fun isStraightCollapsedContinuationF64F32(collapsedF64F32: PathCollapsedIncidenceF64F32): Boolean {
+    val incomingDirectionF64 = collapsedF64F32.incomingDirectionF64 ?: return false
+    val outgoingDirectionF64 = collapsedF64F32.outgoingDirectionF64 ?: return false
+    val incomingLengthSquaredF64 = incomingDirectionF64.x * incomingDirectionF64.x +
+        incomingDirectionF64.y * incomingDirectionF64.y
+    val outgoingLengthSquaredF64 = outgoingDirectionF64.x * outgoingDirectionF64.x +
+        outgoingDirectionF64.y * outgoingDirectionF64.y
+    if (incomingLengthSquaredF64 == 0.0 || outgoingLengthSquaredF64 == 0.0) return false
+    val crossF64 = incomingDirectionF64.x * outgoingDirectionF64.y -
+        incomingDirectionF64.y * outgoingDirectionF64.x
+    val dotF64 = incomingDirectionF64.x * outgoingDirectionF64.x +
+        incomingDirectionF64.y * outgoingDirectionF64.y
+    return crossF64 == 0.0 && dotF64 < 0.0
+}
+
+private fun sourceContourBoundaryDispositionF64F32(
+    sourceSpansF64: List<PathSourceSpanF64>,
+): PathBoundaryDisposition = if (sourceContourDoubleAreaWithinCollapseToleranceF64(sourceSpansF64)) {
+    PathBoundaryDisposition.DROP
+} else {
+    PathBoundaryDisposition.REJECT
 }
 
 private fun sourceContourDoubleAreaWithinCollapseToleranceF64(sourceSpansF64: List<PathSourceSpanF64>): Boolean {

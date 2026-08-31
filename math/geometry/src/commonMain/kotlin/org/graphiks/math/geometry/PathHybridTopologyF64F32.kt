@@ -51,8 +51,10 @@ internal data class PathCollapsedIncidenceF64F32(
     val sourceSectionF64: PathFlattenedSectionF64,
     val sectionIndexI32: Int,
     val hybridVertexF64F32: PathHybridVertexF64F32,
-    val incomingDirectionF64: Vector2F64,
-    val outgoingDirectionF64: Vector2F64,
+    /** Ray from the collapsed endpoint toward the preceding source section, if one exists. */
+    val incomingDirectionF64: Vector2F64?,
+    /** Ray from the collapsed endpoint toward the following source section, if one exists. */
+    val outgoingDirectionF64: Vector2F64?,
 )
 
 /**
@@ -101,6 +103,16 @@ private data class PathProjectedCoincidenceProposalF64F32(
     val endPointF32: Point2F32,
     val firstClaimF64: PathProjectedSpanClaimF64,
     val secondClaimF64: PathProjectedSpanClaimF64,
+)
+
+/**
+ * Immutable proposal group for one exact Point witness.  It is a validation transaction only:
+ * no projected coincidence ID, alias, canonical vertex, or half-edge exists until every group
+ * and every cross-group claim has passed.
+ */
+private data class PathProjectedCoincidenceTransactionF64F32(
+    val pointWitnessF64: PathContactWitnessF64.PointF64,
+    val proposalsF64F32: List<PathProjectedCoincidenceProposalF64F32>,
 )
 
 /**
@@ -316,15 +328,24 @@ internal fun buildPathHybridTopologyF64F32(
         val endVertexIndexI32 = vertexIndexByIdentityF64.getValue(endIdentityF64)
         val startVertexF64F32 = verticesF64F32[startVertexIndexI32]
         val endVertexF64F32 = verticesF64F32[endVertexIndexI32]
-        val directionF64 = sourceSectionF64.endPointF64 - sourceSectionF64.startPointF64
         if (sameHybridPointF32(startVertexF64F32.representativePointF32, endVertexF64F32.representativePointF32)) {
+            val incomingDirectionF64 = sourceSpanF64.flattenedSectionsF64
+                .getOrNull(carrierSectionF64F32.sectionIndexI32 - 1)
+                ?.let { previousSectionF64 ->
+                    previousSectionF64.startIncidencePointF64 - previousSectionF64.endIncidencePointF64
+                }
+            val outgoingDirectionF64 = sourceSpanF64.flattenedSectionsF64
+                .getOrNull(carrierSectionF64F32.sectionIndexI32 + 1)
+                ?.let { nextSectionF64 ->
+                    nextSectionF64.endIncidencePointF64 - nextSectionF64.startIncidencePointF64
+                }
             collapsedIncidencesF64F32 += PathCollapsedIncidenceF64F32(
                 sourceSpanF64 = sourceSpanF64,
                 sourceSectionF64 = sourceSectionF64,
                 sectionIndexI32 = carrierSectionF64F32.sectionIndexI32,
                 hybridVertexF64F32 = startVertexF64F32,
-                incomingDirectionF64 = -directionF64,
-                outgoingDirectionF64 = directionF64,
+                incomingDirectionF64 = incomingDirectionF64,
+                outgoingDirectionF64 = outgoingDirectionF64,
             )
             return@forEachIndexed
         }
@@ -351,17 +372,11 @@ internal fun buildPathHybridTopologyF64F32(
         )
     }
 
-    // A zero-F32-length carrier normally rejects: omitting it would publish a partial contour.
-    // The single safe disposition is an internal flattening interval (strict source parameters,
-    // no original F32 endpoint and no exact event).  It has no representable F32 extent, so the
-    // arrangement explicitly aliases and consumes that exact adjacent pair below.  In particular
-    // an input endpoint or a precise F64 fixture can never take this route.
-    if (collapsedIncidencesF64F32.any { collapsedF64F32 ->
-            !isIntrinsicFlatteningCollapseF64F32(collapsedF64F32, sourceTopologyF64.contactWitnessesF64)
-        }
-    ) {
-        throw IllegalStateException("path-f32-projection-collapse")
-    }
+    // A zero-F32-length carrier is retained until face selection.  At this point the topology
+    // cannot know whether it contributes to a selected boundary at all: rejecting here would
+    // incorrectly reject an unrelated retained face, while omitting it would silently publish a
+    // partial contour.  The arrangement makes the explicit KEEP/DROP/REJECT decision after
+    // winding and before trace emission.
 
     // The AABB index itself is conservative; this debit covers its deterministic construction
     // and immutable projected-edge view before candidate callbacks can run.
@@ -478,7 +493,7 @@ internal fun buildPathHybridTopologyF64F32(
     // registry cut before it reached this hybrid phase.  The hybrid arrangement is therefore
     // lookup-only: projected coincidence validation may reject, but it must never invent an
     // interior source carrier, identity or alias from a projected coordinate.
-    validateLocalProjectedCoincidenceChainsF64F32(
+    val committedProposalsF64F32 = validateAndOrderProjectedCoincidenceTransactionsF64F32(
         proposalsF64F32 = proposalsF64F32,
         pointWitnessIndexF64F32 = pointWitnessIndexF64F32,
         witnessesByIdentityF64 = witnessesByIdentityF64,
@@ -486,14 +501,13 @@ internal fun buildPathHybridTopologyF64F32(
         vertexIndexByIdentityF64 = vertexIndexByIdentityF64,
         candidateWorkBudgetI32 = candidateWorkBudgetI32,
     )
-    validateProjectedCoincidenceClaimsF64F32(proposalsF64F32, candidateWorkBudgetI32)
     validateDeferredEndpointContactsF64F32(
         deferredEndpointContactsF64F32 = deferredEndpointContactsF64F32,
-        proposalsF64F32 = proposalsF64F32,
+        proposalsF64F32 = committedProposalsF64F32,
         candidateWorkBudgetI32 = candidateWorkBudgetI32,
     )
     val projectedCoincidencesF32 = assignProjectedCoincidencesF64F32(
-        proposalsF64F32,
+        committedProposalsF64F32,
         candidateWorkBudgetI32,
     )
     val aliasGroupsF32 = buildHybridAliasGroupsF32(
@@ -512,47 +526,6 @@ internal fun buildPathHybridTopologyF64F32(
             collapsedIncidencesF64F32.toList()
         },
     )
-}
-
-private fun isIntrinsicFlatteningCollapseF64F32(
-    collapsedF64F32: PathCollapsedIncidenceF64F32,
-    witnessesF64: List<PathContactWitnessF64>,
-): Boolean {
-    val sourceSpanF64 = collapsedF64F32.sourceSpanF64
-    val sectionF64 = collapsedF64F32.sourceSectionF64
-    // Only an internal, ordered continuation of this *same* source span may be consumed.  A
-    // source endpoint, seam or one-sided fragment would otherwise turn an F64 carrier loss into
-    // an invisible cross-span alias.
-    val sectionIndexI32 = collapsedF64F32.sectionIndexI32
-    if (sectionIndexI32 <= 0 || sectionIndexI32 >= sourceSpanF64.flattenedSectionsF64.lastIndex) return false
-    val previousSectionF64 = sourceSpanF64.flattenedSectionsF64[sectionIndexI32 - 1]
-    val nextSectionF64 = sourceSpanF64.flattenedSectionsF64[sectionIndexI32 + 1]
-    if (
-        previousSectionF64.endIdentityF64 != sectionF64.startIdentityF64 ||
-            nextSectionF64.startIdentityF64 != sectionF64.endIdentityF64
-    ) {
-        return false
-    }
-    val minimumParameterF64 = minOf(sectionF64.startParameterF64, sectionF64.endParameterF64)
-    val maximumParameterF64 = maxOf(sectionF64.startParameterF64, sectionF64.endParameterF64)
-    if (minimumParameterF64 <= 0.0 || maximumParameterF64 >= 1.0) return false
-    val previousMaximumParameterF64 = maxOf(previousSectionF64.startParameterF64, previousSectionF64.endParameterF64)
-    val nextMinimumParameterF64 = minOf(nextSectionF64.startParameterF64, nextSectionF64.endParameterF64)
-    if (previousMaximumParameterF64 > minimumParameterF64 || maximumParameterF64 > nextMinimumParameterF64) return false
-    if (sectionF64.startIdentityF64.originalPointF32 != null || sectionF64.endIdentityF64.originalPointF32 != null) return false
-    val hasForeignExactWitnessF64 = witnessesF64.any { witnessF64 ->
-        when (witnessF64) {
-            is PathContactWitnessF64.PointF64 ->
-                witnessF64.vertexIdentityF64 == sectionF64.startIdentityF64 ||
-                    witnessF64.vertexIdentityF64 == sectionF64.endIdentityF64
-            is PathContactWitnessF64.OverlapF64 ->
-                sectionF64.startIdentityF64 in witnessF64.startVertexIdentitiesF64 ||
-                    sectionF64.startIdentityF64 in witnessF64.endVertexIdentitiesF64 ||
-                    sectionF64.endIdentityF64 in witnessF64.startVertexIdentitiesF64 ||
-                    sectionF64.endIdentityF64 in witnessF64.endVertexIdentitiesF64
-        }
-    }
-    return !hasForeignExactWitnessF64
 }
 
 private fun sourceSectionLocationF64(
@@ -1517,8 +1490,191 @@ private fun rejectForeignLocalProjectedCoincidenceJoinF64F32(
 }
 
 /**
+ * Canonicalizes the proposal order and validates one complete Point-witness transaction at a
+ * time.  The returned list remains only a proposal list: callers may not assign coincidence IDs
+ * or build aliases until this function and the deferred-contact pass both return.
+ */
+private fun validateAndOrderProjectedCoincidenceTransactionsF64F32(
+    proposalsF64F32: List<PathProjectedCoincidenceProposalF64F32>,
+    pointWitnessIndexF64F32: PathPointWitnessIndexF64F32,
+    witnessesByIdentityF64: Map<PathVertexIdentityF64, List<PathContactWitnessF64>>,
+    verticesF64F32: List<PathHybridVertexF64F32>,
+    vertexIndexByIdentityF64: Map<PathVertexIdentityF64, Int>,
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+): List<PathProjectedCoincidenceProposalF64F32> {
+    if (proposalsF64F32.isEmpty()) {
+        // Preserve the two deterministic empty-pass debits that this transaction replaces:
+        // local-chain validation (2) and source-span claim validation (1).  Without them a
+        // no-proposal operation would gain backend-independent budget credit merely because the
+        // implementation now has an explicit transaction object.
+        preflightHybridLinearF64F32(3L, candidateWorkBudgetI32)
+        return emptyList()
+    }
+    val proposalCountI64 = proposalsF64F32.size.toLong()
+    preflightHybridLinearF64F32(
+        checkedPathWorkAddI64(
+            checkedPathWorkMultiplyI64(proposalCountI64, 14L),
+            3L,
+        ),
+        candidateWorkBudgetI32,
+    )
+    val orderedProposalsF64F32 = sortedHybridF64F32(
+        proposalsF64F32,
+        candidateWorkBudgetI32,
+        ::compareProjectedCoincidenceTransactionProposalsF64F32,
+    )
+
+    val witnessByIdI64 = mutableMapOf<Long, PathContactWitnessF64.PointF64>()
+    orderedProposalsF64F32.forEach { proposalF64F32 ->
+        val previousWitnessF64 = witnessByIdI64.put(
+            proposalF64F32.pointWitnessF64.witnessIdI64,
+            proposalF64F32.pointWitnessF64,
+        )
+        if (previousWitnessF64 != null && previousWitnessF64 != proposalF64F32.pointWitnessF64) {
+            throw IllegalStateException("path-f32-projection-collapse")
+        }
+    }
+
+    // A canonical source registry owns one Point witness for an exact F64 location.  A second
+    // witness at that same semantic key would make a sort tie an authority decision, so reject
+    // rather than use a witness ID or candidate order as a hidden tie-break.
+    val transactionsF64F32 = ArrayList<PathProjectedCoincidenceTransactionF64F32>(
+        checkedPathCapacityI32(proposalCountI64, "path-candidate-limit"),
+    )
+    var transactionStartI32 = 0
+    while (transactionStartI32 < orderedProposalsF64F32.size) {
+        val witnessF64 = orderedProposalsF64F32[transactionStartI32].pointWitnessF64
+        var transactionEndI32 = transactionStartI32 + 1
+        while (
+            transactionEndI32 < orderedProposalsF64F32.size &&
+                compareProjectedPointWitnessSemanticF64(
+                    witnessF64,
+                    orderedProposalsF64F32[transactionEndI32].pointWitnessF64,
+                ) == 0
+        ) {
+            if (orderedProposalsF64F32[transactionEndI32].pointWitnessF64.witnessIdI64 != witnessF64.witnessIdI64) {
+                throw IllegalStateException("path-f32-projection-collapse")
+            }
+            transactionEndI32 += 1
+        }
+        transactionsF64F32 += PathProjectedCoincidenceTransactionF64F32(
+            pointWitnessF64 = witnessF64,
+            proposalsF64F32 = orderedProposalsF64F32.subList(transactionStartI32, transactionEndI32),
+        )
+        transactionStartI32 = transactionEndI32
+    }
+
+    transactionsF64F32.forEach { transactionF64F32 ->
+        validateProjectedCoincidenceTransactionF64F32(
+            transactionF64F32 = transactionF64F32,
+            pointWitnessIndexF64F32 = pointWitnessIndexF64F32,
+            witnessesByIdentityF64 = witnessesByIdentityF64,
+            verticesF64F32 = verticesF64F32,
+            vertexIndexByIdentityF64 = vertexIndexByIdentityF64,
+            candidateWorkBudgetI32 = candidateWorkBudgetI32,
+        )
+    }
+
+    validateProjectedCoincidenceClaimsF64F32(orderedProposalsF64F32, candidateWorkBudgetI32)
+    return orderedProposalsF64F32
+}
+
+/** Validates all pair relations carried by one n-way Point witness as one immutable unit. */
+private fun validateProjectedCoincidenceTransactionF64F32(
+    transactionF64F32: PathProjectedCoincidenceTransactionF64F32,
+    pointWitnessIndexF64F32: PathPointWitnessIndexF64F32,
+    witnessesByIdentityF64: Map<PathVertexIdentityF64, List<PathContactWitnessF64>>,
+    verticesF64F32: List<PathHybridVertexF64F32>,
+    vertexIndexByIdentityF64: Map<PathVertexIdentityF64, Int>,
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+) {
+    val proposalCountI64 = transactionF64F32.proposalsF64F32.size.toLong()
+    if (proposalCountI64 == 0L) throw IllegalStateException("path-arrangement-inconsistent")
+    preflightHybridLinearF64F32(
+        checkedPathWorkAddI64(checkedPathWorkMultiplyI64(proposalCountI64, 18L), 2L),
+        candidateWorkBudgetI32,
+    )
+    transactionF64F32.proposalsF64F32.forEach { proposalF64F32 ->
+        if (
+            proposalF64F32.pointWitnessF64 != transactionF64F32.pointWitnessF64
+        ) {
+            throw IllegalStateException("path-f32-projection-collapse")
+        }
+        validateProjectedClaimNoOpF64F32(
+            claimF64 = proposalF64F32.firstClaimF64,
+            projectedSpanF64F32 = proposalF64F32.firstSpanF64,
+            witnessF64 = transactionF64F32.pointWitnessF64,
+            vertexIndexByIdentityF64 = vertexIndexByIdentityF64,
+        )
+        validateProjectedClaimNoOpF64F32(
+            claimF64 = proposalF64F32.secondClaimF64,
+            projectedSpanF64F32 = proposalF64F32.secondSpanF64,
+            witnessF64 = transactionF64F32.pointWitnessF64,
+            vertexIndexByIdentityF64 = vertexIndexByIdentityF64,
+        )
+    }
+    validateLocalProjectedCoincidenceChainsF64F32(
+        proposalsF64F32 = transactionF64F32.proposalsF64F32,
+        pointWitnessIndexF64F32 = pointWitnessIndexF64F32,
+        witnessesByIdentityF64 = witnessesByIdentityF64,
+        verticesF64F32 = verticesF64F32,
+        vertexIndexByIdentityF64 = vertexIndexByIdentityF64,
+        candidateWorkBudgetI32 = candidateWorkBudgetI32,
+    )
+}
+
+/**
+ * Hybrid claims may only reuse source-registry cuts.  The source topology has already charged
+ * every strict interior cut to `maxIntersections`; this phase cannot spend a second slot or
+ * synthesize a new endpoint from an F32 coordinate.  Thus an unmaterialized bound rejects and an
+ * exact [PathVertexIdentityF64] already present in [vertexIndexByIdentityF64] is the sole no-op.
+ */
+private fun validateProjectedClaimNoOpF64F32(
+    claimF64: PathProjectedSpanClaimF64,
+    projectedSpanF64F32: PathProjectedSourceSpanF64F32,
+    witnessF64: PathContactWitnessF64.PointF64,
+    vertexIndexByIdentityF64: Map<PathVertexIdentityF64, Int>,
+) {
+    val startIdentityF64 = claimF64.startVertexIdentityF64
+        ?: throw IllegalStateException("path-f32-projection-collapse")
+    val endIdentityF64 = claimF64.endVertexIdentityF64
+        ?: throw IllegalStateException("path-f32-projection-collapse")
+    val sourceSpanF64 = projectedSpanF64F32.sourceSpanF64
+    val sourceSectionF64 = projectedSpanF64F32.sourceSectionF64
+    if (
+        claimF64.witnessIdI64 != witnessF64.witnessIdI64 ||
+            claimF64.sourceSpanIdI64 != sourceSpanF64.sourceSpanIdI64 ||
+            claimF64.sourceSectionIndexI32 != projectedSpanF64F32.sectionIndexI32 ||
+            claimF64.inputEdgeIdI32 != sourceSectionF64.inputEdgeIdI32 ||
+            claimF64.startParameterF64 >= claimF64.endParameterF64 ||
+            (claimF64.startEdgeParameterF64 != 0.0 && claimF64.startEdgeParameterF64 != 1.0) ||
+            (claimF64.endEdgeParameterF64 != 0.0 && claimF64.endEdgeParameterF64 != 1.0)
+    ) {
+        throw IllegalStateException("path-f32-projection-collapse")
+    }
+    if (
+        sourceParameterAtEdgeCutF64(projectedSpanF64F32.projectedEdgeF64, claimF64.startEdgeParameterF64) !=
+            claimF64.startParameterF64 ||
+            sourceParameterAtEdgeCutF64(projectedSpanF64F32.projectedEdgeF64, claimF64.endEdgeParameterF64) !=
+            claimF64.endParameterF64 ||
+            projectedSectionEndpointIdentityF64F32(
+                projectedSpanF64F32,
+                claimF64.startEdgeParameterF64,
+            ) != startIdentityF64 ||
+            projectedSectionEndpointIdentityF64F32(
+                projectedSpanF64F32,
+                claimF64.endEdgeParameterF64,
+            ) != endIdentityF64 ||
+            startIdentityF64 !in vertexIndexByIdentityF64 ||
+            endIdentityF64 !in vertexIndexByIdentityF64
+    ) {
+        throw IllegalStateException("path-f32-projection-collapse")
+    }
+}
+
+/**
  * Validates the complete claim multiset before [PathProjectedCoincidenceF32] receives an ID or
- * [PathAliasGroupF32] can merge any vertices.  The sweep is carrier-local, so a long run of
+ * [PathAliasGroupF32] can merge any vertices.  The sweep is source-span-local, so a long run of
  * claims is linear after the deterministic sort rather than a pairwise post-publication scan.
  */
 private fun validateProjectedCoincidenceClaimsF64F32(
@@ -1556,10 +1712,7 @@ private fun validateProjectedCoincidenceClaimsF64F32(
                 if (claimF64.endParameterF64 > activeF64.endParameterF64) activeClaimF64 = claimF64
             }
             claimF64.startParameterF64 == activeF64.endParameterF64 -> {
-                if (
-                    claimF64.witnessIdI64 != activeF64.witnessIdI64 &&
-                        activeF64.endVertexIdentityF64 != claimF64.startVertexIdentityF64
-                ) {
+                if (activeF64.endVertexIdentityF64 != claimF64.startVertexIdentityF64) {
                     throw IllegalStateException("path-f32-projection-collapse")
                 }
                 if (claimF64.endParameterF64 >= activeF64.endParameterF64) activeClaimF64 = claimF64
@@ -1752,16 +1905,102 @@ private fun isSourceAdjacentToClaimEndpointF64F32(
 private fun sameProjectedClaimCarrierF64F32(
     firstF64: PathProjectedSpanClaimF64,
     secondF64: PathProjectedSpanClaimF64,
-): Boolean = firstF64.inputEdgeIdI32 == secondF64.inputEdgeIdI32
+): Boolean = firstF64.sourceSpanIdI64 == secondF64.sourceSpanIdI64
 
 private fun compareProjectedClaimsF64F32(
     firstF64: PathProjectedSpanClaimF64,
     secondF64: PathProjectedSpanClaimF64,
 ): Int {
-    firstF64.inputEdgeIdI32.compareTo(secondF64.inputEdgeIdI32).takeIf { it != 0 }?.let { return it }
+    firstF64.sourceSpanIdI64.compareTo(secondF64.sourceSpanIdI64).takeIf { it != 0 }?.let { return it }
     firstF64.startParameterF64.compareTo(secondF64.startParameterF64).takeIf { it != 0 }?.let { return it }
     firstF64.endParameterF64.compareTo(secondF64.endParameterF64).takeIf { it != 0 }?.let { return it }
-    return firstF64.witnessIdI64.compareTo(secondF64.witnessIdI64)
+    firstF64.sourceSectionIndexI32.compareTo(secondF64.sourceSectionIndexI32).takeIf { it != 0 }?.let { return it }
+    firstF64.startEdgeParameterF64.compareTo(secondF64.startEdgeParameterF64).takeIf { it != 0 }?.let { return it }
+    return firstF64.endEdgeParameterF64.compareTo(secondF64.endEdgeParameterF64)
+}
+
+/**
+ * Proposal ordering is semantic: an exact F64 witness first, then the canonical source-span
+ * provenance of each of its two sides, then the exact source interval.  IDs only remain in
+ * ownership validation below; they never decide an otherwise geometric proposal order.
+ */
+private fun compareProjectedCoincidenceTransactionProposalsF64F32(
+    firstF64F32: PathProjectedCoincidenceProposalF64F32,
+    secondF64F32: PathProjectedCoincidenceProposalF64F32,
+): Int {
+    compareProjectedPointWitnessSemanticF64(firstF64F32.pointWitnessF64, secondF64F32.pointWitnessF64)
+        .takeIf { it != 0 }?.let { return it }
+    val firstOrderI32 = compareProjectedProposalSidesSemanticF64F32(
+        firstF64F32.firstSpanF64,
+        firstF64F32.firstClaimF64,
+        firstF64F32.secondSpanF64,
+        firstF64F32.secondClaimF64,
+    )
+    val secondOrderI32 = compareProjectedProposalSidesSemanticF64F32(
+        secondF64F32.firstSpanF64,
+        secondF64F32.firstClaimF64,
+        secondF64F32.secondSpanF64,
+        secondF64F32.secondClaimF64,
+    )
+    val firstPrimarySpanF64F32 = if (firstOrderI32 <= 0) firstF64F32.firstSpanF64 else firstF64F32.secondSpanF64
+    val firstPrimaryClaimF64 = if (firstOrderI32 <= 0) firstF64F32.firstClaimF64 else firstF64F32.secondClaimF64
+    val firstSecondarySpanF64F32 = if (firstOrderI32 <= 0) firstF64F32.secondSpanF64 else firstF64F32.firstSpanF64
+    val firstSecondaryClaimF64 = if (firstOrderI32 <= 0) firstF64F32.secondClaimF64 else firstF64F32.firstClaimF64
+    val secondPrimarySpanF64F32 = if (secondOrderI32 <= 0) secondF64F32.firstSpanF64 else secondF64F32.secondSpanF64
+    val secondPrimaryClaimF64 = if (secondOrderI32 <= 0) secondF64F32.firstClaimF64 else secondF64F32.secondClaimF64
+    val secondSecondarySpanF64F32 = if (secondOrderI32 <= 0) secondF64F32.secondSpanF64 else secondF64F32.firstSpanF64
+    val secondSecondaryClaimF64 = if (secondOrderI32 <= 0) secondF64F32.secondClaimF64 else secondF64F32.firstClaimF64
+    compareProjectedProposalSidesSemanticF64F32(
+        firstPrimarySpanF64F32,
+        firstPrimaryClaimF64,
+        secondPrimarySpanF64F32,
+        secondPrimaryClaimF64,
+    )
+        .takeIf { it != 0 }?.let { return it }
+    return compareProjectedProposalSidesSemanticF64F32(
+        firstSecondarySpanF64F32,
+        firstSecondaryClaimF64,
+        secondSecondarySpanF64F32,
+        secondSecondaryClaimF64,
+    )
+}
+
+private fun compareProjectedProposalSidesSemanticF64F32(
+    firstSpanF64F32: PathProjectedSourceSpanF64F32,
+    firstClaimF64: PathProjectedSpanClaimF64,
+    secondSpanF64F32: PathProjectedSourceSpanF64F32,
+    secondClaimF64: PathProjectedSpanClaimF64,
+): Int {
+    compareProjectedSourceSpansSemanticF64F32(
+        firstSpanF64F32.sourceSpanF64,
+        secondSpanF64F32.sourceSpanF64,
+    ).takeIf { it != 0 }?.let { return it }
+    firstClaimF64.sourceSectionIndexI32.compareTo(secondClaimF64.sourceSectionIndexI32)
+        .takeIf { it != 0 }?.let { return it }
+    firstClaimF64.startParameterF64.compareTo(secondClaimF64.startParameterF64)
+        .takeIf { it != 0 }?.let { return it }
+    return firstClaimF64.endParameterF64.compareTo(secondClaimF64.endParameterF64)
+}
+
+private fun compareProjectedPointWitnessSemanticF64(
+    firstF64: PathContactWitnessF64.PointF64,
+    secondF64: PathContactWitnessF64.PointF64,
+): Int = compareHybridPointsF64(firstF64.pointF64, secondF64.pointF64)
+
+private fun compareProjectedSourceSpansSemanticF64F32(
+    firstF64: PathSourceSpanF64,
+    secondF64: PathSourceSpanF64,
+): Int {
+    compareHybridSourceSpansF64(firstF64, secondF64).takeIf { it != 0 }?.let { return it }
+    firstF64.operand.compareTo(secondF64.operand).takeIf { it != 0 }?.let { return it }
+    firstF64.contourIndexI32.compareTo(secondF64.contourIndexI32).takeIf { it != 0 }?.let { return it }
+    firstF64.startLocationF64.sourceSegmentIndexI32.compareTo(secondF64.startLocationF64.sourceSegmentIndexI32)
+        .takeIf { it != 0 }?.let { return it }
+    firstF64.startLocationF64.parameterF64.compareTo(secondF64.startLocationF64.parameterF64)
+        .takeIf { it != 0 }?.let { return it }
+    firstF64.endLocationF64.sourceSegmentIndexI32.compareTo(secondF64.endLocationF64.sourceSegmentIndexI32)
+        .takeIf { it != 0 }?.let { return it }
+    return firstF64.endLocationF64.parameterF64.compareTo(secondF64.endLocationF64.parameterF64)
 }
 
 private fun buildHybridAliasGroupsF32(
