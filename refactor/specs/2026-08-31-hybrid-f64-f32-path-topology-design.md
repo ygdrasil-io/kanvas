@@ -1,7 +1,7 @@
 # Arrangement hybride F64/F32 pour les opérations de paths
 
 Date : 2026-08-31  
-Statut : design conversationnel validé, spec écrite en attente de review utilisateur  
+Statut : validée par l'utilisateur le 2026-08-31  
 Périmètre : `:math:geometry`, remplacement de la projection finale de Task 5  
 Hors périmètre : font, codec, façades Kanvas, renderer GPU, changement d'API
 publique et conservation des verbes courbes dans le résultat booléen
