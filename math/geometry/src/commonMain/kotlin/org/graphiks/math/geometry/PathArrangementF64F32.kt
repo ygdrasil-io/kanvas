@@ -445,11 +445,6 @@ internal class PathArrangementF64F32 private constructor(
             val outgoingI32 = List(canonicalVerticesF64F32.verticesF64F32.size) { mutableListOf<Int>() }
             mutableHalfEdgesF64F32.forEach { halfEdgeF64F32 -> outgoingI32[halfEdgeF64F32.originVertexIndexI32] += halfEdgeF64F32.idI32 }
             outgoingI32.forEachIndexed { vertexIndexI32, halfEdgeIndicesI32 ->
-                validateHybridSourceDirectionBundlesAtVertexF64F32(
-                    halfEdgeIndicesI32 = halfEdgeIndicesI32,
-                    halfEdgesF64F32 = mutableHalfEdgesF64F32,
-                    candidateWorkBudgetI32 = candidateWorkBudgetI32,
-                )
                 sortHybridArrangementI32(halfEdgeIndicesI32, candidateWorkBudgetI32) { firstI32, secondI32 ->
                     compareHybridOutgoingRaysF64F32(
                         firstI32,
@@ -458,6 +453,11 @@ internal class PathArrangementF64F32 private constructor(
                         mutableHalfEdgesF64F32,
                     )
                 }
+                validateHybridSourceDirectionBundlesAtVertexF64F32(
+                    halfEdgeIndicesI32 = halfEdgeIndicesI32,
+                    halfEdgesF64F32 = mutableHalfEdgesF64F32,
+                    candidateWorkBudgetI32 = candidateWorkBudgetI32,
+                )
                 halfEdgeIndicesI32.zipWithNext().forEach { (firstI32, secondI32) ->
                     if (sameHybridOutgoingRayF64F32(mutableHalfEdgesF64F32[firstI32], mutableHalfEdgesF64F32[secondI32])) {
                         throw IllegalStateException("path-f32-projection-collapse")
@@ -596,6 +596,13 @@ private class PathMutableHybridHalfEdgeF64F32(
     val embeddingDirectionF64: Vector2F64,
     var nextIndexI32: Int = -1,
     var leftFaceIndexI32: Int = -1,
+)
+
+/** One exact source ray, tagged only by the already-canonical F32 bundle it belongs to. */
+private data class PathHybridSourceAngularEventF64F32(
+    val bundleHalfEdgeIndexI32: Int,
+    val embeddingPositionI32: Int,
+    val directionF64: Vector2F64,
 )
 
 private class PathMutableHybridFaceI32(
@@ -780,8 +787,14 @@ private fun canonicalTraceCarrierGroupF64F32(
         hybridSourceDirectionF64F32(carrierSectionF64F32, forward)
     }
     val canonicalDirectionF64 = sourceDirectionsF64.first()
-    val requiresPointWitnessF64 = sourceDirectionsF64.drop(1).any { directionF64 ->
-        !sameHybridDirectionsF64F32(canonicalDirectionF64, directionF64)
+    var requiresPointWitnessF64 = false
+    var sourceDirectionIndexI32 = 1
+    while (sourceDirectionIndexI32 < sourceDirectionsF64.size) {
+        if (!sameHybridDirectionsF64F32(canonicalDirectionF64, sourceDirectionsF64[sourceDirectionIndexI32])) {
+            requiresPointWitnessF64 = true
+            break
+        }
+        sourceDirectionIndexI32 += 1
     }
     val pointWitnessF64 = if (requiresPointWitnessF64) {
         pointWitnessResolvingCarrierGroupF64F32(
@@ -889,8 +902,12 @@ private fun hybridSourceDirectionF64F32(
     carrierSectionF64F32: PathHybridCarrierSectionF64F32,
     forward: Boolean,
 ): Vector2F64 {
-    val directionF64 = carrierSectionF64F32.sourceSectionF64.endPointF64 -
-        carrierSectionF64F32.sourceSectionF64.startPointF64
+    // `startPointF64`/`endPointF64` are the registry's canonical topology coordinates.  They
+    // deliberately do not choose an angular sector when exact evaluations on individual
+    // carriers differ.  The hybrid arrangement keeps that per-incidence geometry for this
+    // source-F64 ray proof; only the eventual DCEL embedding is lifted from F32.
+    val directionF64 = carrierSectionF64F32.sourceSectionF64.endIncidencePointF64 -
+        carrierSectionF64F32.sourceSectionF64.startIncidencePointF64
     if (directionF64.x == 0.0 && directionF64.y == 0.0) throw IllegalStateException("path-f32-projection-collapse")
     return if (forward) directionF64 else -directionF64
 }
@@ -1570,76 +1587,104 @@ private fun compareHybridDirectionsF64F32(firstF64: Vector2F64, secondF64: Vecto
 }
 
 /**
- * The F32 embedding orders the DCEL ray, but every original F64 ray is still checked against
- * that order.  A validated Point-witness bundle may straddle its F32 ray (for example ±tiny
- * slopes around a horizontal rail); an unrelated ray inside that exact source wedge is a sector
- * ambiguity and rejects before face construction.
+ * Proves that the F32 embedding has not inverted any exact source-F64 sectors.
+ *
+ * Every per-incidence F64 ray becomes one angular event tagged by the canonical F32 bundle it
+ * belongs to.  The single exact angular sort is followed by a cyclic sweep: a bundle must occupy
+ * exactly one run, and the resulting cyclic bundle sequence must be the F32 embedding sequence
+ * up to rotation (never reversal).  Equal exact rays are compatible: their deterministic order
+ * is the already-computed F32 embedding order, not a source label or half-edge ID.
  */
 private fun validateHybridSourceDirectionBundlesAtVertexF64F32(
     halfEdgeIndicesI32: List<Int>,
     halfEdgesF64F32: List<PathMutableHybridHalfEdgeF64F32>,
     candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
 ) {
+    if (halfEdgeIndicesI32.isEmpty()) return
+    val bundleCountI64 = halfEdgeIndicesI32.size.toLong()
     preflightArrangementF64F32(
-        checkedPathWorkMultiplyI64(halfEdgeIndicesI32.size.toLong(), halfEdgeIndicesI32.size.toLong()),
+        checkedPathWorkMultiplyI64(bundleCountI64, 2L),
         candidateWorkBudgetI32,
     )
-    halfEdgeIndicesI32.forEach { firstIndexI32 ->
-        val firstF64F32 = halfEdgesF64F32[firstIndexI32]
-        firstF64F32.sourceDirectionsF64.forEach { sourceDirectionF64 ->
-            val dotF64 = sourceDirectionF64.x * firstF64F32.embeddingDirectionF64.x +
-                sourceDirectionF64.y * firstF64F32.embeddingDirectionF64.y
-            if (dotF64 <= 0.0) throw IllegalStateException("path-f32-projection-collapse")
-        }
-        halfEdgeIndicesI32.forEach { secondIndexI32 ->
-            if (firstIndexI32 == secondIndexI32) return@forEach
-            val secondF64F32 = halfEdgesF64F32[secondIndexI32]
-            if (
-                sourceDirectionBundleContainsEmbeddingRayF64F32(
-                    sourceDirectionsF64 = firstF64F32.sourceDirectionsF64,
-                    embeddingDirectionF64 = firstF64F32.embeddingDirectionF64,
-                    candidateDirectionF64 = secondF64F32.embeddingDirectionF64,
-                )
-            ) {
+    var sourceEventCountI64 = 0L
+    halfEdgeIndicesI32.forEach { bundleHalfEdgeIndexI32 ->
+        val sourceDirectionsF64 = halfEdgesF64F32[bundleHalfEdgeIndexI32].sourceDirectionsF64
+        if (sourceDirectionsF64.isEmpty()) throw IllegalStateException("path-f32-projection-collapse")
+        sourceEventCountI64 = checkedPathWorkAddI64(sourceEventCountI64, sourceDirectionsF64.size.toLong())
+    }
+    preflightArrangementF64F32(
+        checkedPathWorkAddI64(
+            checkedPathWorkMultiplyI64(sourceEventCountI64, 3L),
+            checkedPathWorkMultiplyI64(bundleCountI64, 2L),
+        ),
+        candidateWorkBudgetI32,
+    )
+    val sourceEventsF64F32 = ArrayList<PathHybridSourceAngularEventF64F32>(
+        checkedPathCapacityI32(sourceEventCountI64, "path-candidate-limit"),
+    )
+    halfEdgeIndicesI32.forEachIndexed { embeddingPositionI32, bundleHalfEdgeIndexI32 ->
+        val bundleF64F32 = halfEdgesF64F32[bundleHalfEdgeIndexI32]
+        bundleF64F32.sourceDirectionsF64.forEach { sourceDirectionF64 ->
+            if (sourceDirectionF64.x == 0.0 && sourceDirectionF64.y == 0.0) {
                 throw IllegalStateException("path-f32-projection-collapse")
             }
+            val dotF64 = sourceDirectionF64.x * bundleF64F32.embeddingDirectionF64.x +
+                sourceDirectionF64.y * bundleF64F32.embeddingDirectionF64.y
+            if (dotF64 <= 0.0) throw IllegalStateException("path-f32-projection-collapse")
+            sourceEventsF64F32 += PathHybridSourceAngularEventF64F32(
+                bundleHalfEdgeIndexI32 = bundleHalfEdgeIndexI32,
+                embeddingPositionI32 = embeddingPositionI32,
+                directionF64 = sourceDirectionF64,
+            )
         }
     }
-}
-
-private fun sourceDirectionBundleContainsEmbeddingRayF64F32(
-    sourceDirectionsF64: List<Vector2F64>,
-    embeddingDirectionF64: Vector2F64,
-    candidateDirectionF64: Vector2F64,
-): Boolean {
-    val embeddingToCandidateI32 = OrientationPredicateF64.sign(
-        Point2F64.Origin,
-        Point2F64(embeddingDirectionF64.x, embeddingDirectionF64.y),
-        Point2F64(candidateDirectionF64.x, candidateDirectionF64.y),
+    val orderedSourceEventsF64F32 = sortedArrangementF64F32(
+        sourceEventsF64F32,
+        candidateWorkBudgetI32,
+    ) { firstF64F32, secondF64F32 ->
+        compareHybridDirectionsF64F32(firstF64F32.directionF64, secondF64F32.directionF64)
+            .takeIf { it != 0 }
+            ?: firstF64F32.embeddingPositionI32.compareTo(secondF64F32.embeddingPositionI32)
+    }
+    preflightArrangementF64F32(
+        checkedPathWorkAddI64(
+            checkedPathWorkMultiplyI64(sourceEventCountI64, 2L),
+            checkedPathWorkMultiplyI64(bundleCountI64, 3L),
+        ),
+        candidateWorkBudgetI32,
     )
-    val embeddingDotCandidateF64 = embeddingDirectionF64.x * candidateDirectionF64.x +
-        embeddingDirectionF64.y * candidateDirectionF64.y
-    if (embeddingToCandidateI32 == 0) return embeddingDotCandidateF64 > 0.0
-    return sourceDirectionsF64.any { sourceDirectionF64 ->
-        val embeddingToSourceI32 = OrientationPredicateF64.sign(
-            Point2F64.Origin,
-            Point2F64(embeddingDirectionF64.x, embeddingDirectionF64.y),
-            Point2F64(sourceDirectionF64.x, sourceDirectionF64.y),
-        )
-        when {
-            embeddingToCandidateI32 > 0 && embeddingToSourceI32 > 0 ->
-                OrientationPredicateF64.sign(
-                    Point2F64.Origin,
-                    Point2F64(candidateDirectionF64.x, candidateDirectionF64.y),
-                    Point2F64(sourceDirectionF64.x, sourceDirectionF64.y),
-                ) >= 0
-            embeddingToCandidateI32 < 0 && embeddingToSourceI32 < 0 ->
-                OrientationPredicateF64.sign(
-                    Point2F64.Origin,
-                    Point2F64(sourceDirectionF64.x, sourceDirectionF64.y),
-                    Point2F64(candidateDirectionF64.x, candidateDirectionF64.y),
-                ) >= 0
-            else -> false
+    val orderedBundleRunEmbeddingPositionsI32 = ArrayList<Int>(
+        checkedPathCapacityI32(sourceEventCountI64, "path-candidate-limit"),
+    )
+    // Half-edge indices are list indices, so -1 is an unambiguous no-previous-event sentinel.
+    var previousBundleHalfEdgeIndexI32 = -1
+    orderedSourceEventsF64F32.forEach { eventF64F32 ->
+        if (previousBundleHalfEdgeIndexI32 != eventF64F32.bundleHalfEdgeIndexI32) {
+            orderedBundleRunEmbeddingPositionsI32 += eventF64F32.embeddingPositionI32
+        }
+        previousBundleHalfEdgeIndexI32 = eventF64F32.bundleHalfEdgeIndexI32
+    }
+    if (
+        orderedBundleRunEmbeddingPositionsI32.size > 1 &&
+        orderedSourceEventsF64F32.first().bundleHalfEdgeIndexI32 == orderedSourceEventsF64F32.last().bundleHalfEdgeIndexI32
+    ) {
+        orderedBundleRunEmbeddingPositionsI32.removeAt(orderedBundleRunEmbeddingPositionsI32.lastIndex)
+    }
+    if (orderedBundleRunEmbeddingPositionsI32.size != halfEdgeIndicesI32.size) {
+        throw IllegalStateException("path-f32-projection-collapse")
+    }
+    val seenEmbeddingPositionsI32 = BooleanArray(halfEdgeIndicesI32.size)
+    orderedBundleRunEmbeddingPositionsI32.forEach { embeddingPositionI32 ->
+        if (embeddingPositionI32 !in halfEdgeIndicesI32.indices || seenEmbeddingPositionsI32[embeddingPositionI32]) {
+            throw IllegalStateException("path-f32-projection-collapse")
+        }
+        seenEmbeddingPositionsI32[embeddingPositionI32] = true
+    }
+    val embeddingStartI32 = orderedBundleRunEmbeddingPositionsI32.first()
+    orderedBundleRunEmbeddingPositionsI32.forEachIndexed { sourcePositionI32, embeddingPositionI32 ->
+        val expectedEmbeddingIndexI32 = (embeddingStartI32 + sourcePositionI32) % halfEdgeIndicesI32.size
+        if (embeddingPositionI32 != expectedEmbeddingIndexI32) {
+            throw IllegalStateException("path-f32-projection-collapse")
         }
     }
 }

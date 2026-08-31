@@ -290,3 +290,76 @@ an independently derived end-to-end budget model.  The source registry atomizati
 makes a separately public, conflicting strict-interior hybrid-cut fixture unreachable without
 bypassing production; its conservative validation is retained rather than asserted through an
 internal graph fixture.
+
+## Fix round 3 — source-F64 bundle sweep and overlap authority index
+
+### Scope correction and ruling
+
+This round verified the three public projected-interior-cut hypotheses documented in
+[`task-2-round-3-ruling.md`](task-2-round-3-ruling.md).  They establish that source atomization
+already makes every reachable authoritative rail endpoint a direct `0/1` section endpoint; no
+valid public fixture reaches a unique, local, strict-interior projected claim without bypassing
+the production registry.  Accordingly, the earlier round-1/round-2 wording that implied Task 2
+closed projected cut materialization or the complete `KEEP`/`DROP`/`REJECT` boundary disposition
+is superseded.  The validated plan assigns proposal/commit of those claims, their
+`maxIntersections` accounting, and full collapsed disposition to Task 3 steps 3--4.  Task 2 keeps
+its conservative rejection path and does not silently omit a selected trace.
+
+### Production changes
+
+- `PathArrangementF64F32` now derives an outgoing source ray from every carrier section's
+  `startIncidencePointF64`/`endIncidencePointF64`, not from its canonical topology endpoints.
+  It flattens all rays at a vertex into tagged angular events, performs one exact F64 angular
+  sort, and runs a cyclic validation: each F32 embedding bundle occupies one run and the sequence
+  of runs equals the F32 embedding sequence up to rotation, never reversal.  Equal exact rays use
+  only the established F32 embedding position, never raw source labels or half-edge IDs.
+- The source sweep is `O(M log M + M)`: `2B` units are charged before the bundle/event count,
+  `3M + 2B` before event storage and construction, the deterministic sort envelope before its
+  comparator, and `2M + 3B` before run storage, scan, and membership bitmap.  The sweep stores
+  only O(M+B) local tags/positions; it no longer allocates per-vertex arrays sized by every DCEL
+  half-edge.
+- `PathHybridTopologyF64F32` materializes its overlap authority index once per input edge, with
+  lists ordered by exact registry `witnessIdI64`.  IDs are lookup keys for source-canonical atomic
+  intervals, not geometry tie-breakers.  A projected authority query performs a two-pointer join
+  of those two ordered lists and checks direct interval coverage.  It no longer forms a Cartesian
+  incidence product; a non-covering equal witness advances both cursors so a later atomic witness
+  remains reachable.
+- The overlap index charges each phase before it works: witness count before counting references,
+  checked `2R + W` reference-count build, checked `2E + R` exact-capacity edge lists and entries,
+  deterministic per-list sort envelopes, then a checked duplicate scan.  A query charges its two
+  registry lookups before reading them and `R1 + R2 + 4` before its bounded two-pointer join.
+  All totals use checked I64 arithmetic.  No new `map`, `filter`, `sumOf`, comparator callback,
+  or allocation is hidden ahead of these local preflights.
+
+### Public evidence
+
+- Added a six-sector high-valence `PathBuilder`/`PathOpsF32` union fixture.  Its literal
+  boundary-distant probes and exact `PathF32` equality cover contour and operand permutations;
+  the focused tangent suite remains green.  It is a normal public stress of the cyclic sweep, not
+  a fabricated internal inversion fixture: public F32 input cannot directly inject inconsistent
+  hidden per-incidence F64 directions.  The production sweep rejects such an inversion before
+  DCEL construction.
+- The public staggered n-way and long staggered overlap fixtures remain green under relabeling
+  and operand permutation after the two-pointer change.  The initial two-pointer implementation
+  REDded all three by returning false at the first same-witness non-covering interval; advancing
+  both sorted cursors is the minimal exact atomic-interval correction.
+- Fresh focused verification:
+
+```text
+rtk ./gradlew :math:geometry:jvmTest --tests '*PathOpsHybridTopologyF32Test*' --tests '*PathOpsF32Test*' --rerun-tasks
+90 tests completed, 0 failed
+
+rtk ./gradlew :math:geometry:jvmTest :math:geometry:jsNodeTest --rerun-tasks
+BUILD SUCCESSFUL
+```
+
+The captured global rectangle budget regression is now `4_986` reject / `4_987` success, with
+identical forward/reverse result.  This recalibration includes the explicitly charged exact index
+lookups and is intentionally **not** an independent global budget oracle; Task 5 still owns that
+end-to-end ledger model.
+
+### Remaining assigned work
+
+No independently reproducible Task-2 arrangement blocker remains.  Task 3 owns the deferred
+projected interior proposal/commit and full collapsed disposition described above; Task 5 owns
+the inherited global source-topology ledger conversion.  No font, codec, or GM scope changed.

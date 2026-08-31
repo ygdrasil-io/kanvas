@@ -63,3 +63,16 @@ pipeline. Fresh `:math:geometry:jvmTest :math:geometry:jsNodeTest --rerun-tasks`
 `git diff --check` passed. The old `4_329` independent-budget claim is superseded: `4_679`
 reject / `4_680` success is a deterministic regression boundary only, while the independent
 global source-topology ledger audit remains explicitly assigned to Task 5.
+
+Fix round 3: the validated source-atomization ruling is recorded in
+`task-2-round-3-ruling.md`.  Task 2 therefore does not add an unreachable hybrid strict-interior
+cut materializer or claim completion of full collapsed `KEEP`/`DROP`/`REJECT` disposition; those
+proposal/commit semantics and their `maxIntersections` accounting belong to Task 3 steps 3--4.
+The independently reproducible arrangement work is closed: outgoing source directions now use
+per-incidence F64 points; a single exact angular event sweep proves cyclic bundle contiguity and
+F32 embedding order; and exact overlap authority uses a sorted atomic-witness two-pointer join
+rather than a Cartesian product.  All new sweep/index allocations, lookup, scans and deterministic
+sorts preflight checked I64 work before execution.  The public high-valence, tangent,
+staggered-overlap and permutation tests are green; the captured (non-oracle, Task-5) global
+budget regression is now `4_986` reject / `4_987` success.  Fresh JVM/JS verification and the
+diff check are recorded in `task-2-report.md`.

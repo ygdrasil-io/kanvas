@@ -291,6 +291,56 @@ class PathOpsHybridTopologyF32Test {
     }
 
     @Test
+    fun `high valence exact junction preserves public union across contour and operand permutations`() {
+        // Six separated sectors touch at exactly one literal F32 vertex.  The probes are well
+        // inside each sector, so their expectations are geometric facts rather than an oracle
+        // derived from the arrangement.  This gives the hybrid outgoing-ray sweep a public
+        // high-valence junction under both contour and operand permutation.
+        val sectorsF32 = listOf(
+            listOf(Point2F32(6f, -1f), Point2F32(6f, 1f)),
+            listOf(Point2F32(5f, 3f), Point2F32(3f, 5f)),
+            listOf(Point2F32(-3f, 5f), Point2F32(-5f, 3f)),
+            listOf(Point2F32(-6f, 1f), Point2F32(-6f, -1f)),
+            listOf(Point2F32(-5f, -3f), Point2F32(-3f, -5f)),
+            listOf(Point2F32(3f, -5f), Point2F32(5f, -3f)),
+        )
+        fun path(indicesI32: List<Int>): PathF32 = PathBuilder().also { builderF32 ->
+            indicesI32.forEach { indexI32 ->
+                val (firstPointF32, secondPointF32) = sectorsF32[indexI32]
+                builderF32.moveTo(0f, 0f)
+                    .lineTo(firstPointF32.x, firstPointF32.y)
+                    .lineTo(secondPointF32.x, secondPointF32.y)
+                    .close()
+            }
+        }.build()
+
+        val variantsF32 = listOf(
+            path(listOf(0, 2, 4)) to path(listOf(1, 3, 5)),
+            path(listOf(4, 0, 2)) to path(listOf(5, 1, 3)),
+            path(listOf(5, 3, 1)) to path(listOf(4, 2, 0)),
+        )
+        val resultsF32 = variantsF32.map { (firstF32, secondF32) ->
+            PathOpsF32.op(firstF32, secondF32, PathBooleanOp.UNION)
+        }
+
+        resultsF32.forEach { resultF32 ->
+            listOf(
+                Point2F32(4f, 0f),
+                Point2F32(3.75f, 3.75f),
+                Point2F32(-3.75f, 3.75f),
+                Point2F32(-4f, 0f),
+                Point2F32(-3.75f, -3.75f),
+                Point2F32(3.75f, -3.75f),
+            ).forEach { probeF32 ->
+                assertTrue(PathAnalysisF32.contains(resultF32, probeF32), "missing $probeF32")
+            }
+            assertFalse(PathAnalysisF32.contains(resultF32, Point2F32(0f, 2f)))
+        }
+        assertEquals(resultsF32.first(), resultsF32[1])
+        assertEquals(resultsF32.first(), resultsF32[2])
+    }
+
+    @Test
     fun `hybrid representative preserves the semantic signed zero original bits`() {
         val source = PathBuilder()
             .moveTo(-0.0f, -0.0f)
@@ -454,4 +504,4 @@ private fun pathVerticesF32(path: PathF32): List<Point2F32> = buildList {
 // The paired limit-1/limit assertions make changes to the checked ledger visible and the
 // permutation test verifies backend-independent determinism.  It is intentionally not presented
 // as an independent global cost oracle: specifying a fully algebraic global cost model is Task 5.
-private const val overlappingRectanglesHybridBudgetI32 = 4_680
+private const val overlappingRectanglesHybridBudgetI32 = 4_987

@@ -132,9 +132,15 @@ private data class PathOverlapWitnessIncidenceReferenceF64F32(
     val incidenceF64: PathOverlapWitnessIncidenceF64,
 )
 
-/** Direct exact-overlap incidence lookup; projected coordinates never enter this registry. */
+/**
+ * Direct exact-overlap incidence lookup; projected coordinates never enter this registry.
+ *
+ * Each edge list is ordered by the registry witness identity.  That identity is a lookup key for
+ * an already-canonical atomic interval, never a geometric tie-break: equal geometry must have
+ * been canonicalized by the source registry before this index exists.
+ */
 private data class PathOverlapWitnessIndexF64F32(
-    val incidencesByInputEdgeIdI32: Map<Int, List<PathOverlapWitnessIncidenceReferenceF64F32>>,
+    val orderedIncidencesByInputEdgeIdI32: Map<Int, List<PathOverlapWitnessIncidenceReferenceF64F32>>,
 )
 
 /**
@@ -925,23 +931,78 @@ private fun buildOverlapWitnessIndexF64F32(
     candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
 ): PathOverlapWitnessIndexF64F32 {
     preflightHybridLinearF64F32(witnessesF64.size.toLong(), candidateWorkBudgetI32)
-    val incidencesByInputEdgeIdI32 = linkedMapOf<Int, MutableList<PathOverlapWitnessIncidenceReferenceF64F32>>()
+    var overlapReferenceCountI64 = 0L
+    witnessesF64.forEach { witnessF64 ->
+        if (witnessF64 is PathContactWitnessF64.OverlapF64) {
+            overlapReferenceCountI64 = checkedPathWorkAddI64(
+                overlapReferenceCountI64,
+                witnessF64.incidencesF64.size.toLong(),
+            )
+        }
+    }
+    preflightHybridLinearF64F32(
+        checkedPathWorkAddI64(
+            checkedPathWorkMultiplyI64(overlapReferenceCountI64, 2L),
+            witnessesF64.size.toLong(),
+        ),
+        candidateWorkBudgetI32,
+    )
+    val referenceCountByInputEdgeIdI32 = mutableMapOf<Int, Int>()
     witnessesF64.forEach { witnessF64 ->
         if (witnessF64 !is PathContactWitnessF64.OverlapF64) return@forEach
-        preflightHybridLinearF64F32(
-            checkedPathWorkAddI64(
-                checkedPathWorkMultiplyI64(witnessF64.incidencesF64.size.toLong(), 3L),
-                2L,
-            ),
-            candidateWorkBudgetI32,
-        )
         witnessF64.incidencesF64.forEach { incidenceF64 ->
-            incidencesByInputEdgeIdI32.getOrPut(incidenceF64.inputEdgeIdI32) { mutableListOf() } +=
+            val currentCountI32 = referenceCountByInputEdgeIdI32[incidenceF64.inputEdgeIdI32] ?: 0
+            referenceCountByInputEdgeIdI32[incidenceF64.inputEdgeIdI32] = checkedPathCapacityI32(
+                checkedPathWorkAddI64(currentCountI32.toLong(), 1L),
+                "path-candidate-limit",
+            )
+        }
+    }
+    preflightHybridLinearF64F32(
+        checkedPathWorkAddI64(
+            checkedPathWorkMultiplyI64(referenceCountByInputEdgeIdI32.size.toLong(), 2L),
+            overlapReferenceCountI64,
+        ),
+        candidateWorkBudgetI32,
+    )
+    val mutableReferencesByInputEdgeIdI32 = mutableMapOf<Int, MutableList<PathOverlapWitnessIncidenceReferenceF64F32>>()
+    referenceCountByInputEdgeIdI32.forEach { (inputEdgeIdI32, referenceCountI32) ->
+        mutableReferencesByInputEdgeIdI32[inputEdgeIdI32] = ArrayList(referenceCountI32)
+    }
+    witnessesF64.forEach { witnessF64 ->
+        if (witnessF64 !is PathContactWitnessF64.OverlapF64) return@forEach
+        witnessF64.incidencesF64.forEach { incidenceF64 ->
+            mutableReferencesByInputEdgeIdI32.getValue(incidenceF64.inputEdgeIdI32) +=
                 PathOverlapWitnessIncidenceReferenceF64F32(witnessF64, incidenceF64)
         }
     }
-    return PathOverlapWitnessIndexF64F32(incidencesByInputEdgeIdI32)
+    preflightHybridLinearF64F32(referenceCountByInputEdgeIdI32.size.toLong(), candidateWorkBudgetI32)
+    val orderedIncidencesByInputEdgeIdI32 = mutableMapOf<Int, List<PathOverlapWitnessIncidenceReferenceF64F32>>()
+    mutableReferencesByInputEdgeIdI32.forEach { (inputEdgeIdI32, referencesF64F32) ->
+        val orderedReferencesF64F32 = sortedHybridF64F32(
+            referencesF64F32,
+            candidateWorkBudgetI32,
+            ::compareOverlapWitnessIncidenceReferencesF64F32,
+        )
+        preflightHybridLinearF64F32(orderedReferencesF64F32.size.toLong(), candidateWorkBudgetI32)
+        var referenceIndexI32 = 1
+        while (referenceIndexI32 < orderedReferencesF64F32.size) {
+            val firstF64F32 = orderedReferencesF64F32[referenceIndexI32 - 1]
+            val secondF64F32 = orderedReferencesF64F32[referenceIndexI32]
+            if (firstF64F32.witnessF64.witnessIdI64 == secondF64F32.witnessF64.witnessIdI64) {
+                throw IllegalStateException("path-arrangement-inconsistent")
+            }
+            referenceIndexI32 += 1
+        }
+        orderedIncidencesByInputEdgeIdI32[inputEdgeIdI32] = orderedReferencesF64F32
+    }
+    return PathOverlapWitnessIndexF64F32(orderedIncidencesByInputEdgeIdI32)
 }
+
+private fun compareOverlapWitnessIncidenceReferencesF64F32(
+    firstF64F32: PathOverlapWitnessIncidenceReferenceF64F32,
+    secondF64F32: PathOverlapWitnessIncidenceReferenceF64F32,
+): Int = firstF64F32.witnessF64.witnessIdI64.compareTo(secondF64F32.witnessF64.witnessIdI64)
 
 /**
  * Returns the one exact Point witness jointly incident to two source spans.  A second exact
@@ -1090,38 +1151,60 @@ private fun overlapWitnessIndexSupportsProjectedContactF64F32(
     secondEndParameterF64: Double,
     candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
 ): Boolean {
-    val firstReferencesF64F32 = overlapWitnessIndexF64F32.incidencesByInputEdgeIdI32[
+    // Charge the two exact registry lookups before reading either list.  The subsequent
+    // candidate-dependent scan is charged separately from their measured canonical sizes.
+    preflightHybridLinearF64F32(2L, candidateWorkBudgetI32)
+    val firstReferencesF64F32 = overlapWitnessIndexF64F32.orderedIncidencesByInputEdgeIdI32[
         firstF64F32.sourceSectionF64.inputEdgeIdI32
     ].orEmpty()
-    val secondReferencesF64F32 = overlapWitnessIndexF64F32.incidencesByInputEdgeIdI32[
+    val secondReferencesF64F32 = overlapWitnessIndexF64F32.orderedIncidencesByInputEdgeIdI32[
         secondF64F32.sourceSectionF64.inputEdgeIdI32
     ].orEmpty()
     preflightHybridLinearF64F32(
         checkedPathWorkAddI64(
-            checkedPathWorkMultiplyI64(firstReferencesF64F32.size.toLong(), secondReferencesF64F32.size.toLong()),
-            2L,
+            checkedPathWorkAddI64(firstReferencesF64F32.size.toLong(), secondReferencesF64F32.size.toLong()),
+            4L,
         ),
         candidateWorkBudgetI32,
     )
-    val supportedF64 = firstReferencesF64F32.any { firstReferenceF64F32 ->
-        secondReferencesF64F32.any { secondReferenceF64F32 ->
-            firstReferenceF64F32.witnessF64.witnessIdI64 == secondReferenceF64F32.witnessF64.witnessIdI64 &&
-                firstReferenceF64F32.incidenceF64.inputEdgeIdI32 != secondReferenceF64F32.incidenceF64.inputEdgeIdI32 &&
-                overlapIncidenceCoversProjectedRailF64F32(
-                    firstReferenceF64F32.incidenceF64,
-                    firstF64F32,
-                    firstStartParameterF64,
-                    firstEndParameterF64,
-                ) &&
-                overlapIncidenceCoversProjectedRailF64F32(
-                    secondReferenceF64F32.incidenceF64,
-                    secondF64F32,
-                    secondStartParameterF64,
-                    secondEndParameterF64,
-                )
+    var firstIndexI32 = 0
+    var secondIndexI32 = 0
+    while (firstIndexI32 < firstReferencesF64F32.size && secondIndexI32 < secondReferencesF64F32.size) {
+        val firstReferenceF64F32 = firstReferencesF64F32[firstIndexI32]
+        val secondReferenceF64F32 = secondReferencesF64F32[secondIndexI32]
+        when {
+            firstReferenceF64F32.witnessF64.witnessIdI64 < secondReferenceF64F32.witnessF64.witnessIdI64 -> {
+                firstIndexI32 += 1
+            }
+            firstReferenceF64F32.witnessF64.witnessIdI64 > secondReferenceF64F32.witnessF64.witnessIdI64 -> {
+                secondIndexI32 += 1
+            }
+            else -> {
+                if (
+                    firstReferenceF64F32.incidenceF64.inputEdgeIdI32 != secondReferenceF64F32.incidenceF64.inputEdgeIdI32 &&
+                    overlapIncidenceCoversProjectedRailF64F32(
+                        firstReferenceF64F32.incidenceF64,
+                        firstF64F32,
+                        firstStartParameterF64,
+                        firstEndParameterF64,
+                    ) && overlapIncidenceCoversProjectedRailF64F32(
+                        secondReferenceF64F32.incidenceF64,
+                        secondF64F32,
+                        secondStartParameterF64,
+                        secondEndParameterF64,
+                    )
+                ) {
+                    return true
+                }
+                // This atomic witness may cover a different sub-rail of either source edge.
+                // Advance both ordered lists and keep looking; returning false here would turn a
+                // valid later atomic interval into an order-dependent rejection.
+                firstIndexI32 += 1
+                secondIndexI32 += 1
+            }
         }
     }
-    return supportedF64
+    return false
 }
 
 private fun overlapIncidenceCoversProjectedEndpointF64F32(
