@@ -363,3 +363,77 @@ end-to-end ledger model.
 No independently reproducible Task-2 arrangement blocker remains.  Task 3 owns the deferred
 projected interior proposal/commit and full collapsed disposition described above; Task 5 owns
 the inherited global source-topology ledger conversion.  No font, codec, or GM scope changed.
+
+## Fix round 4 — reject unresolved equal source rays and debit local work
+
+### Exact angular authority
+
+The source angular sweep now runs before F32 outgoing-order sorting or face construction.  Its
+comparator orders only exact F64 ray direction; it no longer uses an F32 embedding position to
+break a geometric tie.  A contiguous equal-ray run is scanned immediately after that exact sort:
+repeated rays within one already aggregated bundle remain valid, while the same exact ray in two
+distinct bundles rejects with `path-f32-projection-collapse`.  Only after this guard succeeds may
+the code check the source/F32-direction dot product and map the source runs onto the established
+F32 cyclic order.  Thus neither F32, a label, an ID, nor face traversal can resolve an unresolved
+geometric equality.
+
+The public-input search was deliberately capped at three hypotheses.  The existing public
+six-sector high-valence paths, the centered `+/-2^-25f` quadratic point-witness paths, and the
+translated tangent ovals all exercise normal hybrid paths but cannot inject two distinct F32
+carrier bundles with one inconsistent hidden F64 source ray.  No exact public fixture is therefore
+constructible through `PathBuilder`/`PathOpsF32` after those three attempts, and no internal-shape
+test was added.  The reviewer reproduction remains the design diagnostic: F32 embedding rays
+`(1,0)`, `(1,0.5)`, `(1,1)` paired with source rays `(1,0.2)`, `(1,0.2)`, `(1,1)` previously
+accepted; the negative `(1,0.4)`, `(1,0.2)`, `(1,1)` rejected.  The new source-only guard rejects
+the unresolved equal case at the required earlier point.
+
+### Local checked debits
+
+- `buildOverlapWitnessIndexF64F32` now reserves all three `witnessesF64` visits.  In particular,
+  the preflight before the final capacity/list materialization pass includes `W`, so a lone
+  `PointF64` with `E = R = 0` cannot execute an uncharged third visit.
+- The angular path has checked-I64 preflights before its bundle/event counts, event allocation and
+  construction, exact sort, equal-ray scan, dot validation, F32 run mapping, run storage,
+  seen/order checks, and both post-validation adjacent-ray predicates.  The former
+  `zipWithNext()` allocations were replaced by explicit, preflighted adjacent-pair loops.
+- The overlap authority lookup preflights its two registry reads and a checked linear
+  `8 * (R1 + R2)` envelope before the two-pointer join.  That envelope covers every potential
+  pair's reference reads, witness/edge comparisons, and both interval-coverage chains, including
+  arbitrarily many common non-covering witnesses before a covering one.
+
+This is local accounting only.  It deliberately does not claim or introduce the independent
+end-to-end budget model assigned to Task 5.
+
+### TDD and verification evidence
+
+The new public `PathBuilder`/`PathOpsF32` rectangle test was written first.  Before the production
+debits, `maxCandidateProbes = 4_988` unexpectedly succeeded, so its expected
+`path-candidate-limit` assertion REDded.  With the local debits in place it is GREEN on both
+backends.  The paired public boundary is now `5_315` reject / `5_316` success; it is a
+deterministic local non-regression boundary, not an independent global oracle.
+
+Focused checks were run before the full matrix:
+
+```text
+rtk ./gradlew :math:geometry:jvmTest --tests '*PathOpsHybridTopologyF32Test*' --rerun-tasks --console=plain
+18 tests completed, 0 failed
+
+rtk ./gradlew :math:geometry:jsNodeTest --tests '*PathOpsHybridTopologyF32Test*' --rerun-tasks --console=plain
+18 tests completed, 0 failed
+```
+
+The required complete matrix also passed:
+
+```text
+rtk ./gradlew :math:geometry:jvmTest :math:geometry:jsNodeTest --rerun-tasks --console=plain
+BUILD SUCCESSFUL
+61 actionable tasks: 61 executed
+```
+
+`git diff --check` is recorded with the committing verification for this round.
+
+### Scope retained
+
+No projected interior-cut materialization or collapsed-disposition change was made: both remain
+Task 3 work.  No Task-5 global-budget model, font, codec, GM, rendering, score, or exclusion file
+changed.

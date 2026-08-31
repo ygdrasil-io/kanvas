@@ -98,11 +98,11 @@ internal class PathArrangementF64F32 private constructor(
             sortHybridArrangementI32(halfEdgeIdsI32, candidateWorkBudgetI32) { firstI32, secondI32 ->
                 compareHybridOutputRaysF64F32(firstI32, secondI32, traceSpanByHalfEdgeI32)
             }
-            halfEdgeIdsI32.zipWithNext().forEach { (firstI32, secondI32) ->
-                if (sameHybridOutputRayF64F32(firstI32, secondI32, traceSpanByHalfEdgeI32)) {
-                    throw IllegalStateException("path-f32-projection-collapse")
-                }
-            }
+            rejectAdjacentHybridOutputRaysF64F32(
+                halfEdgeIdsI32 = halfEdgeIdsI32,
+                traceSpanByHalfEdgeI32 = traceSpanByHalfEdgeI32,
+                candidateWorkBudgetI32 = candidateWorkBudgetI32,
+            )
         }
 
         val outgoingPositionI32 = IntArray(halfEdgesF64F32.size) { -1 }
@@ -445,6 +445,11 @@ internal class PathArrangementF64F32 private constructor(
             val outgoingI32 = List(canonicalVerticesF64F32.verticesF64F32.size) { mutableListOf<Int>() }
             mutableHalfEdgesF64F32.forEach { halfEdgeF64F32 -> outgoingI32[halfEdgeF64F32.originVertexIndexI32] += halfEdgeF64F32.idI32 }
             outgoingI32.forEachIndexed { vertexIndexI32, halfEdgeIndicesI32 ->
+                val orderedSourceEventsF64F32 = sweepHybridSourceDirectionsAtVertexF64F32(
+                    halfEdgeIndicesI32 = halfEdgeIndicesI32,
+                    halfEdgesF64F32 = mutableHalfEdgesF64F32,
+                    candidateWorkBudgetI32 = candidateWorkBudgetI32,
+                )
                 sortHybridArrangementI32(halfEdgeIndicesI32, candidateWorkBudgetI32) { firstI32, secondI32 ->
                     compareHybridOutgoingRaysF64F32(
                         firstI32,
@@ -455,14 +460,14 @@ internal class PathArrangementF64F32 private constructor(
                 }
                 validateHybridSourceDirectionBundlesAtVertexF64F32(
                     halfEdgeIndicesI32 = halfEdgeIndicesI32,
+                    orderedSourceEventsF64F32 = orderedSourceEventsF64F32,
+                    candidateWorkBudgetI32 = candidateWorkBudgetI32,
+                )
+                rejectAdjacentHybridOutgoingRaysF64F32(
+                    halfEdgeIndicesI32 = halfEdgeIndicesI32,
                     halfEdgesF64F32 = mutableHalfEdgesF64F32,
                     candidateWorkBudgetI32 = candidateWorkBudgetI32,
                 )
-                halfEdgeIndicesI32.zipWithNext().forEach { (firstI32, secondI32) ->
-                    if (sameHybridOutgoingRayF64F32(mutableHalfEdgesF64F32[firstI32], mutableHalfEdgesF64F32[secondI32])) {
-                        throw IllegalStateException("path-f32-projection-collapse")
-                    }
-                }
             }
             preflightArrangementF64F32(
                 checkedPathWorkMultiplyI64(mutableHalfEdgesF64F32.size.toLong(), 5L),
@@ -598,10 +603,9 @@ private class PathMutableHybridHalfEdgeF64F32(
     var leftFaceIndexI32: Int = -1,
 )
 
-/** One exact source ray, tagged only by the already-canonical F32 bundle it belongs to. */
+/** One exact source ray, tagged only by its carrier bundle before F32 embedding order is used. */
 private data class PathHybridSourceAngularEventF64F32(
     val bundleHalfEdgeIndexI32: Int,
-    val embeddingPositionI32: Int,
     val directionF64: Vector2F64,
 )
 
@@ -1587,23 +1591,23 @@ private fun compareHybridDirectionsF64F32(firstF64: Vector2F64, secondF64: Vecto
 }
 
 /**
- * Proves that the F32 embedding has not inverted any exact source-F64 sectors.
+ * Builds the source-only angular sweep before the F32 embedding order is even computed.
  *
- * Every per-incidence F64 ray becomes one angular event tagged by the canonical F32 bundle it
- * belongs to.  The single exact angular sort is followed by a cyclic sweep: a bundle must occupy
- * exactly one run, and the resulting cyclic bundle sequence must be the F32 embedding sequence
- * up to rotation (never reversal).  Equal exact rays are compatible: their deterministic order
- * is the already-computed F32 embedding order, not a source label or half-edge ID.
+ * Equal source rays may repeat inside one already aggregated carrier bundle.  The same ray in
+ * two distinct bundles has no exact coalescing authority, so it rejects here rather than letting
+ * an F32 position, an ID, or a face traversal choose an order.
  */
-private fun validateHybridSourceDirectionBundlesAtVertexF64F32(
+private fun sweepHybridSourceDirectionsAtVertexF64F32(
     halfEdgeIndicesI32: List<Int>,
     halfEdgesF64F32: List<PathMutableHybridHalfEdgeF64F32>,
     candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
-) {
-    if (halfEdgeIndicesI32.isEmpty()) return
+): List<PathHybridSourceAngularEventF64F32> {
+    if (halfEdgeIndicesI32.isEmpty()) return emptyList()
     val bundleCountI64 = halfEdgeIndicesI32.size.toLong()
+    // Count every bundle visit, direction-list read, and empty-list predicate before reading a
+    // carrier.  This is deliberately separate from event materialization below.
     preflightArrangementF64F32(
-        checkedPathWorkMultiplyI64(bundleCountI64, 2L),
+        checkedPathWorkMultiplyI64(bundleCountI64, 3L),
         candidateWorkBudgetI32,
     )
     var sourceEventCountI64 = 0L
@@ -1612,6 +1616,9 @@ private fun validateHybridSourceDirectionBundlesAtVertexF64F32(
         if (sourceDirectionsF64.isEmpty()) throw IllegalStateException("path-f32-projection-collapse")
         sourceEventCountI64 = checkedPathWorkAddI64(sourceEventCountI64, sourceDirectionsF64.size.toLong())
     }
+    // Reserve the event array and every source-ray visit, zero predicate, and append before
+    // allocating or walking the carrier directions.  F32 compatibility stays after the exact
+    // equality guard below so it cannot decide an equal-ray ambiguity.
     preflightArrangementF64F32(
         checkedPathWorkAddI64(
             checkedPathWorkMultiplyI64(sourceEventCountI64, 3L),
@@ -1622,18 +1629,14 @@ private fun validateHybridSourceDirectionBundlesAtVertexF64F32(
     val sourceEventsF64F32 = ArrayList<PathHybridSourceAngularEventF64F32>(
         checkedPathCapacityI32(sourceEventCountI64, "path-candidate-limit"),
     )
-    halfEdgeIndicesI32.forEachIndexed { embeddingPositionI32, bundleHalfEdgeIndexI32 ->
+    halfEdgeIndicesI32.forEach { bundleHalfEdgeIndexI32 ->
         val bundleF64F32 = halfEdgesF64F32[bundleHalfEdgeIndexI32]
         bundleF64F32.sourceDirectionsF64.forEach { sourceDirectionF64 ->
             if (sourceDirectionF64.x == 0.0 && sourceDirectionF64.y == 0.0) {
                 throw IllegalStateException("path-f32-projection-collapse")
             }
-            val dotF64 = sourceDirectionF64.x * bundleF64F32.embeddingDirectionF64.x +
-                sourceDirectionF64.y * bundleF64F32.embeddingDirectionF64.y
-            if (dotF64 <= 0.0) throw IllegalStateException("path-f32-projection-collapse")
             sourceEventsF64F32 += PathHybridSourceAngularEventF64F32(
                 bundleHalfEdgeIndexI32 = bundleHalfEdgeIndexI32,
-                embeddingPositionI32 = embeddingPositionI32,
                 directionF64 = sourceDirectionF64,
             )
         }
@@ -1643,24 +1646,78 @@ private fun validateHybridSourceDirectionBundlesAtVertexF64F32(
         candidateWorkBudgetI32,
     ) { firstF64F32, secondF64F32 ->
         compareHybridDirectionsF64F32(firstF64F32.directionF64, secondF64F32.directionF64)
-            .takeIf { it != 0 }
-            ?: firstF64F32.embeddingPositionI32.compareTo(secondF64F32.embeddingPositionI32)
     }
+    // The equality scan is source-only and precedes every F32 embedding decision.  Charge both
+    // event visits and exact ray predicates before reading the sorted events.
+    preflightArrangementF64F32(
+        checkedPathWorkMultiplyI64(sourceEventCountI64, 2L),
+        candidateWorkBudgetI32,
+    )
+    var previousEventF64F32: PathHybridSourceAngularEventF64F32? = null
+    orderedSourceEventsF64F32.forEach { eventF64F32 ->
+        val previousF64F32 = previousEventF64F32
+        if (
+            previousF64F32 != null &&
+            previousF64F32.bundleHalfEdgeIndexI32 != eventF64F32.bundleHalfEdgeIndexI32 &&
+            sameHybridDirectionsF64F32(previousF64F32.directionF64, eventF64F32.directionF64)
+        ) {
+            throw IllegalStateException("path-f32-projection-collapse")
+        }
+        previousEventF64F32 = eventF64F32
+    }
+    // Only after source equality is unambiguous may a source ray be checked against its F32
+    // embedding.  Reserve every bundle lookup, dot product, and sign predicate first.
+    preflightArrangementF64F32(
+        checkedPathWorkMultiplyI64(sourceEventCountI64, 3L),
+        candidateWorkBudgetI32,
+    )
+    orderedSourceEventsF64F32.forEach { eventF64F32 ->
+        val embeddingDirectionF64 = halfEdgesF64F32[eventF64F32.bundleHalfEdgeIndexI32].embeddingDirectionF64
+        val dotF64 = eventF64F32.directionF64.x * embeddingDirectionF64.x +
+            eventF64F32.directionF64.y * embeddingDirectionF64.y
+        if (dotF64 <= 0.0) throw IllegalStateException("path-f32-projection-collapse")
+    }
+    return orderedSourceEventsF64F32
+}
+
+/**
+ * Proves that the F32 embedding has not inverted the already unambiguous exact source sectors.
+ * The source sweep has rejected unresolved equal rays before this function receives the F32
+ * ordering; this phase only checks cyclic run/rotation consistency.
+ */
+private fun validateHybridSourceDirectionBundlesAtVertexF64F32(
+    halfEdgeIndicesI32: List<Int>,
+    orderedSourceEventsF64F32: List<PathHybridSourceAngularEventF64F32>,
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+) {
+    if (halfEdgeIndicesI32.isEmpty()) return
+    val bundleCountI64 = halfEdgeIndicesI32.size.toLong()
+    val sourceEventCountI64 = orderedSourceEventsF64F32.size.toLong()
+    // Reserve the bundle-position lookup map, run list, membership bitmap, source-event
+    // visits, and cyclic order predicates before allocating any of those structures.
     preflightArrangementF64F32(
         checkedPathWorkAddI64(
-            checkedPathWorkMultiplyI64(sourceEventCountI64, 2L),
-            checkedPathWorkMultiplyI64(bundleCountI64, 3L),
+            checkedPathWorkMultiplyI64(sourceEventCountI64, 3L),
+            checkedPathWorkMultiplyI64(bundleCountI64, 5L),
         ),
         candidateWorkBudgetI32,
     )
+    val embeddingPositionByHalfEdgeIndexI32 = mutableMapOf<Int, Int>()
+    halfEdgeIndicesI32.forEachIndexed { embeddingPositionI32, bundleHalfEdgeIndexI32 ->
+        if (embeddingPositionByHalfEdgeIndexI32.put(bundleHalfEdgeIndexI32, embeddingPositionI32) != null) {
+            throw IllegalStateException("path-f32-projection-collapse")
+        }
+    }
     val orderedBundleRunEmbeddingPositionsI32 = ArrayList<Int>(
         checkedPathCapacityI32(sourceEventCountI64, "path-candidate-limit"),
     )
     // Half-edge indices are list indices, so -1 is an unambiguous no-previous-event sentinel.
     var previousBundleHalfEdgeIndexI32 = -1
     orderedSourceEventsF64F32.forEach { eventF64F32 ->
+        val embeddingPositionI32 = embeddingPositionByHalfEdgeIndexI32[eventF64F32.bundleHalfEdgeIndexI32]
+            ?: throw IllegalStateException("path-f32-projection-collapse")
         if (previousBundleHalfEdgeIndexI32 != eventF64F32.bundleHalfEdgeIndexI32) {
-            orderedBundleRunEmbeddingPositionsI32 += eventF64F32.embeddingPositionI32
+            orderedBundleRunEmbeddingPositionsI32 += embeddingPositionI32
         }
         previousBundleHalfEdgeIndexI32 = eventF64F32.bundleHalfEdgeIndexI32
     }
@@ -1696,6 +1753,52 @@ private fun sameHybridOutgoingRayF64F32(
     firstF64F32.embeddingDirectionF64,
     secondF64F32.embeddingDirectionF64,
 )
+
+private fun rejectAdjacentHybridOutgoingRaysF64F32(
+    halfEdgeIndicesI32: List<Int>,
+    halfEdgesF64F32: List<PathMutableHybridHalfEdgeF64F32>,
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+) {
+    val adjacentPairCountI64 = (halfEdgeIndicesI32.size - 1).coerceAtLeast(0).toLong()
+    // `zipWithNext` would allocate pairs after the source sweep.  Reserve two list visits, the
+    // exact ray predicate, and its branch for every adjacent pair before the first access.
+    preflightArrangementF64F32(
+        checkedPathWorkMultiplyI64(adjacentPairCountI64, 4L),
+        candidateWorkBudgetI32,
+    )
+    var secondPositionI32 = 1
+    while (secondPositionI32 < halfEdgeIndicesI32.size) {
+        val firstI32 = halfEdgeIndicesI32[secondPositionI32 - 1]
+        val secondI32 = halfEdgeIndicesI32[secondPositionI32]
+        if (sameHybridOutgoingRayF64F32(halfEdgesF64F32[firstI32], halfEdgesF64F32[secondI32])) {
+            throw IllegalStateException("path-f32-projection-collapse")
+        }
+        secondPositionI32 += 1
+    }
+}
+
+private fun rejectAdjacentHybridOutputRaysF64F32(
+    halfEdgeIdsI32: List<Int>,
+    traceSpanByHalfEdgeI32: Map<Int, PathArrangementTraceSpanF64F32>,
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+) {
+    val adjacentPairCountI64 = (halfEdgeIdsI32.size - 1).coerceAtLeast(0).toLong()
+    // This is the extraction analogue of the angular adjacency check above: no pair allocation
+    // or exact predicate may begin after a prior validation without a local debit.
+    preflightArrangementF64F32(
+        checkedPathWorkMultiplyI64(adjacentPairCountI64, 4L),
+        candidateWorkBudgetI32,
+    )
+    var secondPositionI32 = 1
+    while (secondPositionI32 < halfEdgeIdsI32.size) {
+        val firstI32 = halfEdgeIdsI32[secondPositionI32 - 1]
+        val secondI32 = halfEdgeIdsI32[secondPositionI32]
+        if (sameHybridOutputRayF64F32(firstI32, secondI32, traceSpanByHalfEdgeI32)) {
+            throw IllegalStateException("path-f32-projection-collapse")
+        }
+        secondPositionI32 += 1
+    }
+}
 
 private fun sameHybridDirectionsF64F32(firstF64: Vector2F64, secondF64: Vector2F64): Boolean =
     hybridQuadrantF64F32(firstF64) == hybridQuadrantF64F32(secondF64) &&

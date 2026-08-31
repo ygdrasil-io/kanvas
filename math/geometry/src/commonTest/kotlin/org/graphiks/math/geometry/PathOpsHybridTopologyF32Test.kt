@@ -382,6 +382,23 @@ class PathOpsHybridTopologyF32Test {
     }
 
     @Test
+    fun `round four local debit rejects the formerly sufficient rectangle budget`() {
+        val first = PathBuilder().addRect(RectF32.ofLTRB(0f, 0f, 2f, 2f)).build()
+        val second = PathBuilder().addRect(RectF32.ofLTRB(1f, 0f, 3f, 2f)).build()
+
+        val error = assertFailsWith<IllegalStateException> {
+            PathOpsF32.op(
+                first,
+                second,
+                PathBooleanOp.UNION,
+                PathOpsLimitsI32(maxCandidateProbes = roundThreeOverlappingRectanglesHybridBudgetI32 + 1),
+            )
+        }
+
+        assertEquals("path-candidate-limit", error.message)
+    }
+
+    @Test
     fun `hybrid budget frontier is invariant when canonical inputs are permuted`() {
         val left = PathBuilder().addRect(RectF32.ofLTRB(0f, 0f, 2f, 2f)).build()
         val right = PathBuilder().addRect(RectF32.ofLTRB(1f, 0f, 3f, 2f)).build()
@@ -500,8 +517,8 @@ private fun pathVerticesF32(path: PathF32): List<Point2F32> = buildList {
     }
 }
 
-// Captured behavioral boundary for this fixed public operation after the Task-2 preflight audit.
-// The paired limit-1/limit assertions make changes to the checked ledger visible and the
-// permutation test verifies backend-independent determinism.  It is intentionally not presented
-// as an independent global cost oracle: specifying a fully algebraic global cost model is Task 5.
-private const val overlappingRectanglesHybridBudgetI32 = 4_987
+// The round-4 regression keeps the former public success boundary separate, so removal of these
+// local debits makes 4_988 observable again.  The current paired limit-1/limit boundary is a
+// deterministic public non-regression only; an independent global cost oracle remains Task 5.
+private const val roundThreeOverlappingRectanglesHybridBudgetI32 = 4_987
+private const val overlappingRectanglesHybridBudgetI32 = 5_316

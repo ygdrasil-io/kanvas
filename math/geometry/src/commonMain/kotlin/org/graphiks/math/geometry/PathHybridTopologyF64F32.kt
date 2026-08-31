@@ -960,8 +960,11 @@ private fun buildOverlapWitnessIndexF64F32(
     }
     preflightHybridLinearF64F32(
         checkedPathWorkAddI64(
-            checkedPathWorkMultiplyI64(referenceCountByInputEdgeIdI32.size.toLong(), 2L),
-            overlapReferenceCountI64,
+            checkedPathWorkAddI64(
+                checkedPathWorkMultiplyI64(referenceCountByInputEdgeIdI32.size.toLong(), 2L),
+                overlapReferenceCountI64,
+            ),
+            witnessesF64.size.toLong(),
         ),
         candidateWorkBudgetI32,
     )
@@ -1160,11 +1163,16 @@ private fun overlapWitnessIndexSupportsProjectedContactF64F32(
     val secondReferencesF64F32 = overlapWitnessIndexF64F32.orderedIncidencesByInputEdgeIdI32[
         secondF64F32.sourceSectionF64.inputEdgeIdI32
     ].orEmpty()
+    // Reserve every possible join iteration before the first pair is read.  Each iteration
+    // visits two references, compares their witness IDs, may compare edge IDs, and may execute
+    // both full interval-coverage chains.  The `R1 + R2` envelope remains linear while covering
+    // arbitrarily many common but non-covering atomic witnesses before a later covering one.
+    val joinReferenceWorkI64 = checkedPathWorkAddI64(
+        firstReferencesF64F32.size.toLong(),
+        secondReferencesF64F32.size.toLong(),
+    )
     preflightHybridLinearF64F32(
-        checkedPathWorkAddI64(
-            checkedPathWorkAddI64(firstReferencesF64F32.size.toLong(), secondReferencesF64F32.size.toLong()),
-            4L,
-        ),
+        checkedPathWorkMultiplyI64(joinReferenceWorkI64, 8L),
         candidateWorkBudgetI32,
     )
     var firstIndexI32 = 0
