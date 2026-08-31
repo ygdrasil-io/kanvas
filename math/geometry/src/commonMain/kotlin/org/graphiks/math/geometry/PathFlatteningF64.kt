@@ -60,6 +60,46 @@ internal object PathFlattenerF64 {
             add(normalization.normalize(current), sourceSegmentIndex, 0.0, current)
         }
         fun flattenQuad(start: Point2F64, control: Point2F64, end: Point2F64, sourceSegmentIndex: Int) {
+            // A collinear quadratic is geometrically a line, but a control point beyond either
+            // endpoint can reverse traversal at its exact extremum.  Recursive flatness sees the
+            // control outside the chord and can manufacture many tiny carriers around that turn;
+            // represent the true monotone pieces directly instead.  This preserves the retrace
+            // without introducing a zero-length F32 carrier into the hybrid arrangement.
+            val firstDerivativeXF64 = control.x - start.x
+            val firstDerivativeYF64 = control.y - start.y
+            val derivativeDeltaXF64 = start.x - control.x * 2.0 + end.x
+            val derivativeDeltaYF64 = start.y - control.y * 2.0 + end.y
+            val chordXF64 = end.x - start.x
+            val chordYF64 = end.y - start.y
+            val crossF64 = firstDerivativeXF64 * chordYF64 - firstDerivativeYF64 * chordXF64
+            if (crossF64 == 0.0) {
+                val denominatorF64 = derivativeDeltaXF64 * derivativeDeltaXF64 +
+                    derivativeDeltaYF64 * derivativeDeltaYF64
+                val extremumParameterF64 = if (denominatorF64 == 0.0) {
+                    null
+                } else {
+                    -(
+                        firstDerivativeXF64 * derivativeDeltaXF64 +
+                            firstDerivativeYF64 * derivativeDeltaYF64
+                        ) / denominatorF64
+                }
+                if (extremumParameterF64 != null && extremumParameterF64 > 0.0 && extremumParameterF64 < 1.0) {
+                    val inverseParameterF64 = 1.0 - extremumParameterF64
+                    val extremumF64 = Point2F64(
+                        start.x * inverseParameterF64 * inverseParameterF64 +
+                            control.x * 2.0 * inverseParameterF64 * extremumParameterF64 +
+                            end.x * extremumParameterF64 * extremumParameterF64,
+                        start.y * inverseParameterF64 * inverseParameterF64 +
+                            control.y * 2.0 * inverseParameterF64 * extremumParameterF64 +
+                            end.y * extremumParameterF64 * extremumParameterF64,
+                    )
+                    incrementEdges()
+                    add(extremumF64, sourceSegmentIndex, extremumParameterF64, null)
+                }
+                incrementEdges()
+                add(end, sourceSegmentIndex, 1.0, current)
+                return
+            }
             fun recurse(a: Point2F64, c: Point2F64, b: Point2F64, t0: Double, t1: Double, depth: Int) {
                 if (pointToSegmentDistanceF64(c, a, b) <= policy.tolerance) {
                     incrementEdges()

@@ -10,6 +10,7 @@ internal data class PathHybridHalfEdgeF64F32(
     val nextIndexI32: Int,
     val leftFaceIndexI32: Int,
     val sourceSpanIdsI64: List<Long>,
+    val carrierSectionsF64F32: List<PathHybridCarrierSectionF64F32>,
     val firstWindingDeltaI32: Int,
     val secondWindingDeltaI32: Int,
 )
@@ -23,6 +24,10 @@ internal data class PathHybridFaceI32(
 
 internal data class PathBoundaryHalfEdgeTraceF64F32(
     val sourceSpanF64: PathSourceSpanF64,
+    val sourceSectionF64: PathFlattenedSectionF64,
+    val sectionIndexI32: Int,
+    /** Complete canonical provenance group for this aggregated F32 rail. */
+    val carrierSectionsF64F32: List<PathHybridCarrierSectionF64F32>,
     val originVertexF64F32: PathHybridVertexF64F32,
     val destinationVertexF64F32: PathHybridVertexF64F32,
     val forward: Boolean,
@@ -57,7 +62,13 @@ internal class PathArrangementF64F32 private constructor(
     private fun extractBoundaryF64F32(selectsFace: (PathHybridFaceI32) -> Boolean): List<PathBoundaryTraceF64F32> {
         if (halfEdgesF64F32.isEmpty()) return emptyList()
         preflightArrangementF64F32(
-            facesI32.size.toLong() + halfEdgesF64F32.size.toLong() * 10L + verticesF64F32.size.toLong() * 2L,
+            checkedPathWorkAddI64(
+                checkedPathWorkAddI64(
+                    facesI32.size.toLong(),
+                    checkedPathWorkMultiplyI64(halfEdgesF64F32.size.toLong(), 10L),
+                ),
+                checkedPathWorkMultiplyI64(verticesF64F32.size.toLong(), 2L),
+            ),
             candidateWorkBudgetI32,
         )
         val faceSelected = BooleanArray(facesI32.size) { faceIndexI32 -> selectsFace(facesI32[faceIndexI32]) }
@@ -100,7 +111,13 @@ internal class PathArrangementF64F32 private constructor(
                 outgoing[halfEdgesF64F32[halfEdgesF64F32[halfEdgeIndexI32].twinIndexI32].originVertexIndexI32].size.toLong()
             }
         }
-        preflightArrangementF64F32(selectedTraversalWorkI64 + halfEdgesF64F32.size.toLong() * 2L, candidateWorkBudgetI32)
+        preflightArrangementF64F32(
+            checkedPathWorkAddI64(
+                selectedTraversalWorkI64,
+                checkedPathWorkMultiplyI64(halfEdgesF64F32.size.toLong(), 2L),
+            ),
+            candidateWorkBudgetI32,
+        )
         halfEdgesF64F32.indices.forEach { halfEdgeIndexI32 ->
             if (!selected[halfEdgeIndexI32]) return@forEach
             val halfEdgeF64F32 = halfEdgesF64F32[halfEdgeIndexI32]
@@ -110,14 +127,14 @@ internal class PathArrangementF64F32 private constructor(
             var scannedI32 = 0
             while (scannedI32 < arrivalOutgoingI32.size) {
                 val candidateIndexI32 = (twinPositionI32 - scannedI32 - 1 + arrivalOutgoingI32.size) % arrivalOutgoingI32.size
-                val candidateIndex = arrivalOutgoingI32[candidateIndexI32]
-                val candidate = halfEdgesF64F32[candidateIndex]
+                val candidateHalfEdgeIndexI32 = arrivalOutgoingI32[candidateIndexI32]
+                val candidate = halfEdgesF64F32[candidateHalfEdgeIndexI32]
                 val candidateLeft = faceSelected[candidate.leftFaceIndexI32]
                 val candidateRight = faceSelected[halfEdgesF64F32[candidate.twinIndexI32].leftFaceIndexI32]
                 if (!candidateLeft) pathHybridArrangementInconsistentF64F32()
                 if (!candidateRight) {
-                    if (!selected[candidateIndex]) pathHybridArrangementInconsistentF64F32()
-                    nextSelectedI32[halfEdgeIndexI32] = candidateIndex
+                    if (!selected[candidateHalfEdgeIndexI32]) pathHybridArrangementInconsistentF64F32()
+                    nextSelectedI32[halfEdgeIndexI32] = candidateHalfEdgeIndexI32
                     break
                 }
                 scannedI32 += 1
@@ -169,7 +186,10 @@ internal class PathArrangementF64F32 private constructor(
             limitsI32: PathOpsLimitsI32,
             candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
         ): PathArrangementF64F32 {
-            preflightArrangementF64F32(topologyF64F32.sourceSpansF64.size.toLong() * 3L, candidateWorkBudgetI32)
+            preflightArrangementF64F32(
+                checkedPathWorkMultiplyI64(topologyF64F32.sourceSpansF64.size.toLong(), 3L),
+                candidateWorkBudgetI32,
+            )
             val sourceSpansByIdI64 = mutableMapOf<Long, PathSourceSpanF64>()
             topologyF64F32.sourceSpansF64.forEach { sourceSpanF64 ->
                 val previousF64 = sourceSpansByIdI64.put(sourceSpanF64.sourceSpanIdI64, sourceSpanF64)
@@ -177,9 +197,10 @@ internal class PathArrangementF64F32 private constructor(
                     throw IllegalStateException("path-arrangement-inconsistent")
                 }
             }
-            if (topologyF64F32.verticesF64F32.size > limitsI32.maxVertices) throw IllegalStateException("path-vertex-limit")
-
-            preflightArrangementF64F32(topologyF64F32.verticesF64F32.size.toLong() * 3L, candidateWorkBudgetI32)
+            preflightArrangementF64F32(
+                checkedPathWorkMultiplyI64(topologyF64F32.verticesF64F32.size.toLong(), 3L),
+                candidateWorkBudgetI32,
+            )
             val aliasesI32 = PathHybridDisjointSetI32(topologyF64F32.verticesF64F32.size)
             val sourceVertexIndexByIdentityF64 = mutableMapOf<PathVertexIdentityF64, Int>()
             topologyF64F32.verticesF64F32.forEachIndexed { indexI32, vertexF64F32 ->
@@ -190,7 +211,10 @@ internal class PathArrangementF64F32 private constructor(
             val aliasIdentityCountI64 = topologyF64F32.aliasGroupsF32.sumOf { aliasGroupF32 ->
                 aliasGroupF32.vertexIdentitiesF64.size.toLong()
             }
-            preflightArrangementF64F32(aliasIdentityCountI64 * 3L, candidateWorkBudgetI32)
+            preflightArrangementF64F32(
+                checkedPathWorkMultiplyI64(aliasIdentityCountI64, 3L),
+                candidateWorkBudgetI32,
+            )
             topologyF64F32.aliasGroupsF32.forEach { aliasGroupF32 ->
                 val indicesI32 = mutableListOf<Int>()
                 aliasGroupF32.vertexIdentitiesF64.forEach { identityF64 ->
@@ -203,20 +227,48 @@ internal class PathArrangementF64F32 private constructor(
                     }
                 }
             }
+            // The hybrid topology admitted only intrinsic, witness-free flattening collapses.
+            // Their endpoints are an exact adjacent source relation, not a coordinate-derived
+            // alias; join precisely that pair so the following carrier sections remain one
+            // continuous F32 contour.  Every collapsed carrier is consumed explicitly below.
+            preflightArrangementF64F32(
+                checkedPathWorkMultiplyI64(topologyF64F32.collapsedIncidencesF64F32.size.toLong(), 3L),
+                candidateWorkBudgetI32,
+            )
+            topologyF64F32.collapsedIncidencesF64F32.forEach { collapsedF64F32 ->
+                val startVertexIndexI32 = sourceVertexIndexByIdentityF64[
+                    collapsedF64F32.sourceSectionF64.startIdentityF64
+                ] ?: pathHybridArrangementInconsistentF64F32()
+                val endVertexIndexI32 = sourceVertexIndexByIdentityF64[
+                    collapsedF64F32.sourceSectionF64.endIdentityF64
+                ] ?: pathHybridArrangementInconsistentF64F32()
+                aliasesI32.union(startVertexIndexI32, endVertexIndexI32)
+            }
             val canonicalVerticesF64F32 = canonicalHybridVerticesF64F32(
                 topologyF64F32.verticesF64F32,
                 aliasesI32,
                 candidateWorkBudgetI32,
             )
-            if (canonicalVerticesF64F32.verticesF64F32.size > limitsI32.maxVertices) throw IllegalStateException("path-vertex-limit")
+            val finalVertexCountI64 = canonicalVerticesF64F32.verticesF64F32.size.toLong()
+            if (finalVertexCountI64 > limitsI32.maxVertices.toLong()) throw IllegalStateException("path-vertex-limit")
 
-            preflightArrangementF64F32(topologyF64F32.sourceSpansF64.size.toLong() * 10L, candidateWorkBudgetI32)
+            preflightArrangementF64F32(
+                checkedPathWorkMultiplyI64(topologyF64F32.carrierSectionsF64F32.size.toLong(), 10L),
+                candidateWorkBudgetI32,
+            )
             val contributionsByKeyF64F32 = mutableMapOf<PathHybridEdgeKeyI32, PathHybridEdgeContributionF64F32>()
-            topologyF64F32.sourceSpansF64.forEach { sourceSpanF64 ->
-                val startIdentityF64 = sourceSpanF64.startLocationF64.vertexIdentityF64
-                    ?: throw IllegalStateException("path-arrangement-inconsistent")
-                val endIdentityF64 = sourceSpanF64.endLocationF64.vertexIdentityF64
-                    ?: throw IllegalStateException("path-arrangement-inconsistent")
+            val remainingCollapsedCarrierKeysF64F32 = topologyF64F32.collapsedIncidencesF64F32
+                .mapTo(mutableSetOf()) { collapsedF64F32 ->
+                    PathHybridCarrierKeyF64F32(
+                        sourceSpanIdI64 = collapsedF64F32.sourceSpanF64.sourceSpanIdI64,
+                        sectionIndexI32 = collapsedF64F32.sectionIndexI32,
+                    )
+                }
+            topologyF64F32.carrierSectionsF64F32.forEach { carrierSectionF64F32 ->
+                val sourceSpanF64 = carrierSectionF64F32.sourceSpanF64
+                val sourceSectionF64 = carrierSectionF64F32.sourceSectionF64
+                val startIdentityF64 = sourceSectionF64.startIdentityF64
+                val endIdentityF64 = sourceSectionF64.endIdentityF64
                 val startVertexIndexI32 = canonicalVerticesF64F32.indexByIdentityF64[startIdentityF64]
                     ?: throw IllegalStateException("path-arrangement-inconsistent")
                 val endVertexIndexI32 = canonicalVerticesF64F32.indexByIdentityF64[endIdentityF64]
@@ -224,6 +276,13 @@ internal class PathArrangementF64F32 private constructor(
                 val startVertexF64F32 = canonicalVerticesF64F32.verticesF64F32[startVertexIndexI32]
                 val endVertexF64F32 = canonicalVerticesF64F32.verticesF64F32[endVertexIndexI32]
                 if (sameArrangementHybridPointF32(startVertexF64F32.representativePointF32, endVertexF64F32.representativePointF32)) {
+                    val collapsedKeyF64F32 = PathHybridCarrierKeyF64F32(
+                        sourceSpanIdI64 = sourceSpanF64.sourceSpanIdI64,
+                        sectionIndexI32 = carrierSectionF64F32.sectionIndexI32,
+                    )
+                    if (!remainingCollapsedCarrierKeysF64F32.remove(collapsedKeyF64F32)) {
+                        throw IllegalStateException("path-f32-projection-collapse")
+                    }
                     return@forEach
                 }
                 val forward = startVertexIndexI32 < endVertexIndexI32
@@ -238,10 +297,18 @@ internal class PathArrangementF64F32 private constructor(
                     PathOperand.FIRST -> contributionF64F32.firstWindingDeltaI64 += deltaI64
                     PathOperand.SECOND -> contributionF64F32.secondWindingDeltaI64 += deltaI64
                 }
-                contributionF64F32.sourceSpansF64 += sourceSpanF64
-                contributionF64F32.forwardBySourceSpanIdI64[sourceSpanF64.sourceSpanIdI64] = forward
+                contributionF64F32.carrierSectionsF64F32 += carrierSectionF64F32
+                contributionF64F32.forwardByCarrierKeyF64F32[
+                    PathHybridCarrierKeyF64F32(sourceSpanF64.sourceSpanIdI64, carrierSectionF64F32.sectionIndexI32)
+                ] = forward
             }
-            preflightArrangementF64F32(topologyF64F32.sourceSpansF64.size.toLong() * 2L, candidateWorkBudgetI32)
+            if (remainingCollapsedCarrierKeysF64F32.isNotEmpty()) {
+                throw IllegalStateException("path-f32-projection-collapse")
+            }
+            preflightArrangementF64F32(
+                checkedPathWorkMultiplyI64(topologyF64F32.carrierSectionsF64F32.size.toLong(), 2L),
+                candidateWorkBudgetI32,
+            )
             val pathEdgesF64F32 = sortedArrangementF64F32(
                 contributionsByKeyF64F32.entries.filter { (_, contributionF64F32) ->
                     contributionF64F32.firstWindingDeltaI64 != 0L || contributionF64F32.secondWindingDeltaI64 != 0L
@@ -251,7 +318,10 @@ internal class PathArrangementF64F32 private constructor(
                 firstEntryF64F32.key.startVertexIndexI32.compareTo(secondEntryF64F32.key.startVertexIndexI32)
                     .takeIf { it != 0 } ?: firstEntryF64F32.key.endVertexIndexI32.compareTo(secondEntryF64F32.key.endVertexIndexI32)
             }
-            if (pathEdgesF64F32.size > limitsI32.maxHalfEdges / 2) throw IllegalStateException("path-half-edge-limit")
+            val finalHalfEdgeCountI64 = checkedPathWorkMultiplyI64(pathEdgesF64F32.size.toLong(), 2L)
+            if (finalHalfEdgeCountI64 > limitsI32.maxHalfEdges.toLong()) {
+                throw IllegalStateException("path-half-edge-limit")
+            }
             if (pathEdgesF64F32.isEmpty()) {
                 return PathArrangementF64F32(
                     canonicalVerticesF64F32.verticesF64F32,
@@ -263,30 +333,40 @@ internal class PathArrangementF64F32 private constructor(
                 )
             }
 
-            val contributingSpanCountI64 = pathEdgesF64F32.sumOf { (_, contributionF64F32) ->
-                contributionF64F32.sourceSpansF64.size.toLong()
+            val contributingCarrierCountI64 = pathEdgesF64F32.sumOf { (_, contributionF64F32) ->
+                contributionF64F32.carrierSectionsF64F32.size.toLong()
             }
             preflightArrangementF64F32(
-                pathEdgesF64F32.size.toLong() * 12L + contributingSpanCountI64 * 5L,
+                checkedPathWorkAddI64(
+                    checkedPathWorkMultiplyI64(pathEdgesF64F32.size.toLong(), 12L),
+                    checkedPathWorkMultiplyI64(contributingCarrierCountI64, 5L),
+                ),
                 candidateWorkBudgetI32,
             )
-            val mutableHalfEdgesF64F32 = ArrayList<PathMutableHybridHalfEdgeF64F32>(pathEdgesF64F32.size * 2)
+            val mutableHalfEdgesF64F32 = ArrayList<PathMutableHybridHalfEdgeF64F32>(
+                checkedPathCapacityI32(finalHalfEdgeCountI64, "path-half-edge-limit"),
+            )
             val traceSpansByHalfEdgeI32 = mutableMapOf<Int, PathArrangementTraceSpanF64F32>()
             pathEdgesF64F32.forEachIndexed { edgeIndexI32, (keyI32, contributionF64F32) ->
                 val forwardIdI32 = edgeIndexI32 * 2
                 val reverseIdI32 = forwardIdI32 + 1
-                val traceSpanF64 = canonicalTraceSpanF64F32(
-                    contributionF64F32.sourceSpansF64,
-                    candidateWorkBudgetI32,
+                val traceCarrierGroupF64F32 = canonicalTraceCarrierGroupF64F32(
+                    carrierSectionsF64F32 = contributionF64F32.carrierSectionsF64F32,
+                    forwardByCarrierKeyF64F32 = contributionF64F32.forwardByCarrierKeyF64F32,
+                    candidateWorkBudgetI32 = candidateWorkBudgetI32,
                 )
-                val forwardBySourceSpan = contributionF64F32.forwardBySourceSpanIdI64.getValue(traceSpanF64.sourceSpanIdI64)
-                val forwardDirectionF64 = hybridSourceDirectionF64F32(traceSpanF64, forwardBySourceSpan)
+                val traceCarrierSectionF64F32 = traceCarrierGroupF64F32.canonicalCarrierSectionF64F32
+                val forwardByCarrier = traceCarrierGroupF64F32.canonicalForward
+                val forwardDirectionF64 = hybridSourceDirectionF64F32(traceCarrierSectionF64F32, forwardByCarrier)
                 mutableHalfEdgesF64F32 += PathMutableHybridHalfEdgeF64F32(
                     idI32 = forwardIdI32,
                     originVertexIndexI32 = keyI32.startVertexIndexI32,
                     destinationVertexIndexI32 = keyI32.endVertexIndexI32,
                     twinIndexI32 = reverseIdI32,
-                    sourceSpanIdsI64 = contributionF64F32.sourceSpansF64.map(PathSourceSpanF64::sourceSpanIdI64),
+                    sourceSpanIdsI64 = contributionF64F32.carrierSectionsF64F32.map { carrierSectionF64F32 ->
+                        carrierSectionF64F32.sourceSpanF64.sourceSpanIdI64
+                    },
+                    carrierSectionsF64F32 = traceCarrierGroupF64F32.carrierSectionsF64F32,
                     firstWindingDeltaI32 = contributionF64F32.firstWindingDeltaI64.toHybridI32(),
                     secondWindingDeltaI32 = contributionF64F32.secondWindingDeltaI64.toHybridI32(),
                     sourceDirectionF64 = forwardDirectionF64,
@@ -296,13 +376,21 @@ internal class PathArrangementF64F32 private constructor(
                     originVertexIndexI32 = keyI32.endVertexIndexI32,
                     destinationVertexIndexI32 = keyI32.startVertexIndexI32,
                     twinIndexI32 = forwardIdI32,
-                    sourceSpanIdsI64 = contributionF64F32.sourceSpansF64.map(PathSourceSpanF64::sourceSpanIdI64),
+                    sourceSpanIdsI64 = contributionF64F32.carrierSectionsF64F32.map { carrierSectionF64F32 ->
+                        carrierSectionF64F32.sourceSpanF64.sourceSpanIdI64
+                    },
+                    carrierSectionsF64F32 = traceCarrierGroupF64F32.carrierSectionsF64F32,
                     firstWindingDeltaI32 = contributionF64F32.firstWindingDeltaI64.toHybridI32().negatedHybridI32(),
                     secondWindingDeltaI32 = contributionF64F32.secondWindingDeltaI64.toHybridI32().negatedHybridI32(),
                     sourceDirectionF64 = -forwardDirectionF64,
                 )
-                traceSpansByHalfEdgeI32[forwardIdI32] = PathArrangementTraceSpanF64F32(traceSpanF64, forwardBySourceSpan)
-                traceSpansByHalfEdgeI32[reverseIdI32] = PathArrangementTraceSpanF64F32(traceSpanF64, !forwardBySourceSpan)
+                traceSpansByHalfEdgeI32[forwardIdI32] = traceCarrierGroupF64F32
+                traceSpansByHalfEdgeI32[reverseIdI32] = PathArrangementTraceSpanF64F32(
+                    canonicalCarrierSectionF64F32 = traceCarrierSectionF64F32,
+                    canonicalForward = !forwardByCarrier,
+                    carrierSectionsF64F32 = traceCarrierGroupF64F32.carrierSectionsF64F32,
+                    forwardByCarrierKeyF64F32 = traceCarrierGroupF64F32.forwardByCarrierKeyF64F32.mapValues { (_, forward) -> !forward },
+                )
             }
             val outgoingI32 = List(canonicalVerticesF64F32.verticesF64F32.size) { mutableListOf<Int>() }
             mutableHalfEdgesF64F32.forEach { halfEdgeF64F32 -> outgoingI32[halfEdgeF64F32.originVertexIndexI32] += halfEdgeF64F32.idI32 }
@@ -321,7 +409,10 @@ internal class PathArrangementF64F32 private constructor(
                     }
                 }
             }
-            preflightArrangementF64F32(mutableHalfEdgesF64F32.size.toLong() * 5L, candidateWorkBudgetI32)
+            preflightArrangementF64F32(
+                checkedPathWorkMultiplyI64(mutableHalfEdgesF64F32.size.toLong(), 5L),
+                candidateWorkBudgetI32,
+            )
             val outgoingPositionI32 = IntArray(mutableHalfEdgesF64F32.size) { -1 }
             outgoingI32.forEach { indicesI32 -> indicesI32.forEachIndexed { indexI32, halfEdgeIndexI32 -> outgoingPositionI32[halfEdgeIndexI32] = indexI32 } }
             val incomingNextCountI32 = IntArray(mutableHalfEdgesF64F32.size)
@@ -354,7 +445,10 @@ internal class PathArrangementF64F32 private constructor(
                 candidateWorkBudgetI32,
             )
             preflightArrangementF64F32(
-                mutableHalfEdgesF64F32.size.toLong() + mutableFacesI32.size.toLong(),
+                checkedPathWorkAddI64(
+                    mutableHalfEdgesF64F32.size.toLong(),
+                    mutableFacesI32.size.toLong(),
+                ),
                 candidateWorkBudgetI32,
             )
             val halfEdgesF64F32 = mutableHalfEdgesF64F32.map { halfEdgeF64F32 ->
@@ -366,6 +460,7 @@ internal class PathArrangementF64F32 private constructor(
                     nextIndexI32 = halfEdgeF64F32.nextIndexI32,
                     leftFaceIndexI32 = halfEdgeF64F32.leftFaceIndexI32,
                     sourceSpanIdsI64 = halfEdgeF64F32.sourceSpanIdsI64,
+                    carrierSectionsF64F32 = halfEdgeF64F32.carrierSectionsF64F32,
                     firstWindingDeltaI32 = halfEdgeF64F32.firstWindingDeltaI32,
                     secondWindingDeltaI32 = halfEdgeF64F32.secondWindingDeltaI32,
                 )
@@ -403,13 +498,20 @@ private data class PathHybridEdgeKeyI32(
 private class PathHybridEdgeContributionF64F32(
     var firstWindingDeltaI64: Long = 0L,
     var secondWindingDeltaI64: Long = 0L,
-    val sourceSpansF64: MutableList<PathSourceSpanF64> = mutableListOf(),
-    val forwardBySourceSpanIdI64: MutableMap<Long, Boolean> = mutableMapOf(),
+    val carrierSectionsF64F32: MutableList<PathHybridCarrierSectionF64F32> = mutableListOf(),
+    val forwardByCarrierKeyF64F32: MutableMap<PathHybridCarrierKeyF64F32, Boolean> = mutableMapOf(),
 )
 
 private data class PathArrangementTraceSpanF64F32(
-    val sourceSpanF64: PathSourceSpanF64,
-    val forward: Boolean,
+    val canonicalCarrierSectionF64F32: PathHybridCarrierSectionF64F32,
+    val canonicalForward: Boolean,
+    val carrierSectionsF64F32: List<PathHybridCarrierSectionF64F32>,
+    val forwardByCarrierKeyF64F32: Map<PathHybridCarrierKeyF64F32, Boolean>,
+)
+
+private data class PathHybridCarrierKeyF64F32(
+    val sourceSpanIdI64: Long,
+    val sectionIndexI32: Int,
 )
 
 private class PathMutableHybridHalfEdgeF64F32(
@@ -418,6 +520,7 @@ private class PathMutableHybridHalfEdgeF64F32(
     val destinationVertexIndexI32: Int,
     val twinIndexI32: Int,
     val sourceSpanIdsI64: List<Long>,
+    val carrierSectionsF64F32: List<PathHybridCarrierSectionF64F32>,
     val firstWindingDeltaI32: Int,
     val secondWindingDeltaI32: Int,
     val sourceDirectionF64: Vector2F64,
@@ -481,7 +584,10 @@ private fun canonicalHybridVerticesF64F32(
     aliasesI32: PathHybridDisjointSetI32,
     candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
 ): PathHybridCanonicalVerticesF64F32 {
-    preflightArrangementF64F32(sourceVerticesF64F32.size.toLong() * 5L, candidateWorkBudgetI32)
+    preflightArrangementF64F32(
+        checkedPathWorkMultiplyI64(sourceVerticesF64F32.size.toLong(), 5L),
+        candidateWorkBudgetI32,
+    )
     val groupsByRootI32 = mutableMapOf<Int, MutableList<PathHybridVertexF64F32>>()
     sourceVerticesF64F32.forEachIndexed { sourceIndexI32, vertexF64F32 ->
         groupsByRootI32.getOrPut(aliasesI32.find(sourceIndexI32)) { mutableListOf() } += vertexF64F32
@@ -498,12 +604,18 @@ private fun canonicalHybridVerticesF64F32(
     }
     val representativesF64F32 = orderedGroupsF64F32.map(PathHybridVertexGroupF64F32::representativeF64F32)
     val representativeIndexByRootI32 = mutableMapOf<Int, Int>()
-    preflightArrangementF64F32(orderedGroupsF64F32.size.toLong() * 2L, candidateWorkBudgetI32)
+    preflightArrangementF64F32(
+        checkedPathWorkMultiplyI64(orderedGroupsF64F32.size.toLong(), 2L),
+        candidateWorkBudgetI32,
+    )
     orderedGroupsF64F32.forEachIndexed { indexI32, groupF64F32 ->
         representativeIndexByRootI32[groupF64F32.rootI32] = indexI32
     }
     val indexByIdentityF64 = mutableMapOf<PathVertexIdentityF64, Int>()
-    preflightArrangementF64F32(sourceVerticesF64F32.size.toLong() * 2L, candidateWorkBudgetI32)
+    preflightArrangementF64F32(
+        checkedPathWorkMultiplyI64(sourceVerticesF64F32.size.toLong(), 2L),
+        candidateWorkBudgetI32,
+    )
     sourceVerticesF64F32.forEachIndexed { sourceIndexI32, vertexF64F32 ->
         val rootI32 = aliasesI32.find(sourceIndexI32)
         indexByIdentityF64[vertexF64F32.vertexIdentityF64] = representativeIndexByRootI32[rootI32]
@@ -523,7 +635,10 @@ private fun selectCanonicalHybridVertexF64F32(
     candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
 ): PathHybridVertexF64F32 {
     val firstF64F32 = verticesF64F32.firstOrNull() ?: pathHybridArrangementInconsistentF64F32()
-    preflightArrangementF64F32(verticesF64F32.size.toLong() * 2L, candidateWorkBudgetI32)
+    preflightArrangementF64F32(
+        checkedPathWorkMultiplyI64(verticesF64F32.size.toLong(), 2L),
+        candidateWorkBudgetI32,
+    )
     var representativeF64F32 = firstF64F32
     verticesF64F32.drop(1).forEach { vertexF64F32 ->
         if (!sameArrangementHybridPointF32(vertexF64F32.representativePointF32, firstF64F32.representativePointF32)) {
@@ -536,26 +651,76 @@ private fun selectCanonicalHybridVertexF64F32(
     return representativeF64F32
 }
 
-private fun canonicalTraceSpanF64F32(
-    sourceSpansF64: List<PathSourceSpanF64>,
+/**
+ * Retains every source carrier which contributed to one aggregated F32 rail.  A single carrier
+ * only supplies the writer's concrete trace, but all carriers remain attached to the half-edge
+ * for winding/provenance and must agree on their local F64 ray.  There is deliberately no source
+ * label or storage ID in this canonical selection.
+ */
+private fun canonicalTraceCarrierGroupF64F32(
+    carrierSectionsF64F32: List<PathHybridCarrierSectionF64F32>,
+    forwardByCarrierKeyF64F32: Map<PathHybridCarrierKeyF64F32, Boolean>,
     candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
-): PathSourceSpanF64 {
-    var selectedF64 = sourceSpansF64.firstOrNull() ?: pathHybridArrangementInconsistentF64F32()
-    preflightArrangementF64F32(sourceSpansF64.size.toLong() * 2L, candidateWorkBudgetI32)
-    sourceSpansF64.drop(1).forEach { candidateF64 ->
-        if (compareTraceSourceSpansF64F32(candidateF64, selectedF64) < 0) selectedF64 = candidateF64
+): PathArrangementTraceSpanF64F32 {
+    val orderedCarrierSectionsF64F32 = sortedArrangementF64F32(
+        carrierSectionsF64F32,
+        candidateWorkBudgetI32,
+        ::compareTraceCarrierSectionsF64F32,
+    )
+    val canonicalCarrierSectionF64F32 = orderedCarrierSectionsF64F32.firstOrNull()
+        ?: pathHybridArrangementInconsistentF64F32()
+    val canonicalCarrierKeyF64F32 = PathHybridCarrierKeyF64F32(
+        canonicalCarrierSectionF64F32.sourceSpanF64.sourceSpanIdI64,
+        canonicalCarrierSectionF64F32.sectionIndexI32,
+    )
+    val canonicalForward = forwardByCarrierKeyF64F32[canonicalCarrierKeyF64F32]
+        ?: pathHybridArrangementInconsistentF64F32()
+    val canonicalDirectionF64 = hybridSourceDirectionF64F32(canonicalCarrierSectionF64F32, canonicalForward)
+    preflightArrangementF64F32(
+        checkedPathWorkMultiplyI64(orderedCarrierSectionsF64F32.size.toLong(), 3L),
+        candidateWorkBudgetI32,
+    )
+    orderedCarrierSectionsF64F32.drop(1).forEach { carrierSectionF64F32 ->
+        val carrierKeyF64F32 = PathHybridCarrierKeyF64F32(
+            carrierSectionF64F32.sourceSpanF64.sourceSpanIdI64,
+            carrierSectionF64F32.sectionIndexI32,
+        )
+        val forward = forwardByCarrierKeyF64F32[carrierKeyF64F32]
+            ?: pathHybridArrangementInconsistentF64F32()
+        val directionF64 = hybridSourceDirectionF64F32(carrierSectionF64F32, forward)
+        if (!sameHybridDirectionsF64F32(canonicalDirectionF64, directionF64)) {
+            throw IllegalStateException("path-f32-projection-collapse")
+        }
     }
-    return selectedF64
+    return PathArrangementTraceSpanF64F32(
+        canonicalCarrierSectionF64F32 = canonicalCarrierSectionF64F32,
+        canonicalForward = canonicalForward,
+        carrierSectionsF64F32 = orderedCarrierSectionsF64F32,
+        forwardByCarrierKeyF64F32 = forwardByCarrierKeyF64F32,
+    )
 }
 
-private fun compareTraceSourceSpansF64F32(firstF64: PathSourceSpanF64, secondF64: PathSourceSpanF64): Int {
-    compareArrangementPointsF64F32(firstF64.startPointF64, secondF64.startPointF64).takeIf { it != 0 }?.let { return it }
-    compareArrangementPointsF64F32(firstF64.endPointF64, secondF64.endPointF64).takeIf { it != 0 }?.let { return it }
-    return firstF64.windingDeltaI32.compareTo(secondF64.windingDeltaI32)
+private fun compareTraceCarrierSectionsF64F32(
+    firstF64F32: PathHybridCarrierSectionF64F32,
+    secondF64F32: PathHybridCarrierSectionF64F32,
+): Int {
+    compareArrangementPointsF64F32(
+        firstF64F32.sourceSectionF64.startPointF64,
+        secondF64F32.sourceSectionF64.startPointF64,
+    ).takeIf { it != 0 }?.let { return it }
+    compareArrangementPointsF64F32(
+        firstF64F32.sourceSectionF64.endPointF64,
+        secondF64F32.sourceSectionF64.endPointF64,
+    ).takeIf { it != 0 }?.let { return it }
+    return firstF64F32.sourceSpanF64.windingDeltaI32.compareTo(secondF64F32.sourceSpanF64.windingDeltaI32)
 }
 
-private fun hybridSourceDirectionF64F32(sourceSpanF64: PathSourceSpanF64, forward: Boolean): Vector2F64 {
-    val directionF64 = sourceSpanF64.endPointF64 - sourceSpanF64.startPointF64
+private fun hybridSourceDirectionF64F32(
+    carrierSectionF64F32: PathHybridCarrierSectionF64F32,
+    forward: Boolean,
+): Vector2F64 {
+    val directionF64 = carrierSectionF64F32.sourceSectionF64.endPointF64 -
+        carrierSectionF64F32.sourceSectionF64.startPointF64
     if (directionF64.x == 0.0 && directionF64.y == 0.0) throw IllegalStateException("path-f32-projection-collapse")
     return if (forward) directionF64 else -directionF64
 }
@@ -564,7 +729,10 @@ private fun enumerateHybridFacesF64F32(
     halfEdgesF64F32: List<PathMutableHybridHalfEdgeF64F32>,
     candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
 ): List<PathMutableHybridFaceI32> {
-    preflightArrangementF64F32(halfEdgesF64F32.size.toLong() * 3L, candidateWorkBudgetI32)
+    preflightArrangementF64F32(
+        checkedPathWorkMultiplyI64(halfEdgesF64F32.size.toLong(), 3L),
+        candidateWorkBudgetI32,
+    )
     val facesI32 = mutableListOf<PathMutableHybridFaceI32>()
     halfEdgesF64F32.forEach { startF64F32 ->
         if (startF64F32.leftFaceIndexI32 != -1) return@forEach
@@ -596,8 +764,16 @@ private fun hybridComponentsF64F32(
     candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
 ): List<PathHybridComponentI32> {
     preflightArrangementF64F32(
-        pathEdgeKeysI32.size.toLong() * 3L + verticesF64F32.size.toLong() * 8L +
-            halfEdgesF64F32.size.toLong() * 4L + facesI32.size.toLong() * 3L,
+        checkedPathWorkAddI64(
+            checkedPathWorkAddI64(
+                checkedPathWorkMultiplyI64(pathEdgeKeysI32.size.toLong(), 3L),
+                checkedPathWorkMultiplyI64(verticesF64F32.size.toLong(), 8L),
+            ),
+            checkedPathWorkAddI64(
+                checkedPathWorkMultiplyI64(halfEdgesF64F32.size.toLong(), 4L),
+                checkedPathWorkMultiplyI64(facesI32.size.toLong(), 3L),
+            ),
+        ),
         candidateWorkBudgetI32,
     )
     val disjointSetI32 = PathHybridDisjointSetI32(verticesF64F32.size)
@@ -756,9 +932,18 @@ private fun preflightHybridWindingF64F32(
             facesI32[faceIndexI32].boundaryHalfEdgeIndicesI32.size.toLong() + 1L
         }
     }
-    val containmentI64 = componentCountI64 * componentFaceEdgeWorkI64 * 3L
-    val forestI64 = componentCountI64 * componentCountI64 + componentCountI64 * 6L
-    preflightArrangementF64F32(containmentI64 + componentFaceEdgeWorkI64 + forestI64, candidateWorkBudgetI32)
+    val containmentI64 = checkedPathWorkMultiplyI64(
+        checkedPathWorkMultiplyI64(componentCountI64, componentFaceEdgeWorkI64),
+        3L,
+    )
+    val forestI64 = checkedPathWorkAddI64(
+        checkedPathWorkMultiplyI64(componentCountI64, componentCountI64),
+        checkedPathWorkMultiplyI64(componentCountI64, 6L),
+    )
+    preflightArrangementF64F32(
+        checkedPathWorkAddI64(checkedPathWorkAddI64(containmentI64, componentFaceEdgeWorkI64), forestI64),
+        candidateWorkBudgetI32,
+    )
 }
 
 private fun propagateHybridComponentWindingF64F32(
@@ -855,37 +1040,107 @@ private fun canonicalHybridTraceF64F32(
     candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
 ): PathCanonicalTraceF64F32? {
     if (rawHalfEdgeIndicesI32.size < 3) return null
-    preflightArrangementF64F32(rawHalfEdgeIndicesI32.size.toLong() * 5L + 2L, candidateWorkBudgetI32)
+    preflightArrangementF64F32(
+        checkedPathWorkAddI64(checkedPathWorkMultiplyI64(rawHalfEdgeIndicesI32.size.toLong(), 8L), 2L),
+        candidateWorkBudgetI32,
+    )
     val pointsF64 = rawHalfEdgeIndicesI32.map { halfEdgeIndexI32 ->
         verticesF64F32[halfEdgesF64F32[halfEdgeIndexI32].originVertexIndexI32].representativePointF32.toPoint2F64()
     }
     val areaF64 = signedDoubleAreaExpansionF64(pointsF64 + pointsF64.first())
     if (ExpansionF64.sign(areaF64) == 0) return null
-    var firstIndexI32 = 0
-    rawHalfEdgeIndicesI32.indices.drop(1).forEach { candidateIndexI32 ->
-        if (
-            compareHybridTraceStartF64F32(
-                rawHalfEdgeIndicesI32[candidateIndexI32],
-                rawHalfEdgeIndicesI32[firstIndexI32],
-                halfEdgesF64F32,
-                verticesF64F32,
-            ) < 0
-        ) {
-            firstIndexI32 = candidateIndexI32
-        }
-    }
+    val firstIndexI32 = canonicalHybridTraceRotationIndexF64F32(
+        rawHalfEdgeIndicesI32 = rawHalfEdgeIndicesI32,
+        halfEdgesF64F32 = halfEdgesF64F32,
+        verticesF64F32 = verticesF64F32,
+        traceSpanByHalfEdgeI32 = traceSpanByHalfEdgeI32,
+    )
     val rotatedI32 = rawHalfEdgeIndicesI32.drop(firstIndexI32) + rawHalfEdgeIndicesI32.take(firstIndexI32)
     val traceF64F32 = PathBoundaryTraceF64F32(rotatedI32.map { halfEdgeIndexI32 ->
         val halfEdgeF64F32 = halfEdgesF64F32[halfEdgeIndexI32]
         val traceSpanF64F32 = traceSpanByHalfEdgeI32.getValue(halfEdgeIndexI32)
         PathBoundaryHalfEdgeTraceF64F32(
-            sourceSpanF64 = traceSpanF64F32.sourceSpanF64,
+            sourceSpanF64 = traceSpanF64F32.canonicalCarrierSectionF64F32.sourceSpanF64,
+            sourceSectionF64 = traceSpanF64F32.canonicalCarrierSectionF64F32.sourceSectionF64,
+            sectionIndexI32 = traceSpanF64F32.canonicalCarrierSectionF64F32.sectionIndexI32,
+            carrierSectionsF64F32 = traceSpanF64F32.carrierSectionsF64F32,
             originVertexF64F32 = verticesF64F32[halfEdgeF64F32.originVertexIndexI32],
             destinationVertexF64F32 = verticesF64F32[halfEdgeF64F32.destinationVertexIndexI32],
-            forward = traceSpanF64F32.forward,
+            forward = traceSpanF64F32.canonicalForward,
         )
     })
     return PathCanonicalTraceF64F32(traceF64F32, rotatedI32, areaF64)
+}
+
+/**
+ * Booth's linear minimal-rotation algorithm over the complete selected half-edge sequence.
+ * The element comparison deliberately uses only stable F32/F64 geometry and the already
+ * canonical carrier representative; source labels and mutable DCEL indices never break a tie.
+ */
+private fun canonicalHybridTraceRotationIndexF64F32(
+    rawHalfEdgeIndicesI32: List<Int>,
+    halfEdgesF64F32: List<PathHybridHalfEdgeF64F32>,
+    verticesF64F32: List<PathHybridVertexF64F32>,
+    traceSpanByHalfEdgeI32: Map<Int, PathArrangementTraceSpanF64F32>,
+): Int {
+    val sizeI32 = rawHalfEdgeIndicesI32.size
+    if (sizeI32 < 2) return 0
+    var firstI32 = 0
+    var secondI32 = 1
+    var offsetI32 = 0
+    while (firstI32 < sizeI32 && secondI32 < sizeI32 && offsetI32 < sizeI32) {
+        val comparisonI32 = compareHybridTraceElementsF64F32(
+            firstHalfEdgeIndexI32 = rawHalfEdgeIndicesI32[(firstI32 + offsetI32) % sizeI32],
+            secondHalfEdgeIndexI32 = rawHalfEdgeIndicesI32[(secondI32 + offsetI32) % sizeI32],
+            halfEdgesF64F32 = halfEdgesF64F32,
+            verticesF64F32 = verticesF64F32,
+            traceSpanByHalfEdgeI32 = traceSpanByHalfEdgeI32,
+        )
+        when {
+            comparisonI32 == 0 -> offsetI32 += 1
+            comparisonI32 > 0 -> {
+                firstI32 += offsetI32 + 1
+                if (firstI32 == secondI32) firstI32 += 1
+                offsetI32 = 0
+            }
+            else -> {
+                secondI32 += offsetI32 + 1
+                if (firstI32 == secondI32) secondI32 += 1
+                offsetI32 = 0
+            }
+        }
+    }
+    return minOf(firstI32, secondI32).coerceAtMost(sizeI32 - 1)
+}
+
+private fun compareHybridTraceElementsF64F32(
+    firstHalfEdgeIndexI32: Int,
+    secondHalfEdgeIndexI32: Int,
+    halfEdgesF64F32: List<PathHybridHalfEdgeF64F32>,
+    verticesF64F32: List<PathHybridVertexF64F32>,
+    traceSpanByHalfEdgeI32: Map<Int, PathArrangementTraceSpanF64F32>,
+): Int {
+    compareHybridTraceStartF64F32(
+        firstHalfEdgeIndexI32,
+        secondHalfEdgeIndexI32,
+        halfEdgesF64F32,
+        verticesF64F32,
+    ).takeIf { it != 0 }?.let { return it }
+    val firstHalfEdgeF64F32 = halfEdgesF64F32[firstHalfEdgeIndexI32]
+    val secondHalfEdgeF64F32 = halfEdgesF64F32[secondHalfEdgeIndexI32]
+    compareArrangementVerticesF64F32(
+        verticesF64F32[firstHalfEdgeF64F32.destinationVertexIndexI32],
+        verticesF64F32[secondHalfEdgeF64F32.destinationVertexIndexI32],
+    ).takeIf { it != 0 }?.let { return it }
+    val firstTraceSpanF64F32 = traceSpanByHalfEdgeI32.getValue(firstHalfEdgeIndexI32)
+    val secondTraceSpanF64F32 = traceSpanByHalfEdgeI32.getValue(secondHalfEdgeIndexI32)
+    compareTraceCarrierSectionsF64F32(
+        firstTraceSpanF64F32.canonicalCarrierSectionF64F32,
+        secondTraceSpanF64F32.canonicalCarrierSectionF64F32,
+    ).takeIf { it != 0 }?.let { return it }
+    return firstTraceSpanF64F32.carrierSectionsF64F32.size.compareTo(
+        secondTraceSpanF64F32.carrierSectionsF64F32.size,
+    )
 }
 
 private fun compareHybridTraceStartF64F32(
@@ -931,12 +1186,12 @@ private fun compareHybridOutputRaysF64F32(
     traceSpanByHalfEdgeI32: Map<Int, PathArrangementTraceSpanF64F32>,
 ): Int = compareHybridDirectionsF64F32(
     hybridSourceDirectionF64F32(
-        traceSpanByHalfEdgeI32.getValue(firstI32).sourceSpanF64,
-        traceSpanByHalfEdgeI32.getValue(firstI32).forward,
+        traceSpanByHalfEdgeI32.getValue(firstI32).canonicalCarrierSectionF64F32,
+        traceSpanByHalfEdgeI32.getValue(firstI32).canonicalForward,
     ),
     hybridSourceDirectionF64F32(
-        traceSpanByHalfEdgeI32.getValue(secondI32).sourceSpanF64,
-        traceSpanByHalfEdgeI32.getValue(secondI32).forward,
+        traceSpanByHalfEdgeI32.getValue(secondI32).canonicalCarrierSectionF64F32,
+        traceSpanByHalfEdgeI32.getValue(secondI32).canonicalForward,
     ),
 )
 
@@ -946,12 +1201,12 @@ private fun sameHybridOutputRayF64F32(
     traceSpanByHalfEdgeI32: Map<Int, PathArrangementTraceSpanF64F32>,
 ): Boolean = sameHybridDirectionsF64F32(
     hybridSourceDirectionF64F32(
-        traceSpanByHalfEdgeI32.getValue(firstI32).sourceSpanF64,
-        traceSpanByHalfEdgeI32.getValue(firstI32).forward,
+        traceSpanByHalfEdgeI32.getValue(firstI32).canonicalCarrierSectionF64F32,
+        traceSpanByHalfEdgeI32.getValue(firstI32).canonicalForward,
     ),
     hybridSourceDirectionF64F32(
-        traceSpanByHalfEdgeI32.getValue(secondI32).sourceSpanF64,
-        traceSpanByHalfEdgeI32.getValue(secondI32).forward,
+        traceSpanByHalfEdgeI32.getValue(secondI32).canonicalCarrierSectionF64F32,
+        traceSpanByHalfEdgeI32.getValue(secondI32).canonicalForward,
     ),
 )
 
@@ -1050,7 +1305,10 @@ private fun <T> sortedArrangementF64F32(
     compare: (T, T) -> Int,
 ): List<T> {
     val sizeI32 = values.size
-    preflightArrangementF64F32(arrangementSortCostI64F32(sizeI32) + sizeI32.toLong(), candidateWorkBudgetI32)
+    preflightArrangementF64F32(
+        checkedPathWorkAddI64(arrangementSortCostI64F32(sizeI32), sizeI32.toLong()),
+        candidateWorkBudgetI32,
+    )
     return values.sortedWith(Comparator(compare))
 }
 
@@ -1059,7 +1317,10 @@ private fun sortHybridArrangementI32(
     candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
     compare: (Int, Int) -> Int,
 ) {
-    preflightArrangementF64F32(arrangementSortCostI64F32(valuesI32.size) + valuesI32.size.toLong(), candidateWorkBudgetI32)
+    preflightArrangementF64F32(
+        checkedPathWorkAddI64(arrangementSortCostI64F32(valuesI32.size), valuesI32.size.toLong()),
+        candidateWorkBudgetI32,
+    )
     valuesI32.sortWith(Comparator(compare))
 }
 
@@ -1071,7 +1332,7 @@ private fun arrangementSortCostI64F32(sizeI32: Int): Long {
         widthI64 = widthI64 shl 1
         levelsI64 += 1L
     }
-    return sizeI32.toLong() * levelsI64
+    return checkedPathWorkMultiplyI64(sizeI32.toLong(), levelsI64)
 }
 
 private fun preflightArrangementF64F32(unitsI64: Long, candidateWorkBudgetI32: PathCandidateWorkBudgetI32) {

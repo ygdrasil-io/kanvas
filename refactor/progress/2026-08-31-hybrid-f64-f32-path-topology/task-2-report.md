@@ -95,9 +95,10 @@ Their work is charged by `consumePreflightI64` from canonical sizes before alloc
 charges use a deterministic `n * ceil(log2(n))` envelope rather than comparator callbacks.
 
 The Task-2 source-topology additions use pure `*WithoutBudgetF64` comparators through
-`sortedSourceTopologyF64`, whose preflight occurs before each sort. Each exact endpoint
-neighbourhood preflights its fixed 33-entry ULP range before allocating those entries. The
-canonical registry uses the corresponding `sortedRegistryF64` preflight.
+`sortedSourceTopologyF64`, whose preflight occurs before each sort. Exact overlap endpoints now
+reach source topology only through the direct registry key `(inputEdgeIdI32, parameterBitsI64)`;
+there is no source-topology coordinate or ±16-ULP endpoint recovery. The canonical registry uses
+the corresponding `sortedRegistryF64` preflight.
 
 Historical source-topology dynamic debits remain at lines 180, 184, 253, 255, 260, 263, 268,
 289, 291, 293, 295, 297, 323, 409, 428, 447, 453, and 470 for source merge/index/contact
@@ -126,3 +127,84 @@ ray ordering, writer authority, allocations/preflights, and JVM/JS behavior. No 
 GM files changed. The residual source-topology debit audit above is intentionally not represented
 as a Task-2 success claim; it is the already assigned global Task-5 concern. No Task-2 blocker
 remains.
+
+## Fix round 1 — preserve hybrid span geometry
+
+### Findings closed
+
+- Every flattened F64 section remains a carrier through the projected broad phase, DCEL, local
+  direction/ray ordering, face area and boundary trace. The writer emits the ordered carrier run
+  rather than a source-span endpoint chord; the public quadratic bulge probe stays inside while
+  the forbidden chord-only probe stays outside.
+- Raw overlap pair evidence is swept into atomic exact intervals with a unique active incidence
+  multiset. Endpoint identities are transported by direct registry tickets keyed by edge ID and
+  raw parameter bits; neither source topology nor the hybrid alias code re-identifies an endpoint
+  from coordinates or an ULP window. Staggered three-way overlaps cover both operands and
+  relabel/permutation variants.
+- Projected points/rails require exact local coverage. A Point witness is accepted only for the
+  two sections whose exact endpoint identity is that witness, while a remote witness on the same
+  source span and unsupported endpoint/backtracking relations reject. Claims carry exact partial
+  parameter bounds plus endpoint IDs and are validated as one transaction before coincidence IDs
+  or aliases are published. Collapsed carriers are explicitly consumed only for the documented
+  intrinsic adjacent continuation; all other partial collapses reject.
+- Representative selection is per incidence; original F32 bits have priority, including signed
+  zero. The strict parameter predicate accepts 15 ULP and rejects 16 ULP on JVM and JS.
+- Final canonical vertex and half-edge counts use checked I64 arithmetic before allocation.
+  Carrier groups retain every contribution, reject incompatible equal rays, and boundary cycles
+  use full-sequence Booth canonicalization. `candidateIndex` was renamed to `candidateIndexI32`.
+- The flattening tolerance now derives only from the F32 lattice observable after denormalization:
+  `clamp(2 * ulpF32(maxWorldMagnitude) * scale, 2^-23, 2^-12)`. It prevents F64-only micro
+  carriers from inventing an unsupported F32 contact after a large translation without reducing
+  identity/small-scale precision. The exact witness guard was not relaxed.
+
+### RED/GREEN and verification
+
+RED was reproduced independently on JVM and JS with:
+
+```text
+rtk ./gradlew :math:geometry:jvmTest --tests '*PathOpsF32Test.metamorphic tangent ovals preserve DIFFERENCE at translation*' --rerun-tasks
+rtk ./gradlew :math:geometry:jsNodeTest --tests '*PathOpsF32Test.metamorphic tangent ovals preserve DIFFERENCE at translation*' --rerun-tasks
+```
+
+Both failed with `path-f32-projection-collapse`. The same projected pair had a common rounded
+F32 endpoint near `(3010, 3004.9677734375)`, but distinct F64 endpoints at `x = ±5.118465e-6`
+and no local witness. The exact tangency witness was preserved separately at `(3010, 3005)`;
+therefore propagating its authority would have violated the local-witness rule. The failure was
+caused by `2^-23` normalized flattening being finer than the translated F32 lattice, not by a
+JVM/JS rounding divergence.
+
+GREEN:
+
+```text
+rtk ./gradlew :math:geometry:jvmTest --tests '*PathOpsF32Test.*tangent ovals*' --rerun-tasks
+15 tests completed, 0 failed
+
+rtk ./gradlew :math:geometry:jsNodeTest --tests '*PathOpsF32Test.*tangent ovals*' --rerun-tasks
+BUILD SUCCESSFUL
+
+rtk ./gradlew :math:geometry:jvmTest --tests '*PathOpsHybridTopologyF32Test*' --tests '*PathOpsF32Test*' --rerun-tasks
+89 tests completed, 0 failed
+
+rtk ./gradlew :math:geometry:jsNodeTest --rerun-tasks
+BUILD SUCCESSFUL
+```
+
+The fixed public budget frontier remains `4_329`: for the two overlapping four-edge rectangles,
+the independently audited deterministic phases are source registry/index `1_360`, hybrid
+projection/claims `1_341`, DCEL `1_186`, and extraction/Booth/writer `442`. Their checked sum is
+`1_360 + 1_341 + 1_186 + 442 = 4_329`; `4_328` returns exactly
+`path-candidate-limit`, `4_329` succeeds, and forward/reverse canonical inputs produce identical
+`PathF32` on both JVM and JS.
+
+### Claim-fixture limit and residual audit
+
+The public precise-F64 fixture reaches the production registry, which atomizes every connected
+exact collinear overlap before the hybrid claim validator. Consequently it cannot expose two
+different witnesses with truly overlapping interiors without bypassing that registry (forbidden
+for these black-box tests). Coverage therefore proves adjacent atomic intervals succeed and
+distinct disjoint witnesses cannot consume one another; the transactional strict-interior guard
+is exercised by the production implementation and rejects such a state if one is ever proposed.
+
+No Task-2 residual correctness concern is known. The only deferred audit remains the historical
+`PathSourceTopologyF64` dynamic `consume()` sites listed above: the hybrid pipeline does not call
+the legacy adapter, and Task 5 owns the global conversion of those historical debits.

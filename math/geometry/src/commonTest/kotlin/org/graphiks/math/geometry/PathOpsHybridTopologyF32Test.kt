@@ -4,12 +4,53 @@ import kotlin.math.pow
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class PathOpsHybridTopologyF32Test {
     @Test
+    fun `strict source parameter ULP boundary rejects the sixteenth step including signed zero`() {
+        val oneF64 = 1.0
+        val fifteenUlpsF64 = Double.fromBits(oneF64.toRawBits() + 15L)
+        val sixteenUlpsF64 = Double.fromBits(oneF64.toRawBits() + 16L)
+
+        assertTrue(PathPredicatesF64.almostEqualUlps(oneF64, fifteenUlpsF64, maxUlps = 16, nearZeroMaxUlps = 0))
+        assertFalse(PathPredicatesF64.almostEqualUlps(oneF64, sixteenUlpsF64, maxUlps = 16, nearZeroMaxUlps = 0))
+        assertTrue(PathPredicatesF64.almostEqualUlps(-0.0, 0.0, maxUlps = 16, nearZeroMaxUlps = 0))
+        assertFalse(
+            PathPredicatesF64.almostEqualUlps(
+                0.0,
+                Double.fromBits(16L),
+                maxUlps = 16,
+                nearZeroMaxUlps = 0,
+            ),
+        )
+    }
+
+    @Test
+    fun `hybrid simplify preserves a flattened quadratic carrier instead of its endpoint chord`() {
+        val curved = PathBuilder()
+            .moveTo(0f, 0f)
+            .quadTo(1f, 2f, 2f, 0f)
+            .lineTo(2f, -1f)
+            .lineTo(0f, -1f)
+            .close()
+            .build()
+
+        val result = PathOpsF32.simplify(curved)
+
+        // The quadratic reaches y = 1 at x = 1, so this literal probe is inside the source
+        // region but would be outside the forbidden endpoint chord from (0, 0) to (2, 0).
+        assertTrue(PathAnalysisF32.contains(result, Point2F32(1f, .5f)))
+        assertEquals(false, PathAnalysisF32.contains(result, Point2F32(1f, 1.25f)))
+    }
+
+    @Test
     fun `point witness permits only its two local projected branches through the hybrid arrangement`() {
-        val e = 2.0.pow(-25)
+        // These two F64 rays share one exact source event, while their other endpoints remain
+        // distinct F32 values.  The public result must therefore retain the local junction
+        // without granting it authority over a remote projected endpoint.
+        val e = 2.0.pow(-22)
         val lower = normalizedContourF64(
             0.0 to 1.0,
             1.0 to 1.0 - e,
@@ -51,6 +92,27 @@ class PathOpsHybridTopologyF32Test {
     }
 
     @Test
+    fun `projected endpoint contact without an exact witness rejects before the hybrid DCEL`() {
+        val e = 2.0.pow(-25)
+        val left = normalizedContourF64(
+            0.0 to 1.0 - e,
+            1.0 to 1.0 - e,
+            1.0 to -1.0,
+            0.0 to -1.0,
+        )
+        val right = normalizedContourF64(
+            1.0 to 1.0 + e,
+            2.0 to 1.0 + e,
+            2.0 to 3.0,
+            1.0 to 3.0,
+        )
+
+        val error = assertFailsWith<IllegalStateException> { projectTogetherF64(left, right) }
+
+        assertEquals("path-f32-projection-collapse", error.message)
+    }
+
+    @Test
     fun `adjacent backtracking projected overlap without exact proof rejects`() {
         // These are distinct F64 rays at the shared vertex, but both y offsets round to the
         // same F32 zero rail.  The only exact contact is the adjacent endpoint.
@@ -65,6 +127,36 @@ class PathOpsHybridTopologyF32Test {
         val error = assertFailsWith<IllegalStateException> { projectOneF64(contour) }
 
         assertEquals("path-f32-projection-collapse", error.message)
+    }
+
+    @Test
+    fun `staggered n way exact overlaps stay atomic across operands and contour relabeling`() {
+        val leftF32 = RectF32.ofLTRB(0f, 0f, 4f, 1f)
+        val middleF32 = RectF32.ofLTRB(1f, 0f, 5f, 1f)
+        val rightF32 = RectF32.ofLTRB(2f, 0f, 6f, 1f)
+
+        fun path(vararg rectanglesF32: RectF32): PathF32 {
+            val builder = PathBuilder()
+            rectanglesF32.forEach(builder::addRect)
+            return builder.build()
+        }
+
+        val variants = listOf(
+            path(leftF32, rightF32) to path(middleF32),
+            path(rightF32, leftF32) to path(middleF32),
+            path(middleF32) to path(leftF32, rightF32),
+        )
+
+        variants.forEach { (firstF32, secondF32) ->
+            val result = PathOpsF32.op(firstF32, secondF32, PathBooleanOp.UNION)
+
+            listOf(.5f, 1.5f, 3f, 4.5f, 5.5f).forEach { xF32 ->
+                assertTrue(PathAnalysisF32.contains(result, Point2F32(xF32, .5f)))
+            }
+            assertEquals(false, PathAnalysisF32.contains(result, Point2F32(-.25f, .5f)))
+            assertEquals(false, PathAnalysisF32.contains(result, Point2F32(6.25f, .5f)))
+            assertEquals(RectF32.ofLTRB(0f, 0f, 6f, 1f), PathAnalysisF32.bounds(result))
+        }
     }
 
     @Test
@@ -106,21 +198,20 @@ class PathOpsHybridTopologyF32Test {
     fun `hybrid arrangement debits the exact candidate budget frontier deterministically`() {
         val first = PathBuilder().addRect(RectF32.ofLTRB(0f, 0f, 2f, 2f)).build()
         val second = PathBuilder().addRect(RectF32.ofLTRB(1f, 0f, 3f, 2f)).build()
-        val requiredBudgetI32 = firstSuccessfulHybridBudgetI32(first, second)
 
         val belowError = assertFailsWith<IllegalStateException> {
             PathOpsF32.op(
                 first,
                 second,
                 PathBooleanOp.UNION,
-                PathOpsLimitsI32(maxCandidateProbes = requiredBudgetI32 - 1),
+                PathOpsLimitsI32(maxCandidateProbes = overlappingRectanglesHybridBudgetI32 - 1),
             )
         }
         val atBoundary = PathOpsF32.op(
             first,
             second,
             PathBooleanOp.UNION,
-            PathOpsLimitsI32(maxCandidateProbes = requiredBudgetI32),
+            PathOpsLimitsI32(maxCandidateProbes = overlappingRectanglesHybridBudgetI32),
         )
 
         assertEquals("path-candidate-limit", belowError.message)
@@ -132,32 +223,30 @@ class PathOpsHybridTopologyF32Test {
     fun `hybrid budget frontier is invariant when canonical inputs are permuted`() {
         val left = PathBuilder().addRect(RectF32.ofLTRB(0f, 0f, 2f, 2f)).build()
         val right = PathBuilder().addRect(RectF32.ofLTRB(1f, 0f, 3f, 2f)).build()
-        val forwardBudgetI32 = firstSuccessfulHybridBudgetI32(left, right)
-        val reverseBudgetI32 = firstSuccessfulHybridBudgetI32(right, left)
 
         val belowError = assertFailsWith<IllegalStateException> {
             PathOpsF32.op(
                 right,
                 left,
                 PathBooleanOp.UNION,
-                PathOpsLimitsI32(maxCandidateProbes = reverseBudgetI32 - 1),
+                PathOpsLimitsI32(maxCandidateProbes = overlappingRectanglesHybridBudgetI32 - 1),
             )
         }
         val forward = PathOpsF32.op(
             left,
             right,
             PathBooleanOp.UNION,
-            PathOpsLimitsI32(maxCandidateProbes = forwardBudgetI32),
+            PathOpsLimitsI32(maxCandidateProbes = overlappingRectanglesHybridBudgetI32),
         )
         val reverse = PathOpsF32.op(
             right,
             left,
             PathBooleanOp.UNION,
-            PathOpsLimitsI32(maxCandidateProbes = reverseBudgetI32),
+            PathOpsLimitsI32(maxCandidateProbes = overlappingRectanglesHybridBudgetI32),
         )
 
-        assertEquals(forwardBudgetI32, reverseBudgetI32)
         assertEquals("path-candidate-limit", belowError.message)
+        assertEquals(forward, reverse)
         listOf(Point2F32(.5f, 1f), Point2F32(1.5f, 1f), Point2F32(2.5f, 1f)).forEach { probeF32 ->
             assertEquals(PathAnalysisF32.contains(forward, probeF32), PathAnalysisF32.contains(reverse, probeF32))
         }
@@ -253,7 +342,7 @@ class PathOpsHybridTopologyF32Test {
     }
 
     @Test
-    fun `overlapping exact witness claims reject atomically`() {
+    fun `atomic n way exact witness intervals do not create pairwise claim conflicts`() {
         val lower = normalizedContourF64(
             0.0 to 0.0,
             4.0 to 0.0,
@@ -271,18 +360,28 @@ class PathOpsHybridTopologyF32Test {
             3.5 to 3.0,
         )
 
-        val error = assertFailsWith<IllegalStateException> {
-            projectTogetherF64(lower, first, second)
-        }
+        val result = projectTogetherF64(lower, first, second)
 
-        assertEquals("path-f32-projection-collapse", error.message)
+        assertTrue(PathAnalysisF32.contains(result, Point2F32(2f, .5f)))
+        assertTrue(PathAnalysisF32.contains(result, Point2F32(.5f, 2f)))
+        assertTrue(PathAnalysisF32.contains(result, Point2F32(3.5f, 2f)))
+        assertEquals(false, PathAnalysisF32.contains(result, Point2F32(-.25f, .5f)))
     }
 
     @Test
-    fun `under threshold witness drops only its collapsed source contour`() {
-        val result = projectUnderThresholdWitnessFixtureF32()
+    fun `collapsed hybrid incidence rejects instead of silently skipping a partial contour`() {
+        val contour = normalizedContourF64(
+            0.0 to 0.0,
+            1.0 to 0.0,
+            1.0 + 2.0.pow(-25) to 1.0e-46,
+            2.0 to 0.0,
+            2.0 to 1.0,
+            0.0 to 1.0,
+        )
 
-        assertTrue(PathAnalysisF32.contains(result, Point2F32(-0.5e-8f, 0f)))
+        val error = assertFailsWith<IllegalStateException> { projectOneF64(contour) }
+
+        assertEquals("path-f32-projection-collapse", error.message)
     }
 }
 
@@ -404,23 +503,10 @@ private fun pathVerticesF32(path: PathF32): List<Point2F32> = buildList {
     }
 }
 
-private fun firstSuccessfulHybridBudgetI32(first: PathF32, second: PathF32): Int {
-    var lowerI32 = 1
-    var upperI32 = 16_384
-    while (lowerI32 < upperI32) {
-        val middleI32 = lowerI32 + (upperI32 - lowerI32) / 2
-        try {
-            PathOpsF32.op(
-                first,
-                second,
-                PathBooleanOp.UNION,
-                PathOpsLimitsI32(maxCandidateProbes = middleI32),
-            )
-            upperI32 = middleI32
-        } catch (error: IllegalStateException) {
-            if (error.message != "path-candidate-limit") throw error
-            lowerI32 = middleI32 + 1
-        }
-    }
-    return lowerI32
-}
+// Hand-derived fixed ledger for two four-edge rectangles. The eight input edges become twelve
+// canonical source spans/carriers at the two shared vertical cuts, with nine exact witnesses and
+// eight hybrid vertices. The audited deterministic phase totals are source registry/index 1_360,
+// projection/claims 1_341, DCEL 1_186, and boundary extraction + Booth + writer 442 = 4_329.
+// Keeping the sum literal makes a newly introduced traversal or comparator debit visible at
+// `limit - 1` instead of rediscovering a backend-local threshold by probing it in the test.
+private const val overlappingRectanglesHybridBudgetI32 = 4_329

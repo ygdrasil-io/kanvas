@@ -253,7 +253,12 @@ private fun writeHybridBoundaryTracesF64F32(
     // The temporary writer only walks the immutable traces selected by the hybrid DCEL.  Reserve
     // every point/area/builder pass up front from those canonical trace lengths; it must not add
     // traversal-order-dependent debits while it serializes the public PathF32.
-    candidateWorkBudget.consumePreflightI64(vertexCountI64 * 5L + tracesF64F32.size.toLong() * 3L)
+    candidateWorkBudget.consumePreflightI64(
+        checkedPathWorkAddI64(
+            checkedPathWorkMultiplyI64(vertexCountI64, 5L),
+            checkedPathWorkMultiplyI64(tracesF64F32.size.toLong(), 3L),
+        ),
+    )
     val builder = PathBuilder(fillRule)
     tracesF64F32.forEach { traceF64F32 ->
         val halfEdgesF64F32 = traceF64F32.halfEdgesF64F32
@@ -280,7 +285,10 @@ private fun inputEdgesF64(
     normalization: PathNormalizationF64,
     limits: PathOpsLimitsI32,
 ): List<PathInputEdgeF64> {
-    val policy = PathFlatteningPolicyF64(limits = limits)
+    val policy = PathFlatteningPolicyF64(
+        tolerance = normalization.projectionLatticeFlatteningToleranceF64(),
+        limits = limits,
+    )
     val vertices = mutableListOf<PathInputVertexF64>()
     val seeds = mutableListOf<PathInputEdgeSeedF64>()
 

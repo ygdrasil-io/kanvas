@@ -2,8 +2,10 @@ package org.graphiks.math.geometry
 
 import org.graphiks.math.vector.Vector2F32
 import org.graphiks.math.vector.Vector2F64
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.pow
 
 internal data class PathNormalizationF64(
     val origin: Point2F64,
@@ -28,6 +30,39 @@ internal data class PathNormalizationF64(
 // Kotlin/JS represents `Float` values with JavaScript numbers at some call boundaries. Rebuild
 // through the raw IEEE-754 payload so the normalization boundary has the same F32 lattice as JVM.
 private fun roundedNormalizedCoordinateF32(value: Double): Float = Float.fromBits(value.toFloat().toRawBits())
+
+/**
+ * The source flattener must not resolve a carrier more finely than the F32 lattice that will
+ * embed it.  Otherwise two F64-only micro sections can round to a spurious F32 endpoint contact
+ * away from their exact witness.  The bound comes solely from the maximum observable F32 spacing
+ * over this normalization rectangle: `2 * ulpF32(worldBound) * scale`.
+ *
+ * The lower bound keeps the established identity/small-scale precision.  The upper bound limits
+ * the approximation even when a finite F32 input is so far from the origin that its lattice is
+ * coarse; a material projected collapse is then still rejected by the hybrid guard.
+ */
+internal fun PathNormalizationF64.projectionLatticeFlatteningToleranceF64(): Double {
+    val halfExtentF64 = 0.5 / scale
+    val maximumWorldMagnitudeF64 = max(
+        abs(origin.x) + halfExtentF64,
+        abs(origin.y) + halfExtentF64,
+    )
+    val latticeStepF64 = f32LatticeStepAtMagnitudeF64(maximumWorldMagnitudeF64)
+    return (latticeStepF64 * scale * 2.0)
+        .coerceAtLeast(2.0.pow(-23))
+        .coerceAtMost(2.0.pow(-12))
+}
+
+private fun f32LatticeStepAtMagnitudeF64(magnitudeF64: Double): Double {
+    val roundedF32 = Float.fromBits(magnitudeF64.toFloat().toRawBits())
+    val roundedBitsI32 = roundedF32.toRawBits()
+    val adjacentF32 = if (roundedBitsI32 == Float.MAX_VALUE.toRawBits()) {
+        Float.fromBits(roundedBitsI32 - 1)
+    } else {
+        Float.fromBits(roundedBitsI32 + 1)
+    }
+    return abs(adjacentF32.toDouble() - roundedF32.toDouble())
+}
 
 internal fun pathNormalizationF64(paths: List<PathF32>): PathNormalizationF64 {
     var left = Double.POSITIVE_INFINITY

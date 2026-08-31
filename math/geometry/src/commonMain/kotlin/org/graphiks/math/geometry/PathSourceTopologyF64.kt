@@ -62,9 +62,13 @@ internal sealed interface PathContactWitnessF64 {
 }
 
 internal data class PathOverlapWitnessIncidenceF64(
+    /** Exact registry carrier identity; never reconstructed from a source-span scan. */
+    val inputEdgeIdI32: Int,
     val sourceSpanIdsI64: List<Long>,
     val startParameterF64: Double,
     val endParameterF64: Double,
+    val startVertexIdentityF64: PathVertexIdentityF64,
+    val endVertexIdentityF64: PathVertexIdentityF64,
 )
 
 // Temporary Task-1 bridge. It follows a source section to a legacy boundary half-edge and is
@@ -96,12 +100,6 @@ private data class PathSourceSectionReferenceF64(
 private data class PathSourceTopologyIndexF64(
     val sectionsByInputEdgeIdI32: Map<Int, List<PathSourceSectionReferenceF64>>,
     val spanIdsByEndpointIdentityF64: Map<PathVertexIdentityF64, List<Long>>,
-    val endpointIdentitiesByInputAndParameterF64: Map<PathSourceEndpointParameterKeyF64, Set<PathVertexIdentityF64>>,
-)
-
-private data class PathSourceEndpointParameterKeyF64(
-    val inputEdgeIdI32: Int,
-    val parameterBitsI64: Long,
 )
 
 private data class PathLegacySectionProvenanceIndexF64(
@@ -165,13 +163,12 @@ private fun buildPathSourceTopologyIndexF64(
     spansF64: List<PathSourceSpanF64>,
     candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
 ): PathSourceTopologyIndexF64 {
-    // The exact index owns three canonical maps. Reserve their construction before any source
-    // section is inserted; the later per-entry historical debits remain part of Task 5's global
-    // frontier audit.
-    preflightSourceTopologyLinearF64(3L, candidateWorkBudgetI32)
+    // The exact registry already attaches endpoint identities to every overlap incidence.  This
+    // topology index owns only source sections and endpoint-to-span membership; it never builds
+    // an ULP neighbourhood to recover an identity later.
+    preflightSourceTopologyLinearF64(2L, candidateWorkBudgetI32)
     val sectionsByInputEdgeIdI32 = mutableMapOf<Int, MutableList<PathSourceSectionReferenceF64>>()
     val spanIdsByEndpointIdentityF64 = mutableMapOf<PathVertexIdentityF64, MutableSet<Long>>()
-    val endpointIdentitiesByInputAndParameterF64 = mutableMapOf<PathSourceEndpointParameterKeyF64, MutableSet<PathVertexIdentityF64>>()
     spansF64.forEach { spanF64 ->
         listOfNotNull(
             spanF64.startLocationF64.vertexIdentityF64,
@@ -184,20 +181,6 @@ private fun buildPathSourceTopologyIndexF64(
             candidateWorkBudgetI32.consume()
             sectionsByInputEdgeIdI32.getOrPut(sectionF64.inputEdgeIdI32) { mutableListOf() } +=
                 PathSourceSectionReferenceF64(spanF64, sectionF64)
-            addSourceEndpointIdentityF64(
-                endpointIdentitiesByInputAndParameterF64,
-                sectionF64.inputEdgeIdI32,
-                sectionF64.startParameterF64,
-                sectionF64.startIdentityF64,
-                candidateWorkBudgetI32,
-            )
-            addSourceEndpointIdentityF64(
-                endpointIdentitiesByInputAndParameterF64,
-                sectionF64.inputEdgeIdI32,
-                sectionF64.endParameterF64,
-                sectionF64.endIdentityF64,
-                candidateWorkBudgetI32,
-            )
         }
     }
     return PathSourceTopologyIndexF64(
@@ -212,33 +195,8 @@ private fun buildPathSourceTopologyIndexF64(
         spanIdsByEndpointIdentityF64 = spanIdsByEndpointIdentityF64.mapValues { (_, idsI64) ->
             sortedSourceTopologyF64(idsI64.toList(), candidateWorkBudgetI32) { firstI64, secondI64 -> firstI64.compareTo(secondI64) }
         },
-        endpointIdentitiesByInputAndParameterF64 = endpointIdentitiesByInputAndParameterF64,
     )
 }
-
-private fun addSourceEndpointIdentityF64(
-    identitiesF64: MutableMap<PathSourceEndpointParameterKeyF64, MutableSet<PathVertexIdentityF64>>,
-    inputEdgeIdI32: Int,
-    parameterF64: Double,
-    identityF64: PathVertexIdentityF64,
-    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
-) {
-    // The topology's endpoint snap has a fixed sixteen-ULP policy.  Materialize that finite
-    // neighbourhood once in the authoritative index, so witness recovery is one exact map
-    // lookup rather than a parameter scan through source sections.
-    val parameterBitsI64 = canonicalSourceParameterBitsI64(parameterF64)
-    candidateWorkBudgetI32.consumePreflightI64(33L)
-    (-16L..16L).forEach { offsetI64 ->
-        val keyF64 = PathSourceEndpointParameterKeyF64(
-            inputEdgeIdI32 = inputEdgeIdI32,
-            parameterBitsI64 = parameterBitsI64 + offsetI64,
-        )
-        identitiesF64.getOrPut(keyF64) { linkedSetOf() } += identityF64
-    }
-}
-
-private fun canonicalSourceParameterBitsI64(parameterF64: Double): Long =
-    if (parameterF64 == 0.0) 0L else parameterF64.toRawBits()
 
 private fun mergeSourceSpansF64(
     splitEdgesF64: List<PathSplitEdgeF64>,
@@ -351,23 +309,14 @@ private fun buildContactWitnessesF64(
         val endIdentitiesF64 = linkedSetOf<PathVertexIdentityF64>()
         preflightSourceTopologyLinearF64(canonicalIncidencesF64.size.toLong() * 4L, candidateWorkBudgetI32)
         canonicalIncidencesF64.forEach { incidenceF64 ->
-            startIdentitiesF64 += sourceEndpointIdentityF64(
-                sourceTopologyIndexF64,
-                incidenceF64.inputEdgeIdI32,
-                incidenceF64.startParameterF64,
-                candidateWorkBudgetI32,
-            )
-            endIdentitiesF64 += sourceEndpointIdentityF64(
-                sourceTopologyIndexF64,
-                incidenceF64.inputEdgeIdI32,
-                incidenceF64.endParameterF64,
-                candidateWorkBudgetI32,
-            )
+            startIdentitiesF64 += incidenceF64.startVertexIdentityF64
+            endIdentitiesF64 += incidenceF64.endVertexIdentityF64
         }
         val startIdentityF64 = startIdentitiesF64.firstOrNull() ?: throw IllegalStateException("path-arrangement-inconsistent")
         val endIdentityF64 = endIdentitiesF64.firstOrNull() ?: throw IllegalStateException("path-arrangement-inconsistent")
         val incidencesF64 = canonicalIncidencesF64.map { incidenceF64 ->
             PathOverlapWitnessIncidenceF64(
+                inputEdgeIdI32 = incidenceF64.inputEdgeIdI32,
                 sourceSpanIdsI64 = traversedSourceSpanIdsF64(
                     sourceTopologyIndexF64,
                     incidenceF64.inputEdgeIdI32,
@@ -377,6 +326,8 @@ private fun buildContactWitnessesF64(
                 ),
                 startParameterF64 = incidenceF64.startParameterF64,
                 endParameterF64 = incidenceF64.endParameterF64,
+                startVertexIdentityF64 = incidenceF64.startVertexIdentityF64,
+                endVertexIdentityF64 = incidenceF64.endVertexIdentityF64,
             )
         }
         if (incidencesF64.any { incidenceF64 -> incidenceF64.sourceSpanIdsI64.isEmpty() }) {
@@ -417,18 +368,6 @@ private fun buildContactWitnessesF64(
         )
     }
     return pointsF64 + overlapsF64
-}
-
-private fun sourceEndpointIdentityF64(
-    sourceTopologyIndexF64: PathSourceTopologyIndexF64,
-    inputEdgeIdI32: Int,
-    parameterF64: Double,
-    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
-): PathVertexIdentityF64 {
-    candidateWorkBudgetI32.consume()
-    return sourceTopologyIndexF64.endpointIdentitiesByInputAndParameterF64[
-        PathSourceEndpointParameterKeyF64(inputEdgeIdI32, canonicalSourceParameterBitsI64(parameterF64))
-    ]?.singleOrNull() ?: throw IllegalStateException("path-arrangement-inconsistent")
 }
 
 private fun traversedSourceSpanIdsF64(

@@ -39,3 +39,13 @@ verification passed 299 tests; `git diff --check` passed. New hybrid maps, array
 sorts, containment, writer work and immutable conversion preflight deterministically. The
 historical source-topology debit audit remains explicitly carried to Task 5 under breaker ruling
 9; details and exact lines are in `task-2-report.md`.
+
+Fix round 1: closed the durable carrier/atomic-overlap/authority/limit/budget findings. The
+hybrid flattener now derives a bounded tolerance from the observable denormalized F32 lattice,
+so translated tangent ovals no longer manufacture an unwitnessed micro-carrier contact; all five
+operations × three transforms are green on JVM and JS without relaxing the exact witness guard.
+The direct endpoint ticket registry replaces source-topology ±16-ULP recovery, staggered n-way
+overlaps remain atomic across operands, and the exact `4_328` reject / `4_329` success frontier
+is identical under permutations on both targets. Round-1 focused JVM verification passed 89
+tests and complete JS passed; details, RED evidence and the Task-5 historical-debit carry are in
+`task-2-report.md`.
