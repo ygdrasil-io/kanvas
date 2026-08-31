@@ -48,7 +48,6 @@ internal sealed interface PathContactWitnessF64 {
 internal data class PathSourceTopologyF64(
     val sourceSpansF64: List<PathSourceSpanF64>,
     val contactWitnessesF64: List<PathContactWitnessF64>,
-    internal val legacySplitEdgesF64: List<PathSplitEdgeF64>,
 )
 
 internal fun splitPathSourceTopologyF64(
@@ -125,13 +124,63 @@ internal fun splitPathSourceTopologyF64(
                 }.map(PathSourceSpanF64::sourceSpanIdI64).sorted(),
             )
         }
-    return PathSourceTopologyF64(spansF64, contactsF64, splitEdgesF64)
+    return PathSourceTopologyF64(spansF64, contactsF64)
 }
 
 // TODO(Task 3): delete once PathArrangementF64F32 consumes [PathSourceTopologyF64] directly.
 // This adapter retains source-derived data; it never tries to recover provenance from coordinates.
-internal fun PathSourceTopologyF64.toPathSplitEdgesF64ForLegacyArrangement(): List<PathSplitEdgeF64> =
-    legacySplitEdgesF64
+internal fun PathSourceTopologyF64.toPathSplitEdgesF64ForLegacyArrangement(): List<PathSplitEdgeF64> {
+    // TODO(Task 3): the hybrid arrangement consumes spans directly.  Until then, section order
+    // is the sole source of legacy edges: coordinates are copied from sections, never searched
+    // or used to recover provenance.
+    val orderedSpansF64 = sourceSpansF64.sortedBy(PathSourceSpanF64::sourceSpanIdI64)
+    val edgeCountI32 = orderedSpansF64.sumOf { spanF64 -> spanF64.flattenedSectionsF64.size }
+    val edgeIdsBySpanF64 = mutableMapOf<Long, IntRange>()
+    var nextEdgeIdI32 = 0
+    orderedSpansF64.forEach { spanF64 ->
+        val endExclusiveI32 = nextEdgeIdI32 + spanF64.flattenedSectionsF64.size
+        edgeIdsBySpanF64[spanF64.sourceSpanIdI64] = nextEdgeIdI32 until endExclusiveI32
+        nextEdgeIdI32 = endExclusiveI32
+    }
+    return buildList(edgeCountI32) {
+        orderedSpansF64.forEach { spanF64 ->
+            val edgeIdsI32 = edgeIdsBySpanF64.getValue(spanF64.sourceSpanIdI64)
+            spanF64.flattenedSectionsF64.forEachIndexed { sectionIndexI32, sectionF64 ->
+                val edgeIdI32 = edgeIdsI32.first + sectionIndexI32
+                val startIdentityF64 = when (sectionIndexI32) {
+                    0 -> requireNotNull(spanF64.startLocationF64.vertexIdentityF64)
+                    else -> legacySectionIdentityF64(edgeIdsI32.first + sectionIndexI32 - 1, edgeIdI32)
+                }
+                val endIdentityF64 = when (sectionIndexI32) {
+                    edgeIdsI32.last - edgeIdsI32.first -> requireNotNull(spanF64.endLocationF64.vertexIdentityF64)
+                    else -> legacySectionIdentityF64(edgeIdI32, edgeIdI32 + 1)
+                }
+                add(
+                    PathSplitEdgeF64(
+                        sourceId = edgeIdI32,
+                        operand = spanF64.operand,
+                        contourIndexI32 = spanF64.contourIndexI32,
+                        sourceSegmentIndexI32 = spanF64.startLocationF64.sourceSegmentIndexI32,
+                        sourceStartParameterF64 = sectionF64.startParameterF64,
+                        sourceEndParameterF64 = sectionF64.endParameterF64,
+                        startIdentity = startIdentityF64,
+                        endIdentity = endIdentityF64,
+                        start = sectionF64.startPointF64,
+                        end = sectionF64.endPointF64,
+                        windingDelta = spanF64.windingDeltaI32,
+                    ),
+                )
+            }
+        }
+    }
+}
+
+private fun legacySectionIdentityF64(firstEdgeIdI32: Int, secondEdgeIdI32: Int): PathVertexIdentityF64 =
+    PathVertexIdentityF64(
+        incidentEdgeIds = listOf(firstEdgeIdI32, secondEdgeIdI32).sorted(),
+        parameterByEdgeId = mapOf(firstEdgeIdI32 to 1.0, secondEdgeIdI32 to 0.0),
+        originalPointF32 = null,
+    )
 
 private fun PathSplitEdgeF64.toPathFlattenedSectionF64(): PathFlattenedSectionF64 = PathFlattenedSectionF64(
     startPointF64 = start,

@@ -81,3 +81,16 @@ BUILD SUCCESSFUL
 ```
 
 The historical JS RED artifact was not retained verbatim. The JVM result above preserves the exact observable message for the round-1 correction; the earlier report's JS wording is therefore only a summary, not a quoted log.
+
+## Fix round 2
+
+The temporary arrangement adapter now materializes every legacy split edge solely from the ordered source spans and their flattened sections. It derives only internal-section identities from the canonical span/section order; source endpoint identities remain attached to the span locations. The parallel raw-split side channel was removed. Input closing edges now select the destination segment as authority and force a seam or segment transition to `[0.0, 1.0]`, retaining both coincident locations.
+
+RED during this round: before initializing unreferenced coincident locations, the production-routing mutation failed `PathOpsF32Test` with the exact JVM error `java.util.NoSuchElementException: Key 0 is missing in the map.` from `inputEdgesF64`. GREEN followed after preserving the locations while initializing their incidence map.
+
+```text
+rtk ./gradlew :math:geometry:jvmTest --tests '*PathOpsHybridTopologyF32Test*' --tests '*PathFlatteningF64Test*' --tests '*PathIntersectionsF64Test*' --rerun-tasks
+BUILD SUCCESSFUL
+```
+
+Self-review: the adapter no longer transports raw split edges. Remaining work is limited to the follow-on hybrid DCEL: the existing legacy projection compactor is still isolated behind its prior compatibility branch and exact overlap witness materialization requires the registry export scheduled for the next topology step.

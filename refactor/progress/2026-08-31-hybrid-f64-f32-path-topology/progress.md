@@ -6,4 +6,6 @@ Completed 2026-08-31. Source segment/parameter provenance now traverses flatteni
 
 Fix round 1: production now constructs the source topology before the legacy arrangement, retains coincident source locations/seams, and carries exact-cut boundaries through source spans.
 
+Fix round 2: removed the legacy raw-split side channel; the transitional adapter emits all legacy edges from authoritative spans and flattened sections.
+
 The Task 1 regression suite and focused JVM/complete JS verification passed before commit. See `task-1-report.md` for commands and evidence.

@@ -232,8 +232,13 @@ private fun inputEdgesF64(
             operand = edge.operand,
             contourIndexI32 = edge.contourIndex,
             sourceSegmentIndexI32 = edge.end.sourceSegmentIndexI32,
-            sourceStartParameterF64 = edge.start.parameterF64,
-            sourceEndParameterF64 = edge.end.parameterF64,
+            // A destination location owns the segment.  Coincident MoveTo/segment starts are
+            // intentionally distinct locations: the first flattened section starts at 0.0;
+            // so do explicit and implicit closure seams.
+            sourceStartParameterF64 = if (
+                edge.start.sourceSegmentIndexI32 == edge.end.sourceSegmentIndexI32
+            ) edge.start.parameterF64 else 0.0,
+            sourceEndParameterF64 = if (edge.end.sourceSegmentIndexI32 == -1) 1.0 else edge.end.parameterF64,
             startIdentityF64 = identitiesByVertexId.getValue(edge.start.id),
             endIdentityF64 = identitiesByVertexId.getValue(edge.end.id),
             startPointF64 = edge.start.point,
@@ -501,7 +506,7 @@ private fun compactProjectedPointWitnessRunsF64(
         sourceFirstVertices = sourceFirstVertices,
         sourceLastVertices = sourceLastVertices,
         normalization = normalization,
-    ) ?: contour
+    ) ?: throw IllegalStateException("path-f32-projection-collapse")
 }
 
 private fun projectionOnlyWitnessRunEndF64(
