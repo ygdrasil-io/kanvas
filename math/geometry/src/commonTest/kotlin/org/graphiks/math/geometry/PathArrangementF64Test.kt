@@ -212,6 +212,8 @@ class PathArrangementF64Test {
 
     @Test
     fun `touching and collinear contours remain geometrically valid after splitting`() {
+        // Collinear subdivision is no longer an output-shape contract.  The public PathOps
+        // regression in PathOpsHybridTopologyF32Test covers its observable membership instead.
         val pointTouch = arrangementFromInputEdgesF64(
             closedContourEdgesF64(squarePointsF64(0.0, 0.0, 4.0, 4.0), PathOperand.FIRST, 0) +
                 closedContourEdgesF64(squarePointsF64(4.0, 4.0, 8.0, 8.0), PathOperand.SECOND, 10),
@@ -465,20 +467,6 @@ private fun assertContourGeometryF64(
     assertTrue(PathAnalysisF32.contains(result, secondInside))
     assertEquals(expectedBounds, assertNotNull(PathAnalysisF32.bounds(result)))
     assertTrue(contours.all { abs(signedAreaF64(it.vertices.map { vertex -> vertex.point })) > 0.0 })
-    contours.forEach { contour ->
-        val points = contour.vertices.map { it.point }
-        assertTrue(points.size >= 3)
-        points.indices.forEach { index ->
-            val previous = points[(index - 1 + points.size) % points.size]
-            val current = points[index]
-            val next = points[(index + 1) % points.size]
-            assertFalse(current == next)
-            assertFalse(
-                OrientationPredicateF64.sign(previous, current, next) == 0 &&
-                    PathPredicatesF64.onSegment(current, previous, next),
-            )
-        }
-    }
 }
 
 private fun expectedMembershipF64(

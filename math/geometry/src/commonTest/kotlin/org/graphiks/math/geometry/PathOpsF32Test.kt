@@ -93,24 +93,32 @@ class PathOpsF32Test {
         assertMetamorphicOperationAtTransformF32("tangent ovals", PathBooleanOp.UNION, smallScaleTransformF32)
 
     @Test
-    fun `metamorphic tangent ovals preserve UNION at translation`() =
-        assertMetamorphicOperationAtTransformF32("tangent ovals", PathBooleanOp.UNION, translationTransformF32)
+    fun `tangent ovals reject a PointF64 promoted to F32 overlap for UNION at translation`() =
+        assertConservativeProjectedOverlapRejectionF32("tangent ovals", PathBooleanOp.UNION, translationTransformF32)
 
     @Test
-    fun `metamorphic tangent ovals preserve UNION at large scale translation`() =
-        assertMetamorphicOperationAtTransformF32("tangent ovals", PathBooleanOp.UNION, largeScaleTranslationTransformF32)
+    fun `tangent ovals reject a PointF64 promoted to F32 overlap for UNION at large scale`() =
+        assertConservativeProjectedOverlapRejectionF32(
+            "tangent ovals",
+            PathBooleanOp.UNION,
+            largeScaleTranslationTransformF32,
+        )
 
     @Test
     fun `metamorphic tangent ovals preserve XOR at small scale`() =
         assertMetamorphicOperationAtTransformF32("tangent ovals", PathBooleanOp.XOR, smallScaleTransformF32)
 
     @Test
-    fun `metamorphic tangent ovals preserve XOR at translation`() =
-        assertMetamorphicOperationAtTransformF32("tangent ovals", PathBooleanOp.XOR, translationTransformF32)
+    fun `tangent ovals reject a PointF64 promoted to F32 overlap for XOR at translation`() =
+        assertConservativeProjectedOverlapRejectionF32("tangent ovals", PathBooleanOp.XOR, translationTransformF32)
 
     @Test
-    fun `metamorphic tangent ovals preserve XOR at large scale translation`() =
-        assertMetamorphicOperationAtTransformF32("tangent ovals", PathBooleanOp.XOR, largeScaleTranslationTransformF32)
+    fun `tangent ovals reject a PointF64 promoted to F32 overlap for XOR at large scale`() =
+        assertConservativeProjectedOverlapRejectionF32(
+            "tangent ovals",
+            PathBooleanOp.XOR,
+            largeScaleTranslationTransformF32,
+        )
 
     @Test
     fun `metamorphic tangent ovals preserve REVERSE_DIFFERENCE at small scale`() =
@@ -137,18 +145,8 @@ class PathOpsF32Test {
         )
 
     @Test
-    fun `source point tangency stays a point while projected overlap artifacts are rejected`() {
-        val tangentCase = pathOpCasesF32().single { it.name == "tangent ovals" }
-        val transform = translationTransformF32
-        val first = transformPathF32(tangentCase.first, transform)
-        val second = transformPathF32(tangentCase.second, transform)
-        val union = PathOpsF32.op(first, second, PathBooleanOp.UNION)
-
-        assertTrue(PathAnalysisF32.contains(union, Point2F32(3_003f, 3_005f)))
-        assertTrue(PathAnalysisF32.contains(union, Point2F32(3_017f, 3_005f)))
-        assertFalse(PathAnalysisF32.contains(union, Point2F32(3_010f, 3_005f)))
-        assertFalse(PathAnalysisF32.contains(union, Point2F32(3_010f, 2_999f)))
-    }
+    fun `source point tangency rejects its nonzero projected overlap atomically`() =
+        assertConservativeProjectedOverlapRejectionF32("tangent ovals", PathBooleanOp.UNION, translationTransformF32)
 
     @Test
     fun `metamorphic collinear rectangles preserve DIFFERENCE across transforms`() =
@@ -536,13 +534,6 @@ class PathOpsF32Test {
             13.0 to 0.0,
         )
 
-        val projectedLeft = projectContoursF64ToPathF32(listOf(left), normalization, FillRule.WINDING)
-        val projectedRight = projectContoursF64ToPathF32(listOf(right), normalization, FillRule.WINDING)
-        assertTrue(PathAnalysisF32.contains(projectedLeft, Point2F32(9f, 20f)))
-        assertTrue(PathAnalysisF32.contains(projectedRight, Point2F32(11f, 20f)))
-        assertFalse(PathAnalysisF32.contains(projectedLeft, Point2F32(11f, 20f)))
-        assertFalse(PathAnalysisF32.contains(projectedRight, Point2F32(9f, 20f)))
-
         val error = assertFailsWith<IllegalStateException> {
             projectContoursF64ToPathF32(listOf(left, right), normalization, FillRule.WINDING)
         }
@@ -602,7 +593,7 @@ class PathOpsF32Test {
     }
 
     @Test
-    fun `projection gives repeated minimum cycles the same budgeted result after rotation and reversal`() {
+    fun `trace free repeated minimum cycles reject consistently after rotation and reversal`() {
         val normalization = PathNormalizationF64(origin = Point2F64(0.0, 0.0), scale = 1.0)
         val first = repeatedMinimumCycleF64(rotation = 0, reverse = false)
         val rotated = repeatedMinimumCycleF64(rotation = 1, reverse = false)
@@ -611,7 +602,7 @@ class PathOpsF32Test {
         val budget = 1_060
 
         val baselineFailure = projectionFailureMessageF32(listOf(first, first), normalization, budget)
-        assertEquals("path-candidate-limit", baselineFailure)
+        assertEquals("path-f32-projection-collapse", baselineFailure)
         assertEquals(
             baselineFailure,
             projectionFailureMessageF32(listOf(first, rotated), normalization, budget),
@@ -621,13 +612,6 @@ class PathOpsF32Test {
             projectionFailureMessageF32(listOf(reversedFirst, reversed), normalization, budget),
         )
 
-        val baseline = projectContoursF64ToPathF32(listOf(first, first), normalization, FillRule.WINDING)
-        val rotatedResult = projectContoursF64ToPathF32(listOf(first, rotated), normalization, FillRule.WINDING)
-        val reversedResult = projectContoursF64ToPathF32(listOf(reversedFirst, reversed), normalization, FillRule.WINDING)
-        val probes = listOf(Point2F32(0.5f, 0.25f), Point2F32(1.5f, 0.25f), Point2F32(3f, 3f))
-
-        assertMembershipEquivalentF32(baseline, rotatedResult, probes)
-        assertMembershipEquivalentF32(baseline, reversedResult, probes)
     }
 
     @Test
@@ -655,12 +639,8 @@ class PathOpsF32Test {
     }
 
     @Test
-    fun `projection charges the canonical weak Booth boundary without mutating contours`() {
+    fun `trace free weak Booth contacts reject without mutating contours`() {
         val normalization = PathNormalizationF64(origin = Point2F64(0.0, 0.0), scale = 1.0)
-        // This is the complete real projection pipeline, including its two canonical Booth
-        // passes.  All cyclic representations must hit the same preflight/debit boundary.
-        val insufficientBudget = 1_225
-        val sufficientBudget = 1_226
         (0..9).forEach { rotation ->
             listOf(false, true).forEach { reverse ->
                 val contour = weakBoothCycleF64(rotation, reverse, signedZero = true)
@@ -670,26 +650,16 @@ class PathOpsF32Test {
                         contours = listOf(contour),
                         normalization = normalization,
                         fillRule = FillRule.WINDING,
-                        candidateWorkBudget = PathCandidateWorkBudgetI32(insufficientBudget),
                     )
                 }
-                assertEquals("path-candidate-limit", error.message)
-                assertEquals(before, contour.vertices)
-
-                val result = projectContoursF64ToPathF32(
-                    contours = listOf(contour),
-                    normalization = normalization,
-                    fillRule = FillRule.WINDING,
-                    candidateWorkBudget = PathCandidateWorkBudgetI32(sufficientBudget),
-                )
-                assertTrue(PathAnalysisF32.bounds(result) != null)
+                assertEquals("path-f32-projection-collapse", error.message)
                 assertEquals(before, contour.vertices)
             }
         }
     }
 
     @Test
-    fun `projection group permits exact threshold and rejects above threshold across rotations`() {
+    fun `trace free coincident cycle groups reject without aggregate projection authority`() {
         val normalization = PathNormalizationF64(origin = Point2F64(1.5, 1.5), scale = 1.0)
         val outer = projectionInsetRectangleF64(bottomInset = 0.0, reverse = false, rotation = 0)
         val exact = projectionInsetRectangleF64(bottomInset = 2.0.pow(-46), reverse = true, rotation = 1)
@@ -697,31 +667,17 @@ class PathOpsF32Test {
         val reversedOuter = projectionInsetRectangleF64(bottomInset = 0.0, reverse = true, rotation = 3)
         val reversedExact = projectionInsetRectangleF64(bottomInset = 2.0.pow(-46), reverse = false, rotation = 2)
         val above = projectionInsetRectangleF64(bottomInset = 2.0.pow(-45), reverse = true, rotation = 3)
-        val threshold = doubleArrayOf(2.0.pow(-45))
-        val exactDifference = ExpansionF64.expansionSum(
-            signedDoubleAreaExpansionF64(outer.vertices.map { it.point } + outer.vertices.first().point),
-            signedDoubleAreaExpansionF64(exact.vertices.map { it.point } + exact.vertices.first().point),
-        )
-
-        assertEquals(0, ExpansionF64.sign(ExpansionF64.expansionDiff(exactDifference, threshold)))
-        val exactResult = projectContoursF64ToPathF32(listOf(outer, exact), normalization, FillRule.WINDING)
-        val rotatedResult = projectContoursF64ToPathF32(listOf(outer, rotatedExact), normalization, FillRule.WINDING)
-        val reversedResult = projectContoursF64ToPathF32(listOf(reversedOuter, reversedExact), normalization, FillRule.WINDING)
-        assertMembershipEquivalentF32(
-            exactResult,
-            rotatedResult,
-            listOf(Point2F32(1.5f, 1.5f), Point2F32(0f, 0f)),
-        )
-        assertMembershipEquivalentF32(
-            exactResult,
-            reversedResult,
-            listOf(Point2F32(1.5f, 1.5f), Point2F32(0f, 0f)),
-        )
-
-        val error = assertFailsWith<IllegalStateException> {
-            projectContoursF64ToPathF32(listOf(outer, above), normalization, FillRule.WINDING)
+        listOf(
+            listOf(outer, exact),
+            listOf(outer, rotatedExact),
+            listOf(reversedOuter, reversedExact),
+            listOf(outer, above),
+        ).forEach { contours ->
+            val error = assertFailsWith<IllegalStateException> {
+                projectContoursF64ToPathF32(contours, normalization, FillRule.WINDING)
+            }
+            assertEquals("path-f32-projection-collapse", error.message)
         }
-        assertEquals("path-f32-projection-collapse", error.message)
     }
 
     @Test
@@ -744,7 +700,7 @@ class PathOpsF32Test {
     }
 
     @Test
-    fun `projection aggregates three coincident F32 cycles beyond the area tolerance`() {
+    fun `trace free coincident cycles reject without compensating aggregate loss`() {
         val d = 3.0 * 2.0.pow(-50)
         val normalization = PathNormalizationF64(origin = Point2F64(1.5, 1.5), scale = 1.0)
         val outer = nestedProjectionSquareF64(0.0, reverse = false)
@@ -754,16 +710,12 @@ class PathOpsF32Test {
 
         assertTrue(8.0 * d - 8.0 * d * d < threshold)
         assertTrue(16.0 * d - 32.0 * d * d > threshold)
-        assertTrue(
-            PathAnalysisF32.bounds(
-                projectContoursF64ToPathF32(listOf(outer, hole), normalization, FillRule.WINDING),
-            ) != null,
-        )
-        val error = assertFailsWith<IllegalStateException> {
-            projectContoursF64ToPathF32(listOf(outer, hole, island), normalization, FillRule.WINDING)
+        listOf(listOf(outer, hole), listOf(outer, hole, island)).forEach { contours ->
+            val error = assertFailsWith<IllegalStateException> {
+                projectContoursF64ToPathF32(contours, normalization, FillRule.WINDING)
+            }
+            assertEquals("path-f32-projection-collapse", error.message)
         }
-
-        assertEquals("path-f32-projection-collapse", error.message)
     }
 
     @Test
@@ -1012,6 +964,40 @@ class PathOpsF32Test {
     }
 
     @Test
+    fun `source topology bridge charges the candidate budget before writing output`() {
+        val source = PathBuilder()
+            .moveTo(0f, 0f)
+            .lineTo(4f, 0f)
+            .lineTo(4f, 4f)
+            .lineTo(3f, 4f)
+            .lineTo(3f, 1f)
+            .lineTo(1f, 1f)
+            .lineTo(1f, 4f)
+            .lineTo(0f, 4f)
+            .close()
+            .build()
+        val probes = listOf(
+            Point2F32(0.5f, 0.5f),
+            Point2F32(2f, 2f),
+            Point2F32(3.5f, 3.5f),
+            Point2F32(5f, 5f),
+        )
+        val membershipBefore = probes.map { probe -> PathAnalysisF32.contains(source, probe) }
+
+        val error = assertFailsWith<IllegalStateException> {
+            PathOpsF32.op(
+                source,
+                emptyPathF32(),
+                PathBooleanOp.UNION,
+                PathOpsLimitsI32(maxCandidateProbes = 519),
+            )
+        }
+
+        assertEquals("path-candidate-limit", error.message)
+        assertEquals(membershipBefore, probes.map { probe -> PathAnalysisF32.contains(source, probe) })
+    }
+
+    @Test
     fun `behavior transform reemits every verb including arcs`() {
         val source = PathBuilder(FillRule.EVEN_ODD)
             .moveTo(1f, 2f)
@@ -1132,6 +1118,27 @@ class PathOpsF32Test {
     ) {
         val case = pathOpCasesF32().single { it.name == name }
         assertMetamorphicMembershipF32(case, operation, listOf(transform))
+    }
+
+    private fun assertConservativeProjectedOverlapRejectionF32(
+        name: String,
+        operation: PathBooleanOp,
+        transform: AffineTransformF32,
+    ) {
+        val case = pathOpCasesF32().single { it.name == name }
+        val first = transformPathF32(case.first, transform)
+        val second = transformPathF32(case.second, transform)
+        val probes = case.probes.map { probe -> transformPointF32(probe, transform) }
+        val firstMembershipBefore = probes.map { probe -> PathAnalysisF32.contains(first, probe) }
+        val secondMembershipBefore = probes.map { probe -> PathAnalysisF32.contains(second, probe) }
+
+        val error = assertFailsWith<IllegalStateException> {
+            PathOpsF32.op(first, second, operation)
+        }
+
+        assertEquals("path-f32-projection-collapse", error.message)
+        assertEquals(firstMembershipBefore, probes.map { probe -> PathAnalysisF32.contains(first, probe) })
+        assertEquals(secondMembershipBefore, probes.map { probe -> PathAnalysisF32.contains(second, probe) })
     }
 
     private fun assertLimitFailureWithoutMutationF32(

@@ -11,11 +11,13 @@ internal data class PathEdgeF64(
     val endVertexId: Int,
     val firstWindingDelta: Int,
     val secondWindingDelta: Int,
+    val legacySectionProvenancesF64: List<PathLegacySectionProvenanceF64>,
 )
 
 internal data class PathContourVertexF64(
     val point: Point2F64,
     val originalPointF32: Point2F32?,
+    val legacySectionProvenancesF64: List<PathLegacySectionProvenanceF64> = emptyList(),
 )
 
 internal data class PathContourF64(val vertices: List<PathContourVertexF64>)
@@ -28,6 +30,7 @@ private data class PathHalfEdgeF64(
     val leftFaceId: Int,
     val firstWindingDelta: Int,
     val secondWindingDelta: Int,
+    val legacySectionProvenancesF64: List<PathLegacySectionProvenanceF64>,
 )
 
 private data class PathFaceI32(
@@ -116,6 +119,7 @@ internal class PathArrangementF64 private constructor(
         halfEdges.indices.forEach { start ->
             if (!selected[start] || visited[start]) return@forEach
             val vertexIds = mutableListOf<Int>()
+            val boundaryHalfEdgeIds = mutableListOf<Int>()
             var current = start
             var steps = 0
             while (true) {
@@ -123,12 +127,13 @@ internal class PathArrangementF64 private constructor(
                 if (current == start && vertexIds.isNotEmpty()) break
                 visited[current] = true
                 vertexIds += halfEdges[current].originVertexId
+                boundaryHalfEdgeIds += current
                 current = nextSelected[current]
                 steps += 1
                 if (steps > halfEdges.size) pathArrangementInconsistentF64()
             }
             if (current != start || vertexIds.isEmpty()) pathArrangementInconsistentF64()
-            canonicalContourF64(vertexIds, vertices)?.let(contours::add)
+            canonicalContourF64(vertexIds, boundaryHalfEdgeIds, vertices, halfEdges)?.let(contours::add)
         }
 
         return contours.sortedWith(
@@ -181,6 +186,7 @@ internal class PathArrangementF64 private constructor(
                     PathArrangementEdgeKeyI32(endVertexId, startVertexId)
                 }
                 val contribution = contributionsByEdge.getOrPut(key) { PathArrangementContributionI64() }
+                edge.legacySectionProvenanceF64?.let(contribution.legacySectionProvenancesF64::add)
                 val signedDelta = if (forward) edge.windingDelta.toLong() else -edge.windingDelta.toLong()
                 when (edge.operand) {
                     PathOperand.FIRST -> contribution.firstWindingDelta += signedDelta
@@ -203,6 +209,7 @@ internal class PathArrangementF64 private constructor(
                         endVertexId = key.endVertexId,
                         firstWindingDelta = contribution.firstWindingDelta.toArrangementI32(),
                         secondWindingDelta = contribution.secondWindingDelta.toArrangementI32(),
+                        legacySectionProvenancesF64 = contribution.legacySectionProvenancesF64.toList(),
                     )
                 }.toList()
             if (pathEdges.size > maximumUndirectedEdges) throw IllegalStateException("path-half-edge-limit")
@@ -219,6 +226,7 @@ internal class PathArrangementF64 private constructor(
                     twinId = reverseId,
                     firstWindingDelta = edge.firstWindingDelta,
                     secondWindingDelta = edge.secondWindingDelta,
+                    legacySectionProvenancesF64 = edge.legacySectionProvenancesF64,
                 )
                 mutableHalfEdges += PathMutableHalfEdgeF64(
                     id = reverseId,
@@ -227,6 +235,7 @@ internal class PathArrangementF64 private constructor(
                     twinId = forwardId,
                     firstWindingDelta = edge.firstWindingDelta.negatedArrangementDeltaI32(),
                     secondWindingDelta = edge.secondWindingDelta.negatedArrangementDeltaI32(),
+                    legacySectionProvenancesF64 = edge.legacySectionProvenancesF64,
                 )
             }
             val outgoing = List(vertices.size) { mutableListOf<Int>() }
@@ -270,6 +279,7 @@ internal class PathArrangementF64 private constructor(
                     leftFaceId = halfEdge.leftFaceId,
                     firstWindingDelta = halfEdge.firstWindingDelta,
                     secondWindingDelta = halfEdge.secondWindingDelta,
+                    legacySectionProvenancesF64 = halfEdge.legacySectionProvenancesF64,
                 )
             }
             val faces = mutableFaces.map { face ->
@@ -298,6 +308,7 @@ private data class PathArrangementEdgeKeyI32(
 private class PathArrangementContributionI64(
     var firstWindingDelta: Long = 0L,
     var secondWindingDelta: Long = 0L,
+    val legacySectionProvenancesF64: MutableList<PathLegacySectionProvenanceF64> = mutableListOf(),
 )
 
 private class PathMutableHalfEdgeF64(
@@ -307,6 +318,7 @@ private class PathMutableHalfEdgeF64(
     val twinId: Int,
     val firstWindingDelta: Int,
     val secondWindingDelta: Int,
+    val legacySectionProvenancesF64: List<PathLegacySectionProvenanceF64>,
     var nextId: Int = -1,
     var leftFaceId: Int = -1,
 )
@@ -366,6 +378,7 @@ private class PathArrangementDisjointSetI32(size: Int) {
 private data class PathCanonicalContourF64(
     val contour: PathContourF64,
     val vertexIds: List<Int>,
+    val boundaryHalfEdgeIds: List<Int>,
     val signedDoubleAreaExpansion: DoubleArray,
 )
 
@@ -666,30 +679,12 @@ private fun faceBoundaryContainsPointF64(
 
 private fun canonicalContourF64(
     rawVertexIds: List<Int>,
+    rawBoundaryHalfEdgeIds: List<Int>,
     vertices: List<PathVertexF64>,
+    halfEdges: List<PathHalfEdgeF64>,
 ): PathCanonicalContourF64? {
-    val vertexIds = rawVertexIds.fold(mutableListOf<Int>()) { result, vertexId ->
-        if (result.lastOrNull() != vertexId) result += vertexId
-        result
-    }
-    if (vertexIds.size > 1 && vertexIds.first() == vertexIds.last()) vertexIds.removeAt(vertexIds.lastIndex)
-    var removed = true
-    while (removed && vertexIds.size >= 3) {
-        removed = false
-        vertexIds.indices.forEach { index ->
-            if (removed) return@forEach
-            val previous = vertices[vertexIds[(index - 1 + vertexIds.size) % vertexIds.size]].point
-            val current = vertices[vertexIds[index]].point
-            val next = vertices[vertexIds[(index + 1) % vertexIds.size]].point
-            if (
-                OrientationPredicateF64.sign(previous, current, next) == 0 &&
-                PathPredicatesF64.onSegment(current, previous, next)
-            ) {
-                vertexIds.removeAt(index)
-                removed = true
-            }
-        }
-    }
+    if (rawVertexIds.size != rawBoundaryHalfEdgeIds.size) pathArrangementInconsistentF64()
+    val vertexIds = rawVertexIds
     if (vertexIds.size < 3) return null
     val points = vertexIds.map { vertices[it].point }
     val closedPoints = points + points.first()
@@ -699,14 +694,18 @@ private fun canonicalContourF64(
         Comparator { first, second -> compareContourStartF64(vertexIds[first], vertexIds[second], vertices) },
     ) ?: return null
     val rotatedIds = vertexIds.drop(firstIndex) + vertexIds.take(firstIndex)
+    val rotatedHalfEdgeIds = rawBoundaryHalfEdgeIds.drop(firstIndex) + rawBoundaryHalfEdgeIds.take(firstIndex)
     return PathCanonicalContourF64(
         contour = PathContourF64(
-            rotatedIds.map { vertexId ->
+            rotatedIds.indices.map { indexI32 ->
+                val vertexId = rotatedIds[indexI32]
                 val vertex = vertices[vertexId]
-                PathContourVertexF64(vertex.point, vertex.originalPointF32)
+                val halfEdge = halfEdges[rotatedHalfEdgeIds[indexI32]]
+                PathContourVertexF64(vertex.point, vertex.originalPointF32, halfEdge.legacySectionProvenancesF64)
             },
         ),
         vertexIds = rotatedIds,
+        boundaryHalfEdgeIds = rotatedHalfEdgeIds,
         signedDoubleAreaExpansion = signedDoubleAreaExpansion,
     )
 }
@@ -823,6 +822,8 @@ private fun compareContourStartF64(firstId: Int, secondId: Int, vertices: List<P
     compareVerticesF64(firstId, secondId, vertices)
 
 private fun comparePathVertexIdentitiesF64(first: PathVertexIdentityF64, second: PathVertexIdentityF64): Int {
+    first.namespaceI32.compareTo(second.namespaceI32).takeIf { it != 0 }?.let { return it }
+    first.identityScopeI64.compareTo(second.identityScopeI64).takeIf { it != 0 }?.let { return it }
     first.incidentEdgeIds.size.compareTo(second.incidentEdgeIds.size).takeIf { it != 0 }?.let { return it }
     first.incidentEdgeIds.indices.forEach { index ->
         first.incidentEdgeIds[index].compareTo(second.incidentEdgeIds[index]).takeIf { it != 0 }?.let { return it }
