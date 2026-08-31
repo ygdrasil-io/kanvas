@@ -208,3 +208,85 @@ is exercised by the production implementation and rejects such a state if one is
 No Task-2 residual correctness concern is known. The only deferred audit remains the historical
 `PathSourceTopologyF64` dynamic `consume()` sites listed above: the hybrid pipeline does not call
 the legacy adapter, and Task 5 owns the global conversion of those historical debits.
+
+## Fix round 2 — authoritative source sweep and projected carriers
+
+### Review verification and RED/GREEN
+
+The reviewer-local projected-coincidence reproduction was first verified rather than accepted
+blindly.  Its original `y = 1 +/- 2^-25` literals rounded to the same input `Float` value before
+`PathOpsF32` ran; the resulting JS-only flattened-chain rejection was therefore not a valid
+public geometry failure.  The replacement puts the offset at zero, where `+/-2^-25f` are nonzero
+and have distinct raw bits.  It is a `PathBuilder`/`PathOpsF32` test: `maxIntersections = 8`
+returns `path-intersection-limit`, while `9` succeeds with the two literal membership probes.
+Both JVM and JS pass this centered public boundary.
+
+The final fresh verification was:
+
+```text
+rtk ./gradlew :math:geometry:jvmTest :math:geometry:jsNodeTest --rerun-tasks
+BUILD SUCCESSFUL
+
+rtk git diff --check
+exit 0
+```
+
+### Production changes closed
+
+- The source registry now consumes raw pair evidence through an exact sorted endpoint event sweep
+  and active incidence set.  It emits atomic overlap intervals with their full active incidence
+  multiset and direct `(inputEdgeIdI32, parameterBitsI64)` tickets before identities or split
+  outputs are allocated.  There is no interval-times-all-edge regrouping or coordinate/ULP
+  endpoint recovery.  The public 12-rectangle staggered fixture verifies independent bounds and
+  exact `PathF32` equality under operand and contour permutations on both backends.
+- Every flattened section stays a hybrid carrier.  The source topology keeps canonical F64
+  geometry for source splitting while separately retaining each incidence's evaluated F64 point.
+  The hybrid seed names these paths explicitly as `canonicalPointF64` and `incidencePointF64`:
+  canonical geometry preserves robust source topology, and representative candidates are
+  evaluated at the incidence parameter.  Original representable F32 bits, including signed zero,
+  win; any alternative remains confined to the same exact witness.
+- Exact source atomization occurs before hybrid aliases.  Therefore an active overlap endpoint is
+  already a counted source cut, and the hybrid path only validates/looks up transactional claims;
+  it does not rematerialize interior cuts after IDs or aliases have been published.  A true
+  conflicting interior-witness case is not reachable through the public registry because it is
+  atomized first; the defensive hybrid validator remains conservative.
+- Collapsed carriers are consumed explicitly.  Only intrinsic adjacent continuation on one source
+  span is admitted; otherwise whole-contour source double area decides `Drop` at `<= 2^-45` or
+  atomic `Reject`.  No selected trace is silently omitted.  Existing public whole-contour drop,
+  significant-collapse rejection, local/remote witness, backtracking, 15/16-ULP, curve-vs-chord,
+  and all tangent-transform tests remain green.
+- `maxVertices` and `maxHalfEdges` use checked final canonical DCEL counts before allocation.
+  The public identical-rectangle boundary rejects `7` and accepts final count `8`; obsolete
+  assertions that applied that public limit to transient source splitting were removed.  The
+  source sweep's staggered fixture derives `6 + 5 = 11` exact event groups and verifies `10`
+  rejects before hybrid allocation while `11` succeeds.
+- Normalization now rejects finite F64 values that would convert above `Float.MAX_VALUE` and uses
+  a bounded observable-F32 lattice spacing.  Public extreme finite and subnormal translation
+  tests are deterministic on JVM and JS.
+
+### Ledger and test-scope audit
+
+All new sweep, carrier, alias, arrangement, and writer traversals preflight deterministic checked
+work before allocation or traversal; sort charges are envelopes based on canonical sizes, never
+comparator invocation counts.  Two exact per-incidence F64 evaluations per retained source split
+are now charged before those output objects are built.
+
+The current `4_679` reject / `4_680` success rectangle budget is retained only as a public,
+backend- and permutation-deterministic regression boundary.  It is **not** an independent global
+cost oracle: the earlier round-1 claim that `4_329` was an independently derived total is
+superseded and withdrawn.  A complete algebraic accounting of historical source-topology dynamic
+debits remains a Task-5 concern; no new comparator- or visit-order-dependent debit was added here.
+
+Task-2 topology tests no longer construct `PathVertexIdentityF64`/`PathInputEdgeF64` or invoke
+the former hybrid projection helper.  They build public paths and assert only result membership,
+bounds, bits, errors, limits, and immutability; the direct F64 ULP predicate test is retained as
+a numeric predicate test.
+
+### Residual risk carried forward
+
+No known Task-2 correctness failure remains after the fresh JVM/JS run.  The residual audit is
+deliberately narrow: Task 5 must replace the inherited global source-topology dynamic ledger with
+an independently derived end-to-end budget model.  The source registry atomization invariant also
+makes a separately public, conflicting strict-interior hybrid-cut fixture unreachable without
+bypassing production; its conservative validation is retained rather than asserted through an
+internal graph fixture.

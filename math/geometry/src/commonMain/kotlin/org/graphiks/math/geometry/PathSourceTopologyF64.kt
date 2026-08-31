@@ -13,6 +13,10 @@ internal data class PathFlattenedSectionF64(
     val inputEdgeIdI32: Int,
     val startPointF64: Point2F64,
     val endPointF64: Point2F64,
+    /** Per-carrier F64 evaluation retained for hybrid representative validation. */
+    val startIncidencePointF64: Point2F64 = startPointF64,
+    /** Per-carrier F64 evaluation retained for hybrid representative validation. */
+    val endIncidencePointF64: Point2F64 = endPointF64,
     val startParameterF64: Double,
     val endParameterF64: Double,
     val startIdentityF64: PathVertexIdentityF64,
@@ -542,6 +546,8 @@ internal fun PathSourceTopologyF64.toPathSplitEdgesF64ForLegacyArrangement(
                         endIdentity = endIdentityF64,
                         start = sectionF64.startPointF64,
                         end = sectionF64.endPointF64,
+                        startIncidencePointF64 = sectionF64.startIncidencePointF64,
+                        endIncidencePointF64 = sectionF64.endIncidencePointF64,
                         windingDelta = spanF64.windingDeltaI32,
                         legacySectionProvenanceF64 = PathLegacySectionProvenanceF64(
                             sourceSpanIdI64 = spanF64.sourceSpanIdI64,
@@ -574,6 +580,8 @@ private fun PathSplitEdgeF64.toPathFlattenedSectionF64(): PathFlattenedSectionF6
     inputEdgeIdI32 = sourceId,
     startPointF64 = start,
     endPointF64 = end,
+    startIncidencePointF64 = startIncidencePointF64,
+    endIncidencePointF64 = endIncidencePointF64,
     startParameterF64 = sourceStartParameterF64,
     endParameterF64 = sourceEndParameterF64,
     startIdentityF64 = startIdentity,

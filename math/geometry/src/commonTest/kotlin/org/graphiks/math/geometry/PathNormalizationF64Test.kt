@@ -4,6 +4,7 @@ import org.graphiks.math.vector.Vector2F32
 import org.graphiks.math.vector.Vector2F64
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 class PathNormalizationF64Test {
     @Test
@@ -19,5 +20,16 @@ class PathNormalizationF64Test {
     @Test
     fun `empty normalization is origin with unit scale`() {
         assertEquals(PathNormalizationF64(Point2F64.Origin, 1.0), pathNormalizationF64(emptyList()))
+    }
+
+    @Test
+    fun `finite double outside the F32 domain rejects instead of becoming infinity`() {
+        val error = assertFailsWith<IllegalStateException> {
+            PathNormalizationF64(Point2F64.Origin, 1.0).denormalize(
+                Point2F64(Float.MAX_VALUE.toDouble() * 2.0, 0.0),
+            )
+        }
+
+        assertEquals("path-f32-projection-collapse", error.message)
     }
 }

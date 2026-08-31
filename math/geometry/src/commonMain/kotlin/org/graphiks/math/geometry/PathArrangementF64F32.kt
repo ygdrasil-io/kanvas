@@ -1,6 +1,7 @@
 package org.graphiks.math.geometry
 
 import org.graphiks.math.vector.Vector2F64
+import kotlin.math.pow
 
 internal data class PathHybridHalfEdgeF64F32(
     val idI32: Int,
@@ -42,6 +43,7 @@ internal class PathArrangementF64F32 private constructor(
     private val halfEdgesF64F32: List<PathHybridHalfEdgeF64F32>,
     private val facesI32: List<PathHybridFaceI32>,
     private val sourceSpansByIdI64: Map<Long, PathSourceSpanF64>,
+    private val collapsedIncidencesF64F32: List<PathCollapsedIncidenceF64F32>,
     private val traceSpanByHalfEdgeI32: Map<Int, PathArrangementTraceSpanF64F32>,
     private val candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
 ) {
@@ -81,6 +83,13 @@ internal class PathArrangementF64F32 private constructor(
                 selected[if (leftSelected) halfEdgeF64F32.idI32 else halfEdgeF64F32.twinIndexI32] = true
             }
         }
+        classifySelectedCollapsedContinuationsF64F32(
+            selectedI32 = selected,
+            halfEdgesF64F32 = halfEdgesF64F32,
+            traceSpanByHalfEdgeI32 = traceSpanByHalfEdgeI32,
+            collapsedIncidencesF64F32 = collapsedIncidencesF64F32,
+            candidateWorkBudgetI32 = candidateWorkBudgetI32,
+        )
         if (selected.none { it }) return emptyList()
 
         val outgoing = List(verticesF64F32.size) { mutableListOf<Int>() }
@@ -104,11 +113,17 @@ internal class PathArrangementF64F32 private constructor(
         }
 
         val nextSelectedI32 = IntArray(halfEdgesF64F32.size) { -1 }
-        val selectedTraversalWorkI64 = halfEdgesF64F32.indices.sumOf { halfEdgeIndexI32 ->
-            if (!selected[halfEdgeIndexI32]) {
-                0L
-            } else {
-                outgoing[halfEdgesF64F32[halfEdgesF64F32[halfEdgeIndexI32].twinIndexI32].originVertexIndexI32].size.toLong()
+        // This pass derives the exact selected-ray scan bound.  Debit it before looking at the
+        // selected bitmap so a data-dependent traversal cannot escape the common ledger.
+        preflightArrangementF64F32(halfEdgesF64F32.size.toLong(), candidateWorkBudgetI32)
+        var selectedTraversalWorkI64 = 0L
+        halfEdgesF64F32.indices.forEach { halfEdgeIndexI32 ->
+            if (selected[halfEdgeIndexI32]) {
+                selectedTraversalWorkI64 = checkedPathWorkAddI64(
+                    selectedTraversalWorkI64,
+                    outgoing[halfEdgesF64F32[halfEdgesF64F32[halfEdgeIndexI32].twinIndexI32].originVertexIndexI32]
+                        .size.toLong(),
+                )
             }
         }
         preflightArrangementF64F32(
@@ -161,14 +176,18 @@ internal class PathArrangementF64F32 private constructor(
                 if (stepsI32 > halfEdgesF64F32.size) pathHybridArrangementInconsistentF64F32()
             }
             if (currentIndexI32 != startIndexI32 || traceIndicesI32.size < 3) pathHybridArrangementInconsistentF64F32()
-            canonicalHybridTraceF64F32(
+            when (val traceDispositionF64F32 = canonicalHybridTraceF64F32(
                 rawHalfEdgeIndicesI32 = traceIndicesI32,
                 halfEdgesF64F32 = halfEdgesF64F32,
                 verticesF64F32 = verticesF64F32,
                 traceSpanByHalfEdgeI32 = traceSpanByHalfEdgeI32,
+                sourceSpansByIdI64 = sourceSpansByIdI64,
+                collapsedIncidencesF64F32 = collapsedIncidencesF64F32,
                 candidateWorkBudgetI32 = candidateWorkBudgetI32,
-            )
-                ?.let(tracesF64F32::add)
+            )) {
+                is PathCanonicalTraceDispositionF64F32.Keep -> tracesF64F32 += traceDispositionF64F32.traceF64F32
+                PathCanonicalTraceDispositionF64F32.Drop -> Unit
+            }
         }
         return sortedArrangementF64F32(tracesF64F32, candidateWorkBudgetI32) { firstF64F32, secondF64F32 ->
             compareHybridTraceStartF64F32(
@@ -208,8 +227,13 @@ internal class PathArrangementF64F32 private constructor(
                     pathHybridArrangementInconsistentF64F32()
                 }
             }
-            val aliasIdentityCountI64 = topologyF64F32.aliasGroupsF32.sumOf { aliasGroupF32 ->
-                aliasGroupF32.vertexIdentitiesF64.size.toLong()
+            preflightArrangementF64F32(topologyF64F32.aliasGroupsF32.size.toLong(), candidateWorkBudgetI32)
+            var aliasIdentityCountI64 = 0L
+            topologyF64F32.aliasGroupsF32.forEach { aliasGroupF32 ->
+                aliasIdentityCountI64 = checkedPathWorkAddI64(
+                    aliasIdentityCountI64,
+                    aliasGroupF32.vertexIdentitiesF64.size.toLong(),
+                )
             }
             preflightArrangementF64F32(
                 checkedPathWorkMultiplyI64(aliasIdentityCountI64, 3L),
@@ -247,10 +271,14 @@ internal class PathArrangementF64F32 private constructor(
             val canonicalVerticesF64F32 = canonicalHybridVerticesF64F32(
                 topologyF64F32.verticesF64F32,
                 aliasesI32,
+                limitsI32.maxVertices,
                 candidateWorkBudgetI32,
             )
-            val finalVertexCountI64 = canonicalVerticesF64F32.verticesF64F32.size.toLong()
-            if (finalVertexCountI64 > limitsI32.maxVertices.toLong()) throw IllegalStateException("path-vertex-limit")
+
+            val pointWitnessByCarrierPairF64F32 = pointWitnessCarrierPairsF64F32(
+                topologyF64F32.projectedCoincidencesF32,
+                candidateWorkBudgetI32,
+            )
 
             preflightArrangementF64F32(
                 checkedPathWorkMultiplyI64(topologyF64F32.carrierSectionsF64F32.size.toLong(), 10L),
@@ -328,13 +356,19 @@ internal class PathArrangementF64F32 private constructor(
                     emptyList(),
                     emptyList(),
                     sourceSpansByIdI64,
+                    topologyF64F32.collapsedIncidencesF64F32,
                     emptyMap(),
                     candidateWorkBudgetI32,
                 )
             }
 
-            val contributingCarrierCountI64 = pathEdgesF64F32.sumOf { (_, contributionF64F32) ->
-                contributionF64F32.carrierSectionsF64F32.size.toLong()
+            preflightArrangementF64F32(pathEdgesF64F32.size.toLong(), candidateWorkBudgetI32)
+            var contributingCarrierCountI64 = 0L
+            pathEdgesF64F32.forEach { (_, contributionF64F32) ->
+                contributingCarrierCountI64 = checkedPathWorkAddI64(
+                    contributingCarrierCountI64,
+                    contributionF64F32.carrierSectionsF64F32.size.toLong(),
+                )
             }
             preflightArrangementF64F32(
                 checkedPathWorkAddI64(
@@ -353,11 +387,20 @@ internal class PathArrangementF64F32 private constructor(
                 val traceCarrierGroupF64F32 = canonicalTraceCarrierGroupF64F32(
                     carrierSectionsF64F32 = contributionF64F32.carrierSectionsF64F32,
                     forwardByCarrierKeyF64F32 = contributionF64F32.forwardByCarrierKeyF64F32,
+                    pointWitnessByCarrierPairF64F32 = pointWitnessByCarrierPairF64F32,
                     candidateWorkBudgetI32 = candidateWorkBudgetI32,
                 )
                 val traceCarrierSectionF64F32 = traceCarrierGroupF64F32.canonicalCarrierSectionF64F32
                 val forwardByCarrier = traceCarrierGroupF64F32.canonicalForward
-                val forwardDirectionF64 = hybridSourceDirectionF64F32(traceCarrierSectionF64F32, forwardByCarrier)
+                val forwardEmbeddingDirectionF64 =
+                    canonicalVerticesF64F32.verticesF64F32[keyI32.endVertexIndexI32].representativePointF32.toPoint2F64() -
+                        canonicalVerticesF64F32.verticesF64F32[keyI32.startVertexIndexI32].representativePointF32.toPoint2F64()
+                if (forwardEmbeddingDirectionF64.x == 0.0 && forwardEmbeddingDirectionF64.y == 0.0) {
+                    throw IllegalStateException("path-f32-projection-collapse")
+                }
+                val forwardTraceCarrierGroupF64F32 = traceCarrierGroupF64F32.copy(
+                    embeddingDirectionF64 = forwardEmbeddingDirectionF64,
+                )
                 mutableHalfEdgesF64F32 += PathMutableHybridHalfEdgeF64F32(
                     idI32 = forwardIdI32,
                     originVertexIndexI32 = keyI32.startVertexIndexI32,
@@ -366,10 +409,12 @@ internal class PathArrangementF64F32 private constructor(
                     sourceSpanIdsI64 = contributionF64F32.carrierSectionsF64F32.map { carrierSectionF64F32 ->
                         carrierSectionF64F32.sourceSpanF64.sourceSpanIdI64
                     },
-                    carrierSectionsF64F32 = traceCarrierGroupF64F32.carrierSectionsF64F32,
+                    carrierSectionsF64F32 = forwardTraceCarrierGroupF64F32.carrierSectionsF64F32,
                     firstWindingDeltaI32 = contributionF64F32.firstWindingDeltaI64.toHybridI32(),
                     secondWindingDeltaI32 = contributionF64F32.secondWindingDeltaI64.toHybridI32(),
-                    sourceDirectionF64 = forwardDirectionF64,
+                    sourceDirectionsF64 = forwardTraceCarrierGroupF64F32.sourceDirectionsF64,
+                    pointWitnessF64 = forwardTraceCarrierGroupF64F32.pointWitnessF64,
+                    embeddingDirectionF64 = forwardEmbeddingDirectionF64,
                 )
                 mutableHalfEdgesF64F32 += PathMutableHybridHalfEdgeF64F32(
                     idI32 = reverseIdI32,
@@ -382,19 +427,29 @@ internal class PathArrangementF64F32 private constructor(
                     carrierSectionsF64F32 = traceCarrierGroupF64F32.carrierSectionsF64F32,
                     firstWindingDeltaI32 = contributionF64F32.firstWindingDeltaI64.toHybridI32().negatedHybridI32(),
                     secondWindingDeltaI32 = contributionF64F32.secondWindingDeltaI64.toHybridI32().negatedHybridI32(),
-                    sourceDirectionF64 = -forwardDirectionF64,
+                    sourceDirectionsF64 = traceCarrierGroupF64F32.sourceDirectionsF64.map { directionF64 -> -directionF64 },
+                    pointWitnessF64 = traceCarrierGroupF64F32.pointWitnessF64,
+                    embeddingDirectionF64 = -forwardEmbeddingDirectionF64,
                 )
-                traceSpansByHalfEdgeI32[forwardIdI32] = traceCarrierGroupF64F32
+                traceSpansByHalfEdgeI32[forwardIdI32] = forwardTraceCarrierGroupF64F32
                 traceSpansByHalfEdgeI32[reverseIdI32] = PathArrangementTraceSpanF64F32(
                     canonicalCarrierSectionF64F32 = traceCarrierSectionF64F32,
                     canonicalForward = !forwardByCarrier,
                     carrierSectionsF64F32 = traceCarrierGroupF64F32.carrierSectionsF64F32,
                     forwardByCarrierKeyF64F32 = traceCarrierGroupF64F32.forwardByCarrierKeyF64F32.mapValues { (_, forward) -> !forward },
+                    sourceDirectionsF64 = traceCarrierGroupF64F32.sourceDirectionsF64.map { directionF64 -> -directionF64 },
+                    pointWitnessF64 = traceCarrierGroupF64F32.pointWitnessF64,
+                    embeddingDirectionF64 = -forwardEmbeddingDirectionF64,
                 )
             }
             val outgoingI32 = List(canonicalVerticesF64F32.verticesF64F32.size) { mutableListOf<Int>() }
             mutableHalfEdgesF64F32.forEach { halfEdgeF64F32 -> outgoingI32[halfEdgeF64F32.originVertexIndexI32] += halfEdgeF64F32.idI32 }
             outgoingI32.forEachIndexed { vertexIndexI32, halfEdgeIndicesI32 ->
+                validateHybridSourceDirectionBundlesAtVertexF64F32(
+                    halfEdgeIndicesI32 = halfEdgeIndicesI32,
+                    halfEdgesF64F32 = mutableHalfEdgesF64F32,
+                    candidateWorkBudgetI32 = candidateWorkBudgetI32,
+                )
                 sortHybridArrangementI32(halfEdgeIndicesI32, candidateWorkBudgetI32) { firstI32, secondI32 ->
                     compareHybridOutgoingRaysF64F32(
                         firstI32,
@@ -478,6 +533,7 @@ internal class PathArrangementF64F32 private constructor(
                 halfEdgesF64F32,
                 facesI32,
                 sourceSpansByIdI64,
+                topologyF64F32.collapsedIncidencesF64F32,
                 traceSpansByHalfEdgeI32,
                 candidateWorkBudgetI32,
             )
@@ -507,11 +563,23 @@ private data class PathArrangementTraceSpanF64F32(
     val canonicalForward: Boolean,
     val carrierSectionsF64F32: List<PathHybridCarrierSectionF64F32>,
     val forwardByCarrierKeyF64F32: Map<PathHybridCarrierKeyF64F32, Boolean>,
+    /** Every exact source ray represented by this one F32 rail. */
+    val sourceDirectionsF64: List<Vector2F64>,
+    /** Non-null only when a Point witness resolves distinct source rays on this rail. */
+    val pointWitnessF64: PathContactWitnessF64.PointF64?,
+    /** Lifted direction of the selected F32 embedding; assigned when the DCEL edge is built. */
+    val embeddingDirectionF64: Vector2F64,
 )
 
 private data class PathHybridCarrierKeyF64F32(
     val sourceSpanIdI64: Long,
     val sectionIndexI32: Int,
+)
+
+/** Exact relation lookup only; it never participates in a geometric tie-break. */
+private data class PathHybridCarrierPairKeyF64F32(
+    val firstF64F32: PathHybridCarrierKeyF64F32,
+    val secondF64F32: PathHybridCarrierKeyF64F32,
 )
 
 private class PathMutableHybridHalfEdgeF64F32(
@@ -523,7 +591,9 @@ private class PathMutableHybridHalfEdgeF64F32(
     val carrierSectionsF64F32: List<PathHybridCarrierSectionF64F32>,
     val firstWindingDeltaI32: Int,
     val secondWindingDeltaI32: Int,
-    val sourceDirectionF64: Vector2F64,
+    val sourceDirectionsF64: List<Vector2F64>,
+    val pointWitnessF64: PathContactWitnessF64.PointF64?,
+    val embeddingDirectionF64: Vector2F64,
     var nextIndexI32: Int = -1,
     var leftFaceIndexI32: Int = -1,
 )
@@ -582,10 +652,30 @@ private class PathHybridDisjointSetI32(sizeI32: Int) {
 private fun canonicalHybridVerticesF64F32(
     sourceVerticesF64F32: List<PathHybridVertexF64F32>,
     aliasesI32: PathHybridDisjointSetI32,
+    maximumCanonicalVerticesI32: Int,
     candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
 ): PathHybridCanonicalVerticesF64F32 {
+    // The public vertex limit applies to the alias-collapsed DCEL vertices, never the source
+    // seeds.  Count roots with only fixed-size transient storage first; do not allocate canonical
+    // groups, representatives, or their index until the final count has been accepted.
     preflightArrangementF64F32(
-        checkedPathWorkMultiplyI64(sourceVerticesF64F32.size.toLong(), 5L),
+        checkedPathWorkMultiplyI64(sourceVerticesF64F32.size.toLong(), 2L),
+        candidateWorkBudgetI32,
+    )
+    val rootsSeenI32 = BooleanArray(sourceVerticesF64F32.size)
+    var canonicalVertexCountI64 = 0L
+    sourceVerticesF64F32.indices.forEach { sourceIndexI32 ->
+        val rootI32 = aliasesI32.find(sourceIndexI32)
+        if (!rootsSeenI32[rootI32]) {
+            rootsSeenI32[rootI32] = true
+            canonicalVertexCountI64 = checkedPathWorkAddI64(canonicalVertexCountI64, 1L)
+        }
+    }
+    if (canonicalVertexCountI64 > maximumCanonicalVerticesI32.toLong()) {
+        throw IllegalStateException("path-vertex-limit")
+    }
+    preflightArrangementF64F32(
+        checkedPathWorkMultiplyI64(sourceVerticesF64F32.size.toLong(), 3L),
         candidateWorkBudgetI32,
     )
     val groupsByRootI32 = mutableMapOf<Int, MutableList<PathHybridVertexF64F32>>()
@@ -660,6 +750,7 @@ private fun selectCanonicalHybridVertexF64F32(
 private fun canonicalTraceCarrierGroupF64F32(
     carrierSectionsF64F32: List<PathHybridCarrierSectionF64F32>,
     forwardByCarrierKeyF64F32: Map<PathHybridCarrierKeyF64F32, Boolean>,
+    pointWitnessByCarrierPairF64F32: Map<PathHybridCarrierPairKeyF64F32, PathContactWitnessF64.PointF64>,
     candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
 ): PathArrangementTraceSpanF64F32 {
     val orderedCarrierSectionsF64F32 = sortedArrangementF64F32(
@@ -675,29 +766,108 @@ private fun canonicalTraceCarrierGroupF64F32(
     )
     val canonicalForward = forwardByCarrierKeyF64F32[canonicalCarrierKeyF64F32]
         ?: pathHybridArrangementInconsistentF64F32()
-    val canonicalDirectionF64 = hybridSourceDirectionF64F32(canonicalCarrierSectionF64F32, canonicalForward)
     preflightArrangementF64F32(
-        checkedPathWorkMultiplyI64(orderedCarrierSectionsF64F32.size.toLong(), 3L),
+        checkedPathWorkMultiplyI64(orderedCarrierSectionsF64F32.size.toLong(), 6L),
         candidateWorkBudgetI32,
     )
-    orderedCarrierSectionsF64F32.drop(1).forEach { carrierSectionF64F32 ->
+    val sourceDirectionsF64 = orderedCarrierSectionsF64F32.map { carrierSectionF64F32 ->
         val carrierKeyF64F32 = PathHybridCarrierKeyF64F32(
             carrierSectionF64F32.sourceSpanF64.sourceSpanIdI64,
             carrierSectionF64F32.sectionIndexI32,
         )
         val forward = forwardByCarrierKeyF64F32[carrierKeyF64F32]
             ?: pathHybridArrangementInconsistentF64F32()
-        val directionF64 = hybridSourceDirectionF64F32(carrierSectionF64F32, forward)
-        if (!sameHybridDirectionsF64F32(canonicalDirectionF64, directionF64)) {
-            throw IllegalStateException("path-f32-projection-collapse")
-        }
+        hybridSourceDirectionF64F32(carrierSectionF64F32, forward)
+    }
+    val canonicalDirectionF64 = sourceDirectionsF64.first()
+    val requiresPointWitnessF64 = sourceDirectionsF64.drop(1).any { directionF64 ->
+        !sameHybridDirectionsF64F32(canonicalDirectionF64, directionF64)
+    }
+    val pointWitnessF64 = if (requiresPointWitnessF64) {
+        pointWitnessResolvingCarrierGroupF64F32(
+            orderedCarrierSectionsF64F32 = orderedCarrierSectionsF64F32,
+            pointWitnessByCarrierPairF64F32 = pointWitnessByCarrierPairF64F32,
+        ) ?: throw IllegalStateException("path-f32-projection-collapse")
+    } else {
+        null
     }
     return PathArrangementTraceSpanF64F32(
         canonicalCarrierSectionF64F32 = canonicalCarrierSectionF64F32,
         canonicalForward = canonicalForward,
         carrierSectionsF64F32 = orderedCarrierSectionsF64F32,
         forwardByCarrierKeyF64F32 = forwardByCarrierKeyF64F32,
+        sourceDirectionsF64 = sourceDirectionsF64,
+        pointWitnessF64 = pointWitnessF64,
+        embeddingDirectionF64 = Vector2F64(0.0, 0.0),
     )
+}
+
+private fun pointWitnessCarrierPairsF64F32(
+    projectedCoincidencesF32: List<PathProjectedCoincidenceF32>,
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+): Map<PathHybridCarrierPairKeyF64F32, PathContactWitnessF64.PointF64> {
+    preflightArrangementF64F32(
+        checkedPathWorkMultiplyI64(projectedCoincidencesF32.size.toLong(), 6L),
+        candidateWorkBudgetI32,
+    )
+    val resultF64F32 = mutableMapOf<PathHybridCarrierPairKeyF64F32, PathContactWitnessF64.PointF64>()
+    projectedCoincidencesF32.forEach { coincidenceF32 ->
+        val firstKeyF64F32 = PathHybridCarrierKeyF64F32(
+            coincidenceF32.firstClaimF64.sourceSpanIdI64,
+            coincidenceF32.firstClaimF64.sourceSectionIndexI32,
+        )
+        val secondKeyF64F32 = PathHybridCarrierKeyF64F32(
+            coincidenceF32.secondClaimF64.sourceSpanIdI64,
+            coincidenceF32.secondClaimF64.sourceSectionIndexI32,
+        )
+        addPointWitnessCarrierPairF64F32(
+            resultF64F32,
+            PathHybridCarrierPairKeyF64F32(firstKeyF64F32, secondKeyF64F32),
+            coincidenceF32.pointWitnessF64,
+        )
+        addPointWitnessCarrierPairF64F32(
+            resultF64F32,
+            PathHybridCarrierPairKeyF64F32(secondKeyF64F32, firstKeyF64F32),
+            coincidenceF32.pointWitnessF64,
+        )
+    }
+    return resultF64F32
+}
+
+private fun addPointWitnessCarrierPairF64F32(
+    pointWitnessByCarrierPairF64F32: MutableMap<PathHybridCarrierPairKeyF64F32, PathContactWitnessF64.PointF64>,
+    pairKeyF64F32: PathHybridCarrierPairKeyF64F32,
+    pointWitnessF64: PathContactWitnessF64.PointF64,
+) {
+    val previousF64 = pointWitnessByCarrierPairF64F32.put(pairKeyF64F32, pointWitnessF64)
+    if (previousF64 != null && previousF64 != pointWitnessF64) {
+        throw IllegalStateException("path-f32-projection-collapse")
+    }
+}
+
+private fun pointWitnessResolvingCarrierGroupF64F32(
+    orderedCarrierSectionsF64F32: List<PathHybridCarrierSectionF64F32>,
+    pointWitnessByCarrierPairF64F32: Map<PathHybridCarrierPairKeyF64F32, PathContactWitnessF64.PointF64>,
+): PathContactWitnessF64.PointF64? {
+    val firstCarrierF64F32 = orderedCarrierSectionsF64F32.firstOrNull() ?: return null
+    val firstKeyF64F32 = PathHybridCarrierKeyF64F32(
+        firstCarrierF64F32.sourceSpanF64.sourceSpanIdI64,
+        firstCarrierF64F32.sectionIndexI32,
+    )
+    var witnessF64: PathContactWitnessF64.PointF64? = null
+    orderedCarrierSectionsF64F32.drop(1).forEach { carrierSectionF64F32 ->
+        val keyF64F32 = PathHybridCarrierKeyF64F32(
+            carrierSectionF64F32.sourceSpanF64.sourceSpanIdI64,
+            carrierSectionF64F32.sectionIndexI32,
+        )
+        val pairWitnessF64 = pointWitnessByCarrierPairF64F32[
+            PathHybridCarrierPairKeyF64F32(firstKeyF64F32, keyF64F32)
+        ] ?: return null
+        val previousF64 = witnessF64
+        if (previousF64 != null && previousF64 != pairWitnessF64) return null
+        witnessF64 = pairWitnessF64
+    }
+    return witnessF64
 }
 
 private fun compareTraceCarrierSectionsF64F32(
@@ -821,7 +991,10 @@ private fun hybridComponentsF64F32(
         }
         var beforeLeftI32 = -1
         candidatesI32.forEachIndexed { indexI32, halfEdgeIndexI32 ->
-            if (hybridQuadrantF64F32(halfEdgesF64F32[halfEdgeIndexI32].sourceDirectionF64) <= 1) {
+            if (halfEdgesF64F32[halfEdgeIndexI32].sourceDirectionsF64.any { directionF64 ->
+                    hybridQuadrantF64F32(directionF64) <= 1
+                }
+            ) {
                 beforeLeftI32 = indexI32
             }
         }
@@ -927,9 +1100,22 @@ private fun preflightHybridWindingF64F32(
     candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
 ) {
     val componentCountI64 = componentsI32.size.toLong()
-    val componentFaceEdgeWorkI64 = componentsI32.sumOf { componentI32 ->
-        componentI32.faceIndicesI32.sumOf { faceIndexI32 ->
-            facesI32[faceIndexI32].boundaryHalfEdgeIndicesI32.size.toLong() + 1L
+    // First charge the count pass itself.  The precise containment envelope depends on canonical
+    // face boundaries, so deriving it with `sumOf` before a debit would be hidden work.
+    preflightArrangementF64F32(
+        checkedPathWorkAddI64(componentCountI64, facesI32.size.toLong()),
+        candidateWorkBudgetI32,
+    )
+    var componentFaceEdgeWorkI64 = 0L
+    componentsI32.forEach { componentI32 ->
+        componentI32.faceIndicesI32.forEach { faceIndexI32 ->
+            componentFaceEdgeWorkI64 = checkedPathWorkAddI64(
+                componentFaceEdgeWorkI64,
+                checkedPathWorkAddI64(
+                    facesI32[faceIndexI32].boundaryHalfEdgeIndicesI32.size.toLong(),
+                    1L,
+                ),
+            )
         }
     }
     val containmentI64 = checkedPathWorkMultiplyI64(
@@ -1037,9 +1223,11 @@ private fun canonicalHybridTraceF64F32(
     halfEdgesF64F32: List<PathHybridHalfEdgeF64F32>,
     verticesF64F32: List<PathHybridVertexF64F32>,
     traceSpanByHalfEdgeI32: Map<Int, PathArrangementTraceSpanF64F32>,
+    sourceSpansByIdI64: Map<Long, PathSourceSpanF64>,
+    collapsedIncidencesF64F32: List<PathCollapsedIncidenceF64F32>,
     candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
-): PathCanonicalTraceF64F32? {
-    if (rawHalfEdgeIndicesI32.size < 3) return null
+): PathCanonicalTraceDispositionF64F32 {
+    if (rawHalfEdgeIndicesI32.size < 3) throw IllegalStateException("path-f32-projection-collapse")
     preflightArrangementF64F32(
         checkedPathWorkAddI64(checkedPathWorkMultiplyI64(rawHalfEdgeIndicesI32.size.toLong(), 8L), 2L),
         candidateWorkBudgetI32,
@@ -1048,7 +1236,15 @@ private fun canonicalHybridTraceF64F32(
         verticesF64F32[halfEdgesF64F32[halfEdgeIndexI32].originVertexIndexI32].representativePointF32.toPoint2F64()
     }
     val areaF64 = signedDoubleAreaExpansionF64(pointsF64 + pointsF64.first())
-    if (ExpansionF64.sign(areaF64) == 0) return null
+    if (ExpansionF64.sign(areaF64) == 0) {
+        return zeroAreaTraceDispositionF64F32(
+            rawHalfEdgeIndicesI32 = rawHalfEdgeIndicesI32,
+            traceSpanByHalfEdgeI32 = traceSpanByHalfEdgeI32,
+            sourceSpansByIdI64 = sourceSpansByIdI64,
+            collapsedIncidencesF64F32 = collapsedIncidencesF64F32,
+            candidateWorkBudgetI32 = candidateWorkBudgetI32,
+        )
+    }
     val firstIndexI32 = canonicalHybridTraceRotationIndexF64F32(
         rawHalfEdgeIndicesI32 = rawHalfEdgeIndicesI32,
         halfEdgesF64F32 = halfEdgesF64F32,
@@ -1069,7 +1265,160 @@ private fun canonicalHybridTraceF64F32(
             forward = traceSpanF64F32.canonicalForward,
         )
     })
-    return PathCanonicalTraceF64F32(traceF64F32, rotatedI32, areaF64)
+    return PathCanonicalTraceDispositionF64F32.Keep(PathCanonicalTraceF64F32(traceF64F32, rotatedI32, areaF64))
+}
+
+/** A selected projected trace is either emitted intact or disposed as one complete source contour. */
+private sealed interface PathCanonicalTraceDispositionF64F32 {
+    data class Keep(val traceF64F32: PathCanonicalTraceF64F32) : PathCanonicalTraceDispositionF64F32
+
+    data object Drop : PathCanonicalTraceDispositionF64F32
+}
+
+private data class PathSourceContourKeyF64F32(
+    val operand: PathOperand,
+    val contourIndexI32: Int,
+)
+
+/**
+ * A zero-area F32 trace cannot disappear just because the DCEL has no visible face.  It may drop
+ * only when every source carrier of exactly one source contour is represented (including an
+ * explicitly consumed intrinsic collapse) and that contour's exact normalized double area is at
+ * most 2^-45.  All partial, mixed, or significant losses reject before the writer sees a trace.
+ */
+private fun zeroAreaTraceDispositionF64F32(
+    rawHalfEdgeIndicesI32: List<Int>,
+    traceSpanByHalfEdgeI32: Map<Int, PathArrangementTraceSpanF64F32>,
+    sourceSpansByIdI64: Map<Long, PathSourceSpanF64>,
+    collapsedIncidencesF64F32: List<PathCollapsedIncidenceF64F32>,
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+): PathCanonicalTraceDispositionF64F32 {
+    preflightArrangementF64F32(
+        checkedPathWorkAddI64(
+            checkedPathWorkMultiplyI64(rawHalfEdgeIndicesI32.size.toLong(), 8L),
+            checkedPathWorkAddI64(
+                checkedPathWorkMultiplyI64(sourceSpansByIdI64.size.toLong(), 4L),
+                checkedPathWorkMultiplyI64(collapsedIncidencesF64F32.size.toLong(), 4L),
+            ),
+        ),
+        candidateWorkBudgetI32,
+    )
+    val representedCarrierKeysF64F32 = mutableSetOf<PathHybridCarrierKeyF64F32>()
+    val contourKeysF64F32 = mutableSetOf<PathSourceContourKeyF64F32>()
+    rawHalfEdgeIndicesI32.forEach { halfEdgeIndexI32 ->
+        val traceSpanF64F32 = traceSpanByHalfEdgeI32.getValue(halfEdgeIndexI32)
+        traceSpanF64F32.carrierSectionsF64F32.forEach { carrierSectionF64F32 ->
+            representedCarrierKeysF64F32 += carrierSectionF64F32.toHybridCarrierKeyF64F32()
+            contourKeysF64F32 += carrierSectionF64F32.sourceSpanF64.toSourceContourKeyF64F32()
+        }
+    }
+    val contourKeyF64F32 = contourKeysF64F32.singleOrNull()
+        ?: throw IllegalStateException("path-f32-projection-collapse")
+    collapsedIncidencesF64F32.forEach { collapsedF64F32 ->
+        if (collapsedF64F32.sourceSpanF64.toSourceContourKeyF64F32() == contourKeyF64F32) {
+            representedCarrierKeysF64F32 += collapsedF64F32.toHybridCarrierKeyF64F32()
+        }
+    }
+    val sourceSpansF64 = sourceSpansByIdI64.values.filter { sourceSpanF64 ->
+        sourceSpanF64.toSourceContourKeyF64F32() == contourKeyF64F32
+    }
+    if (sourceSpansF64.isEmpty()) throw IllegalStateException("path-arrangement-inconsistent")
+    val expectedCarrierKeysF64F32 = mutableSetOf<PathHybridCarrierKeyF64F32>()
+    sourceSpansF64.forEach { sourceSpanF64 ->
+        sourceSpanF64.flattenedSectionsF64.indices.forEach { sectionIndexI32 ->
+            expectedCarrierKeysF64F32 += PathHybridCarrierKeyF64F32(sourceSpanF64.sourceSpanIdI64, sectionIndexI32)
+        }
+    }
+    if (representedCarrierKeysF64F32 != expectedCarrierKeysF64F32) {
+        throw IllegalStateException("path-f32-projection-collapse")
+    }
+    return if (sourceContourDoubleAreaWithinCollapseToleranceF64(sourceSpansF64)) {
+        PathCanonicalTraceDispositionF64F32.Drop
+    } else {
+        throw IllegalStateException("path-f32-projection-collapse")
+    }
+}
+
+private fun PathHybridCarrierSectionF64F32.toHybridCarrierKeyF64F32(): PathHybridCarrierKeyF64F32 =
+    PathHybridCarrierKeyF64F32(sourceSpanF64.sourceSpanIdI64, sectionIndexI32)
+
+private fun PathCollapsedIncidenceF64F32.toHybridCarrierKeyF64F32(): PathHybridCarrierKeyF64F32 =
+    PathHybridCarrierKeyF64F32(sourceSpanF64.sourceSpanIdI64, sectionIndexI32)
+
+private fun PathSourceSpanF64.toSourceContourKeyF64F32(): PathSourceContourKeyF64F32 =
+    PathSourceContourKeyF64F32(operand, contourIndexI32)
+
+/**
+ * A collapsed carrier has no half-edge, but it is still classified at the boundary vertex.  A
+ * selected source span may keep such a carrier only as the exact internal continuation proven by
+ * topology: both adjacent sections must remain on the selected boundary, and its F64 incoming /
+ * outgoing directions and winding must remain non-degenerate.  Otherwise omission would turn a
+ * local loss of dimension into a partial contour, so reject before trace extraction.
+ */
+private fun classifySelectedCollapsedContinuationsF64F32(
+    selectedI32: BooleanArray,
+    halfEdgesF64F32: List<PathHybridHalfEdgeF64F32>,
+    traceSpanByHalfEdgeI32: Map<Int, PathArrangementTraceSpanF64F32>,
+    collapsedIncidencesF64F32: List<PathCollapsedIncidenceF64F32>,
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+) {
+    if (collapsedIncidencesF64F32.isEmpty()) return
+    preflightArrangementF64F32(
+        checkedPathWorkAddI64(
+            checkedPathWorkMultiplyI64(halfEdgesF64F32.size.toLong(), 4L),
+            checkedPathWorkMultiplyI64(collapsedIncidencesF64F32.size.toLong(), 12L),
+        ),
+        candidateWorkBudgetI32,
+    )
+    val selectedSourceSpanIdsI64 = mutableSetOf<Long>()
+    val selectedCarrierKeysF64F32 = mutableSetOf<PathHybridCarrierKeyF64F32>()
+    selectedI32.indices.forEach { halfEdgeIndexI32 ->
+        if (!selectedI32[halfEdgeIndexI32]) return@forEach
+        halfEdgesF64F32[halfEdgeIndexI32].sourceSpanIdsI64.forEach(selectedSourceSpanIdsI64::add)
+        traceSpanByHalfEdgeI32.getValue(halfEdgeIndexI32).carrierSectionsF64F32.forEach { carrierSectionF64F32 ->
+            selectedCarrierKeysF64F32 += carrierSectionF64F32.toHybridCarrierKeyF64F32()
+        }
+    }
+    collapsedIncidencesF64F32.forEach { collapsedF64F32 ->
+        val sourceSpanF64 = collapsedF64F32.sourceSpanF64
+        if (sourceSpanF64.sourceSpanIdI64 !in selectedSourceSpanIdsI64) return@forEach
+        if (sourceSpanF64.windingDeltaI32 == 0) throw IllegalStateException("path-f32-projection-collapse")
+        val incomingDirectionF64 = collapsedF64F32.incomingDirectionF64
+        val outgoingDirectionF64 = collapsedF64F32.outgoingDirectionF64
+        val incomingLengthSquaredF64 = incomingDirectionF64.x * incomingDirectionF64.x + incomingDirectionF64.y * incomingDirectionF64.y
+        val outgoingLengthSquaredF64 = outgoingDirectionF64.x * outgoingDirectionF64.x + outgoingDirectionF64.y * outgoingDirectionF64.y
+        if (incomingLengthSquaredF64 == 0.0 || outgoingLengthSquaredF64 == 0.0) {
+            throw IllegalStateException("path-f32-projection-collapse")
+        }
+        val transitionDotF64 = incomingDirectionF64.x * outgoingDirectionF64.x +
+            incomingDirectionF64.y * outgoingDirectionF64.y
+        if (transitionDotF64 >= 0.0) throw IllegalStateException("path-f32-projection-collapse")
+        val sectionIndexI32 = collapsedF64F32.sectionIndexI32
+        val previousKeyF64F32 = PathHybridCarrierKeyF64F32(sourceSpanF64.sourceSpanIdI64, sectionIndexI32 - 1)
+        val nextKeyF64F32 = PathHybridCarrierKeyF64F32(sourceSpanF64.sourceSpanIdI64, sectionIndexI32 + 1)
+        if (previousKeyF64F32 !in selectedCarrierKeysF64F32 || nextKeyF64F32 !in selectedCarrierKeysF64F32) {
+            throw IllegalStateException("path-f32-projection-collapse")
+        }
+    }
+}
+
+private fun sourceContourDoubleAreaWithinCollapseToleranceF64(sourceSpansF64: List<PathSourceSpanF64>): Boolean {
+    var doubleAreaF64 = doubleArrayOf()
+    sourceSpansF64.forEach { sourceSpanF64 ->
+        sourceSpanF64.flattenedSectionsF64.forEach { sectionF64 ->
+            val crossF64 = ExpansionF64.expansionDiff(
+                ExpansionF64.twoProduct(sectionF64.startPointF64.x, sectionF64.endPointF64.y),
+                ExpansionF64.twoProduct(sectionF64.startPointF64.y, sectionF64.endPointF64.x),
+            )
+            doubleAreaF64 = ExpansionF64.expansionSum(doubleAreaF64, crossF64)
+        }
+    }
+    val signI32 = ExpansionF64.sign(doubleAreaF64)
+    if (signI32 == 0) return true
+    val absoluteDoubleAreaF64 = if (signI32 > 0) doubleAreaF64 else DoubleArray(doubleAreaF64.size) { indexI32 -> -doubleAreaF64[indexI32] }
+    return ExpansionF64.sign(
+        ExpansionF64.expansionDiff(absoluteDoubleAreaF64, doubleArrayOf(2.0.pow(-45))),
+    ) <= 0
 }
 
 /**
@@ -1185,14 +1534,8 @@ private fun compareHybridOutputRaysF64F32(
     secondI32: Int,
     traceSpanByHalfEdgeI32: Map<Int, PathArrangementTraceSpanF64F32>,
 ): Int = compareHybridDirectionsF64F32(
-    hybridSourceDirectionF64F32(
-        traceSpanByHalfEdgeI32.getValue(firstI32).canonicalCarrierSectionF64F32,
-        traceSpanByHalfEdgeI32.getValue(firstI32).canonicalForward,
-    ),
-    hybridSourceDirectionF64F32(
-        traceSpanByHalfEdgeI32.getValue(secondI32).canonicalCarrierSectionF64F32,
-        traceSpanByHalfEdgeI32.getValue(secondI32).canonicalForward,
-    ),
+    traceSpanByHalfEdgeI32.getValue(firstI32).embeddingDirectionF64,
+    traceSpanByHalfEdgeI32.getValue(secondI32).embeddingDirectionF64,
 )
 
 private fun sameHybridOutputRayF64F32(
@@ -1200,14 +1543,8 @@ private fun sameHybridOutputRayF64F32(
     secondI32: Int,
     traceSpanByHalfEdgeI32: Map<Int, PathArrangementTraceSpanF64F32>,
 ): Boolean = sameHybridDirectionsF64F32(
-    hybridSourceDirectionF64F32(
-        traceSpanByHalfEdgeI32.getValue(firstI32).canonicalCarrierSectionF64F32,
-        traceSpanByHalfEdgeI32.getValue(firstI32).canonicalForward,
-    ),
-    hybridSourceDirectionF64F32(
-        traceSpanByHalfEdgeI32.getValue(secondI32).canonicalCarrierSectionF64F32,
-        traceSpanByHalfEdgeI32.getValue(secondI32).canonicalForward,
-    ),
+    traceSpanByHalfEdgeI32.getValue(firstI32).embeddingDirectionF64,
+    traceSpanByHalfEdgeI32.getValue(secondI32).embeddingDirectionF64,
 )
 
 private fun compareHybridOutgoingRaysF64F32(
@@ -1215,7 +1552,10 @@ private fun compareHybridOutgoingRaysF64F32(
     secondI32: Int,
     originVertexIndexI32: Int,
     halfEdgesF64F32: List<PathMutableHybridHalfEdgeF64F32>,
-): Int = compareHybridDirectionsF64F32(halfEdgesF64F32[firstI32].sourceDirectionF64, halfEdgesF64F32[secondI32].sourceDirectionF64)
+): Int = compareHybridDirectionsF64F32(
+    halfEdgesF64F32[firstI32].embeddingDirectionF64,
+    halfEdgesF64F32[secondI32].embeddingDirectionF64,
+)
 
 private fun compareHybridDirectionsF64F32(firstF64: Vector2F64, secondF64: Vector2F64): Int {
     val firstQuadrantI32 = hybridQuadrantF64F32(firstF64)
@@ -1229,10 +1569,88 @@ private fun compareHybridDirectionsF64F32(firstF64: Vector2F64, secondF64: Vecto
     return -orientationI32
 }
 
+/**
+ * The F32 embedding orders the DCEL ray, but every original F64 ray is still checked against
+ * that order.  A validated Point-witness bundle may straddle its F32 ray (for example ±tiny
+ * slopes around a horizontal rail); an unrelated ray inside that exact source wedge is a sector
+ * ambiguity and rejects before face construction.
+ */
+private fun validateHybridSourceDirectionBundlesAtVertexF64F32(
+    halfEdgeIndicesI32: List<Int>,
+    halfEdgesF64F32: List<PathMutableHybridHalfEdgeF64F32>,
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+) {
+    preflightArrangementF64F32(
+        checkedPathWorkMultiplyI64(halfEdgeIndicesI32.size.toLong(), halfEdgeIndicesI32.size.toLong()),
+        candidateWorkBudgetI32,
+    )
+    halfEdgeIndicesI32.forEach { firstIndexI32 ->
+        val firstF64F32 = halfEdgesF64F32[firstIndexI32]
+        firstF64F32.sourceDirectionsF64.forEach { sourceDirectionF64 ->
+            val dotF64 = sourceDirectionF64.x * firstF64F32.embeddingDirectionF64.x +
+                sourceDirectionF64.y * firstF64F32.embeddingDirectionF64.y
+            if (dotF64 <= 0.0) throw IllegalStateException("path-f32-projection-collapse")
+        }
+        halfEdgeIndicesI32.forEach { secondIndexI32 ->
+            if (firstIndexI32 == secondIndexI32) return@forEach
+            val secondF64F32 = halfEdgesF64F32[secondIndexI32]
+            if (
+                sourceDirectionBundleContainsEmbeddingRayF64F32(
+                    sourceDirectionsF64 = firstF64F32.sourceDirectionsF64,
+                    embeddingDirectionF64 = firstF64F32.embeddingDirectionF64,
+                    candidateDirectionF64 = secondF64F32.embeddingDirectionF64,
+                )
+            ) {
+                throw IllegalStateException("path-f32-projection-collapse")
+            }
+        }
+    }
+}
+
+private fun sourceDirectionBundleContainsEmbeddingRayF64F32(
+    sourceDirectionsF64: List<Vector2F64>,
+    embeddingDirectionF64: Vector2F64,
+    candidateDirectionF64: Vector2F64,
+): Boolean {
+    val embeddingToCandidateI32 = OrientationPredicateF64.sign(
+        Point2F64.Origin,
+        Point2F64(embeddingDirectionF64.x, embeddingDirectionF64.y),
+        Point2F64(candidateDirectionF64.x, candidateDirectionF64.y),
+    )
+    val embeddingDotCandidateF64 = embeddingDirectionF64.x * candidateDirectionF64.x +
+        embeddingDirectionF64.y * candidateDirectionF64.y
+    if (embeddingToCandidateI32 == 0) return embeddingDotCandidateF64 > 0.0
+    return sourceDirectionsF64.any { sourceDirectionF64 ->
+        val embeddingToSourceI32 = OrientationPredicateF64.sign(
+            Point2F64.Origin,
+            Point2F64(embeddingDirectionF64.x, embeddingDirectionF64.y),
+            Point2F64(sourceDirectionF64.x, sourceDirectionF64.y),
+        )
+        when {
+            embeddingToCandidateI32 > 0 && embeddingToSourceI32 > 0 ->
+                OrientationPredicateF64.sign(
+                    Point2F64.Origin,
+                    Point2F64(candidateDirectionF64.x, candidateDirectionF64.y),
+                    Point2F64(sourceDirectionF64.x, sourceDirectionF64.y),
+                ) >= 0
+            embeddingToCandidateI32 < 0 && embeddingToSourceI32 < 0 ->
+                OrientationPredicateF64.sign(
+                    Point2F64.Origin,
+                    Point2F64(sourceDirectionF64.x, sourceDirectionF64.y),
+                    Point2F64(candidateDirectionF64.x, candidateDirectionF64.y),
+                ) >= 0
+            else -> false
+        }
+    }
+}
+
 private fun sameHybridOutgoingRayF64F32(
     firstF64F32: PathMutableHybridHalfEdgeF64F32,
     secondF64F32: PathMutableHybridHalfEdgeF64F32,
-): Boolean = sameHybridDirectionsF64F32(firstF64F32.sourceDirectionF64, secondF64F32.sourceDirectionF64)
+): Boolean = sameHybridDirectionsF64F32(
+    firstF64F32.embeddingDirectionF64,
+    secondF64F32.embeddingDirectionF64,
+)
 
 private fun sameHybridDirectionsF64F32(firstF64: Vector2F64, secondF64: Vector2F64): Boolean =
     hybridQuadrantF64F32(firstF64) == hybridQuadrantF64F32(secondF64) &&

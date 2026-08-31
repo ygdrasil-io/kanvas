@@ -210,38 +210,6 @@ private fun buildHybridArrangementF64F32(
     }
 }
 
-// A single production fixture entry point for precise F64 source inputs.  It follows exactly
-// the public route after flattening: source topology -> hybrid topology -> hybrid DCEL -> writer.
-// Tests may construct numerical source edges, but cannot rebuild or inspect any arrangement.
-internal fun projectSourceEdgesThroughHybridF64F32(
-    edgesF64: List<PathInputEdgeF64>,
-    normalizationF64: PathNormalizationF64,
-    fillRule: FillRule,
-    limitsI32: PathOpsLimitsI32 = PathOpsLimitsI32(),
-): PathF32 {
-    try {
-        val candidateWorkBudgetI32 = PathCandidateWorkBudgetI32(limitsI32.maxCandidateProbes)
-        val sourceTopologyF64 = splitPathSourceTopologyF64(edgesF64, limitsI32, candidateWorkBudgetI32)
-        val topologyF64F32 = buildPathHybridTopologyF64F32(
-            sourceTopologyF64 = sourceTopologyF64,
-            normalizationF64 = normalizationF64,
-            limitsI32 = limitsI32,
-            candidateWorkBudgetI32 = candidateWorkBudgetI32,
-        )
-        val arrangementF64F32 = PathArrangementF64F32.build(topologyF64F32, limitsI32, candidateWorkBudgetI32)
-        return writeHybridBoundaryTracesF64F32(
-            tracesF64F32 = arrangementF64F32.unaryBoundary(fillRule),
-            fillRule = fillRule,
-            candidateWorkBudget = candidateWorkBudgetI32,
-        )
-    } catch (error: IllegalStateException) {
-        if (error.message == "path-arrangement-inconsistent") {
-            throw IllegalStateException("path-f32-projection-collapse")
-        }
-        throw error
-    }
-}
-
 // Temporary Task-2 writer bridge.  It consumes the already selected hybrid half-edge traces;
 // it neither finds contacts nor rewrites a run, so the hybrid DCEL remains the sole authority.
 private fun writeHybridBoundaryTracesF64F32(
@@ -249,7 +217,14 @@ private fun writeHybridBoundaryTracesF64F32(
     fillRule: FillRule,
     candidateWorkBudget: PathCandidateWorkBudgetI32,
 ): PathF32 {
-    val vertexCountI64 = tracesF64F32.sumOf { traceF64F32 -> traceF64F32.halfEdgesF64F32.size.toLong() }
+    // Count immutable trace vertices in a separately charged pass before reserving the exact
+    // writer envelope.  The bridge never discovers geometry, but its scan/allocation still uses
+    // the operation's one deterministic ledger.
+    candidateWorkBudget.consumePreflightI64(tracesF64F32.size.toLong())
+    var vertexCountI64 = 0L
+    tracesF64F32.forEach { traceF64F32 ->
+        vertexCountI64 = checkedPathWorkAddI64(vertexCountI64, traceF64F32.halfEdgesF64F32.size.toLong())
+    }
     // The temporary writer only walks the immutable traces selected by the hybrid DCEL.  Reserve
     // every point/area/builder pass up front from those canonical trace lengths; it must not add
     // traversal-order-dependent debits while it serializes the public PathF32.

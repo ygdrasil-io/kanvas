@@ -49,3 +49,17 @@ overlaps remain atomic across operands, and the exact `4_328` reject / `4_329` s
 is identical under permutations on both targets. Round-1 focused JVM verification passed 89
 tests and complete JS passed; details, RED evidence and the Task-5 historical-debit carry are in
 `task-2-report.md`.
+
+Fix round 2: reviews were verified with public `PathBuilder`/`PathOpsF32` fixtures before the
+implementation was changed. Exact overlap evidence now enters source topology through an event
+sweep and direct parameter-bit tickets, so every active endpoint is source-atomized and counted
+before hybrid aliases/DCEL allocation. The hybrid preserves both canonical split geometry and
+per-incidence F64 evaluation for representative choice; all flattened sections remain carriers.
+Public staggered overlaps, final-DCEL `maxHalfEdges`, source-event `maxIntersections`, whole-
+contour collapse disposition, extreme normalization, signed zero, and centered local-witness
+boundaries are green on JVM and JS. The centered fixture uses nonzero `+/-2^-25f` input bits;
+its `8` reject / `9` success boundary replaces an invalid y=1 fixture that rounded before the
+pipeline. Fresh `:math:geometry:jvmTest :math:geometry:jsNodeTest --rerun-tasks` and
+`git diff --check` passed. The old `4_329` independent-budget claim is superseded: `4_679`
+reject / `4_680` success is a deterministic regression boundary only, while the independent
+global source-topology ledger audit remains explicitly assigned to Task 5.

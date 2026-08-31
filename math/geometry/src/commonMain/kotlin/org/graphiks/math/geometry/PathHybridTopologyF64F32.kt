@@ -26,6 +26,9 @@ internal data class PathProjectedSpanClaimF64(
     val inputEdgeIdI32: Int,
     val startParameterF64: Double,
     val endParameterF64: Double,
+    /** Carrier-local exact parameters retained for transactional projected cuts. */
+    val startEdgeParameterF64: Double,
+    val endEdgeParameterF64: Double,
     val startVertexIdentityF64: PathVertexIdentityF64?,
     val endVertexIdentityF64: PathVertexIdentityF64?,
 )
@@ -73,7 +76,8 @@ internal data class PathHybridTopologyF64F32(
 
 private data class PathHybridVertexSeedF64F32(
     val identityF64: PathVertexIdentityF64,
-    val sourcePointF64: Point2F64,
+    /** Canonical proof point used only for deterministic ordering; carriers retain each evaluation. */
+    var sourcePointF64: Point2F64,
     val originalPointsF32: MutableList<Point2F32>,
     val incidentCandidatesF32: MutableList<Point2F32>,
     val incidentSourceSpanIdsI64: MutableList<Long>,
@@ -100,6 +104,40 @@ private data class PathProjectedCoincidenceProposalF64F32(
 )
 
 /**
+ * A projected point contact which has no direct witness yet may be the exact continuation of a
+ * local rail already proposed by a Point witness.  It is deliberately only a deferred
+ * observation: it cannot create an alias, claim, cut, or ID by itself.
+ */
+private data class PathDeferredProjectedEndpointContactF64F32(
+    val firstSpanF64: PathProjectedSourceSpanF64F32,
+    val firstParameterF64: Double,
+    val secondSpanF64: PathProjectedSourceSpanF64F32,
+    val secondParameterF64: Double,
+)
+
+/**
+ * Exact Point-witness lookup for the projected broad phase. The index is keyed solely by
+ * source-span provenance and the original registry identity; a rounded coordinate is never a
+ * lookup key. In particular, a candidate may observe a witness only when both of its source
+ * spans carry that same witness ID.
+ */
+private data class PathPointWitnessIndexF64F32(
+    val witnessesBySourceSpanIdI64: Map<Long, List<PathContactWitnessF64.PointF64>>,
+    val witnessIdsBySourceSpanIdI64: Map<Long, Set<Long>>,
+    val witnessesByIdentityF64: Map<PathVertexIdentityF64, List<PathContactWitnessF64.PointF64>>,
+)
+
+private data class PathOverlapWitnessIncidenceReferenceF64F32(
+    val witnessF64: PathContactWitnessF64.OverlapF64,
+    val incidenceF64: PathOverlapWitnessIncidenceF64,
+)
+
+/** Direct exact-overlap incidence lookup; projected coordinates never enter this registry. */
+private data class PathOverlapWitnessIndexF64F32(
+    val incidencesByInputEdgeIdI32: Map<Int, List<PathOverlapWitnessIncidenceReferenceF64F32>>,
+)
+
+/**
  * Builds the projection-visible source topology before any face or winding work.  The input
  * source topology remains the sole authority for exact parameters and witnesses; this function
  * only selects lattice representatives and classifies every projected contact conservatively.
@@ -115,9 +153,10 @@ internal fun buildPathHybridTopologyF64F32(
         candidateWorkBudgetI32,
         ::compareHybridSourceSpansF64,
     )
-    val carrierSectionCountI64 = sourceSpansF64.sumOf { sourceSpanF64 ->
-        sourceSpanF64.flattenedSectionsF64.size.toLong()
-    }
+    val carrierSectionCountI64 = countHybridCarrierSectionsF64F32(
+        sourceSpansF64,
+        candidateWorkBudgetI32,
+    )
     // `maxHalfEdges` applies to the canonical DCEL count, not this raw carrier multiset: a
     // valid exact overlap may aggregate several carriers onto one final half-edge.  The source
     // flattening limits already bound this temporary collection; only its JVM/JS capacity needs
@@ -159,12 +198,20 @@ internal fun buildPathHybridTopologyF64F32(
                 witnessesByIdentityF64.getOrPut(witnessF64.vertexIdentityF64) { mutableListOf() } += witnessF64
             }
             is PathContactWitnessF64.OverlapF64 -> {
-                val endpointIdentitiesF64 = witnessF64.startVertexIdentitiesF64 + witnessF64.endVertexIdentitiesF64
                 preflightHybridLinearF64F32(
-                    checkedPathWorkMultiplyI64(endpointIdentitiesF64.size.toLong(), 2L),
+                    checkedPathWorkMultiplyI64(
+                        checkedPathWorkAddI64(
+                            witnessF64.startVertexIdentitiesF64.size.toLong(),
+                            witnessF64.endVertexIdentitiesF64.size.toLong(),
+                        ),
+                        2L,
+                    ),
                     candidateWorkBudgetI32,
                 )
-                endpointIdentitiesF64.forEach { identityF64 ->
+                witnessF64.startVertexIdentitiesF64.forEach { identityF64 ->
+                    witnessesByIdentityF64.getOrPut(identityF64) { mutableListOf() } += witnessF64
+                }
+                witnessF64.endVertexIdentitiesF64.forEach { identityF64 ->
                     witnessesByIdentityF64.getOrPut(identityF64) { mutableListOf() } += witnessF64
                 }
             }
@@ -183,7 +230,8 @@ internal fun buildPathHybridTopologyF64F32(
             seedsByIdentityF64 = seedsByIdentityF64,
             sourceSpanF64 = sourceSpanF64,
             locationF64 = sourceSectionLocationF64(sourceSpanF64, sourceSectionF64, atStart = true),
-            pointF64 = sourceSectionF64.startPointF64,
+            canonicalPointF64 = sourceSectionF64.startPointF64,
+            incidencePointF64 = sourceSectionF64.startIncidencePointF64,
             normalizationF64 = normalizationF64,
             witnessesByIdentityF64 = witnessesByIdentityF64,
             candidateWorkBudgetI32 = candidateWorkBudgetI32,
@@ -192,7 +240,8 @@ internal fun buildPathHybridTopologyF64F32(
             seedsByIdentityF64 = seedsByIdentityF64,
             sourceSpanF64 = sourceSpanF64,
             locationF64 = sourceSectionLocationF64(sourceSpanF64, sourceSectionF64, atStart = false),
-            pointF64 = sourceSectionF64.endPointF64,
+            canonicalPointF64 = sourceSectionF64.endPointF64,
+            incidencePointF64 = sourceSectionF64.endIncidencePointF64,
             normalizationF64 = normalizationF64,
             witnessesByIdentityF64 = witnessesByIdentityF64,
             candidateWorkBudgetI32 = candidateWorkBudgetI32,
@@ -210,17 +259,14 @@ internal fun buildPathHybridTopologyF64F32(
         candidateWorkBudgetI32,
     )
     val vertexIndexByIdentityF64 = mutableMapOf<PathVertexIdentityF64, Int>()
-    val verticesF64F32 = orderedSeedsF64F32.mapIndexed { indexI32, seedF64F32 ->
+    val verticesF64F32 = ArrayList<PathHybridVertexF64F32>(orderedSeedsF64F32.size)
+    orderedSeedsF64F32.forEachIndexed { indexI32, seedF64F32 ->
         preflightHybridLinearF64F32(
             checkedPathWorkAddI64(
                 checkedPathWorkMultiplyI64(seedF64F32.originalPointsF32.size.toLong(), 2L),
                 checkedPathWorkMultiplyI64(seedF64F32.incidentCandidatesF32.size.toLong(), 2L),
             ),
             candidateWorkBudgetI32,
-        )
-        val representativePointF32 = chooseRepresentativePointF32(
-            originalPointsF32 = seedF64F32.originalPointsF32,
-            incidentCandidatesF32 = seedF64F32.incidentCandidatesF32,
         )
         preflightHybridLinearF64F32(seedF64F32.witnessesF64.size.toLong(), candidateWorkBudgetI32)
         val distinctWitnessesF64 = seedF64F32.witnessesF64.distinct()
@@ -232,8 +278,14 @@ internal fun buildPathHybridTopologyF64F32(
         if (witnessesF64.size > 1 && compareHybridWitnessesF64(witnessesF64[0], witnessesF64[1]) == 0) {
             throw IllegalStateException("path-f32-projection-collapse")
         }
+        val representativePointF32 = chooseRepresentativePointF32(
+            originalPointsF32 = seedF64F32.originalPointsF32,
+            incidentCandidatesF32 = seedF64F32.incidentCandidatesF32,
+            incidentSourceSpanIdsI64 = seedF64F32.incidentSourceSpanIdsI64,
+            witnessesF64 = witnessesF64,
+        )
         vertexIndexByIdentityF64[seedF64F32.identityF64] = indexI32
-        PathHybridVertexF64F32(
+        verticesF64F32 += PathHybridVertexF64F32(
             sourcePointF64 = seedF64F32.sourcePointF64,
             representativePointF32 = representativePointF32,
             originalPointF32 = chooseOriginalPointF32(seedF64F32.originalPointsF32),
@@ -315,7 +367,16 @@ internal fun buildPathHybridTopologyF64F32(
     // second all-pairs envelope here: that would charge both culled pairs and the same emitted
     // candidate a second time, and makes a finely flattened curve exhaust its public budget
     // before geometry is examined.
+    val pointWitnessIndexF64F32 = buildPointWitnessIndexF64F32(
+        witnessesF64 = sourceTopologyF64.contactWitnessesF64,
+        candidateWorkBudgetI32 = candidateWorkBudgetI32,
+    )
+    val overlapWitnessIndexF64F32 = buildOverlapWitnessIndexF64F32(
+        witnessesF64 = sourceTopologyF64.contactWitnessesF64,
+        candidateWorkBudgetI32 = candidateWorkBudgetI32,
+    )
     val proposalsF64F32 = mutableListOf<PathProjectedCoincidenceProposalF64F32>()
+    val deferredEndpointContactsF64F32 = mutableListOf<PathDeferredProjectedEndpointContactF64F32>()
     forEachPathEdgeCandidatePairF64(
         projectedSpansF64F32.map(PathProjectedSourceSpanF64F32::projectedEdgeF64),
         candidateWorkBudgetI32,
@@ -339,7 +400,7 @@ internal fun buildPathHybridTopologyF64F32(
             firstF64F32,
             secondF64F32,
             projectedContactF64,
-            sourceTopologyF64.contactWitnessesF64,
+            pointWitnessIndexF64F32,
             verticesF64F32,
             vertexIndexByIdentityF64,
             candidateWorkBudgetI32,
@@ -350,11 +411,21 @@ internal fun buildPathHybridTopologyF64F32(
                         firstF64F32,
                         secondF64F32,
                         projectedContactF64,
-                        sourceTopologyF64.contactWitnessesF64,
+                        overlapWitnessIndexF64F32,
                         candidateWorkBudgetI32,
                     )
                 ) {
-                    throw IllegalStateException("path-f32-projection-collapse")
+                    if (!isProjectedEndpointContactF64F32(projectedContactF64)) {
+                        throw IllegalStateException("path-f32-projection-collapse")
+                    }
+                    // Do not use this coordinate collision as authority.  It is checked only
+                    // after all locally witnessed rails have passed their claim transaction.
+                    deferredEndpointContactsF64F32 += PathDeferredProjectedEndpointContactF64F32(
+                        firstSpanF64 = firstF64F32,
+                        firstParameterF64 = projectedContactF64.firstT,
+                        secondSpanF64 = secondF64F32,
+                        secondParameterF64 = projectedContactF64.secondT,
+                    )
                 }
             }
             is PathIntersectionF64.OverlapF64 -> {
@@ -387,7 +458,7 @@ internal fun buildPathHybridTopologyF64F32(
                         firstF64F32,
                         secondF64F32,
                         projectedContactF64,
-                        sourceTopologyF64.contactWitnessesF64,
+                        overlapWitnessIndexF64F32,
                         candidateWorkBudgetI32,
                     )
                 ) {
@@ -397,7 +468,28 @@ internal fun buildPathHybridTopologyF64F32(
         }
     }
 
-    val projectedCoincidencesF32 = assignProjectedCoincidencesF64F32(proposalsF64F32, candidateWorkBudgetI32)
+    // Source topology has already expanded every atomic exact-overlap endpoint into a direct
+    // registry cut before it reached this hybrid phase.  The hybrid arrangement is therefore
+    // lookup-only: projected coincidence validation may reject, but it must never invent an
+    // interior source carrier, identity or alias from a projected coordinate.
+    validateLocalProjectedCoincidenceChainsF64F32(
+        proposalsF64F32 = proposalsF64F32,
+        pointWitnessIndexF64F32 = pointWitnessIndexF64F32,
+        witnessesByIdentityF64 = witnessesByIdentityF64,
+        verticesF64F32 = verticesF64F32,
+        vertexIndexByIdentityF64 = vertexIndexByIdentityF64,
+        candidateWorkBudgetI32 = candidateWorkBudgetI32,
+    )
+    validateProjectedCoincidenceClaimsF64F32(proposalsF64F32, candidateWorkBudgetI32)
+    validateDeferredEndpointContactsF64F32(
+        deferredEndpointContactsF64F32 = deferredEndpointContactsF64F32,
+        proposalsF64F32 = proposalsF64F32,
+        candidateWorkBudgetI32 = candidateWorkBudgetI32,
+    )
+    val projectedCoincidencesF32 = assignProjectedCoincidencesF64F32(
+        proposalsF64F32,
+        candidateWorkBudgetI32,
+    )
     val aliasGroupsF32 = buildHybridAliasGroupsF32(
         verticesF64F32 = verticesF64F32,
         projectedCoincidencesF32 = projectedCoincidencesF32,
@@ -487,9 +579,10 @@ private fun projectedOverlapKeepsTraversalF64F32(
 }
 
 /**
- * A projected rail is only publishable when both of its exact source bounds are registry
- * vertices.  The partial parameters remain in the claim, but an interior endpoint without a
- * direct identity has no authority to create an alias in Task 2.
+ * A projected rail retains its direct section endpoint identities and exact source bounds as a
+ * proposal.  Whether that proposal is locally authorized is deliberately decided only by the
+ * transaction validator: later sections of the same span may be a contiguous continuation, but
+ * they must never become authority merely because their F32 endpoints match.
  */
 private fun projectedOverlapClaimF64F32(
     witnessF64: PathContactWitnessF64.PointF64,
@@ -508,8 +601,6 @@ private fun projectedOverlapClaimF64F32(
         1.0 -> sourceSectionF64.endIdentityF64
         else -> null
     }
-    if (startIdentityF64 == null || endIdentityF64 == null) return null
-    if (witnessF64.vertexIdentityF64 != startIdentityF64 && witnessF64.vertexIdentityF64 != endIdentityF64) return null
     val startSourceParameterF64 = sourceParameterAtEdgeCutF64(
         projectedSpanF64F32.projectedEdgeF64,
         startParameterF64,
@@ -526,6 +617,8 @@ private fun projectedOverlapClaimF64F32(
             inputEdgeIdI32 = sourceSectionF64.inputEdgeIdI32,
             startParameterF64 = startSourceParameterF64,
             endParameterF64 = endSourceParameterF64,
+            startEdgeParameterF64 = startParameterF64,
+            endEdgeParameterF64 = endParameterF64,
             startVertexIdentityF64 = startIdentityF64,
             endVertexIdentityF64 = endIdentityF64,
         )
@@ -537,6 +630,8 @@ private fun projectedOverlapClaimF64F32(
             inputEdgeIdI32 = sourceSectionF64.inputEdgeIdI32,
             startParameterF64 = endSourceParameterF64,
             endParameterF64 = startSourceParameterF64,
+            startEdgeParameterF64 = endParameterF64,
+            endEdgeParameterF64 = startParameterF64,
             startVertexIdentityF64 = endIdentityF64,
             endVertexIdentityF64 = startIdentityF64,
         )
@@ -563,13 +658,22 @@ private fun validateHybridOverlapClaimsF64(
     candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
 ) {
     preflightHybridLinearF64F32(witnessesF64.size.toLong(), candidateWorkBudgetI32)
-    val overlapWitnessInputsF64 = witnessesF64.filterIsInstance<PathContactWitnessF64.OverlapF64>()
+    val overlapWitnessInputsF64 = ArrayList<PathContactWitnessF64.OverlapF64>(witnessesF64.size)
+    witnessesF64.forEach { witnessF64 ->
+        if (witnessF64 is PathContactWitnessF64.OverlapF64) overlapWitnessInputsF64 += witnessF64
+    }
     val overlapWitnessesF64 = sortedHybridF64F32(
         overlapWitnessInputsF64,
         candidateWorkBudgetI32,
         ::compareHybridWitnessesF64,
     )
-    val claimCountI64 = overlapWitnessesF64.sumOf { witnessF64 -> witnessF64.incidencesF64.size.toLong() }
+    // The exact capacity pass is separate from overlap filtering and is charged before it reads
+    // each incidence count.  No `sumOf`/allocation can otherwise hide work before the ledger.
+    preflightHybridLinearF64F32(overlapWitnessesF64.size.toLong(), candidateWorkBudgetI32)
+    var claimCountI64 = 0L
+    overlapWitnessesF64.forEach { witnessF64 ->
+        claimCountI64 = checkedPathWorkAddI64(claimCountI64, witnessF64.incidencesF64.size.toLong())
+    }
     preflightHybridLinearF64F32(
         checkedPathWorkMultiplyI64(claimCountI64, 4L),
         candidateWorkBudgetI32,
@@ -642,19 +746,20 @@ private fun addHybridVertexSeedF64F32(
     seedsByIdentityF64: MutableMap<PathVertexIdentityF64, PathHybridVertexSeedF64F32>,
     sourceSpanF64: PathSourceSpanF64,
     locationF64: PathSourceLocationF64,
-    pointF64: Point2F64,
+    canonicalPointF64: Point2F64,
+    incidencePointF64: Point2F64,
     normalizationF64: PathNormalizationF64,
     witnessesByIdentityF64: Map<PathVertexIdentityF64, List<PathContactWitnessF64>>,
     candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
 ) {
     val identityF64 = locationF64.vertexIdentityF64 ?: throw IllegalStateException("path-arrangement-inconsistent")
-    val candidatePointF32 = normalizationF64.denormalize(pointF64)
+    val candidatePointF32 = normalizationF64.denormalize(incidencePointF64)
     if (!candidatePointF32.isFinite()) throw IllegalStateException("path-f32-projection-collapse")
     val seedF64F32 = seedsByIdentityF64[identityF64]
     if (seedF64F32 == null) {
         seedsByIdentityF64[identityF64] = PathHybridVertexSeedF64F32(
             identityF64 = identityF64,
-            sourcePointF64 = pointF64,
+            sourcePointF64 = canonicalPointF64,
             originalPointsF32 = mutableListOf<Point2F32>().also { pointsF32 -> locationF64.originalPointF32?.let(pointsF32::add) },
             incidentCandidatesF32 = mutableListOf(candidatePointF32),
             incidentSourceSpanIdsI64 = mutableListOf(sourceSpanF64.sourceSpanIdI64),
@@ -662,8 +767,12 @@ private fun addHybridVertexSeedF64F32(
         )
         return
     }
-    if (!sameHybridPointF64(seedF64F32.sourcePointF64, pointF64)) {
-        throw IllegalStateException("path-arrangement-inconsistent")
+    // A registry identity can be incident to several independently evaluated F64 cuts.  The
+    // point above is only a deterministic proof/order representative; replacing every carrier
+    // endpoint with it would hide the per-incidence evaluation that the hybrid lattice must
+    // validate below.
+    if (compareHybridPointsF64(canonicalPointF64, seedF64F32.sourcePointF64) < 0) {
+        seedF64F32.sourcePointF64 = canonicalPointF64
     }
     locationF64.originalPointF32?.let(seedF64F32.originalPointsF32::add)
     seedF64F32.incidentCandidatesF32 += candidatePointF32
@@ -674,64 +783,220 @@ private fun addHybridVertexSeedF64F32(
 private fun chooseRepresentativePointF32(
     originalPointsF32: List<Point2F32>,
     incidentCandidatesF32: List<Point2F32>,
+    incidentSourceSpanIdsI64: List<Long>,
+    witnessesF64: List<PathContactWitnessF64>,
 ): Point2F32 {
     if (originalPointsF32.isNotEmpty()) {
         val firstF32 = originalPointsF32.first()
         var selectedF32 = firstF32
-        originalPointsF32.drop(1).forEach { pointF32 ->
+        for (pointIndexI32 in 1 until originalPointsF32.size) {
+            val pointF32 = originalPointsF32[pointIndexI32]
             if (!sameHybridPointF32(firstF32, pointF32)) throw IllegalStateException("path-f32-projection-collapse")
             if (compareHybridPointsF32(pointF32, selectedF32) < 0) selectedF32 = pointF32
         }
+        validateRepresentativeCandidateF64F32(
+            selectedF32 = selectedF32,
+            incidentCandidatesF32 = incidentCandidatesF32,
+            incidentSourceSpanIdsI64 = incidentSourceSpanIdsI64,
+            witnessesF64 = witnessesF64,
+            requiresSharedWitnessF64 = false,
+            originalAuthoritativeF32 = true,
+        )
         return selectedF32
     }
     if (incidentCandidatesF32.isEmpty()) throw IllegalStateException("path-f32-projection-collapse")
     val firstF32 = incidentCandidatesF32.first()
     var selectedF32 = firstF32
-    incidentCandidatesF32.drop(1).forEach { pointF32 ->
-        if (!sameHybridPointF32(firstF32, pointF32)) throw IllegalStateException("path-f32-projection-collapse")
+    var requiresSharedWitnessF64 = false
+    for (pointIndexI32 in 1 until incidentCandidatesF32.size) {
+        val pointF32 = incidentCandidatesF32[pointIndexI32]
+        if (!sameHybridPointF32(firstF32, pointF32)) requiresSharedWitnessF64 = true
+        if (compareHybridPointsF32(pointF32, selectedF32) < 0) selectedF32 = pointF32
+    }
+    validateRepresentativeCandidateF64F32(
+        selectedF32 = selectedF32,
+        incidentCandidatesF32 = incidentCandidatesF32,
+        incidentSourceSpanIdsI64 = incidentSourceSpanIdsI64,
+        witnessesF64 = witnessesF64,
+        requiresSharedWitnessF64 = requiresSharedWitnessF64,
+        originalAuthoritativeF32 = false,
+    )
+    return selectedF32
+}
+
+/**
+ * The canonical candidate is always one evaluation produced by an incident carrier.  If those
+ * evaluations quantize differently, only one exact witness may bridge them; later DCEL ray
+ * validation checks every retained carrier direction against the chosen F32 embedding.
+ */
+private fun validateRepresentativeCandidateF64F32(
+    selectedF32: Point2F32,
+    incidentCandidatesF32: List<Point2F32>,
+    incidentSourceSpanIdsI64: List<Long>,
+    witnessesF64: List<PathContactWitnessF64>,
+    requiresSharedWitnessF64: Boolean,
+    originalAuthoritativeF32: Boolean,
+) {
+    if (originalAuthoritativeF32) {
+        // An original F32 input bit pattern is authoritative even when re-evaluating the
+        // normalized F64 carrier lands on its neighbouring lattice point. The DCEL later checks
+        // every retained source direction against the resulting embedding.
+        return
+    }
+    // `selectedF32` was selected from this list by the preceding deterministic scan; do not
+    // re-scan it only to reconstruct that fact after the caller's preflight.
+    if (!requiresSharedWitnessF64) return
+    val witnessF64 = witnessesF64.singleOrNull() ?: throw IllegalStateException("path-f32-projection-collapse")
+    incidentSourceSpanIdsI64.forEach { sourceSpanIdI64 ->
+        val covered = when (witnessF64) {
+            is PathContactWitnessF64.PointF64 -> sourceSpanIdI64 in witnessF64.incidentSourceSpanIdsI64
+            is PathContactWitnessF64.OverlapF64 ->
+                sourceSpanIdI64 in witnessF64.firstSourceSpanIdsI64 ||
+                    sourceSpanIdI64 in witnessF64.secondSourceSpanIdsI64
+        }
+        if (!covered) throw IllegalStateException("path-f32-projection-collapse")
+    }
+}
+
+private fun chooseOriginalPointF32(originalPointsF32: List<Point2F32>): Point2F32? {
+    var selectedF32 = originalPointsF32.firstOrNull() ?: return null
+    for (pointIndexI32 in 1 until originalPointsF32.size) {
+        val pointF32 = originalPointsF32[pointIndexI32]
         if (compareHybridPointsF32(pointF32, selectedF32) < 0) selectedF32 = pointF32
     }
     return selectedF32
 }
 
-private fun chooseOriginalPointF32(originalPointsF32: List<Point2F32>): Point2F32? {
-    var selectedF32 = originalPointsF32.firstOrNull() ?: return null
-    originalPointsF32.drop(1).forEach { pointF32 ->
-        if (compareHybridPointsF32(pointF32, selectedF32) < 0) selectedF32 = pointF32
+/**
+ * Build the Point-witness lookup once before the projected AABB walk. Each exact witness
+ * reserves its complete incidence list immediately before that list is inspected, so the debit
+ * is deterministic from source topology while remaining proportional to actual incidences.
+ */
+private fun buildPointWitnessIndexF64F32(
+    witnessesF64: List<PathContactWitnessF64>,
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+): PathPointWitnessIndexF64F32 {
+    preflightHybridLinearF64F32(witnessesF64.size.toLong(), candidateWorkBudgetI32)
+    val witnessesBySourceSpanIdI64 = linkedMapOf<Long, MutableList<PathContactWitnessF64.PointF64>>()
+    val witnessIdsBySourceSpanIdI64 = linkedMapOf<Long, MutableSet<Long>>()
+    val witnessesByIdentityF64 = linkedMapOf<PathVertexIdentityF64, MutableList<PathContactWitnessF64.PointF64>>()
+    witnessesF64.forEach { witnessF64 ->
+        if (witnessF64 !is PathContactWitnessF64.PointF64) return@forEach
+        preflightHybridLinearF64F32(
+            checkedPathWorkAddI64(
+                checkedPathWorkMultiplyI64(witnessF64.incidentSourceSpanIdsI64.size.toLong(), 3L),
+                3L,
+            ),
+            candidateWorkBudgetI32,
+        )
+        witnessesByIdentityF64.getOrPut(witnessF64.vertexIdentityF64) { mutableListOf() } += witnessF64
+        witnessF64.incidentSourceSpanIdsI64.forEach { sourceSpanIdI64 ->
+            witnessesBySourceSpanIdI64.getOrPut(sourceSpanIdI64) { mutableListOf() } += witnessF64
+            witnessIdsBySourceSpanIdI64.getOrPut(sourceSpanIdI64) { linkedSetOf() } += witnessF64.witnessIdI64
+        }
     }
-    return selectedF32
+    // Every per-span list has been appended in source witness order only.  Rebuild it in the
+    // semantic point order once, before the broad phase, so a backend's map traversal can never
+    // influence a subsequent lookup.
+    preflightHybridLinearF64F32(witnessesBySourceSpanIdI64.size.toLong(), candidateWorkBudgetI32)
+    witnessesBySourceSpanIdI64.values.forEach { witnessesForSpanF64 ->
+        val orderedF64 = sortedHybridF64F32(
+            witnessesForSpanF64,
+            candidateWorkBudgetI32,
+            ::compareHybridPointWitnessesF64,
+        )
+        witnessesForSpanF64.clear()
+        witnessesForSpanF64 += orderedF64
+    }
+    return PathPointWitnessIndexF64F32(
+        witnessesBySourceSpanIdI64 = witnessesBySourceSpanIdI64,
+        witnessIdsBySourceSpanIdI64 = witnessIdsBySourceSpanIdI64,
+        witnessesByIdentityF64 = witnessesByIdentityF64,
+    )
+}
+
+/**
+ * Materialize the exact-overlap incidence registry once. The projected broad phase can then
+ * query only the two source carriers under consideration instead of rescanning every exact
+ * overlap component for every candidate.
+ */
+private fun buildOverlapWitnessIndexF64F32(
+    witnessesF64: List<PathContactWitnessF64>,
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+): PathOverlapWitnessIndexF64F32 {
+    preflightHybridLinearF64F32(witnessesF64.size.toLong(), candidateWorkBudgetI32)
+    val incidencesByInputEdgeIdI32 = linkedMapOf<Int, MutableList<PathOverlapWitnessIncidenceReferenceF64F32>>()
+    witnessesF64.forEach { witnessF64 ->
+        if (witnessF64 !is PathContactWitnessF64.OverlapF64) return@forEach
+        preflightHybridLinearF64F32(
+            checkedPathWorkAddI64(
+                checkedPathWorkMultiplyI64(witnessF64.incidencesF64.size.toLong(), 3L),
+                2L,
+            ),
+            candidateWorkBudgetI32,
+        )
+        witnessF64.incidencesF64.forEach { incidenceF64 ->
+            incidencesByInputEdgeIdI32.getOrPut(incidenceF64.inputEdgeIdI32) { mutableListOf() } +=
+                PathOverlapWitnessIncidenceReferenceF64F32(witnessF64, incidenceF64)
+        }
+    }
+    return PathOverlapWitnessIndexF64F32(incidencesByInputEdgeIdI32)
+}
+
+/**
+ * Returns the one exact Point witness jointly incident to two source spans.  A second exact
+ * witness is an ambiguity rather than an ordering opportunity, so no witness/edge label can
+ * choose a winner.
+ */
+private fun uniqueSharedPointWitnessF64F32(
+    pointWitnessIndexF64F32: PathPointWitnessIndexF64F32,
+    firstSourceSpanIdI64: Long,
+    secondSourceSpanIdI64: Long,
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+): PathContactWitnessF64.PointF64? {
+    val firstWitnessesF64 = pointWitnessIndexF64F32.witnessesBySourceSpanIdI64[firstSourceSpanIdI64].orEmpty()
+    val secondWitnessIdsI64 = pointWitnessIndexF64F32.witnessIdsBySourceSpanIdI64[secondSourceSpanIdI64].orEmpty()
+    preflightHybridLinearF64F32(
+        checkedPathWorkAddI64(firstWitnessesF64.size.toLong(), 2L),
+        candidateWorkBudgetI32,
+    )
+    var selectedF64: PathContactWitnessF64.PointF64? = null
+    firstWitnessesF64.forEach { witnessF64 ->
+        if (witnessF64.witnessIdI64 !in secondWitnessIdsI64) return@forEach
+        val previousF64 = selectedF64
+        if (previousF64 != null && previousF64.witnessIdI64 != witnessF64.witnessIdI64) {
+            return null
+        }
+        selectedF64 = witnessF64
+    }
+    return selectedF64
 }
 
 private fun localPointWitnessForProjectedPairF64F32(
     firstF64F32: PathProjectedSourceSpanF64F32,
     secondF64F32: PathProjectedSourceSpanF64F32,
     projectedContactF64: PathIntersectionF64,
-    witnessesF64: List<PathContactWitnessF64>,
+    pointWitnessIndexF64F32: PathPointWitnessIndexF64F32,
     verticesF64F32: List<PathHybridVertexF64F32>,
     vertexIndexByIdentityF64: Map<PathVertexIdentityF64, Int>,
     candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
 ): PathContactWitnessF64.PointF64? {
+    val witnessF64 = uniqueSharedPointWitnessF64F32(
+        pointWitnessIndexF64F32 = pointWitnessIndexF64F32,
+        firstSourceSpanIdI64 = firstF64F32.sourceSpanF64.sourceSpanIdI64,
+        secondSourceSpanIdI64 = secondF64F32.sourceSpanF64.sourceSpanIdI64,
+        candidateWorkBudgetI32 = candidateWorkBudgetI32,
+    ) ?: return null
+    if (projectedContactF64 is PathIntersectionF64.OverlapF64) return witnessF64
     val projectedPointsF32 = projectedContactPointsF32(projectedContactF64)
-    preflightHybridLinearF64F32(witnessesF64.size.toLong(), candidateWorkBudgetI32)
-    val pointWitnessInputsF64 = witnessesF64.filterIsInstance<PathContactWitnessF64.PointF64>()
-    val pointWitnessesF64 = sortedHybridF64F32(
-        pointWitnessInputsF64,
-        candidateWorkBudgetI32,
-        ::compareHybridPointWitnessesF64,
-    )
-    preflightHybridLinearF64F32(
-        checkedPathWorkAddI64(checkedPathWorkMultiplyI64(pointWitnessesF64.size.toLong(), 6L), 2L),
-        candidateWorkBudgetI32,
-    )
-    pointWitnessesF64.forEach { witnessF64 ->
-        if (!projectedSpanTouchesPointWitnessF64F32(firstF64F32, witnessF64, projectedContactF64, first = true)) return@forEach
-        if (!projectedSpanTouchesPointWitnessF64F32(secondF64F32, witnessF64, projectedContactF64, first = false)) return@forEach
-        val witnessVertexIndexI32 = vertexIndexByIdentityF64[witnessF64.vertexIdentityF64] ?: return@forEach
-        val witnessPointF32 = verticesF64F32[witnessVertexIndexI32].representativePointF32
-        if (projectedPointsF32.none { pointF32 -> sameHybridPointF32(pointF32, witnessPointF32) }) return@forEach
-        return witnessF64
+    preflightHybridLinearF64F32(5L, candidateWorkBudgetI32)
+    if (!projectedSpanTouchesPointWitnessF64F32(firstF64F32, witnessF64, projectedContactF64, first = true)) return null
+    if (!projectedSpanTouchesPointWitnessF64F32(secondF64F32, witnessF64, projectedContactF64, first = false)) return null
+    val witnessVertexIndexI32 = vertexIndexByIdentityF64[witnessF64.vertexIdentityF64] ?: return null
+    val witnessPointF32 = verticesF64F32[witnessVertexIndexI32].representativePointF32
+    return witnessF64.takeIf { witnessF64 ->
+        projectedPointsF32.any { pointF32 -> sameHybridPointF32(pointF32, witnessPointF32) }
     }
-    return null
 }
 
 private fun projectedSpanTouchesPointWitnessF64F32(
@@ -777,119 +1042,86 @@ private fun projectedSectionEndpointIdentityF64F32(
     else -> null
 }
 
+private fun isProjectedEndpointContactF64F32(projectedContactF64: PathIntersectionF64.PointF64): Boolean =
+    (projectedContactF64.firstT == 0.0 || projectedContactF64.firstT == 1.0) &&
+        (projectedContactF64.secondT == 0.0 || projectedContactF64.secondT == 1.0)
+
 private fun exactOverlapSupportsProjectedPointF64F32(
     firstF64F32: PathProjectedSourceSpanF64F32,
     secondF64F32: PathProjectedSourceSpanF64F32,
     projectedContactF64: PathIntersectionF64.PointF64,
-    witnessesF64: List<PathContactWitnessF64>,
+    overlapWitnessIndexF64F32: PathOverlapWitnessIndexF64F32,
     candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
-): Boolean {
-    preflightHybridLinearF64F32(witnessesF64.size.toLong(), candidateWorkBudgetI32)
-    val overlapWitnessesF64 = witnessesF64.filterIsInstance<PathContactWitnessF64.OverlapF64>()
-    preflightOverlapWitnessLookupF64F32(overlapWitnessesF64, candidateWorkBudgetI32)
-    return overlapWitnessesF64.any { witnessF64 ->
-        overlapWitnessCoversProjectedPointF64F32(
-            witnessF64,
-            firstF64F32,
-            projectedContactF64.firstT,
-            secondF64F32,
-            projectedContactF64.secondT,
-        )
-    }
-}
+): Boolean = overlapWitnessIndexSupportsProjectedContactF64F32(
+    overlapWitnessIndexF64F32 = overlapWitnessIndexF64F32,
+    firstF64F32 = firstF64F32,
+    firstStartParameterF64 = projectedContactF64.firstT,
+    firstEndParameterF64 = projectedContactF64.firstT,
+    secondF64F32 = secondF64F32,
+    secondStartParameterF64 = projectedContactF64.secondT,
+    secondEndParameterF64 = projectedContactF64.secondT,
+    candidateWorkBudgetI32 = candidateWorkBudgetI32,
+)
 
 private fun exactOverlapSupportsProjectedOverlapF64F32(
     firstF64F32: PathProjectedSourceSpanF64F32,
     secondF64F32: PathProjectedSourceSpanF64F32,
     projectedContactF64: PathIntersectionF64.OverlapF64,
-    witnessesF64: List<PathContactWitnessF64>,
+    overlapWitnessIndexF64F32: PathOverlapWitnessIndexF64F32,
     candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
-): Boolean {
-    preflightHybridLinearF64F32(witnessesF64.size.toLong(), candidateWorkBudgetI32)
-    val overlapWitnessesF64 = witnessesF64.filterIsInstance<PathContactWitnessF64.OverlapF64>()
-    preflightOverlapWitnessLookupF64F32(overlapWitnessesF64, candidateWorkBudgetI32)
-    return overlapWitnessesF64.any { witnessF64 ->
-        overlapWitnessCoversProjectedRailF64F32(
-            witnessF64,
-            firstF64F32,
-            projectedContactF64.firstStartParameter,
-            projectedContactF64.firstEndParameter,
-            secondF64F32,
-            projectedContactF64.secondStartParameter,
-            projectedContactF64.secondEndParameter,
-        )
-    }
-}
+): Boolean = overlapWitnessIndexSupportsProjectedContactF64F32(
+    overlapWitnessIndexF64F32 = overlapWitnessIndexF64F32,
+    firstF64F32 = firstF64F32,
+    firstStartParameterF64 = projectedContactF64.firstStartParameter,
+    firstEndParameterF64 = projectedContactF64.firstEndParameter,
+    secondF64F32 = secondF64F32,
+    secondStartParameterF64 = projectedContactF64.secondStartParameter,
+    secondEndParameterF64 = projectedContactF64.secondEndParameter,
+    candidateWorkBudgetI32 = candidateWorkBudgetI32,
+)
 
-private fun preflightOverlapWitnessLookupF64F32(
-    overlapWitnessesF64: List<PathContactWitnessF64.OverlapF64>,
-    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
-) {
-    val unitsI64 = overlapWitnessesF64.fold(0L) { totalI64, witnessF64 ->
-        val incidenceCountI64 = witnessF64.incidencesF64.size.toLong()
-        val spanCountI64 = witnessF64.incidencesF64.fold(0L) { spanTotalI64, incidenceF64 ->
-            checkedPathWorkAddI64(spanTotalI64, incidenceF64.sourceSpanIdsI64.size.toLong())
-        }
-        checkedPathWorkAddI64(
-            totalI64,
-            checkedPathWorkAddI64(
-                1L,
-                checkedPathWorkAddI64(
-                    checkedPathWorkMultiplyI64(incidenceCountI64, incidenceCountI64),
-                    checkedPathWorkMultiplyI64(spanCountI64, 2L),
-                ),
-            ),
-        )
-    }
-    preflightHybridLinearF64F32(unitsI64, candidateWorkBudgetI32)
-}
-
-private fun overlapWitnessCoversProjectedPointF64F32(
-    witnessF64: PathContactWitnessF64.OverlapF64,
-    firstF64F32: PathProjectedSourceSpanF64F32,
-    firstParameterF64: Double,
-    secondF64F32: PathProjectedSourceSpanF64F32,
-    secondParameterF64: Double,
-): Boolean = witnessF64.incidencesF64.indices.any { firstIndexI32 ->
-    witnessF64.incidencesF64.indices.any { secondIndexI32 ->
-        firstIndexI32 != secondIndexI32 &&
-            overlapIncidenceCoversProjectedEndpointF64F32(
-                witnessF64.incidencesF64[firstIndexI32],
-                firstF64F32,
-                firstParameterF64,
-            ) &&
-            overlapIncidenceCoversProjectedEndpointF64F32(
-                witnessF64.incidencesF64[secondIndexI32],
-                secondF64F32,
-                secondParameterF64,
-            )
-    }
-}
-
-private fun overlapWitnessCoversProjectedRailF64F32(
-    witnessF64: PathContactWitnessF64.OverlapF64,
+private fun overlapWitnessIndexSupportsProjectedContactF64F32(
+    overlapWitnessIndexF64F32: PathOverlapWitnessIndexF64F32,
     firstF64F32: PathProjectedSourceSpanF64F32,
     firstStartParameterF64: Double,
     firstEndParameterF64: Double,
     secondF64F32: PathProjectedSourceSpanF64F32,
     secondStartParameterF64: Double,
     secondEndParameterF64: Double,
-): Boolean = witnessF64.incidencesF64.indices.any { firstIndexI32 ->
-    witnessF64.incidencesF64.indices.any { secondIndexI32 ->
-        firstIndexI32 != secondIndexI32 &&
-            overlapIncidenceCoversProjectedRailF64F32(
-                witnessF64.incidencesF64[firstIndexI32],
-                firstF64F32,
-                firstStartParameterF64,
-                firstEndParameterF64,
-            ) &&
-            overlapIncidenceCoversProjectedRailF64F32(
-                witnessF64.incidencesF64[secondIndexI32],
-                secondF64F32,
-                secondStartParameterF64,
-                secondEndParameterF64,
-            )
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+): Boolean {
+    val firstReferencesF64F32 = overlapWitnessIndexF64F32.incidencesByInputEdgeIdI32[
+        firstF64F32.sourceSectionF64.inputEdgeIdI32
+    ].orEmpty()
+    val secondReferencesF64F32 = overlapWitnessIndexF64F32.incidencesByInputEdgeIdI32[
+        secondF64F32.sourceSectionF64.inputEdgeIdI32
+    ].orEmpty()
+    preflightHybridLinearF64F32(
+        checkedPathWorkAddI64(
+            checkedPathWorkMultiplyI64(firstReferencesF64F32.size.toLong(), secondReferencesF64F32.size.toLong()),
+            2L,
+        ),
+        candidateWorkBudgetI32,
+    )
+    val supportedF64 = firstReferencesF64F32.any { firstReferenceF64F32 ->
+        secondReferencesF64F32.any { secondReferenceF64F32 ->
+            firstReferenceF64F32.witnessF64.witnessIdI64 == secondReferenceF64F32.witnessF64.witnessIdI64 &&
+                firstReferenceF64F32.incidenceF64.inputEdgeIdI32 != secondReferenceF64F32.incidenceF64.inputEdgeIdI32 &&
+                overlapIncidenceCoversProjectedRailF64F32(
+                    firstReferenceF64F32.incidenceF64,
+                    firstF64F32,
+                    firstStartParameterF64,
+                    firstEndParameterF64,
+                ) &&
+                overlapIncidenceCoversProjectedRailF64F32(
+                    secondReferenceF64F32.incidenceF64,
+                    secondF64F32,
+                    secondStartParameterF64,
+                    secondEndParameterF64,
+                )
+        }
     }
+    return supportedF64
 }
 
 private fun overlapIncidenceCoversProjectedEndpointF64F32(
@@ -944,7 +1176,6 @@ private fun assignProjectedCoincidencesF64F32(
     proposalsF64F32: List<PathProjectedCoincidenceProposalF64F32>,
     candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
 ): List<PathProjectedCoincidenceF32> {
-    validateProjectedCoincidenceClaimsF64F32(proposalsF64F32, candidateWorkBudgetI32)
     val orderedF64F32 = sortedHybridF64F32(
         proposalsF64F32,
         candidateWorkBudgetI32,
@@ -970,6 +1201,227 @@ private fun assignProjectedCoincidencesF64F32(
             firstClaimF64 = proposalF64F32.firstClaimF64,
             secondClaimF64 = proposalF64F32.secondClaimF64,
         )
+    }
+}
+
+private data class PathProjectedCoincidencePairKeyF64F32(
+    val witnessIdI64: Long,
+    val lowerSourceSpanIdI64: Long,
+    val upperSourceSpanIdI64: Long,
+)
+
+private data class PathProjectedClaimProposalSideF64F32(
+    val claimF64: PathProjectedSpanClaimF64,
+    val proposalF64F32: PathProjectedCoincidenceProposalF64F32,
+    val firstSide: Boolean,
+)
+
+/**
+ * A Point witness may seed exactly one local projected run.  The run is checked as a complete
+ * transaction rather than accepted candidate by candidate: each side must start or end at the
+ * witness, every following source section must be monotone and adjacent, and no exact event,
+ * seam, original endpoint, or non-coincident gap may be crossed.  This is provenance-only; the
+ * F32 point is checked only against the already selected representative at the anchor.
+ */
+private fun validateLocalProjectedCoincidenceChainsF64F32(
+    proposalsF64F32: List<PathProjectedCoincidenceProposalF64F32>,
+    pointWitnessIndexF64F32: PathPointWitnessIndexF64F32,
+    witnessesByIdentityF64: Map<PathVertexIdentityF64, List<PathContactWitnessF64>>,
+    verticesF64F32: List<PathHybridVertexF64F32>,
+    vertexIndexByIdentityF64: Map<PathVertexIdentityF64, Int>,
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+) {
+    preflightHybridLinearF64F32(
+        checkedPathWorkAddI64(
+            checkedPathWorkMultiplyI64(proposalsF64F32.size.toLong(), 12L),
+            2L,
+        ),
+        candidateWorkBudgetI32,
+    )
+    val proposalsByPairF64F32 = linkedMapOf<
+        PathProjectedCoincidencePairKeyF64F32,
+        MutableList<PathProjectedCoincidenceProposalF64F32>,
+        >()
+    proposalsF64F32.forEach { proposalF64F32 ->
+        val firstSourceSpanIdI64 = proposalF64F32.firstClaimF64.sourceSpanIdI64
+        val secondSourceSpanIdI64 = proposalF64F32.secondClaimF64.sourceSpanIdI64
+        if (firstSourceSpanIdI64 == secondSourceSpanIdI64) {
+            throw IllegalStateException("path-f32-projection-collapse")
+        }
+        val keyF64F32 = PathProjectedCoincidencePairKeyF64F32(
+            witnessIdI64 = proposalF64F32.pointWitnessF64.witnessIdI64,
+            lowerSourceSpanIdI64 = minOf(firstSourceSpanIdI64, secondSourceSpanIdI64),
+            upperSourceSpanIdI64 = maxOf(firstSourceSpanIdI64, secondSourceSpanIdI64),
+        )
+        proposalsByPairF64F32.getOrPut(keyF64F32) { mutableListOf() } += proposalF64F32
+    }
+    proposalsByPairF64F32.values.forEach { pairProposalsF64F32 ->
+        val witnessF64 = pairProposalsF64F32.firstOrNull()?.pointWitnessF64
+            ?: throw IllegalStateException("path-arrangement-inconsistent")
+        if (pairProposalsF64F32.any { proposalF64F32 ->
+                proposalF64F32.pointWitnessF64.witnessIdI64 != witnessF64.witnessIdI64
+            }
+        ) {
+            throw IllegalStateException("path-f32-projection-collapse")
+        }
+        val proposalsBySourceSpanIdI64 = linkedMapOf<Long, MutableList<PathProjectedClaimProposalSideF64F32>>()
+        pairProposalsF64F32.forEach { proposalF64F32 ->
+            proposalsBySourceSpanIdI64.getOrPut(proposalF64F32.firstClaimF64.sourceSpanIdI64) { mutableListOf() } +=
+                PathProjectedClaimProposalSideF64F32(
+                    claimF64 = proposalF64F32.firstClaimF64,
+                    proposalF64F32 = proposalF64F32,
+                    firstSide = true,
+                )
+            proposalsBySourceSpanIdI64.getOrPut(proposalF64F32.secondClaimF64.sourceSpanIdI64) { mutableListOf() } +=
+                PathProjectedClaimProposalSideF64F32(
+                    claimF64 = proposalF64F32.secondClaimF64,
+                    proposalF64F32 = proposalF64F32,
+                    firstSide = false,
+                )
+        }
+        if (proposalsBySourceSpanIdI64.size != 2) throw IllegalStateException("path-f32-projection-collapse")
+        proposalsBySourceSpanIdI64.forEach { (sourceSpanIdI64, sidesF64F32) ->
+            validateLocalProjectedCoincidenceChainSideF64F32(
+                sourceSpanIdI64 = sourceSpanIdI64,
+                sidesF64F32 = sidesF64F32,
+                witnessF64 = witnessF64,
+                pointWitnessIndexF64F32 = pointWitnessIndexF64F32,
+                witnessesByIdentityF64 = witnessesByIdentityF64,
+                verticesF64F32 = verticesF64F32,
+                vertexIndexByIdentityF64 = vertexIndexByIdentityF64,
+                candidateWorkBudgetI32 = candidateWorkBudgetI32,
+            )
+        }
+    }
+}
+
+private fun validateLocalProjectedCoincidenceChainSideF64F32(
+    sourceSpanIdI64: Long,
+    sidesF64F32: List<PathProjectedClaimProposalSideF64F32>,
+    witnessF64: PathContactWitnessF64.PointF64,
+    pointWitnessIndexF64F32: PathPointWitnessIndexF64F32,
+    witnessesByIdentityF64: Map<PathVertexIdentityF64, List<PathContactWitnessF64>>,
+    verticesF64F32: List<PathHybridVertexF64F32>,
+    vertexIndexByIdentityF64: Map<PathVertexIdentityF64, Int>,
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+) {
+    preflightHybridLinearF64F32(
+        checkedPathWorkAddI64(
+            checkedPathWorkMultiplyI64(sidesF64F32.size.toLong(), 9L),
+            witnessF64.incidentSourceSpanIdsI64.size.toLong(),
+        ),
+        candidateWorkBudgetI32,
+    )
+    if (sourceSpanIdI64 !in witnessF64.incidentSourceSpanIdsI64) {
+        throw IllegalStateException("path-f32-projection-collapse")
+    }
+    val orderedSidesF64F32 = sortedHybridF64F32(
+        sidesF64F32,
+        candidateWorkBudgetI32,
+        ::compareProjectedClaimProposalSidesF64F32,
+    )
+    val firstSideF64F32 = orderedSidesF64F32.firstOrNull()
+        ?: throw IllegalStateException("path-arrangement-inconsistent")
+    var previousSideF64F32 = firstSideF64F32
+    orderedSidesF64F32.drop(1).forEach { sideF64F32 ->
+        val previousClaimF64 = previousSideF64F32.claimF64
+        val claimF64 = sideF64F32.claimF64
+        if (
+            previousClaimF64.startParameterF64 == claimF64.startParameterF64 &&
+                previousClaimF64.endParameterF64 == claimF64.endParameterF64
+        ) {
+            if (
+                previousClaimF64.startVertexIdentityF64 != claimF64.startVertexIdentityF64 ||
+                    previousClaimF64.endVertexIdentityF64 != claimF64.endVertexIdentityF64 ||
+                    previousClaimF64.sourceSectionIndexI32 != claimF64.sourceSectionIndexI32
+            ) {
+                throw IllegalStateException("path-f32-projection-collapse")
+            }
+            return@forEach
+        }
+        if (
+            previousClaimF64.endParameterF64 != claimF64.startParameterF64 ||
+                previousClaimF64.endVertexIdentityF64 != claimF64.startVertexIdentityF64 ||
+                claimF64.sourceSectionIndexI32 != previousClaimF64.sourceSectionIndexI32 + 1
+        ) {
+            throw IllegalStateException("path-f32-projection-collapse")
+        }
+        rejectForeignLocalProjectedCoincidenceJoinF64F32(
+            identityF64 = previousClaimF64.endVertexIdentityF64
+                ?: throw IllegalStateException("path-f32-projection-collapse"),
+            witnessF64 = witnessF64,
+            pointWitnessIndexF64F32 = pointWitnessIndexF64F32,
+            witnessesByIdentityF64 = witnessesByIdentityF64,
+            candidateWorkBudgetI32 = candidateWorkBudgetI32,
+        )
+        previousSideF64F32 = sideF64F32
+    }
+    val lowerAnchored = firstSideF64F32.claimF64.startVertexIdentityF64 == witnessF64.vertexIdentityF64
+    val upperAnchored = previousSideF64F32.claimF64.endVertexIdentityF64 == witnessF64.vertexIdentityF64
+    if (!lowerAnchored && !upperAnchored) throw IllegalStateException("path-f32-projection-collapse")
+    val witnessVertexIndexI32 = vertexIndexByIdentityF64[witnessF64.vertexIdentityF64]
+        ?: throw IllegalStateException("path-arrangement-inconsistent")
+    val witnessPointF32 = verticesF64F32[witnessVertexIndexI32].representativePointF32
+    val hasRepresentativeAnchor = orderedSidesF64F32.any { sideF64F32 ->
+        directPointWitnessAnchorF64F32(sideF64F32, witnessF64, witnessPointF32)
+    }
+    if (!hasRepresentativeAnchor) throw IllegalStateException("path-f32-projection-collapse")
+}
+
+private fun compareProjectedClaimProposalSidesF64F32(
+    firstF64F32: PathProjectedClaimProposalSideF64F32,
+    secondF64F32: PathProjectedClaimProposalSideF64F32,
+): Int {
+    firstF64F32.claimF64.startParameterF64.compareTo(secondF64F32.claimF64.startParameterF64)
+        .takeIf { it != 0 }?.let { return it }
+    return firstF64F32.claimF64.endParameterF64.compareTo(secondF64F32.claimF64.endParameterF64)
+}
+
+private fun directPointWitnessAnchorF64F32(
+    sideF64F32: PathProjectedClaimProposalSideF64F32,
+    witnessF64: PathContactWitnessF64.PointF64,
+    witnessPointF32: Point2F32,
+): Boolean {
+    val firstClaimF64 = sideF64F32.proposalF64F32.firstClaimF64
+    val secondClaimF64 = sideF64F32.proposalF64F32.secondClaimF64
+    val sharedAtStart =
+        firstClaimF64.startVertexIdentityF64 == witnessF64.vertexIdentityF64 &&
+            secondClaimF64.startVertexIdentityF64 == witnessF64.vertexIdentityF64
+    val sharedAtEnd =
+        firstClaimF64.endVertexIdentityF64 == witnessF64.vertexIdentityF64 &&
+            secondClaimF64.endVertexIdentityF64 == witnessF64.vertexIdentityF64
+    if (!sharedAtStart && !sharedAtEnd) return false
+    val proposalF64F32 = sideF64F32.proposalF64F32
+    return sameHybridPointF32(proposalF64F32.startPointF32, witnessPointF32) ||
+        sameHybridPointF32(proposalF64F32.endPointF32, witnessPointF32)
+}
+
+private fun rejectForeignLocalProjectedCoincidenceJoinF64F32(
+    identityF64: PathVertexIdentityF64,
+    witnessF64: PathContactWitnessF64.PointF64,
+    pointWitnessIndexF64F32: PathPointWitnessIndexF64F32,
+    witnessesByIdentityF64: Map<PathVertexIdentityF64, List<PathContactWitnessF64>>,
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+) {
+    if (identityF64 == witnessF64.vertexIdentityF64) return
+    if (identityF64.originalPointF32 != null) throw IllegalStateException("path-f32-projection-collapse")
+    val pointWitnessesF64 = pointWitnessIndexF64F32.witnessesByIdentityF64[identityF64].orEmpty()
+    val exactWitnessesF64 = witnessesByIdentityF64[identityF64].orEmpty()
+    preflightHybridLinearF64F32(
+        checkedPathWorkAddI64(
+            checkedPathWorkAddI64(pointWitnessesF64.size.toLong(), exactWitnessesF64.size.toLong()),
+            2L,
+        ),
+        candidateWorkBudgetI32,
+    )
+    if (pointWitnessesF64.any { pointWitnessF64 -> pointWitnessF64.witnessIdI64 != witnessF64.witnessIdI64 }) {
+        throw IllegalStateException("path-f32-projection-collapse")
+    }
+    if (exactWitnessesF64.any { exactWitnessF64 ->
+            exactWitnessF64 !is PathContactWitnessF64.PointF64 || exactWitnessF64.witnessIdI64 != witnessF64.witnessIdI64
+        }
+    ) {
+        throw IllegalStateException("path-f32-projection-collapse")
     }
 }
 
@@ -1024,6 +1476,186 @@ private fun validateProjectedCoincidenceClaimsF64F32(
             else -> activeClaimF64 = claimF64
         }
     }
+}
+
+private data class PathExactEndpointIdentityPairF64F32(
+    val firstIdentityF64: PathVertexIdentityF64,
+    val secondIdentityF64: PathVertexIdentityF64,
+)
+
+private data class PathValidatedCoincidenceEndpointRelayF64F32(
+    val pointWitnessF64: PathContactWitnessF64.PointF64,
+    val firstSpanF64: PathProjectedSourceSpanF64F32,
+    val firstClaimF64: PathProjectedSpanClaimF64,
+    val firstAtStart: Boolean,
+    val secondSpanF64: PathProjectedSourceSpanF64F32,
+    val secondClaimF64: PathProjectedSpanClaimF64,
+    val secondAtStart: Boolean,
+)
+
+/**
+ * An endpoint observation is harmless only when it is the next source continuation of both
+ * branches already joined by one validated local Point-witness rail.  This is intentionally an
+ * identity-and-parameter proof: neither the projected coordinate nor a broad-phase bucket can
+ * grant this exception, and the observation publishes no additional alias or claim.
+ */
+private fun validateDeferredEndpointContactsF64F32(
+    deferredEndpointContactsF64F32: List<PathDeferredProjectedEndpointContactF64F32>,
+    proposalsF64F32: List<PathProjectedCoincidenceProposalF64F32>,
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+) {
+    preflightHybridLinearF64F32(
+        checkedPathWorkAddI64(
+            checkedPathWorkMultiplyI64(proposalsF64F32.size.toLong(), 12L),
+            checkedPathWorkMultiplyI64(deferredEndpointContactsF64F32.size.toLong(), 3L),
+        ),
+        candidateWorkBudgetI32,
+    )
+    val relaysByEndpointPairF64F32 = mutableMapOf<
+        PathExactEndpointIdentityPairF64F32,
+        MutableList<PathValidatedCoincidenceEndpointRelayF64F32>,
+        >()
+    proposalsF64F32.forEach { proposalF64F32 ->
+        addValidatedCoincidenceEndpointRelayF64F32(
+            relaysByEndpointPairF64F32 = relaysByEndpointPairF64F32,
+            proposalF64F32 = proposalF64F32,
+            firstAtStart = true,
+            secondAtStart = true,
+        )
+        addValidatedCoincidenceEndpointRelayF64F32(
+            relaysByEndpointPairF64F32 = relaysByEndpointPairF64F32,
+            proposalF64F32 = proposalF64F32,
+            firstAtStart = false,
+            secondAtStart = false,
+        )
+    }
+    deferredEndpointContactsF64F32.forEach { deferredF64F32 ->
+        val firstIdentityF64 = projectedSectionEndpointIdentityF64F32(
+            deferredF64F32.firstSpanF64,
+            deferredF64F32.firstParameterF64,
+        ) ?: throw IllegalStateException("path-f32-projection-collapse")
+        val secondIdentityF64 = projectedSectionEndpointIdentityF64F32(
+            deferredF64F32.secondSpanF64,
+            deferredF64F32.secondParameterF64,
+        ) ?: throw IllegalStateException("path-f32-projection-collapse")
+        val relaysF64F32 = relaysByEndpointPairF64F32[
+            PathExactEndpointIdentityPairF64F32(firstIdentityF64, secondIdentityF64)
+        ].orEmpty()
+        preflightHybridLinearF64F32(
+            checkedPathWorkAddI64(relaysF64F32.size.toLong(), 1L),
+            candidateWorkBudgetI32,
+        )
+        var hasAdjacentRelay = false
+        relaysF64F32.forEach { relayF64F32 ->
+            if (
+                isSourceAdjacentToClaimEndpointF64F32(
+                    deferredSpanF64 = deferredF64F32.firstSpanF64,
+                    deferredParameterF64 = deferredF64F32.firstParameterF64,
+                    claimedSpanF64 = relayF64F32.firstSpanF64,
+                    claimF64 = relayF64F32.firstClaimF64,
+                    claimAtStart = relayF64F32.firstAtStart,
+                ) && isSourceAdjacentToClaimEndpointF64F32(
+                    deferredSpanF64 = deferredF64F32.secondSpanF64,
+                    deferredParameterF64 = deferredF64F32.secondParameterF64,
+                    claimedSpanF64 = relayF64F32.secondSpanF64,
+                    claimF64 = relayF64F32.secondClaimF64,
+                    claimAtStart = relayF64F32.secondAtStart,
+                )
+            ) {
+                hasAdjacentRelay = true
+            }
+        }
+        if (!hasAdjacentRelay) throw IllegalStateException("path-f32-projection-collapse")
+    }
+}
+
+private fun addValidatedCoincidenceEndpointRelayF64F32(
+    relaysByEndpointPairF64F32: MutableMap<
+        PathExactEndpointIdentityPairF64F32,
+        MutableList<PathValidatedCoincidenceEndpointRelayF64F32>,
+        >,
+    proposalF64F32: PathProjectedCoincidenceProposalF64F32,
+    firstAtStart: Boolean,
+    secondAtStart: Boolean,
+) {
+    val firstIdentityF64 = if (firstAtStart) {
+        proposalF64F32.firstClaimF64.startVertexIdentityF64
+    } else {
+        proposalF64F32.firstClaimF64.endVertexIdentityF64
+    } ?: throw IllegalStateException("path-f32-projection-collapse")
+    val secondIdentityF64 = if (secondAtStart) {
+        proposalF64F32.secondClaimF64.startVertexIdentityF64
+    } else {
+        proposalF64F32.secondClaimF64.endVertexIdentityF64
+    } ?: throw IllegalStateException("path-f32-projection-collapse")
+    val relayF64F32 = PathValidatedCoincidenceEndpointRelayF64F32(
+        pointWitnessF64 = proposalF64F32.pointWitnessF64,
+        firstSpanF64 = proposalF64F32.firstSpanF64,
+        firstClaimF64 = proposalF64F32.firstClaimF64,
+        firstAtStart = firstAtStart,
+        secondSpanF64 = proposalF64F32.secondSpanF64,
+        secondClaimF64 = proposalF64F32.secondClaimF64,
+        secondAtStart = secondAtStart,
+    )
+    relaysByEndpointPairF64F32.getOrPut(
+        PathExactEndpointIdentityPairF64F32(firstIdentityF64, secondIdentityF64),
+    ) { mutableListOf() } += relayF64F32
+    relaysByEndpointPairF64F32.getOrPut(
+        PathExactEndpointIdentityPairF64F32(secondIdentityF64, firstIdentityF64),
+    ) { mutableListOf() } += PathValidatedCoincidenceEndpointRelayF64F32(
+        pointWitnessF64 = proposalF64F32.pointWitnessF64,
+        firstSpanF64 = proposalF64F32.secondSpanF64,
+        firstClaimF64 = proposalF64F32.secondClaimF64,
+        firstAtStart = secondAtStart,
+        secondSpanF64 = proposalF64F32.firstSpanF64,
+        secondClaimF64 = proposalF64F32.firstClaimF64,
+        secondAtStart = firstAtStart,
+    )
+}
+
+private fun isSourceAdjacentToClaimEndpointF64F32(
+    deferredSpanF64: PathProjectedSourceSpanF64F32,
+    deferredParameterF64: Double,
+    claimedSpanF64: PathProjectedSourceSpanF64F32,
+    claimF64: PathProjectedSpanClaimF64,
+    claimAtStart: Boolean,
+): Boolean {
+    val deferredIdentityF64 = projectedSectionEndpointIdentityF64F32(
+        deferredSpanF64,
+        deferredParameterF64,
+    ) ?: return false
+    val claimIdentityF64 = if (claimAtStart) claimF64.startVertexIdentityF64 else claimF64.endVertexIdentityF64
+        ?: return false
+    if (deferredIdentityF64 != claimIdentityF64) return false
+    if (
+        deferredSpanF64.sourceSpanF64.operand != claimedSpanF64.sourceSpanF64.operand ||
+            deferredSpanF64.sourceSpanF64.contourIndexI32 != claimedSpanF64.sourceSpanF64.contourIndexI32
+    ) {
+        return false
+    }
+    if (
+        deferredSpanF64.sourceSpanF64.sourceSpanIdI64 == claimedSpanF64.sourceSpanF64.sourceSpanIdI64 &&
+            kotlin.math.abs(deferredSpanF64.sectionIndexI32 - claimedSpanF64.sectionIndexI32) == 1
+    ) {
+        return true
+    }
+    val deferredSourceParameterF64 = sourceParameterAtEdgeCutF64(
+        deferredSpanF64.projectedEdgeF64,
+        deferredParameterF64,
+    )
+    val claimedSourceParameterF64 = if (claimAtStart) claimF64.startParameterF64 else claimF64.endParameterF64
+    val deferredSegmentIndexI32 = deferredSpanF64.sourceSpanF64.startLocationF64.sourceSegmentIndexI32
+    val claimedSegmentIndexI32 = claimedSpanF64.sourceSpanF64.startLocationF64.sourceSegmentIndexI32
+    if (deferredSegmentIndexI32 == claimedSegmentIndexI32) {
+        return deferredSourceParameterF64 == claimedSourceParameterF64
+    }
+    return (
+        claimedSourceParameterF64 == 1.0 && deferredSourceParameterF64 == 0.0 &&
+            deferredSegmentIndexI32 == claimedSegmentIndexI32 + 1
+        ) || (
+        deferredSourceParameterF64 == 1.0 && claimedSourceParameterF64 == 0.0 &&
+            claimedSegmentIndexI32 == deferredSegmentIndexI32 + 1
+        )
 }
 
 private fun sameProjectedClaimCarrierF64F32(
@@ -1269,4 +1901,17 @@ private fun deterministicSortCostI64F32(sizeI32: Int): Long {
 
 private fun preflightHybridLinearF64F32(unitsI64: Long, candidateWorkBudgetI32: PathCandidateWorkBudgetI32) {
     candidateWorkBudgetI32.consumePreflightI64(unitsI64)
+}
+
+/** Counts carrier storage in a separately charged pass before its exact-capacity allocation. */
+private fun countHybridCarrierSectionsF64F32(
+    sourceSpansF64: List<PathSourceSpanF64>,
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+): Long {
+    preflightHybridLinearF64F32(sourceSpansF64.size.toLong(), candidateWorkBudgetI32)
+    var countI64 = 0L
+    sourceSpansF64.forEach { sourceSpanF64 ->
+        countI64 = checkedPathWorkAddI64(countI64, sourceSpanF64.flattenedSectionsF64.size.toLong())
+    }
+    return countI64
 }

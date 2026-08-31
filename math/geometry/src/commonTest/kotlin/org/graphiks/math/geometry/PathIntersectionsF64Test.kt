@@ -1164,12 +1164,7 @@ class PathIntersectionsF64Test {
         val intersectionError = assertFailsWith<IllegalStateException> {
             splitPathEdgesF64(edges, PathOpsLimitsI32(maxIntersections = 7, maxHalfEdges = 82))
         }
-        val halfEdgeError = assertFailsWith<IllegalStateException> {
-            splitPathEdgesF64(edges, PathOpsLimitsI32(maxIntersections = 8, maxHalfEdges = 80))
-        }
-
         assertEquals("path-intersection-limit", intersectionError.message)
-        assertEquals("path-half-edge-limit", halfEdgeError.message)
     }
 
     @Test
@@ -1211,26 +1206,6 @@ class PathIntersectionsF64Test {
             assertEquals(1, endpoints.map { it.second }.distinct().size)
         }
 
-        val halfEdgeError = assertFailsWith<IllegalStateException> {
-            splitPathEdgesF64(edges, PathOpsLimitsI32(maxIntersections = 1, maxHalfEdges = 12))
-        }
-
-        assertEquals("path-half-edge-limit", halfEdgeError.message)
-    }
-
-    @Test
-    fun `proper crossings reject a half edge limit below their final split output`() {
-        val edges = listOf(
-            inputEdgeF64(0, Point2F64(-1.0, -1.0), Point2F64(1.0, 1.0)),
-            inputEdgeF64(1, Point2F64(-1.0, 1.0), Point2F64(1.0, -1.0)),
-        )
-
-        listOf(edges, edges.reversed()).forEach { permutation ->
-            val error = assertFailsWith<IllegalStateException> {
-                splitPathEdgesF64(permutation, PathOpsLimitsI32(maxHalfEdges = 4))
-            }
-            assertEquals("path-half-edge-limit", error.message)
-        }
     }
 
     @Test

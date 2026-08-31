@@ -29,7 +29,15 @@ internal data class PathNormalizationF64(
 
 // Kotlin/JS represents `Float` values with JavaScript numbers at some call boundaries. Rebuild
 // through the raw IEEE-754 payload so the normalization boundary has the same F32 lattice as JVM.
-private fun roundedNormalizedCoordinateF32(value: Double): Float = Float.fromBits(value.toFloat().toRawBits())
+private fun roundedNormalizedCoordinateF32(value: Double): Float {
+    val maximumF32AsF64 = Float.MAX_VALUE.toDouble()
+    if (!value.isFinite() || value < -maximumF32AsF64 || value > maximumF32AsF64) {
+        throw IllegalStateException("path-f32-projection-collapse")
+    }
+    val roundedF32 = Float.fromBits(value.toFloat().toRawBits())
+    if (!roundedF32.isFinite()) throw IllegalStateException("path-f32-projection-collapse")
+    return roundedF32
+}
 
 /**
  * The source flattener must not resolve a carrier more finely than the F32 lattice that will
@@ -42,7 +50,11 @@ private fun roundedNormalizedCoordinateF32(value: Double): Float = Float.fromBit
  * coarse; a material projected collapse is then still rejected by the hybrid guard.
  */
 internal fun PathNormalizationF64.projectionLatticeFlatteningToleranceF64(): Double {
+    if (!origin.x.isFinite() || !origin.y.isFinite() || !scale.isFinite() || scale <= 0.0) {
+        throw IllegalStateException("path-f32-projection-collapse")
+    }
     val halfExtentF64 = 0.5 / scale
+    if (!halfExtentF64.isFinite()) throw IllegalStateException("path-f32-projection-collapse")
     val maximumWorldMagnitudeF64 = max(
         abs(origin.x) + halfExtentF64,
         abs(origin.y) + halfExtentF64,
@@ -54,7 +66,12 @@ internal fun PathNormalizationF64.projectionLatticeFlatteningToleranceF64(): Dou
 }
 
 private fun f32LatticeStepAtMagnitudeF64(magnitudeF64: Double): Double {
-    val roundedF32 = Float.fromBits(magnitudeF64.toFloat().toRawBits())
+    if (!magnitudeF64.isFinite()) throw IllegalStateException("path-f32-projection-collapse")
+    // The spacing is an observable F32-domain property.  A finite normalization envelope can
+    // exceed Float.MAX_VALUE while adding origin and half-extent in F64; clamp only this lookup
+    // to the outer finite lattice cell, never an emitted coordinate.
+    val boundedMagnitudeF64 = magnitudeF64.coerceIn(0.0, Float.MAX_VALUE.toDouble())
+    val roundedF32 = Float.fromBits(boundedMagnitudeF64.toFloat().toRawBits())
     val roundedBitsI32 = roundedF32.toRawBits()
     val adjacentF32 = if (roundedBitsI32 == Float.MAX_VALUE.toRawBits()) {
         Float.fromBits(roundedBitsI32 - 1)

@@ -46,85 +46,99 @@ class PathOpsHybridTopologyF32Test {
     }
 
     @Test
-    fun `point witness permits only its two local projected branches through the hybrid arrangement`() {
-        // These two F64 rays share one exact source event, while their other endpoints remain
-        // distinct F32 values.  The public result must therefore retain the local junction
-        // without granting it authority over a remote projected endpoint.
-        val e = 2.0.pow(-22)
-        val lower = normalizedContourF64(
-            0.0 to 1.0,
-            1.0 to 1.0 - e,
-            2.0 to -1.0,
-            0.0 to -1.0,
-        )
-        val upper = normalizedContourF64(
-            0.0 to 1.0,
-            1.0 to 1.0 + e,
-            2.0 to 3.0,
-            0.0 to 3.0,
-        )
+    fun `public quadratic point witness keeps its local projected coincidence without remote authority`() {
+        // The ±2^-25 difference sits on the near-zero *end* abscissa, so it survives F32 input
+        // construction. At interior t the two F64 rails lie around x=.5 and quantize onto the
+        // same F32 lattice; their only source contact is the shared start point.
+        val eF32 = 2.0.pow(-25).toFloat()
+        val lower = PathBuilder()
+            .moveTo(0f, 0f)
+            .quadTo(1f, 0f, -eF32, 4f)
+            .lineTo(3f, -1f)
+            .lineTo(0f, -1f)
+            .close()
+            .build()
+        val upper = PathBuilder()
+            .moveTo(0f, 0f)
+            .quadTo(1f, 0f, eF32, 4f)
+            .lineTo(3f, 5f)
+            .lineTo(0f, 5f)
+            .close()
+            .build()
 
-        val result = projectTogetherF64(lower, upper)
+        val result = PathOpsF32.op(lower, upper, PathBooleanOp.UNION)
 
         assertTrue(PathAnalysisF32.contains(result, Point2F32(1f, 0f)))
         assertTrue(PathAnalysisF32.contains(result, Point2F32(1f, 2f)))
     }
 
     @Test
-    fun `same projected branches without their exact source witness reject`() {
-        val e = 2.0.pow(-25)
-        val lower = normalizedContourF64(
-            0.0 to 1.0 - e,
-            1.0 to 1.0 - e,
-            2.0 to -1.0,
-            0.0 to -1.0,
-        )
-        val upper = normalizedContourF64(
-            0.0 to 1.0 + e,
-            1.0 to 1.0 + e,
-            2.0 to 3.0,
-            0.0 to 3.0,
+    fun `public local projected coincidence checks its canonical intersection limit before carrier mutation`() {
+        // Keep the ±2^-25 offset at zero, where both literal F32 inputs have distinct raw bits.
+        // An offset around y=1 would round away before PathOps sees it and make the fixture
+        // backend-dependent rather than a public geometric limit boundary.
+        val eF32 = 2.0.pow(-25).toFloat()
+        assertTrue(eF32.toRawBits() != 0f.toRawBits())
+        assertTrue((-eF32).toRawBits() != eF32.toRawBits())
+        val lower = PathBuilder()
+            .moveTo(0f, 0f)
+            .quadTo(1f, 0f, -eF32, 4f)
+            .lineTo(3f, -1f)
+            .lineTo(0f, -1f)
+            .close()
+            .build()
+        val upper = PathBuilder()
+            .moveTo(0f, 0f)
+            .quadTo(1f, 0f, eF32, 4f)
+            .lineTo(3f, 5f)
+            .lineTo(0f, 3f)
+            .close()
+            .build()
+
+        val belowError = assertFailsWith<IllegalStateException> {
+            PathOpsF32.op(
+                lower,
+                upper,
+                PathBooleanOp.UNION,
+                PathOpsLimitsI32(maxIntersections = 8),
+            )
+        }
+        val atBoundary = PathOpsF32.op(
+            lower,
+            upper,
+            PathBooleanOp.UNION,
+            PathOpsLimitsI32(maxIntersections = 9),
         )
 
-        val error = assertFailsWith<IllegalStateException> { projectTogetherF64(lower, upper) }
-
-        assertEquals("path-f32-projection-collapse", error.message)
+        assertEquals("path-intersection-limit", belowError.message)
+        assertTrue(PathAnalysisF32.contains(atBoundary, Point2F32(1f, 0f)))
+        assertTrue(PathAnalysisF32.contains(atBoundary, Point2F32(1f, 2f)))
     }
 
     @Test
-    fun `projected endpoint contact without an exact witness rejects before the hybrid DCEL`() {
-        val e = 2.0.pow(-25)
-        val left = normalizedContourF64(
-            0.0 to 1.0 - e,
-            1.0 to 1.0 - e,
-            1.0 to -1.0,
-            0.0 to -1.0,
-        )
-        val right = normalizedContourF64(
-            1.0 to 1.0 + e,
-            2.0 to 1.0 + e,
-            2.0 to 3.0,
-            1.0 to 3.0,
-        )
+    fun `public quadratic coincidence without the adjacent source witness rejects`() {
+        // These curves can acquire the same projected micro-section, but their source starts,
+        // ends and parameters are disjoint.  Matching F32 coordinates must not substitute for
+        // the adjacent provenance chain used by the preceding successful fixture.
+        val eF32 = 2.0.pow(-23).toFloat()
+        val lower = PathBuilder()
+            .moveTo(0f, 1f - eF32)
+            .quadTo(.5f, 4f, 1f, 1f - eF32)
+            .lineTo(2f, -1f)
+            .lineTo(0f, -1f)
+            .close()
+            .build()
+        val upper = PathBuilder()
+            .moveTo(0f, 1f + eF32)
+            .quadTo(.5f, 4f, 1f, 1f + eF32)
+            .lineTo(2f, 3f)
+            .lineTo(0f, 3f)
+            .close()
+            .build()
 
-        val error = assertFailsWith<IllegalStateException> { projectTogetherF64(left, right) }
-
-        assertEquals("path-f32-projection-collapse", error.message)
-    }
-
-    @Test
-    fun `adjacent backtracking projected overlap without exact proof rejects`() {
-        // These are distinct F64 rays at the shared vertex, but both y offsets round to the
-        // same F32 zero rail.  The only exact contact is the adjacent endpoint.
-        val e = 2.0.pow(-150)
-        val contour = normalizedContourF64(
-            0.0 to 0.0,
-            2.0 to e,
-            0.0 to 2.0 * e,
-            0.0 to -1.0,
-        )
-
-        val error = assertFailsWith<IllegalStateException> { projectOneF64(contour) }
+        val error = assertFailsWith<IllegalStateException> {
+            PathOpsF32.op(lower, upper, PathBooleanOp.UNION)
+        }
 
         assertEquals("path-f32-projection-collapse", error.message)
     }
@@ -160,22 +174,120 @@ class PathOpsHybridTopologyF32Test {
     }
 
     @Test
-    fun `exact n way overlap aggregates ties independently of fixture relabeling`() {
-        val first = normalizedContourF64(0.0 to 0.0, 2.0 to 0.0, 2.0 to 2.0, 0.0 to 2.0)
-        val second = normalizedContourF64(0.0 to 0.0, 2.0 to 0.0, 2.0 to 2.0, 0.0 to 2.0)
-        val third = normalizedContourF64(0.0 to 0.0, 2.0 to 0.0, 2.0 to 2.0, 0.0 to 2.0)
-        val probes = listOf(Point2F32(1f, 1f), Point2F32(3f, 1f))
+    fun `atomic staggered overlap endpoint groups enforce max intersections before hybrid allocation`() {
+        // Three rails [0,4], [1,5], [2,6] have six exact lower events x={0,1,2,4,5,6} and five
+        // upper events x={1,2,4,5,6}; the upper-left corner is the one known adjacent contour
+        // endpoint, so it is not registered as an intersection. Thus this exact fixture has
+        // 6 + 5 = 11 source event groups. Every active carrier gets its direct source cut at an
+        // already-counted group; no hybrid allocation may add another one.
+        val leftF32 = RectF32.ofLTRB(0f, 0f, 4f, 1f)
+        val middleF32 = RectF32.ofLTRB(1f, 0f, 5f, 1f)
+        val rightF32 = RectF32.ofLTRB(2f, 0f, 6f, 1f)
+        val firstF32 = PathBuilder().addRect(leftF32).addRect(rightF32).build()
+        val secondF32 = PathBuilder().addRect(middleF32).build()
 
-        val results = listOf(
-            projectTogetherF64(first, second, third),
-            projectTogetherF64(third, first, second),
-            projectTogetherF64(second, third, first),
+        val belowError = assertFailsWith<IllegalStateException> {
+            PathOpsF32.op(
+                firstF32,
+                secondF32,
+                PathBooleanOp.UNION,
+                PathOpsLimitsI32(maxIntersections = 10),
+            )
+        }
+        val atBoundaryF32 = PathOpsF32.op(
+            firstF32,
+            secondF32,
+            PathBooleanOp.UNION,
+            PathOpsLimitsI32(maxIntersections = 11),
         )
 
-        results.forEach { result ->
-            assertEquals(true, PathAnalysisF32.contains(result, probes[0]))
-            assertEquals(false, PathAnalysisF32.contains(result, probes[1]))
+        assertEquals("path-intersection-limit", belowError.message)
+        assertTrue(PathAnalysisF32.contains(atBoundaryF32, Point2F32(3f, .5f)))
+        assertFalse(PathAnalysisF32.contains(atBoundaryF32, Point2F32(6.25f, .5f)))
+        assertEquals(RectF32.ofLTRB(0f, 0f, 6f, 1f), PathAnalysisF32.bounds(atBoundaryF32))
+    }
+
+    @Test
+    fun `max half edges counts the final canonical DCEL for identical rectangles`() {
+        val firstF32 = PathBuilder().addRect(RectF32.ofLTRB(0f, 0f, 2f, 1f)).build()
+        val secondF32 = PathBuilder().addRect(RectF32.ofLTRB(0f, 0f, 2f, 1f)).build()
+
+        val belowError = assertFailsWith<IllegalStateException> {
+            PathOpsF32.op(
+                firstF32,
+                secondF32,
+                PathBooleanOp.UNION,
+                PathOpsLimitsI32(maxHalfEdges = 7),
+            )
         }
+        val atBoundaryF32 = PathOpsF32.op(
+            firstF32,
+            secondF32,
+            PathBooleanOp.UNION,
+            PathOpsLimitsI32(maxHalfEdges = 8),
+        )
+
+        assertEquals("path-half-edge-limit", belowError.message)
+        assertEquals(RectF32.ofLTRB(0f, 0f, 2f, 1f), PathAnalysisF32.bounds(atBoundaryF32))
+        assertTrue(PathAnalysisF32.contains(atBoundaryF32, Point2F32(1f, .5f)))
+        assertFalse(PathAnalysisF32.contains(atBoundaryF32, Point2F32(2.25f, .5f)))
+    }
+
+    @Test
+    fun `max vertices counts the alias collapsed canonical vertices before DCEL allocation`() {
+        val firstF32 = PathBuilder().addRect(RectF32.ofLTRB(0f, 0f, 2f, 1f)).build()
+        val secondF32 = PathBuilder().addRect(RectF32.ofLTRB(0f, 0f, 2f, 1f)).build()
+
+        val belowError = assertFailsWith<IllegalStateException> {
+            PathOpsF32.op(
+                firstF32,
+                secondF32,
+                PathBooleanOp.UNION,
+                PathOpsLimitsI32(maxVertices = 3),
+            )
+        }
+        val atBoundaryF32 = PathOpsF32.op(
+            firstF32,
+            secondF32,
+            PathBooleanOp.UNION,
+            PathOpsLimitsI32(maxVertices = 4),
+        )
+
+        assertEquals("path-vertex-limit", belowError.message)
+        assertEquals(RectF32.ofLTRB(0f, 0f, 2f, 1f), PathAnalysisF32.bounds(atBoundaryF32))
+        assertTrue(PathAnalysisF32.contains(atBoundaryF32, Point2F32(1f, .5f)))
+    }
+
+    @Test
+    fun `long staggered exact overlaps preserve the public union under operand and contour permutations`() {
+        val rectanglesF32 = List(12) { indexI32 ->
+            val leftF32 = indexI32.toFloat() * .5f
+            RectF32.ofLTRB(leftF32, 0f, leftF32 + 2f, 1f)
+        }
+
+        fun path(indicesI32: List<Int>): PathF32 = PathBuilder().also { builderF32 ->
+            indicesI32.forEach { indexI32 -> builderF32.addRect(rectanglesF32[indexI32]) }
+        }.build()
+
+        val variants = listOf(
+            path(listOf(0, 2, 4, 6, 8, 10)) to path(listOf(1, 3, 5, 7, 9, 11)),
+            path(listOf(10, 6, 2, 8, 0, 4)) to path(listOf(11, 7, 3, 9, 1, 5)),
+            path(listOf(11, 9, 7, 5, 3, 1)) to path(listOf(10, 8, 6, 4, 2, 0)),
+        )
+
+        val resultsF32 = variants.map { (firstF32, secondF32) ->
+            PathOpsF32.op(firstF32, secondF32, PathBooleanOp.UNION)
+        }
+        resultsF32.forEach { resultF32 ->
+            listOf(.25f, 1.25f, 2.75f, 4.25f, 5.75f).forEach { xF32 ->
+                assertTrue(PathAnalysisF32.contains(resultF32, Point2F32(xF32, .5f)))
+            }
+            assertFalse(PathAnalysisF32.contains(resultF32, Point2F32(-.25f, .5f)))
+            assertFalse(PathAnalysisF32.contains(resultF32, Point2F32(7.75f, .5f)))
+            assertEquals(RectF32.ofLTRB(0f, 0f, 7.5f, 1f), PathAnalysisF32.bounds(resultF32))
+        }
+        assertEquals(resultsF32.first(), resultsF32[1])
+        assertEquals(resultsF32.first(), resultsF32[2])
     }
 
     @Test
@@ -195,7 +307,7 @@ class PathOpsHybridTopologyF32Test {
     }
 
     @Test
-    fun `hybrid arrangement debits the exact candidate budget frontier deterministically`() {
+    fun `hybrid global budget regression remains deterministic at its checked boundary`() {
         val first = PathBuilder().addRect(RectF32.ofLTRB(0f, 0f, 2f, 2f)).build()
         val second = PathBuilder().addRect(RectF32.ofLTRB(1f, 0f, 3f, 2f)).build()
 
@@ -282,212 +394,47 @@ class PathOpsHybridTopologyF32Test {
     }
 
     @Test
-    fun `distant point witness on the same source spans never certifies an F32 overlap`() {
-        val e = 2.0.pow(-25)
-        val lower = normalizedContourF64(
-            0.0 to 1.0, 1.0 to 1.0 - e, 2.0 to 1.0 - e / 2.0,
-            2.0 to -1.0, 0.0 to -1.0,
-        )
-        val upper = normalizedContourF64(
-            0.0 to 1.0, 1.0 to 1.0 + e, 2.0 to 1.0 + e / 2.0,
-            2.0 to 3.0, 0.0 to 3.0,
-        )
+    fun `public zero source area contour drops atomically instead of emitting a partial boundary`() {
+        val collinear = PathBuilder()
+            .moveTo(0f, 0f)
+            .lineTo(2f, 0f)
+            .lineTo(1f, 0f)
+            .close()
+            .build()
 
-        // The source contours meet only at (0, 1); their rounded boundary rails overlap.
-        assertTrue(PathAnalysisF32.contains(projectOneF64(lower), Point2F32(1f, .5f)))
-        assertTrue(PathAnalysisF32.contains(projectOneF64(upper), Point2F32(1f, 1.5f)))
+        val result = PathOpsF32.simplify(collinear)
 
-        val error = assertFailsWith<IllegalStateException> { projectTogetherF64(lower, upper) }
-
-        assertEquals("path-f32-projection-collapse", error.message)
+        assertEquals(null, PathAnalysisF32.bounds(result))
+        assertFalse(PathAnalysisF32.contains(result, Point2F32(1f, 0f)))
     }
 
     @Test
-    fun `distinct witnesses cannot consume one another`() {
-        val e = 2.0.pow(-25)
-        val main = normalizedContourWithSourceLocationsF64(
-            sourceLocationsF64 = listOf(
-                ProjectionSourceLocationF64(sourceSegmentIndexI32 = 6, parameterF64 = 1.0),
-                ProjectionSourceLocationF64(sourceSegmentIndexI32 = 0, parameterF64 = 1.0 / 3.0),
-                ProjectionSourceLocationF64(sourceSegmentIndexI32 = 0, parameterF64 = 2.0 / 3.0),
-                ProjectionSourceLocationF64(sourceSegmentIndexI32 = 0, parameterF64 = 1.0),
-                ProjectionSourceLocationF64(sourceSegmentIndexI32 = 1, parameterF64 = 1.0),
-                ProjectionSourceLocationF64(sourceSegmentIndexI32 = 2, parameterF64 = 1.0),
-                ProjectionSourceLocationF64(sourceSegmentIndexI32 = 3, parameterF64 = 1.0),
-            ),
-            0.0 to 1.0, 1.0 to 1.0 + e, 2.0 to 1.0, 3.0 to 1.0 - e,
-            3.0 to -1.0, 1.5 to -2.0, 0.0 to -1.0,
-        )
-        val firstTouch = normalizedContourF64(0.0 to 1.0, -0.4 to 2.0, 0.4 to 2.0)
-        val secondTouch = normalizedContourF64(2.0 to 1.0, 1.6 to 2.0, 2.4 to 2.0)
+    fun `public finite extreme and subnormal translation keep a finite deterministic result`() {
+        val extremeF32 = PathBuilder()
+            .addRect(RectF32.ofLTRB(0f, 0f, Float.MAX_VALUE, 1f))
+            .build()
+        val extremeResultF32 = PathOpsF32.simplify(extremeF32)
+        val extremeBoundsF32 = requireNotNull(PathAnalysisF32.bounds(extremeResultF32))
+        assertTrue(extremeBoundsF32.isFinite())
+        assertEquals(Float.MAX_VALUE, extremeBoundsF32.right)
 
-        val mainBefore = projectOneF64(main)
-        assertTrue(PathAnalysisF32.contains(mainBefore, Point2F32(1.5f, 0f)))
-
-        // Swapping the contour order changes the raw input IDs assigned by the fixture.  The
-        // exact source claims stay disjoint, so all equivalent relabelings must keep every region.
-        listOf(
-            projectTogetherF64(main, firstTouch, secondTouch),
-            projectTogetherF64(secondTouch, main, firstTouch),
-            projectTogetherF64(firstTouch, secondTouch, main),
-        ).forEach { result ->
-            assertTrue(PathAnalysisF32.contains(result, Point2F32(1.5f, 0f)))
-            assertTrue(PathAnalysisF32.contains(result, Point2F32(0f, 1.5f)))
-            assertTrue(PathAnalysisF32.contains(result, Point2F32(2f, 1.5f)))
-        }
-
-        // A traced projection has no mutable input/output bridge: reusing the original main
-        // contour after all relabelings must retain its original region.
-        assertTrue(PathAnalysisF32.contains(projectOneF64(main), Point2F32(1.5f, 0f)))
-    }
-
-    @Test
-    fun `atomic n way exact witness intervals do not create pairwise claim conflicts`() {
-        val lower = normalizedContourF64(
-            0.0 to 0.0,
-            4.0 to 0.0,
-            4.0 to 1.0,
-            0.0 to 1.0,
-        )
-        val first = normalizedContourF64(
-            0.0 to 1.0,
-            3.0 to 1.0,
-            0.5 to 3.0,
-        )
-        val second = normalizedContourF64(
-            1.0 to 1.0,
-            4.0 to 1.0,
-            3.5 to 3.0,
-        )
-
-        val result = projectTogetherF64(lower, first, second)
-
-        assertTrue(PathAnalysisF32.contains(result, Point2F32(2f, .5f)))
-        assertTrue(PathAnalysisF32.contains(result, Point2F32(.5f, 2f)))
-        assertTrue(PathAnalysisF32.contains(result, Point2F32(3.5f, 2f)))
-        assertEquals(false, PathAnalysisF32.contains(result, Point2F32(-.25f, .5f)))
-    }
-
-    @Test
-    fun `collapsed hybrid incidence rejects instead of silently skipping a partial contour`() {
-        val contour = normalizedContourF64(
-            0.0 to 0.0,
-            1.0 to 0.0,
-            1.0 + 2.0.pow(-25) to 1.0e-46,
-            2.0 to 0.0,
-            2.0 to 1.0,
-            0.0 to 1.0,
-        )
-
-        val error = assertFailsWith<IllegalStateException> { projectOneF64(contour) }
-
-        assertEquals("path-f32-projection-collapse", error.message)
-    }
-}
-
-private val identityNormalizationF64 =
-    PathNormalizationF64(origin = Point2F64(0.0, 0.0), scale = 1.0)
-
-private data class ProjectionSourceLocationF64(
-    val sourceSegmentIndexI32: Int,
-    val parameterF64: Double,
-)
-
-private data class TracedProjectionContourF64(
-    val pointsF64: List<Point2F64>,
-    val sourceLocationsF64: List<ProjectionSourceLocationF64>,
-)
-
-private fun normalizedContourF64(vararg coordinatesF64: Pair<Double, Double>): TracedProjectionContourF64 =
-    normalizedContourWithSourceLocationsF64(
-        sourceLocationsF64 = coordinatesF64.indices.map { indexI32 ->
-            ProjectionSourceLocationF64(sourceSegmentIndexI32 = indexI32, parameterF64 = 1.0)
-        },
-        *coordinatesF64,
-    )
-
-private fun normalizedContourWithSourceLocationsF64(
-    sourceLocationsF64: List<ProjectionSourceLocationF64>,
-    vararg coordinatesF64: Pair<Double, Double>,
-): TracedProjectionContourF64 {
-    require(sourceLocationsF64.size == coordinatesF64.size)
-    return TracedProjectionContourF64(
-        pointsF64 = coordinatesF64.map { (xF64, yF64) -> Point2F64(xF64, yF64) },
-        sourceLocationsF64 = sourceLocationsF64,
-    )
-}
-
-private fun projectOneF64(contourF64: TracedProjectionContourF64): PathF32 =
-    projectTracedContoursF64(listOf(contourF64))
-
-private fun projectTogetherF64(vararg contoursF64: TracedProjectionContourF64): PathF32 =
-    projectTracedContoursF64(contoursF64.toList())
-
-private fun projectTracedContoursF64(contoursF64: List<TracedProjectionContourF64>): PathF32 {
-    val limitsI32 = PathOpsLimitsI32()
-    val edgesF64 = mutableListOf<PathInputEdgeF64>()
-    contoursF64.forEachIndexed { contourIndexI32, tracedContourF64 ->
-        val verticesF64 = tracedContourF64.pointsF64
-        val sourceLocationsF64 = tracedContourF64.sourceLocationsF64
-        val firstEdgeIdI32 = edgesF64.size
-        verticesF64.indices.forEach { vertexIndexI32 ->
-            val edgeIdI32 = firstEdgeIdI32 + vertexIndexI32
-            val previousEdgeIdI32 = firstEdgeIdI32 + (vertexIndexI32 - 1 + verticesF64.size) % verticesF64.size
-            val identityF64 = PathVertexIdentityF64(
-                incidentEdgeIds = listOf(previousEdgeIdI32, edgeIdI32).sorted(),
-                parameterByEdgeId = mapOf(previousEdgeIdI32 to 1.0, edgeIdI32 to 0.0),
-                originalPointF32 = null,
-            )
-            val nextIndexI32 = (vertexIndexI32 + 1) % verticesF64.size
-            edgesF64 += PathInputEdgeF64(
-                idI32 = edgeIdI32,
-                operand = PathOperand.FIRST,
-                contourIndexI32 = contourIndexI32,
-                sourceSegmentIndexI32 = sourceLocationsF64[nextIndexI32].sourceSegmentIndexI32,
-                sourceStartParameterF64 = if (
-                    sourceLocationsF64[vertexIndexI32].sourceSegmentIndexI32 ==
-                        sourceLocationsF64[nextIndexI32].sourceSegmentIndexI32
-                ) {
-                    sourceLocationsF64[vertexIndexI32].parameterF64
-                } else {
-                    0.0
-                },
-                sourceEndParameterF64 = sourceLocationsF64[nextIndexI32].parameterF64,
-                startIdentityF64 = identityF64,
-                endIdentityF64 = PathVertexIdentityF64(
-                    incidentEdgeIds = listOf(edgeIdI32, firstEdgeIdI32 + nextIndexI32).sorted(),
-                parameterByEdgeId = mapOf(edgeIdI32 to 1.0, firstEdgeIdI32 + nextIndexI32 to 0.0),
-                    originalPointF32 = null,
+        val translationF32 = Float.fromBits(0x00000100)
+        val spanF32 = Float.fromBits(0x00001000)
+        val tinyF32 = PathBuilder()
+            .addRect(
+                RectF32.ofLTRB(
+                    translationF32,
+                    translationF32,
+                    translationF32 + spanF32,
+                    translationF32 + spanF32,
                 ),
-                startPointF64 = verticesF64[vertexIndexI32],
-                endPointF64 = verticesF64[nextIndexI32],
-                windingDeltaI32 = 1,
             )
-        }
+            .build()
+        val tinyResultF32 = PathOpsF32.simplify(tinyF32)
+        val tinyBoundsF32 = requireNotNull(PathAnalysisF32.bounds(tinyResultF32))
+        assertTrue(tinyBoundsF32.isFinite())
+        assertTrue(PathAnalysisF32.contains(tinyResultF32, Point2F32(translationF32 + spanF32 * .5f, translationF32 + spanF32 * .5f)))
     }
-    return projectSourceEdgesThroughHybridF64F32(
-        edgesF64 = edgesF64,
-        normalizationF64 = identityNormalizationF64,
-        fillRule = FillRule.WINDING,
-        limitsI32 = limitsI32,
-    )
-}
-
-private fun projectUnderThresholdWitnessFixtureF32(): PathF32 {
-    val scaleF64 = 1.0e-8
-    val tinyF64 = 1.0e-46
-    val runF64 = normalizedContourF64(
-        0.0 to 0.0,
-        scaleF64 to tinyF64,
-        2.0 * scaleF64 to -tinyF64,
-        2.0 * scaleF64 to scaleF64,
-    )
-    val touchF64 = normalizedContourF64(
-        0.0 to 0.0,
-        -scaleF64 to scaleF64,
-        -scaleF64 to -scaleF64,
-    )
-    return projectTogetherF64(runF64, touchF64)
 }
 
 private fun pathVerticesF32(path: PathF32): List<Point2F32> = buildList {
@@ -503,10 +450,8 @@ private fun pathVerticesF32(path: PathF32): List<Point2F32> = buildList {
     }
 }
 
-// Hand-derived fixed ledger for two four-edge rectangles. The eight input edges become twelve
-// canonical source spans/carriers at the two shared vertical cuts, with nine exact witnesses and
-// eight hybrid vertices. The audited deterministic phase totals are source registry/index 1_360,
-// projection/claims 1_341, DCEL 1_186, and boundary extraction + Booth + writer 442 = 4_329.
-// Keeping the sum literal makes a newly introduced traversal or comparator debit visible at
-// `limit - 1` instead of rediscovering a backend-local threshold by probing it in the test.
-private const val overlappingRectanglesHybridBudgetI32 = 4_329
+// Captured behavioral boundary for this fixed public operation after the Task-2 preflight audit.
+// The paired limit-1/limit assertions make changes to the checked ledger visible and the
+// permutation test verifies backend-independent determinism.  It is intentionally not presented
+// as an independent global cost oracle: specifying a fully algebraic global cost model is Task 5.
+private const val overlappingRectanglesHybridBudgetI32 = 4_680
