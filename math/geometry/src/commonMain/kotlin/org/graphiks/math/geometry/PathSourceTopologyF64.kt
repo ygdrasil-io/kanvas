@@ -91,6 +91,8 @@ internal data class PathLegacySectionProvenanceF64(
 internal data class PathSourceTopologyF64(
     val sourceSpansF64: List<PathSourceSpanF64>,
     val contactWitnessesF64: List<PathContactWitnessF64>,
+    /** Exact canonical source-event groups already charged by the F64 registry. */
+    val intersectionEventCountI32: Int,
 )
 
 // This index is built once from the authoritative spans and sections. It deliberately keys only
@@ -160,7 +162,11 @@ internal fun splitPathSourceTopologyF64(
         buildContactWitnessesF64(splitTopologyF64, sourceTopologyIndexF64, candidateWorkBudgetI32),
         candidateWorkBudgetI32,
     )
-    return PathSourceTopologyF64(spansF64, contactsF64)
+    return PathSourceTopologyF64(
+        sourceSpansF64 = spansF64,
+        contactWitnessesF64 = contactsF64,
+        intersectionEventCountI32 = splitTopologyF64.pointContactsF64.size,
+    )
 }
 
 private fun buildPathSourceTopologyIndexF64(

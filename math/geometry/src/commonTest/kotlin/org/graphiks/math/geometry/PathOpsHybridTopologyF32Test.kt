@@ -598,4 +598,4 @@ private fun pathVerticesF32(path: PathF32): List<Point2F32> = buildList {
 // local debits makes 4_988 observable again.  The current paired limit-1/limit boundary is a
 // deterministic public non-regression only; an independent global cost oracle remains Task 5.
 private const val roundThreeOverlappingRectanglesHybridBudgetI32 = 4_987
-private const val overlappingRectanglesHybridBudgetI32 = 5_316
+private const val overlappingRectanglesHybridBudgetI32 = 5_773
