@@ -48,6 +48,7 @@ internal sealed interface PathContactWitnessF64 {
 internal data class PathSourceTopologyF64(
     val sourceSpansF64: List<PathSourceSpanF64>,
     val contactWitnessesF64: List<PathContactWitnessF64>,
+    internal val legacySplitEdgesF64: List<PathSplitEdgeF64>,
 )
 
 internal fun splitPathSourceTopologyF64(
@@ -71,12 +72,11 @@ internal fun splitPathSourceTopologyF64(
         while (indexI32 < orderedEdgesF64.size) {
             val nextF64 = orderedEdgesF64[indexI32]
             if (
-                nextF64.sourceId != firstF64.sourceId ||
-                    nextF64.sourceSegmentIndexI32 != firstF64.sourceSegmentIndexI32 ||
+                nextF64.sourceSegmentIndexI32 != firstF64.sourceSegmentIndexI32 ||
                     nextF64.operand != firstF64.operand ||
                     nextF64.contourIndexI32 != firstF64.contourIndexI32 ||
                     nextF64.sourceStartParameterF64 != lastF64.sourceEndParameterF64 ||
-                    nextF64.startIdentity != lastF64.endIdentity
+                    nextF64.startIsExactEventF64
             ) break
             sectionsF64 += nextF64.toPathFlattenedSectionF64()
             lastF64 = nextF64
@@ -94,61 +94,44 @@ internal fun splitPathSourceTopologyF64(
             windingDeltaI32 = firstF64.windingDelta,
         )
     }
-    val contactsF64 = mutableListOf<PathContactWitnessF64>()
-    edgesF64.indices.forEach { firstIndexI32 ->
-        for (secondIndexI32 in firstIndexI32 + 1 until edgesF64.size) {
-            candidateWorkBudgetI32.consume()
-            when (val contactF64 = intersectPathEdgesF64(edgesF64[firstIndexI32], edgesF64[secondIndexI32])) {
-                is PathIntersectionF64.PointF64 -> {
-                    val identityF64 = splitEdgesF64.endpointIdentityAtF64(contactF64.point)
-                    contactsF64 += PathContactWitnessF64.PointF64(
-                        vertexIdentityF64 = identityF64,
-                        pointF64 = contactF64.point,
-                        incidentSourceSpanIdsI64 = spansF64.incidentToF64(edgesF64[firstIndexI32], contactF64.firstT) +
-                            spansF64.incidentToF64(edgesF64[secondIndexI32], contactF64.secondT),
-                    )
-                }
-                is PathIntersectionF64.OverlapF64 -> {
-                    contactsF64 += PathContactWitnessF64.OverlapF64(
-                        startVertexIdentityF64 = splitEdgesF64.endpointIdentityAtF64(contactF64.start),
-                        endVertexIdentityF64 = splitEdgesF64.endpointIdentityAtF64(contactF64.end),
-                        firstSourceSpanIdsI64 = spansF64.incidentToF64(edgesF64[firstIndexI32], contactF64.firstStartParameter),
-                        secondSourceSpanIdsI64 = spansF64.incidentToF64(edgesF64[secondIndexI32], contactF64.secondStartParameter),
-                        firstStartParameterF64 = sourceParameterAtEdgeCutF64(edgesF64[firstIndexI32], contactF64.firstStartParameter),
-                        firstEndParameterF64 = sourceParameterAtEdgeCutF64(edgesF64[firstIndexI32], contactF64.firstEndParameter),
-                        secondStartParameterF64 = sourceParameterAtEdgeCutF64(edgesF64[secondIndexI32], contactF64.secondStartParameter),
-                        secondEndParameterF64 = sourceParameterAtEdgeCutF64(edgesF64[secondIndexI32], contactF64.secondEndParameter),
-                    )
-                }
-                null -> Unit
-            }
+    // The split registry has already canonicalized all exact components. Index its endpoint
+    // identities directly: this creates one witness for an n-way event and never re-runs the
+    // kernel or matches a coordinate back to an identity.
+    val endpointsByIdentityF64 = linkedMapOf<PathVertexIdentityF64, MutableList<Pair<Point2F64, PathSplitEdgeF64>>>()
+    splitEdgesF64.forEach { edgeF64 ->
+        candidateWorkBudgetI32.consume()
+        if (edgeF64.startIsExactEventF64) {
+            endpointsByIdentityF64.getOrPut(edgeF64.startIdentity) { mutableListOf() } += edgeF64.start to edgeF64
+        }
+        candidateWorkBudgetI32.consume()
+        if (edgeF64.endIsExactEventF64) {
+            endpointsByIdentityF64.getOrPut(edgeF64.endIdentity) { mutableListOf() } += edgeF64.end to edgeF64
         }
     }
-    return PathSourceTopologyF64(spansF64, contactsF64)
+    val contactsF64 = endpointsByIdentityF64.entries
+        .filter { (identityF64, endpointsF64) -> identityF64.incidentEdgeIds.size > 1 && endpointsF64.isNotEmpty() }
+        .sortedWith(
+            Comparator { firstF64, secondF64 ->
+                compareValues(pathVertexIdentitySemanticKeyF64(firstF64.key), pathVertexIdentitySemanticKeyF64(secondF64.key))
+            },
+        )
+        .map { (identityF64, endpointsF64) ->
+            PathContactWitnessF64.PointF64(
+                vertexIdentityF64 = identityF64,
+                pointF64 = endpointsF64.first().first,
+                incidentSourceSpanIdsI64 = spansF64.filter { spanF64 ->
+                    spanF64.startLocationF64.vertexIdentityF64 == identityF64 ||
+                        spanF64.endLocationF64.vertexIdentityF64 == identityF64
+                }.map(PathSourceSpanF64::sourceSpanIdI64).sorted(),
+            )
+        }
+    return PathSourceTopologyF64(spansF64, contactsF64, splitEdgesF64)
 }
 
 // TODO(Task 3): delete once PathArrangementF64F32 consumes [PathSourceTopologyF64] directly.
 // This adapter retains source-derived data; it never tries to recover provenance from coordinates.
 internal fun PathSourceTopologyF64.toPathSplitEdgesF64ForLegacyArrangement(): List<PathSplitEdgeF64> =
-    sourceSpansF64.flatMap { spanF64 ->
-        spanF64.flattenedSectionsF64.mapIndexed { sectionIndexI32, sectionF64 ->
-            val sourceIdI32 = spanF64.startLocationF64.vertexIdentityF64?.incidentEdgeIds?.firstOrNull()
-                ?: -(spanF64.sourceSpanIdI64.toInt() + sectionIndexI32 + 1)
-            PathSplitEdgeF64(
-                sourceId = sourceIdI32,
-                operand = spanF64.operand,
-                contourIndexI32 = spanF64.contourIndexI32,
-                sourceSegmentIndexI32 = spanF64.startLocationF64.sourceSegmentIndexI32,
-                sourceStartParameterF64 = sectionF64.startParameterF64,
-                sourceEndParameterF64 = sectionF64.endParameterF64,
-                startIdentity = spanF64.startLocationF64.vertexIdentityF64 ?: error("path-source-span-start-identity"),
-                endIdentity = spanF64.endLocationF64.vertexIdentityF64 ?: error("path-source-span-end-identity"),
-                start = sectionF64.startPointF64,
-                end = sectionF64.endPointF64,
-                windingDelta = spanF64.windingDeltaI32,
-            )
-        }
-    }
+    legacySplitEdgesF64
 
 private fun PathSplitEdgeF64.toPathFlattenedSectionF64(): PathFlattenedSectionF64 = PathFlattenedSectionF64(
     startPointF64 = start,
@@ -171,23 +154,7 @@ private fun PathSplitEdgeF64.endLocationF64(): PathSourceLocationF64 = PathSourc
     vertexIdentityF64 = endIdentity,
 )
 
-private fun List<PathSplitEdgeF64>.endpointIdentityAtF64(pointF64: Point2F64): PathVertexIdentityF64 =
-    asSequence()
-        .flatMap { edgeF64 -> sequenceOf(edgeF64.start to edgeF64.startIdentity, edgeF64.end to edgeF64.endIdentity) }
-        .filter { (candidateF64, _) -> candidateF64 == pointF64 }
-        .map { (_, identityF64) -> identityF64 }
-        .maxByOrNull { identityF64 -> identityF64.incidentEdgeIds.size }
-        ?: error("path-source-witness-identity")
-
-private fun List<PathSourceSpanF64>.incidentToF64(
-    edgeF64: PathInputEdgeF64,
-    edgeParameterF64: Double,
-): List<Long> {
-    val parameterF64 = sourceParameterAtEdgeCutF64(edgeF64, edgeParameterF64)
-    return filter { spanF64 ->
-        spanF64.operand == edgeF64.operand &&
-            spanF64.contourIndexI32 == edgeF64.contourIndex &&
-            spanF64.startLocationF64.sourceSegmentIndexI32 == edgeF64.sourceSegmentIndexI32 &&
-            parameterF64 in spanF64.startLocationF64.parameterF64..spanF64.endLocationF64.parameterF64
-    }.map(PathSourceSpanF64::sourceSpanIdI64)
-}
+private fun pathVertexIdentitySemanticKeyF64(identityF64: PathVertexIdentityF64): String =
+    identityF64.incidentEdgeIds.sorted().joinToString(",") + ":" +
+        identityF64.parameterByEdgeId.entries.sortedBy { entry -> entry.key }
+            .joinToString(",") { entry -> entry.value.toBits().toString() }

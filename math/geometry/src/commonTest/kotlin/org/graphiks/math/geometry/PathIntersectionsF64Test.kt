@@ -174,10 +174,10 @@ class PathIntersectionsF64Test {
     fun `splitting rejects malformed source endpoint identities`() {
         val edge = inputEdgeF64(0, Point2F64(0.0, 0.0), Point2F64(1.0, 0.0))
         val malformedStart = edge.copy(
-            startIdentity = PathVertexIdentityF64(listOf(0), mapOf(0 to 1e-16), Point2F32(0f, 0f)),
+            startIdentityF64 = PathVertexIdentityF64(listOf(0), mapOf(0 to 1e-16), Point2F32(0f, 0f)),
         )
         val malformedEnd = edge.copy(
-            endIdentity = PathVertexIdentityF64(emptyList(), emptyMap(), Point2F32(1f, 0f)),
+            endIdentityF64 = PathVertexIdentityF64(emptyList(), emptyMap(), Point2F32(1f, 0f)),
         )
 
         val startError = assertFailsWith<IllegalArgumentException> {
@@ -581,8 +581,8 @@ class PathIntersectionsF64Test {
 
     @Test
     fun `splitting an overlap emits each nonzero contributor subedge once`() {
-        val first = inputEdgeF64(0, Point2F64(0.0, 0.0), Point2F64(10.0, 0.0)).copy(windingDelta = 2)
-        val second = inputEdgeF64(1, Point2F64(4.0, 0.0), Point2F64(12.0, 0.0), PathOperand.SECOND).copy(windingDelta = -3)
+        val first = inputEdgeF64(0, Point2F64(0.0, 0.0), Point2F64(10.0, 0.0)).copy(windingDeltaI32 = 2)
+        val second = inputEdgeF64(1, Point2F64(4.0, 0.0), Point2F64(12.0, 0.0), PathOperand.SECOND).copy(windingDeltaI32 = -3)
         val split = splitPathEdgesF64(
             listOf(first, second),
             PathOpsLimitsI32(),
@@ -1331,14 +1331,17 @@ private fun inputEdgeF64(
     end: Point2F64,
     operand: PathOperand = PathOperand.FIRST,
 ): PathInputEdgeF64 = PathInputEdgeF64(
-    id = id,
+    idI32 = id,
     operand = operand,
-    contourIndex = 0,
-    startIdentity = PathVertexIdentityF64(listOf(id), mapOf(id to 0.0), Point2F32(start.x.toFloat(), start.y.toFloat())),
-    endIdentity = PathVertexIdentityF64(listOf(id), mapOf(id to 1.0), Point2F32(end.x.toFloat(), end.y.toFloat())),
-    start = start,
-    end = end,
-    windingDelta = 1,
+    contourIndexI32 = 0,
+    sourceSegmentIndexI32 = 0,
+    sourceStartParameterF64 = 0.0,
+    sourceEndParameterF64 = 1.0,
+    startIdentityF64 = PathVertexIdentityF64(listOf(id), mapOf(id to 0.0), Point2F32(start.x.toFloat(), start.y.toFloat())),
+    endIdentityF64 = PathVertexIdentityF64(listOf(id), mapOf(id to 1.0), Point2F32(end.x.toFloat(), end.y.toFloat())),
+    startPointF64 = start,
+    endPointF64 = end,
+    windingDeltaI32 = 1,
 )
 
 private fun openContourInputEdgesF64(points: List<Point2F64>): List<PathInputEdgeF64> {
@@ -1357,14 +1360,17 @@ private fun openContourInputEdgesF64(points: List<Point2F64>): List<PathInputEdg
     }
     return points.zipWithNext().mapIndexed { edgeIndex, (start, end) ->
         PathInputEdgeF64(
-            id = edgeIndex,
+            idI32 = edgeIndex,
             operand = PathOperand.FIRST,
-            contourIndex = 0,
-            startIdentity = identities[edgeIndex],
-            endIdentity = identities[edgeIndex + 1],
-            start = start,
-            end = end,
-            windingDelta = 1,
+            contourIndexI32 = 0,
+            sourceSegmentIndexI32 = edgeIndex,
+            sourceStartParameterF64 = 0.0,
+            sourceEndParameterF64 = 1.0,
+            startIdentityF64 = identities[edgeIndex],
+            endIdentityF64 = identities[edgeIndex + 1],
+            startPointF64 = start,
+            endPointF64 = end,
+            windingDeltaI32 = 1,
         )
     }
 }
@@ -1383,14 +1389,17 @@ private fun closedContourInputEdgesF64(points: List<Point2F64>): List<PathInputE
     }
     return points.indices.map { edgeIndex ->
         PathInputEdgeF64(
-            id = edgeIndex,
+            idI32 = edgeIndex,
             operand = PathOperand.FIRST,
-            contourIndex = 0,
-            startIdentity = identities[edgeIndex],
-            endIdentity = identities[(edgeIndex + 1) % points.size],
-            start = points[edgeIndex],
-            end = points[(edgeIndex + 1) % points.size],
-            windingDelta = 1,
+            contourIndexI32 = 0,
+            sourceSegmentIndexI32 = edgeIndex,
+            sourceStartParameterF64 = 0.0,
+            sourceEndParameterF64 = 1.0,
+            startIdentityF64 = identities[edgeIndex],
+            endIdentityF64 = identities[(edgeIndex + 1) % points.size],
+            startPointF64 = points[edgeIndex],
+            endPointF64 = points[(edgeIndex + 1) % points.size],
+            windingDeltaI32 = 1,
         )
     }
 }
@@ -1581,9 +1590,9 @@ private fun relabelPathEdgesF64(edges: List<PathInputEdgeF64>, labels: List<Int>
     val sourceIds = edges.mapIndexed { index, edge -> edge.id to labels[index] }.toMap()
     return edges.mapIndexed { index, edge ->
         edge.copy(
-            id = labels[index],
-            startIdentity = relabelPathVertexIdentityF64(edge.startIdentity, sourceIds),
-            endIdentity = relabelPathVertexIdentityF64(edge.endIdentity, sourceIds),
+            idI32 = labels[index],
+            startIdentityF64 = relabelPathVertexIdentityF64(edge.startIdentity, sourceIds),
+            endIdentityF64 = relabelPathVertexIdentityF64(edge.endIdentity, sourceIds),
         )
     }
 }

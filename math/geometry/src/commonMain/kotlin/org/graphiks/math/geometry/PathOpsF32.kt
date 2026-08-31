@@ -165,7 +165,8 @@ private fun buildArrangementF64(
     candidateWorkBudget: PathCandidateWorkBudgetI32,
 ): PathArrangementF64 {
     val edges = inputEdgesF64(inputs, normalization, limits)
-    val splitEdges = splitPathEdgesF64(edges, limits, candidateWorkBudget)
+    val topologyF64 = splitPathSourceTopologyF64(edges, limits, candidateWorkBudget)
+    val splitEdges = topologyF64.toPathSplitEdgesF64ForLegacyArrangement()
     val arrangement = PathArrangementF64.build(splitEdges, limits)
     return arrangement
 }
@@ -186,7 +187,7 @@ private fun inputEdgesF64(
             closeForFill = true,
         )
         contours.forEachIndexed { contourIndex, contour ->
-            val points = canonicalFlattenedContourPointsF64(contour)
+            val points = contour.points
             if (points.size < 2) return@forEachIndexed
             val contourVertices = points.map { point ->
                 PathInputVertexF64(
@@ -197,18 +198,20 @@ private fun inputEdgesF64(
                     originalPointF32 = point.originalPointF32,
                 ).also(vertices::add)
             }
-            contourVertices.indices.forEach { startIndex ->
+            contourVertices.zipWithNext().forEach { (start, end) ->
+                if (samePathOperationPointF64(start.point, end.point)) return@forEach
                 seeds += PathInputEdgeSeedF64(
                     operand = input.operand,
                     contourIndex = contourIndex,
-                    start = contourVertices[startIndex],
-                    end = contourVertices[(startIndex + 1) % contourVertices.size],
+                    start = start,
+                    end = end,
                 )
             }
         }
     }
 
     val parametersByVertexId = mutableMapOf<Int, MutableMap<Int, Double>>()
+    vertices.forEach { vertex -> parametersByVertexId.getOrPut(vertex.id) { mutableMapOf() } }
     seeds.forEachIndexed { edgeId, edge ->
         parametersByVertexId.getOrPut(edge.start.id) { mutableMapOf() }[edgeId] = 0.0
         parametersByVertexId.getOrPut(edge.end.id) { mutableMapOf() }[edgeId] = 1.0
@@ -225,17 +228,17 @@ private fun inputEdgesF64(
 
     return seeds.mapIndexed { edgeId, edge ->
         PathInputEdgeF64(
-            id = edgeId,
+            idI32 = edgeId,
             operand = edge.operand,
-            contourIndex = edge.contourIndex,
+            contourIndexI32 = edge.contourIndex,
             sourceSegmentIndexI32 = edge.end.sourceSegmentIndexI32,
             sourceStartParameterF64 = edge.start.parameterF64,
             sourceEndParameterF64 = edge.end.parameterF64,
-            startIdentity = identitiesByVertexId.getValue(edge.start.id),
-            endIdentity = identitiesByVertexId.getValue(edge.end.id),
-            start = edge.start.point,
-            end = edge.end.point,
-            windingDelta = 1,
+            startIdentityF64 = identitiesByVertexId.getValue(edge.start.id),
+            endIdentityF64 = identitiesByVertexId.getValue(edge.end.id),
+            startPointF64 = edge.start.point,
+            endPointF64 = edge.end.point,
+            windingDeltaI32 = 1,
         )
     }
 }
@@ -492,15 +495,13 @@ private fun compactProjectedPointWitnessRunsF64(
         sourceFirstVertices.removeAt(index)
         sourceLastVertices.removeAt(index)
     }
-    return checkNotNull(
-        projectedPathContourF32(
-            originalSignedDoubleAreaExpansionF64 = contour.originalSignedDoubleAreaExpansionF64,
-            vertices = vertices,
-            sourceFirstVertices = sourceFirstVertices,
-            sourceLastVertices = sourceLastVertices,
-            normalization = normalization,
-        ),
-    )
+    return projectedPathContourF32(
+        originalSignedDoubleAreaExpansionF64 = contour.originalSignedDoubleAreaExpansionF64,
+        vertices = vertices,
+        sourceFirstVertices = sourceFirstVertices,
+        sourceLastVertices = sourceLastVertices,
+        normalization = normalization,
+    ) ?: contour
 }
 
 private fun projectionOnlyWitnessRunEndF64(
@@ -1367,18 +1368,21 @@ private fun projectedBoundaryEdgesF64(contours: List<ProjectedPathContourF32>): 
                 originalPointF32 = null,
             )
             val projected = PathInputEdgeF64(
-                id = edgeId,
+                idI32 = edgeId,
                 operand = PathOperand.FIRST,
-                contourIndex = contourIndex,
-                startIdentity = identity(0.0),
-                endIdentity = identity(1.0),
-                start = contour.vertices[edgeIndex].toPoint2F64(),
-                end = contour.vertices[nextIndex].toPoint2F64(),
-                windingDelta = 1,
+                contourIndexI32 = contourIndex,
+                sourceSegmentIndexI32 = -1,
+                sourceStartParameterF64 = 0.0,
+                sourceEndParameterF64 = 1.0,
+                startIdentityF64 = identity(0.0),
+                endIdentityF64 = identity(1.0),
+                startPointF64 = contour.vertices[edgeIndex].toPoint2F64(),
+                endPointF64 = contour.vertices[nextIndex].toPoint2F64(),
+                windingDeltaI32 = 1,
             )
             val source = projected.copy(
-                start = contour.sourceLastVertices[edgeIndex],
-                end = contour.sourceFirstVertices[nextIndex],
+                startPointF64 = contour.sourceLastVertices[edgeIndex],
+                endPointF64 = contour.sourceFirstVertices[nextIndex],
             )
             result += ProjectedBoundaryEdgeF64(contourIndex, edgeIndex, projected, source)
         }

@@ -13,18 +13,26 @@ internal data class PathVertexIdentityF64(
 )
 
 internal data class PathInputEdgeF64(
-    val id: Int,
+    val idI32: Int,
     val operand: PathOperand,
-    val contourIndex: Int,
-    val sourceSegmentIndexI32: Int = -1,
-    val sourceStartParameterF64: Double = 0.0,
-    val sourceEndParameterF64: Double = 1.0,
-    val startIdentity: PathVertexIdentityF64,
-    val endIdentity: PathVertexIdentityF64,
-    val start: Point2F64,
-    val end: Point2F64,
-    val windingDelta: Int,
+    val contourIndexI32: Int,
+    val sourceSegmentIndexI32: Int,
+    val sourceStartParameterF64: Double,
+    val sourceEndParameterF64: Double,
+    val startIdentityF64: PathVertexIdentityF64,
+    val endIdentityF64: PathVertexIdentityF64,
+    val startPointF64: Point2F64,
+    val endPointF64: Point2F64,
+    val windingDeltaI32: Int,
 )
+
+internal val PathInputEdgeF64.id: Int get() = idI32
+internal val PathInputEdgeF64.contourIndex: Int get() = contourIndexI32
+internal val PathInputEdgeF64.startIdentity: PathVertexIdentityF64 get() = startIdentityF64
+internal val PathInputEdgeF64.endIdentity: PathVertexIdentityF64 get() = endIdentityF64
+internal val PathInputEdgeF64.start: Point2F64 get() = startPointF64
+internal val PathInputEdgeF64.end: Point2F64 get() = endPointF64
+internal val PathInputEdgeF64.windingDelta: Int get() = windingDeltaI32
 
 internal fun sourceParameterAtEdgeCutF64(
     edgeF64: PathInputEdgeF64,
@@ -69,8 +77,8 @@ internal class PathCandidateWorkBudgetI32(maxCandidateProbes: Int) {
 }
 
 private fun canonicalTopologicalPathInputEdgeF64(edge: PathInputEdgeF64): PathInputEdgeF64 = edge.copy(
-    start = canonicalTopologicalPointF64(edge.start),
-    end = canonicalTopologicalPointF64(edge.end),
+    startPointF64 = canonicalTopologicalPointF64(edge.start),
+    endPointF64 = canonicalTopologicalPointF64(edge.end),
 )
 
 internal sealed interface PathIntersectionF64 {
@@ -99,6 +107,8 @@ internal data class PathSplitEdgeF64(
     val sourceSegmentIndexI32: Int = -1,
     val sourceStartParameterF64: Double = 0.0,
     val sourceEndParameterF64: Double = 1.0,
+    val startIsExactEventF64: Boolean = false,
+    val endIsExactEventF64: Boolean = false,
     val startIdentity: PathVertexIdentityF64,
     val endIdentity: PathVertexIdentityF64,
     val start: Point2F64,
@@ -294,6 +304,8 @@ internal fun splitPathEdgesF64(
                         sourceSegmentIndexI32 = edge.sourceSegmentIndexI32,
                         sourceStartParameterF64 = sourceParameterAtEdgeCutF64(edge, startCut.parameter),
                         sourceEndParameterF64 = sourceParameterAtEdgeCutF64(edge, endCut.parameter),
+                        startIsExactEventF64 = startCut.isIntersection,
+                        endIsExactEventF64 = endCut.isIntersection,
                         startIdentity = startCut.identity,
                         endIdentity = endCut.identity,
                         start = start,

@@ -394,14 +394,17 @@ private fun closedContourEdgesF64(
     }
     return points.indices.map { index ->
         PathInputEdgeF64(
-            id = ids[index],
+            idI32 = ids[index],
             operand = operand,
-            contourIndex = sourceIdStart,
-            startIdentity = identities[index],
-            endIdentity = identities[(index + 1) % points.size],
-            start = points[index],
-            end = points[(index + 1) % points.size],
-            windingDelta = 1,
+            contourIndexI32 = sourceIdStart,
+            sourceSegmentIndexI32 = index,
+            sourceStartParameterF64 = 0.0,
+            sourceEndParameterF64 = 1.0,
+            startIdentityF64 = identities[index],
+            endIdentityF64 = identities[(index + 1) % points.size],
+            startPointF64 = points[index],
+            endPointF64 = points[(index + 1) % points.size],
+            windingDeltaI32 = 1,
         )
     }
 }
