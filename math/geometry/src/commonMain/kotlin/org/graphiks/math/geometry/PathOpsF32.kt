@@ -253,7 +253,27 @@ internal fun projectContoursF64ToPathF32(
     candidateWorkBudget: PathCandidateWorkBudgetI32 =
         PathCandidateWorkBudgetI32(PathOpsLimitsI32().maxCandidateProbes),
 ): PathF32 {
-    val projected = contours.mapNotNull { contour -> projectContourF32(contour, normalization) }
+    val uncanonicalProjected = contours.mapNotNull { contour -> projectUncanonicalContourF32(contour, normalization) }
+    val compactionEdges = projectedBoundaryEdgesF64(uncanonicalProjected)
+    val pointWitnesses = if (compactionEdges.size < 2) {
+        emptyList()
+    } else {
+        projectedSourceContactAnchorsF64(
+            edges = compactionEdges,
+            contours = uncanonicalProjected,
+            normalization = normalization,
+            candidateWorkBudget = candidateWorkBudget,
+        )
+    }
+    val compactedProjected = compactProjectedPointWitnessRunsF64(
+        contours = uncanonicalProjected,
+        pointWitnesses = pointWitnesses,
+        normalization = normalization,
+        candidateWorkBudget = candidateWorkBudget,
+    )
+    val projected = compactedProjected.mapNotNull { contour ->
+        projectContourF32(contour, normalization, candidateWorkBudget)
+    }
     validateProjectedContourSetF64(projected, normalization, candidateWorkBudget)
     val ordered = projected
         .sortedWith(
@@ -279,7 +299,7 @@ internal fun projectContoursF64ToPathF32(
     return builder.build()
 }
 
-private fun projectContourF32(
+private fun projectUncanonicalContourF32(
     contour: PathContourF64,
     normalization: PathNormalizationF64,
 ): ProjectedPathContourF32? {
@@ -327,12 +347,234 @@ private fun projectContourF32(
         if (projectedSign != originalSign) throw IllegalStateException("path-f32-projection-collapse")
     }
 
-    val firstIndex = pathOperationRotationIndexF32(vertices)
-    vertices = rotatePathOperationVerticesF32(vertices, firstIndex)
-    sourceFirstVertices =
-        (sourceFirstVertices.drop(firstIndex) + sourceFirstVertices.take(firstIndex)).toMutableList()
-    sourceLastVertices = (sourceLastVertices.drop(firstIndex) + sourceLastVertices.take(firstIndex)).toMutableList()
-    projectedArea = signedDoubleAreaExpansionF64(vertices.map(Point2F32::toPoint2F64) + vertices.first().toPoint2F64())
+    val normalizedProjectedArea = signedDoubleAreaExpansionF64(
+        vertices.map(normalization::normalize) + normalization.normalize(vertices.first()),
+    )
+    if (ExpansionF64.sign(normalizedProjectedArea) != originalSign) {
+        throw IllegalStateException("path-f32-projection-collapse")
+    }
+    val result = projectedPathContourF32(
+        originalSignedDoubleAreaExpansionF64 = originalArea,
+        vertices = vertices,
+        sourceFirstVertices = sourceFirstVertices,
+        sourceLastVertices = sourceLastVertices,
+        normalization = normalization,
+    )
+    return result
+}
+
+private fun projectContourF32(
+    contour: ProjectedPathContourF32,
+    normalization: PathNormalizationF64,
+    candidateWorkBudget: PathCandidateWorkBudgetI32,
+): ProjectedPathContourF32? {
+    val firstIndex = pathOperationRotationIndexF32(contour.vertices, candidateWorkBudget)
+    val vertices = rotatePathOperationVerticesF32(contour.vertices, firstIndex)
+    val sourceFirstVertices =
+        (contour.sourceFirstVertices.drop(firstIndex) + contour.sourceFirstVertices.take(firstIndex)).toMutableList()
+    val sourceLastVertices =
+        (contour.sourceLastVertices.drop(firstIndex) + contour.sourceLastVertices.take(firstIndex)).toMutableList()
+    return projectedPathContourF32(
+        originalSignedDoubleAreaExpansionF64 = contour.originalSignedDoubleAreaExpansionF64,
+        vertices = vertices,
+        sourceFirstVertices = sourceFirstVertices,
+        sourceLastVertices = sourceLastVertices,
+        normalization = normalization,
+    )
+}
+
+// A source Point may round a locally curved neighbourhood onto a lattice carrier shared with a
+// tangent contour. Compact only one precomputed non-wrapping collinear run into its own known
+// source witness before contact validation. Every source bridge in that run must turn relative
+// to the carrier. The replacement bridge has that witness as an endpoint, so any retained
+// projected Point has a direct source preimage; no pair-wide permission, contact-graph walk,
+// seam wrap, witness aggregation, or Point-to-Overlap reclassification is involved.
+private fun compactProjectedPointWitnessRunsF64(
+    contours: List<ProjectedPathContourF32>,
+    pointWitnesses: List<ProjectedSourceContactAnchorF32>,
+    normalization: PathNormalizationF64,
+    candidateWorkBudget: PathCandidateWorkBudgetI32,
+): List<ProjectedPathContourF32> {
+    val witnessesByContour = linkedMapOf<Int, MutableList<Point2F64>>()
+    pointWitnesses.forEach { witness ->
+        if (witness.kind != ProjectedSourceContactKindF32.POINT || witness.sourcePoints.size != 1) return@forEach
+        listOf(witness.firstContourIndex, witness.secondContourIndex).forEach { contourIndex ->
+            val witnesses = witnessesByContour.getOrPut(contourIndex) { mutableListOf() }
+            val sourcePoint = witness.sourcePoints.single()
+            var alreadyPresent = false
+            witnesses.forEach { existing ->
+                candidateWorkBudget.consume()
+                if (samePathOperationPointF64(existing, sourcePoint)) alreadyPresent = true
+            }
+            if (!alreadyPresent) {
+                candidateWorkBudget.consume()
+                witnesses += sourcePoint
+            }
+        }
+    }
+    return contours.mapIndexed { contourIndex, contour ->
+        val witnesses = witnessesByContour[contourIndex] ?: return@mapIndexed contour
+        compactProjectedPointWitnessRunsF64(contour, witnesses, normalization, candidateWorkBudget)
+    }
+}
+
+private fun compactProjectedPointWitnessRunsF64(
+    contour: ProjectedPathContourF32,
+    witnesses: List<Point2F64>,
+    normalization: PathNormalizationF64,
+    candidateWorkBudget: PathCandidateWorkBudgetI32,
+): ProjectedPathContourF32 {
+    val vertices = contour.vertices.toMutableList()
+    val sourceFirstVertices = contour.sourceFirstVertices.toMutableList()
+    val sourceLastVertices = contour.sourceLastVertices.toMutableList()
+    val removals = linkedSetOf<Int>()
+
+    witnesses.forEach { sourcePoint ->
+        val witnessIndex = sourceFirstVertices.indices.firstOrNull { index ->
+            candidateWorkBudget.consume()
+            samePathOperationPointF64(sourceFirstVertices[index], sourcePoint) &&
+                samePathOperationPointF64(sourceLastVertices[index], sourcePoint)
+        } ?: return@forEach
+
+        listOf(-1, 1).forEach { direction ->
+            val runEnd = projectionOnlyWitnessRunEndF64(
+                vertices = vertices,
+                sourceFirstVertices = sourceFirstVertices,
+                sourceLastVertices = sourceLastVertices,
+                witnessIndex = witnessIndex,
+                direction = direction,
+                normalization = normalization,
+                candidateWorkBudget = candidateWorkBudget,
+            ) ?: return@forEach
+            var index = witnessIndex + direction
+            while (index != runEnd + direction) {
+                candidateWorkBudget.consume()
+                removals += index
+                index += direction
+            }
+        }
+    }
+
+    if (removals.isEmpty()) return contour
+    removals.sortedDescending().forEach { index ->
+        vertices.removeAt(index)
+        sourceFirstVertices.removeAt(index)
+        sourceLastVertices.removeAt(index)
+    }
+    return checkNotNull(
+        projectedPathContourF32(
+            originalSignedDoubleAreaExpansionF64 = contour.originalSignedDoubleAreaExpansionF64,
+            vertices = vertices,
+            sourceFirstVertices = sourceFirstVertices,
+            sourceLastVertices = sourceLastVertices,
+            normalization = normalization,
+        ),
+    )
+}
+
+private fun projectionOnlyWitnessRunEndF64(
+    vertices: List<Point2F32>,
+    sourceFirstVertices: List<Point2F64>,
+    sourceLastVertices: List<Point2F64>,
+    witnessIndex: Int,
+    direction: Int,
+    normalization: PathNormalizationF64,
+    candidateWorkBudget: PathCandidateWorkBudgetI32,
+): Int? {
+    val firstIndex = witnessIndex + direction
+    val secondIndex = firstIndex + direction
+    if (firstIndex !in vertices.indices || secondIndex !in vertices.indices) return null
+    val witness = vertices[witnessIndex].toPoint2F64()
+    val first = vertices[firstIndex].toPoint2F64()
+    candidateWorkBudget.consume()
+    if (samePathOperationPointF64(witness, first)) return null
+    candidateWorkBudget.consume()
+    if (OrientationPredicateF64.sign(witness, first, vertices[secondIndex].toPoint2F64()) != 0) return null
+
+    val sourceWitness = sourceFirstVertices[witnessIndex]
+    val sourceFirst = sourcePointOnWitnessBranchF64(sourceFirstVertices, sourceLastVertices, firstIndex, direction)
+    val sourceSecond = sourcePointOnWitnessBranchF64(sourceFirstVertices, sourceLastVertices, secondIndex, direction)
+    candidateWorkBudget.consume()
+    if (samePathOperationPointF64(sourceWitness, sourceFirst)) return null
+    candidateWorkBudget.consume()
+    if (OrientationPredicateF64.sign(sourceWitness, sourceFirst, sourceSecond) == 0) return null
+
+    var runEnd = firstIndex
+    var index = secondIndex
+    while (index in vertices.indices) {
+        candidateWorkBudget.consume()
+        if (OrientationPredicateF64.sign(witness, first, vertices[index].toPoint2F64()) != 0) break
+        runEnd = index
+        index += direction
+    }
+    if (
+        !sourceWitnessRunBridgesAreNonParallelToProjectedCarrierF64(
+            vertices = vertices,
+            sourceFirstVertices = sourceFirstVertices,
+            sourceLastVertices = sourceLastVertices,
+            witnessIndex = witnessIndex,
+            runEnd = runEnd,
+            direction = direction,
+            normalization = normalization,
+            candidateWorkBudget = candidateWorkBudget,
+        )
+    ) {
+        return null
+    }
+    return runEnd
+}
+
+// A source rail that merely sits one F32 ULP-cell away from the witness is not a curved tangent
+// artefact.  Every source bridge in a compacted run must therefore turn relative to the exact
+// F32 carrier through the witness.  The carrier is mapped back through the shared normalization,
+// so this uses an exact robust direction predicate rather than an absolute tolerance.
+private fun sourceWitnessRunBridgesAreNonParallelToProjectedCarrierF64(
+    vertices: List<Point2F32>,
+    sourceFirstVertices: List<Point2F64>,
+    sourceLastVertices: List<Point2F64>,
+    witnessIndex: Int,
+    runEnd: Int,
+    direction: Int,
+    normalization: PathNormalizationF64,
+    candidateWorkBudget: PathCandidateWorkBudgetI32,
+): Boolean {
+    val carrierStart = normalization.normalize(vertices[witnessIndex])
+    val carrierEnd = normalization.normalize(vertices[witnessIndex + direction])
+    var previousIndex = witnessIndex
+    while (previousIndex != runEnd) {
+        val nextIndex = previousIndex + direction
+        val sourceStart = if (direction > 0) sourceLastVertices[previousIndex] else sourceLastVertices[nextIndex]
+        val sourceEnd = if (direction > 0) sourceFirstVertices[nextIndex] else sourceFirstVertices[previousIndex]
+        val sourceDirectionEnd = Point2F64(
+            x = carrierStart.x + (sourceEnd.x - sourceStart.x),
+            y = carrierStart.y + (sourceEnd.y - sourceStart.y),
+        )
+        candidateWorkBudget.consume()
+        if (OrientationPredicateF64.sign(carrierStart, carrierEnd, sourceDirectionEnd) == 0) return false
+        previousIndex = nextIndex
+    }
+    return true
+}
+
+private fun sourcePointOnWitnessBranchF64(
+    sourceFirstVertices: List<Point2F64>,
+    sourceLastVertices: List<Point2F64>,
+    index: Int,
+    direction: Int,
+): Point2F64 = if (direction < 0) sourceLastVertices[index] else sourceFirstVertices[index]
+
+private fun projectedPathContourF32(
+    originalSignedDoubleAreaExpansionF64: DoubleArray,
+    vertices: List<Point2F32>,
+    sourceFirstVertices: List<Point2F64>,
+    sourceLastVertices: List<Point2F64>,
+    normalization: PathNormalizationF64,
+): ProjectedPathContourF32? {
+    check(vertices.size == sourceFirstVertices.size && vertices.size == sourceLastVertices.size)
+    if (vertices.size < 3) return projectionCollapseOrDropF32(originalSignedDoubleAreaExpansionF64)
+    val originalSign = ExpansionF64.sign(originalSignedDoubleAreaExpansionF64)
+    if (originalSign == 0) return null
+    val projectedArea = signedDoubleAreaExpansionF64(vertices.map(Point2F32::toPoint2F64) + vertices.first().toPoint2F64())
     if (ExpansionF64.sign(projectedArea) != originalSign) throw IllegalStateException("path-f32-projection-collapse")
     val normalizedProjectedArea = signedDoubleAreaExpansionF64(
         vertices.map(normalization::normalize) + normalization.normalize(vertices.first()),
@@ -341,12 +583,12 @@ private fun projectContourF32(
         throw IllegalStateException("path-f32-projection-collapse")
     }
     return ProjectedPathContourF32(
-        sourceFirstVertices,
-        sourceLastVertices,
-        originalArea,
-        vertices,
-        projectedArea,
-        normalizedProjectedArea,
+        sourceFirstVertices = sourceFirstVertices,
+        sourceLastVertices = sourceLastVertices,
+        originalSignedDoubleAreaExpansionF64 = originalSignedDoubleAreaExpansionF64,
+        vertices = vertices,
+        signedDoubleAreaExpansionF64 = projectedArea,
+        normalizedSignedDoubleAreaExpansionF64 = normalizedProjectedArea,
     )
 }
 
@@ -556,26 +798,21 @@ private fun normalizeProjectedContactWithLocalSourceWitnessF64(
                 }
                 if (
                     anchor.kind == ProjectedSourceContactKindF32.POINT &&
-                        sourcePointWitnessBacksLocalProjectedPointF64(candidate, anchor, edges, candidateWorkBudget)
+                        sourcePointWitnessBacksDirectProjectedPointF64(candidate, anchor, edges, candidateWorkBudget)
                 ) {
                     return projectedIntersection
                 }
             }
             is PathIntersectionF64.OverlapF64 -> {
-                // The relation partial order is deliberate: a source Point never preserves an
-                // F32 Overlap. A proven opposed tangent run may only normalize that interval to
-                // its one source Point; any surviving F32 Overlap requires a source Overlap.
+                // The relation partial order is geometric as well as classificatory: a source
+                // Point cannot retain an F32 interval under a different relation name.  The
+                // raw interval remains in the emitted boundary, so only an exact source
+                // Overlap can certify it.
                 if (
                     anchor.kind == ProjectedSourceContactKindF32.OVERLAP &&
                         sourceOverlapWitnessBacksProjectedContactF64(candidate, anchor, candidateWorkBudget)
                 ) {
                     return projectedIntersection
-                }
-                if (
-                    anchor.kind == ProjectedSourceContactKindF32.POINT &&
-                        sourcePointWitnessBacksLocalProjectedPointF64(candidate, anchor, edges, candidateWorkBudget)
-                ) {
-                    return collapsedProjectedSourcePointF64(anchor)
                 }
             }
         }
@@ -628,7 +865,7 @@ private fun sourceBridgeFollowsSourceOverlapCarrierF64(
     return true
 }
 
-private fun sourcePointWitnessBacksLocalProjectedPointF64(
+private fun sourcePointWitnessBacksDirectProjectedPointF64(
     candidate: ProjectedBoundaryContactF64,
     anchor: ProjectedSourceContactAnchorF32,
     edges: List<ProjectedBoundaryEdgeF64>,
@@ -640,47 +877,13 @@ private fun sourcePointWitnessBacksLocalProjectedPointF64(
     val anchorFirst = projectedBoundaryEdgeAtSourceAnchorF64(candidate.first, anchor.firstEdgeIndex, edges)
     val anchorSecond = projectedBoundaryEdgeAtSourceAnchorF64(candidate.second, anchor.secondEdgeIndex, edges)
     val sourcePoint = anchor.sourcePoints.single()
-    candidateWorkBudget.consume()
-    val firstCarrierSide = OrientationPredicateF64.sign(
-        candidate.first.source.start,
-        candidate.first.source.end,
-        candidate.second.source.start,
-    )
-    candidateWorkBudget.consume()
-    val secondCarrierSide = OrientationPredicateF64.sign(
-        candidate.first.source.start,
-        candidate.first.source.end,
-        candidate.second.source.end,
-    )
-    if (firstCarrierSide == 0 && secondCarrierSide == 0) return false
-    if (!sourcePointCandidateCarriersAreNonParallelF64(candidate.first.source, candidate.second.source, candidateWorkBudget)) {
-        return false
-    }
-
-    return sourcePointBranchCertificateF64(
-        sourcePoint,
-        anchorFirst.source,
-        anchorSecond.source,
-        candidate.first.source,
-        candidate.second.source,
-        candidate.intersection,
-        anchor.anchors.single(),
-        candidateWorkBudget,
-    )
-}
-
-// A rounded tangent can be normalized only from two non-parallel source branches. Parallel rails
-// on opposite sides of the same source point are a new long F32 overlap, not a local point
-// artifact, even when their normal coordinates round to the witness lattice coordinate.
-private fun sourcePointCandidateCarriersAreNonParallelF64(
-    first: PathInputEdgeF64,
-    second: PathInputEdgeF64,
-    candidateWorkBudget: PathCandidateWorkBudgetI32,
-): Boolean {
-    candidateWorkBudget.consume()
-    val firstDirection = Point2F64(first.end.x - first.start.x, first.end.y - first.start.y)
-    val secondDirection = Point2F64(second.end.x - second.start.x, second.end.y - second.start.y)
-    return OrientationPredicateF64.sign(Point2F64.Origin, firstDirection, secondDirection) != 0
+    return sourcePointIsOnBridgeF64(candidate.first.source, sourcePoint, candidateWorkBudget) &&
+        sourcePointIsOnBridgeF64(candidate.second.source, sourcePoint, candidateWorkBudget) &&
+        sourcePointIsOnBridgeF64(anchorFirst.source, sourcePoint, candidateWorkBudget) &&
+        sourcePointIsOnBridgeF64(anchorSecond.source, sourcePoint, candidateWorkBudget) &&
+        candidateBridgeIsWitnessOrImmediateMergedContinuationF64(candidate.first, anchorFirst, candidateWorkBudget) &&
+        candidateBridgeIsWitnessOrImmediateMergedContinuationF64(candidate.second, anchorSecond, candidateWorkBudget) &&
+        projectedIntersectionContainsSourceAnchorF64(candidate.intersection, anchor.anchors, candidateWorkBudget)
 }
 
 private fun projectedBoundaryEdgeAtSourceAnchorF64(
@@ -694,101 +897,29 @@ private fun projectedBoundaryEdgeAtSourceAnchorF64(
     return anchor
 }
 
-// This is a direct certificate, not a graph walk. Both candidate bridges must continue the two
-// source branches meeting at the witness, on opposite sides of one exact coordinate axis, and
-// their F32 contact must remain on that witness's F32 normal lattice coordinate. It bounds a
-// rounded tangent artifact by its own source point and rejects a same-side distant branch.
-private fun sourcePointBranchCertificateF64(
+private fun sourcePointIsOnBridgeF64(
+    bridge: PathInputEdgeF64,
     sourcePoint: Point2F64,
-    firstAnchor: PathInputEdgeF64,
-    secondAnchor: PathInputEdgeF64,
-    firstCandidate: PathInputEdgeF64,
-    secondCandidate: PathInputEdgeF64,
-    projectedContact: PathIntersectionF64,
-    projectedAnchor: Point2F32,
     candidateWorkBudget: PathCandidateWorkBudgetI32,
 ): Boolean {
-    for (coordinate in 0..1) {
-        val firstAnchorSide = sourcePointRunSideF64(
-            firstAnchor,
-            sourcePoint,
-            coordinate,
-            candidateWorkBudget = candidateWorkBudget,
-        )
-        val secondAnchorSide = sourcePointRunSideF64(
-            secondAnchor,
-            sourcePoint,
-            coordinate,
-            candidateWorkBudget = candidateWorkBudget,
-        )
-        if (firstAnchorSide == 0 || secondAnchorSide != -firstAnchorSide) continue
-        val firstCandidateSide = sourcePointRunSideF64(
-            firstCandidate,
-            sourcePoint,
-            coordinate,
-            candidateWorkBudget = candidateWorkBudget,
-        )
-        val secondCandidateSide = sourcePointRunSideF64(
-            secondCandidate,
-            sourcePoint,
-            coordinate,
-            candidateWorkBudget = candidateWorkBudget,
-        )
-        if (firstCandidateSide != firstAnchorSide || secondCandidateSide != secondAnchorSide) continue
-        val staysOnNormal = projectedContactIsOnSourcePointLatticeNormalF64(
-            projectedContact,
-            projectedAnchor,
-            coordinate,
-            candidateWorkBudget,
-        )
-        if (staysOnNormal) {
-            return true
-        }
-    }
-    return false
-}
-
-private fun sourcePointRunSideF64(
-    edge: PathInputEdgeF64,
-    sourcePoint: Point2F64,
-    coordinate: Int,
-    candidateWorkBudget: PathCandidateWorkBudgetI32,
-): Int {
     candidateWorkBudget.consume()
-    val start = sourcePointCoordinateOrderF64(edge.start, sourcePoint, coordinate)
+    if (OrientationPredicateF64.sign(bridge.start, bridge.end, sourcePoint) != 0) return false
     candidateWorkBudget.consume()
-    val end = sourcePointCoordinateOrderF64(edge.end, sourcePoint, coordinate)
-    return when {
-        start <= 0 && end <= 0 && (start < 0 || end < 0) -> -1
-        start >= 0 && end >= 0 && (start > 0 || end > 0) -> 1
-        else -> 0
-    }
+    return PathPredicatesF64.onSegment(sourcePoint, bridge.start, bridge.end)
 }
 
-private fun sourcePointCoordinateOrderF64(point: Point2F64, sourcePoint: Point2F64, coordinate: Int): Int = when (coordinate) {
-    0 -> point.x.compareTo(sourcePoint.x)
-    else -> point.y.compareTo(sourcePoint.y)
-}
-
-private fun projectedContactIsOnSourcePointLatticeNormalF64(
-    projectedContact: PathIntersectionF64,
-    projectedAnchor: Point2F32,
-    coordinate: Int,
+// No path walk is permitted here.  A non-anchor bridge can be a continuation only when it is
+// immediately adjacent in the already projected contour order, never through the cyclic seam.
+// Its source bridge has already been proved to contain the exact source witness above.
+private fun candidateBridgeIsWitnessOrImmediateMergedContinuationF64(
+    candidate: ProjectedBoundaryEdgeF64,
+    witness: ProjectedBoundaryEdgeF64,
     candidateWorkBudget: PathCandidateWorkBudgetI32,
 ): Boolean {
-    val anchor = canonicalProjectedPointF32(projectedAnchor).toPoint2F64()
-    return projectedContactLatticeBoundaryPointsF64(projectedContact).all { point ->
-        candidateWorkBudget.consume()
-        when (coordinate) {
-            0 -> point.x == anchor.x
-            else -> point.y == anchor.y
-        }
-    }
-}
-
-private fun collapsedProjectedSourcePointF64(anchor: ProjectedSourceContactAnchorF32): PathIntersectionF64.PointF64 {
-    val point = canonicalProjectedPointF32(anchor.anchors.single()).toPoint2F64()
-    return PathIntersectionF64.PointF64(point, 0.0, 0.0)
+    candidateWorkBudget.consume()
+    if (candidate.edgeIndex == witness.edgeIndex) return true
+    candidateWorkBudget.consume()
+    return candidate.edgeIndex + 1 == witness.edgeIndex || witness.edgeIndex + 1 == candidate.edgeIndex
 }
 
 private fun projectedContactBoundaryPointsF64(intersection: PathIntersectionF64): List<Point2F64> = when (intersection) {
@@ -1219,20 +1350,39 @@ private fun compareAbsoluteAreasF64(first: DoubleArray, second: DoubleArray): In
 
 private fun DoubleArray.negatedPathOperationExpansionF64(): DoubleArray = DoubleArray(size) { index -> -this[index] }
 
-private fun pathOperationRotationIndexF32(vertices: List<Point2F32>): Int =
-    minimalPathOperationRotationIndexF32(vertices) { first, second ->
-        comparePathOperationPointsF32(first, second)
-    }
-
 internal fun pathOperationRotationIndexF32(
     vertices: List<Point2F32>,
     candidateWorkBudget: PathCandidateWorkBudgetI32,
-): Int = minimalPathOperationRotationIndexF32(vertices) { first, second ->
-    // A weak cyclic word can require more than `2n` comparisons. Debit immediately before each
-    // real point comparison so JVM and JS expose the same exact candidate-budget boundary.
-    candidateWorkBudget.consume()
-    comparePathOperationPointsF32(first, second)
+): Int {
+    val canonicalCost = canonicalBoothCandidateCostI64(vertices.size)
+    // Proof of the `3n` bound used for canonical debit:
+    // - `first` and `second` never move backwards. A mismatch ends one phase and advances one
+    //   of them by `offset + 1` (or farther when it must step past the other candidate).
+    // - A phase therefore performs exactly `offset + 1` comparisons and is covered by that
+    //   monotone candidate advance. Across all mismatch-ended phases, the two candidates can
+    //   advance fewer than `2n` positions before one leaves the range.
+    // - The only remaining phase is an equality suffix. Its `offset` rises from zero to at most
+    //   `n`, then terminates the loop. It performs at most `n` comparisons.
+    // Thus no execution compares more than `3n` points. Compute the bound with `Long` so an
+    // `Int`-sized contour cannot overflow. Check the complete canonical debit before the first
+    // comparison so cyclic rotations/reversals cannot partially scan then diverge at a budget
+    // boundary. This is not a reservation: every real comparison below still debits immediately
+    // before it runs, then only the proven unused remainder is consumed as canonical padding.
+    candidateWorkBudget.requireRemainingAtLeast(canonicalCost)
+    var chargedComparisons = 0L
+    val result = minimalPathOperationRotationIndexF32(vertices) { first, second ->
+        candidateWorkBudget.consume()
+        chargedComparisons += 1L
+        comparePathOperationPointsF32(first, second)
+    }
+    while (chargedComparisons < canonicalCost) {
+        candidateWorkBudget.consume()
+        chargedComparisons += 1L
+    }
+    return result
 }
+
+private fun canonicalBoothCandidateCostI64(size: Int): Long = if (size < 2) 0L else 3L * size.toLong()
 
 private fun minimalPathOperationRotationIndexF32(
     vertices: List<Point2F32>,

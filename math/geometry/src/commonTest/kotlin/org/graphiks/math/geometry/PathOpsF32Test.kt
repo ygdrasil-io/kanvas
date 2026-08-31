@@ -514,6 +514,43 @@ class PathOpsF32Test {
     }
 
     @Test
+    fun `projection rejects a remote opposed F32 overlap beyond a seam source point`() {
+        val epsilon = 2.0.pow(-25)
+        val normalization = affineProjectionNormalizationF64()
+        val left = affineProjectionContourF64(
+            10.0 to 0.0,
+            9.0 to -1.0,
+            8.0 to 18.0,
+            10.0 - epsilon to 19.0,
+            10.0 - 2.0 * epsilon to 21.0,
+            8.0 to 22.0,
+            7.0 to 0.0,
+        )
+        val right = affineProjectionContourF64(
+            10.0 to 0.0,
+            11.0 to -1.0,
+            12.0 to 18.0,
+            10.0 + epsilon to 19.0,
+            10.0 + 2.0 * epsilon to 21.0,
+            12.0 to 22.0,
+            13.0 to 0.0,
+        )
+
+        val projectedLeft = projectContoursF64ToPathF32(listOf(left), normalization, FillRule.WINDING)
+        val projectedRight = projectContoursF64ToPathF32(listOf(right), normalization, FillRule.WINDING)
+        assertTrue(PathAnalysisF32.contains(projectedLeft, Point2F32(9f, 20f)))
+        assertTrue(PathAnalysisF32.contains(projectedRight, Point2F32(11f, 20f)))
+        assertFalse(PathAnalysisF32.contains(projectedLeft, Point2F32(11f, 20f)))
+        assertFalse(PathAnalysisF32.contains(projectedRight, Point2F32(9f, 20f)))
+
+        val error = assertFailsWith<IllegalStateException> {
+            projectContoursF64ToPathF32(listOf(left, right), normalization, FillRule.WINDING)
+        }
+
+        assertEquals("path-f32-projection-collapse", error.message)
+    }
+
+    @Test
     fun `projection rejects an F32 overlap walk beyond its source overlap`() {
         val first = subdividedProjectionTopRectangleF64()
         val sourceDisjoint = projectionOverlapWalkContourF64(sourceOverlap = false)
@@ -594,26 +631,61 @@ class PathOpsF32Test {
     }
 
     @Test
-    fun `weak ten vertex cycle charges Booth comparisons at the exact boundary`() {
-        val weak = weakBoothCycleF64(rotation = 0, reverse = false)
-        val rotated = weakBoothCycleF64(rotation = 3, reverse = false)
-        val reversed = weakBoothCycleF64(rotation = 0, reverse = true)
-        val normalization = PathNormalizationF64(origin = Point2F64(0.0, 0.0), scale = 1.0)
-        val weakVertices = weak.vertices.map { it.point.toPoint2F32() }
+    fun `weak ten vertex Booth boundary is invariant across rotations reversals and signed zero`() {
+        val insufficientBudget = 29
+        val sufficientBudget = 30
+        listOf(false, true).forEach { signedZero ->
+            (0..9).forEach { rotation ->
+                listOf(false, true).forEach { reverse ->
+                    val vertices = weakBoothCycleF64(rotation, reverse, signedZero).vertices.map { it.point.toPoint2F32() }
+                    val error = assertFailsWith<IllegalStateException> {
+                        pathOperationRotationIndexF32(vertices, PathCandidateWorkBudgetI32(insufficientBudget))
+                    }
+                    assertEquals("path-candidate-limit", error.message)
 
-        val error = assertFailsWith<IllegalStateException> {
-            pathOperationRotationIndexF32(weakVertices, PathCandidateWorkBudgetI32(20))
+                    val firstIndex = pathOperationRotationIndexF32(
+                        vertices,
+                        PathCandidateWorkBudgetI32(sufficientBudget),
+                    )
+                    assertTrue(vertices[firstIndex].x == 0f)
+                    assertTrue(vertices[firstIndex].y == 0f)
+                }
+            }
         }
-        assertEquals("path-candidate-limit", error.message)
-        assertEquals(4, pathOperationRotationIndexF32(weakVertices, PathCandidateWorkBudgetI32(21)))
+    }
 
-        val canonical = projectContoursF64ToPathF32(listOf(weak), normalization, FillRule.WINDING)
-        val rotatedCanonical = projectContoursF64ToPathF32(listOf(rotated), normalization, FillRule.WINDING)
-        val reversedCanonical = projectContoursF64ToPathF32(listOf(reversed), normalization, FillRule.WINDING)
-        val probes = listOf(Point2F32(0.1f, 0.1f), Point2F32(0.9f, 0.1f), Point2F32(2f, 2f))
+    @Test
+    fun `projection charges the canonical weak Booth boundary without mutating contours`() {
+        val normalization = PathNormalizationF64(origin = Point2F64(0.0, 0.0), scale = 1.0)
+        // This is the complete real projection pipeline, including its two canonical Booth
+        // passes.  All cyclic representations must hit the same preflight/debit boundary.
+        val insufficientBudget = 1_225
+        val sufficientBudget = 1_226
+        (0..9).forEach { rotation ->
+            listOf(false, true).forEach { reverse ->
+                val contour = weakBoothCycleF64(rotation, reverse, signedZero = true)
+                val before = contour.vertices.toList()
+                val error = assertFailsWith<IllegalStateException> {
+                    projectContoursF64ToPathF32(
+                        contours = listOf(contour),
+                        normalization = normalization,
+                        fillRule = FillRule.WINDING,
+                        candidateWorkBudget = PathCandidateWorkBudgetI32(insufficientBudget),
+                    )
+                }
+                assertEquals("path-candidate-limit", error.message)
+                assertEquals(before, contour.vertices)
 
-        assertMembershipEquivalentF32(canonical, rotatedCanonical, probes)
-        assertMembershipEquivalentF32(canonical, reversedCanonical, probes)
+                val result = projectContoursF64ToPathF32(
+                    contours = listOf(contour),
+                    normalization = normalization,
+                    fillRule = FillRule.WINDING,
+                    candidateWorkBudget = PathCandidateWorkBudgetI32(sufficientBudget),
+                )
+                assertTrue(PathAnalysisF32.bounds(result) != null)
+                assertEquals(before, contour.vertices)
+            }
+        }
     }
 
     @Test
@@ -1167,8 +1239,9 @@ class PathOpsF32Test {
         return affineProjectionContourF64(*points.toTypedArray())
     }
 
-    private fun weakBoothCycleF64(rotation: Int, reverse: Boolean): PathContourF64 {
-        val a = Point2F64(0.0, 0.0)
+    private fun weakBoothCycleF64(rotation: Int, reverse: Boolean, signedZero: Boolean = false): PathContourF64 {
+        val zero = if (signedZero) -0.0 else 0.0
+        val a = Point2F64(zero, zero)
         val b = Point2F64(0.0, 1.0)
         val c = Point2F64(1.0, 0.0)
         val points = listOf(b, c, b, c, a, b, c, b, c, a)

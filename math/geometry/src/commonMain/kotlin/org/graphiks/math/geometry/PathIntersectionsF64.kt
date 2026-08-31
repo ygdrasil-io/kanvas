@@ -51,6 +51,12 @@ internal class PathCandidateWorkBudgetI32(maxCandidateProbes: Int) {
         if (remaining <= 0) throw IllegalStateException("path-candidate-limit")
         remaining -= 1
     }
+
+    // A canonical linear pass may prove its complete per-pass debit before beginning.  This is
+    // a check only: every real operation still calls [consume] immediately before it executes.
+    fun requireRemainingAtLeast(units: Long) {
+        if (units > remaining.toLong()) throw IllegalStateException("path-candidate-limit")
+    }
 }
 
 private fun canonicalTopologicalPathInputEdgeF64(edge: PathInputEdgeF64): PathInputEdgeF64 = edge.copy(

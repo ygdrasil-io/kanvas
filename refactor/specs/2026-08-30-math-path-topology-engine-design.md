@@ -327,20 +327,30 @@ witness `Overlap`, chaque endpoint du contact `F32` et les deux ponts source
 localement mappés doivent appartenir à l'intervalle source exact et à son image
 sur la lattice `F32`.
 
-Un witness source `Point` ne conserve donc jamais un `Overlap F32`. Une
-tangence aplatie qui arrondit temporairement des fragments colinéaires est
-normalisée *comme relation de validation* en son unique `Point F32`, mais
-seulement avec un certificat direct : les deux ponts source du candidat et les
-deux ponts incidents au witness poursuivent des branches opposées et robustement
-non parallèles autour du point exact, et le contact arrondi reste sur sa
-coordonnée normale `F32`. Des rails source parallèles, même de part et d'autre
-du witness, sont un long overlap nouveau et échouent. L'intervalle brut ne
-survit pas comme relation `Overlap`. Il n'existe aucun
-cache par paire de contours, aucune BFS et aucune fermeture transitive : un
-contact source à gauche ne peut jamais autoriser un endpoint ou overlap projeté
-distant à droite. Toute préimage ou relation locale ambiguë échoue
-conservativement par `path-f32-projection-collapse`; chaque comparaison ou
-prédicat de ce certificat débite d'abord le budget candidat.
+Un witness source `Point` ne conserve donc jamais un `Overlap F32`, ni sous le
+nom d'une relation `Point`. Avant cette validation, une tangence aplatie peut
+subir une compaction géométriquement neutre : une seule branche projetée,
+non-cyclique et localement colinéaire, est remplacée par son segment jusqu'au
+witness exact. Cette compaction exige que le witness soit son propre sommet
+source, que *chaque* pont source du run soit robuste non parallèle au carrier
+F32 ramené en `F64` par la normalisation, et que chaque pont de remplacement
+ait ce même witness comme endpoint. Elle ne franchit jamais le seam, ne marche
+jamais sur un graphe de contacts et n'agrège jamais plusieurs witnesses. Elle
+supprime donc seulement des subdivisions F32 colinéaires d'une branche
+véritablement courbe, plutôt que de requalifier un intervalle brut ou un rail
+source réel.
+
+Après cette compaction, un `Point F32` issu d'un witness `Point` doit encore
+porter un certificat direct : les deux ponts candidats et les deux ponts du
+witness contiennent le point source exact (carrier robuste puis `onSegment`),
+chaque candidat est le pont witness ou son unique voisin non-cyclique, et son
+locus F32 contient l'ancre F32 exacte du witness. Un `Overlap F32` brut ne peut
+être conservé que par un witness source `Overlap`. Il n'existe aucun cache par
+paire de contours, aucune BFS et aucune fermeture transitive : un contact
+source à gauche ne peut jamais autoriser un endpoint ou overlap projeté distant
+à droite. Toute préimage ou relation locale ambiguë échoue conservativement
+par `path-f32-projection-collapse`; chaque comparaison ou prédicat de ce
+certificat débite d'abord le budget candidat.
 Une jonction, un croisement ou un overlap partiel nouveau entre cycles source-
 disjoints échoue si les cycles ne sont pas exactement le même cycle projeté;
 un contact nouveau non-adjacent au sein d'un cycle dérive d'abord ses préimages
@@ -356,10 +366,17 @@ suppression exacte des sommets colinéaires. Toute rotation est départagée par
 la séquence cyclique complète (rotation minimale linéaire de Booth, dans les
 deux sens), y compris lorsqu'un minimum est répété; la multiplicité et
 l'orientation de chaque membre restent séparées de cette clé. Booth débite le
-budget immédiatement avant chaque comparaison réelle de points (jamais une
-réservation fixe `2n`), ce qui conserve son coût `O(n)` et rend la frontière de
-budget identique sur JVM et JS; ses index cycliques et incréments sont calculés
-en arithmétique élargie avant le retour à `Int`. Pour chaque
+budget immédiatement avant chaque comparaison réelle de points. Pour rendre la
+frontière identique sous rotation et réversion, chaque passe vérifie avant sa
+première comparaison qu'il reste sa borne canonique `3n`, puis débite le
+padding prouvé après les comparaisons réelles. Ce n'est pas la réservation
+incorrecte `2n` : une phase qui finit par un mismatch compare exactement
+`offset + 1` points et avance un des deux candidats d'au moins cette distance;
+les deux indices ne reculent jamais et couvrent moins de `2n` positions. Il ne
+reste qu'une éventuelle phase d'égalités terminale, où `offset` atteint au plus
+`n`. Aucune exécution ne dépasse donc `3n` comparaisons. Les index, incréments
+et le produit de la borne emploient une arithmétique élargie avant le retour à
+`Int`. Pour chaque
 groupe, des expansions calculent
 à la fois la modification signée agrégée des doubles-aires source/projetées et
 l'étendue cumulée des frontières source; l'une ou l'autre supérieure à `2^-45`
