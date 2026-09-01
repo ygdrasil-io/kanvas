@@ -208,7 +208,9 @@ internal fun admitPathSourcePrimitivesF64F32(
         },
     )
     var unsupportedF64F32 = false
-    orderedF64F32.zipWithNext().forEach { (firstF64F32, secondF64F32) ->
+    for (indexI32 in 0 until orderedF64F32.size - 1) {
+        val firstF64F32 = orderedF64F32[indexI32]
+        val secondF64F32 = orderedF64F32[indexI32 + 1]
         // The adjacent revalidation is geometric only: source provenance is intentionally not
         // part of the key equality, but both observations were individually source-qualified.
         candidateWorkBudgetI32.consume()

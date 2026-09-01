@@ -839,10 +839,20 @@ private fun unresolvedDeferredEndpointObservationsF64F32(
     projectedSpansF64F32: List<PathProjectedSourceSpanF64F32>,
     candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
 ): List<PathDeferredProjectedEndpointObservationF64F32> {
+    val deferredContactCountI64 = deferredEndpointContactsF64F32.size.toLong()
+    val unresolvedCapacityI32 = checkedPathCapacityI32(
+        deferredContactCountI64,
+        "path-candidate-limit",
+    )
     preflightHybridLinearF64F32(
         checkedPathWorkAddI64(
             checkedPathWorkMultiplyI64(proposalsF64F32.size.toLong(), 8L),
-            checkedPathWorkMultiplyI64(projectedSpansF64F32.size.toLong(), 2L),
+            checkedPathWorkAddI64(
+                checkedPathWorkMultiplyI64(projectedSpansF64F32.size.toLong(), 2L),
+                // Reserve the full deferred buffer and its worst-case one-copy result before
+                // allocating it. The later immutable observation copy is a separate allocation.
+                deferredContactCountI64,
+            ),
         ),
         candidateWorkBudgetI32,
     )
@@ -872,9 +882,7 @@ private fun unresolvedDeferredEndpointObservationsF64F32(
             firstAtStart = false,
         )
     }
-    val unresolvedF64F32 = ArrayList<PathDeferredProjectedEndpointObservationF64F32>(
-        deferredEndpointContactsF64F32.size,
-    )
+    val unresolvedF64F32 = ArrayList<PathDeferredProjectedEndpointObservationF64F32>(unresolvedCapacityI32)
     deferredEndpointContactsF64F32.forEach { deferredF64F32 ->
         val firstSpanF64F32 = spansByCarrierF64F32[
             PathProjectedCarrierKeyF64F32(

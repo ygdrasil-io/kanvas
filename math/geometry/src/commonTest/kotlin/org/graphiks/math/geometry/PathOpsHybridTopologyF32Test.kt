@@ -87,10 +87,22 @@ private fun assertPathF32ProjectionCollapseF32(
     vararg inputsF32: PathF32,
     operation: () -> Unit,
 ) {
+    assertPathF32FailureF32(
+        expectedMessage = "path-f32-projection-collapse",
+        inputsF32 = inputsF32,
+        operation = operation,
+    )
+}
+
+private fun assertPathF32FailureF32(
+    expectedMessage: String,
+    vararg inputsF32: PathF32,
+    operation: () -> Unit,
+) {
     val inputsBeforeF32 = inputsF32.map(PathF32::toList)
     val error = assertFailsWith<IllegalStateException> { operation() }
 
-    assertEquals("path-f32-projection-collapse", error.message)
+    assertEquals(expectedMessage, error.message)
     inputsF32.zip(inputsBeforeF32).forEach { (inputF32, beforeF32) ->
         assertEquals(beforeF32, inputF32.toList())
     }
@@ -174,10 +186,16 @@ class PathOpsHybridTopologyF32Test {
             .close()
             .build()
 
-        val result = PathOpsF32.op(lower, upper, PathBooleanOp.UNION)
+        val lowerBeforeF32 = lower.toList()
+        val upperBeforeF32 = upper.toList()
+        val forwardResultF32 = PathOpsF32.op(lower, upper, PathBooleanOp.UNION)
+        val swappedResultF32 = PathOpsF32.op(upper, lower, PathBooleanOp.UNION)
 
-        assertTrue(PathAnalysisF32.contains(result, Point2F32(1f, 0f)))
-        assertTrue(PathAnalysisF32.contains(result, Point2F32(1f, 2f)))
+        assertTrue(PathAnalysisF32.contains(forwardResultF32, Point2F32(1f, 0f)))
+        assertTrue(PathAnalysisF32.contains(forwardResultF32, Point2F32(1f, 2f)))
+        assertEquals(forwardResultF32, swappedResultF32)
+        assertEquals(lowerBeforeF32, lower.toList())
+        assertEquals(upperBeforeF32, upper.toList())
     }
 
     @Test
@@ -246,11 +264,12 @@ class PathOpsHybridTopologyF32Test {
             .close()
             .build()
 
-        val error = assertFailsWith<IllegalStateException> {
+        assertPathF32ProjectionCollapseF32(lower, upper) {
             PathOpsF32.op(lower, upper, PathBooleanOp.UNION)
         }
-
-        assertEquals("path-f32-projection-collapse", error.message)
+        assertPathF32ProjectionCollapseF32(upper, lower) {
+            PathOpsF32.op(upper, lower, PathBooleanOp.UNION)
+        }
     }
 
     @Test
@@ -554,15 +573,14 @@ class PathOpsHybridTopologyF32Test {
             }
         }.build()
 
-        val aloneError = assertFailsWith<IllegalStateException> {
-            PathOpsF32.simplify(sourceF32(opposite = false))
+        val aloneF32 = sourceF32(opposite = false)
+        val siblingF32 = sourceF32(opposite = true)
+        assertPathF32ProjectionCollapseF32(aloneF32) {
+            PathOpsF32.simplify(aloneF32)
         }
-        val siblingError = assertFailsWith<IllegalStateException> {
-            PathOpsF32.simplify(sourceF32(opposite = true))
+        assertPathF32ProjectionCollapseF32(siblingF32) {
+            PathOpsF32.simplify(siblingF32)
         }
-
-        assertEquals("path-f32-projection-collapse", aloneError.message)
-        assertEquals("path-f32-projection-collapse", siblingError.message)
     }
 
     @Test
@@ -619,17 +637,11 @@ class PathOpsHybridTopologyF32Test {
             .close()
             .build()
 
-        listOf(loopF32, reversedLoopF32).forEachIndexed { permutationIndexI32, secondF32 ->
+        listOf(loopF32, reversedLoopF32).forEach { secondF32 ->
             listOf(PathBooleanOp.UNION, PathBooleanOp.INTERSECT).forEach { operation ->
-                val error = assertFailsWith<IllegalStateException> {
+                assertPathF32ProjectionCollapseF32(loopF32, secondF32) {
                     PathOpsF32.op(loopF32, secondF32, operation)
                 }
-
-                assertEquals(
-                    "path-f32-projection-collapse",
-                    error.message,
-                    "permutation=$permutationIndexI32 operation=$operation",
-                )
             }
         }
     }
@@ -912,17 +924,19 @@ class PathOpsHybridTopologyF32Test {
         }
 
         val collapsedF32 = loop(extra = false)
-        val simplifyError = assertFailsWith<IllegalStateException> {
+        val retainedF32 = loop(extra = true)
+        val reversedRetainedF32 = loop(extra = true, reverseLobe = true)
+        assertPathF32ProjectionCollapseF32(collapsedF32) {
             PathOpsF32.simplify(collapsedF32)
         }
-        val intersectError = assertFailsWith<IllegalStateException> {
-            PathOpsF32.op(loop(extra = true), collapsedF32, PathBooleanOp.INTERSECT)
+        assertPathF32ProjectionCollapseF32(retainedF32, collapsedF32) {
+            PathOpsF32.op(retainedF32, collapsedF32, PathBooleanOp.INTERSECT)
         }
-        val reversedIntersectError = assertFailsWith<IllegalStateException> {
-            PathOpsF32.op(collapsedF32, loop(extra = true), PathBooleanOp.INTERSECT)
+        assertPathF32ProjectionCollapseF32(collapsedF32, retainedF32) {
+            PathOpsF32.op(collapsedF32, retainedF32, PathBooleanOp.INTERSECT)
         }
-        val reversedProvenanceError = assertFailsWith<IllegalStateException> {
-            PathOpsF32.op(loop(extra = true, reverseLobe = true), collapsedF32, PathBooleanOp.INTERSECT)
+        assertPathF32ProjectionCollapseF32(reversedRetainedF32, collapsedF32) {
+            PathOpsF32.op(reversedRetainedF32, collapsedF32, PathBooleanOp.INTERSECT)
         }
         val distantF32 = PathBuilder()
             .addRect(RectF32.ofLTRB(30f, 30f, 40f, 40f))
@@ -931,10 +945,6 @@ class PathOpsHybridTopologyF32Test {
             PathOpsF32.op(collapsedF32, distantF32, PathBooleanOp.INTERSECT)
         }
 
-        assertEquals("path-f32-projection-collapse", simplifyError.message)
-        assertEquals("path-f32-projection-collapse", intersectError.message)
-        assertEquals("path-f32-projection-collapse", reversedIntersectError.message)
-        assertEquals("path-f32-projection-collapse", reversedProvenanceError.message)
     }
 
     @Test
@@ -980,11 +990,10 @@ class PathOpsHybridTopologyF32Test {
     @Test
     fun `thin lens candidate limit takes priority while projection precedes intersection limit`() {
         val lensF32 = thinLensWithDistantSelfClosedPrimitiveF32()
-        val candidateError = assertFailsWith<IllegalStateException> {
+        assertPathF32FailureF32("path-candidate-limit", lensF32) {
             PathOpsF32.simplify(lensF32, PathOpsLimitsI32(maxCandidateProbes = 1))
         }
 
-        assertEquals("path-candidate-limit", candidateError.message)
         assertPathF32ProjectionCollapseF32(lensF32) {
             PathOpsF32.simplify(lensF32, PathOpsLimitsI32(maxIntersections = 1))
         }
