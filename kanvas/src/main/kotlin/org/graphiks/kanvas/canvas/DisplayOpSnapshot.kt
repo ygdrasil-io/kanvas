@@ -34,8 +34,13 @@ internal fun List<DisplayOp>.snapshotGeometry(): List<DisplayOp> {
 internal class GeometrySnapshotContext {
     private val textBlobs = IdentityHashMap<TextBlob, TextBlob>()
 
-    fun snapshot(blob: TextBlob): TextBlob = textBlobs[blob] ?: blob.snapshotGeometry().also {
-        textBlobs[blob] = it
+    fun snapshot(blob: TextBlob): TextBlob {
+        val previous = textBlobs[blob]
+        if (previous != null && blob == previous) return previous
+
+        return blob.snapshotGeometry().also {
+            textBlobs[blob] = it
+        }
     }
 }
 

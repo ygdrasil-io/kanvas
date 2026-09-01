@@ -25,6 +25,7 @@ import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotSame
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Test
 import kotlin.test.assertIs
@@ -94,6 +95,27 @@ class RecordedGeometrySnapshotTest {
         assertEquals(listOf(1.toUShort()), recorded.glyphRuns.first().glyphs)
         assertEquals(listOf(Point2F32(3f, 4f)), recorded.glyphRuns.first().positions)
         assertEquals(mapOf("wght" to 400f), recorded.variationCoordinates)
+    }
+
+    @Test
+    fun `text blob captures its current state at each draw`() {
+        val surface = Surface(32, 32)
+        val glyphs = mutableListOf(1.toUShort())
+        val blob = TextBlob(
+            glyphRuns = listOf(KanvasGlyphRun(glyphs, listOf(Point2F32(3f, 4f)), fontSize = 12f)),
+        )
+        val canvas = surface.canvas()
+        canvas.drawText(blob, 0f, 0f, Paint.fill(ColorARGB.Red))
+
+        glyphs[0] = 2.toUShort()
+        canvas.drawText(blob, 0f, 10f, Paint.fill(ColorARGB.Red))
+
+        val snapshot = surface.snapshotOps()
+        val first = assertIs<DisplayOp.DrawText>(snapshot[0]).blob
+        val second = assertIs<DisplayOp.DrawText>(snapshot[1]).blob
+        assertEquals(listOf(1.toUShort()), first.glyphRuns.single().glyphs)
+        assertEquals(listOf(2.toUShort()), second.glyphRuns.single().glyphs)
+        assertNotSame(first, second)
     }
 
     @Test
