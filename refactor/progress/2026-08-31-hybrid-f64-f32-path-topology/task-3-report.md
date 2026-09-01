@@ -2,7 +2,7 @@
 
 ## Status
 
-Fix round 3 is locally implemented and verified on 2026-09-01, but Task 3
+Fix round 4 is locally implemented and verified on 2026-09-01, but Task 3
 remains **in progress pending fresh independent spec and quality gates**. This
 report records local evidence only. It does not claim that an unproved public
 physical strict-interior-cut fixture has been closed.
@@ -146,6 +146,79 @@ No stable geometric public assertion could therefore prove this implementation
 branch without retaining an invalid fixture. No temporary instrumentation,
 scratch test, debug output, or test-only production switch remains.
 
+## Round 4 — equal carriers, no-face XOR, local zero payload and face locator
+
+### REDs observed before the production edits
+
+The round-3 public failures were reproduced on JVM and Kotlin/JS before the
+fixes:
+
+- compressing equal self-closed carriers retained only a broad-phase leader;
+  later point cuts from a third-party clip did not reach the removed source
+  members, so compact and separate encodings diverged;
+- an under-threshold tiny self-closed loop dropped alone but rejected when
+  nested in a filled rectangle because both reverse DCEL boundary cycles were
+  counted as containing faces;
+- `XOR` used a raw structural `first == second` escape hatch, so a cyclic or
+  signed-zero-equivalent operand reached a different budget/topology path;
+- signed-zero output was globally rewritten from all input payloads, allowing
+  an unselected distant `-0.0f` to change a selected `+0.0f` boundary;
+- the equal-carrier source-segment `IntArray.sort()` had only a linear debit.
+
+### Causal remediation
+
+- An equal-carrier group remains only a broad-phase proxy.  Every leader point
+  or overlap event is expanded over the Cartesian product of its exact member
+  ranges *before* the registry creates components, identities or source
+  splits.  The source-overlap star still proves the group, but no longer
+  substitutes for third-party cuts.  The dispatch work and its checked
+  `memberCount × memberCount` cost are preflighted before registry mutation.
+  The structural source-segment sort now reserves its deterministic
+  `O(N log N)` comparison cost before `IntArray.sort()`.
+- The public compact/separate n=1..3 matrix uses one physical clipping
+  rectangle and discriminant membership probes for all five boolean operations.
+  It has 30 independent test cases so Kotlin/JS keeps its two-second test
+  limit.  A temporary public bisection (removed after derivation) found the
+  exact n=2 `maxIntersections` frontier `215` reject / `216` success for
+  compact, separate, and both operand orders.  The four permanent static
+  boundary tests assert that same frontier; this does not recalibrate any
+  existing limit.
+- The face locator now retains only canonical CCW left-face cycles and chooses
+  the innermost exact positive-area cycle.  Its reverse twin is not a second
+  candidate face.  The public nested-loop case covers ordinary fill, hole,
+  reversed outer contour, inverse winding and a boundary ambiguity rejection.
+- The raw XOR identity bypass is removed.  Deferred projection endpoint
+  contacts can be discharged only by a complete reciprocal exact-overlap cover
+  of both source contours: every carrier has one full-interval opposite-
+  operand match, the match is reciprocal, and its orientation is uniform
+  (`+1` or `-1`).  This cover is source-only and creates neither an alias nor a
+  cut.  `C XOR C`, signed-zero cyclic rotations, and geometric reversal now use
+  the same validated ledger; at `maxCandidateProbes = 1` the direct and rotated
+  forms both report `path-candidate-limit`.
+- Signed-zero choice is local to the exact incident component.  Its semantic
+  coordinate order has a deterministic raw-bit tie-break, while the writer
+  may use only the already-selected carrier's matching original payload.
+  There is no global signed-zero policy or post-topology rewrite.
+- Kotlin/JS can retain a Float-shaped analytic bounds value as a JavaScript
+  number at the F32/F64 normalization boundary.  Normalization reconstructs
+  the raw F32 payload before choosing its shared F64 envelope.  The public tiny
+  loop test now also covers translation and scale.  Removing that reconstruction
+  temporarily produced the expected Kotlin/JS RED (`IllegalStateException`
+  from the arrangement); restoring it is green on JVM and JS.
+
+### Scope and performance ruling
+
+The existing public 10-tiny-lobe and 20-sibling-lobe JavaScript tests remain
+green (`0.001 s` and `0.0 s` in the Node XML report); the slowest new n=3
+case is `0.558 s`, below the two-second per-test limit.  No new 10/20
+equal-carrier giant-loop stress test is retained: the observed 20k-carrier
+scaling concern is assigned to Task 5's independent global budget/performance
+work rather than disguised as a Task-3 fixture.
+
+The physical strict-interior-cut/remap public-fixture gap above is unchanged.
+No additional derived fixture was retained because it would not be an honest
+proof of that physical branch.
+
 ## Self-review against round-2 rereviews
 
 - **Representable self-closed cubic:** closed by post-DCEL carrier-absence proof;
@@ -174,7 +247,7 @@ BUILD SUCCESSFUL
 
 rtk ./gradlew :math:geometry:jvmTest :math:geometry:jsNodeTest \
   --rerun-tasks --console=plain
-BUILD SUCCESSFUL in 25s
+BUILD SUCCESSFUL in 26s
 61 actionable tasks: 61 executed
 
 rtk git diff --check

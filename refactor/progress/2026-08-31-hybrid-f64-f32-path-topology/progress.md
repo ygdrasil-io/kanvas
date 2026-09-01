@@ -99,3 +99,19 @@ equality; signed-zero provenance is global; an under-threshold collapsed loop ne
 face falsely rejects; and the compression sort is underdebited. The physical strict-cut branch is
 coherent by inspection but still lacks a public fixture. Task 3 remains in progress; see
 `task-3-spec-rereview-3.md` and `task-3-quality-rereview-3.md`.
+
+Fix round 4 is locally complete pending fresh independent gates. A canonical equal-carrier proxy
+now propagates every third-party leader point/overlap event to every exact member before source
+components and splits; the public n=1..3 × five-operation compact/separate matrix is green on
+JVM/JS, and the n=2 `maxIntersections` frontier is identically `215` reject / `216` success under
+compact/separate encodings and operand swap. The proxy sort and propagation dispatch preflight
+their checked work. The locator uses only canonical CCW left-face cycles, closing the nested tiny
+loop DROP through holes, inverse/reversed fill and boundary ambiguity coverage. The raw XOR
+equality bypass and global signed-zero rewrite are removed; exact reciprocal full-contour cover
+permits no-face algebra only for proven cross-operand components, including geometric reversal.
+Signed-zero payload selection is local to incident provenance. Kotlin/JS normalization now
+reconstructs the logical F32 bounds payload; its public translated/scaled tiny-loop RED was
+reproduced by temporarily removing that reconstruction and is green after restoration. Full
+`:math:geometry:jvmTest :math:geometry:jsNodeTest --rerun-tasks --console=plain` passed in 26s
+with 61 actionable tasks. The physical strict-interior-cut public-fixture gap remains explicitly
+open; 20k equal-carrier stress scaling is assigned to Task 5, and no false fixture is retained.

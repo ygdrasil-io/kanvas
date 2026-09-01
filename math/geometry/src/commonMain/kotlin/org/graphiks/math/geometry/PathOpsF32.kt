@@ -26,15 +26,8 @@ public object PathOpsF32 {
         require(!first.fillRule.isInverse() && !second.fillRule.isInverse()) {
             "Boolean operations require finite fill rules"
         }
-        val firstSignedZeroPolicyF32 = validateFinitePathF32(first)
-        val secondSignedZeroPolicyF32 = validateFinitePathF32(second)
-        val signedZeroPolicyF32 = firstSignedZeroPolicyF32 + secondSignedZeroPolicyF32
-
-        // This is an algebraic identity over immutable source values, established before any
-        // projected embedding exists: A XOR A is empty. It is deliberately not a geometric
-        // proximity shortcut, so unrelated no-face sectors still enter the conservative hybrid
-        // disposition path.
-        if (op == PathBooleanOp.XOR && first == second) return PathBuilder(FillRule.WINDING).build()
+        validateFinitePathF32(first)
+        validateFinitePathF32(second)
 
         val normalization = pathNormalizationF64(listOf(first, second))
         val candidateWorkBudget = PathCandidateWorkBudgetI32(limits.maxCandidateProbes)
@@ -51,7 +44,6 @@ public object PathOpsF32 {
             tracesF64F32 = arrangementF64F32.boundary(first.fillRule, second.fillRule, op),
             fillRule = FillRule.WINDING,
             candidateWorkBudget = candidateWorkBudget,
-            signedZeroPolicyF32 = signedZeroPolicyF32,
         )
     }
 
@@ -188,7 +180,7 @@ private fun claimsConflictF64(
 }
 
 private fun unaryResultF32(path: PathF32, limits: PathOpsLimitsI32, outputFillRule: FillRule): PathF32 {
-    val signedZeroPolicyF32 = validateFinitePathF32(path)
+    validateFinitePathF32(path)
     val normalization = pathNormalizationF64(listOf(path))
     val candidateWorkBudget = PathCandidateWorkBudgetI32(limits.maxCandidateProbes)
     val arrangementF64F32 = buildHybridArrangementF64F32(
@@ -201,7 +193,6 @@ private fun unaryResultF32(path: PathF32, limits: PathOpsLimitsI32, outputFillRu
         tracesF64F32 = arrangementF64F32.unaryBoundary(path.fillRule),
         fillRule = outputFillRule,
         candidateWorkBudget = candidateWorkBudget,
-        signedZeroPolicyF32 = signedZeroPolicyF32,
     )
 }
 
@@ -244,7 +235,6 @@ private fun writeHybridBoundaryTracesF64F32(
     tracesF64F32: List<PathBoundaryTraceF64F32>,
     fillRule: FillRule,
     candidateWorkBudget: PathCandidateWorkBudgetI32,
-    signedZeroPolicyF32: PathSignedZeroPayloadPolicyF32,
 ): PathF32 {
     // Count immutable trace vertices in a separately charged pass before reserving the exact
     // writer envelope.  The bridge never discovers geometry, but its scan/allocation still uses
@@ -267,9 +257,7 @@ private fun writeHybridBoundaryTracesF64F32(
     tracesF64F32.forEach { traceF64F32 ->
         val halfEdgesF64F32 = traceF64F32.halfEdgesF64F32
         if (halfEdgesF64F32.size < 3) throw IllegalStateException("path-f32-projection-collapse")
-        val pointsF32 = halfEdgesF64F32.map { traceF64F32 ->
-            signedZeroPolicyF32.canonicalize(writerOriginPointF64F32(traceF64F32))
-        }
+        val pointsF32 = halfEdgesF64F32.map(::writerOriginPointF64F32)
         if (pointsF32.zipWithNext().any { (firstF32, secondF32) -> firstF32.x == secondF32.x && firstF32.y == secondF32.y }) {
             throw IllegalStateException("path-f32-projection-collapse")
         }
@@ -285,9 +273,9 @@ private fun writeHybridBoundaryTracesF64F32(
 }
 
 /**
- * The arrangement owns geometry, while the canonical carrier retains the only semantic input
- * payload allowed to choose a printed signed zero. The raw source point is used only when it is
- * geometrically the already-selected vertex; it cannot create an alias or change a boundary.
+ * The arrangement owns topology; the selected canonical carrier owns its printable raw payload.
+ * The original point is usable only when it is numerically the already-selected vertex, so a
+ * distant unselected signed-zero source can neither alias nor rewrite this boundary vertex.
  */
 private fun writerOriginPointF64F32(traceF64F32: PathBoundaryHalfEdgeTraceF64F32): Point2F32 {
     val representativePointF32 = traceF64F32.originVertexF64F32.representativePointF32
@@ -299,27 +287,6 @@ private fun writerOriginPointF64F32(traceF64F32: PathBoundaryHalfEdgeTraceF64F32
     return originalPointF32?.takeIf { pointF32 ->
         pointF32.x == representativePointF32.x && pointF32.y == representativePointF32.y
     } ?: representativePointF32
-}
-
-/**
- * Signed zero is geometrically one point but remains observable in immutable [PathF32] values.
- * The already-required finite-input pass records its semantic payload without changing topology;
- * the writer then emits the same canonical payload under an operand permutation.
- */
-private data class PathSignedZeroPayloadPolicyF32(
-    val negativeZeroXI32: Boolean = false,
-    val negativeZeroYI32: Boolean = false,
-) {
-    operator fun plus(otherF32: PathSignedZeroPayloadPolicyF32): PathSignedZeroPayloadPolicyF32 =
-        PathSignedZeroPayloadPolicyF32(
-            negativeZeroXI32 = negativeZeroXI32 || otherF32.negativeZeroXI32,
-            negativeZeroYI32 = negativeZeroYI32 || otherF32.negativeZeroYI32,
-        )
-
-    fun canonicalize(pointF32: Point2F32): Point2F32 = Point2F32(
-        x = if (pointF32.x == 0f && negativeZeroXI32) -0.0f else pointF32.x,
-        y = if (pointF32.y == 0f && negativeZeroYI32) -0.0f else pointF32.y,
-    )
 }
 
 private fun inputEdgesF64(
@@ -1253,13 +1220,9 @@ private fun samePathOperationPointF64(first: Point2F64, second: Point2F64): Bool
 private fun samePathOperationPointF32(first: Point2F32, second: Point2F32): Boolean =
     first.x == second.x && first.y == second.y
 
-private fun validateFinitePathF32(path: PathF32): PathSignedZeroPayloadPolicyF32 {
-    var negativeZeroXI32 = false
-    var negativeZeroYI32 = false
+private fun validateFinitePathF32(path: PathF32) {
     fun requireFiniteEndpointF32(pointF32: Point2F32) {
         requireFinitePointF32(pointF32)
-        negativeZeroXI32 = negativeZeroXI32 || pointF32.x.toRawBits() == (-0.0f).toRawBits()
-        negativeZeroYI32 = negativeZeroYI32 || pointF32.y.toRawBits() == (-0.0f).toRawBits()
     }
     path.forEach { segment ->
         when (segment) {
@@ -1281,7 +1244,6 @@ private fun validateFinitePathF32(path: PathF32): PathSignedZeroPayloadPolicyF32
             PathSegmentF32.Close -> Unit
         }
     }
-    return PathSignedZeroPayloadPolicyF32(negativeZeroXI32, negativeZeroYI32)
 }
 
 private fun requireFinitePointF32(point: Point2F32) {

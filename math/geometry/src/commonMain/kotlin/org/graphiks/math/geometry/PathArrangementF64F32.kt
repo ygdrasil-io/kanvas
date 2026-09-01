@@ -803,7 +803,10 @@ private fun canonicalHybridVerticesF64F32(
         PathHybridVertexGroupF64F32(
             rootI32 = rootI32,
             verticesF64F32 = verticesF64F32,
-            representativeF64F32 = selectCanonicalHybridVertexF64F32(verticesF64F32, candidateWorkBudgetI32),
+            representativeF64F32 = selectCanonicalHybridVertexF64F32(
+                verticesF64F32,
+                candidateWorkBudgetI32,
+            ),
         )
     }
     val orderedGroupsF64F32 = sortedArrangementF64F32(groupsF64F32, candidateWorkBudgetI32) { firstF64F32, secondF64F32 ->
@@ -2441,42 +2444,79 @@ private fun classifyCollapsedSectorsAfterFaceSelectionF64F32(
 ): PathBoundaryDisposition {
     val groupsF64F32 = collapsedSectorLedgerF64F32.sectorGroupsF64F32
     if (groupsF64F32.isEmpty()) return PathBoundaryDisposition.KEEP
-    // One point-in-face pass per F32 sector, not per collapsed sibling.  The face-boundary scan
-    // is bounded and debited before any predicate is evaluated.
+    val locatorFacesF64F32 = canonicalHybridFaceLocatorsF64F32(
+        facesI32 = facesI32,
+        halfEdgesF64F32 = halfEdgesF64F32,
+        verticesF64F32 = verticesF64F32,
+        candidateWorkBudgetI32 = candidateWorkBudgetI32,
+    )
+    // One point-in-face pass per F32 sector, not per collapsed sibling. The canonical locator
+    // retains only CCW (left-bounded) DCEL cycles, so a face and its reverse twin are never
+    // counted as competing containing faces. Nested left cycles select the innermost exact area.
+    preflightArrangementF64F32(locatorFacesF64F32.size.toLong(), candidateWorkBudgetI32)
+    var largestAreaExpansionLengthI64 = 0L
+    locatorFacesF64F32.forEach { locatorFaceF64F32 ->
+        largestAreaExpansionLengthI64 = maxOf(
+            largestAreaExpansionLengthI64,
+            locatorFaceF64F32.absoluteDoubleAreaF64.size.toLong(),
+        )
+    }
+    val areaComparisonWorkI64 = checkedPathWorkMultiplyI64(
+        checkedPathWorkMultiplyI64(groupsF64F32.size.toLong(), locatorFacesF64F32.size.toLong()),
+        checkedPathWorkAddI64(
+            checkedPathWorkMultiplyI64(largestAreaExpansionLengthI64, largestAreaExpansionLengthI64),
+            largestAreaExpansionLengthI64,
+        ),
+    )
     preflightArrangementF64F32(
-        checkedPathWorkMultiplyI64(
-            groupsF64F32.size.toLong(),
-            checkedPathWorkAddI64(
-                checkedPathWorkMultiplyI64(facesI32.size.toLong(), 2L),
-                checkedPathWorkMultiplyI64(halfEdgesF64F32.size.toLong(), 3L),
+        checkedPathWorkAddI64(
+            checkedPathWorkMultiplyI64(
+                groupsF64F32.size.toLong(),
+                checkedPathWorkAddI64(
+                    checkedPathWorkMultiplyI64(locatorFacesF64F32.size.toLong(), 2L),
+                    checkedPathWorkMultiplyI64(halfEdgesF64F32.size.toLong(), 3L),
+                ),
             ),
+            areaComparisonWorkI64,
         ),
         candidateWorkBudgetI32,
     )
     groupsF64F32.forEach { groupF64F32 ->
-        var containingFaceCountI32 = 0
-        var baseFirstWindingI32 = 0
-        var baseSecondWindingI32 = 0
+        var containingLocatorFaceF64F32: PathHybridCanonicalFaceLocatorF64F32? = null
         val representativePointF64 = groupF64F32.representativePointF32.toPoint2F64()
-        facesI32.forEach { faceI32 ->
+        locatorFacesF64F32.forEach { locatorFaceF64F32 ->
             when (
                 classifyPointInHybridFaceF64F32(
-                    faceI32 = faceI32,
+                    faceI32 = locatorFaceF64F32.faceI32,
                     pointF64 = representativePointF64,
                     halfEdgesF64F32 = halfEdgesF64F32,
                     verticesF64F32 = verticesF64F32,
                 )
             ) {
                 PathHybridFacePointRelationF64F32.BOUNDARY -> return PathBoundaryDisposition.REJECT
-                PathHybridFacePointRelationF64F32.INSIDE -> {
-                    containingFaceCountI32 += 1
-                    baseFirstWindingI32 = faceI32.firstWindingI32
-                    baseSecondWindingI32 = faceI32.secondWindingI32
+                PathHybridFacePointRelationF64F32.LEFT_INSIDE -> {
+                    val previousLocatorFaceF64F32 = containingLocatorFaceF64F32
+                    if (previousLocatorFaceF64F32 == null) {
+                        containingLocatorFaceF64F32 = locatorFaceF64F32
+                    } else {
+                        when (
+                            compareHybridPositiveAbsoluteAreasF64(
+                                previousLocatorFaceF64F32.absoluteDoubleAreaF64,
+                                locatorFaceF64F32.absoluteDoubleAreaF64,
+                            )
+                        ) {
+                            -1 -> containingLocatorFaceF64F32 = locatorFaceF64F32
+                            0 -> return PathBoundaryDisposition.REJECT
+                        }
+                    }
                 }
-                PathHybridFacePointRelationF64F32.OUTSIDE -> Unit
+                PathHybridFacePointRelationF64F32.RIGHT_INSIDE,
+                PathHybridFacePointRelationF64F32.OUTSIDE,
+                -> Unit
             }
         }
-        if (containingFaceCountI32 > 1) return PathBoundaryDisposition.REJECT
+        val baseFirstWindingI32 = containingLocatorFaceF64F32?.faceI32?.firstWindingI32 ?: 0
+        val baseSecondWindingI32 = containingLocatorFaceF64F32?.faceI32?.secondWindingI32 ?: 0
         if (
             collapsedGroupBoundaryDispositionF64F32(
                 groupF64F32 = groupF64F32,
@@ -2741,7 +2781,74 @@ private fun classifySelectedCollapsedContinuationsF64F32(
     return PathBoundaryDisposition.KEEP
 }
 
-private enum class PathHybridFacePointRelationF64F32 { INSIDE, OUTSIDE, BOUNDARY }
+/** A canonical left face is CCW around a point in its bounded region; its twin is CW. */
+private enum class PathHybridFacePointRelationF64F32 { LEFT_INSIDE, RIGHT_INSIDE, OUTSIDE, BOUNDARY }
+
+private data class PathHybridCanonicalFaceLocatorF64F32(
+    val faceI32: PathHybridFaceI32,
+    /** Exact positive magnitude of this CCW left-face boundary cycle. */
+    val absoluteDoubleAreaF64: DoubleArray,
+)
+
+/**
+ * Face enumeration stores one boundary cycle per directed side. A polygon containment test alone
+ * therefore sees both the bounded cycle and its reverse exterior twin. Materialize a canonical
+ * locator from CCW left-face cycles once, with exact area retained solely to choose the innermost
+ * nested DCEL face; no source ordering or coordinate aliasing participates in this choice.
+ */
+private fun canonicalHybridFaceLocatorsF64F32(
+    facesI32: List<PathHybridFaceI32>,
+    halfEdgesF64F32: List<PathHybridHalfEdgeF64F32>,
+    verticesF64F32: List<PathHybridVertexF64F32>,
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+): List<PathHybridCanonicalFaceLocatorF64F32> {
+    // First debit the count pass. The exact expansion cost depends on canonical boundary lengths;
+    // deriving it before an admitted scan would hide quadratic arithmetic and temporary storage.
+    preflightArrangementF64F32(facesI32.size.toLong(), candidateWorkBudgetI32)
+    var areaWorkI64 = 0L
+    facesI32.forEach { faceI32 ->
+        val boundaryCountI64 = faceI32.boundaryHalfEdgeIndicesI32.size.toLong()
+        areaWorkI64 = checkedPathWorkAddI64(
+            areaWorkI64,
+            checkedPathWorkAddI64(
+                checkedPathWorkMultiplyI64(boundaryCountI64, boundaryCountI64),
+                checkedPathWorkMultiplyI64(boundaryCountI64, 8L),
+            ),
+        )
+    }
+    preflightArrangementF64F32(areaWorkI64, candidateWorkBudgetI32)
+    val locatorFacesF64F32 = ArrayList<PathHybridCanonicalFaceLocatorF64F32>(facesI32.size)
+    facesI32.forEach { faceI32 ->
+        val boundaryI32 = faceI32.boundaryHalfEdgeIndicesI32
+        val pointCapacityI32 = checkedPathCapacityI32(
+            checkedPathWorkAddI64(boundaryI32.size.toLong(), 1L),
+            "path-candidate-limit",
+        )
+        val pointsF64 = ArrayList<Point2F64>(pointCapacityI32)
+        boundaryI32.forEach { halfEdgeIndexI32 ->
+            val halfEdgeF64F32 = halfEdgesF64F32.getOrNull(halfEdgeIndexI32)
+                ?: pathHybridArrangementInconsistentF64F32()
+            pointsF64 += verticesF64F32[halfEdgeF64F32.originVertexIndexI32].representativePointF32.toPoint2F64()
+        }
+        val firstPointF64 = pointsF64.firstOrNull() ?: pathHybridArrangementInconsistentF64F32()
+        pointsF64 += firstPointF64
+        val signedDoubleAreaF64 = signedDoubleAreaExpansionF64(pointsF64)
+        when (ExpansionF64.sign(signedDoubleAreaF64)) {
+            0 -> pathHybridArrangementInconsistentF64F32()
+            -1 -> Unit
+            1 -> locatorFacesF64F32 += PathHybridCanonicalFaceLocatorF64F32(
+                faceI32 = faceI32,
+                absoluteDoubleAreaF64 = signedDoubleAreaF64,
+            )
+            else -> pathHybridArrangementInconsistentF64F32()
+        }
+    }
+    return locatorFacesF64F32
+}
+
+/** Compares `|second| - |first|` for two already-positive exact face areas. */
+private fun compareHybridPositiveAbsoluteAreasF64(firstF64: DoubleArray, secondF64: DoubleArray): Int =
+    ExpansionF64.sign(ExpansionF64.expansionDiff(secondF64, firstF64))
 
 /**
  * This is only a selection-provenance locator.  It has no authority to merge vertices or create
@@ -2770,10 +2877,10 @@ private fun classifyPointInHybridFaceF64F32(
             windingI64 -= 1L
         }
     }
-    return if (windingI64 == 0L) {
-        PathHybridFacePointRelationF64F32.OUTSIDE
-    } else {
-        PathHybridFacePointRelationF64F32.INSIDE
+    return when {
+        windingI64 > 0L -> PathHybridFacePointRelationF64F32.LEFT_INSIDE
+        windingI64 < 0L -> PathHybridFacePointRelationF64F32.RIGHT_INSIDE
+        else -> PathHybridFacePointRelationF64F32.OUTSIDE
     }
 }
 

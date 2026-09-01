@@ -206,6 +206,8 @@ private data class PathDeferredProjectedEndpointContactF64F32(
     val firstParameterF64: Double,
     val secondSpanF64: PathProjectedSourceSpanF64F32,
     val secondParameterF64: Double,
+    /** Exact full cross-operand source-component proof; this observation still publishes nothing. */
+    val hasCompleteExactOppositeComponentF64: Boolean,
 )
 
 /**
@@ -235,6 +237,62 @@ private data class PathOverlapWitnessIncidenceReferenceF64F32(
 private data class PathOverlapWitnessIndexF64F32(
     val orderedIncidencesByInputEdgeIdI32: Map<Int, List<PathOverlapWitnessIncidenceReferenceF64F32>>,
 )
+
+/** Proven exact correspondence between two complete, oppositely-owned source contours. */
+private data class PathExactOppositeContourComponentF64F32(
+    val firstContourIndexI32: Int,
+    val secondContourIndexI32: Int,
+    /** `+1` means every matched exact rail has the same traversal; `-1` means every one reverses it. */
+    val orientationI32: Int,
+)
+
+/** Source-only contour key used while proving a complete cross-operand overlap component. */
+private data class PathExactSourceContourKeyF64F32(
+    val operand: PathOperand,
+    val contourIndexI32: Int,
+)
+
+/** Registry carrier identity; a projected coordinate is deliberately absent from this key. */
+private data class PathExactSourceCarrierKeyF64F32(
+    val sourceSpanIdI64: Long,
+    val sectionIndexI32: Int,
+)
+
+private data class PathExactOppositeCarrierMatchF64F32(
+    val counterpartCarrierKeyF64F32: PathExactSourceCarrierKeyF64F32,
+    val orientationI32: Int,
+)
+
+/**
+ * A deferred projected endpoint observation may be harmless only when its entire source contour
+ * belongs to one bidirectionally complete exact-overlap component in the other operand.  This is
+ * stricter than finding two unrelated local overlap witnesses: every carrier must have one
+ * reciprocal full-interval rail, and all of those rails must share one exact orientation
+ * relation (uniformly forward or uniformly reversed).
+ */
+private data class PathExactOppositeContourComponentPlanF64F32(
+    val componentsF64F32: List<PathExactOppositeContourComponentF64F32>,
+) {
+    fun coversDeferredSourceComponentF64F32(
+        firstF64F32: PathProjectedSourceSpanF64F32,
+        secondF64F32: PathProjectedSourceSpanF64F32,
+        candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+    ): Boolean {
+        val firstSourceSpanF64 = firstF64F32.sourceSpanF64
+        val secondSourceSpanF64 = secondF64F32.sourceSpanF64
+        preflightHybridLinearF64F32(componentsF64F32.size.toLong(), candidateWorkBudgetI32)
+        return componentsF64F32.any { componentF64F32 ->
+            componentF64F32.containsSourceContourF64F32(firstSourceSpanF64) &&
+                componentF64F32.containsSourceContourF64F32(secondSourceSpanF64)
+        }
+    }
+}
+
+private fun PathExactOppositeContourComponentF64F32.containsSourceContourF64F32(sourceSpanF64: PathSourceSpanF64): Boolean =
+    when (sourceSpanF64.operand) {
+        PathOperand.FIRST -> firstContourIndexI32 == sourceSpanF64.contourIndexI32
+        PathOperand.SECOND -> secondContourIndexI32 == sourceSpanF64.contourIndexI32
+    }
 
 /**
  * Builds the projection-visible source topology before any face or winding work.  The input
@@ -446,16 +504,6 @@ internal fun buildPathHybridTopologyF64F32(
     // partial contour.  The arrangement makes the explicit KEEP/DROP/REJECT decision after
     // winding and before trace emission.
 
-    // The AABB index itself is conservative; this debit covers its deterministic construction
-    // and immutable projected-edge view before candidate callbacks can run.
-    preflightHybridLinearF64F32(
-        checkedPathWorkMultiplyI64(projectedSpansF64F32.size.toLong(), 6L),
-        candidateWorkBudgetI32,
-    )
-    // The shared AABB walker debits only the candidates it actually emits.  Do not reserve a
-    // second all-pairs envelope here: that would charge both culled pairs and the same emitted
-    // candidate a second time, and makes a finely flattened curve exhaust its public budget
-    // before geometry is examined.
     val pointWitnessIndexF64F32 = buildPointWitnessIndexF64F32(
         witnessesF64 = sourceTopologyF64.contactWitnessesF64,
         candidateWorkBudgetI32 = candidateWorkBudgetI32,
@@ -464,16 +512,20 @@ internal fun buildPathHybridTopologyF64F32(
         witnessesF64 = sourceTopologyF64.contactWitnessesF64,
         candidateWorkBudgetI32 = candidateWorkBudgetI32,
     )
+    val exactOppositeContourComponentPlanF64F32 = completeExactOppositeContourComponentsF64F32(
+        carrierSectionsF64F32 = carrierSectionsF64F32,
+        overlapWitnessIndexF64F32 = overlapWitnessIndexF64F32,
+        contactWitnessesF64 = sourceTopologyF64.contactWitnessesF64,
+        hasSelfClosedSourcePrimitiveF64 = sourceTopologyF64.hasSelfClosedSourcePrimitiveF64,
+        candidateWorkBudgetI32 = candidateWorkBudgetI32,
+    )
     val proposalsF64F32 = mutableListOf<PathProjectedCoincidenceProposalF64F32>()
     val deferredEndpointContactsF64F32 = mutableListOf<PathDeferredProjectedEndpointContactF64F32>()
-    forEachPathEdgeCandidatePairF64(
-        projectedSpansF64F32.map(PathProjectedSourceSpanF64F32::projectedEdgeF64),
-        candidateWorkBudgetI32,
-    ) { firstIndexI32, secondIndexI32 ->
-        val firstF64F32 = projectedSpansF64F32[firstIndexI32]
-        val secondF64F32 = projectedSpansF64F32[secondIndexI32]
-        val projectedContactF64 = intersectPathEdgesF64(firstF64F32.projectedEdgeF64, secondF64F32.projectedEdgeF64)
-            ?: return@forEachPathEdgeCandidatePairF64
+    fun processProjectedSpanContactF64F32(
+        firstF64F32: PathProjectedSourceSpanF64F32,
+        secondF64F32: PathProjectedSourceSpanF64F32,
+        projectedContactF64: PathIntersectionF64,
+    ) {
         if (
             isSameExactSourceEventF64F32(
                 firstF64F32,
@@ -483,7 +535,7 @@ internal fun buildPathHybridTopologyF64F32(
                 vertexIndexByIdentityF64,
             )
         ) {
-            return@forEachPathEdgeCandidatePairF64
+            return
         }
         val pointWitnessF64 = localPointWitnessForProjectedPairF64F32(
             firstF64F32,
@@ -514,6 +566,12 @@ internal fun buildPathHybridTopologyF64F32(
                         firstParameterF64 = projectedContactF64.firstT,
                         secondSpanF64 = secondF64F32,
                         secondParameterF64 = projectedContactF64.secondT,
+                        hasCompleteExactOppositeComponentF64 =
+                            exactOppositeContourComponentPlanF64F32.coversDeferredSourceComponentF64F32(
+                                firstF64F32 = firstF64F32,
+                                secondF64F32 = secondF64F32,
+                                candidateWorkBudgetI32 = candidateWorkBudgetI32,
+                            ),
                     )
                 }
             }
@@ -555,6 +613,32 @@ internal fun buildPathHybridTopologyF64F32(
                 }
             }
         }
+    }
+
+    // The AABB index itself is conservative; this debit covers its deterministic construction
+    // and immutable projected-edge view before candidate callbacks can run.
+    val projectedCandidateEdgesF64 = projectedSpansF64F32.map(PathProjectedSourceSpanF64F32::projectedEdgeF64)
+    preflightHybridLinearF64F32(
+        checkedPathWorkMultiplyI64(projectedCandidateEdgesF64.size.toLong(), 6L),
+        candidateWorkBudgetI32,
+    )
+    // The shared AABB walker debits only the candidates it actually emits. Do not reserve a
+    // second all-pairs envelope here: that would charge both culled pairs and the same emitted
+    // candidate a second time, and makes a finely flattened curve exhaust its public budget
+    // before geometry is examined.
+    forEachPathEdgeCandidatePairF64(projectedCandidateEdgesF64, candidateWorkBudgetI32) {
+            firstCandidateIndexI32,
+            secondCandidateIndexI32,
+            ->
+        val projectedContactF64 = intersectPathEdgesF64(
+            projectedCandidateEdgesF64[firstCandidateIndexI32],
+            projectedCandidateEdgesF64[secondCandidateIndexI32],
+        ) ?: return@forEachPathEdgeCandidatePairF64
+        processProjectedSpanContactF64F32(
+            projectedSpansF64F32[firstCandidateIndexI32],
+            projectedSpansF64F32[secondCandidateIndexI32],
+            projectedContactF64,
+        )
     }
 
     // Every prospective projected cut is now staged structurally from the Point witness and its
@@ -2763,6 +2847,361 @@ private fun buildOverlapWitnessIndexF64F32(
     return PathOverlapWitnessIndexF64F32(orderedIncidencesByInputEdgeIdI32)
 }
 
+/**
+ * Finds only complete opposite-operand overlap components.  A local relation is insufficient:
+ * each exact carrier must have one reciprocal full-section counterpart, the source-parameter
+ * intervals must agree exactly, and every rail in the contour pair must share one orientation.
+ * The resulting plan is a validation gate for deferred projected endpoint observations; it
+ * creates neither a projected alias nor a cut.
+ */
+private fun completeExactOppositeContourComponentsF64F32(
+    carrierSectionsF64F32: List<PathHybridCarrierSectionF64F32>,
+    overlapWitnessIndexF64F32: PathOverlapWitnessIndexF64F32,
+    contactWitnessesF64: List<PathContactWitnessF64>,
+    hasSelfClosedSourcePrimitiveF64: Boolean,
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+): PathExactOppositeContourComponentPlanF64F32 {
+    if (!hasSelfClosedSourcePrimitiveF64 || carrierSectionsF64F32.isEmpty()) {
+        return PathExactOppositeContourComponentPlanF64F32(emptyList())
+    }
+    // Deferred projected endpoint contacts can only be discharged by an exact overlap that
+    // crosses operands. Same-operand duplicate carriers still need their source registry
+    // evidence, but cannot form the required opposite contour component. Prove that absence
+    // from source-owned incidences before allocating the complete reciprocal-cover index.
+    if (!hasCrossOperandOverlapWitnessF64F32(
+            carrierSectionsF64F32 = carrierSectionsF64F32,
+            contactWitnessesF64 = contactWitnessesF64,
+            candidateWorkBudgetI32 = candidateWorkBudgetI32,
+        )
+    ) {
+        return PathExactOppositeContourComponentPlanF64F32(emptyList())
+    }
+    preflightHybridLinearF64F32(
+        checkedPathWorkMultiplyI64(carrierSectionsF64F32.size.toLong(), 12L),
+        candidateWorkBudgetI32,
+    )
+    val carrierByKeyF64F32 = mutableMapOf<PathExactSourceCarrierKeyF64F32, PathHybridCarrierSectionF64F32>()
+    val carriersByInputEdgeIdI32 = mutableMapOf<Int, MutableList<PathHybridCarrierSectionF64F32>>()
+    val carriersByContourKeyF64F32 = mutableMapOf<
+        PathExactSourceContourKeyF64F32,
+        MutableList<PathExactSourceCarrierKeyF64F32>,
+        >()
+    carrierSectionsF64F32.forEach { carrierSectionF64F32 ->
+        val carrierKeyF64F32 = carrierSectionF64F32.toExactSourceCarrierKeyF64F32()
+        if (carrierByKeyF64F32.put(carrierKeyF64F32, carrierSectionF64F32) != null) {
+            throw IllegalStateException("path-arrangement-inconsistent")
+        }
+        carriersByInputEdgeIdI32.getOrPut(carrierSectionF64F32.sourceSectionF64.inputEdgeIdI32) {
+            mutableListOf()
+        } += carrierSectionF64F32
+        carriersByContourKeyF64F32.getOrPut(carrierSectionF64F32.toExactSourceContourKeyF64F32()) {
+            mutableListOf()
+        } += carrierKeyF64F32
+    }
+
+    // Count every registry-reference and exact-kernel pairing before allocating the match map.
+    // The `64` envelope covers both interval proofs and the two-source-section exact predicate.
+    var relationWorkI64 = 0L
+    carrierSectionsF64F32.forEach { carrierSectionF64F32 ->
+        val referencesF64F32 = overlapWitnessIndexF64F32.orderedIncidencesByInputEdgeIdI32[
+            carrierSectionF64F32.sourceSectionF64.inputEdgeIdI32
+        ].orEmpty()
+        relationWorkI64 = checkedPathWorkAddI64(relationWorkI64, 2L)
+        referencesF64F32.forEach { referenceF64F32 ->
+            relationWorkI64 = checkedPathWorkAddI64(
+                relationWorkI64,
+                checkedPathWorkAddI64(
+                    checkedPathWorkMultiplyI64(referenceF64F32.witnessF64.incidencesF64.size.toLong(), 2L),
+                    4L,
+                ),
+            )
+            referenceF64F32.witnessF64.incidencesF64.forEach { counterpartIncidenceF64 ->
+                relationWorkI64 = checkedPathWorkAddI64(
+                    relationWorkI64,
+                    checkedPathWorkMultiplyI64(
+                        carriersByInputEdgeIdI32[counterpartIncidenceF64.inputEdgeIdI32].orEmpty().size.toLong(),
+                        64L,
+                    ),
+                )
+            }
+        }
+    }
+    preflightHybridLinearF64F32(relationWorkI64, candidateWorkBudgetI32)
+    val matchByCarrierKeyF64F32 = mutableMapOf<PathExactSourceCarrierKeyF64F32, PathExactOppositeCarrierMatchF64F32>()
+    carrierSectionsF64F32.forEach { carrierSectionF64F32 ->
+        val matchF64F32 = uniqueFullExactOppositeCarrierMatchF64F32(
+            carrierSectionF64F32 = carrierSectionF64F32,
+            referencesF64F32 = overlapWitnessIndexF64F32.orderedIncidencesByInputEdgeIdI32[
+                carrierSectionF64F32.sourceSectionF64.inputEdgeIdI32
+            ].orEmpty(),
+            carriersByInputEdgeIdI32 = carriersByInputEdgeIdI32,
+        )
+        if (matchF64F32 != null) {
+            matchByCarrierKeyF64F32[carrierSectionF64F32.toExactSourceCarrierKeyF64F32()] = matchF64F32
+        }
+    }
+
+    preflightHybridLinearF64F32(
+        checkedPathWorkMultiplyI64(carrierSectionsF64F32.size.toLong(), 18L),
+        candidateWorkBudgetI32,
+    )
+    val componentsF64F32 = mutableListOf<PathExactOppositeContourComponentF64F32>()
+    carriersByContourKeyF64F32.forEach { (firstContourKeyF64F32, firstCarrierKeysF64F32) ->
+        if (firstContourKeyF64F32.operand != PathOperand.FIRST) return@forEach
+        var counterpartContourKeyF64F32: PathExactSourceContourKeyF64F32? = null
+        var componentOrientationI32 = 0
+        val counterpartCarrierKeysF64F32 = mutableSetOf<PathExactSourceCarrierKeyF64F32>()
+        var complete = true
+        firstCarrierKeysF64F32.forEach { firstCarrierKeyF64F32 ->
+            val matchF64F32 = matchByCarrierKeyF64F32[firstCarrierKeyF64F32]
+            if (matchF64F32 == null) {
+                complete = false
+                return@forEach
+            }
+            val counterpartCarrierSectionF64F32 = carrierByKeyF64F32[matchF64F32.counterpartCarrierKeyF64F32]
+            if (counterpartCarrierSectionF64F32 == null) {
+                complete = false
+                return@forEach
+            }
+            val nextContourKeyF64F32 = counterpartCarrierSectionF64F32.toExactSourceContourKeyF64F32()
+            if (
+                nextContourKeyF64F32.operand != PathOperand.SECOND ||
+                    (counterpartContourKeyF64F32 != null && counterpartContourKeyF64F32 != nextContourKeyF64F32) ||
+                    !counterpartCarrierKeysF64F32.add(matchF64F32.counterpartCarrierKeyF64F32)
+            ) {
+                complete = false
+                return@forEach
+            }
+            val reciprocalF64F32 = matchByCarrierKeyF64F32[matchF64F32.counterpartCarrierKeyF64F32]
+            if (
+                reciprocalF64F32 == null ||
+                    reciprocalF64F32.counterpartCarrierKeyF64F32 != firstCarrierKeyF64F32 ||
+                    reciprocalF64F32.orientationI32 != matchF64F32.orientationI32
+            ) {
+                complete = false
+                return@forEach
+            }
+            counterpartContourKeyF64F32 = nextContourKeyF64F32
+            if (componentOrientationI32 == 0) {
+                componentOrientationI32 = matchF64F32.orientationI32
+            } else if (componentOrientationI32 != matchF64F32.orientationI32) {
+                complete = false
+            }
+        }
+        val resolvedCounterpartContourKeyF64F32 = counterpartContourKeyF64F32
+        val expectedCounterpartCarrierKeysF64F32 = resolvedCounterpartContourKeyF64F32?.let(carriersByContourKeyF64F32::get)
+        if (
+            !complete || resolvedCounterpartContourKeyF64F32 == null || componentOrientationI32 == 0 ||
+                expectedCounterpartCarrierKeysF64F32 == null ||
+                counterpartCarrierKeysF64F32.size != firstCarrierKeysF64F32.size ||
+                counterpartCarrierKeysF64F32.size != expectedCounterpartCarrierKeysF64F32.size ||
+                !counterpartCarrierKeysF64F32.containsAll(expectedCounterpartCarrierKeysF64F32)
+        ) {
+            return@forEach
+        }
+        componentsF64F32 += PathExactOppositeContourComponentF64F32(
+            firstContourIndexI32 = firstContourKeyF64F32.contourIndexI32,
+            secondContourIndexI32 = resolvedCounterpartContourKeyF64F32.contourIndexI32,
+            orientationI32 = componentOrientationI32,
+        )
+    }
+    val orderedComponentsF64F32 = sortedHybridF64F32(
+        componentsF64F32,
+        candidateWorkBudgetI32,
+    ) { firstF64F32, secondF64F32 ->
+        firstF64F32.firstContourIndexI32.compareTo(secondF64F32.firstContourIndexI32)
+            .takeIf { it != 0 }
+            ?: firstF64F32.secondContourIndexI32.compareTo(secondF64F32.secondContourIndexI32)
+            .takeIf { it != 0 }
+            ?: firstF64F32.orientationI32.compareTo(secondF64F32.orientationI32)
+    }
+    return PathExactOppositeContourComponentPlanF64F32(orderedComponentsF64F32)
+}
+
+/**
+ * Determines whether the source registry contains any exact overlap witness spanning both
+ * operands. This is a coarse eligibility proof only: a `true` result still runs the complete
+ * reciprocal contour-cover validation below. A `false` result is conclusive because projected
+ * contacts are never permitted to manufacture an exact source overlap.
+ */
+private fun hasCrossOperandOverlapWitnessF64F32(
+    carrierSectionsF64F32: List<PathHybridCarrierSectionF64F32>,
+    contactWitnessesF64: List<PathContactWitnessF64>,
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+): Boolean {
+    var overlapIncidenceCountI64 = 0L
+    contactWitnessesF64.forEach { witnessF64 ->
+        if (witnessF64 is PathContactWitnessF64.OverlapF64) {
+            overlapIncidenceCountI64 = checkedPathWorkAddI64(
+                overlapIncidenceCountI64,
+                witnessF64.incidencesF64.size.toLong(),
+            )
+        }
+    }
+    // Count and reserve the complete source-only classification before its map allocation.
+    // The scan cannot depend on projected geometry, backend iteration order, or early-return
+    // timing: it has one debit for every carrier, witness dispatch, and exact incidence.
+    preflightHybridLinearF64F32(
+        checkedPathWorkAddI64(
+            checkedPathWorkAddI64(
+                carrierSectionsF64F32.size.toLong(),
+                contactWitnessesF64.size.toLong(),
+            ),
+            overlapIncidenceCountI64,
+        ),
+        candidateWorkBudgetI32,
+    )
+    val operandByInputEdgeIdI32 = mutableMapOf<Int, PathOperand>()
+    carrierSectionsF64F32.forEach { carrierSectionF64F32 ->
+        val inputEdgeIdI32 = carrierSectionF64F32.sourceSectionF64.inputEdgeIdI32
+        val operand = carrierSectionF64F32.sourceSpanF64.operand
+        val previousOperand = operandByInputEdgeIdI32.put(inputEdgeIdI32, operand)
+        if (previousOperand != null && previousOperand != operand) {
+            throw IllegalStateException("path-arrangement-inconsistent")
+        }
+    }
+    contactWitnessesF64.forEach { witnessF64 ->
+        if (witnessF64 !is PathContactWitnessF64.OverlapF64) return@forEach
+        var hasFirstOperand = false
+        var hasSecondOperand = false
+        witnessF64.incidencesF64.forEach { incidenceF64 ->
+            when (operandByInputEdgeIdI32[incidenceF64.inputEdgeIdI32]
+                ?: throw IllegalStateException("path-arrangement-inconsistent")) {
+                PathOperand.FIRST -> hasFirstOperand = true
+                PathOperand.SECOND -> hasSecondOperand = true
+            }
+        }
+        if (hasFirstOperand && hasSecondOperand) return true
+    }
+    return false
+}
+
+private fun PathHybridCarrierSectionF64F32.toExactSourceCarrierKeyF64F32(): PathExactSourceCarrierKeyF64F32 =
+    PathExactSourceCarrierKeyF64F32(sourceSpanF64.sourceSpanIdI64, sectionIndexI32)
+
+private fun PathHybridCarrierSectionF64F32.toExactSourceContourKeyF64F32(): PathExactSourceContourKeyF64F32 =
+    PathExactSourceContourKeyF64F32(sourceSpanF64.operand, sourceSpanF64.contourIndexI32)
+
+private fun uniqueFullExactOppositeCarrierMatchF64F32(
+    carrierSectionF64F32: PathHybridCarrierSectionF64F32,
+    referencesF64F32: List<PathOverlapWitnessIncidenceReferenceF64F32>,
+    carriersByInputEdgeIdI32: Map<Int, List<PathHybridCarrierSectionF64F32>>,
+): PathExactOppositeCarrierMatchF64F32? {
+    var selectedMatchF64F32: PathExactOppositeCarrierMatchF64F32? = null
+    var ambiguous = false
+    referencesF64F32.forEach { referenceF64F32 ->
+        if (!overlapIncidenceCoversFullSourceCarrierF64F32(referenceF64F32.incidenceF64, carrierSectionF64F32)) {
+            return@forEach
+        }
+        referenceF64F32.witnessF64.incidencesF64.forEach { counterpartIncidenceF64 ->
+            if (
+                counterpartIncidenceF64.inputEdgeIdI32 == referenceF64F32.incidenceF64.inputEdgeIdI32 ||
+                    counterpartIncidenceF64.inputEdgeIdI32 == carrierSectionF64F32.sourceSectionF64.inputEdgeIdI32
+            ) {
+                return@forEach
+            }
+            carriersByInputEdgeIdI32[counterpartIncidenceF64.inputEdgeIdI32].orEmpty().forEach { counterpartCarrierSectionF64F32 ->
+                val orientationI32 = fullExactOppositeCarrierOrientationF64F32(
+                    firstCarrierSectionF64F32 = carrierSectionF64F32,
+                    firstIncidenceF64 = referenceF64F32.incidenceF64,
+                    secondCarrierSectionF64F32 = counterpartCarrierSectionF64F32,
+                    secondIncidenceF64 = counterpartIncidenceF64,
+                ) ?: return@forEach
+                val candidateMatchF64F32 = PathExactOppositeCarrierMatchF64F32(
+                    counterpartCarrierKeyF64F32 = counterpartCarrierSectionF64F32.toExactSourceCarrierKeyF64F32(),
+                    orientationI32 = orientationI32,
+                )
+                val previousMatchF64F32 = selectedMatchF64F32
+                if (previousMatchF64F32 == null) {
+                    selectedMatchF64F32 = candidateMatchF64F32
+                } else if (previousMatchF64F32 != candidateMatchF64F32) {
+                    ambiguous = true
+                }
+            }
+        }
+    }
+    return selectedMatchF64F32?.takeUnless { ambiguous }
+}
+
+private fun fullExactOppositeCarrierOrientationF64F32(
+    firstCarrierSectionF64F32: PathHybridCarrierSectionF64F32,
+    firstIncidenceF64: PathOverlapWitnessIncidenceF64,
+    secondCarrierSectionF64F32: PathHybridCarrierSectionF64F32,
+    secondIncidenceF64: PathOverlapWitnessIncidenceF64,
+): Int? {
+    if (firstCarrierSectionF64F32.sourceSpanF64.operand == secondCarrierSectionF64F32.sourceSpanF64.operand) return null
+    if (
+        !overlapIncidenceCoversFullSourceCarrierF64F32(firstIncidenceF64, firstCarrierSectionF64F32) ||
+            !overlapIncidenceCoversFullSourceCarrierF64F32(secondIncidenceF64, secondCarrierSectionF64F32)
+    ) {
+        return null
+    }
+    val firstSectionF64 = firstCarrierSectionF64F32.sourceSectionF64
+    val secondSectionF64 = secondCarrierSectionF64F32.sourceSectionF64
+    val overlapF64 = intersectPathEdgesF64(
+        exactSourceCarrierEdgeF64F32(firstCarrierSectionF64F32),
+        exactSourceCarrierEdgeF64F32(secondCarrierSectionF64F32),
+    ) as? PathIntersectionF64.OverlapF64 ?: return null
+    if (overlapF64.firstStartParameter != 0.0 || overlapF64.firstEndParameter != 1.0) return null
+    val orientationI32 = when {
+        overlapF64.secondStartParameter == 0.0 && overlapF64.secondEndParameter == 1.0 -> 1
+        overlapF64.secondStartParameter == 1.0 && overlapF64.secondEndParameter == 0.0 -> -1
+        else -> return null
+    }
+    val firstLowerParameterF64 = minOf(firstSectionF64.startParameterF64, firstSectionF64.endParameterF64)
+    val firstUpperParameterF64 = maxOf(firstSectionF64.startParameterF64, firstSectionF64.endParameterF64)
+    val secondLowerParameterF64 = minOf(secondSectionF64.startParameterF64, secondSectionF64.endParameterF64)
+    val secondUpperParameterF64 = maxOf(secondSectionF64.startParameterF64, secondSectionF64.endParameterF64)
+    val hasMatchingExactInterval = when (orientationI32) {
+        1 -> firstLowerParameterF64 == secondLowerParameterF64 &&
+            firstUpperParameterF64 == secondUpperParameterF64
+        -1 -> firstLowerParameterF64 == 1.0 - secondUpperParameterF64 &&
+            firstUpperParameterF64 == 1.0 - secondLowerParameterF64
+        else -> false
+    }
+    return orientationI32.takeIf { hasMatchingExactInterval }
+}
+
+private fun overlapIncidenceCoversFullSourceCarrierF64F32(
+    incidenceF64: PathOverlapWitnessIncidenceF64,
+    carrierSectionF64F32: PathHybridCarrierSectionF64F32,
+): Boolean {
+    val sourceSectionF64 = carrierSectionF64F32.sourceSectionF64
+    if (
+        incidenceF64.inputEdgeIdI32 != sourceSectionF64.inputEdgeIdI32 ||
+            carrierSectionF64F32.sourceSpanF64.sourceSpanIdI64 !in incidenceF64.sourceSpanIdsI64 ||
+            incidenceF64.inputEdgeIdI32 !in sourceSectionF64.startIdentityF64.parameterByEdgeId ||
+            incidenceF64.inputEdgeIdI32 !in sourceSectionF64.endIdentityF64.parameterByEdgeId
+    ) {
+        return false
+    }
+    val lowerIncidenceParameterF64 = minOf(incidenceF64.startParameterF64, incidenceF64.endParameterF64)
+    val upperIncidenceParameterF64 = maxOf(incidenceF64.startParameterF64, incidenceF64.endParameterF64)
+    return sourceSectionF64.startParameterF64 >= lowerIncidenceParameterF64 &&
+        sourceSectionF64.startParameterF64 <= upperIncidenceParameterF64 &&
+        sourceSectionF64.endParameterF64 >= lowerIncidenceParameterF64 &&
+        sourceSectionF64.endParameterF64 <= upperIncidenceParameterF64
+}
+
+/** A carrier already retains the exact source section consumed by the overlap predicate. */
+private fun exactSourceCarrierEdgeF64F32(carrierSectionF64F32: PathHybridCarrierSectionF64F32): PathInputEdgeF64 {
+    val sourceSpanF64 = carrierSectionF64F32.sourceSpanF64
+    val sourceSectionF64 = carrierSectionF64F32.sourceSectionF64
+    return PathInputEdgeF64(
+        idI32 = sourceSectionF64.inputEdgeIdI32,
+        operand = sourceSpanF64.operand,
+        contourIndexI32 = sourceSpanF64.contourIndexI32,
+        sourceSegmentIndexI32 = sourceSpanF64.startLocationF64.sourceSegmentIndexI32,
+        sourceStartParameterF64 = sourceSectionF64.startParameterF64,
+        sourceEndParameterF64 = sourceSectionF64.endParameterF64,
+        startIdentityF64 = sourceSectionF64.startIdentityF64,
+        endIdentityF64 = sourceSectionF64.endIdentityF64,
+        startPointF64 = sourceSectionF64.startIncidencePointF64,
+        endPointF64 = sourceSectionF64.endIncidencePointF64,
+        windingDeltaI32 = sourceSpanF64.windingDeltaI32,
+    )
+}
+
 private fun compareOverlapWitnessIncidenceReferencesF64F32(
     firstF64F32: PathOverlapWitnessIncidenceReferenceF64F32,
     secondF64F32: PathOverlapWitnessIncidenceReferenceF64F32,
@@ -3701,7 +4140,12 @@ private fun validateDeferredEndpointContactsF64F32(
                 hasAdjacentRelay = true
             }
         }
-        if (!hasAdjacentRelay) throw IllegalStateException("path-f32-projection-collapse")
+        if (
+            !hasAdjacentRelay &&
+                !(proposalsF64F32.isEmpty() && deferredF64F32.hasCompleteExactOppositeComponentF64)
+        ) {
+            throw IllegalStateException("path-f32-projection-collapse")
+        }
     }
 }
 

@@ -89,10 +89,13 @@ internal fun pathNormalizationF64(paths: List<PathF32>): PathNormalizationF64 {
 
     paths.forEach { path ->
         val bounds = PathAnalysisF32.bounds(path) ?: return@forEach
-        left = min(left, bounds.left.toDouble())
-        top = min(top, bounds.top.toDouble())
-        right = max(right, bounds.right.toDouble())
-        bottom = max(bottom, bounds.bottom.toDouble())
+        // Kotlin/JS keeps Float-shaped intermediate bounds as JS numbers. Restore the public F32
+        // payload before it contributes to a shared F64 normalization envelope, otherwise a
+        // sub-ULP analytic extremum can select a backend-specific scale and subdivision depth.
+        left = min(left, canonicalInputCoordinateF64(bounds.left))
+        top = min(top, canonicalInputCoordinateF64(bounds.top))
+        right = max(right, canonicalInputCoordinateF64(bounds.right))
+        bottom = max(bottom, canonicalInputCoordinateF64(bounds.bottom))
     }
 
     if (!left.isFinite()) return PathNormalizationF64(Point2F64.Origin, 1.0)
@@ -105,6 +108,9 @@ internal fun pathNormalizationF64(paths: List<PathF32>): PathNormalizationF64 {
         scale = if (extent > 0.0) 1.0 / extent else 1.0,
     )
 }
+
+/** Reconstructs the logical F32 payload at a Kotlin/JS-to-F64 boundary. */
+private fun canonicalInputCoordinateF64(valueF32: Float): Double = Float.fromBits(valueF32.toRawBits()).toDouble()
 
 internal data class NormalizedPathF64(
     val path: PathF32,

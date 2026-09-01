@@ -7,6 +7,92 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
+private val equalSelfClosedCarrierClipF32: PathF32 = PathBuilder()
+    // The long public clipping rectangle keeps this reproduction small enough for Kotlin/JS
+    // while its left edge still creates the third-party cuts through every repeated carrier.
+    .addRect(RectF32.ofLTRB(1.2f, .75f, 1_025f, 2f))
+    .build()
+
+private val equalSelfClosedCarrierProbesF32 = listOf(
+    Point2F32(1.1f, 1.1f),
+    Point2F32(1.35f, 1.35f),
+    Point2F32(2f, 1f),
+    Point2F32(1_024f, 1f),
+)
+
+private fun repeatedEqualSelfClosedCarrierPathF32(countI32: Int, separateContours: Boolean): PathF32 =
+    PathBuilder().also { builderF32 ->
+        if (separateContours) {
+            repeat(countI32) {
+                builderF32
+                    .moveTo(1f, 1f)
+                    .cubicTo(2f, 1f, 1f, 2f, 1f, 1f)
+                    .close()
+            }
+        } else {
+            builderF32.moveTo(1f, 1f)
+            repeat(countI32) {
+                builderF32.cubicTo(2f, 1f, 1f, 2f, 1f, 1f)
+            }
+            builderF32.close()
+        }
+    }.build()
+
+private fun expectedEqualSelfClosedCarrierClipContainsF32(operation: PathBooleanOp): List<Boolean> = when (operation) {
+    PathBooleanOp.DIFFERENCE -> listOf(true, false, false, false)
+    PathBooleanOp.INTERSECT -> listOf(false, true, false, false)
+    PathBooleanOp.UNION -> listOf(true, true, true, true)
+    PathBooleanOp.XOR -> listOf(true, false, true, true)
+    PathBooleanOp.REVERSE_DIFFERENCE -> listOf(false, false, true, true)
+}
+
+private fun assertEqualSelfClosedCarrierClipResultF32(
+    countI32: Int,
+    separateContours: Boolean,
+    operation: PathBooleanOp,
+    limitsI32: PathOpsLimitsI32 = PathOpsLimitsI32(),
+) {
+    val sourceF32 = repeatedEqualSelfClosedCarrierPathF32(countI32, separateContours)
+    val resultF32 = PathOpsF32.op(sourceF32, equalSelfClosedCarrierClipF32, operation, limitsI32)
+    val label = "count=$countI32 separate=$separateContours operation=$operation"
+    assertEquals(
+        expectedEqualSelfClosedCarrierClipContainsF32(operation),
+        equalSelfClosedCarrierProbesF32.map { probeF32 -> PathAnalysisF32.contains(resultF32, probeF32) },
+        label,
+    )
+}
+
+private fun assertEqualSelfClosedCarrierClipIntersectionBoundaryF32(
+    separateContours: Boolean,
+    swapOperands: Boolean,
+) {
+    val carriersF32 = repeatedEqualSelfClosedCarrierPathF32(countI32 = 2, separateContours = separateContours)
+    val firstF32 = if (swapOperands) equalSelfClosedCarrierClipF32 else carriersF32
+    val secondF32 = if (swapOperands) carriersF32 else equalSelfClosedCarrierClipF32
+    val canonicalEventCountI32 = 216
+    val belowError = assertFailsWith<IllegalStateException> {
+        PathOpsF32.op(
+            firstF32,
+            secondF32,
+            PathBooleanOp.UNION,
+            PathOpsLimitsI32(maxIntersections = canonicalEventCountI32 - 1),
+        )
+    }
+    val resultF32 = PathOpsF32.op(
+        firstF32,
+        secondF32,
+        PathBooleanOp.UNION,
+        PathOpsLimitsI32(maxIntersections = canonicalEventCountI32),
+    )
+    val label = "separate=$separateContours swap=$swapOperands"
+    assertEquals("path-intersection-limit", belowError.message, label)
+    assertEquals(
+        expectedEqualSelfClosedCarrierClipContainsF32(PathBooleanOp.UNION),
+        equalSelfClosedCarrierProbesF32.map { probeF32 -> PathAnalysisF32.contains(resultF32, probeF32) },
+        label,
+    )
+}
+
 class PathOpsHybridTopologyF32Test {
     @Test
     fun `strict source parameter ULP boundary rejects the sixteenth step including signed zero`() {
@@ -560,11 +646,309 @@ class PathOpsHybridTopologyF32Test {
             .cubicTo(uF32, 1f, 1f, uF32, 1f, 1f)
             .close()
             .build()
+        val reversedLoopF32 = PathBuilder()
+            .moveTo(1f, 1f)
+            .cubicTo(1f, uF32, uF32, 1f, 1f, 1f)
+            .close()
+            .build()
 
         val resultF32 = PathOpsF32.op(loopF32, loopF32, PathBooleanOp.XOR)
+        val reversedResultF32 = PathOpsF32.op(loopF32, reversedLoopF32, PathBooleanOp.XOR)
 
         assertEquals(null, PathAnalysisF32.bounds(resultF32))
         assertFalse(PathAnalysisF32.contains(resultF32, Point2F32(1f, 1f)))
+        assertEquals(null, PathAnalysisF32.bounds(reversedResultF32))
+        assertFalse(PathAnalysisF32.contains(reversedResultF32, Point2F32(1f, 1f)))
+    }
+
+    @Test
+    fun `significant equal collapsed loops do not cancel outside XOR`() {
+        val uF32 = Float.fromBits(1f.toRawBits() + 2)
+        val loopF32 = PathBuilder()
+            .moveTo(1f, 1f)
+            .cubicTo(uF32, 1f, 1f, uF32, 1f, 1f)
+            .close()
+            .build()
+        val reversedLoopF32 = PathBuilder()
+            .moveTo(1f, 1f)
+            .cubicTo(1f, uF32, uF32, 1f, 1f, 1f)
+            .close()
+            .build()
+
+        listOf(loopF32, reversedLoopF32).forEachIndexed { permutationIndexI32, secondF32 ->
+            listOf(PathBooleanOp.UNION, PathBooleanOp.INTERSECT).forEach { operation ->
+                val error = assertFailsWith<IllegalStateException> {
+                    PathOpsF32.op(loopF32, secondF32, operation)
+                }
+
+                assertEquals(
+                    "path-f32-projection-collapse",
+                    error.message,
+                    "permutation=$permutationIndexI32 operation=$operation",
+                )
+            }
+        }
+    }
+
+    // Each case executes one public operation. Kotlin/JS enforces a two-second per-test timeout;
+    // partitioning this one equivalence hypothesis by n, operation, and encoding keeps the
+    // complete n=1..3 × five-op matrix executable on both backends.
+    @Test fun `equal self closed n1 compact difference retains clip cuts`() =
+        assertEqualSelfClosedCarrierClipResultF32(1, false, PathBooleanOp.DIFFERENCE)
+    @Test fun `equal self closed n1 compact intersect retains clip cuts`() =
+        assertEqualSelfClosedCarrierClipResultF32(1, false, PathBooleanOp.INTERSECT)
+    @Test fun `equal self closed n1 compact union retains clip cuts`() =
+        assertEqualSelfClosedCarrierClipResultF32(1, false, PathBooleanOp.UNION)
+    @Test fun `equal self closed n1 compact xor retains clip cuts`() =
+        assertEqualSelfClosedCarrierClipResultF32(1, false, PathBooleanOp.XOR)
+    @Test fun `equal self closed n1 compact reverse difference retains clip cuts`() =
+        assertEqualSelfClosedCarrierClipResultF32(1, false, PathBooleanOp.REVERSE_DIFFERENCE)
+
+    @Test fun `equal self closed n1 separate difference retains clip cuts`() =
+        assertEqualSelfClosedCarrierClipResultF32(1, true, PathBooleanOp.DIFFERENCE)
+    @Test fun `equal self closed n1 separate intersect retains clip cuts`() =
+        assertEqualSelfClosedCarrierClipResultF32(1, true, PathBooleanOp.INTERSECT)
+    @Test fun `equal self closed n1 separate union retains clip cuts`() =
+        assertEqualSelfClosedCarrierClipResultF32(1, true, PathBooleanOp.UNION)
+    @Test fun `equal self closed n1 separate xor retains clip cuts`() =
+        assertEqualSelfClosedCarrierClipResultF32(1, true, PathBooleanOp.XOR)
+    @Test fun `equal self closed n1 separate reverse difference retains clip cuts`() =
+        assertEqualSelfClosedCarrierClipResultF32(1, true, PathBooleanOp.REVERSE_DIFFERENCE)
+
+    @Test fun `equal self closed n2 compact difference retains clip cuts`() =
+        assertEqualSelfClosedCarrierClipResultF32(2, false, PathBooleanOp.DIFFERENCE)
+    @Test fun `equal self closed n2 compact intersect retains clip cuts`() =
+        assertEqualSelfClosedCarrierClipResultF32(2, false, PathBooleanOp.INTERSECT)
+    @Test fun `equal self closed n2 compact union retains clip cuts`() =
+        assertEqualSelfClosedCarrierClipResultF32(2, false, PathBooleanOp.UNION)
+    @Test fun `equal self closed n2 compact xor retains clip cuts`() =
+        assertEqualSelfClosedCarrierClipResultF32(2, false, PathBooleanOp.XOR)
+    @Test fun `equal self closed n2 compact reverse difference retains clip cuts`() =
+        assertEqualSelfClosedCarrierClipResultF32(2, false, PathBooleanOp.REVERSE_DIFFERENCE)
+
+    @Test fun `equal self closed n2 separate difference retains clip cuts`() =
+        assertEqualSelfClosedCarrierClipResultF32(2, true, PathBooleanOp.DIFFERENCE)
+    @Test fun `equal self closed n2 separate intersect retains clip cuts`() =
+        assertEqualSelfClosedCarrierClipResultF32(2, true, PathBooleanOp.INTERSECT)
+    @Test fun `equal self closed n2 separate union retains clip cuts`() =
+        assertEqualSelfClosedCarrierClipResultF32(2, true, PathBooleanOp.UNION)
+    @Test fun `equal self closed n2 separate xor retains clip cuts`() =
+        assertEqualSelfClosedCarrierClipResultF32(2, true, PathBooleanOp.XOR)
+    @Test fun `equal self closed n2 separate reverse difference retains clip cuts`() =
+        assertEqualSelfClosedCarrierClipResultF32(2, true, PathBooleanOp.REVERSE_DIFFERENCE)
+
+    @Test fun `equal self closed n3 compact difference retains clip cuts`() =
+        assertEqualSelfClosedCarrierClipResultF32(3, false, PathBooleanOp.DIFFERENCE)
+    @Test fun `equal self closed n3 compact intersect retains clip cuts`() =
+        assertEqualSelfClosedCarrierClipResultF32(3, false, PathBooleanOp.INTERSECT)
+    @Test fun `equal self closed n3 compact union retains clip cuts`() =
+        assertEqualSelfClosedCarrierClipResultF32(3, false, PathBooleanOp.UNION)
+    @Test fun `equal self closed n3 compact xor retains clip cuts`() =
+        assertEqualSelfClosedCarrierClipResultF32(3, false, PathBooleanOp.XOR)
+    @Test fun `equal self closed n3 compact reverse difference retains clip cuts`() =
+        assertEqualSelfClosedCarrierClipResultF32(3, false, PathBooleanOp.REVERSE_DIFFERENCE)
+
+    @Test fun `equal self closed n3 separate difference retains clip cuts`() =
+        assertEqualSelfClosedCarrierClipResultF32(3, true, PathBooleanOp.DIFFERENCE)
+    @Test fun `equal self closed n3 separate intersect retains clip cuts`() =
+        assertEqualSelfClosedCarrierClipResultF32(3, true, PathBooleanOp.INTERSECT)
+    @Test fun `equal self closed n3 separate union retains clip cuts`() =
+        assertEqualSelfClosedCarrierClipResultF32(3, true, PathBooleanOp.UNION)
+    @Test fun `equal self closed n3 separate xor retains clip cuts`() =
+        assertEqualSelfClosedCarrierClipResultF32(3, true, PathBooleanOp.XOR)
+    @Test fun `equal self closed n3 separate reverse difference retains clip cuts`() =
+        assertEqualSelfClosedCarrierClipResultF32(3, true, PathBooleanOp.REVERSE_DIFFERENCE)
+
+    // Public bisection during remediation derived 216 canonical events for n=2. Adjacent
+    // limits verify that compact/separate input and operand order share exactly one frontier.
+    @Test fun `equal self closed frontier compact n2 is representation invariant`() =
+        assertEqualSelfClosedCarrierClipIntersectionBoundaryF32(separateContours = false, swapOperands = false)
+    @Test fun `equal self closed frontier separate n2 is representation invariant`() =
+        assertEqualSelfClosedCarrierClipIntersectionBoundaryF32(separateContours = true, swapOperands = false)
+    @Test fun `equal self closed frontier compact n2 survives operand swap`() =
+        assertEqualSelfClosedCarrierClipIntersectionBoundaryF32(separateContours = false, swapOperands = true)
+    @Test fun `equal self closed frontier separate n2 survives operand swap`() =
+        assertEqualSelfClosedCarrierClipIntersectionBoundaryF32(separateContours = true, swapOperands = true)
+
+    @Test
+    fun `under threshold collapsed loop drops both alone and inside a retained face`() {
+        val uF32 = Float.fromBits(1f.toRawBits() + 1)
+        fun tinyLoopF32(builderF32: PathBuilder) {
+            builderF32
+                .moveTo(1f, 1f)
+                .cubicTo(uF32, 1f, 1f, uF32, 1f, 1f)
+                .close()
+        }
+        val aloneF32 = PathBuilder().also(::tinyLoopF32).build()
+        val nestedF32 = PathBuilder()
+            .addRect(RectF32.ofLTRB(0f, 0f, 3f, 3f))
+            .also(::tinyLoopF32)
+            .build()
+        val holedF32 = PathBuilder(FillRule.EVEN_ODD)
+            .addRect(RectF32.ofLTRB(0f, 0f, 3f, 3f))
+            .addRect(RectF32.ofLTRB(.75f, .75f, 1.25f, 1.25f))
+            .also(::tinyLoopF32)
+            .build()
+        val reversedOuterF32 = PathBuilder()
+            .moveTo(0f, 0f)
+            .lineTo(0f, 3f)
+            .lineTo(3f, 3f)
+            .lineTo(3f, 0f)
+            .close()
+            .also(::tinyLoopF32)
+            .build()
+        val inverseF32 = PathBuilder(FillRule.INVERSE_WINDING)
+            .addRect(RectF32.ofLTRB(0f, 0f, 3f, 3f))
+            .also(::tinyLoopF32)
+            .build()
+        val boundaryAmbiguityF32 = PathBuilder()
+            .addRect(RectF32.ofLTRB(1f, 0f, 3f, 3f))
+            .also(::tinyLoopF32)
+            .build()
+
+        val droppedF32 = PathOpsF32.simplify(aloneF32)
+        val retainedF32 = PathOpsF32.simplify(nestedF32)
+        val holedResultF32 = PathOpsF32.simplify(holedF32)
+        val reversedResultF32 = PathOpsF32.simplify(reversedOuterF32)
+        val inverseResultF32 = PathOpsF32.simplify(inverseF32)
+        val boundaryError = assertFailsWith<IllegalStateException> {
+            PathOpsF32.simplify(boundaryAmbiguityF32)
+        }
+
+        assertEquals(null, PathAnalysisF32.bounds(droppedF32))
+        assertTrue(PathAnalysisF32.contains(retainedF32, Point2F32(.5f, .5f)))
+        assertTrue(PathAnalysisF32.contains(retainedF32, Point2F32(2.5f, 2.5f)))
+        assertTrue(PathAnalysisF32.contains(holedResultF32, Point2F32(.5f, .5f)))
+        assertFalse(PathAnalysisF32.contains(holedResultF32, Point2F32(1f, 1f)))
+        assertTrue(PathAnalysisF32.contains(reversedResultF32, Point2F32(.5f, .5f)))
+        assertTrue(PathAnalysisF32.contains(reversedResultF32, Point2F32(2.5f, 2.5f)))
+        assertEquals(FillRule.INVERSE_WINDING, inverseResultF32.fillRule)
+        assertFalse(PathAnalysisF32.contains(inverseResultF32, Point2F32(.5f, .5f)))
+        assertTrue(PathAnalysisF32.contains(inverseResultF32, Point2F32(4f, 4f)))
+        assertEquals("path-f32-projection-collapse", boundaryError.message)
+
+        // The same logical F32-lattice lobe must retain its DROP disposition when the public
+        // input is translated and scaled before shared normalization. This stays geometric: the
+        // oracle is only the emitted empty/retained coverage, not a normalizer implementation.
+        fun assertTransformedNestedDropF32(scaleF32: Float, translationF32: Float) {
+            fun transformF32(valueF32: Float): Float = valueF32 * scaleF32 + translationF32
+            val transformedAloneF32 = PathBuilder()
+                .moveTo(transformF32(1f), transformF32(1f))
+                .cubicTo(
+                    transformF32(uF32),
+                    transformF32(1f),
+                    transformF32(1f),
+                    transformF32(uF32),
+                    transformF32(1f),
+                    transformF32(1f),
+                )
+                .close()
+                .build()
+            val transformedNestedF32 = PathBuilder()
+                .addRect(
+                    RectF32.ofLTRB(
+                        transformF32(0f),
+                        transformF32(0f),
+                        transformF32(3f),
+                        transformF32(3f),
+                    ),
+                )
+                .also { builderF32 ->
+                    builderF32
+                        .moveTo(transformF32(1f), transformF32(1f))
+                        .cubicTo(
+                            transformF32(uF32),
+                            transformF32(1f),
+                            transformF32(1f),
+                            transformF32(uF32),
+                            transformF32(1f),
+                            transformF32(1f),
+                        )
+                        .close()
+                }
+                .build()
+
+            assertEquals(null, PathAnalysisF32.bounds(PathOpsF32.simplify(transformedAloneF32)))
+            val transformedResultF32 = PathOpsF32.simplify(transformedNestedF32)
+            assertTrue(
+                PathAnalysisF32.contains(
+                    transformedResultF32,
+                    Point2F32(transformF32(.5f), transformF32(.5f)),
+                ),
+            )
+            assertTrue(
+                PathAnalysisF32.contains(
+                    transformedResultF32,
+                    Point2F32(transformF32(2.5f), transformF32(2.5f)),
+                ),
+            )
+        }
+        assertTransformedNestedDropF32(scaleF32 = 1f, translationF32 = .125f)
+        assertTransformedNestedDropF32(scaleF32 = .5f, translationF32 = .125f)
+    }
+
+    @Test
+    fun `geometrically identical signed zero rotations XOR consistently through the budget`() {
+        val canonicalF32 = PathBuilder()
+            .moveTo(0f, 0f)
+            .lineTo(2f, 0f)
+            .lineTo(0f, 2f)
+            .close()
+            .build()
+        val rotatedSignedZeroF32 = PathBuilder()
+            .moveTo(2f, 0f)
+            .lineTo(-0.0f, 2f)
+            .lineTo(-0.0f, -0.0f)
+            .close()
+            .build()
+
+        val resultF32 = PathOpsF32.op(canonicalF32, rotatedSignedZeroF32, PathBooleanOp.XOR)
+        val exactBudgetError = assertFailsWith<IllegalStateException> {
+            PathOpsF32.op(
+                canonicalF32,
+                canonicalF32,
+                PathBooleanOp.XOR,
+                PathOpsLimitsI32(maxCandidateProbes = 1),
+            )
+        }
+        val rotatedBudgetError = assertFailsWith<IllegalStateException> {
+            PathOpsF32.op(
+                canonicalF32,
+                rotatedSignedZeroF32,
+                PathBooleanOp.XOR,
+                PathOpsLimitsI32(maxCandidateProbes = 1),
+            )
+        }
+
+        assertEquals(null, PathAnalysisF32.bounds(resultF32))
+        assertEquals("path-candidate-limit", exactBudgetError.message)
+        assertEquals(exactBudgetError.message, rotatedBudgetError.message)
+    }
+
+    @Test
+    fun `unselected distant signed zero provenance cannot rewrite selected output`() {
+        val selectedPositiveZeroF32 = PathBuilder()
+            .moveTo(0f, 0f)
+            .lineTo(2f, 0f)
+            .lineTo(0f, 2f)
+            .close()
+            .build()
+        val distantNegativeZeroF32 = PathBuilder()
+            .moveTo(10f, -0.0f)
+            .lineTo(12f, -0.0f)
+            .lineTo(10f, 2f)
+            .close()
+            .build()
+
+        val resultF32 = PathOpsF32.op(
+            selectedPositiveZeroF32,
+            distantNegativeZeroF32,
+            PathBooleanOp.DIFFERENCE,
+        )
+        val zeroYVerticesF32 = pathVerticesF32(resultF32).filter { pointF32 -> pointF32.y == 0f }
+
+        assertTrue(zeroYVerticesF32.isNotEmpty())
+        assertTrue(zeroYVerticesF32.all { pointF32 -> pointF32.y.toRawBits() == 0f.toRawBits() })
     }
 
     @Test
