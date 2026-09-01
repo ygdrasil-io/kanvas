@@ -291,7 +291,8 @@ class Picture internal constructor(
 // ---- Binary serialization helpers ------------------------------------------
 
 private val MAGIC = byteArrayOf(0x4B, 0x50, 0x49, 0x43)
-private const val FORMAT_VERSION = 7
+private const val FORMAT_VERSION = 8
+private const val STABLE_WIRE_VERSION = 8
 
 // type discriminators
 private const val OP_DRAW_RECT: Byte = 0
@@ -355,10 +356,10 @@ private class Writer {
     }
 
     fun path(p: Path) {
-        byte(p.fillType.ordinal.toByte())
+        byte(stableFillTypeId(p.fillType))
         val commands = p.commands()
         int(commands.size)
-        for (command in commands) byte(command.verb.ordinal.toByte())
+        for (command in commands) byte(stablePathVerbId(command.verb))
         int(commands.sumOf { it.serializedPairCount })
         for (command in commands) {
             when (command) {
@@ -388,7 +389,7 @@ private class Writer {
 
     fun image(img: Image) {
         int(img.width); int(img.height)
-        byte(img.colorType.ordinal.toByte())
+        byte(stableColorTypeId(img.colorType))
         string(img.sourceId)
         val px = img.pixels
         if (px != null) {
@@ -398,13 +399,13 @@ private class Writer {
             bool(false)
         }
         colorSpace(img.colorSpace)
-        byte(img.alphaType.ordinal.toByte())
+        byte(stableAlphaTypeId(img.alphaType))
     }
 
     fun colorSpace(cs: ColorSpace) {
         string(cs.name)
-        byte(cs.transferFunction.ordinal.toByte())
-        byte(cs.gamut.ordinal.toByte())
+        byte(stableTransferFunctionId(cs.transferFunction))
+        byte(stableGamutId(cs.gamut))
     }
 
     fun paint(p: Paint) {
@@ -416,10 +417,10 @@ private class Writer {
         pathEffect(p.pathEffect)
         imageFilter(p.imageFilter)
         blender(p.blender)
-        byte(p.style.ordinal.toByte())
+        byte(stablePaintStyleId(p.style))
         float(p.strokeWidth)
-        byte(p.strokeCap.ordinal.toByte())
-        byte(p.strokeJoin.ordinal.toByte())
+        byte(stableStrokeCapId(p.strokeCap))
+        byte(stableStrokeJoinId(p.strokeJoin))
         float(p.strokeMiter)
         bool(p.antiAlias)
     }
@@ -485,7 +486,7 @@ private class Writer {
 
     private fun uniformSlots(slots: List<UniformSlot>) {
         int(slots.size)
-        for (s in slots) { string(s.name); int(s.binding); byte(s.type.ordinal.toByte()); int(s.size) }
+        for (s in slots) { string(s.name); int(s.binding); byte(stableUniformTypeId(s.type)); int(s.size) }
     }
 
     private fun textureSlots(slots: List<TextureSlot>) {
@@ -496,12 +497,13 @@ private class Writer {
     private fun writeVertexLayout(vl: VertexLayout) {
         vertexAttribs(vl.attributes)
         int(vl.stride)
+        byte(stableVertexStepModeId(vl.stepMode))
     }
 
     private fun vertexAttribs(attrs: List<VertexAttribute>) {
         int(attrs.size)
         for (a in attrs) {
-            int(a.shaderLocation); byte(a.format.ordinal.toByte())
+            int(a.shaderLocation); byte(stableVertexFormatId(a.format))
             int(a.offset)
         }
     }
@@ -512,7 +514,7 @@ private class Writer {
 
     private fun childSlots(slots: List<ChildSlot>) {
         int(slots.size)
-        for (s in slots) { string(s.name); byte(s.type.ordinal.toByte()) }
+        for (s in slots) { string(s.name); byte(stableChildTypeId(s.type)) }
     }
 
     private fun <T> namedMap(
@@ -597,7 +599,7 @@ private class Writer {
             is PathEffect.Dash -> { byte(0); int(pe.intervals.size); for (f in pe.intervals) float(f); float(pe.phase) }
             is PathEffect.Corner -> { byte(1); float(pe.radius) }
             is PathEffect.Discrete -> { byte(2); float(pe.segmentLength); float(pe.deviation) }
-            is PathEffect.Path1D -> { byte(3); path(pe.path); float(pe.advance); float(pe.phase); byte(pe.style.ordinal.toByte()) }
+            is PathEffect.Path1D -> { byte(3); path(pe.path); float(pe.advance); float(pe.phase); byte(stablePath1DStyleId(pe.style)) }
             is PathEffect.Path2D -> { byte(4); matrix33(pe.matrix); path(pe.path) }
             is PathEffect.Trim -> { byte(5); float(pe.start); float(pe.stop) }
         }
@@ -656,15 +658,15 @@ private class Writer {
         }
     }
 
-    fun blendMode(m: BlendMode) { byte(m.ordinal.toByte()) }
-    fun tileMode(m: TileMode) { byte(m.ordinal.toByte()) }
-    fun blurStyle(s: BlurStyle) { byte(s.ordinal.toByte()) }
-    fun colorChannel(c: ColorChannel) { byte(c.ordinal.toByte()) }
-    fun colorSpaceInterpolation(c: ColorSpaceInterpolation) { byte(c.ordinal.toByte()) }
-    fun pointMode(m: PointMode) { byte(m.ordinal.toByte()) }
-    fun vertexMode(m: VertexMode) { byte(m.ordinal.toByte()) }
-    fun latticeFlags(f: LatticeFlags) { byte(f.ordinal.toByte()) }
-    fun clipOp(op: ClipOp) { byte(op.ordinal.toByte()) }
+    fun blendMode(m: BlendMode) { byte(stableBlendModeId(m)) }
+    fun tileMode(m: TileMode) { byte(stableTileModeId(m)) }
+    fun blurStyle(s: BlurStyle) { byte(stableBlurStyleId(s)) }
+    fun colorChannel(c: ColorChannel) { byte(stableColorChannelId(c)) }
+    fun colorSpaceInterpolation(c: ColorSpaceInterpolation) { byte(stableColorSpaceInterpolationId(c)) }
+    fun pointMode(m: PointMode) { byte(stablePointModeId(m)) }
+    fun vertexMode(m: VertexMode) { byte(stableVertexModeId(m)) }
+    fun latticeFlags(f: LatticeFlags) { byte(stableLatticeFlagsId(f)) }
+    fun clipOp(op: ClipOp) { byte(stableClipOpId(op)) }
 
     fun textBlob(blob: TextBlob) {
         int(blob.glyphRuns.size)
@@ -862,6 +864,39 @@ private class Reader(private val data: ByteArray) {
     fun string(): String { var v = ""; guard { v = dis.readUTF() }; return v }
     fun bytes(len: Int): ByteArray { val v = ByteArray(len); guard { if (valid) dis.readFully(v) }; return v }
 
+    private fun <T> discriminator(
+        legacy: List<T>,
+        stable: (Byte) -> T?,
+        default: T,
+    ): T {
+        val id = byte()
+        val value = if (formatVersion == STABLE_WIRE_VERSION) stable(id) else legacy.getOrNull(id.toInt())
+        if (value == null) {
+            valid = false
+            return default
+        }
+        return value
+    }
+
+    private fun fillType(): FillType = discriminator(FillType.entries, ::stableFillTypeFromId, FillType.WINDING)
+    private fun pathVerb(): PathVerb = discriminator(PathVerb.entries, ::stablePathVerbFromId, PathVerb.MOVE)
+    private fun colorType(): ColorType = discriminator(ColorType.entries, ::stableColorTypeFromId, ColorType.UNKNOWN)
+    private fun alphaType(): AlphaType = discriminator(AlphaType.entries, ::stableAlphaTypeFromId, AlphaType.UNKNOWN)
+    private fun transferFunction(): TransferFunction = discriminator(TransferFunction.entries, ::stableTransferFunctionFromId, TransferFunction.SRGB)
+    private fun gamut(): Gamut = discriminator(Gamut.entries, ::stableGamutFromId, Gamut.SRGB)
+    private fun paintStyle(): PaintStyle = discriminator(PaintStyle.entries, ::stablePaintStyleFromId, PaintStyle.FILL)
+    private fun strokeCap(): StrokeCap = discriminator(StrokeCap.entries, ::stableStrokeCapFromId, StrokeCap.BUTT)
+    private fun strokeJoin(): StrokeJoin = discriminator(StrokeJoin.entries, ::stableStrokeJoinFromId, StrokeJoin.MITER)
+    private fun uniformType(): UniformType = discriminator(UniformType.entries, ::stableUniformTypeFromId, UniformType.FLOAT)
+    private fun vertexFormat(): VertexFormat = discriminator(VertexFormat.entries, ::stableVertexFormatFromId, VertexFormat.FLOAT32)
+    private fun childType(): ChildType = discriminator(ChildType.entries, ::stableChildTypeFromId, ChildType.SHADER)
+    private fun vertexStepMode(): VertexStepMode = discriminator(
+        VertexStepMode.entries,
+        ::stableVertexStepModeFromId,
+        VertexStepMode.VERTEX,
+    )
+    private fun path1DStyle(): Path1DStyle = discriminator(Path1DStyle.entries, ::stablePath1DStyleFromId, Path1DStyle.TRANSLATE)
+
     fun rect(): RectF32 = RectF32(float(), float(), float(), float())
     fun point2(): Point2F32 = Point2F32(float(), float())
     fun vector2(): Vector2F32 = Vector2F32(float(), float())
@@ -890,9 +925,9 @@ private class Reader(private val data: ByteArray) {
     }
 
     fun path(): Path {
-        val fillType = FillType.entries[byte().toInt()]
+        val fillType = fillType()
         val verbCount = int()
-        val verbs = List(verbCount) { PathVerb.entries[byte().toInt()] }
+        val verbs = List(verbCount) { pathVerb() }
         val ptCount = int()
         val values = FloatArray(ptCount * 2) { float() }
         val p = Path()
@@ -939,19 +974,19 @@ private class Reader(private val data: ByteArray) {
 
     fun image(): Image {
         val w = int(); val h = int()
-        val ct = ColorType.entries[byte().toInt()]
+        val ct = colorType()
         val srcId = string()
         val hasPixels = bool()
         val px = if (hasPixels) { val len = int(); bytes(len) } else null
         val cs = readColorSpace()
-        val alphaType = if (formatVersion >= 5) AlphaType.entries[byte().toInt()] else AlphaType.UNPREMUL
+        val alphaType = if (formatVersion >= 5) alphaType() else AlphaType.UNPREMUL
         return Image(w, h, ct, srcId, px, cs, alphaType)
     }
 
     fun readColorSpace(): ColorSpace {
         val name = string()
-        val tf = TransferFunction.entries[byte().toInt()]
-        val g = Gamut.entries[byte().toInt()]
+        val tf = transferFunction()
+        val g = gamut()
         return ColorSpace(name, tf, g)
     }
 
@@ -964,10 +999,10 @@ private class Reader(private val data: ByteArray) {
         val pe = pathEffect()
         val imf = imageFilter()
         val bl = blender()
-        val style = PaintStyle.entries[byte().toInt()]
+        val style = paintStyle()
         val sw = float()
-        val cap = StrokeCap.entries[byte().toInt()]
-        val join = StrokeJoin.entries[byte().toInt()]
+        val cap = strokeCap()
+        val join = strokeJoin()
         val sm = float()
         val aa = bool()
         return Paint(c, s, bm, cf, mf, pe, imf, bl, style, sw, cap, join, sm, aa)
@@ -1033,32 +1068,37 @@ private class Reader(private val data: ByteArray) {
         val source = string()
         val entry = string()
         val uniformCount = int()
-        val uniforms = List(uniformCount) { UniformSlot(string(), int(), UniformType.entries[byte().toInt()], int()) }
+        val uniforms = List(uniformCount) { UniformSlot(string(), int(), uniformType(), int()) }
         val textureCount = int()
         val textures = List(textureCount) { TextureSlot(string(), int()) }
         val attrCount = int()
-        val attrs = List(attrCount) { VertexAttribute(VertexFormat.entries[byte().toInt()], int(), int()) }
+        val attrs = List(attrCount) { VertexAttribute(vertexFormat(), int(), int()) }
         val stride = int()
-        val stepMode = VertexStepMode.entries[byte().toInt()]
-        // ShaderModule constructor is private; uniforms/textures/vertexLayout cannot be
-        // injected into the reconstructed module. If the source had bindings, mark invalid.
-        if (uniforms.isNotEmpty() || textures.isNotEmpty() || attrs.isNotEmpty()) {
-            valid = false
+        val stepMode = if (formatVersion == STABLE_WIRE_VERSION) {
+            vertexStepMode()
+        } else {
+            VertexStepMode.entries[byte().toInt()]
         }
-        return ShaderModule.fromSource(source, entry)
+        if (formatVersion != STABLE_WIRE_VERSION) {
+            // Versions 1–7 could not reconstruct private ShaderModule state.
+            if (uniforms.isNotEmpty() || textures.isNotEmpty() || attrs.isNotEmpty()) valid = false
+            return ShaderModule.fromSource(source, entry)
+        }
+        return createShaderModule(source, entry, uniforms, textures, VertexLayout(attrs, stride, stepMode))
+            ?: ShaderModule.fromSource(source, entry).also { valid = false }
     }
 
     private fun readUniformLayout(): UniformLayout {
         val n = int()
         val slots = List(n) {
-            UniformSlot(string(), int(), UniformType.entries[byte().toInt()], int())
+            UniformSlot(string(), int(), uniformType(), int())
         }
         return UniformLayout(slots)
     }
 
     private fun readChildSlots(): List<ChildSlot> {
         val n = int()
-        return List(n) { ChildSlot(string(), ChildType.entries[byte().toInt()]) }
+        return List(n) { ChildSlot(string(), childType()) }
     }
 
     fun readUniformBlock(): UniformBlock? {
@@ -1126,7 +1166,7 @@ private class Reader(private val data: ByteArray) {
             0 -> PathEffect.Dash(FloatArray(int()) { float() }, float())
             1 -> PathEffect.Corner(float())
             2 -> PathEffect.Discrete(float(), float())
-            3 -> PathEffect.Path1D(path(), float(), float(), Path1DStyle.entries[byte().toInt()])
+            3 -> PathEffect.Path1D(path(), float(), float(), path1DStyle())
             4 -> PathEffect.Path2D(matrix33(), path())
             5 -> PathEffect.Trim(float(), float())
             else -> { valid = false; null }
@@ -1180,15 +1220,19 @@ private class Reader(private val data: ByteArray) {
         }
     }
 
-    fun blendMode(): BlendMode = BlendMode.entries[byte().toInt()]
-    fun tileMode(): TileMode = TileMode.entries[byte().toInt()]
-    fun blurStyle(): BlurStyle = BlurStyle.entries[byte().toInt()]
-    fun colorChannel(): ColorChannel = ColorChannel.entries[byte().toInt()]
-    fun colorSpaceInterpolation(): ColorSpaceInterpolation = ColorSpaceInterpolation.entries[byte().toInt()]
-    fun pointMode(): PointMode = PointMode.entries[byte().toInt()]
-    fun vertexMode(): VertexMode = VertexMode.entries[byte().toInt()]
-    fun latticeFlags(): LatticeFlags = LatticeFlags.entries[byte().toInt()]
-    fun clipOp(): ClipOp = ClipOp.entries[byte().toInt()]
+    fun blendMode(): BlendMode = discriminator(BlendMode.entries, ::stableBlendModeFromId, BlendMode.SRC_OVER)
+    fun tileMode(): TileMode = discriminator(TileMode.entries, ::stableTileModeFromId, TileMode.CLAMP)
+    fun blurStyle(): BlurStyle = discriminator(BlurStyle.entries, ::stableBlurStyleFromId, BlurStyle.NORMAL)
+    fun colorChannel(): ColorChannel = discriminator(ColorChannel.entries, ::stableColorChannelFromId, ColorChannel.R)
+    fun colorSpaceInterpolation(): ColorSpaceInterpolation = discriminator(
+        ColorSpaceInterpolation.entries,
+        ::stableColorSpaceInterpolationFromId,
+        ColorSpaceInterpolation.SRGB,
+    )
+    fun pointMode(): PointMode = discriminator(PointMode.entries, ::stablePointModeFromId, PointMode.POINTS)
+    fun vertexMode(): VertexMode = discriminator(VertexMode.entries, ::stableVertexModeFromId, VertexMode.TRIANGLES)
+    fun latticeFlags(): LatticeFlags = discriminator(LatticeFlags.entries, ::stableLatticeFlagsFromId, LatticeFlags.DEFAULT)
+    fun clipOp(): ClipOp = discriminator(ClipOp.entries, ::stableClipOpFromId, ClipOp.INTERSECT)
 
     fun textBlob(): TextBlob {
         val runs = List(int()) {
@@ -1382,7 +1426,24 @@ private fun decodePicture(data: ByteArray): Picture? {
     val r = Reader(data)
     r.bytes(4) // skip magic
     val version = r.int()
-    if (version !in 1..FORMAT_VERSION || !r.valid) return null
+    if (!r.valid) return null
+    return when (version) {
+        in 1..7 -> decodeLegacyPicture(data, version)
+        STABLE_WIRE_VERSION -> decodePictureV8(data)
+        else -> null
+    }
+}
+
+private fun decodeLegacyPicture(data: ByteArray, version: Int): Picture? =
+    decodePictureWithVersion(data, version)
+
+private fun decodePictureV8(data: ByteArray): Picture? =
+    decodePictureWithVersion(data, STABLE_WIRE_VERSION)
+
+private fun decodePictureWithVersion(data: ByteArray, version: Int): Picture? {
+    val r = Reader(data)
+    r.bytes(4) // skip magic
+    if (r.int() != version || !r.valid) return null
     r.formatVersion = version
     val cullRect = r.rect()
     val opCount = r.int()
@@ -1408,6 +1469,24 @@ private fun createRuntimeEffect(id: String, module: ShaderModule, uniformLayout:
     )
     constructor.isAccessible = true
     constructor.newInstance(id, module, uniformLayout, children)
+} catch (_: Exception) { null }
+
+private fun createShaderModule(
+    source: String,
+    entryPoint: String,
+    uniforms: List<UniformSlot>,
+    textures: List<TextureSlot>,
+    vertexLayout: VertexLayout,
+): ShaderModule? = try {
+    val constructor = ShaderModule::class.java.getDeclaredConstructor(
+        String::class.java,
+        String::class.java,
+        List::class.java,
+        List::class.java,
+        VertexLayout::class.java,
+    )
+    constructor.isAccessible = true
+    constructor.newInstance(source, entryPoint, uniforms, textures, vertexLayout)
 } catch (_: Exception) { null }
 
 private val PathCommand.serializedPairCount: Int

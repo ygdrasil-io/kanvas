@@ -35,6 +35,8 @@ Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :
 
 - [Baseline de vérité W00](waves/W00-truth-baseline/status.md) — gate stricte
   non atteinte en raison de la quarantaine temporaire `jpg-color-cube`.
+- [État W01 — géométrie immuable et format `Picture` v8](waves/W01-immutable-geometry/status.md)
+  — preuve d'immuabilité, compatibilité de lecture v7 et writer v8 stable.
 - [État consolidé de la topologie hybride](progress/2026-08-31-hybrid-f64-f32-path-topology/progress.md)
 - [Rapport d'implémentation de l'admission conservative](progress/2026-09-01-conservative-hybrid-topology-admission/implementation-report.md)
 - [Revue de spécification de l'admission conservative](progress/2026-09-01-conservative-hybrid-topology-admission/spec-review.md)
@@ -45,7 +47,7 @@ Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :
 | Vague | Sujet | État |
 | --- | --- | --- |
 | W0 | Vérité de référence | Baseline publiée ; gate stricte non atteinte |
-| W1 | Géométrie immuable dans `:math` | Partiellement livrée : `PathF32` immuable, topologie source, topologie hybride F64/F32 et admission conservative ; la vague entière reste ouverte |
+| W1 | Géométrie immuable dans `:math` | Livrée pour les frontières d'enregistrement/Picture : snapshots immuables et writer `Picture` v8 stable ; topologie source, topologie hybride F64/F32 et admission conservative restent documentées séparément |
 | W2 | `Scene IR` et frontières de modules | Non démarrée |
 | W3 | `gpu-plan` et premier `RenderGraph` | Non démarrée |
 | W4 | Geometry/coverage | Non démarrée |
