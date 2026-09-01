@@ -93,6 +93,10 @@ internal data class PathSourceTopologyF64(
     val contactWitnessesF64: List<PathContactWitnessF64>,
     /** Exact canonical source-event groups already charged by the F64 registry. */
     val intersectionEventCountI32: Int,
+    /** Immutable source provenance gate for the post-DCEL self-closed absence audit. */
+    val hasSelfClosedSourcePrimitiveF64: Boolean = false,
+    /** Operand-local F32-loss intervals, retained only as exact source-parameter provenance. */
+    val operandLocalCollapsedSectionsF64F32: List<PathOperandLocalCollapsedSectionF64F32> = emptyList(),
 )
 
 // This index is built once from the authoritative spans and sections. It deliberately keys only
@@ -151,8 +155,15 @@ internal fun splitPathSourceTopologyF64(
     edgesF64: List<PathInputEdgeF64>,
     limitsI32: PathOpsLimitsI32,
     candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+    allowSelfClosedNWayCarrierGroupingF64: Boolean = false,
+    operandLocalCollapsedSectionsF64F32: List<PathOperandLocalCollapsedSectionF64F32> = emptyList(),
 ): PathSourceTopologyF64 {
-    val splitTopologyF64 = splitPathTopologyF64(edgesF64, limitsI32, candidateWorkBudgetI32)
+    val splitTopologyF64 = splitPathTopologyF64(
+        edges = edgesF64,
+        limits = limitsI32,
+        candidateWorkBudget = candidateWorkBudgetI32,
+        allowSelfClosedNWayCarrierGroupingF64 = allowSelfClosedNWayCarrierGroupingF64,
+    )
     val spansF64 = assignSourceSpanIdsF64(
         mergeSourceSpansF64(splitTopologyF64.splitEdgesF64, candidateWorkBudgetI32),
         candidateWorkBudgetI32,
@@ -166,6 +177,8 @@ internal fun splitPathSourceTopologyF64(
         sourceSpansF64 = spansF64,
         contactWitnessesF64 = contactsF64,
         intersectionEventCountI32 = splitTopologyF64.pointContactsF64.size,
+        hasSelfClosedSourcePrimitiveF64 = allowSelfClosedNWayCarrierGroupingF64,
+        operandLocalCollapsedSectionsF64F32 = operandLocalCollapsedSectionsF64F32,
     )
 }
 

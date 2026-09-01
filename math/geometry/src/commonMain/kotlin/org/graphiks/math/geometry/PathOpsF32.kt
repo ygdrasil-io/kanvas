@@ -26,8 +26,15 @@ public object PathOpsF32 {
         require(!first.fillRule.isInverse() && !second.fillRule.isInverse()) {
             "Boolean operations require finite fill rules"
         }
-        validateFinitePathF32(first)
-        validateFinitePathF32(second)
+        val firstSignedZeroPolicyF32 = validateFinitePathF32(first)
+        val secondSignedZeroPolicyF32 = validateFinitePathF32(second)
+        val signedZeroPolicyF32 = firstSignedZeroPolicyF32 + secondSignedZeroPolicyF32
+
+        // This is an algebraic identity over immutable source values, established before any
+        // projected embedding exists: A XOR A is empty. It is deliberately not a geometric
+        // proximity shortcut, so unrelated no-face sectors still enter the conservative hybrid
+        // disposition path.
+        if (op == PathBooleanOp.XOR && first == second) return PathBuilder(FillRule.WINDING).build()
 
         val normalization = pathNormalizationF64(listOf(first, second))
         val candidateWorkBudget = PathCandidateWorkBudgetI32(limits.maxCandidateProbes)
@@ -44,6 +51,7 @@ public object PathOpsF32 {
             tracesF64F32 = arrangementF64F32.boundary(first.fillRule, second.fillRule, op),
             fillRule = FillRule.WINDING,
             candidateWorkBudget = candidateWorkBudget,
+            signedZeroPolicyF32 = signedZeroPolicyF32,
         )
     }
 
@@ -76,6 +84,19 @@ private data class PathInputEdgeSeedF64(
     val contourIndex: Int,
     val start: PathInputVertexF64,
     val end: PathInputVertexF64,
+)
+
+/** Immutable source preparation; the Boolean avoids a second uncharged topology-wide probe. */
+private data class PathPreparedInputEdgesF64(
+    val edgesF64: List<PathInputEdgeF64>,
+    val hasSelfClosedNWayCarrierGroupingF64: Boolean,
+    /** Operand-local collapse intervals retained as source provenance, never F32 identity. */
+    val operandLocalCollapsedSectionsF64F32: List<PathOperandLocalCollapsedSectionF64F32>,
+)
+
+private data class PathSourceSegmentEndpointsF32(
+    var startPointF32: Point2F32? = null,
+    var endPointF32: Point2F32? = null,
 )
 
 private data class ProjectedPathContourF32(
@@ -167,7 +188,7 @@ private fun claimsConflictF64(
 }
 
 private fun unaryResultF32(path: PathF32, limits: PathOpsLimitsI32, outputFillRule: FillRule): PathF32 {
-    validateFinitePathF32(path)
+    val signedZeroPolicyF32 = validateFinitePathF32(path)
     val normalization = pathNormalizationF64(listOf(path))
     val candidateWorkBudget = PathCandidateWorkBudgetI32(limits.maxCandidateProbes)
     val arrangementF64F32 = buildHybridArrangementF64F32(
@@ -180,6 +201,7 @@ private fun unaryResultF32(path: PathF32, limits: PathOpsLimitsI32, outputFillRu
         tracesF64F32 = arrangementF64F32.unaryBoundary(path.fillRule),
         fillRule = outputFillRule,
         candidateWorkBudget = candidateWorkBudget,
+        signedZeroPolicyF32 = signedZeroPolicyF32,
     )
 }
 
@@ -190,8 +212,14 @@ private fun buildHybridArrangementF64F32(
     candidateWorkBudget: PathCandidateWorkBudgetI32,
 ): PathArrangementF64F32 {
     try {
-        val edgesF64 = inputEdgesF64(inputs, normalization, limits)
-        val sourceTopologyF64 = splitPathSourceTopologyF64(edgesF64, limits, candidateWorkBudget)
+        val preparedEdgesF64 = inputEdgesF64(inputs, normalization, limits, candidateWorkBudget)
+        val sourceTopologyF64 = splitPathSourceTopologyF64(
+            edgesF64 = preparedEdgesF64.edgesF64,
+            limitsI32 = limits,
+            candidateWorkBudgetI32 = candidateWorkBudget,
+            allowSelfClosedNWayCarrierGroupingF64 = preparedEdgesF64.hasSelfClosedNWayCarrierGroupingF64,
+            operandLocalCollapsedSectionsF64F32 = preparedEdgesF64.operandLocalCollapsedSectionsF64F32,
+        )
         val topologyF64F32 = buildPathHybridTopologyF64F32(
             sourceTopologyF64 = sourceTopologyF64,
             normalizationF64 = normalization,
@@ -216,6 +244,7 @@ private fun writeHybridBoundaryTracesF64F32(
     tracesF64F32: List<PathBoundaryTraceF64F32>,
     fillRule: FillRule,
     candidateWorkBudget: PathCandidateWorkBudgetI32,
+    signedZeroPolicyF32: PathSignedZeroPayloadPolicyF32,
 ): PathF32 {
     // Count immutable trace vertices in a separately charged pass before reserving the exact
     // writer envelope.  The bridge never discovers geometry, but its scan/allocation still uses
@@ -238,8 +267,8 @@ private fun writeHybridBoundaryTracesF64F32(
     tracesF64F32.forEach { traceF64F32 ->
         val halfEdgesF64F32 = traceF64F32.halfEdgesF64F32
         if (halfEdgesF64F32.size < 3) throw IllegalStateException("path-f32-projection-collapse")
-        val pointsF32 = halfEdgesF64F32.map { halfEdgeF64F32 ->
-            halfEdgeF64F32.originVertexF64F32.representativePointF32
+        val pointsF32 = halfEdgesF64F32.map { traceF64F32 ->
+            signedZeroPolicyF32.canonicalize(writerOriginPointF64F32(traceF64F32))
         }
         if (pointsF32.zipWithNext().any { (firstF32, secondF32) -> firstF32.x == secondF32.x && firstF32.y == secondF32.y }) {
             throw IllegalStateException("path-f32-projection-collapse")
@@ -255,17 +284,57 @@ private fun writeHybridBoundaryTracesF64F32(
     return builder.build()
 }
 
+/**
+ * The arrangement owns geometry, while the canonical carrier retains the only semantic input
+ * payload allowed to choose a printed signed zero. The raw source point is used only when it is
+ * geometrically the already-selected vertex; it cannot create an alias or change a boundary.
+ */
+private fun writerOriginPointF64F32(traceF64F32: PathBoundaryHalfEdgeTraceF64F32): Point2F32 {
+    val representativePointF32 = traceF64F32.originVertexF64F32.representativePointF32
+    val originalPointF32 = if (traceF64F32.forward) {
+        traceF64F32.sourceSectionF64.startIdentityF64.originalPointF32
+    } else {
+        traceF64F32.sourceSectionF64.endIdentityF64.originalPointF32
+    }
+    return originalPointF32?.takeIf { pointF32 ->
+        pointF32.x == representativePointF32.x && pointF32.y == representativePointF32.y
+    } ?: representativePointF32
+}
+
+/**
+ * Signed zero is geometrically one point but remains observable in immutable [PathF32] values.
+ * The already-required finite-input pass records its semantic payload without changing topology;
+ * the writer then emits the same canonical payload under an operand permutation.
+ */
+private data class PathSignedZeroPayloadPolicyF32(
+    val negativeZeroXI32: Boolean = false,
+    val negativeZeroYI32: Boolean = false,
+) {
+    operator fun plus(otherF32: PathSignedZeroPayloadPolicyF32): PathSignedZeroPayloadPolicyF32 =
+        PathSignedZeroPayloadPolicyF32(
+            negativeZeroXI32 = negativeZeroXI32 || otherF32.negativeZeroXI32,
+            negativeZeroYI32 = negativeZeroYI32 || otherF32.negativeZeroYI32,
+        )
+
+    fun canonicalize(pointF32: Point2F32): Point2F32 = Point2F32(
+        x = if (pointF32.x == 0f && negativeZeroXI32) -0.0f else pointF32.x,
+        y = if (pointF32.y == 0f && negativeZeroYI32) -0.0f else pointF32.y,
+    )
+}
+
 private fun inputEdgesF64(
     inputs: List<PathOperandInputF32>,
     normalization: PathNormalizationF64,
     limits: PathOpsLimitsI32,
-): List<PathInputEdgeF64> {
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+): PathPreparedInputEdgesF64 {
     val policy = PathFlatteningPolicyF64(
         tolerance = normalization.projectionLatticeFlatteningToleranceF64(),
         limits = limits,
     )
     val vertices = mutableListOf<PathInputVertexF64>()
     val seeds = mutableListOf<PathInputEdgeSeedF64>()
+    val selfClosedSourceSegmentsF64 = mutableSetOf<PathSourceSegmentKeyF64F32>()
 
     inputs.forEach { input ->
         val contours = PathFlattenerF64.flatten(
@@ -276,7 +345,36 @@ private fun inputEdgesF64(
         contours.forEachIndexed { contourIndex, contour ->
             val points = contour.points
             if (points.size < 2) return@forEachIndexed
+            // PathFlattenerF64 emits each primitive as its directed [0, 1] partition.  Record
+            // only endpoints that it retained as authoritative input provenance; generated F64
+            // points cannot prove self-closure.  This is preparation for a later exact-kernel
+            // candidate reduction, never an F32 geometric identity.
+            val endpointsBySourceSegmentF64 = mutableMapOf<Int, PathSourceSegmentEndpointsF32>()
             val contourVertices = points.map { point ->
+                if (point.sourceSegmentIndexI32 >= 0 && point.originalPointF32 != null) {
+                    val endpointsF32 = endpointsBySourceSegmentF64.getOrPut(point.sourceSegmentIndexI32) {
+                        PathSourceSegmentEndpointsF32()
+                    }
+                    when (point.parameterF64) {
+                        0.0 -> {
+                            val previousPointF32 = endpointsF32.startPointF32
+                            if (previousPointF32 == null) {
+                                endpointsF32.startPointF32 = point.originalPointF32
+                            } else if (!samePathOperationPointF32(previousPointF32, point.originalPointF32)) {
+                                throw IllegalStateException("path-arrangement-inconsistent")
+                            }
+                        }
+
+                        1.0 -> {
+                            val previousPointF32 = endpointsF32.endPointF32
+                            if (previousPointF32 == null) {
+                                endpointsF32.endPointF32 = point.originalPointF32
+                            } else if (!samePathOperationPointF32(previousPointF32, point.originalPointF32)) {
+                                throw IllegalStateException("path-arrangement-inconsistent")
+                            }
+                        }
+                    }
+                }
                 PathInputVertexF64(
                     id = vertices.size,
                     point = point.point,
@@ -284,6 +382,17 @@ private fun inputEdgesF64(
                     parameterF64 = point.parameterF64,
                     originalPointF32 = point.originalPointF32,
                 ).also(vertices::add)
+            }
+            endpointsBySourceSegmentF64.forEach { (sourceSegmentIndexI32, endpointsF32) ->
+                val startPointF32 = endpointsF32.startPointF32
+                val endPointF32 = endpointsF32.endPointF32
+                if (startPointF32 != null && endPointF32 != null && samePathOperationPointF32(startPointF32, endPointF32)) {
+                    selfClosedSourceSegmentsF64 += PathSourceSegmentKeyF64F32(
+                        operand = input.operand,
+                        contourIndexI32 = contourIndex,
+                        sourceSegmentIndexI32 = sourceSegmentIndexI32,
+                    )
+                }
             }
             contourVertices.zipWithNext().forEach { (start, end) ->
                 if (samePathOperationPointF64(start.point, end.point)) return@forEach
@@ -296,6 +405,13 @@ private fun inputEdgesF64(
             }
         }
     }
+
+    val operandLocalCollapsedSectionsF64F32 = collectOperandLocalCollapsedSectionsF64F32(
+        inputs = inputs,
+        selfClosedSourceSegmentsF64 = selfClosedSourceSegmentsF64,
+        limitsI32 = limits,
+        candidateWorkBudgetI32 = candidateWorkBudgetI32,
+    )
 
     val parametersByVertexId = mutableMapOf<Int, MutableMap<Int, Double>>()
     vertices.forEach { vertex -> parametersByVertexId.getOrPut(vertex.id) { mutableMapOf() } }
@@ -313,7 +429,7 @@ private fun inputEdgesF64(
         )
     }
 
-    return seeds.mapIndexed { edgeId, edge ->
+    val edgesF64 = seeds.mapIndexed { edgeId, edge ->
         PathInputEdgeF64(
             idI32 = edgeId,
             operand = edge.operand,
@@ -331,9 +447,193 @@ private fun inputEdgesF64(
             startPointF64 = edge.start.point,
             endPointF64 = edge.end.point,
             windingDeltaI32 = 1,
+            isSelfClosedSourcePrimitiveF64 = PathSourceSegmentKeyF64F32(
+                operand = edge.operand,
+                contourIndexI32 = edge.contourIndex,
+                sourceSegmentIndexI32 = edge.end.sourceSegmentIndexI32,
+            ) in selfClosedSourceSegmentsF64,
         )
     }
+    return PathPreparedInputEdgesF64(
+        edgesF64 = edgesF64,
+        hasSelfClosedNWayCarrierGroupingF64 = edgesF64.any(PathInputEdgeF64::isSelfClosedSourcePrimitiveF64),
+        operandLocalCollapsedSectionsF64F32 = operandLocalCollapsedSectionsF64F32,
+    )
 }
+
+/**
+ * Finds F32-zero source sections in a normalization that belongs to one operand only.
+ *
+ * This is deliberately a negative representability proof, not a geometry key: a self-closing
+ * primitive can be emitted normally only when this bounded, operand-local embedding found no
+ * zero section.  A common operation normalization or a coincident second operand can otherwise
+ * make a coarse re-tessellation look representable and hide a loss already observable by unary
+ * simplify.  The later arrangement matches these records only by source key and exact parameter
+ * coverage; the F32 endpoint equality below is never published as an alias or identity.
+ */
+private fun collectOperandLocalCollapsedSectionsF64F32(
+    inputs: List<PathOperandInputF32>,
+    selfClosedSourceSegmentsF64: Set<PathSourceSegmentKeyF64F32>,
+    limitsI32: PathOpsLimitsI32,
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+): List<PathOperandLocalCollapsedSectionF64F32> {
+    if (selfClosedSourceSegmentsF64.isEmpty()) return emptyList()
+    // Determine the bounded operand set under the common ledger before allocating a local
+    // flattening input list or asking either flattener to do work.  The two booleans are enough:
+    // source keys are already structural `(operand, contour, segment)` values.
+    candidateWorkBudgetI32.consumePreflightI64(
+        checkedPathWorkAddI64(
+            selfClosedSourceSegmentsF64.size.toLong(),
+            inputs.size.toLong(),
+        ),
+    )
+    var hasFirstOperandF64F32 = false
+    var hasSecondOperandF64F32 = false
+    selfClosedSourceSegmentsF64.forEach { sourceSegmentKeyF64F32 ->
+        when (sourceSegmentKeyF64F32.operand) {
+            PathOperand.FIRST -> hasFirstOperandF64F32 = true
+            PathOperand.SECOND -> hasSecondOperandF64F32 = true
+        }
+    }
+    var localInputCountI64 = 0L
+    inputs.forEach { inputF32 ->
+        if (
+            (inputF32.operand == PathOperand.FIRST && hasFirstOperandF64F32) ||
+                (inputF32.operand == PathOperand.SECOND && hasSecondOperandF64F32)
+        ) {
+            localInputCountI64 = checkedPathWorkAddI64(localInputCountI64, 1L)
+        }
+    }
+    // The local flattener has a public per-operand cap. Reserve its complete binary-subdivision
+    // envelope, the endpoint embedding checks, and the bounded record staging before invoking
+    // it. This is intentionally independent of the common-operation flattener below.
+    val maximumLocalSectionsI64 = checkedPathWorkMultiplyI64(
+        localInputCountI64,
+        limitsI32.maxFlattenedEdgesPerOperand.toLong(),
+    )
+    candidateWorkBudgetI32.consumePreflightI64(
+        checkedPathWorkMultiplyI64(maximumLocalSectionsI64, 6L),
+    )
+    val collapsedSectionsF64F32 = ArrayList<PathOperandLocalCollapsedSectionF64F32>(
+        checkedPathCapacityI32(maximumLocalSectionsI64, "path-candidate-limit"),
+    )
+    val expectedNextParameterBySourceSegmentF64 = mutableMapOf<PathSourceSegmentKeyF64F32, Double>()
+    val lastCollapsedRecordIndexBySourceSegmentF64 = mutableMapOf<PathSourceSegmentKeyF64F32, Int>()
+    inputs.forEach { inputF32 ->
+        if (
+            (inputF32.operand == PathOperand.FIRST && !hasFirstOperandF64F32) ||
+                (inputF32.operand == PathOperand.SECOND && !hasSecondOperandF64F32)
+        ) {
+            return@forEach
+        }
+        val localNormalizationF64 = pathNormalizationF64(listOf(inputF32.path))
+        val localContoursF64 = PathFlattenerF64.flatten(
+            normalizedPath = NormalizedPathF64(inputF32.path, localNormalizationF64),
+            policy = PathFlatteningPolicyF64(
+                tolerance = localNormalizationF64.projectionLatticeFlatteningToleranceF64(),
+                limits = limitsI32,
+            ),
+            closeForFill = true,
+        )
+        localContoursF64.forEachIndexed { contourIndexI32, contourF64 ->
+            contourF64.points.zipWithNext().forEach { (startF64, endF64) ->
+                if (
+                    endF64.parameterF64 == 0.0 &&
+                        samePathOperationPointF64(startF64.point, endF64.point)
+                ) {
+                    // `beginSegment` inserts this exact t=0 hand-off after MoveTo.  It is not
+                    // a source-section interval and must not be mistaken for an incomplete
+                    // `[0,1]` partition of the following primitive.
+                    return@forEach
+                }
+                val sourceSegmentIndexI32 = endF64.sourceSegmentIndexI32
+                val sourceSegmentKeyF64F32 = PathSourceSegmentKeyF64F32(
+                    operand = inputF32.operand,
+                    contourIndexI32 = contourIndexI32,
+                    sourceSegmentIndexI32 = sourceSegmentIndexI32,
+                )
+                if (sourceSegmentKeyF64F32 !in selfClosedSourceSegmentsF64) return@forEach
+                val startParameterF64 = if (
+                    startF64.sourceSegmentIndexI32 == sourceSegmentIndexI32
+                ) {
+                    startF64.parameterF64
+                } else {
+                    0.0
+                }
+                val endParameterF64 = if (sourceSegmentIndexI32 == -1) 1.0 else endF64.parameterF64
+                if (
+                    !startParameterF64.isFinite() || !endParameterF64.isFinite() ||
+                        startParameterF64 >= endParameterF64
+                ) {
+                    throw IllegalStateException("path-f32-projection-collapse")
+                }
+                val expectedStartParameterF64 = expectedNextParameterBySourceSegmentF64[sourceSegmentKeyF64F32]
+                if (
+                    (expectedStartParameterF64 == null && !sameOperandLocalSourceParameterF64F32(startParameterF64, 0.0)) ||
+                        (expectedStartParameterF64 != null &&
+                            !sameOperandLocalSourceParameterF64F32(startParameterF64, expectedStartParameterF64))
+                ) {
+                    // The proof is a complete directed `[0,1]` partition. Do not bridge a
+                    // rounding-sized parameter gap: an unproved gap must remain conservative.
+                    throw IllegalStateException("path-f32-projection-collapse")
+                }
+                expectedNextParameterBySourceSegmentF64[sourceSegmentKeyF64F32] = endParameterF64
+                if (
+                    samePathOperationPointF32(
+                        localNormalizationF64.denormalize(startF64.point),
+                        localNormalizationF64.denormalize(endF64.point),
+                    )
+                ) {
+                    val collapsedSectionF64F32 = PathOperandLocalCollapsedSectionF64F32(
+                        sourceSegmentKeyF64F32 = sourceSegmentKeyF64F32,
+                        startParameterF64 = canonicalOperandLocalSourceParameterF64F32(startParameterF64),
+                        endParameterF64 = canonicalOperandLocalSourceParameterF64F32(endParameterF64),
+                    )
+                    val previousRecordIndexI32 = lastCollapsedRecordIndexBySourceSegmentF64[sourceSegmentKeyF64F32]
+                    val previousCollapsedSectionF64F32 = previousRecordIndexI32?.let(collapsedSectionsF64F32::get)
+                    if (
+                        previousRecordIndexI32 != null && previousCollapsedSectionF64F32 != null &&
+                            sameOperandLocalSourceParameterF64F32(
+                                previousCollapsedSectionF64F32.endParameterF64,
+                                collapsedSectionF64F32.startParameterF64,
+                            )
+                    ) {
+                        // Adjacent local zero sections are one canonical source interval. Their
+                        // shared parameter came from one directed subdivision node, so raw-bit
+                        // equality (with only signed zero canonicalized) proves no ULP hole.
+                        collapsedSectionsF64F32[previousRecordIndexI32] = previousCollapsedSectionF64F32.copy(
+                            endParameterF64 = collapsedSectionF64F32.endParameterF64,
+                        )
+                    } else {
+                        collapsedSectionsF64F32 += collapsedSectionF64F32
+                        lastCollapsedRecordIndexBySourceSegmentF64[sourceSegmentKeyF64F32] =
+                            collapsedSectionsF64F32.lastIndex
+                    }
+                }
+            }
+        }
+    }
+    selfClosedSourceSegmentsF64.forEach { sourceSegmentKeyF64F32 ->
+        if (
+            !sameOperandLocalSourceParameterF64F32(
+                expectedNextParameterBySourceSegmentF64[sourceSegmentKeyF64F32] ?: Double.NaN,
+                1.0,
+            )
+        ) {
+            // An absent or incomplete source primitive has no operand-local representability
+            // proof. Do not let a later common normalization manufacture one from another input.
+            throw IllegalStateException("path-f32-projection-collapse")
+        }
+    }
+    return collapsedSectionsF64F32
+}
+
+private fun canonicalOperandLocalSourceParameterF64F32(parameterF64: Double): Double =
+    if (parameterF64 == 0.0) 0.0 else parameterF64
+
+private fun sameOperandLocalSourceParameterF64F32(firstParameterF64: Double, secondParameterF64: Double): Boolean =
+    canonicalOperandLocalSourceParameterF64F32(firstParameterF64).toRawBits() ==
+        canonicalOperandLocalSourceParameterF64F32(secondParameterF64).toRawBits()
 
 internal fun projectContoursF64ToPathF32(
     contours: List<PathContourF64>,
@@ -939,9 +1239,12 @@ private fun comparePathOperationPointsF32(first: Point2F32, second: Point2F32): 
 }
 
 private fun comparePathOperationCoordinatesF32(first: Float, second: Float): Int = when {
-    first == second -> 0
     first < second -> -1
-    else -> 1
+    first > second -> 1
+    // Geometrically signed zero is one coordinate, but canonical output ordering must still be
+    // total across JVM and JS.  This is only a final ordering tie-break: topology and semantic
+    // provenance continue to treat the two zero payloads as the same point.
+    else -> first.toRawBits().compareTo(second.toRawBits())
 }
 
 private fun samePathOperationPointF64(first: Point2F64, second: Point2F64): Boolean =
@@ -950,27 +1253,35 @@ private fun samePathOperationPointF64(first: Point2F64, second: Point2F64): Bool
 private fun samePathOperationPointF32(first: Point2F32, second: Point2F32): Boolean =
     first.x == second.x && first.y == second.y
 
-private fun validateFinitePathF32(path: PathF32) {
+private fun validateFinitePathF32(path: PathF32): PathSignedZeroPayloadPolicyF32 {
+    var negativeZeroXI32 = false
+    var negativeZeroYI32 = false
+    fun requireFiniteEndpointF32(pointF32: Point2F32) {
+        requireFinitePointF32(pointF32)
+        negativeZeroXI32 = negativeZeroXI32 || pointF32.x.toRawBits() == (-0.0f).toRawBits()
+        negativeZeroYI32 = negativeZeroYI32 || pointF32.y.toRawBits() == (-0.0f).toRawBits()
+    }
     path.forEach { segment ->
         when (segment) {
-            is PathSegmentF32.MoveTo -> requireFinitePointF32(segment.point)
-            is PathSegmentF32.LineTo -> requireFinitePointF32(segment.point)
+            is PathSegmentF32.MoveTo -> requireFiniteEndpointF32(segment.point)
+            is PathSegmentF32.LineTo -> requireFiniteEndpointF32(segment.point)
             is PathSegmentF32.QuadTo -> {
                 requireFinitePointF32(segment.control)
-                requireFinitePointF32(segment.point)
+                requireFiniteEndpointF32(segment.point)
             }
             is PathSegmentF32.CubicTo -> {
                 requireFinitePointF32(segment.control1)
                 requireFinitePointF32(segment.control2)
-                requireFinitePointF32(segment.point)
+                requireFiniteEndpointF32(segment.point)
             }
             is PathSegmentF32.ArcTo -> {
                 require(segment.radius.isFinite() && segment.xAxisRotation.isFinite()) { "Path operations require finite coordinates" }
-                requireFinitePointF32(segment.point)
+                requireFiniteEndpointF32(segment.point)
             }
             PathSegmentF32.Close -> Unit
         }
     }
+    return PathSignedZeroPayloadPolicyF32(negativeZeroXI32, negativeZeroYI32)
 }
 
 private fun requireFinitePointF32(point: Point2F32) {

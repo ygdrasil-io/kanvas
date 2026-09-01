@@ -134,7 +134,7 @@ internal object PathFlattenerF64 {
                     // before its post-face KEEP/DROP/REJECT decision.  This is not a finer
                     // F32 approximation: the emitted endpoints remain subject to the normal
                     // projection guard and may both collapse later.
-                    if (preserveClosedLoop && depth < 2) {
+                    if (preserveClosedLoop && depth < 2 && depth < policy.limits.maxSubdivisionDepth) {
                         val a1 = midpointF64(a, c1)
                         val a2 = midpointF64(c1, c2)
                         val a3 = midpointF64(c2, b)

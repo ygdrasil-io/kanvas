@@ -231,11 +231,18 @@ class PathOpsHybridTopologyF32Test {
             PathBooleanOp.UNION,
             PathOpsLimitsI32(maxHalfEdges = 8),
         )
+        val permutedF32 = PathOpsF32.op(
+            secondF32,
+            firstF32,
+            PathBooleanOp.UNION,
+            PathOpsLimitsI32(maxHalfEdges = 8),
+        )
 
         assertEquals("path-half-edge-limit", belowError.message)
         assertEquals(RectF32.ofLTRB(0f, 0f, 2f, 1f), PathAnalysisF32.bounds(atBoundaryF32))
         assertTrue(PathAnalysisF32.contains(atBoundaryF32, Point2F32(1f, .5f)))
         assertFalse(PathAnalysisF32.contains(atBoundaryF32, Point2F32(2.25f, .5f)))
+        assertEquals(atBoundaryF32, permutedF32)
     }
 
     @Test
@@ -481,15 +488,119 @@ class PathOpsHybridTopologyF32Test {
     }
 
     @Test
+    fun `representable self closed cubic keeps a normal public boundary`() {
+        val loopF32 = PathBuilder()
+            .moveTo(1f, 1f)
+            .cubicTo(2f, 1f, 1f, 2f, 1f, 1f)
+            .close()
+            .build()
+        val distantF32 = PathBuilder().addRect(RectF32.ofLTRB(10f, 10f, 20f, 20f)).build()
+
+        val simplifiedF32 = PathOpsF32.simplify(loopF32)
+        val intersectedF32 = PathOpsF32.op(loopF32, distantF32, PathBooleanOp.INTERSECT)
+        val differedF32 = PathOpsF32.op(loopF32, distantF32, PathBooleanOp.DIFFERENCE)
+
+        assertTrue(PathAnalysisF32.contains(simplifiedF32, Point2F32(1.2f, 1.2f)))
+        assertEquals(null, PathAnalysisF32.bounds(intersectedF32))
+        assertTrue(PathAnalysisF32.contains(differedF32, Point2F32(1.2f, 1.2f)))
+    }
+
+    @Test
+    fun `significant collapsed sibling cannot be hidden by smaller opposite lobes`() {
+        val uF32 = Float.fromBits(1f.toRawBits() + 1)
+        val dF32 = Float.fromBits(1f.toRawBits() - 1)
+        fun sourceF32(opposite: Boolean): PathF32 = PathBuilder().apply {
+            moveTo(1f, 1f)
+            repeat(10) {
+                cubicTo(uF32, 1f, 1f, uF32, 1f, 1f)
+            }
+            close()
+            if (opposite) {
+                moveTo(1f, 1f)
+                repeat(10) {
+                    cubicTo(1f, dF32, dF32, 1f, 1f, 1f)
+                }
+                close()
+            }
+        }.build()
+
+        val aloneError = assertFailsWith<IllegalStateException> {
+            PathOpsF32.simplify(sourceF32(opposite = false))
+        }
+        val siblingError = assertFailsWith<IllegalStateException> {
+            PathOpsF32.simplify(sourceF32(opposite = true))
+        }
+
+        assertEquals("path-f32-projection-collapse", aloneError.message)
+        assertEquals("path-f32-projection-collapse", siblingError.message)
+    }
+
+    @Test
+    fun `even odd repeated tiny lobes simplify to an empty path`() {
+        val uF32 = Float.fromBits(1f.toRawBits() + 1)
+        val sourceF32 = PathBuilder(FillRule.EVEN_ODD).apply {
+            moveTo(1f, 1f)
+            repeat(10) {
+                cubicTo(uF32, 1f, 1f, uF32, 1f, 1f)
+            }
+            close()
+        }.build()
+
+        val resultF32 = PathOpsF32.simplify(sourceF32)
+
+        assertEquals(null, PathAnalysisF32.bounds(resultF32))
+        assertFalse(PathAnalysisF32.contains(resultF32, Point2F32(1f, 1f)))
+    }
+
+    @Test
+    fun `identical collapsed loops XOR to an empty public path`() {
+        val uF32 = Float.fromBits(1f.toRawBits() + 2)
+        val loopF32 = PathBuilder()
+            .moveTo(1f, 1f)
+            .cubicTo(uF32, 1f, 1f, uF32, 1f, 1f)
+            .close()
+            .build()
+
+        val resultF32 = PathOpsF32.op(loopF32, loopF32, PathBooleanOp.XOR)
+
+        assertEquals(null, PathAnalysisF32.bounds(resultF32))
+        assertFalse(PathAnalysisF32.contains(resultF32, Point2F32(1f, 1f)))
+    }
+
+    @Test
+    fun `union of signed zero triangles is invariant under operand order`() {
+        val negativeZeroF32 = PathBuilder()
+            .moveTo(-0.0f, -0.0f)
+            .lineTo(2f, -0.0f)
+            .lineTo(-0.0f, 2f)
+            .close()
+            .build()
+        val positiveZeroF32 = PathBuilder()
+            .moveTo(0.0f, 0.0f)
+            .lineTo(2f, 0.0f)
+            .lineTo(0.0f, 2f)
+            .close()
+            .build()
+
+        val forwardF32 = PathOpsF32.op(negativeZeroF32, positiveZeroF32, PathBooleanOp.UNION)
+        val reverseF32 = PathOpsF32.op(positiveZeroF32, negativeZeroF32, PathBooleanOp.UNION)
+
+        assertEquals(forwardF32, reverseF32)
+    }
+
+    @Test
     fun `public intersect rejects jointly selected collapsed sibling instead of returning empty`() {
         val uF32 = Float.fromBits(1f.toRawBits() + 2)
-        fun loop(extra: Boolean): PathF32 {
+        fun loop(extra: Boolean, reverseLobe: Boolean = false): PathF32 {
             val builderF32 = PathBuilder()
             if (extra) builderF32.addRect(RectF32.ofLTRB(10f, 10f, 20f, 20f))
-            builderF32
-                .moveTo(1f, 1f)
-                .cubicTo(uF32, 1f, 1f, uF32, 1f, 1f)
-                .close()
+            builderF32.moveTo(1f, 1f)
+            if (reverseLobe) {
+                builderF32.cubicTo(1f, uF32, uF32, 1f, 1f, 1f)
+            } else {
+                builderF32.cubicTo(uF32, 1f, 1f, uF32, 1f, 1f)
+            }
+            builderF32.close()
             return builderF32.build()
         }
 
@@ -500,13 +611,22 @@ class PathOpsHybridTopologyF32Test {
         val intersectError = assertFailsWith<IllegalStateException> {
             PathOpsF32.op(loop(extra = true), collapsedF32, PathBooleanOp.INTERSECT)
         }
-        val noFaceXorError = assertFailsWith<IllegalStateException> {
-            PathOpsF32.op(collapsedF32, loop(extra = false), PathBooleanOp.XOR)
+        val reversedIntersectError = assertFailsWith<IllegalStateException> {
+            PathOpsF32.op(collapsedF32, loop(extra = true), PathBooleanOp.INTERSECT)
         }
+        val reversedProvenanceError = assertFailsWith<IllegalStateException> {
+            PathOpsF32.op(loop(extra = true, reverseLobe = true), collapsedF32, PathBooleanOp.INTERSECT)
+        }
+        val distantF32 = PathBuilder()
+            .addRect(RectF32.ofLTRB(30f, 30f, 40f, 40f))
+            .build()
+        val distantIntersectF32 = PathOpsF32.op(collapsedF32, distantF32, PathBooleanOp.INTERSECT)
 
         assertEquals("path-f32-projection-collapse", simplifyError.message)
         assertEquals("path-f32-projection-collapse", intersectError.message)
-        assertEquals("path-f32-projection-collapse", noFaceXorError.message)
+        assertEquals("path-f32-projection-collapse", reversedIntersectError.message)
+        assertEquals("path-f32-projection-collapse", reversedProvenanceError.message)
+        assertEquals(null, PathAnalysisF32.bounds(distantIntersectF32))
     }
 
     @Test
@@ -613,6 +733,7 @@ class PathOpsHybridTopologyF32Test {
         assertTrue(tinyBoundsF32.isFinite())
         assertTrue(PathAnalysisF32.contains(tinyResultF32, Point2F32(translationF32 + spanF32 * .5f, translationF32 + spanF32 * .5f)))
     }
+
 }
 
 private fun pathVerticesF32(path: PathF32): List<Point2F32> = buildList {
@@ -632,5 +753,5 @@ private fun pathVerticesF32(path: PathF32): List<Point2F32> = buildList {
 // local debits makes 4_988 observable again.  The current paired limit-1/limit boundary is a
 // deterministic public non-regression only; an independent global cost oracle remains Task 5.
 private const val roundThreeOverlappingRectanglesHybridBudgetI32 = 4_987
-/** Local hybrid-ledger frontier: 6_121 rejects; 6_122 succeeds.  This is not Task 5's oracle. */
-private const val overlappingRectanglesHybridBudgetI32 = 6_122
+/** Local hybrid-ledger frontier: 5_989 rejects; 5_990 succeeds.  This is not Task 5's oracle. */
+private const val overlappingRectanglesHybridBudgetI32 = 5_990

@@ -90,10 +90,14 @@ internal data class PathHybridCarrierSectionF64F32(
 internal data class PathHybridTopologyF64F32(
     val verticesF64F32: List<PathHybridVertexF64F32>,
     val sourceSpansF64: List<PathSourceSpanF64>,
+    /** Immutable source provenance gate for the post-DCEL self-closed absence audit. */
+    val hasSelfClosedSourcePrimitiveF64: Boolean,
     val carrierSectionsF64F32: List<PathHybridCarrierSectionF64F32>,
     val aliasGroupsF32: List<PathAliasGroupF32>,
     val projectedCoincidencesF32: List<PathProjectedCoincidenceF32>,
     val collapsedIncidencesF64F32: List<PathCollapsedIncidenceF64F32>,
+    /** Operand-local source intervals that lacked a representable F32 section proof. */
+    val operandLocalCollapsedSectionsF64F32: List<PathOperandLocalCollapsedSectionF64F32>,
 )
 
 private data class PathHybridVertexSeedF64F32(
@@ -179,6 +183,17 @@ private data class PathProjectedClaimMaterializationF64F32(
     val proposalsF64F32: List<PathProjectedCoincidenceProposalF64F32>,
     /** Immutable, bounded pre-commit cuts; carrier insertion waits for transaction validation. */
     val stagedCutsF64F32: List<PathProjectedCutF64F32>,
+)
+
+/**
+ * Count-stage inventory for strict projected bounds.  It intentionally contains only canonical
+ * structural identities: this is the separately candidate-work-bounded index required to count
+ * n-way events.  Full cut records, per-cut validation groups, and carrier partitions are not
+ * allocated until the public `maxIntersections` gate has admitted the exact event count.
+ */
+private data class PathProjectedClaimCutIdentityPlanF64F32(
+    val newCutIdentitiesF64: Set<PathVertexIdentityF64>,
+    val strictCutOccurrenceCountI64: Long,
 )
 
 /**
@@ -418,7 +433,6 @@ internal fun buildPathHybridTopologyF64F32(
             projectedEdgeF64 = projectedEdgeF64,
         )
     }
-
     val collapsedIncidencesF64F32 = collectCollapsedHybridIncidencesF64F32(
         carrierSectionsF64F32 = carrierSectionsF64F32,
         verticesF64F32 = verticesF64F32,
@@ -615,6 +629,7 @@ internal fun buildPathHybridTopologyF64F32(
     return PathHybridTopologyF64F32(
         verticesF64F32 = finalCarrierTopologyF64F32.verticesF64F32,
         sourceSpansF64 = finalSourceSpansF64,
+        hasSelfClosedSourcePrimitiveF64 = sourceTopologyF64.hasSelfClosedSourcePrimitiveF64,
         carrierSectionsF64F32 = finalCarrierTopologyF64F32.carrierSectionsF64F32,
         aliasGroupsF32 = aliasGroupsF32,
         projectedCoincidencesF32 = projectedCoincidencesF32,
@@ -624,6 +639,13 @@ internal fun buildPathHybridTopologyF64F32(
                 candidateWorkBudgetI32,
             )
             finalCarrierTopologyF64F32.collapsedIncidencesF64F32.toList()
+        },
+        operandLocalCollapsedSectionsF64F32 = run {
+            preflightHybridLinearF64F32(
+                sourceTopologyF64.operandLocalCollapsedSectionsF64F32.size.toLong(),
+                candidateWorkBudgetI32,
+            )
+            sourceTopologyF64.operandLocalCollapsedSectionsF64F32.toList()
         },
     )
 }
@@ -740,14 +762,14 @@ private fun materializeProjectedClaimPlanF64F32(
     val endpointCountI64 = checkedPathWorkMultiplyI64(proposalCountI64, 4L)
     preflightHybridLinearF64F32(
         checkedPathWorkAddI64(
-            checkedPathWorkMultiplyI64(endpointCountI64, 8L),
+            checkedPathWorkMultiplyI64(endpointCountI64, 4L),
             proposalCountI64,
         ),
         candidateWorkBudgetI32,
     )
-    // Endpoint identities are derived before staging: strict endpoints receive their structural
-    // projected identity here, while the bounded staging below only validates and records the
-    // corresponding carrier cut.  No carrier/vertex/DCEL allocation has happened yet.
+    // Endpoint identities are derived before the count stage: strict endpoints receive their
+    // structural projected identity here, while physical cut records stay deferred.  No
+    // carrier/vertex/DCEL allocation has happened yet.
     val materializedProposalsF64F32 = proposalsF64F32.map { proposalF64F32 ->
         proposalF64F32.copy(
             firstClaimF64 = materializeProjectedClaimEndpointIdentitiesF64F32(
@@ -762,103 +784,20 @@ private fun materializeProjectedClaimPlanF64F32(
             ),
         )
     }
-    val stagedCutsF64F32 = ArrayList<PathProjectedCutF64F32>(
-        checkedPathCapacityI32(endpointCountI64, "path-candidate-limit"),
+    // This separately debited candidate-bounded raw endpoint scan builds only the exact identity
+    // index needed for canonical n-way counting; a physical `PathProjectedCutF64F32` is
+    // deliberately deferred until after `maxIntersections` passes.
+    val cutIdentityPlanF64F32 = collectProjectedClaimCutIdentityPlanF64F32(
+        proposalsF64F32 = materializedProposalsF64F32,
+        candidateWorkBudgetI32 = candidateWorkBudgetI32,
     )
-    materializedProposalsF64F32.forEach { proposalF64F32 ->
-        addProjectedClaimEndpointCutF64F32(
-            stagedCutsF64F32 = stagedCutsF64F32,
-            claimF64 = proposalF64F32.firstClaimF64,
-            projectedSpanF64F32 = proposalF64F32.firstSpanF64,
-            witnessF64 = proposalF64F32.pointWitnessF64,
-            expectedPointF32 = projectedClaimEndpointRepresentativePointF32(
-                proposalF64F32,
-                proposalF64F32.firstSpanF64,
-                proposalF64F32.firstClaimF64,
-                atStart = true,
-            ),
-            atStart = true,
-            normalizationF64 = normalizationF64,
-        )
-        addProjectedClaimEndpointCutF64F32(
-            stagedCutsF64F32 = stagedCutsF64F32,
-            claimF64 = proposalF64F32.firstClaimF64,
-            projectedSpanF64F32 = proposalF64F32.firstSpanF64,
-            witnessF64 = proposalF64F32.pointWitnessF64,
-            expectedPointF32 = projectedClaimEndpointRepresentativePointF32(
-                proposalF64F32,
-                proposalF64F32.firstSpanF64,
-                proposalF64F32.firstClaimF64,
-                atStart = false,
-            ),
-            atStart = false,
-            normalizationF64 = normalizationF64,
-        )
-        addProjectedClaimEndpointCutF64F32(
-            stagedCutsF64F32 = stagedCutsF64F32,
-            claimF64 = proposalF64F32.secondClaimF64,
-            projectedSpanF64F32 = proposalF64F32.secondSpanF64,
-            witnessF64 = proposalF64F32.pointWitnessF64,
-            expectedPointF32 = projectedClaimEndpointRepresentativePointF32(
-                proposalF64F32,
-                proposalF64F32.secondSpanF64,
-                proposalF64F32.secondClaimF64,
-                atStart = true,
-            ),
-            atStart = true,
-            normalizationF64 = normalizationF64,
-        )
-        addProjectedClaimEndpointCutF64F32(
-            stagedCutsF64F32 = stagedCutsF64F32,
-            claimF64 = proposalF64F32.secondClaimF64,
-            projectedSpanF64F32 = proposalF64F32.secondSpanF64,
-            witnessF64 = proposalF64F32.pointWitnessF64,
-            expectedPointF32 = projectedClaimEndpointRepresentativePointF32(
-                proposalF64F32,
-                proposalF64F32.secondSpanF64,
-                proposalF64F32.secondClaimF64,
-                atStart = false,
-            ),
-            atStart = false,
-            normalizationF64 = normalizationF64,
-        )
-    }
-
-    // A structural identity is the canonical n-way cut group.  Map insertion is only grouping
-    // validation; no coordinate, span/contour label, or input order chooses a geometric tie.
-    preflightHybridLinearF64F32(
-        checkedPathWorkMultiplyI64(stagedCutsF64F32.size.toLong(), 5L),
-        candidateWorkBudgetI32,
-    )
-    val cutsByIdentityF64 = linkedMapOf<PathVertexIdentityF64, MutableList<PathProjectedCutF64F32>>()
-    stagedCutsF64F32.forEach { cutF64F32 ->
-        cutsByIdentityF64.getOrPut(cutF64F32.identityF64) { mutableListOf() } += cutF64F32
-    }
-    preflightHybridLinearF64F32(cutsByIdentityF64.size.toLong(), candidateWorkBudgetI32)
-    cutsByIdentityF64.values.forEach { groupF64F32 ->
-        val canonicalCutF64F32 = groupF64F32.firstOrNull()
-            ?: throw IllegalStateException("path-arrangement-inconsistent")
-        preflightHybridLinearF64F32(groupF64F32.size.toLong(), candidateWorkBudgetI32)
-        groupF64F32.drop(1).forEach { cutF64F32 ->
-            if (
-                cutF64F32.witnessIdI64 != canonicalCutF64F32.witnessIdI64 ||
-                    cutF64F32.inputEdgeIdI32 != canonicalCutF64F32.inputEdgeIdI32 ||
-                    cutF64F32.edgeParameterF64 != canonicalCutF64F32.edgeParameterF64 ||
-                    cutF64F32.sourceParameterF64 != canonicalCutF64F32.sourceParameterF64 ||
-                    !sameHybridPointF64(cutF64F32.canonicalPointF64, canonicalCutF64F32.canonicalPointF64) ||
-                    !sameHybridPointF64(cutF64F32.incidencePointF64, canonicalCutF64F32.incidencePointF64)
-            ) {
-                throw IllegalStateException("path-f32-projection-collapse")
-            }
-        }
-    }
     // The canonical group joins pairwise n-way relations through their shared structural
     // identities; a rounded projected point is never a group key.  This is the exact logical
     // event count, not an approximation by witnesses or by individual carrier incidences.
     preflightHybridLinearF64F32(
         checkedPathWorkAddI64(
             checkedPathWorkMultiplyI64(proposalCountI64, 14L),
-            checkedPathWorkMultiplyI64(cutsByIdentityF64.size.toLong(), 6L),
+            checkedPathWorkMultiplyI64(cutIdentityPlanF64F32.newCutIdentitiesF64.size.toLong(), 6L),
         ),
         candidateWorkBudgetI32,
     )
@@ -868,7 +807,7 @@ private fun materializeProjectedClaimPlanF64F32(
     // therefore charged once.
     val projectedEventPlanF64F32 = canonicalProjectedCutGroupCountF64F32(
         proposalsF64F32 = materializedProposalsF64F32,
-        newCutIdentitiesF64 = cutsByIdentityF64.keys,
+        newCutIdentitiesF64 = cutIdentityPlanF64F32.newCutIdentitiesF64,
         candidateWorkBudgetI32 = candidateWorkBudgetI32,
     )
     val newCanonicalCutGroupCountI64 = projectedEventPlanF64F32.eventKeysF64F32.size.toLong()
@@ -880,22 +819,30 @@ private fun materializeProjectedClaimPlanF64F32(
         throw IllegalStateException("path-intersection-limit")
     }
 
-    // The exact total is admitted before the immutable cut plan receives event keys.  Final
-    // carrier insertion remains outside this function, after every witness transaction and
-    // deferred-contact conflict has been validated by the caller.
+    // The exact total is admitted before physical cut/per-identity-group allocation.  The
+    // count-stage relation index above is separately bounded by candidate work; final carrier
+    // insertion remains outside this function, after every witness transaction and deferred-
+    // contact conflict has been validated by the caller.
     preflightHybridLinearF64F32(
         checkedPathWorkAddI64(
-            checkedPathWorkMultiplyI64(stagedCutsF64F32.size.toLong(), 3L),
-            cutsByIdentityF64.size.toLong(),
+            checkedPathWorkMultiplyI64(cutIdentityPlanF64F32.strictCutOccurrenceCountI64, 3L),
+            cutIdentityPlanF64F32.newCutIdentitiesF64.size.toLong(),
         ),
         candidateWorkBudgetI32,
     )
-    val eventKeyedCutsF64F32 = stagedCutsF64F32.map { cutF64F32 ->
-        cutF64F32.copy(
-            eventKeyF64F32 = projectedEventPlanF64F32.eventKeyByCutIdentityF64[cutF64F32.identityF64]
-                ?: throw IllegalStateException("path-f32-projection-collapse"),
-        )
-    }
+    val eventKeyedCutsF64F32 = materializeProjectedClaimEndpointCutsF64F32(
+        proposalsF64F32 = materializedProposalsF64F32,
+        normalizationF64 = normalizationF64,
+        eventKeyByCutIdentityF64 = projectedEventPlanF64F32.eventKeyByCutIdentityF64,
+        expectedStrictCutOccurrenceCountI64 = cutIdentityPlanF64F32.strictCutOccurrenceCountI64,
+        candidateWorkBudgetI32 = candidateWorkBudgetI32,
+    )
+    // A structural identity is the canonical n-way cut group.  This validation is intentionally
+    // after the public event gate and before any source carrier, alias, vertex, or DCEL mutation.
+    validateProjectedCutIdentityGroupsF64F32(
+        stagedCutsF64F32 = eventKeyedCutsF64F32,
+        candidateWorkBudgetI32 = candidateWorkBudgetI32,
+    )
 
     return PathProjectedClaimMaterializationF64F32(
         proposalsF64F32 = materializedProposalsF64F32,
@@ -1245,6 +1192,136 @@ private fun projectedClaimEndpointRepresentativePointF32(
     return if (matchesStart) proposalF64F32.startPointF32 else proposalF64F32.endPointF32
 }
 
+private inline fun forEachProjectedClaimEndpointF64F32(
+    proposalF64F32: PathProjectedCoincidenceProposalF64F32,
+    actionF64F32: (
+        claimF64: PathProjectedSpanClaimF64,
+        projectedSpanF64F32: PathProjectedSourceSpanF64F32,
+        atStart: Boolean,
+    ) -> Unit,
+) {
+    actionF64F32(proposalF64F32.firstClaimF64, proposalF64F32.firstSpanF64, true)
+    actionF64F32(proposalF64F32.firstClaimF64, proposalF64F32.firstSpanF64, false)
+    actionF64F32(proposalF64F32.secondClaimF64, proposalF64F32.secondSpanF64, true)
+    actionF64F32(proposalF64F32.secondClaimF64, proposalF64F32.secondSpanF64, false)
+}
+
+/**
+ * First phase of the projected-cut materializer.  The resulting set is a compact canonical
+ * identity index, not a carrier or cut allocation.  Its fixed endpoint scan is debited before
+ * reading any proposal, so it remains independently bounded by `maxCandidateProbes` while the
+ * event ceiling is still unknown.
+ */
+private fun collectProjectedClaimCutIdentityPlanF64F32(
+    proposalsF64F32: List<PathProjectedCoincidenceProposalF64F32>,
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+): PathProjectedClaimCutIdentityPlanF64F32 {
+    val endpointCountI64 = checkedPathWorkMultiplyI64(proposalsF64F32.size.toLong(), 4L)
+    preflightHybridLinearF64F32(
+        checkedPathWorkMultiplyI64(endpointCountI64, 2L),
+        candidateWorkBudgetI32,
+    )
+    val newCutIdentitiesF64 = linkedSetOf<PathVertexIdentityF64>()
+    var strictCutOccurrenceCountI64 = 0L
+    proposalsF64F32.forEach { proposalF64F32 ->
+        forEachProjectedClaimEndpointF64F32(proposalF64F32) { claimF64, projectedSpanF64F32, atStart ->
+            val identityF64 = projectedClaimEndpointStrictIdentityF64F32(
+                claimF64 = claimF64,
+                projectedSpanF64F32 = projectedSpanF64F32,
+                witnessF64 = proposalF64F32.pointWitnessF64,
+                atStart = atStart,
+            ) ?: return@forEachProjectedClaimEndpointF64F32
+            strictCutOccurrenceCountI64 = checkedPathWorkAddI64(strictCutOccurrenceCountI64, 1L)
+            newCutIdentitiesF64 += identityF64
+        }
+    }
+    return PathProjectedClaimCutIdentityPlanF64F32(
+        newCutIdentitiesF64 = newCutIdentitiesF64,
+        strictCutOccurrenceCountI64 = strictCutOccurrenceCountI64,
+    )
+}
+
+/**
+ * Second phase of the projected-cut materializer.  This is intentionally called only after the
+ * exact source-plus-projected event total has passed `maxIntersections`; no raw continuation can
+ * make physical cut records appear before that public gate.
+ */
+private fun materializeProjectedClaimEndpointCutsF64F32(
+    proposalsF64F32: List<PathProjectedCoincidenceProposalF64F32>,
+    normalizationF64: PathNormalizationF64,
+    eventKeyByCutIdentityF64: Map<PathVertexIdentityF64, PathProjectedEventKeyF64F32>,
+    expectedStrictCutOccurrenceCountI64: Long,
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+): List<PathProjectedCutF64F32> {
+    preflightHybridLinearF64F32(
+        checkedPathWorkMultiplyI64(expectedStrictCutOccurrenceCountI64, 2L),
+        candidateWorkBudgetI32,
+    )
+    val stagedCutsF64F32 = ArrayList<PathProjectedCutF64F32>(
+        checkedPathCapacityI32(expectedStrictCutOccurrenceCountI64, "path-candidate-limit"),
+    )
+    proposalsF64F32.forEach { proposalF64F32 ->
+        forEachProjectedClaimEndpointF64F32(proposalF64F32) { claimF64, projectedSpanF64F32, atStart ->
+            addProjectedClaimEndpointCutF64F32(
+                stagedCutsF64F32 = stagedCutsF64F32,
+                claimF64 = claimF64,
+                projectedSpanF64F32 = projectedSpanF64F32,
+                witnessF64 = proposalF64F32.pointWitnessF64,
+                expectedPointF32 = projectedClaimEndpointRepresentativePointF32(
+                    proposalF64F32 = proposalF64F32,
+                    projectedSpanF64F32 = projectedSpanF64F32,
+                    claimF64 = claimF64,
+                    atStart = atStart,
+                ),
+                atStart = atStart,
+                normalizationF64 = normalizationF64,
+                eventKeyByCutIdentityF64 = eventKeyByCutIdentityF64,
+            )
+        }
+    }
+    if (stagedCutsF64F32.size.toLong() != expectedStrictCutOccurrenceCountI64) {
+        throw IllegalStateException("path-f32-projection-collapse")
+    }
+    return stagedCutsF64F32
+}
+
+/**
+ * A structural identity is the canonical n-way cut group.  This validation is deliberately
+ * post-limit and pre-publication: a coordinate, contour label, carrier index, or input order
+ * never resolves a disagreement inside one claimed identity group.
+ */
+private fun validateProjectedCutIdentityGroupsF64F32(
+    stagedCutsF64F32: List<PathProjectedCutF64F32>,
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+) {
+    preflightHybridLinearF64F32(
+        checkedPathWorkMultiplyI64(stagedCutsF64F32.size.toLong(), 5L),
+        candidateWorkBudgetI32,
+    )
+    val cutsByIdentityF64 = linkedMapOf<PathVertexIdentityF64, MutableList<PathProjectedCutF64F32>>()
+    stagedCutsF64F32.forEach { cutF64F32 ->
+        cutsByIdentityF64.getOrPut(cutF64F32.identityF64) { mutableListOf() } += cutF64F32
+    }
+    preflightHybridLinearF64F32(cutsByIdentityF64.size.toLong(), candidateWorkBudgetI32)
+    cutsByIdentityF64.values.forEach { groupF64F32 ->
+        val canonicalCutF64F32 = groupF64F32.firstOrNull()
+            ?: throw IllegalStateException("path-arrangement-inconsistent")
+        preflightHybridLinearF64F32(groupF64F32.size.toLong(), candidateWorkBudgetI32)
+        groupF64F32.drop(1).forEach { cutF64F32 ->
+            if (
+                cutF64F32.witnessIdI64 != canonicalCutF64F32.witnessIdI64 ||
+                    cutF64F32.inputEdgeIdI32 != canonicalCutF64F32.inputEdgeIdI32 ||
+                    cutF64F32.edgeParameterF64 != canonicalCutF64F32.edgeParameterF64 ||
+                    cutF64F32.sourceParameterF64 != canonicalCutF64F32.sourceParameterF64 ||
+                    !sameHybridPointF64(cutF64F32.canonicalPointF64, canonicalCutF64F32.canonicalPointF64) ||
+                    !sameHybridPointF64(cutF64F32.incidencePointF64, canonicalCutF64F32.incidencePointF64)
+            ) {
+                throw IllegalStateException("path-f32-projection-collapse")
+            }
+        }
+    }
+}
+
 private fun addProjectedClaimEndpointCutF64F32(
     stagedCutsF64F32: MutableList<PathProjectedCutF64F32>,
     claimF64: PathProjectedSpanClaimF64,
@@ -1253,7 +1330,57 @@ private fun addProjectedClaimEndpointCutF64F32(
     expectedPointF32: Point2F32,
     atStart: Boolean,
     normalizationF64: PathNormalizationF64,
+    eventKeyByCutIdentityF64: Map<PathVertexIdentityF64, PathProjectedEventKeyF64F32>,
 ) {
+    val edgeParameterF64 = if (atStart) claimF64.startEdgeParameterF64 else claimF64.endEdgeParameterF64
+    val sourceParameterF64 = if (atStart) claimF64.startParameterF64 else claimF64.endParameterF64
+    val sourceSectionF64 = projectedSpanF64F32.sourceSectionF64
+    val projectedIdentityF64 = projectedClaimEndpointStrictIdentityF64F32(
+        claimF64 = claimF64,
+        projectedSpanF64F32 = projectedSpanF64F32,
+        witnessF64 = witnessF64,
+        atStart = atStart,
+    ) ?: return
+    val canonicalPointF64 = projectedSectionPointAtCutF64F32(
+        sourceSectionF64.startPointF64,
+        sourceSectionF64.endPointF64,
+        edgeParameterF64,
+    )
+    val incidencePointF64 = projectedSectionPointAtCutF64F32(
+        sourceSectionF64.startIncidencePointF64,
+        sourceSectionF64.endIncidencePointF64,
+        edgeParameterF64,
+    )
+    val representativePointF32 = normalizationF64.denormalize(incidencePointF64)
+    if (!sameHybridPointF32(representativePointF32, expectedPointF32)) {
+        throw IllegalStateException("path-f32-projection-collapse")
+    }
+    stagedCutsF64F32 += PathProjectedCutF64F32(
+        witnessIdI64 = witnessF64.witnessIdI64,
+        eventKeyF64F32 = eventKeyByCutIdentityF64[projectedIdentityF64]
+            ?: throw IllegalStateException("path-f32-projection-collapse"),
+        sourceSpanIdI64 = projectedSpanF64F32.sourceSpanF64.sourceSpanIdI64,
+        sourceSectionIndexI32 = projectedSpanF64F32.sectionIndexI32,
+        inputEdgeIdI32 = sourceSectionF64.inputEdgeIdI32,
+        edgeParameterF64 = edgeParameterF64,
+        sourceParameterF64 = sourceParameterF64,
+        identityF64 = projectedIdentityF64,
+        canonicalPointF64 = canonicalPointF64,
+        incidencePointF64 = incidencePointF64,
+    )
+}
+
+/**
+ * Validates the exact provenance of one endpoint without allocating a physical cut.  The
+ * materialized claim identity is the authority; F32 is intentionally deferred to the embedding
+ * validation performed after the public intersection gate.
+ */
+private fun projectedClaimEndpointStrictIdentityF64F32(
+    claimF64: PathProjectedSpanClaimF64,
+    projectedSpanF64F32: PathProjectedSourceSpanF64F32,
+    witnessF64: PathContactWitnessF64.PointF64,
+    atStart: Boolean,
+): PathVertexIdentityF64? {
     val edgeParameterF64 = if (atStart) claimF64.startEdgeParameterF64 else claimF64.endEdgeParameterF64
     val sourceParameterF64 = if (atStart) claimF64.startParameterF64 else claimF64.endParameterF64
     val suppliedIdentityF64 = if (atStart) claimF64.startVertexIdentityF64 else claimF64.endVertexIdentityF64
@@ -1263,7 +1390,7 @@ private fun addProjectedClaimEndpointCutF64F32(
         if (suppliedIdentityF64 != null && suppliedIdentityF64 != endpointIdentityF64) {
             throw IllegalStateException("path-f32-projection-collapse")
         }
-        return
+        return null
     }
     if (
         edgeParameterF64 <= 0.0 || edgeParameterF64 >= 1.0 ||
@@ -1281,20 +1408,6 @@ private fun addProjectedClaimEndpointCutF64F32(
     if (materializedSourceParameterF64 != sourceParameterF64) {
         throw IllegalStateException("path-f32-projection-collapse")
     }
-    val canonicalPointF64 = projectedSectionPointAtCutF64F32(
-        sourceSectionF64.startPointF64,
-        sourceSectionF64.endPointF64,
-        edgeParameterF64,
-    )
-    val incidencePointF64 = projectedSectionPointAtCutF64F32(
-        sourceSectionF64.startIncidencePointF64,
-        sourceSectionF64.endIncidencePointF64,
-        edgeParameterF64,
-    )
-    val representativePointF32 = normalizationF64.denormalize(incidencePointF64)
-    if (!sameHybridPointF32(representativePointF32, expectedPointF32)) {
-        throw IllegalStateException("path-f32-projection-collapse")
-    }
     val projectedIdentityF64 = projectedCutIdentityF64F32(
         witnessF64 = witnessF64,
         sourceSectionF64 = sourceSectionF64,
@@ -1303,18 +1416,7 @@ private fun addProjectedClaimEndpointCutF64F32(
     if (suppliedIdentityF64 != null && suppliedIdentityF64 != projectedIdentityF64) {
         throw IllegalStateException("path-f32-projection-collapse")
     }
-    stagedCutsF64F32 += PathProjectedCutF64F32(
-        witnessIdI64 = witnessF64.witnessIdI64,
-        eventKeyF64F32 = null,
-        sourceSpanIdI64 = projectedSpanF64F32.sourceSpanF64.sourceSpanIdI64,
-        sourceSectionIndexI32 = projectedSpanF64F32.sectionIndexI32,
-        inputEdgeIdI32 = sourceSectionF64.inputEdgeIdI32,
-        edgeParameterF64 = edgeParameterF64,
-        sourceParameterF64 = sourceParameterF64,
-        identityF64 = projectedIdentityF64,
-        canonicalPointF64 = canonicalPointF64,
-        incidencePointF64 = incidencePointF64,
-    )
+    return projectedIdentityF64
 }
 
 private fun materializeProjectedClaimEndpointIdentitiesF64F32(
@@ -2710,9 +2812,28 @@ private fun localPointWitnessForProjectedPairF64F32(
         secondSourceSpanIdI64 = secondF64F32.sourceSpanF64.sourceSpanIdI64,
         candidateWorkBudgetI32 = candidateWorkBudgetI32,
     ) ?: return null
-    if (projectedContactF64 is PathIntersectionF64.OverlapF64) return witnessF64
+    // A Point witness may connect separate source rails, including a complete n-way component,
+    // but it cannot turn two non-adjacent sections of one uninterrupted source span into a
+    // coincidence.  Such a projected overlap is precisely a lost intra-primitive relation; it
+    // needs an independently materialized source event and therefore conservatively rejects.
+    if (firstF64F32.sourceSpanF64.sourceSpanIdI64 == secondF64F32.sourceSpanF64.sourceSpanIdI64) return null
+    val pointContactF64 = projectedContactF64 as? PathIntersectionF64.PointF64 ?: return witnessF64
     val projectedPointsF32 = projectedContactPointsF32(projectedContactF64)
-    preflightHybridLinearF64F32(5L, candidateWorkBudgetI32)
+    // A Point witness is scoped to the exact source-section relation that created it.  A source
+    // span can contain many flattened sections, so span membership alone would let an unrelated
+    // projected intra-contour collision borrow a cross-operand/n-way witness.  Re-run the exact
+    // kernel on precisely these two original sections before the witness can admit a claim.
+    // This is a proof check only; F32 supplies neither the relation nor an identity.
+    preflightHybridLinearF64F32(9L, candidateWorkBudgetI32)
+    if (!exactSourceSectionPointWitnessSupportsProjectedContactF64F32(
+            firstF64F32 = firstF64F32,
+            secondF64F32 = secondF64F32,
+            pointWitnessF64 = witnessF64,
+            projectedContactF64 = pointContactF64,
+        )
+    ) {
+        return null
+    }
     if (!projectedSpanTouchesPointWitnessF64F32(firstF64F32, witnessF64, projectedContactF64, first = true)) return null
     if (!projectedSpanTouchesPointWitnessF64F32(secondF64F32, witnessF64, projectedContactF64, first = false)) return null
     val witnessVertexIndexI32 = vertexIndexByIdentityF64[witnessF64.vertexIdentityF64] ?: return null
@@ -2720,6 +2841,47 @@ private fun localPointWitnessForProjectedPairF64F32(
     return witnessF64.takeIf { witnessF64 ->
         projectedPointsF32.any { pointF32 -> sameHybridPointF32(pointF32, witnessPointF32) }
     }
+}
+
+/**
+ * A source-span witness is an n-way incidence summary, not permission to combine arbitrary
+ * sections of that span.  This proof keeps the Point path pair-local: the original F64 sections
+ * must meet at the witness itself and at the same carrier endpoints observed in the projected
+ * pair.  It deliberately has no coordinate-based F32 fallback.
+ */
+private fun exactSourceSectionPointWitnessSupportsProjectedContactF64F32(
+    firstF64F32: PathProjectedSourceSpanF64F32,
+    secondF64F32: PathProjectedSourceSpanF64F32,
+    pointWitnessF64: PathContactWitnessF64.PointF64,
+    projectedContactF64: PathIntersectionF64.PointF64,
+): Boolean {
+    val sourceContactF64 = intersectPathEdgesF64(
+        exactSourceSectionEdgeF64F32(firstF64F32),
+        exactSourceSectionEdgeF64F32(secondF64F32),
+    ) as? PathIntersectionF64.PointF64 ?: return false
+    return sameHybridPointF64(sourceContactF64.point, pointWitnessF64.pointF64) &&
+        sourceContactF64.firstT == projectedContactF64.firstT &&
+        sourceContactF64.secondT == projectedContactF64.secondT
+}
+
+private fun exactSourceSectionEdgeF64F32(
+    projectedSpanF64F32: PathProjectedSourceSpanF64F32,
+): PathInputEdgeF64 {
+    val sourceSpanF64 = projectedSpanF64F32.sourceSpanF64
+    val sourceSectionF64 = projectedSpanF64F32.sourceSectionF64
+    return PathInputEdgeF64(
+        idI32 = sourceSectionF64.inputEdgeIdI32,
+        operand = sourceSpanF64.operand,
+        contourIndexI32 = sourceSpanF64.contourIndexI32,
+        sourceSegmentIndexI32 = sourceSpanF64.startLocationF64.sourceSegmentIndexI32,
+        sourceStartParameterF64 = sourceSectionF64.startParameterF64,
+        sourceEndParameterF64 = sourceSectionF64.endParameterF64,
+        startIdentityF64 = sourceSectionF64.startIdentityF64,
+        endIdentityF64 = sourceSectionF64.endIdentityF64,
+        startPointF64 = sourceSectionF64.startIncidencePointF64,
+        endPointF64 = sourceSectionF64.endIncidencePointF64,
+        windingDeltaI32 = sourceSpanF64.windingDeltaI32,
+    )
 }
 
 private fun projectedSpanTouchesPointWitnessF64F32(
@@ -3778,7 +3940,13 @@ private fun buildHybridAliasGroupsF32(
             vertexByIdentityF64 = vertexByIdentityF64,
         )
     }
-    val identityCountI64 = groupedIdentitiesF64.values.sumOf { identitiesF64 -> identitiesF64.size.toLong() }
+    // Count the already-built direct alias groups in a separately debited pass; `sumOf` would
+    // inspect every set before the shared ledger had admitted that scan.
+    preflightHybridLinearF64F32(groupedIdentitiesF64.size.toLong(), candidateWorkBudgetI32)
+    var identityCountI64 = 0L
+    groupedIdentitiesF64.values.forEach { identitiesF64 ->
+        identityCountI64 = checkedPathWorkAddI64(identityCountI64, identitiesF64.size.toLong())
+    }
     preflightHybridLinearF64F32(
         checkedPathWorkAddI64(
             checkedPathWorkMultiplyI64(identityCountI64, 3L),

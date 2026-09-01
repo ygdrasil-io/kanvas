@@ -17,6 +17,27 @@ internal data class PathVertexIdentityF64(
     val identityScopeI64: Long = 0L,
 )
 
+/** Structural source primitive key; no projected coordinate participates in this identity. */
+internal data class PathSourceSegmentKeyF64F32(
+    val operand: PathOperand,
+    val contourIndexI32: Int,
+    val sourceSegmentIndexI32: Int,
+)
+
+/**
+ * One locally observed F32-collapse interval of a self-closing source primitive.
+ *
+ * The point embedding that discovered the interval is intentionally not retained as an identity:
+ * later selection checks use only this source key and the exact F64 parameter interval.  Keeping
+ * the interval operand-local prevents a second operand or a wider common normalization from
+ * making an otherwise unrepresentable primitive appear proved representable.
+ */
+internal data class PathOperandLocalCollapsedSectionF64F32(
+    val sourceSegmentKeyF64F32: PathSourceSegmentKeyF64F32,
+    val startParameterF64: Double,
+    val endParameterF64: Double,
+)
+
 internal data class PathInputEdgeF64(
     val idI32: Int,
     val operand: PathOperand,
@@ -29,6 +50,13 @@ internal data class PathInputEdgeF64(
     val startPointF64: Point2F64,
     val endPointF64: Point2F64,
     val windingDeltaI32: Int,
+    /**
+     * Set only by the public-path flattener after it has proved that this edge belongs to one
+     * complete, source-authoritative self-closing primitive.  It is provenance, not a geometric
+     * equality key: the n-way fast path still asks the exact intersection kernel to prove every
+     * overlap before it suppresses a broad-phase carrier.
+     */
+    val isSelfClosedSourcePrimitiveF64: Boolean = false,
 )
 
 internal val PathInputEdgeF64.id: Int get() = idI32
@@ -391,6 +419,7 @@ internal fun splitPathTopologyF64(
     edges: List<PathInputEdgeF64>,
     limits: PathOpsLimitsI32,
     candidateWorkBudget: PathCandidateWorkBudgetI32,
+    allowSelfClosedNWayCarrierGroupingF64: Boolean = false,
 ): PathSplitTopologyF64 {
     validatePathInputEdgesF64(edges)
     val canonicalEdges = canonicalPathInputEdgesF64(edges, candidateWorkBudget).map(::canonicalTopologicalPathInputEdgeF64)
@@ -410,52 +439,90 @@ internal fun splitPathTopologyF64(
         maxTransientInteriorCutsI32 = limits.maxCandidateProbes,
         candidateWorkBudget = candidateWorkBudget,
     )
-    forEachPathEdgeCandidatePairF64(canonicalEdges, candidateWorkBudget) { firstIndex, secondIndex ->
-        val first = canonicalEdges[firstIndex]
-        val second = canonicalEdges[secondIndex]
-        // The broad phase emits the retained second indices in this exact canonical order.
-        // It rejects only AABB gaps that cannot reach the kernel's endpoint-snap policy;
-        // endpoint/tangent/overlap contacts continue through the robust kernel unchanged.
-        if (pathEdgesShareOnlyKnownNonCollinearEndpointF64(first, second, candidateWorkBudget)) {
-            registry.consumeKnownEndpointNoOpCandidateWorkF64()
-            return@forEachPathEdgeCandidatePairF64
-        }
-        candidateWorkBudget.consume()
-        when (val intersection = intersectPathEdgesF64(first, second)) {
-            is PathIntersectionF64.PointF64 -> registry.addIntersection(
-                firstIndex,
-                intersection.firstT,
-                secondIndex,
-                intersection.secondT,
-                intersection.point,
-                hasUniqueCarrierIntersection = true,
-            )
-            is PathIntersectionF64.OverlapF64 -> {
-                val startTicketF64 = registry.addIntersection(
-                    firstIndex,
-                    intersection.firstStartParameter,
-                    secondIndex,
-                    intersection.secondStartParameter,
-                    intersection.start,
-                    hasUniqueCarrierIntersection = false,
-                )
-                val endTicketF64 = registry.addIntersection(
-                    firstIndex,
-                    intersection.firstEndParameter,
-                    secondIndex,
-                    intersection.secondEndParameter,
-                    intersection.end,
-                    hasUniqueCarrierIntersection = false,
-                )
-                registry.addOverlapContactF64(
-                    firstEdgeIndex = firstIndex,
-                    secondEdgeIndex = secondIndex,
-                    intersectionF64 = intersection,
-                    startTicketF64 = startTicketF64,
-                    endTicketF64 = endTicketF64,
-                )
+    // Only a public flattener-proven self-closing primitive may use this compression.  Generic
+    // coincident source edges retain their pair evidence: a semantic sort key is never geometric
+    // equality authority, in particular around bounded ULP clusters.
+    val candidatePlanF64 = if (allowSelfClosedNWayCarrierGroupingF64) {
+        canonicalPathEdgeCandidatePlanF64(canonicalEdges, candidateWorkBudget)
+    } else {
+        null
+    }
+    if (candidatePlanF64 == null) {
+        // Keep the established generic path byte-for-byte in control flow. It is deliberately
+        // separate from the self-closed reduction: generic candidate accounting and ULP profile
+        // behavior must not depend on an optional provenance optimization.
+        forEachPathEdgeCandidatePairF64(canonicalEdges, candidateWorkBudget) { firstIndex, secondIndex ->
+            val first = canonicalEdges[firstIndex]
+            val second = canonicalEdges[secondIndex]
+            if (pathEdgesShareOnlyKnownNonCollinearEndpointF64(first, second, candidateWorkBudget)) {
+                registry.consumeKnownEndpointNoOpCandidateWorkF64()
+                return@forEachPathEdgeCandidatePairF64
             }
-            null -> Unit
+            candidateWorkBudget.consume()
+            when (val intersectionF64 = intersectPathEdgesF64(first, second)) {
+                is PathIntersectionF64.PointF64 -> registry.addIntersection(
+                    firstIndex,
+                    intersectionF64.firstT,
+                    secondIndex,
+                    intersectionF64.secondT,
+                    intersectionF64.point,
+                    hasUniqueCarrierIntersection = true,
+                )
+
+                is PathIntersectionF64.OverlapF64 -> {
+                    val startTicketF64 = registry.addIntersection(
+                        firstIndex,
+                        intersectionF64.firstStartParameter,
+                        secondIndex,
+                        intersectionF64.secondStartParameter,
+                        intersectionF64.start,
+                        hasUniqueCarrierIntersection = false,
+                    )
+                    val endTicketF64 = registry.addIntersection(
+                        firstIndex,
+                        intersectionF64.firstEndParameter,
+                        secondIndex,
+                        intersectionF64.secondEndParameter,
+                        intersectionF64.end,
+                        hasUniqueCarrierIntersection = false,
+                    )
+                    registry.addOverlapContactF64(
+                        firstEdgeIndex = firstIndex,
+                        secondEdgeIndex = secondIndex,
+                        intersectionF64 = intersectionF64,
+                        startTicketF64 = startTicketF64,
+                        endTicketF64 = endTicketF64,
+                    )
+                }
+
+                null -> Unit
+            }
+        }
+    } else {
+        registerCanonicalEqualEdgeOverlapRunsF64(
+            candidatePlanF64 = candidatePlanF64,
+            registryF64 = registry,
+            candidateWorkBudgetI32 = candidateWorkBudget,
+        )
+        forEachPathEdgeCandidatePairF64(candidatePlanF64.representativeEdgesF64, candidateWorkBudget) {
+                firstRepresentativeIndexI32,
+                secondRepresentativeIndexI32,
+            ->
+            val firstIndex = candidatePlanF64.representativeEdgeIndicesI32[firstRepresentativeIndexI32]
+            val secondIndex = candidatePlanF64.representativeEdgeIndicesI32[secondRepresentativeIndexI32]
+            val first = canonicalEdges[firstIndex]
+            val second = canonicalEdges[secondIndex]
+            if (pathEdgesShareOnlyKnownNonCollinearEndpointF64(first, second, candidateWorkBudget)) {
+                registry.consumeKnownEndpointNoOpCandidateWorkF64()
+                return@forEachPathEdgeCandidatePairF64
+            }
+            candidateWorkBudget.consume()
+            registerPathIntersectionF64(
+                registryF64 = registry,
+                firstIndexI32 = firstIndex,
+                secondIndexI32 = secondIndex,
+                intersectionF64 = intersectPathEdgesF64(first, second),
+            )
         }
     }
     // Pair contacts are only raw evidence.  Before identities/splits are allocated, sweep every
@@ -559,6 +626,282 @@ internal fun splitPathTopologyF64(
         pointContactsF64 = pointContactsF64,
         overlapContactsF64 = overlapContactsF64,
     )
+}
+
+/**
+ * A semantic comparator may return zero only as a candidate grouping hint. The plan below is
+ * available exclusively to flattened public input that already proved source-primitive closure.
+ * It then validates every member against the robust intersection kernel before reducing its
+ * broad-phase representation. If any member fails structural or complete-overlap validation the
+ * entire run remains independent; semantic ordering never becomes a geometric equality authority.
+ */
+private data class PathCanonicalEdgeCandidatePlanF64(
+    val representativeEdgeIndicesI32: List<Int>,
+    val representativeEdgesF64: List<PathInputEdgeF64>,
+    /** The first canonical index of a validated complete-overlap run, or this index itself. */
+    val overlapRunStartByEdgeI32: IntArray,
+    /** Non-null only for a validated non-first member of an exact complete-overlap run. */
+    val overlapByMemberEdgeI32: Array<PathIntersectionF64.OverlapF64?>,
+)
+
+private fun canonicalPathEdgeCandidatePlanF64(
+    canonicalEdgesF64: List<PathInputEdgeF64>,
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+): PathCanonicalEdgeCandidatePlanF64 {
+    val edgeCountI32 = canonicalEdgesF64.size
+    if (edgeCountI32 == 0) {
+        return PathCanonicalEdgeCandidatePlanF64(
+            representativeEdgeIndicesI32 = emptyList(),
+            representativeEdgesF64 = emptyList(),
+            overlapRunStartByEdgeI32 = IntArray(0),
+            overlapByMemberEdgeI32 = emptyArray(),
+        )
+    }
+    // The complete scan, candidate validation and fixed-size indexing are all debited before
+    // their allocations/predicates. This is linear in input carriers, not in duplicate pairs.
+    candidateWorkBudgetI32.consumePreflightI64(
+        checkedPathWorkMultiplyI64(edgeCountI32.toLong(), 5L),
+    )
+    val overlapRunStartByEdgeI32 = IntArray(edgeCountI32) { it }
+    val overlapByMemberEdgeI32 = arrayOfNulls<PathIntersectionF64.OverlapF64>(edgeCountI32)
+    var duplicateMemberCountI64 = 0L
+    var groupStartI32 = 0
+    while (groupStartI32 < edgeCountI32) {
+        var groupEndI32 = groupStartI32 + 1
+        while (
+            groupEndI32 < edgeCountI32 &&
+                comparePathInputEdgesSemanticallyF64(
+                    canonicalEdgesF64[groupStartI32],
+                    canonicalEdgesF64[groupEndI32],
+                ) == 0
+        ) {
+            groupEndI32 += 1
+        }
+        if (isSelfClosedDuplicateCarrierRunF64(canonicalEdgesF64, groupStartI32, groupEndI32)) {
+            duplicateMemberCountI64 = checkedPathWorkAddI64(
+                duplicateMemberCountI64,
+                (groupEndI32 - groupStartI32 - 1).toLong(),
+            )
+            // The leader is selected only after structural membership and exact geometry have
+            // been established.  Its source ordinal navigates a proven automorphism class; it
+            // never decides whether two carriers are geometrically equal.
+            val leaderIndexI32 = canonicalSelfClosedDuplicateCarrierLeaderF64(
+                canonicalEdgesF64 = canonicalEdgesF64,
+                groupStartI32 = groupStartI32,
+                groupEndI32 = groupEndI32,
+            )
+            var validCompleteOverlap = true
+            for (memberIndexI32 in groupStartI32 until groupEndI32) {
+                if (memberIndexI32 == leaderIndexI32) continue
+                val overlapF64 = intersectPathEdgesF64(
+                    canonicalEdgesF64[leaderIndexI32],
+                    canonicalEdgesF64[memberIndexI32],
+                )
+                if (overlapF64 !is PathIntersectionF64.OverlapF64 ||
+                    !isCompleteCanonicalEdgeOverlapF64(
+                        canonicalEdgesF64[leaderIndexI32],
+                        canonicalEdgesF64[memberIndexI32],
+                        overlapF64,
+                    )
+                ) {
+                    validCompleteOverlap = false
+                    break
+                }
+                overlapByMemberEdgeI32[memberIndexI32] = overlapF64
+            }
+            if (validCompleteOverlap) {
+                for (memberIndexI32 in groupStartI32 until groupEndI32) {
+                    overlapRunStartByEdgeI32[memberIndexI32] = leaderIndexI32
+                }
+            } else {
+                for (memberIndexI32 in groupStartI32 until groupEndI32) {
+                    overlapByMemberEdgeI32[memberIndexI32] = null
+                }
+            }
+        }
+        groupStartI32 = groupEndI32
+    }
+    candidateWorkBudgetI32.consumePreflightI64(
+        checkedPathWorkMultiplyI64(duplicateMemberCountI64, 4L),
+    )
+    var representativeCountI64 = 0L
+    overlapRunStartByEdgeI32.indices.forEach { edgeIndexI32 ->
+        if (overlapRunStartByEdgeI32[edgeIndexI32] == edgeIndexI32) {
+            representativeCountI64 = checkedPathWorkAddI64(representativeCountI64, 1L)
+        }
+    }
+    candidateWorkBudgetI32.consumePreflightI64(
+        checkedPathWorkMultiplyI64(representativeCountI64, 2L),
+    )
+    val representativeEdgeIndicesI32 = ArrayList<Int>(
+        checkedPathCapacityI32(representativeCountI64, "path-candidate-limit"),
+    )
+    overlapRunStartByEdgeI32.indices.forEach { edgeIndexI32 ->
+        if (overlapRunStartByEdgeI32[edgeIndexI32] == edgeIndexI32) {
+            representativeEdgeIndicesI32 += edgeIndexI32
+        }
+    }
+    val representativeEdgesF64 = ArrayList<PathInputEdgeF64>(representativeEdgeIndicesI32.size)
+    representativeEdgeIndicesI32.forEach { edgeIndexI32 ->
+        representativeEdgesF64 += canonicalEdgesF64[edgeIndexI32]
+    }
+    return PathCanonicalEdgeCandidatePlanF64(
+        representativeEdgeIndicesI32 = representativeEdgeIndicesI32,
+        representativeEdgesF64 = representativeEdgesF64,
+        overlapRunStartByEdgeI32 = overlapRunStartByEdgeI32,
+        overlapByMemberEdgeI32 = overlapByMemberEdgeI32,
+    )
+}
+
+/**
+ * The flattener marks a carrier only when its primitive began and ended at the same authoritative
+ * public endpoint.  A run can be compressed only when every member came from a different such
+ * primitive in the same contour and covers exactly the same primitive parameter interval.  The
+ * source fields here restrict provenance traversal; complete geometric equality is still proved
+ * below by [intersectPathEdgesF64].
+ */
+private fun isSelfClosedDuplicateCarrierRunF64(
+    canonicalEdgesF64: List<PathInputEdgeF64>,
+    groupStartI32: Int,
+    groupEndI32: Int,
+): Boolean {
+    if (groupEndI32 - groupStartI32 < 2) return false
+    val firstEdgeF64 = canonicalEdgesF64[groupStartI32]
+    if (!firstEdgeF64.isSelfClosedSourcePrimitiveF64 || firstEdgeF64.sourceSegmentIndexI32 < 0) return false
+    val sourceSegmentsI32 = IntArray(groupEndI32 - groupStartI32)
+    for (offsetI32 in sourceSegmentsI32.indices) {
+        val edgeF64 = canonicalEdgesF64[groupStartI32 + offsetI32]
+        if (
+            !edgeF64.isSelfClosedSourcePrimitiveF64 ||
+                edgeF64.operand != firstEdgeF64.operand ||
+                edgeF64.contourIndexI32 != firstEdgeF64.contourIndexI32 ||
+                edgeF64.sourceSegmentIndexI32 < 0 ||
+                !sameStructuralPathParameterF64(edgeF64.sourceStartParameterF64, firstEdgeF64.sourceStartParameterF64) ||
+                !sameStructuralPathParameterF64(edgeF64.sourceEndParameterF64, firstEdgeF64.sourceEndParameterF64)
+        ) {
+            return false
+        }
+        sourceSegmentsI32[offsetI32] = edgeF64.sourceSegmentIndexI32
+    }
+    sourceSegmentsI32.sort()
+    for (indexI32 in 1 until sourceSegmentsI32.size) {
+        if (sourceSegmentsI32[indexI32 - 1] == sourceSegmentsI32[indexI32]) return false
+    }
+    return true
+}
+
+private fun canonicalSelfClosedDuplicateCarrierLeaderF64(
+    canonicalEdgesF64: List<PathInputEdgeF64>,
+    groupStartI32: Int,
+    groupEndI32: Int,
+): Int {
+    var leaderIndexI32 = groupStartI32
+    for (memberIndexI32 in groupStartI32 + 1 until groupEndI32) {
+        val comparisonI32 = compareSelfClosedDuplicateCarrierProvenanceF64(
+            canonicalEdgesF64[memberIndexI32],
+            canonicalEdgesF64[leaderIndexI32],
+        )
+        if (comparisonI32 < 0) leaderIndexI32 = memberIndexI32
+    }
+    return leaderIndexI32
+}
+
+private fun compareSelfClosedDuplicateCarrierProvenanceF64(
+    firstF64: PathInputEdgeF64,
+    secondF64: PathInputEdgeF64,
+): Int = firstF64.sourceSegmentIndexI32.compareTo(secondF64.sourceSegmentIndexI32)
+    .takeIf { it != 0 }
+    ?: structuralPathParameterBitsF64(firstF64.sourceStartParameterF64)
+        .compareTo(structuralPathParameterBitsF64(secondF64.sourceStartParameterF64))
+        .takeIf { it != 0 }
+    ?: structuralPathParameterBitsF64(firstF64.sourceEndParameterF64)
+        .compareTo(structuralPathParameterBitsF64(secondF64.sourceEndParameterF64))
+
+private fun sameStructuralPathParameterF64(firstF64: Double, secondF64: Double): Boolean =
+    structuralPathParameterBitsF64(firstF64) == structuralPathParameterBitsF64(secondF64)
+
+private fun structuralPathParameterBitsF64(parameterF64: Double): Long =
+    if (parameterF64 == 0.0) 0L else parameterF64.toRawBits()
+
+private fun isCompleteCanonicalEdgeOverlapF64(
+    firstEdgeF64: PathInputEdgeF64,
+    secondEdgeF64: PathInputEdgeF64,
+    overlapF64: PathIntersectionF64.OverlapF64,
+): Boolean =
+    overlapF64.firstStartParameter == 0.0 &&
+        overlapF64.firstEndParameter == 1.0 &&
+        overlapF64.secondStartParameter == 0.0 &&
+        overlapF64.secondEndParameter == 1.0 &&
+        sameTopologicalPointF64(overlapF64.start, firstEdgeF64.start) &&
+        sameTopologicalPointF64(overlapF64.end, firstEdgeF64.end) &&
+        sameTopologicalPointF64(overlapF64.start, secondEdgeF64.start) &&
+        sameTopologicalPointF64(overlapF64.end, secondEdgeF64.end)
+
+private fun registerCanonicalEqualEdgeOverlapRunsF64(
+    candidatePlanF64: PathCanonicalEdgeCandidatePlanF64,
+    registryF64: PathIntersectionRegistryF64,
+    candidateWorkBudgetI32: PathCandidateWorkBudgetI32,
+) {
+    // Registering one star relation per duplicate is the complete n-way connectivity proof and
+    // replaces the discarded pairwise relations. Each relation and every registry sub-step debit
+    // immediately before its own mutation; no unchecked group-level allocation is introduced.
+    candidatePlanF64.overlapRunStartByEdgeI32.indices.forEach { memberIndexI32 ->
+        val firstIndexI32 = candidatePlanF64.overlapRunStartByEdgeI32[memberIndexI32]
+        if (firstIndexI32 == memberIndexI32) return@forEach
+        val overlapF64 = candidatePlanF64.overlapByMemberEdgeI32[memberIndexI32]
+            ?: throw IllegalStateException("path-arrangement-inconsistent")
+        candidateWorkBudgetI32.consume()
+        registerPathIntersectionF64(
+            registryF64 = registryF64,
+            firstIndexI32 = firstIndexI32,
+            secondIndexI32 = memberIndexI32,
+            intersectionF64 = overlapF64,
+        )
+    }
+}
+
+private fun registerPathIntersectionF64(
+    registryF64: PathIntersectionRegistryF64,
+    firstIndexI32: Int,
+    secondIndexI32: Int,
+    intersectionF64: PathIntersectionF64?,
+) {
+    when (intersectionF64) {
+        is PathIntersectionF64.PointF64 -> registryF64.addIntersection(
+            firstIndexI32,
+            intersectionF64.firstT,
+            secondIndexI32,
+            intersectionF64.secondT,
+            intersectionF64.point,
+            hasUniqueCarrierIntersection = true,
+        )
+        is PathIntersectionF64.OverlapF64 -> {
+            val startTicketF64 = registryF64.addIntersection(
+                firstIndexI32,
+                intersectionF64.firstStartParameter,
+                secondIndexI32,
+                intersectionF64.secondStartParameter,
+                intersectionF64.start,
+                hasUniqueCarrierIntersection = false,
+            )
+            val endTicketF64 = registryF64.addIntersection(
+                firstIndexI32,
+                intersectionF64.firstEndParameter,
+                secondIndexI32,
+                intersectionF64.secondEndParameter,
+                intersectionF64.end,
+                hasUniqueCarrierIntersection = false,
+            )
+            registryF64.addOverlapContactF64(
+                firstEdgeIndex = firstIndexI32,
+                secondEdgeIndex = secondIndexI32,
+                intersectionF64 = intersectionF64,
+                startTicketF64 = startTicketF64,
+                endTicketF64 = endTicketF64,
+            )
+        }
+        null -> Unit
+    }
 }
 
 private data class PathEdgeAabbF64(
