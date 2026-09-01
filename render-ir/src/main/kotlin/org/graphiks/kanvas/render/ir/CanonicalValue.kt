@@ -35,7 +35,8 @@ internal fun canonicalId(tag: String, vararg fields: String): CanonicalId = Cano
     },
 )
 
-internal fun Float.canonicalBits(): String = toBits().toString()
+/** Preserves every IEEE-754 bit, including distinct NaN payloads, in canonical identities. */
+internal fun Float.canonicalBits(): String = toRawBits().toString()
 
 /** Freezes a caller-owned collection behind a JVM-unmodifiable view. */
 internal fun <T> immutableList(values: Collection<T>): List<T> =
