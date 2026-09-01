@@ -524,6 +524,9 @@ private fun sceneChildren(value: SceneSnapshot, depth: Int): List<GraphWork> = b
                 stackEffects(command.descriptor.effects).forEach { add(GraphWork.Effect(it, depth)) }
             }
             is SceneCommand.Clear,
+            is SceneCommand.DrawColor,
+            is SceneCommand.SetTransform,
+            is SceneCommand.SetClip,
             SceneCommand.EndLayer,
             is SceneCommand.State,
             is SceneCommand.Annotation,

@@ -296,6 +296,20 @@ public sealed interface ClipStackNode : CanonicalValue {
         override val canonicalId: CanonicalId = canonicalId("clip-stack-empty-v1")
     }
 
+    /** A compact device-space rectangle remains distinct from a one-entry complex clip. */
+    public class DeviceRect private constructor(bounds: RectF32, public val antiAlias: Boolean) : ClipStackNode {
+        private val storedBounds: RectF32 = bounds.copy()
+        public fun copyBounds(): RectF32 = storedBounds.copy()
+        override val canonicalId: CanonicalId = canonicalId(
+            "clip-stack-device-rect-v1", rectId(storedBounds).value, antiAlias.toString(),
+        )
+        override fun equals(other: Any?): Boolean = other is DeviceRect && canonicalId == other.canonicalId
+        override fun hashCode(): Int = canonicalId.hashCode()
+        public companion object {
+            public fun of(bounds: RectF32, antiAlias: Boolean = true): DeviceRect = DeviceRect(bounds, antiAlias)
+        }
+    }
+
     public class Operations private constructor(entries: Collection<ClipEntry>) : ClipStackNode, Iterable<ClipEntry> {
         private val values: List<ClipEntry> = immutableList(entries)
         public val entryCount: Int get() = values.size

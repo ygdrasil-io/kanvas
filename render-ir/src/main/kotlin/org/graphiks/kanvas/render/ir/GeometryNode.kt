@@ -69,6 +69,7 @@ public sealed interface GeometryNode : CanonicalValue {
         indices: IntArray?,
         bounds: RectF32?,
         public val program: ResourceReference?,
+        public val meshProgram: MeshProgramNode?,
     ) : GeometryNode {
         private val storedVertices: List<Point2F32> = immutableList(vertices)
         private val storedTexCoords: List<Point2F32>? = texCoords?.let(::immutableList)
@@ -83,6 +84,10 @@ public sealed interface GeometryNode : CanonicalValue {
         public fun vertexAt(index: Int): Point2F32 = storedVertices[index]
         public fun texCoordAt(index: Int): Point2F32? = storedTexCoords?.get(index)
         public fun colorAt(index: Int): ColorARGB? = storedColors?.get(index)
+        /** Null is distinct from a present-but-empty texture-coordinate stream. */
+        public fun copyTexCoords(): List<Point2F32>? = storedTexCoords?.toList()
+        /** Null is distinct from a present-but-empty color stream. */
+        public fun copyColors(): List<ColorARGB>? = storedColors?.toList()
         /**
          * Returns null for a direct (non-indexed) mesh; a present empty array
          * remains a distinct indexed representation.
@@ -102,6 +107,7 @@ public sealed interface GeometryNode : CanonicalValue {
             ).value,
             canonicalOptionalId("bounds", storedBounds?.let { rectId("value", it) }).value,
             canonicalOptionalId("program", program?.canonicalId).value,
+            canonicalOptionalId("mesh-program", meshProgram?.canonicalId).value,
         )
 
         public companion object {
@@ -113,7 +119,8 @@ public sealed interface GeometryNode : CanonicalValue {
                 indices: IntArray? = null,
                 bounds: RectF32? = null,
                 program: ResourceReference? = null,
-            ): IndexedMesh = IndexedMesh(primitiveMode, vertices, texCoords, colors, indices, bounds, program)
+                meshProgram: MeshProgramNode? = null,
+            ): IndexedMesh = IndexedMesh(primitiveMode, vertices, texCoords, colors, indices, bounds, program, meshProgram)
         }
     }
 
@@ -160,6 +167,10 @@ public sealed interface GeometryNode : CanonicalValue {
         public fun copyCellRects(): List<RectF32>? = storedCellRects?.map(RectF32::copy)?.let(::immutableList)
         public fun colorAt(index: Int): ColorARGB? = storedColors?.get(index)
         public fun flagAt(index: Int): LatticeCellFlag? = storedFlags?.get(index)
+        /** Null is distinct from a present-but-empty lattice color table. */
+        public fun copyColors(): List<ColorARGB>? = storedColors?.toList()
+        /** Null is distinct from a present-but-empty lattice flag table. */
+        public fun copyFlags(): List<LatticeCellFlag>? = storedFlags?.toList()
         public fun copyDestination(): RectF32 = storedDestination.copy()
 
         override val canonicalId: CanonicalId = canonicalId(
@@ -256,6 +267,99 @@ public sealed interface GeometryNode : CanonicalValue {
                 typeface: TypefaceReference? = null,
             ): GlyphRun = GlyphRun(glyphIds, positions, fontSize, variations, typeface)
         }
+    }
+
+    /** A resolved text blob retains all runs and its draw origin without importing font APIs. */
+    public class TextBlob private constructor(
+        runs: Collection<GlyphRun>,
+        public val x: Float,
+        public val y: Float,
+        public val typeface: TypefaceReference?,
+        public val fontSize: Float,
+        variationCoordinates: Map<String, Float>,
+    ) : GeometryNode, Iterable<GlyphRun> {
+        private val values: List<GlyphRun> = immutableList(runs)
+        private val storedVariationCoordinates: Map<String, Float> = immutableSortedMap(variationCoordinates)
+        public val runCount: Int get() = values.size
+        public fun runAt(index: Int): GlyphRun = values[index]
+        /** Immutable, canonicalized OpenType design coordinates resolved for this blob. */
+        public fun variationCoordinates(): Map<String, Float> = storedVariationCoordinates
+        override fun iterator(): Iterator<GlyphRun> = values.iterator()
+        override val canonicalId: CanonicalId = canonicalId(
+            "geometry-text-blob-v2",
+            canonicalSequenceId("runs", values.map { it.canonicalId.value }).value,
+            x.canonicalBits(),
+            y.canonicalBits(),
+            canonicalOptionalId("typeface", typeface?.canonicalId).value,
+            fontSize.canonicalBits(),
+            canonicalMapId("variations", storedVariationCoordinates).value,
+        )
+        public companion object {
+            public fun of(
+                runs: Collection<GlyphRun>,
+                x: Float,
+                y: Float,
+                typeface: TypefaceReference? = null,
+                fontSize: Float = 12f,
+                variationCoordinates: Map<String, Float> = emptyMap(),
+            ): TextBlob = TextBlob(runs, x, y, typeface, fontSize, variationCoordinates)
+        }
+    }
+
+    /** A bounded nested picture is a typed subscene, never a string or renderer handle. */
+    public class Picture private constructor(public val scene: SceneSnapshot, cullRect: RectF32) : GeometryNode {
+        private val storedCullRect: RectF32 = cullRect.copy()
+        public fun copyCullRect(): RectF32 = storedCullRect.copy()
+        override val canonicalId: CanonicalId = canonicalId(
+            "geometry-picture-v1", scene.canonicalId.value, rectId("cull", storedCullRect).value,
+        )
+        override fun equals(other: Any?): Boolean = other is Picture && canonicalId == other.canonicalId
+        override fun hashCode(): Int = canonicalId.hashCode()
+        public companion object { public fun of(scene: SceneSnapshot, cullRect: RectF32): Picture = Picture(scene, cullRect) }
+    }
+}
+
+/** Typed MeshProgram runtime contract, independent from any compiled shader or GPU child object. */
+public class MeshProgramNode private constructor(
+    public val descriptor: RuntimeEffectDescriptor,
+    uniforms: Map<String, RuntimeUniformValue>,
+    children: Collection<MeshProgramChild>,
+) : CanonicalValue, Iterable<MeshProgramChild> {
+    private val storedUniforms: Map<String, RuntimeUniformValue> = immutableUniformMap(uniforms)
+    private val storedChildren: List<MeshProgramChild> = immutableList(children)
+    init {
+        require(descriptor.abi == RuntimeEffectAbi.SHADER) { "Mesh Program must use SHADER runtime ABI" }
+        RuntimeBindingValidator.validate(descriptor, storedUniforms, storedChildren.map { it.binding }).requireValid()
+    }
+    public fun uniforms(): Map<String, RuntimeUniformValue> = storedUniforms
+    public val childCount: Int get() = storedChildren.size
+    public fun childAt(index: Int): MeshProgramChild = storedChildren[index]
+    override fun iterator(): Iterator<MeshProgramChild> = storedChildren.iterator()
+    override val canonicalId: CanonicalId = canonicalId(
+        "mesh-program-node-v1", descriptor.canonicalId.value, uniformMapId(storedUniforms).value,
+        canonicalSequenceId("children", storedChildren.map { it.canonicalId.value }).value,
+    )
+    public companion object {
+        public fun of(descriptor: RuntimeEffectDescriptor, uniforms: Map<String, RuntimeUniformValue>, children: Collection<MeshProgramChild>): MeshProgramNode =
+            MeshProgramNode(descriptor, uniforms, children)
+    }
+}
+
+/** Tagged, ordered MeshProgram children. */
+public sealed interface MeshProgramChild : CanonicalValue {
+    public val name: String
+    public val binding: RuntimeChildBinding
+    public data class Shader(override val name: String, public val material: MaterialNode) : MeshProgramChild {
+        override val binding: RuntimeChildBinding = RuntimeChildBinding(name, RuntimeChildType.SHADER)
+        override val canonicalId: CanonicalId = canonicalId("mesh-program-child-shader-v1", name, material.canonicalId.value)
+    }
+    public data class ColorFilter(override val name: String, public val filter: ColorFilterNode) : MeshProgramChild {
+        override val binding: RuntimeChildBinding = RuntimeChildBinding(name, RuntimeChildType.COLOR_FILTER)
+        override val canonicalId: CanonicalId = canonicalId("mesh-program-child-color-filter-v1", name, filter.canonicalId.value)
+    }
+    public data class Blender(override val name: String, public val blender: BlenderNode) : MeshProgramChild {
+        override val binding: RuntimeChildBinding = RuntimeChildBinding(name, RuntimeChildType.BLENDER)
+        override val canonicalId: CanonicalId = canonicalId("mesh-program-child-blender-v1", name, blender.canonicalId.value)
     }
 }
 
