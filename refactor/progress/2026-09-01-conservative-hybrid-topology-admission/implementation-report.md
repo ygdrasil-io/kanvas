@@ -12,6 +12,7 @@ Implementation started from `db2c12784cc1311185280c694c3cc7d1e8611f15` with a cl
 - After the projected broad phase, an immutable observation records exact witnesses, endpoint-only claims, deferred endpoint observations, strict-cut requirements, collapsed incidences, and unsupported projected contacts.  Its full validation completes before returning `Unsupported`.
 - Only transaction-validated endpoint-only relations enter `PathAcceptedExactPlanF64F32`; aliases are built solely from that plan.  Deferred, collapsed, strict-cut, unowned, and malformed projected findings fail closed with `path-f32-projection-collapse` before aliases, cuts, or DCEL work.
 - Deferred endpoint resolution now derives a checked-I64 capacity and debits the complete deferred buffer/copy bound before allocating the capacity-sized result list.  The later immutable observation copy remains separately preflighted, so no allocation is uncovered or charged twice.
+- The projected candidate-edge view now derives `6N` from `projectedSpansF64F32.size` and debits it before its `map` traversal/allocation.  The post-plan endpoint guard separately reserves checked `5P` (one full proposal visit plus four nullable identity tests), evaluates all four tests for every proposal without early exit, then rejects only after the complete scan; this does not double-debit the plan factory copy or transaction validation.
 
 ## Supported public families
 
@@ -31,7 +32,7 @@ There is still no public `PathF32` fixture that physically reaches a strict-inte
 
 ## Verification
 
-RED was observed before the source gate: the full hybrid topology class left each of the twenty duplicate `count=2` cases successful, producing assertion failures because `path-f32-projection-collapse` was absent.  A second RED pass showed the former collapsed/distant successes and the old projected endpoint limit boundary no longer matched the conservative public contract.  The correction-1 public-only immutability extensions were immediately green because they expose already established public behavior; allocation-before-preflight is deliberately not tested by private/source-shape/infrastructure assertions.
+RED was observed before the source gate: the full hybrid topology class left each of the twenty duplicate `count=2` cases successful, producing assertion failures because `path-f32-projection-collapse` was absent.  A second RED pass showed the former collapsed/distant successes and the old projected endpoint limit boundary no longer matched the conservative public contract.  The correction-1 public-only immutability extensions were immediately green because they expose already established public behavior; the correction-1 allocation ordering and correction-2 ledger ordering defects have no independent public RED oracle and are deliberately not tested by prohibited private/source-shape/infrastructure assertions.
 
 Focused JVM and JS hybrid-topology runs, followed by public `PathOpsF32Test` plus hybrid-topology runs, were green.  The complete fresh JVM/JS verification was then run with:
 

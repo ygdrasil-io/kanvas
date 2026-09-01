@@ -618,13 +618,13 @@ internal fun buildPathHybridTopologyF64F32(
         }
     }
 
-    // The AABB index itself is conservative; this debit covers its deterministic construction
-    // and immutable projected-edge view before candidate callbacks can run.
-    val projectedCandidateEdgesF64 = projectedSpansF64F32.map(PathProjectedSourceSpanF64F32::projectedEdgeF64)
+    // The AABB index itself is conservative; debit its deterministic construction and immutable
+    // projected-edge view before traversing or allocating that view.
     preflightHybridLinearF64F32(
-        checkedPathWorkMultiplyI64(projectedCandidateEdgesF64.size.toLong(), 6L),
+        checkedPathWorkMultiplyI64(projectedSpansF64F32.size.toLong(), 6L),
         candidateWorkBudgetI32,
     )
+    val projectedCandidateEdgesF64 = projectedSpansF64F32.map(PathProjectedSourceSpanF64F32::projectedEdgeF64)
     // The shared AABB walker debits only the candidates it actually emits. Do not reserve a
     // second all-pairs envelope here: that would charge both culled pairs and the same emitted
     // candidate a second time, and makes a finely flattened curve exhaust its public budget
@@ -702,15 +702,35 @@ internal fun buildPathHybridTopologyF64F32(
 
         is PathHybridAdmissionF64F32.Accepted -> admissionF64F32.exactPlanF64F32
     }
-    // The only accepted relation is endpoint-only.  Do not construct aliases from a hidden
-    // strict cut even if an upstream invariant were to regress.
-    if (exactPlanF64F32.endpointOnlyProjectedRelationsF64F32.any { proposalF64F32 ->
-            proposalF64F32.firstClaimF64.startVertexIdentityF64 == null ||
-                proposalF64F32.firstClaimF64.endVertexIdentityF64 == null ||
-                proposalF64F32.secondClaimF64.startVertexIdentityF64 == null ||
-                proposalF64F32.secondClaimF64.endVertexIdentityF64 == null
+    // The plan factory's separately debited copy cannot cover this distinct guard.  Reserve
+    // one proposal visit and all four nullable endpoint-identity checks (5P) before scanning so
+    // a depleted budget wins regardless of proposal order.
+    preflightHybridLinearF64F32(
+        checkedPathWorkMultiplyI64(
+            exactPlanF64F32.endpointOnlyProjectedRelationsF64F32.size.toLong(),
+            5L,
+        ),
+        candidateWorkBudgetI32,
+    )
+    // The only accepted relation is endpoint-only. Do not construct aliases from a hidden
+    // strict cut even if an upstream invariant were to regress. Complete this scan before
+    // rejecting; the four checks are evaluated independently for every proposal.
+    var missingEndpointIdentityF64F32 = false
+    exactPlanF64F32.endpointOnlyProjectedRelationsF64F32.forEach { proposalF64F32 ->
+        val firstStartMissingF64F32 = proposalF64F32.firstClaimF64.startVertexIdentityF64 == null
+        val firstEndMissingF64F32 = proposalF64F32.firstClaimF64.endVertexIdentityF64 == null
+        val secondStartMissingF64F32 = proposalF64F32.secondClaimF64.startVertexIdentityF64 == null
+        val secondEndMissingF64F32 = proposalF64F32.secondClaimF64.endVertexIdentityF64 == null
+        if (
+            firstStartMissingF64F32 ||
+                firstEndMissingF64F32 ||
+                secondStartMissingF64F32 ||
+                secondEndMissingF64F32
+        ) {
+            missingEndpointIdentityF64F32 = true
         }
-    ) {
+    }
+    if (missingEndpointIdentityF64F32) {
         throw IllegalStateException("path-f32-projection-collapse")
     }
     candidateWorkBudgetI32.consume()
