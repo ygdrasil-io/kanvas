@@ -100,6 +100,14 @@ face falsely rejects; and the compression sort is underdebited. The physical str
 coherent by inspection but still lacks a public fixture. Task 3 remains in progress; see
 `task-3-spec-rereview-3.md` and `task-3-quality-rereview-3.md`.
 
+Fix round 4 is committed as `59f4899cd`. It closes the round-3 external-cut, face-locator,
+signed-zero, raw-bounds and shortcut defects for the covered public fixtures; the full JVM/JS
+matrix passes 61 tasks. Both fresh gates still fail: full-cover authority is too broad for some
+contacts and too narrow for multi-counterpart exact carriers; `maxIntersections` counts flattening
+joints; direct/reversed XOR work frontiers differ; and the planner performs an unbounded quadratic
+pre-pass. The physical strict-cut proof remains open. Task 3 continues; see
+`task-3-spec-rereview-4.md` and `task-3-quality-rereview-4.md`.
+
 Fix round 4 is locally complete pending fresh independent gates. A canonical equal-carrier proxy
 now propagates every third-party leader point/overlap event to every exact member before source
 components and splits; the public n=1..3 × five-operation compact/separate matrix is green on
