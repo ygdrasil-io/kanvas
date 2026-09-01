@@ -514,8 +514,7 @@ private class Writer {
     private fun vertexAttribs(attrs: List<VertexAttribute>) {
         int(attrs.size)
         for (a in attrs) {
-            int(a.shaderLocation); byte(stableVertexFormatId(a.format))
-            int(a.offset)
+            byte(stableVertexFormatId(a.format)); int(a.offset); int(a.shaderLocation)
         }
     }
 

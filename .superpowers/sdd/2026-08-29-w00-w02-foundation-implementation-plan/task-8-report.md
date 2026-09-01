@@ -32,6 +32,13 @@ compare les propriétés reconstruites.
    mutation-testé : changer temporairement l'id v8 de
    `INVERSE_EVEN_ODD` vers `EVEN_ODD` l'a fait échouer, puis la table correcte
    a été restaurée et le test est redevenu vert.
+4. Correctif post-review : le nouveau test public de round-trip d'un
+   `RuntimeEffect` avec tous les `VertexFormat` et les deux `VertexStepMode`
+   a échoué (RED) avant le correctif : l'ordre writer
+   `[shaderLocation, format, offset]` désynchronisait le reader jusqu'à un
+   `ColorMatrixF32`. Le writer v8 émet désormais
+   `[format, offset, shaderLocation]`; le test et la couverture de tous les
+   verbes `Path` v8 sont verts (GREEN).
 
 ## Fichiers
 
@@ -46,23 +53,29 @@ compare les propriétés reconstruites.
 
 - W0 est opérationnelle, mais sa gate stricte demeure **NON ATTEINTE** à cause
   de la quarantaine `jpg-color-cube` établie par W00.
-- W1 est prouvée pour les conditions de cette tâche : les tests vérifient les
-  mutations après enregistrement, les snapshots d'opérations, l'immuabilité de
-  `Picture` et son round-trip, ainsi que la lecture de la fixture v7.
+- Le périmètre fonctionnel W1 de cette tâche est implémenté et couvert de façon
+  ciblée : les tests vérifient les mutations après enregistrement, les
+  snapshots d'opérations, l'immuabilité de `Picture`, son round-trip v8 et la
+  lecture de la fixture v7. La gate W1 stricte reste toutefois **NON
+  ATTEINTE / bloquée** tant que `:kanvas:test` global est rouge sur la
+  baseline GPU/Image.
 
 ## Vérifications
 
-- `rtk ./gradlew :kanvas:test --tests '*PictureTest*' --tests '*RecordedGeometrySnapshotTest*'` : succès.
+- `rtk ./gradlew :kanvas:test --tests '*PictureTest*' --tests '*RecordedGeometrySnapshotTest*'` : succès, 51 tests au total (32 `PictureTest`, 19 `RecordedGeometrySnapshotTest`).
 - `rtk ./gradlew :math:geometry:jvmTest :math:geometry:jsNodeTest :math:matrix:jvmTest :math:matrix:jsNodeTest` : succès.
-- `rtk ./gradlew :kanvas:test` : 53 échecs GPU/Image hors scope observés.
-  Ils sont laissés visibles; les tests Picture et d'immuabilité ciblés passent.
+- `rtk ./gradlew :kanvas:test` : baseline connue après le correctif Task 7 :
+  51 échecs GPU/Image hors scope. Ils sont laissés visibles; les tests Picture
+  et d'immuabilité ciblés passent.
 
 ## Self-review et concerns
 
 - Aucun fichier `font` ou codec, aucun GM, render, dashboard ou score n'a été
   modifié.
-- La compatibilité v7 est établie par une fixture indépendante du nouveau
-  writer; les fixtures v1/v2 et les cas legacy v1–6 existants restent couverts.
-- La suite globale ne peut pas servir de gate verte tant que ses 53 échecs
+- La compatibilité legacy prouvée repose sur les fixtures littérales v1/v2 et
+  v7, et sur la disposition v5 dérivée de la fixture v7; aucun blob v8 n'est
+  présenté comme une fixture legacy. Le reader garde les dispositions strictes
+  1–7.
+- La suite globale ne peut pas servir de gate verte tant que ses 51 échecs
   préexistants GPU/Image ne sont pas résolus; ils ne sont pas attribués à cette
   tâche sans une baseline plus fine.

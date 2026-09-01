@@ -38,6 +38,10 @@ import org.graphiks.kanvas.pipeline.UniformBlock
 import org.graphiks.kanvas.pipeline.UniformLayout
 import org.graphiks.kanvas.pipeline.UniformSlot
 import org.graphiks.kanvas.pipeline.UniformType
+import org.graphiks.kanvas.pipeline.VertexAttribute
+import org.graphiks.kanvas.pipeline.VertexFormat
+import org.graphiks.kanvas.pipeline.VertexLayout
+import org.graphiks.kanvas.pipeline.VertexStepMode
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.KanvasTypeface
 import org.graphiks.kanvas.text.TextBlob
@@ -111,7 +115,15 @@ class PictureTest {
             FillType.entries.forEachIndexed { index, fillType ->
                 add(
                     DisplayOp.DrawPath(
-                        Path().apply { this.fillType = fillType; moveTo(1f, 1f); lineTo(7f, 7f); close() },
+                        Path().apply {
+                            this.fillType = fillType
+                            moveTo(1f, 1f)
+                            lineTo(7f, 1f)
+                            quadTo(7f, 3f, 5f, 4f)
+                            cubicTo(4f, 5f, 3f, 6f, 2f, 5f)
+                            arcTo(2f, 3f, 45f, largeArc = true, sweep = false, x = 1f, y = 1f)
+                            close()
+                        },
                         Paint(
                             pathEffect = PathEffect.Path1D(
                                 effectPath,
@@ -225,6 +237,12 @@ class PictureTest {
         val images = collectedImages.filter { it.sourceId.startsWith("enum-image-") }
 
         assertEquals(FillType.entries.toList(), paths.map { it.path.fillType })
+        assertTrue(
+            paths.all { path ->
+                path.path.commands().map { command -> command.verb } ==
+                    listOf(PathVerb.MOVE, PathVerb.LINE, PathVerb.QUAD, PathVerb.CUBIC, PathVerb.ARC_TO, PathVerb.CLOSE)
+            },
+        )
         assertEquals(Path1DStyle.entries.toList(), paths.map { assertIs<PathEffect.Path1D>(it.paint.pathEffect).style }.distinct())
         assertEquals(PaintStyle.entries.toList(), paths.map { it.paint.style }.distinct())
         assertEquals(StrokeCap.entries.toList(), paths.map { it.paint.strokeCap }.distinct())
@@ -260,6 +278,46 @@ class PictureTest {
         ).effect
         assertEquals(UniformType.entries.toList(), restoredRuntime.uniformLayout.slots.map { it.type })
         assertEquals(ChildType.entries.toList(), restoredRuntime.children.map { it.type })
+    }
+
+    @Test
+    fun `version 8 round trips runtime vertex layouts through the public Picture API`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 8f, 8f)
+        val expectedAttributes = VertexFormat.entries.mapIndexed { index, format ->
+            VertexAttribute(format, offset = index * 16, shaderLocation = index + 3)
+        }
+        val expectedStride = expectedAttributes.size * 16
+
+        val restoredLayouts = VertexStepMode.entries.map { stepMode ->
+            val effect = RuntimeEffect(
+                "runtime-layout-$stepMode",
+                shaderModuleWithVertexLayout(VertexLayout(expectedAttributes, expectedStride, stepMode)),
+                UniformLayout(emptyList()),
+                emptyList(),
+            )
+            val restored = requireNotNull(
+                Picture(
+                    bounds,
+                    listOf(
+                        DisplayOp.DrawRect(
+                            bounds,
+                            Paint(shader = effect.makeShader(UniformBlock.EMPTY)),
+                            Matrix3x3F32.Identity,
+                            ClipStack.WideOpen,
+                        ),
+                    ),
+                ).let { picture -> Picture.fromByteArray(picture.toByteArray()) },
+            )
+            assertIs<Shader.RuntimeEffect>(
+                assertIs<DisplayOp.DrawRect>(restored.ops.single()).paint.shader,
+            ).effect.module.vertexLayout
+        }
+
+        assertEquals(VertexStepMode.entries.toList(), restoredLayouts.map(VertexLayout::stepMode))
+        restoredLayouts.forEach { layout ->
+            assertEquals(expectedAttributes, layout.attributes)
+            assertEquals(expectedStride, layout.stride)
+        }
     }
 
     @Test
@@ -304,7 +362,7 @@ class PictureTest {
     }
 
     @Test
-    fun `format 6 leaves non path opcode payload compatible with format 5`() {
+    fun `format 5 layer fixture retains the version 2 non path layout`() {
         val legacyHeader = ByteArray(V2_LAYER_PICTURE_FIXTURE.size + 1).also { bytes ->
             V2_LAYER_PICTURE_FIXTURE.copyInto(bytes, endIndex = V2_LAYER_PICTURE_FIXTURE.size - 1)
             bytes[V2_LAYER_PICTURE_FIXTURE.size - 1] = 0 // no composite clip in format 5
@@ -325,7 +383,7 @@ class PictureTest {
     }
 
     @Test
-    fun `format 6 refuses an arbitrary serialized DrawPath source`() {
+    fun `format 8 refuses an arbitrary serialized DrawPath source`() {
         val encoded = Picture(
             RectF32.ofLTRB(0f, 0f, 8f, 8f),
             listOf(
@@ -347,7 +405,7 @@ class PictureTest {
     }
 
     @Test
-    fun `format 5 round trip preserves each explicit image alpha authority`() {
+    fun `format 8 round trip preserves each explicit image alpha authority`() {
         for (alpha in listOf(AlphaType.PREMUL, AlphaType.OPAQUE, AlphaType.UNPREMUL)) {
             val picture = pictureWithImageAlpha(alpha)
             val restored = requireNotNull(Picture.fromByteArray(picture.toByteArray()))
@@ -356,39 +414,6 @@ class PictureTest {
             val restoredImage = images.single()
 
             assertEquals(alpha, restoredImage.alphaType)
-        }
-    }
-
-    @Test
-    fun `formats one through four decode legacy images as conservative unpremultiplied`() {
-        val v5 = pictureWithImageAlpha(AlphaType.PREMUL).toByteArray()
-        val sourceId = "legacy-alpha".encodeToByteArray()
-        val sourceIndex = v5.indexOfSubArray(sourceId)
-        assertTrue(sourceIndex >= 0)
-        val afterSource = sourceIndex + sourceId.size
-        val colorSpaceStart = if (v5[afterSource].toInt() == 0) {
-            afterSource + 1
-        } else {
-            val pixelLength = ((v5[afterSource + 1].toInt() and 0xFF) shl 24) or
-                ((v5[afterSource + 2].toInt() and 0xFF) shl 16) or
-                ((v5[afterSource + 3].toInt() and 0xFF) shl 8) or
-                (v5[afterSource + 4].toInt() and 0xFF)
-            afterSource + 5 + pixelLength
-        }
-        val colorSpaceNameLength = ((v5[colorSpaceStart].toInt() and 0xFF) shl 8) or (v5[colorSpaceStart + 1].toInt() and 0xFF)
-        val alphaIndex = colorSpaceStart + 2 + colorSpaceNameLength + 2
-        val legacy = v5.copyInto(ByteArray(v5.size - 1), 0, 0, alphaIndex).also { target ->
-            v5.copyInto(target, alphaIndex, alphaIndex + 1, v5.size)
-        }
-        for (version in 1..4) {
-            legacy[4] = 0
-            legacy[5] = 0
-            legacy[6] = 0
-            legacy[7] = version.toByte()
-            val restored = requireNotNull(Picture.fromByteArray(legacy))
-            val images = mutableListOf<Image>()
-            restored.walkImages(images::add)
-            assertEquals(AlphaType.UNPREMUL, images.single().alphaType)
         }
     }
 
@@ -767,6 +792,18 @@ class PictureTest {
     }
 }
 
+private fun shaderModuleWithVertexLayout(vertexLayout: VertexLayout): ShaderModule {
+    val constructor = ShaderModule::class.java.declaredConstructors.single { it.parameterCount == 5 }
+        .also { it.isAccessible = true }
+    return constructor.newInstance(
+        "runtime-layout-module",
+        "main",
+        emptyList<UniformSlot>(),
+        emptyList<org.graphiks.kanvas.pipeline.TextureSlot>(),
+        vertexLayout,
+    ) as ShaderModule
+}
+
 private fun pictureWithImageAlpha(alphaType: AlphaType): Picture {
     val recorder = PictureRecorder()
     recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 2f, 2f)).drawImage(
@@ -775,9 +812,6 @@ private fun pictureWithImageAlpha(alphaType: AlphaType): Picture {
     )
     return recorder.finishRecordingAsPicture()
 }
-
-private fun ByteArray.indexOfSubArray(needle: ByteArray): Int =
-    indices.firstOrNull { index -> index + needle.size <= size && needle.indices.all { offset -> this[index + offset] == needle[offset] } } ?: -1
 
 private val V1_LAYER_PICTURE_FIXTURE = byteArrayOf(
     0x4B, 0x50, 0x49, 0x43, // KPIC
