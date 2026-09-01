@@ -13,6 +13,7 @@ import org.graphiks.kanvas.canvas.ClipStackOp
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.canvas.DrawPathSourceOperation
 import org.graphiks.kanvas.canvas.SaveLayerRec
+import org.graphiks.kanvas.canvas.GeometrySnapshotContext
 import org.graphiks.kanvas.canvas.snapshotGeometry
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.color.Gamut
@@ -68,7 +69,7 @@ class Picture internal constructor(
     val cullRect: RectF32
         get() = RectF32(recordedCullRect.left, recordedCullRect.top, recordedCullRect.right, recordedCullRect.bottom)
 
-    internal val ops: List<DisplayOp> = ops.map(DisplayOp::snapshotGeometry)
+    internal val ops: List<DisplayOp> = ops.snapshotGeometry()
 
     /** Unique identifier for this picture instance. */
     val uniqueID: Int = nextId()
@@ -128,11 +129,19 @@ class Picture internal constructor(
      * @param action invoked for each [DisplayOp] encountered
      */
     fun forEachOp(nested: Boolean = false, action: (DisplayOp) -> Unit) {
+        forEachOp(nested, action, GeometrySnapshotContext())
+    }
+
+    private fun forEachOp(
+        nested: Boolean,
+        action: (DisplayOp) -> Unit,
+        context: GeometrySnapshotContext,
+    ) {
         for (op in ops) {
-            val snapshot = op.snapshotGeometry()
+            val snapshot = op.snapshotGeometry(context)
             action(snapshot)
             if (nested && snapshot is DisplayOp.DrawPicture) {
-                snapshot.picture.forEachOp(nested = true, action = action)
+                snapshot.picture.forEachOp(nested = true, action = action, context = context)
             }
         }
     }

@@ -12,7 +12,6 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.ShaderChild
 import org.graphiks.kanvas.paint.ColorFilterChild
 import org.graphiks.kanvas.paint.BlenderChild
-import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Lattice
@@ -20,9 +19,27 @@ import org.graphiks.kanvas.types.Mesh
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
+import java.util.IdentityHashMap
 
 /** Returns a recursive defensive copy of every mutable geometric value in this operation. */
-internal fun DisplayOp.snapshotGeometry(): DisplayOp = when (this) {
+internal fun DisplayOp.snapshotGeometry(): DisplayOp = snapshotGeometry(GeometrySnapshotContext())
+
+/** Returns a defensive copy that preserves aliases between operations in this snapshot. */
+internal fun List<DisplayOp>.snapshotGeometry(): List<DisplayOp> {
+    val context = GeometrySnapshotContext()
+    return map { it.snapshotGeometry(context) }
+}
+
+/** Snapshot state that must be shared for one append or complete operation copy. */
+internal class GeometrySnapshotContext {
+    private val textBlobs = IdentityHashMap<TextBlob, TextBlob>()
+
+    fun snapshot(blob: TextBlob): TextBlob = textBlobs[blob] ?: blob.snapshotGeometry().also {
+        textBlobs[blob] = it
+    }
+}
+
+internal fun DisplayOp.snapshotGeometry(context: GeometrySnapshotContext): DisplayOp = when (this) {
     is DisplayOp.DrawRect -> copy(rect = rect.snapshotGeometry(), paint = paint.snapshotGeometry(), clip = clip.snapshotGeometry())
     is DisplayOp.DrawRRect -> copy(rrect = rrect.snapshotGeometry(), paint = paint.snapshotGeometry(), clip = clip.snapshotGeometry())
     is DisplayOp.DrawPath -> copyPreservingSourceOperation(
@@ -37,7 +54,7 @@ internal fun DisplayOp.snapshotGeometry(): DisplayOp = when (this) {
         clip = clip.snapshotGeometry(),
     )
     is DisplayOp.DrawText -> copy(
-        blob = blob.snapshotGeometry(),
+        blob = context.snapshot(blob),
         paint = paint.snapshotGeometry(),
         clip = clip.snapshotGeometry(),
     )
@@ -68,7 +85,7 @@ internal fun DisplayOp.snapshotGeometry(): DisplayOp = when (this) {
         clip = clip.snapshotGeometry(),
     )
     is DisplayOp.DrawPicture -> copy(
-        picture = picture.snapshotGeometry(),
+        picture = picture,
         paint = paint?.snapshotGeometry(),
         clip = clip.snapshotGeometry(),
     )
@@ -174,7 +191,7 @@ private fun ImageFilter.snapshotGeometry(): ImageFilter = when (this) {
         displacement = displacement.snapshotGeometry(),
         input = input?.snapshotGeometry(),
     )
-    is ImageFilter.Picture -> copy(picture = picture.snapshotGeometry(), src = src?.snapshotGeometry())
+    is ImageFilter.Picture -> copy(picture = picture, src = src?.snapshotGeometry())
     is ImageFilter.Magnifier -> copy(src = src.snapshotGeometry(), input = input?.snapshotGeometry())
     is ImageFilter.MatrixConvolution -> copy(kernel = kernel.copyOf(), input = input?.snapshotGeometry())
     is ImageFilter.RuntimeEffect -> copy(
@@ -223,11 +240,6 @@ private fun MeshChildren.snapshotGeometry(): MeshChildren = copy(
             },
         )
     },
-)
-
-internal fun Picture.snapshotGeometry(): Picture = Picture(
-    cullRect = cullRect,
-    ops = ops,
 )
 
 private fun TextBlob.snapshotGeometry(): TextBlob = TextBlob(
