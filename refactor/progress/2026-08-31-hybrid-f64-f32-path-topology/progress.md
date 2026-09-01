@@ -1,125 +1,102 @@
-# Hybrid F64/F32 path topology progress
+# État consolidé — topologie de paths F64/F32
 
-## Task 1 — Preserve source spans
+Date de consolidation : 2026-09-01
+Périmètre : `:math:geometry`, `PathF32` et `PathOpsF32`
 
-Completed 2026-08-31. Source segment/parameter provenance now traverses flattening and split edges; the transitional source-topology model and legacy adapter are present.  Projection no longer applies unsafe late compaction to synthetic F64 contours with multiple potential witnesses, and permitted collapse is represented by `Drop`.
+## État du jalon
 
-Fix round 1: production now constructs the source topology before the legacy arrangement, retains coincident source locations/seams, and carries exact-cut boundaries through source spans.
+La vague W1 est **partiellement livrée**. Elle comprend l'immuabilité de
+`PathF32`, la topologie source F64, l'arrangement hybride F64/F32 et une
+admission conservative. Cette livraison stabilise un sous-ensemble prouvé des
+opérations de paths ; elle ne clôt ni toute la vague W1 ni l'objectif de parité
+Skia quasi isopixel.
 
-Fix round 2: removed the legacy raw-split side channel; the transitional adapter emits all legacy edges from authoritative spans and flattened sections.
+La baseline W00 reste la référence de vérité pour le renderer. Sa gate stricte
+n'est pas atteinte à cause de la quarantaine temporaire de `jpg-color-cube` ;
+la présente livraison ne modifie ni les GMs, ni les scores, ni les exclusions,
+ni les domaines `font` et `codec`.
 
-The Task 1 regression suite and focused JVM/complete JS verification passed before commit. See `task-1-report.md` for commands and evidence.
+## Décisions et faits porteurs
 
-Fix round 5: le registre exact unique alimente désormais spans, sections et le pont de provenance minimal vers `PathArrangementF64`; le même budget débite cette transition avant toute sortie. La projection n'a plus de compactor, de chord ni de fallback permissif : chaque contour est `Keep`, `Drop` ou `Reject` atomique, et le ledger temporaire valide les claims exacts `(witness, span, intervalle)` avant émission. Les régressions publiques couvrent la subdivision collinéaire, `PointF64` → `OverlapF32`, claims disjoints sous permutation/relabeling et immutabilité, claims chevauchants, et le seuil de budget.
+- `PathF32` est une valeur immuable ; les opérations publiques préservent les
+  entrées, qu'elles réussissent ou rejettent.
+- La provenance, les paramètres, les intersections et les prédicats restent
+  en F64 dans la topologie source. L'embedding et l'écriture publique utilisent
+  les représentants F32 déjà prouvés ; aucune compaction finale ni corde de
+  remplacement n'est autorisée.
+- L'arrangement hybride unique conserve les directions source F64 pour l'ordre
+  angulaire, les witnesses exacts pour la provenance et les représentants F32
+  pour les sommets et la sortie. Les overlaps exacts, contacts n-way exacts et
+  les relations locales endpoint-only explicitement prouvées restent admis.
+- Les routes larges étudiées pendant Task 3 — `full-cover`, équivalence de
+  contacts deferred, algèbre des incidences collapsed et physical strict-interior
+  cuts — sont supersédées par l'admission conservative. Elles ne constituent
+  plus une autorité sur le chemin public.
 
-Ruling de transition Task 1 documenté : une preuve locale de claims disjoints conserve les trois régions; des claims chevauchants, ou un `PointF64` promu en `OverlapF32`, rejettent avec `path-f32-projection-collapse`. Les cinq tangences publiques concernées restent donc des rejets conservateurs jusqu'à Task 2. Dette de suivi : Task 2 pourra restaurer ces succès uniquement avec une `PathProjectedCoincidenceF32` locale, bornée et prouvée; aucun alias F32, matching de coordonnées source ni second DCEL hybride n'est introduit ici.
+## Graphe d'appel public et frontière fail-closed
 
-Breaker Task 1 : les gates Sol finaux restent en échec après cinq rounds. Les
-findings ne sont pas masqués : neuf rulings explicites sont consignés dans
-`task-1-breaker-rulings.md`. Les prérequis load-bearing (porteurs pour la suite)
-sur l'overlap canonique, les IDs, l'ancrage local des point-witnesses, les paires
-adjacentes, les tests full-pipeline et le budget sont transférés à Task 2; les
-claims/endpoints et le `Drop` de contour complet à Task 3; la frontière globale
-de complexité/budget à Task 5. Task 1 est donc close procéduralement avec findings
-parqués, pas approuvée comme état final autonome.
+Les trois entrées publiques `PathOpsF32.op`, `PathOpsF32.simplify` et
+`PathOpsF32.asWinding` suivent la même route :
 
-## Task 2 — Hybrid F64/F32 projected contacts and arrangement
+```text
+PathF32
+  -> validation des entrées et limites
+  -> budget candidat, puis source capability gate
+  -> topologie source exacte F64
+  -> observation projetée immutable
+  -> projection capability gate
+       Unsupported -> IllegalStateException("path-f32-projection-collapse")
+       Accepted    -> plan exact accepté
+  -> arrangement hybride F64/F32
+  -> trace de frontière et writer
+  -> PathF32
+```
 
-Completed 2026-08-31. `PathOpsF32` binary and unary paths now use the authoritative route
-`source topology -> hybrid topology -> PathArrangementF64F32 -> hybrid trace writer`; the old
-legacy arrangement adapter has no common-main caller. The exact registry exports canonical n-way
-overlap components with strict interior incidences, point authority is local to its exact witness,
-and unsupported adjacent/backtracking projected relations reject. The single hybrid DCEL embeds
-on lifted F32 representatives while ordering rays in source F64 and aggregating operand winding.
+Le source gate s'exécute avant le flattening et la planification proxy. Il
+rejette les primitives courbes self-closed non dégénérées dupliquées. Le
+projection gate s'exécute avant aliases, cuts physiques, DCEL ou sortie ; il
+n'admet que les événements source exacts et les contacts projetés locaux,
+endpoint-only, directement soutenus par un witness exact et des identités de
+sommets source existantes.
 
-Task-2 tests cover all tangent-operation transforms with literal probes, local/absent/distant
-point witness cases, backtracking, n-way relabeling, signed zero, arrangement authority and the
-candidate-budget boundary/permutation. Focused JVM verification passed 85 tests; complete JS
-verification passed 299 tests; `git diff --check` passed. New hybrid maps, arrays, pair work,
-sorts, containment, writer work and immutable conversion preflight deterministically. The
-historical source-topology debit audit remains explicitly carried to Task 5 under breaker ruling
-9; details and exact lines are in `task-2-report.md`.
+Une relation deferred ou non prouvée, un strict-interior cut, une incidence
+collapsed, une autorité `full-cover`/cross-operand, un overlap projeté non
+couvert par un overlap F64 exact, ou une ambiguïté d'ownership, d'orientation
+ou de comptage est rejeté après le scan d'admission. Aucun état partiel n'est
+publié et aucun fallback legacy n'est appelé.
 
-Fix round 1: closed the durable carrier/atomic-overlap/authority/limit/budget findings. The
-hybrid flattener now derives a bounded tolerance from the observable denormalized F32 lattice,
-so translated tangent ovals no longer manufacture an unwitnessed micro-carrier contact; all five
-operations × three transforms are green on JVM and JS without relaxing the exact witness guard.
-The direct endpoint ticket registry replaces source-topology ±16-ULP recovery, staggered n-way
-overlaps remain atomic across operands, and the exact `4_328` reject / `4_329` success frontier
-is identical under permutations on both targets. Round-1 focused JVM verification passed 89
-tests and complete JS passed; details, RED evidence and the Task-5 historical-debit carry are in
-`task-2-report.md`.
+La priorité observable est : entrée ou limite invalide, `path-candidate-limit`,
+`path-f32-projection-collapse`, limite d'intersections source, puis limites
+structurelles finales. Les coûts d'observation et d'admission sont préflightés
+en I64 ; `maxIntersections` ne compte que les événements canoniques source.
 
-Fix round 2: reviews were verified with public `PathBuilder`/`PathOpsF32` fixtures before the
-implementation was changed. Exact overlap evidence now enters source topology through an event
-sweep and direct parameter-bit tickets, so every active endpoint is source-atomized and counted
-before hybrid aliases/DCEL allocation. The hybrid preserves both canonical split geometry and
-per-incidence F64 evaluation for representative choice; all flattened sections remain carriers.
-Public staggered overlaps, final-DCEL `maxHalfEdges`, source-event `maxIntersections`, whole-
-contour collapse disposition, extreme normalization, signed zero, and centered local-witness
-boundaries are green on JVM and JS. The centered fixture uses nonzero `+/-2^-25f` input bits;
-its `8` reject / `9` success boundary replaces an invalid y=1 fixture that rounded before the
-pipeline. Fresh `:math:geometry:jvmTest :math:geometry:jsNodeTest --rerun-tasks` and
-`git diff --check` passed. The old `4_329` independent-budget claim is superseded: `4_679`
-reject / `4_680` success is a deterministic regression boundary only, while the independent
-global source-topology ledger audit remains explicitly assigned to Task 5.
+## Vérification disponible
 
-Fix round 3: the validated source-atomization ruling is recorded in
-`task-2-round-3-ruling.md`.  Task 2 therefore does not add an unreachable hybrid strict-interior
-cut materializer or claim completion of full collapsed `KEEP`/`DROP`/`REJECT` disposition; those
-proposal/commit semantics and their `maxIntersections` accounting belong to Task 3 steps 3--4.
-The independently reproducible arrangement work is closed: outgoing source directions now use
-per-incidence F64 points; a single exact angular event sweep proves cyclic bundle contiguity and
-F32 embedding order; and exact overlap authority uses a sorted atomic-witness two-pointer join
-rather than a Cartesian product.  All new sweep/index allocations, lookup, scans and deterministic
-sorts preflight checked I64 work before execution.  The public high-valence, tangent,
-staggered-overlap and permutation tests are green; the captured (non-oracle, Task-5) global
-budget regression is now `4_986` reject / `4_987` success.  Fresh JVM/JS verification and the
-diff check are recorded in `task-2-report.md`.
+- Les tests ciblés `PathOpsHybridTopologyF32Test` sont verts sur JVM (20
+  tâches Gradle) et JS (53 tâches Gradle).
+- La vérification complète
+  `rtk ./gradlew :math:geometry:jvmTest :math:geometry:jsNodeTest --rerun-tasks`
+  est verte avec 61 tâches Gradle actionnables.
+- Les contrôles publics couvrent notamment opérations rectangulaires, crossings
+  et overlaps exacts, contacts n-way, signed zero, permutations d'opérandes,
+  immuabilité, contacts endpoint-only admis, limites et rejets conservatifs.
+- Les revues de spécification et de qualité indépendantes ont le verdict PASS ;
+  leurs commandes de vérification et leurs constats sont conservés dans les
+  rapports finaux.
+- `git diff --check` était propre pendant la livraison conservative.
 
-## Task 3 — Atomic projected cuts and collapsed disposition
+## Risques et suite
 
-Fix round 2 is committed as `f1d3772d4`, but both fresh gates fail. The implementation now has
-canonical projected event grouping, n-way propagation, final-section-list remapping, post-alias
-vertex limits, local-neighbour partial-collapse checks, and the mandatory collapsed sibling
-`INTERSECT` repro. Fresh JVM/JS verification passes 61 tasks.
+Le domaine accepté est délibérément incomplet : une opération hors preuve est
+prévisiblement rejetée, ce qui limite le taux de succès mais protège la
+topologie et le déterminisme JVM/JS. Il n'existe pas encore de fixture publique
+qui atteigne physiquement un strict-interior projected cut ; la branche est
+néanmoins rejetée fail-closed sans test interne synthétique.
 
-The round-2 gates found that the self-closed provenance is too broad for ordinary representable
-closed cubics, sibling areas can still compensate a significant loss, winding multiplicity is
-reduced to its sign, exact no-face `C XOR C` is rejected, signed-zero output depends on operand
-order, and several local scans/staging allocations are not bounded at the required gate. A public
-physical strict-interior cut/remap proof is also still missing. Task 3 remains in progress; see
-`task-3-spec-rereview-2.md` and `task-3-quality-rereview-2.md`.
-
-Fix round 3 is committed as `98a280385` and closes the round-2 public reproductions, local work
-debits, depth limit, operand-local collapse intervals and two-phase physical-cut staging. Its fresh
-JVM/JS matrix passes 61 tasks, but both round-3 gates fail. Equal-carrier compression loses
-third-party interior cuts and changes event counts; exact XOR is only short-circuited by structural
-equality; signed-zero provenance is global; an under-threshold collapsed loop nested in a filled
-face falsely rejects; and the compression sort is underdebited. The physical strict-cut branch is
-coherent by inspection but still lacks a public fixture. Task 3 remains in progress; see
-`task-3-spec-rereview-3.md` and `task-3-quality-rereview-3.md`.
-
-Fix round 4 is committed as `59f4899cd`. It closes the round-3 external-cut, face-locator,
-signed-zero, raw-bounds and shortcut defects for the covered public fixtures; the full JVM/JS
-matrix passes 61 tasks. Both fresh gates still fail: full-cover authority is too broad for some
-contacts and too narrow for multi-counterpart exact carriers; `maxIntersections` counts flattening
-joints; direct/reversed XOR work frontiers differ; and the planner performs an unbounded quadratic
-pre-pass. The physical strict-cut proof remains open. Task 3 continues; see
-`task-3-spec-rereview-4.md` and `task-3-quality-rereview-4.md`.
-
-Fix round 4 is locally complete pending fresh independent gates. A canonical equal-carrier proxy
-now propagates every third-party leader point/overlap event to every exact member before source
-components and splits; the public n=1..3 × five-operation compact/separate matrix is green on
-JVM/JS, and the n=2 `maxIntersections` frontier is identically `215` reject / `216` success under
-compact/separate encodings and operand swap. The proxy sort and propagation dispatch preflight
-their checked work. The locator uses only canonical CCW left-face cycles, closing the nested tiny
-loop DROP through holes, inverse/reversed fill and boundary ambiguity coverage. The raw XOR
-equality bypass and global signed-zero rewrite are removed; exact reciprocal full-contour cover
-permits no-face algebra only for proven cross-operand components, including geometric reversal.
-Signed-zero payload selection is local to incident provenance. Kotlin/JS normalization now
-reconstructs the logical F32 bounds payload; its public translated/scaled tiny-loop RED was
-reproduced by temporarily removing that reconstruction and is green after restoration. Full
-`:math:geometry:jvmTest :math:geometry:jsNodeTest --rerun-tasks --console=plain` passed in 26s
-with 61 actionable tasks. The physical strict-interior-cut public-fixture gap remains explicitly
-open; 20k equal-carrier stress scaling is assigned to Task 5, and no false fixture is retained.
+Les classes de preuve futures doivent être réintroduites séparément, avec leur
+autorité source exacte, obligation de preuve immutable, comptage canonique,
+disposition de collapse sélection-aware et tests publics. Les premières pistes
+sont les strict-interior projected cuts ; `full-cover`, l'équivalence
+cross-operand et l'algèbre collapsed restent des classes distinctes. Le
+remplacement du writer de Task 4 et l'oracle global de budget indépendant de
+Task 5 ne sont pas livrés par cette stabilisation.

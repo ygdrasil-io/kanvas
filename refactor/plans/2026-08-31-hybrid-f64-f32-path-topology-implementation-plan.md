@@ -174,7 +174,7 @@ fichier. La task suivante ne commence qu'après `Spec: PASS` et `Quality: PASS`.
 - Modify: `math/geometry/src/commonTest/kotlin/org/graphiks/math/geometry/PathFlatteningF64Test.kt`
 - Modify: `math/geometry/src/commonTest/kotlin/org/graphiks/math/geometry/PathIntersectionsF64Test.kt`
 - Create: `refactor/progress/2026-08-31-hybrid-f64-f32-path-topology/progress.md`
-- Create: `refactor/progress/2026-08-31-hybrid-f64-f32-path-topology/task-1-report.md`
+- Create: `refactor/progress/2026-08-31-hybrid-f64-f32-path-topology/progress.md`
 
 **Interfaces:**
 
@@ -354,7 +354,7 @@ rtk ./gradlew :math:geometry:jsNodeTest --tests '*PathOpsHybridTopologyF32Test*'
 
 Expected now: the first two tests fail because membership is erased; the third
 fails with `Required value was null.`. Copy the exact evidence into
-`task-1-report.md`.
+`progress.md`.
 
 - [ ] **Step 3: Propagate source segment and parameter provenance**
 
@@ -432,7 +432,7 @@ rtk git commit -m "refactor(math): preserve path source topology"
 - Modify: `math/geometry/src/commonMain/kotlin/org/graphiks/math/geometry/PathOpsF32.kt`
 - Modify: `math/geometry/src/commonTest/kotlin/org/graphiks/math/geometry/PathOpsHybridTopologyF32Test.kt`
 - Modify: `math/geometry/src/commonTest/kotlin/org/graphiks/math/geometry/PathBehaviorTestSupportF32.kt`
-- Create: `refactor/progress/2026-08-31-hybrid-f64-f32-path-topology/task-2-report.md`
+- Create: `refactor/progress/2026-08-31-hybrid-f64-f32-path-topology/progress.md`
 
 **Interfaces:**
 
@@ -698,7 +698,7 @@ rtk git commit -m "feat(math): build hybrid F64 F32 path arrangement"
 - Modify: `math/geometry/src/commonMain/kotlin/org/graphiks/math/geometry/PathArrangementF64F32.kt`
 - Modify: `math/geometry/src/commonTest/kotlin/org/graphiks/math/geometry/PathOpsHybridTopologyF32Test.kt`
 - Modify: `math/geometry/src/commonTest/kotlin/org/graphiks/math/geometry/PathBehaviorTestSupportF32.kt`
-- Create: `refactor/progress/2026-08-31-hybrid-f64-f32-path-topology/task-3-report.md`
+- Create: `refactor/progress/2026-08-31-hybrid-f64-f32-path-topology/progress.md`
 
 **Interfaces:**
 
