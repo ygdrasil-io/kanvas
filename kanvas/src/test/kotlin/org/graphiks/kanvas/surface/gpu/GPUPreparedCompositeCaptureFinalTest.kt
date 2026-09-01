@@ -12,7 +12,6 @@ import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeKind
-import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeRefusalCodes
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -86,16 +85,20 @@ class GPUPreparedCompositeCaptureFinalTest {
     }
 
     @Test
-    fun `picture self-cycle is refused`() {
+    fun `detached post-construction self reference is ignored`() {
         val operations = mutableListOf<DisplayOp>()
         val picture = Picture(RectF32(0f, 0f, 1f, 1f), operations)
         operations += DisplayOp.DrawPicture(picture, null, id33, ClipStack.WideOpen)
 
-        val refused = assertIs<GPUPreparedCompositeCaptureResult.Refused>(
+        val ready = assertIs<GPUPreparedCompositeCaptureResult.Ready>(
             capture(listOf(DisplayOp.DrawPicture(picture, null, id33, ClipStack.WideOpen))),
         )
 
-        assertEquals(GPUPreparedCompositeRefusalCodes.PICTURE_CYCLE, refused.code)
+        assertEquals(0, ready.capture.expandedOperations.size)
+        assertEquals(
+            listOf(GPUPreparedCompositeScopeKind.Root),
+            ready.capture.scopes.values.map { it.sourceKind },
+        )
     }
 
     @Test

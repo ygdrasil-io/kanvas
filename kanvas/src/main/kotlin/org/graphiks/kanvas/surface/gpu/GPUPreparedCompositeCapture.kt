@@ -402,7 +402,7 @@ internal object GPUPreparedCompositeCapturer {
             parentScope: MutableCaptureScope,
         ) {
             val pictureId = operation.picture.uniqueID
-            if (operation.picture.hasConstructionSelfReference() || pictureId in activePictureIds) {
+            if (pictureId in activePictureIds) {
                 refuse(
                     GPUPreparedCompositeRefusalCodes.PICTURE_CYCLE,
                     operationIndex,
