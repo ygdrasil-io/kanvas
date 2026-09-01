@@ -13,6 +13,8 @@ import org.graphiks.kanvas.paint.ShaderChild
 import org.graphiks.kanvas.paint.ColorFilterChild
 import org.graphiks.kanvas.paint.BlenderChild
 import org.graphiks.kanvas.picture.Picture
+import org.graphiks.kanvas.text.KanvasGlyphRun
+import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.kanvas.types.Mesh
 import org.graphiks.kanvas.types.Vertices
@@ -34,7 +36,11 @@ internal fun DisplayOp.snapshotGeometry(): DisplayOp = when (this) {
         paint = paint?.snapshotGeometry(),
         clip = clip.snapshotGeometry(),
     )
-    is DisplayOp.DrawText -> copy(paint = paint.snapshotGeometry(), clip = clip.snapshotGeometry())
+    is DisplayOp.DrawText -> copy(
+        blob = blob.snapshotGeometry(),
+        paint = paint.snapshotGeometry(),
+        clip = clip.snapshotGeometry(),
+    )
     is DisplayOp.SetTransform -> this
     is DisplayOp.SetClip -> copy(clip = clip.snapshotGeometry())
     is DisplayOp.BeginLayer -> copy(rec = rec.snapshotGeometry())
@@ -134,11 +140,11 @@ private fun Shader.snapshotGeometry(): Shader = when (this) {
     is Shader.WithLocalMatrix -> copy(shader = shader.snapshotGeometry())
     is Shader.WithColorFilter -> copy(shader = shader.snapshotGeometry())
     is Shader.CoordClamp -> copy(shader = shader.snapshotGeometry(), subset = subset.snapshotGeometry())
+    is Shader.WithWorkingColorSpace -> copy(shader = shader.snapshotGeometry())
     is Shader.SolidColor,
     is Shader.Image,
     is Shader.PerlinNoise,
     is Shader.FractalNoise,
-    is Shader.WithWorkingColorSpace,
     -> this
 }
 
@@ -220,8 +226,21 @@ private fun MeshChildren.snapshotGeometry(): MeshChildren = copy(
 )
 
 internal fun Picture.snapshotGeometry(): Picture = Picture(
-    cullRect = cullRect.snapshotGeometry(),
-    ops = ops.map(DisplayOp::snapshotGeometry),
+    cullRect = cullRect,
+    ops = ops,
+)
+
+private fun TextBlob.snapshotGeometry(): TextBlob = TextBlob(
+    glyphRuns = glyphRuns.map { run ->
+        KanvasGlyphRun(
+            glyphs = run.glyphs.toList(),
+            positions = run.positions.toList(),
+            fontSize = run.fontSize,
+        )
+    },
+    typeface = typeface,
+    fontSize = fontSize,
+    variationCoordinates = variationCoordinates.toMap(),
 )
 
 private fun org.graphiks.kanvas.geometry.Path.snapshotGeometry() =

@@ -9,6 +9,8 @@ import org.graphiks.kanvas.text.GlyphPaintProvider
 import org.graphiks.kanvas.text.PreparedTextOutline
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.geometry.Path
+import org.graphiks.kanvas.geometry.toCompatibilityPath
+import org.graphiks.kanvas.geometry.toPathF32
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.SamplingOptions
@@ -502,7 +504,7 @@ class Canvas internal constructor(buffer: DisplayListBuffer) {
         val transformClass = currentTransform.captureTransformClass()
         val terminalCapture = transformClass.isTerminalClipTransformClass()
         return ClipStackOp.PathOp(
-            if (terminalCapture) path else path.transform(currentTransform),
+            if (terminalCapture) path.toPathF32().toCompatibilityPath() else path.transform(currentTransform),
             op,
             antiAlias,
             perspectiveCaptureRefusal = transformClass == "perspective",

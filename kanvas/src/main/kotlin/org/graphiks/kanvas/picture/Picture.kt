@@ -129,9 +129,10 @@ class Picture internal constructor(
      */
     fun forEachOp(nested: Boolean = false, action: (DisplayOp) -> Unit) {
         for (op in ops) {
-            action(op)
-            if (nested && op is DisplayOp.DrawPicture) {
-                op.picture.forEachOp(nested = true, action = action)
+            val snapshot = op.snapshotGeometry()
+            action(snapshot)
+            if (nested && snapshot is DisplayOp.DrawPicture) {
+                snapshot.picture.forEachOp(nested = true, action = action)
             }
         }
     }
