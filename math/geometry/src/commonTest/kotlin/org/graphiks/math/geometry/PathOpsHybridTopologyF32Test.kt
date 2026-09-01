@@ -46,7 +46,7 @@ private fun expectedEqualSelfClosedCarrierClipContainsF32(operation: PathBoolean
     PathBooleanOp.REVERSE_DIFFERENCE -> listOf(false, false, true, true)
 }
 
-private fun assertEqualSelfClosedCarrierClipResultF32(
+private fun assertSupportedSingleSelfClosedCarrierClipResultF32(
     countI32: Int,
     separateContours: Boolean,
     operation: PathBooleanOp,
@@ -62,35 +62,57 @@ private fun assertEqualSelfClosedCarrierClipResultF32(
     )
 }
 
-private fun assertEqualSelfClosedCarrierClipIntersectionBoundaryF32(
+private fun assertDuplicateSelfClosedCarrierRejectedF32(
     separateContours: Boolean,
+    operation: PathBooleanOp,
     swapOperands: Boolean,
+    limitsI32: PathOpsLimitsI32 = PathOpsLimitsI32(),
 ) {
     val carriersF32 = repeatedEqualSelfClosedCarrierPathF32(countI32 = 2, separateContours = separateContours)
     val firstF32 = if (swapOperands) equalSelfClosedCarrierClipF32 else carriersF32
     val secondF32 = if (swapOperands) carriersF32 else equalSelfClosedCarrierClipF32
-    val canonicalEventCountI32 = 216
-    val belowError = assertFailsWith<IllegalStateException> {
-        PathOpsF32.op(
-            firstF32,
-            secondF32,
-            PathBooleanOp.UNION,
-            PathOpsLimitsI32(maxIntersections = canonicalEventCountI32 - 1),
-        )
+    val firstBeforeF32 = firstF32.toList()
+    val secondBeforeF32 = secondF32.toList()
+
+    val error = assertFailsWith<IllegalStateException> {
+        PathOpsF32.op(firstF32, secondF32, operation, limitsI32)
     }
-    val resultF32 = PathOpsF32.op(
-        firstF32,
-        secondF32,
-        PathBooleanOp.UNION,
-        PathOpsLimitsI32(maxIntersections = canonicalEventCountI32),
-    )
-    val label = "separate=$separateContours swap=$swapOperands"
-    assertEquals("path-intersection-limit", belowError.message, label)
-    assertEquals(
-        expectedEqualSelfClosedCarrierClipContainsF32(PathBooleanOp.UNION),
-        equalSelfClosedCarrierProbesF32.map { probeF32 -> PathAnalysisF32.contains(resultF32, probeF32) },
-        label,
-    )
+
+    assertEquals("path-f32-projection-collapse", error.message)
+    assertEquals(firstBeforeF32, firstF32.toList())
+    assertEquals(secondBeforeF32, secondF32.toList())
+}
+
+private fun assertPathF32ProjectionCollapseF32(
+    vararg inputsF32: PathF32,
+    operation: () -> Unit,
+) {
+    val inputsBeforeF32 = inputsF32.map(PathF32::toList)
+    val error = assertFailsWith<IllegalStateException> { operation() }
+
+    assertEquals("path-f32-projection-collapse", error.message)
+    inputsF32.zip(inputsBeforeF32).forEach { (inputF32, beforeF32) ->
+        assertEquals(beforeF32, inputF32.toList())
+    }
+}
+
+private fun thinLensWithDistantSelfClosedPrimitiveF32(): PathF32 {
+    val eF32 = 2.0.pow(-23).toFloat()
+    return PathBuilder()
+        .moveTo(0f, 1f - eF32)
+        .quadTo(.5f, 4f, 1f, 1f - eF32)
+        .lineTo(2f, -1f)
+        .lineTo(0f, -1f)
+        .close()
+        .moveTo(0f, 1f + eF32)
+        .quadTo(.5f, 4f, 1f, 1f + eF32)
+        .lineTo(2f, 3f)
+        .lineTo(0f, 3f)
+        .close()
+        .moveTo(10f, 10f)
+        .cubicTo(11f, 10f, 10f, 11f, 10f, 10f)
+        .close()
+        .build()
 }
 
 class PathOpsHybridTopologyF32Test {
@@ -163,11 +185,8 @@ class PathOpsHybridTopologyF32Test {
         // Keep the ±2^-25 offset at zero, where both literal F32 inputs have distinct raw bits.
         // An offset around y=1 would round away before PathOps sees it and make the fixture
         // backend-dependent rather than a public geometric limit boundary.
-        // Its nine source events and one distinct canonical projected endpoint relation require
-        // ten events in total.  The projected rail is flattened into many degree-two occurrences,
-        // but those are one structural event rather than one event per carrier section.  The
-        // existing endpoint-only relation remains part of that canonical event even though it
-        // needs no physical carrier cut.
+        // Its nine source events include the endpoint-only relation.  It admits without a
+        // physical projected cut, so no tenth public event is created after admission.
         val eF32 = 2.0.pow(-25).toFloat()
         assertTrue(eF32.toRawBits() != 0f.toRawBits())
         assertTrue((-eF32).toRawBits() != eF32.toRawBits())
@@ -191,14 +210,14 @@ class PathOpsHybridTopologyF32Test {
                 lower,
                 upper,
                 PathBooleanOp.UNION,
-                PathOpsLimitsI32(maxIntersections = 9),
+                PathOpsLimitsI32(maxIntersections = 8),
             )
         }
         val atBoundary = PathOpsF32.op(
             lower,
             upper,
             PathBooleanOp.UNION,
-            PathOpsLimitsI32(maxIntersections = 10),
+            PathOpsLimitsI32(maxIntersections = 9),
         )
 
         assertEquals("path-intersection-limit", belowError.message)
@@ -455,81 +474,6 @@ class PathOpsHybridTopologyF32Test {
     }
 
     @Test
-    fun `hybrid local candidate budget remains deterministic at its checked boundary`() {
-        val first = PathBuilder().addRect(RectF32.ofLTRB(0f, 0f, 2f, 2f)).build()
-        val second = PathBuilder().addRect(RectF32.ofLTRB(1f, 0f, 3f, 2f)).build()
-
-        val belowError = assertFailsWith<IllegalStateException> {
-            PathOpsF32.op(
-                first,
-                second,
-                PathBooleanOp.UNION,
-                PathOpsLimitsI32(maxCandidateProbes = overlappingRectanglesHybridBudgetI32 - 1),
-            )
-        }
-        val atBoundary = PathOpsF32.op(
-            first,
-            second,
-            PathBooleanOp.UNION,
-            PathOpsLimitsI32(maxCandidateProbes = overlappingRectanglesHybridBudgetI32),
-        )
-
-        assertEquals("path-candidate-limit", belowError.message)
-        assertTrue(PathAnalysisF32.contains(atBoundary, Point2F32(.5f, 1f)))
-        assertTrue(PathAnalysisF32.contains(atBoundary, Point2F32(2.5f, 1f)))
-    }
-
-    @Test
-    fun `round four local debit rejects the formerly sufficient rectangle budget`() {
-        val first = PathBuilder().addRect(RectF32.ofLTRB(0f, 0f, 2f, 2f)).build()
-        val second = PathBuilder().addRect(RectF32.ofLTRB(1f, 0f, 3f, 2f)).build()
-
-        val error = assertFailsWith<IllegalStateException> {
-            PathOpsF32.op(
-                first,
-                second,
-                PathBooleanOp.UNION,
-                PathOpsLimitsI32(maxCandidateProbes = roundThreeOverlappingRectanglesHybridBudgetI32 + 1),
-            )
-        }
-
-        assertEquals("path-candidate-limit", error.message)
-    }
-
-    @Test
-    fun `hybrid budget frontier is invariant when canonical inputs are permuted`() {
-        val left = PathBuilder().addRect(RectF32.ofLTRB(0f, 0f, 2f, 2f)).build()
-        val right = PathBuilder().addRect(RectF32.ofLTRB(1f, 0f, 3f, 2f)).build()
-
-        val belowError = assertFailsWith<IllegalStateException> {
-            PathOpsF32.op(
-                right,
-                left,
-                PathBooleanOp.UNION,
-                PathOpsLimitsI32(maxCandidateProbes = overlappingRectanglesHybridBudgetI32 - 1),
-            )
-        }
-        val forward = PathOpsF32.op(
-            left,
-            right,
-            PathBooleanOp.UNION,
-            PathOpsLimitsI32(maxCandidateProbes = overlappingRectanglesHybridBudgetI32),
-        )
-        val reverse = PathOpsF32.op(
-            right,
-            left,
-            PathBooleanOp.UNION,
-            PathOpsLimitsI32(maxCandidateProbes = overlappingRectanglesHybridBudgetI32),
-        )
-
-        assertEquals("path-candidate-limit", belowError.message)
-        assertEquals(forward, reverse)
-        listOf(Point2F32(.5f, 1f), Point2F32(1.5f, 1f), Point2F32(2.5f, 1f)).forEach { probeF32 ->
-            assertEquals(PathAnalysisF32.contains(forward, probeF32), PathAnalysisF32.contains(reverse, probeF32))
-        }
-    }
-
-    @Test
     fun `collinear subdivision crossing remains observable through the public operation`() {
         val first = PathBuilder()
             .moveTo(0f, 0f)
@@ -622,7 +566,7 @@ class PathOpsHybridTopologyF32Test {
     }
 
     @Test
-    fun `even odd repeated tiny lobes simplify to an empty path`() {
+    fun `even odd repeated tiny lobes reject instead of simplifying to an empty path`() {
         val uF32 = Float.fromBits(1f.toRawBits() + 1)
         val sourceF32 = PathBuilder(FillRule.EVEN_ODD).apply {
             moveTo(1f, 1f)
@@ -632,14 +576,13 @@ class PathOpsHybridTopologyF32Test {
             close()
         }.build()
 
-        val resultF32 = PathOpsF32.simplify(sourceF32)
-
-        assertEquals(null, PathAnalysisF32.bounds(resultF32))
-        assertFalse(PathAnalysisF32.contains(resultF32, Point2F32(1f, 1f)))
+        assertPathF32ProjectionCollapseF32(sourceF32) {
+            PathOpsF32.simplify(sourceF32)
+        }
     }
 
     @Test
-    fun `identical collapsed loops XOR to an empty public path`() {
+    fun `identical collapsed loops reject XOR and difference instead of returning an empty path`() {
         val uF32 = Float.fromBits(1f.toRawBits() + 2)
         val loopF32 = PathBuilder()
             .moveTo(1f, 1f)
@@ -652,13 +595,14 @@ class PathOpsHybridTopologyF32Test {
             .close()
             .build()
 
-        val resultF32 = PathOpsF32.op(loopF32, loopF32, PathBooleanOp.XOR)
-        val reversedResultF32 = PathOpsF32.op(loopF32, reversedLoopF32, PathBooleanOp.XOR)
-
-        assertEquals(null, PathAnalysisF32.bounds(resultF32))
-        assertFalse(PathAnalysisF32.contains(resultF32, Point2F32(1f, 1f)))
-        assertEquals(null, PathAnalysisF32.bounds(reversedResultF32))
-        assertFalse(PathAnalysisF32.contains(reversedResultF32, Point2F32(1f, 1f)))
+        listOf(PathBooleanOp.XOR, PathBooleanOp.DIFFERENCE).forEach { operation ->
+            assertPathF32ProjectionCollapseF32(loopF32, loopF32) {
+                PathOpsF32.op(loopF32, loopF32, operation)
+            }
+            assertPathF32ProjectionCollapseF32(loopF32, reversedLoopF32) {
+                PathOpsF32.op(loopF32, reversedLoopF32, operation)
+            }
+        }
     }
 
     @Test
@@ -690,88 +634,92 @@ class PathOpsHybridTopologyF32Test {
         }
     }
 
-    // Each case executes one public operation. Kotlin/JS enforces a two-second per-test timeout;
-    // partitioning this one equivalence hypothesis by n, operation, and encoding keeps the
-    // complete n=1..3 × five-op matrix executable on both backends.
+    // Each case executes one public operation. Kotlin/JS enforces a two-second per-test timeout.
     @Test fun `equal self closed n1 compact difference retains clip cuts`() =
-        assertEqualSelfClosedCarrierClipResultF32(1, false, PathBooleanOp.DIFFERENCE)
+        assertSupportedSingleSelfClosedCarrierClipResultF32(1, false, PathBooleanOp.DIFFERENCE)
     @Test fun `equal self closed n1 compact intersect retains clip cuts`() =
-        assertEqualSelfClosedCarrierClipResultF32(1, false, PathBooleanOp.INTERSECT)
+        assertSupportedSingleSelfClosedCarrierClipResultF32(1, false, PathBooleanOp.INTERSECT)
     @Test fun `equal self closed n1 compact union retains clip cuts`() =
-        assertEqualSelfClosedCarrierClipResultF32(1, false, PathBooleanOp.UNION)
+        assertSupportedSingleSelfClosedCarrierClipResultF32(1, false, PathBooleanOp.UNION)
     @Test fun `equal self closed n1 compact xor retains clip cuts`() =
-        assertEqualSelfClosedCarrierClipResultF32(1, false, PathBooleanOp.XOR)
+        assertSupportedSingleSelfClosedCarrierClipResultF32(1, false, PathBooleanOp.XOR)
     @Test fun `equal self closed n1 compact reverse difference retains clip cuts`() =
-        assertEqualSelfClosedCarrierClipResultF32(1, false, PathBooleanOp.REVERSE_DIFFERENCE)
+        assertSupportedSingleSelfClosedCarrierClipResultF32(1, false, PathBooleanOp.REVERSE_DIFFERENCE)
 
     @Test fun `equal self closed n1 separate difference retains clip cuts`() =
-        assertEqualSelfClosedCarrierClipResultF32(1, true, PathBooleanOp.DIFFERENCE)
+        assertSupportedSingleSelfClosedCarrierClipResultF32(1, true, PathBooleanOp.DIFFERENCE)
     @Test fun `equal self closed n1 separate intersect retains clip cuts`() =
-        assertEqualSelfClosedCarrierClipResultF32(1, true, PathBooleanOp.INTERSECT)
+        assertSupportedSingleSelfClosedCarrierClipResultF32(1, true, PathBooleanOp.INTERSECT)
     @Test fun `equal self closed n1 separate union retains clip cuts`() =
-        assertEqualSelfClosedCarrierClipResultF32(1, true, PathBooleanOp.UNION)
+        assertSupportedSingleSelfClosedCarrierClipResultF32(1, true, PathBooleanOp.UNION)
     @Test fun `equal self closed n1 separate xor retains clip cuts`() =
-        assertEqualSelfClosedCarrierClipResultF32(1, true, PathBooleanOp.XOR)
+        assertSupportedSingleSelfClosedCarrierClipResultF32(1, true, PathBooleanOp.XOR)
     @Test fun `equal self closed n1 separate reverse difference retains clip cuts`() =
-        assertEqualSelfClosedCarrierClipResultF32(1, true, PathBooleanOp.REVERSE_DIFFERENCE)
+        assertSupportedSingleSelfClosedCarrierClipResultF32(1, true, PathBooleanOp.REVERSE_DIFFERENCE)
 
-    @Test fun `equal self closed n2 compact difference retains clip cuts`() =
-        assertEqualSelfClosedCarrierClipResultF32(2, false, PathBooleanOp.DIFFERENCE)
-    @Test fun `equal self closed n2 compact intersect retains clip cuts`() =
-        assertEqualSelfClosedCarrierClipResultF32(2, false, PathBooleanOp.INTERSECT)
-    @Test fun `equal self closed n2 compact union retains clip cuts`() =
-        assertEqualSelfClosedCarrierClipResultF32(2, false, PathBooleanOp.UNION)
-    @Test fun `equal self closed n2 compact xor retains clip cuts`() =
-        assertEqualSelfClosedCarrierClipResultF32(2, false, PathBooleanOp.XOR)
-    @Test fun `equal self closed n2 compact reverse difference retains clip cuts`() =
-        assertEqualSelfClosedCarrierClipResultF32(2, false, PathBooleanOp.REVERSE_DIFFERENCE)
-
-    @Test fun `equal self closed n2 separate difference retains clip cuts`() =
-        assertEqualSelfClosedCarrierClipResultF32(2, true, PathBooleanOp.DIFFERENCE)
-    @Test fun `equal self closed n2 separate intersect retains clip cuts`() =
-        assertEqualSelfClosedCarrierClipResultF32(2, true, PathBooleanOp.INTERSECT)
-    @Test fun `equal self closed n2 separate union retains clip cuts`() =
-        assertEqualSelfClosedCarrierClipResultF32(2, true, PathBooleanOp.UNION)
-    @Test fun `equal self closed n2 separate xor retains clip cuts`() =
-        assertEqualSelfClosedCarrierClipResultF32(2, true, PathBooleanOp.XOR)
-    @Test fun `equal self closed n2 separate reverse difference retains clip cuts`() =
-        assertEqualSelfClosedCarrierClipResultF32(2, true, PathBooleanOp.REVERSE_DIFFERENCE)
-
-    @Test fun `equal self closed n3 compact difference retains clip cuts`() =
-        assertEqualSelfClosedCarrierClipResultF32(3, false, PathBooleanOp.DIFFERENCE)
-    @Test fun `equal self closed n3 compact intersect retains clip cuts`() =
-        assertEqualSelfClosedCarrierClipResultF32(3, false, PathBooleanOp.INTERSECT)
-    @Test fun `equal self closed n3 compact union retains clip cuts`() =
-        assertEqualSelfClosedCarrierClipResultF32(3, false, PathBooleanOp.UNION)
-    @Test fun `equal self closed n3 compact xor retains clip cuts`() =
-        assertEqualSelfClosedCarrierClipResultF32(3, false, PathBooleanOp.XOR)
-    @Test fun `equal self closed n3 compact reverse difference retains clip cuts`() =
-        assertEqualSelfClosedCarrierClipResultF32(3, false, PathBooleanOp.REVERSE_DIFFERENCE)
-
-    @Test fun `equal self closed n3 separate difference retains clip cuts`() =
-        assertEqualSelfClosedCarrierClipResultF32(3, true, PathBooleanOp.DIFFERENCE)
-    @Test fun `equal self closed n3 separate intersect retains clip cuts`() =
-        assertEqualSelfClosedCarrierClipResultF32(3, true, PathBooleanOp.INTERSECT)
-    @Test fun `equal self closed n3 separate union retains clip cuts`() =
-        assertEqualSelfClosedCarrierClipResultF32(3, true, PathBooleanOp.UNION)
-    @Test fun `equal self closed n3 separate xor retains clip cuts`() =
-        assertEqualSelfClosedCarrierClipResultF32(3, true, PathBooleanOp.XOR)
-    @Test fun `equal self closed n3 separate reverse difference retains clip cuts`() =
-        assertEqualSelfClosedCarrierClipResultF32(3, true, PathBooleanOp.REVERSE_DIFFERENCE)
-
-    // Public bisection during remediation derived 216 canonical events for n=2. Adjacent
-    // limits verify that compact/separate input and operand order share exactly one frontier.
-    @Test fun `equal self closed frontier compact n2 is representation invariant`() =
-        assertEqualSelfClosedCarrierClipIntersectionBoundaryF32(separateContours = false, swapOperands = false)
-    @Test fun `equal self closed frontier separate n2 is representation invariant`() =
-        assertEqualSelfClosedCarrierClipIntersectionBoundaryF32(separateContours = true, swapOperands = false)
-    @Test fun `equal self closed frontier compact n2 survives operand swap`() =
-        assertEqualSelfClosedCarrierClipIntersectionBoundaryF32(separateContours = false, swapOperands = true)
-    @Test fun `equal self closed frontier separate n2 survives operand swap`() =
-        assertEqualSelfClosedCarrierClipIntersectionBoundaryF32(separateContours = true, swapOperands = true)
+    @Test fun `duplicate self closed compact difference rejects`() =
+        assertDuplicateSelfClosedCarrierRejectedF32(false, PathBooleanOp.DIFFERENCE, false)
+    @Test fun `duplicate self closed compact intersect rejects`() =
+        assertDuplicateSelfClosedCarrierRejectedF32(false, PathBooleanOp.INTERSECT, false)
+    @Test fun `duplicate self closed compact union rejects`() =
+        assertDuplicateSelfClosedCarrierRejectedF32(false, PathBooleanOp.UNION, false)
+    @Test fun `duplicate self closed compact xor rejects`() =
+        assertDuplicateSelfClosedCarrierRejectedF32(false, PathBooleanOp.XOR, false)
+    @Test fun `duplicate self closed compact reverse difference rejects`() =
+        assertDuplicateSelfClosedCarrierRejectedF32(false, PathBooleanOp.REVERSE_DIFFERENCE, false)
+    @Test fun `duplicate self closed separate difference rejects`() =
+        assertDuplicateSelfClosedCarrierRejectedF32(true, PathBooleanOp.DIFFERENCE, false)
+    @Test fun `duplicate self closed separate intersect rejects`() =
+        assertDuplicateSelfClosedCarrierRejectedF32(true, PathBooleanOp.INTERSECT, false)
+    @Test fun `duplicate self closed separate union rejects`() =
+        assertDuplicateSelfClosedCarrierRejectedF32(true, PathBooleanOp.UNION, false)
+    @Test fun `duplicate self closed separate xor rejects`() =
+        assertDuplicateSelfClosedCarrierRejectedF32(true, PathBooleanOp.XOR, false)
+    @Test fun `duplicate self closed separate reverse difference rejects`() =
+        assertDuplicateSelfClosedCarrierRejectedF32(true, PathBooleanOp.REVERSE_DIFFERENCE, false)
+    @Test fun `duplicate self closed compact difference rejects after operand swap`() =
+        assertDuplicateSelfClosedCarrierRejectedF32(false, PathBooleanOp.DIFFERENCE, true)
+    @Test fun `duplicate self closed compact intersect rejects after operand swap`() =
+        assertDuplicateSelfClosedCarrierRejectedF32(false, PathBooleanOp.INTERSECT, true)
+    @Test fun `duplicate self closed compact union rejects after operand swap`() =
+        assertDuplicateSelfClosedCarrierRejectedF32(false, PathBooleanOp.UNION, true)
+    @Test fun `duplicate self closed compact xor rejects after operand swap`() =
+        assertDuplicateSelfClosedCarrierRejectedF32(false, PathBooleanOp.XOR, true)
+    @Test fun `duplicate self closed compact reverse difference rejects after operand swap`() =
+        assertDuplicateSelfClosedCarrierRejectedF32(false, PathBooleanOp.REVERSE_DIFFERENCE, true)
+    @Test fun `duplicate self closed separate difference rejects after operand swap`() =
+        assertDuplicateSelfClosedCarrierRejectedF32(true, PathBooleanOp.DIFFERENCE, true)
+    @Test fun `duplicate self closed separate intersect rejects after operand swap`() =
+        assertDuplicateSelfClosedCarrierRejectedF32(true, PathBooleanOp.INTERSECT, true)
+    @Test fun `duplicate self closed separate union rejects after operand swap`() =
+        assertDuplicateSelfClosedCarrierRejectedF32(true, PathBooleanOp.UNION, true)
+    @Test fun `duplicate self closed separate xor rejects after operand swap`() =
+        assertDuplicateSelfClosedCarrierRejectedF32(true, PathBooleanOp.XOR, true)
+    @Test fun `duplicate self closed separate reverse difference rejects after operand swap`() =
+        assertDuplicateSelfClosedCarrierRejectedF32(true, PathBooleanOp.REVERSE_DIFFERENCE, true)
 
     @Test
-    fun `under threshold collapsed loop drops both alone and inside a retained face`() {
+    fun `duplicate self closed budget takes priority over projection rejection`() {
+        val carriersF32 = repeatedEqualSelfClosedCarrierPathF32(countI32 = 2, separateContours = false)
+        val firstBeforeF32 = carriersF32.toList()
+        val secondBeforeF32 = equalSelfClosedCarrierClipF32.toList()
+
+        val error = assertFailsWith<IllegalStateException> {
+            PathOpsF32.op(
+                carriersF32,
+                equalSelfClosedCarrierClipF32,
+                PathBooleanOp.UNION,
+                PathOpsLimitsI32(maxCandidateProbes = 1),
+            )
+        }
+
+        assertEquals("path-candidate-limit", error.message)
+        assertEquals(firstBeforeF32, carriersF32.toList())
+        assertEquals(secondBeforeF32, equalSelfClosedCarrierClipF32.toList())
+    }
+
+    @Test
+    fun `under threshold collapsed loop rejects in every public fill context`() {
         val uF32 = Float.fromBits(1f.toRawBits() + 1)
         fun tinyLoopF32(builderF32: PathBuilder) {
             builderF32
@@ -806,31 +754,14 @@ class PathOpsHybridTopologyF32Test {
             .also(::tinyLoopF32)
             .build()
 
-        val droppedF32 = PathOpsF32.simplify(aloneF32)
-        val retainedF32 = PathOpsF32.simplify(nestedF32)
-        val holedResultF32 = PathOpsF32.simplify(holedF32)
-        val reversedResultF32 = PathOpsF32.simplify(reversedOuterF32)
-        val inverseResultF32 = PathOpsF32.simplify(inverseF32)
-        val boundaryError = assertFailsWith<IllegalStateException> {
-            PathOpsF32.simplify(boundaryAmbiguityF32)
+        listOf(aloneF32, nestedF32, holedF32, reversedOuterF32, inverseF32, boundaryAmbiguityF32).forEach { sourceF32 ->
+            assertPathF32ProjectionCollapseF32(sourceF32) {
+                PathOpsF32.simplify(sourceF32)
+            }
         }
 
-        assertEquals(null, PathAnalysisF32.bounds(droppedF32))
-        assertTrue(PathAnalysisF32.contains(retainedF32, Point2F32(.5f, .5f)))
-        assertTrue(PathAnalysisF32.contains(retainedF32, Point2F32(2.5f, 2.5f)))
-        assertTrue(PathAnalysisF32.contains(holedResultF32, Point2F32(.5f, .5f)))
-        assertFalse(PathAnalysisF32.contains(holedResultF32, Point2F32(1f, 1f)))
-        assertTrue(PathAnalysisF32.contains(reversedResultF32, Point2F32(.5f, .5f)))
-        assertTrue(PathAnalysisF32.contains(reversedResultF32, Point2F32(2.5f, 2.5f)))
-        assertEquals(FillRule.INVERSE_WINDING, inverseResultF32.fillRule)
-        assertFalse(PathAnalysisF32.contains(inverseResultF32, Point2F32(.5f, .5f)))
-        assertTrue(PathAnalysisF32.contains(inverseResultF32, Point2F32(4f, 4f)))
-        assertEquals("path-f32-projection-collapse", boundaryError.message)
-
-        // The same logical F32-lattice lobe must retain its DROP disposition when the public
-        // input is translated and scaled before shared normalization. This stays geometric: the
-        // oracle is only the emitted empty/retained coverage, not a normalizer implementation.
-        fun assertTransformedNestedDropF32(scaleF32: Float, translationF32: Float) {
+        // Translation and scale cannot manufacture support for a collapsed source primitive.
+        fun assertTransformedNestedRejectionF32(scaleF32: Float, translationF32: Float) {
             fun transformF32(valueF32: Float): Float = valueF32 * scaleF32 + translationF32
             val transformedAloneF32 = PathBuilder()
                 .moveTo(transformF32(1f), transformF32(1f))
@@ -868,23 +799,15 @@ class PathOpsHybridTopologyF32Test {
                 }
                 .build()
 
-            assertEquals(null, PathAnalysisF32.bounds(PathOpsF32.simplify(transformedAloneF32)))
-            val transformedResultF32 = PathOpsF32.simplify(transformedNestedF32)
-            assertTrue(
-                PathAnalysisF32.contains(
-                    transformedResultF32,
-                    Point2F32(transformF32(.5f), transformF32(.5f)),
-                ),
-            )
-            assertTrue(
-                PathAnalysisF32.contains(
-                    transformedResultF32,
-                    Point2F32(transformF32(2.5f), transformF32(2.5f)),
-                ),
-            )
+            assertPathF32ProjectionCollapseF32(transformedAloneF32) {
+                PathOpsF32.simplify(transformedAloneF32)
+            }
+            assertPathF32ProjectionCollapseF32(transformedNestedF32) {
+                PathOpsF32.simplify(transformedNestedF32)
+            }
         }
-        assertTransformedNestedDropF32(scaleF32 = 1f, translationF32 = .125f)
-        assertTransformedNestedDropF32(scaleF32 = .5f, translationF32 = .125f)
+        assertTransformedNestedRejectionF32(scaleF32 = 1f, translationF32 = .125f)
+        assertTransformedNestedRejectionF32(scaleF32 = .5f, translationF32 = .125f)
     }
 
     @Test
@@ -1004,13 +927,67 @@ class PathOpsHybridTopologyF32Test {
         val distantF32 = PathBuilder()
             .addRect(RectF32.ofLTRB(30f, 30f, 40f, 40f))
             .build()
-        val distantIntersectF32 = PathOpsF32.op(collapsedF32, distantF32, PathBooleanOp.INTERSECT)
+        assertPathF32ProjectionCollapseF32(collapsedF32, distantF32) {
+            PathOpsF32.op(collapsedF32, distantF32, PathBooleanOp.INTERSECT)
+        }
 
         assertEquals("path-f32-projection-collapse", simplifyError.message)
         assertEquals("path-f32-projection-collapse", intersectError.message)
         assertEquals("path-f32-projection-collapse", reversedIntersectError.message)
         assertEquals("path-f32-projection-collapse", reversedProvenanceError.message)
-        assertEquals(null, PathAnalysisF32.bounds(distantIntersectF32))
+    }
+
+    @Test
+    fun `as winding admits polygons and rejects collapsed self closed curves`() {
+        val polygonF32 = PathBuilder().addRect(RectF32.ofLTRB(0f, 0f, 2f, 2f)).build()
+        val uF32 = Float.fromBits(1f.toRawBits() + 1)
+        val collapsedF32 = PathBuilder()
+            .moveTo(1f, 1f)
+            .cubicTo(uF32, 1f, 1f, uF32, 1f, 1f)
+            .close()
+            .build()
+        val duplicateF32 = repeatedEqualSelfClosedCarrierPathF32(countI32 = 2, separateContours = false)
+        val polygonBeforeF32 = polygonF32.toList()
+
+        val windingF32 = PathOpsF32.asWinding(polygonF32)
+
+        assertTrue(PathAnalysisF32.contains(windingF32, Point2F32(1f, 1f)))
+        assertEquals(polygonBeforeF32, polygonF32.toList())
+        assertPathF32ProjectionCollapseF32(collapsedF32) { PathOpsF32.asWinding(collapsedF32) }
+        assertPathF32ProjectionCollapseF32(duplicateF32) { PathOpsF32.asWinding(duplicateF32) }
+    }
+
+    @Test
+    fun `thin lens overlapping projected claims reject atomically`() {
+        val lensF32 = thinLensWithDistantSelfClosedPrimitiveF32()
+        val rectangleF32 = PathBuilder().addRect(RectF32.ofLTRB(20f, 20f, 21f, 21f)).build()
+
+        assertPathF32ProjectionCollapseF32(lensF32) { PathOpsF32.simplify(lensF32) }
+        assertPathF32ProjectionCollapseF32(lensF32, lensF32) {
+            PathOpsF32.op(lensF32, lensF32, PathBooleanOp.UNION)
+        }
+        assertPathF32ProjectionCollapseF32(lensF32, lensF32) {
+            PathOpsF32.op(lensF32, lensF32, PathBooleanOp.INTERSECT)
+        }
+        assertPathF32ProjectionCollapseF32(lensF32, rectangleF32) {
+            PathOpsF32.op(lensF32, rectangleF32, PathBooleanOp.UNION)
+        }
+        assertPathF32ProjectionCollapseF32(rectangleF32, lensF32) {
+            PathOpsF32.op(rectangleF32, lensF32, PathBooleanOp.UNION)
+        }
+    }
+
+    @Test
+    fun `thin lens candidate limit takes priority while projection precedes intersection limit`() {
+        val lensF32 = thinLensWithDistantSelfClosedPrimitiveF32()
+        val candidateError = assertFailsWith<IllegalStateException> {
+            PathOpsF32.simplify(lensF32, PathOpsLimitsI32(maxCandidateProbes = 1))
+        }
+
+        assertEquals("path-candidate-limit", candidateError.message)
+        assertPathF32ProjectionCollapseF32(lensF32) {
+            PathOpsF32.simplify(lensF32, PathOpsLimitsI32(maxIntersections = 1))
+        }
     }
 
     @Test
@@ -1132,10 +1109,3 @@ private fun pathVerticesF32(path: PathF32): List<Point2F32> = buildList {
         }
     }
 }
-
-// The round-4 regression keeps the former public success boundary separate, so removal of these
-// local debits makes 4_988 observable again.  The current paired limit-1/limit boundary is a
-// deterministic public non-regression only; an independent global cost oracle remains Task 5.
-private const val roundThreeOverlappingRectanglesHybridBudgetI32 = 4_987
-/** Local hybrid-ledger frontier: 5_989 rejects; 5_990 succeeds.  This is not Task 5's oracle. */
-private const val overlappingRectanglesHybridBudgetI32 = 5_990

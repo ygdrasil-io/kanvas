@@ -163,6 +163,7 @@ internal fun splitPathSourceTopologyF64(
         limits = limitsI32,
         candidateWorkBudget = candidateWorkBudgetI32,
         allowSelfClosedNWayCarrierGroupingF64 = allowSelfClosedNWayCarrierGroupingF64,
+        enforceIntersectionLimit = false,
     )
     val spansF64 = assignSourceSpanIdsF64(
         mergeSourceSpansF64(splitTopologyF64.splitEdgesF64, candidateWorkBudgetI32),

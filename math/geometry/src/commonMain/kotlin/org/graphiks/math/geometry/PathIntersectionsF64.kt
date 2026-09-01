@@ -420,6 +420,7 @@ internal fun splitPathTopologyF64(
     limits: PathOpsLimitsI32,
     candidateWorkBudget: PathCandidateWorkBudgetI32,
     allowSelfClosedNWayCarrierGroupingF64: Boolean = false,
+    enforceIntersectionLimit: Boolean = true,
 ): PathSplitTopologyF64 {
     validatePathInputEdgesF64(edges)
     val canonicalEdges = canonicalPathInputEdgesF64(edges, candidateWorkBudget).map(::canonicalTopologicalPathInputEdgeF64)
@@ -533,7 +534,9 @@ internal fun splitPathTopologyF64(
     // atomic endpoint.  This is the sole authority for overlap cuts downstream.
     registry.materializeAtomicOverlapEndpointIncidencesF64()
     val components = registry.components
-    if (components.size > limits.maxIntersections) throw IllegalStateException("path-intersection-limit")
+    if (enforceIntersectionLimit && components.size > limits.maxIntersections) {
+        throw IllegalStateException("path-intersection-limit")
+    }
 
     val identityByComponent = components.associateWith { component ->
         pathIntersectionIdentityF64(component, canonicalEdges)

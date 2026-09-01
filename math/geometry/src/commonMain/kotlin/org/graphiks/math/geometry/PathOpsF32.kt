@@ -58,11 +58,6 @@ public object PathOpsF32 {
         )
 }
 
-private data class PathOperandInputF32(
-    val operand: PathOperand,
-    val path: PathF32,
-)
-
 private data class PathInputVertexF64(
     val id: Int,
     val point: Point2F64,
@@ -203,6 +198,17 @@ private fun buildHybridArrangementF64F32(
     candidateWorkBudget: PathCandidateWorkBudgetI32,
 ): PathArrangementF64F32 {
     try {
+        when (
+            admitPathSourcePrimitivesF64F32(
+                inputsF32 = inputs,
+                normalizationF64 = normalization,
+                candidateWorkBudgetI32 = candidateWorkBudget,
+            )
+        ) {
+            PathSourceAdmissionF64F32.Accepted -> Unit
+            PathSourceAdmissionF64F32.Unsupported ->
+                throw IllegalStateException("path-f32-projection-collapse")
+        }
         val preparedEdgesF64 = inputEdgesF64(inputs, normalization, limits, candidateWorkBudget)
         val sourceTopologyF64 = splitPathSourceTopologyF64(
             edgesF64 = preparedEdgesF64.edgesF64,
@@ -305,7 +311,7 @@ private fun inputEdgesF64(
 
     inputs.forEach { input ->
         val contours = PathFlattenerF64.flatten(
-            normalizedPath = NormalizedPathF64(input.path, normalization),
+            normalizedPath = NormalizedPathF64(input.pathF32, normalization),
             policy = policy,
             closeForFill = true,
         )
@@ -493,9 +499,9 @@ private fun collectOperandLocalCollapsedSectionsF64F32(
         ) {
             return@forEach
         }
-        val localNormalizationF64 = pathNormalizationF64(listOf(inputF32.path))
+        val localNormalizationF64 = pathNormalizationF64(listOf(inputF32.pathF32))
         val localContoursF64 = PathFlattenerF64.flatten(
-            normalizedPath = NormalizedPathF64(inputF32.path, localNormalizationF64),
+            normalizedPath = NormalizedPathF64(inputF32.pathF32, localNormalizationF64),
             policy = PathFlatteningPolicyF64(
                 tolerance = localNormalizationF64.projectionLatticeFlatteningToleranceF64(),
                 limits = limitsI32,
