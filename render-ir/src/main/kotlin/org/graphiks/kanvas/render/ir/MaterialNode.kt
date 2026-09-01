@@ -52,6 +52,8 @@ public sealed interface MaterialNode : CanonicalValue {
             "material-linear-gradient-v1", pointId(start).value, pointId(end).value,
             canonicalSequenceId("stops", values.map { it.canonicalId.value }).value, tileMode.name, interpolation.name,
         )
+        override fun equals(other: Any?): Boolean = other is LinearGradient && canonicalId == other.canonicalId
+        override fun hashCode(): Int = canonicalId.hashCode()
         public companion object {
             public fun of(
                 start: Point2F32,
@@ -76,6 +78,8 @@ public sealed interface MaterialNode : CanonicalValue {
             "material-radial-gradient-v1", pointId(center).value, radius.canonicalBits(),
             canonicalSequenceId("stops", values.map { it.canonicalId.value }).value, tileMode.name, interpolation.name,
         )
+        override fun equals(other: Any?): Boolean = other is RadialGradient && canonicalId == other.canonicalId
+        override fun hashCode(): Int = canonicalId.hashCode()
         public companion object {
             public fun of(
                 center: Point2F32,
@@ -101,6 +105,8 @@ public sealed interface MaterialNode : CanonicalValue {
             "material-sweep-gradient-v1", pointId(center).value, startAngle.canonicalBits(), endAngle.canonicalBits(),
             canonicalSequenceId("stops", values.map { it.canonicalId.value }).value, tileMode.name, interpolation.name,
         )
+        override fun equals(other: Any?): Boolean = other is SweepGradient && canonicalId == other.canonicalId
+        override fun hashCode(): Int = canonicalId.hashCode()
         public companion object {
             public fun of(
                 center: Point2F32,
@@ -129,6 +135,8 @@ public sealed interface MaterialNode : CanonicalValue {
             endRadius.canonicalBits(), canonicalSequenceId("stops", values.map { it.canonicalId.value }).value,
             tileMode.name, interpolation.name,
         )
+        override fun equals(other: Any?): Boolean = other is ConicalGradient && canonicalId == other.canonicalId
+        override fun hashCode(): Int = canonicalId.hashCode()
         public companion object {
             public fun of(
                 start: Point2F32,
@@ -169,6 +177,11 @@ public sealed interface MaterialNode : CanonicalValue {
             require(storedChildren.map(RuntimeMaterialChild::name).distinct().size == storedChildren.size) {
                 "Runtime material child names must be unique"
             }
+            RuntimeBindingValidator.validate(
+                descriptor,
+                storedUniforms,
+                storedChildren.map { RuntimeChildBinding(it.name, RuntimeChildType.SHADER) },
+            ).requireValid()
         }
         public fun uniforms(): Map<String, RuntimeUniformValue> = storedUniforms
         public val childCount: Int get() = storedChildren.size
@@ -178,6 +191,8 @@ public sealed interface MaterialNode : CanonicalValue {
             "material-runtime-effect-v1", descriptor.canonicalId.value, uniformMapId(storedUniforms).value,
             canonicalSequenceId("children", storedChildren.map { it.canonicalId.value }).value,
         )
+        override fun equals(other: Any?): Boolean = other is RuntimeEffect && canonicalId == other.canonicalId
+        override fun hashCode(): Int = canonicalId.hashCode()
         public companion object {
             public fun of(
                 descriptor: RuntimeEffectDescriptor,
@@ -227,6 +242,8 @@ public sealed interface MaterialNode : CanonicalValue {
         private val storedSubset: RectF32 = subset.copy()
         public fun copySubset(): RectF32 = storedSubset.copy()
         override val canonicalId: CanonicalId = canonicalId("material-coord-clamp-v1", material.canonicalId.value, rectId(storedSubset).value)
+        override fun equals(other: Any?): Boolean = other is CoordClamp && canonicalId == other.canonicalId
+        override fun hashCode(): Int = canonicalId.hashCode()
         public companion object { public operator fun invoke(material: MaterialNode, subset: RectF32): CoordClamp = CoordClamp(material, subset) }
     }
 }
@@ -285,6 +302,8 @@ public sealed interface ClipStackNode : CanonicalValue {
         public fun entryAt(index: Int): ClipEntry = values[index]
         override fun iterator(): Iterator<ClipEntry> = values.iterator()
         override val canonicalId: CanonicalId = canonicalSequenceId("clip-stack-operations-v1", values.map { it.canonicalId.value })
+        override fun equals(other: Any?): Boolean = other is Operations && canonicalId == other.canonicalId
+        override fun hashCode(): Int = canonicalId.hashCode()
         public companion object { public fun of(entries: Collection<ClipEntry>): ClipStackNode = if (entries.isEmpty()) Empty else Operations(entries) }
     }
 }

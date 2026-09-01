@@ -22,7 +22,7 @@ class MaterialNodeTest {
         val stops = mutableListOf(redStop, blueStop)
         val pixels = byteArrayOf(1, 2, 3, 4)
         val image = ImageResourceSnapshot.rgba8(1, 1, pixels, ColorSpace.SRGB)
-        val uniforms = linkedMapOf<String, RuntimeUniformValue>("matrix" to RuntimeUniformValue.M4(floatArrayOf(1f, 2f, 3f, 4f)))
+        val uniforms = linkedMapOf<String, RuntimeUniformValue>("matrix" to RuntimeUniformValue.M4(FloatArray(16) { (it + 1).toFloat() }))
         val children = mutableListOf(
             RuntimeMaterialChild("child", MaterialNode.Solid(ColorARGB.Green)),
         )
@@ -55,7 +55,7 @@ class MaterialNodeTest {
 
         assertEquals(listOf(redStop, blueStop), gradient.stops())
         assertContentEquals(byteArrayOf(1, 2, 3, 4), image.copyPixels())
-        assertContentEquals(floatArrayOf(1f, 2f, 3f, 4f), (runtime.uniforms().getValue("matrix") as RuntimeUniformValue.M4).copyValues())
+        assertContentEquals(FloatArray(16) { (it + 1).toFloat() }, (runtime.uniforms().getValue("matrix") as RuntimeUniformValue.M4).copyValues())
         assertEquals(1, runtime.childCount)
         assertEquals("child", runtime.childAt(0).name)
         assertEquals(materialId, material.canonicalId)
@@ -75,7 +75,13 @@ class MaterialNodeTest {
         val conical = MaterialNode.ConicalGradient.of(Point2F32(1f, 2f), 3f, Point2F32(4f, 5f), 6f, listOf(redStop), TileMode.CLAMP, ColorInterpolation.OKLCH)
         val sampled = MaterialNode.ImageSample(image, TileMode.REPEAT, TileMode.MIRROR, ImageSampling.Cubic(1f / 3f, 1f / 3f))
         val blended = MaterialNode.Blend(BlendMode.SCREEN, linear, radial)
-        val runtime = MaterialNode.RuntimeEffect.of(runtimeDescriptor(), mapOf("f" to RuntimeUniformValue.F1(2f)), emptyList())
+        val runtime = MaterialNode.RuntimeEffect.of(
+            RuntimeEffectDescriptor.of(
+                RuntimeEffectId("family-effect"), RuntimeEffectAbi.SHADER,
+                RuntimeUniformLayout.of(listOf(RuntimeUniformSlot("f", 0, RuntimeUniformType.FLOAT, 0))), emptyList(),
+            ),
+            mapOf("f" to RuntimeUniformValue.F1(2f)), emptyList(),
+        )
         val local = MaterialNode.WithLocalMatrix(sweep, Matrix3x3F32(tx = 2f, ty = 3f))
         val filtered = MaterialNode.WithColorFilter(conical, ColorFilterNode.Lighting(ColorARGB.Red, ColorARGB.Blue))
         val opacity = MaterialNode.Opacity(sampled, 0.25f)
@@ -90,7 +96,7 @@ class MaterialNodeTest {
         assertEquals(6f, conical.endRadius)
         assertEquals(TileMode.MIRROR, sampled.tileModeY)
         assertEquals(BlendMode.SCREEN, blended.mode)
-        assertEquals(RuntimeEffectId("effect-1"), runtime.descriptor.id)
+        assertEquals(RuntimeEffectId("family-effect"), runtime.descriptor.id)
         assertEquals(Matrix3x3F32(tx = 2f, ty = 3f), local.matrix)
         assertEquals(ColorARGB.Blue, (filtered.filter as ColorFilterNode.Lighting).add)
         assertEquals(0.25f, opacity.alpha)
@@ -128,8 +134,8 @@ class MaterialNodeTest {
             RuntimeEffectId("owned-effect"), RuntimeEffectAbi.SHADER, RuntimeUniformLayout.of(slots), childSlots,
             RuntimeVertexLayout.of(8, attributes),
         )
-        val uniformValues = floatArrayOf(1f, 2f, 3f, 4f)
-        val uniforms = linkedMapOf<String, RuntimeUniformValue>("value" to RuntimeUniformValue.M4(uniformValues))
+        val uniformValues = floatArrayOf(1f)
+        val uniforms = linkedMapOf<String, RuntimeUniformValue>("value" to RuntimeUniformValue.F1(uniformValues[0]))
         val children = mutableListOf(RuntimeMaterialChild("child", MaterialNode.Solid(ColorARGB.Red)))
         val runtime = MaterialNode.RuntimeEffect.of(descriptor, uniforms, children)
         val clipEntries = mutableListOf(
@@ -145,12 +151,12 @@ class MaterialNodeTest {
         uniforms.clear()
         children.clear()
         clipEntries.clear()
-        (runtime.uniforms().getValue("value") as RuntimeUniformValue.M4).copyValues()[0] = 9f
+        uniformValues[0] = 9f
 
         assertEquals(1, descriptor.uniformLayout.slotCount)
         assertEquals(1, descriptor.childSlotCount)
         assertEquals(1, descriptor.vertexLayout!!.attributeCount)
-        assertContentEquals(floatArrayOf(1f, 2f, 3f, 4f), (runtime.uniforms().getValue("value") as RuntimeUniformValue.M4).copyValues())
+        assertEquals(RuntimeUniformValue.F1(1f), runtime.uniforms().getValue("value"))
         assertEquals(1, runtime.childCount)
         assertEquals(1, clip.entryCount)
         assertEquals(identity, runtime.canonicalId)
@@ -162,7 +168,7 @@ class MaterialNodeTest {
         id = RuntimeEffectId("effect-1"),
         abi = RuntimeEffectAbi.SHADER,
         uniformLayout = RuntimeUniformLayout.of(
-            listOf(RuntimeUniformSlot("matrix", 0, RuntimeUniformType.MAT4X4, 4)),
+            listOf(RuntimeUniformSlot("matrix", 0, RuntimeUniformType.MAT4X4, 0)),
         ),
         childSlots = listOf(RuntimeChildSlot("child", RuntimeChildType.SHADER)),
         vertexLayout = RuntimeVertexLayout.of(

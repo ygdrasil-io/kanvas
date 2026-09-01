@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.render.ir
 
 import java.util.Collections
+import java.util.LinkedHashMap
 import java.util.TreeMap
 
 /** A stable content identity for a backend-neutral value. */
@@ -35,8 +36,8 @@ internal fun canonicalId(tag: String, vararg fields: String): CanonicalId = Cano
     },
 )
 
-/** Preserves every IEEE-754 bit, including distinct NaN payloads, in canonical identities. */
-internal fun Float.canonicalBits(): String = toRawBits().toString()
+/** Uses Kotlin's canonical floating-point equality bits in canonical identities. */
+internal fun Float.canonicalBits(): String = toBits().toString()
 
 /** Freezes a caller-owned collection behind a JVM-unmodifiable view. */
 internal fun <T> immutableList(values: Collection<T>): List<T> =
@@ -45,6 +46,10 @@ internal fun <T> immutableList(values: Collection<T>): List<T> =
 /** Freezes caller-owned map entries in their canonical key order. */
 internal fun <K : Comparable<K>, V> immutableSortedMap(values: Map<K, V>): Map<K, V> =
     Collections.unmodifiableMap(TreeMap(values))
+
+/** Freezes caller-owned map entries while retaining their source iteration order. */
+internal fun <K, V> immutableInsertionOrderMap(values: Map<K, V>): Map<K, V> =
+    Collections.unmodifiableMap(LinkedHashMap(values))
 
 /** Encodes a collection as a nested canonical value, retaining its cardinality and field boundaries. */
 internal fun canonicalSequenceId(tag: String, values: Collection<String>): CanonicalId =

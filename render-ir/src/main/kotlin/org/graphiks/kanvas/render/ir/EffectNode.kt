@@ -69,6 +69,11 @@ public sealed interface ColorFilterNode : EffectNode {
             require(storedChildren.map(RuntimeColorFilterChild::name).distinct().size == storedChildren.size) {
                 "Runtime color-filter child names must be unique"
             }
+            RuntimeBindingValidator.validate(
+                descriptor,
+                storedUniforms,
+                storedChildren.map { RuntimeChildBinding(it.name, RuntimeChildType.COLOR_FILTER) },
+            ).requireValid()
         }
         public fun uniforms(): Map<String, RuntimeUniformValue> = storedUniforms
         public val childCount: Int get() = storedChildren.size
@@ -78,6 +83,8 @@ public sealed interface ColorFilterNode : EffectNode {
             "color-filter-runtime-effect-v1", descriptor.canonicalId.value, uniformMapId(storedUniforms).value,
             canonicalSequenceId("children", storedChildren.map { it.canonicalId.value }).value,
         )
+        override fun equals(other: Any?): Boolean = other is RuntimeEffect && canonicalId == other.canonicalId
+        override fun hashCode(): Int = canonicalId.hashCode()
         public companion object {
             public fun of(
                 descriptor: RuntimeEffectDescriptor,
@@ -135,6 +142,8 @@ public sealed interface ImageFilterNode : EffectNode {
         private val storedCrop: RectF32 = crop.copy()
         public fun copyCrop(): RectF32 = storedCrop.copy()
         override val canonicalId: CanonicalId = canonicalId("image-filter-crop-v1", effectRectId(storedCrop).value, tileMode.name, optionalEffectId(input).value)
+        override fun equals(other: Any?): Boolean = other is Crop && canonicalId == other.canonicalId
+        override fun hashCode(): Int = canonicalId.hashCode()
         public companion object { public fun of(crop: RectF32, tileMode: TileMode = TileMode.CLAMP, input: ImageFilterNode? = null): Crop = Crop(crop, tileMode, input) }
     }
     public data class Blur(public val sigmaX: Float, public val sigmaY: Float, public val tileMode: TileMode = TileMode.CLAMP, public val input: ImageFilterNode? = null) : ImageFilterNode {
@@ -208,6 +217,8 @@ public sealed interface ImageFilterNode : EffectNode {
         public fun copySource(): RectF32 = storedSrc.copy()
         public fun copyDestination(): RectF32 = storedDst.copy()
         override val canonicalId: CanonicalId = canonicalId("image-filter-tile-v1", effectRectId(storedSrc).value, effectRectId(storedDst).value, optionalEffectId(input).value)
+        override fun equals(other: Any?): Boolean = other is Tile && canonicalId == other.canonicalId
+        override fun hashCode(): Int = canonicalId.hashCode()
         public companion object { public fun of(src: RectF32, dst: RectF32, input: ImageFilterNode? = null): Tile = Tile(src, dst, input) }
     }
     public class Merge private constructor(inputs: Collection<ImageFilterNode>) : ImageFilterNode, Iterable<ImageFilterNode> {
@@ -216,6 +227,8 @@ public sealed interface ImageFilterNode : EffectNode {
         public fun inputAt(index: Int): ImageFilterNode = values[index]
         override fun iterator(): Iterator<ImageFilterNode> = values.iterator()
         override val canonicalId: CanonicalId = canonicalSequenceId("image-filter-merge-v1", values.map { it.canonicalId.value })
+        override fun equals(other: Any?): Boolean = other is Merge && canonicalId == other.canonicalId
+        override fun hashCode(): Int = canonicalId.hashCode()
         public companion object { public fun of(inputs: Collection<ImageFilterNode>): Merge = Merge(inputs) }
     }
     public data class DisplacementMap(
@@ -224,16 +237,29 @@ public sealed interface ImageFilterNode : EffectNode {
     ) : ImageFilterNode {
         override val canonicalId: CanonicalId = canonicalId("image-filter-displacement-map-v1", xChannelSelector.name, yChannelSelector.name, scale.canonicalBits(), displacement.canonicalId.value, optionalEffectId(input).value)
     }
-    public class Picture private constructor(public val scene: SceneSnapshot, src: RectF32?) : ImageFilterNode {
+    public class Picture private constructor(public val scene: SceneSnapshot, cullRect: RectF32, src: RectF32?) : ImageFilterNode {
+        private val storedCullRect: RectF32 = cullRect.copy()
         private val storedSrc: RectF32? = src?.copy()
+        public fun copyCullRect(): RectF32 = storedCullRect.copy()
         public fun copySource(): RectF32? = storedSrc?.copy()
-        override val canonicalId: CanonicalId = canonicalId("image-filter-picture-v1", scene.canonicalId.value, canonicalOptionalId("source", storedSrc?.let(::effectRectId)).value)
-        public companion object { public fun of(scene: SceneSnapshot, src: RectF32? = null): Picture = Picture(scene, src) }
+        override val canonicalId: CanonicalId = canonicalId(
+            "image-filter-picture-v1",
+            scene.canonicalId.value,
+            effectRectId(storedCullRect).value,
+            canonicalOptionalId("source", storedSrc?.let(::effectRectId)).value,
+        )
+        override fun equals(other: Any?): Boolean = other is Picture && canonicalId == other.canonicalId
+        override fun hashCode(): Int = canonicalId.hashCode()
+        public companion object {
+            public fun of(scene: SceneSnapshot, cullRect: RectF32, src: RectF32? = null): Picture = Picture(scene, cullRect, src)
+        }
     }
     public class Magnifier private constructor(src: RectF32, public val zoom: Float, public val inset: Float, public val input: ImageFilterNode?) : ImageFilterNode {
         private val storedSrc: RectF32 = src.copy()
         public fun copySource(): RectF32 = storedSrc.copy()
         override val canonicalId: CanonicalId = canonicalId("image-filter-magnifier-v1", effectRectId(storedSrc).value, zoom.canonicalBits(), inset.canonicalBits(), optionalEffectId(input).value)
+        override fun equals(other: Any?): Boolean = other is Magnifier && canonicalId == other.canonicalId
+        override fun hashCode(): Int = canonicalId.hashCode()
         public companion object { public fun of(src: RectF32, zoom: Float, inset: Float, input: ImageFilterNode? = null): Magnifier = Magnifier(src, zoom, inset, input) }
     }
     public class MatrixConvolution private constructor(
@@ -251,6 +277,8 @@ public sealed interface ImageFilterNode : EffectNode {
             kernel.canonicalId.value, gain.canonicalBits(), bias.canonicalBits(), effectVectorId(kernelOffset).value,
             tileMode.name, convolveAlpha.toString(), optionalEffectId(input).value,
         )
+        override fun equals(other: Any?): Boolean = other is MatrixConvolution && canonicalId == other.canonicalId
+        override fun hashCode(): Int = canonicalId.hashCode()
         public companion object {
             public fun of(
                 kernelSize: SizeF32,
@@ -278,6 +306,17 @@ public sealed interface ImageFilterNode : EffectNode {
             require(storedChildren.map(RuntimeImageFilterChild::name).distinct().size == storedChildren.size) {
                 "Runtime image-filter child names must be unique"
             }
+            require(childShaderName == null || storedChildren.none { it.name == childShaderName }) {
+                "Runtime image-filter child names must be unique"
+            }
+            RuntimeBindingValidator.validate(
+                descriptor,
+                storedUniforms,
+                buildList {
+                    childShaderName?.let { add(RuntimeChildBinding(it, RuntimeChildType.SHADER)) }
+                    storedChildren.forEach { add(RuntimeChildBinding(it.name, RuntimeChildType.IMAGE_FILTER)) }
+                },
+            ).requireValid()
         }
         public fun uniforms(): Map<String, RuntimeUniformValue> = storedUniforms
         public val childCount: Int get() = storedChildren.size
@@ -288,6 +327,8 @@ public sealed interface ImageFilterNode : EffectNode {
             if (childShaderName == null) "absent" else "present", childShaderName.orEmpty(),
             canonicalSequenceId("children", storedChildren.map { it.canonicalId.value }).value,
         )
+        override fun equals(other: Any?): Boolean = other is RuntimeEffect && canonicalId == other.canonicalId
+        override fun hashCode(): Int = canonicalId.hashCode()
         public companion object {
             public fun of(
                 descriptor: RuntimeEffectDescriptor,
@@ -326,6 +367,8 @@ public sealed interface EffectStack : CanonicalValue {
         public fun effectAt(index: Int): EffectNode = values[index]
         override fun iterator(): Iterator<EffectNode> = values.iterator()
         override val canonicalId: CanonicalId = canonicalSequenceId("effect-stack-v1", values.map { it.canonicalId.value })
+        override fun equals(other: Any?): Boolean = other is Entries && canonicalId == other.canonicalId
+        override fun hashCode(): Int = canonicalId.hashCode()
     }
     public companion object {
         public fun of(effects: Collection<EffectNode>): EffectStack = if (effects.isEmpty()) Empty else Entries(effects)

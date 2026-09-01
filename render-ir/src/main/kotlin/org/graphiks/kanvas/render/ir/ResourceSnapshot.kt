@@ -25,6 +25,7 @@ public data class ResourceReference(public val id: ResourceId) : CanonicalValue 
 public class ImmutableBytes private constructor(bytes: ByteArray) : CanonicalValue {
     private val values: ByteArray = bytes.copyOf()
 
+    internal val size: Int get() = values.size
     public fun copyToByteArray(): ByteArray = values.copyOf()
     override val canonicalId: CanonicalId = canonicalSequenceId("immutable-bytes-v1", values.map(Byte::toString))
     override fun equals(other: Any?): Boolean = other is ImmutableBytes && values.contentEquals(other.values)
@@ -38,6 +39,7 @@ public class ImmutableBytes private constructor(bytes: ByteArray) : CanonicalVal
 public class ImmutableFloats private constructor(values: FloatArray) : CanonicalValue {
     private val storedValues: FloatArray = values.copyOf()
 
+    internal val size: Int get() = storedValues.size
     public fun copyToFloatArray(): FloatArray = storedValues.copyOf()
     override val canonicalId: CanonicalId = canonicalSequenceId(
         "immutable-floats-v1",
@@ -118,8 +120,12 @@ public sealed interface ImageResourceSnapshot : ResourceSnapshot {
         init {
             require(sourceId.isNotBlank()) { "ImageResourceSnapshot.sourceId must not be blank" }
             require(width > 0 && height > 0) { "Image resource dimensions must be positive" }
+            require(pixelFormat != ImagePixelFormat.UNKNOWN) { "Owned pixels require a concrete pixel format" }
+            require(alphaType != ImageAlphaType.UNKNOWN) { "Owned pixels require a concrete alpha type" }
+            require(colorSpace.name.isNotBlank()) { "Owned pixels require a nonblank color-space identity" }
             require(rowBytes >= minimumRowBytes(width, pixelFormat)) { "rowBytes is smaller than one image row" }
-            require(storedPixels.copyToByteArray().size.toLong() >= rowBytes.toLong() * height.toLong()) {
+            val requiredBytes = checkedPixelByteCount(rowBytes, height)
+            require(storedPixels.size.toLong() >= requiredBytes) {
                 "pixel bytes do not cover the declared image rows"
             }
         }
@@ -151,7 +157,16 @@ public sealed interface ImageResourceSnapshot : ResourceSnapshot {
             colorSpace: ColorSpace,
             alphaType: ImageAlphaType = ImageAlphaType.UNPREMUL,
             sourceId: String = "pixels",
-        ): Pixels = Pixels(sourceId, width, height, ImagePixelFormat.RGBA_8888, alphaType, colorSpace, width * 4, pixels)
+        ): Pixels = Pixels(
+            sourceId,
+            width,
+            height,
+            ImagePixelFormat.RGBA_8888,
+            alphaType,
+            colorSpace,
+            minimumRowBytes(width, ImagePixelFormat.RGBA_8888),
+            pixels,
+        )
 
         public fun fromPixels(
             sourceId: String,
@@ -224,12 +239,13 @@ public data class RuntimeUniformSlot(
     public val name: String,
     public val binding: Int,
     public val type: RuntimeUniformType,
+    /** ABI-declared storage size, preserved without reinterpreting it as a value arity. */
     public val size: Int,
 ) : CanonicalValue {
     init {
         require(name.isNotBlank()) { "RuntimeUniformSlot.name must not be blank" }
         require(binding >= 0) { "RuntimeUniformSlot.binding must not be negative" }
-        require(size > 0) { "RuntimeUniformSlot.size must be positive" }
+        require(size >= 0) { "RuntimeUniformSlot.size must not be negative" }
     }
     override val canonicalId: CanonicalId = canonicalId("runtime-uniform-slot-v1", name, binding.toString(), type.name, size.toString())
 }
@@ -237,11 +253,16 @@ public data class RuntimeUniformSlot(
 /** Immutable ABI uniform layout. */
 public class RuntimeUniformLayout private constructor(slots: Collection<RuntimeUniformSlot>) : CanonicalValue, Iterable<RuntimeUniformSlot> {
     private val values: List<RuntimeUniformSlot> = immutableList(slots)
-    init { require(values.map(RuntimeUniformSlot::name).distinct().size == values.size) { "Runtime uniform slot names must be unique" } }
+    init {
+        require(values.map(RuntimeUniformSlot::name).distinct().size == values.size) { "Runtime uniform slot names must be unique" }
+        require(values.map(RuntimeUniformSlot::binding).distinct().size == values.size) { "Runtime uniform slot bindings must be unique" }
+    }
     public val slotCount: Int get() = values.size
     public fun slotAt(index: Int): RuntimeUniformSlot = values[index]
     override fun iterator(): Iterator<RuntimeUniformSlot> = values.iterator()
     override val canonicalId: CanonicalId = canonicalSequenceId("runtime-uniform-layout-v1", values.map { it.canonicalId.value })
+    override fun equals(other: Any?): Boolean = other is RuntimeUniformLayout && canonicalId == other.canonicalId
+    override fun hashCode(): Int = canonicalId.hashCode()
     public companion object { public fun of(slots: Collection<RuntimeUniformSlot>): RuntimeUniformLayout = RuntimeUniformLayout(slots) }
 }
 
@@ -271,7 +292,20 @@ public class RuntimeVertexLayout private constructor(
     attributes: Collection<RuntimeVertexAttribute>,
 ) : CanonicalValue, Iterable<RuntimeVertexAttribute> {
     private val values: List<RuntimeVertexAttribute> = immutableList(attributes)
-    init { require(stride >= 0) { "RuntimeVertexLayout.stride must not be negative" } }
+    init {
+        require(stride >= 0) { "RuntimeVertexLayout.stride must not be negative" }
+        require(values.map(RuntimeVertexAttribute::shaderLocation).distinct().size == values.size) {
+            "Runtime vertex shader locations must be unique"
+        }
+        values.forEach { attribute ->
+            val extent = try {
+                Math.addExact(attribute.offset, attribute.format.byteSize())
+            } catch (error: ArithmeticException) {
+                throw IllegalArgumentException("Runtime vertex attribute extent overflows Int", error)
+            }
+            require(extent <= stride) { "Runtime vertex attribute extends beyond stride" }
+        }
+    }
     public val attributeCount: Int get() = values.size
     public fun attributeAt(index: Int): RuntimeVertexAttribute = values[index]
     override fun iterator(): Iterator<RuntimeVertexAttribute> = values.iterator()
@@ -281,6 +315,8 @@ public class RuntimeVertexLayout private constructor(
         stepMode.name,
         canonicalSequenceId("attributes", values.map { it.canonicalId.value }).value,
     )
+    override fun equals(other: Any?): Boolean = other is RuntimeVertexLayout && canonicalId == other.canonicalId
+    override fun hashCode(): Int = canonicalId.hashCode()
     public companion object {
         public fun of(
             stride: Int,
@@ -311,6 +347,8 @@ public class RuntimeEffectDescriptor private constructor(
         canonicalSequenceId("child-slots", values.map { it.canonicalId.value }).value,
         canonicalOptionalId("vertex-layout", vertexLayout?.canonicalId).value,
     )
+    override fun equals(other: Any?): Boolean = other is RuntimeEffectDescriptor && canonicalId == other.canonicalId
+    override fun hashCode(): Int = canonicalId.hashCode()
     public companion object {
         public fun of(
             id: RuntimeEffectId,
@@ -344,12 +382,87 @@ public sealed interface RuntimeUniformValue : CanonicalValue {
     }
     public class M4 private constructor(values: FloatArray) : RuntimeUniformValue {
         private val storedValues: ImmutableFloats = ImmutableFloats.copyOf(values)
+        init { require(storedValues.size == 16) { "Runtime M4 uniforms require exactly 16 values" } }
         public fun copyValues(): FloatArray = storedValues.copyToFloatArray()
         override val canonicalId: CanonicalId = canonicalId("runtime-uniform-m4-v1", storedValues.canonicalId.value)
         override fun equals(other: Any?): Boolean = other is M4 && storedValues == other.storedValues
         override fun hashCode(): Int = storedValues.hashCode()
         public companion object { public operator fun invoke(values: FloatArray): M4 = M4(values) }
     }
+}
+
+/** A neutral runtime child binding supplied to a registered effect descriptor. */
+public data class RuntimeChildBinding(public val name: String, public val type: RuntimeChildType) {
+    init { require(name.isNotBlank()) { "RuntimeChildBinding.name must not be blank" } }
+}
+
+/** Public, backend-free outcome of checking runtime values against a registered ABI. */
+public sealed interface RuntimeBindingValidationResult {
+    public data object Valid : RuntimeBindingValidationResult
+    public data class MissingUniform(public val name: String) : RuntimeBindingValidationResult
+    public data class UnexpectedUniform(public val name: String) : RuntimeBindingValidationResult
+    public data class UniformTypeMismatch(
+        public val name: String,
+        public val expected: RuntimeUniformType,
+        public val actual: RuntimeUniformType,
+    ) : RuntimeBindingValidationResult
+    public data class MissingChild(public val name: String) : RuntimeBindingValidationResult
+    public data class UnexpectedChild(public val name: String) : RuntimeBindingValidationResult
+    public data class DuplicateChild(public val name: String) : RuntimeBindingValidationResult
+    public data class ChildTypeMismatch(
+        public val name: String,
+        public val expected: RuntimeChildType,
+        public val actual: RuntimeChildType,
+    ) : RuntimeBindingValidationResult
+}
+
+/** Checks a runtime binding before renderer planning or backend allocation. */
+public object RuntimeBindingValidator {
+    public fun validate(
+        descriptor: RuntimeEffectDescriptor,
+        uniforms: Map<String, RuntimeUniformValue>,
+        children: Collection<RuntimeChildBinding>,
+    ): RuntimeBindingValidationResult {
+        children.groupBy(RuntimeChildBinding::name).entries.firstOrNull { it.value.size > 1 }?.let { duplicate ->
+            return RuntimeBindingValidationResult.DuplicateChild(duplicate.key)
+        }
+        descriptor.uniformLayout.forEach { slot ->
+            val value = uniforms[slot.name] ?: return RuntimeBindingValidationResult.MissingUniform(slot.name)
+            val actual = value.runtimeType()
+            if (actual != slot.type) {
+                return RuntimeBindingValidationResult.UniformTypeMismatch(slot.name, slot.type, actual)
+            }
+        }
+        uniforms.keys.firstOrNull { name -> descriptor.uniformLayout.none { it.name == name } }?.let { name ->
+            return RuntimeBindingValidationResult.UnexpectedUniform(name)
+        }
+
+        descriptor.forEach { slot ->
+            val child = children.firstOrNull { it.name == slot.name }
+                ?: return RuntimeBindingValidationResult.MissingChild(slot.name)
+            if (child.type != slot.type) {
+                return RuntimeBindingValidationResult.ChildTypeMismatch(slot.name, slot.type, child.type)
+            }
+        }
+        children.firstOrNull { child -> descriptor.none { it.name == child.name } }?.let { child ->
+            return RuntimeBindingValidationResult.UnexpectedChild(child.name)
+        }
+        return RuntimeBindingValidationResult.Valid
+    }
+}
+
+internal fun RuntimeBindingValidationResult.requireValid() {
+    require(this is RuntimeBindingValidationResult.Valid) { "Runtime effect bindings are invalid: $this" }
+}
+
+private fun RuntimeUniformValue.runtimeType(): RuntimeUniformType = when (this) {
+    is RuntimeUniformValue.F1 -> RuntimeUniformType.FLOAT
+    is RuntimeUniformValue.F2 -> RuntimeUniformType.FLOAT2
+    is RuntimeUniformValue.F3 -> RuntimeUniformType.FLOAT3
+    is RuntimeUniformValue.F4 -> RuntimeUniformType.FLOAT4
+    is RuntimeUniformValue.I1 -> RuntimeUniformType.INT1
+    is RuntimeUniformValue.M3 -> RuntimeUniformType.MAT3X3
+    is RuntimeUniformValue.M4 -> RuntimeUniformType.MAT4X4
 }
 
 /** Ordered material child retained by a runtime shader effect. */
@@ -360,7 +473,7 @@ public data class RuntimeMaterialChild(public val name: String, public val mater
 
 internal fun immutableUniformMap(values: Map<String, RuntimeUniformValue>): Map<String, RuntimeUniformValue> {
     values.keys.forEach { require(it.isNotBlank()) { "Runtime uniform names must not be blank" } }
-    return immutableSortedMap(values)
+    return immutableInsertionOrderMap(values)
 }
 
 internal fun uniformMapId(values: Map<String, RuntimeUniformValue>): CanonicalId = canonicalSequenceId(
@@ -384,5 +497,25 @@ internal fun matrixCanonicalId(tag: String, value: Matrix3x3F32): CanonicalId = 
 
 private fun minimumRowBytes(width: Int, format: ImagePixelFormat): Int {
     require(width > 0) { "Image width must be positive" }
-    return Math.multiplyExact(width, format.bytesPerPixel)
+    return try {
+        Math.multiplyExact(width, format.bytesPerPixel)
+    } catch (error: ArithmeticException) {
+        throw IllegalArgumentException("Image row byte count overflows Int", error)
+    }
+}
+
+private fun checkedPixelByteCount(rowBytes: Int, height: Int): Long = try {
+    Math.multiplyExact(rowBytes.toLong(), height.toLong())
+} catch (error: ArithmeticException) {
+    throw IllegalArgumentException("Image byte count overflows Long", error)
+}
+
+private fun RuntimeVertexFormat.byteSize(): Int = when (this) {
+    RuntimeVertexFormat.FLOAT32 -> 4
+    RuntimeVertexFormat.FLOAT32X2 -> 8
+    RuntimeVertexFormat.FLOAT32X3 -> 12
+    RuntimeVertexFormat.FLOAT32X4 -> 16
+    RuntimeVertexFormat.UINT8X4 -> 4
+    RuntimeVertexFormat.SINT16X2 -> 4
+    RuntimeVertexFormat.SINT16X4 -> 8
 }
