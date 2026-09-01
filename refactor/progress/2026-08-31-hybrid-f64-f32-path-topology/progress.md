@@ -76,3 +76,17 @@ sorts preflight checked I64 work before execution.  The public high-valence, tan
 staggered-overlap and permutation tests are green; the captured (non-oracle, Task-5) global
 budget regression is now `4_986` reject / `4_987` success.  Fresh JVM/JS verification and the
 diff check are recorded in `task-2-report.md`.
+
+## Task 3 — Atomic projected cuts and collapsed disposition
+
+Fix round 2 is committed as `f1d3772d4`, but both fresh gates fail. The implementation now has
+canonical projected event grouping, n-way propagation, final-section-list remapping, post-alias
+vertex limits, local-neighbour partial-collapse checks, and the mandatory collapsed sibling
+`INTERSECT` repro. Fresh JVM/JS verification passes 61 tasks.
+
+The round-2 gates found that the self-closed provenance is too broad for ordinary representable
+closed cubics, sibling areas can still compensate a significant loss, winding multiplicity is
+reduced to its sign, exact no-face `C XOR C` is rejected, signed-zero output depends on operand
+order, and several local scans/staging allocations are not bounded at the required gate. A public
+physical strict-interior cut/remap proof is also still missing. Task 3 remains in progress; see
+`task-3-spec-rereview-2.md` and `task-3-quality-rereview-2.md`.
