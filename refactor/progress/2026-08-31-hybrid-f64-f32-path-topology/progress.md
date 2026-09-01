@@ -90,3 +90,12 @@ reduced to its sign, exact no-face `C XOR C` is rejected, signed-zero output dep
 order, and several local scans/staging allocations are not bounded at the required gate. A public
 physical strict-interior cut/remap proof is also still missing. Task 3 remains in progress; see
 `task-3-spec-rereview-2.md` and `task-3-quality-rereview-2.md`.
+
+Fix round 3 is committed as `98a280385` and closes the round-2 public reproductions, local work
+debits, depth limit, operand-local collapse intervals and two-phase physical-cut staging. Its fresh
+JVM/JS matrix passes 61 tasks, but both round-3 gates fail. Equal-carrier compression loses
+third-party interior cuts and changes event counts; exact XOR is only short-circuited by structural
+equality; signed-zero provenance is global; an under-threshold collapsed loop nested in a filled
+face falsely rejects; and the compression sort is underdebited. The physical strict-cut branch is
+coherent by inspection but still lacks a public fixture. Task 3 remains in progress; see
+`task-3-spec-rereview-3.md` and `task-3-quality-rereview-3.md`.
