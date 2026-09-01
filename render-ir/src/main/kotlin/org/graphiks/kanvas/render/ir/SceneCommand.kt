@@ -31,6 +31,8 @@ public class LayerDescriptor private constructor(
     public val label: String?,
     bounds: RectF32?,
     public val material: MaterialNode?,
+    public val blend: BlendNode,
+    public val clip: ClipStackNode,
     public val backdrop: EffectStack,
     public val effects: EffectStack,
     public val transform: Matrix3x3F32,
@@ -42,10 +44,12 @@ public class LayerDescriptor private constructor(
     public fun copyBounds(): RectF32? = storedBounds?.copy()
 
     override val canonicalId: CanonicalId = canonicalId(
-        "layer-descriptor-v2",
+        "layer-descriptor-v3",
         label.orEmpty(),
         canonicalOptionalId("bounds", storedBounds?.let { rectId("value", it) }).value,
         canonicalOptionalId("material", material?.canonicalId).value,
+        blend.canonicalId.value,
+        clip.canonicalId.value,
         backdrop.canonicalId.value,
         effects.canonicalId.value,
         matrixId("transform", transform).value,
@@ -56,10 +60,12 @@ public class LayerDescriptor private constructor(
             label: String? = null,
             bounds: RectF32? = null,
             material: MaterialNode? = null,
+            blend: BlendNode = BlendNode.SrcOver,
+            clip: ClipStackNode = ClipStackNode.Empty,
             backdrop: EffectStack = EffectStack.Empty,
             effects: EffectStack = EffectStack.Empty,
             transform: Matrix3x3F32 = Matrix3x3F32.Identity,
-        ): LayerDescriptor = LayerDescriptor(label, bounds, material, backdrop, effects, transform)
+        ): LayerDescriptor = LayerDescriptor(label, bounds, material, blend, clip, backdrop, effects, transform)
     }
 }
 

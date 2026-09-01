@@ -54,13 +54,13 @@ class GeometryNodeTest {
         colors.clear()
         indices[0] = 9
         bounds.setEmpty()
-        mesh.copyIndices()[0] = 8
+        mesh.copyIndices()!![0] = 8
         mesh.copyBounds()!!.setEmpty()
 
         assertEquals(1, mesh.vertexCount)
         assertEquals(Point2F32(3f, 4f), mesh.texCoordAt(0))
         assertEquals(ColorARGB.Red, mesh.colorAt(0))
-        assertContentEquals(intArrayOf(0), mesh.copyIndices())
+        assertContentEquals(intArrayOf(0), mesh.copyIndices()!!)
         assertEquals(RectF32(1f, 2f, 3f, 4f), mesh.copyBounds())
         assertEquals(identity, mesh.canonicalId)
         assertNotEquals(identity, indexedMesh(primitiveMode = MeshPrimitiveMode.TRIANGLE_STRIP).canonicalId)
@@ -81,6 +81,34 @@ class GeometryNodeTest {
             indices = intArrayOf(0, 1),
         )
         assertNotEquals(vertexBits.canonicalId, indexBits.canonicalId)
+    }
+
+    @Test
+    fun `indexed mesh distinguishes absent indices from present empty indices`() {
+        val direct = GeometryNode.IndexedMesh.of(
+            primitiveMode = MeshPrimitiveMode.TRIANGLES,
+            vertices = listOf(Point2F32(1f, 2f)),
+            indices = null,
+        )
+        val empty = GeometryNode.IndexedMesh.of(
+            primitiveMode = MeshPrimitiveMode.TRIANGLES,
+            vertices = listOf(Point2F32(1f, 2f)),
+            indices = intArrayOf(),
+        )
+        val supplied = intArrayOf(3)
+        val indexed = GeometryNode.IndexedMesh.of(
+            primitiveMode = MeshPrimitiveMode.TRIANGLES,
+            vertices = listOf(Point2F32(1f, 2f)),
+            indices = supplied,
+        )
+
+        supplied[0] = 7
+        indexed.copyIndices()!![0] = 8
+
+        assertEquals(null, direct.copyIndices())
+        assertContentEquals(intArrayOf(), empty.copyIndices()!!)
+        assertContentEquals(intArrayOf(3), indexed.copyIndices()!!)
+        assertNotEquals(direct.canonicalId, empty.canonicalId)
     }
 
     @Test

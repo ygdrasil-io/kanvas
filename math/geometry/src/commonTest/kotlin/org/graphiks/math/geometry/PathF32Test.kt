@@ -3,6 +3,7 @@ package org.graphiks.math.geometry
 import org.graphiks.math.vector.Vector2F32
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
 
 class PathF32Test {
@@ -55,5 +56,23 @@ class PathF32Test {
         assertEquals(first.toString(), same.toString())
         assertNotEquals(first, differentRule)
         assertNotEquals(first, differentSegments)
+    }
+
+    @Test
+    fun `path iteration cannot mutate the captured segments`() {
+        val path = PathBuilder()
+            .moveTo(1f, 2f)
+            .lineTo(3f, 4f)
+            .build()
+        val iterator = path.iterator() as MutableIterator<PathSegmentF32>
+
+        assertEquals(PathSegmentF32.MoveTo(Point2F32(1f, 2f)), iterator.next())
+        assertFailsWith<UnsupportedOperationException> { iterator.remove() }
+
+        assertEquals(2, path.segmentCount)
+        assertEquals(
+            listOf(PathSegmentF32.MoveTo(Point2F32(1f, 2f)), PathSegmentF32.LineTo(Point2F32(3f, 4f))),
+            path.toList(),
+        )
     }
 }

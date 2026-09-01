@@ -179,4 +179,49 @@ class SceneSnapshotTest {
         assertEquals(RectF32(5f, 6f, 7f, 8f), annotation.copyBounds())
         assertEquals(RectF32(9f, 10f, 11f, 12f), readback.copyBounds())
     }
+
+    @Test
+    fun `scene path and canonical identity remain stable after hostile path iteration`() {
+        val path = org.graphiks.math.geometry.PathBuilder()
+            .moveTo(1f, 2f)
+            .lineTo(3f, 4f)
+            .build()
+        val scene = SceneSnapshot.of(
+            extent = SceneExtent(64, 32),
+            colorSpace = org.graphiks.kanvas.color.ColorSpace.SRGB,
+            commands = listOf(
+                SceneCommand.Draw(
+                    DrawNode(
+                        geometry = GeometryNode.Path(path),
+                        material = MaterialNode.Transparent,
+                        coverage = CoverageRequest.DEFAULT,
+                        clip = ClipStackNode.Empty,
+                        blend = BlendNode.SrcOver,
+                        effects = EffectStack.Empty,
+                        transform = Matrix3x3F32.Identity,
+                    ),
+                ),
+            ),
+        )
+        val identity = scene.canonicalId
+        val iterator = path.iterator() as MutableIterator<org.graphiks.math.geometry.PathSegmentF32>
+
+        iterator.next()
+        assertFailsWith<UnsupportedOperationException> { iterator.remove() }
+
+        assertEquals(2, path.segmentCount)
+        assertEquals(identity, scene.canonicalId)
+    }
+
+    @Test
+    fun `layer retains neutral blend and clip axes for later variants`() {
+        val layer = LayerDescriptor.of(
+            material = MaterialNode.Transparent,
+            blend = BlendNode.SrcOver,
+            clip = ClipStackNode.Empty,
+        )
+
+        assertEquals(BlendNode.SrcOver, layer.blend)
+        assertEquals(ClipStackNode.Empty, layer.clip)
+    }
 }

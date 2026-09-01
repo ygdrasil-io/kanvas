@@ -66,33 +66,40 @@ public sealed interface GeometryNode : CanonicalValue {
         vertices: Collection<Point2F32>,
         texCoords: Collection<Point2F32>?,
         colors: Collection<ColorARGB>?,
-        indices: IntArray,
+        indices: IntArray?,
         bounds: RectF32?,
         public val program: ResourceReference?,
     ) : GeometryNode {
         private val storedVertices: List<Point2F32> = immutableList(vertices)
         private val storedTexCoords: List<Point2F32>? = texCoords?.let(::immutableList)
         private val storedColors: List<ColorARGB>? = colors?.let(::immutableList)
-        private val storedIndices: IntArray = indices.copyOf()
+        private val storedIndices: IntArray? = indices?.copyOf()
         private val storedBounds: RectF32? = bounds?.copy()
 
         public val vertexCount: Int get() = storedVertices.size
         public val texCoordCount: Int get() = storedTexCoords?.size ?: 0
         public val colorCount: Int get() = storedColors?.size ?: 0
-        public val indexCount: Int get() = storedIndices.size
+        public val indexCount: Int get() = storedIndices?.size ?: 0
         public fun vertexAt(index: Int): Point2F32 = storedVertices[index]
         public fun texCoordAt(index: Int): Point2F32? = storedTexCoords?.get(index)
         public fun colorAt(index: Int): ColorARGB? = storedColors?.get(index)
-        public fun copyIndices(): IntArray = storedIndices.copyOf()
+        /**
+         * Returns null for a direct (non-indexed) mesh; a present empty array
+         * remains a distinct indexed representation.
+         */
+        public fun copyIndices(): IntArray? = storedIndices?.copyOf()
         public fun copyBounds(): RectF32? = storedBounds?.copy()
 
         override val canonicalId: CanonicalId = canonicalId(
-            "geometry-indexed-mesh-v2",
+            "geometry-indexed-mesh-v3",
             primitiveMode.name,
             pointSequenceId("vertices", storedVertices).value,
             canonicalOptionalId("tex-coords", storedTexCoords?.let { pointSequenceId("values", it) }).value,
             canonicalOptionalId("colors", storedColors?.let { colorSequenceId("values", it) }).value,
-            canonicalSequenceId("indices", storedIndices.map(Int::toString)).value,
+            canonicalOptionalId(
+                "indices",
+                storedIndices?.let { canonicalSequenceId("values", it.map(Int::toString)) },
+            ).value,
             canonicalOptionalId("bounds", storedBounds?.let { rectId("value", it) }).value,
             canonicalOptionalId("program", program?.canonicalId).value,
         )
@@ -103,7 +110,7 @@ public sealed interface GeometryNode : CanonicalValue {
                 vertices: Collection<Point2F32>,
                 texCoords: Collection<Point2F32>? = null,
                 colors: Collection<ColorARGB>? = null,
-                indices: IntArray,
+                indices: IntArray? = null,
                 bounds: RectF32? = null,
                 program: ResourceReference? = null,
             ): IndexedMesh = IndexedMesh(primitiveMode, vertices, texCoords, colors, indices, bounds, program)

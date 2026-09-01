@@ -55,7 +55,12 @@ public class PathF32 internal constructor(
 
     public fun segmentAt(index: Int): PathSegmentF32 = values[index]
 
-    override fun iterator(): Iterator<PathSegmentF32> = values.iterator()
+    /**
+     * The backing list is intentionally never exposed: on the JVM a list
+     * iterator can otherwise be cast to [MutableIterator] and used to remove
+     * a segment from this immutable path.
+     */
+    override fun iterator(): Iterator<PathSegmentF32> = ReadOnlyPathIterator(values)
 
     override fun equals(other: Any?): Boolean =
         other is PathF32 && fillRule == other.fillRule && values == other.values
@@ -63,4 +68,17 @@ public class PathF32 internal constructor(
     override fun hashCode(): Int = 31 * fillRule.hashCode() + values.hashCode()
 
     override fun toString(): String = "PathF32(fillRule=$fillRule, segments=$values)"
+}
+
+private class ReadOnlyPathIterator<T>(private val values: List<T>) : MutableIterator<T> {
+    private var nextIndex: Int = 0
+
+    override fun hasNext(): Boolean = nextIndex < values.size
+
+    override fun next(): T {
+        if (!hasNext()) throw NoSuchElementException()
+        return values[nextIndex++]
+    }
+
+    override fun remove(): Nothing = throw UnsupportedOperationException("PathF32 iterators are read-only")
 }
