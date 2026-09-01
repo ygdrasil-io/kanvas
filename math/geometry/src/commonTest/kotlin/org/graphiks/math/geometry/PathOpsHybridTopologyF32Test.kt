@@ -77,6 +77,11 @@ class PathOpsHybridTopologyF32Test {
         // Keep the ±2^-25 offset at zero, where both literal F32 inputs have distinct raw bits.
         // An offset around y=1 would round away before PathOps sees it and make the fixture
         // backend-dependent rather than a public geometric limit boundary.
+        // Its nine source events and one distinct canonical projected endpoint relation require
+        // ten events in total.  The projected rail is flattened into many degree-two occurrences,
+        // but those are one structural event rather than one event per carrier section.  The
+        // existing endpoint-only relation remains part of that canonical event even though it
+        // needs no physical carrier cut.
         val eF32 = 2.0.pow(-25).toFloat()
         assertTrue(eF32.toRawBits() != 0f.toRawBits())
         assertTrue((-eF32).toRawBits() != eF32.toRawBits())
@@ -100,14 +105,14 @@ class PathOpsHybridTopologyF32Test {
                 lower,
                 upper,
                 PathBooleanOp.UNION,
-                PathOpsLimitsI32(maxIntersections = 8),
+                PathOpsLimitsI32(maxIntersections = 9),
             )
         }
         val atBoundary = PathOpsF32.op(
             lower,
             upper,
             PathBooleanOp.UNION,
-            PathOpsLimitsI32(maxIntersections = 9),
+            PathOpsLimitsI32(maxIntersections = 10),
         )
 
         assertEquals("path-intersection-limit", belowError.message)
@@ -357,7 +362,7 @@ class PathOpsHybridTopologyF32Test {
     }
 
     @Test
-    fun `hybrid global budget regression remains deterministic at its checked boundary`() {
+    fun `hybrid local candidate budget remains deterministic at its checked boundary`() {
         val first = PathBuilder().addRect(RectF32.ofLTRB(0f, 0f, 2f, 2f)).build()
         val second = PathBuilder().addRect(RectF32.ofLTRB(1f, 0f, 3f, 2f)).build()
 
@@ -473,6 +478,35 @@ class PathOpsHybridTopologyF32Test {
 
         assertEquals(null, PathAnalysisF32.bounds(result))
         assertFalse(PathAnalysisF32.contains(result, Point2F32(1f, 0f)))
+    }
+
+    @Test
+    fun `public intersect rejects jointly selected collapsed sibling instead of returning empty`() {
+        val uF32 = Float.fromBits(1f.toRawBits() + 2)
+        fun loop(extra: Boolean): PathF32 {
+            val builderF32 = PathBuilder()
+            if (extra) builderF32.addRect(RectF32.ofLTRB(10f, 10f, 20f, 20f))
+            builderF32
+                .moveTo(1f, 1f)
+                .cubicTo(uF32, 1f, 1f, uF32, 1f, 1f)
+                .close()
+            return builderF32.build()
+        }
+
+        val collapsedF32 = loop(extra = false)
+        val simplifyError = assertFailsWith<IllegalStateException> {
+            PathOpsF32.simplify(collapsedF32)
+        }
+        val intersectError = assertFailsWith<IllegalStateException> {
+            PathOpsF32.op(loop(extra = true), collapsedF32, PathBooleanOp.INTERSECT)
+        }
+        val noFaceXorError = assertFailsWith<IllegalStateException> {
+            PathOpsF32.op(collapsedF32, loop(extra = false), PathBooleanOp.XOR)
+        }
+
+        assertEquals("path-f32-projection-collapse", simplifyError.message)
+        assertEquals("path-f32-projection-collapse", intersectError.message)
+        assertEquals("path-f32-projection-collapse", noFaceXorError.message)
     }
 
     @Test
@@ -598,4 +632,5 @@ private fun pathVerticesF32(path: PathF32): List<Point2F32> = buildList {
 // local debits makes 4_988 observable again.  The current paired limit-1/limit boundary is a
 // deterministic public non-regression only; an independent global cost oracle remains Task 5.
 private const val roundThreeOverlappingRectanglesHybridBudgetI32 = 4_987
-private const val overlappingRectanglesHybridBudgetI32 = 5_773
+/** Local hybrid-ledger frontier: 6_121 rejects; 6_122 succeeds.  This is not Task 5's oracle. */
+private const val overlappingRectanglesHybridBudgetI32 = 6_122

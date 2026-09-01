@@ -2,94 +2,144 @@
 
 ## Status
 
-Fix round 1 implemented and verified locally on 2026-09-01. The task remains
-**in progress pending fresh spec and quality gates**; this report does not
-claim the earlier failing reviews are closed until those gates inspect this
-commit.
+Fix round 2 is implemented and locally verified on 2026-09-01.  The task is
+still **in progress pending fresh independent spec and quality gates**.  This
+report records local evidence only; it does not reclassify either earlier
+review as closed.
 
-## Review findings checked
+## Public RED and retained coverage
 
-The two critical findings were accepted after direct code inspection:
+The round-2 RED is public and behavioral only.  With
+`u = Float.fromBits(1f.toRawBits() + 2)`, a one-segment self-closed cubic
+combined with the same cubic plus a remote rectangle made
+`PathOpsF32.op(..., INTERSECT)` return an empty `PathF32` before the fix.  The
+retained test now requires `path-f32-projection-collapse`, as does the stable
+no-face XOR variant, on JVM and JS.  It constructs paths exclusively through
+`PathBuilder` and observes only `PathOpsF32` results/errors.
 
-- Strict projected bounds were lookup-only, so a locally authorized Point
-  witness could not materialize an interior carrier endpoint or debit the
-  combined intersection ceiling.
-- A collapsed span in the middle of an otherwise selected contour could be
-  ignored because no half-edge belonged to that collapsed span; adjacency also
-  stopped at source-span boundaries.
+`PathOpsF32.simplify` already threw that error before this round.  It remains
+in the public fixture as a characterization of the same input, but is not
+claimed as a new RED.  No internal topology helper, source assertion, node,
+ID, package/import assertion, or test-only production switch was added.
 
-The other findings were also checked rather than accepted mechanically:
+The strengthened public strict-interior limit fixture has the exact boundary
+`9` reject / `10` succeed.  Its bounded diagnostic has 618 proposal
+occurrences and 1,237 raw endpoint-relation nodes: 1,235 are degree-two,
+single-rail-pair flattening continuations, and two are terminals.  They reduce
+to one projected structural event key, so the added unit is one distinct
+external canonical projected bound rather than a flattened-section, a pairwise
+relation, or an arbitrary degree filter.  A degree-two relation joining more
+than one rail pair remains an event; propagated/n-way occurrences with the
+same event key do not debit again.  Existing public n-way,
+staggered-overlap, disjoint-contact, operand-order, and immutability behavior
+tests remain the coverage for their respective paths.
 
-- The pre-disposition alias union is necessary to construct the temporary F32
-  face graph. It remains local to the arrangement and is not an emitted
-  publication. Every collapsed incidence is retained as source-contour data
-  through face selection; a zero-F32-dimensional carrier has no independent
-  DCEL sector, so its selection is proved from face winding plus source
-  winding, or it rejects conservatively.
-- `operand`, contour, and segment labels now navigate provenance only. They
-  no longer resolve a geometric comparator equality; exact duplicate proposals
-  are indifferent and any other equal-semantic proposal group rejects.
-- Exact source-area expansion now receives the shared candidate budget and
-  performs checked-I64 preflights before its section scans and expansion work.
+## Projected-claim transaction invariants
 
-## Production invariants
+- Proposals are staged and ordered by semantic Point witness, semantic source
+  span, and F64 parameter interval.  Every relation for one witness is
+  validated as a transaction, and all inter-transaction interval conflicts are
+  resolved before projected IDs, aliases, carrier copies, DCEL state, or output
+  are published.
+- Strict interior endpoints receive deterministic projected identities from the
+  witness and exact source incidence/parameter provenance.  F32 is an
+  embedding/validation value only; it is never identity, grouping, or ordering
+  authority.  Exact existing identity is the only no-op.
+- The immutable cut plan counts the exact source event total from
+  `PathSourceTopologyF64` plus canonical projected event groups before final
+  carrier allocation.  An endpoint relation with distinct identities is an
+  event even without a physical cut; exact common identities do not add one.
+  Checked-I64 preflight happens before the bounded staging work and the public
+  `maxIntersections` gate.
+- A projected event is propagated over its validated n-way coincidence
+  component before subdivision.  Final `PathProjectedCoincidence` provenance
+  references lists of final sections, not stale section indexes.  The remap
+  validates contiguous, exact parameter coverage without a gap or overlap.
+- Transaction comparison is strictly lexicographic and total.  Operand,
+  contour, and segment labels navigate provenance but cannot settle a
+  geometric equality: complete equivalence is validated as a group and every
+  other unresolved equality rejects.
+- `maxVertices` is applied to canonical vertices after exact alias groups,
+  rather than to raw pre-alias projected-cut counts.
 
-- A `PointF64` projected-claim plan is built as immutable local staging from
-  the semantic witness, exact source-span/section provenance, and F64 carrier
-  parameter. A projected cut identity contains the witness scope and the exact
-  input-edge parameter; an F32 point is only a consistency check, never
-  identity authority.
-- The plan fills exact endpoint identities, canonicalizes n-way endpoint
-  groups, and compares `PathSourceTopologyF64.intersectionEventCountI32` plus
-  newly materialized groups with `maxIntersections` before carrier insertion,
-  source-span copies, projected IDs, aliases, DCEL state, or output.
-- After the plan is admitted, only immutable source-span copies are subdivided.
-  Claim transactions, inter-witness interval conflicts, endpoint identities,
-  and deferred endpoint relays all validate before projected coincidence IDs
-  and aliases are created. An exact existing identity is the sole no-op.
-- Materialized claims resolve their final carriers by exact endpoint-identity
-  provenance, in both traversal orientations, rather than using a stale
-  pre-subdivision section index.
-- Collapsed incidence adjacency walks the declared contour cyclically across
-  source-span seams. A partially collapsed contour that has any selected
-  carrier dependency is `REJECT`, even when the collapsed span itself has no
-  selected half-edge. A contour with no selected dependency is ignored only
-  at emission.
-- A fully collapsed sibling is classified after face selection. A proven
-  unselected sibling is kept; a proven selected sibling drops only when exact
-  normalized double area is `<= 2^-45`, otherwise the whole operation rejects.
-  Boundary/ambiguous face location and any missing proof reject atomically;
-  no sibling is dropped from absence of a half-edge.
-- All new plan, materializer, collapse-adjacency, selection, and exact-area
-  paths debit the shared candidate ledger with checked I64 arithmetic before
-  scans, sorting, allocation, or predicates. Task 5's independent global
-  budget model is not changed.
+## Critical review closures
 
-## Public RED / fixture limit
+- **Partial collapse:** literal incidences retain their two actual cyclic
+  source-neighbour rays, including span boundaries and seams.  The
+  post-selection check rejects only when either local neighbour is selected;
+  it does not scan a distant selected edge of the contour.
+- **Local cost shape:** each added map, sort, adjacency index, group walk,
+  cut de-duplication, carrier scan, and exact-area expansion is preflighted
+  with checked I64 work.  There is no retained quadratic source of work except
+  the bounded exact-area expansion after collapse provenance makes it needed.
+- **Canonical vertex limit:** the materializer uses a transient
+  `path-candidate-limit` capacity only; `maxVertices` is evaluated after exact
+  aliases are canonicalized in the arrangement.
+- **Comparator:** projected transaction ordering is lexicographic over witness,
+  semantic spans, and F64 interval.  A zero comparison is subsequently
+  validated as an exact duplicate; non-identical semantic ties reject rather
+  than being resolved by operand/contour/segment labels.
+- **No-half-edge siblings:** grouped signed winding and exact interaction proof
+  classify the public collapsed sibling for both `INTERSECT` and no-face
+  `XOR`; both reject atomically instead of returning a partial or empty path.
 
-No internal topology fixture or internal API test was added. The existing
-public `PathBuilder` / `PathOpsF32` / `PathAnalysisF32` behavioral tests remain
-the committed coverage for n-way contacts, disjoint contacts, overlaps,
-permutations, limits, and source-zero collapse.
+## Collapsed-boundary invariants
 
-One bounded additional public strict-interior hypothesis was tried and removed:
-a quadratic Point witness with a remote projected rail failed on JVM and JS at
-the required local-anchor guard (`path-f32-projection-collapse`). It therefore
-does not reach a legal interior materialization and was not retained as a
-misleading RED. No valid public partial-collapse or sibling threshold fixture
-was constructible without violating the same source-provenance contract; no
-baseline-green test is called RED here.
+- `PathBoundaryDisposition { KEEP, DROP, REJECT }` is explicit.  The
+  collapsed-sector ledger is captured before provisional aliases and retained
+  until after face selection, so a missing half-edge never means absent winding.
+- Literal collapsed incidences carry actual cyclic incoming/outgoing source
+  rays across source-span seams.  A partial incidence rejects only when one of
+  those local neighbouring carriers is selected; a distant selected carrier of
+  the same contour does not cause rejection.  Unresolved adjacency rejects.
+- A fully collapsed sector is selected as a group.  The group composes signed
+  exact contour orientation deltas from both operands and requires an exact
+  incidence-connectivity proof; matching F32 representative coordinates alone
+  are ambiguous and reject.  This covers the multi-contour no-half-edge XOR and
+  INTERSECT cases without silently KEEPing or dropping a sibling.
+- A selected group drops only if every required contour is a whole literal
+  carrier collapse and its exact normalized double area is `<= 2^-45`.
+  A larger/partial/ambiguous group rejects atomically.  Unselected candidates
+  are retained as data and ignored only at emission.
+- The new non-literal provenance is structural, not a small-bounds heuristic:
+  `SelfClosedSourceSegmentF64F32` requires one original source segment, an
+  exact contiguous partition of `[0, 1]`, uniform forward or reverse
+  orientation, and identical authoritative F64 endpoint identity at both ends.
+  The original F32 endpoint is retained solely to locate the post-selection
+  sector.  It is considered only when no literal partial collapsed incidence
+  exists; such an incidence instead reaches the local-ray continuation check.
+  A structural candidate is deliberately non-droppable; if selected it rejects.
+  Ordinary zero-area traces made from noncollapsed carriers do not enter this
+  ledger.
+
+## Local budget accounting
+
+All new maps, sorts, cut de-duplication, carrier/section scans, adjacency
+indexes, sector-group selection, and exact-area predicates debit checked-I64
+candidate work before scanning, allocation, or predicates.  Exact area is
+quadratic only after literal or structural collapse provenance makes a contour
+a candidate; ordinary tangent/zero-area noncollapsed traces no longer pay that
+unnecessary expansion cost.
+
+Consequently the public local candidate frontier for overlapping rectangles was
+measured directly from the executed ledger as `6_121` reject /
+`6_122` succeed, in both operand orders.  The previous `6_577`/`6_578` boundary
+included 456 units of unconditional projected-sector/exact-area work that is
+now absent for ordinary contours.  No artificial work was restored to retain
+the old value.  This remains a local implementation ledger frontier, not the
+independent global cost oracle reserved for Task 5.
 
 ## Verification
 
 ```text
-rtk ./gradlew :math:geometry:compileKotlinJvm --rerun-tasks --console=plain
+rtk ./gradlew :math:geometry:compileKotlinJvm :math:geometry:compileKotlinJs \
+  --rerun-tasks --console=plain
 BUILD SUCCESSFUL
 
 rtk ./gradlew :math:geometry:jvmTest \
   --tests 'org.graphiks.math.geometry.PathOpsHybridTopologyF32Test' \
   --rerun-tasks --console=plain
-20 tests completed, 0 failed
+21 tests completed, 0 failed
 
 rtk ./gradlew :math:geometry:jsNodeTest \
   --tests 'org.graphiks.math.geometry.PathOpsHybridTopologyF32Test' \
@@ -100,30 +150,25 @@ rtk ./gradlew :math:geometry:jvmTest :math:geometry:jsNodeTest \
   --rerun-tasks --console=plain
 BUILD SUCCESSFUL in 24s
 61 actionable tasks: 61 executed
+
+rtk git diff --check
+no output (success)
 ```
-
-The public local candidate frontier was recalibrated by a bounded binary
-search after the required new local debits: `5_772` rejects with
-`path-candidate-limit`; `5_773` succeeds, in both operand orders. This is a
-behavioral frontier only, not Task 5's global-cost oracle.
-
-`git diff --check` is rerun immediately before the implementation commit.
 
 ## Files
 
-- `math/geometry/src/commonMain/kotlin/org/graphiks/math/geometry/PathSourceTopologyF64.kt`
+- `math/geometry/src/commonMain/kotlin/org/graphiks/math/geometry/PathFlatteningF64.kt`
 - `math/geometry/src/commonMain/kotlin/org/graphiks/math/geometry/PathHybridTopologyF64F32.kt`
 - `math/geometry/src/commonMain/kotlin/org/graphiks/math/geometry/PathArrangementF64F32.kt`
 - `math/geometry/src/commonTest/kotlin/org/graphiks/math/geometry/PathOpsHybridTopologyF32Test.kt`
 
 ## Remaining concerns for review
 
-- Public construction could not expose the newly reachable strict-interior or
-  partial/sibling-collapse branches without an invalid provenance fixture. The
-  production guards are deliberately conservative and need review by behavior,
-  not by internal-test substitution.
-- A full collapsed sibling located on an F32 face boundary is intentionally
-  rejected rather than guessed. This favors atomic safety over a partial
-  result.
-- Task 4's writer migration and Task 5's independent global budget remain out
-  of scope.
+- The structural self-closed proof is intentionally limited to a whole source
+  contour made from one source segment.  It never uses an F32 coordinate as an
+  identity fallback, and it rejects rather than guesses outside that proof.
+- A collapsed sector on an F32 face boundary, multiple containing faces, or
+  without exact sibling connectivity rejects conservatively.  That prevents a
+  partial result but may reject inputs a future proof could classify.
+- Task 4 writer migration/deletion and Task 5's independent global budget
+  oracle remain out of scope.

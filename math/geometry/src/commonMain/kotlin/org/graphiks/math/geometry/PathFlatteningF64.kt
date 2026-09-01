@@ -117,8 +117,35 @@ internal object PathFlattenerF64 {
             recurse(start, control, end, 0.0, 1.0, 0)
         }
         fun flattenCubic(start: Point2F64, control1: Point2F64, control2: Point2F64, end: Point2F64, sourceSegmentIndex: Int) {
-            fun recurse(a: Point2F64, c1: Point2F64, c2: Point2F64, b: Point2F64, t0: Double, t1: Double, depth: Int) {
+            fun recurse(
+                a: Point2F64,
+                c1: Point2F64,
+                c2: Point2F64,
+                b: Point2F64,
+                t0: Double,
+                t1: Double,
+                depth: Int,
+                preserveClosedLoop: Boolean,
+            ) {
                 if (max(pointToSegmentDistanceF64(c1, a, b), pointToSegmentDistanceF64(c2, a, b)) <= policy.tolerance) {
+                    // A tiny closed cubic can be flat at the F32 lattice while still carrying
+                    // an exact source winding.  Keep one F64 midpoint so the hybrid topology
+                    // can record a collapsed incidence instead of silently erasing the contour
+                    // before its post-face KEEP/DROP/REJECT decision.  This is not a finer
+                    // F32 approximation: the emitted endpoints remain subject to the normal
+                    // projection guard and may both collapse later.
+                    if (preserveClosedLoop && depth < 2) {
+                        val a1 = midpointF64(a, c1)
+                        val a2 = midpointF64(c1, c2)
+                        val a3 = midpointF64(c2, b)
+                        val b1 = midpointF64(a1, a2)
+                        val b2 = midpointF64(a2, a3)
+                        val middle = midpointF64(b1, b2)
+                        val split = (t0 + t1) * 0.5
+                        recurse(a, a1, b1, middle, t0, split, depth + 1, preserveClosedLoop)
+                        recurse(middle, b2, a3, b, split, t1, depth + 1, preserveClosedLoop)
+                        return
+                    }
                     incrementEdges()
                     add(b, sourceSegmentIndex, t1, if (t1 == 1.0) current else null)
                     return
@@ -131,10 +158,20 @@ internal object PathFlattenerF64 {
                 val b2 = midpointF64(a2, a3)
                 val middle = midpointF64(b1, b2)
                 val split = (t0 + t1) * 0.5
-                recurse(a, a1, b1, middle, t0, split, depth + 1)
-                recurse(middle, b2, a3, b, split, t1, depth + 1)
+                recurse(a, a1, b1, middle, t0, split, depth + 1, preserveClosedLoop)
+                recurse(middle, b2, a3, b, split, t1, depth + 1, preserveClosedLoop)
             }
-            recurse(start, control1, control2, end, 0.0, 1.0, 0)
+            recurse(
+                start,
+                control1,
+                control2,
+                end,
+                0.0,
+                1.0,
+                0,
+                start.x == end.x && start.y == end.y &&
+                    (control1.x != start.x || control1.y != start.y || control2.x != start.x || control2.y != start.y),
+            )
         }
         fun flattenArc(arc: ArcCenterF64, end: Point2F64, sourceSegmentIndex: Int) {
             fun recurse(a: Point2F64, b: Point2F64, t0: Double, t1: Double, depth: Int) {
