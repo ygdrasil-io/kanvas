@@ -13,6 +13,7 @@ import org.graphiks.kanvas.canvas.ClipStackOp
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.canvas.DrawPathSourceOperation
 import org.graphiks.kanvas.canvas.SaveLayerRec
+import org.graphiks.kanvas.canvas.snapshotGeometry
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.color.Gamut
 import org.graphiks.kanvas.color.TransferFunction
@@ -58,9 +59,17 @@ import java.io.IOException
  * via [Canvas.drawPicture] or replayed in full via [playback].
  */
 class Picture internal constructor(
-    val cullRect: RectF32,
-    internal val ops: List<DisplayOp>,
+    cullRect: RectF32,
+    ops: List<DisplayOp>,
 ) {
+    private val recordedCullRect = RectF32(cullRect.left, cullRect.top, cullRect.right, cullRect.bottom)
+
+    /** A fresh mutable compatibility value for the immutable recorded cull bounds. */
+    val cullRect: RectF32
+        get() = RectF32(recordedCullRect.left, recordedCullRect.top, recordedCullRect.right, recordedCullRect.bottom)
+
+    internal val ops: List<DisplayOp> = ops.map(DisplayOp::snapshotGeometry)
+
     /** Unique identifier for this picture instance. */
     val uniqueID: Int = nextId()
 

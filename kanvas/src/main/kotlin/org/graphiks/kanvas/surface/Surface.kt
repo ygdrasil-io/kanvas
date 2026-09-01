@@ -1,8 +1,8 @@
 package org.graphiks.kanvas.surface
 
 import org.graphiks.kanvas.canvas.Canvas
-import org.graphiks.kanvas.canvas.DisplayListBuffer
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.canvas.SnapshotDisplayListBuffer
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.AlphaType
@@ -26,7 +26,7 @@ class Surface(
     val format: PixelFormat = PixelFormat.RGBA8,
     val config: RenderConfig = RenderConfig.DEFAULT,
 ) {
-    private val buffer = SurfaceDisplayListBuffer()
+    private val buffer = SnapshotDisplayListBuffer()
     private var canvasInstance: Canvas? = null
 
     /** Return a snapshot of recorded display operations (for diagnostic replay). */
@@ -116,10 +116,4 @@ class Surface(
         }
         return true
     }
-}
-
-private class SurfaceDisplayListBuffer : DisplayListBuffer {
-    private val ops = mutableListOf<DisplayOp>()
-    override fun append(op: DisplayOp) { ops.add(op) }
-    override fun ops(): List<DisplayOp> = ops.toList()
 }
