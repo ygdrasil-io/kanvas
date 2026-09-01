@@ -52,6 +52,7 @@ import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.IOException
+import java.lang.ref.WeakReference
 
 /**
  * An immutable snapshot of recorded drawing commands.
@@ -64,12 +65,22 @@ class Picture internal constructor(
     ops: List<DisplayOp>,
 ) {
     private val recordedCullRect = RectF32(cullRect.left, cullRect.top, cullRect.right, cullRect.bottom)
+    private val constructionOps = WeakReference(ops)
 
     /** A fresh mutable compatibility value for the immutable recorded cull bounds. */
     val cullRect: RectF32
         get() = RectF32(recordedCullRect.left, recordedCullRect.top, recordedCullRect.right, recordedCullRect.bottom)
 
     internal val ops: List<DisplayOp> = ops.snapshotGeometry()
+
+    /**
+     * Detects a direct self-reference introduced through the caller-owned construction list.
+     * The list is never replayed or serialized and is held weakly, so it cannot mutate or
+     * retain this picture's recorded snapshot.
+     */
+    internal fun hasConstructionSelfReference(): Boolean = constructionOps.get()?.any { op ->
+        op is DisplayOp.DrawPicture && op.picture === this
+    } == true
 
     /** Unique identifier for this picture instance. */
     val uniqueID: Int = nextId()
