@@ -13,6 +13,13 @@ import org.graphiks.math.vector.Vector2F32
 
 /** Maps every command in an immutable path through this matrix. */
 public fun Matrix3x3F32.map(path: PathF32): PathF32 {
+    require(!hasPerspective() || path.none { segment ->
+        segment is PathSegmentF32.QuadTo ||
+            segment is PathSegmentF32.CubicTo ||
+            segment is PathSegmentF32.ArcTo
+    }) {
+        "Projective Matrix3x3F32 cannot map paths containing curves"
+    }
     val builder = PathBuilder(path.fillRule)
     path.forEach { segment ->
         when (segment) {

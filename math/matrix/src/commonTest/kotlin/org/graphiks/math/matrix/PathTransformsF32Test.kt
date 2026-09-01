@@ -4,6 +4,7 @@ import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import org.graphiks.math.geometry.PathBuilder
 import org.graphiks.math.geometry.FillRule
@@ -82,17 +83,61 @@ class PathTransformsF32Test {
     }
 
     @Test
-    fun `perspective maps endpoints with homogeneous division`() {
+    fun `perspective maps linear paths with homogeneous division`() {
         val source = PathBuilder()
             .moveTo(1f, 2f)
             .lineTo(3f, 4f)
             .build()
         val matrix = Matrix3x3F32.of(2f, 0f, 4f, 0f, 3f, 6f, 0.1f, 0.2f, 1f)
+        val before = source.toList()
 
         val mapped = matrix.map(source)
 
         assertEquals(Point2F32(6f / 1.5f, 12f / 1.5f), (mapped.segmentAt(0) as PathSegmentF32.MoveTo).point)
         assertEquals(Point2F32(10f / 2.1f, 18f / 2.1f), (mapped.segmentAt(1) as PathSegmentF32.LineTo).point)
+        assertEquals(before, source.toList())
+    }
+
+    @Test
+    fun `perspective rejects quadratic paths without changing source`() {
+        val source = PathBuilder()
+            .moveTo(1f, 2f)
+            .quadTo(3f, 4f, 5f, 6f)
+            .build()
+        val before = source.toList()
+
+        assertFailsWith<IllegalArgumentException> {
+            Matrix3x3F32.perspective(0.1f, 0.2f).map(source)
+        }
+        assertEquals(before, source.toList())
+    }
+
+    @Test
+    fun `perspective rejects cubic paths without changing source`() {
+        val source = PathBuilder()
+            .moveTo(1f, 2f)
+            .cubicTo(3f, 4f, 5f, 6f, 7f, 8f)
+            .build()
+        val before = source.toList()
+
+        assertFailsWith<IllegalArgumentException> {
+            Matrix3x3F32.perspective(0.1f, 0.2f).map(source)
+        }
+        assertEquals(before, source.toList())
+    }
+
+    @Test
+    fun `perspective rejects arc paths without changing source`() {
+        val source = PathBuilder()
+            .moveTo(1f, 2f)
+            .arcTo(3f, 4f, 15f, largeArc = true, sweep = false, x = 5f, y = 6f)
+            .build()
+        val before = source.toList()
+
+        assertFailsWith<IllegalArgumentException> {
+            Matrix3x3F32.perspective(0.1f, 0.2f).map(source)
+        }
+        assertEquals(before, source.toList())
     }
 
     @Test
@@ -115,6 +160,12 @@ class PathTransformsF32Test {
             Point2F32(43f, 36f),
             (mapped.segmentAt(5) as PathSegmentF32.MoveTo).point,
         )
+        val ovalCubic = mapped.segmentAt(6) as PathSegmentF32.CubicTo
+        assertNear(43f, ovalCubic.control1.x)
+        assertNear(41.522846f, ovalCubic.control1.y)
+        assertNear(38.522846f, ovalCubic.control2.x)
+        assertNear(46f, ovalCubic.control2.y)
+        assertEquals(Point2F32(33f, 46f), ovalCubic.point)
         assertTrue(mapped.segmentAt(5) is PathSegmentF32.MoveTo)
         assertTrue(mapped.segmentAt(mapped.segmentCount - 1) is PathSegmentF32.Close)
     }
