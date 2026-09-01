@@ -1,5 +1,8 @@
 package org.graphiks.kanvas.render.ir
 
+import java.util.Collections
+import java.util.TreeMap
+
 /** A stable content identity for a backend-neutral value. */
 @JvmInline
 public value class CanonicalId(public val value: String) {
@@ -21,7 +24,7 @@ public object CanonicalSceneEncoder {
         scene.colorSpace.name,
         scene.colorSpace.transferFunction.name,
         scene.colorSpace.gamut.name,
-        *scene.map { it.canonicalId.value }.toTypedArray(),
+        canonicalSequenceId("commands", scene.map { it.canonicalId.value }).value,
     )
 }
 
@@ -33,3 +36,22 @@ internal fun canonicalId(tag: String, vararg fields: String): CanonicalId = Cano
 )
 
 internal fun Float.canonicalBits(): String = toBits().toString()
+
+/** Freezes a caller-owned collection behind a JVM-unmodifiable view. */
+internal fun <T> immutableList(values: Collection<T>): List<T> =
+    Collections.unmodifiableList(ArrayList(values))
+
+/** Freezes caller-owned map entries in their canonical key order. */
+internal fun <K : Comparable<K>, V> immutableSortedMap(values: Map<K, V>): Map<K, V> =
+    Collections.unmodifiableMap(TreeMap(values))
+
+/** Encodes a collection as a nested canonical value, retaining its cardinality and field boundaries. */
+internal fun canonicalSequenceId(tag: String, values: Collection<String>): CanonicalId =
+    canonicalId(tag, values.size.toString(), *values.toTypedArray())
+
+/** Encodes a nullable canonical subvalue without conflating absence and an empty value. */
+internal fun canonicalOptionalId(tag: String, value: CanonicalId?): CanonicalId = canonicalId(
+    tag,
+    if (value == null) "absent" else "present",
+    value?.value.orEmpty(),
+)

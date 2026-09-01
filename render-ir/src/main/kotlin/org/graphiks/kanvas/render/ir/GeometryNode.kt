@@ -1,10 +1,12 @@
 package org.graphiks.kanvas.render.ir
 
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.PathF32
 import org.graphiks.math.geometry.PathSegmentF32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.matrix.Matrix3x3F32
 
 /** Backend-neutral geometry. Mutable math values are copied at this boundary. */
 public sealed interface GeometryNode : CanonicalValue {
@@ -16,17 +18,17 @@ public sealed interface GeometryNode : CanonicalValue {
     }
 
     public class RRect private constructor(shape: RRectF32) : GeometryNode {
-        private val storedShape: RRectF32 = shape.copy(rect = shape.rect.copy())
-        public fun copyShape(): RRectF32 = storedShape.copy(rect = storedShape.rect.copy())
+        private val storedShape: RRectF32 = copyRRect(shape)
+        public fun copyShape(): RRectF32 = copyRRect(storedShape)
         override val canonicalId: CanonicalId = rrectId("geometry-rrect-v1", storedShape)
         public companion object { public fun of(shape: RRectF32): RRect = RRect(shape) }
     }
 
     public class DoubleRRect private constructor(outer: RRectF32, inner: RRectF32) : GeometryNode {
-        private val storedOuter: RRectF32 = outer.copy(rect = outer.rect.copy())
-        private val storedInner: RRectF32 = inner.copy(rect = inner.rect.copy())
-        public fun copyOuter(): RRectF32 = storedOuter.copy(rect = storedOuter.rect.copy())
-        public fun copyInner(): RRectF32 = storedInner.copy(rect = storedInner.rect.copy())
+        private val storedOuter: RRectF32 = copyRRect(outer)
+        private val storedInner: RRectF32 = copyRRect(inner)
+        public fun copyOuter(): RRectF32 = copyRRect(storedOuter)
+        public fun copyInner(): RRectF32 = copyRRect(storedInner)
         override val canonicalId: CanonicalId = canonicalId(
             "geometry-double-rrect-v1",
             rrectId("outer", storedOuter).value,
@@ -41,32 +43,70 @@ public sealed interface GeometryNode : CanonicalValue {
         override val canonicalId: CanonicalId = pathId(path)
     }
 
-    public class Points private constructor(points: Collection<Point2F32>) : GeometryNode, Iterable<Point2F32> {
-        private val values: List<Point2F32> = points.toList()
+    public class Points private constructor(
+        public val mode: PointMode,
+        points: Collection<Point2F32>,
+    ) : GeometryNode, Iterable<Point2F32> {
+        private val values: List<Point2F32> = immutableList(points)
         public val pointCount: Int get() = values.size
         public fun pointAt(index: Int): Point2F32 = values[index]
         override fun iterator(): Iterator<Point2F32> = values.iterator()
         override val canonicalId: CanonicalId = canonicalId(
-            "geometry-points-v1",
-            *values.flatMap { listOf(it.x.canonicalBits(), it.y.canonicalBits()) }.toTypedArray(),
-        )
-        public companion object { public fun of(points: Collection<Point2F32>): Points = Points(points) }
-    }
-
-    public class IndexedMesh private constructor(vertices: Collection<Point2F32>, indices: IntArray) : GeometryNode {
-        private val storedVertices: List<Point2F32> = vertices.toList()
-        private val storedIndices: IntArray = indices.copyOf()
-        public val vertexCount: Int get() = storedVertices.size
-        public val indexCount: Int get() = storedIndices.size
-        public fun vertexAt(index: Int): Point2F32 = storedVertices[index]
-        public fun copyIndices(): IntArray = storedIndices.copyOf()
-        override val canonicalId: CanonicalId = canonicalId(
-            "geometry-indexed-mesh-v1",
-            *storedVertices.flatMap { listOf(it.x.canonicalBits(), it.y.canonicalBits()) }.toTypedArray(),
-            *storedIndices.map(Int::toString).toTypedArray(),
+            "geometry-points-v2",
+            mode.name,
+            pointSequenceId("points", values).value,
         )
         public companion object {
-            public fun of(vertices: Collection<Point2F32>, indices: IntArray): IndexedMesh = IndexedMesh(vertices, indices)
+            public fun of(mode: PointMode, points: Collection<Point2F32>): Points = Points(mode, points)
+        }
+    }
+
+    public class IndexedMesh private constructor(
+        public val primitiveMode: MeshPrimitiveMode,
+        vertices: Collection<Point2F32>,
+        texCoords: Collection<Point2F32>?,
+        colors: Collection<ColorARGB>?,
+        indices: IntArray,
+        bounds: RectF32?,
+        public val program: ResourceReference?,
+    ) : GeometryNode {
+        private val storedVertices: List<Point2F32> = immutableList(vertices)
+        private val storedTexCoords: List<Point2F32>? = texCoords?.let(::immutableList)
+        private val storedColors: List<ColorARGB>? = colors?.let(::immutableList)
+        private val storedIndices: IntArray = indices.copyOf()
+        private val storedBounds: RectF32? = bounds?.copy()
+
+        public val vertexCount: Int get() = storedVertices.size
+        public val texCoordCount: Int get() = storedTexCoords?.size ?: 0
+        public val colorCount: Int get() = storedColors?.size ?: 0
+        public val indexCount: Int get() = storedIndices.size
+        public fun vertexAt(index: Int): Point2F32 = storedVertices[index]
+        public fun texCoordAt(index: Int): Point2F32? = storedTexCoords?.get(index)
+        public fun colorAt(index: Int): ColorARGB? = storedColors?.get(index)
+        public fun copyIndices(): IntArray = storedIndices.copyOf()
+        public fun copyBounds(): RectF32? = storedBounds?.copy()
+
+        override val canonicalId: CanonicalId = canonicalId(
+            "geometry-indexed-mesh-v2",
+            primitiveMode.name,
+            pointSequenceId("vertices", storedVertices).value,
+            canonicalOptionalId("tex-coords", storedTexCoords?.let { pointSequenceId("values", it) }).value,
+            canonicalOptionalId("colors", storedColors?.let { colorSequenceId("values", it) }).value,
+            canonicalSequenceId("indices", storedIndices.map(Int::toString)).value,
+            canonicalOptionalId("bounds", storedBounds?.let { rectId("value", it) }).value,
+            canonicalOptionalId("program", program?.canonicalId).value,
+        )
+
+        public companion object {
+            public fun of(
+                primitiveMode: MeshPrimitiveMode,
+                vertices: Collection<Point2F32>,
+                texCoords: Collection<Point2F32>? = null,
+                colors: Collection<ColorARGB>? = null,
+                indices: IntArray,
+                bounds: RectF32? = null,
+                program: ResourceReference? = null,
+            ): IndexedMesh = IndexedMesh(primitiveMode, vertices, texCoords, colors, indices, bounds, program)
         }
     }
 
@@ -80,8 +120,10 @@ public sealed interface GeometryNode : CanonicalValue {
         public fun copySource(): RectF32 = storedSource.copy()
         public fun copyDestination(): RectF32 = storedDestination.copy()
         override val canonicalId: CanonicalId = canonicalId(
-            "geometry-image-patch-v1", image.canonicalId.value,
-            rectId("source", storedSource).value, rectId("destination", storedDestination).value,
+            "geometry-image-patch-v1",
+            image.canonicalId.value,
+            rectId("source", storedSource).value,
+            rectId("destination", storedDestination).value,
         )
         public companion object {
             public fun of(image: ResourceReference, source: RectF32, destination: RectF32): ImagePatch =
@@ -91,92 +133,227 @@ public sealed interface GeometryNode : CanonicalValue {
 
     public class ImageLattice private constructor(
         public val image: ResourceReference,
-        xDivs: Collection<Float>,
-        yDivs: Collection<Float>,
+        xDivs: IntArray,
+        yDivs: IntArray,
+        cellRects: Collection<RectF32>?,
+        colors: Collection<ColorARGB>?,
+        flags: Collection<LatticeCellFlag>?,
         destination: RectF32,
+        public val sampling: ImageSampling,
     ) : GeometryNode {
-        private val storedXDivs: List<Float> = xDivs.toList()
-        private val storedYDivs: List<Float> = yDivs.toList()
+        private val storedXDivs: IntArray = xDivs.copyOf()
+        private val storedYDivs: IntArray = yDivs.copyOf()
+        private val storedCellRects: List<RectF32>? = cellRects?.map(RectF32::copy)?.let(::immutableList)
+        private val storedColors: List<ColorARGB>? = colors?.let(::immutableList)
+        private val storedFlags: List<LatticeCellFlag>? = flags?.let(::immutableList)
         private val storedDestination: RectF32 = destination.copy()
-        public fun xDivs(): List<Float> = storedXDivs.toList()
-        public fun yDivs(): List<Float> = storedYDivs.toList()
+
+        public fun copyXDivs(): IntArray = storedXDivs.copyOf()
+        public fun copyYDivs(): IntArray = storedYDivs.copyOf()
+        public fun copyCellRects(): List<RectF32>? = storedCellRects?.map(RectF32::copy)?.let(::immutableList)
+        public fun colorAt(index: Int): ColorARGB? = storedColors?.get(index)
+        public fun flagAt(index: Int): LatticeCellFlag? = storedFlags?.get(index)
         public fun copyDestination(): RectF32 = storedDestination.copy()
+
         override val canonicalId: CanonicalId = canonicalId(
-            "geometry-image-lattice-v1", image.canonicalId.value,
-            *storedXDivs.map(Float::canonicalBits).toTypedArray(),
-            *storedYDivs.map(Float::canonicalBits).toTypedArray(), rectId("destination", storedDestination).value,
+            "geometry-image-lattice-v2",
+            image.canonicalId.value,
+            canonicalSequenceId("x-divs", storedXDivs.map(Int::toString)).value,
+            canonicalSequenceId("y-divs", storedYDivs.map(Int::toString)).value,
+            canonicalOptionalId("cell-rects", storedCellRects?.let { rectSequenceId("values", it) }).value,
+            canonicalOptionalId("colors", storedColors?.let { colorSequenceId("values", it) }).value,
+            canonicalOptionalId("flags", storedFlags?.let { canonicalSequenceId("values", it.map(LatticeCellFlag::name)) }).value,
+            rectId("destination", storedDestination).value,
+            sampling.canonicalId.value,
         )
+
         public companion object {
             public fun of(
-                image: ResourceReference, xDivs: Collection<Float>, yDivs: Collection<Float>, destination: RectF32,
-            ): ImageLattice = ImageLattice(image, xDivs, yDivs, destination)
+                image: ResourceReference,
+                xDivs: IntArray,
+                yDivs: IntArray,
+                cellRects: Collection<RectF32>? = null,
+                colors: Collection<ColorARGB>? = null,
+                flags: Collection<LatticeCellFlag>? = null,
+                destination: RectF32,
+                sampling: ImageSampling = ImageSampling.Linear,
+            ): ImageLattice = ImageLattice(image, xDivs, yDivs, cellRects, colors, flags, destination, sampling)
         }
     }
 
     public class Atlas private constructor(public val image: ResourceReference, entries: Collection<AtlasEntry>) : GeometryNode,
         Iterable<AtlasEntry> {
-        private val values: List<AtlasEntry> = entries.map { it.copy(source = it.source.copy()) }
+        private val values: List<AtlasEntry> = immutableList(entries)
         public val entryCount: Int get() = values.size
-        public fun entryAt(index: Int): AtlasEntry = values[index].copy(source = values[index].source.copy())
-        override fun iterator(): Iterator<AtlasEntry> = values.map { it.copy(source = it.source.copy()) }.iterator()
+        public fun entryAt(index: Int): AtlasEntry = values[index]
+        override fun iterator(): Iterator<AtlasEntry> = values.iterator()
         override val canonicalId: CanonicalId = canonicalId(
-            "geometry-atlas-v1", image.canonicalId.value,
-            *values.map { entry -> canonicalId("atlas-entry", rectId("source", entry.source).value, entry.position.x.canonicalBits(), entry.position.y.canonicalBits()).value }.toTypedArray(),
+            "geometry-atlas-v2",
+            image.canonicalId.value,
+            canonicalSequenceId("entries", values.map { it.canonicalId.value }).value,
         )
         public companion object { public fun of(image: ResourceReference, entries: Collection<AtlasEntry>): Atlas = Atlas(image, entries) }
     }
 
-    public data class AtlasEntry(public val source: RectF32, public val position: Point2F32)
+    public class AtlasEntry private constructor(
+        public val transform: Matrix3x3F32,
+        source: RectF32,
+        public val color: ColorARGB?,
+    ) : CanonicalValue {
+        private val storedSource: RectF32 = source.copy()
+        public fun copySource(): RectF32 = storedSource.copy()
+        override val canonicalId: CanonicalId = canonicalId(
+            "atlas-entry-v2",
+            matrixId("transform", transform).value,
+            rectId("source", storedSource).value,
+            canonicalOptionalId("color", color?.let { colorId("value", it) }).value,
+        )
+        public companion object {
+            public fun of(transform: Matrix3x3F32, source: RectF32, color: ColorARGB? = null): AtlasEntry =
+                AtlasEntry(transform, source, color)
+        }
+    }
 
-    public class GlyphRun private constructor(glyphIds: IntArray, positions: Collection<Point2F32>) : GeometryNode {
+    public class GlyphRun private constructor(
+        glyphIds: IntArray,
+        positions: Collection<Point2F32>,
+        public val fontSize: Float,
+        variations: Map<String, Float>,
+        public val typeface: TypefaceReference?,
+    ) : GeometryNode {
         private val storedGlyphIds: IntArray = glyphIds.copyOf()
-        private val storedPositions: List<Point2F32> = positions.toList()
+        private val storedPositions: List<Point2F32> = immutableList(positions)
+        private val storedVariations: Map<String, Float> = immutableSortedMap(variations)
+
         init { require(storedGlyphIds.size == storedPositions.size) { "GlyphRun glyph IDs and positions must have the same size" } }
+
         public val glyphCount: Int get() = storedGlyphIds.size
         public fun copyGlyphIds(): IntArray = storedGlyphIds.copyOf()
         public fun positionAt(index: Int): Point2F32 = storedPositions[index]
+        public fun variations(): Map<String, Float> = storedVariations
         override val canonicalId: CanonicalId = canonicalId(
-            "geometry-glyph-run-v1", *storedGlyphIds.map(Int::toString).toTypedArray(),
-            *storedPositions.flatMap { listOf(it.x.canonicalBits(), it.y.canonicalBits()) }.toTypedArray(),
+            "geometry-glyph-run-v2",
+            canonicalSequenceId("glyph-ids", storedGlyphIds.map(Int::toString)).value,
+            pointSequenceId("positions", storedPositions).value,
+            fontSize.canonicalBits(),
+            canonicalMapId("variations", storedVariations).value,
+            canonicalOptionalId("typeface", typeface?.canonicalId).value,
         )
-        public companion object { public fun of(glyphIds: IntArray, positions: Collection<Point2F32>): GlyphRun = GlyphRun(glyphIds, positions) }
+
+        public companion object {
+            public fun of(
+                glyphIds: IntArray,
+                positions: Collection<Point2F32>,
+                fontSize: Float = 12f,
+                variations: Map<String, Float> = emptyMap(),
+                typeface: TypefaceReference? = null,
+            ): GlyphRun = GlyphRun(glyphIds, positions, fontSize, variations, typeface)
+        }
     }
 }
 
+/** Semantic point grouping; no canvas dependency is retained. */
+public enum class PointMode { POINTS, LINES, POLYGON }
+
+/** Semantic indexed-mesh topology; no backend primitive topology is selected here. */
+public enum class MeshPrimitiveMode { TRIANGLES, TRIANGLE_STRIP, TRIANGLE_FAN }
+
+/** Per-cell behavior for an image lattice. */
+public enum class LatticeCellFlag { DEFAULT, TRANSPARENT, FIXED_COLOR }
+
+/** Neutral image sampling request that a backend may later lower. */
+public sealed interface ImageSampling : CanonicalValue {
+    public data object Nearest : ImageSampling {
+        override val canonicalId: CanonicalId = canonicalId("image-sampling-nearest-v1")
+    }
+
+    public data object Linear : ImageSampling {
+        override val canonicalId: CanonicalId = canonicalId("image-sampling-linear-v1")
+    }
+
+    public data class Cubic(public val b: Float, public val c: Float) : ImageSampling {
+        override val canonicalId: CanonicalId = canonicalId("image-sampling-cubic-v1", b.canonicalBits(), c.canonicalBits())
+    }
+}
+
+/** Stable reference to a resolved typeface without importing a font implementation. */
+@JvmInline
+public value class TypefaceId(public val value: String) {
+    init { require(value.isNotBlank()) { "TypefaceId.value must not be blank" } }
+}
+
+/** Backend-neutral typeface identity attached to resolved glyph data. */
+public data class TypefaceReference(public val id: TypefaceId) : CanonicalValue {
+    override val canonicalId: CanonicalId = canonicalId("typeface-reference-v1", id.value)
+}
+
+private fun copyRRect(value: RRectF32): RRectF32 = value.copy(rect = value.rect.copy())
+
 private fun rectId(tag: String, rect: RectF32): CanonicalId = canonicalId(
-    tag, rect.left.canonicalBits(), rect.top.canonicalBits(), rect.right.canonicalBits(), rect.bottom.canonicalBits(),
+    tag,
+    rect.left.canonicalBits(), rect.top.canonicalBits(), rect.right.canonicalBits(), rect.bottom.canonicalBits(),
 )
 
 private fun rrectId(tag: String, rrect: RRectF32): CanonicalId = canonicalId(
-    tag, rectId("rect", rrect.rect).value,
+    tag,
+    rectId("rect", rrect.rect).value,
     rrect.topLeft.x.canonicalBits(), rrect.topLeft.y.canonicalBits(),
     rrect.topRight.x.canonicalBits(), rrect.topRight.y.canonicalBits(),
     rrect.bottomRight.x.canonicalBits(), rrect.bottomRight.y.canonicalBits(),
     rrect.bottomLeft.x.canonicalBits(), rrect.bottomLeft.y.canonicalBits(),
 )
 
-private fun pathId(path: PathF32): CanonicalId = canonicalId(
-    "geometry-path-v1",
-    path.fillRule.name,
-    *path.flatMap { segment ->
-        when (segment) {
-            is PathSegmentF32.MoveTo -> listOf("move", segment.point.x.canonicalBits(), segment.point.y.canonicalBits())
-            is PathSegmentF32.LineTo -> listOf("line", segment.point.x.canonicalBits(), segment.point.y.canonicalBits())
-            is PathSegmentF32.QuadTo -> listOf(
-                "quad", segment.control.x.canonicalBits(), segment.control.y.canonicalBits(),
-                segment.point.x.canonicalBits(), segment.point.y.canonicalBits(),
-            )
-            is PathSegmentF32.CubicTo -> listOf(
-                "cubic", segment.control1.x.canonicalBits(), segment.control1.y.canonicalBits(),
-                segment.control2.x.canonicalBits(), segment.control2.y.canonicalBits(),
-                segment.point.x.canonicalBits(), segment.point.y.canonicalBits(),
-            )
-            is PathSegmentF32.ArcTo -> listOf(
-                "arc", segment.radius.x.canonicalBits(), segment.radius.y.canonicalBits(),
-                segment.xAxisRotation.canonicalBits(), segment.largeArc.toString(), segment.sweep.toString(),
-                segment.point.x.canonicalBits(), segment.point.y.canonicalBits(),
-            )
-            PathSegmentF32.Close -> listOf("close")
-        }
-    }.toTypedArray(),
+private fun pointSequenceId(tag: String, points: Collection<Point2F32>): CanonicalId = canonicalSequenceId(
+    tag,
+    points.map { point -> canonicalId("point", point.x.canonicalBits(), point.y.canonicalBits()).value },
 )
+
+private fun rectSequenceId(tag: String, rects: Collection<RectF32>): CanonicalId = canonicalSequenceId(
+    tag,
+    rects.map { rect -> rectId("rect", rect).value },
+)
+
+private fun colorSequenceId(tag: String, colors: Collection<ColorARGB>): CanonicalId = canonicalSequenceId(
+    tag,
+    colors.map { color -> colorId("color", color).value },
+)
+
+private fun colorId(tag: String, color: ColorARGB): CanonicalId = canonicalId(tag, color.value.toString())
+
+private fun matrixId(tag: String, matrix: Matrix3x3F32): CanonicalId = canonicalId(
+    tag,
+    matrix.sx.canonicalBits(), matrix.kx.canonicalBits(), matrix.tx.canonicalBits(),
+    matrix.ky.canonicalBits(), matrix.sy.canonicalBits(), matrix.ty.canonicalBits(),
+    matrix.persp0.canonicalBits(), matrix.persp1.canonicalBits(), matrix.persp2.canonicalBits(),
+)
+
+private fun canonicalMapId(tag: String, values: Map<String, Float>): CanonicalId = canonicalSequenceId(
+    tag,
+    values.map { (name, value) -> canonicalId("entry", name, value.canonicalBits()).value },
+)
+
+private fun pathId(path: PathF32): CanonicalId = canonicalId(
+    "geometry-path-v2",
+    path.fillRule.name,
+    canonicalSequenceId("segments", path.map { segment -> pathSegmentId(segment).value }).value,
+)
+
+private fun pathSegmentId(segment: PathSegmentF32): CanonicalId = when (segment) {
+    is PathSegmentF32.MoveTo -> canonicalId("move", segment.point.x.canonicalBits(), segment.point.y.canonicalBits())
+    is PathSegmentF32.LineTo -> canonicalId("line", segment.point.x.canonicalBits(), segment.point.y.canonicalBits())
+    is PathSegmentF32.QuadTo -> canonicalId(
+        "quad", segment.control.x.canonicalBits(), segment.control.y.canonicalBits(),
+        segment.point.x.canonicalBits(), segment.point.y.canonicalBits(),
+    )
+    is PathSegmentF32.CubicTo -> canonicalId(
+        "cubic", segment.control1.x.canonicalBits(), segment.control1.y.canonicalBits(),
+        segment.control2.x.canonicalBits(), segment.control2.y.canonicalBits(),
+        segment.point.x.canonicalBits(), segment.point.y.canonicalBits(),
+    )
+    is PathSegmentF32.ArcTo -> canonicalId(
+        "arc", segment.radius.x.canonicalBits(), segment.radius.y.canonicalBits(),
+        segment.xAxisRotation.canonicalBits(), segment.largeArc.toString(), segment.sweep.toString(),
+        segment.point.x.canonicalBits(), segment.point.y.canonicalBits(),
+    )
+    PathSegmentF32.Close -> canonicalId("close")
+}

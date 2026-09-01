@@ -99,5 +99,5 @@ public sealed interface RenderExecutionResult {
 
 private fun List<RenderDiagnostic>.snapshotDiagnostics(): List<RenderDiagnostic> {
     require(isNotEmpty()) { "A failed render result must include at least one diagnostic" }
-    return toList()
+    return immutableList(this)
 }

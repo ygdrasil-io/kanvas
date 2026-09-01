@@ -21,7 +21,7 @@ public class SceneSnapshot private constructor(
     public val colorSpace: ColorSpace,
     commands: Collection<SceneCommand>,
 ) : Iterable<SceneCommand>, CanonicalValue {
-    private val values: List<SceneCommand> = commands.toList()
+    private val values: List<SceneCommand> = immutableList(commands)
 
     public val commandCount: Int get() = values.size
 
