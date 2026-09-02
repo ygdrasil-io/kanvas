@@ -106,7 +106,7 @@ internal data class GPUOpMapping(
     val commandIdsByOperationIndex: Map<Int, Set<Int>> = emptyMap(),
 )
 
-data class GPUPreparedOperationRefusal(
+internal data class GPUPreparedOperationRefusal(
     val commandId: Int,
     val operationIndex: Int,
     val code: String,

@@ -1,15 +1,15 @@
 package org.graphiks.kanvas.surface
 
-import org.graphiks.kanvas.gpu.renderer.geometry.GPUPathEdgeFanPayloadContract
-import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageRouteCapability
+private const val MAX_PATH_FAN_TRIANGLES: UInt = 1_024u
+private const val MAX_PATH_GEOMETRY_BYTES: UInt = 36_864u
 
 data class RenderConfig(
     val gpuColorFormat: GPUColorFormat = GPUColorFormat.RGBA8_UNORM_SRGB,
     val maxPathVertices: UInt = 131072u,
     /** Maximum stencil edge-fan triangles admitted by the public Surface path route. */
-    val maxPathFanTriangles: UInt = GPUPathEdgeFanPayloadContract.MAX_TRIANGLES,
+    val maxPathFanTriangles: UInt = MAX_PATH_FAN_TRIANGLES,
     /** Maximum bytes for the public Surface path edge-fan position/index buffers. */
-    val maxPathGeometryBytes: UInt = GPUPathEdgeFanPayloadContract.MAX_GEOMETRY_BYTES,
+    val maxPathGeometryBytes: UInt = MAX_PATH_GEOMETRY_BYTES,
     val curveTolerance: Float = 0.25f,
     val maxImagePixels: UInt = 67_108_864u,
     val maxMaskBlurIntermediateBytes: UInt = 67_108_864u,
@@ -17,8 +17,7 @@ data class RenderConfig(
     /** Maximum ordered clip elements admitted by the public Surface coverage-mask route. */
     val maxClipStackDepth: UInt = 8u,
     /** Selects the explicit prepared-image capability admitted by this Surface. */
-    val preparedImageRouteCapability: GPUPreparedImageRouteCapability =
-        GPUPreparedImageRouteCapability.GenericNative,
+    val preparedImageRoute: PreparedImageRoute = PreparedImageRoute.GENERIC_NATIVE,
     val diagnosticLevel: DiagnosticLevel = DiagnosticLevel.WARN,
     val debugLevel: DebugLevel = DebugLevel.OFF,
 ) {
@@ -33,9 +32,9 @@ data class RenderConfig(
             "geometry.path.fan_budget_config_out_of_int_range"
         maxPathGeometryBytes > Int.MAX_VALUE.toUInt() ->
             "geometry.path.memory_budget_config_out_of_int_range"
-        maxPathFanTriangles > GPUPathEdgeFanPayloadContract.MAX_TRIANGLES ->
+        maxPathFanTriangles > MAX_PATH_FAN_TRIANGLES ->
             "geometry.path.fan_budget_config_exceeded"
-        maxPathGeometryBytes > GPUPathEdgeFanPayloadContract.MAX_GEOMETRY_BYTES ->
+        maxPathGeometryBytes > MAX_PATH_GEOMETRY_BYTES ->
             "geometry.path.memory_budget_config_exceeded"
         else -> null
     }
@@ -65,9 +64,9 @@ data class RenderConfig(
                     ?.toUIntOrNull() ?: DEFAULT.maxClipIntermediateBytes,
                 maxClipStackDepth = p.getProperty("kanvas.render.maxClipStackDepth")
                     ?.toUIntOrNull() ?: DEFAULT.maxClipStackDepth,
-                preparedImageRouteCapability = p.getProperty("kanvas.render.preparedImageRouteCapability")
-                    ?.let { runCatching { GPUPreparedImageRouteCapability.valueOf(it) }.getOrNull() }
-                    ?: DEFAULT.preparedImageRouteCapability,
+                preparedImageRoute = p.getProperty("kanvas.render.preparedImageRouteCapability")
+                    ?.let(::parsePreparedImageRoute)
+                    ?: DEFAULT.preparedImageRoute,
                 diagnosticLevel = p.getProperty("kanvas.render.diagnosticLevel")
                     ?.let { runCatching { DiagnosticLevel.valueOf(it) }.getOrNull() }
                     ?: DEFAULT.diagnosticLevel,
@@ -77,4 +76,11 @@ data class RenderConfig(
             )
         }
     }
+}
+
+private fun parsePreparedImageRoute(value: String): PreparedImageRoute? = when (value) {
+    "GenericNative", PreparedImageRoute.GENERIC_NATIVE.name -> PreparedImageRoute.GENERIC_NATIVE
+    "BoundedNearest1To1", PreparedImageRoute.BOUNDED_NEAREST_1_TO_1.name ->
+        PreparedImageRoute.BOUNDED_NEAREST_1_TO_1
+    else -> null
 }

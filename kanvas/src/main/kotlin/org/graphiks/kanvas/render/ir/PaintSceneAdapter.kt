@@ -75,15 +75,23 @@ public object PaintSceneAdapter {
     public fun captureMeshProgram(
         program: org.graphiks.kanvas.paint.MeshProgram,
         captureImage: (Image) -> ImageResourceSnapshot = ResourceSceneAdapter::captureImage,
-    ): MeshProgramNode = MeshProgramNode.of(
-        descriptor = program.effect.toDescriptor(RuntimeEffectAbi.SHADER),
-        uniforms = program.uniforms.toRuntimeUniforms(),
-        children = program.children.entries.map { entry -> when (val child = entry.child) {
+    ): MeshProgramNode {
+        val children = program.children.entries.map { entry -> when (val child = entry.child) {
             is org.graphiks.kanvas.paint.ShaderChild -> MeshProgramChild.Shader(entry.name, child.shader.toMaterial(captureImage))
             is org.graphiks.kanvas.paint.ColorFilterChild -> MeshProgramChild.ColorFilter(entry.name, child.filter.toNode(captureImage))
             is org.graphiks.kanvas.paint.BlenderChild -> MeshProgramChild.Blender(entry.name, child.blender.toNode())
-        } },
-    )
+        } }
+        return MeshProgramNode.of(
+            descriptor = program.effect.toDescriptor(
+                abi = RuntimeEffectAbi.SHADER,
+                extraChildren = children.map { child ->
+                    RuntimeChildSlot(child.binding.name, child.binding.type)
+                },
+            ),
+            uniforms = program.uniforms.toRuntimeUniforms(),
+            children = children,
+        )
+    }
 
     public fun restoreMeshProgram(node: MeshProgramNode): org.graphiks.kanvas.paint.MeshProgram =
         org.graphiks.kanvas.paint.MeshProgram(
@@ -377,7 +385,7 @@ public object PaintSceneAdapter {
             require(registered.id == id.value) { "Registered runtime effect identity does not match scene descriptor" }
             val registeredDescriptor = registered.toDescriptor(
                 abi,
-                filter { captured -> registered.children.none { it.name == captured.name } }.toList(),
+                toList(),
             )
             require(registeredDescriptor == this) {
                 "Registered runtime effect descriptor does not match the scene descriptor"

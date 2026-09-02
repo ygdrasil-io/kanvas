@@ -56,7 +56,7 @@ import org.graphiks.kanvas.text.PreparedTextOutline
 import org.graphiks.math.matrix.Matrix3x3F32
 import kotlin.uuid.Uuid
 
-data class PreparedTextFrameInventoryLimits(
+internal data class PreparedTextFrameInventoryLimits(
     val pageWidth: Int,
     val pageHeight: Int,
     val maxPages: Int,
@@ -82,7 +82,7 @@ data class PreparedTextFrameInventoryLimits(
     }
 }
 
-data class GPUPreparedTextFrameMetrics(
+internal data class GPUPreparedTextFrameMetrics(
     val glyphCount: Int,
     val uniqueMaskCount: Int,
     val instanceCount: Int,
@@ -98,14 +98,14 @@ data class GPUPreparedTextFrameMetrics(
     val packingNanoseconds: Long = 0L,
 )
 
-data class PreparedTextMaskIdentity(
+internal data class PreparedTextMaskIdentity(
     val operationIndex: Int,
     val glyphIndex: Int,
     val layerIndex: Int?,
     val maskKeySha256: String,
 )
 
-class GPUPreparedTextStrokePath private constructor(
+internal class GPUPreparedTextStrokePath private constructor(
     val operationIndex: Int,
     val glyphIndex: Int,
     val draw: GPUPreparedTextDraw,
@@ -131,7 +131,7 @@ class GPUPreparedTextStrokePath private constructor(
     }
 }
 
-class GPUPreparedTextSubRun private constructor(
+internal class GPUPreparedTextSubRun private constructor(
     val operationIndex: Int,
     val subRunIndex: Int,
     val draw: GPUPreparedTextDraw,
@@ -176,7 +176,7 @@ class GPUPreparedTextSubRun private constructor(
     }
 }
 
-class PreparedTextFrameInventory private constructor(
+internal class PreparedTextFrameInventory private constructor(
     val generation: GPUTextArtifactGeneration,
     sourcePages: List<GPUTextA8AtlasPageArtifact>,
     sourceSubRunsByOperationIndex: Map<Int, List<GPUPreparedTextSubRun>>,
@@ -237,7 +237,7 @@ class PreparedTextFrameInventory private constructor(
     }
 }
 
-sealed interface PreparedTextFrameInventoryResult {
+internal sealed interface PreparedTextFrameInventoryResult {
     data class Ready(
         val inventory: PreparedTextFrameInventory,
         val rasterNanoseconds: Long,
@@ -255,7 +255,7 @@ sealed interface PreparedTextFrameInventoryResult {
     }
 }
 
-sealed interface PreparedTextColorLayerArtifact {
+internal sealed interface PreparedTextColorLayerArtifact {
     val layerIndex: Int
     val glyphId: Int
 
@@ -274,7 +274,7 @@ sealed interface PreparedTextColorLayerArtifact {
     ) : PreparedTextColorLayerArtifact
 }
 
-sealed interface PreparedTextGlyphArtifact {
+internal sealed interface PreparedTextGlyphArtifact {
     data class A8(
         val mask: A8GlyphMask,
         val maskKey: GlyphMaskKey,
@@ -319,7 +319,7 @@ internal interface PreparedTextFrameInventoryObserver {
 private object NoOpPreparedTextFrameInventoryObserver :
     PreparedTextFrameInventoryObserver
 
-fun interface PreparedTextGlyphArtifactResolver {
+internal fun interface PreparedTextGlyphArtifactResolver {
     fun resolve(
         draw: GPUPreparedTextDraw,
         glyphIndex: Int,
@@ -331,7 +331,7 @@ fun interface PreparedTextGlyphArtifactResolver {
  * Exact product resolver: it reconstructs the snapshotted face, verifies all identity fields and
  * invokes the same face-indexed outline authority used during Task 4 lowering.
  */
-object ExactPreparedTextGlyphArtifactResolver : PreparedTextGlyphArtifactResolver {
+internal object ExactPreparedTextGlyphArtifactResolver : PreparedTextGlyphArtifactResolver {
     override fun resolve(
         draw: GPUPreparedTextDraw,
         glyphIndex: Int,
@@ -520,7 +520,7 @@ private fun resolveExactArtifact(
     }
 }
 
-object PreparedTextFrameInventoryBuilder {
+internal object PreparedTextFrameInventoryBuilder {
     fun build(
         draws: List<GPUPreparedTextDraw>,
         generation: GPUTextArtifactGeneration,

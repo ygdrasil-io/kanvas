@@ -21,14 +21,14 @@ import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
-data class GPUPreparedImageLoweringContext(
+internal data class GPUPreparedImageLoweringContext(
     val provenance: GPUFrameProvenance,
     val target: GPUTargetFacts,
     val config: RenderConfig,
     val capabilities: GPUCapabilities,
 )
 
-sealed interface GPUPreparedImageGridLowering {
+internal sealed interface GPUPreparedImageGridLowering {
     data class Ready(val commands: List<GPUFramePathVisualCommand>) :
         GPUPreparedImageGridLowering
 

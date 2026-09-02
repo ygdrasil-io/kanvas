@@ -50,25 +50,25 @@ import org.graphiks.kanvas.surface.RenderConfig
 
 const val GPU_FRAME_PROVENANCE_ANNOTATION_KEY: String = "kanvas.frame.provenance"
 
-enum class GPUFramePathStateKind {
+internal enum class GPUFramePathStateKind {
     Transform,
     Clip,
     Annotation,
     FlushSnapshot,
 }
 
-data class GPUFramePathStateEvent(
+internal data class GPUFramePathStateEvent(
     val operationIndex: Int,
     val kind: GPUFramePathStateKind,
 )
 
-data class GPUFramePathTelemetryInput(
+internal data class GPUFramePathTelemetryInput(
     val commandId: GPUDrawCommandID,
     val paintOrder: Int,
     val provenance: GPUFrameProvenance,
 )
 
-data class GPUFramePathVisualCommand(
+internal data class GPUFramePathVisualCommand(
     val normalized: NormalizedDrawCommand,
     val targetSpaceBounds: GPUBounds,
     val geometryCoverage: GPUCoverageConsumption,
@@ -81,7 +81,7 @@ data class GPUFramePathVisualCommand(
     val preparedText: GPUPreparedTextSubRun? = null,
 )
 
-data class GPUFramePathInventoryPlan(
+internal data class GPUFramePathInventoryPlan(
     val target: GPUTargetFacts,
     val visualCommands: List<GPUFramePathVisualCommand>,
     val normalizedCommands: List<NormalizedDrawCommand>,
@@ -102,7 +102,7 @@ data class GPUFramePathInventoryPlan(
  * proof that a product frame reached one native queue submit. It only makes handle-free route
  * decisions and prepared-frame evidence inspectable by tests.
  */
-object GPUFramePathApiInventory {
+internal object GPUFramePathApiInventory {
     fun plan(
         operations: List<DisplayOp>,
         target: GPUTargetFacts,

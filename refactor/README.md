@@ -37,6 +37,8 @@ Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :
   non atteinte en raison de la quarantaine temporaire `jpg-color-cube`.
 - [État W01 — géométrie immuable et format `Picture` v8](waves/W01-immutable-geometry/status.md)
   — preuve d'immuabilité, compatibilité de lecture v7 et writer v8 stable.
+- [État W02 — Scene IR et frontières de modules](waves/W02-scene-ir/status.md)
+  — capture backend-neutral publiée ; rendu public encore legacy et gates strictes non atteintes.
 - [État consolidé de la topologie hybride](progress/2026-08-31-hybrid-f64-f32-path-topology/progress.md)
 - [Rapport d'implémentation de l'admission conservative](progress/2026-09-01-conservative-hybrid-topology-admission/implementation-report.md)
 - [Revue de spécification de l'admission conservative](progress/2026-09-01-conservative-hybrid-topology-admission/spec-review.md)
@@ -47,8 +49,8 @@ Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :
 | Vague | Sujet | État |
 | --- | --- | --- |
 | W0 | Vérité de référence | Baseline publiée ; gate stricte non atteinte |
-| W1 | Géométrie immuable dans `:math` | Périmètre fonctionnel implémenté et prouvé ciblé pour les frontières d'enregistrement/Picture : snapshots immuables et writer `Picture` v8 stable. Gate stricte **NON ATTEINTE / bloquée** par la baseline globale de 51 échecs GPU/Image ; topologie source, topologie hybride F64/F32 et admission conservative restent documentées séparément |
-| W2 | `Scene IR` et frontières de modules | Non démarrée |
+| W1 | Géométrie immuable dans `:math` | Périmètre fonctionnel implémenté et prouvé ciblé pour les frontières d'enregistrement/Picture : snapshots immuables et writer `Picture` v8 stable. Gate stricte **NON ATTEINTE / bloquée** par la validation globale fraîche de 51 échecs sur 3 573 tests, qui confirme la baseline globale ; topologie source, topologie hybride F64/F32 et admission conservative restent documentées séparément |
+| W2 | `Scene IR` et frontières de modules | Capture backend-neutral et frontières de modules implémentées ; gate stricte **NON ATTEINTE** (431/443 captures, 12 dettes), rendu public encore legacy |
 | W3 | `gpu-plan` et premier `RenderGraph` | Non démarrée |
 | W4 | Geometry/coverage | Non démarrée |
 | W5 | Material graph | Non démarrée |

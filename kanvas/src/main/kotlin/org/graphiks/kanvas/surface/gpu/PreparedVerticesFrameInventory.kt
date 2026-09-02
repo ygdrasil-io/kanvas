@@ -13,7 +13,7 @@ import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes
 
 private const val WEBGPU_BUFFER_UPLOAD_ALIGNMENT = 4L
 
-data class PreparedVerticesFrameInventoryLimits(
+internal data class PreparedVerticesFrameInventoryLimits(
     val maxDraws: Int,
     val maxUniqueArtifacts: Int,
     val maxVertexBytes: Long,
@@ -33,7 +33,7 @@ data class PreparedVerticesFrameInventoryLimits(
     }
 }
 
-data class PreparedVerticesFrameLimitEvidence(
+internal data class PreparedVerticesFrameLimitEvidence(
     val configured: PreparedVerticesFrameInventoryLimits,
     val effective: PreparedVerticesFrameInventoryLimits,
     val capabilitySource: String,
@@ -43,9 +43,9 @@ data class PreparedVerticesFrameLimitEvidence(
     }
 }
 
-enum class PreparedVerticesUploadBufferKind { Vertex, Index }
+internal enum class PreparedVerticesUploadBufferKind { Vertex, Index }
 
-data class PreparedVerticesUploadRange(
+internal data class PreparedVerticesUploadRange(
     val artifactKey: String,
     val bufferKind: PreparedVerticesUploadBufferKind,
     val offset: Long,
@@ -65,7 +65,7 @@ data class PreparedVerticesUploadRange(
         get() = Math.addExact(offset, occupiedByteCount)
 }
 
-class PreparedVerticesFrameCommand internal constructor(
+internal class PreparedVerticesFrameCommand internal constructor(
     val operationIndex: Int,
     val artifactKey: String,
     val artifact: GPUPreparedVerticesUploadArtifact,
@@ -89,7 +89,7 @@ class PreparedVerticesFrameCommand internal constructor(
         get() = materialFrameSnapshot.program
 }
 
-class PreparedVerticesMappedCommand internal constructor(
+internal class PreparedVerticesMappedCommand internal constructor(
     val commandId: Int,
     val operationIndex: Int,
     val artifactKey: String,
@@ -100,7 +100,7 @@ class PreparedVerticesMappedCommand internal constructor(
     }
 }
 
-data class PreparedVerticesFrameMetrics(
+internal data class PreparedVerticesFrameMetrics(
     val drawCount: Int,
     val uniqueArtifactCount: Int,
     val vertexBytes: Long,
@@ -110,7 +110,7 @@ data class PreparedVerticesFrameMetrics(
     val runtimeChildren: Int,
 )
 
-class PreparedVerticesFrameInventory internal constructor(
+internal class PreparedVerticesFrameInventory internal constructor(
     commands: List<PreparedVerticesFrameCommand>,
     artifactsByKey: Map<String, GPUPreparedVerticesUploadArtifact>,
     materialsByKey: Map<String, GPUPreparedMaterialProgram>,
@@ -280,7 +280,7 @@ internal sealed interface PreparedVerticesCommandBindingResult {
     }
 }
 
-sealed interface PreparedVerticesFrameInventoryResult {
+internal sealed interface PreparedVerticesFrameInventoryResult {
     data class Ready(val inventory: PreparedVerticesFrameInventory) :
         PreparedVerticesFrameInventoryResult
 
@@ -293,7 +293,7 @@ sealed interface PreparedVerticesFrameInventoryResult {
     }
 }
 
-object PreparedVerticesFrameInventoryBuilder {
+internal object PreparedVerticesFrameInventoryBuilder {
     fun build(
         draws: List<GPUPreparedVerticesDraw>,
         limits: PreparedVerticesFrameInventoryLimits,

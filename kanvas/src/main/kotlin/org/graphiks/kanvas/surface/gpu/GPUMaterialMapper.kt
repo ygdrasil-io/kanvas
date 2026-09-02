@@ -42,20 +42,20 @@ import org.graphiks.math.color.ColorMatrixF32
 import org.graphiks.math.matrix.Matrix3x3F32
 import kotlin.math.pow
 
-data class GPUPreparedMaterialMapping(
+internal data class GPUPreparedMaterialMapping(
     val descriptor: GPUMaterialDescriptor,
     val paintAlpha: Float,
 )
 
 /** Exact MeshProgram material mapping; final target blend remains a separate draw fact. */
-data class GPUPreparedMeshProgramMapping(
+internal data class GPUPreparedMeshProgramMapping(
     val descriptor: GPUMaterialDescriptor.RuntimeEffect,
     val paintAlpha: Float,
     val finalTargetBlendMode: GPUBlendMode? = null,
 )
 
 /** Typed, deterministic result used by later prepared lowering without exceptions or fallback. */
-sealed interface GPUPreparedMeshProgramMappingResult {
+internal sealed interface GPUPreparedMeshProgramMappingResult {
     data class Ready(
         val mapping: GPUPreparedMeshProgramMapping,
     ) : GPUPreparedMeshProgramMappingResult
