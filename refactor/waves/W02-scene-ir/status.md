@@ -1,7 +1,7 @@
 # W02 — Scene IR et frontières de modules
 
 Date de génération : 2026-09-02  
-Commit d'implémentation : `88e49aaf8` (`refactor: close W02 scene IR boundaries`)
+Commit de vérification : `b575b5b74`
 
 ## État des gates
 
@@ -9,7 +9,7 @@ Commit d'implémentation : `88e49aaf8` (`refactor: close W02 scene IR boundaries
 | --- | --- | --- |
 | W00 baseline opérationnelle | Publiée | Inventaire `gpu-gm-inventory-v3` strict de 631 GMs. |
 | W00 gate stricte | **NON ATTEINTE** | `jpg-color-cube` est l’unique quarantaine nominale `quarantined-resource-limit`. Son `mustAttempt=false` la filtre avant `Surface`, setup, draw et render ; aucune ressource lourde de rendu n’est engagée. |
-| W1 gate stricte | **NON ATTEINTE** | La validation fraîche de `:kanvas:test` confirme la baseline globale de 51 échecs sur 3 573 tests. |
+| W1 gate stricte | **NON ATTEINTE** | La validation fraîche de `:kanvas:test --rerun-tasks` confirme la baseline globale de 51 échecs sur 3 585 tests, 0 erreur ; aucun nouveau test W1/W2 n'échoue. |
 | W2 capture Scene IR stricte | **NON ATTEINTE** | 443 GMs éligibles : 431 capturées, 11 bloquées au setup (5 readbacks et 6 stubs), 1 capture invalide pour flottants non finis. |
 
 Les 12 dettes de capture ne sont ni masquées ni reclassifiées. Il n’existe aucune
@@ -40,13 +40,27 @@ par la nouvelle architecture.
 - Les valeurs géométriques restent dans `:math` avec la nomenclature
   `I32`/`I64`/`F32`/`F64`; W02 ne les déplace pas vers `:kanvas`.
 
+## Identité et graphes
+
+- Les identifiants canoniques de la Scene IR sont des SHA-256 hexadécimaux de
+  64 caractères ; le domaine et le framing sont calculés exactement sur les
+  unités UTF-16 contractuelles.
+- La construction d'un DAG (directed acyclic graph, graphe orienté acyclique)
+  partagé de profondeur 1 024 conserve une identité de taille fixe, sans
+  croissance mémoire exponentielle. Son admission reste soumise aux limites de
+  graphe : les dépassements sont refusés par un diagnostic typé piloté par
+  `SceneCaptureLimits`, sans plafond local dans la phase d'enregistrement.
+
 ## Périmètre GM et quarantaine
 
-Le document W00 conserve ses comptes historiques. L’inventaire régénéré après
-Task13 est la vérité fraîche : il recense 631 GMs, dont 450 `eligible`, 126
+Le document W00 conserve ses comptes historiques. L’inventaire régénéré le
+2026-09-02 est la vérité fraîche : il recense 631 GMs, dont 450 `eligible`, 126
 `excluded-font`, 54 `excluded-codec` et 1 `quarantined-resource-limit`. Ses
 routes et ses scores peuvent donc différer des artefacts précédents. Le score
 audit reste strict avec zéro score orphelin et aucune exclusion n’a été ajoutée.
+La génération a abouti en 2 min 10 s. `jpg-color-cube` a
+`attempted=false` et `setupState=NOT_ATTEMPTED` ; elle est filtrée avant
+`Surface`/setup/draw/render par la quarantaine de limite de ressource.
 
 Les 450 GMs `eligible` de l’inventaire W0 sont un compte post-observation de
 la route d’inventaire. La capture Scene IR exécute son propre setup/draw dans
@@ -82,9 +96,11 @@ produits par la Scene IR.
 | `rtk ./gradlew :kanvas:test --tests '*GPUPreparedDrawImageLowererTest*' :integration-tests:gpu-evidence:compileKotlin :integration-tests:skia:compileTestKotlin` | Succès : la route publique bornée conserve le refus du filtrage linéaire et les consommateurs directs compilent. |
 | `rtk ./gradlew :kanvas:test --tests '*GPUFramePathApiInventoryTest*'` | Succès : les limites publiques backend-neutral déterminent les defaults et les refus de budget. |
 | `rtk ./gradlew :kanvas:svg:compileKotlin :integration-tests:svg:compileTestKotlin` | Succès : les consommateurs SVG déclarent leur dépendance GPU explicite. |
-| `rtk ./gradlew :integration-tests:skia:generateSkiaGmInventory` | Succès en 1 min 26 s ; vérité fraîche post-Task13, score audit strict et `jpg-color-cube` filtrée avant `Surface`/setup/draw/render. |
-| `rtk ./gradlew :integration-tests:skia:test --tests '*SkiaGmSceneCaptureTest*'` | Succès : les sept GMs reclassés après draw font passer les 450 éligibles W0 à 443 ; 431 captures, 11 blocages au setup et une capture invalide. `jpg-color-cube` reste filtrée avant `Surface`/setup/draw/render. |
-| `rtk ./gradlew :kanvas:test --rerun-tasks` | Échec connu : 51 échecs sur 3 573 tests, 0 erreur. Ce compte frais confirme la baseline globale et maintient W1 strict non atteinte. |
+| `rtk ./gradlew :integration-tests:skia:generateSkiaGmInventory` | Succès en 2 min 10 s ; 631 GMs enregistrées, 450 éligibles, 54 `excluded-codec`, 126 `excluded-font`, 1 quarantaine ; `scoreAudit.strict=true`, `orphanCount=0`, et `jpg-color-cube` filtrée avant `Surface`/setup/draw/render. |
+| `rtk ./gradlew :integration-tests:skia:test --tests '*SkiaGmInventoryTest*' --tests '*SkiaGmConformanceTest*' --tests '*SkiaGmSceneCaptureTest*'` | Succès : les sept GMs reclassés après draw font passer les 450 éligibles W0 à 443 ; 431 captures, 11 blocages au setup et une capture invalide. `jpg-color-cube` reste filtrée avant `Surface`/setup/draw/render. |
+| Tests ciblés Picture/RuntimeEffect/RecordedGeometry/DisplayOpSceneAdapter/SceneRoundTrip/SceneRecordingScope/SurfaceSceneSnapshot/GPUFramePathApiInventory | Succès. Les snapshots profonds, graphes cycliques, IDs canoniques et frontières de modules sont couverts. |
+| Compilation des consumers (`:kanvas`, `:kanvas:svg`, `integration-tests:test-utils`, `integration-tests:skia`, `integration-tests:svg`, `integration-tests:gpu-evidence`) | Succès. |
+| `rtk ./gradlew :kanvas:test --rerun-tasks` | Échec connu : 51 échecs sur 3 585 tests, 0 erreur. Ces échecs sont exactement les six classes de baseline GPU/Image connues ; aucun nouveau test W1/W2 ne tombe. Ce compte frais maintient W1 strict non atteinte. |
 
 Audit exact de l'inventaire frais :
 
