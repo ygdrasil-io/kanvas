@@ -1,0 +1,111 @@
+package org.graphiks.kanvas.gpu.plan
+
+import org.graphiks.math.color.ColorF32
+import org.graphiks.math.geometry.RectI32
+
+public enum class CoveragePlan { FullOrScissor }
+public enum class SamplePlan { SingleSample }
+public enum class BlendPlan { SrcOver }
+public enum class AttachmentLoadPlan { ClearTransparent }
+public enum class AttachmentStorePlan { Store }
+public enum class PlanPassRole { MainRender, TextureCopy, Filter, Resolve, Readback }
+
+public class SolidRectDraw private constructor(
+    public val commandIndex: Int,
+    public val color: ColorF32,
+    visibleBounds: RectI32,
+    scissor: RectI32,
+    public val coverage: CoveragePlan,
+    public val sample: SamplePlan,
+    public val blend: BlendPlan,
+) {
+    private val storedVisibleBounds = visibleBounds.copy()
+    private val storedScissor = scissor.copy()
+
+    public fun copyVisibleBounds(): RectI32 = storedVisibleBounds.copy()
+    public fun copyScissor(): RectI32 = storedScissor.copy()
+
+    public companion object {
+        public fun of(
+            commandIndex: Int,
+            color: ColorF32,
+            visibleBounds: RectI32,
+            scissor: RectI32,
+            coverage: CoveragePlan = CoveragePlan.FullOrScissor,
+            sample: SamplePlan = SamplePlan.SingleSample,
+            blend: BlendPlan = BlendPlan.SrcOver,
+        ): SolidRectDraw {
+            require(commandIndex >= 0) { "Command index must be non-negative" }
+            require(!visibleBounds.isEmpty && !scissor.isEmpty) { "Draw rectangles must be non-empty" }
+            return SolidRectDraw(commandIndex, color, visibleBounds, scissor, coverage, sample, blend)
+        }
+    }
+}
+
+public sealed interface PlanPass {
+    public val id: PlanPassId
+    public val role: PlanPassRole
+    public val ordinal: Int
+
+    public class RenderPass(
+        override val ordinal: Int,
+        public val target: PlanResourceId,
+        draws: List<SolidRectDraw>,
+        public val load: AttachmentLoadPlan,
+        public val store: AttachmentStorePlan,
+    ) : PlanPass {
+        override val role: PlanPassRole = PlanPassRole.MainRender
+        override val id: PlanPassId = checkedPassId(role, ordinal)
+        private val storedDraws = immutableList(draws)
+        public fun draws(): List<SolidRectDraw> = storedDraws
+    }
+
+    public data class TextureCopy(
+        override val ordinal: Int,
+        public val source: PlanResourceId,
+        public val destination: PlanResourceId,
+    ) : PlanPass {
+        override val role: PlanPassRole = PlanPassRole.TextureCopy
+        override val id: PlanPassId = checkedPassId(role, ordinal)
+    }
+
+    public class FilterPass(
+        override val ordinal: Int,
+        inputs: List<PlanResourceId>,
+        public val output: PlanResourceId,
+    ) : PlanPass {
+        override val role: PlanPassRole = PlanPassRole.Filter
+        override val id: PlanPassId = checkedPassId(role, ordinal)
+        private val storedInputs = immutableList(inputs)
+        public fun inputs(): List<PlanResourceId> = storedInputs
+    }
+
+    public data class ResolvePass(
+        override val ordinal: Int,
+        public val source: PlanResourceId,
+        public val destination: PlanResourceId,
+    ) : PlanPass {
+        override val role: PlanPassRole = PlanPassRole.Resolve
+        override val id: PlanPassId = checkedPassId(role, ordinal)
+    }
+
+    public data class ReadbackPass(
+        override val ordinal: Int,
+        public val source: PlanResourceId,
+        public val staging: PlanResourceId,
+        public val bytesPerRow: Long,
+    ) : PlanPass {
+        override val role: PlanPassRole = PlanPassRole.Readback
+        override val id: PlanPassId = checkedPassId(role, ordinal)
+        init { require(bytesPerRow > 0) { "Readback row bytes must be positive" } }
+    }
+}
+
+public data class PlanPassDependency(public val before: PlanPassId, public val after: PlanPassId)
+
+private fun checkedPassId(role: PlanPassRole, ordinal: Int): PlanPassId {
+    require(ordinal >= 0) { "Pass ordinal must be non-negative" }
+    return planPassId(role, ordinal)
+}
+
+internal fun <T> immutableList(values: List<T>): List<T> = java.util.Collections.unmodifiableList(values.toList())
