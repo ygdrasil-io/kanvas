@@ -9,6 +9,39 @@ import kotlin.test.assertNotEquals
 
 class RuntimeBindingValidationTest {
     @Test
+    fun `shader module descriptor owns every module ABI field and distinguishes each mismatch`() {
+        val uniforms = mutableListOf(RuntimeUniformSlot("tint", 2, RuntimeUniformType.FLOAT4, 16))
+        val textures = mutableListOf(RuntimeTextureSlot("image", 3))
+        val descriptor = ShaderModuleDescriptor.of("source-a", "fragment", uniforms, textures)
+        val identity = descriptor.canonicalId
+
+        uniforms.clear()
+        textures.clear()
+
+        assertEquals("source-a", descriptor.source)
+        assertEquals("fragment", descriptor.entryPoint)
+        assertEquals(RuntimeUniformSlot("tint", 2, RuntimeUniformType.FLOAT4, 16), descriptor.uniformAt(0))
+        assertEquals(RuntimeTextureSlot("image", 3), descriptor.textureAt(0))
+        assertEquals(identity, descriptor.canonicalId)
+        assertFailsWith<UnsupportedOperationException> { (descriptor.uniforms() as MutableList<RuntimeUniformSlot>).clear() }
+        assertFailsWith<UnsupportedOperationException> { (descriptor.textures() as MutableList<RuntimeTextureSlot>).clear() }
+
+        listOf(
+            ShaderModuleDescriptor.of("source-b", "fragment", listOf(RuntimeUniformSlot("tint", 2, RuntimeUniformType.FLOAT4, 16)), listOf(RuntimeTextureSlot("image", 3))),
+            ShaderModuleDescriptor.of("source-a", "vertex", listOf(RuntimeUniformSlot("tint", 2, RuntimeUniformType.FLOAT4, 16)), listOf(RuntimeTextureSlot("image", 3))),
+            ShaderModuleDescriptor.of("source-a", "fragment", listOf(RuntimeUniformSlot("other", 2, RuntimeUniformType.FLOAT4, 16)), listOf(RuntimeTextureSlot("image", 3))),
+            ShaderModuleDescriptor.of("source-a", "fragment", listOf(RuntimeUniformSlot("tint", 4, RuntimeUniformType.FLOAT4, 16)), listOf(RuntimeTextureSlot("image", 3))),
+            ShaderModuleDescriptor.of("source-a", "fragment", listOf(RuntimeUniformSlot("tint", 2, RuntimeUniformType.FLOAT3, 16)), listOf(RuntimeTextureSlot("image", 3))),
+            ShaderModuleDescriptor.of("source-a", "fragment", listOf(RuntimeUniformSlot("tint", 2, RuntimeUniformType.FLOAT4, 4)), listOf(RuntimeTextureSlot("image", 3))),
+            ShaderModuleDescriptor.of("source-a", "fragment", listOf(RuntimeUniformSlot("tint", 2, RuntimeUniformType.FLOAT4, 16)), listOf(RuntimeTextureSlot("other", 3))),
+            ShaderModuleDescriptor.of("source-a", "fragment", listOf(RuntimeUniformSlot("tint", 2, RuntimeUniformType.FLOAT4, 16)), listOf(RuntimeTextureSlot("image", 5))),
+        ).forEach { mismatch ->
+            assertNotEquals(descriptor, mismatch)
+            assertNotEquals(identity, mismatch.canonicalId)
+        }
+    }
+
+    @Test
     fun `runtime binding validation reports missing extra and mistyped values before construction`() {
         val descriptor = shaderDescriptor(
             slots = listOf(RuntimeUniformSlot("value", 0, RuntimeUniformType.FLOAT, 0)),

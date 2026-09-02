@@ -234,15 +234,6 @@ public enum class RuntimeChildType { SHADER, COLOR_FILTER, IMAGE_FILTER, BLENDER
 public enum class RuntimeVertexFormat { FLOAT32, FLOAT32X2, FLOAT32X3, FLOAT32X4, UINT8X4, SINT16X2, SINT16X4 }
 public enum class RuntimeVertexStepMode { VERTEX, INSTANCE }
 
-/** Handle-free runtime module provenance retained for descriptor compatibility checks. */
-public data class RuntimeModuleMetadata(
-    public val source: String,
-    public val entryPoint: String,
-) : CanonicalValue {
-    init { require(entryPoint.isNotBlank()) { "RuntimeModuleMetadata.entryPoint must not be blank" } }
-    override val canonicalId: CanonicalId = canonicalId("runtime-module-metadata-v1", source, entryPoint)
-}
-
 /** One ABI uniform declaration. */
 public data class RuntimeUniformSlot(
     public val name: String,
@@ -257,6 +248,57 @@ public data class RuntimeUniformSlot(
         require(size >= 0) { "RuntimeUniformSlot.size must not be negative" }
     }
     override val canonicalId: CanonicalId = canonicalId("runtime-uniform-slot-v1", name, binding.toString(), type.name, size.toString())
+}
+
+/** One handle-free texture declaration from a public shader module. */
+public data class RuntimeTextureSlot(public val name: String, public val binding: Int) : CanonicalValue {
+    init {
+        require(name.isNotBlank()) { "RuntimeTextureSlot.name must not be blank" }
+        require(binding >= 0) { "RuntimeTextureSlot.binding must not be negative" }
+    }
+    override val canonicalId: CanonicalId = canonicalId("runtime-texture-slot-v1", name, binding.toString())
+}
+
+/**
+ * Complete, immutable, handle-free public shader-module descriptor.  It keeps
+ * module source and entrypoint alongside the module's own uniform and texture
+ * ABI; runtime-effect uniform bindings are intentionally represented separately.
+ */
+public class ShaderModuleDescriptor private constructor(
+    public val source: String,
+    public val entryPoint: String,
+    uniforms: Collection<RuntimeUniformSlot>,
+    textures: Collection<RuntimeTextureSlot>,
+) : CanonicalValue {
+    private val storedUniforms: List<RuntimeUniformSlot> = immutableList(uniforms)
+    private val storedTextures: List<RuntimeTextureSlot> = immutableList(textures)
+
+    init { require(entryPoint.isNotBlank()) { "ShaderModuleDescriptor.entryPoint must not be blank" } }
+
+    public val uniformCount: Int get() = storedUniforms.size
+    public val textureCount: Int get() = storedTextures.size
+    public fun uniformAt(index: Int): RuntimeUniformSlot = storedUniforms[index]
+    public fun textureAt(index: Int): RuntimeTextureSlot = storedTextures[index]
+    public fun uniforms(): List<RuntimeUniformSlot> = storedUniforms
+    public fun textures(): List<RuntimeTextureSlot> = storedTextures
+    override val canonicalId: CanonicalId = canonicalId(
+        "shader-module-descriptor-v1",
+        source,
+        entryPoint,
+        canonicalSequenceId("uniforms", storedUniforms.map { it.canonicalId.value }).value,
+        canonicalSequenceId("textures", storedTextures.map { it.canonicalId.value }).value,
+    )
+    override fun equals(other: Any?): Boolean = other is ShaderModuleDescriptor && canonicalId == other.canonicalId
+    override fun hashCode(): Int = canonicalId.hashCode()
+
+    public companion object {
+        public fun of(
+            source: String,
+            entryPoint: String,
+            uniforms: Collection<RuntimeUniformSlot> = emptyList(),
+            textures: Collection<RuntimeTextureSlot> = emptyList(),
+        ): ShaderModuleDescriptor = ShaderModuleDescriptor(source, entryPoint, uniforms, textures)
+    }
 }
 
 /** Immutable ABI uniform layout. */
@@ -342,7 +384,7 @@ public class RuntimeEffectDescriptor private constructor(
     public val uniformLayout: RuntimeUniformLayout,
     childSlots: Collection<RuntimeChildSlot>,
     public val vertexLayout: RuntimeVertexLayout?,
-    public val module: RuntimeModuleMetadata?,
+    public val module: ShaderModuleDescriptor?,
 ) : CanonicalValue, Iterable<RuntimeChildSlot> {
     private val values: List<RuntimeChildSlot> = immutableList(childSlots)
     init { require(values.map(RuntimeChildSlot::name).distinct().size == values.size) { "Runtime child slot names must be unique" } }
@@ -367,7 +409,7 @@ public class RuntimeEffectDescriptor private constructor(
             uniformLayout: RuntimeUniformLayout,
             childSlots: Collection<RuntimeChildSlot>,
             vertexLayout: RuntimeVertexLayout? = null,
-            module: RuntimeModuleMetadata? = null,
+            module: ShaderModuleDescriptor? = null,
         ): RuntimeEffectDescriptor = RuntimeEffectDescriptor(id, abi, uniformLayout, childSlots, vertexLayout, module)
     }
 }

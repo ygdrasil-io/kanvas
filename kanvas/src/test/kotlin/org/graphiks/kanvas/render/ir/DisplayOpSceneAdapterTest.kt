@@ -14,8 +14,10 @@ import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.text.KanvasGlyphRun
+import org.graphiks.kanvas.text.KanvasTypeface
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Lattice
+import org.graphiks.kanvas.types.LatticeFlags
 import org.graphiks.kanvas.types.Mesh
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.VertexMode
@@ -33,6 +35,29 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class DisplayOpSceneAdapterTest {
+    @Test
+    fun `capture rejects a shared material DAG at its graph budget before expansion`() {
+        var shared: org.graphiks.kanvas.paint.Shader = org.graphiks.kanvas.paint.Shader.SolidColor(ColorARGB.Red)
+        repeat(19) {
+            shared = org.graphiks.kanvas.paint.Shader.Blend(BlendMode.SRC_OVER, shared, shared)
+        }
+        val operation = DisplayOp.DrawRect(
+            RectF32.ofLTRB(0f, 0f, 1f, 1f),
+            Paint(shader = shared),
+            Matrix3x3F32.Identity,
+            ClipStack.WideOpen,
+        )
+
+        val result = DisplayOpSceneAdapter.capture(
+            listOf(operation),
+            SceneExtent(8, 8),
+            ColorSpace.SRGB,
+            SceneCaptureLimits(graphLimits = GraphLimits(maxNodes = 20)),
+        )
+
+        assertEquals("graph-node-limit", assertInstanceOf(SceneCaptureResult.Invalid::class.java, result).diagnostics.single().code.value)
+    }
+
     @Test
     fun `capture rejects nonfinite graph text and picture values before reconstruction`() {
         val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
@@ -225,8 +250,20 @@ class DisplayOpSceneAdapterTest {
             DisplayOp.DrawRect(bounds, paint, transform, clip),
             DisplayOp.DrawRRect(rrect, paint, transform, clip),
             DisplayOp.DrawPath.withSourceOperation(path, paint, transform, clip, DrawPathSourceOperation.TEXT_EXPANDED),
-            DisplayOp.DrawImage(image, bounds, bounds, null, transform, clip),
-            DisplayOp.DrawText(TextBlob(listOf(KanvasGlyphRun(listOf(7u), listOf(Point2F32(2f, 3f)), 14f))), 5f, 6f, paint, transform, clip),
+            DisplayOp.DrawImage(image, bounds, bounds, paint, transform, clip),
+            DisplayOp.DrawText(
+                TextBlob(
+                    listOf(KanvasGlyphRun(listOf(7u), listOf(Point2F32(2f, 3f)), 14f)),
+                    typeface = KanvasTypeface("task11-matrix-typeface"),
+                    fontSize = 15f,
+                    variationCoordinates = linkedMapOf("wght" to 650f),
+                ),
+                5f,
+                6f,
+                paint,
+                transform,
+                clip,
+            ),
             DisplayOp.SetTransform(transform),
             DisplayOp.SetClip(clip),
             DisplayOp.BeginLayer(bounds, paint),
@@ -236,12 +273,26 @@ class DisplayOpSceneAdapterTest {
             DisplayOp.DrawPoint(1f, 2f, paint, transform, clip),
             DisplayOp.DrawPoints(PointMode.LINES, listOf(Point2F32(1f, 2f), Point2F32(3f, 4f)), paint, transform, clip),
             DisplayOp.DrawDRRect(rrect, RRectF32.of(RectF32.ofLTRB(3f, 4f, 10f, 12f), 1f), paint, transform, clip),
-            DisplayOp.DrawImageNine(image, bounds, bounds, null, transform, clip),
-            DisplayOp.DrawImageLattice(image, Lattice(listOf(1), listOf(1)), bounds, null, transform, clip, SamplingOptions.Cubic(0f, 0.5f)),
-            DisplayOp.DrawPicture(picture, null, transform, clip),
+            DisplayOp.DrawImageNine(image, bounds, bounds, paint, transform, clip),
+            DisplayOp.DrawImageLattice(
+                image,
+                Lattice(
+                    xDivs = listOf(1),
+                    yDivs = listOf(1),
+                    rects = listOf(RectF32.ofLTRB(0f, 0f, 1f, 1f)),
+                    colors = listOf(ColorARGB.Yellow),
+                    flags = listOf(LatticeFlags.FIXED_COLOR),
+                ),
+                bounds,
+                paint,
+                transform,
+                clip,
+                SamplingOptions.Cubic(0f, 0.5f),
+            ),
+            DisplayOp.DrawPicture(picture, paint, transform, clip),
             DisplayOp.DrawVertices(vertices, paint, transform, clip),
             DisplayOp.DrawMesh(Mesh(vertices, bounds = bounds), paint, BlendMode.OVERLAY, transform, clip),
-            DisplayOp.DrawAtlas(image, listOf(transform), listOf(bounds), listOf(ColorARGB.Yellow), BlendMode.MODULATE, null, transform, clip),
+            DisplayOp.DrawAtlas(image, listOf(transform), listOf(bounds), listOf(ColorARGB.Yellow), BlendMode.MODULATE, paint, transform, clip),
             DisplayOp.Annotation(bounds, "matrix", "annotation"),
             DisplayOp.FlushAndSnapshot(bounds),
         )

@@ -26,9 +26,24 @@ class ShaderModule private constructor(
     )
 
     companion object {
+        /** Creates a handle-free shader-module snapshot from public module ABI values. */
+        fun of(
+            source: String,
+            entryPoint: String = "main",
+            uniforms: List<UniformSlot> = emptyList(),
+            textures: List<TextureSlot> = emptyList(),
+            vertexLayout: VertexLayout = VertexLayout(emptyList(), 0),
+        ): ShaderModule = ShaderModule(
+            source,
+            entryPoint,
+            Collections.unmodifiableList(ArrayList(uniforms)),
+            Collections.unmodifiableList(ArrayList(textures)),
+            vertexLayout.copy(attributes = Collections.unmodifiableList(ArrayList(vertexLayout.attributes))),
+        )
+
         fun fromSource(wgsl: String, entry: String = "main"): ShaderModule =
-            ShaderModule(wgsl, entry, emptyList(), emptyList(), VertexLayout(emptyList(), 0))
+            of(wgsl, entry)
         fun fromResource(path: String, entry: String = "main"): ShaderModule =
-            ShaderModule("resource:$path", entry, emptyList(), emptyList(), VertexLayout(emptyList(), 0))
+            of("resource:$path", entry)
     }
 }

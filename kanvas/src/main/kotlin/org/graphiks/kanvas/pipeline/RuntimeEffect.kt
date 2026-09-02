@@ -1,16 +1,21 @@
 package org.graphiks.kanvas.pipeline
 
 import java.util.concurrent.ConcurrentHashMap
+import java.util.Collections
 import org.graphiks.kanvas.paint.Blender
 import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.Shader
 
 class RuntimeEffect internal constructor(
     val id: String,
-    val module: ShaderModule,
-    val uniformLayout: UniformLayout,
-    val children: List<ChildSlot>,
+    module: ShaderModule,
+    uniformLayout: UniformLayout,
+    children: List<ChildSlot>,
 ) {
+    val module: ShaderModule = module.immutableSnapshot()
+    val uniformLayout: UniformLayout = UniformLayout(Collections.unmodifiableList(ArrayList(uniformLayout.slots)))
+    val children: List<ChildSlot> = Collections.unmodifiableList(ArrayList(children))
+
     init {
         register(this)
     }

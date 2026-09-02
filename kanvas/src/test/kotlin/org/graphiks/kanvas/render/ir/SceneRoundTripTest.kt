@@ -17,6 +17,8 @@ import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.MeshChildren
 import org.graphiks.kanvas.paint.MeshProgram
 import org.graphiks.kanvas.paint.ShaderChild
+import org.graphiks.kanvas.paint.ColorFilterChild
+import org.graphiks.kanvas.paint.BlenderChild
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.pipeline.ChildSlot
@@ -27,6 +29,10 @@ import org.graphiks.kanvas.pipeline.UniformBlock
 import org.graphiks.kanvas.pipeline.UniformLayout
 import org.graphiks.kanvas.pipeline.UniformSlot
 import org.graphiks.kanvas.pipeline.UniformType
+import org.graphiks.kanvas.pipeline.TextureSlot
+import org.graphiks.kanvas.pipeline.VertexLayout
+import org.graphiks.kanvas.pipeline.VertexAttribute
+import org.graphiks.kanvas.pipeline.VertexFormat
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
@@ -41,6 +47,79 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 
 class SceneRoundTripTest {
+    @Test
+    fun `capture retains full public shader module ABI for runtime reconstruction`() {
+        val effect = RuntimeEffect(
+            id = "task11-runtime-module-abi",
+            module = ShaderModule.of(
+                source = "@fragment fn fragment() -> @location(0) vec4f { return vec4f(); }",
+                entryPoint = "fragment",
+                uniforms = listOf(UniformSlot("moduleTint", 4, UniformType.FLOAT4, 16)),
+                textures = listOf(TextureSlot("moduleImage", 5)),
+            ),
+            uniformLayout = UniformLayout(emptyList()),
+            children = emptyList(),
+        )
+        val operation = DisplayOp.DrawRect(
+            RectF32.ofLTRB(0f, 0f, 4f, 4f),
+            Paint(shader = Shader.RuntimeEffect(effect, UniformBlock.EMPTY)),
+            Matrix3x3F32.Identity,
+            ClipStack.WideOpen,
+        )
+
+        val scene = assertInstanceOf(
+            SceneCaptureResult.Captured::class.java,
+            DisplayOpSceneAdapter.capture(listOf(operation), SceneExtent(8, 8), ColorSpace.SRGB),
+        ).scene
+        val material = assertInstanceOf(
+            MaterialNode.RuntimeEffect::class.java,
+            assertInstanceOf(SceneCommand.Draw::class.java, scene.commandAt(0)).node.material,
+        )
+        val module = requireNotNull(material.descriptor.module)
+
+        assertEquals("@fragment fn fragment() -> @location(0) vec4f { return vec4f(); }", module.source)
+        assertEquals("fragment", module.entryPoint)
+        assertEquals(RuntimeUniformSlot("moduleTint", 4, RuntimeUniformType.FLOAT4, 16), module.uniformAt(0))
+        assertEquals(RuntimeTextureSlot("moduleImage", 5), module.textureAt(0))
+        val restored = assertInstanceOf(DisplayOp.DrawRect::class.java, SceneDisplayOpAdapter.toDisplayOps(scene).single())
+        assertEquals(operation.rect, restored.rect)
+        assertEquals(effect, assertInstanceOf(Shader.RuntimeEffect::class.java, restored.paint.shader).effect)
+        assertTrue(assertInstanceOf(Shader.RuntimeEffect::class.java, restored.paint.shader).uniforms.entries.isEmpty())
+    }
+
+    @Test
+    fun `round trip preserves runtime image filter shader slot and image filter children`() {
+        val effect = RuntimeEffect(
+            id = "task11-runtime-image-children",
+            module = ShaderModule.fromSource("@fragment fn main() -> @location(0) vec4f { return vec4f(); }"),
+            uniformLayout = UniformLayout(emptyList()),
+            children = emptyList(),
+        )
+        val operation = DisplayOp.DrawRect(
+            RectF32.ofLTRB(0f, 0f, 4f, 4f),
+            Paint(
+                imageFilter = ImageFilter.RuntimeEffect(
+                    effect = effect,
+                    uniforms = UniformBlock.EMPTY,
+                    childShaderName = "shade-child",
+                    childImageFilters = linkedMapOf("filter-child" to ImageFilter.Blur(1f, 2f, TileMode.DECAL)),
+                ),
+            ),
+            Matrix3x3F32.Identity,
+            ClipStack.WideOpen,
+        )
+
+        val captured = DisplayOpSceneAdapter.capture(listOf(operation), SceneExtent(8, 8), ColorSpace.SRGB)
+        val restored = assertInstanceOf(
+            DisplayOp.DrawRect::class.java,
+            SceneDisplayOpAdapter.toDisplayOps(assertInstanceOf(SceneCaptureResult.Captured::class.java, captured).scene).single(),
+        )
+        val filter = assertInstanceOf(ImageFilter.RuntimeEffect::class.java, restored.paint.imageFilter)
+
+        assertEquals("shade-child", filter.childShaderName)
+        assertEquals(ImageFilter.Blur(1f, 2f, TileMode.DECAL), filter.childImageFilters.getValue("filter-child"))
+    }
+
     @Test
     fun `round trip restores registered runtime shader color filter and image filter descriptors`() {
         fun runtime(id: String): RuntimeEffect = RuntimeEffect(
@@ -96,6 +175,47 @@ class SceneRoundTripTest {
     }
 
     @Test
+    fun `runtime registry compares every public shader module ABI field`() {
+        fun module(
+            source: String = "source-a",
+            entry: String = "fragment",
+            uniform: UniformSlot = UniformSlot("tint", 2, UniformType.FLOAT4, 16),
+            texture: TextureSlot = TextureSlot("image", 3),
+            vertexLayout: VertexLayout = VertexLayout(emptyList(), 0),
+        ): ShaderModule = ShaderModule.of(source, entry, listOf(uniform), listOf(texture), vertexLayout)
+        data class Definition(
+            val module: ShaderModule,
+            val layout: UniformLayout = UniformLayout(emptyList()),
+            val children: List<ChildSlot> = emptyList(),
+        )
+        fun effect(definition: Definition): RuntimeEffect = RuntimeEffect(
+            id = "task11-runtime-module-collision",
+            module = definition.module,
+            uniformLayout = definition.layout,
+            children = definition.children,
+        )
+
+        val base = Definition(module())
+        effect(base)
+        listOf(
+            base.copy(module = module(source = "source-b")),
+            base.copy(module = module(entry = "vertex")),
+            base.copy(module = module(uniform = UniformSlot("other", 2, UniformType.FLOAT4, 16))),
+            base.copy(module = module(uniform = UniformSlot("tint", 4, UniformType.FLOAT4, 16))),
+            base.copy(module = module(uniform = UniformSlot("tint", 2, UniformType.FLOAT3, 16))),
+            base.copy(module = module(uniform = UniformSlot("tint", 2, UniformType.FLOAT4, 4))),
+            base.copy(module = module(texture = TextureSlot("other", 3))),
+            base.copy(module = module(texture = TextureSlot("image", 5))),
+            base.copy(module = module(vertexLayout = VertexLayout(listOf(VertexAttribute(VertexFormat.FLOAT32, 0, 0)), 4))),
+            base.copy(layout = UniformLayout(listOf(UniformSlot("runtime", 0, UniformType.FLOAT, 0)))),
+            base.copy(children = listOf(ChildSlot("source", ChildType.SHADER))),
+        ).forEach { incompatible ->
+            val failure = assertThrows(IllegalArgumentException::class.java) { effect(incompatible) }
+            assertTrue(failure.message.orEmpty().contains("incompatible descriptor"))
+        }
+    }
+
+    @Test
     fun `round trip preserves an explicitly empty complex clip instead of wide open`() {
         val operation = DisplayOp.DrawRect(
             RectF32.ofLTRB(0f, 0f, 1f, 1f),
@@ -114,24 +234,40 @@ class SceneRoundTripTest {
     }
 
     @Test
-    fun `round trip restores a registered mesh runtime program and immutable mutable inputs`() {
+    fun `round trip restores a registered mesh runtime program and snapshots mutable public inputs`() {
         val positions = mutableListOf(Point2F32(1f, 2f), Point2F32(3f, 4f), Point2F32(5f, 6f))
         val vertices = org.graphiks.kanvas.types.Vertices(org.graphiks.kanvas.types.VertexMode.TRIANGLES, positions)
         val latticeX = mutableListOf(1)
         val latticeY = mutableListOf(1)
-        val lattice = org.graphiks.kanvas.types.Lattice(latticeX, latticeY)
+        val lattice = org.graphiks.kanvas.types.Lattice(
+            latticeX,
+            latticeY,
+            rects = listOf(RectF32.ofLTRB(0f, 0f, 1f, 1f)),
+            colors = listOf(ColorARGB.Yellow),
+            flags = listOf(org.graphiks.kanvas.types.LatticeFlags.FIXED_COLOR),
+        )
         val uniformValues = FloatArray(16) { index -> index.toFloat() }
+        val runtimeChildren = mutableListOf(
+            ChildSlot("source", ChildType.SHADER),
+            ChildSlot("filter", ChildType.COLOR_FILTER),
+            ChildSlot("blend", ChildType.BLENDER),
+        )
         val effect = RuntimeEffect(
             id = "task11-mesh-runtime",
             module = ShaderModule.fromSource("@vertex fn main() -> @builtin(position) vec4f { return vec4f(); }"),
             uniformLayout = UniformLayout(listOf(UniformSlot("matrix", 0, UniformType.MAT4X4, 16))),
-            children = listOf(ChildSlot("source", ChildType.SHADER)),
+            children = runtimeChildren,
         )
         RuntimeEffect.register(effect)
+        val meshChildEntries = mutableListOf(
+            MeshChildren.Entry("source", ShaderChild(Shader.SolidColor(ColorARGB.Green))),
+            MeshChildren.Entry("filter", ColorFilterChild(ColorFilter.Luma)),
+            MeshChildren.Entry("blend", BlenderChild(Blender.Arithmetic(1f, 2f, 3f, 4f))),
+        )
         val program = MeshProgram(
             effect = effect,
             uniforms = UniformBlock { mat4x4("matrix", uniformValues) },
-            children = MeshChildren.of("source" to ShaderChild(Shader.SolidColor(ColorARGB.Green))),
+            children = MeshChildren(meshChildEntries),
         )
         val image = Image.fromPixels(1, 1, byteArrayOf(1, 2, 3, 4), sourceId = "mutable-lattice")
         val operations = listOf(
@@ -149,7 +285,9 @@ class SceneRoundTripTest {
         positions[0] = Point2F32(99f, 99f)
         latticeX[0] = 99
         latticeY[0] = 99
-        uniformValues[0] = 99f
+        runtimeChildren.clear()
+        meshChildEntries.clear()
+        assertTrue(program.children.entries.isEmpty())
 
         val restored = SceneDisplayOpAdapter.toDisplayOps(assertInstanceOf(SceneCaptureResult.Captured::class.java, captured).scene)
         val mesh = assertInstanceOf(DisplayOp.DrawMesh::class.java, restored[0]).mesh
@@ -162,6 +300,8 @@ class SceneRoundTripTest {
         assertEquals(0f, matrix.values[0])
         assertEquals(effect, mesh.program.effect)
         assertEquals(Shader.SolidColor(ColorARGB.Green), mesh.program.children.getShader("source"))
+        assertEquals(ColorFilter.Luma, mesh.program.children.getColorFilter("filter"))
+        assertEquals(Blender.Arithmetic(1f, 2f, 3f, 4f), mesh.program.children.getBlender("blend"))
     }
 
     @Test

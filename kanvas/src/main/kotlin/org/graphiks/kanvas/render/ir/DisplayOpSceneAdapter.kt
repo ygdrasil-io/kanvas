@@ -397,17 +397,14 @@ private class CaptureContext(private val limits: SceneCaptureLimits) {
     private fun walkGraph(roots: List<Any>) {
         data class Visit(val value: Any, val depth: Int, val leaving: Boolean)
         val active = IdentityHashMap<Any, Unit>()
-        val completed = IdentityHashMap<Any, Unit>()
         val pending = ArrayDeque<Visit>()
         roots.asReversed().forEach { pending.addLast(Visit(it, 1, false)) }
         while (pending.isNotEmpty()) {
             val visit = pending.removeLast()
             if (visit.leaving) {
                 active.remove(visit.value)
-                completed[visit.value] = Unit
                 continue
             }
-            if (completed.containsKey(visit.value)) continue
             if (active.put(visit.value, Unit) != null) {
                 throw CaptureFailure("cyclic-effect-graph", "Paint, effect, or material graph contains an identity cycle")
             }

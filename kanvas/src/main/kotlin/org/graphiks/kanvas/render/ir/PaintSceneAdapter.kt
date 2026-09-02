@@ -327,7 +327,14 @@ public object PaintSceneAdapter {
             },
             stepMode = RuntimeVertexStepMode.valueOf(module.vertexLayout.stepMode.name),
         ),
-        module = RuntimeModuleMetadata(module.source, module.entryPoint),
+        module = ShaderModuleDescriptor.of(
+            source = module.source,
+            entryPoint = module.entryPoint,
+            uniforms = module.uniforms.map { slot ->
+                RuntimeUniformSlot(slot.name, slot.binding, RuntimeUniformType.valueOf(slot.type.name), slot.size)
+            },
+            textures = module.textures.map { slot -> RuntimeTextureSlot(slot.name, slot.binding) },
+        ),
     )
 
     private fun org.graphiks.kanvas.pipeline.UniformBlock.toRuntimeUniforms(): Map<String, RuntimeUniformValue> = entries.mapValues { (_, value) ->
@@ -362,7 +369,7 @@ public object PaintSceneAdapter {
             require(registered.id == id.value) { "Registered runtime effect identity does not match scene descriptor" }
             val registeredDescriptor = registered.toDescriptor(
                 abi,
-                filter { slot -> slot.type == RuntimeChildType.IMAGE_FILTER }.toList(),
+                filter { captured -> registered.children.none { it.name == captured.name } }.toList(),
             )
             require(registeredDescriptor == this) {
                 "Registered runtime effect descriptor does not match the scene descriptor"
