@@ -11,13 +11,14 @@ class RuntimeEffect internal constructor(
     module: ShaderModule,
     uniformLayout: UniformLayout,
     children: List<ChildSlot>,
+    registerOnConstruction: Boolean = true,
 ) {
     val module: ShaderModule = module.immutableSnapshot()
     val uniformLayout: UniformLayout = UniformLayout(Collections.unmodifiableList(ArrayList(uniformLayout.slots)))
     val children: List<ChildSlot> = Collections.unmodifiableList(ArrayList(children))
 
     init {
-        register(this)
+        if (registerOnConstruction) register(this)
     }
     fun makeShader(
         uniforms: UniformBlock,
@@ -56,19 +57,49 @@ class RuntimeEffect internal constructor(
          * existing runtime effect on an application-owned reconstruction path.
          */
         fun register(effect: RuntimeEffect): RuntimeEffect {
-            val installed = registeredEffects.putIfAbsent(effect.id, effect)
-            if (installed != null) {
-                require(installed.hasCompatibleDescriptor(effect)) {
-                    "Runtime effect id ${effect.id} is already registered with an incompatible descriptor"
+            return synchronized(registryLock) {
+                val installed = registeredEffects.putIfAbsent(effect.id, effect)
+                if (installed != null) {
+                    require(installed.hasCompatibleDescriptor(effect)) {
+                        "Runtime effect id ${effect.id} is already registered with an incompatible descriptor"
+                    }
                 }
+                installed ?: effect
             }
-            return installed ?: effect
         }
 
         fun registered(id: String): RuntimeEffect? = registeredEffects[id] ?: lookupRegistered?.invoke(id)
 
+        /**
+         * Builds a descriptor while a compatibility archive is still being
+         * decoded.  The caller must install it with [registerDecoded] only
+         * after the whole archive has passed validation.
+         */
+        internal fun detached(
+            id: String,
+            module: ShaderModule,
+            uniformLayout: UniformLayout,
+            children: List<ChildSlot>,
+        ): RuntimeEffect = RuntimeEffect(id, module, uniformLayout, children, registerOnConstruction = false)
+
+        /** Installs a fully decoded archive's descriptors as one transaction. */
+        internal fun registerDecoded(effects: List<RuntimeEffect>): Boolean = synchronized(registryLock) {
+            val decodedById = LinkedHashMap<String, RuntimeEffect>()
+            for (effect in effects) {
+                val decoded = decodedById.putIfAbsent(effect.id, effect)
+                if (decoded != null && !decoded.hasCompatibleDescriptor(effect)) return false
+                val installed = registeredEffects[effect.id]
+                if (installed != null && !installed.hasCompatibleDescriptor(effect)) return false
+            }
+            for (effect in decodedById.values) {
+                registeredEffects.putIfAbsent(effect.id, effect)
+            }
+            true
+        }
+
         /** Backend hooks installed by :gpu-renderer's RuntimeEffectCompileProvider. */
         private val registeredEffects = ConcurrentHashMap<String, RuntimeEffect>()
+        private val registryLock = Any()
         internal var compileWgsl: ((String) -> RuntimeEffect?)? = null
         internal var lookupRegistered: ((String) -> RuntimeEffect?)? = null
         internal var makeColorFilterHook: ((RuntimeEffect, UniformBlock, Map<String, ColorFilter>) -> ColorFilter?)? = null

@@ -64,6 +64,8 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import java.util.Base64
 import java.nio.ByteBuffer
+import java.io.ByteArrayOutputStream
+import java.io.DataOutputStream
 
 class PictureTest {
     @Test
@@ -126,6 +128,52 @@ class PictureTest {
         val trailing = historicalTask8ClearPayload().copyOf(34).also { it[33] = 0x7F }
 
         assertNull(Picture.fromByteArray(trailing))
+    }
+
+    @Test
+    fun `invalid legacy runtime effect payload does not poison the registry`() {
+        val id = "legacy-invalid-runtime-${System.nanoTime()}"
+
+        assertNull(Picture.fromByteArray(legacyRuntimeEffectPicture(id, truncated = true)))
+        assertNull(RuntimeEffect.registered(id))
+
+        val legitimate = RuntimeEffect(
+            id,
+            ShaderModule.fromResource("legitimate-runtime"),
+            UniformLayout(emptyList()),
+            emptyList(),
+        )
+
+        assertEquals(legitimate, RuntimeEffect.registered(id))
+    }
+
+    @Test
+    fun `valid legacy runtime effect payload registers only after picture decoding succeeds`() {
+        val id = "legacy-valid-runtime-${System.nanoTime()}"
+
+        val picture = requireNotNull(Picture.fromByteArray(legacyRuntimeEffectPicture(id)))
+        val effect = assertIs<Shader.RuntimeEffect>(
+            assertIs<DisplayOp.DrawRect>(picture.ops.single()).paint.shader,
+        ).effect
+
+        assertEquals(effect, RuntimeEffect.registered(id))
+    }
+
+    @Test
+    fun `legacy runtime effect registry collision leaves earlier decoded effects unregistered`() {
+        val firstId = "legacy-transaction-first-${System.nanoTime()}"
+        val conflictingId = "legacy-transaction-conflict-${System.nanoTime()}"
+        val installed = RuntimeEffect(
+            conflictingId,
+            ShaderModule.fromResource("installed-runtime"),
+            UniformLayout(emptyList()),
+            emptyList(),
+        )
+
+        assertNull(Picture.fromByteArray(legacyRuntimeEffectPicture(firstId, conflictingId)))
+
+        assertNull(RuntimeEffect.registered(firstId))
+        assertEquals(installed, RuntimeEffect.registered(conflictingId))
     }
 
     @Test
@@ -909,4 +957,55 @@ private class TestBuffer : DisplayListBuffer {
     private val ops = mutableListOf<DisplayOp>()
     override fun append(op: DisplayOp) { ops.add(op) }
     override fun ops(): List<DisplayOp> = ops.toList()
+}
+
+private fun legacyRuntimeEffectPicture(vararg ids: String, truncated: Boolean = false): ByteArray {
+    val bytes = ByteArrayOutputStream()
+    DataOutputStream(bytes).use { output ->
+        output.write(byteArrayOf(0x4B, 0x50, 0x49, 0x43))
+        output.writeInt(7)
+        output.writeFloat(0f)
+        output.writeFloat(0f)
+        output.writeFloat(8f)
+        output.writeFloat(8f)
+        output.writeInt(ids.size)
+        ids.forEach { id ->
+            output.writeByte(0) // DrawRect
+            output.writeFloat(1f)
+            output.writeFloat(1f)
+            output.writeFloat(7f)
+            output.writeFloat(7f)
+            output.writeInt(ColorARGB.Red.toPackedInt())
+            output.writeByte(7) // Shader.RuntimeEffect
+            output.writeUTF(id)
+            output.writeUTF("legacy-runtime-source")
+            output.writeUTF("main")
+            output.writeInt(0) // module uniforms
+            output.writeInt(0) // module textures
+            output.writeInt(0) // module vertex attributes
+            output.writeInt(0) // module stride
+            output.writeByte(0) // VertexStepMode.VERTEX
+            output.writeInt(0) // uniform layout
+            output.writeInt(0) // child slots
+            output.writeInt(0) // uniform block
+            output.writeInt(0) // shader child bindings
+            if (!truncated) {
+                output.writeByte(BlendMode.SRC_OVER.ordinal)
+                output.writeByte(0xFF) // color filter absent
+                output.writeByte(0xFF) // mask filter absent
+                output.writeByte(0xFF) // path effect absent
+                output.writeByte(0xFF) // image filter absent
+                output.writeByte(0xFF) // blender absent
+                output.writeByte(PaintStyle.FILL.ordinal)
+                output.writeFloat(0f)
+                output.writeByte(StrokeCap.BUTT.ordinal)
+                output.writeByte(StrokeJoin.MITER.ordinal)
+                output.writeFloat(4f)
+                output.writeBoolean(true)
+                repeat(9) { index -> output.writeFloat(if (index % 4 == 0) 1f else 0f) }
+                output.writeByte(0) // ClipStack.WideOpen
+            }
+        }
+    }
+    return bytes.toByteArray()
 }

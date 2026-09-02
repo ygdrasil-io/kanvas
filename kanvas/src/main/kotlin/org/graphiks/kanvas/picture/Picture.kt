@@ -335,7 +335,10 @@ private const val OP_ANNOTATION: Byte = 19
 private const val OP_FLUSH_AND_SNAPSHOT: Byte = 20
 private const val OP_DRAW_MESH: Byte = 21
 
-private class Reader(private val data: ByteArray) {
+private class Reader(
+    private val data: ByteArray,
+    private val decodedRuntimeEffects: MutableList<RuntimeEffect>,
+) {
     var formatVersion: Int = 1
     private val bais = ByteArrayInputStream(data)
     val dis = DataInputStream(bais)
@@ -550,8 +553,13 @@ private class Reader(private val data: ByteArray) {
         val module = readShaderModule()
         val layout = readUniformLayout()
         val children = readChildSlots()
-        val result = createRuntimeEffect(id, module, layout, children)
-        if (result == null) valid = false
+        val result = try {
+            RuntimeEffect.detached(id, module, layout, children)
+        } catch (_: IllegalArgumentException) {
+            valid = false
+            null
+        }
+        if (result != null) decodedRuntimeEffects.add(result)
         return result
     }
 
@@ -691,7 +699,7 @@ private class Reader(private val data: ByteArray) {
             19 -> {
                 val nestedLen = int()
                 val nestedData = bytes(nestedLen)
-                val pic = decodePicture(nestedData)
+                val pic = decodePicture(nestedData, decodedRuntimeEffects)
                 val src = if (bool()) rect() else null
                 if (pic != null) ImageFilter.Picture(pic, src) else { valid = false; null }
             }
@@ -857,7 +865,7 @@ private class Reader(private val data: ByteArray) {
             OP_DRAW_TEXT.toInt() -> DisplayOp.DrawText(textBlob(), float(), float(), paint(), matrix33(), clipStack())
             OP_DRAW_PICTURE.toInt() -> {
                 val nestedLen = int(); val nestedData = bytes(nestedLen)
-                val nestedPic = decodePicture(nestedData)
+                val nestedPic = decodePicture(nestedData, decodedRuntimeEffects)
                 val p = if (bool()) paint() else null
                 if (nestedPic == null) { valid = false; return null }
                 DisplayOp.DrawPicture(nestedPic, p, matrix33(), clipStack())
@@ -901,15 +909,29 @@ private class Reader(private val data: ByteArray) {
 }
 
 private fun decodePicture(data: ByteArray): Picture? {
+    val decodedRuntimeEffects = mutableListOf<RuntimeEffect>()
+    val picture = try {
+        decodePicture(data, decodedRuntimeEffects)
+    } catch (_: IllegalArgumentException) {
+        null
+    } catch (_: IllegalStateException) {
+        null
+    } catch (_: IndexOutOfBoundsException) {
+        null
+    } ?: return null
+    return picture.takeIf { RuntimeEffect.registerDecoded(decodedRuntimeEffects) }
+}
+
+private fun decodePicture(data: ByteArray, decodedRuntimeEffects: MutableList<RuntimeEffect>): Picture? {
     if (data.size < 4) return null
     if (data[0] != 0x4B.toByte() || data[1] != 0x50.toByte() ||
         data[2] != 0x49.toByte() || data[3] != 0x43.toByte()) return null
-    val r = Reader(data)
+    val r = Reader(data, decodedRuntimeEffects)
     r.bytes(4) // skip magic
     val version = r.int()
     if (!r.valid) return null
     return when (version) {
-        in 1..7 -> decodeLegacyPicture(data, version)
+        in 1..7 -> decodeLegacyPicture(data, version, decodedRuntimeEffects)
         STABLE_WIRE_VERSION -> when (val decoded = SceneArchiveCodec.decodePicture(data)) {
             is SceneArchiveDecodeResult.Decoded -> try {
                 Picture(decoded.copyCullRect(), SceneDisplayOpAdapter.toDisplayOps(decoded.scene))
@@ -920,25 +942,35 @@ private fun decodePicture(data: ByteArray): Picture? {
             } catch (_: ClassCastException) {
                 null
             }
-            SceneArchiveDecodeResult.LegacyV8 -> decodeHistoricalPictureV8(data)
+            SceneArchiveDecodeResult.LegacyV8 -> decodeHistoricalPictureV8(data, decodedRuntimeEffects)
             is SceneArchiveDecodeResult.Invalid -> null
         }
         else -> null
     }
 }
 
-private fun decodeLegacyPicture(data: ByteArray, version: Int): Picture? =
-    decodePictureWithVersion(data, version, requireEnd = false)
+private fun decodeLegacyPicture(
+    data: ByteArray,
+    version: Int,
+    decodedRuntimeEffects: MutableList<RuntimeEffect>,
+): Picture? = decodePictureWithVersion(data, version, requireEnd = false, decodedRuntimeEffects)
 
 /**
  * Compatibility reader for v8 data written before SceneArchiveCodec owned the
  * writer.  It is intentionally read-only; all new v8 output is IR-tagged.
  */
-private fun decodeHistoricalPictureV8(data: ByteArray): Picture? =
-    decodePictureWithVersion(data, STABLE_WIRE_VERSION, requireEnd = true)
+private fun decodeHistoricalPictureV8(
+    data: ByteArray,
+    decodedRuntimeEffects: MutableList<RuntimeEffect>,
+): Picture? = decodePictureWithVersion(data, STABLE_WIRE_VERSION, requireEnd = true, decodedRuntimeEffects)
 
-private fun decodePictureWithVersion(data: ByteArray, version: Int, requireEnd: Boolean): Picture? {
-    val r = Reader(data)
+private fun decodePictureWithVersion(
+    data: ByteArray,
+    version: Int,
+    requireEnd: Boolean,
+    decodedRuntimeEffects: MutableList<RuntimeEffect>,
+): Picture? {
+    val r = Reader(data, decodedRuntimeEffects)
     r.bytes(4) // skip magic
     if (r.int() != version || !r.valid) return null
     r.formatVersion = version
@@ -967,14 +999,6 @@ private fun createUniformBlock(entries: Map<String, UniformValue>): UniformBlock
     val constructor = UniformBlock::class.java.getDeclaredConstructor(Map::class.java)
     constructor.isAccessible = true
     constructor.newInstance(entries)
-} catch (_: Exception) { null }
-
-private fun createRuntimeEffect(id: String, module: ShaderModule, uniformLayout: UniformLayout, children: List<ChildSlot>): RuntimeEffect? = try {
-    val constructor = RuntimeEffect::class.java.getDeclaredConstructor(
-        String::class.java, ShaderModule::class.java, UniformLayout::class.java, List::class.java
-    )
-    constructor.isAccessible = true
-    constructor.newInstance(id, module, uniformLayout, children)
 } catch (_: Exception) { null }
 
 private fun createShaderModule(
