@@ -424,6 +424,196 @@ private sealed interface GraphWork {
     data class Scene(val value: SceneSnapshot, override val depth: Int) : GraphWork
 }
 
+/** Typed result of checking whether a Scene IR can be reconstructed as public display operations. */
+public sealed interface SceneSemanticValidationResult {
+    public data object Valid : SceneSemanticValidationResult
+    public data class Invalid(public val code: String, public val message: String) : SceneSemanticValidationResult
+}
+
+/**
+ * Validates the backend-neutral scene contract before serialization or public
+ * display-operation reconstruction. The traversal is iterative and applies the
+ * same default graph limits to materials, effect stacks, and nested scenes.
+ */
+public object SceneSemanticValidator {
+    public fun validate(
+        scene: SceneSnapshot,
+        limits: GraphLimits = GraphLimits(),
+    ): SceneSemanticValidationResult {
+        val pending = ArrayDeque<GraphWork>()
+        pending.addLast(GraphWork.Scene(scene, 1))
+        var nodes = 0
+        while (pending.isNotEmpty()) {
+            val current = pending.removeLast()
+            if (current.depth > limits.maxDepth) {
+                return SceneSemanticValidationResult.Invalid(
+                    "graph-depth-limit",
+                    "Scene graph exceeds depth ${limits.maxDepth}",
+                )
+            }
+            nodes += 1
+            if (nodes > limits.maxNodes) {
+                return SceneSemanticValidationResult.Invalid(
+                    "graph-node-limit",
+                    "Scene graph exceeds ${limits.maxNodes} nodes",
+                )
+            }
+            if (current is GraphWork.Scene) {
+                validateSceneCommands(current.value)?.let { return it }
+            }
+            val children = when (current) {
+                is GraphWork.Material -> materialChildren(current.value, current.depth + 1)
+                is GraphWork.Effect -> effectChildren(current.value, current.depth + 1)
+                is GraphWork.Scene -> sceneChildren(current.value, current.depth + 1)
+            }
+            children.asReversed().forEach(pending::addLast)
+        }
+        return SceneSemanticValidationResult.Valid
+    }
+}
+
+private fun validateSceneCommands(scene: SceneSnapshot): SceneSemanticValidationResult.Invalid? {
+    var layerDepth = 0
+    scene.forEach { command ->
+        when (command) {
+            is SceneCommand.Draw -> validateDraw(command.node)?.let { return it }
+            is SceneCommand.DrawColor -> validateClip(command.clip)?.let { return it }
+            is SceneCommand.SetClip -> validateClip(command.clip)?.let { return it }
+            is SceneCommand.BeginLayer -> {
+                layerDepth += 1
+                validateLayer(command.descriptor)?.let { return it }
+            }
+            SceneCommand.EndLayer -> {
+                if (layerDepth == 0) return invalidScene("invalid-layer-balance", "Scene ends a layer that was not begun")
+                layerDepth -= 1
+            }
+            is SceneCommand.Clear,
+            is SceneCommand.SetTransform,
+            is SceneCommand.State,
+            is SceneCommand.Annotation,
+            is SceneCommand.Readback,
+            -> Unit
+        }
+    }
+    return if (layerDepth == 0) null else invalidScene("invalid-layer-balance", "Scene has an unterminated layer")
+}
+
+private fun validateLayer(value: LayerDescriptor): SceneSemanticValidationResult.Invalid? {
+    validateClip(value.clip)?.let { return it }
+    value.compositeClip?.let(::validateClip)?.let { return it }
+    when (val backdrop = value.backdrop) {
+        EffectStack.Empty -> Unit
+        is EffectStack.Entries -> if (backdrop.effectCount != 1 || backdrop.effectAt(0) !is ImageFilterNode) {
+            return invalidScene("invalid-layer-backdrop", "Layer backdrop must be exactly one image filter")
+        }
+    }
+    return null
+}
+
+private fun validateDraw(value: DrawNode): SceneSemanticValidationResult.Invalid? {
+    validateClip(value.clip)?.let { return it }
+    fun requiresPaint(): SceneSemanticValidationResult.Invalid? =
+        if (value.paint == null) invalidScene("invalid-draw-paint", "${value.origin} draw requires paint") else null
+    fun requiresImage(expected: Class<out GeometryNode>): SceneSemanticValidationResult.Invalid? {
+        if (!expected.isInstance(value.geometry)) return invalidScene("invalid-draw-origin", "${value.origin} draw has incompatible geometry")
+        val resource = value.resource ?: return invalidScene("invalid-draw-resource", "${value.origin} draw requires an image resource")
+        val geometryResourceId = when (val geometry = value.geometry) {
+            is GeometryNode.ImagePatch -> geometry.image.id.value
+            is GeometryNode.ImageLattice -> geometry.image.id.value
+            is GeometryNode.Atlas -> geometry.image.id.value
+            else -> error("Geometry type was checked before extracting its resource")
+        }
+        return if (geometryResourceId == resource.sourceId) null else invalidScene("invalid-draw-resource", "Draw image resource does not match geometry")
+    }
+    fun requiresGeometry(expected: Class<out GeometryNode>): SceneSemanticValidationResult.Invalid? =
+        if (expected.isInstance(value.geometry)) null else invalidScene("invalid-draw-origin", "${value.origin} draw has incompatible geometry")
+    fun requiresNoResource(): SceneSemanticValidationResult.Invalid? =
+        if (value.resource == null) null else invalidScene("invalid-draw-resource", "${value.origin} draw must not contain an image resource")
+    fun requiresNoOperationBlend(): SceneSemanticValidationResult.Invalid? =
+        if (value.operationBlendMode == null) null else invalidScene("invalid-draw-operation-blend", "${value.origin} draw must not contain an operation blend mode")
+
+    when (value.origin) {
+        DrawOrigin.RECT -> requiresGeometry(GeometryNode.Rect::class.java)?.let { return it }
+        DrawOrigin.RRECT -> requiresGeometry(GeometryNode.RRect::class.java)?.let { return it }
+        DrawOrigin.DOUBLE_RRECT -> requiresGeometry(GeometryNode.DoubleRRect::class.java)?.let { return it }
+        DrawOrigin.PATH,
+        DrawOrigin.TEXT_EXPANDED_PATH,
+        -> requiresGeometry(GeometryNode.Path::class.java)?.let { return it }
+        DrawOrigin.POINT -> {
+            val points = value.geometry as? GeometryNode.Points
+                ?: return invalidScene("invalid-draw-origin", "POINT draw has incompatible geometry")
+            if (points.mode != PointMode.POINTS || points.pointCount != 1) {
+                return invalidScene("invalid-draw-origin", "POINT draw requires exactly one POINTS geometry entry")
+            }
+        }
+        DrawOrigin.POINTS -> requiresGeometry(GeometryNode.Points::class.java)?.let { return it }
+        DrawOrigin.IMAGE,
+        DrawOrigin.IMAGE_NINE,
+        -> requiresImage(GeometryNode.ImagePatch::class.java)?.let { return it }
+        DrawOrigin.IMAGE_LATTICE -> requiresImage(GeometryNode.ImageLattice::class.java)?.let { return it }
+        DrawOrigin.ATLAS -> {
+            requiresImage(GeometryNode.Atlas::class.java)?.let { return it }
+            val atlas = value.geometry as GeometryNode.Atlas
+            if (atlas.any { it.color != null } && atlas.any { it.color == null }) {
+                return invalidScene("invalid-draw-resource", "ATLAS draw has a partial color table")
+            }
+            if (value.operationBlendMode == null) {
+                return invalidScene("invalid-draw-operation-blend", "ATLAS draw requires an operation blend mode")
+            }
+        }
+        DrawOrigin.VERTICES -> {
+            val geometry = value.geometry as? GeometryNode.IndexedMesh
+                ?: return invalidScene("invalid-draw-origin", "VERTICES draw has incompatible geometry")
+            if (geometry.copyBounds() != null || geometry.meshProgram != null || geometry.program != null) {
+                return invalidScene("invalid-draw-origin", "VERTICES draw contains mesh-only fields")
+            }
+        }
+        DrawOrigin.MESH -> {
+            val geometry = value.geometry as? GeometryNode.IndexedMesh
+                ?: return invalidScene("invalid-draw-origin", "MESH draw has incompatible geometry")
+            if (geometry.copyBounds() == null || geometry.program != null) {
+                return invalidScene("invalid-draw-origin", "MESH draw requires bounds and no resource reference")
+            }
+        }
+        DrawOrigin.TEXT -> requiresGeometry(GeometryNode.TextBlob::class.java)?.let { return it }
+        DrawOrigin.PICTURE -> requiresGeometry(GeometryNode.Picture::class.java)?.let { return it }
+    }
+
+    when (value.origin) {
+        DrawOrigin.IMAGE,
+        DrawOrigin.IMAGE_NINE,
+        DrawOrigin.IMAGE_LATTICE,
+        DrawOrigin.ATLAS,
+        DrawOrigin.PICTURE,
+        -> Unit
+        else -> requiresPaint()?.let { return it }
+    }
+    when (value.origin) {
+        DrawOrigin.IMAGE,
+        DrawOrigin.IMAGE_NINE,
+        DrawOrigin.IMAGE_LATTICE,
+        DrawOrigin.ATLAS,
+        -> Unit
+        else -> requiresNoResource()?.let { return it }
+    }
+    if (value.origin != DrawOrigin.ATLAS && value.origin != DrawOrigin.MESH) {
+        requiresNoOperationBlend()?.let { return it }
+    }
+    return null
+}
+
+private fun validateClip(value: ClipStackNode): SceneSemanticValidationResult.Invalid? = when (value) {
+    ClipStackNode.Empty,
+    is ClipStackNode.DeviceRect,
+    -> null
+    is ClipStackNode.Operations -> value.firstOrNull { entry ->
+        entry.geometry !is GeometryNode.Rect && entry.geometry !is GeometryNode.RRect && entry.geometry !is GeometryNode.Path
+    }?.let { invalidScene("invalid-clip-geometry", "Clip contains a geometry without a public clip equivalent") }
+}
+
+private fun invalidScene(code: String, message: String): SceneSemanticValidationResult.Invalid =
+    SceneSemanticValidationResult.Invalid(code, message)
+
 private fun validateGraph(initial: Collection<GraphWork>, limits: GraphLimits): GraphValidationResult {
     val pending = ArrayDeque<GraphWork>()
     initial.toList().asReversed().forEach(pending::addLast)
@@ -517,11 +707,22 @@ private fun sceneChildren(value: SceneSnapshot, depth: Int): List<GraphWork> = b
             is SceneCommand.Draw -> {
                 add(GraphWork.Material(command.node.material, depth))
                 stackEffects(command.node.effects).forEach { add(GraphWork.Effect(it, depth)) }
+                command.node.paint?.let { paint ->
+                    paint.shader?.let { add(GraphWork.Material(it, depth)) }
+                    listOfNotNull(paint.colorFilter, paint.maskFilter, paint.pathEffect, paint.imageFilter)
+                        .forEach { add(GraphWork.Effect(it, depth)) }
+                }
+                (command.node.geometry as? GeometryNode.Picture)?.let { add(GraphWork.Scene(it.scene, depth)) }
             }
             is SceneCommand.BeginLayer -> {
                 command.descriptor.material?.let { add(GraphWork.Material(it, depth)) }
                 stackEffects(command.descriptor.backdrop).forEach { add(GraphWork.Effect(it, depth)) }
                 stackEffects(command.descriptor.effects).forEach { add(GraphWork.Effect(it, depth)) }
+                command.descriptor.paint?.let { paint ->
+                    paint.shader?.let { add(GraphWork.Material(it, depth)) }
+                    listOfNotNull(paint.colorFilter, paint.maskFilter, paint.pathEffect, paint.imageFilter)
+                        .forEach { add(GraphWork.Effect(it, depth)) }
+                }
             }
             is SceneCommand.Clear,
             is SceneCommand.DrawColor,

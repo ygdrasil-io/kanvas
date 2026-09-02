@@ -353,6 +353,7 @@ private class Reader(private val data: ByteArray) {
     fun bool(): Boolean { var v = false; guard { v = dis.readBoolean() }; return v }
     fun string(): String { var v = ""; guard { v = dis.readUTF() }; return v }
     fun bytes(len: Int): ByteArray { val v = ByteArray(len); guard { if (valid) dis.readFully(v) }; return v }
+    fun atEnd(): Boolean = bais.available() == 0
 
     private fun <T> discriminator(
         legacy: List<T>,
@@ -927,16 +928,16 @@ private fun decodePicture(data: ByteArray): Picture? {
 }
 
 private fun decodeLegacyPicture(data: ByteArray, version: Int): Picture? =
-    decodePictureWithVersion(data, version)
+    decodePictureWithVersion(data, version, requireEnd = false)
 
 /**
  * Compatibility reader for v8 data written before SceneArchiveCodec owned the
  * writer.  It is intentionally read-only; all new v8 output is IR-tagged.
  */
 private fun decodeHistoricalPictureV8(data: ByteArray): Picture? =
-    decodePictureWithVersion(data, STABLE_WIRE_VERSION)
+    decodePictureWithVersion(data, STABLE_WIRE_VERSION, requireEnd = true)
 
-private fun decodePictureWithVersion(data: ByteArray, version: Int): Picture? {
+private fun decodePictureWithVersion(data: ByteArray, version: Int, requireEnd: Boolean): Picture? {
     val r = Reader(data)
     r.bytes(4) // skip magic
     if (r.int() != version || !r.valid) return null
@@ -950,6 +951,7 @@ private fun decodePictureWithVersion(data: ByteArray, version: Int): Picture? {
         if (op == null || !r.valid) return null
         ops.add(op)
     }
+    if (requireEnd && !r.atEnd()) return null
     return Picture(cullRect, ops)
 }
 

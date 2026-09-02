@@ -113,19 +113,19 @@ class PictureTest {
 
     @Test
     fun `reader keeps decoding historical task 8 v8 payloads`() {
-        val historical = ByteBuffer.allocate(33)
-            .put("KPIC".encodeToByteArray())
-            .putInt(8)
-            .putFloat(0f).putFloat(0f).putFloat(8f).putFloat(8f)
-            .putInt(1)
-            .put(14) // historical OP_CLEAR
-            .putInt(ColorARGB.Blue.toPackedInt())
-            .array()
+        val historical = historicalTask8ClearPayload()
 
         val picture = requireNotNull(Picture.fromByteArray(historical))
 
         assertEquals(RectF32.ofLTRB(0f, 0f, 8f, 8f), picture.cullRect)
         assertEquals(listOf(DisplayOp.Clear(ColorARGB.Blue)), picture.ops)
+    }
+
+    @Test
+    fun `reader rejects a historical task 8 payload with trailing data`() {
+        val trailing = historicalTask8ClearPayload().copyOf(34).also { it[33] = 0x7F }
+
+        assertNull(Picture.fromByteArray(trailing))
     }
 
     @Test
@@ -844,6 +844,15 @@ class PictureTest {
         assertTrue(collected.any { it is DisplayOp.DrawPicture })
     }
 }
+
+private fun historicalTask8ClearPayload(): ByteArray = ByteBuffer.allocate(33)
+    .put("KPIC".encodeToByteArray())
+    .putInt(8)
+    .putFloat(0f).putFloat(0f).putFloat(8f).putFloat(8f)
+    .putInt(1)
+    .put(14) // historical OP_CLEAR
+    .putInt(ColorARGB.Blue.toPackedInt())
+    .array()
 
 private fun shaderModuleWithVertexLayout(vertexLayout: VertexLayout): ShaderModule {
     val constructor = ShaderModule::class.java.declaredConstructors.single { it.parameterCount == 5 }

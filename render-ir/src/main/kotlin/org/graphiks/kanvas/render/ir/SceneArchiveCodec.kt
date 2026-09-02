@@ -4,6 +4,9 @@ package org.graphiks.kanvas.render.ir
 
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
+import java.nio.ByteBuffer
+import java.nio.charset.CharacterCodingException
+import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.color.Gamut
@@ -39,6 +42,7 @@ public object SceneArchiveCodec {
 
     /** Encodes a deeply immutable Scene IR as the sole v8 Picture writer. */
     public fun encodePicture(scene: SceneSnapshot, cullRect: RectF32): ByteArray {
+        requireSemanticValidity(scene)
         val writer = ArchiveWriter()
         writer.bytes(magic)
         writer.i32(pictureVersion)
@@ -67,13 +71,25 @@ public object SceneArchiveCodec {
             if (reader.i32() != schemaVersion) return SceneArchiveDecodeResult.Invalid("unknown-schema", "Scene archive schema is not supported")
             val scene = reader.scene()
             reader.requireEnd()
-            SceneArchiveDecodeResult.Decoded(scene, cull)
+            when (val validation = SceneSemanticValidator.validate(scene)) {
+                SceneSemanticValidationResult.Valid -> SceneArchiveDecodeResult.Decoded(scene, cull)
+                is SceneSemanticValidationResult.Invalid -> SceneArchiveDecodeResult.Invalid(validation.code, validation.message)
+            }
         } catch (failure: ArchiveFailure) {
             SceneArchiveDecodeResult.Invalid(failure.code, failure.message)
         } catch (_: IllegalArgumentException) {
             SceneArchiveDecodeResult.Invalid("invalid-value", "Archive contains an invalid Scene IR value")
         } catch (_: ArithmeticException) {
             SceneArchiveDecodeResult.Invalid("invalid-value", "Archive contains an overflowing Scene IR value")
+        }
+    }
+
+    private fun requireSemanticValidity(scene: SceneSnapshot) {
+        when (val validation = SceneSemanticValidator.validate(scene)) {
+            SceneSemanticValidationResult.Valid -> Unit
+            is SceneSemanticValidationResult.Invalid -> throw IllegalArgumentException(
+                "Scene archive semantic validation failed: ${validation.code}",
+            )
         }
     }
 }
@@ -348,7 +364,21 @@ private class ArchiveReader(private val data: ByteArray) {
     fun bool(): Boolean = when (val value = byte()) { 0 -> false; 1 -> true; else -> throw ArchiveFailure("invalid-boolean", "Boolean tag $value is invalid") }
     fun byte(): Int { requireBytes(1); return data[offset++].toInt() and 255 }
     fun f32(): Float = Float.fromBits(i32()).also { if (!it.isFinite()) throw ArchiveFailure("non-finite", "Archive contains a non-finite float") }
-    fun text(): String { val length = length(MAX_BINARY_SIZE, "string"); requireBytes(length); return String(data, offset, length, StandardCharsets.UTF_8).also { offset += length } }
+    fun text(): String {
+        val length = length(MAX_BINARY_SIZE, "string")
+        requireBytes(length)
+        val start = offset
+        offset += length
+        return try {
+            StandardCharsets.UTF_8.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT)
+                .decode(ByteBuffer.wrap(data, start, length))
+                .toString()
+        } catch (_: CharacterCodingException) {
+            throw ArchiveFailure("invalid-utf8", "Archive contains malformed UTF-8 text")
+        }
+    }
     fun color(): ColorARGB = ColorARGB.fromPackedInt(i32())
     fun colorF32(): ColorF32 = ColorF32.of(f32(), f32(), f32(), f32())
     fun point(): Point2F32 = Point2F32(f32(), f32())

@@ -5,6 +5,7 @@ package org.graphiks.kanvas.render.ir
 import java.nio.ByteBuffer
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.color.ColorSpace
@@ -32,6 +33,7 @@ class SceneArchiveCodecTest {
                         blend = BlendNode.SrcOver,
                         effects = EffectStack.Empty,
                         transform = org.graphiks.math.matrix.Matrix3x3F32.Identity,
+                        paint = solidPaint(),
                     ),
                 ),
                 SceneCommand.DrawColor(ColorARGB.Blue, BlendMode.SRC_OVER),
@@ -105,6 +107,244 @@ class SceneArchiveCodecTest {
             .array()
 
         assertEquals(SceneArchiveDecodeResult.LegacyV8, SceneArchiveCodec.decodePicture(historical))
+    }
+
+    @Test
+    fun `picture archive rejects a mutated draw origin before returning a decoded scene`() {
+        val wire = SceneArchiveCodec.encodePicture(validArchiveScene(), RectF32(0f, 0f, 8f, 8f))
+        val mutated = replaceFirstUtf8(wire, "RECT", "TEXT")
+
+        val invalid = assertIs<SceneArchiveDecodeResult.Invalid>(SceneArchiveCodec.decodePicture(mutated))
+
+        assertEquals("invalid-draw-origin", invalid.code)
+    }
+
+    @Test
+    fun `picture archive refuses semantically mismatched draw origins before encoding`() {
+        val invalidScene = validArchiveScene(
+            DrawNode(
+                geometry = GeometryNode.Rect.of(RectF32(0f, 0f, 8f, 8f)),
+                material = MaterialNode.Solid(ColorARGB.Red),
+                coverage = CoverageRequest.DEFAULT,
+                clip = ClipStackNode.Empty,
+                blend = BlendNode.SrcOver,
+                effects = EffectStack.Empty,
+                transform = Matrix3x3F32.Identity,
+                origin = DrawOrigin.TEXT,
+                paint = solidPaint(),
+            ),
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            SceneArchiveCodec.encodePicture(invalidScene, RectF32(0f, 0f, 8f, 8f))
+        }
+    }
+
+    @Test
+    fun `picture archive enforces public draw field requirements before encoding`() {
+        val image = ImageResourceSnapshot.fromPixels(
+            sourceId = "other",
+            width = 1,
+            height = 1,
+            pixelFormat = ImagePixelFormat.RGBA_8888,
+            alphaType = ImageAlphaType.PREMUL,
+            colorSpace = ColorSpace.SRGB,
+            rowBytes = 4,
+            pixels = ByteArray(4),
+        )
+        val matchingImage = ImageResourceSnapshot.fromPixels(
+            sourceId = "pixels",
+            width = 1,
+            height = 1,
+            pixelFormat = ImagePixelFormat.RGBA_8888,
+            alphaType = ImageAlphaType.PREMUL,
+            colorSpace = ColorSpace.SRGB,
+            rowBytes = 4,
+            pixels = ByteArray(4),
+        )
+        val pixelReference = ResourceReference(ResourceId("pixels"))
+        val imagePatch = GeometryNode.ImagePatch.of(pixelReference, RectF32(0f, 0f, 1f, 1f), RectF32(0f, 0f, 8f, 8f))
+        val atlas = GeometryNode.Atlas.of(
+            pixelReference,
+            listOf(GeometryNode.AtlasEntry.of(Matrix3x3F32.Identity, RectF32(0f, 0f, 1f, 1f))),
+        )
+        val verticesWithBounds = GeometryNode.IndexedMesh.of(
+            MeshPrimitiveMode.TRIANGLES,
+            listOf(Point2F32(0f, 0f)),
+            bounds = RectF32(0f, 0f, 1f, 1f),
+        )
+        val meshWithoutBounds = GeometryNode.IndexedMesh.of(MeshPrimitiveMode.TRIANGLES, listOf(Point2F32(0f, 0f)))
+        val text = GeometryNode.TextBlob.of(emptyList(), 0f, 0f)
+        val picture = GeometryNode.Picture.of(SceneSnapshot.of(SceneExtent(1, 1), ColorSpace.SRGB, emptyList()), RectF32(0f, 0f, 1f, 1f))
+
+        listOf(
+            "invalid-draw-paint" to drawNode(text, DrawOrigin.TEXT, paint = null),
+            "invalid-draw-resource" to drawNode(imagePatch, DrawOrigin.IMAGE, resource = image, paint = null),
+            "invalid-draw-operation-blend" to drawNode(atlas, DrawOrigin.ATLAS, resource = matchingImage, paint = null),
+            "invalid-draw-origin" to drawNode(verticesWithBounds, DrawOrigin.VERTICES),
+            "invalid-draw-origin" to drawNode(meshWithoutBounds, DrawOrigin.MESH),
+            "invalid-draw-resource" to drawNode(picture, DrawOrigin.PICTURE, resource = image, paint = null),
+        ).forEach { (expectedCode, node) ->
+            val failure = assertFailsWith<IllegalArgumentException> {
+                SceneArchiveCodec.encodePicture(validArchiveScene(node), RectF32(0f, 0f, 8f, 8f))
+            }
+
+            assertEquals("Scene archive semantic validation failed: $expectedCode", failure.message)
+        }
+    }
+
+    @Test
+    fun `picture archive enforces balanced layers before encoding`() {
+        val scene = SceneSnapshot.of(SceneExtent(8, 8), ColorSpace.SRGB, listOf(SceneCommand.EndLayer))
+
+        val failure = assertFailsWith<IllegalArgumentException> {
+            SceneArchiveCodec.encodePicture(scene, RectF32(0f, 0f, 8f, 8f))
+        }
+
+        assertEquals("Scene archive semantic validation failed: invalid-layer-balance", failure.message)
+    }
+
+    @Test
+    fun `picture archive rejects malformed UTF 8 text`() {
+        val wire = SceneArchiveCodec.encodePicture(validArchiveScene(), RectF32(0f, 0f, 8f, 8f))
+        val mutated = wire.copyOf().also { bytes ->
+            val offset = indexOf(bytes, ColorSpace.SRGB.name.encodeToByteArray())
+            bytes[offset] = 0xC3.toByte()
+            bytes[offset + 1] = 0x28
+        }
+
+        val invalid = assertIs<SceneArchiveDecodeResult.Invalid>(SceneArchiveCodec.decodePicture(mutated))
+
+        assertEquals("invalid-utf8", invalid.code)
+    }
+
+    @Test
+    fun `picture archive refuses an effect stack above the default graph limit on encode`() {
+        val failure = assertFailsWith<IllegalArgumentException> {
+            SceneArchiveCodec.encodePicture(
+                validArchiveScene(effects = EffectStack.of(List(4_097) { ColorFilterNode.Luma })),
+                RectF32(0f, 0f, 8f, 8f),
+            )
+        }
+
+        assertEquals("Scene archive semantic validation failed: graph-node-limit", failure.message)
+    }
+
+    @Test
+    fun `picture archive rejects an oversized effect stack before returning decoded data`() {
+        val baseline = SceneArchiveCodec.encodePicture(
+            validArchiveScene(effects = EffectStack.of(listOf(ColorFilterNode.Luma))),
+            RectF32(0f, 0f, 8f, 8f),
+        )
+        val oversized = expandEffectStack(baseline, 4_097)
+
+        val invalid = assertIs<SceneArchiveDecodeResult.Invalid>(SceneArchiveCodec.decodePicture(oversized))
+
+        assertEquals("graph-node-limit", invalid.code)
+        assertEquals("Scene graph exceeds 4096 nodes", invalid.message)
+    }
+
+    @Test
+    fun `picture archive bounds nested scenes with the default graph depth`() {
+        var scene = SceneSnapshot.of(SceneExtent(1, 1), ColorSpace.SRGB, emptyList())
+        repeat(64) {
+            scene = SceneSnapshot.of(
+                SceneExtent(1, 1),
+                ColorSpace.SRGB,
+                listOf(SceneCommand.Draw(drawNode(GeometryNode.Picture.of(scene, RectF32(0f, 0f, 1f, 1f)), DrawOrigin.PICTURE, paint = null))),
+            )
+        }
+
+        val failure = assertFailsWith<IllegalArgumentException> {
+            SceneArchiveCodec.encodePicture(scene, RectF32(0f, 0f, 1f, 1f))
+        }
+
+        assertEquals("Scene archive semantic validation failed: graph-depth-limit", failure.message)
+    }
+
+    private fun validArchiveScene(
+        node: DrawNode = DrawNode(
+            geometry = GeometryNode.Rect.of(RectF32(0f, 0f, 8f, 8f)),
+            material = MaterialNode.Solid(ColorARGB.Red),
+            coverage = CoverageRequest.DEFAULT,
+            clip = ClipStackNode.Empty,
+            blend = BlendNode.SrcOver,
+            effects = EffectStack.Empty,
+            transform = Matrix3x3F32.Identity,
+            origin = DrawOrigin.RECT,
+            paint = solidPaint(),
+        ),
+        effects: EffectStack = node.effects,
+    ): SceneSnapshot = SceneSnapshot.of(
+        SceneExtent(8, 8),
+        ColorSpace.SRGB,
+        listOf(SceneCommand.Draw(node.copy(effects = effects))),
+    )
+
+    private fun drawNode(
+        geometry: GeometryNode,
+        origin: DrawOrigin,
+        paint: PaintNode? = solidPaint(),
+        resource: ImageResourceSnapshot? = null,
+        operationBlendMode: BlendMode? = null,
+    ): DrawNode = DrawNode(
+        geometry = geometry,
+        material = MaterialNode.Solid(ColorARGB.Red),
+        coverage = CoverageRequest.DEFAULT,
+        clip = ClipStackNode.Empty,
+        blend = BlendNode.SrcOver,
+        effects = EffectStack.Empty,
+        transform = Matrix3x3F32.Identity,
+        origin = origin,
+        paint = paint,
+        resource = resource,
+        operationBlendMode = operationBlendMode,
+    )
+
+    private fun solidPaint(): PaintNode = PaintNode(
+        color = ColorARGB.Red,
+        shader = null,
+        blendMode = BlendMode.SRC_OVER,
+        blender = null,
+        colorFilter = null,
+        maskFilter = null,
+        pathEffect = null,
+        imageFilter = null,
+        style = PaintStyleNode.FILL,
+        strokeWidth = 1f,
+        strokeCap = StrokeCapNode.BUTT,
+        strokeJoin = StrokeJoinNode.MITER,
+        strokeMiter = 4f,
+        antiAlias = true,
+    )
+
+    private fun replaceFirstUtf8(bytes: ByteArray, original: String, replacement: String): ByteArray {
+        require(original.encodeToByteArray().size == replacement.encodeToByteArray().size)
+        return bytes.copyOf().also { copy ->
+            val offset = indexOf(copy, original.encodeToByteArray())
+            replacement.encodeToByteArray().copyInto(copy, offset)
+        }
+    }
+
+    private fun expandEffectStack(bytes: ByteArray, count: Int): ByteArray {
+        val stack = ByteBuffer.allocate(16).putInt(2).putInt(1).putInt(1).putInt(11).array()
+        val offset = indexOf(bytes, stack)
+        val repeatedEffect = ByteBuffer.allocate(8).putInt(1).putInt(11).array()
+        val expanded = ByteArray(bytes.size + (count - 1) * repeatedEffect.size)
+        bytes.copyInto(expanded, endIndex = offset + stack.size)
+        repeat(count - 1) { index ->
+            repeatedEffect.copyInto(expanded, offset + stack.size + index * repeatedEffect.size)
+        }
+        bytes.copyInto(expanded, offset + stack.size + (count - 1) * repeatedEffect.size, offset + stack.size)
+        ByteBuffer.wrap(expanded).putInt(offset + 4, count)
+        return expanded
+    }
+
+    private fun indexOf(bytes: ByteArray, expected: ByteArray): Int {
+        val offset = bytes.indices.firstOrNull { start ->
+            start + expected.size <= bytes.size && expected.indices.all { index -> bytes[start + index] == expected[index] }
+        }
+        return requireNotNull(offset) { "Expected payload fragment is absent" }
     }
 
     private fun firstCommandTagOffset(bytes: ByteArray): Int {
@@ -198,19 +438,55 @@ class SceneArchiveCodecTest {
             strokeMiter = 3f,
             antiAlias = false,
         )
-        val geometries = listOf<GeometryNode>(
-            GeometryNode.Rect.of(bounds),
-            GeometryNode.RRect.of(org.graphiks.math.geometry.RRectF32.of(bounds, 2f)),
-            GeometryNode.DoubleRRect.of(org.graphiks.math.geometry.RRectF32.of(bounds, 2f), org.graphiks.math.geometry.RRectF32.of(RectF32(3f, 4f, 20f, 25f), 1f)),
-            GeometryNode.Path(path), GeometryNode.Points.of(PointMode.LINES, listOf(Point2F32(1f, 2f), Point2F32(3f, 4f))),
-            GeometryNode.IndexedMesh.of(MeshPrimitiveMode.TRIANGLES, listOf(Point2F32(0f, 0f)), listOf(Point2F32(1f, 1f)), listOf(ColorARGB.Red), intArrayOf(), bounds, ResourceReference(ResourceId("mesh")), meshProgram),
-            GeometryNode.ImagePatch.of(ResourceReference(ResourceId("pixels")), bounds, RectF32(2f, 3f, 20f, 30f)),
-            GeometryNode.ImageLattice.of(ResourceReference(ResourceId("pixels")), intArrayOf(1), intArrayOf(2), listOf(bounds), listOf(ColorARGB.Red), listOf(LatticeCellFlag.FIXED_COLOR), bounds, ImageSampling.Cubic(0.2f, 0.3f)),
-            GeometryNode.Atlas.of(ResourceReference(ResourceId("pixels")), listOf(GeometryNode.AtlasEntry.of(Matrix3x3F32.Identity, bounds, ColorARGB.Blue))),
-            GeometryNode.GlyphRun.of(intArrayOf(1), listOf(Point2F32(1f, 2f)), 12f, mapOf("wght" to 400f), TypefaceReference(TypefaceId("font"))),
-            GeometryNode.TextBlob.of(listOf(GeometryNode.GlyphRun.of(intArrayOf(2), listOf(Point2F32(3f, 4f)))), 1f, 2f, TypefaceReference(TypefaceId("font")), 13f, mapOf("wdth" to 90f)),
-            GeometryNode.Picture.of(nested, bounds),
+        val rect = GeometryNode.Rect.of(bounds)
+        val rrect = GeometryNode.RRect.of(org.graphiks.math.geometry.RRectF32.of(bounds, 2f))
+        val doubleRRect = GeometryNode.DoubleRRect.of(
+            org.graphiks.math.geometry.RRectF32.of(bounds, 2f),
+            org.graphiks.math.geometry.RRectF32.of(RectF32(3f, 4f, 20f, 25f), 1f),
         )
+        val point = GeometryNode.Points.of(PointMode.POINTS, listOf(Point2F32(1f, 2f)))
+        val points = GeometryNode.Points.of(PointMode.LINES, listOf(Point2F32(1f, 2f), Point2F32(3f, 4f)))
+        val vertices = GeometryNode.IndexedMesh.of(
+            MeshPrimitiveMode.TRIANGLES,
+            listOf(Point2F32(0f, 0f)),
+            listOf(Point2F32(1f, 1f)),
+            listOf(ColorARGB.Red),
+            intArrayOf(),
+        )
+        val mesh = GeometryNode.IndexedMesh.of(
+            MeshPrimitiveMode.TRIANGLES,
+            listOf(Point2F32(0f, 0f)),
+            listOf(Point2F32(1f, 1f)),
+            listOf(ColorARGB.Red),
+            intArrayOf(),
+            bounds,
+            meshProgram = meshProgram,
+        )
+        val pixelPatch = GeometryNode.ImagePatch.of(ResourceReference(ResourceId("pixels")), bounds, RectF32(2f, 3f, 20f, 30f))
+        val externalPatch = GeometryNode.ImagePatch.of(ResourceReference(ResourceId("external")), bounds, RectF32(2f, 3f, 20f, 30f))
+        val lattice = GeometryNode.ImageLattice.of(
+            ResourceReference(ResourceId("pixels")),
+            intArrayOf(1),
+            intArrayOf(2),
+            listOf(bounds),
+            listOf(ColorARGB.Red),
+            listOf(LatticeCellFlag.FIXED_COLOR),
+            bounds,
+            ImageSampling.Cubic(0.2f, 0.3f),
+        )
+        val atlas = GeometryNode.Atlas.of(
+            ResourceReference(ResourceId("pixels")),
+            listOf(GeometryNode.AtlasEntry.of(Matrix3x3F32.Identity, bounds, ColorARGB.Blue)),
+        )
+        val text = GeometryNode.TextBlob.of(
+            listOf(GeometryNode.GlyphRun.of(intArrayOf(2), listOf(Point2F32(3f, 4f)))),
+            1f,
+            2f,
+            TypefaceReference(TypefaceId("font")),
+            13f,
+            mapOf("wdth" to 90f),
+        )
+        val picture = GeometryNode.Picture.of(nested, bounds)
         val materials = listOf<MaterialNode>(
             MaterialNode.Transparent, MaterialNode.Solid(ColorARGB.Red), MaterialNode.LinearGradient.of(Point2F32(0f, 0f), Point2F32(1f, 1f), listOf(GradientStop(0f, ColorARGB.Red))),
             MaterialNode.RadialGradient.of(Point2F32(0f, 0f), 1f, listOf(GradientStop(0f, ColorARGB.Red))), MaterialNode.SweepGradient.of(Point2F32(0f, 0f), stops = listOf(GradientStop(0f, ColorARGB.Red))),
@@ -226,15 +502,79 @@ class SceneArchiveCodecTest {
                 add(SceneCommand.DrawColor(ColorARGB.Cyan, BlendMode.MULTIPLY, Matrix3x3F32.Identity, ClipStackNode.DeviceRect.of(bounds, false)))
                 add(SceneCommand.SetTransform(Matrix3x3F32.Identity))
                 add(SceneCommand.SetClip(ClipStackNode.Operations.of(listOf(ClipEntry(GeometryNode.Path(path), ClipOperation.DIFFERENCE, false, true, "perspective")))))
-                add(SceneCommand.BeginLayer(LayerDescriptor.of("layer", bounds, runtimeMaterial, paint, BlendNode.Paint(BlendMode.SCREEN, BlenderNode.Mode(BlendMode.XOR)), ClipStackNode.Empty, ClipStackNode.DeviceRect.of(bounds), allEffects, allEffects, Matrix3x3F32.Identity)))
-                geometries.forEachIndexed { index, geometry ->
-                    add(SceneCommand.Draw(DrawNode(geometry, materials[index % materials.size], CoverageRequest.HARD_EDGE, ClipStackNode.Empty, BlendNode.Custom(BlenderNode.Mode(BlendMode.PLUS)), allEffects, Matrix3x3F32.Identity, DrawOrigin.entries[index % DrawOrigin.entries.size], paint, if (index % 2 == 0) image else external, BlendMode.DIFFERENCE)))
+                add(
+                    SceneCommand.BeginLayer(
+                        LayerDescriptor.of(
+                            "layer",
+                            bounds,
+                            runtimeMaterial,
+                            paint,
+                            BlendNode.Paint(BlendMode.SCREEN, BlenderNode.Mode(BlendMode.XOR)),
+                            ClipStackNode.Empty,
+                            ClipStackNode.DeviceRect.of(bounds),
+                            EffectStack.of(listOf(imageChild)),
+                            allEffects,
+                            Matrix3x3F32.Identity,
+                        ),
+                    ),
+                )
+                fun draw(
+                    geometry: GeometryNode,
+                    origin: DrawOrigin,
+                    resource: ImageResourceSnapshot? = null,
+                    operationBlendMode: BlendMode? = null,
+                    drawPaint: PaintNode? = solidPaint(),
+                ) {
+                    add(
+                        SceneCommand.Draw(
+                            DrawNode(
+                                geometry,
+                                MaterialNode.Solid(ColorARGB.Black),
+                                CoverageRequest.HARD_EDGE,
+                                ClipStackNode.Empty,
+                                BlendNode.Custom(BlenderNode.Mode(BlendMode.PLUS)),
+                                EffectStack.Empty,
+                                Matrix3x3F32.Identity,
+                                origin,
+                                drawPaint,
+                                resource,
+                                operationBlendMode,
+                            ),
+                        ),
+                    )
                 }
+                draw(rect, DrawOrigin.RECT)
+                draw(rrect, DrawOrigin.RRECT)
+                draw(doubleRRect, DrawOrigin.DOUBLE_RRECT)
+                draw(GeometryNode.Path(path), DrawOrigin.PATH)
+                draw(GeometryNode.Path(path), DrawOrigin.TEXT_EXPANDED_PATH)
+                draw(point, DrawOrigin.POINT)
+                draw(points, DrawOrigin.POINTS)
+                draw(pixelPatch, DrawOrigin.IMAGE, image, drawPaint = null)
+                draw(externalPatch, DrawOrigin.IMAGE, external, drawPaint = null)
+                draw(pixelPatch, DrawOrigin.IMAGE_NINE, image, drawPaint = null)
+                draw(lattice, DrawOrigin.IMAGE_LATTICE, image, drawPaint = null)
+                draw(atlas, DrawOrigin.ATLAS, image, BlendMode.DIFFERENCE, null)
+                draw(vertices, DrawOrigin.VERTICES)
+                draw(mesh, DrawOrigin.MESH)
+                draw(text, DrawOrigin.TEXT)
+                draw(picture, DrawOrigin.PICTURE, drawPaint = null)
                 materials.forEach { material ->
-                    add(SceneCommand.Draw(DrawNode(GeometryNode.Rect.of(bounds), material, CoverageRequest.DEFAULT, ClipStackNode.Empty, BlendNode.Mode(BlendMode.DST_OVER), EffectStack.Empty, Matrix3x3F32.Identity)))
-                }
-                DrawOrigin.entries.forEach { origin ->
-                    add(SceneCommand.Draw(DrawNode(GeometryNode.Rect.of(bounds), MaterialNode.Solid(ColorARGB.Black), CoverageRequest.ANTIALIASED, ClipStackNode.Empty, BlendNode.SrcOver, EffectStack.Empty, Matrix3x3F32.Identity, origin)))
+                    add(
+                        SceneCommand.Draw(
+                            DrawNode(
+                                rect,
+                                material,
+                                CoverageRequest.DEFAULT,
+                                ClipStackNode.Empty,
+                                BlendNode.Mode(BlendMode.DST_OVER),
+                                EffectStack.Empty,
+                                Matrix3x3F32.Identity,
+                                DrawOrigin.RECT,
+                                solidPaint(),
+                            ),
+                        ),
+                    )
                 }
                 add(SceneCommand.EndLayer)
                 add(SceneCommand.State.of("state", linkedMapOf("a" to "b")))
