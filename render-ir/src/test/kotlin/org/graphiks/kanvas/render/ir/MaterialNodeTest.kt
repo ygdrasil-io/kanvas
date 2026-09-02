@@ -126,6 +126,26 @@ class MaterialNodeTest {
     }
 
     @Test
+    fun `shared material dag keeps canonical identity bounded before graph rejection`() {
+        var shared: MaterialNode = MaterialNode.Solid(ColorARGB.Red)
+        repeat(1_024) {
+            shared = MaterialNode.Blend(BlendMode.SRC_OVER, shared, shared)
+        }
+
+        assertEquals(64, shared.canonicalId.value.length)
+        val depthBounded = assertIs<MaterialGraphBuildResult.Rejected>(
+            MaterialGraph.bounded(shared, GraphLimits(maxDepth = 1_024, maxNodes = 4_096)),
+        )
+        val depthFailure = assertIs<GraphValidationResult.DepthLimitExceeded>(depthBounded.validation)
+        assertEquals(1_025, depthFailure.observedDepth)
+        val nodeBounded = assertIs<MaterialGraphBuildResult.Rejected>(
+            MaterialGraph.bounded(shared, GraphLimits(maxDepth = 2_048, maxNodes = 16)),
+        )
+        val nodeFailure = assertIs<GraphValidationResult.NodeLimitExceeded>(nodeBounded.validation)
+        assertEquals(17, nodeFailure.observedNodes)
+    }
+
+    @Test
     fun `runtime metadata and ordered child collections remain owned by the graph`() {
         val slots = mutableListOf(RuntimeUniformSlot("value", 0, RuntimeUniformType.FLOAT, 1))
         val childSlots = mutableListOf(RuntimeChildSlot("child", RuntimeChildType.SHADER))

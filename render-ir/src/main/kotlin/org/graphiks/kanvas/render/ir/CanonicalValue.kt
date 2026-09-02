@@ -3,6 +3,8 @@ package org.graphiks.kanvas.render.ir
 import java.util.Collections
 import java.util.LinkedHashMap
 import java.util.TreeMap
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 
 /** A stable content identity for a backend-neutral value. */
 @JvmInline
@@ -29,12 +31,44 @@ public object CanonicalSceneEncoder {
     )
 }
 
-internal fun canonicalId(tag: String, vararg fields: String): CanonicalId = CanonicalId(
-    buildString {
-        append(tag.length).append(':').append(tag)
-        fields.forEach { field -> append('|').append(field.length).append(':').append(field) }
-    },
-)
+/**
+ * Produces a fixed-size identity from length-delimited UTF-8 fields.
+ *
+ * The explicit format domain, tag, field count, and byte lengths preserve the
+ * former field-boundary semantics without recursively embedding whole child
+ * identities in their parents.
+ */
+internal fun canonicalId(tag: String, vararg fields: String): CanonicalId {
+    val digest = MessageDigest.getInstance("SHA-256")
+    canonicalDigestField(digest, "kanvas-canonical-id-v2")
+    canonicalDigestField(digest, tag)
+    canonicalDigestLength(digest, fields.size)
+    fields.forEach { canonicalDigestField(digest, it) }
+    return CanonicalId(canonicalHex(digest.digest()))
+}
+
+private fun canonicalDigestField(digest: MessageDigest, value: String) {
+    val bytes = value.toByteArray(StandardCharsets.UTF_8)
+    canonicalDigestLength(digest, bytes.size)
+    digest.update(bytes)
+}
+
+private fun canonicalDigestLength(digest: MessageDigest, value: Int) {
+    digest.update((value ushr 24).toByte())
+    digest.update((value ushr 16).toByte())
+    digest.update((value ushr 8).toByte())
+    digest.update(value.toByte())
+}
+
+private fun canonicalHex(bytes: ByteArray): String = buildString(bytes.size * 2) {
+    bytes.forEach { byte ->
+        val value = byte.toInt() and 0xff
+        append(CANONICAL_HEX[value ushr 4])
+        append(CANONICAL_HEX[value and 0x0f])
+    }
+}
+
+private const val CANONICAL_HEX: String = "0123456789abcdef"
 
 /** Uses Kotlin's canonical floating-point equality bits in canonical identities. */
 internal fun Float.canonicalBits(): String = toBits().toString()
