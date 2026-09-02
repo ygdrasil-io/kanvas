@@ -42,6 +42,15 @@ class RuntimeBindingValidationTest {
     }
 
     @Test
+    fun `shader module identity preserves distinct isolated UTF 16 surrogates`() {
+        val first = ShaderModuleDescriptor.of("shader-\uD800", "fragment")
+        val second = ShaderModuleDescriptor.of("shader-\uD801", "fragment")
+
+        assertNotEquals(first.canonicalId, second.canonicalId)
+        assertNotEquals(first, second)
+    }
+
+    @Test
     fun `runtime binding validation reports missing extra and mistyped values before construction`() {
         val descriptor = shaderDescriptor(
             slots = listOf(RuntimeUniformSlot("value", 0, RuntimeUniformType.FLOAT, 0)),

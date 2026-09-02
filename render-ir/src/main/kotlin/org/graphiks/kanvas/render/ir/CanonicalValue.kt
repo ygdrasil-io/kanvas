@@ -3,7 +3,6 @@ package org.graphiks.kanvas.render.ir
 import java.util.Collections
 import java.util.LinkedHashMap
 import java.util.TreeMap
-import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 
 /** A stable content identity for a backend-neutral value. */
@@ -32,15 +31,15 @@ public object CanonicalSceneEncoder {
 }
 
 /**
- * Produces a fixed-size identity from length-delimited UTF-8 fields.
+ * Produces a fixed-size identity from length-delimited UTF-16 code-unit fields.
  *
  * The explicit format domain, tag, field count, and byte lengths preserve the
- * former field-boundary semantics without recursively embedding whole child
- * identities in their parents.
+ * former field-boundary semantics, including isolated surrogate code units,
+ * without recursively embedding whole child identities in their parents.
  */
 internal fun canonicalId(tag: String, vararg fields: String): CanonicalId {
     val digest = MessageDigest.getInstance("SHA-256")
-    canonicalDigestField(digest, "kanvas-canonical-id-v2")
+    canonicalDigestField(digest, "kanvas-canonical-id-v3")
     canonicalDigestField(digest, tag)
     canonicalDigestLength(digest, fields.size)
     fields.forEach { canonicalDigestField(digest, it) }
@@ -48,9 +47,11 @@ internal fun canonicalId(tag: String, vararg fields: String): CanonicalId {
 }
 
 private fun canonicalDigestField(digest: MessageDigest, value: String) {
-    val bytes = value.toByteArray(StandardCharsets.UTF_8)
-    canonicalDigestLength(digest, bytes.size)
-    digest.update(bytes)
+    canonicalDigestLength(digest, value.length)
+    value.forEach { codeUnit ->
+        digest.update((codeUnit.code ushr 8).toByte())
+        digest.update(codeUnit.code.toByte())
+    }
 }
 
 private fun canonicalDigestLength(digest: MessageDigest, value: Int) {
