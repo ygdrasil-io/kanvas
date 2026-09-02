@@ -20,6 +20,10 @@ par la nouvelle architecture.
 
 - `:render-ir` porte la Scene IR backend-neutral et reste indépendant de
   `:gpu-renderer`.
+- `:render-ir` publie `RenderPathFanLimits`, l’unique autorité backend-neutral
+  pour la capacité des edge fans. `RenderConfig` et
+  `GPUPathEdgeFanPayloadContract` y aliasent leurs limites ; `:gpu-renderer`
+  la consomme par `implementation`.
 - `:kanvas` expose `:render-ir` par `api` et consomme `:gpu-renderer` par
   `implementation`.
 - Dans le périmètre W02, `RenderConfig` expose les limites backend-neutral
@@ -43,6 +47,16 @@ Task13 est la vérité fraîche : il recense 631 GMs, dont 450 `eligible`, 126
 `excluded-font`, 54 `excluded-codec` et 1 `quarantined-resource-limit`. Ses
 routes et ses scores peuvent donc différer des artefacts précédents. Le score
 audit reste strict avec zéro score orphelin et aucune exclusion n’a été ajoutée.
+
+Les 450 GMs `eligible` de l’inventaire W0 sont un compte post-observation de
+la route d’inventaire. La capture Scene IR exécute son propre setup/draw dans
+le scope `recordingOnly` et observe ensuite une sortie de font pour sept GMs
+encore W0-éligibles : `convex_poly_clip`, `drawbitmaprect`,
+`drawbitmaprect-subset`, `drawbitmaprect-imagerect`,
+`drawbitmaprect-imagerect-subset`, `scaled_tilemode_bitmap` et `tilemodes`.
+Ils sont donc reclassés `excluded-font` après draw : 450 → 443. Cette
+reclassification est une observation de dépendance, pas une modification de
+scope, d’allowlist, ni du périmètre `font`/`codec`.
 
 Avant toute création de `Surface`, `captureInventoryEvidence` évalue la
 décision de conformance ; une décision dont `mustAttempt=false` retourne
@@ -69,7 +83,7 @@ produits par la Scene IR.
 | `rtk ./gradlew :kanvas:test --tests '*GPUFramePathApiInventoryTest*'` | Succès : les limites publiques backend-neutral déterminent les defaults et les refus de budget. |
 | `rtk ./gradlew :kanvas:svg:compileKotlin :integration-tests:svg:compileTestKotlin` | Succès : les consommateurs SVG déclarent leur dépendance GPU explicite. |
 | `rtk ./gradlew :integration-tests:skia:generateSkiaGmInventory` | Succès en 1 min 26 s ; vérité fraîche post-Task13, score audit strict et `jpg-color-cube` filtrée avant `Surface`/setup/draw/render. |
-| `rtk ./gradlew :integration-tests:skia:test --tests '*SkiaGmSceneCaptureTest*'` | Succès : 443 GMs éligibles, 431 captures, 11 blocages au setup et une capture invalide ; `jpg-color-cube` reste filtrée avant `Surface`/setup/draw/render. |
+| `rtk ./gradlew :integration-tests:skia:test --tests '*SkiaGmSceneCaptureTest*'` | Succès : les sept GMs reclassés après draw font passer les 450 éligibles W0 à 443 ; 431 captures, 11 blocages au setup et une capture invalide. `jpg-color-cube` reste filtrée avant `Surface`/setup/draw/render. |
 | `rtk ./gradlew :kanvas:test --rerun-tasks` | Échec connu : 51 échecs sur 3 573 tests, 0 erreur. Ce compte frais confirme la baseline globale et maintient W1 strict non atteinte. |
 
 Audit exact de l'inventaire frais :

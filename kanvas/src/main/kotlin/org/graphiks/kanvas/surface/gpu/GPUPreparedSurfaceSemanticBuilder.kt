@@ -25,7 +25,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageVertex
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecording
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 
-sealed interface GPUPreparedSurfaceSemanticGatherResult {
+internal sealed interface GPUPreparedSurfaceSemanticGatherResult {
     data class Gathered(
         val semanticsByCommandId: Map<Int, GPUDrawSemanticPayload>,
     ) : GPUPreparedSurfaceSemanticGatherResult
