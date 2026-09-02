@@ -20,7 +20,7 @@ internal class SnapshotDisplayListBuffer : DisplayListBuffer {
     private val appendContext = GeometrySnapshotContext()
 
     override fun append(op: DisplayOp) {
-        recorded += op.snapshotGeometry(appendContext)
+        recorded += appendContext.snapshot(op)
     }
 
     override fun ops(): List<DisplayOp> = recorded.snapshotGeometry()
@@ -33,7 +33,7 @@ internal class GeometrySnapshotDisplayListBuffer(
     private val appendContext = GeometrySnapshotContext()
 
     override fun append(op: DisplayOp) {
-        delegate.append(op.snapshotGeometry(appendContext))
+        delegate.append(appendContext.snapshot(op))
     }
 
     override fun ops(): List<DisplayOp> = delegate.ops().snapshotGeometry()

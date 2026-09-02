@@ -144,7 +144,7 @@ class Picture internal constructor(
         context: GeometrySnapshotContext,
     ) {
         for (op in ops) {
-            val snapshot = op.snapshotGeometry(context)
+            val snapshot = context.snapshot(op)
             action(snapshot)
             if (nested && snapshot is DisplayOp.DrawPicture) {
                 snapshot.picture.forEachOp(nested = true, action = action, context = context)
