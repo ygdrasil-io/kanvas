@@ -9,6 +9,7 @@ import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.render.ir.ColorFilterNode
+import org.graphiks.kanvas.render.ir.GraphLimits
 import org.graphiks.kanvas.render.ir.ImageResourceSnapshot
 import org.graphiks.kanvas.render.ir.MaterialNode
 import org.graphiks.kanvas.render.ir.MaskFilterNode
@@ -187,6 +188,24 @@ class SurfaceSceneSnapshotTest {
 
         val invalid = assertInstanceOf(SceneCaptureResult.Invalid::class.java, surface.snapshotScene())
         assertEquals("cyclic-effect-graph", invalid.diagnostics.single().code.value)
+    }
+
+    @Test
+    fun `snapshotScene defers acyclic effect depth limits until capture`() {
+        var filter: ImageFilter = ImageFilter.Blur(1f, 1f)
+        repeat(65) { filter = ImageFilter.Blur(1f, 1f, input = filter) }
+        val surface = Surface(16, 12)
+
+        surface.canvas {
+            drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(imageFilter = filter))
+        }
+
+        assertInstanceOf(
+            SceneCaptureResult.Captured::class.java,
+            surface.snapshotScene(SceneCaptureLimits(maxDepth = 128, graphLimits = GraphLimits(maxDepth = 128, maxNodes = 128))),
+        )
+        val invalid = assertInstanceOf(SceneCaptureResult.Invalid::class.java, surface.snapshotScene())
+        assertEquals("graph-depth-limit", invalid.diagnostics.single().code.value)
     }
 
     private fun Surface.singleDraw(): SceneCommand.Draw = assertInstanceOf(

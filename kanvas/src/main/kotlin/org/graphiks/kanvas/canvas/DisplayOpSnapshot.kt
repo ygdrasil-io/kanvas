@@ -24,6 +24,7 @@ import org.graphiks.kanvas.types.Vertices
 import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.color.ColorMatrixF32
+import java.util.ArrayDeque
 import java.util.Collections
 import java.util.IdentityHashMap
 
@@ -44,17 +45,21 @@ internal class GeometrySnapshotContext {
     private val colorFilters = IdentityHashMap<ColorFilter, ColorFilter>()
     private val maskFilters = IdentityHashMap<MaskFilter, MaskFilter>()
     private val imageFilters = IdentityHashMap<ImageFilter, ImageFilter>()
-    private val activeEffectSnapshots = IdentityHashMap<Any, Unit>()
-    private var effectSnapshotNodes = 0
+    private val shaderRuntimeChildren = IdentityHashMap<Shader.RuntimeEffect, MutableMap<String, Shader>>()
+    private val colorRuntimeChildren = IdentityHashMap<ColorFilter.RuntimeEffect, MutableMap<String, ColorFilter>>()
+    private val imageRuntimeChildren = IdentityHashMap<ImageFilter.RuntimeEffect, MutableMap<String, ImageFilter?>>()
+    private val mergeInputs = IdentityHashMap<ImageFilter.Merge, MutableList<ImageFilter>>()
 
     fun snapshot(operation: DisplayOp): DisplayOp {
-        check(activeEffectSnapshots.isEmpty()) { "Display operation snapshot leaked an active effect traversal" }
-        effectSnapshotNodes = 0
         images.clear()
         shaders.clear()
         colorFilters.clear()
         maskFilters.clear()
         imageFilters.clear()
+        shaderRuntimeChildren.clear()
+        colorRuntimeChildren.clear()
+        imageRuntimeChildren.clear()
+        mergeInputs.clear()
         return operation.snapshotGeometry(this)
     }
 
@@ -79,131 +84,202 @@ internal class GeometrySnapshotContext {
 
     fun snapshot(shader: Shader): Shader {
         shaders[shader]?.let { return it }
-        enterEffectSnapshot(shader)
-        return try {
-            when (shader) {
-            is Shader.RuntimeEffect -> {
-                val children = linkedMapOf<String, Shader>()
-                Shader.RuntimeEffect(shader.effect, shader.uniforms, Collections.unmodifiableMap(children)).also { copy ->
-                    shaders[shader] = copy
-                    shader.children.forEach { (name, child) -> children[name] = snapshot(child) }
+        data class ShaderFrame(val value: Shader, val leaving: Boolean)
+        val pending = ArrayDeque<ShaderFrame>()
+        pending += ShaderFrame(shader, false)
+        while (pending.isNotEmpty()) {
+            val frame = pending.removeLast()
+            val value = frame.value
+            if (frame.leaving) {
+                when (value) {
+                    is Shader.RuntimeEffect -> shaderRuntimeChildren.getValue(value).apply {
+                        value.children.forEach { (name, child) -> put(name, shaders.getValue(child)) }
+                    }
+                    is Shader.Blend -> shaders[value] = value.copy(dst = shaders.getValue(value.dst), src = shaders.getValue(value.src))
+                    is Shader.WithLocalMatrix -> shaders[value] = value.copy(shader = shaders.getValue(value.shader))
+                    is Shader.WithColorFilter -> shaders[value] = value.copy(shader = shaders.getValue(value.shader), filter = snapshot(value.filter))
+                    is Shader.CoordClamp -> shaders[value] = value.copy(shader = shaders.getValue(value.shader), subset = value.subset.snapshotGeometry())
+                    is Shader.WithWorkingColorSpace -> shaders[value] = value.copy(shader = shaders.getValue(value.shader))
+                    is Shader.Image -> shaders[value] = value.copy(image = snapshot(value.image))
+                    is Shader.LinearGradient -> shaders[value] = value.copy(stops = value.stops.toList())
+                    is Shader.RadialGradient -> shaders[value] = value.copy(stops = value.stops.toList())
+                    is Shader.SweepGradient -> shaders[value] = value.copy(stops = value.stops.toList())
+                    is Shader.ConicalGradient -> shaders[value] = value.copy(stops = value.stops.toList())
+                    is Shader.SolidColor,
+                    is Shader.PerlinNoise,
+                    is Shader.FractalNoise,
+                    -> shaders[value] = value
+                }
+                continue
+            }
+            if (shaders.containsKey(value)) continue
+            when (value) {
+                is Shader.RuntimeEffect -> {
+                    val children = linkedMapOf<String, Shader>()
+                    shaderRuntimeChildren[value] = children
+                    shaders[value] = Shader.RuntimeEffect(value.effect, value.uniforms, Collections.unmodifiableMap(children))
+                    pending += ShaderFrame(value, true)
+                    value.children.values.reversed().forEach { pending += ShaderFrame(it, false) }
+                }
+                else -> {
+                    pending += ShaderFrame(value, true)
+                    shaderChildren(value).asReversed().forEach { pending += ShaderFrame(it, false) }
                 }
             }
-            is Shader.Blend -> shader.copy(dst = snapshot(shader.dst), src = snapshot(shader.src))
-            is Shader.WithLocalMatrix -> shader.copy(shader = snapshot(shader.shader))
-            is Shader.WithColorFilter -> shader.copy(shader = snapshot(shader.shader), filter = snapshot(shader.filter))
-            is Shader.CoordClamp -> shader.copy(shader = snapshot(shader.shader), subset = shader.subset.snapshotGeometry())
-            is Shader.WithWorkingColorSpace -> shader.copy(shader = snapshot(shader.shader))
-            is Shader.Image -> shader.copy(image = snapshot(shader.image))
-            is Shader.LinearGradient -> shader.copy(stops = shader.stops.toList())
-            is Shader.RadialGradient -> shader.copy(stops = shader.stops.toList())
-            is Shader.SweepGradient -> shader.copy(stops = shader.stops.toList())
-            is Shader.ConicalGradient -> shader.copy(stops = shader.stops.toList())
-            is Shader.SolidColor,
-            is Shader.PerlinNoise,
-            is Shader.FractalNoise,
-            -> shader
-            }.also { shaders[shader] = it }
-        } finally {
-            leaveEffectSnapshot(shader)
         }
+        return shaders.getValue(shader)
     }
 
     fun snapshot(filter: ColorFilter): ColorFilter {
         colorFilters[filter]?.let { return it }
-        enterEffectSnapshot(filter)
-        return try {
-            when (filter) {
-            is ColorFilter.RuntimeEffect -> {
-                val children = linkedMapOf<String, ColorFilter>()
-                ColorFilter.RuntimeEffect(filter.effect, filter.uniforms, Collections.unmodifiableMap(children)).also { copy ->
-                    colorFilters[filter] = copy
-                    filter.children.forEach { (name, child) -> children[name] = snapshot(child) }
+        data class ColorFilterFrame(val value: ColorFilter, val leaving: Boolean)
+        val pending = ArrayDeque<ColorFilterFrame>()
+        pending += ColorFilterFrame(filter, false)
+        while (pending.isNotEmpty()) {
+            val frame = pending.removeLast()
+            val value = frame.value
+            if (frame.leaving) {
+                when (value) {
+                    is ColorFilter.RuntimeEffect -> colorRuntimeChildren.getValue(value).apply {
+                        value.children.forEach { (name, child) -> put(name, colorFilters.getValue(child)) }
+                    }
+                    is ColorFilter.Compose -> colorFilters[value] = value.copy(outer = colorFilters.getValue(value.outer), inner = colorFilters.getValue(value.inner))
+                    is ColorFilter.Lerp -> colorFilters[value] = value.copy(dst = colorFilters.getValue(value.dst), src = colorFilters.getValue(value.src))
+                    is ColorFilter.Matrix -> colorFilters[value] = value.copy(matrix = ColorMatrixF32.of(value.matrix.toFloatArray()))
+                    is ColorFilter.Table -> colorFilters[value] = value.copy(table = value.table.copyOf())
+                    is ColorFilter.HSLAMatrix -> colorFilters[value] = value.copy(values = value.values.copyOf())
+                    is ColorFilter.Blend,
+                    is ColorFilter.Lighting,
+                    ColorFilter.SRGBToLinear,
+                    ColorFilter.LinearToSRGB,
+                    ColorFilter.HighContrast,
+                    ColorFilter.Luma,
+                    ColorFilter.Overdraw,
+                    -> colorFilters[value] = value
+                }
+                continue
+            }
+            if (colorFilters.containsKey(value)) continue
+            when (value) {
+                is ColorFilter.RuntimeEffect -> {
+                    val children = linkedMapOf<String, ColorFilter>()
+                    colorRuntimeChildren[value] = children
+                    colorFilters[value] = ColorFilter.RuntimeEffect(value.effect, value.uniforms, Collections.unmodifiableMap(children))
+                    pending += ColorFilterFrame(value, true)
+                    value.children.values.reversed().forEach { pending += ColorFilterFrame(it, false) }
+                }
+                else -> {
+                    pending += ColorFilterFrame(value, true)
+                    colorFilterChildren(value).asReversed().forEach { pending += ColorFilterFrame(it, false) }
                 }
             }
-            is ColorFilter.Compose -> filter.copy(outer = snapshot(filter.outer), inner = snapshot(filter.inner))
-            is ColorFilter.Lerp -> filter.copy(dst = snapshot(filter.dst), src = snapshot(filter.src))
-            is ColorFilter.Matrix -> filter.copy(matrix = ColorMatrixF32.of(filter.matrix.toFloatArray()))
-            is ColorFilter.Table -> filter.copy(table = filter.table.copyOf())
-            is ColorFilter.HSLAMatrix -> filter.copy(values = filter.values.copyOf())
-            is ColorFilter.Blend,
-            is ColorFilter.Lighting,
-            ColorFilter.SRGBToLinear,
-            ColorFilter.LinearToSRGB,
-            ColorFilter.HighContrast,
-            ColorFilter.Luma,
-            ColorFilter.Overdraw,
-            -> filter
-            }.also { colorFilters[filter] = it }
-        } finally {
-            leaveEffectSnapshot(filter)
         }
+        return colorFilters.getValue(filter)
     }
 
     fun snapshot(filter: ImageFilter): ImageFilter {
         imageFilters[filter]?.let { return it }
-        enterEffectSnapshot(filter)
-        return try {
-            when (filter) {
-            is ImageFilter.Merge -> {
-                val inputs = mutableListOf<ImageFilter>()
-                ImageFilter.Merge(Collections.unmodifiableList(inputs)).also { copy ->
-                    imageFilters[filter] = copy
-                    filter.inputs.forEach { input -> inputs += snapshot(input) }
+        data class ImageFilterFrame(val value: ImageFilter, val leaving: Boolean)
+        val pending = ArrayDeque<ImageFilterFrame>()
+        pending += ImageFilterFrame(filter, false)
+        while (pending.isNotEmpty()) {
+            val frame = pending.removeLast()
+            val value = frame.value
+            if (frame.leaving) {
+                imageFilters[value] = when (value) {
+                    is ImageFilter.Merge -> imageFilters.getValue(value).also {
+                        mergeInputs.getValue(value).addAll(value.inputs.map(imageFilters::getValue))
+                    }
+                    is ImageFilter.RuntimeEffect -> imageFilters.getValue(value).also {
+                        imageRuntimeChildren.getValue(value).apply {
+                            value.childImageFilters.forEach { (name, child) -> put(name, child?.let(imageFilters::getValue)) }
+                        }
+                    }
+                    is ImageFilter.Crop -> value.copy(crop = value.crop.snapshotGeometry(), input = value.input?.let(imageFilters::getValue))
+                    is ImageFilter.Blur -> value.copy(input = value.input?.let(imageFilters::getValue))
+                    is ImageFilter.DropShadow -> value.copy(input = value.input?.let(imageFilters::getValue))
+                    is ImageFilter.ColorFilter -> value.copy(filter = snapshot(value.filter), input = value.input?.let(imageFilters::getValue))
+                    is ImageFilter.Compose -> value.copy(outer = imageFilters.getValue(value.outer), inner = imageFilters.getValue(value.inner))
+                    is ImageFilter.Blend -> value.copy(background = imageFilters.getValue(value.background), foreground = imageFilters.getValue(value.foreground))
+                    is ImageFilter.Dilate -> value.copy(input = value.input?.let(imageFilters::getValue))
+                    is ImageFilter.Erode -> value.copy(input = value.input?.let(imageFilters::getValue))
+                    is ImageFilter.DistantLitDiffuse -> value.copy(input = value.input?.let(imageFilters::getValue))
+                    is ImageFilter.PointLitDiffuse -> value.copy(input = value.input?.let(imageFilters::getValue))
+                    is ImageFilter.SpotLitDiffuse -> value.copy(input = value.input?.let(imageFilters::getValue))
+                    is ImageFilter.DistantLitSpecular -> value.copy(input = value.input?.let(imageFilters::getValue))
+                    is ImageFilter.PointLitSpecular -> value.copy(input = value.input?.let(imageFilters::getValue))
+                    is ImageFilter.SpotLitSpecular -> value.copy(input = value.input?.let(imageFilters::getValue))
+                    is ImageFilter.Offset -> value.copy(input = value.input?.let(imageFilters::getValue))
+                    is ImageFilter.Tile -> value.copy(src = value.src.snapshotGeometry(), dst = value.dst.snapshotGeometry(), input = value.input?.let(imageFilters::getValue))
+                    is ImageFilter.DisplacementMap -> value.copy(displacement = imageFilters.getValue(value.displacement), input = value.input?.let(imageFilters::getValue))
+                    is ImageFilter.Picture -> value.copy(src = value.src?.snapshotGeometry())
+                    is ImageFilter.Magnifier -> value.copy(src = value.src.snapshotGeometry(), input = value.input?.let(imageFilters::getValue))
+                    is ImageFilter.MatrixConvolution -> value.copy(kernel = value.kernel.copyOf(), input = value.input?.let(imageFilters::getValue))
+                }
+                continue
+            }
+            if (imageFilters.containsKey(value)) continue
+            when (value) {
+                is ImageFilter.Merge -> {
+                    val inputs = mutableListOf<ImageFilter>()
+                    mergeInputs[value] = inputs
+                    imageFilters[value] = ImageFilter.Merge(Collections.unmodifiableList(inputs))
+                    pending += ImageFilterFrame(value, true)
+                    value.inputs.reversed().forEach { pending += ImageFilterFrame(it, false) }
+                }
+                is ImageFilter.RuntimeEffect -> {
+                    val children = linkedMapOf<String, ImageFilter?>()
+                    imageRuntimeChildren[value] = children
+                    imageFilters[value] = ImageFilter.RuntimeEffect(value.effect, value.uniforms, value.childShaderName, Collections.unmodifiableMap(children))
+                    pending += ImageFilterFrame(value, true)
+                    value.childImageFilters.values.filterNotNull().toList().asReversed().forEach { pending += ImageFilterFrame(it, false) }
+                }
+                else -> {
+                    pending += ImageFilterFrame(value, true)
+                    imageFilterChildren(value).asReversed().forEach { pending += ImageFilterFrame(it, false) }
                 }
             }
-            is ImageFilter.RuntimeEffect -> {
-                val children = linkedMapOf<String, ImageFilter?>()
-                ImageFilter.RuntimeEffect(filter.effect, filter.uniforms, filter.childShaderName, Collections.unmodifiableMap(children)).also { copy ->
-                    imageFilters[filter] = copy
-                    filter.childImageFilters.forEach { (name, child) -> children[name] = child?.let(::snapshot) }
-                }
-            }
-            is ImageFilter.Crop -> filter.copy(crop = filter.crop.snapshotGeometry(), input = filter.input?.let(::snapshot))
-            is ImageFilter.Blur -> filter.copy(input = filter.input?.let(::snapshot))
-            is ImageFilter.DropShadow -> filter.copy(input = filter.input?.let(::snapshot))
-            is ImageFilter.ColorFilter -> filter.copy(filter = snapshot(filter.filter), input = filter.input?.let(::snapshot))
-            is ImageFilter.Compose -> filter.copy(outer = snapshot(filter.outer), inner = snapshot(filter.inner))
-            is ImageFilter.Blend -> filter.copy(background = snapshot(filter.background), foreground = snapshot(filter.foreground))
-            is ImageFilter.Dilate -> filter.copy(input = filter.input?.let(::snapshot))
-            is ImageFilter.Erode -> filter.copy(input = filter.input?.let(::snapshot))
-            is ImageFilter.DistantLitDiffuse -> filter.copy(input = filter.input?.let(::snapshot))
-            is ImageFilter.PointLitDiffuse -> filter.copy(input = filter.input?.let(::snapshot))
-            is ImageFilter.SpotLitDiffuse -> filter.copy(input = filter.input?.let(::snapshot))
-            is ImageFilter.DistantLitSpecular -> filter.copy(input = filter.input?.let(::snapshot))
-            is ImageFilter.PointLitSpecular -> filter.copy(input = filter.input?.let(::snapshot))
-            is ImageFilter.SpotLitSpecular -> filter.copy(input = filter.input?.let(::snapshot))
-            is ImageFilter.Offset -> filter.copy(input = filter.input?.let(::snapshot))
-            is ImageFilter.Tile -> filter.copy(src = filter.src.snapshotGeometry(), dst = filter.dst.snapshotGeometry(), input = filter.input?.let(::snapshot))
-            is ImageFilter.DisplacementMap -> filter.copy(displacement = snapshot(filter.displacement), input = filter.input?.let(::snapshot))
-            is ImageFilter.Picture -> filter.copy(src = filter.src?.snapshotGeometry())
-            is ImageFilter.Magnifier -> filter.copy(src = filter.src.snapshotGeometry(), input = filter.input?.let(::snapshot))
-            is ImageFilter.MatrixConvolution -> filter.copy(kernel = filter.kernel.copyOf(), input = filter.input?.let(::snapshot))
-            }.also { imageFilters[filter] = it }
-        } finally {
-            leaveEffectSnapshot(filter)
         }
+        return imageFilters.getValue(filter)
     }
+}
 
-    private fun enterEffectSnapshot(value: Any) {
-        check(activeEffectSnapshots.size < MAX_EFFECT_SNAPSHOT_DEPTH) {
-            "Display operation effect graph exceeds immutable snapshot depth $MAX_EFFECT_SNAPSHOT_DEPTH"
-        }
-        check(effectSnapshotNodes < MAX_EFFECT_SNAPSHOT_NODES) {
-            "Display operation effect graph exceeds immutable snapshot node budget $MAX_EFFECT_SNAPSHOT_NODES"
-        }
-        activeEffectSnapshots[value] = Unit
-        effectSnapshotNodes += 1
-    }
+private fun shaderChildren(value: Shader): List<Shader> = when (value) {
+    is Shader.Blend -> listOf(value.dst, value.src)
+    is Shader.WithLocalMatrix -> listOf(value.shader)
+    is Shader.WithColorFilter -> listOf(value.shader)
+    is Shader.CoordClamp -> listOf(value.shader)
+    is Shader.WithWorkingColorSpace -> listOf(value.shader)
+    else -> emptyList()
+}
 
-    private fun leaveEffectSnapshot(value: Any) {
-        activeEffectSnapshots.remove(value)
-    }
+private fun colorFilterChildren(value: ColorFilter): List<ColorFilter> = when (value) {
+    is ColorFilter.Compose -> listOf(value.outer, value.inner)
+    is ColorFilter.Lerp -> listOf(value.dst, value.src)
+    else -> emptyList()
+}
 
-    private companion object {
-        const val MAX_EFFECT_SNAPSHOT_DEPTH = 64
-        const val MAX_EFFECT_SNAPSHOT_NODES = 4_096
-    }
+private fun imageFilterChildren(value: ImageFilter): List<ImageFilter> = when (value) {
+    is ImageFilter.Crop -> listOfNotNull(value.input)
+    is ImageFilter.Blur -> listOfNotNull(value.input)
+    is ImageFilter.DropShadow -> listOfNotNull(value.input)
+    is ImageFilter.ColorFilter -> listOfNotNull(value.input)
+    is ImageFilter.Compose -> listOf(value.outer, value.inner)
+    is ImageFilter.Blend -> listOf(value.background, value.foreground)
+    is ImageFilter.Dilate -> listOfNotNull(value.input)
+    is ImageFilter.Erode -> listOfNotNull(value.input)
+    is ImageFilter.DistantLitDiffuse -> listOfNotNull(value.input)
+    is ImageFilter.PointLitDiffuse -> listOfNotNull(value.input)
+    is ImageFilter.SpotLitDiffuse -> listOfNotNull(value.input)
+    is ImageFilter.DistantLitSpecular -> listOfNotNull(value.input)
+    is ImageFilter.PointLitSpecular -> listOfNotNull(value.input)
+    is ImageFilter.SpotLitSpecular -> listOfNotNull(value.input)
+    is ImageFilter.Offset -> listOfNotNull(value.input)
+    is ImageFilter.Tile -> listOfNotNull(value.input)
+    is ImageFilter.DisplacementMap -> listOfNotNull(value.displacement, value.input)
+    is ImageFilter.Magnifier -> listOfNotNull(value.input)
+    is ImageFilter.MatrixConvolution -> listOfNotNull(value.input)
+    else -> emptyList()
 }
 
 internal fun DisplayOp.snapshotGeometry(context: GeometrySnapshotContext): DisplayOp = when (this) {
