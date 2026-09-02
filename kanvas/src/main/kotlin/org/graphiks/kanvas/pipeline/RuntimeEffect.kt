@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.pipeline
 
+import java.util.concurrent.ConcurrentHashMap
 import org.graphiks.kanvas.paint.Blender
 import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.Shader
@@ -10,6 +11,9 @@ class RuntimeEffect internal constructor(
     val uniformLayout: UniformLayout,
     val children: List<ChildSlot>,
 ) {
+    init {
+        register(this)
+    }
     fun makeShader(
         uniforms: UniformBlock,
         children: Map<String, Shader> = emptyMap(),
@@ -41,12 +45,38 @@ class RuntimeEffect internal constructor(
             }
         }
 
-        fun registered(id: String): RuntimeEffect? = lookupRegistered?.invoke(id)
+        /**
+         * Installs a handle-free runtime descriptor for scene reconstruction.
+         * Compilation installs the resulting value; callers may re-install an
+         * existing runtime effect on an application-owned reconstruction path.
+         */
+        fun register(effect: RuntimeEffect): RuntimeEffect {
+            val installed = registeredEffects.putIfAbsent(effect.id, effect)
+            if (installed != null) {
+                require(installed.hasCompatibleDescriptor(effect)) {
+                    "Runtime effect id ${effect.id} is already registered with an incompatible descriptor"
+                }
+            }
+            return installed ?: effect
+        }
+
+        fun registered(id: String): RuntimeEffect? = registeredEffects[id] ?: lookupRegistered?.invoke(id)
 
         /** Backend hooks installed by :gpu-renderer's RuntimeEffectCompileProvider. */
+        private val registeredEffects = ConcurrentHashMap<String, RuntimeEffect>()
         internal var compileWgsl: ((String) -> RuntimeEffect?)? = null
         internal var lookupRegistered: ((String) -> RuntimeEffect?)? = null
         internal var makeColorFilterHook: ((RuntimeEffect, UniformBlock) -> ColorFilter?)? = null
         internal var makeBlenderHook: ((RuntimeEffect, UniformBlock) -> Blender?)? = null
+
+        private fun RuntimeEffect.hasCompatibleDescriptor(other: RuntimeEffect): Boolean =
+            id == other.id &&
+                module.source == other.module.source &&
+                module.entryPoint == other.module.entryPoint &&
+                module.uniforms == other.module.uniforms &&
+                module.textures == other.module.textures &&
+                module.vertexLayout == other.module.vertexLayout &&
+                uniformLayout == other.uniformLayout &&
+                children == other.children
     }
 }

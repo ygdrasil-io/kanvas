@@ -8,7 +8,10 @@ import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.geometry.toPathF32
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.paint.Blender
+import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.SamplingOptions
+import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
@@ -30,6 +33,135 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class DisplayOpSceneAdapterTest {
+    @Test
+    fun `capture rejects nonfinite graph text and picture values before reconstruction`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
+        val transform = Matrix3x3F32.Identity
+        val operations = listOf(
+            DisplayOp.DrawRect(
+                bounds,
+                Paint(shader = org.graphiks.kanvas.paint.Shader.LinearGradient(Point2F32(Float.NaN, 0f), Point2F32(1f, 1f), emptyList())),
+                transform,
+                ClipStack.WideOpen,
+            ),
+            DisplayOp.DrawRect(
+                bounds,
+                Paint(imageFilter = ImageFilter.PointLitDiffuse(Point2F32(Float.POSITIVE_INFINITY, 0f), ColorARGB.White, 1f, 1f)),
+                transform,
+                ClipStack.WideOpen,
+            ),
+            DisplayOp.DrawText(
+                TextBlob(listOf(KanvasGlyphRun(listOf(1u), listOf(Point2F32(Float.NaN, 0f)), 12f))),
+                0f,
+                0f,
+                Paint.fill(ColorARGB.White),
+                transform,
+                ClipStack.WideOpen,
+            ),
+            DisplayOp.DrawPicture(Picture(RectF32.ofLTRB(0f, 0f, Float.NaN, 2f), emptyList()), null, transform, ClipStack.WideOpen),
+        )
+
+        operations.forEach { operation ->
+            val result = DisplayOpSceneAdapter.capture(listOf(operation), SceneExtent(8, 8), ColorSpace.SRGB)
+            assertEquals("non-finite-value", assertInstanceOf(SceneCaptureResult.Invalid::class.java, result).diagnostics.single().code.value)
+        }
+    }
+
+    @Test
+    fun `capture returns Invalid before recursing through a cyclic image filter graph`() {
+        val children = mutableListOf<ImageFilter>()
+        val cyclic = ImageFilter.Merge(children)
+        children += cyclic
+        val operation = DisplayOp.DrawRect(
+            RectF32.ofLTRB(0f, 0f, 1f, 1f),
+            Paint(imageFilter = cyclic),
+            Matrix3x3F32.Identity,
+            ClipStack.WideOpen,
+        )
+
+        val result = DisplayOpSceneAdapter.capture(listOf(operation), SceneExtent(8, 8), ColorSpace.SRGB)
+
+        assertEquals("cyclic-effect-graph", assertInstanceOf(SceneCaptureResult.Invalid::class.java, result).diagnostics.single().code.value)
+    }
+
+    @Test
+    fun `capture returns Invalid for malformed Atlas cardinalities and nonfinite clip geometry`() {
+        val image = Image.fromPixels(1, 1, byteArrayOf(1, 2, 3, 4), sourceId = "atlas-invalid")
+        val transform = Matrix3x3F32.Identity
+        val malformedAtlas = DisplayOp.DrawAtlas(
+            image,
+            transforms = listOf(transform),
+            texRects = emptyList(),
+            colors = null,
+            blendMode = BlendMode.SRC_OVER,
+            paint = null,
+            transform = transform,
+            clip = ClipStack.WideOpen,
+        )
+        val nonfiniteClip = DisplayOp.DrawRect(
+            RectF32.ofLTRB(0f, 0f, 1f, 1f),
+            Paint.fill(ColorARGB.Red),
+            transform,
+            ClipStack.Complex(listOf(ClipStackOp.RectOp(RectF32.ofLTRB(Float.NaN, 0f, 1f, 1f), org.graphiks.kanvas.pipeline.ClipOp.INTERSECT))),
+        )
+
+        val atlasResult = DisplayOpSceneAdapter.capture(listOf(malformedAtlas), SceneExtent(8, 8), ColorSpace.SRGB)
+        val clipResult = DisplayOpSceneAdapter.capture(listOf(nonfiniteClip), SceneExtent(8, 8), ColorSpace.SRGB)
+
+        assertEquals("atlas-cardinality", assertInstanceOf(SceneCaptureResult.Invalid::class.java, atlasResult).diagnostics.single().code.value)
+        assertEquals("non-finite-value", assertInstanceOf(SceneCaptureResult.Invalid::class.java, clipResult).diagnostics.single().code.value)
+    }
+
+    @Test
+    fun `normalized image and layer axes retain source effects and custom blend independently`() {
+        val image = Image.fromPixels(1, 1, byteArrayOf(1, 2, 3, 4), sourceId = "axis-image")
+        val paint = Paint(
+            color = ColorARGB.Magenta,
+            blendMode = BlendMode.SCREEN,
+            blender = Blender.Arithmetic(1f, 2f, 3f, 4f),
+            imageFilter = ImageFilter.Blur(1f, 2f, TileMode.DECAL),
+        )
+        val imageOperation = DisplayOp.DrawImage(
+            image,
+            RectF32.ofLTRB(0f, 0f, 1f, 1f),
+            RectF32.ofLTRB(2f, 3f, 6f, 7f),
+            paint,
+            Matrix3x3F32.Identity,
+            ClipStack.WideOpen,
+        )
+        val layer = DisplayOp.BeginLayer(RectF32.ofLTRB(0f, 0f, 5f, 5f), paint)
+
+        val scene = assertInstanceOf(
+            SceneCaptureResult.Captured::class.java,
+            DisplayOpSceneAdapter.capture(listOf(imageOperation, layer), SceneExtent(8, 8), ColorSpace.SRGB),
+        ).scene
+        val draw = assertInstanceOf(SceneCommand.Draw::class.java, scene.commandAt(0)).node
+        val descriptor = assertInstanceOf(SceneCommand.BeginLayer::class.java, scene.commandAt(1)).descriptor
+
+        assertInstanceOf(MaterialNode.ImageSample::class.java, draw.material)
+        assertInstanceOf(EffectStack.Entries::class.java, draw.effects)
+        assertInstanceOf(BlendNode.Paint::class.java, draw.blend)
+        assertInstanceOf(EffectStack.Entries::class.java, descriptor.effects)
+        assertInstanceOf(BlendNode.Paint::class.java, descriptor.blend)
+    }
+
+    @Test
+    fun `capture aggregates graph limits across commands rather than resetting per paint`() {
+        val operations = listOf(
+            DisplayOp.DrawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(shader = org.graphiks.kanvas.paint.Shader.SolidColor(ColorARGB.Red)), Matrix3x3F32.Identity, ClipStack.WideOpen),
+            DisplayOp.DrawRect(RectF32.ofLTRB(2f, 0f, 3f, 1f), Paint(shader = org.graphiks.kanvas.paint.Shader.SolidColor(ColorARGB.Blue)), Matrix3x3F32.Identity, ClipStack.WideOpen),
+        )
+
+        val result = DisplayOpSceneAdapter.capture(
+            operations,
+            SceneExtent(8, 8),
+            ColorSpace.SRGB,
+            SceneCaptureLimits(graphLimits = GraphLimits(maxNodes = 1)),
+        )
+
+        assertEquals("graph-node-limit", assertInstanceOf(SceneCaptureResult.Invalid::class.java, result).diagnostics.single().code.value)
+    }
+
     @Test
     fun `capture reports typed invalid diagnostics for nonfinite and aggregate limits`() {
         val invalidPoint = DisplayOp.DrawPoint(Float.NaN, 1f, Paint.fill(ColorARGB.Red), Matrix3x3F32.Identity, ClipStack.WideOpen)

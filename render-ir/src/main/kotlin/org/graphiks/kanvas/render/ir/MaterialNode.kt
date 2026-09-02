@@ -270,6 +270,15 @@ public sealed interface BlendNode : CanonicalValue {
     public data class Custom(public val blender: BlenderNode) : BlendNode {
         override val canonicalId: CanonicalId = canonicalId("blend-custom-v1", blender.canonicalId.value)
     }
+
+    /** Complete Paint blend state: the mode and custom blender intentionally coexist. */
+    public data class Paint(public val mode: BlendMode, public val blender: BlenderNode?) : BlendNode {
+        override val canonicalId: CanonicalId = canonicalId(
+            "blend-paint-v1",
+            mode.name,
+            canonicalOptionalId("blender", blender?.canonicalId).value,
+        )
+    }
 }
 
 /** Backend-neutral clip operation kind. */
@@ -318,7 +327,11 @@ public sealed interface ClipStackNode : CanonicalValue {
         override val canonicalId: CanonicalId = canonicalSequenceId("clip-stack-operations-v1", values.map { it.canonicalId.value })
         override fun equals(other: Any?): Boolean = other is Operations && canonicalId == other.canonicalId
         override fun hashCode(): Int = canonicalId.hashCode()
-        public companion object { public fun of(entries: Collection<ClipEntry>): ClipStackNode = if (entries.isEmpty()) Empty else Operations(entries) }
+        /**
+         * An empty operation sequence is still an explicitly captured complex clip;
+         * callers use [Empty] only for the public WideOpen state.
+         */
+        public companion object { public fun of(entries: Collection<ClipEntry>): Operations = Operations(entries) }
     }
 }
 

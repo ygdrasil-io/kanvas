@@ -98,16 +98,16 @@ public object PaintSceneAdapter {
 
     private fun Shader.toMaterial(captureImage: (Image) -> ImageResourceSnapshot): MaterialNode = when (this) {
         is Shader.SolidColor -> MaterialNode.Solid(color)
-        is Shader.LinearGradient -> MaterialNode.LinearGradient.of(start, end, stops.map { GradientStop(it.position.checked("shader.stop"), it.color) }, TileMode.valueOf(tileMode.name), ColorInterpolation.valueOf(interpolation.name))
-        is Shader.RadialGradient -> MaterialNode.RadialGradient.of(center, radius.checked("shader.radius"), stops.map { GradientStop(it.position.checked("shader.stop"), it.color) }, TileMode.valueOf(tileMode.name), ColorInterpolation.valueOf(interpolation.name))
-        is Shader.SweepGradient -> MaterialNode.SweepGradient.of(center, startAngle.checked("shader.start-angle"), endAngle.checked("shader.end-angle"), stops.map { GradientStop(it.position.checked("shader.stop"), it.color) }, TileMode.valueOf(tileMode.name), ColorInterpolation.valueOf(interpolation.name))
-        is Shader.ConicalGradient -> MaterialNode.ConicalGradient.of(start, startRadius.checked("shader.start-radius"), end, endRadius.checked("shader.end-radius"), stops.map { GradientStop(it.position.checked("shader.stop"), it.color) }, TileMode.valueOf(tileMode.name), ColorInterpolation.valueOf(interpolation.name))
+        is Shader.LinearGradient -> MaterialNode.LinearGradient.of(start.checked("shader.start"), end.checked("shader.end"), stops.map { GradientStop(it.position.checked("shader.stop"), it.color) }, TileMode.valueOf(tileMode.name), ColorInterpolation.valueOf(interpolation.name))
+        is Shader.RadialGradient -> MaterialNode.RadialGradient.of(center.checked("shader.center"), radius.checked("shader.radius"), stops.map { GradientStop(it.position.checked("shader.stop"), it.color) }, TileMode.valueOf(tileMode.name), ColorInterpolation.valueOf(interpolation.name))
+        is Shader.SweepGradient -> MaterialNode.SweepGradient.of(center.checked("shader.center"), startAngle.checked("shader.start-angle"), endAngle.checked("shader.end-angle"), stops.map { GradientStop(it.position.checked("shader.stop"), it.color) }, TileMode.valueOf(tileMode.name), ColorInterpolation.valueOf(interpolation.name))
+        is Shader.ConicalGradient -> MaterialNode.ConicalGradient.of(start.checked("shader.start"), startRadius.checked("shader.start-radius"), end.checked("shader.end"), endRadius.checked("shader.end-radius"), stops.map { GradientStop(it.position.checked("shader.stop"), it.color) }, TileMode.valueOf(tileMode.name), ColorInterpolation.valueOf(interpolation.name))
         is Shader.Image -> MaterialNode.ImageSample(captureImage(image), TileMode.valueOf(tileModeX.name), TileMode.valueOf(tileModeY.name), sampling.toImageSampling())
         is Shader.Blend -> MaterialNode.Blend(BlendMode.valueOf(mode.name), dst.toMaterial(captureImage), src.toMaterial(captureImage))
         is Shader.WithLocalMatrix -> MaterialNode.WithLocalMatrix(shader.toMaterial(captureImage), matrix.checked("shader.local-matrix"))
         is Shader.WithColorFilter -> MaterialNode.WithColorFilter(shader.toMaterial(captureImage), filter.toNode(captureImage))
-        is Shader.PerlinNoise -> MaterialNode.PerlinNoise(baseX.checked("shader.base-x"), baseY.checked("shader.base-y"), numOctaves, seed, tileSize)
-        is Shader.FractalNoise -> MaterialNode.FractalNoise(baseX.checked("shader.base-x"), baseY.checked("shader.base-y"), numOctaves, seed, tileSize)
+        is Shader.PerlinNoise -> MaterialNode.PerlinNoise(baseX.checked("shader.base-x"), baseY.checked("shader.base-y"), numOctaves, seed, tileSize?.checked("shader.tile-size"))
+        is Shader.FractalNoise -> MaterialNode.FractalNoise(baseX.checked("shader.base-x"), baseY.checked("shader.base-y"), numOctaves, seed, tileSize?.checked("shader.tile-size"))
         is Shader.WithWorkingColorSpace -> MaterialNode.WithWorkingColorSpace(shader.toMaterial(captureImage), ColorInterpolation.valueOf(interpolation.name))
         is Shader.CoordClamp -> MaterialNode.CoordClamp(shader.toMaterial(captureImage), subset.checked("shader.subset"))
         is Shader.RuntimeEffect -> MaterialNode.RuntimeEffect.of(
@@ -147,8 +147,8 @@ public object PaintSceneAdapter {
         is PathEffect.Dash -> PathEffectNode.Dash(ImmutableFloats.copyOf(intervals.checked("path-effect.dash")), phase.checked("path-effect.phase"))
         is PathEffect.Corner -> PathEffectNode.Corner(radius.checked("path-effect.corner"))
         is PathEffect.Discrete -> PathEffectNode.Discrete(segmentLength.checked("path-effect.segment-length"), deviation.checked("path-effect.deviation"))
-        is PathEffect.Path1D -> PathEffectNode.Path1D(path.toPathF32(), advance.checked("path-effect.advance"), phase.checked("path-effect.phase"), org.graphiks.kanvas.render.ir.Path1DStyle.valueOf(style.name))
-        is PathEffect.Path2D -> PathEffectNode.Path2D(matrix.checked("path-effect.matrix"), path.toPathF32())
+        is PathEffect.Path1D -> PathEffectNode.Path1D(path.toPathF32().checked("path-effect.path1d"), advance.checked("path-effect.advance"), phase.checked("path-effect.phase"), org.graphiks.kanvas.render.ir.Path1DStyle.valueOf(style.name))
+        is PathEffect.Path2D -> PathEffectNode.Path2D(matrix.checked("path-effect.matrix"), path.toPathF32().checked("path-effect.path2d"))
         is PathEffect.Trim -> PathEffectNode.Trim(start.checked("path-effect.trim-start"), stop.checked("path-effect.trim-stop"))
     }
 
@@ -165,18 +165,18 @@ public object PaintSceneAdapter {
         is ImageFilter.Dilate -> ImageFilterNode.Dilate(radiusX.checked("image-filter.radius-x"), radiusY.checked("image-filter.radius-y"), input?.toNode(captureImage, capturePicture))
         is ImageFilter.Erode -> ImageFilterNode.Erode(radiusX.checked("image-filter.radius-x"), radiusY.checked("image-filter.radius-y"), input?.toNode(captureImage, capturePicture))
         is ImageFilter.DistantLitDiffuse -> ImageFilterNode.DistantLitDiffuse(direction.x.checked("image-filter.direction-x"), direction.y.checked("image-filter.direction-y"), lightColor, surfaceScale.checked("image-filter.surface"), kd.checked("image-filter.kd"), input?.toNode(captureImage, capturePicture))
-        is ImageFilter.PointLitDiffuse -> ImageFilterNode.PointLitDiffuse(location, lightColor, surfaceScale.checked("image-filter.surface"), kd.checked("image-filter.kd"), input?.toNode(captureImage, capturePicture))
-        is ImageFilter.SpotLitDiffuse -> ImageFilterNode.SpotLitDiffuse(location, target, specularExponent.checked("image-filter.exponent"), cutoffAngle.checked("image-filter.cutoff"), lightColor, surfaceScale.checked("image-filter.surface"), kd.checked("image-filter.kd"), input?.toNode(captureImage, capturePicture))
+        is ImageFilter.PointLitDiffuse -> ImageFilterNode.PointLitDiffuse(location.checked("image-filter.location"), lightColor, surfaceScale.checked("image-filter.surface"), kd.checked("image-filter.kd"), input?.toNode(captureImage, capturePicture))
+        is ImageFilter.SpotLitDiffuse -> ImageFilterNode.SpotLitDiffuse(location.checked("image-filter.location"), target.checked("image-filter.target"), specularExponent.checked("image-filter.exponent"), cutoffAngle.checked("image-filter.cutoff"), lightColor, surfaceScale.checked("image-filter.surface"), kd.checked("image-filter.kd"), input?.toNode(captureImage, capturePicture))
         is ImageFilter.DistantLitSpecular -> ImageFilterNode.DistantLitSpecular(direction.x.checked("image-filter.direction-x"), direction.y.checked("image-filter.direction-y"), lightColor, surfaceScale.checked("image-filter.surface"), ks.checked("image-filter.ks"), shininess.checked("image-filter.shininess"), input?.toNode(captureImage, capturePicture))
-        is ImageFilter.PointLitSpecular -> ImageFilterNode.PointLitSpecular(location, lightColor, surfaceScale.checked("image-filter.surface"), ks.checked("image-filter.ks"), shininess.checked("image-filter.shininess"), input?.toNode(captureImage, capturePicture))
-        is ImageFilter.SpotLitSpecular -> ImageFilterNode.SpotLitSpecular(location, target, specularExponent.checked("image-filter.exponent"), cutoffAngle.checked("image-filter.cutoff"), lightColor, surfaceScale.checked("image-filter.surface"), ks.checked("image-filter.ks"), shininess.checked("image-filter.shininess"), input?.toNode(captureImage, capturePicture))
+        is ImageFilter.PointLitSpecular -> ImageFilterNode.PointLitSpecular(location.checked("image-filter.location"), lightColor, surfaceScale.checked("image-filter.surface"), ks.checked("image-filter.ks"), shininess.checked("image-filter.shininess"), input?.toNode(captureImage, capturePicture))
+        is ImageFilter.SpotLitSpecular -> ImageFilterNode.SpotLitSpecular(location.checked("image-filter.location"), target.checked("image-filter.target"), specularExponent.checked("image-filter.exponent"), cutoffAngle.checked("image-filter.cutoff"), lightColor, surfaceScale.checked("image-filter.surface"), ks.checked("image-filter.ks"), shininess.checked("image-filter.shininess"), input?.toNode(captureImage, capturePicture))
         is ImageFilter.Offset -> ImageFilterNode.Offset(dx.checked("image-filter.dx"), dy.checked("image-filter.dy"), input?.toNode(captureImage, capturePicture))
         is ImageFilter.Tile -> ImageFilterNode.Tile.of(src.checked("image-filter.src"), dst.checked("image-filter.dst"), input?.toNode(captureImage, capturePicture))
         is ImageFilter.Merge -> ImageFilterNode.Merge.of(inputs.map { it.toNode(captureImage, capturePicture) })
         is ImageFilter.DisplacementMap -> ImageFilterNode.DisplacementMap(ColorChannel.valueOf(xChannelSelector.name.replace("R", "RED").replace("G", "GREEN").replace("B", "BLUE").replace("A", "ALPHA")), ColorChannel.valueOf(yChannelSelector.name.replace("R", "RED").replace("G", "GREEN").replace("B", "BLUE").replace("A", "ALPHA")), scale.checked("image-filter.scale"), displacement.toNode(captureImage, capturePicture), input?.toNode(captureImage, capturePicture))
-        is ImageFilter.Picture -> ImageFilterNode.Picture.of(capturePicture(picture), picture.cullRect, src?.checked("image-filter.picture-src"))
+        is ImageFilter.Picture -> ImageFilterNode.Picture.of(capturePicture(picture), picture.cullRect.checked("image-filter.picture-cull"), src?.checked("image-filter.picture-src"))
         is ImageFilter.Magnifier -> ImageFilterNode.Magnifier.of(src.checked("image-filter.src"), zoom.checked("image-filter.zoom"), inset.checked("image-filter.inset"), input?.toNode(captureImage, capturePicture))
-        is ImageFilter.MatrixConvolution -> ImageFilterNode.MatrixConvolution.of(kernelSize, ImmutableFloats.copyOf(kernel.checked("image-filter.kernel")), gain.checked("image-filter.gain"), bias.checked("image-filter.bias"), kernelOffset, TileMode.valueOf(tileMode.name), convolveAlpha, input?.toNode(captureImage, capturePicture))
+        is ImageFilter.MatrixConvolution -> ImageFilterNode.MatrixConvolution.of(kernelSize.checked("image-filter.kernel-size"), ImmutableFloats.copyOf(kernel.checked("image-filter.kernel")), gain.checked("image-filter.gain"), bias.checked("image-filter.bias"), kernelOffset.checked("image-filter.kernel-offset"), TileMode.valueOf(tileMode.name), convolveAlpha, input?.toNode(captureImage, capturePicture))
         is ImageFilter.RuntimeEffect -> ImageFilterNode.RuntimeEffect.of(
             effect.toDescriptor(
                 RuntimeEffectAbi.IMAGE_FILTER,
@@ -316,6 +316,18 @@ public object PaintSceneAdapter {
         childSlots = children.map { slot ->
             RuntimeChildSlot(slot.name, RuntimeChildType.valueOf(slot.type.name))
         } + extraChildren.filter { extra -> children.none { it.name == extra.name } },
+        vertexLayout = RuntimeVertexLayout.of(
+            stride = module.vertexLayout.stride,
+            attributes = module.vertexLayout.attributes.map { attribute ->
+                RuntimeVertexAttribute(
+                    format = RuntimeVertexFormat.valueOf(attribute.format.name.uppercase()),
+                    offset = attribute.offset,
+                    shaderLocation = attribute.shaderLocation,
+                )
+            },
+            stepMode = RuntimeVertexStepMode.valueOf(module.vertexLayout.stepMode.name),
+        ),
+        module = RuntimeModuleMetadata(module.source, module.entryPoint),
     )
 
     private fun org.graphiks.kanvas.pipeline.UniformBlock.toRuntimeUniforms(): Map<String, RuntimeUniformValue> = entries.mapValues { (_, value) ->
@@ -348,6 +360,13 @@ public object PaintSceneAdapter {
             "Runtime effect ${id.value} is not registered for scene reconstruction"
         }.also { registered ->
             require(registered.id == id.value) { "Registered runtime effect identity does not match scene descriptor" }
+            val registeredDescriptor = registered.toDescriptor(
+                abi,
+                filter { slot -> slot.type == RuntimeChildType.IMAGE_FILTER }.toList(),
+            )
+            require(registeredDescriptor == this) {
+                "Registered runtime effect descriptor does not match the scene descriptor"
+            }
         }
 }
 

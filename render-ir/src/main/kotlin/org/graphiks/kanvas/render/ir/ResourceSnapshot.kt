@@ -221,7 +221,7 @@ public class ExternalImageReference private constructor(
     }
 }
 
-/** Registered runtime-effect identity; it is never source code or a compiled shader handle. */
+/** Stable registered runtime-effect identity; it is never a compiled shader handle. */
 @JvmInline
 public value class RuntimeEffectId(public val value: String) {
     init { require(value.isNotBlank()) { "RuntimeEffectId.value must not be blank" } }
@@ -233,6 +233,15 @@ public enum class RuntimeUniformType { FLOAT, FLOAT2, FLOAT3, FLOAT4, INT1, MAT3
 public enum class RuntimeChildType { SHADER, COLOR_FILTER, IMAGE_FILTER, BLENDER }
 public enum class RuntimeVertexFormat { FLOAT32, FLOAT32X2, FLOAT32X3, FLOAT32X4, UINT8X4, SINT16X2, SINT16X4 }
 public enum class RuntimeVertexStepMode { VERTEX, INSTANCE }
+
+/** Handle-free runtime module provenance retained for descriptor compatibility checks. */
+public data class RuntimeModuleMetadata(
+    public val source: String,
+    public val entryPoint: String,
+) : CanonicalValue {
+    init { require(entryPoint.isNotBlank()) { "RuntimeModuleMetadata.entryPoint must not be blank" } }
+    override val canonicalId: CanonicalId = canonicalId("runtime-module-metadata-v1", source, entryPoint)
+}
 
 /** One ABI uniform declaration. */
 public data class RuntimeUniformSlot(
@@ -333,6 +342,7 @@ public class RuntimeEffectDescriptor private constructor(
     public val uniformLayout: RuntimeUniformLayout,
     childSlots: Collection<RuntimeChildSlot>,
     public val vertexLayout: RuntimeVertexLayout?,
+    public val module: RuntimeModuleMetadata?,
 ) : CanonicalValue, Iterable<RuntimeChildSlot> {
     private val values: List<RuntimeChildSlot> = immutableList(childSlots)
     init { require(values.map(RuntimeChildSlot::name).distinct().size == values.size) { "Runtime child slot names must be unique" } }
@@ -340,12 +350,13 @@ public class RuntimeEffectDescriptor private constructor(
     public fun childSlotAt(index: Int): RuntimeChildSlot = values[index]
     override fun iterator(): Iterator<RuntimeChildSlot> = values.iterator()
     override val canonicalId: CanonicalId = canonicalId(
-        "runtime-effect-descriptor-v1",
+        "runtime-effect-descriptor-v2",
         id.value,
         abi.name,
         uniformLayout.canonicalId.value,
         canonicalSequenceId("child-slots", values.map { it.canonicalId.value }).value,
         canonicalOptionalId("vertex-layout", vertexLayout?.canonicalId).value,
+        canonicalOptionalId("module", module?.canonicalId).value,
     )
     override fun equals(other: Any?): Boolean = other is RuntimeEffectDescriptor && canonicalId == other.canonicalId
     override fun hashCode(): Int = canonicalId.hashCode()
@@ -356,7 +367,8 @@ public class RuntimeEffectDescriptor private constructor(
             uniformLayout: RuntimeUniformLayout,
             childSlots: Collection<RuntimeChildSlot>,
             vertexLayout: RuntimeVertexLayout? = null,
-        ): RuntimeEffectDescriptor = RuntimeEffectDescriptor(id, abi, uniformLayout, childSlots, vertexLayout)
+            module: RuntimeModuleMetadata? = null,
+        ): RuntimeEffectDescriptor = RuntimeEffectDescriptor(id, abi, uniformLayout, childSlots, vertexLayout, module)
     }
 }
 

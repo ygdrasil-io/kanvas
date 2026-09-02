@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.render.ir
 
 import java.util.Collections
+import java.util.ArrayDeque
 import java.util.IdentityHashMap
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
@@ -11,13 +12,20 @@ import org.graphiks.kanvas.text.KanvasTypeface
 import org.graphiks.kanvas.text.Typeface
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.paint.SamplingOptions
+import org.graphiks.kanvas.paint.ColorFilter
+import org.graphiks.kanvas.paint.ImageFilter
+import org.graphiks.kanvas.paint.MaskFilter
+import org.graphiks.kanvas.paint.MeshProgram
+import org.graphiks.kanvas.paint.Shader
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.RRectF32
+import org.graphiks.math.geometry.SizeF32
 import org.graphiks.math.geometry.PathF32
 import org.graphiks.math.geometry.PathSegmentF32
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.color.ColorF32
+import org.graphiks.math.vector.Vector2F32
 
 /** Immutable capture budgets, checked before any renderer is asked to plan the scene. */
 public data class SceneCaptureLimits(
@@ -109,15 +117,23 @@ public object DisplayOpSceneAdapter {
             GeometryNode.ImageLattice.of(ResourceReference(ResourceId(operation.image.sourceId)), operation.lattice.xDivs.toIntArray(), operation.lattice.yDivs.toIntArray(), operation.lattice.rects?.map { it.checked("draw[$index].lattice-rect") }, operation.lattice.colors, operation.lattice.flags?.map { LatticeCellFlag.valueOf(it.name) }, operation.dst.checked("draw[$index].dst"), operation.sampling.toImageSampling()),
             operation.paint, operation.transform, operation.clip, DrawOrigin.IMAGE_LATTICE, context.captureImage(operation.image), limits, context = context,
         )
-        is DisplayOp.DrawAtlas -> imageDraw(
-            GeometryNode.Atlas.of(ResourceReference(ResourceId(operation.atlas.sourceId)), operation.transforms.indices.map { i -> GeometryNode.AtlasEntry.of(operation.transforms[i].checked("draw[$index].atlas-transform"), operation.texRects[i].checked("draw[$index].atlas-rect"), operation.colors?.get(i)) }),
-            operation.paint, operation.transform, operation.clip, DrawOrigin.ATLAS, context.captureImage(operation.atlas), limits, BlendMode.valueOf(operation.blendMode.name), context,
-        )
+        is DisplayOp.DrawAtlas -> {
+            if (operation.transforms.size != operation.texRects.size || operation.colors?.size?.let { it != operation.transforms.size } == true) {
+                throw CaptureFailure("atlas-cardinality", "Atlas transforms, texture rectangles, and colors must have identical cardinalities")
+            }
+            imageDraw(
+                GeometryNode.Atlas.of(ResourceReference(ResourceId(operation.atlas.sourceId)), operation.transforms.indices.map { i -> GeometryNode.AtlasEntry.of(operation.transforms[i].checked("draw[$index].atlas-transform"), operation.texRects[i].checked("draw[$index].atlas-rect"), operation.colors?.get(i)) }),
+                operation.paint, operation.transform, operation.clip, DrawOrigin.ATLAS, context.captureImage(operation.atlas), limits, BlendMode.valueOf(operation.blendMode.name), context,
+            )
+        }
         is DisplayOp.DrawVertices -> draw(operation.vertices.toGeometry(null), operation.paint, operation.transform, operation.clip, DrawOrigin.VERTICES, limits, context = context)
         is DisplayOp.DrawMesh -> draw(
             operation.mesh.vertices.toGeometry(
                 operation.mesh.bounds,
-                operation.mesh.program?.let { PaintSceneAdapter.captureMeshProgram(it, context::captureImage) },
+                operation.mesh.program?.let {
+                    context.preflightMeshProgram(it)
+                    PaintSceneAdapter.captureMeshProgram(it, context::captureImage)
+                },
             ),
             operation.paint, operation.transform, operation.clip, DrawOrigin.MESH, limits,
             operation.blendMode?.let { BlendMode.valueOf(it.name) }, context,
@@ -138,7 +154,7 @@ public object DisplayOpSceneAdapter {
             limits,
             context = context,
         )
-        is DisplayOp.DrawPicture -> imageDraw(GeometryNode.Picture.of(capturePicture(operation.picture, limits, context), operation.picture.cullRect), operation.paint, operation.transform, operation.clip, DrawOrigin.PICTURE, null, limits, context = context)
+        is DisplayOp.DrawPicture -> imageDraw(GeometryNode.Picture.of(capturePicture(operation.picture, limits, context), operation.picture.cullRect.checked("draw[$index].picture-cull")), operation.paint, operation.transform, operation.clip, DrawOrigin.PICTURE, null, limits, context = context)
         is DisplayOp.SetTransform -> SceneCommand.SetTransform(operation.matrix.checked("set-transform"))
         is DisplayOp.SetClip -> SceneCommand.SetClip(captureClip(operation.clip))
         is DisplayOp.Annotation -> SceneCommand.Annotation.of(operation.rect.checked("annotation"), operation.key, operation.value)
@@ -153,15 +169,17 @@ public object DisplayOpSceneAdapter {
         is DisplayOp.BeginLayer -> {
             val paint = operation.rec.paint?.let { capturePaint(it, limits, context) }
             val backdrop = operation.rec.backdrop?.let { filter ->
-                requireNotNull(capturePaint(org.graphiks.kanvas.paint.Paint(imageFilter = filter), limits, context).imageFilter)
+                requireNotNull(capturePaint(org.graphiks.kanvas.paint.Paint(imageFilter = filter), limits, context, defaultMaterial = false).imageFilter)
             }
             SceneCommand.BeginLayer(
                 LayerDescriptor.of(
                     bounds = operation.rec.bounds?.checked("layer[$index].bounds"),
                     material = paint?.shader ?: paint?.let { MaterialNode.Solid(it.color) },
                     paint = paint,
+                    blend = paint?.toBlendNode() ?: BlendNode.SrcOver,
                     compositeClip = operation.rec.compositeClip?.let(::captureClip),
                     backdrop = backdrop?.let { EffectStack.of(listOf(it)) } ?: EffectStack.Empty,
+                    effects = paint?.toEffectStack() ?: EffectStack.Empty,
                     transform = operation.transform.checked("layer[$index].transform"),
                 ),
             )
@@ -207,8 +225,8 @@ public object DisplayOpSceneAdapter {
                 material = paint.shader ?: MaterialNode.Solid(paint.color),
                 coverage = if (paint.antiAlias) CoverageRequest.ANTIALIASED else CoverageRequest.HARD_EDGE,
                 clip = captureClip(clip),
-                blend = BlendNode.Mode(paint.blendMode),
-                effects = EffectStack.Empty,
+                blend = paint.toBlendNode(),
+                effects = paint.toEffectStack(),
                 transform = transform.checked("draw.transform"),
                 origin = origin,
                 paint = paint,
@@ -228,13 +246,15 @@ public object DisplayOpSceneAdapter {
         operationBlendMode: BlendMode? = null,
         context: CaptureContext,
     ): SceneCommand.Draw {
-        val paint = sourcePaint?.let { capturePaint(it, limits, context) }
+        val paint = sourcePaint?.let { capturePaint(it, limits, context, defaultMaterial = resource == null) }
+        if (resource != null) context.countGraphLeaf()
+        if (resource == null && sourcePaint == null) context.countGraphLeaf()
         return SceneCommand.Draw(DrawNode(
             geometry = geometry,
-            material = paint?.shader ?: paint?.let { MaterialNode.Solid(it.color) } ?: resource?.let(MaterialNode::ImageSample) ?: MaterialNode.Transparent,
+            material = resource?.let(MaterialNode::ImageSample) ?: paint?.shader ?: paint?.let { MaterialNode.Solid(it.color) } ?: MaterialNode.Transparent,
             coverage = paint?.let { if (it.antiAlias) CoverageRequest.ANTIALIASED else CoverageRequest.HARD_EDGE } ?: CoverageRequest.DEFAULT,
-            clip = captureClip(clip), blend = paint?.let { BlendNode.Mode(it.blendMode) } ?: BlendNode.SrcOver,
-            effects = EffectStack.Empty, transform = transform.checked("draw.transform"), origin = origin, paint = paint,
+            clip = captureClip(clip), blend = paint?.toBlendNode() ?: BlendNode.SrcOver,
+            effects = paint?.toEffectStack() ?: EffectStack.Empty, transform = transform.checked("draw.transform"), origin = origin, paint = paint,
             resource = resource, operationBlendMode = operationBlendMode,
         ))
     }
@@ -244,21 +264,26 @@ public object DisplayOpSceneAdapter {
         is ClipStack.DeviceRect -> ClipStackNode.DeviceRect.of(clip.rect.checked("clip.device-rect"), clip.antiAlias)
         is ClipStack.Complex -> ClipStackNode.Operations.of(clip.ops.map { entry ->
             when (entry) {
-                is org.graphiks.kanvas.canvas.ClipStackOp.RectOp -> ClipEntry(GeometryNode.Rect.of(entry.rect), ClipOperation.valueOf(entry.op.name), entry.antiAlias, entry.perspectiveCaptureRefusal, "identity")
+                is org.graphiks.kanvas.canvas.ClipStackOp.RectOp -> ClipEntry(GeometryNode.Rect.of(entry.rect.checked("clip.rect")), ClipOperation.valueOf(entry.op.name), entry.antiAlias, entry.perspectiveCaptureRefusal, "identity")
                 is org.graphiks.kanvas.canvas.ClipStackOp.RRectOp -> ClipEntry(GeometryNode.RRect.of(entry.rrect.checked("clip.rrect")), ClipOperation.valueOf(entry.op.name), entry.antiAlias, entry.perspectiveCaptureRefusal, entry.transformClass)
                 is org.graphiks.kanvas.canvas.ClipStackOp.PathOp -> ClipEntry(GeometryNode.Path(entry.path.toPathF32().checked("clip.path")), ClipOperation.valueOf(entry.op.name), entry.antiAlias, entry.perspectiveCaptureRefusal, entry.transformClass)
             }
         })
     }
 
-    private fun captureGlyphRun(run: KanvasGlyphRun): GeometryNode.GlyphRun = GeometryNode.GlyphRun.of(run.glyphs.map(UShort::toInt).toIntArray(), run.positions, run.fontSize)
+    private fun captureGlyphRun(run: KanvasGlyphRun): GeometryNode.GlyphRun = GeometryNode.GlyphRun.of(
+        run.glyphs.map(UShort::toInt).toIntArray(),
+        run.positions.map { it.checked("text.glyph-position") },
+        run.fontSize.checked("text.glyph-font-size"),
+    )
 
     private fun capturePaint(
         paint: org.graphiks.kanvas.paint.Paint,
         limits: SceneCaptureLimits,
         context: CaptureContext?,
+        defaultMaterial: Boolean = true,
     ): PaintNode = PaintSceneAdapter.capture(
-        paint = paint,
+        paint = paint.also { context?.preflightPaint(it, defaultMaterial) },
         limits = limits,
         captureImage = context?.let { it::captureImage } ?: ResourceSceneAdapter::captureImage,
         capturePicture = { picture ->
@@ -273,10 +298,10 @@ public object DisplayOpSceneAdapter {
         context: CaptureContext,
     ): SceneSnapshot {
         context.enterPicture(picture)
-        val cull = picture.cullRect
+        val cull = picture.cullRect.checked("picture.cull")
         return try {
             SceneSnapshot.of(
-                SceneExtent(maxOf(1, cull.width().toInt()), maxOf(1, cull.height().toInt())),
+                SceneExtent(cull.width().pictureExtent("picture.cull.width"), cull.height().pictureExtent("picture.cull.height")),
                 ColorSpace.SRGB,
                 captureOperations(picture.ops, limits, context),
             )
@@ -304,6 +329,7 @@ private class CaptureContext(private val limits: SceneCaptureLimits) {
     private val activePictures = IdentityHashMap<org.graphiks.kanvas.picture.Picture, Unit>()
     private val images = IdentityHashMap<org.graphiks.kanvas.image.Image, Unit>()
     private var nodes: Int = 0
+    private var graphNodes: Int = 0
 
     fun countNode() {
         nodes += 1
@@ -329,6 +355,107 @@ private class CaptureContext(private val limits: SceneCaptureLimits) {
     }
 
     fun leavePicture(picture: org.graphiks.kanvas.picture.Picture) { activePictures.remove(picture) }
+
+    /**
+     * Walk public paint graphs before their recursive IR conversion.  This makes
+     * cycles and oversized (but otherwise valid) public graphs a typed capture
+     * failure rather than a stack overflow or a backend concern.
+     */
+    fun preflightPaint(paint: org.graphiks.kanvas.paint.Paint, defaultMaterial: Boolean) {
+        val roots = buildList<Any> {
+            paint.shader?.let(::add)
+            paint.colorFilter?.let(::add)
+            paint.maskFilter?.let(::add)
+            paint.pathEffect?.let(::add)
+            paint.imageFilter?.let(::add)
+            paint.blender?.let(::add)
+        }
+        if (paint.shader == null && defaultMaterial) countGraphLeaf()
+        walkGraph(roots)
+    }
+
+    fun preflightMeshProgram(program: MeshProgram) {
+        walkGraph(buildList {
+            add(program.effect)
+            program.children.entries.forEach { entry ->
+                when (val child = entry.child) {
+                    is org.graphiks.kanvas.paint.ShaderChild -> add(child.shader)
+                    is org.graphiks.kanvas.paint.ColorFilterChild -> add(child.filter)
+                    is org.graphiks.kanvas.paint.BlenderChild -> add(child.blender)
+                }
+            }
+        })
+    }
+
+    fun countGraphLeaf() {
+        graphNodes += 1
+        if (graphNodes > limits.graphLimits.maxNodes) {
+            throw CaptureFailure("graph-node-limit", "Capture graph budget exceeds ${limits.graphLimits.maxNodes} nodes")
+        }
+    }
+
+    private fun walkGraph(roots: List<Any>) {
+        data class Visit(val value: Any, val depth: Int, val leaving: Boolean)
+        val active = IdentityHashMap<Any, Unit>()
+        val completed = IdentityHashMap<Any, Unit>()
+        val pending = ArrayDeque<Visit>()
+        roots.asReversed().forEach { pending.addLast(Visit(it, 1, false)) }
+        while (pending.isNotEmpty()) {
+            val visit = pending.removeLast()
+            if (visit.leaving) {
+                active.remove(visit.value)
+                completed[visit.value] = Unit
+                continue
+            }
+            if (completed.containsKey(visit.value)) continue
+            if (active.put(visit.value, Unit) != null) {
+                throw CaptureFailure("cyclic-effect-graph", "Paint, effect, or material graph contains an identity cycle")
+            }
+            if (visit.depth > minOf(limits.maxDepth, limits.graphLimits.maxDepth)) {
+                throw CaptureFailure("graph-depth-limit", "Paint, effect, or material graph exceeds configured depth")
+            }
+            countGraphLeaf()
+            pending.addLast(Visit(visit.value, visit.depth, true))
+            graphChildren(visit.value).asReversed().forEach { child ->
+                pending.addLast(Visit(child, visit.depth + 1, false))
+            }
+        }
+    }
+
+    private fun graphChildren(value: Any): List<Any> = when (value) {
+        is Shader.Blend -> listOf(value.dst, value.src)
+        is Shader.RuntimeEffect -> value.children.values.toList()
+        is Shader.WithLocalMatrix -> listOf(value.shader)
+        is Shader.WithColorFilter -> listOf(value.shader, value.filter)
+        is Shader.WithWorkingColorSpace -> listOf(value.shader)
+        is Shader.CoordClamp -> listOf(value.shader)
+        is ColorFilter.Compose -> listOf(value.outer, value.inner)
+        is ColorFilter.Lerp -> listOf(value.dst, value.src)
+        is ColorFilter.RuntimeEffect -> value.children.values.toList()
+        is MaskFilter.Shader -> listOf(value.shader)
+        is ImageFilter.Crop -> listOfNotNull(value.input)
+        is ImageFilter.Blur -> listOfNotNull(value.input)
+        is ImageFilter.DropShadow -> listOfNotNull(value.input)
+        is ImageFilter.ColorFilter -> listOfNotNull(value.filter, value.input)
+        is ImageFilter.Compose -> listOf(value.outer, value.inner)
+        is ImageFilter.Blend -> listOf(value.background, value.foreground)
+        is ImageFilter.Dilate -> listOfNotNull(value.input)
+        is ImageFilter.Erode -> listOfNotNull(value.input)
+        is ImageFilter.DistantLitDiffuse -> listOfNotNull(value.input)
+        is ImageFilter.PointLitDiffuse -> listOfNotNull(value.input)
+        is ImageFilter.SpotLitDiffuse -> listOfNotNull(value.input)
+        is ImageFilter.DistantLitSpecular -> listOfNotNull(value.input)
+        is ImageFilter.PointLitSpecular -> listOfNotNull(value.input)
+        is ImageFilter.SpotLitSpecular -> listOfNotNull(value.input)
+        is ImageFilter.Offset -> listOfNotNull(value.input)
+        is ImageFilter.Tile -> listOfNotNull(value.input)
+        is ImageFilter.Merge -> value.inputs.toList()
+        is ImageFilter.DisplacementMap -> listOfNotNull(value.displacement, value.input)
+        is ImageFilter.Magnifier -> listOfNotNull(value.input)
+        is ImageFilter.MatrixConvolution -> listOfNotNull(value.input)
+        is ImageFilter.RuntimeEffect -> value.childImageFilters.values.filterNotNull()
+        else -> emptyList()
+    }
 
     fun validate(command: SceneCommand) {
         if (command is SceneCommand.Draw) {
@@ -388,6 +515,21 @@ internal fun RRectF32.checked(field: String): RRectF32 {
     return copy(rect = rect.copy())
 }
 
+internal fun Point2F32.checked(field: String): Point2F32 = Point2F32(
+    x.checked("$field.x"),
+    y.checked("$field.y"),
+)
+
+internal fun SizeF32.checked(field: String): SizeF32 = SizeF32(
+    width.checked("$field.width"),
+    height.checked("$field.height"),
+)
+
+internal fun Vector2F32.checked(field: String): Vector2F32 = Vector2F32(
+    x.checked("$field.x"),
+    y.checked("$field.y"),
+)
+
 internal fun PathF32.checked(field: String): PathF32 {
     forEachIndexed { index, segment ->
         fun point(name: String, value: Point2F32) {
@@ -429,6 +571,20 @@ private fun SamplingOptions.toImageSampling(): ImageSampling = when (this) {
     SamplingOptions.LINEAR -> ImageSampling.Linear
     is SamplingOptions.Cubic -> ImageSampling.Cubic(B.checked("sampling.b"), C.checked("sampling.c"))
 }
+
+private fun Float.pictureExtent(field: String): Int {
+    checked(field)
+    if (this > Int.MAX_VALUE.toFloat()) {
+        throw CaptureFailure("scene-extent-overflow", "$field exceeds the scene extent range")
+    }
+    return maxOf(1, toInt())
+}
+
+private fun PaintNode.toBlendNode(): BlendNode = BlendNode.Paint(blendMode, blender)
+
+private fun PaintNode.toEffectStack(): EffectStack = EffectStack.of(
+    listOfNotNull(colorFilter, maskFilter, pathEffect, imageFilter),
+)
 
 private fun Vertices.toGeometry(bounds: RectF32?, meshProgram: MeshProgramNode? = null): GeometryNode.IndexedMesh = GeometryNode.IndexedMesh.of(
     primitiveMode = MeshPrimitiveMode.valueOf(mode.name),
