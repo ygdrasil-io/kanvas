@@ -419,8 +419,14 @@ public sealed interface MaterialGraphBuildResult {
 
 private sealed interface GraphWork {
     val depth: Int
-    data class Material(val value: MaterialNode, override val depth: Int) : GraphWork
+    data class Material(
+        val value: MaterialNode,
+        override val depth: Int,
+        val shaderPosition: Boolean = false,
+    ) : GraphWork
     data class Effect(val value: EffectNode, override val depth: Int) : GraphWork
+    data class MeshProgram(val value: MeshProgramNode, override val depth: Int) : GraphWork
+    data class Blender(val value: BlenderNode, override val depth: Int) : GraphWork
     data class Scene(val value: SceneSnapshot, override val depth: Int) : GraphWork
 }
 
@@ -433,7 +439,8 @@ public sealed interface SceneSemanticValidationResult {
 /**
  * Validates the backend-neutral scene contract before serialization or public
  * display-operation reconstruction. The traversal is iterative and applies the
- * same default graph limits to materials, effect stacks, and nested scenes.
+ * same default graph limits to materials, effects, mesh programs and nested
+ * scenes.
  */
 public object SceneSemanticValidator {
     public fun validate(
@@ -458,14 +465,17 @@ public object SceneSemanticValidator {
                     "Scene graph exceeds ${limits.maxNodes} nodes",
                 )
             }
-            if (current is GraphWork.Scene) {
-                validateSceneCommands(current.value)?.let { return it }
+            when (current) {
+                is GraphWork.Scene -> validateSceneCommands(current.value)?.let { return it }
+                is GraphWork.Material -> if (current.shaderPosition && current.value is MaterialNode.Opacity) {
+                    return invalidScene("invalid-shader-material", "Opacity material has no public Shader equivalent")
+                }
+                is GraphWork.Effect,
+                is GraphWork.MeshProgram,
+                is GraphWork.Blender,
+                -> Unit
             }
-            val children = when (current) {
-                is GraphWork.Material -> materialChildren(current.value, current.depth + 1)
-                is GraphWork.Effect -> effectChildren(current.value, current.depth + 1)
-                is GraphWork.Scene -> sceneChildren(current.value, current.depth + 1)
-            }
+            val children = graphChildren(current)
             children.asReversed().forEach(pending::addLast)
         }
         return SceneSemanticValidationResult.Valid
@@ -623,17 +633,25 @@ private fun validateGraph(initial: Collection<GraphWork>, limits: GraphLimits): 
         if (current.depth > limits.maxDepth) return GraphValidationResult.DepthLimitExceeded(limits.maxDepth, current.depth)
         nodes += 1
         if (nodes > limits.maxNodes) return GraphValidationResult.NodeLimitExceeded(limits.maxNodes, nodes)
-        val children = when (current) {
-            is GraphWork.Material -> materialChildren(current.value, current.depth + 1)
-            is GraphWork.Effect -> effectChildren(current.value, current.depth + 1)
-            is GraphWork.Scene -> sceneChildren(current.value, current.depth + 1)
-        }
+        val children = graphChildren(current)
         children.asReversed().forEach(pending::addLast)
     }
     return GraphValidationResult.Valid
 }
 
-private fun materialChildren(value: MaterialNode, depth: Int): List<GraphWork> = when (value) {
+private fun graphChildren(value: GraphWork): List<GraphWork> = when (value) {
+    is GraphWork.Material -> materialChildren(value.value, value.depth + 1, value.shaderPosition)
+    is GraphWork.Effect -> effectChildren(value.value, value.depth + 1)
+    is GraphWork.MeshProgram -> meshProgramChildren(value.value, value.depth + 1)
+    is GraphWork.Blender -> emptyList()
+    is GraphWork.Scene -> sceneChildren(value.value, value.depth + 1)
+}
+
+private fun materialChildren(
+    value: MaterialNode,
+    depth: Int,
+    shaderPosition: Boolean = false,
+): List<GraphWork> = when (value) {
     MaterialNode.Transparent,
     is MaterialNode.Solid,
     is MaterialNode.LinearGradient,
@@ -644,20 +662,20 @@ private fun materialChildren(value: MaterialNode, depth: Int): List<GraphWork> =
     is MaterialNode.PerlinNoise,
     is MaterialNode.FractalNoise,
     -> emptyList()
-    is MaterialNode.Blend -> listOf(GraphWork.Material(value.dst, depth), GraphWork.Material(value.src, depth))
-    is MaterialNode.RuntimeEffect -> value.map { GraphWork.Material(it.material, depth) }
-    is MaterialNode.WithLocalMatrix -> listOf(GraphWork.Material(value.material, depth))
-    is MaterialNode.WithColorFilter -> listOf(GraphWork.Material(value.material, depth), GraphWork.Effect(value.filter, depth))
-    is MaterialNode.Opacity -> listOf(GraphWork.Material(value.material, depth))
-    is MaterialNode.WithWorkingColorSpace -> listOf(GraphWork.Material(value.material, depth))
-    is MaterialNode.CoordClamp -> listOf(GraphWork.Material(value.material, depth))
+    is MaterialNode.Blend -> listOf(GraphWork.Material(value.dst, depth, shaderPosition), GraphWork.Material(value.src, depth, shaderPosition))
+    is MaterialNode.RuntimeEffect -> value.map { GraphWork.Material(it.material, depth, shaderPosition) }
+    is MaterialNode.WithLocalMatrix -> listOf(GraphWork.Material(value.material, depth, shaderPosition))
+    is MaterialNode.WithColorFilter -> listOf(GraphWork.Material(value.material, depth, shaderPosition), GraphWork.Effect(value.filter, depth))
+    is MaterialNode.Opacity -> listOf(GraphWork.Material(value.material, depth, shaderPosition))
+    is MaterialNode.WithWorkingColorSpace -> listOf(GraphWork.Material(value.material, depth, shaderPosition))
+    is MaterialNode.CoordClamp -> listOf(GraphWork.Material(value.material, depth, shaderPosition))
 }
 
 private fun effectChildren(value: EffectNode, depth: Int): List<GraphWork> = when (value) {
     is ColorFilterNode.Compose -> listOf(GraphWork.Effect(value.outer, depth), GraphWork.Effect(value.inner, depth))
     is ColorFilterNode.Lerp -> listOf(GraphWork.Effect(value.dst, depth), GraphWork.Effect(value.src, depth))
     is ColorFilterNode.RuntimeEffect -> value.map { GraphWork.Effect(it.filter, depth) }
-    is MaskFilterNode.Shader -> listOf(GraphWork.Material(value.material, depth))
+    is MaskFilterNode.Shader -> listOf(GraphWork.Material(value.material, depth, shaderPosition = true))
     is ImageFilterNode.Crop -> value.input?.let { listOf(GraphWork.Effect(it, depth)) }.orEmpty()
     is ImageFilterNode.Blur -> value.input?.let { listOf(GraphWork.Effect(it, depth)) }.orEmpty()
     is ImageFilterNode.DropShadow -> value.input?.let { listOf(GraphWork.Effect(it, depth)) }.orEmpty()
@@ -701,6 +719,14 @@ private fun effectChildren(value: EffectNode, depth: Int): List<GraphWork> = whe
     -> emptyList()
 }
 
+private fun meshProgramChildren(value: MeshProgramNode, depth: Int): List<GraphWork> = value.map { child ->
+    when (child) {
+        is MeshProgramChild.Shader -> GraphWork.Material(child.material, depth, shaderPosition = true)
+        is MeshProgramChild.ColorFilter -> GraphWork.Effect(child.filter, depth)
+        is MeshProgramChild.Blender -> GraphWork.Blender(child.blender, depth)
+    }
+}
+
 private fun sceneChildren(value: SceneSnapshot, depth: Int): List<GraphWork> = buildList {
     value.forEach { command ->
         when (command) {
@@ -708,18 +734,19 @@ private fun sceneChildren(value: SceneSnapshot, depth: Int): List<GraphWork> = b
                 add(GraphWork.Material(command.node.material, depth))
                 stackEffects(command.node.effects).forEach { add(GraphWork.Effect(it, depth)) }
                 command.node.paint?.let { paint ->
-                    paint.shader?.let { add(GraphWork.Material(it, depth)) }
+                    paint.shader?.let { add(GraphWork.Material(it, depth, shaderPosition = true)) }
                     listOfNotNull(paint.colorFilter, paint.maskFilter, paint.pathEffect, paint.imageFilter)
                         .forEach { add(GraphWork.Effect(it, depth)) }
                 }
                 (command.node.geometry as? GeometryNode.Picture)?.let { add(GraphWork.Scene(it.scene, depth)) }
+                (command.node.geometry as? GeometryNode.IndexedMesh)?.meshProgram?.let { add(GraphWork.MeshProgram(it, depth)) }
             }
             is SceneCommand.BeginLayer -> {
                 command.descriptor.material?.let { add(GraphWork.Material(it, depth)) }
                 stackEffects(command.descriptor.backdrop).forEach { add(GraphWork.Effect(it, depth)) }
                 stackEffects(command.descriptor.effects).forEach { add(GraphWork.Effect(it, depth)) }
                 command.descriptor.paint?.let { paint ->
-                    paint.shader?.let { add(GraphWork.Material(it, depth)) }
+                    paint.shader?.let { add(GraphWork.Material(it, depth, shaderPosition = true)) }
                     listOfNotNull(paint.colorFilter, paint.maskFilter, paint.pathEffect, paint.imageFilter)
                         .forEach { add(GraphWork.Effect(it, depth)) }
                 }

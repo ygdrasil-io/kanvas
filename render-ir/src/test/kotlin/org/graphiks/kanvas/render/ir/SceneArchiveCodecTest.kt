@@ -2,6 +2,7 @@
 
 package org.graphiks.kanvas.render.ir
 
+import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -219,6 +220,36 @@ class SceneArchiveCodecTest {
     }
 
     @Test
+    fun `picture archive rejects an unpaired UTF 16 surrogate before encoding`() {
+        val scene = SceneSnapshot.of(
+            SceneExtent(1, 1),
+            ColorSpace.SRGB,
+            listOf(SceneCommand.Annotation.of(RectF32(0f, 0f, 1f, 1f), "key", "\uD800")),
+        )
+
+        val failure = assertFailsWith<IllegalArgumentException> {
+            SceneArchiveCodec.encodePicture(scene, RectF32(0f, 0f, 1f, 1f))
+        }
+
+        assertEquals("Scene archive text is not valid UTF-8", failure.message)
+    }
+
+    @Test
+    fun `picture archive preserves valid non ASCII UTF 8 text`() {
+        val scene = SceneSnapshot.of(
+            SceneExtent(1, 1),
+            ColorSpace.SRGB,
+            listOf(SceneCommand.Annotation.of(RectF32(0f, 0f, 1f, 1f), "café", "東京")),
+        )
+
+        val decoded = assertIs<SceneArchiveDecodeResult.Decoded>(
+            SceneArchiveCodec.decodePicture(SceneArchiveCodec.encodePicture(scene, RectF32(0f, 0f, 1f, 1f))),
+        )
+
+        assertEquals(scene.canonicalId, decoded.scene.canonicalId)
+    }
+
+    @Test
     fun `picture archive refuses an effect stack above the default graph limit on encode`() {
         val failure = assertFailsWith<IllegalArgumentException> {
             SceneArchiveCodec.encodePicture(
@@ -245,21 +276,148 @@ class SceneArchiveCodecTest {
     }
 
     @Test
-    fun `picture archive bounds nested scenes with the default graph depth`() {
-        var scene = SceneSnapshot.of(SceneExtent(1, 1), ColorSpace.SRGB, emptyList())
-        repeat(64) {
-            scene = SceneSnapshot.of(
-                SceneExtent(1, 1),
-                ColorSpace.SRGB,
-                listOf(SceneCommand.Draw(drawNode(GeometryNode.Picture.of(scene, RectF32(0f, 0f, 1f, 1f)), DrawOrigin.PICTURE, paint = null))),
-            )
-        }
+    fun `picture archive round trips the 64 scene depth boundary`() {
+        val scene = nestedPictureScene(64)
+
+        val decoded = assertIs<SceneArchiveDecodeResult.Decoded>(
+            SceneArchiveCodec.decodePicture(SceneArchiveCodec.encodePicture(scene, RectF32(0f, 0f, 1f, 1f))),
+        )
+
+        assertEquals(scene.canonicalId, decoded.scene.canonicalId)
+    }
+
+    @Test
+    fun `picture archive rejects the 65 scene depth boundary semantically`() {
+        val scene = nestedPictureScene(65)
 
         val failure = assertFailsWith<IllegalArgumentException> {
             SceneArchiveCodec.encodePicture(scene, RectF32(0f, 0f, 1f, 1f))
         }
 
         assertEquals("Scene archive semantic validation failed: graph-depth-limit", failure.message)
+    }
+
+    @Test
+    fun `picture archive bounds every mesh program child family before encoding`() {
+        listOf(
+            meshProgramWithBlenderChildren(4_097),
+            meshProgramWithColorFilterChildren(4_097),
+            meshProgramWithShaderChildren(4_097),
+        ).forEach { program ->
+            val failure = assertFailsWith<IllegalArgumentException> {
+                SceneArchiveCodec.encodePicture(meshProgramScene(program), RectF32(0f, 0f, 1f, 1f))
+            }
+
+            assertEquals("Scene archive semantic validation failed: graph-node-limit", failure.message)
+        }
+    }
+
+    @Test
+    fun `picture archive bounds mesh program children before returning decoded data`() {
+        val validWire = SceneArchiveCodec.encodePicture(
+            meshProgramScene(meshProgramWithBlenderChildren(1)),
+            RectF32(0f, 0f, 1f, 1f),
+        )
+
+        val invalid = assertIs<SceneArchiveDecodeResult.Invalid>(
+            SceneArchiveCodec.decodePicture(expandMeshProgramBlenderChildren(validWire, 4_097)),
+        )
+
+        assertEquals("graph-node-limit", invalid.code)
+    }
+
+    @Test
+    fun `picture archive rejects opacity only in public shader positions`() {
+        val opacity = MaterialNode.Opacity(MaterialNode.Solid(ColorARGB.Red), 0.5f)
+        val neutralDraw = validArchiveScene().let { scene ->
+            SceneSnapshot.of(
+                scene.extent,
+                scene.colorSpace,
+                listOf(SceneCommand.Draw((scene.first() as SceneCommand.Draw).node.copy(material = opacity))),
+            )
+        }
+        val neutralLayer = SceneSnapshot.of(
+            SceneExtent(1, 1),
+            ColorSpace.SRGB,
+            listOf(SceneCommand.BeginLayer(LayerDescriptor.of(material = opacity)), SceneCommand.EndLayer),
+        )
+        val paintShader = validArchiveScene(drawNode(GeometryNode.Rect.of(RectF32(0f, 0f, 1f, 1f)), DrawOrigin.RECT, solidPaint().copy(shader = opacity)))
+        val layerPaintShader = SceneSnapshot.of(
+            SceneExtent(1, 1),
+            ColorSpace.SRGB,
+            listOf(SceneCommand.BeginLayer(LayerDescriptor.of(paint = solidPaint().copy(shader = opacity))), SceneCommand.EndLayer),
+        )
+        val maskShader = validArchiveScene(drawNode(GeometryNode.Rect.of(RectF32(0f, 0f, 1f, 1f)), DrawOrigin.RECT, solidPaint().copy(maskFilter = MaskFilterNode.Shader(opacity))))
+        val meshShader = meshProgramScene(meshProgramWithShaderChild(opacity))
+        val blendShader = validArchiveScene(drawNode(GeometryNode.Rect.of(RectF32(0f, 0f, 1f, 1f)), DrawOrigin.RECT, solidPaint().copy(shader = MaterialNode.Blend(BlendMode.SRC_OVER, MaterialNode.Solid(ColorARGB.Blue), opacity))))
+        val runtimeShader = validArchiveScene(
+            drawNode(
+                GeometryNode.Rect.of(RectF32(0f, 0f, 1f, 1f)),
+                DrawOrigin.RECT,
+                solidPaint().copy(
+                    shader = MaterialNode.RuntimeEffect.of(
+                        descriptor("opacity-child", RuntimeEffectAbi.SHADER, RuntimeChildSlot("child", RuntimeChildType.SHADER)),
+                        mapOf("u" to RuntimeUniformValue.F1(1f)),
+                        listOf(RuntimeMaterialChild("child", opacity)),
+                    ),
+                ),
+            ),
+        )
+
+        listOf(neutralDraw, neutralLayer).forEach { scene ->
+            assertIs<SceneArchiveDecodeResult.Decoded>(SceneArchiveCodec.decodePicture(SceneArchiveCodec.encodePicture(scene, RectF32(0f, 0f, 1f, 1f))))
+        }
+        listOf(paintShader, layerPaintShader, maskShader, meshShader, blendShader, runtimeShader).forEach { scene ->
+            val failure = assertFailsWith<IllegalArgumentException> {
+                SceneArchiveCodec.encodePicture(scene, RectF32(0f, 0f, 1f, 1f))
+            }
+            assertEquals("Scene archive semantic validation failed: invalid-shader-material", failure.message)
+        }
+    }
+
+    @Test
+    fun `picture archive rejects a mutated opacity material in a public shader`() {
+        val marker = ColorARGB.fromPackedInt(0x13579BDF)
+        val valid = validArchiveScene(
+            drawNode(
+                GeometryNode.Rect.of(RectF32(0f, 0f, 1f, 1f)),
+                DrawOrigin.RECT,
+                solidPaint().copy(shader = MaterialNode.Solid(marker)),
+            ),
+        )
+        val wire = SceneArchiveCodec.encodePicture(valid, RectF32(0f, 0f, 1f, 1f))
+        val invalidWire = replaceFirst(
+            wire,
+            ByteBuffer.allocate(8).putInt(2).putInt(marker.value.toInt()).array(),
+            ByteBuffer.allocate(16).putInt(12).putInt(2).putInt(marker.value.toInt()).putFloat(0.5f).array(),
+        )
+
+        val invalid = assertIs<SceneArchiveDecodeResult.Invalid>(SceneArchiveCodec.decodePicture(invalidWire))
+
+        assertEquals("invalid-shader-material", invalid.code)
+    }
+
+    @Test
+    fun `picture archive restores recursive public shader materials`() {
+        val bounds = RectF32(0f, 0f, 1f, 1f)
+        val child = MaterialNode.Blend(
+            BlendMode.SRC_OVER,
+            MaterialNode.Solid(ColorARGB.Red),
+            MaterialNode.WithLocalMatrix(MaterialNode.Solid(ColorARGB.Blue), Matrix3x3F32.Identity),
+        )
+        val descriptor = descriptor("recursive-shader", RuntimeEffectAbi.SHADER, RuntimeChildSlot("child", RuntimeChildType.SHADER))
+        val shader = MaterialNode.RuntimeEffect.of(
+            descriptor,
+            mapOf("u" to RuntimeUniformValue.F1(1f)),
+            listOf(RuntimeMaterialChild("child", child)),
+        )
+        val scene = validArchiveScene(drawNode(GeometryNode.Rect.of(bounds), DrawOrigin.RECT, solidPaint().copy(shader = shader)))
+
+        val decoded = assertIs<SceneArchiveDecodeResult.Decoded>(
+            SceneArchiveCodec.decodePicture(SceneArchiveCodec.encodePicture(scene, bounds)),
+        )
+
+        assertEquals(scene.canonicalId, decoded.scene.canonicalId)
     }
 
     private fun validArchiveScene(
@@ -340,9 +498,147 @@ class SceneArchiveCodecTest {
         return expanded
     }
 
+    private fun expandMeshProgramBlenderChildren(bytes: ByteArray, count: Int): ByteArray {
+        val slot = meshProgramSlot("b0000")
+        val child = meshProgramBlenderChild("b0000")
+        val slots = ByteBuffer.allocate(4 + slot.size).putInt(1).put(slot).array()
+        val children = ByteBuffer.allocate(4 + child.size).putInt(1).put(child).array()
+        val slotsOffset = indexOf(bytes, slots)
+        val childrenOffset = indexOf(bytes, children, slotsOffset + slots.size)
+        val allSlots = ByteArrayOutputStream().also { output ->
+            repeat(count) { index -> output.write(meshProgramSlot(meshChildName(index))) }
+        }.toByteArray()
+        val allChildren = ByteArrayOutputStream().also { output ->
+            repeat(count) { index -> output.write(meshProgramBlenderChild(meshChildName(index))) }
+        }.toByteArray()
+        return ByteArrayOutputStream().also { output ->
+            output.write(bytes, 0, slotsOffset)
+            output.write(ByteBuffer.allocate(4).putInt(count).array())
+            output.write(allSlots)
+            output.write(bytes, slotsOffset + slots.size, childrenOffset - (slotsOffset + slots.size))
+            output.write(ByteBuffer.allocate(4).putInt(count).array())
+            output.write(allChildren)
+            output.write(bytes, childrenOffset + children.size, bytes.size - (childrenOffset + children.size))
+        }.toByteArray()
+    }
+
+    private fun meshProgramSlot(name: String): ByteArray {
+        val encodedName = name.encodeToByteArray()
+        val encodedType = RuntimeChildType.BLENDER.name.encodeToByteArray()
+        return ByteBuffer.allocate(4 + encodedName.size + 4 + encodedType.size)
+            .putInt(encodedName.size).put(encodedName)
+            .putInt(encodedType.size).put(encodedType)
+            .array()
+    }
+
+    private fun meshProgramBlenderChild(name: String): ByteArray {
+        val encodedName = name.encodeToByteArray()
+        val encodedMode = BlendMode.SRC_OVER.name.encodeToByteArray()
+        return ByteBuffer.allocate(4 + encodedName.size + 4 + 4 + 4 + encodedMode.size)
+            .putInt(encodedName.size).put(encodedName)
+            .putInt(3)
+            .putInt(1)
+            .putInt(encodedMode.size).put(encodedMode)
+            .array()
+    }
+
+    private fun nestedPictureScene(sceneDepth: Int): SceneSnapshot {
+        require(sceneDepth > 0)
+        var scene = SceneSnapshot.of(SceneExtent(1, 1), ColorSpace.SRGB, emptyList())
+        repeat(sceneDepth - 1) {
+            scene = SceneSnapshot.of(
+                SceneExtent(1, 1),
+                ColorSpace.SRGB,
+                listOf(SceneCommand.Draw(drawNode(GeometryNode.Picture.of(scene, RectF32(0f, 0f, 1f, 1f)), DrawOrigin.PICTURE, paint = null))),
+            )
+        }
+        return scene
+    }
+
+    private fun meshProgramScene(program: MeshProgramNode): SceneSnapshot = validArchiveScene(
+        drawNode(
+            GeometryNode.IndexedMesh.of(
+                primitiveMode = MeshPrimitiveMode.TRIANGLES,
+                vertices = listOf(Point2F32(0f, 0f)),
+                bounds = RectF32(0f, 0f, 1f, 1f),
+                meshProgram = program,
+            ),
+            DrawOrigin.MESH,
+        ),
+    )
+
+    private fun meshProgramWithBlenderChildren(count: Int): MeshProgramNode {
+        val names = List(count, ::meshChildName)
+        val descriptor = RuntimeEffectDescriptor.of(
+            RuntimeEffectId("mesh-child-limit"),
+            RuntimeEffectAbi.SHADER,
+            RuntimeUniformLayout.of(emptyList()),
+            names.map { RuntimeChildSlot(it, RuntimeChildType.BLENDER) },
+        )
+        return MeshProgramNode.of(
+            descriptor,
+            emptyMap(),
+            names.map { MeshProgramChild.Blender(it, BlenderNode.Mode(BlendMode.SRC_OVER)) },
+        )
+    }
+
+    private fun meshProgramWithColorFilterChildren(count: Int): MeshProgramNode {
+        val names = List(count, ::meshChildName)
+        val descriptor = RuntimeEffectDescriptor.of(
+            RuntimeEffectId("mesh-color-filter-limit"),
+            RuntimeEffectAbi.SHADER,
+            RuntimeUniformLayout.of(emptyList()),
+            names.map { RuntimeChildSlot(it, RuntimeChildType.COLOR_FILTER) },
+        )
+        return MeshProgramNode.of(
+            descriptor,
+            emptyMap(),
+            names.map { MeshProgramChild.ColorFilter(it, ColorFilterNode.Luma) },
+        )
+    }
+
+    private fun meshProgramWithShaderChildren(count: Int): MeshProgramNode {
+        val names = List(count, ::meshChildName)
+        val descriptor = RuntimeEffectDescriptor.of(
+            RuntimeEffectId("mesh-shader-limit"),
+            RuntimeEffectAbi.SHADER,
+            RuntimeUniformLayout.of(emptyList()),
+            names.map { RuntimeChildSlot(it, RuntimeChildType.SHADER) },
+        )
+        return MeshProgramNode.of(
+            descriptor,
+            emptyMap(),
+            names.map { MeshProgramChild.Shader(it, MaterialNode.Solid(ColorARGB.Red)) },
+        )
+    }
+
+    private fun meshProgramWithShaderChild(material: MaterialNode): MeshProgramNode {
+        val descriptor = descriptor("mesh-shader", RuntimeEffectAbi.SHADER, RuntimeChildSlot("shader", RuntimeChildType.SHADER))
+        return MeshProgramNode.of(
+            descriptor,
+            mapOf("u" to RuntimeUniformValue.F1(1f)),
+            listOf(MeshProgramChild.Shader("shader", material)),
+        )
+    }
+
+    private fun meshChildName(index: Int): String = "b${index.toString().padStart(4, '0')}"
+
+    private fun replaceFirst(bytes: ByteArray, expected: ByteArray, replacement: ByteArray): ByteArray {
+        val offset = indexOf(bytes, expected)
+        return ByteArray(bytes.size - expected.size + replacement.size).also { rewritten ->
+            bytes.copyInto(rewritten, endIndex = offset)
+            replacement.copyInto(rewritten, offset)
+            bytes.copyInto(rewritten, offset + replacement.size, offset + expected.size)
+        }
+    }
+
     private fun indexOf(bytes: ByteArray, expected: ByteArray): Int {
+        return indexOf(bytes, expected, 0)
+    }
+
+    private fun indexOf(bytes: ByteArray, expected: ByteArray, startOffset: Int): Int {
         val offset = bytes.indices.firstOrNull { start ->
-            start + expected.size <= bytes.size && expected.indices.all { index -> bytes[start + index] == expected[index] }
+            start >= startOffset && start + expected.size <= bytes.size && expected.indices.all { index -> bytes[start + index] == expected[index] }
         }
         return requireNotNull(offset) { "Expected payload fragment is absent" }
     }

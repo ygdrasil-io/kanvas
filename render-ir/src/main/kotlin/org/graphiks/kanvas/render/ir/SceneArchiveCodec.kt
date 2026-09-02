@@ -5,6 +5,7 @@ package org.graphiks.kanvas.render.ir
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
 import java.nio.ByteBuffer
+import java.nio.CharBuffer
 import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
@@ -112,7 +113,13 @@ public sealed interface SceneArchiveDecodeResult {
 
 private const val MAX_COLLECTION_SIZE = 1_000_000
 private const val MAX_BINARY_SIZE = 64 * 1024 * 1024
-private const val MAX_NESTING = 64
+/*
+ * Wire frames are more granular than semantic graph edges: a Picture scene
+ * crosses scene/command/draw/geometry frames before reaching its child scene.
+ * Eight wire frames per semantic edge bounds every current recursive writer
+ * path while preserving the public GraphLimits depth of 64.
+ */
+private const val MAX_NESTING = 512
 
 private class ArchiveFailure(val code: String, override val message: String) : RuntimeException(message)
 
@@ -130,7 +137,15 @@ private class ArchiveWriter {
         stream.writeFloat(value)
     }
     fun text(value: String) {
-        val bytes = value.toByteArray(StandardCharsets.UTF_8)
+        val bytes = try {
+            val encoded = StandardCharsets.UTF_8.newEncoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT)
+                .encode(CharBuffer.wrap(value))
+            ByteArray(encoded.remaining()).also(encoded::get)
+        } catch (failure: CharacterCodingException) {
+            throw IllegalArgumentException("Scene archive text is not valid UTF-8", failure)
+        }
         require(bytes.size <= MAX_BINARY_SIZE) { "String exceeds archive limit" }
         i32(bytes.size); bytes(bytes)
     }
