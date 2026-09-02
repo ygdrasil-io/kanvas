@@ -100,9 +100,12 @@ internal fun captureInventoryEvidence(
     gm: SkiaGm,
     createSurface: () -> InventorySurfaceCapture,
 ): InventoryRenderEvidence {
+    val initialDecision = SkiaGmConformance.decisionFor(gm)
+    if (!initialDecision.mustAttempt) return excludedInventoryEvidence(initialDecision)
     val surface = try {
         createSurface()
-    } catch (failure: Exception) {
+    } catch (failure: Throwable) {
+        rethrowFatalSetupFailure(failure)
         return InventoryRenderEvidence(
             attempted = false,
             renderSucceeded = false,
@@ -111,16 +114,23 @@ internal fun captureInventoryEvidence(
             route = "setup-failure",
             setupState = InventorySetupState.FAILED,
             setupDiagnostic = failure.message.orEmpty(),
+            conformanceDecision = initialDecision,
         )
     }
+    var gmCanvas: GmCanvas? = null
     try {
         val canvas = surface.canvas()
         canvas.drawRect(RectF32(0f, 0f, gm.width.toFloat(), gm.height.toFloat()),
             Paint(color = ColorARGB.fromRGBA(1f, 1f, 1f, 1f), antiAlias = false))
-        val gmCanvas = GmCanvas(canvas, gm.width, gm.height)
-        gm.onOnceBeforeDraw(gmCanvas)
-        gm.draw(gmCanvas, gm.width, gm.height)
-    } catch (failure: Exception) {
+        val createdCanvas = GmCanvas(canvas, gm.width, gm.height)
+        gmCanvas = createdCanvas
+        gm.onOnceBeforeDraw(createdCanvas)
+        gm.draw(createdCanvas, gm.width, gm.height)
+    } catch (failure: Throwable) {
+        rethrowFatalSetupFailure(failure)
+        val finalDecision = gmCanvas?.let { canvas ->
+            SkiaGmConformance.decisionFor(gm, canvas.observedExternalDependencies())
+        } ?: initialDecision
         return InventoryRenderEvidence(
             attempted = false,
             renderSucceeded = false,
@@ -129,6 +139,15 @@ internal fun captureInventoryEvidence(
             route = "setup-failure",
             setupState = InventorySetupState.FAILED,
             setupDiagnostic = failure.message.orEmpty(),
+            conformanceDecision = finalDecision,
+        )
+    }
+    val finalDecision = SkiaGmConformance.decisionFor(gm, checkNotNull(gmCanvas).observedExternalDependencies())
+    if (!finalDecision.mustAttempt) {
+        return excludedInventoryEvidence(
+            decision = finalDecision,
+            operationCount = surface.snapshotOperationCount(),
+            setupState = InventorySetupState.SUCCEEDED,
         )
     }
     return try {
@@ -140,8 +159,10 @@ internal fun captureInventoryEvidence(
             operationCount = surface.snapshotOperationCount(),
             diagnostics = result.diagnostics.entries.map { "${it.code}: ${it.reason}" },
             route = "gpu",
+            conformanceDecision = finalDecision,
         )
-    } catch (failure: Exception) {
+    } catch (failure: Throwable) {
+        rethrowFatalSetupFailure(failure)
         InventoryRenderEvidence(
             attempted = true,
             renderSucceeded = false,
@@ -149,9 +170,30 @@ internal fun captureInventoryEvidence(
             operationCount = surface.snapshotOperationCount(),
             diagnostics = listOf(failure.message.orEmpty()),
             route = "render-failure",
+            conformanceDecision = finalDecision,
         )
     }
 }
+
+@Suppress("DEPRECATION")
+private fun rethrowFatalSetupFailure(failure: Throwable) {
+    if (failure is VirtualMachineError || failure is ThreadDeath) throw failure
+}
+
+private fun excludedInventoryEvidence(
+    decision: GmConformanceDecision,
+    operationCount: Int = 0,
+    setupState: InventorySetupState = InventorySetupState.NOT_ATTEMPTED,
+): InventoryRenderEvidence = InventoryRenderEvidence(
+    attempted = false,
+    renderSucceeded = false,
+    terminalFailure = false,
+    operationCount = operationCount,
+    diagnostics = listOf("excluded:${decision.scope.wireName}"),
+    route = "excluded:${decision.scope.wireName}",
+    setupState = setupState,
+    conformanceDecision = decision,
+)
 
 data class SkiaRenderResult(
     val rgba: ByteArray,

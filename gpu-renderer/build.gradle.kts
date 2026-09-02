@@ -8,6 +8,7 @@ plugins {
 dependencies {
     api(project(":font:gpu-api"))
     implementation(project(":font"))
+    implementation(project(":render-ir"))
 
     implementation(kotlin("stdlib"))
     implementation(libs.wgpu4kToolkit)

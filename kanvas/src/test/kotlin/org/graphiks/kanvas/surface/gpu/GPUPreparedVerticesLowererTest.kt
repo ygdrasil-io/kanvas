@@ -63,7 +63,7 @@ class GPUPreparedVerticesLowererTest {
 
     @Test
     fun `unregistered mesh program is terminal before native work`() {
-        val result = lower(meshOperation(program = MeshProgram(effect("not.registered"))))
+        val result = lower(meshOperation(program = MeshProgram(effect("not.registered.vertices"))))
 
         val refusal = assertIs<GPUPreparedVerticesLowering.Refused>(result)
         assertEquals(GPUPreparedVerticesRefusalCodes.MeshProgramUnregistered, refusal.code)
@@ -846,7 +846,7 @@ class GPUPreparedVerticesLowererTest {
 
     private fun effect(id: String): RuntimeEffect = RuntimeEffect(
         id = id,
-        module = ShaderModule.fromSource("fixture"),
+        module = ShaderModule.fromSource("registered-only"),
         uniformLayout = UniformLayout(emptyList()),
         children = emptyList(),
     )

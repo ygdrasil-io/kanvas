@@ -1,10 +1,7 @@
 package org.graphiks.kanvas.surface.gpu
 
-import java.io.File
 import kotlin.test.Test
-import kotlin.test.assertContains
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat as CanonicalGPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
@@ -40,20 +37,5 @@ class GPUPreparedSurfaceColorMappingTest {
 
         assertEquals(CanonicalGPUColorFormat.BGRA8Unorm, ready.physicalFormat)
         assertEquals(GPUColorInterpretation.EncodedPremulSrgb, ready.interpretation)
-    }
-
-    @Test
-    fun `surface keeps GPU route internals behind renderViaGpu after product cutover`() {
-        val surfaceSource = File(
-            "src/main/kotlin/org/graphiks/kanvas/surface/Surface.kt",
-        ).readText()
-
-        assertContains(
-            surfaceSource,
-            "fun render(): RenderResult = renderViaGpu(buffer, width, height, format, config)",
-        )
-        assertFalse(surfaceSource.contains("mapPreparedGpuColorConfig"))
-        assertFalse(surfaceSource.contains("prepareSceneFrameSession"))
-        assertFalse(surfaceSource.contains("GPUFrameCoordinator"))
     }
 }

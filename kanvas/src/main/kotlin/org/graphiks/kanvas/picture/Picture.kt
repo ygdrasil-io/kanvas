@@ -13,9 +13,17 @@ import org.graphiks.kanvas.canvas.ClipStackOp
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.canvas.DrawPathSourceOperation
 import org.graphiks.kanvas.canvas.SaveLayerRec
+import org.graphiks.kanvas.canvas.GeometrySnapshotContext
+import org.graphiks.kanvas.canvas.snapshotGeometry
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.color.Gamut
 import org.graphiks.kanvas.color.TransferFunction
+import org.graphiks.kanvas.render.ir.DisplayOpSceneAdapter
+import org.graphiks.kanvas.render.ir.SceneArchiveCodec
+import org.graphiks.kanvas.render.ir.SceneArchiveDecodeResult
+import org.graphiks.kanvas.render.ir.SceneCaptureResult
+import org.graphiks.kanvas.render.ir.SceneDisplayOpAdapter
+import org.graphiks.kanvas.render.ir.SceneExtent
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.geometry.PathCommand
@@ -58,9 +66,17 @@ import java.io.IOException
  * via [Canvas.drawPicture] or replayed in full via [playback].
  */
 class Picture internal constructor(
-    val cullRect: RectF32,
-    internal val ops: List<DisplayOp>,
+    cullRect: RectF32,
+    ops: List<DisplayOp>,
 ) {
+    private val recordedCullRect = RectF32(cullRect.left, cullRect.top, cullRect.right, cullRect.bottom)
+
+    /** A fresh mutable compatibility value for the immutable recorded cull bounds. */
+    val cullRect: RectF32
+        get() = RectF32(recordedCullRect.left, recordedCullRect.top, recordedCullRect.right, recordedCullRect.bottom)
+
+    internal val ops: List<DisplayOp> = ops.snapshotGeometry()
+
     /** Unique identifier for this picture instance. */
     val uniqueID: Int = nextId()
 
@@ -119,10 +135,19 @@ class Picture internal constructor(
      * @param action invoked for each [DisplayOp] encountered
      */
     fun forEachOp(nested: Boolean = false, action: (DisplayOp) -> Unit) {
+        forEachOp(nested, action, GeometrySnapshotContext())
+    }
+
+    private fun forEachOp(
+        nested: Boolean,
+        action: (DisplayOp) -> Unit,
+        context: GeometrySnapshotContext,
+    ) {
         for (op in ops) {
-            action(op)
-            if (nested && op is DisplayOp.DrawPicture) {
-                op.picture.forEachOp(nested = true, action = action)
+            val snapshot = context.snapshot(op)
+            action(snapshot)
+            if (nested && snapshot is DisplayOp.DrawPicture) {
+                snapshot.picture.forEachOp(nested = true, action = action, context = context)
             }
         }
     }
@@ -255,7 +280,18 @@ class Picture internal constructor(
 
     /** Serialize this picture to a compact binary representation. */
     fun toByteArray(): ByteArray {
-        return encodePicture(this)
+        val capture = DisplayOpSceneAdapter.capture(
+            operations = ops,
+            extent = SceneExtent(cullExtent(recordedCullRect.width(), "cull width"), cullExtent(recordedCullRect.height(), "cull height")),
+            colorSpace = ColorSpace.SRGB,
+        )
+        val scene = when (capture) {
+            is SceneCaptureResult.Captured -> capture.scene
+            is SceneCaptureResult.Invalid -> throw IllegalStateException(
+                capture.diagnostics.joinToString(",") { it.code.value },
+            )
+        }
+        return SceneArchiveCodec.encodePicture(scene, recordedCullRect)
     }
 
     companion object {
@@ -272,7 +308,8 @@ class Picture internal constructor(
 // ---- Binary serialization helpers ------------------------------------------
 
 private val MAGIC = byteArrayOf(0x4B, 0x50, 0x49, 0x43)
-private const val FORMAT_VERSION = 7
+private const val FORMAT_VERSION = 8
+private const val STABLE_WIRE_VERSION = 8
 
 // type discriminators
 private const val OP_DRAW_RECT: Byte = 0
@@ -298,533 +335,10 @@ private const val OP_ANNOTATION: Byte = 19
 private const val OP_FLUSH_AND_SNAPSHOT: Byte = 20
 private const val OP_DRAW_MESH: Byte = 21
 
-private class Writer {
-    private val baos = ByteArrayOutputStream()
-    val dos = DataOutputStream(baos)
-
-    fun byte(v: Byte) { dos.writeByte(v.toInt()) }
-    fun int(v: Int) { dos.writeInt(v) }
-    fun float(v: Float) { dos.writeFloat(v) }
-    fun bool(v: Boolean) { dos.writeBoolean(v) }
-    fun string(v: String) { dos.writeUTF(v) }
-    fun bytes(v: ByteArray) { dos.write(v) }
-    fun result(): ByteArray = baos.toByteArray()
-
-    fun rect(r: RectF32) { float(r.left); float(r.top); float(r.right); float(r.bottom) }
-    fun point2(p: Point2F32) { float(p.x); float(p.y) }
-    fun vector2(v: Vector2F32) { float(v.x); float(v.y) }
-    fun size(s: SizeF32) { float(s.width); float(s.height) }
-    fun color(c: ColorARGB) { int(c.value.toInt()) }
-    fun samplingOptions(sampling: SamplingOptions) {
-        when (sampling) {
-            SamplingOptions.NEAREST -> byte(0)
-            SamplingOptions.LINEAR -> byte(1)
-            is SamplingOptions.Cubic -> { byte(2); float(sampling.B); float(sampling.C) }
-        }
-    }
-    fun cornerRadii(c: CornerRadiiF32) { float(c.x); float(c.y) }
-
-    fun matrix33(m: Matrix3x3F32) {
-        float(m.sx); float(m.kx); float(m.tx)
-        float(m.ky); float(m.sy); float(m.ty)
-        float(m.persp0); float(m.persp1); float(m.persp2)
-    }
-
-    fun rrect(r: RRectF32) {
-        rect(r.rect); cornerRadii(r.topLeft); cornerRadii(r.topRight)
-        cornerRadii(r.bottomRight); cornerRadii(r.bottomLeft)
-    }
-
-    fun path(p: Path) {
-        byte(p.fillType.ordinal.toByte())
-        val commands = p.commands()
-        int(commands.size)
-        for (command in commands) byte(command.verb.ordinal.toByte())
-        int(commands.sumOf { it.serializedPairCount })
-        for (command in commands) {
-            when (command) {
-                is PathCommand.Move -> point2(command.point)
-                is PathCommand.Line -> point2(command.endpoint)
-                is PathCommand.Quad -> {
-                    point2(command.control)
-                    point2(command.endpoint)
-                }
-                is PathCommand.Cubic -> {
-                    point2(command.control1)
-                    point2(command.control2)
-                    point2(command.endpoint)
-                }
-                is PathCommand.ArcTo -> {
-                    vector2(command.radius)
-                    float(command.xAxisRotation)
-                    float(if (command.largeArc) 1f else 0f)
-                    float(if (command.sweep) 1f else 0f)
-                    float(0f)
-                    point2(command.endpoint)
-                }
-                PathCommand.Close -> Unit
-            }
-        }
-    }
-
-    fun image(img: Image) {
-        int(img.width); int(img.height)
-        byte(img.colorType.ordinal.toByte())
-        string(img.sourceId)
-        val px = img.pixels
-        if (px != null) {
-            bool(true)
-            int(px.size); bytes(px)
-        } else {
-            bool(false)
-        }
-        colorSpace(img.colorSpace)
-        byte(img.alphaType.ordinal.toByte())
-    }
-
-    fun colorSpace(cs: ColorSpace) {
-        string(cs.name)
-        byte(cs.transferFunction.ordinal.toByte())
-        byte(cs.gamut.ordinal.toByte())
-    }
-
-    fun paint(p: Paint) {
-        color(p.color)
-        shader(p.shader)
-        blendMode(p.blendMode)
-        colorFilter(p.colorFilter)
-        maskFilter(p.maskFilter)
-        pathEffect(p.pathEffect)
-        imageFilter(p.imageFilter)
-        blender(p.blender)
-        byte(p.style.ordinal.toByte())
-        float(p.strokeWidth)
-        byte(p.strokeCap.ordinal.toByte())
-        byte(p.strokeJoin.ordinal.toByte())
-        float(p.strokeMiter)
-        bool(p.antiAlias)
-    }
-
-    fun shader(s: Shader?) {
-        if (s == null) { byte(0xFF.toByte()); return }
-        when (s) {
-            is Shader.SolidColor -> { byte(0); color(s.color) }
-            is Shader.LinearGradient -> {
-                byte(1); point2(s.start); point2(s.end)
-                gradientStops(s.stops); tileMode(s.tileMode); colorSpaceInterpolation(s.interpolation)
-            }
-            is Shader.RadialGradient -> {
-                byte(2); point2(s.center); float(s.radius)
-                gradientStops(s.stops); tileMode(s.tileMode); colorSpaceInterpolation(s.interpolation)
-            }
-            is Shader.SweepGradient -> {
-                byte(3); point2(s.center); float(s.startAngle); float(s.endAngle)
-                gradientStops(s.stops); tileMode(s.tileMode); colorSpaceInterpolation(s.interpolation)
-            }
-            is Shader.ConicalGradient -> {
-                byte(4); point2(s.start); float(s.startRadius); point2(s.end); float(s.endRadius)
-                gradientStops(s.stops); tileMode(s.tileMode); colorSpaceInterpolation(s.interpolation)
-            }
-            is Shader.Image -> { byte(5); image(s.image); tileMode(s.tileModeX); tileMode(s.tileModeY) }
-            is Shader.Blend -> { byte(6); blendMode(s.mode); shader(s.dst); shader(s.src) }
-            is Shader.RuntimeEffect -> {
-                byte(7)
-                runtimeEffect(s.effect)
-                uniformBlock(s.uniforms)
-                shaderMap(s.children)
-            }
-            is Shader.WithLocalMatrix -> { byte(8); shader(s.shader); matrix33(s.matrix) }
-            is Shader.WithColorFilter -> { byte(9); shader(s.shader); colorFilter(s.filter) }
-            is Shader.PerlinNoise -> { byte(10); float(s.baseX); float(s.baseY); int(s.numOctaves); int(s.seed); sizeOrNull(s.tileSize) }
-            is Shader.FractalNoise -> { byte(11); float(s.baseX); float(s.baseY); int(s.numOctaves); int(s.seed); sizeOrNull(s.tileSize) }
-            is Shader.WithWorkingColorSpace -> { byte(12); shader(s.shader); colorSpaceInterpolation(s.interpolation) }
-            is Shader.CoordClamp -> { byte(13); shader(s.shader); rect(s.subset) }
-        }
-    }
-
-    private fun gradientStops(stops: List<GradientStop>) {
-        int(stops.size)
-        for (st in stops) { float(st.position); color(st.color) }
-    }
-
-    private fun sizeOrNull(s: SizeF32?) {
-        if (s == null) { bool(false); return }
-        bool(true); size(s)
-    }
-
-    fun runtimeEffect(e: RuntimeEffect) {
-        string(e.id)
-        shaderModule(e.module)
-        writeUniformLayout(e.uniformLayout)
-        childSlots(e.children)
-    }
-
-    private fun shaderModule(m: ShaderModule) {
-        string(m.source); string(m.entryPoint)
-        uniformSlots(m.uniforms); textureSlots(m.textures); writeVertexLayout(m.vertexLayout)
-    }
-
-    private fun uniformSlots(slots: List<UniformSlot>) {
-        int(slots.size)
-        for (s in slots) { string(s.name); int(s.binding); byte(s.type.ordinal.toByte()); int(s.size) }
-    }
-
-    private fun textureSlots(slots: List<TextureSlot>) {
-        int(slots.size)
-        for (s in slots) { string(s.name); int(s.binding) }
-    }
-
-    private fun writeVertexLayout(vl: VertexLayout) {
-        vertexAttribs(vl.attributes)
-        int(vl.stride)
-    }
-
-    private fun vertexAttribs(attrs: List<VertexAttribute>) {
-        int(attrs.size)
-        for (a in attrs) {
-            int(a.shaderLocation); byte(a.format.ordinal.toByte())
-            int(a.offset)
-        }
-    }
-
-    private fun writeUniformLayout(ul: UniformLayout) {
-        uniformSlots(ul.slots)
-    }
-
-    private fun childSlots(slots: List<ChildSlot>) {
-        int(slots.size)
-        for (s in slots) { string(s.name); byte(s.type.ordinal.toByte()) }
-    }
-
-    private fun <T> namedMap(
-        map: Map<String, T>,
-        serialize: (Pair<String, T>) -> Unit,
-    ) {
-        int(map.size)
-        for ((key, value) in map) {
-            string(key)
-            serialize(key to value)
-        }
-    }
-
-    private fun shaderMap(map: Map<String, Shader>) = namedMap(map) { shader(it.second) }
-
-    private fun colorFilterMap(map: Map<String, ColorFilter>) = namedMap(map) { colorFilter(it.second) }
-
-    private fun imageFilterMap(map: Map<String, ImageFilter?>) = namedMap(map) { imageFilter(it.second) }
-
-    private fun stringOrNull(s: String?) {
-        if (s == null) { bool(false); return }
-        bool(true); string(s)
-    }
-
-    fun uniformBlock(ub: UniformBlock) {
-        val entries = ub.entries
-        int(entries.size)
-        for ((name, value) in entries) {
-            string(name)
-            when (value) {
-                is UniformValue.F1 -> { byte(0); float(value.v) }
-                is UniformValue.F2 -> { byte(1); float(value.x); float(value.y) }
-                is UniformValue.F3 -> { byte(2); float(value.x); float(value.y); float(value.z) }
-                is UniformValue.F4 -> { byte(3); float(value.x); float(value.y); float(value.z); float(value.w) }
-                is UniformValue.I1 -> { byte(6); int(value.v) }
-                is UniformValue.M3 -> { byte(4); matrix33(value.m) }
-                is UniformValue.M4 -> { byte(5); int(value.values.size); for (f in value.values) float(f) }
-            }
-        }
-    }
-
-    fun colorFilter(cf: ColorFilter?) {
-        if (cf == null) { byte(0xFF.toByte()); return }
-        when (cf) {
-            is ColorFilter.Matrix -> {
-                byte(0)
-                int(20)
-                for (index in 0 until 20) float(cf.matrix[index])
-            }
-            is ColorFilter.Blend -> { byte(1); color(cf.color); blendMode(cf.mode) }
-            is ColorFilter.Compose -> { byte(2); colorFilter(cf.outer); colorFilter(cf.inner) }
-            is ColorFilter.Table -> { byte(3); int(cf.table.size); for (b in cf.table) byte(b.toByte()) }
-            is ColorFilter.Lighting -> { byte(4); color(cf.mul); color(cf.add) }
-            ColorFilter.SRGBToLinear -> byte(5)
-            ColorFilter.LinearToSRGB -> byte(6)
-            is ColorFilter.HSLAMatrix -> { byte(7); int(cf.values.size); for (f in cf.values) float(f) }
-            is ColorFilter.Lerp -> { byte(8); float(cf.t); colorFilter(cf.dst); colorFilter(cf.src) }
-            ColorFilter.HighContrast -> byte(9)
-            ColorFilter.Luma -> byte(10)
-            ColorFilter.Overdraw -> byte(11)
-            is ColorFilter.RuntimeEffect -> {
-                byte(12)
-                runtimeEffect(cf.effect)
-                uniformBlock(cf.uniforms)
-                colorFilterMap(cf.children)
-            }
-        }
-    }
-
-    fun maskFilter(mf: MaskFilter?) {
-        if (mf == null) { byte(0xFF.toByte()); return }
-        when (mf) {
-            is MaskFilter.Blur -> { byte(0); blurStyle(mf.style); float(mf.sigma) }
-            is MaskFilter.Shader -> { byte(1); shader(mf.shader) }
-            is MaskFilter.Table -> { byte(2); int(mf.table.size); for (b in mf.table) byte(b.toByte()) }
-        }
-    }
-
-    fun pathEffect(pe: PathEffect?) {
-        if (pe == null) { byte(0xFF.toByte()); return }
-        when (pe) {
-            is PathEffect.Dash -> { byte(0); int(pe.intervals.size); for (f in pe.intervals) float(f); float(pe.phase) }
-            is PathEffect.Corner -> { byte(1); float(pe.radius) }
-            is PathEffect.Discrete -> { byte(2); float(pe.segmentLength); float(pe.deviation) }
-            is PathEffect.Path1D -> { byte(3); path(pe.path); float(pe.advance); float(pe.phase); byte(pe.style.ordinal.toByte()) }
-            is PathEffect.Path2D -> { byte(4); matrix33(pe.matrix); path(pe.path) }
-            is PathEffect.Trim -> { byte(5); float(pe.start); float(pe.stop) }
-        }
-    }
-
-    fun imageFilter(imageFilter: ImageFilter?) {
-        if (imageFilter == null) { byte(0xFF.toByte()); return }
-        when (imageFilter) {
-            is ImageFilter.Blur -> { byte(0); float(imageFilter.sigmaX); float(imageFilter.sigmaY); tileMode(imageFilter.tileMode); imageFilter(imageFilter.input) }
-            is ImageFilter.Crop -> { byte(21); rect(imageFilter.crop); tileMode(imageFilter.tileMode); imageFilter(imageFilter.input) }
-            is ImageFilter.DropShadow -> { byte(1); float(imageFilter.dx); float(imageFilter.dy); float(imageFilter.sigmaX); float(imageFilter.sigmaY); color(imageFilter.color); imageFilter(imageFilter.input) }
-            is ImageFilter.ColorFilter -> { byte(2); colorFilter(imageFilter.filter); imageFilter(imageFilter.input) }
-            is ImageFilter.Compose -> { byte(3); imageFilter(imageFilter.outer); imageFilter(imageFilter.inner) }
-            is ImageFilter.Blend -> { byte(4); blendMode(imageFilter.mode); imageFilter(imageFilter.background); imageFilter(imageFilter.foreground) }
-            is ImageFilter.Dilate -> { byte(5); float(imageFilter.radiusX); float(imageFilter.radiusY); imageFilter(imageFilter.input) }
-            is ImageFilter.Erode -> { byte(6); float(imageFilter.radiusX); float(imageFilter.radiusY); imageFilter(imageFilter.input) }
-            is ImageFilter.DistantLitDiffuse -> { byte(7); vector2(imageFilter.direction); color(imageFilter.lightColor); float(imageFilter.surfaceScale); float(imageFilter.kd); imageFilter(imageFilter.input) }
-            is ImageFilter.PointLitDiffuse -> { byte(8); point2(imageFilter.location); color(imageFilter.lightColor); float(imageFilter.surfaceScale); float(imageFilter.kd); imageFilter(imageFilter.input) }
-            is ImageFilter.SpotLitDiffuse -> { byte(9); point2(imageFilter.location); point2(imageFilter.target); float(imageFilter.specularExponent); float(imageFilter.cutoffAngle); color(imageFilter.lightColor); float(imageFilter.surfaceScale); float(imageFilter.kd); imageFilter(imageFilter.input) }
-            is ImageFilter.DistantLitSpecular -> { byte(10); vector2(imageFilter.direction); color(imageFilter.lightColor); float(imageFilter.surfaceScale); float(imageFilter.ks); float(imageFilter.shininess); imageFilter(imageFilter.input) }
-            is ImageFilter.PointLitSpecular -> { byte(11); point2(imageFilter.location); color(imageFilter.lightColor); float(imageFilter.surfaceScale); float(imageFilter.ks); float(imageFilter.shininess); imageFilter(imageFilter.input) }
-            is ImageFilter.SpotLitSpecular -> { byte(12); point2(imageFilter.location); point2(imageFilter.target); float(imageFilter.specularExponent); float(imageFilter.cutoffAngle); color(imageFilter.lightColor); float(imageFilter.surfaceScale); float(imageFilter.ks); float(imageFilter.shininess); imageFilter(imageFilter.input) }
-            is ImageFilter.Offset -> { byte(13); float(imageFilter.dx); float(imageFilter.dy); imageFilter(imageFilter.input) }
-            is ImageFilter.Tile -> { byte(14); rect(imageFilter.src); rect(imageFilter.dst); imageFilter(imageFilter.input) }
-            is ImageFilter.Merge -> { byte(15); int(imageFilter.inputs.size); for (f in imageFilter.inputs) imageFilter(f) }
-            is ImageFilter.DisplacementMap -> { byte(16); colorChannel(imageFilter.xChannelSelector); colorChannel(imageFilter.yChannelSelector); float(imageFilter.scale); imageFilter(imageFilter.displacement); imageFilter(imageFilter.input) }
-            is ImageFilter.Magnifier -> { byte(17); rect(imageFilter.src); float(imageFilter.zoom); float(imageFilter.inset); imageFilter(imageFilter.input) }
-            is ImageFilter.MatrixConvolution -> {
-                byte(18); size(imageFilter.kernelSize); int(imageFilter.kernel.size)
-                for (f in imageFilter.kernel) float(f)
-                float(imageFilter.gain); float(imageFilter.bias)
-                vector2(imageFilter.kernelOffset); tileMode(imageFilter.tileMode)
-                bool(imageFilter.convolveAlpha); imageFilter(imageFilter.input)
-            }
-            is ImageFilter.Picture -> {
-                byte(19)
-                val nestedBytes = encodePicture(imageFilter.picture)
-                int(nestedBytes.size); bytes(nestedBytes)
-                if (imageFilter.src != null) { bool(true); rect(imageFilter.src) } else bool(false)
-            }
-            is ImageFilter.RuntimeEffect -> {
-                byte(20)
-                runtimeEffect(imageFilter.effect)
-                uniformBlock(imageFilter.uniforms)
-                stringOrNull(imageFilter.childShaderName)
-                imageFilterMap(imageFilter.childImageFilters)
-            }
-        }
-    }
-
-    fun blender(b: Blender?) {
-        if (b == null) { byte(0xFF.toByte()); return }
-        when (b) {
-            is Blender.Mode -> { byte(0); blendMode(b.mode) }
-            is Blender.Arithmetic -> { byte(1); float(b.k1); float(b.k2); float(b.k3); float(b.k4) }
-        }
-    }
-
-    fun blendMode(m: BlendMode) { byte(m.ordinal.toByte()) }
-    fun tileMode(m: TileMode) { byte(m.ordinal.toByte()) }
-    fun blurStyle(s: BlurStyle) { byte(s.ordinal.toByte()) }
-    fun colorChannel(c: ColorChannel) { byte(c.ordinal.toByte()) }
-    fun colorSpaceInterpolation(c: ColorSpaceInterpolation) { byte(c.ordinal.toByte()) }
-    fun pointMode(m: PointMode) { byte(m.ordinal.toByte()) }
-    fun vertexMode(m: VertexMode) { byte(m.ordinal.toByte()) }
-    fun latticeFlags(f: LatticeFlags) { byte(f.ordinal.toByte()) }
-    fun clipOp(op: ClipOp) { byte(op.ordinal.toByte()) }
-
-    fun textBlob(blob: TextBlob) {
-        int(blob.glyphRuns.size)
-        for (run in blob.glyphRuns) {
-            int(run.glyphs.size)
-            for (g in run.glyphs) int(g.toInt())
-            int(run.positions.size)
-            for (p in run.positions) point2(p)
-        }
-        val tf = blob.typeface
-        if (tf != null) { bool(true); string((tf as? KanvasTypeface)?.resourcePath ?: tf.fontName) } else bool(false)
-        float(blob.fontSize)
-    }
-
-    fun vertices(v: Vertices) {
-        vertexMode(v.mode)
-        int(v.positions.size); for (p in v.positions) point2(p)
-        if (v.texCoords != null) { bool(true); int(v.texCoords.size); for (p in v.texCoords) point2(p) } else bool(false)
-        if (v.colors != null) { bool(true); int(v.colors.size); for (c in v.colors) color(c) } else bool(false)
-        if (v.indices != null) { bool(true); int(v.indices.size); for (i in v.indices) int(i) } else bool(false)
-    }
-
-    fun lattice(l: Lattice) {
-        int(l.xDivs.size); for (d in l.xDivs) int(d)
-        int(l.yDivs.size); for (d in l.yDivs) int(d)
-        if (l.rects != null) { bool(true); int(l.rects.size); for (r in l.rects) rect(r) } else bool(false)
-        if (l.colors != null) { bool(true); int(l.colors.size); for (c in l.colors) color(c) } else bool(false)
-        if (l.flags != null) { bool(true); int(l.flags.size); for (f in l.flags) latticeFlags(f) } else bool(false)
-    }
-
-    fun clipStack(cs: ClipStack) {
-        when (cs) {
-            ClipStack.WideOpen -> byte(0)
-            is ClipStack.DeviceRect -> { byte(1); rect(cs.rect); bool(cs.antiAlias) }
-            is ClipStack.Complex -> { byte(2); int(cs.ops.size); for (op in cs.ops) clipStackOp(op) }
-        }
-    }
-
-    private fun clipStackOp(op: ClipStackOp) {
-        bool(op.antiAlias)
-        when (op) {
-            is ClipStackOp.RectOp -> { byte(0); rect(op.rect); clipOp(op.op) }
-            is ClipStackOp.RRectOp -> { byte(1); rrect(op.rrect); clipOp(op.op) }
-            is ClipStackOp.PathOp -> {
-                byte(2)
-                path(op.path)
-                clipOp(op.op)
-                string(op.transformClass)
-            }
-        }
-    }
-
-    fun meshProgram(mp: MeshProgram?) {
-        if (mp == null) { bool(false); return }
-        bool(true)
-        runtimeEffect(mp.effect)
-        uniformBlock(mp.uniforms)
-        val entries = mp.children.entries
-        int(entries.size)
-        for (entry in entries) {
-            string(entry.name)
-            meshChild(entry.child)
-        }
-    }
-
-    fun meshChild(child: MeshChild) {
-        when (child) {
-            is ShaderChild -> { byte(0); shader(child.shader) }
-            is ColorFilterChild -> { byte(1); colorFilter(child.filter) }
-            is BlenderChild -> { byte(2); blender(child.blender) }
-        }
-    }
-
-    fun displayOp(op: DisplayOp) {
-        when (op) {
-            is DisplayOp.DrawRect -> {
-                byte(OP_DRAW_RECT); rect(op.rect); paint(op.paint)
-                matrix33(op.transform); clipStack(op.clip)
-            }
-            is DisplayOp.DrawRRect -> {
-                byte(OP_DRAW_R_RECT); rrect(op.rrect); paint(op.paint)
-                matrix33(op.transform); clipStack(op.clip)
-            }
-            is DisplayOp.DrawDRRect -> {
-                byte(OP_DRAW_D_R_RECT); rrect(op.outer); rrect(op.inner); paint(op.paint)
-                matrix33(op.transform); clipStack(op.clip)
-            }
-            is DisplayOp.DrawPath -> {
-                byte(OP_DRAW_PATH); path(op.path); paint(op.paint)
-                matrix33(op.transform); clipStack(op.clip); string(op.sourceOperation)
-            }
-            is DisplayOp.DrawPoint -> {
-                byte(OP_DRAW_POINT); float(op.x); float(op.y); paint(op.paint)
-                matrix33(op.transform); clipStack(op.clip)
-            }
-            is DisplayOp.DrawPoints -> {
-                byte(OP_DRAW_POINTS); pointMode(op.mode); int(op.points.size)
-                for (p in op.points) point2(p); paint(op.paint)
-                matrix33(op.transform); clipStack(op.clip)
-            }
-            is DisplayOp.DrawImage -> {
-                byte(OP_DRAW_IMAGE); image(op.image); rect(op.src); rect(op.dst)
-                if (op.paint != null) { bool(true); paint(op.paint) } else bool(false)
-                matrix33(op.transform); clipStack(op.clip)
-            }
-            is DisplayOp.DrawImageNine -> {
-                byte(OP_DRAW_IMAGE_NINE); image(op.image); rect(op.center); rect(op.dst)
-                if (op.paint != null) { bool(true); paint(op.paint) } else bool(false)
-                matrix33(op.transform); clipStack(op.clip)
-            }
-            is DisplayOp.DrawImageLattice -> {
-                byte(OP_DRAW_IMAGE_LATTICE); image(op.image); lattice(op.lattice); rect(op.dst)
-                if (op.paint != null) { bool(true); paint(op.paint) } else bool(false)
-                matrix33(op.transform); clipStack(op.clip); samplingOptions(op.sampling)
-            }
-            is DisplayOp.DrawText -> {
-                byte(OP_DRAW_TEXT); textBlob(op.blob); float(op.x); float(op.y); paint(op.paint)
-                matrix33(op.transform); clipStack(op.clip)
-            }
-            is DisplayOp.DrawPicture -> {
-                byte(OP_DRAW_PICTURE); picture(op.picture)
-                if (op.paint != null) { bool(true); paint(op.paint) } else bool(false)
-                matrix33(op.transform); clipStack(op.clip)
-            }
-            is DisplayOp.DrawVertices -> {
-                byte(OP_DRAW_VERTICES); vertices(op.vertices); paint(op.paint)
-                matrix33(op.transform); clipStack(op.clip)
-            }
-            is DisplayOp.DrawMesh -> {
-                byte(OP_DRAW_MESH)
-                vertices(op.mesh.vertices)
-                paint(op.paint)
-                if (op.blendMode != null) { bool(true); blendMode(op.blendMode) } else bool(false)
-                meshProgram(op.mesh.program)
-                rect(op.mesh.bounds)
-                matrix33(op.transform); clipStack(op.clip)
-            }
-            is DisplayOp.DrawAtlas -> {
-                byte(OP_DRAW_ATLAS); image(op.atlas); int(op.transforms.size)
-                for (m in op.transforms) matrix33(m)
-                for (r in op.texRects) rect(r)
-                if (op.colors != null) { bool(true); for (c in op.colors) color(c) } else bool(false)
-                blendMode(op.blendMode)
-                if (op.paint != null) { bool(true); paint(op.paint) } else bool(false)
-                matrix33(op.transform); clipStack(op.clip)
-            }
-            is DisplayOp.DrawColor -> {
-                byte(OP_DRAW_COLOR); color(op.color); blendMode(op.mode)
-                matrix33(op.transform); clipStack(op.clip)
-            }
-            is DisplayOp.Clear -> { byte(OP_CLEAR); color(op.color) }
-            is DisplayOp.SetTransform -> { byte(OP_SET_TRANSFORM); matrix33(op.matrix) }
-            is DisplayOp.SetClip -> { byte(OP_SET_CLIP); clipStack(op.clip) }
-            is DisplayOp.BeginLayer -> {
-                byte(OP_BEGIN_LAYER)
-                val bounds = op.rec.bounds
-                val paint = op.rec.paint
-                if (bounds != null) { bool(true); rect(bounds) } else bool(false)
-                if (paint != null) { bool(true); paint(paint) } else bool(false)
-                imageFilter(op.rec.backdrop)
-                op.rec.compositeClip?.let { clip ->
-                    bool(true)
-                    clipStack(clip)
-                } ?: bool(false)
-            }
-            DisplayOp.EndLayer -> byte(OP_END_LAYER)
-            is DisplayOp.Annotation -> { byte(OP_ANNOTATION); rect(op.rect); string(op.key); string(op.value) }
-            is DisplayOp.FlushAndSnapshot -> { byte(OP_FLUSH_AND_SNAPSHOT); rect(op.bounds) }
-        }
-    }
-
-    fun picture(p: Picture) {
-        // recursively serialize a nested Picture
-        val nested = encodePicture(p)
-        int(nested.size); bytes(nested)
-    }
-}
-
-private class Reader(private val data: ByteArray) {
+private class Reader(
+    private val data: ByteArray,
+    private val decodedRuntimeEffects: MutableList<RuntimeEffect>,
+) {
     var formatVersion: Int = 1
     private val bais = ByteArrayInputStream(data)
     val dis = DataInputStream(bais)
@@ -842,6 +356,40 @@ private class Reader(private val data: ByteArray) {
     fun bool(): Boolean { var v = false; guard { v = dis.readBoolean() }; return v }
     fun string(): String { var v = ""; guard { v = dis.readUTF() }; return v }
     fun bytes(len: Int): ByteArray { val v = ByteArray(len); guard { if (valid) dis.readFully(v) }; return v }
+    fun atEnd(): Boolean = bais.available() == 0
+
+    private fun <T> discriminator(
+        legacy: List<T>,
+        stable: (Byte) -> T?,
+        default: T,
+    ): T {
+        val id = byte()
+        val value = if (formatVersion == STABLE_WIRE_VERSION) stable(id) else legacy.getOrNull(id.toInt())
+        if (value == null) {
+            valid = false
+            return default
+        }
+        return value
+    }
+
+    private fun fillType(): FillType = discriminator(FillType.entries, ::stableFillTypeFromId, FillType.WINDING)
+    private fun pathVerb(): PathVerb = discriminator(PathVerb.entries, ::stablePathVerbFromId, PathVerb.MOVE)
+    private fun colorType(): ColorType = discriminator(ColorType.entries, ::stableColorTypeFromId, ColorType.UNKNOWN)
+    private fun alphaType(): AlphaType = discriminator(AlphaType.entries, ::stableAlphaTypeFromId, AlphaType.UNKNOWN)
+    private fun transferFunction(): TransferFunction = discriminator(TransferFunction.entries, ::stableTransferFunctionFromId, TransferFunction.SRGB)
+    private fun gamut(): Gamut = discriminator(Gamut.entries, ::stableGamutFromId, Gamut.SRGB)
+    private fun paintStyle(): PaintStyle = discriminator(PaintStyle.entries, ::stablePaintStyleFromId, PaintStyle.FILL)
+    private fun strokeCap(): StrokeCap = discriminator(StrokeCap.entries, ::stableStrokeCapFromId, StrokeCap.BUTT)
+    private fun strokeJoin(): StrokeJoin = discriminator(StrokeJoin.entries, ::stableStrokeJoinFromId, StrokeJoin.MITER)
+    private fun uniformType(): UniformType = discriminator(UniformType.entries, ::stableUniformTypeFromId, UniformType.FLOAT)
+    private fun vertexFormat(): VertexFormat = discriminator(VertexFormat.entries, ::stableVertexFormatFromId, VertexFormat.FLOAT32)
+    private fun childType(): ChildType = discriminator(ChildType.entries, ::stableChildTypeFromId, ChildType.SHADER)
+    private fun vertexStepMode(): VertexStepMode = discriminator(
+        VertexStepMode.entries,
+        ::stableVertexStepModeFromId,
+        VertexStepMode.VERTEX,
+    )
+    private fun path1DStyle(): Path1DStyle = discriminator(Path1DStyle.entries, ::stablePath1DStyleFromId, Path1DStyle.TRANSLATE)
 
     fun rect(): RectF32 = RectF32(float(), float(), float(), float())
     fun point2(): Point2F32 = Point2F32(float(), float())
@@ -871,9 +419,9 @@ private class Reader(private val data: ByteArray) {
     }
 
     fun path(): Path {
-        val fillType = FillType.entries[byte().toInt()]
+        val fillType = fillType()
         val verbCount = int()
-        val verbs = List(verbCount) { PathVerb.entries[byte().toInt()] }
+        val verbs = List(verbCount) { pathVerb() }
         val ptCount = int()
         val values = FloatArray(ptCount * 2) { float() }
         val p = Path()
@@ -920,19 +468,19 @@ private class Reader(private val data: ByteArray) {
 
     fun image(): Image {
         val w = int(); val h = int()
-        val ct = ColorType.entries[byte().toInt()]
+        val ct = colorType()
         val srcId = string()
         val hasPixels = bool()
         val px = if (hasPixels) { val len = int(); bytes(len) } else null
         val cs = readColorSpace()
-        val alphaType = if (formatVersion >= 5) AlphaType.entries[byte().toInt()] else AlphaType.UNPREMUL
+        val alphaType = if (formatVersion >= 5) alphaType() else AlphaType.UNPREMUL
         return Image(w, h, ct, srcId, px, cs, alphaType)
     }
 
     fun readColorSpace(): ColorSpace {
         val name = string()
-        val tf = TransferFunction.entries[byte().toInt()]
-        val g = Gamut.entries[byte().toInt()]
+        val tf = transferFunction()
+        val g = gamut()
         return ColorSpace(name, tf, g)
     }
 
@@ -945,10 +493,10 @@ private class Reader(private val data: ByteArray) {
         val pe = pathEffect()
         val imf = imageFilter()
         val bl = blender()
-        val style = PaintStyle.entries[byte().toInt()]
+        val style = paintStyle()
         val sw = float()
-        val cap = StrokeCap.entries[byte().toInt()]
-        val join = StrokeJoin.entries[byte().toInt()]
+        val cap = strokeCap()
+        val join = strokeJoin()
         val sm = float()
         val aa = bool()
         return Paint(c, s, bm, cf, mf, pe, imf, bl, style, sw, cap, join, sm, aa)
@@ -1005,8 +553,13 @@ private class Reader(private val data: ByteArray) {
         val module = readShaderModule()
         val layout = readUniformLayout()
         val children = readChildSlots()
-        val result = createRuntimeEffect(id, module, layout, children)
-        if (result == null) valid = false
+        val result = try {
+            RuntimeEffect.detached(id, module, layout, children)
+        } catch (_: IllegalArgumentException) {
+            valid = false
+            null
+        }
+        if (result != null) decodedRuntimeEffects.add(result)
         return result
     }
 
@@ -1014,32 +567,37 @@ private class Reader(private val data: ByteArray) {
         val source = string()
         val entry = string()
         val uniformCount = int()
-        val uniforms = List(uniformCount) { UniformSlot(string(), int(), UniformType.entries[byte().toInt()], int()) }
+        val uniforms = List(uniformCount) { UniformSlot(string(), int(), uniformType(), int()) }
         val textureCount = int()
         val textures = List(textureCount) { TextureSlot(string(), int()) }
         val attrCount = int()
-        val attrs = List(attrCount) { VertexAttribute(VertexFormat.entries[byte().toInt()], int(), int()) }
+        val attrs = List(attrCount) { VertexAttribute(vertexFormat(), int(), int()) }
         val stride = int()
-        val stepMode = VertexStepMode.entries[byte().toInt()]
-        // ShaderModule constructor is private; uniforms/textures/vertexLayout cannot be
-        // injected into the reconstructed module. If the source had bindings, mark invalid.
-        if (uniforms.isNotEmpty() || textures.isNotEmpty() || attrs.isNotEmpty()) {
-            valid = false
+        val stepMode = if (formatVersion == STABLE_WIRE_VERSION) {
+            vertexStepMode()
+        } else {
+            VertexStepMode.entries[byte().toInt()]
         }
-        return ShaderModule.fromSource(source, entry)
+        if (formatVersion != STABLE_WIRE_VERSION) {
+            // Versions 1–7 could not reconstruct private ShaderModule state.
+            if (uniforms.isNotEmpty() || textures.isNotEmpty() || attrs.isNotEmpty()) valid = false
+            return ShaderModule.fromSource(source, entry)
+        }
+        return createShaderModule(source, entry, uniforms, textures, VertexLayout(attrs, stride, stepMode))
+            ?: ShaderModule.fromSource(source, entry).also { valid = false }
     }
 
     private fun readUniformLayout(): UniformLayout {
         val n = int()
         val slots = List(n) {
-            UniformSlot(string(), int(), UniformType.entries[byte().toInt()], int())
+            UniformSlot(string(), int(), uniformType(), int())
         }
         return UniformLayout(slots)
     }
 
     private fun readChildSlots(): List<ChildSlot> {
         val n = int()
-        return List(n) { ChildSlot(string(), ChildType.entries[byte().toInt()]) }
+        return List(n) { ChildSlot(string(), childType()) }
     }
 
     fun readUniformBlock(): UniformBlock? {
@@ -1107,7 +665,7 @@ private class Reader(private val data: ByteArray) {
             0 -> PathEffect.Dash(FloatArray(int()) { float() }, float())
             1 -> PathEffect.Corner(float())
             2 -> PathEffect.Discrete(float(), float())
-            3 -> PathEffect.Path1D(path(), float(), float(), Path1DStyle.entries[byte().toInt()])
+            3 -> PathEffect.Path1D(path(), float(), float(), path1DStyle())
             4 -> PathEffect.Path2D(matrix33(), path())
             5 -> PathEffect.Trim(float(), float())
             else -> { valid = false; null }
@@ -1141,7 +699,7 @@ private class Reader(private val data: ByteArray) {
             19 -> {
                 val nestedLen = int()
                 val nestedData = bytes(nestedLen)
-                val pic = decodePicture(nestedData)
+                val pic = decodePicture(nestedData, decodedRuntimeEffects)
                 val src = if (bool()) rect() else null
                 if (pic != null) ImageFilter.Picture(pic, src) else { valid = false; null }
             }
@@ -1161,15 +719,19 @@ private class Reader(private val data: ByteArray) {
         }
     }
 
-    fun blendMode(): BlendMode = BlendMode.entries[byte().toInt()]
-    fun tileMode(): TileMode = TileMode.entries[byte().toInt()]
-    fun blurStyle(): BlurStyle = BlurStyle.entries[byte().toInt()]
-    fun colorChannel(): ColorChannel = ColorChannel.entries[byte().toInt()]
-    fun colorSpaceInterpolation(): ColorSpaceInterpolation = ColorSpaceInterpolation.entries[byte().toInt()]
-    fun pointMode(): PointMode = PointMode.entries[byte().toInt()]
-    fun vertexMode(): VertexMode = VertexMode.entries[byte().toInt()]
-    fun latticeFlags(): LatticeFlags = LatticeFlags.entries[byte().toInt()]
-    fun clipOp(): ClipOp = ClipOp.entries[byte().toInt()]
+    fun blendMode(): BlendMode = discriminator(BlendMode.entries, ::stableBlendModeFromId, BlendMode.SRC_OVER)
+    fun tileMode(): TileMode = discriminator(TileMode.entries, ::stableTileModeFromId, TileMode.CLAMP)
+    fun blurStyle(): BlurStyle = discriminator(BlurStyle.entries, ::stableBlurStyleFromId, BlurStyle.NORMAL)
+    fun colorChannel(): ColorChannel = discriminator(ColorChannel.entries, ::stableColorChannelFromId, ColorChannel.R)
+    fun colorSpaceInterpolation(): ColorSpaceInterpolation = discriminator(
+        ColorSpaceInterpolation.entries,
+        ::stableColorSpaceInterpolationFromId,
+        ColorSpaceInterpolation.SRGB,
+    )
+    fun pointMode(): PointMode = discriminator(PointMode.entries, ::stablePointModeFromId, PointMode.POINTS)
+    fun vertexMode(): VertexMode = discriminator(VertexMode.entries, ::stableVertexModeFromId, VertexMode.TRIANGLES)
+    fun latticeFlags(): LatticeFlags = discriminator(LatticeFlags.entries, ::stableLatticeFlagsFromId, LatticeFlags.DEFAULT)
+    fun clipOp(): ClipOp = discriminator(ClipOp.entries, ::stableClipOpFromId, ClipOp.INTERSECT)
 
     fun textBlob(): TextBlob {
         val runs = List(int()) {
@@ -1303,7 +865,7 @@ private class Reader(private val data: ByteArray) {
             OP_DRAW_TEXT.toInt() -> DisplayOp.DrawText(textBlob(), float(), float(), paint(), matrix33(), clipStack())
             OP_DRAW_PICTURE.toInt() -> {
                 val nestedLen = int(); val nestedData = bytes(nestedLen)
-                val nestedPic = decodePicture(nestedData)
+                val nestedPic = decodePicture(nestedData, decodedRuntimeEffects)
                 val p = if (bool()) paint() else null
                 if (nestedPic == null) { valid = false; return null }
                 DisplayOp.DrawPicture(nestedPic, p, matrix33(), clipStack())
@@ -1346,35 +908,91 @@ private class Reader(private val data: ByteArray) {
     }
 }
 
-private fun encodePicture(picture: Picture): ByteArray {
-    val w = Writer()
-    w.bytes(MAGIC)
-    w.int(FORMAT_VERSION)
-    w.rect(picture.cullRect)
-    w.int(picture.ops.size)
-    for (op in picture.ops) w.displayOp(op)
-    return w.result()
+private fun decodePicture(data: ByteArray): Picture? {
+    val decodedRuntimeEffects = mutableListOf<RuntimeEffect>()
+    val picture = try {
+        decodePicture(data, decodedRuntimeEffects)
+    } catch (_: IllegalArgumentException) {
+        null
+    } catch (_: IllegalStateException) {
+        null
+    } catch (_: IndexOutOfBoundsException) {
+        null
+    } ?: return null
+    return picture.takeIf { RuntimeEffect.registerDecoded(decodedRuntimeEffects) }
 }
 
-private fun decodePicture(data: ByteArray): Picture? {
+private fun decodePicture(data: ByteArray, decodedRuntimeEffects: MutableList<RuntimeEffect>): Picture? {
     if (data.size < 4) return null
     if (data[0] != 0x4B.toByte() || data[1] != 0x50.toByte() ||
         data[2] != 0x49.toByte() || data[3] != 0x43.toByte()) return null
-    val r = Reader(data)
+    val r = Reader(data, decodedRuntimeEffects)
     r.bytes(4) // skip magic
     val version = r.int()
-    if (version !in 1..FORMAT_VERSION || !r.valid) return null
+    if (!r.valid) return null
+    return when (version) {
+        in 1..7 -> decodeLegacyPicture(data, version, decodedRuntimeEffects)
+        STABLE_WIRE_VERSION -> when (val decoded = SceneArchiveCodec.decodePicture(data)) {
+            is SceneArchiveDecodeResult.Decoded -> try {
+                Picture(decoded.copyCullRect(), SceneDisplayOpAdapter.toDisplayOps(decoded.scene))
+            } catch (_: IllegalArgumentException) {
+                null
+            } catch (_: IllegalStateException) {
+                null
+            } catch (_: ClassCastException) {
+                null
+            }
+            SceneArchiveDecodeResult.LegacyV8 -> decodeHistoricalPictureV8(data, decodedRuntimeEffects)
+            is SceneArchiveDecodeResult.Invalid -> null
+        }
+        else -> null
+    }
+}
+
+private fun decodeLegacyPicture(
+    data: ByteArray,
+    version: Int,
+    decodedRuntimeEffects: MutableList<RuntimeEffect>,
+): Picture? = decodePictureWithVersion(data, version, requireEnd = false, decodedRuntimeEffects)
+
+/**
+ * Compatibility reader for v8 data written before SceneArchiveCodec owned the
+ * writer.  It is intentionally read-only; all new v8 output is IR-tagged.
+ */
+private fun decodeHistoricalPictureV8(
+    data: ByteArray,
+    decodedRuntimeEffects: MutableList<RuntimeEffect>,
+): Picture? = decodePictureWithVersion(data, STABLE_WIRE_VERSION, requireEnd = true, decodedRuntimeEffects)
+
+private fun decodePictureWithVersion(
+    data: ByteArray,
+    version: Int,
+    requireEnd: Boolean,
+    decodedRuntimeEffects: MutableList<RuntimeEffect>,
+): Picture? {
+    val r = Reader(data, decodedRuntimeEffects)
+    r.bytes(4) // skip magic
+    if (r.int() != version || !r.valid) return null
     r.formatVersion = version
     val cullRect = r.rect()
     val opCount = r.int()
-    if (opCount < 0 || !r.valid) return null
+    if (opCount !in 0..MAX_LEGACY_OPS || !r.valid) return null
     val ops = mutableListOf<DisplayOp>()
     for (i in 0 until opCount) {
         val op = r.displayOp()
         if (op == null || !r.valid) return null
         ops.add(op)
     }
+    if (requireEnd && !r.atEnd()) return null
     return Picture(cullRect, ops)
+}
+
+private const val MAX_LEGACY_OPS = 1_000_000
+
+private fun cullExtent(value: Float, field: String): Int {
+    require(value.isFinite()) { "$field must be finite" }
+    require(value <= Int.MAX_VALUE.toFloat()) { "$field exceeds the scene extent range" }
+    return maxOf(1, value.toInt())
 }
 
 private fun createUniformBlock(entries: Map<String, UniformValue>): UniformBlock? = try {
@@ -1383,12 +1001,22 @@ private fun createUniformBlock(entries: Map<String, UniformValue>): UniformBlock
     constructor.newInstance(entries)
 } catch (_: Exception) { null }
 
-private fun createRuntimeEffect(id: String, module: ShaderModule, uniformLayout: UniformLayout, children: List<ChildSlot>): RuntimeEffect? = try {
-    val constructor = RuntimeEffect::class.java.getDeclaredConstructor(
-        String::class.java, ShaderModule::class.java, UniformLayout::class.java, List::class.java
+private fun createShaderModule(
+    source: String,
+    entryPoint: String,
+    uniforms: List<UniformSlot>,
+    textures: List<TextureSlot>,
+    vertexLayout: VertexLayout,
+): ShaderModule? = try {
+    val constructor = ShaderModule::class.java.getDeclaredConstructor(
+        String::class.java,
+        String::class.java,
+        List::class.java,
+        List::class.java,
+        VertexLayout::class.java,
     )
     constructor.isAccessible = true
-    constructor.newInstance(id, module, uniformLayout, children)
+    constructor.newInstance(source, entryPoint, uniforms, textures, vertexLayout)
 } catch (_: Exception) { null }
 
 private val PathCommand.serializedPairCount: Int

@@ -34,7 +34,7 @@ import java.nio.ByteBuffer
 import java.security.MessageDigest
 import java.util.Collections
 
-data class GPUPreparedCompositeCaptureLimits(
+internal data class GPUPreparedCompositeCaptureLimits(
     val maxRecursionDepth: Int = 10,
     val maxNestingDepth: Int = 10,
     val maxExpandedOps: Int = 10000,
@@ -46,7 +46,7 @@ data class GPUPreparedCompositeCaptureLimits(
     }
 }
 
-enum class GPUPreparedPathVerbSnapshot {
+internal enum class GPUPreparedPathVerbSnapshot {
     Move,
     Line,
     Quad,
@@ -55,19 +55,19 @@ enum class GPUPreparedPathVerbSnapshot {
     Close,
 }
 
-enum class GPUPreparedPathFillSnapshot {
+internal enum class GPUPreparedPathFillSnapshot {
     Winding,
     EvenOdd,
     InverseWinding,
     InverseEvenOdd,
 }
 
-data class GPUPreparedPointSnapshot(
+internal data class GPUPreparedPointSnapshot(
     val xBits: Int,
     val yBits: Int,
 )
 
-sealed interface GPUPreparedGeometrySnapshot {
+internal sealed interface GPUPreparedGeometrySnapshot {
     fun identityFragment(): String
 
     data class RectGeometry(
@@ -116,7 +116,7 @@ sealed interface GPUPreparedGeometrySnapshot {
     }
 }
 
-sealed interface GPUPreparedOperationSnapshot {
+internal sealed interface GPUPreparedOperationSnapshot {
     fun identityFragment(): String
 
     data class Draw(
@@ -168,7 +168,7 @@ sealed interface GPUPreparedOperationSnapshot {
 }
 
 /** Captured operation with typed, immutable semantics. */
-data class GPUPreparedCapturedOperation(
+internal data class GPUPreparedCapturedOperation(
     val sourceOperationIndex: Int,
     val snapshot: GPUPreparedOperationSnapshot,
     val identity: String,
@@ -184,7 +184,7 @@ data class GPUPreparedCapturedOperation(
 }
 
 /** Immutable composite capture result. */
-class GPUPreparedCompositeCapture(
+internal class GPUPreparedCompositeCapture(
     val rootScopeId: GPUPreparedCompositeScopeId,
     scopes: Map<GPUPreparedCompositeScopeId, GPUPreparedCompositeScope>,
     expandedOperations: List<GPUPreparedCapturedOperation>,
@@ -239,7 +239,7 @@ class GPUPreparedCompositeCapture(
     }
 }
 
-sealed interface GPUPreparedCompositeCaptureResult {
+internal sealed interface GPUPreparedCompositeCaptureResult {
     data class Ready(val capture: GPUPreparedCompositeCapture) :
         GPUPreparedCompositeCaptureResult
 

@@ -8,6 +8,8 @@ plugins {
 dependencies {
     implementation(kotlin("stdlib"))
     implementation(project(":kanvas"))
+    implementation(project(":render-ir"))
+    implementation(project(":gpu-renderer"))
     implementation(project(":math:color"))
     implementation(project(":math:geometry"))
     implementation(project(":codec"))

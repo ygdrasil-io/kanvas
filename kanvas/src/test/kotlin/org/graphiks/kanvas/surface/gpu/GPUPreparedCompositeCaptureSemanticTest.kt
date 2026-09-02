@@ -174,15 +174,19 @@ class GPUPreparedCompositeCaptureSemanticTest {
     }
 
     @Test
-    fun `self-referential picture is refused without overflowing the stack`() {
+    fun `detached post-construction self reference leaves capture empty`() {
         val operations = mutableListOf<DisplayOp>()
         val picture = Picture(RectF32.ofLTRB(0f, 0f, 10f, 10f), operations)
         operations += DisplayOp.DrawPicture(picture, null, identity, open)
 
-        val refused = assertIs<GPUPreparedCompositeCaptureResult.Refused>(
+        val ready = assertIs<GPUPreparedCompositeCaptureResult.Ready>(
             capture(listOf(DisplayOp.DrawPicture(picture, null, identity, open))),
         )
-        assertEquals("unsupported.composite.picture.cycle", refused.code)
+        assertEquals(0, ready.capture.expandedOperations.size)
+        assertEquals(
+            listOf(GPUPreparedCompositeScopeKind.Root),
+            ready.capture.scopes.values.map { it.sourceKind },
+        )
     }
 
     @Test

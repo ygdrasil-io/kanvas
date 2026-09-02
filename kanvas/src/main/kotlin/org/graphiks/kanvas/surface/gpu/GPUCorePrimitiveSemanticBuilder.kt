@@ -76,7 +76,7 @@ internal enum class GPUCorePrimitiveColorTransform {
     SrgbToLinear,
 }
 
-data class GPUCorePrimitiveGeometryRefusal(
+internal data class GPUCorePrimitiveGeometryRefusal(
     val code: String,
     val refusalFacts: Map<String, String>,
 )

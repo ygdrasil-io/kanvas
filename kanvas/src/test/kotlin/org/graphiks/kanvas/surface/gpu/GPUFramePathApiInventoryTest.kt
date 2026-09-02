@@ -33,7 +33,6 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
-import org.graphiks.kanvas.gpu.renderer.geometry.GPUPathEdgeFanPayloadContract
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
@@ -81,19 +80,14 @@ import org.graphiks.kanvas.types.Vertices
 
 class GPUFramePathApiInventoryTest {
     @Test
-    fun `public path defaults derive from the stencil edge fan payload contract`() {
+    fun `public path defaults expose backend-neutral capacity limits`() {
         assertEquals(
-            GPUPathEdgeFanPayloadContract.MAX_TRIANGLES,
+            RenderConfig.MAX_PATH_FAN_TRIANGLES,
             RenderConfig.DEFAULT.maxPathFanTriangles,
         )
         assertEquals(
-            GPUPathEdgeFanPayloadContract.MAX_GEOMETRY_BYTES,
+            RenderConfig.MAX_PATH_GEOMETRY_BYTES,
             RenderConfig.DEFAULT.maxPathGeometryBytes,
-        )
-        assertEquals(
-            GPUPathEdgeFanPayloadContract.BYTES_PER_TRIANGLE,
-            GPUPathEdgeFanPayloadContract.MAX_GEOMETRY_BYTES /
-                GPUPathEdgeFanPayloadContract.MAX_TRIANGLES,
         )
     }
 
@@ -2321,9 +2315,15 @@ class GPUFramePathApiInventoryTest {
     @Test
     fun `public path rejects static and UInt-overflow fan memory configuration before submission`() {
         val cases = listOf(
-            RenderConfig(maxPathVertices = 16u, maxPathFanTriangles = 1_025u) to
+            RenderConfig(
+                maxPathVertices = 16u,
+                maxPathFanTriangles = RenderConfig.MAX_PATH_FAN_TRIANGLES + 1u,
+            ) to
                 "geometry.path.fan_budget_config_exceeded",
-            RenderConfig(maxPathVertices = 16u, maxPathGeometryBytes = 36_865u) to
+            RenderConfig(
+                maxPathVertices = 16u,
+                maxPathGeometryBytes = RenderConfig.MAX_PATH_GEOMETRY_BYTES + 1u,
+            ) to
                 "geometry.path.memory_budget_config_exceeded",
             RenderConfig(maxPathVertices = 16u, maxPathFanTriangles = UInt.MAX_VALUE) to
                 "geometry.path.fan_budget_config_out_of_int_range",

@@ -57,9 +57,9 @@ class StrokeRectGm : SkiaGm {
             RectF32.ofLTRB(0f, 0f, w, 0f),
             RectF32.ofLTRB(0f, 0f, 0f, h),
             RectF32.ofLTRB(0f, 0f, 0f, 0f),
-            RectF32.ofLTRB(0f, 0f, w, FLT_EPSILON),
-            RectF32.ofLTRB(0f, 0f, FLT_EPSILON, h),
-            RectF32.ofLTRB(0f, 0f, FLT_EPSILON, FLT_EPSILON),
+            RectF32.ofLTRB(0f, 0f, w, EPSILON_F32),
+            RectF32.ofLTRB(0f, 0f, EPSILON_F32, h),
+            RectF32.ofLTRB(0f, 0f, EPSILON_F32, EPSILON_F32),
         )
 
         for (doFill in 0..1) {
@@ -84,6 +84,6 @@ class StrokeRectGm : SkiaGm {
 
     private companion object {
         private const val STROKE_WIDTH: Float = 20f
-        private const val FLT_EPSILON: Float = 1.1920929e-7f
+        private const val EPSILON_F32: Float = 1.1920929e-7f
     }
 }

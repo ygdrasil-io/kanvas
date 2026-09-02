@@ -22,7 +22,7 @@ import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 
-sealed interface GPUPreparedAtlasLowering {
+internal sealed interface GPUPreparedAtlasLowering {
     data class Ready(val commands: List<GPUFramePathVisualCommand>) :
         GPUPreparedAtlasLowering
 

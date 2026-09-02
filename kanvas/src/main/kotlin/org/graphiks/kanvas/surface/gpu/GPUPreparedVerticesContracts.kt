@@ -14,25 +14,25 @@ import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 
 /** The public operation semantic retained by one handle-free prepared vertices draw. */
-enum class GPUPreparedVerticesOperationKind { DrawVertices, DrawMesh }
+internal enum class GPUPreparedVerticesOperationKind { DrawVertices, DrawMesh }
 
 /** Exact immutable clip decision retained by the prepared draw. */
-data class GPUPreparedVerticesClipSnapshot(
+internal data class GPUPreparedVerticesClipSnapshot(
     val identity: String,
     val coveragePlan: GPUClipCoveragePlan,
     val scissorBounds: GPUBounds?,
 )
 
 /** Closed accountability record for canonical refusal codes not emitted by this pure phase. */
-enum class GPUPreparedVerticesRefusalDisposition { Direct, Delegated, Reserved }
+internal enum class GPUPreparedVerticesRefusalDisposition { Direct, Delegated, Reserved }
 
-data class GPUPreparedVerticesRefusalClassification(
+internal data class GPUPreparedVerticesRefusalClassification(
     val disposition: GPUPreparedVerticesRefusalDisposition,
     val authority: String,
     val reason: String,
 )
 
-object GPUPreparedVerticesRefusalCoverage {
+internal object GPUPreparedVerticesRefusalCoverage {
     val classifications: Map<String, GPUPreparedVerticesRefusalClassification> =
         Collections.unmodifiableMap(linkedMapOf(
             org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes.Topology to c(GPUPreparedVerticesRefusalDisposition.Reserved, "GPUPreparedVerticesPacker", "public VertexMode is closed"),
@@ -70,7 +70,7 @@ object GPUPreparedVerticesRefusalCoverage {
  * Immutable result of pure vertices/mesh lowering. It deliberately contains no
  * WebGPU objects, upload offsets, cache references, or native allocation state.
  */
-class GPUPreparedVerticesDraw private constructor(
+internal class GPUPreparedVerticesDraw private constructor(
     val artifact: GPUPreparedVerticesUploadArtifact,
     val operationKind: GPUPreparedVerticesOperationKind,
     val material: GPUPreparedMaterialProgram,
@@ -159,7 +159,7 @@ class GPUPreparedVerticesDraw private constructor(
 }
 
 /** One terminal result, published only after every lowering authority succeeds. */
-sealed interface GPUPreparedVerticesLowering {
+internal sealed interface GPUPreparedVerticesLowering {
     @ConsistentCopyVisibility
     data class Ready internal constructor(val draw: GPUPreparedVerticesDraw) : GPUPreparedVerticesLowering
 

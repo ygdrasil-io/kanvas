@@ -13,7 +13,7 @@ import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.color.ColorSpace
 
-object GPUPreparedSurfaceImageSource {
+internal object GPUPreparedSurfaceImageSource {
     fun prepare(image: Image): GPUPreparedImageArtifactResult {
         val format = when (image.colorType) {
             ColorType.RGBA_8888 -> GPUPreparedImageSourceFormat.Rgba8

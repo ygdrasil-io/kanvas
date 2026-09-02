@@ -33,12 +33,23 @@ import org.junit.jupiter.params.provider.MethodSource
 
 @OptIn(ExperimentalUnsignedTypes::class)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class GPUPreparedTextRefusalMatrixTest {
+internal class GPUPreparedTextRefusalMatrixTest {
+    enum class ResolverFixture {
+        DEFAULT,
+        UNSTABLE_IDENTITY,
+        MALFORMED_BYTES,
+        MISSING_REPRESENTATION,
+        CBDT_CBLC,
+        SBIX,
+        SVG,
+        COLRV1,
+    }
+
     data class RefusalCase(
         val name: String,
         val operation: DisplayOp.DrawText,
         val expectedCode: String,
-        val resolver: GPUPreparedTextFontResolver = GPUPreparedFontTypefaceResolver,
+        val resolverFixture: ResolverFixture = ResolverFixture.DEFAULT,
     ) {
         override fun toString(): String = name
     }
@@ -52,7 +63,7 @@ class GPUPreparedTextRefusalMatrixTest {
                 operationIndex = 17,
                 target = target(),
                 capabilities = capabilities(),
-                fontResolver = case.resolver,
+                fontResolver = resolverFor(case.resolverFixture),
             ),
         )
 
@@ -81,13 +92,13 @@ class GPUPreparedTextRefusalMatrixTest {
                 "unstable identity",
                 valid,
                 GPUTextRefusalCodes.FONT_IDENTITY_UNSTABLE,
-                refusingResolver(GPUTextRefusalCodes.FONT_IDENTITY_UNSTABLE),
+                ResolverFixture.UNSTABLE_IDENTITY,
             ),
             RefusalCase(
                 "malformed font bytes",
                 valid,
                 GPUTextRefusalCodes.FONT_BYTES_MALFORMED,
-                refusingResolver(GPUTextRefusalCodes.FONT_BYTES_MALFORMED),
+                ResolverFixture.MALFORMED_BYTES,
             ),
             RefusalCase(
                 "mismatched positions",
@@ -113,37 +124,37 @@ class GPUPreparedTextRefusalMatrixTest {
                 "missing notdef representation",
                 valid.withRun(glyphs = listOf(0u)),
                 GPUTextRefusalCodes.NOTDEF_UNAVAILABLE,
-                overridingRepresentation(GPUPreparedTextSourceRepresentation.MISSING),
+                ResolverFixture.MISSING_REPRESENTATION,
             ),
             RefusalCase(
                 "CBDT CBLC bitmap glyph",
                 valid,
                 GPUTextRefusalCodes.BITMAP_CBDT_CBLC_UNSUPPORTED,
-                overridingRepresentation(GPUPreparedTextSourceRepresentation.CBDT_CBLC),
+                ResolverFixture.CBDT_CBLC,
             ),
             RefusalCase(
                 "sbix bitmap glyph",
                 valid,
                 GPUTextRefusalCodes.BITMAP_SBIX_UNSUPPORTED,
-                overridingRepresentation(GPUPreparedTextSourceRepresentation.SBIX),
+                ResolverFixture.SBIX,
             ),
             RefusalCase(
                 "SVG glyph",
                 valid,
                 GPUTextRefusalCodes.SVG_PLAN_UNSUPPORTED,
-                overridingRepresentation(GPUPreparedTextSourceRepresentation.SVG),
+                ResolverFixture.SVG,
             ),
             RefusalCase(
                 "unproved COLRv1 glyph",
                 valid,
                 GPUTextRefusalCodes.COLRV1_UNPROVED,
-                overridingRepresentation(GPUPreparedTextSourceRepresentation.COLRV1),
+                ResolverFixture.COLRV1,
             ),
             RefusalCase(
                 "missing internal representation",
                 valid,
                 GPUTextRefusalCodes.REPRESENTATION_MISSING,
-                overridingRepresentation(GPUPreparedTextSourceRepresentation.MISSING),
+                ResolverFixture.MISSING_REPRESENTATION,
             ),
             RefusalCase(
                 "non finite origin",
@@ -266,7 +277,7 @@ class GPUPreparedTextRefusalMatrixTest {
                     paint = valid.paint.copy(imageFilter = ImageFilter.Blur(1f, 1f)),
                 ),
                 GPUTextRefusalCodes.REPRESENTATION_MISSING,
-                overridingRepresentation(GPUPreparedTextSourceRepresentation.MISSING),
+                ResolverFixture.MISSING_REPRESENTATION,
             ),
             RefusalCase(
                 "non-finite determinant produced by finite coefficients",
@@ -569,6 +580,21 @@ class GPUPreparedTextRefusalMatrixTest {
         GPUPreparedTextFontResolver {
             GPUPreparedTextFontResolution.refused(code, "fixture refusal")
         }
+
+    private fun resolverFor(fixture: ResolverFixture): GPUPreparedTextFontResolver = when (fixture) {
+        ResolverFixture.DEFAULT -> GPUPreparedFontTypefaceResolver
+        ResolverFixture.UNSTABLE_IDENTITY ->
+            refusingResolver(GPUTextRefusalCodes.FONT_IDENTITY_UNSTABLE)
+        ResolverFixture.MALFORMED_BYTES ->
+            refusingResolver(GPUTextRefusalCodes.FONT_BYTES_MALFORMED)
+        ResolverFixture.MISSING_REPRESENTATION ->
+            overridingRepresentation(GPUPreparedTextSourceRepresentation.MISSING)
+        ResolverFixture.CBDT_CBLC ->
+            overridingRepresentation(GPUPreparedTextSourceRepresentation.CBDT_CBLC)
+        ResolverFixture.SBIX -> overridingRepresentation(GPUPreparedTextSourceRepresentation.SBIX)
+        ResolverFixture.SVG -> overridingRepresentation(GPUPreparedTextSourceRepresentation.SVG)
+        ResolverFixture.COLRV1 -> overridingRepresentation(GPUPreparedTextSourceRepresentation.COLRV1)
+    }
 
     private fun overridingRepresentation(
         representation: GPUPreparedTextSourceRepresentation,

@@ -2,7 +2,7 @@ package org.graphiks.kanvas.picture
 
 import org.graphiks.kanvas.canvas.Canvas
 import org.graphiks.kanvas.canvas.DisplayListBuffer
-import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.canvas.SnapshotDisplayListBuffer
 import org.graphiks.math.geometry.RectF32
 
 /**
@@ -31,16 +31,12 @@ class PictureRecorder {
      */
     fun beginRecording(bounds: RectF32): Canvas {
         check(activeCanvas == null) { "Recording already in progress" }
-        val buffer = object : DisplayListBuffer {
-            private val ops = mutableListOf<DisplayOp>()
-            override fun append(op: DisplayOp) { ops.add(op) }
-            override fun ops(): List<DisplayOp> = ops.toList()
-        }
+        val buffer = SnapshotDisplayListBuffer()
         val canvas = Canvas(buffer)
         canvas.clipRect(bounds)
         activeBuffer = buffer
         activeCanvas = canvas
-        recordingBounds = bounds
+        recordingBounds = RectF32(bounds.left, bounds.top, bounds.right, bounds.bottom)
         return canvas
     }
 

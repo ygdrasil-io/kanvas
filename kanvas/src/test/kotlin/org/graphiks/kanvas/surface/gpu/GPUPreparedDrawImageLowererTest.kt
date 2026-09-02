@@ -32,7 +32,6 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometryClass
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
-import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageRouteCapability
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
@@ -46,6 +45,7 @@ import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.surface.RenderConfig
+import org.graphiks.kanvas.surface.PreparedImageRoute
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
@@ -54,7 +54,7 @@ import org.graphiks.math.geometry.RectF32
 class GPUPreparedDrawImageLowererTest {
 
     private val boundedW28Config = RenderConfig(
-        preparedImageRouteCapability = GPUPreparedImageRouteCapability.BoundedNearest1To1,
+        preparedImageRoute = PreparedImageRoute.BOUNDED_NEAREST_1_TO_1,
     )
 
     private fun target() = GPUTargetFacts(64, 64, "rgba8unorm-srgb")

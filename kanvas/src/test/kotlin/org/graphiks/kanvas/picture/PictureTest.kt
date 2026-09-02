@@ -7,14 +7,41 @@ import org.graphiks.kanvas.canvas.DisplayListBuffer
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.canvas.DrawPathSourceOperation
 import org.graphiks.kanvas.canvas.SaveLayerRec
+import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.geometry.Path
+import org.graphiks.kanvas.geometry.FillType
+import org.graphiks.kanvas.geometry.PathVerb
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.Image
+import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.paint.ColorChannel
+import org.graphiks.kanvas.paint.ColorSpaceInterpolation
+import org.graphiks.kanvas.paint.GradientStop
+import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.PaintStyle
+import org.graphiks.kanvas.paint.Path1DStyle
+import org.graphiks.kanvas.paint.PathEffect
+import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.paint.StrokeCap
+import org.graphiks.kanvas.paint.StrokeJoin
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.TileMode
+import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.pipeline.ClipOp
+import org.graphiks.kanvas.pipeline.RuntimeEffect
+import org.graphiks.kanvas.pipeline.ShaderModule
+import org.graphiks.kanvas.pipeline.UniformBlock
+import org.graphiks.kanvas.pipeline.UniformLayout
+import org.graphiks.kanvas.pipeline.UniformSlot
+import org.graphiks.kanvas.pipeline.UniformType
+import org.graphiks.kanvas.pipeline.VertexAttribute
+import org.graphiks.kanvas.pipeline.VertexFormat
+import org.graphiks.kanvas.pipeline.VertexLayout
+import org.graphiks.kanvas.pipeline.VertexStepMode
+import org.graphiks.kanvas.render.ir.SceneArchiveCodec
+import org.graphiks.kanvas.render.ir.SceneArchiveDecodeResult
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.KanvasTypeface
 import org.graphiks.kanvas.text.TextBlob
@@ -22,17 +49,381 @@ import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
+import org.graphiks.kanvas.types.Lattice
+import org.graphiks.kanvas.types.LatticeFlags
+import org.graphiks.kanvas.types.PointMode
+import org.graphiks.kanvas.types.VertexMode
+import org.graphiks.kanvas.types.Vertices
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import java.util.Base64
+import java.nio.ByteBuffer
+import java.io.ByteArrayOutputStream
+import java.io.DataOutputStream
 
 class PictureTest {
     @Test
-    fun `format 7 preserves expanded text and clip provenance through round trip and playback`() {
+    fun `decodes the fixed version 7 path fixture through the public API`() {
+        val bytes = Base64.getDecoder().decode(
+            requireNotNull(javaClass.getResource("/picture/format-7-path.base64"))
+                .readText()
+                .trim(),
+        )
+
+        val picture = requireNotNull(Picture.fromByteArray(bytes))
+        val draw = assertIs<DisplayOp.DrawPath>(picture.ops.single())
+        val effect = assertIs<PathEffect.Path1D>(draw.paint.pathEffect)
+
+        assertEquals(RectF32.ofLTRB(0f, 0f, 8f, 8f), picture.cullRect)
+        assertEquals(FillType.INVERSE_EVEN_ODD, draw.path.fillType)
+        assertEquals(
+            listOf(PathVerb.MOVE, PathVerb.LINE, PathVerb.QUAD, PathVerb.CUBIC, PathVerb.ARC_TO, PathVerb.CLOSE),
+            draw.path.commands().map { it.verb },
+        )
+        assertEquals(Path1DStyle.ROTATE, effect.style)
+        assertEquals(2.5f, effect.advance)
+        assertEquals(0.5f, effect.phase)
+        assertEquals(listOf(PathVerb.MOVE, PathVerb.LINE), effect.path.commands().map { it.verb })
+    }
+
+    @Test
+    fun `writer emits version 8 pictures`() {
+        val picture = Picture(
+            RectF32.ofLTRB(0f, 0f, 8f, 8f),
+            listOf(
+                DisplayOp.DrawRect(
+                    RectF32.ofLTRB(1f, 1f, 7f, 7f),
+                    Paint.fill(ColorARGB.Red),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+            ),
+        )
+
+        val bytes = picture.toByteArray()
+
+        assertEquals(8, bytes.readBigEndianInt(offset = 4))
+        assertIs<SceneArchiveDecodeResult.Decoded>(SceneArchiveCodec.decodePicture(bytes))
+        assertEquals(picture.ops, requireNotNull(Picture.fromByteArray(bytes)).ops)
+    }
+
+    @Test
+    fun `reader keeps decoding historical task 8 v8 payloads`() {
+        val historical = historicalTask8ClearPayload()
+
+        val picture = requireNotNull(Picture.fromByteArray(historical))
+
+        assertEquals(RectF32.ofLTRB(0f, 0f, 8f, 8f), picture.cullRect)
+        assertEquals(listOf(DisplayOp.Clear(ColorARGB.Blue)), picture.ops)
+    }
+
+    @Test
+    fun `reader rejects a historical task 8 payload with trailing data`() {
+        val trailing = historicalTask8ClearPayload().copyOf(34).also { it[33] = 0x7F }
+
+        assertNull(Picture.fromByteArray(trailing))
+    }
+
+    @Test
+    fun `invalid legacy runtime effect payload does not poison the registry`() {
+        val id = "legacy-invalid-runtime-${System.nanoTime()}"
+
+        assertNull(Picture.fromByteArray(legacyRuntimeEffectPicture(id, truncated = true)))
+        assertNull(RuntimeEffect.registered(id))
+
+        val legitimate = RuntimeEffect(
+            id,
+            ShaderModule.fromResource("legitimate-runtime"),
+            UniformLayout(emptyList()),
+            emptyList(),
+        )
+
+        assertEquals(legitimate, RuntimeEffect.registered(id))
+    }
+
+    @Test
+    fun `valid legacy runtime effect payload registers only after picture decoding succeeds`() {
+        val id = "legacy-valid-runtime-${System.nanoTime()}"
+
+        val picture = requireNotNull(Picture.fromByteArray(legacyRuntimeEffectPicture(id)))
+        val effect = assertIs<Shader.RuntimeEffect>(
+            assertIs<DisplayOp.DrawRect>(picture.ops.single()).paint.shader,
+        ).effect
+
+        assertEquals(effect, RuntimeEffect.registered(id))
+    }
+
+    @Test
+    fun `legacy runtime effect registry collision leaves earlier decoded effects unregistered`() {
+        val firstId = "legacy-transaction-first-${System.nanoTime()}"
+        val conflictingId = "legacy-transaction-conflict-${System.nanoTime()}"
+        val installed = RuntimeEffect(
+            conflictingId,
+            ShaderModule.fromResource("installed-runtime"),
+            UniformLayout(emptyList()),
+            emptyList(),
+        )
+
+        assertNull(Picture.fromByteArray(legacyRuntimeEffectPicture(firstId, conflictingId)))
+
+        assertNull(RuntimeEffect.registered(firstId))
+        assertEquals(installed, RuntimeEffect.registered(conflictingId))
+    }
+
+    @Test
+    fun `version 8 round trips every public serialized enum value`() {
+        val identity = Matrix3x3F32.Identity
+        val bounds = RectF32.ofLTRB(0f, 0f, 8f, 8f)
+        val source = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val effectPath = Path().apply { moveTo(0f, 0f); lineTo(1f, 1f) }
+        val ops = buildList<DisplayOp> {
+            FillType.entries.forEachIndexed { index, fillType ->
+                add(
+                    DisplayOp.DrawPath(
+                        Path().apply {
+                            this.fillType = fillType
+                            moveTo(1f, 1f)
+                            lineTo(7f, 1f)
+                            quadTo(7f, 3f, 5f, 4f)
+                            cubicTo(4f, 5f, 3f, 6f, 2f, 5f)
+                            arcTo(2f, 3f, 45f, largeArc = true, sweep = false, x = 1f, y = 1f)
+                            close()
+                        },
+                        Paint(
+                            pathEffect = PathEffect.Path1D(
+                                effectPath,
+                                advance = 2f,
+                                phase = 0f,
+                                style = Path1DStyle.entries[index % Path1DStyle.entries.size],
+                            ),
+                            style = PaintStyle.entries[index % PaintStyle.entries.size],
+                            strokeCap = StrokeCap.entries[index % StrokeCap.entries.size],
+                            strokeJoin = StrokeJoin.entries[index % StrokeJoin.entries.size],
+                        ),
+                        identity,
+                        ClipStack.WideOpen,
+                    ),
+                )
+            }
+            BlendMode.entries.forEach { mode -> add(DisplayOp.DrawColor(ColorARGB.Red, mode, identity, ClipStack.WideOpen)) }
+            TileMode.entries.forEachIndexed { index, tileMode ->
+                add(
+                    DisplayOp.DrawRect(
+                        bounds,
+                        Paint(
+                            shader = Shader.LinearGradient(
+                                Point2F32(0f, 0f),
+                                Point2F32(8f, 8f),
+                                listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)),
+                                tileMode,
+                                ColorSpaceInterpolation.entries[index % ColorSpaceInterpolation.entries.size],
+                            ),
+                        ),
+                        identity,
+                        ClipStack.WideOpen,
+                    ),
+                )
+            }
+            ColorSpaceInterpolation.entries.drop(TileMode.entries.size).forEach { interpolation ->
+                add(
+                    DisplayOp.DrawRect(
+                        bounds,
+                        Paint(shader = Shader.LinearGradient(Point2F32(0f, 0f), Point2F32(8f, 8f), listOf(GradientStop(0f, ColorARGB.Red)), interpolation = interpolation)),
+                        identity,
+                        ClipStack.WideOpen,
+                    ),
+                )
+            }
+            BlurStyle.entries.forEach { style -> add(DisplayOp.DrawRect(bounds, Paint(maskFilter = MaskFilter.Blur(style, 1f)), identity, ClipStack.WideOpen)) }
+            ColorChannel.entries.forEach { channel ->
+                add(
+                    DisplayOp.DrawRect(
+                        bounds,
+                        Paint(imageFilter = ImageFilter.DisplacementMap(channel, channel, 1f, ImageFilter.Blur(1f, 1f))),
+                        identity,
+                        ClipStack.WideOpen,
+                    ),
+                )
+            }
+            PointMode.entries.forEach { mode -> add(DisplayOp.DrawPoints(mode, listOf(Point2F32(1f, 1f)), Paint.fill(ColorARGB.Red), identity, ClipStack.WideOpen)) }
+            VertexMode.entries.forEach { mode -> add(DisplayOp.DrawVertices(Vertices(mode, listOf(Point2F32(0f, 0f))), Paint.fill(ColorARGB.Red), identity, ClipStack.WideOpen)) }
+            LatticeFlags.entries.forEach { flag ->
+                add(
+                    DisplayOp.DrawImageLattice(
+                        Image(1, 1, sourceId = "enum-lattice-$flag"),
+                        Lattice(listOf(1), listOf(1), flags = listOf(flag)),
+                        bounds,
+                        null,
+                        identity,
+                        ClipStack.WideOpen,
+                    ),
+                )
+            }
+            ClipOp.entries.forEach { op ->
+                add(
+                    DisplayOp.DrawRect(
+                        bounds,
+                        Paint.fill(ColorARGB.Red),
+                        identity,
+                        ClipStack.Complex(listOf(ClipStackOp.RectOp(bounds, op))),
+                    ),
+                )
+            }
+            ColorType.entries.forEachIndexed { index, colorType ->
+                add(
+                    DisplayOp.DrawImage(
+                        Image(
+                            1,
+                            1,
+                            colorType,
+                            "enum-image-$index",
+                            colorSpace = ColorSpace(
+                                "enum-space-$index",
+                                org.graphiks.kanvas.color.TransferFunction.entries[index % org.graphiks.kanvas.color.TransferFunction.entries.size],
+                                org.graphiks.kanvas.color.Gamut.entries[index % org.graphiks.kanvas.color.Gamut.entries.size],
+                            ),
+                            alphaType = AlphaType.entries[index % AlphaType.entries.size],
+                        ),
+                        source,
+                        bounds,
+                        null,
+                        identity,
+                        ClipStack.WideOpen,
+                    ),
+                )
+            }
+        }
+
+        val restored = requireNotNull(Picture(bounds, ops).let { Picture.fromByteArray(it.toByteArray()) })
+        val paths = restored.ops.filterIsInstance<DisplayOp.DrawPath>()
+        val gradients = restored.ops.filterIsInstance<DisplayOp.DrawRect>().mapNotNull { it.paint.shader as? Shader.LinearGradient }
+        val collectedImages = mutableListOf<Image>()
+        restored.walkImages(collectedImages::add)
+        val images = collectedImages.filter { it.sourceId.startsWith("enum-image-") }
+
+        assertEquals(FillType.entries.toList(), paths.map { it.path.fillType })
+        assertTrue(
+            paths.all { path ->
+                path.path.commands().map { command -> command.verb } ==
+                    listOf(PathVerb.MOVE, PathVerb.LINE, PathVerb.QUAD, PathVerb.CUBIC, PathVerb.ARC_TO, PathVerb.CLOSE)
+            },
+        )
+        assertEquals(Path1DStyle.entries.toList(), paths.map { assertIs<PathEffect.Path1D>(it.paint.pathEffect).style }.distinct())
+        assertEquals(PaintStyle.entries.toList(), paths.map { it.paint.style }.distinct())
+        assertEquals(StrokeCap.entries.toList(), paths.map { it.paint.strokeCap }.distinct())
+        assertEquals(StrokeJoin.entries.toList(), paths.map { it.paint.strokeJoin }.distinct())
+        assertEquals(BlendMode.entries.toList(), restored.ops.filterIsInstance<DisplayOp.DrawColor>().map { it.mode })
+        assertEquals(TileMode.entries.toList(), gradients.map { it.tileMode }.take(TileMode.entries.size))
+        assertEquals(ColorSpaceInterpolation.entries.toList(), gradients.map { it.interpolation }.distinct())
+        assertEquals(BlurStyle.entries.toList(), restored.ops.filterIsInstance<DisplayOp.DrawRect>().mapNotNull { (it.paint.maskFilter as? MaskFilter.Blur)?.style })
+        assertEquals(ColorChannel.entries.toList(), restored.ops.filterIsInstance<DisplayOp.DrawRect>().mapNotNull { (it.paint.imageFilter as? ImageFilter.DisplacementMap)?.xChannelSelector })
+        assertEquals(PointMode.entries.toList(), restored.ops.filterIsInstance<DisplayOp.DrawPoints>().map { it.mode })
+        assertEquals(VertexMode.entries.toList(), restored.ops.filterIsInstance<DisplayOp.DrawVertices>().map { it.vertices.mode })
+        assertEquals(LatticeFlags.entries.toList(), restored.ops.filterIsInstance<DisplayOp.DrawImageLattice>().map { it.lattice.flags!!.single() })
+        assertEquals(ClipOp.entries.toList(), restored.ops.filterIsInstance<DisplayOp.DrawRect>().mapNotNull { (it.clip as? ClipStack.Complex)?.ops?.single()?.let { op -> (op as? ClipStackOp.RectOp)?.op } })
+        assertEquals(ColorType.entries.toList(), images.map { it.colorType })
+        assertEquals(AlphaType.entries.toList().toSet(), images.map { it.alphaType }.toSet())
+        assertEquals(org.graphiks.kanvas.color.TransferFunction.entries.toList().toSet(), images.map { it.colorSpace.transferFunction }.toSet())
+        assertEquals(org.graphiks.kanvas.color.Gamut.entries.toList().toSet(), images.map { it.colorSpace.gamut }.toSet())
+
+        val runtimeEffect = RuntimeEffect(
+            "enum-runtime",
+            ShaderModule.fromResource("enum-runtime"),
+            UniformLayout(UniformType.entries.mapIndexed { index, type -> UniformSlot("uniform-$index", index, type, 1) }),
+            emptyList(),
+        )
+        val runtimeUniforms = UniformBlock {
+            UniformType.entries.forEachIndexed { index, type -> when (type) {
+                UniformType.FLOAT -> float1("uniform-$index", 1f)
+                UniformType.FLOAT2 -> float2("uniform-$index", 1f, 2f)
+                UniformType.FLOAT3 -> float3("uniform-$index", 1f, 2f, 3f)
+                UniformType.FLOAT4 -> float4("uniform-$index", 1f, 2f, 3f, 4f)
+                UniformType.INT1 -> int1("uniform-$index", index)
+                UniformType.MAT3X3 -> mat3x3("uniform-$index", Matrix3x3F32.Identity)
+                UniformType.MAT4X4 -> mat4x4("uniform-$index", FloatArray(16) { it.toFloat() })
+            } }
+        }
+        val runtimeRestored = requireNotNull(
+            Picture(
+                bounds,
+                listOf(DisplayOp.DrawRect(bounds, Paint(shader = runtimeEffect.makeShader(runtimeUniforms)), identity, ClipStack.WideOpen)),
+            ).let { Picture.fromByteArray(it.toByteArray()) },
+        )
+        val restoredRuntime = assertIs<Shader.RuntimeEffect>(
+            assertIs<DisplayOp.DrawRect>(runtimeRestored.ops.single()).paint.shader,
+        ).effect
+        assertEquals(UniformType.entries.toList(), restoredRuntime.uniformLayout.slots.map { it.type })
+        assertTrue(restoredRuntime.children.isEmpty())
+    }
+
+    @Test
+    fun `version 8 refuses runtime effects with incomplete bindings`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 8f, 8f)
+        val effect = RuntimeEffect(
+            "incomplete-runtime",
+            ShaderModule.fromResource("incomplete-runtime"),
+            UniformLayout(listOf(UniformSlot("required", 0, UniformType.FLOAT, 1))),
+            emptyList(),
+        )
+
+        val failure = assertFailsWith<IllegalStateException> {
+            Picture(
+                bounds,
+                listOf(DisplayOp.DrawRect(bounds, Paint(shader = effect.makeShader(UniformBlock.EMPTY)), Matrix3x3F32.Identity, ClipStack.WideOpen)),
+            ).toByteArray()
+        }
+
+        assertEquals("scene-capture-invalid", failure.message)
+    }
+
+    @Test
+    fun `version 8 round trips runtime vertex layouts through the public Picture API`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 8f, 8f)
+        val expectedAttributes = VertexFormat.entries.mapIndexed { index, format ->
+            VertexAttribute(format, offset = index * 16, shaderLocation = index + 3)
+        }
+        val expectedStride = expectedAttributes.size * 16
+
+        val restoredLayouts = VertexStepMode.entries.map { stepMode ->
+            val effect = RuntimeEffect(
+                "runtime-layout-$stepMode",
+                shaderModuleWithVertexLayout(VertexLayout(expectedAttributes, expectedStride, stepMode)),
+                UniformLayout(emptyList()),
+                emptyList(),
+            )
+            val restored = requireNotNull(
+                Picture(
+                    bounds,
+                    listOf(
+                        DisplayOp.DrawRect(
+                            bounds,
+                            Paint(shader = effect.makeShader(UniformBlock.EMPTY)),
+                            Matrix3x3F32.Identity,
+                            ClipStack.WideOpen,
+                        ),
+                    ),
+                ).let { picture -> Picture.fromByteArray(picture.toByteArray()) },
+            )
+            assertIs<Shader.RuntimeEffect>(
+                assertIs<DisplayOp.DrawRect>(restored.ops.single()).paint.shader,
+            ).effect.module.vertexLayout
+        }
+
+        assertEquals(VertexStepMode.entries.toList(), restoredLayouts.map(VertexLayout::stepMode))
+        restoredLayouts.forEach { layout ->
+            assertEquals(expectedAttributes, layout.attributes)
+            assertEquals(expectedStride, layout.stride)
+        }
+    }
+
+    @Test
+    fun `format 8 preserves expanded text and clip provenance through round trip and playback`() {
         val path = DisplayOp.DrawPath.withSourceOperation(
             path = Path().addRect(RectF32.ofLTRB(1f, 2f, 3f, 4f)),
             paint = Paint.fill(ColorARGB.Red),
@@ -43,7 +434,7 @@ class PictureTest {
         val original = Picture(RectF32.ofLTRB(0f, 0f, 8f, 8f), listOf(path))
 
         val encoded = original.toByteArray()
-        assertEquals(7, encoded.readBigEndianInt(offset = 4))
+        assertEquals(8, encoded.readBigEndianInt(offset = 4))
         val restored = requireNotNull(Picture.fromByteArray(encoded))
         assertEquals("text-expanded", assertIs<DisplayOp.DrawPath>(restored.ops.single()).sourceOperation)
 
@@ -57,19 +448,12 @@ class PictureTest {
 
     @Test
     fun `format 5 DrawPath remains decodable with the truthful legacy source`() {
-        val source = "text-expanded"
-        val current = Picture(
-            RectF32.ofLTRB(0f, 0f, 8f, 8f),
-            listOf(
-                DisplayOp.DrawPath.withSourceOperation(
-                    path = Path().addRect(RectF32.ofLTRB(1f, 2f, 3f, 4f)),
-                    paint = Paint.fill(ColorARGB.Red),
-                    transform = Matrix3x3F32.Identity,
-                    clip = ClipStack.WideOpen,
-                    sourceOperation = DrawPathSourceOperation.TEXT_EXPANDED,
-                ),
-            ),
-        ).toByteArray()
+        val source = "drawPath"
+        val current = Base64.getDecoder().decode(
+            requireNotNull(javaClass.getResource("/picture/format-7-path.base64"))
+                .readText()
+                .trim(),
+        )
         val legacy = current.copyOf(current.size - 2 - source.encodeToByteArray().size).also { bytes ->
             bytes.writeBigEndianInt(offset = 4, value = 5)
         }
@@ -80,37 +464,28 @@ class PictureTest {
     }
 
     @Test
-    fun `format 6 leaves non path opcode payload compatible with format 5`() {
-        val current = Picture(
-            RectF32.ofLTRB(0f, 0f, 8f, 8f),
-            listOf(
-                DisplayOp.DrawRect(
-                    rect = RectF32.ofLTRB(1f, 2f, 3f, 4f),
-                    paint = Paint.fill(ColorARGB.Blue),
-                    transform = Matrix3x3F32.Identity,
-                    clip = ClipStack.WideOpen,
-                ),
-            ),
-        ).toByteArray()
-        val legacyHeader = current.copyOf().also { bytes ->
+    fun `format 5 layer fixture retains the version 2 non path layout`() {
+        val legacyHeader = ByteArray(V2_LAYER_PICTURE_FIXTURE.size + 1).also { bytes ->
+            V2_LAYER_PICTURE_FIXTURE.copyInto(bytes, endIndex = V2_LAYER_PICTURE_FIXTURE.size - 1)
+            bytes[V2_LAYER_PICTURE_FIXTURE.size - 1] = 0 // no composite clip in format 5
+            V2_LAYER_PICTURE_FIXTURE.copyInto(
+                bytes,
+                destinationOffset = V2_LAYER_PICTURE_FIXTURE.size,
+                startIndex = V2_LAYER_PICTURE_FIXTURE.size - 1,
+            )
             bytes.writeBigEndianInt(offset = 4, value = 5)
         }
 
         val restored = requireNotNull(Picture.fromByteArray(legacyHeader))
 
         assertEquals(
-            DisplayOp.DrawRect(
-                rect = RectF32.ofLTRB(1f, 2f, 3f, 4f),
-                paint = Paint.fill(ColorARGB.Blue),
-                transform = Matrix3x3F32.Identity,
-                clip = ClipStack.WideOpen,
-            ),
-            restored.ops.single(),
+            listOf(DisplayOp.BeginLayer(SaveLayerRec()), DisplayOp.EndLayer),
+            restored.ops,
         )
     }
 
     @Test
-    fun `format 6 refuses an arbitrary serialized DrawPath source`() {
+    fun `format 8 refuses an arbitrary serialized DrawPath source`() {
         val encoded = Picture(
             RectF32.ofLTRB(0f, 0f, 8f, 8f),
             listOf(
@@ -132,7 +507,7 @@ class PictureTest {
     }
 
     @Test
-    fun `format 5 round trip preserves each explicit image alpha authority`() {
+    fun `format 8 round trip preserves each explicit image alpha authority`() {
         for (alpha in listOf(AlphaType.PREMUL, AlphaType.OPAQUE, AlphaType.UNPREMUL)) {
             val picture = pictureWithImageAlpha(alpha)
             val restored = requireNotNull(Picture.fromByteArray(picture.toByteArray()))
@@ -141,39 +516,6 @@ class PictureTest {
             val restoredImage = images.single()
 
             assertEquals(alpha, restoredImage.alphaType)
-        }
-    }
-
-    @Test
-    fun `formats one through four decode legacy images as conservative unpremultiplied`() {
-        val v5 = pictureWithImageAlpha(AlphaType.PREMUL).toByteArray()
-        val sourceId = "legacy-alpha".encodeToByteArray()
-        val sourceIndex = v5.indexOfSubArray(sourceId)
-        assertTrue(sourceIndex >= 0)
-        val afterSource = sourceIndex + sourceId.size
-        val colorSpaceStart = if (v5[afterSource].toInt() == 0) {
-            afterSource + 1
-        } else {
-            val pixelLength = ((v5[afterSource + 1].toInt() and 0xFF) shl 24) or
-                ((v5[afterSource + 2].toInt() and 0xFF) shl 16) or
-                ((v5[afterSource + 3].toInt() and 0xFF) shl 8) or
-                (v5[afterSource + 4].toInt() and 0xFF)
-            afterSource + 5 + pixelLength
-        }
-        val colorSpaceNameLength = ((v5[colorSpaceStart].toInt() and 0xFF) shl 8) or (v5[colorSpaceStart + 1].toInt() and 0xFF)
-        val alphaIndex = colorSpaceStart + 2 + colorSpaceNameLength + 2
-        val legacy = v5.copyInto(ByteArray(v5.size - 1), 0, 0, alphaIndex).also { target ->
-            v5.copyInto(target, alphaIndex, alphaIndex + 1, v5.size)
-        }
-        for (version in 1..4) {
-            legacy[4] = 0
-            legacy[5] = 0
-            legacy[6] = 0
-            legacy[7] = version.toByte()
-            val restored = requireNotNull(Picture.fromByteArray(legacy))
-            val images = mutableListOf<Image>()
-            restored.walkImages(images::add)
-            assertEquals(AlphaType.UNPREMUL, images.single().alphaType)
         }
     }
 
@@ -235,6 +577,28 @@ class PictureTest {
         assertNotNull(restored)
         assertEquals(original.cullRect, restored.cullRect)
         assertEquals(original.approximateOpCount(), restored.approximateOpCount())
+    }
+
+    @Test
+    fun `mutating a source path after recording cannot change a Picture or its round trip`() {
+        val source = Path().addRect(RectF32.ofLTRB(1f, 2f, 7f, 8f))
+        val recorder = PictureRecorder()
+        recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 8f, 8f)).drawPath(source, Paint.fill(ColorARGB.Red))
+        val picture = recorder.finishRecordingAsPicture()
+
+        source.addRect(RectF32.ofLTRB(20f, 20f, 30f, 30f))
+
+        fun recordedPathBounds(value: Picture): RectF32 {
+            val bounds = mutableListOf<RectF32>()
+            value.forEachOp { op -> if (op is DisplayOp.DrawPath) bounds += requireNotNull(op.path.computeBounds()) }
+            return bounds.single()
+        }
+
+        assertEquals(RectF32.ofLTRB(1f, 2f, 7f, 8f), recordedPathBounds(picture))
+        assertEquals(
+            RectF32.ofLTRB(1f, 2f, 7f, 8f),
+            recordedPathBounds(requireNotNull(Picture.fromByteArray(picture.toByteArray()))),
+        )
     }
 
     @Test
@@ -357,6 +721,16 @@ class PictureTest {
     @Test
     fun `fromByteArray returns null for invalid data`() {
         assertNull(Picture.fromByteArray(byteArrayOf(0, 1, 2, 3)))
+    }
+
+    @Test
+    fun `fromByteArray returns null for an unknown format version`() {
+        val encoded = Picture(
+            RectF32.ofLTRB(0f, 0f, 1f, 1f),
+            listOf(DisplayOp.Clear(ColorARGB.Transparent)),
+        ).toByteArray().also { it.writeBigEndianInt(offset = 4, value = 9) }
+
+        assertNull(Picture.fromByteArray(encoded))
     }
 
     @Test
@@ -520,6 +894,27 @@ class PictureTest {
     }
 }
 
+private fun historicalTask8ClearPayload(): ByteArray = ByteBuffer.allocate(33)
+    .put("KPIC".encodeToByteArray())
+    .putInt(8)
+    .putFloat(0f).putFloat(0f).putFloat(8f).putFloat(8f)
+    .putInt(1)
+    .put(14) // historical OP_CLEAR
+    .putInt(ColorARGB.Blue.toPackedInt())
+    .array()
+
+private fun shaderModuleWithVertexLayout(vertexLayout: VertexLayout): ShaderModule {
+    val constructor = ShaderModule::class.java.declaredConstructors.single { it.parameterCount == 5 }
+        .also { it.isAccessible = true }
+    return constructor.newInstance(
+        "runtime-layout-module",
+        "main",
+        emptyList<UniformSlot>(),
+        emptyList<org.graphiks.kanvas.pipeline.TextureSlot>(),
+        vertexLayout,
+    ) as ShaderModule
+}
+
 private fun pictureWithImageAlpha(alphaType: AlphaType): Picture {
     val recorder = PictureRecorder()
     recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 2f, 2f)).drawImage(
@@ -528,9 +923,6 @@ private fun pictureWithImageAlpha(alphaType: AlphaType): Picture {
     )
     return recorder.finishRecordingAsPicture()
 }
-
-private fun ByteArray.indexOfSubArray(needle: ByteArray): Int =
-    indices.firstOrNull { index -> index + needle.size <= size && needle.indices.all { offset -> this[index + offset] == needle[offset] } } ?: -1
 
 private val V1_LAYER_PICTURE_FIXTURE = byteArrayOf(
     0x4B, 0x50, 0x49, 0x43, // KPIC
@@ -565,4 +957,55 @@ private class TestBuffer : DisplayListBuffer {
     private val ops = mutableListOf<DisplayOp>()
     override fun append(op: DisplayOp) { ops.add(op) }
     override fun ops(): List<DisplayOp> = ops.toList()
+}
+
+private fun legacyRuntimeEffectPicture(vararg ids: String, truncated: Boolean = false): ByteArray {
+    val bytes = ByteArrayOutputStream()
+    DataOutputStream(bytes).use { output ->
+        output.write(byteArrayOf(0x4B, 0x50, 0x49, 0x43))
+        output.writeInt(7)
+        output.writeFloat(0f)
+        output.writeFloat(0f)
+        output.writeFloat(8f)
+        output.writeFloat(8f)
+        output.writeInt(ids.size)
+        ids.forEach { id ->
+            output.writeByte(0) // DrawRect
+            output.writeFloat(1f)
+            output.writeFloat(1f)
+            output.writeFloat(7f)
+            output.writeFloat(7f)
+            output.writeInt(ColorARGB.Red.toPackedInt())
+            output.writeByte(7) // Shader.RuntimeEffect
+            output.writeUTF(id)
+            output.writeUTF("legacy-runtime-source")
+            output.writeUTF("main")
+            output.writeInt(0) // module uniforms
+            output.writeInt(0) // module textures
+            output.writeInt(0) // module vertex attributes
+            output.writeInt(0) // module stride
+            output.writeByte(0) // VertexStepMode.VERTEX
+            output.writeInt(0) // uniform layout
+            output.writeInt(0) // child slots
+            output.writeInt(0) // uniform block
+            output.writeInt(0) // shader child bindings
+            if (!truncated) {
+                output.writeByte(BlendMode.SRC_OVER.ordinal)
+                output.writeByte(0xFF) // color filter absent
+                output.writeByte(0xFF) // mask filter absent
+                output.writeByte(0xFF) // path effect absent
+                output.writeByte(0xFF) // image filter absent
+                output.writeByte(0xFF) // blender absent
+                output.writeByte(PaintStyle.FILL.ordinal)
+                output.writeFloat(0f)
+                output.writeByte(StrokeCap.BUTT.ordinal)
+                output.writeByte(StrokeJoin.MITER.ordinal)
+                output.writeFloat(4f)
+                output.writeBoolean(true)
+                repeat(9) { index -> output.writeFloat(if (index % 4 == 0) 1f else 0f) }
+                output.writeByte(0) // ClipStack.WideOpen
+            }
+        }
+    }
+    return bytes.toByteArray()
 }

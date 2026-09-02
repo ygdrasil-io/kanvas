@@ -13,3 +13,28 @@ interface DisplayListBuffer {
     /** Return an immutable snapshot of all recorded display operations. */
     fun ops(): List<DisplayOp>
 }
+
+/** In-memory buffer that owns a defensive geometry snapshot at both boundaries. */
+internal class SnapshotDisplayListBuffer : DisplayListBuffer {
+    private val recorded = mutableListOf<DisplayOp>()
+    private val appendContext = GeometrySnapshotContext()
+
+    override fun append(op: DisplayOp) {
+        recorded += appendContext.snapshot(op)
+    }
+
+    override fun ops(): List<DisplayOp> = recorded.snapshotGeometry()
+}
+
+/** Applies the recording contract to caller-provided buffer implementations. */
+internal class GeometrySnapshotDisplayListBuffer(
+    private val delegate: DisplayListBuffer,
+) : DisplayListBuffer {
+    private val appendContext = GeometrySnapshotContext()
+
+    override fun append(op: DisplayOp) {
+        delegate.append(appendContext.snapshot(op))
+    }
+
+    override fun ops(): List<DisplayOp> = delegate.ops().snapshotGeometry()
+}

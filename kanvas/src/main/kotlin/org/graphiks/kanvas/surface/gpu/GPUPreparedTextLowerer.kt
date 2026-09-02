@@ -45,7 +45,7 @@ private const val PREPARED_TEXT_MATERIAL_DICTIONARY_VERSION =
     "material-dictionary:prepared-material:v1"
 
 /** Pure Kotlin prepared-text lowering with one terminal result per operation. */
-object GPUPreparedTextLowerer {
+internal object GPUPreparedTextLowerer {
     /** Canonical product entry; font identity and bytes are always resolved by the built-in authority. */
     fun lower(
         operation: DisplayOp.DrawText,

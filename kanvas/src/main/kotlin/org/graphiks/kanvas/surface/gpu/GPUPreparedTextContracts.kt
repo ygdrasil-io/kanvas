@@ -14,7 +14,7 @@ import org.graphiks.math.matrix.Matrix3x3F32
 
 /** Immutable font-source snapshot retained by a prepared text draw. */
 @ConsistentCopyVisibility
-data class GPUPreparedFontFaceSnapshot private constructor(
+internal data class GPUPreparedFontFaceSnapshot private constructor(
     val sourceId: FontSourceID,
     val typefaceId: TypefaceID,
     val faceIndex: Int,
@@ -46,7 +46,7 @@ data class GPUPreparedFontFaceSnapshot private constructor(
 }
 
 /** Renderer-relevant source representation proven for one shaped glyph. */
-enum class GPUPreparedTextSourceRepresentation {
+internal enum class GPUPreparedTextSourceRepresentation {
     OUTLINE,
     COLRV0,
     CBDT_CBLC,
@@ -57,14 +57,14 @@ enum class GPUPreparedTextSourceRepresentation {
 }
 
 /** Prepared representation admitted for later mask/atlas inventory work. */
-enum class GPUPreparedTextRepresentation {
+internal enum class GPUPreparedTextRepresentation {
     A8_MASK,
     COLRV0,
 }
 
 /** Per-draw representation selection in exact flattened glyph order. */
 @ConsistentCopyVisibility
-data class GPUPreparedTextRepresentationPolicy private constructor(
+internal data class GPUPreparedTextRepresentationPolicy private constructor(
     val representations: List<GPUPreparedTextRepresentation>,
 ) {
     companion object {
@@ -99,7 +99,7 @@ data class GPUPreparedTextRepresentationPolicy private constructor(
  * shift rotation/skew subpixel phase.
  */
 @ConsistentCopyVisibility
-data class GPUPreparedGlyphInput private constructor(
+internal data class GPUPreparedGlyphInput private constructor(
     val glyphId: Int,
     val positionX: Float,
     val positionY: Float,
@@ -125,7 +125,7 @@ data class GPUPreparedGlyphInput private constructor(
 }
 
 /** Pure, handle-free, transactionally prepared text draw. */
-class GPUPreparedTextDraw private constructor(
+internal class GPUPreparedTextDraw private constructor(
     val operationIndex: Int,
     val face: GPUPreparedFontFaceSnapshot,
     val glyphs: List<GPUPreparedGlyphInput>,
@@ -218,7 +218,7 @@ class GPUPreparedTextDraw private constructor(
 }
 
 /** Terminal result of pure prepared-text lowering. */
-sealed interface GPUPreparedTextLowering {
+internal sealed interface GPUPreparedTextLowering {
     @ConsistentCopyVisibility
     data class Ready private constructor(
         val draw: GPUPreparedTextDraw,

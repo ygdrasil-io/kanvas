@@ -40,6 +40,8 @@ enum class TextAlign(val factor: Float) {
     RIGHT(1f),
 }
 
+enum class GmExternalDependency { FONT }
+
 private const val PORTABLE_FONT_RESOURCE = "fonts/LiberationSans-Regular.ttf"
 private const val PORTABLE_FONT_FALLBACK_RESOURCE = "fonts/liberation/LiberationSans-Regular.ttf"
 
@@ -82,6 +84,7 @@ class GmCanvas(
     val width: Int,
     val height: Int,
 ) {
+    private val observedDependencies = linkedSetOf<GmExternalDependency>()
     private val transformStack = mutableListOf<Matrix3x3F32>()
     private val clipStack = mutableListOf<RectF32?>()
     private var currentTransform = Matrix3x3F32.Identity
@@ -221,6 +224,11 @@ class GmCanvas(
         withClip {
             if (currentTransform.isIdentity()) {
                 inner.drawPath(path, paint)
+            } else if (currentTransform.hasPerspective()) {
+                inner.save()
+                inner.concat(currentTransform)
+                inner.drawPath(path, paint)
+                inner.restore()
             } else {
                 inner.drawPath(path.transform(currentTransform), paint)
             }
@@ -445,6 +453,7 @@ class GmCanvas(
     }
 
     fun drawString(str: String, x: Float, y: Float, font: Font, paint: Paint) {
+        observedDependencies += GmExternalDependency.FONT
         withClip {
             if (currentTransform.isIdentity()) {
                 inner.drawString(str, x, y, font, paint)
@@ -486,6 +495,7 @@ class GmCanvas(
     /** Draw individual glyphs at explicit positions. Renders monochrome outlines
      * via the path pipeline; color glyph layers require the GPU text pipeline. */
     fun drawGlyphs(glyphIds: List<Int>, positions: List<Point2F32>, font: Font, paint: Paint) {
+        observedDependencies += GmExternalDependency.FONT
         require(glyphIds.size == positions.size)
         val emboldenWidth = font.size * 0.02f
         val glyphPaint = when {
@@ -507,6 +517,7 @@ class GmCanvas(
     }
 
     fun drawTextBlob(blob: TextBlob, x: Float, y: Float, paint: Paint) {
+        observedDependencies += GmExternalDependency.FONT
         withClip {
             if (currentTransform.isIdentity()) {
                 inner.drawText(blob, x, y, paint)
@@ -518,6 +529,8 @@ class GmCanvas(
             }
         }
     }
+
+    internal fun observedExternalDependencies(): Set<GmExternalDependency> = observedDependencies.toSet()
 
     fun drawPicture(picture: Picture, paint: Paint? = null) {
         withClip {

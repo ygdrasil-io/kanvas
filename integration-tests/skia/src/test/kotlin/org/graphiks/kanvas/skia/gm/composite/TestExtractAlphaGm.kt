@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.skia.gm.composite
 
 import org.graphiks.kanvas.image.Image
+import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.skia.GmCanvas
@@ -64,6 +65,6 @@ class TestExtractAlphaGm : SkiaGm {
                 pixels[i] = if (dist >= r - 10f && dist <= r + 10f) 0xFF.toByte() else 0x00.toByte()
             }
         }
-        return Image.fromPixels(100, 100, pixels, sourceId = "alpha_circle")
+        return Image.fromPixels(100, 100, pixels, ColorType.ALPHA_8, sourceId = "alpha_circle")
     }
 }
