@@ -5,6 +5,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.plan.AttachmentLoadPlan
 import org.graphiks.kanvas.gpu.plan.AttachmentStorePlan
@@ -45,6 +46,8 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureFormatSampleSupport
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureSampleCountSupport
 import org.graphiks.kanvas.gpu.renderer.analysis.corePrimitiveRectGeometryAuthority
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
@@ -58,6 +61,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitivePreplannedFram
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryResourceKind
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime
@@ -70,6 +74,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+import org.graphiks.kanvas.gpu.renderer.passes.W3SessionScratchV1
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
@@ -91,6 +96,338 @@ import org.graphiks.math.matrix.Matrix3x3F32
 
 class GpuPlanTaskListLowererTest {
     private val lowerer = GpuPlanTaskListLowerer()
+
+    @Test
+    fun `W3 lowerer emits encoded sRGB readback for the native completion boundary`() {
+        val taskList = assertIs<GpuPlanLoweringResult.Lowered>(lowerer.lower(validRequest(graph()))).taskList
+        val readback = taskList.tasks.filterIsInstance<GPUTask.Readback>().single()
+
+        assertEquals(GPUColorInterpretation.EncodedPremulSrgb, readback.request.outputColorInterpretation)
+    }
+
+    @Test
+    fun `W3 packet carries the core semantic analysis record authority`() {
+        val taskList = assertIs<GpuPlanLoweringResult.Lowered>(lowerer.lower(validRequest(graph()))).taskList
+        val packet = taskList.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
+        val semantic = assertIs<GPUDrawSemanticPayload.CorePrimitive>(packet.semanticPayload)
+
+        assertEquals(semantic.analysisRecordId, packet.analysisRecordId)
+    }
+
+    @Test
+    fun `W3 multi draw frame seals one shared physical scratch with exact packed sizes`() {
+        val graph = multiDrawGraph()
+        val render = assertIs<GpuPlanLoweringResult.Lowered>(
+            lowerer.lower(validRequest(graph)),
+        ).taskList.tasks.filterIsInstance<GPUTask.Render>().single()
+
+        val packets = render.drawPackets
+        assertEquals(2, packets.size)
+        val scratch = requireNotNull(packets.first().corePrimitivePreparedAuthority?.w3SessionScratch)
+        assertSame(scratch, requireNotNull(packets.last().corePrimitivePreparedAuthority?.w3SessionScratch))
+        assertEquals(packets.map(GPUDrawPacket::packetId), scratch.packetIds)
+        assertEquals(packets.map(GPUDrawPacket::commandIdValue), scratch.commandIds)
+        assertEquals(64L, scratch.vertexBytes)
+        assertEquals(48L, scratch.indexBytes)
+        assertEquals(listOf(32L, 32L), scratch.uniformPlan.slots.map { it.payloadBytes })
+    }
+
+    @Test
+    fun `W3 scratch accepts the sealed 1 through 512 draw range with exact device limits`() {
+        listOf(1, 512).forEach { drawCount ->
+            val render = assertIs<GpuPlanLoweringResult.Lowered>(
+                lowerer.lower(validRequest(multiDrawGraph(drawCount))),
+            ).taskList.tasks.filterIsInstance<GPUTask.Render>().single()
+            val scratch = requireNotNull(render.drawPackets.first().corePrimitivePreparedAuthority?.w3SessionScratch)
+
+            assertEquals(drawCount, render.drawPackets.size)
+            assertTrue(render.drawPackets.all {
+                it.corePrimitivePreparedAuthority?.w3SessionScratch === scratch
+            })
+            assertEquals(drawCount.toLong() * 32L, scratch.vertexBytes)
+            assertEquals(drawCount.toLong() * 24L, scratch.indexBytes)
+            assertEquals(1L shl 20, scratch.maxBufferSize)
+            assertEquals(1L, scratch.maxDynamicUniformBuffersPerPipelineLayout)
+        }
+    }
+
+    @Test
+    fun `W3 scratch reports stable buffer and dynamic uniform capability refusals`() {
+        val dynamicCapabilities = capabilities().let { capabilities ->
+            capabilities.copy(
+                limits = requireNotNull(capabilities.limits).copy(
+                    maxDynamicUniformBuffersPerPipelineLayout = 0,
+                ),
+            )
+        }
+        val dynamic = assertIs<GpuPlanLoweringResult.UnsupportedCapability>(
+            lowerer.lower(validRequest(rendererCapabilities = dynamicCapabilities)),
+        )
+        assertEquals("w3.capability.dynamic_uniform", dynamic.diagnostic.code.value)
+
+        val buffer = assertIs<GpuPlanLoweringResult.UnsupportedCapability>(
+            lowerer.lower(
+                validRequest(
+                    graph = multiDrawGraph(drawCount = 2, maxBufferSize = 256L),
+                    rendererCapabilities = capabilities(maxBufferSize = 256L),
+                ),
+            ),
+        )
+        assertEquals("w3.capability.buffer_size", buffer.diagnostic.code.value)
+    }
+
+    @Test
+    fun `W3 scratch refuses pooled buffer floors and rounded capacities before materialization`() {
+        listOf(4L * 1024L, 16L * 1024L - 1L).forEach { maxBufferSize ->
+            val refusal = assertIs<GpuPlanLoweringResult.UnsupportedCapability>(
+                lowerer.lower(
+                    validRequest(
+                        graph = multiDrawGraph(drawCount = 1, maxBufferSize = maxBufferSize),
+                        rendererCapabilities = capabilities(maxBufferSize = maxBufferSize),
+                    ),
+                ),
+            )
+
+            assertEquals("w3.capability.buffer_size", refusal.diagnostic.code.value)
+        }
+
+        val roundedRefusal = assertIs<GpuPlanLoweringResult.UnsupportedCapability>(
+            lowerer.lower(
+                validRequest(
+                    graph = multiDrawGraph(drawCount = 96, maxBufferSize = 24L * 1024L),
+                    rendererCapabilities = capabilities(maxBufferSize = 24L * 1024L),
+                ),
+            ),
+        )
+        assertEquals("w3.capability.buffer_size", roundedRefusal.diagnostic.code.value)
+
+        assertIs<GpuPlanLoweringResult.Lowered>(
+            lowerer.lower(
+                validRequest(
+                    graph = multiDrawGraph(drawCount = 1, maxBufferSize = 16L * 1024L),
+                    rendererCapabilities = capabilities(maxBufferSize = 16L * 1024L),
+                ),
+            ),
+        )
+        assertIs<GpuPlanLoweringResult.Lowered>(
+            lowerer.lower(
+                validRequest(
+                    graph = multiDrawGraph(drawCount = 96, maxBufferSize = 32L * 1024L),
+                    rendererCapabilities = capabilities(maxBufferSize = 32L * 1024L),
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun `preplanned W3 scratch must be shared and malformed packet authority refuses safely`() {
+        val graph = multiDrawGraph()
+        val lowered = assertIs<GpuPlanLoweringResult.Lowered>(lowerer.lower(validRequest(graph))).taskList
+        val prepare = assertIs<GPUTask.PrepareResources>(lowered.tasks[0])
+        val render = assertIs<GPUTask.Render>(lowered.tasks[1])
+        val readback = assertIs<GPUTask.Readback>(lowered.tasks[2])
+        val first = render.drawPackets.first()
+        val second = render.drawPackets.last()
+        val originalAuthority = requireNotNull(second.corePrimitivePreparedAuthority)
+        val originalScratch = requireNotNull(originalAuthority.w3SessionScratch)
+        val foreignScratch = W3SessionScratchV1(
+            planId = originalScratch.planId,
+            capabilitySealHash = originalScratch.capabilitySealHash,
+            deviceGeneration = originalScratch.deviceGeneration,
+            target = originalScratch.target,
+            staging = originalScratch.staging,
+            targetBounds = originalScratch.targetBounds,
+            packetIds = originalScratch.packetIds,
+            commandIds = originalScratch.commandIds,
+            structuralPipelineKey = originalScratch.structuralPipelineKey,
+            uniformPlan = originalScratch.uniformPlan,
+            maxBufferSize = originalScratch.maxBufferSize,
+            maxDynamicUniformBuffersPerPipelineLayout = originalScratch.maxDynamicUniformBuffersPerPipelineLayout,
+            vertexBytes = originalScratch.vertexBytes,
+            indexBytes = originalScratch.indexBytes,
+            poolCapacities = originalScratch.poolCapacities,
+        )
+        val foreignPacket = copyPacket(second, second.targetStateHash).attachCorePrimitivePreparedAuthority(
+            originalAuthority.copy(w3SessionScratch = foreignScratch),
+        )
+        val nullClipPacket = copyPacket(
+            second,
+            second.targetStateHash,
+            clipExecutionPlan = null,
+        ).attachCorePrimitivePreparedAuthority(
+            originalAuthority.copy(),
+        )
+
+        listOf(
+            listOf(first, foreignPacket),
+            listOf(first, nullClipPacket),
+        ).forEach { packets ->
+            val alteredRender = GPUTask.Render(
+                render.taskId,
+                render.recordingId,
+                render.phase,
+                render.target,
+                render.loadStore,
+                render.samplePlan,
+                render.resourceUses,
+                render.provisionalSegmentKey,
+                packets,
+                packets.associate { packet ->
+                    packet.packetId to render.batchEligibilityByPacketId.getValue(packet.packetId)
+                },
+                render.sampleContinuationKey,
+                render.compositeMembership,
+                render.depthStencilLoadStore,
+                render.preparedImageBindingsByPacketId,
+                render.preparedTextBindingsByPacketId,
+            )
+            val base = GPUTaskList(
+                lowered.frameId,
+                lowered.capabilitySeal,
+                lowered.recordingSeals,
+                lowered.expectedReplayKeyHash,
+                listOf(alteredRender),
+                emptyList(),
+                lowered.phaseOrder,
+                lowered.memoryBudget,
+                lowered.diagnostics,
+            )
+            val result = GPUCorePrimitivePreparedFrameTaskListAssembler().buildPreplanned(
+                GPUCorePrimitivePreplannedFrameRequest(
+                    graph.id,
+                    base,
+                    readback.source,
+                    assertIs<GPUFrameTextureDescriptor>(prepare.requests[0].descriptor).logicalBounds,
+                    prepare.requests[0],
+                    readback.staging,
+                    prepare.requests[1],
+                    readback.request,
+                    lowered.memoryBudget,
+                    graph.passes()[0].id,
+                    graph.passes()[1].id,
+                ),
+            )
+
+            assertEquals(
+                "w3.lowering.incompatible_plan",
+                assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+            )
+        }
+    }
+
+    @Test
+    fun `preplanned W3 scratch rechecks device facts packing and canonical pipeline authority`() {
+        val graph = multiDrawGraph()
+        val lowered = assertIs<GpuPlanLoweringResult.Lowered>(lowerer.lower(validRequest(graph))).taskList
+        val prepare = assertIs<GPUTask.PrepareResources>(lowered.tasks[0])
+        val render = assertIs<GPUTask.Render>(lowered.tasks[1])
+        val readback = assertIs<GPUTask.Readback>(lowered.tasks[2])
+        val scratch = requireNotNull(render.drawPackets.first().corePrimitivePreparedAuthority?.w3SessionScratch)
+
+        fun assemble(
+            packets: List<GPUDrawPacket> = render.drawPackets,
+            memory: GPUFrameMemoryBudgetPlan = lowered.memoryBudget,
+        ): GPUCorePrimitivePreparedFrameResult {
+            val alteredRender = GPUTask.Render(
+                render.taskId,
+                render.recordingId,
+                render.phase,
+                render.target,
+                render.loadStore,
+                render.samplePlan,
+                render.resourceUses,
+                render.provisionalSegmentKey,
+                packets,
+                packets.associate { packet ->
+                    packet.packetId to render.batchEligibilityByPacketId.getValue(packet.packetId)
+                },
+                render.sampleContinuationKey,
+                render.compositeMembership,
+                render.depthStencilLoadStore,
+                render.preparedImageBindingsByPacketId,
+                render.preparedTextBindingsByPacketId,
+            )
+            val base = GPUTaskList(
+                lowered.frameId,
+                lowered.capabilitySeal,
+                lowered.recordingSeals,
+                lowered.expectedReplayKeyHash,
+                listOf(alteredRender),
+                emptyList(),
+                lowered.phaseOrder,
+                memory,
+                lowered.diagnostics,
+            )
+            return GPUCorePrimitivePreparedFrameTaskListAssembler().buildPreplanned(
+                GPUCorePrimitivePreplannedFrameRequest(
+                    graph.id,
+                    base,
+                    readback.source,
+                    assertIs<GPUFrameTextureDescriptor>(prepare.requests[0].descriptor).logicalBounds,
+                    prepare.requests[0],
+                    readback.staging,
+                    prepare.requests[1],
+                    readback.request,
+                    memory,
+                    graph.passes()[0].id,
+                    graph.passes()[1].id,
+                ),
+            )
+        }
+
+        assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(assemble())
+
+        val forgedBufferLimit = lowered.memoryBudget.copy(
+            deviceLimitFacts = lowered.memoryBudget.deviceLimitFacts.map { fact ->
+                if (fact.name == "maxBufferSize") fact.copy(value = "512") else fact
+            },
+        )
+        val forgedAlignment = lowered.memoryBudget.copy(
+            deviceLimitFacts = lowered.memoryBudget.deviceLimitFacts.map { fact ->
+                if (fact.name == "minUniformBufferOffsetAlignment") fact.copy(value = "128") else fact
+            },
+        )
+        val forgedStructuralKey = scratch.structuralPipelineKey.copy(
+            colorFormat = org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8Unorm,
+        )
+        val forgedScratch = W3SessionScratchV1(
+            planId = scratch.planId,
+            capabilitySealHash = scratch.capabilitySealHash,
+            deviceGeneration = scratch.deviceGeneration,
+            target = scratch.target,
+            staging = scratch.staging,
+            targetBounds = scratch.targetBounds,
+            packetIds = scratch.packetIds,
+            commandIds = scratch.commandIds,
+            structuralPipelineKey = forgedStructuralKey,
+            uniformPlan = scratch.uniformPlan,
+            maxBufferSize = scratch.maxBufferSize,
+            maxDynamicUniformBuffersPerPipelineLayout = scratch.maxDynamicUniformBuffersPerPipelineLayout,
+            vertexBytes = scratch.vertexBytes,
+            indexBytes = scratch.indexBytes,
+            poolCapacities = scratch.poolCapacities,
+        )
+        val forgedPackets = render.drawPackets.map { packet ->
+            val authority = requireNotNull(packet.corePrimitivePreparedAuthority)
+            copyPacket(packet, packet.targetStateHash).attachCorePrimitivePreparedAuthority(
+                authority.copy(
+                    structuralPipelineKey = forgedStructuralKey,
+                    w3SessionScratch = forgedScratch,
+                ),
+            )
+        }
+
+        listOf(
+            assemble(memory = forgedBufferLimit),
+            assemble(memory = forgedAlignment),
+            assemble(packets = forgedPackets),
+        ).forEach { result ->
+            assertEquals(
+                "w3.lowering.incompatible_plan",
+                assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+            )
+        }
+    }
 
     @Test
     fun `public graph keeps original scene command index while packet ordering stays compact`() {
@@ -309,6 +646,23 @@ class GpuPlanTaskListLowererTest {
         assertEquals(null, render.compositeMembership)
         assertEquals(null, render.depthStencilLoadStore)
         val packet = render.drawPackets.single()
+        val authority = requireNotNull(packet.corePrimitivePreparedAuthority)
+        val scratch = requireNotNull(authority.w3SessionScratch)
+        assertEquals(graph.id.value, scratch.planId)
+        assertEquals(render.target, scratch.target)
+        assertEquals(readback.staging, scratch.staging)
+        assertEquals(target.logicalBounds, scratch.targetBounds)
+        assertEquals(listOf(packet.packetId), scratch.packetIds)
+        assertEquals(listOf(packet.commandIdValue), scratch.commandIds)
+        assertEquals(authority.structuralPipelineKey, scratch.structuralPipelineKey)
+        assertEquals(32L, scratch.vertexBytes)
+        assertEquals(24L, scratch.indexBytes)
+        assertEquals(1, scratch.uniformPlan.slots.size)
+        assertEquals(32L, scratch.uniformPlan.slots.single().payloadBytes)
+        assertEquals(256L, scratch.uniformPlan.alignmentBytes)
+        assertTrue(
+            taskList.memoryBudget.categoryTotals.getValue(GPUFrameMemoryCategory.ReusableScratch) == 0L,
+        )
         assertEquals("packet.w3.0", packet.packetId.value)
         assertEquals("pass.w3.main", packet.passId)
         assertEquals("core-primitive-device-geometry", packet.vertexSourceLabel)
@@ -346,7 +700,7 @@ class GpuPlanTaskListLowererTest {
         assertEquals("w3.${graph.id.value}.readback", readback.request.requestId.value)
         assertEquals("Rgba8Unorm", readback.request.pixelFormat.name)
         assertEquals(target.logicalBounds, readback.request.sourceBounds)
-        assertEquals(GPUColorInterpretation.LinearPremul, readback.request.outputColorInterpretation)
+        assertEquals(GPUColorInterpretation.EncodedPremulSrgb, readback.request.outputColorInterpretation)
     }
 
     @Test
@@ -714,6 +1068,55 @@ class GpuPlanTaskListLowererTest {
         )
     }
 
+    private fun multiDrawGraph(
+        drawCount: Int = 2,
+        maxBufferSize: Long = 1L shl 20,
+    ): RenderGraph {
+        require(drawCount in 1..512)
+        val scene = SceneSnapshot.of(
+            SceneExtent(2, 1),
+            ColorSpace.SRGB,
+            List(drawCount) { index ->
+                SceneCommand.Draw(
+                    DrawNode(
+                        GeometryNode.Rect.of(
+                            RectF32(
+                                if (index % 2 == 0) 0f else 1f,
+                                0f,
+                                if (index % 2 == 0) 1f else 2f,
+                                1f,
+                            ),
+                        ),
+                        MaterialNode.Solid(
+                            if (index % 2 == 0) ColorARGB.fromPackedUInt(0xFFFF0000u)
+                            else ColorARGB.fromPackedUInt(0xFF0000FFu),
+                        ),
+                        CoverageRequest.HARD_EDGE,
+                        ClipStackNode.Empty,
+                        BlendNode.SrcOver,
+                        EffectStack.Empty,
+                        Matrix3x3F32.Identity,
+                        DrawOrigin.RECT,
+                    ),
+                )
+            },
+        )
+        return assertIs<RenderPlanResult.Ready<RenderGraph>>(
+            W3SolidRectPlanCompiler().plan(
+                scene,
+                RenderTargetDescriptor(scene.extent, ColorSpace.SRGB),
+                PlanCapabilitySnapshot.of(
+                    deviceGeneration = 7,
+                    maxTextureDimension2D = 2048,
+                    maxBufferSizeBytes = maxBufferSize,
+                    copyBytesPerRowAlignment = 256,
+                    supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+                ),
+                PlanBudget(1024),
+            ),
+        ).plan
+    }
+
     private fun copyPacket(
         source: GPUDrawPacket,
         targetStateHash: String,
@@ -726,6 +1129,8 @@ class GpuPlanTaskListLowererTest {
         sortKey: Long = source.sortKey,
         sortKeyPreimage: String = source.sortKeyPreimage,
         originalPaintOrder: Int = source.originalPaintOrder,
+        clipExecutionPlan: org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan? =
+            source.clipExecutionPlan,
     ): GPUDrawPacket = GPUDrawPacket(
         packetId,
         commandIdValue,
@@ -753,7 +1158,7 @@ class GpuPlanTaskListLowererTest {
         source.resourceGeneration,
         source.frameProvenance,
         source.clipCoveragePlan,
-        source.clipExecutionPlan,
+        clipExecutionPlan,
         source.diagnostics,
         source.clipProducerAuthority,
     )
@@ -776,6 +1181,13 @@ class GpuPlanTaskListLowererTest {
             maxDynamicUniformBuffersPerPipelineLayout = 1,
         ),
         supportedTextureFormats = setOf(GPUTextureFormat.RGBA8Unorm, GPUTextureFormat.RGBA8UnormSrgb),
+        textureFormatSampleSupport = GPUTextureFormatSampleSupport(
+            mapOf(
+                GPUTextureFormat.RGBA8UnormSrgb to GPUTextureSampleCountSupport(
+                    renderAttachmentSampleCounts = setOf(1),
+                ),
+            ),
+        ),
         rendererFeatures = setOf(GPURendererFeature.RenderPass, GPURendererFeature.Readback),
     )
 }

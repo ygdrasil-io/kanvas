@@ -21,7 +21,11 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingSlot
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPayload
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUCorePrimitiveFramePoolCapacities
+import org.graphiks.kanvas.gpu.renderer.resources.corePrimitiveFramePoolCapacitiesOrNull
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 
@@ -1611,6 +1615,129 @@ internal class GPUCorePrimitiveAnalyticIntersectionUniformSeal(
         expected.size == 160 && payloadBytesSnapshot.contentEquals(expected)
 }
 
+/**
+ * Handle-free W3 encoder-scratch authority.  W3 deliberately keeps the vertex, index, and
+ * uniform slabs outside the logical prepared-resource graph: they are borrowed from the
+ * session-scoped native frame pool only after this seal has been accepted by preflight.
+ */
+internal class W3SessionScratchV1(
+    val planId: String,
+    val capabilitySealHash: String,
+    val deviceGeneration: Long,
+    val target: GPUFrameTargetRef,
+    val staging: GPUFrameBufferRef,
+    val targetBounds: GPUPixelBounds,
+    packetIds: List<GPUDrawPacketID>,
+    commandIds: List<Int>,
+    val structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+    val uniformPlan: GPUUniformSlabPlan,
+    /** Exact device limits used when sealing the physical encoder scratch. */
+    val maxBufferSize: Long,
+    val maxDynamicUniformBuffersPerPipelineLayout: Long,
+    val vertexBytes: Long,
+    val indexBytes: Long,
+    /** Exact minimum physical capacities allocated by the reusable native frame pool. */
+    val poolCapacities: GPUCorePrimitiveFramePoolCapacities,
+) {
+    val packetIds: List<GPUDrawPacketID> = immutableList(packetIds)
+    val commandIds: List<Int> = immutableList(commandIds)
+
+    init {
+        require(planId.isNotBlank() && capabilitySealHash.isNotBlank()) {
+            "W3 scratch requires the exact plan and capability seals"
+        }
+        require(deviceGeneration >= 0L && !targetBounds.isEmpty) {
+            "W3 scratch requires a current non-empty target"
+        }
+        require(maxBufferSize > 0L && maxDynamicUniformBuffersPerPipelineLayout >= 1L) {
+            "W3 scratch requires observed positive buffer and dynamic-uniform limits"
+        }
+        require(this.packetIds.size in 1..512 && this.packetIds.distinct().size == this.packetIds.size &&
+            this.commandIds.size == this.packetIds.size && this.commandIds.distinct().size == this.commandIds.size &&
+            this.commandIds.all { it >= 0 }
+        ) { "W3 scratch requires one ordered packet and command identity per draw" }
+        require(structuralPipelineKey.shader == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry &&
+            structuralPipelineKey.topology == GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList &&
+            structuralPipelineKey.sampleCount == 1 &&
+            structuralPipelineKey.uniformLayout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2
+        ) { "W3 scratch accepts only the direct single-sample uniform32 pipeline" }
+        require(vertexBytes == this.packetIds.size.toLong() * 32L &&
+            indexBytes == this.packetIds.size.toLong() * 24L &&
+            vertexBytes <= Int.MAX_VALUE.toLong() && indexBytes <= Int.MAX_VALUE.toLong() &&
+            uniformPlan.sourceLabel == SOURCE_LABEL &&
+            uniformPlan.uploadBudgetBytes == maxBufferSize &&
+            uniformPlan.totalBytes <= Int.MAX_VALUE.toLong() &&
+            uniformPlan.totalBytes <= UInt.MAX_VALUE.toLong() &&
+            uniformPlan.slots.size == this.packetIds.size &&
+            uniformPlan.deviceGeneration == deviceGeneration &&
+            uniformPlan.slots.all { slot ->
+                slot.payloadBytes == 32L &&
+                    slot.alignedOffset <= UInt.MAX_VALUE.toLong() &&
+                    slot.allocatedBytes <= UInt.MAX_VALUE.toLong() &&
+                    slot.alignedOffset <= UInt.MAX_VALUE.toLong() - slot.allocatedBytes
+            }
+        ) { "W3 scratch byte packing must be exact for every packet" }
+        require(
+            poolCapacities == corePrimitiveFramePoolCapacitiesOrNull(
+                vertexBytes,
+                indexBytes,
+                uniformPlan.totalBytes,
+            ),
+        ) { "W3 scratch must seal the exact pooled buffer capacities" }
+    }
+
+    internal fun matches(
+        expectedPlanId: String,
+        capabilityHash: String,
+        generation: Long,
+        expectedTarget: GPUFrameTargetRef,
+        expectedStaging: GPUFrameBufferRef,
+        bounds: GPUPixelBounds,
+        packets: List<GPUDrawPacket>,
+    ): Boolean =
+        planId == expectedPlanId && capabilitySealHash == capabilityHash &&
+            deviceGeneration == generation && target == expectedTarget && staging == expectedStaging &&
+            targetBounds == bounds &&
+            packetIds == packets.map(GPUDrawPacket::packetId) &&
+            commandIds == packets.map(GPUDrawPacket::commandIdValue)
+
+    internal fun hasExactUniformPayloads(
+        expectedAlignmentBytes: Long,
+        packets: List<GPUDrawPacket>,
+    ): Boolean {
+        val payloads = packets.map { packet ->
+            val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive
+                ?: return false
+            val bytes = semantic.payloadRef.uniformBlock?.bytes ?: return false
+            GPUUniformSlabPayload(
+                "w3.draw.${packet.commandIdValue}",
+                bytes.map(Int::toByte).toByteArray(),
+            )
+        }
+        return uniformPlan.hasExactPayloads(
+            expectedSourceLabel = SOURCE_LABEL,
+            expectedDeviceGeneration = deviceGeneration,
+            expectedAlignmentBytes = expectedAlignmentBytes,
+            payloads = payloads,
+        )
+    }
+
+    internal fun fitsDeviceLimits(
+        maxBufferSize: Long,
+        maxDynamicUniformBuffersPerPipelineLayout: Long,
+    ): Boolean =
+        maxBufferSize == this.maxBufferSize &&
+            maxDynamicUniformBuffersPerPipelineLayout == this.maxDynamicUniformBuffersPerPipelineLayout &&
+            poolCapacities.vertexBytes <= maxBufferSize &&
+            poolCapacities.indexBytes <= maxBufferSize &&
+            poolCapacities.uniformBytes <= maxBufferSize &&
+            uniformPlan.uploadBudgetBytes == maxBufferSize
+
+    internal companion object {
+        const val SOURCE_LABEL: String = "w3-session-scratch-v1"
+    }
+}
+
 /** One-shot authority attached by the prepared-frame builder before the packet escapes. */
 internal data class GPUCorePrimitivePreparedPacketAuthority(
     val structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
@@ -1620,4 +1747,5 @@ internal data class GPUCorePrimitivePreparedPacketAuthority(
     val analyticClipUniformSeal: GPUCorePrimitiveAnalyticClipUniformSeal? = null,
     val analyticIntersectionUniformSeal: GPUCorePrimitiveAnalyticIntersectionUniformSeal? = null,
     val coverageMaskUniformSlabSeal: GPUCorePrimitiveCoverageMaskUniformSlabSeal? = null,
+    val w3SessionScratch: W3SessionScratchV1? = null,
 )

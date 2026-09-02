@@ -5,6 +5,7 @@ import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.junit.jupiter.api.AfterEach
@@ -44,6 +45,56 @@ class SurfaceTest {
     }
 
     @Test
+    fun `raw GPU runtime disposal refreshes the W3 context before the next frame`() {
+        val first = Surface(1, 1).also { surface ->
+            surface.canvas { drawColor(ColorARGB.Red) }
+        }.render()
+        assertArrayEquals(byteArrayOf(-1, 0, 0, -1), first.pixels.toByteArray())
+
+        GPUBackendRuntimeFactory.dispose()
+
+        val second = Surface(1, 1).also { surface ->
+            surface.canvas { drawColor(ColorARGB.Blue) }
+        }.render()
+        assertArrayEquals(byteArrayOf(0, 0, -1, -1), second.pixels.toByteArray())
+    }
+
+    @Test
+    fun `W3 frame local budget exhaustion is terminal`() {
+        val surface = Surface(
+            width = 1,
+            height = 1,
+            config = RenderConfig(frameLocalBudgetBytes = 1L),
+        )
+        surface.canvas { drawColor(ColorARGB.Red) }
+
+        val failure = assertThrows(IllegalStateException::class.java) { surface.render() }
+
+        assertTrue(failure.message.orEmpty().startsWith("w3.budget.frame_local_exceeded:"))
+    }
+
+    @Test
+    fun `W3 capability failure is terminal without returning the legacy pixel sentinel`() {
+        val legacySentinel = Surface(
+            width = 1,
+            height = 1,
+            config = RenderConfig(gpuColorFormat = GPUColorFormat.BGRA8_UNORM),
+        ).also { surface ->
+            surface.canvas { drawColor(ColorARGB.Red) }
+        }.render()
+        assertArrayEquals(byteArrayOf(0, 0, -1, -1), legacySentinel.pixels.toByteArray())
+
+        val surface = Surface(width = 16_777_217, height = 1)
+        surface.canvas { drawColor(ColorARGB.Red) }
+        val before = surface.snapshotOps()
+
+        val failure = assertThrows(IllegalStateException::class.java) { surface.render() }
+
+        assertTrue(failure.message.orEmpty().startsWith("w3.capability.texture_dimension:"))
+        assertEquals(before, surface.snapshotOps())
+    }
+
+    @Test
     fun `annotation is pixel inert and snapshots distinguish valid empty and out of bounds subsets`() {
         val surface = Surface(4, 3)
         surface.canvas {
@@ -65,6 +116,36 @@ class SurfaceTest {
         assertTrue(surface.snapshotOps().any { it is org.graphiks.kanvas.canvas.DisplayOp.Annotation })
     }
     @Test fun `Surface canvas DSL`() { val s = Surface(320, 240); s.canvas { drawRect(RectF32.ofLTRB(0f,0f,100f,80f), Paint.fill(ColorARGB.Red)) }; val r = s.render(); assertEquals(1, r.stats.opsDispatched) }
+
+    @Test
+    fun `W3 renders multiple solid rectangles in draw order`() {
+        val surface = Surface(2, 1)
+        surface.canvas {
+            drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint.fill(ColorARGB.Red))
+            drawRect(RectF32.ofLTRB(1f, 0f, 2f, 1f), Paint.fill(ColorARGB.Blue))
+        }
+
+        val result = surface.render()
+
+        assertArrayEquals(
+            byteArrayOf(-1, 0, 0, -1, 0, 0, -1, -1),
+            result.pixels.toByteArray(),
+        )
+        assertEquals(2, result.stats.opsDispatched)
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+        assertTrue(result.nativeEvidenceCounters.isNotEmpty())
+    }
+
+    @Test
+    fun `W3 planner gap keeps the product legacy pixels`() {
+        val surface = Surface(1, 1)
+        surface.canvas {
+            drawColor(ColorARGB.Blue)
+            drawColor(ColorARGB.of(128, 255, 0, 0), BlendMode.SRC)
+        }
+
+        assertArrayEquals(byteArrayOf(-68, 0, 0, -128), surface.render().pixels.toByteArray())
+    }
     @Test
     fun `readPixels copies correct region`() {
         val surface = Surface(100, 100)

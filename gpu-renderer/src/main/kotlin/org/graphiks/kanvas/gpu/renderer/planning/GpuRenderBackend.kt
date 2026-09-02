@@ -58,17 +58,27 @@ public class GpuRenderBackend(
         scene: SceneSnapshot,
         target: RenderTargetDescriptor,
     ): RenderPlanResult<RenderGraph> {
-        val capabilities = try {
-            context.capabilities()
-        } catch (_: Throwable) {
-            null
-        } ?: return RenderPlanResult.GapOnPromotedScope(
-            listOf(diag("w3.execution.device_failure", "GPU runtime is unavailable.")),
-        )
         if (target.extent != targetConfig.extent || target.colorSpace != targetConfig.colorSpace) {
             return RenderPlanResult.InvalidScene(
                 listOf(diag("w3.lowering.incompatible_plan", "Target does not match the bound GPU backend.")),
             )
+        }
+        compiler.classify(scene, target)?.let { return it }
+        val acquired = try {
+            context.acquirePlanningCapabilities()
+        } catch (_: Throwable) {
+            GpuPlanningCapabilityAcquisition.Unavailable
+        }
+        val capabilities = when (acquired) {
+            is GpuPlanningCapabilityAcquisition.Ready -> acquired.snapshot
+            is GpuPlanningCapabilityAcquisition.Unsupported -> {
+                return RenderPlanResult.GapOnPromotedScope(listOf(acquired.diagnostic))
+            }
+            GpuPlanningCapabilityAcquisition.Unavailable -> {
+                return RenderPlanResult.GapOnPromotedScope(
+                    listOf(diag("w3.execution.device_failure", "GPU runtime is unavailable.")),
+                )
+            }
         }
         return compiler.plan(scene, target, capabilities, PlanBudget(targetConfig.frameLocalBudgetBytes)).also { result ->
             if (result is RenderPlanResult.Ready) {
@@ -122,7 +132,7 @@ public class GpuRenderBackend(
             return invalid("The submitted plan is not an authenticated plan for this backend target.")
         }
 
-        val loweredPlan = try {
+        val lowering = try {
             val capabilities = context.backendCapabilities()
                 ?: return device("w3.execution.device_failure", "GPU capabilities are unavailable.")
             GpuPlanTaskListLowerer().lower(
@@ -134,10 +144,17 @@ public class GpuRenderBackend(
                     frameId = GPUFrameID(1),
                     recordingId = GPURecordingID("w3.${plan.id.value}"),
                 ),
-            ) as? GpuPlanLoweringResult.Lowered
+            )
         } catch (_: Throwable) {
             return device("w3.execution.device_failure", "GPU frame preparation failed.")
-        } ?: return invalid("The submitted plan could not be lowered.")
+        }
+        val loweredPlan = when (lowering) {
+            is GpuPlanLoweringResult.Lowered -> lowering
+            is GpuPlanLoweringResult.UnsupportedCapability ->
+                return RenderExecutionResult.UnsupportedCapability(listOf(lowering.diagnostic))
+            is GpuPlanLoweringResult.InvalidPlan ->
+                return RenderExecutionResult.InvalidPlan(listOf(lowering.diagnostic))
+        }
 
         val key = GpuRenderSessionKey(
             deviceGeneration = snapshot.deviceGeneration,

@@ -40,6 +40,68 @@ class GpuRenderBackendTest {
         assertFailsWith<IllegalArgumentException> { GpuRenderTargetConfig(SceneExtent(1, 1), ColorSpace.SRGB, 0) }
     }
 
+    @Test
+    fun `semantic W3 classification is final before a runtime is acquired`() {
+        val backend = GpuRenderBackend(
+            W3SolidRectPlanCompiler(),
+            GpuRenderContext(ThrowingOwner()),
+            GpuRenderTargetConfig(SceneExtent(2, 2), ColorSpace.SRGB, 1L shl 20),
+        )
+        val empty = SceneSnapshot.of(SceneExtent(2, 2), ColorSpace.SRGB, emptyList())
+        val nonFinite = SceneSnapshot.of(
+            SceneExtent(2, 2),
+            ColorSpace.SRGB,
+            listOf(
+                SceneCommand.Draw(
+                    DrawNode(
+                        GeometryNode.Rect.of(RectF32(Float.NaN, 0f, 2f, 2f)),
+                        MaterialNode.Solid(ColorARGB.Red),
+                        CoverageRequest.HARD_EDGE,
+                        ClipStackNode.Empty,
+                        BlendNode.SrcOver,
+                        EffectStack.Empty,
+                        Matrix3x3F32.Identity,
+                        DrawOrigin.RECT,
+                    ),
+                ),
+            ),
+        )
+
+        val gap = assertIs<RenderPlanResult.GapNotMigrated>(backend.plan(empty, target(2, 2)))
+        assertEquals("w3.command.not_migrated", gap.diagnostics.single().code.value)
+        val invalid = assertIs<RenderPlanResult.InvalidScene>(backend.plan(nonFinite, target(2, 2)))
+        assertEquals("w3.scene.invalid", invalid.diagnostics.single().code.value)
+    }
+
+    @Test
+    fun `physical sRGB format and lowerer capability refusals remain typed`() = runBlocking {
+        val unsupportedFormatCapabilities = caps().copy(
+            textureFormatSampleSupport = GPUTextureFormatSampleSupport(),
+        )
+        val formatRenderer = renderer(
+            FakeOwner(listOf(FakeBackend(1, FakePrepared(1), reportedCapabilities = unsupportedFormatCapabilities))),
+        )
+        val formatFailure = assertIs<RenderPlanResult.GapOnPromotedScope>(
+            formatRenderer.plan(scene(2, 2), target(2, 2)),
+        )
+        assertEquals("w3.capability.format", formatFailure.diagnostics.single().code.value)
+
+        val base = caps()
+        val dynamicLimitCapabilities = base.copy(
+            limits = requireNotNull(base.limits).copy(maxDynamicUniformBuffersPerPipelineLayout = 0),
+        )
+        val prepared = FakePrepared(1)
+        val dynamicRenderer = renderer(
+            FakeOwner(listOf(FakeBackend(1, prepared, reportedCapabilities = dynamicLimitCapabilities))),
+        )
+        val plan = issue(dynamicRenderer, 2, 2)
+
+        val execution = assertIs<RenderExecutionResult.UnsupportedCapability>(
+            dynamicRenderer.submit(plan).await(),
+        )
+        assertEquals("w3.capability.dynamic_uniform", execution.diagnostics.single().code.value)
+    }
+
     @Test fun `completed multi draw frame uses its immutable native metrics snapshot`() = runBlocking {
         val nativeCounters = linkedMapOf("native.render_passes" to 1L, "native.draws" to 6L)
         val prepared = FakePrepared(1, metricsSnapshot = { visualCommandCount ->
@@ -380,8 +442,12 @@ class GpuRenderBackendTest {
         override fun disposeGeneration(deviceGeneration: GPUDeviceGenerationID) { events += "dispose:${deviceGeneration.value}" }
         override fun close() { events += "owner-close" }
     }
-    private class FakeBackend(generation: Long, vararg sessions: FakePrepared) : GpuBackendSessionPort {
-        override val deviceGeneration = GPUDeviceGenerationID(generation); override val capabilities = caps(); private val queue = ArrayDeque(sessions.asList())
+    private class FakeBackend(
+        generation: Long,
+        vararg sessions: FakePrepared,
+        private val reportedCapabilities: GPUCapabilities = caps(),
+    ) : GpuBackendSessionPort {
+        override val deviceGeneration = GPUDeviceGenerationID(generation); override val capabilities = reportedCapabilities; private val queue = ArrayDeque(sessions.asList())
         val events = Collections.synchronizedList(mutableListOf<String>())
         var prepareFailure: Throwable? = null
         override fun prepareSceneFrameSession(request: GPUOffscreenTargetRequest): GpuPreparedSceneSessionPort {
@@ -390,6 +456,11 @@ class GpuRenderBackendTest {
             return queue.removeFirst()
         }
         override fun close() { events += "backend-close" }
+    }
+    private class ThrowingOwner : GpuBackendRuntimeOwnerPort {
+        override fun createOrNull(): GpuBackendSessionPort? = error("runtime must not be acquired for semantic classification")
+        override fun disposeGeneration(deviceGeneration: GPUDeviceGenerationID) = Unit
+        override fun close() = Unit
     }
     private class FakePrepared(
         generation: Long,
@@ -434,5 +505,17 @@ class GpuRenderBackendTest {
 
         fun runNext() { checkNotNull(queued.poll()).run() }
     }
-    private companion object { fun caps() = GPUCapabilities(GPUImplementationIdentity("fake", "fake", "fake", "fake"), listOf(GPUCapabilityFact("first_slice.fill_rect.native", "test", "supported", true, "w3")), snapshotId = "fake", limits = GPULimits(2048, 256, 256, maxBufferSize = 1L shl 20, maxDynamicUniformBuffersPerPipelineLayout = 1), supportedTextureFormats = setOf(GPUTextureFormat.RGBA8UnormSrgb), rendererFeatures = setOf(GPURendererFeature.RenderPass, GPURendererFeature.Readback)) }
+    private companion object {
+        fun caps() = GPUCapabilities(
+            GPUImplementationIdentity("fake", "fake", "fake", "fake"),
+            listOf(GPUCapabilityFact("first_slice.fill_rect.native", "test", "supported", true, "w3")),
+            snapshotId = "fake",
+            limits = GPULimits(2048, 256, 256, maxBufferSize = 1L shl 20, maxDynamicUniformBuffersPerPipelineLayout = 1),
+            supportedTextureFormats = setOf(GPUTextureFormat.RGBA8UnormSrgb),
+            textureFormatSampleSupport = GPUTextureFormatSampleSupport(
+                mapOf(GPUTextureFormat.RGBA8UnormSrgb to GPUTextureSampleCountSupport(setOf(1))),
+            ),
+            rendererFeatures = setOf(GPURendererFeature.RenderPass, GPURendererFeature.Readback),
+        )
+    }
 }

@@ -28,6 +28,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedSemanticA
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveUniformSlabSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskPreparedRoute
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
+import org.graphiks.kanvas.gpu.renderer.passes.W3SessionScratchV1
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPreparedImageClipAuthorityValidation
 import org.graphiks.kanvas.gpu.renderer.passes.validateGPUCorePrimitiveCoverageMaskPreparedAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.validateCorePrimitiveCoverageSampleAuthority
@@ -74,6 +75,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.PREPARED_VERTICES_UNMATERIALIZED_PREFLIGHT_REFUSAL_CODE
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackLayoutPlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackLayoutPlanner
+import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackPixelFormat
 import org.graphiks.kanvas.gpu.renderer.recording.COLOR_GLYPH_PACKET_PASS_AUTHORITY_CODE
 import org.graphiks.kanvas.gpu.renderer.recording.COLOR_GLYPH_PACKET_PASS_AUTHORITY_MESSAGE
 import org.graphiks.kanvas.gpu.renderer.recording.preparedColorGlyphPacketAuthorityRefusal
@@ -3618,6 +3620,136 @@ internal class GPUFramePreflighter(
         return CorePrimitiveDirectGeometryValidation(diagnostic, routeSeal)
     }
 
+    /** W3 is the sole direct lane whose physical V/I/U slabs are sealed encoder scratch. */
+    private fun hasExactW3SessionScratch(
+        framePlan: GPUFramePlan,
+        renders: List<GPUFrameStep.RenderPassStep>,
+        scratch: W3SessionScratchV1,
+    ): Boolean {
+        val render = renders.singleOrNull() ?: return false
+        val readback = framePlan.steps.filterIsInstance<GPUFrameStep.ReadbackCopyStep>()
+            .singleOrNull() ?: return false
+        val expectedPlanId = readback.request.requestId.value
+            .takeIf { it.startsWith("w3.") && it.endsWith(".readback") }
+            ?.removePrefix("w3.")
+            ?.removeSuffix(".readback")
+            ?.takeIf(String::isNotBlank)
+            ?: return false
+        val limits = capabilities.limits ?: return false
+        val maxBufferSize = limits.maxBufferSize ?: return false
+        val maxDynamicUniformBuffers = limits.maxDynamicUniformBuffersPerPipelineLayout ?: return false
+        val packets = render.drawPackets
+        val firstSemantic = packets.firstOrNull()?.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive
+            ?: return false
+        val preparations = framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+            .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+        val target = preparations.singleOrNull { it.role == GPUFrameResourceRole.SceneTarget }
+        val staging = preparations.singleOrNull { it.role == GPUFrameResourceRole.ReadbackStaging }
+        val targetDescriptor = target?.descriptor as? GPUFrameTextureDescriptor
+        val stagingDescriptor = staging?.descriptor as? GPUFrameBufferDescriptor
+        val targetBytes = try {
+            Math.multiplyExact(
+                Math.multiplyExact(firstSemantic.targetBounds.width.toLong(), firstSemantic.targetBounds.height.toLong()),
+                4L,
+            )
+        } catch (_: ArithmeticException) {
+            return false
+        }
+        val stagingBytes = try {
+            val unpaddedBytesPerRow = Math.multiplyExact(firstSemantic.targetBounds.width.toLong(), 4L)
+            val alignment = limits.copyBytesPerRowAlignment
+            val paddedBytesPerRow = Math.addExact(
+                unpaddedBytesPerRow,
+                (alignment - unpaddedBytesPerRow % alignment) % alignment,
+            )
+            Math.multiplyExact(paddedBytesPerRow, firstSemantic.targetBounds.height.toLong())
+        } catch (_: ArithmeticException) {
+            return false
+        }
+        return framePlan.steps.size == 3 &&
+            framePlan.steps[0] is GPUFrameStep.PrepareResourcesStep &&
+            framePlan.steps[1] === render && framePlan.steps[2] === readback &&
+            framePlan.recordingSeals.size == 1 &&
+            framePlan.recordingSeals.single().compatibilityKeyHash == "w3:$expectedPlanId" &&
+            framePlan.recordingSeals.single().replayKeyHash == "w3:$expectedPlanId" &&
+            packets.size in 1..512 &&
+            scratch.matches(
+                expectedPlanId,
+                framePlan.capabilitySeal.sealHash,
+                framePlan.capabilitySeal.deviceGeneration.value,
+                render.target,
+                readback.staging,
+                firstSemantic.targetBounds,
+                packets,
+            ) &&
+            scratch.hasExactUniformPayloads(limits.minUniformBufferOffsetAlignment, packets) &&
+            scratch.fitsDeviceLimits(maxBufferSize, maxDynamicUniformBuffers) &&
+            packets.all { packet ->
+                val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive
+                val authority = packet.corePrimitivePreparedAuthority
+                semantic != null &&
+                    authority?.w3SessionScratch === scratch &&
+                    authority.uniformSlabSeal == null &&
+                    authority.structuralPipelineKey == scratch.structuralPipelineKey &&
+                    packet.analysisRecordId == semantic.analysisRecordId &&
+                    packet.blendPlan.isCanonicalSolidRectSrcOver() &&
+                    packet.clipExecutionPlan == if (semantic.scissorBounds == firstSemantic.targetBounds) {
+                        org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan.NoClip
+                    } else {
+                        org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan.ScissorOnly(
+                            semantic.scissorBounds,
+                        )
+                    } &&
+                    authority.structuralPipelineKey == corePrimitiveRenderPipelineStructuralKey(
+                        semantic,
+                        requireNotNull(packet.clipExecutionPlan),
+                        requireNotNull(packet.blendPlan),
+                        sampleCount = 1,
+                        colorFormat = GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat(),
+                    ) &&
+                    packet.renderPipelineKey == authority.structuralPipelineKey.stableRenderPipelineKey(
+                        CORE_PRIMITIVE_RENDER_PIPELINE_KEY,
+                    ) &&
+                    semantic.sourceFamily == GPUCorePrimitiveSourceFamily.Rect &&
+                    semantic.targetBounds == firstSemantic.targetBounds &&
+                    semantic.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor &&
+                    semantic.material is GPUCorePrimitiveMaterialPayload.SolidColor &&
+                    semantic.geometry is GPUCorePrimitiveGeometry.Rect
+            } &&
+            render.samplePlan == GPUSamplePlan.SingleSampleFrame &&
+            render.loadStore.loadOp == "clear" && render.loadStore.storePlan == GPUStorePlan.Store &&
+            render.loadStore.clearColorLabel == null && render.resourceUses.isEmpty() &&
+            render.sampleContinuation == null && render.depthStencilLoadStore == null &&
+            readback.source == render.target &&
+            readback.request.sourceBounds == firstSemantic.targetBounds &&
+            readback.request.pixelFormat == GPUReadbackPixelFormat.Rgba8Unorm &&
+            readback.request.outputColorInterpretation == GPUColorInterpretation.EncodedPremulSrgb &&
+            readback.request.bufferOffsetBytes == 0L &&
+            preparations.size == 2 && target?.resource == scratch.target &&
+            target?.usages == setOf(GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceUsage.CopySource) &&
+            target.lifetime == GPUFrameResourceLifetime.FrameLocal && target.byteSize == targetBytes &&
+            targetDescriptor?.logicalBounds == firstSemantic.targetBounds &&
+            targetDescriptor.format == GPUColorFormat.RGBA8UnormSrgb && targetDescriptor.sampleCount == 1 &&
+            staging?.resource == scratch.staging &&
+            staging.usages == setOf(GPUFrameResourceUsage.CopyDestination, GPUFrameResourceUsage.MapRead) &&
+            staging.lifetime == GPUFrameResourceLifetime.FrameLocal && staging.byteSize == stagingBytes &&
+            stagingDescriptor?.byteSize == stagingBytes &&
+            stagingDescriptor.alignmentBytes == limits.copyBytesPerRowAlignment &&
+            framePlan.memoryBudget.allocations.size == 2 &&
+            framePlan.memoryBudget.allocations.map { it.category } == listOf(
+                GPUFrameMemoryCategory.CanonicalTarget,
+                GPUFrameMemoryCategory.ReadbackStaging,
+            ) && framePlan.memoryBudget.allocations[0].bytes == targetBytes &&
+            framePlan.memoryBudget.allocations[0].extent == firstSemantic.targetBounds &&
+            framePlan.memoryBudget.allocations[1].bytes == stagingBytes &&
+            framePlan.memoryBudget.allocations[1].extent == null &&
+            framePlan.memoryBudget.targetResidentBytes == targetBytes &&
+            framePlan.memoryBudget.peakFrameTransientBytes == stagingBytes &&
+            targetBytes <= Long.MAX_VALUE - stagingBytes &&
+            targetBytes + stagingBytes <= framePlan.memoryBudget.configuredAggregateBudgetBytes &&
+            framePlan.memoryBudget.allocations.none { it.category == GPUFrameMemoryCategory.ReusableScratch }
+    }
+
     private fun validateCorePrimitiveDirectGeometryResourcesDiagnostic(
         framePlan: GPUFramePlan,
         strictNativeRoute: Boolean,
@@ -3791,6 +3923,18 @@ internal class GPUFramePreflighter(
                 "invalid.preflight.core_primitive_semantic_integrity",
                 "Core primitive packet authority contradicts its immutable semantic input.",
             )
+        }
+        val w3Scratch = coreRenders.flatMap { it.drawPackets }
+            .mapNotNull { it.corePrimitivePreparedAuthority?.w3SessionScratch }
+            .firstOrNull()
+        if (w3Scratch != null) {
+            if (!hasExactW3SessionScratch(framePlan, coreRenders, w3Scratch)) {
+                return diagnostic(
+                    "invalid.preflight.w3_session_scratch",
+                    "W3 encoder scratch authority is absent, stale, or contradicts the closed frame envelope.",
+                )
+            }
+            return null
         }
         // A frame that exactly matches the prepared-surface mixed boundary owns mask/depth
         // artifacts for its non-core members (text, image, vertices); only an all-direct-core
@@ -6654,6 +6798,25 @@ internal class GPUFramePreflighter(
         return when (step) {
             is GPUFrameStep.RenderPassStep -> {
                 val targetResourceLabel = resources.first()
+                val w3Scratch = step.drawPackets.firstOrNull()
+                    ?.corePrimitivePreparedAuthority?.w3SessionScratch
+                if (w3Scratch != null && step.drawPackets.all {
+                        it.corePrimitivePreparedAuthority?.w3SessionScratch === w3Scratch
+                    }
+                ) {
+                    return listOf(
+                        key(GPUPreparedNativeOperandRole.RenderColorTarget, GPUPreparedNativeOperandKind.TextureView, targetResourceLabel),
+                        key(GPUPreparedNativeOperandRole.RenderPipeline, GPUPreparedNativeOperandKind.RenderPipeline, "w3.${w3Scratch.planId}.pipeline"),
+                        key(GPUPreparedNativeOperandRole.RenderVertexBuffer, GPUPreparedNativeOperandKind.Buffer, "w3.${w3Scratch.planId}.scratch.vertex"),
+                        key(GPUPreparedNativeOperandRole.RenderIndexBuffer, GPUPreparedNativeOperandKind.Buffer, "w3.${w3Scratch.planId}.scratch.index"),
+                    ) + step.drawPackets.map { packet ->
+                        key(
+                            GPUPreparedNativeOperandRole.RenderBindGroup,
+                            GPUPreparedNativeOperandKind.BindGroup,
+                            "w3.${w3Scratch.planId}.scratch.uniform.${packet.commandIdValue}",
+                        )
+                    }
+                }
                 val textA8 = step.drawPackets.all {
                     it.semanticPayload is GPUDrawSemanticPayload.TextA8
                 }

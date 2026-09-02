@@ -15,15 +15,17 @@ internal fun renderViaGpu(
     preparedRouteTrace: GPUPreparedSurfaceRouteTrace? = null,
 ): RenderResult {
     val operations = buffer.ops()
-    return GPUPreparedSurfaceProductEntry.render(
-        operations = operations,
-        width = width,
-        height = height,
-        format = format,
-        config = config,
-        executionPort = preparedSurfaceProductExecutionPort,
-        trace = preparedRouteTrace,
-    )
+    return GPUPlanSurfaceRouter().render(operations, width, height, format, config) {
+        GPUPreparedSurfaceProductEntry.render(
+            operations = operations,
+            width = width,
+            height = height,
+            format = format,
+            config = config,
+            executionPort = preparedSurfaceProductExecutionPort,
+            trace = preparedRouteTrace,
+        )
+    }
 }
 
 private val preparedSurfaceProductExecutionPort: GPUPreparedSurfaceExecutionPort =

@@ -996,6 +996,7 @@ object GPUBackendRuntimeNativeFactory {
     private var sharedInner: GPUBackendSession? = null
     private var shutdownHook: Thread? = null
     private val generationCounter = AtomicLong(0L)
+    private val lifecycleEpochCounter = AtomicLong(0L)
 
     /** Original backend creation implementation used when no test seam is installed. */
     internal val defaultBackendCreator: () -> GPUBackendSession? = ::createGlfwBackendSession
@@ -1006,6 +1007,9 @@ object GPUBackendRuntimeNativeFactory {
     /** Stamps the next factory-owned device generation; every session creation consumes exactly one. */
     internal fun nextDeviceGeneration(): GPUDeviceGenerationID =
         GPUDeviceGenerationID(generationCounter.incrementAndGet())
+
+    /** Changes after every process-wide disposal, including repeated disposals. */
+    internal fun lifecycleEpoch(): Long = lifecycleEpochCounter.get()
 
     private fun createGlfwBackendSession(): GPUBackendSession? = try {
         val glfw = runBlocking {
@@ -1055,6 +1059,7 @@ object GPUBackendRuntimeNativeFactory {
                 sharedInner?.close()
             } finally {
                 sharedInner = null
+                lifecycleEpochCounter.incrementAndGet()
             }
         }
     }

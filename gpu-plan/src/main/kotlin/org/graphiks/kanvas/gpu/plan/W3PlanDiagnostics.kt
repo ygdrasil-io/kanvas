@@ -14,6 +14,7 @@ public object W3PlanDiagnostics {
     public val SizeOverflow: RenderDiagnosticCode = RenderDiagnosticCode("w3.size.overflow")
     public val CapabilityTextureDimension: RenderDiagnosticCode = RenderDiagnosticCode("w3.capability.texture_dimension")
     public val CapabilityBufferSize: RenderDiagnosticCode = RenderDiagnosticCode("w3.capability.buffer_size")
+    public val CapabilityDynamicUniform: RenderDiagnosticCode = RenderDiagnosticCode("w3.capability.dynamic_uniform")
     public val CapabilityFormat: RenderDiagnosticCode = RenderDiagnosticCode("w3.capability.format")
     public val BudgetFrameLocalExceeded: RenderDiagnosticCode = RenderDiagnosticCode("w3.budget.frame_local_exceeded")
     public val PlanIdentityInvalid: RenderDiagnosticCode = RenderDiagnosticCode("w3.plan.identity_invalid")

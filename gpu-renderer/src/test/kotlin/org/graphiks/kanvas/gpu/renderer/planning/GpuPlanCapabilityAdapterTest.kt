@@ -9,6 +9,8 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureFormatSampleSupport
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureSampleCountSupport
 
 class GpuPlanCapabilityAdapterTest {
     @Test
@@ -68,6 +70,30 @@ class GpuPlanCapabilityAdapterTest {
         }
     }
 
+    @Test
+    fun `sRGB is advertised only with an observed single sample render attachment`() {
+        val missingSampleEvidence = capabilities().copy(
+            textureFormatSampleSupport = GPUTextureFormatSampleSupport(),
+        )
+        val fourSamplesOnly = capabilities().copy(
+            textureFormatSampleSupport = GPUTextureFormatSampleSupport(
+                mapOf(
+                    GPUTextureFormat.RGBA8UnormSrgb to GPUTextureSampleCountSupport(
+                        renderAttachmentSampleCounts = setOf(4),
+                        resolveSourceSampleCounts = setOf(4),
+                    ),
+                ),
+            ),
+        )
+
+        listOf(missingSampleEvidence, fourSamplesOnly).forEach { unsupported ->
+            val result = assertIs<GpuPlanCapabilityAdapterResult.Unsupported>(
+                unsupported.toPlanCapabilitySnapshot(GPUDeviceGenerationID(7)),
+            )
+            assertEquals("w3.capability.format", result.diagnostic.code.value)
+        }
+    }
+
     private fun capabilities() = GPUCapabilities(
         implementation = GPUImplementationIdentity("GPU", "test", "adapter", "device"),
         facts = emptyList(),
@@ -77,7 +103,15 @@ class GpuPlanCapabilityAdapterTest {
             copyBytesPerRowAlignment = 256,
             minUniformBufferOffsetAlignment = 256,
             maxBufferSize = 1L shl 20,
+            maxDynamicUniformBuffersPerPipelineLayout = 1,
         ),
         supportedTextureFormats = setOf(GPUTextureFormat.RGBA8UnormSrgb),
+        textureFormatSampleSupport = GPUTextureFormatSampleSupport(
+            mapOf(
+                GPUTextureFormat.RGBA8UnormSrgb to GPUTextureSampleCountSupport(
+                    renderAttachmentSampleCounts = setOf(1),
+                ),
+            ),
+        ),
     )
 }

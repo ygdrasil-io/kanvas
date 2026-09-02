@@ -29,25 +29,35 @@ import org.graphiks.math.matrix.Matrix3x3F32
 
 /** W3's closed capability: pixel-aligned solid rectangles and SrcOver only. */
 public class W3SolidRectPlanCompiler : GpuPlanCompiler {
+    override fun classify(
+        scene: SceneSnapshot,
+        target: RenderTargetDescriptor,
+    ): RenderPlanResult<Nothing>? {
+        if (scene.extent != target.extent || scene.colorSpace != target.colorSpace) {
+            return invalid(diag(W3PlanDiagnostics.SceneInvalid, RenderDiagnosticDomain.SCENE, "Scene and target descriptors disagree"))
+        }
+        when (val recognition = recognize(scene)) {
+            is Recognition.Gap -> return gap(recognition.diagnostic)
+            is Recognition.Invalid -> return invalid(recognition.diagnostic)
+            is Recognition.Accepted -> Unit
+        }
+        return if (target.colorSpace != ColorSpace.SRGB) {
+            gap(diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.TARGET, "W3 supports only sRGB targets"))
+        } else {
+            null
+        }
+    }
+
     override fun plan(
         scene: SceneSnapshot,
         target: RenderTargetDescriptor,
         capabilities: PlanCapabilitySnapshot,
         budget: PlanBudget,
     ): RenderPlanResult<RenderGraph> {
-        if (scene.extent != target.extent || scene.colorSpace != target.colorSpace) {
-            return invalid(diag(W3PlanDiagnostics.SceneInvalid, RenderDiagnosticDomain.SCENE, "Scene and target descriptors disagree"))
-        }
+        classify(scene, target)?.let { return it }
         val recognition = recognize(scene)
-        when (recognition) {
-            is Recognition.Gap -> return gap(recognition.diagnostic)
-            is Recognition.Invalid -> return invalid(recognition.diagnostic)
-            is Recognition.Accepted -> Unit
-        }
-
-        if (target.colorSpace != ColorSpace.SRGB) {
-            return gap(diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.TARGET, "W3 supports only sRGB targets"))
-        }
+        val accepted = recognition as? Recognition.Accepted
+            ?: return invalid(diag(W3PlanDiagnostics.SceneInvalid, RenderDiagnosticDomain.SCENE, "W3 semantic classification changed during planning"))
 
         val targetExtent = SizeI32(target.extent.width, target.extent.height)
         if (targetExtent.width > capabilities.maxTextureDimension2D || targetExtent.height > capabilities.maxTextureDimension2D) {
@@ -90,7 +100,7 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
                 setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead), PlanResourceLifetime.FrameLocal, 1, 2,
             )
             val render = PlanPass.RenderPass(
-                0, logicalTarget.id, recognition.draws, AttachmentLoadPlan.ClearTransparent, AttachmentStorePlan.Store,
+                0, logicalTarget.id, accepted.draws, AttachmentLoadPlan.ClearTransparent, AttachmentStorePlan.Store,
             )
             val readback = PlanPass.ReadbackPass(0, logicalTarget.id, staging.id, withinBudget.readbackBytesPerRow)
             RenderPlanResult.Ready(
@@ -101,7 +111,7 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
                     colorFormat = FORMAT,
                     capabilities = capabilities,
                     budget = budget,
-                    visualCommandCount = recognition.draws.size,
+                    visualCommandCount = accepted.draws.size,
                     resources = listOf(logicalTarget, staging),
                     passes = listOf(render, readback),
                     dependencies = listOf(PlanPassDependency(render.id, readback.id)),

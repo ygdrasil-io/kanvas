@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.planning
 import io.ygdrasil.webgpu.GPUTextureFormat
 import org.graphiks.kanvas.gpu.plan.PlanCapabilitySnapshot
 import org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat
+import org.graphiks.kanvas.gpu.plan.W3PlanDiagnostics
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.render.ir.RenderDiagnostic
@@ -19,16 +20,27 @@ public sealed interface GpuPlanCapabilityAdapterResult {
 public fun GPUCapabilities.toPlanCapabilitySnapshot(
     deviceGeneration: GPUDeviceGenerationID,
 ): GpuPlanCapabilityAdapterResult {
-    val observedLimits = limits ?: return unsupported("Renderer limits were not observed for this device session.")
+    val observedLimits = limits ?: return unsupported(
+        message = "Renderer limits were not observed for this device session.",
+        code = W3PlanDiagnostics.CapabilityBufferSize,
+    )
     val maxBuffer = observedLimits.maxBufferSize ?: return unsupported(
-        "Renderer maxBufferSize was not observed for this device session.",
+        message = "Renderer maxBufferSize was not observed for this device session.",
+        code = W3PlanDiagnostics.CapabilityBufferSize,
     )
     if (observedLimits.maxTextureDimension2D > Int.MAX_VALUE ||
         observedLimits.copyBytesPerRowAlignment > Int.MAX_VALUE ||
-        !observedLimits.copyBytesPerRowAlignment.isPositivePowerOfTwo() ||
-        GPUTextureFormat.RGBA8UnormSrgb !in supportedTextureFormats
+        !observedLimits.copyBytesPerRowAlignment.isPositivePowerOfTwo()
     ) {
         return unsupported("Renderer capabilities cannot represent the W3 sRGB target contract.")
+    }
+    val srgbSamples = textureFormatSampleSupport[GPUTextureFormat.RGBA8UnormSrgb]
+        ?.renderAttachmentSampleCounts
+    if (GPUTextureFormat.RGBA8UnormSrgb !in supportedTextureFormats || 1 !in srgbSamples.orEmpty()) {
+        return unsupported(
+            message = "Renderer capabilities do not support a single-sample RGBA8UnormSrgb render target.",
+            code = W3PlanDiagnostics.CapabilityFormat,
+        )
     }
     return try {
         GpuPlanCapabilityAdapterResult.Supported(
@@ -47,10 +59,13 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
 
 private fun Long.isPositivePowerOfTwo(): Boolean = this > 0L && this and (this - 1L) == 0L
 
-private fun unsupported(message: String): GpuPlanCapabilityAdapterResult.Unsupported =
+private fun unsupported(
+    message: String,
+    code: RenderDiagnosticCode = RenderDiagnosticCode("w3.lowering.unsupported_capability"),
+): GpuPlanCapabilityAdapterResult.Unsupported =
     GpuPlanCapabilityAdapterResult.Unsupported(
         RenderDiagnostic(
-            RenderDiagnosticCode("w3.lowering.unsupported_capability"),
+            code,
             RenderDiagnosticDomain.CAPABILITY,
             RenderDiagnosticSeverity.ERROR,
             message,

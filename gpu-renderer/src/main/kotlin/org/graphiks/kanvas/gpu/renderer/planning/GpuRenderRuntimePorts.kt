@@ -17,6 +17,7 @@ import kotlin.coroutines.resumeWithException
 
 internal interface GpuBackendRuntimeOwnerPort : AutoCloseable {
     fun createOrNull(): GpuBackendSessionPort?
+    fun lifecycleEpoch(): Long = 0L
     fun disposeGeneration(deviceGeneration: GPUDeviceGenerationID)
 }
 internal interface GpuBackendSessionPort : AutoCloseable {
@@ -59,14 +60,114 @@ internal data class GpuPreparedFrameHandle(
 internal fun interface GpuCompletionAwaiter { suspend fun await(completion: CompletionStage<GPUPreparedSceneCompletedFrameResult>): GPUPreparedSceneCompletedFrameResult }
 
 internal class DefaultGpuBackendRuntimeOwner : GpuBackendRuntimeOwnerPort {
-    private var session: GPUBackendSession? = null
+    private var lease: ProductionGpuBackendRuntimeLease? = null
+
     override fun createOrNull(): GpuBackendSessionPort? = synchronized(this) {
-        session?.let(::GpuBackendSessionAdapter) ?: GPUBackendRuntimeFactory.createOrNull()?.also { session = it }?.let(::GpuBackendSessionAdapter)
+        val current = lease
+        if (current != null && ProductionGpuBackendRuntimeLeases.isCurrent(current)) {
+            return@synchronized GpuBackendSessionAdapter(current.session)
+        }
+        current?.let(ProductionGpuBackendRuntimeLeases::release)
+        lease = ProductionGpuBackendRuntimeLeases.acquireOrNull()
+        lease?.session?.let(::GpuBackendSessionAdapter)
     }
-    override fun disposeGeneration(deviceGeneration: GPUDeviceGenerationID) = synchronized(this) {
-        if (session?.deviceGeneration == deviceGeneration) { session?.close(); session = null; GPUBackendRuntimeFactory.dispose() }
+
+    override fun lifecycleEpoch(): Long = GPUBackendRuntimeFactory.lifecycleEpoch()
+
+    override fun disposeGeneration(deviceGeneration: GPUDeviceGenerationID) {
+        val current = synchronized(this) { lease }
+        if (current?.session?.deviceGeneration != deviceGeneration) return
+        ProductionGpuBackendRuntimeLeases.disposeGeneration(deviceGeneration)
+        synchronized(this) {
+            if (lease === current) lease = null
+        }
     }
-    override fun close() = synchronized(this) { session?.close(); session = null; GPUBackendRuntimeFactory.dispose() }
+
+    override fun close() {
+        val current = synchronized(this) {
+            lease.also { lease = null }
+        }
+        current?.let(ProductionGpuBackendRuntimeLeases::release)
+    }
+}
+
+/** One production-context ownership claim on the process-wide backend runtime. */
+internal class ProductionGpuBackendRuntimeLease internal constructor(
+    internal val session: GPUBackendSession,
+    internal val lifecycleEpoch: Long,
+)
+
+/**
+ * Coordinates production-context ownership of the native singleton. A raw factory disposal
+ * advances its epoch, making all outstanding leases stale without allowing one stale close to
+ * dispose a subsequently recreated runtime.
+ */
+internal object ProductionGpuBackendRuntimeLeases {
+    private data class SharedRuntime(
+        val session: GPUBackendSession,
+        val lifecycleEpoch: Long,
+        var owners: Int,
+    )
+
+    private var shared: SharedRuntime? = null
+
+    fun acquireOrNull(): ProductionGpuBackendRuntimeLease? = synchronized(this) {
+        val currentEpoch = GPUBackendRuntimeFactory.lifecycleEpoch()
+        val current = shared?.takeIf { it.lifecycleEpoch == currentEpoch }
+        if (current == null) {
+            shared = null
+            val session = GPUBackendRuntimeFactory.createOrNull() ?: return@synchronized null
+            val created = SharedRuntime(
+                session = session,
+                lifecycleEpoch = GPUBackendRuntimeFactory.lifecycleEpoch(),
+                owners = 1,
+            )
+            shared = created
+            return@synchronized ProductionGpuBackendRuntimeLease(
+                created.session,
+                created.lifecycleEpoch,
+            )
+        }
+        current.owners += 1
+        ProductionGpuBackendRuntimeLease(current.session, current.lifecycleEpoch)
+    }
+
+    fun isCurrent(lease: ProductionGpuBackendRuntimeLease): Boolean = synchronized(this) {
+        val current = shared
+        current != null &&
+            current.lifecycleEpoch == GPUBackendRuntimeFactory.lifecycleEpoch() &&
+            current.lifecycleEpoch == lease.lifecycleEpoch &&
+            current.session === lease.session
+    }
+
+    fun release(lease: ProductionGpuBackendRuntimeLease) = synchronized(this) {
+        val current = shared ?: return@synchronized
+        if (current.lifecycleEpoch != GPUBackendRuntimeFactory.lifecycleEpoch() ||
+            current.lifecycleEpoch != lease.lifecycleEpoch ||
+            current.session !== lease.session
+        ) {
+            if (current.lifecycleEpoch != GPUBackendRuntimeFactory.lifecycleEpoch()) shared = null
+            return@synchronized
+        }
+        check(current.owners > 0) { "Production runtime lease count underflow" }
+        current.owners -= 1
+        if (current.owners == 0) {
+            shared = null
+            GPUBackendRuntimeFactory.dispose()
+        }
+    }
+
+    fun disposeGeneration(deviceGeneration: GPUDeviceGenerationID) = synchronized(this) {
+        val current = shared ?: return@synchronized
+        if (current.lifecycleEpoch != GPUBackendRuntimeFactory.lifecycleEpoch()) {
+            shared = null
+            return@synchronized
+        }
+        if (current.session.deviceGeneration == deviceGeneration) {
+            shared = null
+            GPUBackendRuntimeFactory.dispose()
+        }
+    }
 }
 internal class GpuBackendSessionAdapter(private val delegate: GPUBackendSession) : GpuBackendSessionPort {
     override val deviceGeneration get() = delegate.deviceGeneration
@@ -94,7 +195,10 @@ internal class GpuPreparedSceneSessionAdapter(private val delegate: org.graphiks
                 pipelineBinds = nativeDelta(renderAfter.pipelineBinds, renderBefore.pipelineBinds),
                 draws = nativeDelta(renderAfter.draws, renderBefore.draws),
                 drawIndexed = nativeDelta(renderAfter.drawIndexed, renderBefore.drawIndexed),
-                nativeCounters = nativeAfter.evidenceSince(nativeBefore),
+                nativeCounters = nativeAfter.evidenceSince(
+                    before = nativeBefore,
+                    nativePayloadRegistrations = frame.nativePayloadRegistrations,
+                ),
             ),
         )
     }
@@ -103,6 +207,7 @@ internal class GpuPreparedSceneSessionAdapter(private val delegate: org.graphiks
 
 private fun org.graphiks.kanvas.gpu.renderer.execution.GPUPreparedSceneNativeCounters.evidenceSince(
     before: org.graphiks.kanvas.gpu.renderer.execution.GPUPreparedSceneNativeCounters,
+    nativePayloadRegistrations: Long,
 ): Map<String, Long> = linkedMapOf(
     "encoders" to nativeDelta(encoders, before.encoders),
     "commandBuffers" to nativeDelta(commandBuffers, before.commandBuffers),
@@ -115,7 +220,7 @@ private fun org.graphiks.kanvas.gpu.renderer.execution.GPUPreparedSceneNativeCou
     "retentionCompletions" to nativeDelta(retentionCompletions, before.retentionCompletions),
     "retentionQuarantines" to nativeDelta(retentionQuarantines, before.retentionQuarantines),
     "frameCoordinatorCreations" to nativeDelta(frameCoordinatorCreations, before.frameCoordinatorCreations),
-    "nativePayloadRegistrations" to nativeDelta(nativePayloadRegistrations, before.nativePayloadRegistrations),
+    "nativePayloadRegistrations" to nativePayloadRegistrations,
     "renderPasses" to nativeDelta(renderPasses, before.renderPasses),
     "draws" to nativeDelta(draws, before.draws),
     "drawIndexed" to nativeDelta(drawIndexed, before.drawIndexed),

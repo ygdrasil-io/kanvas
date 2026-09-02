@@ -9,6 +9,8 @@ data class RenderConfig(
     val maxPathFanTriangles: UInt = MAX_PATH_FAN_TRIANGLES,
     /** Maximum bytes for the public Surface path edge-fan position/index buffers. */
     val maxPathGeometryBytes: UInt = MAX_PATH_GEOMETRY_BYTES,
+    /** Maximum transient memory used by one promoted W3 frame. */
+    val frameLocalBudgetBytes: Long = 1L shl 30,
     val curveTolerance: Float = 0.25f,
     val maxImagePixels: UInt = 67_108_864u,
     val maxMaskBlurIntermediateBytes: UInt = 67_108_864u,
@@ -20,6 +22,10 @@ data class RenderConfig(
     val diagnosticLevel: DiagnosticLevel = DiagnosticLevel.WARN,
     val debugLevel: DebugLevel = DebugLevel.OFF,
 ) {
+    init {
+        require(frameLocalBudgetBytes > 0L) { "frameLocalBudgetBytes must be positive" }
+    }
+
     /**
      * Validates the public path edge-fan configuration before the mapper can
      * convert unsigned limits to backend `Int` values or allocate geometry.
@@ -59,6 +65,8 @@ data class RenderConfig(
                     ?.toUIntOrNull() ?: DEFAULT.maxPathFanTriangles,
                 maxPathGeometryBytes = p.getProperty("kanvas.render.maxPathGeometryBytes")
                     ?.toUIntOrNull() ?: DEFAULT.maxPathGeometryBytes,
+                frameLocalBudgetBytes = p.getProperty("kanvas.render.frameLocalBudgetBytes")
+                    ?.toLongOrNull() ?: DEFAULT.frameLocalBudgetBytes,
                 curveTolerance = p.getProperty("kanvas.render.curveTolerance")
                     ?.toFloatOrNull() ?: DEFAULT.curveTolerance,
                 maxImagePixels = p.getProperty("kanvas.render.maxImagePixels")

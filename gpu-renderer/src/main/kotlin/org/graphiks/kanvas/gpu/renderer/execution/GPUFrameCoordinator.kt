@@ -69,7 +69,13 @@ class GPUPreparedSceneFrameHandle internal constructor(
     val attemptId: GPUFrameAttemptID,
     val immediateState: GPUFrameImmediateState,
     val completion: CompletionStage<GPUPreparedSceneCompletedFrameResult>,
-)
+    /** One exact successful native-payload registry admission belongs to this prepared frame. */
+    val nativePayloadRegistrations: Long = 0L,
+) {
+    init {
+        require(nativePayloadRegistrations >= 0L)
+    }
+}
 
 /** Sole planner -> preflight -> executor entry point for a prepared scene session. */
 class GPUFrameCoordinator internal constructor(
@@ -195,6 +201,7 @@ class GPUFrameCoordinator internal constructor(
             attemptId = execution.attemptId,
             immediateState = execution.immediateState,
             completion = execution.completion.thenApply { result -> result.toProduct(outputRequest) },
+            nativePayloadRegistrations = if (frame.hasNativePayload) 1L else 0L,
         )
     }
 
@@ -776,6 +783,7 @@ class GPUPreparedSceneFrameSession internal constructor(
             attemptId = handle.attemptId,
             immediateState = handle.immediateState,
             completion = completionAfterFrameState(handle.completion),
+            nativePayloadRegistrations = handle.nativePayloadRegistrations,
         )
     }
 

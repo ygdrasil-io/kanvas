@@ -9,6 +9,8 @@ import io.ygdrasil.webgpu.GPUTextureUsage
 import io.ygdrasil.webgpu.GPUTextureView
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
+import org.graphiks.kanvas.gpu.renderer.resources.corePrimitiveFramePoolCapacitiesOrNull
+import org.graphiks.kanvas.gpu.renderer.resources.roundedCorePrimitiveFramePoolCapacityOrNull
 import org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity
 
 internal enum class GPUWgpu4kCorePrimitiveFramePoolResource {
@@ -1421,12 +1423,18 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
 
     private fun capacitiesFor(
         requirements: GPUWgpu4kCorePrimitiveFramePoolRequirements,
-    ): GPUWgpu4kCorePrimitiveFramePoolCapacities? {
-        val vertex = powerOfTwoCapacity(requirements.vertexBytes, VERTEX_FLOOR_BYTES) ?: return null
-        val index = powerOfTwoCapacity(requirements.indexBytes, INDEX_FLOOR_BYTES) ?: return null
-        val uniform = powerOfTwoCapacity(requirements.uniformBytes, UNIFORM_FLOOR_BYTES) ?: return null
-        return GPUWgpu4kCorePrimitiveFramePoolCapacities(vertex, index, uniform)
-    }
+    ): GPUWgpu4kCorePrimitiveFramePoolCapacities? =
+        corePrimitiveFramePoolCapacitiesOrNull(
+            requirements.vertexBytes,
+            requirements.indexBytes,
+            requirements.uniformBytes,
+        )?.let { capacities ->
+            GPUWgpu4kCorePrimitiveFramePoolCapacities(
+                capacities.vertexBytes,
+                capacities.indexBytes,
+                capacities.uniformBytes,
+            )
+        }
 
     private fun invalidCapacityRefusal(
         requirements: GPUWgpu4kCorePrimitiveFramePoolRequirements,
@@ -1435,19 +1443,10 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
             GPUWgpu4kCorePrimitiveFramePoolResource.VertexBuffer to requirements.vertexBytes,
             GPUWgpu4kCorePrimitiveFramePoolResource.IndexBuffer to requirements.indexBytes,
             GPUWgpu4kCorePrimitiveFramePoolResource.UniformBuffer to requirements.uniformBytes,
-        ).first { (_, requested) -> requested <= 0L || powerOfTwoCapacity(requested, 1L) == null }
-        return GPUWgpu4kCorePrimitiveFramePoolRefusal.InvalidCapacity(resource, bytes)
-    }
-
-    private fun powerOfTwoCapacity(requestedBytes: Long, floorBytes: Long): Long? {
-        if (requestedBytes <= 0L) return null
-        val required = maxOf(requestedBytes, floorBytes)
-        var capacity = floorBytes
-        while (capacity < required) {
-            if (capacity > Long.MAX_VALUE / 2L) return null
-            capacity *= 2L
+        ).first { (_, requested) ->
+            requested <= 0L || roundedCorePrimitiveFramePoolCapacityOrNull(requested, 1L) == null
         }
-        return capacity
+        return GPUWgpu4kCorePrimitiveFramePoolRefusal.InvalidCapacity(resource, bytes)
     }
 
     private fun GPUWgpu4kCorePrimitiveFramePoolCapacities.contains(
@@ -1552,8 +1551,5 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
 
     private companion object {
         const val MAX_SLOTS = 3
-        const val VERTEX_FLOOR_BYTES = 16L * 1024L
-        const val INDEX_FLOOR_BYTES = 4L * 1024L
-        const val UNIFORM_FLOOR_BYTES = 4L * 1024L
     }
 }
