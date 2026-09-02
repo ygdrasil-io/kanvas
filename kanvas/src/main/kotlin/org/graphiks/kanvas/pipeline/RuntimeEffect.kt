@@ -1,6 +1,5 @@
 package org.graphiks.kanvas.pipeline
 
-import java.util.concurrent.ConcurrentHashMap
 import java.util.Collections
 import org.graphiks.kanvas.paint.Blender
 import org.graphiks.kanvas.paint.ColorFilter
@@ -58,11 +57,13 @@ class RuntimeEffect internal constructor(
          */
         fun register(effect: RuntimeEffect): RuntimeEffect {
             return synchronized(registryLock) {
-                val installed = registeredEffects.putIfAbsent(effect.id, effect)
+                val installed = registeredEffects[effect.id]
                 if (installed != null) {
                     require(installed.hasCompatibleDescriptor(effect)) {
                         "Runtime effect id ${effect.id} is already registered with an incompatible descriptor"
                     }
+                } else {
+                    registeredEffects = immutableRegistry(registeredEffects + (effect.id to effect))
                 }
                 installed ?: effect
             }
@@ -91,14 +92,12 @@ class RuntimeEffect internal constructor(
                 val installed = registeredEffects[effect.id]
                 if (installed != null && !installed.hasCompatibleDescriptor(effect)) return false
             }
-            for (effect in decodedById.values) {
-                registeredEffects.putIfAbsent(effect.id, effect)
-            }
+            registeredEffects = immutableRegistry(registeredEffects + decodedById.filterKeys { it !in registeredEffects })
             true
         }
 
         /** Backend hooks installed by :gpu-renderer's RuntimeEffectCompileProvider. */
-        private val registeredEffects = ConcurrentHashMap<String, RuntimeEffect>()
+        @Volatile private var registeredEffects: Map<String, RuntimeEffect> = emptyMap()
         private val registryLock = Any()
         internal var compileWgsl: ((String) -> RuntimeEffect?)? = null
         internal var lookupRegistered: ((String) -> RuntimeEffect?)? = null
@@ -114,5 +113,8 @@ class RuntimeEffect internal constructor(
                 module.vertexLayout == other.module.vertexLayout &&
                 uniformLayout == other.uniformLayout &&
                 children == other.children
+
+        private fun immutableRegistry(entries: Map<String, RuntimeEffect>): Map<String, RuntimeEffect> =
+            Collections.unmodifiableMap(LinkedHashMap(entries))
     }
 }
