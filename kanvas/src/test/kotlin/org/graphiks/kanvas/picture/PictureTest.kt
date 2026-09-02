@@ -29,8 +29,6 @@ import org.graphiks.kanvas.paint.StrokeJoin
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.pipeline.BlurStyle
-import org.graphiks.kanvas.pipeline.ChildSlot
-import org.graphiks.kanvas.pipeline.ChildType
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.pipeline.RuntimeEffect
 import org.graphiks.kanvas.pipeline.ShaderModule
@@ -42,6 +40,8 @@ import org.graphiks.kanvas.pipeline.VertexAttribute
 import org.graphiks.kanvas.pipeline.VertexFormat
 import org.graphiks.kanvas.pipeline.VertexLayout
 import org.graphiks.kanvas.pipeline.VertexStepMode
+import org.graphiks.kanvas.render.ir.SceneArchiveCodec
+import org.graphiks.kanvas.render.ir.SceneArchiveDecodeResult
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.KanvasTypeface
 import org.graphiks.kanvas.text.TextBlob
@@ -56,12 +56,14 @@ import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import java.util.Base64
+import java.nio.ByteBuffer
 
 class PictureTest {
     @Test
@@ -102,7 +104,28 @@ class PictureTest {
             ),
         )
 
-        assertEquals(8, picture.toByteArray().readBigEndianInt(offset = 4))
+        val bytes = picture.toByteArray()
+
+        assertEquals(8, bytes.readBigEndianInt(offset = 4))
+        assertIs<SceneArchiveDecodeResult.Decoded>(SceneArchiveCodec.decodePicture(bytes))
+        assertEquals(picture.ops, requireNotNull(Picture.fromByteArray(bytes)).ops)
+    }
+
+    @Test
+    fun `reader keeps decoding historical task 8 v8 payloads`() {
+        val historical = ByteBuffer.allocate(33)
+            .put("KPIC".encodeToByteArray())
+            .putInt(8)
+            .putFloat(0f).putFloat(0f).putFloat(8f).putFloat(8f)
+            .putInt(1)
+            .put(14) // historical OP_CLEAR
+            .putInt(ColorARGB.Blue.toPackedInt())
+            .array()
+
+        val picture = requireNotNull(Picture.fromByteArray(historical))
+
+        assertEquals(RectF32.ofLTRB(0f, 0f, 8f, 8f), picture.cullRect)
+        assertEquals(listOf(DisplayOp.Clear(ColorARGB.Blue)), picture.ops)
     }
 
     @Test
@@ -265,19 +288,49 @@ class PictureTest {
             "enum-runtime",
             ShaderModule.fromResource("enum-runtime"),
             UniformLayout(UniformType.entries.mapIndexed { index, type -> UniformSlot("uniform-$index", index, type, 1) }),
-            ChildType.entries.mapIndexed { index, type -> ChildSlot("child-$index", type) },
+            emptyList(),
         )
+        val runtimeUniforms = UniformBlock {
+            UniformType.entries.forEachIndexed { index, type -> when (type) {
+                UniformType.FLOAT -> float1("uniform-$index", 1f)
+                UniformType.FLOAT2 -> float2("uniform-$index", 1f, 2f)
+                UniformType.FLOAT3 -> float3("uniform-$index", 1f, 2f, 3f)
+                UniformType.FLOAT4 -> float4("uniform-$index", 1f, 2f, 3f, 4f)
+                UniformType.MAT3X3 -> mat3x3("uniform-$index", Matrix3x3F32.Identity)
+                UniformType.MAT4X4 -> mat4x4("uniform-$index", FloatArray(16) { it.toFloat() })
+            } }
+        }
         val runtimeRestored = requireNotNull(
             Picture(
                 bounds,
-                listOf(DisplayOp.DrawRect(bounds, Paint(shader = runtimeEffect.makeShader(UniformBlock.EMPTY)), identity, ClipStack.WideOpen)),
+                listOf(DisplayOp.DrawRect(bounds, Paint(shader = runtimeEffect.makeShader(runtimeUniforms)), identity, ClipStack.WideOpen)),
             ).let { Picture.fromByteArray(it.toByteArray()) },
         )
         val restoredRuntime = assertIs<Shader.RuntimeEffect>(
             assertIs<DisplayOp.DrawRect>(runtimeRestored.ops.single()).paint.shader,
         ).effect
         assertEquals(UniformType.entries.toList(), restoredRuntime.uniformLayout.slots.map { it.type })
-        assertEquals(ChildType.entries.toList(), restoredRuntime.children.map { it.type })
+        assertTrue(restoredRuntime.children.isEmpty())
+    }
+
+    @Test
+    fun `version 8 refuses runtime effects with incomplete bindings`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 8f, 8f)
+        val effect = RuntimeEffect(
+            "incomplete-runtime",
+            ShaderModule.fromResource("incomplete-runtime"),
+            UniformLayout(listOf(UniformSlot("required", 0, UniformType.FLOAT, 1))),
+            emptyList(),
+        )
+
+        val failure = assertFailsWith<IllegalStateException> {
+            Picture(
+                bounds,
+                listOf(DisplayOp.DrawRect(bounds, Paint(shader = effect.makeShader(UniformBlock.EMPTY)), Matrix3x3F32.Identity, ClipStack.WideOpen)),
+            ).toByteArray()
+        }
+
+        assertEquals("scene-capture-invalid", failure.message)
     }
 
     @Test
