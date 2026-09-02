@@ -1,7 +1,7 @@
 # W3 — `gpu-plan` et première tranche compositionnelle
 
 Date : 2026-09-02  
-Statut : review Sol approuvée, en attente de validation utilisateur  
+Statut : validée par l’utilisateur et review Sol approuvée  
 Branche : `codex/w3-gpu-plan-first-slice`
 
 ## 1. Contexte
