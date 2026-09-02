@@ -95,11 +95,12 @@ public class GpuPlanTaskListLowerer {
 
     private fun lowerGraph(request: GpuPlanLoweringRequest, graph: W3Graph): GpuPlanLoweringResult = try {
         val targetBounds = GPUPixelBounds(0, 0, request.graph.targetExtent.width, request.graph.targetExtent.height)
-        val target = GPUFrameTargetRef("w3.${request.graph.id.value}.target")
-        val staging = GPUFrameBufferRef("w3.${request.graph.id.value}.staging")
-        val targetPreparation = GPUResourcePreparationRequest(target, GPUFrameTextureDescriptor(targetBounds, GPUColorFormat.RGBA8UnormSrgb, 1), GPUFrameResourceRole.SceneTarget, setOf(GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceUsage.CopySource), GPUFrameResourceLifetime.FrameLocal, graph.target.byteSize, "w3.${request.graph.id.value}.target")
-        val stagingPreparation = GPUResourcePreparationRequest(staging, GPUFrameBufferDescriptor(graph.staging.byteSize, request.graph.capabilities.copyBytesPerRowAlignment.toLong()), GPUFrameResourceRole.ReadbackStaging, setOf(GPUFrameResourceUsage.CopyDestination, GPUFrameResourceUsage.MapRead), GPUFrameResourceLifetime.FrameLocal, graph.staging.byteSize, "w3.${request.graph.id.value}.staging")
-        val memory = memoryBudget(request.capabilities, request.graph, graph, targetBounds)
+        val sessionIdentity = "w3.session.${request.deviceGeneration.value}.${request.graph.targetExtent.width}x${request.graph.targetExtent.height}.rgba8unorm-srgb"
+        val target = GPUFrameTargetRef("$sessionIdentity.target")
+        val staging = GPUFrameBufferRef("$sessionIdentity.staging")
+        val targetPreparation = GPUResourcePreparationRequest(target, GPUFrameTextureDescriptor(targetBounds, GPUColorFormat.RGBA8UnormSrgb, 1), GPUFrameResourceRole.SceneTarget, setOf(GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceUsage.CopySource), GPUFrameResourceLifetime.FrameLocal, graph.target.byteSize, "$sessionIdentity.target")
+        val stagingPreparation = GPUResourcePreparationRequest(staging, GPUFrameBufferDescriptor(graph.staging.byteSize, request.graph.capabilities.copyBytesPerRowAlignment.toLong()), GPUFrameResourceRole.ReadbackStaging, setOf(GPUFrameResourceUsage.CopyDestination, GPUFrameResourceUsage.MapRead), GPUFrameResourceLifetime.FrameLocal, graph.staging.byteSize, "$sessionIdentity.staging")
+        val memory = memoryBudget(request.capabilities, request.graph, graph, targetBounds, request.deviceGeneration)
             ?: return invalid("The graph memory facts cannot be represented by the renderer.")
         val readback = GPUFrameReadbackRequest(GPUReadbackRequestID("w3.${request.graph.id.value}.readback"), targetBounds, GPUReadbackPixelFormat.Rgba8Unorm, GPUColorInterpretation.LinearPremul)
         val base = renderOnlyTaskList(request, graph, target, targetBounds, memory)
@@ -124,6 +125,9 @@ public class GpuPlanTaskListLowerer {
     private fun packet(draw: SolidRectDraw, paintOrder: Int, target: GPUPixelBounds): GPUDrawPacket {
         val bounds = draw.copyVisibleBounds()
         val scissor = draw.copyScissor()
+        require(bounds.roundTripsExactlyThroughF32() && scissor.roundTripsExactlyThroughF32()) {
+            "W3 planned I32 bounds cannot round-trip exactly through renderer F32 values."
+        }
         val rect = org.graphiks.kanvas.gpu.renderer.commands.GPURect(bounds.left.toFloat(), bounds.top.toFloat(), bounds.right.toFloat(), bounds.bottom.toFloat())
         val scissorBounds = GPUPixelBounds(scissor.left, scissor.top, scissor.right, scissor.bottom)
         val clip = if (scissorBounds == target) GPUClipCoveragePlan.NoClip else GPUClipCoveragePlan.Scissor(GPUBounds(scissor.left.toFloat(), scissor.top.toFloat(), scissor.right.toFloat(), scissor.bottom.toFloat()))
@@ -133,11 +137,12 @@ public class GpuPlanTaskListLowerer {
         return GPUDrawPacket(GPUDrawPacketID("packet.w3.${draw.commandIndex}"), draw.commandIndex, "w3.${draw.commandIndex}", "pass.w3.main", "root", "binding.w3.${draw.commandIndex}", "w3-solid-rect", paintOrder.toLong(), "paint-order:$paintOrder", GPURenderStepID(CORE_PRIMITIVE_RENDER_STEP_IDENTITY), 1, GPUDrawPacketRole.Shading, blend, GPURenderPipelineKey(CORE_PRIMITIVE_RENDER_PIPELINE_KEY), bindingLayoutHash = CORE_PRIMITIVE_BINDING_LAYOUT_HASH, uniformSlot = semantic.payloadRef.uniformSlot, semanticPayload = semantic, vertexSourceLabel = CORE_PRIMITIVE_VERTEX_SOURCE_LABEL, scissorBoundsHash = corePrimitiveScissorAuthority(scissorBounds), targetStateHash = corePrimitiveTargetStateHash(1, GPUColorFormat.RGBA8UnormSrgb), originalPaintOrder = paintOrder, resourceGeneration = PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION, frameProvenance = GPUFrameProvenance.None, clipCoveragePlan = clip, clipExecutionPlan = execution)
     }
 
-    private fun memoryBudget(capabilities: GPUCapabilities, graph: RenderGraph, shape: W3Graph, bounds: GPUPixelBounds): GPUFrameMemoryBudgetPlan? {
+    private fun memoryBudget(capabilities: GPUCapabilities, graph: RenderGraph, shape: W3Graph, bounds: GPUPixelBounds, generation: org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID): GPUFrameMemoryBudgetPlan? {
         val limits = capabilities.limits ?: return null
         if (shape.target.byteSize + shape.staging.byteSize != graph.peakFrameLocalBytes || graph.peakFrameLocalBytes > graph.budget.maxFrameLocalBytes) return null
-        val target = GPUFrameMemoryAllocation("w3.${graph.id.value}.target", GPUFrameMemoryCategory.CanonicalTarget, shape.target.byteSize, GPUFrameMemoryResourceKind.Texture2D, bounds)
-        val staging = GPUFrameMemoryAllocation("w3.${graph.id.value}.staging", GPUFrameMemoryCategory.ReadbackStaging, shape.staging.byteSize, GPUFrameMemoryResourceKind.Buffer, null)
+        val identity = "w3.session.${generation.value}.${bounds.width}x${bounds.height}.rgba8unorm-srgb"
+        val target = GPUFrameMemoryAllocation("$identity.target", GPUFrameMemoryCategory.CanonicalTarget, shape.target.byteSize, GPUFrameMemoryResourceKind.Texture2D, bounds)
+        val staging = GPUFrameMemoryAllocation("$identity.staging", GPUFrameMemoryCategory.ReadbackStaging, shape.staging.byteSize, GPUFrameMemoryResourceKind.Buffer, null)
         return GPUFrameMemoryBudgetPlan(shape.staging.byteSize, shape.target.byteSize, GPUFrameMemoryCategory.entries.associateWith { category -> when (category) { GPUFrameMemoryCategory.CanonicalTarget -> shape.target.byteSize; GPUFrameMemoryCategory.ReadbackStaging -> shape.staging.byteSize; else -> 0L } }, limits.capabilityFacts("frame-memory-budget"), graph.budget.maxFrameLocalBytes, null, listOf(target, staging))
     }
 
@@ -171,6 +176,14 @@ public class GpuPlanTaskListLowerer {
     }
 
     private data class W3Graph(val target: PlanResource, val staging: PlanResource, val render: PlanPass.RenderPass, val readback: PlanPass.ReadbackPass)
+
+    private fun org.graphiks.math.geometry.RectI32.roundTripsExactlyThroughF32(): Boolean =
+        listOf(left, top, right, bottom).all { value ->
+            val original = value.toLong().toDouble()
+            val converted = value.toFloat().toDouble()
+            converted.isFinite() && converted == original
+        }
+
     private fun invalid(message: String) = GpuPlanLoweringResult.InvalidPlan(diagnostic(message, RenderDiagnosticDomain.RESOURCE))
     private fun unsupported(message: String) = GpuPlanLoweringResult.UnsupportedCapability(diagnostic(message, RenderDiagnosticDomain.CAPABILITY))
     private fun diagnostic(message: String, domain: RenderDiagnosticDomain) = RenderDiagnostic(RenderDiagnosticCode("w3.lowering.incompatible_plan"), domain, RenderDiagnosticSeverity.ERROR, message)

@@ -1773,8 +1773,11 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             render.drawPackets.isEmpty() ||
             render.drawPackets.map { it.packetId }.distinct().size != render.drawPackets.size ||
             render.drawPackets.withIndex().any { (paintOrder, packet) ->
-                packet.commandIdValue != paintOrder || packet.originalPaintOrder != paintOrder ||
+                packet.originalPaintOrder != paintOrder ||
                     packet.sortKey != paintOrder.toLong()
+            } ||
+            render.drawPackets.zipWithNext().any { (first, second) ->
+                first.commandIdValue >= second.commandIdValue
             } ||
             render.drawPackets.any { packet -> !isExactW3Packet(packet, request.targetBounds) } ||
             render.batchEligibilityByPacketId.keys != render.drawPackets.map(GPUDrawPacket::packetId).toSet() ||
@@ -1793,8 +1796,8 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             request.stagingPreparation.usages != setOf(GPUFrameResourceUsage.CopyDestination, GPUFrameResourceUsage.MapRead) ||
             request.targetPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
             request.stagingPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
-            request.targetPreparation.diagnosticLabel != "w3.${request.planId.value}.target" ||
-            request.stagingPreparation.diagnosticLabel != "w3.${request.planId.value}.staging" ||
+            request.targetPreparation.diagnosticLabel != w3SessionIdentity(request) + ".target" ||
+            request.stagingPreparation.diagnosticLabel != w3SessionIdentity(request) + ".staging" ||
             request.readbackRequest.requestId.value != "w3.${request.planId.value}.readback" ||
             request.memoryBudget.diagnostic != null ||
             request.memoryBudget.configuredAggregateBudgetBytes <= 0L ||
@@ -1818,14 +1821,14 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
 
         val expectedAllocations = listOf(
             GPUFrameMemoryAllocation(
-                "w3.${request.planId.value}.target",
+            w3SessionIdentity(request) + ".target",
                 GPUFrameMemoryCategory.CanonicalTarget,
                 targetBytes,
                 GPUFrameMemoryResourceKind.Texture2D,
                 request.targetBounds,
             ),
             GPUFrameMemoryAllocation(
-                "w3.${request.planId.value}.staging",
+            w3SessionIdentity(request) + ".staging",
                 GPUFrameMemoryCategory.ReadbackStaging,
                 stagingBytes,
                 GPUFrameMemoryResourceKind.Buffer,
@@ -1848,6 +1851,9 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             null
         }
     }
+
+    private fun w3SessionIdentity(request: GPUCorePrimitivePreplannedFrameRequest): String =
+        "w3.session.${request.baseTaskList.capabilitySeal.deviceGeneration.value}.${request.targetBounds.width}x${request.targetBounds.height}.rgba8unorm-srgb"
 
     private fun isExactW3Packet(packet: GPUDrawPacket, targetBounds: GPUPixelBounds): Boolean {
         val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive ?: return false
@@ -1884,6 +1890,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             semantic.material !is GPUCorePrimitiveMaterialPayload.SolidColor ||
             semantic.targetBounds != targetBounds ||
             semantic.coverageMode != GPUCorePrimitiveCoverageMode.FullOrScissor ||
+            semantic.blendPlanIdentity != canonicalSolidRectSrcOverBlendPlan().canonicalIdentity() ||
             semantic.analysisRecordId != "analysis.fill_rect.${packet.commandIdValue}" ||
             semantic.analysisCommandFamily != "FillRect" ||
             semantic.payloadRef.commandIdValue != packet.commandIdValue ||

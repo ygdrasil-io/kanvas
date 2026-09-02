@@ -93,6 +93,149 @@ class GpuPlanTaskListLowererTest {
     private val lowerer = GpuPlanTaskListLowerer()
 
     @Test
+    fun `public graph keeps original scene command index while packet ordering stays compact`() {
+        val scene = SceneSnapshot.of(
+            SceneExtent(2, 2),
+            ColorSpace.SRGB,
+            listOf(
+                SceneCommand.Annotation.of(RectF32(0f, 0f, 2f, 2f), "origin", "test"),
+                SceneCommand.SetTransform(Matrix3x3F32.Identity),
+                SceneCommand.SetClip(ClipStackNode.Empty),
+                SceneCommand.Draw(
+                    DrawNode(
+                        GeometryNode.Rect.of(RectF32(0f, 0f, 2f, 2f)),
+                        MaterialNode.Solid(ColorARGB.fromPackedUInt(0xFF4080C0u)),
+                        CoverageRequest.HARD_EDGE,
+                        ClipStackNode.Empty,
+                        BlendNode.SrcOver,
+                        EffectStack.Empty,
+                        Matrix3x3F32.Identity,
+                        DrawOrigin.RECT,
+                    ),
+                ),
+            ),
+        )
+        val graph = assertIs<RenderPlanResult.Ready<RenderGraph>>(
+            W3SolidRectPlanCompiler().plan(
+                scene,
+                RenderTargetDescriptor(scene.extent, ColorSpace.SRGB),
+                PlanCapabilitySnapshot.of(7, 2048, 1L shl 20, 256, setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL)),
+                PlanBudget(1024),
+            ),
+        ).plan
+
+        val packet = assertIs<GpuPlanLoweringResult.Lowered>(lowerer.lower(validRequest(graph))).taskList
+            .tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
+
+        assertEquals(3, packet.commandIdValue)
+        assertEquals(0, packet.originalPaintOrder)
+        assertEquals(0L, packet.sortKey)
+    }
+
+    @Test
+    fun `public graph whose I32 bounds cannot round trip through F32 is refused`() {
+        val width = 16_777_217
+        val graph = graph(
+            extent = SizeI32(width, 1),
+            targetByteSize = width.toLong() * 4L,
+            readbackBytesPerRow = 67_109_120L,
+            budget = PlanBudget(256L shl 20),
+            capabilities = PlanCapabilitySnapshot.of(7, width, 256L shl 20, 256, setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL)),
+            drawBounds = RectI32(0, 0, width, 1),
+        )
+
+        val refusal = assertIs<GpuPlanLoweringResult.InvalidPlan>(
+            lowerer.lower(
+                validRequest(
+                    graph,
+                    currentBudget = graph.budget,
+                    rendererCapabilities = capabilities(width.toLong(), 256L shl 20),
+                ),
+            ),
+        )
+
+        assertEquals("w3.lowering.incompatible_plan", refusal.diagnostic.code.value)
+    }
+
+    @Test
+    fun `public graph at Int MAX I32 boundary is refused without saturating`() {
+        val width = Int.MAX_VALUE
+        val bytesPerRow = 8_589_934_592L
+        val graph = graph(
+            extent = SizeI32(width, 1),
+            targetByteSize = width.toLong() * 4L,
+            readbackBytesPerRow = bytesPerRow,
+            budget = PlanBudget(32L shl 30),
+            capabilities = PlanCapabilitySnapshot.of(7, width, 32L shl 30, 256, setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL)),
+            drawBounds = RectI32(0, 0, width, 1),
+        )
+
+        val refusal = assertIs<GpuPlanLoweringResult.InvalidPlan>(
+            lowerer.lower(
+                validRequest(
+                    graph = graph,
+                    currentBudget = graph.budget,
+                    rendererCapabilities = capabilities(width.toLong(), 32L shl 30),
+                ),
+            ),
+        )
+
+        assertEquals("w3.lowering.incompatible_plan", refusal.diagnostic.code.value)
+    }
+
+    @Test
+    fun `coherently re-signed blend semantic payload is refused by the W3 lowering envelope`() {
+        val graph = graph()
+        val lowered = assertIs<GpuPlanLoweringResult.Lowered>(lowerer.lower(validRequest(graph))).taskList
+        val prepare = assertIs<GPUTask.PrepareResources>(lowered.tasks[0])
+        val render = assertIs<GPUTask.Render>(lowered.tasks[1])
+        val readback = assertIs<GPUTask.Readback>(lowered.tasks[2])
+        val original = render.drawPackets.single()
+        val semantic = assertIs<GPUDrawSemanticPayload.CorePrimitive>(original.semanticPayload)
+        val geometry = assertIs<GPUCorePrimitiveGeometry.Rect>(semantic.geometry)
+        val reSigned = GPUCorePrimitivePayloadGatherer().gatherSemantic(
+            GPUCorePrimitivePayloadInput(
+                original.commandIdValue,
+                GPUCorePrimitiveSourceFamily.Rect,
+                GPUCorePrimitiveGeometryInput.Rect(geometry.left, geometry.top, geometry.right, geometry.bottom),
+                semantic.premultipliedRgba,
+                semantic.targetBounds,
+                semantic.scissorBounds,
+                semantic.clipCoveragePlan,
+                semantic.clipExecutionPlanIdentity,
+                "blend.re-signed",
+                GPUFrameProvenance.None,
+                GPUCorePrimitiveCoverageMode.FullOrScissor,
+                semantic.analysisRecordId!!,
+                semantic.analysisCommandFamily!!,
+                GPUCorePrimitiveRectRouteAuthority.RectAxisAligned,
+                corePrimitiveRectGeometryAuthority(GPURect(geometry.left, geometry.top, geometry.right, geometry.bottom), GPUTransformFacts.identity()),
+            ),
+        )
+        val altered = GPUTask.Render(
+            render.taskId, render.recordingId, render.phase, render.target, render.loadStore, render.samplePlan,
+            render.resourceUses, render.provisionalSegmentKey, listOf(copyPacket(original, original.targetStateHash, semanticPayload = reSigned)),
+            render.batchEligibilityByPacketId, render.sampleContinuationKey, render.compositeMembership,
+            render.depthStencilLoadStore, render.preparedImageBindingsByPacketId, render.preparedTextBindingsByPacketId,
+        )
+        val base = GPUTaskList(
+            lowered.frameId, lowered.capabilitySeal, lowered.recordingSeals, lowered.expectedReplayKeyHash,
+            listOf(altered), emptyList(), lowered.phaseOrder, lowered.memoryBudget, lowered.diagnostics,
+        )
+
+        val result = GPUCorePrimitivePreparedFrameTaskListAssembler().buildPreplanned(
+            GPUCorePrimitivePreplannedFrameRequest(
+                graph.id, base, readback.source,
+                assertIs<GPUFrameTextureDescriptor>(prepare.requests[0].descriptor).logicalBounds,
+                prepare.requests[0], readback.staging, prepare.requests[1], readback.request,
+                lowered.memoryBudget, graph.passes()[0].id, graph.passes()[1].id,
+            ),
+        )
+
+        assertEquals("w3.lowering.incompatible_plan", assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value)
+    }
+
+    @Test
     fun `ready W3 graph lowers to a frame accepted by GPUFramePlanner`() {
         val graph = graph()
         assertEquals(0, assertIs<PlanPass.ReadbackPass>(graph.passes().last()).ordinal)
@@ -139,8 +282,8 @@ class GpuPlanTaskListLowererTest {
         assertEquals(GPUFrameResourceLifetime.FrameLocal, prepare.requests[1].lifetime)
         assertEquals(16L, prepare.requests[0].byteSize)
         assertEquals(512L, prepare.requests[1].byteSize)
-        assertEquals("w3.${graph.id.value}.target", prepare.requests[0].diagnosticLabel)
-        assertEquals("w3.${graph.id.value}.staging", prepare.requests[1].diagnosticLabel)
+        assertEquals("w3.session.7.2x2.rgba8unorm-srgb.target", prepare.requests[0].diagnosticLabel)
+        assertEquals("w3.session.7.2x2.rgba8unorm-srgb.staging", prepare.requests[1].diagnosticLabel)
         assertEquals(512L, taskList.memoryBudget.peakFrameTransientBytes)
         assertEquals(16L, taskList.memoryBudget.targetResidentBytes)
         assertEquals(1024L, taskList.memoryBudget.configuredAggregateBudgetBytes)
@@ -152,8 +295,8 @@ class GpuPlanTaskListLowererTest {
         assertEquals(GPUFrameMemoryResourceKind.Buffer, taskList.memoryBudget.allocations[1].resourceKind)
         assertEquals(16L, taskList.memoryBudget.allocations[0].bytes)
         assertEquals(512L, taskList.memoryBudget.allocations[1].bytes)
-        assertEquals("w3.${graph.id.value}.target", taskList.memoryBudget.allocations[0].label)
-        assertEquals("w3.${graph.id.value}.staging", taskList.memoryBudget.allocations[1].label)
+        assertEquals("w3.session.7.2x2.rgba8unorm-srgb.target", taskList.memoryBudget.allocations[0].label)
+        assertEquals("w3.session.7.2x2.rgba8unorm-srgb.staging", taskList.memoryBudget.allocations[1].label)
         assertEquals(GPUFrameMemoryCategory.CanonicalTarget, taskList.memoryBudget.allocations[0].category)
         assertEquals(GPUFrameMemoryCategory.ReadbackStaging, taskList.memoryBudget.allocations[1].category)
         assertEquals(target.logicalBounds, taskList.memoryBudget.allocations[0].extent)
@@ -453,9 +596,10 @@ class GpuPlanTaskListLowererTest {
         graph: RenderGraph = graph(),
         deviceGeneration: GPUDeviceGenerationID = GPUDeviceGenerationID(7),
         currentBudget: PlanBudget = PlanBudget(1024),
+        rendererCapabilities: GPUCapabilities = capabilities(),
     ) = GpuPlanLoweringRequest(
         graph = graph,
-        capabilities = capabilities(),
+        capabilities = rendererCapabilities,
         deviceGeneration = deviceGeneration,
         currentBudget = currentBudget,
         frameId = GPUFrameID(3),
@@ -464,6 +608,15 @@ class GpuPlanTaskListLowererTest {
 
     private fun graph(
         capabilityId: String = "solid-rect-pixel-aligned-simple-clip-src-over-srgb-v1",
+        extent: SizeI32 = SizeI32(2, 2),
+        capabilities: PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(
+            deviceGeneration = 7,
+            maxTextureDimension2D = 2048,
+            maxBufferSizeBytes = 1L shl 20,
+            copyBytesPerRowAlignment = 256,
+            supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+        ),
+        drawBounds: RectI32 = RectI32(0, 0, 2, 2),
         readbackOrdinal: Int? = null,
         targetOrdinal: Int = 0,
         targetByteSize: Long = 16L,
@@ -476,7 +629,9 @@ class GpuPlanTaskListLowererTest {
         includeDependency: Boolean = true,
         budget: PlanBudget = PlanBudget(1024),
     ): RenderGraph {
-        if (capabilityId == W3SolidRectPlanCompiler.CAPABILITY_ID && readbackOrdinal == null &&
+        if (capabilityId == W3SolidRectPlanCompiler.CAPABILITY_ID && extent == SizeI32(2, 2) &&
+            capabilities == PlanCapabilitySnapshot.of(7, 2048, 1L shl 20, 256, setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL)) &&
+            drawBounds == RectI32(0, 0, 2, 2) && readbackOrdinal == null &&
             targetOrdinal == 0 && targetByteSize == 16L &&
             targetUsages == setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource) &&
             stagingFirstPassIndex == 1 && readbackBytesPerRow == 256L && includeDependency &&
@@ -515,14 +670,6 @@ class GpuPlanTaskListLowererTest {
                 ),
             ).plan
         }
-        val extent = SizeI32(2, 2)
-        val capabilities = PlanCapabilitySnapshot.of(
-            deviceGeneration = 7,
-            maxTextureDimension2D = 2048,
-            maxBufferSizeBytes = 1L shl 20,
-            copyBytesPerRowAlignment = 256,
-            supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
-        )
         val target = PlanResource.of(
             PlanResourceRole.LogicalTarget, targetOrdinal, PlanResourceKind.Texture2D,
             PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL, extent, targetByteSize,
@@ -530,7 +677,7 @@ class GpuPlanTaskListLowererTest {
             PlanResourceLifetime.FrameLocal, 0, 2,
         )
         val staging = PlanResource.of(
-            PlanResourceRole.ReadbackStaging, 0, PlanResourceKind.Buffer, null, null, readbackBytesPerRow * 2L,
+            PlanResourceRole.ReadbackStaging, 0, PlanResourceKind.Buffer, null, null, readbackBytesPerRow * extent.height.toLong(),
             setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead),
             PlanResourceLifetime.FrameLocal, stagingFirstPassIndex, 2,
         )
@@ -541,8 +688,8 @@ class GpuPlanTaskListLowererTest {
                 SolidRectDraw.of(
                     commandIndex = 0,
                     color = ColorF32.of(0.25f, 0.5f, 0.75f, 1f),
-                    visibleBounds = RectI32(0, 0, 2, 2),
-                    scissor = RectI32(0, 0, 2, 2),
+                    visibleBounds = drawBounds,
+                    scissor = drawBounds,
                     coverage = CoveragePlan.FullOrScissor,
                     sample = SamplePlan.SingleSample,
                     blend = BlendPlan.SrcOver,
@@ -563,7 +710,7 @@ class GpuPlanTaskListLowererTest {
             listOf(target, staging),
             listOf(render, readback),
             if (includeDependency) listOf(PlanPassDependency(render.id, readback.id)) else emptyList(),
-            targetByteSize + readbackBytesPerRow * 2L,
+            targetByteSize + readbackBytesPerRow * extent.height.toLong(),
         )
     }
 
@@ -611,7 +758,10 @@ class GpuPlanTaskListLowererTest {
         source.clipProducerAuthority,
     )
 
-    private fun capabilities() = GPUCapabilities(
+    private fun capabilities(
+        maxTextureDimension2D: Long = 2048L,
+        maxBufferSize: Long = 1L shl 20,
+    ) = GPUCapabilities(
         implementation = GPUImplementationIdentity("GPU", "test", "adapter", "device"),
         facts = listOf(
             GPUCapabilityFact("first_slice.fill_rect.native", "test", "supported", true, "w3"),
@@ -619,10 +769,10 @@ class GpuPlanTaskListLowererTest {
         ),
         snapshotId = "w3-test",
         limits = GPULimits(
-            2048,
+            maxTextureDimension2D,
             256,
             256,
-            maxBufferSize = 1L shl 20,
+            maxBufferSize = maxBufferSize,
             maxDynamicUniformBuffersPerPipelineLayout = 1,
         ),
         supportedTextureFormats = setOf(GPUTextureFormat.RGBA8Unorm, GPUTextureFormat.RGBA8UnormSrgb),
