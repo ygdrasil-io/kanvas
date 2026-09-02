@@ -68,8 +68,12 @@ public object DisplayOpSceneAdapter {
             SceneCaptureResult.Captured(SceneSnapshot.of(extent, colorSpace, captureOperations(operations, limits, context)))
         } catch (failure: CaptureFailure) {
             invalid(diagnostics, failure.code, failure.message)
-        } catch (_: IllegalArgumentException) {
-            invalid(diagnostics, "scene-capture-invalid", "DisplayOp capture contains an invalid semantic value")
+        } catch (failure: IllegalArgumentException) {
+            invalid(
+                diagnostics,
+                "scene-capture-invalid",
+                "DisplayOp capture contains an invalid semantic value: ${failure.message.orEmpty()}",
+            )
         } catch (_: ArithmeticException) {
             invalid(diagnostics, "scene-capture-invalid", "DisplayOp capture overflows a semantic resource bound")
         }

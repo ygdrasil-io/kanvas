@@ -27,7 +27,7 @@ class RuntimeEffect internal constructor(
         uniforms: UniformBlock,
         children: Map<String, ColorFilter> = emptyMap(),
     ): ColorFilter {
-        val result = makeColorFilterHook?.invoke(this, uniforms)
+        val result = makeColorFilterHook?.invoke(this, uniforms, children)
         if (result != null) return result
         return ColorFilter.RuntimeEffect(this, uniforms, children)
     }
@@ -71,7 +71,7 @@ class RuntimeEffect internal constructor(
         private val registeredEffects = ConcurrentHashMap<String, RuntimeEffect>()
         internal var compileWgsl: ((String) -> RuntimeEffect?)? = null
         internal var lookupRegistered: ((String) -> RuntimeEffect?)? = null
-        internal var makeColorFilterHook: ((RuntimeEffect, UniformBlock) -> ColorFilter?)? = null
+        internal var makeColorFilterHook: ((RuntimeEffect, UniformBlock, Map<String, ColorFilter>) -> ColorFilter?)? = null
         internal var makeBlenderHook: ((RuntimeEffect, UniformBlock) -> Blender?)? = null
 
         private fun RuntimeEffect.hasCompatibleDescriptor(other: RuntimeEffect): Boolean =

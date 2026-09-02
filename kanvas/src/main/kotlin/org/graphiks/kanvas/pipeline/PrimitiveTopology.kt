@@ -14,5 +14,5 @@ enum class VertexFormat { FLOAT32, FLOAT32x2, FLOAT32x3, FLOAT32x4, UINT8x4, SIN
 enum class VertexStepMode { VERTEX, INSTANCE }
 enum class LoadOp { CLEAR, LOAD }
 enum class StoreOp { STORE, DISCARD }
-enum class UniformType { FLOAT, FLOAT2, FLOAT3, FLOAT4, MAT3X3, MAT4X4 }
+enum class UniformType { FLOAT, FLOAT2, FLOAT3, FLOAT4, INT1, MAT3X3, MAT4X4 }
 enum class ChildType { SHADER, COLOR_FILTER, BLENDER }

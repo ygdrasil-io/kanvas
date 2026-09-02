@@ -224,6 +224,11 @@ class GmCanvas(
         withClip {
             if (currentTransform.isIdentity()) {
                 inner.drawPath(path, paint)
+            } else if (currentTransform.hasPerspective()) {
+                inner.save()
+                inner.concat(currentTransform)
+                inner.drawPath(path, paint)
+                inner.restore()
             } else {
                 inner.drawPath(path.transform(currentTransform), paint)
             }

@@ -314,7 +314,8 @@ public object PaintSceneAdapter {
             RuntimeUniformSlot(slot.name, slot.binding, RuntimeUniformType.valueOf(slot.type.name), slot.size)
         }),
         childSlots = children.map { slot ->
-            RuntimeChildSlot(slot.name, RuntimeChildType.valueOf(slot.type.name))
+            extraChildren.firstOrNull { it.name == slot.name }
+                ?: RuntimeChildSlot(slot.name, abi.defaultChildType())
         } + extraChildren.filter { extra -> children.none { it.name == extra.name } },
         vertexLayout = RuntimeVertexLayout.of(
             stride = module.vertexLayout.stride,
@@ -336,6 +337,13 @@ public object PaintSceneAdapter {
             textures = module.textures.map { slot -> RuntimeTextureSlot(slot.name, slot.binding) },
         ),
     )
+
+    private fun RuntimeEffectAbi.defaultChildType(): RuntimeChildType = when (this) {
+        RuntimeEffectAbi.SHADER -> RuntimeChildType.SHADER
+        RuntimeEffectAbi.COLOR_FILTER -> RuntimeChildType.COLOR_FILTER
+        RuntimeEffectAbi.IMAGE_FILTER -> RuntimeChildType.IMAGE_FILTER
+        RuntimeEffectAbi.BLENDER -> RuntimeChildType.BLENDER
+    }
 
     private fun org.graphiks.kanvas.pipeline.UniformBlock.toRuntimeUniforms(): Map<String, RuntimeUniformValue> = entries.mapValues { (_, value) ->
         when (value) {

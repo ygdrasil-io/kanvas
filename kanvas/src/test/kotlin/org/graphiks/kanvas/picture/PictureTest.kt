@@ -296,6 +296,7 @@ class PictureTest {
                 UniformType.FLOAT2 -> float2("uniform-$index", 1f, 2f)
                 UniformType.FLOAT3 -> float3("uniform-$index", 1f, 2f, 3f)
                 UniformType.FLOAT4 -> float4("uniform-$index", 1f, 2f, 3f, 4f)
+                UniformType.INT1 -> int1("uniform-$index", index)
                 UniformType.MAT3X3 -> mat3x3("uniform-$index", Matrix3x3F32.Identity)
                 UniformType.MAT4X4 -> mat4x4("uniform-$index", FloatArray(16) { it.toFloat() })
             } }

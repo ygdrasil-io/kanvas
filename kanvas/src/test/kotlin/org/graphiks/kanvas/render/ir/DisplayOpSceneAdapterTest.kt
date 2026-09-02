@@ -205,6 +205,26 @@ class DisplayOpSceneAdapterTest {
     }
 
     @Test
+    fun `capture retains the semantic cause of an illegal argument diagnostic`() {
+        val malformed = Image.fromPixels(1, 1, byteArrayOf(1), sourceId = "undersized-rgba")
+        val operation = DisplayOp.DrawImage(
+            malformed,
+            RectF32.ofLTRB(0f, 0f, 1f, 1f),
+            RectF32.ofLTRB(0f, 0f, 1f, 1f),
+            null,
+            Matrix3x3F32.Identity,
+            ClipStack.WideOpen,
+        )
+
+        val result = DisplayOpSceneAdapter.capture(listOf(operation), SceneExtent(8, 8), ColorSpace.SRGB)
+
+        assertTrue(
+            assertInstanceOf(SceneCaptureResult.Invalid::class.java, result)
+                .diagnostics.single().message.contains("pixel bytes do not cover"),
+        )
+    }
+
+    @Test
     fun `capture preserves a rectangle public geometry paint transform and clip`() {
         val rectangle = RectF32.ofLTRB(1f, 2f, 30f, 40f)
         val paint = Paint.fill(ColorARGB.Red)

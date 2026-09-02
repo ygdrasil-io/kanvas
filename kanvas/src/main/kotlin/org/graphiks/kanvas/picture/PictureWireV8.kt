@@ -209,6 +209,7 @@ internal fun stableUniformTypeId(value: UniformType): Byte = when (value) {
     UniformType.FLOAT2 -> 2
     UniformType.FLOAT3 -> 3
     UniformType.FLOAT4 -> 4
+    UniformType.INT1 -> 7
     UniformType.MAT3X3 -> 5
     UniformType.MAT4X4 -> 6
 }
@@ -218,6 +219,7 @@ internal fun stableUniformTypeFromId(id: Byte): UniformType? = when (id.toInt())
     2 -> UniformType.FLOAT2
     3 -> UniformType.FLOAT3
     4 -> UniformType.FLOAT4
+    7 -> UniformType.INT1
     5 -> UniformType.MAT3X3
     6 -> UniformType.MAT4X4
     else -> null

@@ -1,9 +1,14 @@
 package org.graphiks.kanvas.gpu.renderer.wgsl
 
 const val ColorFilterLumaToAlphaWgsl: String = """
+struct ColorFilterLumaToAlphaUniform {
+    srcColor: vec4<f32>,
+}
+@group(1) @binding(0) var<uniform> uColorFilterLumaToAlpha: ColorFilterLumaToAlphaUniform;
+
 fn color_filter_luma_to_alpha(inColor: vec4<f32>) -> vec4<f32> {
-    let luma = dot(inColor.rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
-    return vec4<f32>(inColor.rgb, luma);
+    let luma = dot(uColorFilterLumaToAlpha.srcColor.rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
+    return vec4<f32>(uColorFilterLumaToAlpha.srcColor.rgb, luma);
 }
 """
 
