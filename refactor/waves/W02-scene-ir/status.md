@@ -1,7 +1,7 @@
 # W02 — Scene IR et frontières de modules
 
 Date de génération : 2026-09-02  
-Commit de publication : `HEAD` (`refactor: close W02 scene IR boundaries`)
+Commit d'implémentation : `88e49aaf8` (`refactor: close W02 scene IR boundaries`)
 
 ## État des gates
 
@@ -22,11 +22,12 @@ par la nouvelle architecture.
   `:gpu-renderer`.
 - `:kanvas` expose `:render-ir` par `api` et consomme `:gpu-renderer` par
   `implementation`.
-- `RenderConfig` n’expose ni type ni constante GPU :
-  `PreparedImageRoute.GENERIC_NATIVE` et
-  `PreparedImageRoute.BOUNDED_NEAREST_1_TO_1` sont les deux routes publiques.
-  L’adaptation vers `GPUPreparedImageRouteCapability` vit uniquement dans
-  `surface.gpu`.
+- Dans le périmètre W02, `RenderConfig` expose les limites backend-neutral
+  `MAX_PATH_FAN_TRIANGLES` et `MAX_PATH_GEOMETRY_BYTES`, ainsi que les routes
+  publiques `PreparedImageRoute.GENERIC_NATIVE` et
+  `PreparedImageRoute.BOUNDED_NEAREST_1_TO_1`. L’adaptation vers
+  `GPUPreparedImageRouteCapability` vit uniquement dans `surface.gpu`.
+  Le type public historique `GPUColorFormat` reste inchangé pour compatibilité.
 - Les adapters de préparation GPU sont `internal`; les consommateurs qui
   importent volontairement `GPUBackendRuntimeFactory` déclarent directement
   `:gpu-renderer` (`integration-tests:skia`, `integration-tests:test-utils`,
@@ -65,6 +66,14 @@ produits par la Scene IR.
 | Commande | Résultat |
 | --- | --- |
 | `rtk ./gradlew :kanvas:test --tests '*GPUPreparedDrawImageLowererTest*' :integration-tests:gpu-evidence:compileKotlin :integration-tests:skia:compileTestKotlin` | Succès : la route publique bornée conserve le refus du filtrage linéaire et les consommateurs directs compilent. |
+| `rtk ./gradlew :kanvas:test --tests '*GPUFramePathApiInventoryTest*'` | Succès : les limites publiques backend-neutral déterminent les defaults et les refus de budget. |
 | `rtk ./gradlew :kanvas:svg:compileKotlin :integration-tests:svg:compileTestKotlin` | Succès : les consommateurs SVG déclarent leur dépendance GPU explicite. |
 | `rtk ./gradlew :integration-tests:skia:generateSkiaGmInventory` | Succès en 1 min 26 s ; vérité fraîche post-Task13, score audit strict et `jpg-color-cube` filtrée avant `Surface`/setup/draw/render. |
+| `rtk ./gradlew :integration-tests:skia:test --tests '*SkiaGmSceneCaptureTest*'` | Succès : 443 GMs éligibles, 431 captures, 11 blocages au setup et une capture invalide ; `jpg-color-cube` reste filtrée avant `Surface`/setup/draw/render. |
 | `rtk ./gradlew :kanvas:test --rerun-tasks` | Échec connu : 51 échecs sur 3 573 tests, 0 erreur. Ce compte frais confirme la baseline globale et maintient W1 strict non atteinte. |
+
+Audit exact de l'inventaire frais :
+
+```sh
+rtk jq -e '.scoreAudit.strict == true and ([.rows[] | select((.conformanceScope == "eligible" or .conformanceScope == "accepted-skia-gap") and .setupState == "NOT_ATTEMPTED")] | length) == 0' reports/gpu-renderer/evidence/gm-inventory/source-inventory.json
+```

@@ -1,8 +1,5 @@
 package org.graphiks.kanvas.surface
 
-private const val MAX_PATH_FAN_TRIANGLES: UInt = 1_024u
-private const val MAX_PATH_GEOMETRY_BYTES: UInt = 36_864u
-
 data class RenderConfig(
     val gpuColorFormat: GPUColorFormat = GPUColorFormat.RGBA8_UNORM_SRGB,
     val maxPathVertices: UInt = 131072u,
@@ -40,6 +37,12 @@ data class RenderConfig(
     }
 
     companion object {
+        /** Maximum path edge-fan triangles admitted by the public Surface route. */
+        public const val MAX_PATH_FAN_TRIANGLES: UInt = 1_024u
+
+        /** Maximum path edge-fan geometry bytes admitted by the public Surface route. */
+        public const val MAX_PATH_GEOMETRY_BYTES: UInt = 36_864u
+
         val DEFAULT = RenderConfig()
 
         fun fromEnvironment(): RenderConfig {
