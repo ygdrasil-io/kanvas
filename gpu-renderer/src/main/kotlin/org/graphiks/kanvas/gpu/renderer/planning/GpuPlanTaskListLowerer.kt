@@ -16,6 +16,7 @@ import org.graphiks.kanvas.gpu.plan.SamplePlan
 import org.graphiks.kanvas.gpu.plan.SolidRectDraw
 import org.graphiks.kanvas.gpu.plan.W3SolidRectPlanCompiler
 import org.graphiks.kanvas.gpu.plan.W3PlanDiagnostics
+import org.graphiks.kanvas.gpu.plan.W4aAnalyticRectPlanCompiler
 import org.graphiks.kanvas.gpu.renderer.analysis.corePrimitiveRectGeometryAuthority
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
@@ -98,6 +99,17 @@ public class GpuPlanTaskListLowerer {
         }
         if (request.graph.capabilities != current) return unsupported("The graph capability snapshot is stale.")
         if (request.graph.budget != request.currentBudget) return invalid("The graph budget is stale.")
+        return when (request.graph.capabilityId) {
+            W3SolidRectPlanCompiler.CAPABILITY_ID -> lowerW3(request, current)
+            W4aAnalyticRectPlanCompiler.CAPABILITY_ID -> W4aAnalyticRectGraphLowerer().lower(request)
+            else -> invalid("Unknown gpu-plan capability id.")
+        }
+    }
+
+    private fun lowerW3(
+        request: GpuPlanLoweringRequest,
+        current: org.graphiks.kanvas.gpu.plan.PlanCapabilitySnapshot,
+    ): GpuPlanLoweringResult {
         val graph = validateW3Graph(request.graph) ?: return invalid("The graph is not the exact W3 topology.")
         if (graph.staging.byteSize > current.maxBufferSizeBytes) {
             return capability(

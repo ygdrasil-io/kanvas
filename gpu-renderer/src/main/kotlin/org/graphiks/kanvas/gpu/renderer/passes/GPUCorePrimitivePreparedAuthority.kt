@@ -1748,4 +1748,5 @@ internal data class GPUCorePrimitivePreparedPacketAuthority(
     val analyticIntersectionUniformSeal: GPUCorePrimitiveAnalyticIntersectionUniformSeal? = null,
     val coverageMaskUniformSlabSeal: GPUCorePrimitiveCoverageMaskUniformSlabSeal? = null,
     val w3SessionScratch: W3SessionScratchV1? = null,
+    val w4aSessionScratch: W4aSessionScratchV1? = null,
 )
