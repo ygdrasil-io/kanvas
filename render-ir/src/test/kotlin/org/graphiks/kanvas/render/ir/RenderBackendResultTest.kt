@@ -4,9 +4,13 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
+import kotlin.test.assertSame
 
 class RenderBackendResultTest {
+    private data class TestOutput(val bytes: List<Int>) : RenderOutput
+
     @Test
     fun `planning failures require a public diagnostic`() {
         assertFailsWith<IllegalArgumentException> {
@@ -53,10 +57,25 @@ class RenderBackendResultTest {
     }
 
     @Test
-    fun `every execution outcome is distinct and failures isolate diagnostics`() {
+    fun `completed execution carries its immutable typed output`() {
+        val output = TestOutput(listOf(1, 2, 3, 4))
+        val result: RenderExecutionResult<TestOutput> = RenderExecutionResult.Completed(output)
+
+        assertSame(output, assertIs<RenderExecutionResult.Completed<*>>(result).output)
+    }
+
+    @Test
+    fun `failure outcomes remain covariant for every output`() {
+        val failure: RenderExecutionResult<TestOutput> =
+            RenderExecutionResult.InvalidPlan(listOf(diagnostic("invalid.plan")))
+
+        assertIs<RenderExecutionResult.InvalidPlan>(failure)
+    }
+
+    @Test
+    fun `every failed execution outcome is distinct and failures isolate diagnostics`() {
         val source = mutableListOf(diagnostic("execution"))
-        val outcomes = listOf<RenderExecutionResult>(
-            RenderExecutionResult.Completed,
+        val outcomes = listOf<RenderExecutionResult<TestOutput>>(
             RenderExecutionResult.UnsupportedCapability(source),
             RenderExecutionResult.InvalidPlan(source),
             RenderExecutionResult.ResourceLimitExceeded(source),
@@ -66,7 +85,7 @@ class RenderBackendResultTest {
         source.clear()
 
         assertEquals(outcomes.size, outcomes.map { it::class }.distinct().size)
-        outcomes.drop(1).forEach { outcome ->
+        outcomes.forEach { outcome ->
             val diagnostics = outcome.failedDiagnostics()
             assertFailsWith<UnsupportedOperationException> {
                 (diagnostics as MutableList<RenderDiagnostic>).clear()
@@ -90,8 +109,8 @@ class RenderBackendResultTest {
         is RenderPlanResult.Ready -> error("Ready is not a failure")
     }
 
-    private fun RenderExecutionResult.failedDiagnostics(): List<RenderDiagnostic> = when (this) {
-        RenderExecutionResult.Completed -> error("Completed is not a failure")
+    private fun <O : RenderOutput> RenderExecutionResult<O>.failedDiagnostics(): List<RenderDiagnostic> = when (this) {
+        is RenderExecutionResult.Completed -> error("Completed is not a failure")
         is RenderExecutionResult.UnsupportedCapability -> diagnostics
         is RenderExecutionResult.InvalidPlan -> diagnostics
         is RenderExecutionResult.ResourceLimitExceeded -> diagnostics

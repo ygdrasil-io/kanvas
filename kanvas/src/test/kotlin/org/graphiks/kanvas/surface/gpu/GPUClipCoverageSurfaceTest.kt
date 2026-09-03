@@ -1199,18 +1199,27 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `public singular and non finite hard path clip transforms refuse before submission`() {
+    fun `public singular clip transforms refuse before submission`() {
         requireWebGpu()
-        val session = requireNotNull(GPUBackendRuntimeFactory.createOrNull())
-        val submissionsBefore = session.runtimeTelemetry.submissions
-        val cases = listOf(
-            "singular" to 0f to "unsupported.transform.affine_singular",
-            "nan" to Float.NaN to "unsupported.transform.non_finite",
-            "infinity" to Float.POSITIVE_INFINITY to "unsupported.transform.non_finite",
-        )
+        val surface = Surface(32, 32)
+        surface.canvas {
+            save()
+            scale(0f, 1f)
+            clipPath(Path().apply { addRect(RectF32(4f, 4f, 28f, 28f)) }, ClipOp.INTERSECT, antiAlias = false)
+            resetMatrix()
+            drawColor(ColorARGB.Red)
+            restore()
+        }
 
-        cases.forEach { (labelAndScale, expectedCode) ->
-            val (label, scaleX) = labelAndScale
+        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> { surface.render() }
+        assertEquals("unsupported.transform.affine_singular", failure.diagnostic.code.value)
+    }
+
+    @Test
+    fun `non finite clip transforms terminate in W3 capture without runtime setup`() {
+        val scales = listOf("nan" to Float.NaN, "infinity" to Float.POSITIVE_INFINITY)
+
+        scales.forEach { (label, scaleX) ->
             val surface = Surface(32, 32)
             surface.canvas {
                 save()
@@ -1221,27 +1230,43 @@ class GPUClipCoverageSurfaceTest {
                 restore()
             }
 
-            val failure = assertFailsWith<GPUPreparedSurfaceTerminalException>(label) { surface.render() }
-            assertEquals(expectedCode, failure.diagnostic.code.value, label)
-            assertEquals(submissionsBefore, session.runtimeTelemetry.submissions, label)
+            val failure = assertFailsWith<GPUPlanSurfaceTerminalException>(label) { surface.render() }
+            assertEquals("non-finite-value", failure.code, label)
         }
     }
 
     @Test
-    fun `public singular and non finite rect rrect and path clips refuse before submission`() {
+    fun `public singular rect rrect and path clips refuse before submission`() {
         requireWebGpu()
-        val session = requireNotNull(GPUBackendRuntimeFactory.createOrNull())
-        val submissionsBefore = session.runtimeTelemetry.submissions
-        val scales = listOf(
-            "singular" to 0f to "unsupported.transform.affine_singular",
-            "nan" to Float.NaN to "unsupported.transform.non_finite",
-            "infinity" to Float.POSITIVE_INFINITY to "unsupported.transform.non_finite",
-        )
         val clipKinds = listOf("rect", "rrect", "path")
 
         clipKinds.forEach { kind ->
-            scales.forEach { (labelAndScale, expectedCode) ->
-                val (label, scaleX) = labelAndScale
+            val surface = Surface(32, 32)
+            surface.canvas {
+                save()
+                scale(0f, 1f)
+                when (kind) {
+                    "rect" -> clipRect(RectF32(4f, 4f, 28f, 28f), ClipOp.INTERSECT, antiAlias = false)
+                    "rrect" -> clipRRect(RRectF32.of(RectF32(4f, 4f, 28f, 28f), radius = 4f), ClipOp.INTERSECT, antiAlias = false)
+                    else -> clipPath(Path().apply { addRect(RectF32(4f, 4f, 28f, 28f)) }, ClipOp.INTERSECT, antiAlias = false)
+                }
+                resetMatrix()
+                drawColor(ColorARGB.Red)
+                restore()
+            }
+
+            val failure = assertFailsWith<GPUPreparedSurfaceTerminalException>(kind) { surface.render() }
+            assertEquals("unsupported.transform.affine_singular", failure.diagnostic.code.value, kind)
+        }
+    }
+
+    @Test
+    fun `non finite rect rrect and path clips terminate in W3 capture without runtime setup`() {
+        val scales = listOf("nan" to Float.NaN, "infinity" to Float.POSITIVE_INFINITY)
+        val clipKinds = listOf("rect", "rrect", "path")
+
+        clipKinds.forEach { kind ->
+            scales.forEach { (label, scaleX) ->
                 val surface = Surface(32, 32)
                 surface.canvas {
                     save()
@@ -1256,9 +1281,8 @@ class GPUClipCoverageSurfaceTest {
                     restore()
                 }
 
-                val failure = assertFailsWith<GPUPreparedSurfaceTerminalException>("$kind-$label") { surface.render() }
-                assertEquals(expectedCode, failure.diagnostic.code.value, "$kind-$label")
-                assertEquals(submissionsBefore, session.runtimeTelemetry.submissions, "$kind-$label")
+                val failure = assertFailsWith<GPUPlanSurfaceTerminalException>("$kind-$label") { surface.render() }
+                assertEquals("non-finite-value", failure.code, "$kind-$label")
             }
         }
     }

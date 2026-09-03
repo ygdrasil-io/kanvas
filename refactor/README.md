@@ -39,6 +39,8 @@ Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :
   — preuve d'immuabilité, compatibilité de lecture v7 et writer v8 stable.
 - [État W02 — Scene IR et frontières de modules](waves/W02-scene-ir/status.md)
   — capture backend-neutral publiée ; rendu public encore legacy et gates strictes non atteintes.
+- [État W03 — `gpu-plan` et première tranche compositionnelle](waves/W03-gpu-plan/status.md)
+  — preuve pixel exacte publiée ; baseline globale W0–W2 préservée.
 - [État consolidé de la topologie hybride](progress/2026-08-31-hybrid-f64-f32-path-topology/progress.md)
 - [Rapport d'implémentation de l'admission conservative](progress/2026-09-01-conservative-hybrid-topology-admission/implementation-report.md)
 - [Revue de spécification de l'admission conservative](progress/2026-09-01-conservative-hybrid-topology-admission/spec-review.md)
@@ -51,7 +53,7 @@ Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :
 | W0 | Vérité de référence | Baseline publiée ; gate stricte non atteinte |
 | W1 | Géométrie immuable dans `:math` | Périmètre fonctionnel implémenté et prouvé ciblé pour les frontières d'enregistrement/Picture : snapshots profonds immuables d'images/effets, copie itérative résistante aux cycles avec limites reportées à `SceneCaptureLimits`, writer `Picture` v8 stable et enregistrement détaché/transactionnel des `RuntimeEffect`. Gate stricte **NON ATTEINTE / bloquée** par la validation globale fraîche de 51 échecs sur 3 585 tests, qui confirme la baseline globale ; topologie source, topologie hybride F64/F32 et admission conservative restent documentées séparément |
 | W2 | `Scene IR` et frontières de modules | Capture backend-neutral et frontières de modules implémentées ; gate stricte **NON ATTEINTE** (431/443 captures, 12 dettes), rendu public encore legacy |
-| W3 | `gpu-plan` et premier `RenderGraph` | Non démarrée |
+| W3 | `gpu-plan` et premier `RenderGraph` | Capability rectangles solides/clip simple/`SrcOver` branchée et prouvée par pixels exacts ; baseline globale conservée (51 échecs connus, 0 erreur) |
 | W4 | Geometry/coverage | Non démarrée |
 | W5 | Material graph | Non démarrée |
 | W6 | Layers et effets | Non démarrée |

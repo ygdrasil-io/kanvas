@@ -35,6 +35,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticShapeUnif
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveGradientAnalyticShapeUniformBuildResult
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveDirectNativeRoute
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedSemanticAuthority
+import org.graphiks.kanvas.gpu.renderer.passes.W3SessionScratchV1
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveDirectPathDepthStencilState
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveStructuralColorFormat
@@ -50,6 +51,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.snapshotGPUCorePrimitiveCoverageM
 import org.graphiks.kanvas.gpu.renderer.passes.validateGPUCorePrimitiveCoverageMaskPreparedAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.buildCorePrimitiveAnalyticShapeUniform
 import org.graphiks.kanvas.gpu.renderer.passes.buildCorePrimitiveGradientAnalyticShapeUniform
+import org.graphiks.kanvas.gpu.renderer.passes.validateCorePrimitiveDirectNativeRoute
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_RENDER_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
@@ -186,6 +188,20 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 )
             }
             consumed = true
+        }
+
+        val w3Render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().singleOrNull()
+        val w3Scratch = w3Render?.drawPackets?.firstOrNull()
+            ?.corePrimitivePreparedAuthority?.w3SessionScratch
+        if (w3Render != null && w3Scratch != null) {
+            return materializeW3SessionScratch(
+                framePlan,
+                encoderPlan,
+                resources,
+                generationSeal,
+                w3Render,
+                w3Scratch,
+            )
         }
 
         if (encoderPlan.scopes.any { scope ->
@@ -1590,6 +1606,261 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 "Public wgpu4k CorePrimitive materialization failed: " +
                     "${failure::class.simpleName.orEmpty()}: ${failure.message.orEmpty()}.",
             )
+        }
+    }
+
+    /**
+     * Materializes the closed W3 encoder scratch.  Its V/I/U buffers are physical pooled
+     * resources, never logical frame-plan resources or memory-budget allocations.
+     */
+    private fun materializeW3SessionScratch(
+        framePlan: GPUFramePlan,
+        encoderPlan: GPUCommandEncoderPlan,
+        resources: GPUPreparedResourceSet,
+        generationSeal: GPUPreparedGenerationSeal,
+        renderStep: GPUFrameStep.RenderPassStep,
+        scratch: W3SessionScratchV1,
+    ): GPUPreparedNativeFramePayloadMaterialization {
+        val packets = renderStep.drawPackets
+        val semantics = packets.map { it.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive }
+        val readbackStep = framePlan.steps.filterIsInstance<GPUFrameStep.ReadbackCopyStep>()
+            .singleOrNull() ?: return refused(
+            "invalid.native-core-primitive.w3-readback",
+            "W3 requires one sealed readback step.",
+        )
+        val expectedPlanId = readbackStep.request.requestId.value
+            .takeIf { it.startsWith("w3.") && it.endsWith(".readback") }
+            ?.removePrefix("w3.")
+            ?.removeSuffix(".readback")
+            ?.takeIf(String::isNotBlank)
+            ?: return refused(
+                "invalid.native-core-primitive.w3-scratch",
+                "W3 readback identity cannot bind the scratch plan.",
+            )
+        val maxBufferSize = limits.maxBufferSize ?: return refused(
+            "invalid.native-core-primitive.w3-limits",
+            "W3 requires an observed maxBufferSize.",
+        )
+        val maxDynamicUniformBuffers = limits.maxDynamicUniformBuffersPerPipelineLayout ?: return refused(
+            "invalid.native-core-primitive.w3-limits",
+            "W3 requires an observed dynamic-uniform limit.",
+        )
+        val targetFormat = framePlan.corePrimitiveSceneTargetDescriptor(renderStep.target)?.format
+            ?: return refused("invalid.native-core-primitive.w3-target", "W3 target descriptor is missing.")
+        val renderScope = encoderPlan.scopes.singleOrNull {
+            it.operationKind == GPUEncoderOperationKind.Render
+        } ?: return refused("invalid.native-core-primitive.w3-scope", "W3 requires one render encoder scope.")
+        val readbackScope = encoderPlan.scopes.singleOrNull {
+            it.operationKind == GPUEncoderOperationKind.Readback
+        } ?: return refused("invalid.native-core-primitive.w3-scope", "W3 requires one readback encoder scope.")
+        if (encoderPlan.scopes.size != 2 ||
+            renderScope.sourceStepIndex != framePlan.steps.indexOf(renderStep) ||
+            readbackScope.sourceStepIndex != framePlan.steps.indexOf(readbackStep) ||
+            targetFormat != GPUColorFormat.RGBA8UnormSrgb ||
+            preparedSceneTarget.width != scratch.targetBounds.width ||
+            preparedSceneTarget.height != scratch.targetBounds.height ||
+            preparedSceneTarget.deviceGeneration != generationSeal.deviceGeneration ||
+            preparedSceneTarget.targetGeneration != generationSeal.targetGeneration ||
+            generationSeal.capabilitySealHash != framePlan.capabilitySeal.sealHash ||
+            resources.ordinaryResources.singleOrNull()?.let { evidence ->
+                evidence.logicalResource == scratch.target &&
+                    evidence.role == GPUFrameResourceRole.SceneTarget &&
+                    evidence.deviceGeneration == generationSeal.deviceGeneration
+            } != true ||
+            semantics.any { it == null } || !scratch.matches(
+                expectedPlanId,
+                framePlan.capabilitySeal.sealHash,
+                generationSeal.deviceGeneration.value,
+                renderStep.target,
+                readbackStep.staging,
+                semantics.first()?.targetBounds ?: return refused(
+                    "invalid.native-core-primitive.w3-scratch",
+                    "W3 scratch has no semantic target.",
+                ),
+                packets,
+            ) ||
+            packets.any { it.corePrimitivePreparedAuthority?.w3SessionScratch !== scratch } ||
+            scratch.uniformPlan.alignmentBytes != limits.minUniformBufferOffsetAlignment ||
+            scratch.uniformPlan.deviceGeneration != generationSeal.deviceGeneration.value ||
+            !scratch.hasExactUniformPayloads(limits.minUniformBufferOffsetAlignment, packets) ||
+            !scratch.fitsDeviceLimits(maxBufferSize, maxDynamicUniformBuffers)
+        ) {
+            return refused(
+                "invalid.native-core-primitive.w3-scratch",
+                "W3 encoder scratch is stale or contradicts the frame authority.",
+            )
+        }
+        val staging = resources.outputOwnedReadbacks.singleOrNull()
+            ?: return refused("invalid.native-core-primitive.w3-readback", "W3 output-owned readback is missing.")
+        if (staging.stagingResource != scratch.staging || staging.request != readbackStep.request ||
+            staging.layout.width != scratch.targetBounds.width ||
+            staging.layout.height != scratch.targetBounds.height ||
+            staging.stagingLease.backingBufferBytes < staging.layout.totalBufferBytes
+        ) {
+            return refused(
+                "invalid.native-core-primitive.w3-readback",
+                "W3 output-owned readback contradicts its sealed staging authority.",
+            )
+        }
+        val coreSemantics = semantics.filterNotNull()
+        val routes = coreSemantics.mapIndexed { index, semantic ->
+            validateCorePrimitiveDirectNativeRoute(
+                semantic,
+                semantic.scissorBounds,
+                packets[index].blendPlan ?: return refused(
+                    "invalid.native-core-primitive.w3-blend",
+                    "W3 packet is missing SrcOver blend authority.",
+                ),
+                GPUSamplePlan.SingleSampleFrame,
+                targetFormat.value,
+            ) as? GPUCorePrimitiveDirectNativeRoute.Accepted ?: return refused(
+                "invalid.native-core-primitive.w3-geometry",
+                "W3 scratch geometry is not an admitted direct CorePrimitive route.",
+            )
+        }
+        val arena = try {
+            packCorePrimitiveFrameGeometry(routes)
+        } catch (failure: Throwable) {
+            return refused(
+                "invalid.native-core-primitive.w3-geometry",
+                "W3 scratch geometry packing failed: ${failure::class.simpleName.orEmpty()}.",
+            )
+        }
+        val vertexBytes = arena.vertices.size.toLong() * Float.SIZE_BYTES
+        val indexBytes = arena.indices.size.toLong() * Int.SIZE_BYTES
+        if (vertexBytes != scratch.vertexBytes || indexBytes != scratch.indexBytes) {
+            return refused("invalid.native-core-primitive.w3-packing", "W3 scratch V/I packing is not exact.")
+        }
+        val uniformBytes = ByteArray(scratch.uniformPlan.totalBytes.toInt())
+        coreSemantics.forEachIndexed { index, semantic ->
+            val bytes = semantic.payloadRef.uniformBlock?.bytes?.map(Int::toByte)?.toByteArray()
+                ?: return refused("invalid.native-core-primitive.w3-uniform", "W3 packet uniform payload is missing.")
+            val slot = scratch.uniformPlan.slots[index]
+            if (bytes.size != 32 || slot.payloadBytes != 32L ||
+                slot.alignedOffset + bytes.size > uniformBytes.size
+            ) {
+                return refused("invalid.native-core-primitive.w3-uniform", "W3 uniform packing is not exact.")
+            }
+            bytes.copyInto(uniformBytes, slot.alignedOffset.toInt())
+        }
+        val mapping = mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(scratch.structuralPipelineKey)
+            as? GPUWgpu4kCorePrimitivePipelineMapping.Mapped
+            ?: return refused("unsupported.native-core-primitive.w3-pipeline", "W3 structural pipeline is unavailable.")
+        val cache = when (val acquired = sessionCache.acquire(
+            GPUWgpu4kCorePrimitivePipelineCacheKey(mapping.componentIdentity, mapping.identity),
+        )) {
+            is GPUWgpu4kCorePrimitiveSessionCacheAcquire.Acquired -> acquired
+            is GPUWgpu4kCorePrimitiveSessionCacheAcquire.Refused -> return refusedSessionCacheAcquire(acquired.reason)
+        }
+        synchronized(this) {
+            if (closed) return refused("unsupported.native-core-primitive.materializer-state", "The W3 materializer is closed.")
+            materializing = true
+        }
+        var lease: GPUWgpu4kCorePrimitiveFramePoolLease? = null
+        var transferred = false
+        return try {
+            lease = when (val checkout = sessionCache.acquireFrame(
+                GPUWgpu4kCorePrimitiveFramePoolRequirements(
+                    generationSeal.deviceGeneration,
+                    scratch.vertexBytes,
+                    scratch.indexBytes,
+                    scratch.uniformPlan.totalBytes,
+                    componentIdentity = mapping.componentIdentity,
+                    sampleCount = 1,
+                ),
+            )) {
+                is GPUWgpu4kCorePrimitiveFramePoolCheckout.Acquired -> checkout.lease
+                is GPUWgpu4kCorePrimitiveFramePoolCheckout.Refused -> {
+                    synchronized(this) { materializing = false }
+                    return refusedPoolCheckout(checkout.reason)
+                }
+            }
+            val pooled = requireNotNull(lease)
+            uploadExact(pooled.handles.vertexBuffer, ArrayBuffer.of(arena.vertices), scratch.vertexBytes, pooled.capacities.vertexBytes)
+            uploadExact(pooled.handles.indexBuffer, ArrayBuffer.of(arena.indices), scratch.indexBytes, pooled.capacities.indexBytes)
+            uploadExact(pooled.handles.uniformBuffer, ArrayBuffer.of(uniformBytes), scratch.uniformPlan.totalBytes, pooled.capacities.uniformBytes)
+            val (targetTexture, targetView) = preparedSceneTarget.borrow()
+            val stagingBuffer = device.createBuffer(
+                BufferDescriptor(
+                    size = staging.stagingLease.backingBufferBytes.toULong(),
+                    usage = GPUBufferUsage.MapRead or GPUBufferUsage.CopyDst,
+                    mappedAtCreation = false,
+                    label = "Kanvas.frame.w3.readback",
+                ),
+            ).tracked()
+            val generation = generationSeal.deviceGeneration
+            val pipeline = GPUPreparedNativeRenderPipelineOperand(cache.pipeline, generation, GPUPreparedNativeOperandOwnership.Borrowed)
+            val vertex = GPUPreparedNativeBufferOperand(pooled.handles.vertexBuffer, generation, GPUPreparedNativeOperandOwnership.Borrowed, pooled.capacities.vertexBytes)
+            val index = GPUPreparedNativeBufferOperand(pooled.handles.indexBuffer, generation, GPUPreparedNativeOperandOwnership.Borrowed, pooled.capacities.indexBytes)
+            val bindGroup = GPUPreparedNativeBindGroupOperand(pooled.handles.bindGroup, generation, GPUPreparedNativeOperandOwnership.Borrowed)
+            val commands = buildList {
+                add(GPUPreparedNativeRenderCommand.SetPipeline(pipeline))
+                add(GPUPreparedNativeRenderCommand.SetVertexBuffer(0, vertex, 0L, scratch.vertexBytes, 8L))
+                add(GPUPreparedNativeRenderCommand.SetIndexBuffer(index, GPUPreparedNativeIndexFormat.Uint32, 0L, scratch.indexBytes))
+                coreSemantics.indices.forEach { indexValue ->
+                    val slice = arena.slices[indexValue]
+                    val scissor = coreSemantics[indexValue].scissorBounds
+                    add(GPUPreparedNativeRenderCommand.SetBindGroup(0, bindGroup, listOf(scratch.uniformPlan.slots[indexValue].alignedOffset)))
+                    add(GPUPreparedNativeRenderCommand.SetScissor(scissor.left, scissor.top, scissor.width, scissor.height))
+                    add(GPUPreparedNativeRenderCommand.DrawIndexed(
+                        GPUPreparedNativeDrawCall.DrawIndexed(
+                            indexCount = slice.indexCount,
+                            firstIndex = slice.firstIndex,
+                            baseVertex = slice.baseVertex,
+                            vertexCount = slice.vertexCount,
+                            maxLocalIndex = slice.maxLocalIndex,
+                        ),
+                    ))
+                }
+            }
+            val renderOperand = GPUPreparedNativeScopeOperand.Render(
+                renderScope.sourceStepIndex,
+                GPUPreparedNativeRenderPassConfig(
+                    GPUPreparedNativeTextureViewOperand(targetView, generation, GPUPreparedNativeOperandOwnership.Borrowed),
+                    loadOperation = GPUPreparedNativeLoadOperation.Clear,
+                    storeOperation = GPUPreparedNativeStoreOperation.Store,
+                    clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0),
+                ),
+                commands,
+                coreSemantics,
+            )
+            val readbackOperand = GPUPreparedNativeScopeOperand.Readback(
+                readbackScope.sourceStepIndex,
+                GPUPreparedNativeTextureOperand(targetTexture, generation, GPUPreparedNativeOperandOwnership.Borrowed),
+                GPUPreparedNativeBufferOperand(stagingBuffer, generation, GPUPreparedNativeOperandOwnership.OutputOwnedReadback),
+                GPUPreparedNativeReadbackLayout(
+                    staging.request.sourceBounds.left,
+                    staging.request.sourceBounds.top,
+                    staging.layout.width,
+                    staging.layout.height,
+                    staging.layout.paddedBytesPerRow,
+                    staging.layout.rowsPerImage,
+                    staging.layout.bufferOffset,
+                    staging.layout.totalBufferBytes,
+                    targetFormat.toCorePrimitiveGPUTextureFormat(),
+                ),
+            )
+            val scopeOperandKeys = encoderPlan.scopes.map { it.nativeOperandKeys }
+            val keys = encoderPlan.scopes.mapIndexed { index, scope ->
+                GPUPreparedNativeScopeKey(scope.sourceStepIndex, scope.operationKind, scope.resourceGenerationLabels, scopeOperandKeys[index])
+            }
+            val payload = GPUPreparedNativeFramePayload(
+                GPUPreparedNativeFrameIdentity(framePlan.frameId, encoderPlan.contextIdentity, encoderPlan.planId, generation, generationSeal.targetGeneration, keys),
+                keys.map { key -> if (key.sourceStepIndex == renderScope.sourceStepIndex) renderOperand else readbackOperand },
+                scopeOperandKeys,
+                leaseLifecycle = GPUWgpu4kCorePrimitivePayloadLeaseLifecycle(pooled),
+            )
+            synchronized(this) {
+                check(!closed) { "Native W3 materializer closed during materialization" }
+                preRegistrationHandles.transferAll()
+                materializing = false
+                transferred = true
+            }
+            GPUPreparedNativeFramePayloadMaterialization.Materialized(GPUPreparedNativeFrameDraft(payload))
+        } catch (failure: Throwable) {
+            if (!transferred) terminalizePooledLeaseBeforeRegistration(lease)
+            synchronized(this) { materializing = false; preRegistrationHandles.closeRetainingFailures() }
+            refused("failed.native-core-primitive.w3-materialization", "W3 native materialization failed: ${failure::class.simpleName.orEmpty()}: ${failure.message.orEmpty()}.")
         }
     }
 

@@ -322,7 +322,10 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
 
         val result = renderViaGpu(
             buffer = StaticDisplayListBuffer(
-                listOf(rect(RectF32.ofLTRB(0f, 0f, 4f, 4f), color)),
+                listOf(
+                    DisplayOp.Clear(ColorARGB.Transparent),
+                    rect(RectF32.ofLTRB(0f, 0f, 4f, 4f), color),
+                ),
             ),
             width = 4,
             height = 4,
@@ -1098,7 +1101,10 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
 
         val result = renderViaGpu(
             buffer = StaticDisplayListBuffer(
-                listOf(rect(RectF32.ofLTRB(0f, 0f, 2f, 1f), ColorARGB.Red)),
+                listOf(
+                    DisplayOp.Clear(ColorARGB.Black),
+                    rect(RectF32.ofLTRB(0f, 0f, 2f, 1f), ColorARGB.Red),
+                ),
             ),
             width = 2,
             height = 1,

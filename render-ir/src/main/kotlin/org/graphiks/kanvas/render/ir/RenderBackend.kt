@@ -2,11 +2,14 @@ package org.graphiks.kanvas.render.ir
 
 import org.graphiks.kanvas.color.ColorSpace
 
+/** Immutable, handle-free output produced by a completed backend submission. */
+public interface RenderOutput
+
 /** Backend-neutral planning and submission port. */
-public interface RenderBackend<P : Any> {
+public interface RenderBackend<P : Any, O : RenderOutput> {
     public fun plan(scene: SceneSnapshot, target: RenderTargetDescriptor): RenderPlanResult<P>
 
-    public fun submit(plan: P): RenderSubmission
+    public fun submit(plan: P): RenderSubmission<O>
 }
 
 /** Logical output target; a backend resolves it to its own surface or image. */
@@ -70,29 +73,29 @@ public value class SubmissionId(public val value: Long) {
 }
 
 /** A submitted backend plan that can be awaited without exposing backend internals. */
-public interface RenderSubmission {
+public interface RenderSubmission<out O : RenderOutput> {
     public val id: SubmissionId
 
-    public suspend fun await(): RenderExecutionResult
+    public suspend fun await(): RenderExecutionResult<O>
 }
 
 /** Terminal public execution outcomes. */
-public sealed interface RenderExecutionResult {
-    public data object Completed : RenderExecutionResult
+public sealed interface RenderExecutionResult<out O : RenderOutput> {
+    public data class Completed<O : RenderOutput>(public val output: O) : RenderExecutionResult<O>
 
-    public class UnsupportedCapability(diagnostics: List<RenderDiagnostic>) : RenderExecutionResult {
+    public class UnsupportedCapability(diagnostics: List<RenderDiagnostic>) : RenderExecutionResult<Nothing> {
         public val diagnostics: List<RenderDiagnostic> = diagnostics.snapshotDiagnostics()
     }
 
-    public class InvalidPlan(diagnostics: List<RenderDiagnostic>) : RenderExecutionResult {
+    public class InvalidPlan(diagnostics: List<RenderDiagnostic>) : RenderExecutionResult<Nothing> {
         public val diagnostics: List<RenderDiagnostic> = diagnostics.snapshotDiagnostics()
     }
 
-    public class ResourceLimitExceeded(diagnostics: List<RenderDiagnostic>) : RenderExecutionResult {
+    public class ResourceLimitExceeded(diagnostics: List<RenderDiagnostic>) : RenderExecutionResult<Nothing> {
         public val diagnostics: List<RenderDiagnostic> = diagnostics.snapshotDiagnostics()
     }
 
-    public class DeviceFailure(diagnostics: List<RenderDiagnostic>) : RenderExecutionResult {
+    public class DeviceFailure(diagnostics: List<RenderDiagnostic>) : RenderExecutionResult<Nothing> {
         public val diagnostics: List<RenderDiagnostic> = diagnostics.snapshotDiagnostics()
     }
 }

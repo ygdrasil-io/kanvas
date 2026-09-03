@@ -696,6 +696,9 @@ object GPUBackendRuntimeFactory {
     /** Returns a GPU session or null when runtime initialization is unavailable. */
     fun createOrNull(): GPUBackendSession? = GPUBackendRuntimeNativeFactory.createOrNull()
 
+    /** Monotonic process-runtime lifetime marker used to discard stale cached wrappers. */
+    internal fun lifecycleEpoch(): Long = GPUBackendRuntimeNativeFactory.lifecycleEpoch()
+
     /** Releases the shared GPU runtime resources owned by this process. */
     fun dispose() = GPUBackendRuntimeNativeFactory.dispose()
 }

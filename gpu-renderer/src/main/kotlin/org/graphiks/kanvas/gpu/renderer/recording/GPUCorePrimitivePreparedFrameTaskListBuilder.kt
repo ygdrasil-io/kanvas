@@ -8,11 +8,13 @@ import java.nio.ByteOrder
 import kotlin.math.ceil
 import kotlin.math.floor
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.capabilities.validateTextureRequest
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilLoadOperation
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilStoreOperation
@@ -46,6 +48,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.passes.isCorePrimitiveDirectLaneBlend
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedPacketAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedSemanticAuthority
+import org.graphiks.kanvas.gpu.renderer.passes.W3SessionScratchV1
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveStrokeLoweringProof
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticShapeUniformSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskAttachmentAuthority
@@ -84,6 +87,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveClipStencilProducerR
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveStructuralColorFormat
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchEligibility
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchAdjacency
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchQueueGuard
 import org.graphiks.kanvas.gpu.renderer.passes.GPUProvisionalRenderSegmentKey
@@ -110,10 +114,12 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectRouteAuthority
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceFamily
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryAllocation
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlanner
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
@@ -135,6 +141,8 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendComponent
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity
+import org.graphiks.kanvas.gpu.plan.PlanId
+import org.graphiks.kanvas.gpu.plan.PlanPassId
 
 const val CORE_PRIMITIVE_RENDER_PIPELINE_KEY = CORE_PRIMITIVE_STRUCTURAL_PIPELINE_BASE_KEY
 const val CORE_PRIMITIVE_BINDING_LAYOUT_HASH = "layout.core-primitive.dynamic-uniform32-v2"
@@ -1587,6 +1595,25 @@ sealed interface GPUCorePrimitivePreparedFrameResult {
     data class Refused(val diagnostic: GPUDiagnostic) : GPUCorePrimitivePreparedFrameResult
 }
 
+/**
+ * Closed W3 envelope assembled from a graph that has already made every resource and pass
+ * decision. Unlike [GPUCorePrimitivePreparedFrameRequest], this request carries no planning
+ * inputs that could authorize a replacement topology.
+ */
+internal data class GPUCorePrimitivePreplannedFrameRequest(
+    val planId: PlanId,
+    val baseTaskList: GPUTaskList,
+    val target: GPUFrameTargetRef,
+    val targetBounds: GPUPixelBounds,
+    val targetPreparation: GPUResourcePreparationRequest,
+    val staging: GPUFrameBufferRef,
+    val stagingPreparation: GPUResourcePreparationRequest,
+    val readbackRequest: GPUFrameReadbackRequest,
+    val memoryBudget: GPUFrameMemoryBudgetPlan,
+    val renderPassId: PlanPassId,
+    val readbackPassId: PlanPassId,
+)
+
 /** Source-compatible core-only facade over the shared prepared-surface task assembly. */
 class GPUCorePrimitivePreparedFrameTaskListBuilder(
     private val readbackLayoutPlanner: GPUReadbackLayoutPlanner = GPUReadbackLayoutPlanner(),
@@ -1617,6 +1644,416 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
 internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
     private val readbackLayoutPlanner: GPUReadbackLayoutPlanner = GPUReadbackLayoutPlanner(),
 ) {
+    /** Attaches the W3 prepare/readback envelope without changing the supplied render packets. */
+    fun buildPreplanned(
+        request: GPUCorePrimitivePreplannedFrameRequest,
+    ): GPUCorePrimitivePreparedFrameResult {
+        val render = request.baseTaskList.tasks.singleOrNull() as? GPUTask.Render
+            ?: return refused(
+                "w3.lowering.incompatible_plan",
+                "A preplanned W3 frame requires exactly one render-only base task.",
+            )
+        if (!hasExactW3Envelope(request, render)) {
+            return refused("w3.lowering.incompatible_plan", "Preplanned W3 frame facts are inconsistent.")
+        }
+        val targetDescriptor = request.targetPreparation.descriptor as? GPUFrameTextureDescriptor
+            ?: return refused("w3.lowering.incompatible_plan", "W3 target must be a texture descriptor.")
+        val stagingDescriptor = request.stagingPreparation.descriptor as? GPUFrameBufferDescriptor
+            ?: return refused("w3.lowering.incompatible_plan", "W3 staging must be a buffer descriptor.")
+        val targetBytes = try {
+            Math.multiplyExact(
+                Math.multiplyExact(request.targetBounds.width.toLong(), request.targetBounds.height.toLong()),
+                4L,
+            )
+        } catch (_: ArithmeticException) {
+            return refused("w3.lowering.incompatible_plan", "W3 target byte accounting overflows.")
+        }
+        val stagingBytes = stagingDescriptor.byteSize
+        val canonicalStagingBytes = canonicalW3StagingBytes(
+            request.targetBounds.width,
+            request.targetBounds.height,
+            stagingDescriptor.alignmentBytes,
+        ) ?: return refused("w3.lowering.incompatible_plan", "W3 readback layout is not canonical.")
+        if (targetDescriptor.logicalBounds != request.targetBounds ||
+            targetDescriptor.format != GPUColorFormat.RGBA8UnormSrgb || targetDescriptor.sampleCount != 1 ||
+            request.targetPreparation.byteSize != targetBytes ||
+            stagingBytes != request.stagingPreparation.byteSize ||
+            stagingBytes != canonicalStagingBytes ||
+            request.readbackRequest.sourceBounds != request.targetBounds ||
+            request.readbackRequest.pixelFormat != GPUReadbackPixelFormat.Rgba8Unorm ||
+            request.readbackRequest.outputColorInterpretation != GPUColorInterpretation.EncodedPremulSrgb ||
+            request.readbackRequest.bufferOffsetBytes != 0L
+        ) return refused("w3.lowering.incompatible_plan", "W3 resource descriptors differ from the planned graph.")
+
+        val prefix = "task.w3.${request.planId.value}"
+        val prepareId = GPUTaskID("$prefix.prepare.${request.renderPassId.value}")
+        val renderId = GPUTaskID("$prefix.render.${request.renderPassId.value}")
+        val readbackId = GPUTaskID("$prefix.readback.${request.readbackPassId.value}")
+        val preparedRender = GPUTask.Render(
+            taskId = renderId,
+            recordingId = render.recordingId,
+            phase = GPUTaskPhase.Render,
+            target = request.target,
+            loadStore = render.loadStore,
+            samplePlan = render.samplePlan,
+            resourceUses = render.resourceUses,
+            provisionalSegmentKey = render.provisionalSegmentKey,
+            drawPackets = render.drawPackets,
+            batchEligibilityByPacketId = render.batchEligibilityByPacketId,
+            sampleContinuationKey = render.sampleContinuationKey,
+            compositeMembership = render.compositeMembership,
+            depthStencilLoadStore = render.depthStencilLoadStore,
+            preparedImageBindingsByPacketId = render.preparedImageBindingsByPacketId,
+            preparedTextBindingsByPacketId = render.preparedTextBindingsByPacketId,
+        )
+        val tasks = listOf(
+            GPUTask.PrepareResources(
+                prepareId,
+                render.recordingId,
+                GPUTaskPhase.Prepare,
+                listOf(request.targetPreparation, request.stagingPreparation),
+            ),
+            preparedRender,
+            GPUTask.Readback(
+                readbackId,
+                render.recordingId,
+                GPUTaskPhase.Readback,
+                request.target,
+                request.staging,
+                request.readbackRequest,
+            ),
+        )
+        val dependencies = listOf(
+            GPUTaskDependency(
+                prepareId,
+                renderId,
+                "resource-prepare",
+                GPUTaskUseToken("w3.${request.planId.value}.prepare-to-render"),
+                "w3-plan-resource-availability",
+            ),
+            GPUTaskDependency(
+                renderId,
+                readbackId,
+                "plan-pass-dependency",
+                GPUTaskUseToken("w3.${request.planId.value}.${request.renderPassId.value}-to-${request.readbackPassId.value}"),
+                "w3-plan-render-before-readback",
+            ),
+        )
+        return GPUCorePrimitivePreparedFrameResult.Recorded(
+            GPUTaskList(
+                request.baseTaskList.frameId,
+                request.baseTaskList.capabilitySeal,
+                request.baseTaskList.recordingSeals,
+                request.baseTaskList.expectedReplayKeyHash,
+                tasks,
+                dependencies,
+                request.baseTaskList.phaseOrder,
+                request.memoryBudget,
+                request.baseTaskList.diagnostics,
+            ),
+        )
+    }
+
+    private fun hasExactW3Envelope(
+        request: GPUCorePrimitivePreplannedFrameRequest,
+        render: GPUTask.Render,
+    ): Boolean {
+        val deviceLimits = w3DeviceLimitFacts(request.memoryBudget.deviceLimitFacts) ?: return false
+        val scratch = render.drawPackets.firstOrNull()
+            ?.corePrimitivePreparedAuthority
+            ?.w3SessionScratch
+            ?: return false
+        if (request.baseTaskList.diagnostics.any(GPUDiagnostic::isTerminal) ||
+            request.baseTaskList.memoryBudget != request.memoryBudget ||
+            request.baseTaskList.dependencies.isNotEmpty() ||
+            request.baseTaskList.compositeCommands.isNotEmpty() ||
+            request.renderPassId.value != "MainRender:0" ||
+            request.readbackPassId.value != "Readback:0" ||
+            render.target != request.target ||
+            render.samplePlan != GPUSamplePlan.SingleSampleFrame ||
+            render.loadStore != GPULoadStorePlan("clear", GPUStorePlan.Store) ||
+            render.resourceUses.isNotEmpty() ||
+            render.sampleContinuationKey != null ||
+            render.compositeMembership != null ||
+            render.depthStencilLoadStore != null ||
+            render.preparedImageBindingsByPacketId.isNotEmpty() ||
+            render.preparedTextBindingsByPacketId.isNotEmpty() ||
+            render.drawPackets.isEmpty() ||
+            render.drawPackets.map { it.packetId }.distinct().size != render.drawPackets.size ||
+            render.drawPackets.withIndex().any { (paintOrder, packet) ->
+                packet.originalPaintOrder != paintOrder ||
+                    packet.sortKey != paintOrder.toLong()
+            } ||
+            render.drawPackets.zipWithNext().any { (first, second) ->
+                first.commandIdValue >= second.commandIdValue
+            } ||
+            render.drawPackets.any { packet -> !isExactW3Packet(packet, request.targetBounds) } ||
+            render.batchEligibilityByPacketId.keys != render.drawPackets.map(GPUDrawPacket::packetId).toSet() ||
+            render.batchEligibilityByPacketId.values.any { eligibility ->
+                eligibility.kind != GPUPassBatchKind.SolidFill ||
+                    eligibility.adjacency != GPUPassBatchAdjacency.Compatible ||
+                    eligibility.queueGuard.requiredRetainedRefs.isNotEmpty() ||
+                    eligibility.queueGuard.retainedRefs.isNotEmpty()
+            } ||
+            request.targetBounds.left != 0 || request.targetBounds.top != 0 || request.targetBounds.isEmpty ||
+            request.targetPreparation.resource != request.target ||
+            request.stagingPreparation.resource != request.staging ||
+            request.targetPreparation.role != GPUFrameResourceRole.SceneTarget ||
+            request.stagingPreparation.role != GPUFrameResourceRole.ReadbackStaging ||
+            request.targetPreparation.usages != setOf(GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceUsage.CopySource) ||
+            request.stagingPreparation.usages != setOf(GPUFrameResourceUsage.CopyDestination, GPUFrameResourceUsage.MapRead) ||
+            request.targetPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
+            request.stagingPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
+            request.targetPreparation.diagnosticLabel != w3SessionIdentity(request) + ".target" ||
+            request.stagingPreparation.diagnosticLabel != w3SessionIdentity(request) + ".staging" ||
+            request.readbackRequest.requestId.value != "w3.${request.planId.value}.readback" ||
+            request.memoryBudget.diagnostic != null ||
+            request.memoryBudget.configuredAggregateBudgetBytes <= 0L ||
+            request.memoryBudget.categoryTotals.keys != GPUFrameMemoryCategory.entries.toSet()
+        ) return false
+
+        val stagingDescriptor = request.stagingPreparation.descriptor as? GPUFrameBufferDescriptor
+            ?: return false
+        if (request.targetBounds.width.toLong() > deviceLimits.maxTextureDimension2D ||
+            request.targetBounds.height.toLong() > deviceLimits.maxTextureDimension2D ||
+            stagingDescriptor.alignmentBytes != deviceLimits.copyBytesPerRowAlignment ||
+            stagingDescriptor.byteSize > deviceLimits.maxBufferSize ||
+            canonicalW3StagingBytes(
+                request.targetBounds.width,
+                request.targetBounds.height,
+                deviceLimits.copyBytesPerRowAlignment,
+            ) != stagingDescriptor.byteSize
+        ) return false
+
+        if (!hasExactW3Scratch(request, render, scratch, deviceLimits)) return false
+
+        val targetBytes = request.targetPreparation.byteSize
+        val stagingBytes = request.stagingPreparation.byteSize
+        val totals = request.memoryBudget.categoryTotals
+        if (targetBytes <= 0L || stagingBytes <= 0L ||
+            totals[GPUFrameMemoryCategory.CanonicalTarget] != targetBytes ||
+            totals[GPUFrameMemoryCategory.ReadbackStaging] != stagingBytes ||
+            totals.filterKeys { it != GPUFrameMemoryCategory.CanonicalTarget && it != GPUFrameMemoryCategory.ReadbackStaging }
+                .values.any { it != 0L } ||
+            request.memoryBudget.targetResidentBytes != targetBytes ||
+            request.memoryBudget.peakFrameTransientBytes != stagingBytes ||
+            targetBytes > Long.MAX_VALUE - stagingBytes ||
+            targetBytes + stagingBytes > request.memoryBudget.configuredAggregateBudgetBytes ||
+            request.memoryBudget.deviceLimitFacts.isEmpty()
+        ) return false
+
+        val expectedAllocations = listOf(
+            GPUFrameMemoryAllocation(
+            w3SessionIdentity(request) + ".target",
+                GPUFrameMemoryCategory.CanonicalTarget,
+                targetBytes,
+                GPUFrameMemoryResourceKind.Texture2D,
+                request.targetBounds,
+            ),
+            GPUFrameMemoryAllocation(
+            w3SessionIdentity(request) + ".staging",
+                GPUFrameMemoryCategory.ReadbackStaging,
+                stagingBytes,
+                GPUFrameMemoryResourceKind.Buffer,
+                null,
+            ),
+        )
+        return request.memoryBudget.allocations == expectedAllocations
+    }
+
+    /** Validates the complete handle-free authority before any prepared task can escape. */
+    private fun hasExactW3Scratch(
+        request: GPUCorePrimitivePreplannedFrameRequest,
+        render: GPUTask.Render,
+        scratch: W3SessionScratchV1,
+        deviceLimits: W3DeviceLimitFacts,
+    ): Boolean {
+        val packets = render.drawPackets
+        val expectedVertexBytes = packets.size.toLong() * 32L
+        val expectedIndexBytes = packets.size.toLong() * 24L
+        if (packets.size !in 1..512 ||
+            !scratch.matches(
+                request.planId.value,
+                request.baseTaskList.capabilitySeal.sealHash,
+                request.baseTaskList.capabilitySeal.deviceGeneration.value,
+                request.target,
+                request.staging,
+                request.targetBounds,
+                packets,
+            ) ||
+            !scratch.fitsDeviceLimits(
+                deviceLimits.maxBufferSize,
+                deviceLimits.maxDynamicUniformBuffersPerPipelineLayout,
+            ) ||
+            scratch.vertexBytes != expectedVertexBytes ||
+            scratch.indexBytes != expectedIndexBytes ||
+            !scratch.hasExactUniformPayloads(
+                deviceLimits.minUniformBufferOffsetAlignment,
+                packets,
+            )
+        ) return false
+
+        return packets.all { packet ->
+            val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive
+                ?: return false
+            val clip = packet.clipExecutionPlan ?: return false
+            val blend = packet.blendPlan ?: return false
+            val expectedStructuralKey = corePrimitiveRenderPipelineStructuralKey(
+                semantic,
+                clip,
+                blend,
+                sampleCount = 1,
+                colorFormat = GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat(),
+            )
+            val authority = packet.corePrimitivePreparedAuthority
+            authority?.w3SessionScratch === scratch &&
+                authority.uniformSlabSeal == null &&
+                authority.structuralPipelineKey == expectedStructuralKey &&
+                scratch.structuralPipelineKey == expectedStructuralKey &&
+                authority.renderPipelineKey == packet.renderPipelineKey
+        }
+    }
+
+    /** Exact observed device limits retained by the W3 frame-memory evidence. */
+    private data class W3DeviceLimitFacts(
+        val maxTextureDimension2D: Long,
+        val copyBytesPerRowAlignment: Long,
+        val minUniformBufferOffsetAlignment: Long,
+        val maxBufferSize: Long,
+        val maxDynamicUniformBuffersPerPipelineLayout: Long,
+    )
+
+    private fun w3DeviceLimitFacts(facts: List<GPUCapabilityFact>): W3DeviceLimitFacts? {
+        val expectedNames = listOf(
+            "maxTextureDimension2D",
+            "copyBytesPerRowAlignment",
+            "minUniformBufferOffsetAlignment",
+            "maxBufferSize",
+            "maxDynamicUniformBuffersPerPipelineLayout",
+        )
+        if (facts.map { fact -> fact.name } != expectedNames) return null
+        val source = facts.firstOrNull()?.source ?: return null
+        if (facts.any { fact ->
+                fact.source != source || !fact.affectsValidity ||
+                    fact.evidenceLabel != "frame-memory-budget"
+            }
+        ) return null
+
+        fun read(name: String): Long? {
+            val encoded = facts.singleOrNull { fact -> fact.name == name }?.value ?: return null
+            val decoded = encoded.toLongOrNull() ?: return null
+            return decoded.takeIf { value -> value.toString() == encoded }
+        }
+
+        val maxTextureDimension2D = read("maxTextureDimension2D") ?: return null
+        val copyBytesPerRowAlignment = read("copyBytesPerRowAlignment") ?: return null
+        val minUniformBufferOffsetAlignment = read("minUniformBufferOffsetAlignment") ?: return null
+        val maxBufferSize = read("maxBufferSize") ?: return null
+        val maxDynamicUniformBuffersPerPipelineLayout =
+            read("maxDynamicUniformBuffersPerPipelineLayout") ?: return null
+        if (maxTextureDimension2D <= 0L || copyBytesPerRowAlignment <= 0L ||
+            minUniformBufferOffsetAlignment <= 0L ||
+            minUniformBufferOffsetAlignment and (minUniformBufferOffsetAlignment - 1L) != 0L ||
+            maxBufferSize <= 0L || maxDynamicUniformBuffersPerPipelineLayout < 1L
+        ) return null
+
+        return W3DeviceLimitFacts(
+            maxTextureDimension2D,
+            copyBytesPerRowAlignment,
+            minUniformBufferOffsetAlignment,
+            maxBufferSize,
+            maxDynamicUniformBuffersPerPipelineLayout,
+        )
+    }
+
+    private fun canonicalW3StagingBytes(width: Int, height: Int, alignment: Long): Long? {
+        if (width <= 0 || height <= 0 || alignment <= 0L || alignment and (alignment - 1L) != 0L) {
+            return null
+        }
+        return try {
+            val unpadded = Math.multiplyExact(width.toLong(), 4L)
+            val remainder = unpadded % alignment
+            val bytesPerRow = Math.addExact(unpadded, if (remainder == 0L) 0L else alignment - remainder)
+            Math.multiplyExact(bytesPerRow, height.toLong())
+        } catch (_: ArithmeticException) {
+            null
+        }
+    }
+
+    private fun w3SessionIdentity(request: GPUCorePrimitivePreplannedFrameRequest): String =
+        "w3.session.${request.baseTaskList.capabilitySeal.deviceGeneration.value}.${request.targetBounds.width}x${request.targetBounds.height}.rgba8unorm-srgb"
+
+    private fun isExactW3Packet(packet: GPUDrawPacket, targetBounds: GPUPixelBounds): Boolean {
+        val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive ?: return false
+        val geometry = semantic.geometry as? GPUCorePrimitiveGeometry.Rect ?: return false
+        val clip = packet.clipExecutionPlan ?: return false
+        val blend = packet.blendPlan ?: return false
+        if (packet.packetId.value != "packet.w3.${packet.commandIdValue}" ||
+            packet.analysisRecordId != semantic.analysisRecordId ||
+            packet.passId != "pass.w3.main" ||
+            packet.layerId != "root" ||
+            packet.bindingListId != "binding.w3.${packet.commandIdValue}" ||
+            packet.insertionReasonCode != "w3-solid-rect" ||
+            packet.sortKey != packet.originalPaintOrder.toLong() ||
+            packet.sortKeyPreimage != "paint-order:${packet.originalPaintOrder}" ||
+            packet.renderStepId.value != CORE_PRIMITIVE_RENDER_STEP_IDENTITY ||
+            packet.renderStepVersion != 1 ||
+            packet.role != GPUDrawPacketRole.Shading ||
+            blend.canonicalIdentity() != canonicalSolidRectSrcOverBlendPlan().canonicalIdentity() ||
+            packet.renderPipelineKey != corePrimitiveRenderPipelineStructuralKey(
+                semantic,
+                clip,
+                blend,
+                sampleCount = 1,
+                colorFormat = GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat(),
+            ).stableRenderPipelineKey(CORE_PRIMITIVE_RENDER_PIPELINE_KEY) ||
+            packet.computePipelineKey != null ||
+            packet.bindingLayoutHash != CORE_PRIMITIVE_BINDING_LAYOUT_HASH ||
+            packet.uniformSlot != semantic.payloadRef.uniformSlot ||
+            packet.resourceSlot != null ||
+            packet.vertexSourceLabel != CORE_PRIMITIVE_VERTEX_SOURCE_LABEL ||
+            packet.scissorBoundsHash != corePrimitiveScissorAuthority(semantic.scissorBounds) ||
+            packet.targetStateHash != corePrimitiveTargetStateHash(1, GPUColorFormat.RGBA8UnormSrgb) ||
+            packet.resourceGeneration != PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION ||
+            packet.frameProvenance != GPUFrameProvenance.None ||
+            packet.diagnostics.isNotEmpty() ||
+            packet.clipProducerAuthority != null ||
+            semantic.sourceFamily != GPUCorePrimitiveSourceFamily.Rect ||
+            geometry.left != semantic.scissorBounds.left.toFloat() ||
+            geometry.top != semantic.scissorBounds.top.toFloat() ||
+            geometry.right != semantic.scissorBounds.right.toFloat() ||
+            geometry.bottom != semantic.scissorBounds.bottom.toFloat() ||
+            semantic.material !is GPUCorePrimitiveMaterialPayload.SolidColor ||
+            semantic.targetBounds != targetBounds ||
+            semantic.coverageMode != GPUCorePrimitiveCoverageMode.FullOrScissor ||
+            semantic.blendPlanIdentity != canonicalSolidRectSrcOverBlendPlan().canonicalIdentity() ||
+            semantic.analysisRecordId != "analysis.fill_rect.${packet.commandIdValue}" ||
+            semantic.analysisCommandFamily != "FillRect" ||
+            semantic.payloadRef.commandIdValue != packet.commandIdValue ||
+            semantic.frameProvenance != GPUFrameProvenance.None ||
+            !semantic.hasStructuralIntegrity() ||
+            !semantic.hasCanonicalHashIntegrity()
+        ) return false
+        return when (val coverage = packet.clipCoveragePlan) {
+            GPUClipCoveragePlan.NoClip ->
+                semantic.clipCoveragePlan == GPUClipCoveragePlan.NoClip &&
+                    semantic.scissorBounds == targetBounds &&
+                    packet.clipExecutionPlan == GPUClipExecutionPlan.NoClip &&
+                    semantic.clipExecutionPlanIdentity == GPUClipExecutionPlan.NoClip.canonicalIdentity()
+            is GPUClipCoveragePlan.Scissor -> {
+                val execution = packet.clipExecutionPlan as? GPUClipExecutionPlan.ScissorOnly ?: return false
+                semantic.clipCoveragePlan == coverage &&
+                    semantic.scissorBounds == execution.scissor &&
+                    coverage.bounds.left == execution.scissor.left.toFloat() &&
+                    coverage.bounds.top == execution.scissor.top.toFloat() &&
+                    coverage.bounds.right == execution.scissor.right.toFloat() &&
+                    coverage.bounds.bottom == execution.scissor.bottom.toFloat() &&
+                    semantic.clipExecutionPlanIdentity == execution.canonicalIdentity()
+            }
+            else -> false
+        }
+    }
+
     fun build(
         request: GPUCorePrimitivePreparedFrameRequest,
         additionalMemoryAllocations: List<GPUFrameMemoryAllocation> = emptyList(),
