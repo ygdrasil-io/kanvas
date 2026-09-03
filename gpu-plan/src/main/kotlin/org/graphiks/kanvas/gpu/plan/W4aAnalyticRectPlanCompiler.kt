@@ -29,6 +29,9 @@ import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.color.ColorF32
 import org.graphiks.math.color.ColorTransferFunction
 import org.graphiks.math.geometry.Point2F32
+import org.graphiks.math.geometry.PathF32
+import org.graphiks.math.geometry.PathSegmentF32
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.SizeI32
@@ -215,9 +218,30 @@ public class W4aAnalyticRectPlanCompiler : GpuPlanCompiler {
     private fun hasFractionalEdge(bounds: RectF32): Boolean = listOf(bounds.left, bounds.top, bounds.right, bounds.bottom)
         .any { value -> value.toLong().toFloat() != value }
     private fun finiteMetadataClip(clip: ClipStackNode): Boolean = when (clip) {
-        ClipStackNode.Empty, is ClipStackNode.Operations -> true
+        ClipStackNode.Empty -> true
         is ClipStackNode.DeviceRect -> finite(clip.copyBounds())
+        is ClipStackNode.Operations -> clip.all { finiteMetadataClipGeometry(it.geometry) }
     }
+    private fun finiteMetadataClipGeometry(geometry: GeometryNode): Boolean = when (geometry) {
+        is GeometryNode.Rect -> finite(geometry.copyBounds())
+        is GeometryNode.RRect -> finite(geometry.copyShape())
+        is GeometryNode.Path -> finite(geometry.path)
+        else -> false
+    }
+    private fun finite(shape: RRectF32): Boolean = finite(shape.rect) && listOf(
+        shape.topLeft.x, shape.topLeft.y, shape.topRight.x, shape.topRight.y,
+        shape.bottomRight.x, shape.bottomRight.y, shape.bottomLeft.x, shape.bottomLeft.y,
+    ).all(Float::isFinite)
+    private fun finite(path: PathF32): Boolean = path.all { segment -> when (segment) {
+        is PathSegmentF32.MoveTo -> finite(segment.point)
+        is PathSegmentF32.LineTo -> finite(segment.point)
+        is PathSegmentF32.QuadTo -> finite(segment.control) && finite(segment.point)
+        is PathSegmentF32.CubicTo -> finite(segment.control1) && finite(segment.control2) && finite(segment.point)
+        is PathSegmentF32.ArcTo -> finite(segment.point) && segment.radius.x.isFinite() &&
+            segment.radius.y.isFinite() && segment.xAxisRotation.isFinite()
+        PathSegmentF32.Close -> true
+    } }
+    private fun finite(point: Point2F32): Boolean = point.x.isFinite() && point.y.isFinite()
     private fun finite(bounds: RectF32): Boolean = listOf(bounds.left, bounds.top, bounds.right, bounds.bottom).all(Float::isFinite)
     private fun finite(matrix: Matrix3x3F32): Boolean = listOf(matrix.sx, matrix.kx, matrix.tx, matrix.ky, matrix.sy, matrix.ty, matrix.persp0, matrix.persp1, matrix.persp2).all(Float::isFinite)
     private fun w4aBlend(blend: BlendNode): Boolean = when (blend) { BlendNode.SrcOver -> true; is BlendNode.Mode -> blend.mode == BlendMode.SRC_OVER; is BlendNode.Paint -> blend.mode == BlendMode.SRC_OVER && blend.blender == null; is BlendNode.Custom -> false }

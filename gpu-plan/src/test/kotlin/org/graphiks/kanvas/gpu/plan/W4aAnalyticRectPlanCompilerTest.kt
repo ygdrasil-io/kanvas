@@ -6,6 +6,8 @@ import kotlin.test.assertNotEquals
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.render.ir.BlendMode
 import org.graphiks.kanvas.render.ir.BlendNode
+import org.graphiks.kanvas.render.ir.ClipEntry
+import org.graphiks.kanvas.render.ir.ClipOperation
 import org.graphiks.kanvas.render.ir.ClipStackNode
 import org.graphiks.kanvas.render.ir.CoverageRequest
 import org.graphiks.kanvas.render.ir.DrawNode
@@ -23,6 +25,7 @@ import org.graphiks.kanvas.render.ir.SceneSnapshot
 import org.graphiks.kanvas.render.ir.StrokeCapNode
 import org.graphiks.kanvas.render.ir.StrokeJoinNode
 import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.math.geometry.PathBuilder
 import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
@@ -116,6 +119,35 @@ class W4aAnalyticRectPlanCompilerTest {
         invalidMetadata.forEach { metadata ->
             assertIs<GpuPlanSelection.InvalidScene>(select(listOf(metadata, solidRect())))
         }
+    }
+
+    @Test
+    fun `non finite operations clip geometry remains invalid metadata`() {
+        val invalidGeometry = listOf(
+            GeometryNode.Rect.of(RectF32(Float.NaN, 0f, 4f, 3f)),
+            GeometryNode.RRect.of(RRectF32.of(
+                RectF32(0f, 0f, 4f, 3f),
+                CornerRadiiF32.of(Float.POSITIVE_INFINITY),
+            )),
+            GeometryNode.Path(PathBuilder().moveTo(0f, 0f).quadTo(Float.NaN, 1f, 4f, 3f).build()),
+            GeometryNode.Path(PathBuilder().moveTo(0f, 0f).arcTo(1f, 1f, Float.NEGATIVE_INFINITY, false, true, 4f, 3f).build()),
+        )
+
+        invalidGeometry.forEach { geometry ->
+            val metadata = SceneCommand.SetClip(ClipStackNode.Operations.of(listOf(clipEntry(geometry))))
+            assertIs<GpuPlanSelection.InvalidScene>(select(listOf(metadata, solidRect())))
+        }
+    }
+
+    @Test
+    fun `finite operations clip geometry remains neutral metadata`() {
+        val operations = ClipStackNode.Operations.of(listOf(
+            clipEntry(GeometryNode.Rect.of(RectF32(0f, 0f, 4f, 3f))),
+            clipEntry(GeometryNode.RRect.of(RRectF32.of(RectF32(0f, 0f, 4f, 3f), CornerRadiiF32.of(0.5f)))),
+            clipEntry(GeometryNode.Path(PathBuilder().addRect(RectF32(0f, 0f, 4f, 3f)).build())),
+        ))
+
+        assertIs<GpuPlanSelection.Candidate>(select(listOf(SceneCommand.SetClip(operations), solidRect())))
     }
 
     @Test
@@ -238,6 +270,8 @@ class W4aAnalyticRectPlanCompilerTest {
 
     private fun deviceClip(left: Float, top: Float, right: Float, bottom: Float, antiAlias: Boolean): ClipStackNode =
         ClipStackNode.DeviceRect.of(RectF32(left, top, right, bottom), antiAlias)
+
+    private fun clipEntry(geometry: GeometryNode): ClipEntry = ClipEntry(geometry, ClipOperation.INTERSECT)
 
     private fun select(command: SceneCommand): GpuPlanSelection = select(listOf(command))
 
