@@ -57,10 +57,10 @@ public class AnalyticRectDraw private constructor(
     deviceBounds: RectF32,
     rasterBounds: RectI32,
     scissor: RectI32,
-    override public val coverage: CoveragePlan,
-    override public val sample: SamplePlan,
-    override public val blend: BlendPlan,
 ) : PlanDraw {
+    override public val coverage: CoveragePlan = CoveragePlan.AnalyticScalarAA
+    override public val sample: SamplePlan = SamplePlan.SingleSample
+    override public val blend: BlendPlan = BlendPlan.SrcOver
     private val storedDeviceBounds = deviceBounds.copy()
     private val storedRasterBounds = rasterBounds.copy()
     private val storedScissor = scissor.copy()
@@ -76,15 +76,12 @@ public class AnalyticRectDraw private constructor(
             deviceBounds: RectF32,
             rasterBounds: RectI32,
             scissor: RectI32,
-            coverage: CoveragePlan = CoveragePlan.AnalyticScalarAA,
-            sample: SamplePlan = SamplePlan.SingleSample,
-            blend: BlendPlan = BlendPlan.SrcOver,
         ): AnalyticRectDraw {
             require(commandIndex >= 0) { "Command index must be non-negative" }
             require(!deviceBounds.isEmpty && !rasterBounds.isEmpty && !scissor.isEmpty) {
                 "Draw rectangles must be non-empty"
             }
-            return AnalyticRectDraw(commandIndex, color, deviceBounds, rasterBounds, scissor, coverage, sample, blend)
+            return AnalyticRectDraw(commandIndex, color, deviceBounds, rasterBounds, scissor)
         }
     }
 }

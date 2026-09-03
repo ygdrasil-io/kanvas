@@ -82,7 +82,7 @@ public object AnalyticRectPlanBudget {
     private const val PIXEL_BYTES: Long = 4L
     private const val VERTEX_BYTES_PER_DRAW: Long = 32L
     private const val INDEX_BYTES_PER_DRAW: Long = 24L
-    private const val UNIFORM_BYTES_PER_DRAW: Long = 32L
+    private const val UNIFORM_BYTES_PER_DRAW: Long = 80L
     private const val INVALID_INPUT: String = "invalid-input"
     private const val SIZE_OVERFLOW: String = "size-overflow"
     private const val POOL_CAPACITY_OVERFLOW: String = "pool-capacity-overflow"

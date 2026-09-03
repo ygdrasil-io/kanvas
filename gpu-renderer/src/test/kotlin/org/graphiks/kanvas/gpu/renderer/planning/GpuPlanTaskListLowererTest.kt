@@ -12,9 +12,11 @@ import org.graphiks.kanvas.gpu.plan.AttachmentStorePlan
 import org.graphiks.kanvas.gpu.plan.BlendPlan
 import org.graphiks.kanvas.gpu.plan.CoveragePlan
 import org.graphiks.kanvas.gpu.plan.PlanBudget
+import org.graphiks.kanvas.gpu.plan.PlanBufferAllocationPolicy
 import org.graphiks.kanvas.gpu.plan.PlanCapabilitySnapshot
 import org.graphiks.kanvas.gpu.plan.PlanId
 import org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat
+import org.graphiks.kanvas.gpu.plan.PlanOperationCapability
 import org.graphiks.kanvas.gpu.plan.PlanPass
 import org.graphiks.kanvas.gpu.plan.PlanPassDependency
 import org.graphiks.kanvas.gpu.plan.PlanResource
@@ -163,26 +165,7 @@ class GpuPlanTaskListLowererTest {
         val dynamic = assertIs<GpuPlanLoweringResult.UnsupportedCapability>(
             lowerer.lower(
                 validRequest(
-                    graph = graph(
-                        capabilities = PlanCapabilitySnapshot.of(
-                            deviceGeneration = 7,
-                            maxTextureDimension2D = 2048,
-                            maxBufferSizeBytes = 1L shl 20,
-                            copyBytesPerRowAlignment = 256,
-                            supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
-                            minUniformBufferOffsetAlignment = 256,
-                            maxDynamicUniformBuffersPerPipelineLayout = 0,
-                            supportedOperations = setOf(
-                                org.graphiks.kanvas.gpu.plan.PlanOperationCapability.RenderPass,
-                                org.graphiks.kanvas.gpu.plan.PlanOperationCapability.Readback,
-                            ),
-                            bufferAllocationPolicy = org.graphiks.kanvas.gpu.plan.PlanBufferAllocationPolicy.of(
-                                16_384,
-                                4_096,
-                                4_096,
-                            ),
-                        ),
-                    ),
+                    graph = graph(capabilities = w3PlanCapabilities(maxDynamicUniformBuffersPerPipelineLayout = 0)),
                     rendererCapabilities = dynamicCapabilities,
                 ),
             ),
@@ -480,7 +463,7 @@ class GpuPlanTaskListLowererTest {
             W3SolidRectPlanCompiler().plan(
                 scene,
                 RenderTargetDescriptor(scene.extent, ColorSpace.SRGB),
-                PlanCapabilitySnapshot.of(7, 2048, 1L shl 20, 256, setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL)),
+                w3PlanCapabilities(),
                 PlanBudget(1024),
             ),
         ).plan
@@ -501,7 +484,7 @@ class GpuPlanTaskListLowererTest {
             targetByteSize = width.toLong() * 4L,
             readbackBytesPerRow = 67_109_120L,
             budget = PlanBudget(256L shl 20),
-            capabilities = PlanCapabilitySnapshot.of(7, width, 256L shl 20, 256, setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL)),
+            capabilities = w3PlanCapabilities(maxTextureDimension2D = width, maxBufferSizeBytes = 256L shl 20),
             drawBounds = RectI32(0, 0, width, 1),
         )
 
@@ -527,7 +510,7 @@ class GpuPlanTaskListLowererTest {
             targetByteSize = width.toLong() * 4L,
             readbackBytesPerRow = bytesPerRow,
             budget = PlanBudget(32L shl 30),
-            capabilities = PlanCapabilitySnapshot.of(7, width, 32L shl 30, 256, setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL)),
+            capabilities = w3PlanCapabilities(maxTextureDimension2D = width, maxBufferSizeBytes = 32L shl 30),
             drawBounds = RectI32(0, 0, width, 1),
         )
 
@@ -987,13 +970,7 @@ class GpuPlanTaskListLowererTest {
     private fun graph(
         capabilityId: String = "solid-rect-pixel-aligned-simple-clip-src-over-srgb-v1",
         extent: SizeI32 = SizeI32(2, 2),
-        capabilities: PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(
-            deviceGeneration = 7,
-            maxTextureDimension2D = 2048,
-            maxBufferSizeBytes = 1L shl 20,
-            copyBytesPerRowAlignment = 256,
-            supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
-        ),
+        capabilities: PlanCapabilitySnapshot = w3PlanCapabilities(),
         drawBounds: RectI32 = RectI32(0, 0, 2, 2),
         readbackOrdinal: Int? = null,
         targetOrdinal: Int = 0,
@@ -1008,7 +985,7 @@ class GpuPlanTaskListLowererTest {
         budget: PlanBudget = PlanBudget(1024),
     ): RenderGraph {
         if (capabilityId == W3SolidRectPlanCompiler.CAPABILITY_ID && extent == SizeI32(2, 2) &&
-            capabilities == PlanCapabilitySnapshot.of(7, 2048, 1L shl 20, 256, setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL)) &&
+            capabilities == w3PlanCapabilities() &&
             drawBounds == RectI32(0, 0, 2, 2) && readbackOrdinal == null &&
             targetOrdinal == 0 && targetByteSize == 16L &&
             targetUsages == setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource) &&
@@ -1037,13 +1014,7 @@ class GpuPlanTaskListLowererTest {
                 W3SolidRectPlanCompiler().plan(
                     scene,
                     RenderTargetDescriptor(scene.extent, ColorSpace.SRGB),
-                    PlanCapabilitySnapshot.of(
-                        7,
-                        2048,
-                        1L shl 20,
-                        256,
-                        setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
-                    ),
+                    w3PlanCapabilities(),
                     PlanBudget(1024),
                 ),
             ).plan
@@ -1129,13 +1100,7 @@ class GpuPlanTaskListLowererTest {
             W3SolidRectPlanCompiler().plan(
                 scene,
                 RenderTargetDescriptor(scene.extent, ColorSpace.SRGB),
-                PlanCapabilitySnapshot.of(
-                    deviceGeneration = 7,
-                    maxTextureDimension2D = 2048,
-                    maxBufferSizeBytes = maxBufferSize,
-                    copyBytesPerRowAlignment = 256,
-                    supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
-                ),
+                w3PlanCapabilities(maxBufferSizeBytes = maxBufferSize),
                 PlanBudget(1024),
             ),
         ).plan
@@ -1213,5 +1178,22 @@ class GpuPlanTaskListLowererTest {
             ),
         ),
         rendererFeatures = setOf(GPURendererFeature.RenderPass, GPURendererFeature.Readback),
+    )
+
+    private fun w3PlanCapabilities(
+        deviceGeneration: Long = 7,
+        maxTextureDimension2D: Int = 2048,
+        maxBufferSizeBytes: Long = 1L shl 20,
+        maxDynamicUniformBuffersPerPipelineLayout: Int = 1,
+    ): PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(
+        deviceGeneration = deviceGeneration,
+        maxTextureDimension2D = maxTextureDimension2D,
+        maxBufferSizeBytes = maxBufferSizeBytes,
+        copyBytesPerRowAlignment = 256,
+        supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+        minUniformBufferOffsetAlignment = 256,
+        maxDynamicUniformBuffersPerPipelineLayout = maxDynamicUniformBuffersPerPipelineLayout,
+        supportedOperations = setOf(PlanOperationCapability.RenderPass, PlanOperationCapability.Readback),
+        bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 4_096, 4_096),
     )
 }

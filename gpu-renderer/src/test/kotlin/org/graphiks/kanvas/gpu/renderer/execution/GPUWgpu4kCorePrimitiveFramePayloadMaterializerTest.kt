@@ -39,8 +39,10 @@ import org.graphiks.kanvas.gpu.renderer.analysis.GPUCorePrimitiveRRectGeometryAu
 import org.graphiks.kanvas.gpu.renderer.analysis.corePrimitiveRRectGeometryAuthority
 import org.graphiks.kanvas.gpu.renderer.analysis.corePrimitiveRectGeometryAuthority
 import org.graphiks.kanvas.gpu.plan.PlanBudget
+import org.graphiks.kanvas.gpu.plan.PlanBufferAllocationPolicy
 import org.graphiks.kanvas.gpu.plan.PlanCapabilitySnapshot
 import org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat
+import org.graphiks.kanvas.gpu.plan.PlanOperationCapability
 import org.graphiks.kanvas.gpu.plan.RenderGraph
 import org.graphiks.kanvas.gpu.plan.W3SolidRectPlanCompiler
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
@@ -5591,6 +5593,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                     maxBufferSizeBytes = 1L shl 20,
                     copyBytesPerRowAlignment = 256,
                     supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+                    minUniformBufferOffsetAlignment = 256,
+                    maxDynamicUniformBuffersPerPipelineLayout = 1,
+                    supportedOperations = setOf(PlanOperationCapability.RenderPass, PlanOperationCapability.Readback),
+                    bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 4_096, 4_096),
                 ),
                 PlanBudget(1024),
             ),

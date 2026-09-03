@@ -368,7 +368,17 @@ class W3SolidRectPlanCompilerTest {
         maxTextureDimension2D: Int = 64,
         maxBufferSizeBytes: Long = 1L shl 20,
         formats: Set<PlanLogicalColorFormat> = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
-    ): PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(generation, maxTextureDimension2D, maxBufferSizeBytes, 256, formats)
+    ): PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(
+        generation,
+        maxTextureDimension2D,
+        maxBufferSizeBytes,
+        256,
+        formats,
+        minUniformBufferOffsetAlignment = 256,
+        maxDynamicUniformBuffersPerPipelineLayout = 1,
+        supportedOperations = setOf(PlanOperationCapability.RenderPass, PlanOperationCapability.Readback),
+        bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 4_096, 4_096),
+    )
 
     private fun diagnosticCode(result: RenderPlanResult<*>): String = when (result) {
         is RenderPlanResult.GapNotMigrated -> result.diagnostics.single().code.value

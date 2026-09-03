@@ -23,6 +23,8 @@ class RenderGraphContractTest {
         assertEquals(RectF32(0.25f, 0.5f, 2.75f, 2.25f), draw.copyDeviceBounds())
         assertEquals(RectI32(0, 0, 3, 3), draw.copyRasterBounds())
         assertEquals(CoveragePlan.AnalyticScalarAA, draw.coverage)
+        assertEquals(SamplePlan.SingleSample, draw.sample)
+        assertEquals(BlendPlan.SrcOver, draw.blend)
     }
 
     @Test
@@ -259,6 +261,10 @@ class RenderGraphContractTest {
         maxBufferSizeBytes = 4096,
         copyBytesPerRowAlignment = copyBytesPerRowAlignment,
         supportedFormats = formats,
+        minUniformBufferOffsetAlignment = 256,
+        maxDynamicUniformBuffersPerPipelineLayout = 1,
+        supportedOperations = setOf(PlanOperationCapability.RenderPass, PlanOperationCapability.Readback),
+        bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 4_096, 4_096),
     )
 
     private fun graphWithAnalyticDrawResources(uniformLifetime: IntRange): RenderGraph {

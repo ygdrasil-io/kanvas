@@ -43,17 +43,10 @@ public class PlanCapabilitySnapshot private constructor(
             maxBufferSizeBytes: Long,
             copyBytesPerRowAlignment: Int,
             supportedFormats: Set<PlanLogicalColorFormat>,
-            minUniformBufferOffsetAlignment: Int = DEFAULT_MIN_UNIFORM_BUFFER_OFFSET_ALIGNMENT,
-            maxDynamicUniformBuffersPerPipelineLayout: Int = DEFAULT_MAX_DYNAMIC_UNIFORM_BUFFERS,
-            supportedOperations: Set<PlanOperationCapability> = setOf(
-                PlanOperationCapability.RenderPass,
-                PlanOperationCapability.Readback,
-            ),
-            bufferAllocationPolicy: PlanBufferAllocationPolicy = PlanBufferAllocationPolicy.of(
-                DEFAULT_VERTEX_FLOOR_BYTES,
-                DEFAULT_INDEX_FLOOR_BYTES,
-                DEFAULT_UNIFORM_FLOOR_BYTES,
-            ),
+            minUniformBufferOffsetAlignment: Int,
+            maxDynamicUniformBuffersPerPipelineLayout: Int,
+            supportedOperations: Set<PlanOperationCapability>,
+            bufferAllocationPolicy: PlanBufferAllocationPolicy,
         ): PlanCapabilitySnapshot {
             require(deviceGeneration >= 0) { "Device generation must be non-negative" }
             require(maxTextureDimension2D > 0) { "Maximum texture dimension must be positive" }
@@ -65,12 +58,6 @@ public class PlanCapabilitySnapshot private constructor(
                 copyBytesPerRowAlignment, supportedFormats, minUniformBufferOffsetAlignment,
                 maxDynamicUniformBuffersPerPipelineLayout, supportedOperations, bufferAllocationPolicy)
         }
-
-        private const val DEFAULT_MIN_UNIFORM_BUFFER_OFFSET_ALIGNMENT: Int = 256
-        private const val DEFAULT_MAX_DYNAMIC_UNIFORM_BUFFERS: Int = 1
-        private const val DEFAULT_VERTEX_FLOOR_BYTES: Long = 16_384L
-        private const val DEFAULT_INDEX_FLOOR_BYTES: Long = 4_096L
-        private const val DEFAULT_UNIFORM_FLOOR_BYTES: Long = 4_096L
     }
 }
 

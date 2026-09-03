@@ -19,10 +19,33 @@ class AnalyticRectPlanBudgetTest {
         val ready = assertIs<AnalyticRectPlanBudgetResult.WithinBudget>(result)
         assertEquals(48, ready.footprint.targetBytes)
         assertEquals(768, ready.footprint.readbackBytes)
+        assertEquals(256, ready.footprint.uniformStrideBytes)
+        assertEquals(512, ready.footprint.uniformUsefulBytes)
         assertEquals(16_384, ready.footprint.vertexCapacityBytes)
         assertEquals(4_096, ready.footprint.indexCapacityBytes)
         assertEquals(4_096, ready.footprint.uniformCapacityBytes)
         assertEquals(25_392, ready.footprint.peakBytes)
+    }
+
+    @Test
+    fun `analytic rect budget aligns the 80 byte uniform payload before pooling`() {
+        val result = AnalyticRectPlanBudget.calculate(
+            targetExtent = SizeI32(4, 3),
+            drawCount = 2,
+            capabilities = supportedCapabilities(
+                minUniformAlignment = 64,
+                vertexFloorBytes = 32,
+                indexFloorBytes = 24,
+                uniformFloorBytes = 128,
+            ),
+            budget = PlanBudget(1_184),
+        )
+
+        val ready = assertIs<AnalyticRectPlanBudgetResult.WithinBudget>(result)
+        assertEquals(128, ready.footprint.uniformStrideBytes)
+        assertEquals(256, ready.footprint.uniformUsefulBytes)
+        assertEquals(256, ready.footprint.uniformCapacityBytes)
+        assertEquals(1_184, ready.footprint.peakBytes)
     }
 
     @Test
@@ -37,6 +60,9 @@ class AnalyticRectPlanBudgetTest {
     private fun supportedCapabilities(
         minUniformAlignment: Int = 256,
         maxBufferSizeBytes: Long = 1L shl 20,
+        vertexFloorBytes: Long = 16_384,
+        indexFloorBytes: Long = 4_096,
+        uniformFloorBytes: Long = 4_096,
     ): PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(
         deviceGeneration = 0,
         maxTextureDimension2D = 64,
@@ -46,6 +72,6 @@ class AnalyticRectPlanBudgetTest {
         minUniformBufferOffsetAlignment = minUniformAlignment,
         maxDynamicUniformBuffersPerPipelineLayout = 1,
         supportedOperations = PlanOperationCapability.entries.toSet(),
-        bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 4_096, 4_096),
+        bufferAllocationPolicy = PlanBufferAllocationPolicy.of(vertexFloorBytes, indexFloorBytes, uniformFloorBytes),
     )
 }
