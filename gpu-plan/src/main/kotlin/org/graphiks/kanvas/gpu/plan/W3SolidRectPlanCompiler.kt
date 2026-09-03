@@ -15,7 +15,9 @@ import org.graphiks.kanvas.render.ir.GeometryNode
 import org.graphiks.kanvas.render.ir.PaintNode
 import org.graphiks.kanvas.render.ir.PaintStyleNode
 import org.graphiks.kanvas.render.ir.RenderDiagnostic
+import org.graphiks.kanvas.render.ir.RenderDiagnosticCode
 import org.graphiks.kanvas.render.ir.RenderDiagnosticDomain
+import org.graphiks.kanvas.render.ir.RenderDiagnosticSeverity
 import org.graphiks.kanvas.render.ir.RenderPlanResult
 import org.graphiks.kanvas.render.ir.RenderTargetDescriptor
 import org.graphiks.kanvas.render.ir.SceneCommand
@@ -47,7 +49,7 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
             is Recognition.Accepted -> return if (target.colorSpace != ColorSpace.SRGB) {
                 notCandidate(diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.TARGET, "W3 supports only sRGB targets"))
             } else {
-                GpuPlanSelection.Candidate(W3Candidate(scene.canonicalId, target, recognition.draws))
+                GpuPlanSelection.Candidate(W3Candidate(this, scene.canonicalId, target, recognition.draws))
             }
         }
     }
@@ -58,9 +60,9 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
         budget: PlanBudget,
     ): RenderPlanResult<RenderGraph> {
         val selected = candidate as? W3Candidate
-            ?: return invalid(diag(W3PlanDiagnostics.SceneInvalid, RenderDiagnosticDomain.SCENE, "W3 candidate is invalid"))
-        if (!selected.hasMatchingFingerprints()) {
-            return invalid(diag(W3PlanDiagnostics.SceneInvalid, RenderDiagnosticDomain.SCENE, "W3 candidate fingerprints do not match"))
+            ?: return invalidCandidate()
+        if (selected.owner !== this || !selected.hasMatchingFingerprints()) {
+            return invalidCandidate()
         }
         val target = selected.target
 
@@ -301,6 +303,12 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
         GpuPlanSelection.NotCandidate(listOf(diagnostic))
     private fun invalidSelection(diagnostic: RenderDiagnostic): GpuPlanSelection.InvalidScene =
         GpuPlanSelection.InvalidScene(listOf(diagnostic))
+    private fun invalidCandidate(): RenderPlanResult<Nothing> = invalid(RenderDiagnostic(
+        RenderDiagnosticCode("gpu-plan.selection.invalid-candidate"),
+        RenderDiagnosticDomain.SCENE,
+        RenderDiagnosticSeverity.ERROR,
+        "W3 candidate does not belong to this compiler.",
+    ))
     private fun promoted(diagnostic: RenderDiagnostic): RenderPlanResult<Nothing> = RenderPlanResult.GapOnPromotedScope(listOf(diagnostic))
     private fun invalid(diagnostic: RenderDiagnostic): RenderPlanResult<Nothing> = RenderPlanResult.InvalidScene(listOf(diagnostic))
     private fun resourceLimit(diagnostic: RenderDiagnostic): RenderPlanResult<Nothing> = RenderPlanResult.ResourceLimitExceeded(listOf(diagnostic))
@@ -335,6 +343,7 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
     }
 
     private class W3Candidate(
+        val owner: W3SolidRectPlanCompiler,
         override val sceneCanonicalId: CanonicalId,
         override val target: RenderTargetDescriptor,
         draws: List<SolidRectDraw>,

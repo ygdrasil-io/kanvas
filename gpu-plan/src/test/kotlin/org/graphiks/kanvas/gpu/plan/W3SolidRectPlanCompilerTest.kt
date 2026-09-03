@@ -52,7 +52,23 @@ class W3SolidRectPlanCompilerTest {
             override val target: RenderTargetDescriptor = candidate.target
         }
 
-        assertIs<RenderPlanResult.InvalidScene>(compiler.plan(foreign, supportedCapabilities(), PlanBudget(4096)))
+        val result = assertIs<RenderPlanResult.InvalidScene>(compiler.plan(foreign, supportedCapabilities(), PlanBudget(4096)))
+        assertEquals("gpu-plan.selection.invalid-candidate", result.diagnostics.single().code.value)
+    }
+
+    @Test
+    fun `candidate remains bound to its selecting compiler instance`() {
+        val first = W3SolidRectPlanCompiler()
+        val second = W3SolidRectPlanCompiler()
+        val selected = assertIs<GpuPlanSelection.Candidate>(
+            first.select(sceneOf(solidRect(0f, 0f, 4f, 4f, 0xFFFFFFFFu)), target(4, 4)),
+        ).candidate
+
+        val mismatch = assertIs<RenderPlanResult.InvalidScene>(
+            second.plan(selected, supportedCapabilities(), PlanBudget(4096)),
+        )
+        assertEquals("gpu-plan.selection.invalid-candidate", mismatch.diagnostics.single().code.value)
+        assertIs<RenderPlanResult.Ready<RenderGraph>>(first.plan(selected, supportedCapabilities(), PlanBudget(4096)))
     }
 
     @Test
