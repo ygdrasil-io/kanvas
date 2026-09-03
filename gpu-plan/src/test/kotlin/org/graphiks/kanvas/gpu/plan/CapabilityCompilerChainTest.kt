@@ -5,6 +5,16 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.render.ir.BlendMode
+import org.graphiks.kanvas.render.ir.BlendNode
+import org.graphiks.kanvas.render.ir.ClipStackNode
+import org.graphiks.kanvas.render.ir.CoverageRequest
+import org.graphiks.kanvas.render.ir.DrawNode
+import org.graphiks.kanvas.render.ir.DrawOrigin
+import org.graphiks.kanvas.render.ir.EffectStack
+import org.graphiks.kanvas.render.ir.GeometryNode
+import org.graphiks.kanvas.render.ir.MaterialNode
+import org.graphiks.kanvas.render.ir.PaintNode
+import org.graphiks.kanvas.render.ir.PaintStyleNode
 import org.graphiks.kanvas.render.ir.RenderDiagnostic
 import org.graphiks.kanvas.render.ir.RenderDiagnosticCode
 import org.graphiks.kanvas.render.ir.RenderDiagnosticDomain
@@ -14,7 +24,11 @@ import org.graphiks.kanvas.render.ir.RenderTargetDescriptor
 import org.graphiks.kanvas.render.ir.SceneCommand
 import org.graphiks.kanvas.render.ir.SceneExtent
 import org.graphiks.kanvas.render.ir.SceneSnapshot
+import org.graphiks.kanvas.render.ir.StrokeCapNode
+import org.graphiks.kanvas.render.ir.StrokeJoinNode
 import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.matrix.Matrix3x3F32
 
 class CapabilityCompilerChainTest {
     @Test
@@ -63,6 +77,14 @@ class CapabilityCompilerChainTest {
         assertEquals("gpu-plan.selection.invalid-candidate", result.diagnostics.single().code.value)
     }
 
+    @Test
+    fun `W3 wins aligned frames and W4a wins fractional frames`() {
+        val chain = CapabilityCompilerChain.of(listOf(W3SolidRectPlanCompiler(), W4aAnalyticRectPlanCompiler()))
+
+        assertEquals(W3SolidRectPlanCompiler.CAPABILITY_ID, ready(chain, rectScene(0f)).capabilityId)
+        assertEquals(W4aAnalyticRectPlanCompiler.CAPABILITY_ID, ready(chain, rectScene(0.25f)).capabilityId)
+    }
+
     private class NotCandidateCompiler(private val code: String) : GpuPlanCompiler {
         override fun select(scene: SceneSnapshot, target: RenderTargetDescriptor): GpuPlanSelection =
             GpuPlanSelection.NotCandidate(listOf(RenderDiagnostic(
@@ -98,6 +120,28 @@ class CapabilityCompilerChainTest {
 
     private fun target(): RenderTargetDescriptor =
         RenderTargetDescriptor(SceneExtent(1, 1), ColorSpace.SRGB)
+
+    private fun ready(chain: CapabilityCompilerChain, scene: SceneSnapshot): RenderGraph {
+        val target = RenderTargetDescriptor(scene.extent, scene.colorSpace)
+        val candidate = assertIs<GpuPlanSelection.Candidate>(chain.select(scene, target)).candidate
+        return assertIs<RenderPlanResult.Ready<RenderGraph>>(chain.plan(candidate, capabilities(), PlanBudget(1L shl 20))).plan
+    }
+
+    private fun rectScene(left: Float): SceneSnapshot {
+        val color = ColorARGB.fromPackedUInt(0x80FF0000u)
+        return SceneSnapshot.of(SceneExtent(4, 3), ColorSpace.SRGB, listOf(SceneCommand.Draw(DrawNode(
+            geometry = GeometryNode.Rect.of(RectF32(left, 0f, 3f, 2f)),
+            material = MaterialNode.Solid(color),
+            coverage = CoverageRequest.ANTIALIASED,
+            clip = ClipStackNode.Empty,
+            blend = BlendNode.SrcOver,
+            effects = EffectStack.Empty,
+            transform = Matrix3x3F32.Identity,
+            origin = DrawOrigin.RECT,
+            paint = PaintNode(color, null, BlendMode.SRC_OVER, null, null, null, null, null,
+                PaintStyleNode.FILL, 0f, StrokeCapNode.BUTT, StrokeJoinNode.MITER, 4f, true),
+        ))))
+    }
 
     private fun capabilities(): PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(
         deviceGeneration = 0,
