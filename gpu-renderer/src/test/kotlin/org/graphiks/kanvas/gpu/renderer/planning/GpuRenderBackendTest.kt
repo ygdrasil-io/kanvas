@@ -308,10 +308,11 @@ class GpuRenderBackendTest {
         assertTrue(normalOwner.events.isEmpty())
     }
 
-    @Test fun `unauthenticated reconstructed plan and a target for another backend never render`() = runBlocking {
-        val unused = FakePrepared(1); val issuing = renderer(FakeOwner(listOf(FakeBackend(1, unused))))
+    @Test fun `counterfeit graph with an issued identity and structure never renders`() = runBlocking {
+        val unused = FakePrepared(1, GPUFrameImmediateState.Refused(diag("submit.refused")))
+        val issuing = renderer(FakeOwner(listOf(FakeBackend(1, unused))))
         val plan = issue(issuing, 2, 2)
-        val reconstructed = copyGraph(plan, PlanId("arbitrary-plan-id"))
+        val reconstructed = copyGraph(plan, plan.id)
         assertIs<RenderExecutionResult.InvalidPlan>(issuing.submit(reconstructed).await())
         assertTrue(unused.events.isEmpty())
 

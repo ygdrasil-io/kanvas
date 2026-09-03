@@ -42,7 +42,7 @@ public data class GpuRenderSessionKey(
 }
 
 internal sealed interface GpuPreparedSessionAcquisition {
-    data class Ready(val session: GpuPreparedSceneSessionPort) : GpuPreparedSessionAcquisition
+    data class Ready(val reservation: GpuPreparedSessionReservation) : GpuPreparedSessionAcquisition
 
     data class GenerationMismatch(
         val expectedGeneration: GPUDeviceGenerationID,
@@ -51,6 +51,9 @@ internal sealed interface GpuPreparedSessionAcquisition {
 
     data object Unavailable : GpuPreparedSessionAcquisition
 }
+
+/** Opaque, one-shot ownership of a prepared session acquired for one frame. */
+internal interface GpuPreparedSessionReservation
 
 /** Physical-capability acquisition kept distinct from semantic W3 classification. */
 internal sealed interface GpuPlanningCapabilityAcquisition {
@@ -81,6 +84,13 @@ public class GpuRenderContext internal constructor(
         var activeLeases: Int = 0,
         var lastAccess: Long = 0L,
     )
+
+    private class Reservation(
+        val owner: GpuRenderContext,
+        val key: GpuRenderSessionKey,
+        val entry: Entry,
+        var consumed: Boolean = false,
+    ) : GpuPreparedSessionReservation
 
     private val workerScope = CoroutineScope(SupervisorJob() + workerDispatcher)
     private val workers = linkedSetOf<Job>()
@@ -131,7 +141,9 @@ public class GpuRenderContext internal constructor(
         (acquirePlanningCapabilities() as? GpuPlanningCapabilityAcquisition.Ready)?.snapshot
 
     internal fun prepared(key: GpuRenderSessionKey): GpuPreparedSceneSessionPort? =
-        (acquirePrepared(key) as? GpuPreparedSessionAcquisition.Ready)?.session
+        (acquirePrepared(key) as? GpuPreparedSessionAcquisition.Ready)?.let { acquired ->
+            runBlocking { withLease(acquired.reservation) { session -> session } }
+        }
 
     internal fun acquirePrepared(key: GpuRenderSessionKey): GpuPreparedSessionAcquisition {
         discardStaleRuntimeEpoch()
@@ -147,8 +159,7 @@ public class GpuRenderContext internal constructor(
                 return@synchronized GpuPreparedSessionAcquisition.Unavailable
             }
             entries[key]?.let { entry ->
-                touch(entry)
-                return@synchronized GpuPreparedSessionAcquisition.Ready(entry.session)
+                return@synchronized reserve(key, entry)
             }
             val owner = backend ?: return@synchronized GpuPreparedSessionAcquisition.Unavailable
             val evicted = if (entries.size >= MAX_PREPARED_SESSIONS) {
@@ -180,9 +191,8 @@ public class GpuRenderContext internal constructor(
                     evictedEntry = entry
                 }
                 val entry = Entry(session)
-                touch(entry)
                 entries[key] = entry
-                GpuPreparedSessionAcquisition.Ready(session)
+                reserve(key, entry)
             }
         }
         mismatchedSession?.let(::closeSessionBestEffort)
@@ -212,23 +222,21 @@ public class GpuRenderContext internal constructor(
     }
 
     internal suspend fun <T> withLease(
-        key: GpuRenderSessionKey,
+        reservation: GpuPreparedSessionReservation,
         block: suspend (GpuPreparedSceneSessionPort) -> T,
     ): T? {
+        val lease = reservation as? Reservation ?: return null
         val entry = synchronized(this) {
-            entries[key]?.also { acquired ->
-                acquired.activeLeases += 1
-                touch(acquired)
-            }
+            if (lease.owner !== this || lease.consumed) null else lease.entry.also { lease.consumed = true }
         } ?: return null
         return try {
             entry.lock.withLock {
                 val valid = synchronized(this) {
                     !closed &&
                         invalidatingGenerations.isEmpty() &&
-                        key.deviceGeneration !in invalidatedGenerations &&
-                        entries[key] === entry &&
-                        snapshot?.deviceGeneration == key.deviceGeneration
+                        lease.key.deviceGeneration !in invalidatedGenerations &&
+                        entries[lease.key] === entry &&
+                        snapshot?.deviceGeneration == lease.key.deviceGeneration
                 }
                 if (valid) block(entry.session) else null
             }
@@ -236,7 +244,7 @@ public class GpuRenderContext internal constructor(
             synchronized(this) {
                 check(entry.activeLeases > 0) { "Prepared-session lease count underflow" }
                 entry.activeLeases -= 1
-                if (entries[key] === entry) touch(entry)
+                if (entries[lease.key] === entry) touch(entry)
             }
         }
     }
@@ -304,6 +312,16 @@ public class GpuRenderContext internal constructor(
 
     private fun closeSessionBestEffort(session: GpuPreparedSceneSessionPort) {
         runCatching { session.close() }
+    }
+
+    /** Reserves the exact entry while it is still protected by the context monitor. */
+    private fun reserve(
+        key: GpuRenderSessionKey,
+        entry: Entry,
+    ): GpuPreparedSessionAcquisition.Ready {
+        entry.activeLeases += 1
+        touch(entry)
+        return GpuPreparedSessionAcquisition.Ready(Reservation(this, key, entry))
     }
 
     /** Records access under this context monitor, preserving an idle-only LRU eviction order. */

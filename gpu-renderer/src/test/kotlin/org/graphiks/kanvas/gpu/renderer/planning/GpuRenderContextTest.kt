@@ -172,7 +172,8 @@ class GpuRenderContextTest {
             keys.take(8).forEach(context::prepared)
             val active = keys.take(8).map { key ->
                 async(Dispatchers.Default) {
-                    context.withLease(key) {
+                    val reservation = assertIs<GpuPreparedSessionAcquisition.Ready>(context.acquirePrepared(key)).reservation
+                    context.withLease(reservation) {
                         entered.countDown()
                         release.await(2, java.util.concurrent.TimeUnit.SECONDS)
                         "released"
@@ -185,12 +186,55 @@ class GpuRenderContextTest {
 
             release.countDown()
             assertEquals(List(8) { "released" }, active.awaitAll())
-            assertIs<GpuPreparedSessionAcquisition.Ready>(context.acquirePrepared(keys.last()))
+            val ninth = assertIs<GpuPreparedSessionAcquisition.Ready>(context.acquirePrepared(keys.last()))
+            assertEquals("released", context.withLease(ninth.reservation) { "released" })
         } finally {
             release.countDown()
             context.close()
         }
         Unit
+    }
+
+    @Test fun `newly prepared session remains runnable while a ninth key churns the idle LRU`() = runBlocking {
+        val events = mutableListOf<String>()
+        val sessions = (1..9).map { ordinal -> Session(1, events, "session-$ordinal") }
+        val context = GpuRenderContext(Owner(Backend(1, sessions.first(), *sessions.drop(1).toTypedArray()), events))
+        val keys = (1..9).map(::sessionKey)
+
+        try {
+            context.capabilities()
+            keys.take(7).forEach(context::prepared)
+            val acquired = assertIs<GpuPreparedSessionAcquisition.Ready>(context.acquirePrepared(keys[7]))
+
+            keys.take(7).forEach(context::prepared)
+            context.prepared(keys[8])
+
+            val rendered = context.withLease(acquired.reservation) { "rendered" }
+
+            assertEquals("rendered", rendered)
+            assertTrue("session-8" !in events)
+        } finally {
+            context.close()
+        }
+    }
+
+    @Test fun `reservation stays bound to the context that acquired it`() = runBlocking {
+        val events = mutableListOf<String>()
+        val first = GpuRenderContext(Owner(Backend(1, Session(1, events)), events))
+        val second = GpuRenderContext(Owner(Backend(1, Session(1, events)), events))
+        val key = sessionKey(1)
+
+        try {
+            first.capabilities()
+            second.capabilities()
+            val reservation = assertIs<GpuPreparedSessionAcquisition.Ready>(first.acquirePrepared(key)).reservation
+
+            assertNull(second.withLease(reservation) { "foreign" })
+            assertEquals("owned", first.withLease(reservation) { "owned" })
+        } finally {
+            first.close()
+            second.close()
+        }
     }
 
     private class Owner(first: Backend, private val events: MutableList<String>, vararg rest: Backend) : GpuBackendRuntimeOwnerPort {

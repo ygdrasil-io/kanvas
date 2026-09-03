@@ -1,6 +1,6 @@
 # État W03 — `gpu-plan` et première tranche compositionnelle
 
-Révision vérifiée : `d04a1515abb9b9b2022957b20ebf011ebf69f224` (`feat: route W3 frames through gpu plan`).
+Révision vérifiée : branche W3 avec la correction finale des lifetimes de plan et de session.
 
 ## Capability publiée
 
@@ -15,6 +15,15 @@ legacy entière; aucun fallback legacy n'est autorisé après `Ready`.
 La cible physique W3 reste `rgba8unorm-srgb`. Le boundary Surface restitue
 RGBA directement et applique le swizzle déterministe vers BGRA après
 readback.
+
+Le cache de sessions préparées conserve sa borne LRU de huit entrées, mais une
+acquisition réserve maintenant atomiquement la session exacte avant le travail
+de frame : une entrée active n'est jamais évictée entre préparation et rendu.
+La réservation est one-shot et liée à son `GpuRenderContext`. L'authentification
+des `RenderGraph` émis par un backend est également weak et fondée sur
+l'identité de l'instance : un graphe reconstruit, même avec le même `PlanId` et
+la même structure, est terminalement refusé sans soumission native, tandis que
+les graphes vivants émis restent indépendamment valides.
 
 ## Preuves W3
 
@@ -36,6 +45,7 @@ forme.
 | `rtk ./gradlew :math:geometry:jvmTest :math:geometry:jsTest :math:matrix:jvmTest :math:matrix:jsTest :math:color:jvmTest :math:color:jsTest` | Succès. |
 | `rtk ./gradlew :render-ir:test :gpu-plan:test` | Succès. |
 | `rtk ./gradlew :gpu-renderer:test --tests '*Gpu*Plan*' --tests '*GpuRender*' --tests '*GPUCorePrimitivePreparedFrameTaskListBuilderTest*'` | Succès. |
+| Régressions finales ciblées `GpuRenderContextTest` / `GpuRenderBackendTest` | Succès : réservation LRU, liaison au context et graphe contrefait identique. |
 | `rtk ./gradlew :kanvas:test --tests '*GPUPlanSurface*' --tests '*SurfaceTest*' --tests '*DisplayOpSceneAdapterTest*'` | Les preuves W3 passent; 45 échecs legacy connus, 0 erreur. |
 | `rtk ./gradlew :kanvas:test --rerun-tasks` | Baseline préservée : 3 610 tests, 51 échecs, 0 erreur. |
 

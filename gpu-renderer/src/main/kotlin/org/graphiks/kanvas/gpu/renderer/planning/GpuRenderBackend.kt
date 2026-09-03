@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.planning
 
-import java.util.concurrent.ConcurrentHashMap
+import java.lang.ref.ReferenceQueue
+import java.lang.ref.WeakReference
+import java.util.HashMap
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CompletableDeferred
 import org.graphiks.kanvas.color.ColorSpace
@@ -32,6 +34,26 @@ import org.graphiks.kanvas.render.ir.SceneExtent
 import org.graphiks.kanvas.render.ir.SceneSnapshot
 import org.graphiks.kanvas.render.ir.SubmissionId
 
+/**
+ * Weak identity key: equal semantic graphs remain distinct, while collected
+ * graph keys are removed through the owning backend's reference queue.
+ */
+private class WeakRenderGraphKey(
+    graph: RenderGraph,
+    queue: ReferenceQueue<RenderGraph>? = null,
+) : WeakReference<RenderGraph>(graph, queue) {
+    private val identityHash: Int = System.identityHashCode(graph)
+
+    override fun hashCode(): Int = identityHash
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is WeakRenderGraphKey || identityHash != other.identityHash) return false
+        val graph = get() ?: return false
+        return graph === other.get()
+    }
+}
+
 public data class GpuRenderTargetConfig(
     public val extent: SceneExtent,
     public val colorSpace: ColorSpace,
@@ -52,7 +74,8 @@ public class GpuRenderBackend(
     private val targetConfig: GpuRenderTargetConfig,
 ) : RenderBackend<RenderGraph, GpuFrameOutput> {
     private val ids = AtomicLong(0)
-    private val issuedPlans = ConcurrentHashMap<String, MutableSet<String>>()
+    private val issuedPlanReferences = ReferenceQueue<RenderGraph>()
+    private val issuedPlans = HashMap<WeakRenderGraphKey, Unit>()
 
     override fun plan(
         scene: SceneSnapshot,
@@ -82,8 +105,10 @@ public class GpuRenderBackend(
         }
         return compiler.plan(scene, target, capabilities, PlanBudget(targetConfig.frameLocalBudgetBytes)).also { result ->
             if (result is RenderPlanResult.Ready) {
-                issuedPlans.computeIfAbsent(result.plan.id.value) { ConcurrentHashMap.newKeySet() }
-                    .add(planFingerprint(result.plan))
+                synchronized(issuedPlans) {
+                    removeCollectedPlans()
+                    issuedPlans[WeakRenderGraphKey(result.plan, issuedPlanReferences)] = Unit
+                }
             }
         }
     }
@@ -162,12 +187,12 @@ public class GpuRenderBackend(
             height = targetConfig.extent.height,
             internalFormat = targetConfig.internalFormat,
         )
-        when (val prepared = try {
+        val reservation = when (val prepared = try {
             context.acquirePrepared(key)
         } catch (_: Throwable) {
             return device("w3.execution.device_failure", "GPU target preparation failed.")
         }) {
-            is GpuPreparedSessionAcquisition.Ready -> Unit
+            is GpuPreparedSessionAcquisition.Ready -> prepared.reservation
             is GpuPreparedSessionAcquisition.GenerationMismatch -> {
                 context.invalidateDeviceGeneration(prepared.expectedGeneration)
                 return device(
@@ -181,7 +206,7 @@ public class GpuRenderBackend(
         }
 
         val outcome = try {
-            context.withLease(key) { session ->
+            context.withLease(reservation) { session ->
                 executeFrame(session, loweredPlan, plan.visualCommandCount)
             }
         } catch (_: Throwable) {
@@ -285,49 +310,27 @@ public class GpuRenderBackend(
     private fun isAuthenticatedForTarget(
         plan: RenderGraph,
         snapshot: PlanCapabilitySnapshot,
-    ): Boolean =
-        issuedPlans[plan.id.value]?.contains(planFingerprint(plan)) == true &&
+    ): Boolean = synchronized(issuedPlans) {
+        removeCollectedPlans()
+        issuedPlans.containsKey(WeakRenderGraphKey(plan))
+    } &&
             plan.targetExtent.width == targetConfig.extent.width &&
             plan.targetExtent.height == targetConfig.extent.height &&
             plan.colorFormat == targetConfig.internalFormat &&
             plan.capabilities == snapshot &&
             plan.budget == PlanBudget(targetConfig.frameLocalBudgetBytes)
 
+    @Suppress("UNCHECKED_CAST")
+    private fun removeCollectedPlans() {
+        while (true) {
+            val collected = issuedPlanReferences.poll() as? WeakRenderGraphKey ?: return
+            issuedPlans.remove(collected)
+        }
+    }
+
     private fun isDeviceLoss(diagnostic: GPUDiagnostic?): Boolean =
         diagnostic?.facts?.get("kind") == "DeviceLost" ||
             diagnostic?.code?.value?.contains("device", ignoreCase = true) == true
-
-    private fun planFingerprint(plan: RenderGraph): String = buildString {
-        append(plan.capabilityId).append('|').append(plan.targetExtent).append('|').append(plan.colorFormat)
-        append('|').append(plan.capabilities).append('|').append(plan.budget).append('|').append(plan.visualCommandCount)
-        plan.resources().forEach { resource ->
-            append('|').append(resource.id.value).append(':').append(resource.kind).append(':').append(resource.format)
-            append(':').append(resource.copyExtent()).append(':').append(resource.byteSize).append(':').append(resource.usages())
-            append(':').append(resource.firstPassIndex).append(':').append(resource.lastPassIndexExclusive)
-        }
-        plan.passes().forEach { pass ->
-            append('|').append(pass.id.value).append(':').append(pass.role).append(':').append(pass.ordinal)
-            when (pass) {
-                is org.graphiks.kanvas.gpu.plan.PlanPass.RenderPass -> pass.draws().forEach { draw ->
-                    append(':').append(draw.commandIndex).append(':').append(draw.color)
-                    append(':').append(draw.copyVisibleBounds()).append(':').append(draw.copyScissor())
-                    append(':').append(draw.coverage).append(':').append(draw.sample).append(':').append(draw.blend)
-                }
-                is org.graphiks.kanvas.gpu.plan.PlanPass.TextureCopy ->
-                    append(':').append(pass.source.value).append(':').append(pass.destination.value)
-                is org.graphiks.kanvas.gpu.plan.PlanPass.FilterPass ->
-                    append(':').append(pass.inputs()).append(':').append(pass.output.value)
-                is org.graphiks.kanvas.gpu.plan.PlanPass.ResolvePass ->
-                    append(':').append(pass.source.value).append(':').append(pass.destination.value)
-                is org.graphiks.kanvas.gpu.plan.PlanPass.ReadbackPass ->
-                    append(':').append(pass.source.value).append(':').append(pass.staging.value).append(':').append(pass.bytesPerRow)
-            }
-        }
-        plan.dependencies().forEach { dependency ->
-            append('|').append(dependency.before.value).append('>').append(dependency.after.value)
-        }
-        append('|').append(plan.peakFrameLocalBytes)
-    }
 
     private fun nativeDiagnostic(diagnostic: GPUDiagnostic): RenderDiagnostic =
         diag(diagnostic.code.value, diagnostic.message)
