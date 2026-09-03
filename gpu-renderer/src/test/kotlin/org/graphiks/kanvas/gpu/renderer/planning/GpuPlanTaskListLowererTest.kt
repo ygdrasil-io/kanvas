@@ -161,7 +161,31 @@ class GpuPlanTaskListLowererTest {
             )
         }
         val dynamic = assertIs<GpuPlanLoweringResult.UnsupportedCapability>(
-            lowerer.lower(validRequest(rendererCapabilities = dynamicCapabilities)),
+            lowerer.lower(
+                validRequest(
+                    graph = graph(
+                        capabilities = PlanCapabilitySnapshot.of(
+                            deviceGeneration = 7,
+                            maxTextureDimension2D = 2048,
+                            maxBufferSizeBytes = 1L shl 20,
+                            copyBytesPerRowAlignment = 256,
+                            supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+                            minUniformBufferOffsetAlignment = 256,
+                            maxDynamicUniformBuffersPerPipelineLayout = 0,
+                            supportedOperations = setOf(
+                                org.graphiks.kanvas.gpu.plan.PlanOperationCapability.RenderPass,
+                                org.graphiks.kanvas.gpu.plan.PlanOperationCapability.Readback,
+                            ),
+                            bufferAllocationPolicy = org.graphiks.kanvas.gpu.plan.PlanBufferAllocationPolicy.of(
+                                16_384,
+                                4_096,
+                                4_096,
+                            ),
+                        ),
+                    ),
+                    rendererCapabilities = dynamicCapabilities,
+                ),
+            ),
         )
         assertEquals("w3.capability.dynamic_uniform", dynamic.diagnostic.code.value)
 

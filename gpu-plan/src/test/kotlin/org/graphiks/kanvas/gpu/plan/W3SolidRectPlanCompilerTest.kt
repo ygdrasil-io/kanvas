@@ -353,7 +353,9 @@ class W3SolidRectPlanCompilerTest {
         assertIs<RenderPlanResult.GapNotMigrated>(compiler.plan(scene, target, supportedCapabilities(), PlanBudget(4096)))
     }
 
-    private fun firstDraw(graph: RenderGraph): SolidRectDraw = assertIs<PlanPass.RenderPass>(graph.passes().first()).draws().first()
+    private fun firstDraw(graph: RenderGraph): SolidRectDraw = assertIs<PlanPass.RenderPass>(graph.passes().first())
+        .draws()
+        .let { draws -> assertIs<SolidRectDraw>(draws.first()) }
 
     private fun sceneOf(vararg commands: SceneCommand): SceneSnapshot =
         SceneSnapshot.of(SceneExtent(4, 4), ColorSpace.SRGB, commands.toList())

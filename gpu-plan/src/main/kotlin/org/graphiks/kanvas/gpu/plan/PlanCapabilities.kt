@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.plan
 
 public enum class PlanLogicalColorFormat { RGBA8_UNORM_SRGB_LINEAR_PREMUL }
+public enum class PlanOperationCapability { RenderPass, CopyUpload, UniformBuffer, Readback }
 
 public class PlanCapabilitySnapshot private constructor(
     public val deviceGeneration: Long,
@@ -8,20 +9,31 @@ public class PlanCapabilitySnapshot private constructor(
     public val maxBufferSizeBytes: Long,
     public val copyBytesPerRowAlignment: Int,
     supportedFormats: Set<PlanLogicalColorFormat>,
+    public val minUniformBufferOffsetAlignment: Int,
+    public val maxDynamicUniformBuffersPerPipelineLayout: Int,
+    supportedOperations: Set<PlanOperationCapability>,
+    public val bufferAllocationPolicy: PlanBufferAllocationPolicy,
 ) {
     private val formats: Set<PlanLogicalColorFormat> = supportedFormats.toSet().let(::immutableSet)
+    private val operations: Set<PlanOperationCapability> = supportedOperations.toSet().let(::immutableSet)
 
     public fun supportedFormats(): Set<PlanLogicalColorFormat> = formats
+    public fun supportedOperations(): Set<PlanOperationCapability> = operations
 
     override fun equals(other: Any?): Boolean = other is PlanCapabilitySnapshot &&
         deviceGeneration == other.deviceGeneration &&
         maxTextureDimension2D == other.maxTextureDimension2D &&
         maxBufferSizeBytes == other.maxBufferSizeBytes &&
         copyBytesPerRowAlignment == other.copyBytesPerRowAlignment &&
-        formats == other.formats
+        formats == other.formats &&
+        minUniformBufferOffsetAlignment == other.minUniformBufferOffsetAlignment &&
+        maxDynamicUniformBuffersPerPipelineLayout == other.maxDynamicUniformBuffersPerPipelineLayout &&
+        operations == other.operations &&
+        bufferAllocationPolicy == other.bufferAllocationPolicy
 
     override fun hashCode(): Int = listOf(
         deviceGeneration, maxTextureDimension2D, maxBufferSizeBytes, copyBytesPerRowAlignment, formats,
+        minUniformBufferOffsetAlignment, maxDynamicUniformBuffersPerPipelineLayout, operations, bufferAllocationPolicy,
     ).hashCode()
 
     public companion object {
@@ -31,14 +43,34 @@ public class PlanCapabilitySnapshot private constructor(
             maxBufferSizeBytes: Long,
             copyBytesPerRowAlignment: Int,
             supportedFormats: Set<PlanLogicalColorFormat>,
+            minUniformBufferOffsetAlignment: Int = DEFAULT_MIN_UNIFORM_BUFFER_OFFSET_ALIGNMENT,
+            maxDynamicUniformBuffersPerPipelineLayout: Int = DEFAULT_MAX_DYNAMIC_UNIFORM_BUFFERS,
+            supportedOperations: Set<PlanOperationCapability> = setOf(
+                PlanOperationCapability.RenderPass,
+                PlanOperationCapability.Readback,
+            ),
+            bufferAllocationPolicy: PlanBufferAllocationPolicy = PlanBufferAllocationPolicy.of(
+                DEFAULT_VERTEX_FLOOR_BYTES,
+                DEFAULT_INDEX_FLOOR_BYTES,
+                DEFAULT_UNIFORM_FLOOR_BYTES,
+            ),
         ): PlanCapabilitySnapshot {
             require(deviceGeneration >= 0) { "Device generation must be non-negative" }
             require(maxTextureDimension2D > 0) { "Maximum texture dimension must be positive" }
             require(maxBufferSizeBytes > 0) { "Maximum buffer size must be positive" }
             require(copyBytesPerRowAlignment > 0) { "Copy row alignment must be positive" }
+            require(minUniformBufferOffsetAlignment > 0) { "Minimum uniform alignment must be positive" }
+            require(maxDynamicUniformBuffersPerPipelineLayout >= 0) { "Maximum dynamic uniform buffers must be non-negative" }
             return PlanCapabilitySnapshot(deviceGeneration, maxTextureDimension2D, maxBufferSizeBytes,
-                copyBytesPerRowAlignment, supportedFormats)
+                copyBytesPerRowAlignment, supportedFormats, minUniformBufferOffsetAlignment,
+                maxDynamicUniformBuffersPerPipelineLayout, supportedOperations, bufferAllocationPolicy)
         }
+
+        private const val DEFAULT_MIN_UNIFORM_BUFFER_OFFSET_ALIGNMENT: Int = 256
+        private const val DEFAULT_MAX_DYNAMIC_UNIFORM_BUFFERS: Int = 1
+        private const val DEFAULT_VERTEX_FLOOR_BYTES: Long = 16_384L
+        private const val DEFAULT_INDEX_FLOOR_BYTES: Long = 4_096L
+        private const val DEFAULT_UNIFORM_FLOOR_BYTES: Long = 4_096L
     }
 }
 

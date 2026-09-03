@@ -3,8 +3,8 @@ package org.graphiks.kanvas.gpu.plan
 import org.graphiks.math.geometry.SizeI32
 
 public enum class PlanResourceKind { Texture2D, Buffer }
-public enum class PlanResourceRole { LogicalTarget, ReadbackStaging }
-public enum class PlanResourceUsage { RenderAttachment, CopySource, CopyDestination, MapRead }
+public enum class PlanResourceRole { LogicalTarget, ReadbackStaging, VertexData, IndexData, UniformData }
+public enum class PlanResourceUsage { RenderAttachment, CopySource, CopyDestination, MapRead, Vertex, Index, Uniform }
 public enum class PlanResourceLifetime { FrameLocal }
 
 public class PlanResource private constructor(

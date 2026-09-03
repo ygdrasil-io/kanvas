@@ -5,14 +5,46 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat
+import org.graphiks.kanvas.gpu.plan.PlanOperationCapability
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureFormatSampleSupport
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureSampleCountSupport
 
 class GpuPlanCapabilityAdapterTest {
+    @Test
+    fun `adapter publishes exact W4 planning facts`() {
+        val snapshot = assertIs<GpuPlanCapabilityAdapterResult.Supported>(
+            capabilities(rendererFeatures = requiredPlanFeatures()).toPlanCapabilitySnapshot(GPUDeviceGenerationID(7)),
+        ).snapshot
+
+        assertEquals(256, snapshot.minUniformBufferOffsetAlignment)
+        assertEquals(1, snapshot.maxDynamicUniformBuffersPerPipelineLayout)
+        assertEquals(
+            setOf(
+                PlanOperationCapability.RenderPass,
+                PlanOperationCapability.CopyUpload,
+                PlanOperationCapability.UniformBuffer,
+                PlanOperationCapability.Readback,
+            ),
+            snapshot.supportedOperations(),
+        )
+        assertEquals(16_384, snapshot.bufferAllocationPolicy.vertexFloorBytes)
+    }
+
+    @Test
+    fun `adapter keeps missing renderer operations absent from the snapshot`() {
+        val snapshot = assertIs<GpuPlanCapabilityAdapterResult.Supported>(
+            capabilities(rendererFeatures = requiredPlanFeatures() - GPURendererFeature.UniformBuffer)
+                .toPlanCapabilitySnapshot(GPUDeviceGenerationID(7)),
+        ).snapshot
+
+        assertEquals(false, PlanOperationCapability.UniformBuffer in snapshot.supportedOperations())
+    }
+
     @Test
     fun `supported renderer capabilities become a handle-free W3 snapshot`() {
         val result = capabilities().toPlanCapabilitySnapshot(GPUDeviceGenerationID(7))
@@ -94,7 +126,16 @@ class GpuPlanCapabilityAdapterTest {
         }
     }
 
-    private fun capabilities() = GPUCapabilities(
+    private fun requiredPlanFeatures(): Set<GPURendererFeature> = setOf(
+        GPURendererFeature.RenderPass,
+        GPURendererFeature.CopyUpload,
+        GPURendererFeature.UniformBuffer,
+        GPURendererFeature.Readback,
+    )
+
+    private fun capabilities(
+        rendererFeatures: Set<GPURendererFeature> = requiredPlanFeatures(),
+    ) = GPUCapabilities(
         implementation = GPUImplementationIdentity("GPU", "test", "adapter", "device"),
         facts = emptyList(),
         snapshotId = "w3-test",
@@ -113,5 +154,6 @@ class GpuPlanCapabilityAdapterTest {
                 ),
             ),
         ),
+        rendererFeatures = rendererFeatures,
     )
 }

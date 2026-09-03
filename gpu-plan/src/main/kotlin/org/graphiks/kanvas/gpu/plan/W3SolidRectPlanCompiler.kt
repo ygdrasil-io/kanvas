@@ -303,6 +303,10 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
             target.colorSpace.name, target.colorSpace.transferFunction.name, target.colorSpace.gamut.name,
             capabilities.deviceGeneration.toString(), capabilities.maxTextureDimension2D.toString(), capabilities.maxBufferSizeBytes.toString(),
             capabilities.copyBytesPerRowAlignment.toString(), capabilities.supportedFormats().map { it.name }.sorted().joinToString(","),
+            capabilities.minUniformBufferOffsetAlignment.toString(), capabilities.maxDynamicUniformBuffersPerPipelineLayout.toString(),
+            capabilities.supportedOperations().map { it.name }.sorted().joinToString(","),
+            capabilities.bufferAllocationPolicy.vertexFloorBytes.toString(), capabilities.bufferAllocationPolicy.indexFloorBytes.toString(),
+            capabilities.bufferAllocationPolicy.uniformFloorBytes.toString(), capabilities.bufferAllocationPolicy.growth.name,
             budget.maxFrameLocalBytes.toString(),
         )
         val digest = MessageDigest.getInstance("SHA-256")

@@ -2,10 +2,16 @@ package org.graphiks.kanvas.gpu.renderer.planning
 
 import io.ygdrasil.webgpu.GPUTextureFormat
 import org.graphiks.kanvas.gpu.plan.PlanCapabilitySnapshot
+import org.graphiks.kanvas.gpu.plan.PlanBufferAllocationPolicy
 import org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat
+import org.graphiks.kanvas.gpu.plan.PlanOperationCapability
 import org.graphiks.kanvas.gpu.plan.W3PlanDiagnostics
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
+import org.graphiks.kanvas.gpu.renderer.resources.CORE_PRIMITIVE_FRAME_POOL_INDEX_FLOOR_BYTES
+import org.graphiks.kanvas.gpu.renderer.resources.CORE_PRIMITIVE_FRAME_POOL_UNIFORM_FLOOR_BYTES
+import org.graphiks.kanvas.gpu.renderer.resources.CORE_PRIMITIVE_FRAME_POOL_VERTEX_FLOOR_BYTES
 import org.graphiks.kanvas.render.ir.RenderDiagnostic
 import org.graphiks.kanvas.render.ir.RenderDiagnosticCode
 import org.graphiks.kanvas.render.ir.RenderDiagnosticDomain
@@ -30,6 +36,8 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
     )
     if (observedLimits.maxTextureDimension2D > Int.MAX_VALUE ||
         observedLimits.copyBytesPerRowAlignment > Int.MAX_VALUE ||
+        observedLimits.minUniformBufferOffsetAlignment > Int.MAX_VALUE ||
+        observedLimits.maxDynamicUniformBuffersPerPipelineLayout?.let { it > Int.MAX_VALUE } == true ||
         !observedLimits.copyBytesPerRowAlignment.isPositivePowerOfTwo()
     ) {
         return unsupported("Renderer capabilities cannot represent the W3 sRGB target contract.")
@@ -50,6 +58,23 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
                 maxBufferSizeBytes = maxBuffer,
                 copyBytesPerRowAlignment = observedLimits.copyBytesPerRowAlignment.toInt(),
                 supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+                minUniformBufferOffsetAlignment = observedLimits.minUniformBufferOffsetAlignment.toInt(),
+                maxDynamicUniformBuffersPerPipelineLayout =
+                    observedLimits.maxDynamicUniformBuffersPerPipelineLayout?.toInt() ?: 0,
+                supportedOperations = rendererFeatures.mapNotNull { feature ->
+                    when (feature) {
+                        GPURendererFeature.RenderPass -> PlanOperationCapability.RenderPass
+                        GPURendererFeature.CopyUpload -> PlanOperationCapability.CopyUpload
+                        GPURendererFeature.UniformBuffer -> PlanOperationCapability.UniformBuffer
+                        GPURendererFeature.Readback -> PlanOperationCapability.Readback
+                        else -> null
+                    }
+                }.toSet(),
+                bufferAllocationPolicy = PlanBufferAllocationPolicy.of(
+                    CORE_PRIMITIVE_FRAME_POOL_VERTEX_FLOOR_BYTES,
+                    CORE_PRIMITIVE_FRAME_POOL_INDEX_FLOOR_BYTES,
+                    CORE_PRIMITIVE_FRAME_POOL_UNIFORM_FLOOR_BYTES,
+                ),
             ),
         )
     } catch (_: IllegalArgumentException) {
