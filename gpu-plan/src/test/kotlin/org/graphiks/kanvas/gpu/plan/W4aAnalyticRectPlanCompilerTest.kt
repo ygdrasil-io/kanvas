@@ -92,6 +92,42 @@ class W4aAnalyticRectPlanCompilerTest {
     }
 
     @Test
+    fun `finite provenance metadata does not veto sealed W4a draws`() {
+        val metadata = listOf(
+            SceneCommand.SetTransform(Matrix3x3F32.rotation(0.25f)),
+            SceneCommand.SetTransform(Matrix3x3F32.skewing(0.25f, 0f)),
+            SceneCommand.SetTransform(Matrix3x3F32(persp0 = 0.1f)),
+            SceneCommand.SetClip(deviceClip(0f, 0f, 4f, 3f, antiAlias = true)),
+            SceneCommand.SetClip(deviceClip(0.5f, 0f, 4f, 3f, antiAlias = false)),
+            SceneCommand.SetClip(ClipStackNode.Operations.of(emptyList())),
+        )
+
+        assertIs<GpuPlanSelection.Candidate>(select(metadata + solidRect()))
+    }
+
+    @Test
+    fun `non finite provenance metadata remains invalid`() {
+        val invalidMetadata = listOf(
+            SceneCommand.SetTransform(Matrix3x3F32(tx = Float.NaN)),
+            SceneCommand.SetClip(deviceClip(Float.NaN, 0f, 4f, 3f, antiAlias = false)),
+            SceneCommand.Annotation.of(RectF32(Float.NaN, 0f, 4f, 3f), "fixture", "w4a"),
+        )
+
+        invalidMetadata.forEach { metadata ->
+            assertIs<GpuPlanSelection.InvalidScene>(select(listOf(metadata, solidRect())))
+        }
+    }
+
+    @Test
+    fun `wide integral I32 clip remains valid and scissors to the target`() {
+        val graph = ready(solidRect(
+            clip = deviceClip(-2_147_483_648f, 0f, 4f, 3f, antiAlias = false),
+        ))
+
+        assertEquals(RectI32(0, 0, 4, 3), assertIs<AnalyticRectDraw>(renderPass(graph).draws().single()).copyScissor())
+    }
+
+    @Test
     fun `W4a limits visual rectangles not metadata`() {
         val metadata = SceneCommand.Annotation.of(RectF32(0f, 0f, 4f, 3f), "fixture", "w4a")
         assertIs<GpuPlanSelection.Candidate>(select(List(512) { solidRect() } + metadata))

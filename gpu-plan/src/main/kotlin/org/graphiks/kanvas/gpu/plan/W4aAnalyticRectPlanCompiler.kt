@@ -125,14 +125,11 @@ public class W4aAnalyticRectPlanCompiler : GpuPlanCompiler {
                 is DrawRecognition.Gap -> return Recognition.Gap(draw.message)
                 is DrawRecognition.Invalid -> return Recognition.Invalid(draw.message)
             }
-            is SceneCommand.SetTransform -> when {
-                !finite(command.matrix) -> return Recognition.Invalid("Transform is non-finite")
-                !(command.matrix.isIdentity || command.matrix.isScaleTranslate()) -> return Recognition.Gap("Transform provenance is outside W4a")
+            is SceneCommand.SetTransform -> if (!finite(command.matrix)) {
+                return Recognition.Invalid("Transform is non-finite")
             }
-            is SceneCommand.SetClip -> when (val clip = recognizeClip(command.clip)) {
-                is ClipRecognition.Accepted -> Unit
-                is ClipRecognition.Gap -> return Recognition.Gap(clip.message)
-                is ClipRecognition.Invalid -> return Recognition.Invalid(clip.message)
+            is SceneCommand.SetClip -> if (!finiteMetadataClip(command.clip)) {
+                return Recognition.Invalid("Clip bounds are non-finite")
             }
             is SceneCommand.Annotation -> if (!finite(command.copyBounds())) return Recognition.Invalid("Annotation bounds are non-finite")
             else -> return Recognition.Gap("Scene command is outside W4a")
@@ -205,7 +202,7 @@ public class W4aAnalyticRectPlanCompiler : GpuPlanCompiler {
             if (long.toFloat() != value || long !in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong()) return null
             long.toInt()
         }
-        return RectI32(converted[0], converted[1], converted[2], converted[3]).takeUnless { it.isEmpty }
+        return RectI32(converted[0], converted[1], converted[2], converted[3]).takeUnless { it.isEmpty64() }
     }
 
     private fun RectI32.toRectF32(): RectF32 = RectF32(left.toFloat(), top.toFloat(), right.toFloat(), bottom.toFloat())
@@ -217,6 +214,10 @@ public class W4aAnalyticRectPlanCompiler : GpuPlanCompiler {
 
     private fun hasFractionalEdge(bounds: RectF32): Boolean = listOf(bounds.left, bounds.top, bounds.right, bounds.bottom)
         .any { value -> value.toLong().toFloat() != value }
+    private fun finiteMetadataClip(clip: ClipStackNode): Boolean = when (clip) {
+        ClipStackNode.Empty, is ClipStackNode.Operations -> true
+        is ClipStackNode.DeviceRect -> finite(clip.copyBounds())
+    }
     private fun finite(bounds: RectF32): Boolean = listOf(bounds.left, bounds.top, bounds.right, bounds.bottom).all(Float::isFinite)
     private fun finite(matrix: Matrix3x3F32): Boolean = listOf(matrix.sx, matrix.kx, matrix.tx, matrix.ky, matrix.sy, matrix.ty, matrix.persp0, matrix.persp1, matrix.persp2).all(Float::isFinite)
     private fun w4aBlend(blend: BlendNode): Boolean = when (blend) { BlendNode.SrcOver -> true; is BlendNode.Mode -> blend.mode == BlendMode.SRC_OVER; is BlendNode.Paint -> blend.mode == BlendMode.SRC_OVER && blend.blender == null; is BlendNode.Custom -> false }
