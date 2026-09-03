@@ -41,7 +41,7 @@ class GpuRenderBackendTest {
     }
 
     @Test
-    fun `semantic W3 classification is final before a runtime is acquired`() {
+    fun `selection returns W3 gaps and invalid scenes before GPU runtime acquisition`() {
         val backend = GpuRenderBackend(
             W3SolidRectPlanCompiler(),
             GpuRenderContext(ThrowingOwner()),

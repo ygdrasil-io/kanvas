@@ -39,6 +39,7 @@ import org.graphiks.kanvas.gpu.renderer.analysis.GPUCorePrimitiveRRectGeometryAu
 import org.graphiks.kanvas.gpu.renderer.analysis.corePrimitiveRRectGeometryAuthority
 import org.graphiks.kanvas.gpu.renderer.analysis.corePrimitiveRectGeometryAuthority
 import org.graphiks.kanvas.gpu.plan.PlanBudget
+import org.graphiks.kanvas.gpu.plan.GpuPlanSelection
 import org.graphiks.kanvas.gpu.plan.PlanBufferAllocationPolicy
 import org.graphiks.kanvas.gpu.plan.PlanCapabilitySnapshot
 import org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat
@@ -5583,24 +5584,22 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                 ),
             ),
         )
-        val graph = assertIs<RenderPlanResult.Ready<RenderGraph>>(
-            W3SolidRectPlanCompiler().plan(
-                scene,
-                RenderTargetDescriptor(scene.extent, ColorSpace.SRGB),
-                PlanCapabilitySnapshot.of(
-                    deviceGeneration = generation.value,
-                    maxTextureDimension2D = 2048,
-                    maxBufferSizeBytes = 1L shl 20,
-                    copyBytesPerRowAlignment = 256,
-                    supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
-                    minUniformBufferOffsetAlignment = 256,
-                    maxDynamicUniformBuffersPerPipelineLayout = 1,
-                    supportedOperations = setOf(PlanOperationCapability.RenderPass, PlanOperationCapability.Readback),
-                    bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 4_096, 4_096),
-                ),
-                PlanBudget(1024),
+        val graph = planW3(
+            scene,
+            RenderTargetDescriptor(scene.extent, ColorSpace.SRGB),
+            PlanCapabilitySnapshot.of(
+                deviceGeneration = generation.value,
+                maxTextureDimension2D = 2048,
+                maxBufferSizeBytes = 1L shl 20,
+                copyBytesPerRowAlignment = 256,
+                supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+                minUniformBufferOffsetAlignment = 256,
+                maxDynamicUniformBuffersPerPipelineLayout = 1,
+                supportedOperations = setOf(PlanOperationCapability.RenderPass, PlanOperationCapability.Readback),
+                bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 4_096, 4_096),
             ),
-        ).plan
+            PlanBudget(1024),
+        )
         val taskList = assertIs<GpuPlanLoweringResult.Lowered>(
             GpuPlanTaskListLowerer().lower(
                 GpuPlanLoweringRequest(
@@ -7657,5 +7656,16 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
     private companion object {
         val TARGET = GPUPixelBounds(0, 0, 16, 16)
         val EMPTY_UPLOAD_SNAPSHOT = ByteArray(0)
+    }
+
+    private fun planW3(
+        scene: SceneSnapshot,
+        target: RenderTargetDescriptor,
+        capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget,
+    ): RenderGraph {
+        val compiler = W3SolidRectPlanCompiler()
+        val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target)).candidate
+        return assertIs<RenderPlanResult.Ready<RenderGraph>>(compiler.plan(candidate, capabilities, budget)).plan
     }
 }

@@ -12,6 +12,7 @@ import org.graphiks.kanvas.gpu.plan.AttachmentStorePlan
 import org.graphiks.kanvas.gpu.plan.BlendPlan
 import org.graphiks.kanvas.gpu.plan.CoveragePlan
 import org.graphiks.kanvas.gpu.plan.PlanBudget
+import org.graphiks.kanvas.gpu.plan.GpuPlanSelection
 import org.graphiks.kanvas.gpu.plan.PlanBufferAllocationPolicy
 import org.graphiks.kanvas.gpu.plan.PlanCapabilitySnapshot
 import org.graphiks.kanvas.gpu.plan.PlanId
@@ -459,14 +460,12 @@ class GpuPlanTaskListLowererTest {
                 ),
             ),
         )
-        val graph = assertIs<RenderPlanResult.Ready<RenderGraph>>(
-            W3SolidRectPlanCompiler().plan(
-                scene,
-                RenderTargetDescriptor(scene.extent, ColorSpace.SRGB),
-                w3PlanCapabilities(),
-                PlanBudget(1024),
-            ),
-        ).plan
+        val graph = planW3(
+            scene,
+            RenderTargetDescriptor(scene.extent, ColorSpace.SRGB),
+            w3PlanCapabilities(),
+            PlanBudget(1024),
+        )
 
         val packet = assertIs<GpuPlanLoweringResult.Lowered>(lowerer.lower(validRequest(graph))).taskList
             .tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
@@ -1010,14 +1009,12 @@ class GpuPlanTaskListLowererTest {
                     ),
                 ),
             )
-            return assertIs<RenderPlanResult.Ready<RenderGraph>>(
-                W3SolidRectPlanCompiler().plan(
-                    scene,
-                    RenderTargetDescriptor(scene.extent, ColorSpace.SRGB),
-                    w3PlanCapabilities(),
-                    PlanBudget(1024),
-                ),
-            ).plan
+            return planW3(
+                scene,
+                RenderTargetDescriptor(scene.extent, ColorSpace.SRGB),
+                w3PlanCapabilities(),
+                PlanBudget(1024),
+            )
         }
         val target = PlanResource.of(
             PlanResourceRole.LogicalTarget, targetOrdinal, PlanResourceKind.Texture2D,
@@ -1096,14 +1093,12 @@ class GpuPlanTaskListLowererTest {
                 )
             },
         )
-        return assertIs<RenderPlanResult.Ready<RenderGraph>>(
-            W3SolidRectPlanCompiler().plan(
-                scene,
-                RenderTargetDescriptor(scene.extent, ColorSpace.SRGB),
-                w3PlanCapabilities(maxBufferSizeBytes = maxBufferSize),
-                PlanBudget(1024),
-            ),
-        ).plan
+        return planW3(
+            scene,
+            RenderTargetDescriptor(scene.extent, ColorSpace.SRGB),
+            w3PlanCapabilities(maxBufferSizeBytes = maxBufferSize),
+            PlanBudget(1024),
+        )
     }
 
     private fun copyPacket(
@@ -1196,4 +1191,15 @@ class GpuPlanTaskListLowererTest {
         supportedOperations = setOf(PlanOperationCapability.RenderPass, PlanOperationCapability.Readback),
         bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 4_096, 4_096),
     )
+
+    private fun planW3(
+        scene: SceneSnapshot,
+        target: RenderTargetDescriptor,
+        capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget,
+    ): RenderGraph {
+        val compiler = W3SolidRectPlanCompiler()
+        val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target)).candidate
+        return assertIs<RenderPlanResult.Ready<RenderGraph>>(compiler.plan(candidate, capabilities, budget)).plan
+    }
 }

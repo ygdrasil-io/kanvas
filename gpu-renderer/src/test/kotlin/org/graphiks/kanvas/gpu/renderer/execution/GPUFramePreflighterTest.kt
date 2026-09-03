@@ -13,6 +13,7 @@ import java.nio.ByteOrder
 import org.graphiks.kanvas.gpu.renderer.analysis.corePrimitiveRectGeometryAuthority
 import org.graphiks.kanvas.gpu.renderer.analysis.corePrimitiveRRectGeometryAuthority
 import org.graphiks.kanvas.gpu.plan.PlanBudget
+import org.graphiks.kanvas.gpu.plan.GpuPlanSelection
 import org.graphiks.kanvas.gpu.plan.PlanBufferAllocationPolicy
 import org.graphiks.kanvas.gpu.plan.PlanCapabilitySnapshot
 import org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat
@@ -7816,14 +7817,12 @@ class GPUFramePreflighterTest {
                 ),
             ),
         )
-        val graph = assertIs<RenderPlanResult.Ready<RenderGraph>>(
-            W3SolidRectPlanCompiler().plan(
-                scene,
-                RenderTargetDescriptor(scene.extent, ColorSpace.SRGB),
-                planCapabilities,
-                PlanBudget(1024),
-            ),
-        ).plan
+        val graph = planW3(
+            scene,
+            RenderTargetDescriptor(scene.extent, ColorSpace.SRGB),
+            planCapabilities,
+            PlanBudget(1024),
+        )
         val taskList = assertIs<GpuPlanLoweringResult.Lowered>(
             GpuPlanTaskListLowerer().lower(
                 GpuPlanLoweringRequest(
@@ -10947,4 +10946,15 @@ class GPUFramePreflighterTest {
         configuredAggregateBudgetBytes = 1L shl 30,
         diagnostic = null,
     )
+
+    private fun planW3(
+        scene: SceneSnapshot,
+        target: RenderTargetDescriptor,
+        capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget,
+    ): RenderGraph {
+        val compiler = W3SolidRectPlanCompiler()
+        val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target)).candidate
+        return assertIs<RenderPlanResult.Ready<RenderGraph>>(compiler.plan(candidate, capabilities, budget)).plan
+    }
 }

@@ -37,8 +37,27 @@ class W3SolidRectPlanCompilerTest {
     private val compiler: GpuPlanCompiler = W3SolidRectPlanCompiler()
 
     @Test
+    fun `W3 keeps its historical total command limit`() {
+        assertIs<GpuPlanSelection.Candidate>(compiler.select(sceneWithTotalCommands(512), target(4, 4)))
+        assertIs<GpuPlanSelection.NotCandidate>(compiler.select(sceneWithTotalCommands(513), target(4, 4)))
+    }
+
+    @Test
+    fun `candidate remains bound to its exact scene and target`() {
+        val sceneA = sceneOf(solidRect(0f, 0f, 4f, 4f, 0xFFFFFFFFu))
+        val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(sceneA, target(4, 4))).candidate
+        val foreign = object : GpuPlanCandidate {
+            override val capabilityId: String = candidate.capabilityId
+            override val sceneCanonicalId = candidate.sceneCanonicalId
+            override val target: RenderTargetDescriptor = candidate.target
+        }
+
+        assertIs<RenderPlanResult.InvalidScene>(compiler.plan(foreign, supportedCapabilities(), PlanBudget(4096)))
+    }
+
+    @Test
     fun `two overlapping translucent solid rects produce a ready graph`() {
-        val result = compiler.plan(
+        val result = plan(
             scene = SceneSnapshot.of(
                 SceneExtent(16, 8), ColorSpace.SRGB,
                 listOf(solidRect(0f, 0f, 8f, 8f, 0x80FF0000u), solidRect(4f, 0f, 12f, 8f, 0x800000FFu)),
@@ -134,7 +153,7 @@ class W3SolidRectPlanCompilerTest {
 
     @Test
     fun `coordinates beyond the Int range are geometry gaps`() {
-        val result = compiler.plan(
+        val result = plan(
             sceneOf(solidRect(0f, 0f, 2_147_483_648f, 2f, 0xFFFFFFFFu)),
             target(4, 4), supportedCapabilities(), PlanBudget(4096),
         )
@@ -181,7 +200,7 @@ class W3SolidRectPlanCompilerTest {
         )
 
         invalids.forEach { drawNode ->
-            assertEquals("w3.command.not_migrated", diagnosticCode(compiler.plan(sceneOf(SceneCommand.Draw(drawNode)), target(4, 4), supportedCapabilities(), PlanBudget(4096))))
+            assertEquals("w3.command.not_migrated", diagnosticCode(plan(sceneOf(SceneCommand.Draw(drawNode)), target(4, 4), supportedCapabilities(), PlanBudget(4096))))
         }
     }
 
@@ -199,7 +218,7 @@ class W3SolidRectPlanCompilerTest {
         )
 
         listOf(gradient, path).forEach { draw ->
-            assertEquals("w3.command.not_migrated", diagnosticCode(compiler.plan(sceneOf(SceneCommand.Draw(draw)), target(4, 4), supportedCapabilities(), PlanBudget(4096))))
+            assertEquals("w3.command.not_migrated", diagnosticCode(plan(sceneOf(SceneCommand.Draw(draw)), target(4, 4), supportedCapabilities(), PlanBudget(4096))))
         }
     }
 
@@ -224,7 +243,7 @@ class W3SolidRectPlanCompilerTest {
 
     @Test
     fun `fractional DeviceRect reports clip pixel alignment`() {
-        val result = compiler.plan(
+        val result = plan(
             sceneOf(solidRect(0f, 0f, 2f, 2f, 0xFFFFFFFFu, clip = deviceClip(0.5f, 0f, 2f, 2f))),
             target(4, 4), supportedCapabilities(), PlanBudget(4096),
         )
@@ -236,17 +255,17 @@ class W3SolidRectPlanCompilerTest {
     fun `scene target contradictions are invalid and recognized capability failures are terminal`() {
         val scene = sceneOf(solidRect(0f, 0f, 2f, 2f, 0xFFFFFFFFu))
         val nonSrgbScene = SceneSnapshot.of(SceneExtent(4, 4), ColorSpace.LINEAR_SRGB, listOf(solidRect(0f, 0f, 2f, 2f, 0xFFFFFFFFu)))
-        assertIs<RenderPlanResult.InvalidScene>(compiler.plan(scene, target(5, 4), supportedCapabilities(), PlanBudget(4096)))
-        assertIs<RenderPlanResult.InvalidScene>(compiler.plan(scene, RenderTargetDescriptor(SceneExtent(4, 4), ColorSpace.LINEAR_SRGB), supportedCapabilities(), PlanBudget(4096)))
-        assertIs<RenderPlanResult.InvalidScene>(compiler.plan(nonSrgbScene, target(4, 4), supportedCapabilities(), PlanBudget(4096)))
-        assertIs<RenderPlanResult.GapNotMigrated>(compiler.plan(nonSrgbScene, RenderTargetDescriptor(SceneExtent(4, 4), ColorSpace.LINEAR_SRGB), supportedCapabilities(), PlanBudget(4096)))
-        assertIs<RenderPlanResult.GapOnPromotedScope>(compiler.plan(scene, target(4, 4), supportedCapabilities(maxTextureDimension2D = 3), PlanBudget(4096)))
-        assertIs<RenderPlanResult.GapOnPromotedScope>(compiler.plan(scene, target(4, 4), supportedCapabilities(formats = emptySet()), PlanBudget(4096)))
+        assertIs<RenderPlanResult.InvalidScene>(plan(scene, target(5, 4), supportedCapabilities(), PlanBudget(4096)))
+        assertIs<RenderPlanResult.InvalidScene>(plan(scene, RenderTargetDescriptor(SceneExtent(4, 4), ColorSpace.LINEAR_SRGB), supportedCapabilities(), PlanBudget(4096)))
+        assertIs<RenderPlanResult.InvalidScene>(plan(nonSrgbScene, target(4, 4), supportedCapabilities(), PlanBudget(4096)))
+        assertIs<RenderPlanResult.GapNotMigrated>(plan(nonSrgbScene, RenderTargetDescriptor(SceneExtent(4, 4), ColorSpace.LINEAR_SRGB), supportedCapabilities(), PlanBudget(4096)))
+        assertIs<RenderPlanResult.GapOnPromotedScope>(plan(scene, target(4, 4), supportedCapabilities(maxTextureDimension2D = 3), PlanBudget(4096)))
+        assertIs<RenderPlanResult.GapOnPromotedScope>(plan(scene, target(4, 4), supportedCapabilities(formats = emptySet()), PlanBudget(4096)))
     }
 
     @Test
     fun `staging buffer capability is checked after semantic promotion`() {
-        val result = compiler.plan(
+        val result = plan(
             sceneOf(solidRect(0f, 0f, 4f, 4f, 0xFFFFFFFFu)), target(4, 4),
             supportedCapabilities(maxBufferSizeBytes = 1_023), PlanBudget(4096),
         )
@@ -260,13 +279,13 @@ class W3SolidRectPlanCompilerTest {
         val nonFiniteGeometry = sceneOf(solidRect(Float.NaN, 0f, 2f, 2f, 0xFFFFFFFFu))
         val nonFiniteTransform = sceneOf(solidRect(0f, 0f, 2f, 2f, 0xFFFFFFFFu, transform = Matrix3x3F32(tx = Float.POSITIVE_INFINITY)))
 
-        assertIs<RenderPlanResult.InvalidScene>(compiler.plan(nonFiniteGeometry, target(4, 4), supportedCapabilities(), PlanBudget(4096)))
-        assertIs<RenderPlanResult.InvalidScene>(compiler.plan(nonFiniteTransform, target(4, 4), supportedCapabilities(), PlanBudget(4096)))
+        assertIs<RenderPlanResult.InvalidScene>(plan(nonFiniteGeometry, target(4, 4), supportedCapabilities(), PlanBudget(4096)))
+        assertIs<RenderPlanResult.InvalidScene>(plan(nonFiniteTransform, target(4, 4), supportedCapabilities(), PlanBudget(4096)))
     }
 
     @Test
     fun `budget excess is resource limit exceeded`() {
-        val result = compiler.plan(sceneOf(solidRect(0f, 0f, 4f, 4f, 0xFFFFFFFFu)), target(4, 4), supportedCapabilities(), PlanBudget(1))
+        val result = plan(sceneOf(solidRect(0f, 0f, 4f, 4f, 0xFFFFFFFFu)), target(4, 4), supportedCapabilities(), PlanBudget(1))
 
         assertIs<RenderPlanResult.ResourceLimitExceeded>(result)
     }
@@ -344,13 +363,24 @@ class W3SolidRectPlanCompilerTest {
         target: RenderTargetDescriptor = target(scene.extent.width, scene.extent.height),
         capabilities: PlanCapabilitySnapshot = supportedCapabilities(),
         budget: PlanBudget = PlanBudget(4096),
-    ): RenderGraph = assertIs<RenderPlanResult.Ready<RenderGraph>>(compiler.plan(scene, target, capabilities, budget)).plan
+    ): RenderGraph = assertIs<RenderPlanResult.Ready<RenderGraph>>(plan(scene, target, capabilities, budget)).plan
+
+    private fun plan(
+        scene: SceneSnapshot,
+        target: RenderTargetDescriptor,
+        capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget,
+    ): RenderPlanResult<RenderGraph> = when (val selected = compiler.select(scene, target)) {
+        is GpuPlanSelection.Candidate -> compiler.plan(selected.candidate, capabilities, budget)
+        is GpuPlanSelection.NotCandidate -> RenderPlanResult.GapNotMigrated(selected.diagnostics())
+        is GpuPlanSelection.InvalidScene -> RenderPlanResult.InvalidScene(selected.diagnostics())
+    }
 
     private fun assertGap(
         scene: SceneSnapshot,
         target: RenderTargetDescriptor = RenderTargetDescriptor(scene.extent, scene.colorSpace),
     ) {
-        assertIs<RenderPlanResult.GapNotMigrated>(compiler.plan(scene, target, supportedCapabilities(), PlanBudget(4096)))
+        assertIs<RenderPlanResult.GapNotMigrated>(plan(scene, target, supportedCapabilities(), PlanBudget(4096)))
     }
 
     private fun firstDraw(graph: RenderGraph): SolidRectDraw = assertIs<PlanPass.RenderPass>(graph.passes().first())
@@ -359,6 +389,12 @@ class W3SolidRectPlanCompilerTest {
 
     private fun sceneOf(vararg commands: SceneCommand): SceneSnapshot =
         SceneSnapshot.of(SceneExtent(4, 4), ColorSpace.SRGB, commands.toList())
+
+    private fun sceneWithTotalCommands(count: Int): SceneSnapshot = SceneSnapshot.of(
+        SceneExtent(4, 4),
+        ColorSpace.SRGB,
+        List(count) { SceneCommand.DrawColor(ColorARGB.White, BlendMode.SRC_OVER) },
+    )
 
     private fun target(width: Int, height: Int, label: String? = null): RenderTargetDescriptor =
         RenderTargetDescriptor(SceneExtent(width, height), ColorSpace.SRGB, label)
