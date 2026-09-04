@@ -22,6 +22,32 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity
 
 class GPUWgpu4kCorePrimitiveFramePoolTest {
     @Test
+    fun `exact capacity reservation materializes W4a rounded capacities without reusing larger slot`() {
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, FakeFactory())
+        val larger = pool.acquire(
+            requirements(vertexBytes = 16_385L, indexBytes = 4_097L, uniformBytes = 4_097L),
+        ).acquiredLease()
+        assertEquals(32_768L, larger.capacities.vertexBytes)
+        assertEquals(8_192L, larger.capacities.indexBytes)
+        assertEquals(8_192L, larger.capacities.uniformBytes)
+        larger.rollbackBeforeSubmit()
+
+        val expected = GPUWgpu4kCorePrimitiveFramePoolCapacities(16_384L, 4_096L, 4_096L)
+        val exact = pool.acquire(
+            requirements(
+                vertexBytes = 16_384L,
+                indexBytes = 4_096L,
+                uniformBytes = 4_096L,
+                expectedCapacities = expected,
+            ),
+        ).acquiredLease()
+
+        assertEquals(expected, exact.capacities)
+        exact.rollbackBeforeSubmit()
+        pool.close()
+    }
+
+    @Test
     fun `4x path or clip D24S8 requirements match the exact multisample color frame`() {
         val path = pathDepthStencil(32, 24, sampleCount = 4)
         val clip = clipDepthStencil(32, 24, sampleCount = 4)
@@ -2041,6 +2067,7 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
         vertexBytes: Long = 1L,
         indexBytes: Long = 1L,
         uniformBytes: Long = 1L,
+        expectedCapacities: GPUWgpu4kCorePrimitiveFramePoolCapacities? = null,
         pathDepthStencil: GPUWgpu4kCorePrimitivePathDepthStencilRequirement? = null,
         clipDepthStencil: GPUWgpu4kCorePrimitiveClipDepthStencilRequirement? = null,
         coverageMask: GPUWgpu4kCorePrimitiveCoverageMaskRequirement? = null,
@@ -2056,6 +2083,7 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
         vertexBytes = vertexBytes,
         indexBytes = indexBytes,
         uniformBytes = uniformBytes,
+        expectedCapacities = expectedCapacities,
         pathDepthStencil = pathDepthStencil,
         componentIdentity = componentIdentity,
         clipDepthStencil = clipDepthStencil,
