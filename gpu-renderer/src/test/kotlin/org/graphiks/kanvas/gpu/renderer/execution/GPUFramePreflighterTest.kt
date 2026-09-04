@@ -345,6 +345,25 @@ class GPUFramePreflighterTest {
     }
 
     @Test
+    fun `sealed W4b scratch rejects a foreign negative category total`() {
+        val fixture = w4bFixture()
+        val baseline = fixture.framePlan.memoryBudget
+        val forged = fixture.framePlan.withMemoryBudget(
+            baseline.copy(
+                categoryTotals = baseline.categoryTotals +
+                    (GPUFrameMemoryCategory.FrameLocalMsaaColor to -1L),
+            ),
+        )
+
+        assertEquals(
+            "invalid.preflight.w4b_session_scratch",
+            assertIs<GPUFramePreflightResult.Refused>(
+                preflightW4b(forged, fixture.capabilities),
+            ).diagnostic.code.value,
+        )
+    }
+
+    @Test
     fun `W4b Uniform80 scratch rejects a 79 byte slot at public construction`() {
         val source = requireNotNull(
             w4bFixture().framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()

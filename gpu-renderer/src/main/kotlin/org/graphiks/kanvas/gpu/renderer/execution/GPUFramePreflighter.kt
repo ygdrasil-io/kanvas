@@ -3940,6 +3940,15 @@ internal class GPUFramePreflighter(
                 null,
             ),
         )
+        val expectedCategoryTotals = try {
+            GPUFrameMemoryCategory.entries.associateWith { category ->
+                expectedAllocations
+                    .filter { allocation -> allocation.category == category }
+                    .fold(0L) { total, allocation -> Math.addExact(total, allocation.bytes) }
+            }
+        } catch (_: ArithmeticException) {
+            return false
+        }
         if (scratch.uniformPlan.totalBytes !in 1L..Int.MAX_VALUE.toLong()) return false
         val packedUniforms = ByteArray(scratch.uniformPlan.totalBytes.toInt())
         val payloads = packets.mapIndexed { index, packet ->
@@ -4048,10 +4057,7 @@ internal class GPUFramePreflighter(
             framePlan.memoryBudget.diagnostic == null &&
             framePlan.memoryBudget.targetResidentBytes == targetBytes &&
             framePlan.memoryBudget.peakFrameTransientBytes == transientBytes &&
-            framePlan.memoryBudget.categoryTotals.keys == GPUFrameMemoryCategory.entries.toSet() &&
-            framePlan.memoryBudget.categoryTotals[GPUFrameMemoryCategory.CanonicalTarget] == targetBytes &&
-            framePlan.memoryBudget.categoryTotals[GPUFrameMemoryCategory.ReadbackStaging] == stagingBytes &&
-            framePlan.memoryBudget.categoryTotals[GPUFrameMemoryCategory.ReusableScratch] == scratchBytes &&
+            framePlan.memoryBudget.categoryTotals == expectedCategoryTotals &&
             framePlan.memoryBudget.configuredAggregateBudgetBytes >= requiredAggregateBudgetBytes &&
             framePlan.memoryBudget.allocations == expectedAllocations
     }
