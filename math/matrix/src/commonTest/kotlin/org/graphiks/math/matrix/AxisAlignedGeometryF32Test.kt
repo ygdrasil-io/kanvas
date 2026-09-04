@@ -3,9 +3,12 @@ package org.graphiks.math.matrix
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.math.geometry.RRectF32
+import org.graphiks.math.geometry.RRectNormalizationF32Result
 import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.geometry.normalizeForAnalyticFillF32
 
 class AxisAlignedGeometryF32Test {
     @Test
@@ -42,5 +45,30 @@ class AxisAlignedGeometryF32Test {
         assertFailsWith<IllegalArgumentException> {
             Matrix3x3F32.of(1f, 0f, 0f, 0f, 1f, 0f, 0.1f, 0f, 1f).mapAxisAlignedRect(rect)
         }
+    }
+
+    @Test
+    fun `maps reflected rrect corners before analytic normalization`() {
+        val source = RRectF32.of(
+            rect = RectF32(0f, 0f, 20f, 20f),
+            topLeft = CornerRadiiF32.of(1f, 2f),
+            topRight = CornerRadiiF32.of(3f, 4f),
+            bottomRight = CornerRadiiF32.of(5f, 6f),
+            bottomLeft = CornerRadiiF32.of(7f, 8f),
+        )
+        val device = source.mapAxisAligned(Matrix3x3F32.scaling(-2f, 3f))
+
+        assertEquals(CornerRadiiF32.of(6f, 12f), device.topLeft)
+        assertEquals(CornerRadiiF32.of(2f, 6f), device.topRight)
+        assertEquals(CornerRadiiF32.of(14f, 24f), device.bottomRight)
+        assertEquals(CornerRadiiF32.of(10f, 18f), device.bottomLeft)
+
+        val normalized = (device.normalizeForAnalyticFillF32() as RRectNormalizationF32Result.Accepted).shape
+        val width = normalized.rect.right.toDouble() - normalized.rect.left.toDouble()
+        val height = normalized.rect.bottom.toDouble() - normalized.rect.top.toDouble()
+        assertTrue(normalized.topLeft.x.toDouble() + normalized.topRight.x.toDouble() <= width)
+        assertTrue(normalized.bottomLeft.x.toDouble() + normalized.bottomRight.x.toDouble() <= width)
+        assertTrue(normalized.topLeft.y.toDouble() + normalized.bottomLeft.y.toDouble() <= height)
+        assertTrue(normalized.topRight.y.toDouble() + normalized.bottomRight.y.toDouble() <= height)
     }
 }
