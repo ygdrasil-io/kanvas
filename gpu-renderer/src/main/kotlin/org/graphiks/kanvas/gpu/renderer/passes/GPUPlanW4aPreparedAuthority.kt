@@ -164,6 +164,21 @@ internal class W4aSessionScratchV1(
     internal companion object {
         const val SOURCE_LABEL: String = "core-primitive-analytic-shape-uniform-pass"
         const val UNIFORM_PAYLOAD_BYTES: Long = 80L
+
+        /** Checked canonical dynamic-uniform stride for the fixed Uniform80 ABI. */
+        fun canonicalUniformStrideOrNull(minimumAlignmentBytes: Long): Long? {
+            if (minimumAlignmentBytes <= 0L) return null
+            return try {
+                val remainder = UNIFORM_PAYLOAD_BYTES % minimumAlignmentBytes
+                if (remainder == 0L) UNIFORM_PAYLOAD_BYTES else Math.addExact(
+                    UNIFORM_PAYLOAD_BYTES,
+                    minimumAlignmentBytes - remainder,
+                )
+            } catch (_: ArithmeticException) {
+                null
+            }
+        }
+
         private const val VERTEX_BYTES_PER_DRAW: Long = 32L
         private const val INDEX_BYTES_PER_DRAW: Long = 24L
     }

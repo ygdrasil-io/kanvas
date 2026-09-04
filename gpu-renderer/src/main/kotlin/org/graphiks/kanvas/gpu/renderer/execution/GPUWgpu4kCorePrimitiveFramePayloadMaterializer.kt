@@ -1684,6 +1684,12 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             "invalid.native-core-primitive.w4a-limits",
             "W4a requires an observed dynamic-uniform limit.",
         )
+        val expectedUniformStride = W4aSessionScratchV1.canonicalUniformStrideOrNull(
+            limits.minUniformBufferOffsetAlignment,
+        ) ?: return refused(
+            "invalid.native-core-primitive.w4a-limits",
+            "W4a requires a valid observed uniform alignment.",
+        )
         val targetFormat = framePlan.corePrimitiveSceneTargetDescriptor(renderStep.target)?.format
             ?: return refused("invalid.native-core-primitive.w4a-target", "W4a target descriptor is missing.")
         val renderScope = encoderPlan.scopes.singleOrNull {
@@ -1740,7 +1746,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             scratch.maxBufferSize != maxBufferSize ||
             scratch.maxDynamicUniformBuffersPerPipelineLayout != maxDynamicUniformBuffers ||
             scratch.targetBounds.left != 0 || scratch.targetBounds.top != 0 ||
-            scratch.uniformPlan.alignmentBytes != limits.minUniformBufferOffsetAlignment ||
+            scratch.uniformStrideBytes != expectedUniformStride ||
+            scratch.uniformPlan.alignmentBytes != expectedUniformStride ||
             scratch.uniformPlan.deviceGeneration != generationSeal.deviceGeneration.value ||
             scratch.uniformPlan.totalBytes != scratch.uniformUsefulBytes ||
             scratch.uniformPlan.sourceLabel != W4aSessionScratchV1.SOURCE_LABEL ||

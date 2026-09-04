@@ -3820,6 +3820,9 @@ internal class GPUFramePreflighter(
         val limits = capabilities.limits ?: return false
         val maxBufferSize = limits.maxBufferSize ?: return false
         val maxDynamicUniformBuffers = limits.maxDynamicUniformBuffersPerPipelineLayout ?: return false
+        val expectedUniformStride = W4aSessionScratchV1.canonicalUniformStrideOrNull(
+            limits.minUniformBufferOffsetAlignment,
+        ) ?: return false
         val packets = render.drawPackets
         val firstSemantic = packets.firstOrNull()?.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive
             ?: return false
@@ -4031,7 +4034,8 @@ internal class GPUFramePreflighter(
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 &&
             scratch.vertexUsefulBytes == packets.size.toLong() * 32L &&
             scratch.indexUsefulBytes == packets.size.toLong() * 24L &&
-            scratch.uniformStrideBytes == limits.minUniformBufferOffsetAlignment &&
+            scratch.uniformStrideBytes == expectedUniformStride &&
+            scratch.uniformPlan.alignmentBytes == expectedUniformStride &&
             scratch.uniformUsefulBytes == packets.size.toLong() * scratch.uniformStrideBytes &&
             scratch.uniformPlan.hasExactPayloads(
                 W4aSessionScratchV1.SOURCE_LABEL,

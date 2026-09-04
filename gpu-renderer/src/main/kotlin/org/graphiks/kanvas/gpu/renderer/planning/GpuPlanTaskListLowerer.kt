@@ -90,7 +90,7 @@ import org.graphiks.kanvas.render.ir.RenderDiagnosticCode
 import org.graphiks.kanvas.render.ir.RenderDiagnosticDomain
 import org.graphiks.kanvas.render.ir.RenderDiagnosticSeverity
 
-/** Converts exactly the closed W3 graph into prepared frame tasks; it never invokes legacy planning. */
+/** Converts closed W3 or W4a graphs into prepared frame tasks without invoking legacy planning. */
 public class GpuPlanTaskListLowerer {
     public fun lower(request: GpuPlanLoweringRequest): GpuPlanLoweringResult {
         val current = when (val adapted = request.capabilities.toPlanCapabilitySnapshot(request.deviceGeneration)) {

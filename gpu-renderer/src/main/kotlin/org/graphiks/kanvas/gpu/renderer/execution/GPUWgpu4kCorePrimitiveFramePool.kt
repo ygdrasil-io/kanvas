@@ -561,7 +561,7 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
             it.state == SlotState.Available && it.handles.sampleCount == requirements.sampleCount
         }
         val exactCapacityEligible = requirements.expectedCapacities?.let { expected ->
-            available.filter { slot -> expected.contains(slot.capacities) }
+            available.filter { slot -> slot.capacities == expected }
         } ?: available
         var slot = selectAvailableSlot(
             exactCapacityEligible,
@@ -674,9 +674,16 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
             }
         }
         val acquiredSlot = requireNotNull(slot)
-        check(requirements.expectedCapacities == null ||
-            acquiredSlot.capacities == requirements.expectedCapacities
-        ) { "Exact CorePrimitive pool acquisition retained a non-exact capacity" }
+        if (requirements.expectedCapacities != null &&
+            acquiredSlot.capacities != requirements.expectedCapacities
+        ) {
+            return GPUWgpu4kCorePrimitiveFramePoolCheckout.Refused(
+                GPUWgpu4kCorePrimitiveFramePoolRefusal.InvalidCapacity(
+                    GPUWgpu4kCorePrimitiveFramePoolResource.VertexBuffer,
+                    requirements.vertexBytes,
+                ),
+            )
+        }
         if (requirements.coverageMask != null && previousCoverageMaskTexture != null &&
             acquiredSlot.handles.coverageMask?.texture === previousCoverageMaskTexture
         ) {

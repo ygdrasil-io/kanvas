@@ -26,7 +26,7 @@ La preuve publique de frontière sur une cible 1×1 fixe les capacités exactes 
 
 ## Preuves pixels publiques
 
-Les 15 tests ciblés de `GPUPlanSurfacePixelTest` passent. Ils comparent les bytes de `Surface.render()` à l'oracle CPU indépendant W4a : aire de coverage fractionnaire, `SrcOver` prémultiplié linear, quantification `rgba8unorm-srgb` entre draws, scissor qui coupe une frange, ordonnancement RGBA/BGRA, frame mixte intégrale/fractionnaire, scène legacy non admise et frontières 512/513. Les frames W4a vérifient via le résultat public les scopes natifs exactement `{Render, Readback}`; la preuve legacy ne leur impose aucune forme interne.
+Les 15 tests ciblés de `GPUPlanSurfacePixelTest` passent. Un test vérifie directement l'oracle W4a avec des bytes calculés à la main. Six scènes `Surface` W4a comparent leurs pixels à cet oracle indépendant : coverage fractionnaire, `SrcOver` prémultiplié linear, quantification `rgba8unorm-srgb` entre draws, scissor, ordonnancement RGBA/BGRA, frame mixte et frontière 512. Six scènes W3 comparent leurs pixels à l'oracle W3. Les deux scènes legacy restantes (513 draws et `SRC` non admis) vérifient des bytes fixes connus. Les frames W4a vérifient via le résultat public les scopes natifs exactement `{Render, Readback}`; la preuve legacy ne leur impose aucune forme interne.
 
 ## Commandes fraîches
 

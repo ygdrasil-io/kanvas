@@ -365,6 +365,39 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
     }
 
     @Test
+    fun `W4a Uniform80 aligns a 64 byte device minimum to canonical 128 byte slots`() {
+        val fixture = w4aFixture(minUniformBufferOffsetAlignment = 64L)
+        val materializer = GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
+            fixture.native.device,
+            fixture.native.queue,
+            fixture.target,
+            fixture.cache,
+            fixture.limits,
+        )
+        try {
+            val packets = fixture.plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+                .single().drawPackets
+            val scratch = requireNotNull(
+                packets.first().corePrimitivePreparedAuthority?.w4aSessionScratch,
+            )
+
+            assertEquals(128L, scratch.uniformStrideBytes)
+            assertEquals(listOf(0L, 128L), scratch.uniformPlan.slots.map { it.alignedOffset })
+            assertIs<GPUPreparedNativeFramePayloadMaterialization.Materialized>(
+                materializer.materializeReusable(
+                    fixture.plan,
+                    fixture.encoderPlan,
+                    fixture.resources,
+                    fixture.generationSeal,
+                ),
+            ).draft.disposeBeforeRegistration()
+        } finally {
+            materializer.close()
+            fixture.close()
+        }
+    }
+
+    @Test
     fun `W4a uploads raster-covering vertices while Uniform80 retains fractional device bounds`() {
         val fixture = w4aFixture()
         val materializer = GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
@@ -5985,7 +6018,9 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         )
     }
 
-    private fun w4aFixture(): Fixture {
+    private fun w4aFixture(
+        minUniformBufferOffsetAlignment: Long = 256L,
+    ): Fixture {
         val generation = GPUDeviceGenerationID(7)
         val capabilities = GPUCapabilities(
             implementation = GPUImplementationIdentity("GPU", "w4a", "adapter", "device"),
@@ -5996,7 +6031,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             limits = GPULimits(
                 maxTextureDimension2D = 2048,
                 copyBytesPerRowAlignment = 256,
-                minUniformBufferOffsetAlignment = 256,
+                minUniformBufferOffsetAlignment = minUniformBufferOffsetAlignment,
                 maxBufferSize = 1L shl 20,
                 maxDynamicUniformBuffersPerPipelineLayout = 1,
             ),
@@ -6051,7 +6086,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             maxBufferSizeBytes = 1L shl 20,
             copyBytesPerRowAlignment = 256,
             supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
-            minUniformBufferOffsetAlignment = 256,
+            minUniformBufferOffsetAlignment = minUniformBufferOffsetAlignment.toInt(),
             maxDynamicUniformBuffersPerPipelineLayout = 1,
             supportedOperations = PlanOperationCapability.entries.toSet(),
             bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 4_096, 4_096),

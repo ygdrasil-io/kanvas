@@ -143,7 +143,7 @@ class GpuPlanTaskListLowererW4aTest {
     }
 
     @Test
-    fun `rejects a W4a peak contradiction after recomputing the sealed readback row`() {
+    fun `rejects a capability mutation that changes both the sealed readback row and peak`() {
         val base = readyW4aGraph()
         val capabilities = planCapabilities(copyBytesPerRowAlignment = 128)
 
@@ -177,7 +177,7 @@ class GpuPlanTaskListLowererW4aTest {
     }
 
     @Test
-    fun `rejects non ScalarAA coverage without emitting a task list`() {
+    fun `rejects a SolidRectDraw that changes the analytic coverage without emitting a task list`() {
         val base = readyW4aGraph()
         val analytic = renderOf(base).draws().filterIsInstance<AnalyticRectDraw>()
         val replacement = SolidRectDraw.of(

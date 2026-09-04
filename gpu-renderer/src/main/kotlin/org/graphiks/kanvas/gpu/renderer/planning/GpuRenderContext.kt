@@ -57,7 +57,7 @@ internal sealed interface GpuPreparedSessionAcquisition {
 /** Opaque, one-shot ownership of a prepared session acquired for one frame. */
 internal interface GpuPreparedSessionReservation
 
-/** Physical-capability acquisition kept distinct from semantic W3 classification. */
+/** Physical-capability acquisition kept distinct from semantic GPU plan selection. */
 internal sealed interface GpuPlanningCapabilityAcquisition {
     data class Ready(val snapshot: PlanCapabilitySnapshot) : GpuPlanningCapabilityAcquisition
     data class Unsupported(val diagnostic: RenderDiagnostic) : GpuPlanningCapabilityAcquisition
@@ -419,9 +419,9 @@ public class GpuPlanSurfaceExecutor internal constructor(
 
     public fun submit(token: GpuPlanSurfaceReadyToken): GpuPlanSurfaceSubmitResult {
         val ready = token as? ReadyToken
-            ?: return invalidReadyToken("W3 submit requires a ready token issued by this facade.")
+            ?: return invalidReadyToken("GPU plan submission requires a ready token issued by this facade.")
         if (ready.context !== context || !ready.claim()) {
-            return invalidReadyToken("W3 ready token is stale, foreign, or already submitted.")
+            return invalidReadyToken("GPU plan ready token is stale, foreign, or already submitted.")
         }
         return when (val execution = runBlocking { ready.backend.submit(ready.graph).await() }) {
             is RenderExecutionResult.Completed -> GpuPlanSurfaceSubmitResult.Completed(execution.output)
