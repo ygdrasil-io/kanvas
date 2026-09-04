@@ -9,6 +9,7 @@ import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.ClipStackOp
 import org.graphiks.kanvas.color.ColorSpace
+import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.gpu.renderer.planning.GpuFrameChannelOrder
 import org.graphiks.kanvas.gpu.renderer.planning.GpuFrameMetrics
 import org.graphiks.kanvas.gpu.renderer.planning.GpuFrameOutput
@@ -129,6 +130,50 @@ class GPUPlanSurfaceRouterTest {
             )
 
             assertContentEquals(legacy.pixels, result.pixels)
+        }
+    }
+
+    @Test
+    fun `double rounded rectangles and paths retain the legacy frame before planning`() {
+        val cases = listOf(
+            DisplayOp.DrawDRRect(
+                roundedRect(),
+                RRectF32.of(RectF32.ofLTRB(2f, 2f, 3f, 3f), radius = 0.5f),
+                Paint.fill(ColorARGB.Red),
+                Matrix3x3F32.Identity,
+                ClipStack.WideOpen,
+            ),
+            DisplayOp.DrawPath(
+                Path().addRect(RectF32.ofLTRB(0f, 0f, 4f, 4f)),
+                Paint.fill(ColorARGB.Red),
+                Matrix3x3F32.Identity,
+                ClipStack.WideOpen,
+            ),
+        )
+
+        cases.forEach { operation ->
+            val legacy = legacyResult()
+            val result = GPUPlanSurfaceRouter(
+                planPort = object : GPUPlanSurfacePort {
+                    override fun plan(
+                        scene: SceneSnapshot,
+                        target: RenderTargetDescriptor,
+                        frameLocalBudgetBytes: Long,
+                    ): GpuPlanSurfacePlanResult = error("DrawDRRect and DrawPath must not reach planning")
+
+                    override fun submit(token: GpuPlanSurfaceReadyToken): GpuPlanSurfaceSubmitResult =
+                        error("DrawDRRect and DrawPath must not submit a prepared frame")
+                },
+            ).render(
+                operations = listOf(operation),
+                width = 4,
+                height = 4,
+                format = PixelFormat.RGBA8,
+                config = RenderConfig.DEFAULT,
+                legacy = { legacy },
+            )
+
+            assertContentEquals(legacy.pixels, result.pixels, operation::class.simpleName)
         }
     }
 
