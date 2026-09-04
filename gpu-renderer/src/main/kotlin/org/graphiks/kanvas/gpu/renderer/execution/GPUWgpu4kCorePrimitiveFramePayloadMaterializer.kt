@@ -196,19 +196,40 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             consumed = true
         }
 
-        val w3Render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().singleOrNull()
-        val w4aScratch = w3Render?.drawPackets?.firstOrNull()
-            ?.corePrimitivePreparedAuthority?.w4aSessionScratch
-        if (w3Render != null && w4aScratch != null) {
+        val w4aCandidateRenderSteps = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        if (framePlan.hasSealedW4aSessionMarker()) {
+            val w4aRender = w4aCandidateRenderSteps.singleOrNull()
+                ?: return refused(
+                    "invalid.native-core-primitive.w4a-scratch",
+                    "W4a task-list markers require exactly one sealed render packet envelope.",
+                )
+            val packets = w4aRender.drawPackets
+            val w4aScratch = packets
+                .mapNotNull { packet -> packet.corePrimitivePreparedAuthority?.w4aSessionScratch }
+                .firstOrNull()
+                ?: return refused(
+                    "invalid.native-core-primitive.w4a-scratch",
+                    "W4a task-list markers require one common sealed scratch identity.",
+                )
+            if (packets.any { packet ->
+                    packet.corePrimitivePreparedAuthority?.w4aSessionScratch !== w4aScratch
+                }
+            ) {
+                return refused(
+                    "invalid.native-core-primitive.w4a-scratch",
+                    "W4a packets do not share one sealed scratch identity.",
+                )
+            }
             return materializeW4aSessionScratch(
                 framePlan,
                 encoderPlan,
                 resources,
                 generationSeal,
-                w3Render,
+                w4aRender,
                 w4aScratch,
             )
         }
+        val w3Render = w4aCandidateRenderSteps.singleOrNull()
         val w3Scratch = w3Render?.drawPackets?.firstOrNull()
             ?.corePrimitivePreparedAuthority?.w3SessionScratch
         if (w3Render != null && w3Scratch != null) {

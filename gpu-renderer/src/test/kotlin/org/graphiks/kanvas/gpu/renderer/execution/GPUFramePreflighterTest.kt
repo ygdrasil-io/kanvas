@@ -278,8 +278,6 @@ class GPUFramePreflighterTest {
             plan.replacingCorePacket(packet, cloneCorePacket(packet, w4aSessionScratch = replacement))
         }
 
-        assertIs<GPUFramePreflightResult.Refused>(preflightW4a(withScratch(null), fixture.capabilities))
-
         val firstDraw = scratch.draws.first()
         val firstBounds = firstDraw.copyDeviceBounds()
         val forgedBounds = w4aScratchForTest(
@@ -332,14 +330,67 @@ class GPUFramePreflighterTest {
             cloneCorePacket(packets[0], analyticShapeUniformSeal = secondSeal),
         )
         assertIs<GPUFramePreflightResult.Refused>(preflightW4a(wrongUniformSlot, fixture.capabilities))
+    }
 
-        assertFailsWith<IllegalArgumentException> {
-            w4aScratchForTest(
-                scratch,
-                vertexCapacityBytes = scratch.vertexCapacityBytes * 2L,
-                poolCapacities = scratch.poolCapacities.copy(
-                    vertexBytes = scratch.poolCapacities.vertexBytes * 2L,
-                ),
+    @Test
+    fun `sealed W4a markers require one common scratch before generic routing`() {
+        val fixture = w4aFixture()
+        val packets = fixture.framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .single().drawPackets
+        val scratch = requireNotNull(packets.first().corePrimitivePreparedAuthority?.w4aSessionScratch)
+        fun withScratch(scratchForPacket: (Int) -> W4aSessionScratchV1?): GPUFramePlan =
+            packets.foldIndexed(fixture.framePlan) { index, plan, packet ->
+                plan.replacingCorePacket(
+                    packet,
+                    cloneCorePacket(packet, w4aSessionScratch = scratchForPacket(index)),
+                )
+            }
+
+        val cases = listOf(
+            withScratch { null },
+            withScratch { index -> if (index == 0) null else scratch },
+            withScratch { index -> if (index == 0) w4aScratchForTest(scratch) else scratch },
+        )
+
+        cases.forEach { forgedPlan ->
+            assertEquals(
+                "invalid.preflight.w4a_session_scratch",
+                assertIs<GPUFramePreflightResult.Refused>(
+                    preflightW4a(forgedPlan, fixture.capabilities),
+                ).diagnostic.code.value,
+            )
+        }
+    }
+
+    @Test
+    fun `sealed W4a aggregate budget uses its checked resident transient sum`() {
+        val fixture = w4aFixture()
+        val baseline = fixture.framePlan.memoryBudget
+        val required = Math.addExact(
+            baseline.targetResidentBytes,
+            baseline.peakFrameTransientBytes,
+        )
+        val exact = fixture.framePlan.withMemoryBudget(
+            baseline.copy(configuredAggregateBudgetBytes = required),
+        )
+        val oneByteShort = fixture.framePlan.withMemoryBudget(
+            baseline.copy(configuredAggregateBudgetBytes = required - 1L),
+        )
+        val overflow = fixture.framePlan.withMemoryBudget(
+            baseline.copy(
+                targetResidentBytes = Long.MAX_VALUE,
+                peakFrameTransientBytes = 1L,
+                configuredAggregateBudgetBytes = Long.MAX_VALUE,
+            ),
+        )
+
+        assertIs<GPUFramePreflightResult.Prepared>(preflightW4a(exact, fixture.capabilities))
+        listOf(oneByteShort, overflow).forEach { forgedPlan ->
+            assertEquals(
+                "invalid.preflight.w4a_session_scratch",
+                assertIs<GPUFramePreflightResult.Refused>(
+                    preflightW4a(forgedPlan, fixture.capabilities),
+                ).diagnostic.code.value,
             )
         }
     }
@@ -9421,6 +9472,18 @@ class GPUFramePreflighterTest {
         recordingSeals,
         replacement,
         memoryBudget,
+        diagnostics,
+        dependencies,
+    )
+
+    private fun GPUFramePlan.withMemoryBudget(
+        replacement: GPUFrameMemoryBudgetPlan,
+    ): GPUFramePlan = GPUFramePlan(
+        frameId,
+        capabilitySeal,
+        recordingSeals,
+        steps,
+        replacement,
         diagnostics,
         dependencies,
     )

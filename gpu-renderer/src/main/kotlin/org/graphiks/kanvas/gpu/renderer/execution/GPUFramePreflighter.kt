@@ -163,6 +163,24 @@ private fun GPUColorFormat.corePrimitiveInterpretationOrNull(): GPUColorInterpre
     else -> null
 }
 
+/**
+ * A W4a seal is authoritative even when a forged envelope drops its scratch reference.
+ * This must remain independent of generic CorePrimitive route classification.
+ */
+internal fun GPUFramePlan.hasSealedW4aSessionMarker(): Boolean =
+    recordingSeals.any { seal ->
+        seal.compatibilityKeyHash.startsWith("w4a:") || seal.replayKeyHash.startsWith("w4a:")
+    } ||
+        steps.filterIsInstance<GPUFrameStep.RenderPassStep>().any { render ->
+            render.drawPackets.any { packet ->
+                packet.packetId.value.startsWith("packet.w4a.") ||
+                    packet.passId == "pass.w4a.main" ||
+                    packet.bindingListId.startsWith("binding.w4a.") ||
+                    packet.insertionReasonCode == "w4a-analytic-rect" ||
+                    packet.corePrimitivePreparedAuthority?.w4aSessionScratch != null
+            }
+        }
+
 /** Sole transactional join between an immutable semantic frame and materialized resource facts. */
 internal class GPUFramePreflighter(
     private val context: GPUFramePreflightContext,
@@ -229,11 +247,19 @@ internal class GPUFramePreflighter(
                     )
                 }
         }
-        val w4aScratch = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        val renderPackets = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
             .flatMap(GPUFrameStep.RenderPassStep::drawPackets)
+        val hasW4aSessionMarker = framePlan.hasSealedW4aSessionMarker()
+        val w4aScratch = renderPackets
             .mapNotNull { packet -> packet.corePrimitivePreparedAuthority?.w4aSessionScratch }
             .firstOrNull()
-        if (w4aScratch != null && !hasExactW4aSessionScratch(framePlan, w4aScratch)) {
+        if (hasW4aSessionMarker &&
+            (w4aScratch == null ||
+                renderPackets.any { packet ->
+                    packet.corePrimitivePreparedAuthority?.w4aSessionScratch !== w4aScratch
+                } ||
+                !hasExactW4aSessionScratch(framePlan, w4aScratch))
+        ) {
             return GPUFramePreflightResult.Refused(
                 diagnostic(
                     "invalid.preflight.w4a_session_scratch",
@@ -243,7 +269,7 @@ internal class GPUFramePreflighter(
         }
         val pureValidation = pureValidation(
             framePlan,
-            skipNativeCorePrimitiveClassification = w4aScratch != null,
+            skipNativeCorePrimitiveClassification = hasW4aSessionMarker,
         )
         pureValidation.diagnostic?.let { return GPUFramePreflightResult.Refused(it) }
         val corePrimitiveDirectRoutes = pureValidation.corePrimitiveDirectRoutes
@@ -3966,6 +3992,14 @@ internal class GPUFramePreflighter(
             if (!shape.hasExactPayloadAt(packedUniforms, shape.alignedOffset.toInt())) return false
             GPUUniformSlabPayload("analytic-shape-draw-${packet.commandIdValue}", shape.payloadBytesSnapshot())
         }
+        val requiredAggregateBudgetBytes = try {
+            Math.addExact(
+                framePlan.memoryBudget.targetResidentBytes,
+                framePlan.memoryBudget.peakFrameTransientBytes,
+            )
+        } catch (_: ArithmeticException) {
+            return false
+        }
         return framePlan.steps.size == 3 &&
             framePlan.steps[0] is GPUFrameStep.PrepareResourcesStep &&
             framePlan.steps[1] === render && framePlan.steps[2] === readback &&
@@ -4036,6 +4070,7 @@ internal class GPUFramePreflighter(
             framePlan.memoryBudget.categoryTotals[GPUFrameMemoryCategory.CanonicalTarget] == targetBytes &&
             framePlan.memoryBudget.categoryTotals[GPUFrameMemoryCategory.ReadbackStaging] == stagingBytes &&
             framePlan.memoryBudget.categoryTotals[GPUFrameMemoryCategory.ReusableScratch] == scratchBytes &&
+            framePlan.memoryBudget.configuredAggregateBudgetBytes >= requiredAggregateBudgetBytes &&
             framePlan.memoryBudget.allocations == expectedAllocations
     }
 

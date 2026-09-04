@@ -10,6 +10,7 @@ import io.ygdrasil.webgpu.BufferBinding
 import io.ygdrasil.webgpu.GPUBlendFactor
 import io.ygdrasil.webgpu.BufferDescriptor
 import io.ygdrasil.webgpu.GPUBuffer
+import io.ygdrasil.webgpu.GPUBindGroup
 import io.ygdrasil.webgpu.GPUCommandBuffer
 import io.ygdrasil.webgpu.GPUCommandEncoder
 import io.ygdrasil.webgpu.GPUDevice
@@ -277,11 +278,21 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             val render = materialized.draft.payload.scopeOperands
                 .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
                 .single()
+            val packets = fixture.plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+                .single().drawPackets
+            val scratch = requireNotNull(
+                packets.first().corePrimitivePreparedAuthority?.w4aSessionScratch,
+            )
+            val uniformSeals = packets.map { packet ->
+                requireNotNull(packet.corePrimitivePreparedAuthority?.analyticShapeUniformSeal)
+            }
+            val uniformSlots = scratch.uniformPlan.slots
             val vertex = render.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetVertexBuffer>()
                 .single()
             val index = render.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetIndexBuffer>()
                 .single()
-            val offsets = render.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
+            val bindGroups = render.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
+            val offsets = bindGroups
                 .map { command -> command.dynamicOffsets.single() }
             val expectedScissors = fixture.plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
                 .single().drawPackets.map { packet ->
@@ -296,9 +307,39 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             assertEquals(16_384L, vertex.buffer.byteCapacity)
             assertEquals(48L, index.size)
             assertEquals(4_096L, index.buffer.byteCapacity)
+            assertEquals(4_096L, scratch.uniformCapacityBytes)
+            assertEquals(4_096L, scratch.poolCapacities.uniformBytes)
+            assertEquals(512L, scratch.uniformUsefulBytes)
+            assertEquals(256L, scratch.uniformStrideBytes)
+            assertEquals(listOf(80L, 80L), uniformSlots.map { it.payloadBytes })
+            assertEquals(listOf(256L, 256L), uniformSlots.map { it.allocatedBytes })
+            assertEquals(listOf(0L, 256L), uniformSlots.map { it.alignedOffset })
+            assertEquals(listOf(80L, 80L), uniformSeals.map { it.payloadBytes })
+            assertEquals(listOf(80, 80), uniformSeals.map { it.payloadBytesSnapshot().size })
+            assertEquals(listOf(0L, 256L), uniformSeals.map { it.alignedOffset })
             assertEquals(listOf(0L, 256L), offsets)
             assertEquals(expectedScissors, scissors)
-            assertEquals(listOf(GPUFrameResourceRole.SceneTarget), fixture.resources.ordinaryResources.map { it.role })
+            assertTrue(packets.all { packet ->
+                packet.corePrimitivePreparedAuthority?.w4aSessionScratch === scratch
+            })
+            val pooledBindGroup = bindGroups.first().bindGroup.bindGroup
+            assertTrue(bindGroups.all { command -> command.bindGroup.bindGroup === pooledBindGroup })
+            assertEquals(
+                listOf(GPUFrameResourceRole.SceneTarget, GPUFrameResourceRole.ReadbackStaging),
+                fixture.plan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+                    .flatMap { it.requests }.map { it.role },
+            )
+            assertEquals(
+                setOf(GPUFrameResourceRole.SceneTarget),
+                fixture.resources.ordinaryResources.map { it.role }.toSet(),
+            )
+            assertTrue(fixture.resources.ordinaryResources.none { resource ->
+                resource.role in setOf(
+                    GPUFrameResourceRole.VertexData,
+                    GPUFrameResourceRole.IndexData,
+                    GPUFrameResourceRole.UniformData,
+                )
+            })
             assertTrue(fixture.resources.outputOwnedReadbacks.isNotEmpty())
             assertTrue(materialized.draft.disposeBeforeRegistration())
         } finally {
@@ -308,25 +349,74 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
     }
 
     @Test
+    fun `W4a task-list marker refuses missing first scratch before generic fallback`() {
+        val fixture = w4aFixture()
+        try {
+            val render = fixture.plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
+            val firstPacket = render.drawPackets.first()
+            val authority = requireNotNull(firstPacket.corePrimitivePreparedAuthority)
+            val markedPlan = fixture.plan.replacingPacket(
+                firstPacket,
+                firstPacket.withPreparedAuthority(authority.copy(w4aSessionScratch = null)),
+            )
+
+            assertEquals(
+                "invalid.native-core-primitive.w4a-scratch",
+                assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
+                    fixture.copy(plan = markedPlan).materializeCoreResult(),
+                ).code,
+            )
+        } finally {
+            fixture.close()
+        }
+    }
+
+    @Test
     fun `W4a scratch lease remains unavailable through submitted readback then returns on completion`() {
         val fixture = w4aFixture()
         val adapter = GPURuntimeResourceAdapter()
         try {
-            fun vertexBuffer(materialized: GPUPreparedNativeFramePayloadMaterialization.Materialized) =
-                materialized.draft.payload.scopeOperands
+            data class W4aPooledHandles(
+                val vertex: GPUBuffer,
+                val index: GPUBuffer,
+                val uniformBindGroup: GPUBindGroup,
+            )
+
+            fun pooledHandles(materialized: GPUPreparedNativeFramePayloadMaterialization.Materialized): W4aPooledHandles {
+                val render = materialized.draft.payload.scopeOperands
                     .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
                     .single()
-                    .commands
+                val vertex = render.commands
                     .filterIsInstance<GPUPreparedNativeRenderCommand.SetVertexBuffer>()
                     .single()
-                    .buffer.buffer
+                val index = render.commands
+                    .filterIsInstance<GPUPreparedNativeRenderCommand.SetIndexBuffer>()
+                    .single()
+                val bindGroups = render.commands
+                    .filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
+                val bindGroup = bindGroups.first().bindGroup.bindGroup
+                assertTrue(bindGroups.all { command -> command.bindGroup.bindGroup === bindGroup })
+                return W4aPooledHandles(vertex.buffer.buffer, index.buffer.buffer, bindGroup)
+            }
+
+            fun assertSameLease(expected: W4aPooledHandles, actual: W4aPooledHandles) {
+                assertSame(expected.vertex, actual.vertex)
+                assertSame(expected.index, actual.index)
+                assertSame(expected.uniformBindGroup, actual.uniformBindGroup)
+            }
+
+            fun assertDifferentLease(expected: W4aPooledHandles, actual: W4aPooledHandles) {
+                assertNotSame(expected.vertex, actual.vertex)
+                assertNotSame(expected.index, actual.index)
+                assertNotSame(expected.uniformBindGroup, actual.uniformBindGroup)
+            }
 
             val cancelled = fixture.materializeCore()
-            val cancelledVertex = vertexBuffer(cancelled)
+            val cancelledHandles = pooledHandles(cancelled)
             assertTrue(cancelled.draft.disposeBeforeRegistration())
 
             val submitted = fixture.materializeCore()
-            assertSame(cancelledVertex, vertexBuffer(submitted))
+            assertSameLease(cancelledHandles, pooledHandles(submitted))
             val registration = assertIs<GPUPreparedNativeFrameRegistration.Registered>(
                 adapter.registerPreparedNativeFrameDraft(submitted.draft),
             )
@@ -341,13 +431,25 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             )
             assertTrue(registration.ownership.markSubmitted())
 
-            val whileSubmitted = fixture.materializeCore()
-            assertNotSame(cancelledVertex, vertexBuffer(whileSubmitted))
-            assertTrue(whileSubmitted.draft.disposeBeforeRegistration())
+            val secondLiveLease = fixture.materializeCore()
+            val secondHandles = pooledHandles(secondLiveLease)
+            assertDifferentLease(cancelledHandles, secondHandles)
+            val thirdLiveLease = fixture.materializeCore()
+            val thirdHandles = pooledHandles(thirdLiveLease)
+            assertDifferentLease(cancelledHandles, thirdHandles)
+            assertDifferentLease(secondHandles, thirdHandles)
+            assertEquals(
+                "unsupported.native-core-primitive.frame-pool-saturated",
+                assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
+                    fixture.materializeCoreResult(),
+                ).code,
+            )
+            assertTrue(secondLiveLease.draft.disposeBeforeRegistration())
+            assertTrue(thirdLiveLease.draft.disposeBeforeRegistration())
 
             assertTrue(registration.ownership.releaseAfterCompletion())
             val afterCompletion = fixture.materializeCore()
-            assertSame(cancelledVertex, vertexBuffer(afterCompletion))
+            assertSameLease(cancelledHandles, pooledHandles(afterCompletion))
             assertTrue(afterCompletion.draft.disposeBeforeRegistration())
         } finally {
             adapter.close()
