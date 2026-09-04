@@ -1,59 +1,68 @@
 # État W04 — geometry/coverage
 
-Révision vérifiée : `23f672caf` (preuves publiques W4a), avec la correction de frange `65b64626` et les validations globales fraîches ci-dessous.
+Révision vérifiée : `e1c308804d37f447c24f25f53a10e1a6d2eb60e7` (preuves W4b), empilée sur W4a. Les vérifications fraîches ci-dessous ont été exécutées le 2026-09-04 ; elles ne lancent ni GM, ni Skia.
 
-## Tranche W4a atteinte
+## Tranches W4a et W4b atteintes
 
-W4a publie la capability `solid-rect-scalar-aa-simple-scissor-src-over-srgb-v1`. Elle rend des frames entières de rectangles solides fractionnaires axis-aligned avec `CoverageRequest.ANTIALIASED`, coverage analytique `ScalarAA`, blend `SrcOver`, cible sRGB 1x et clip vide ou `DeviceRect` intégral non-AA. Les bounds device exacts restent des `RectF32` de `:math`; les raster bounds et le scissor scellés restent des `RectI32` de `:math`.
+W4a publie `solid-rect-scalar-aa-simple-scissor-src-over-srgb-v1` pour les frames de `Rect` solides, axis-aligned et fractionnaires. W4b ajoute sa branche sœur fermée, `solid-rect-rrect-scalar-aa-simple-scissor-src-over-srgb-v1`, pour une frame ordonnée de `Rect` et `RRect` remplis, `SolidColor` prémultipliée, `SrcOver`, AA scalaire, cible sRGB 1× et scissor entier simple.
 
-La sélection est handle-free et ordonnée : W3 est essayé avant W4a. Les rectangles pixel-aligned conservent donc la capability W3 `solid-rect-pixel-aligned-simple-clip-src-over-srgb-v1`; une frame qui contient au moins une arête fractionnaire et satisfait le contrat fermé devient W4a. Le device n'est acquis qu'après un candidat sélectionné. Après `Ready`, un refus est terminal : ni reclassement, ni fallback legacy, ni allocation double ne sont permis.
+W4b n'est sélectionnée que si la frame comporte au moins une primitive de provenance `DrawOrigin.RRECT`. Chaque `AnalyticRRectDraw` représente une primitive, conserve son ordinal et sa provenance `RECT`/`RRECT`, et transporte les faits device-space normalisés, le scissor et le slot Uniform80 scellés. Un `Rect` cohabitant est un `RRectF32` à huit `+0f`, mais reste d'origine `RECT`. Les RRect sont normalisés par l'unique API backend-neutral de `:math`, avant puis après `mapAxisAligned`, avec mêmes vecteurs et bits F32 sur JVM et JS.
 
-## Ressources, capacités et budget
+La chaîne reste W3 → W4a → W4b : un Rect seul demeure W3/W4a suivant son enveloppe. Après `Ready` W4b, toute divergence du graphe, lowering, preflight ou matérialisation est un refus terminal : aucun reclassement W4b → W4a/W3, fallback direct, recalcul de scissor/bounds/rayons/transform, ni allocation « best effort » n'est permis.
 
-Un graphe W4a possède exactement cinq ressources frame-local :
+## Ressources, durées de vie et ABI
 
-| Rôle | Kind / usages | Capacité ou taille planifiée |
-| --- | --- | --- |
-| `LogicalTarget` | texture 2D, render attachment + copy source | `4 × width × height` bytes |
-| `ReadbackStaging` | buffer, copy destination + map read | row bytes alignés × height |
-| `VertexData` | buffer, vertex + copy destination | capacité pool power-of-two exacte |
-| `IndexData` | buffer, index + copy destination | capacité pool power-of-two exacte |
-| `UniformData` | buffer, uniform + copy destination | capacité pool power-of-two exacte |
+Un graphe W4b matérialise exactement cinq `PlanResource`; pipeline et bind group sont des faits scellés, jamais des substituts au staging de readback.
 
-Les useful bytes sont `32N` pour vertex, `24N` pour index et `N × alignUp(80, minUniformBufferOffsetAlignment)` pour uniform. Les trois dernières ressources sont les buffers du lease natif, pas des buffers ordinary supplémentaires. Le pic est la somme checked des cinq ressources, conservées jusqu'à completion/readback.
+| Rôle | Kind / usages | Taille planifiée | Durée de vie |
+| --- | --- | --- | --- |
+| `LogicalTarget` | texture 2D, render attachment, copy source | `4 × width × height` | `[0, 2)` |
+| `ReadbackStaging` | buffer, copy destination, map read | `alignUp(4 × width, 256) × height` | `[1, 2)` |
+| `VertexData` | buffer, vertex, copy destination | capacité pool réservée | `[0, 2)` |
+| `IndexData` | buffer, index, copy destination | capacité pool réservée | `[0, 2)` |
+| `UniformData` | buffer, uniform, copy destination | capacité pool réservée | `[0, 2)` |
 
-La preuve publique de frontière sur une cible 1×1 fixe les capacités exactes : pour 512 draws, target `4`, staging `256`, vertex `16 384`, index `16 384` et uniform `131 072` bytes, soit `164100` bytes. À 513 draws, les capacités sont target `4`, staging `256`, vertex `32 768`, index `16 384` et uniform `262 144` bytes, soit `311556` bytes. La seconde frame reste legacy : elle ne peut pas être promue silencieusement au-delà de la borne W4a.
+Pour `N` primitives : `vertexBytes = 32 × N`, `indexBytes = 24 × N`, `uniformStride = alignUp(80, minUniformBufferOffsetAlignment)` et `uniformBytes = uniformStride × N`. Le pic checked est la somme des cinq tailles physiques, avec les capacités poolées V/I/U, et les buffers ne retournent au pool qu'après completion/readback. La frontière publique reste 512 draws mixtes avec au moins un RRECT en W4b ; 513 est `NotCandidate` et ne promeut aucune allocation.
 
-## Preuves pixels publiques
+W4b réutilise sans modification `Uniform80` d'`AnalyticShape` : target/padding aux octets 0..15, couleur prémultipliée 16..31, bounds device 32..47, `TL, TR` 48..63, puis `BR, BL` 64..79. Les Rect ont huit rayons positifs nuls et conservent la couverture rectangulaire exacte ; les RRect non nuls suivent la branche SDF native existante.
 
-Les 15 tests ciblés de `GPUPlanSurfacePixelTest` passent. Un test vérifie directement l'oracle W4a avec des bytes calculés à la main. Six scènes `Surface` W4a comparent leurs pixels à cet oracle indépendant : coverage fractionnaire, `SrcOver` prémultiplié linear, quantification `rgba8unorm-srgb` entre draws, scissor, ordonnancement RGBA/BGRA, frame mixte et frontière 512. Six scènes W3 comparent leurs pixels à l'oracle W3. Les deux scènes legacy restantes (513 draws et `SRC` non admis) vérifient des bytes fixes connus. Les frames W4a vérifient via le résultat public les scopes natifs exactement `{Render, Readback}`; la preuve legacy ne leur impose aucune forme interne.
+## Preuves pixels non-GM
+
+L'oracle CPU W4b est test-only et indépendant : aire de chevauchement exacte avec huit rayons nuls, et équation SDF/ramp d'AA native reproduite sans importer shader, renderer, materializer ou helper privé. Les comparaisons sont byte-exact (`assertContentEquals`), sans seuil ni tolérance. Elles couvrent les RRect asymétriques, normalisation à la limite, échelles positive/X/Y/XY, scissor, ordre `SrcOver` avec quantification sRGB entre draws, ordres de pixels RGBA/BGRA et la frontière 512/513.
 
 ## Commandes fraîches
 
-| Commande | Résultat |
+| Commande | Résultat frais |
 | --- | --- |
-| `rtk ./gradlew :math:geometry:jvmTest :math:geometry:jsTest :math:matrix:jvmTest :math:matrix:jsTest :math:color:jvmTest :math:color:jsTest` | Succès. |
-| `rtk ./gradlew :render-ir:test :gpu-plan:test` | Succès. |
-| `rtk ./gradlew :gpu-renderer:test --tests '*Gpu*Plan*' --tests '*GpuRender*' --tests '*GPUFramePreflighterTest*' --tests '*GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest*' --tests '*GPUWgpu4kCorePrimitiveFramePoolTest*'` | Succès. |
-| `rtk ./gradlew :kanvas:test --tests '*GPUPlanSurface*' --tests '*SurfaceTest*' --tests '*DisplayOpSceneAdapterTest*'` | 2 033 tests ; les seules 45 failures sont les `GPUAllApiBlendSurfaceTest :: DrawPoint` connues ; aucune divergence W4a. |
-| `rtk ./gradlew :kanvas:test --rerun-tasks` | 3 617 tests, 51 failures connues, 0 error. |
+| `rtk ./gradlew :math:geometry:jvmTest :math:geometry:jsNodeTest :math:matrix:jvmTest :math:matrix:jsNodeTest` | Succès ; normalisation et parité JVM/JS. |
+| `rtk ./gradlew :render-ir:test :gpu-plan:test` | Succès le 2026-09-04T22:34:45+0200–22:34:47+0200. |
+| `rtk ./gradlew :gpu-renderer:test --tests '*Gpu*Plan*' --tests '*GpuRender*' --tests '*GPUFramePreflighterTest*' --tests '*GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest*' --tests '*GPUWgpu4kCorePrimitiveFramePoolTest*' --tests '*GPUCorePrimitiveAnalyticShapeUniformAbiTest*'` | Succès le 2026-09-04T22:34:52+0200–22:35:00+0200. |
+| `rtk ./gradlew :kanvas:test --tests '*GPUPlanSurface*' --tests '*SurfaceTest*' --tests '*DisplayOpSceneAdapterTest*'` | 2 047 tests ; 45 failures `GPUAllApiBlendSurfaceTest :: DrawPoint` déjà connues, aucune failure W4b. |
+| `rtk ./gradlew :math:geometry:jvmTest :math:geometry:jsNodeTest :math:matrix:jvmTest :math:matrix:jsNodeTest :render-ir:test :gpu-plan:test` | Succès le 2026-09-04T22:35:41+0200–22:35:42+0200. |
+| `rtk ./gradlew :kanvas:test --rerun-tasks` | Run commencé le 2026-09-04T22:36:00+0200 ; XML frais : 3 631 tests, 51 failures connues, 0 error. |
 
-Ni `:integration-tests:skia`, ni tâche GM, ni `jpg-color-cube` n'ont été exécutés. `jpg-color-cube` reste en quarantaine ; `font` et `codec` restent hors périmètre W4a.
+La même commande renderer a aussi été relancée dans le run global et a réussi le 2026-09-04T22:35:50+0200–22:35:51+0200. Elle utilise les mêmes sélecteurs que la ligne renderer ciblée. Les compilations transitives n'ont exécuté aucun test `font`; aucun test `codec` n'a été lancé.
 
-## Baseline globale exacte
+## Ledger XML global exact
 
-Les 51 noms rouges du run frais sont exactement :
+Le scan `rtk rg -n '<failure|<error' kanvas/build/test-results/test/TEST-*.xml`, horodaté 2026-09-04T22:37:53+0200, retourne 51 matches dans 6 fichiers. L'inventaire XML totalise 120 suites, 3 631 tests, 51 failures et 0 error. Les 51 seuls noms sont :
 
 - `ImageTest :: ColorType enum values()` ;
-- `GPUAllApiBlendSurfaceTest :: DrawPoint/{PLUS, MULTIPLY, OVERLAY, DARKEN, LIGHTEN, COLOR_DODGE, COLOR_BURN, HARD_LIGHT, SOFT_LIGHT, DIFFERENCE, EXCLUSION, HUE, SATURATION, COLOR, LUMINOSITY}/{UNCLIPPED, SCISSOR, ALPHA_MASK}` — les 45 combinaisons du produit cartésien affiché ;
+- `GPUAllApiBlendSurfaceTest :: DrawPoint/{PLUS, MULTIPLY, OVERLAY, DARKEN, LIGHTEN, COLOR_DODGE, COLOR_BURN, HARD_LIGHT, SOFT_LIGHT, DIFFERENCE, EXCLUSION, HUE, SATURATION, COLOR, LUMINOSITY}/{UNCLIPPED, SCISSOR, ALPHA_MASK}` — les 45 combinaisons exactes du produit cartésien ;
 - `GPUMaskBlurDispatchTest :: local path mask scales dash intervals and phase()` ;
 - `GPUPreparedSurfaceFrameBuilderTest :: public non finite singular and perspective transforms refuse before frame task assembly()` ;
 - `GPUPreparedSurfaceFrameBuilderTest :: prepared atlas expands to ordered sampled packets sharing one artifact with distinct uniforms()` ;
 - `GPUPreparedTextStrokeTest :: prepared stroke path key seals exact geometry and verb count seals every contour()` ;
 - `GPURefusalGuardsTest :: direct fill guard refuses radial and sweep non identity matrix facts before dispatch()`.
 
-Le scan `rg -n '<failure|<error' kanvas/build/test-results/test/TEST-*.xml` retourne 51 matches ; aucun élément `<error>` n'est présent. Aucun nom nouveau ne bloque donc W4a.
+`rtk rg -n '<error' kanvas/build/test-results/test/TEST-*.xml` ne retourne aucune occurrence. Aucun nom nouveau et aucune failure W4b ne bloquent donc cette publication ; les failures listées sont hors périmètre et ne sont pas modifiées par W4b.
+
+## Exclusions et dette SDF
+
+W4b n'a exécuté ni `:integration-tests:skia`, ni GM/dashboard/baseline, ni `jpg-color-cube`, ni test `font` ou `codec`; `jpg-color-cube` demeure en quarantaine. Aucun shader, seuil de similarité, tolérance ou baseline n'a été modifié.
+
+Pour les RRect non nuls, la SDF native n'est pas l'aire analytique Skia exacte. Cette dette est explicitement réservée à W7 : un nouveau shader ne pourra être envisagé qu'après une divergence matérielle constatée par l'intégration Skia. Il est interdit de la masquer par une tolérance, un seuil plus bas ou une rebaseline.
 
 ## Limites ouvertes
 
-W4 reste ouverte. W4b doit ajouter les RRect et la normalisation de leurs rayons dans `:math`; W4c les fills de paths; W4d les strokes et hairlines; W4e les clips path, inverse et booléens. Materials W5, layers/effets W6 et convergence GM W7 ne font pas partie de cette tranche.
+W4 reste ouverte : W4c couvre les fills de paths, W4d les strokes et hairlines, W4e les clips path, inverse et booléens. W5 (materials), W6 (layers/effets) et W7 (convergence GM, y compris la réévaluation SDF) ne font pas partie de W4b.
