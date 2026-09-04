@@ -273,12 +273,11 @@ internal class GPUCorePrimitiveW4aPreparedFrameTaskListAssembler {
             }
             try {
                 packet.attachCorePrimitivePreparedAuthority(
-                    GPUCorePrimitivePreparedPacketAuthority(
+                    GPUCorePrimitivePreparedPacketAuthority.plannedW4a(
                         structuralPipelineKey = structuralKey,
                         renderPipelineKey = publicPipelineKey,
-                        uniformSlabSeal = null,
                         analyticShapeUniformSeal = seal,
-                        w4aSessionScratch = scratch,
+                        scratch = scratch,
                     ),
                 )
             } catch (_: IllegalArgumentException) {

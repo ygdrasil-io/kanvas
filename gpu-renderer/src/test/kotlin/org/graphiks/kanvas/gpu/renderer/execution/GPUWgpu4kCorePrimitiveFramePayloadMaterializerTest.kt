@@ -33,6 +33,7 @@ import java.util.IdentityHashMap
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotSame
@@ -50,6 +51,7 @@ import org.graphiks.kanvas.gpu.plan.PlanOperationCapability
 import org.graphiks.kanvas.gpu.plan.RenderGraph
 import org.graphiks.kanvas.gpu.plan.W3SolidRectPlanCompiler
 import org.graphiks.kanvas.gpu.plan.W4aAnalyticRectPlanCompiler
+import org.graphiks.kanvas.gpu.plan.W4bAnalyticRRectPlanCompiler
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
@@ -173,6 +175,8 @@ import org.graphiks.kanvas.render.ir.SceneCommand
 import org.graphiks.kanvas.render.ir.SceneExtent
 import org.graphiks.kanvas.render.ir.SceneSnapshot
 import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.CornerRadiiF32
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.matrix.Matrix3x3F32
 
@@ -365,6 +369,148 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
     }
 
     @Test
+    fun `W4b materializer keeps one pooled Uniform80 lease through output readback`() {
+        val fixture = w4bFixture()
+        val materializer = GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
+            fixture.native.device,
+            fixture.native.queue,
+            fixture.target,
+            fixture.cache,
+            fixture.limits,
+        )
+        try {
+            val result = materializer.materializeReusable(
+                fixture.plan,
+                fixture.encoderPlan,
+                fixture.resources,
+                fixture.generationSeal,
+            )
+            val materialized = assertIs<GPUPreparedNativeFramePayloadMaterialization.Materialized>(
+                result,
+                (result as? GPUPreparedNativeFramePayloadMaterialization.Refused)?.message.orEmpty(),
+            )
+            val render = materialized.draft.payload.scopeOperands
+                .filterIsInstance<GPUPreparedNativeScopeOperand.Render>().single()
+            val scratch = requireNotNull(
+                fixture.plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
+                    .drawPackets.first().corePrimitivePreparedAuthority?.w4bSessionScratch,
+            )
+            val offsets = render.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
+                .map { it.dynamicOffsets.single() }
+
+            assertEquals(listOf(0L, 256L), offsets)
+            assertEquals(listOf(80L, 80L), scratch.uniformPlan.slots.map { it.payloadBytes })
+            val uniformUpload = fixture.native.writeBufferCalls.single { upload ->
+                upload.bufferLabel == "Kanvas.session.corePrimitive.framePool.uniforms"
+            }
+            val uniforms = ByteBuffer.wrap(uniformUpload.snapshot).order(ByteOrder.LITTLE_ENDIAN)
+            assertTrue(
+                (0 until 8).all { index ->
+                    uniforms.getFloat(48 + index * Float.SIZE_BYTES).toRawBits() == 0f.toRawBits()
+                },
+            )
+            assertEquals(listOf(1f, 1f, 4f, 4f), uniforms.floatValuesAt(256 + 32))
+            assertEquals(listOf(1f, 1f, 2f, 1f), uniforms.floatValuesAt(256 + 48))
+            assertEquals(listOf(1f, 2f, 0.5f, 1f), uniforms.floatValuesAt(256 + 64))
+            assertEquals(
+                setOf(GPUFrameResourceRole.SceneTarget),
+                fixture.resources.ordinaryResources.map { it.role }.toSet(),
+            )
+            assertTrue(fixture.resources.outputOwnedReadbacks.isNotEmpty())
+            assertTrue(materialized.draft.disposeBeforeRegistration())
+        } finally {
+            materializer.close()
+            fixture.close()
+        }
+    }
+
+    @Test
+    fun `W4b scratch lease remains unavailable through submitted readback then returns on completion`() {
+        val fixture = w4bFixture()
+        val adapter = GPURuntimeResourceAdapter()
+        try {
+            data class W4bPooledHandles(
+                val vertex: GPUBuffer,
+                val index: GPUBuffer,
+                val uniformBindGroup: GPUBindGroup,
+            )
+
+            fun pooledHandles(materialized: GPUPreparedNativeFramePayloadMaterialization.Materialized): W4bPooledHandles {
+                val render = materialized.draft.payload.scopeOperands
+                    .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+                    .single()
+                val vertex = render.commands
+                    .filterIsInstance<GPUPreparedNativeRenderCommand.SetVertexBuffer>()
+                    .single()
+                val index = render.commands
+                    .filterIsInstance<GPUPreparedNativeRenderCommand.SetIndexBuffer>()
+                    .single()
+                val bindGroups = render.commands
+                    .filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
+                val bindGroup = bindGroups.first().bindGroup.bindGroup
+                assertTrue(bindGroups.all { command -> command.bindGroup.bindGroup === bindGroup })
+                return W4bPooledHandles(vertex.buffer.buffer, index.buffer.buffer, bindGroup)
+            }
+
+            fun assertSameLease(expected: W4bPooledHandles, actual: W4bPooledHandles) {
+                assertSame(expected.vertex, actual.vertex)
+                assertSame(expected.index, actual.index)
+                assertSame(expected.uniformBindGroup, actual.uniformBindGroup)
+            }
+
+            fun assertDifferentLease(expected: W4bPooledHandles, actual: W4bPooledHandles) {
+                assertNotSame(expected.vertex, actual.vertex)
+                assertNotSame(expected.index, actual.index)
+                assertNotSame(expected.uniformBindGroup, actual.uniformBindGroup)
+            }
+
+            val cancelled = fixture.materializeCore()
+            val cancelledHandles = pooledHandles(cancelled)
+            assertTrue(cancelled.draft.disposeBeforeRegistration())
+
+            val submitted = fixture.materializeCore()
+            assertSameLease(cancelledHandles, pooledHandles(submitted))
+            val registration = assertIs<GPUPreparedNativeFrameRegistration.Registered>(
+                adapter.registerPreparedNativeFrameDraft(submitted.draft),
+            )
+            assertIs<GPUPreparedNativeFrameBindingResult.Ready>(
+                registration.ownership.bindLateSurface(
+                    null,
+                    GPUPreparedNativeFrameLateSurfaceBinding.NotRequired,
+                ),
+            )
+            assertIs<GPUPreparedNativeFrameConsumption.Consumed>(
+                registration.ownership.consume(submitted.draft.payload.identity),
+            )
+            assertTrue(registration.ownership.markSubmitted())
+
+            val secondLiveLease = fixture.materializeCore()
+            val secondHandles = pooledHandles(secondLiveLease)
+            assertDifferentLease(cancelledHandles, secondHandles)
+            val thirdLiveLease = fixture.materializeCore()
+            val thirdHandles = pooledHandles(thirdLiveLease)
+            assertDifferentLease(cancelledHandles, thirdHandles)
+            assertDifferentLease(secondHandles, thirdHandles)
+            assertEquals(
+                "unsupported.native-core-primitive.frame-pool-saturated",
+                assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
+                    fixture.materializeCoreResult(),
+                ).code,
+            )
+            assertTrue(secondLiveLease.draft.disposeBeforeRegistration())
+            assertTrue(thirdLiveLease.draft.disposeBeforeRegistration())
+
+            assertTrue(registration.ownership.releaseAfterCompletion())
+            val afterCompletion = fixture.materializeCore()
+            assertSameLease(cancelledHandles, pooledHandles(afterCompletion))
+            assertTrue(afterCompletion.draft.disposeBeforeRegistration())
+        } finally {
+            adapter.close()
+            fixture.close()
+        }
+    }
+
+    @Test
     fun `W4a Uniform80 aligns a 64 byte device minimum to canonical 128 byte slots`() {
         val fixture = w4aFixture(minUniformBufferOffsetAlignment = 64L)
         val materializer = GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
@@ -442,23 +588,16 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
     }
 
     @Test
-    fun `W4a task-list marker refuses missing first scratch before generic fallback`() {
+    fun `W4a planned authority rejects scratch erasure before materialization`() {
         val fixture = w4aFixture()
         try {
             val render = fixture.plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
             val firstPacket = render.drawPackets.first()
             val authority = requireNotNull(firstPacket.corePrimitivePreparedAuthority)
-            val markedPlan = fixture.plan.replacingPacket(
-                firstPacket,
-                firstPacket.withPreparedAuthority(authority.copy(w4aSessionScratch = null)),
-            )
 
-            assertEquals(
-                "invalid.native-core-primitive.w4a-scratch",
-                assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
-                    fixture.copy(plan = markedPlan).materializeCoreResult(),
-                ).code,
-            )
+            assertFailsWith<IllegalArgumentException> {
+                authority.copy(w4aSessionScratch = null)
+            }
         } finally {
             fixture.close()
         }
@@ -6165,6 +6304,158 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             native.device,
             4,
             3,
+            GPUTextureFormat.RGBA8UnormSrgb,
+            generation,
+            1L,
+            GPUWgpu4kPreparedSceneTargetLifecycle(),
+            setup,
+        )
+        setup.commit()
+        return Fixture(
+            plan = plan,
+            encoderPlan = prepared.encoderPlan,
+            resources = prepared.resources,
+            generationSeal = prepared.generationSeal,
+            native = native,
+            target = target,
+            cache = GPUWgpu4kCorePrimitiveSessionCache(native.device, generation),
+            limits = requireNotNull(capabilities.limits),
+            preparedByPreflight = prepared,
+        )
+    }
+
+    private fun w4bFixture(): Fixture {
+        val generation = GPUDeviceGenerationID(7)
+        val capabilities = GPUCapabilities(
+            implementation = GPUImplementationIdentity("GPU", "w4b", "adapter", "device"),
+            facts = listOf(GPUCapabilityFact("w4b.scalar_aa", "test", "supported", true, "w4b")),
+            snapshotId = "w4b-materializer",
+            limits = GPULimits(
+                maxTextureDimension2D = 2048,
+                copyBytesPerRowAlignment = 256,
+                minUniformBufferOffsetAlignment = 256,
+                maxBufferSize = 1L shl 20,
+                maxDynamicUniformBuffersPerPipelineLayout = 1,
+            ),
+            supportedTextureFormats = setOf(GPUTextureFormat.RGBA8UnormSrgb),
+            textureFormatSampleSupport = GPUTextureFormatSampleSupport(
+                mapOf(GPUTextureFormat.RGBA8UnormSrgb to GPUTextureSampleCountSupport(setOf(1))),
+            ),
+            rendererFeatures = setOf(
+                GPURendererFeature.RenderPass,
+                GPURendererFeature.CopyUpload,
+                GPURendererFeature.UniformBuffer,
+                GPURendererFeature.Readback,
+            ),
+        )
+        val scene = SceneSnapshot.of(
+            SceneExtent(4, 4),
+            ColorSpace.SRGB,
+            listOf(
+                SceneCommand.Draw(
+                    DrawNode(
+                        GeometryNode.Rect.of(RectF32(0f, 0f, 2f, 2f)),
+                        MaterialNode.Solid(ColorARGB.fromPackedUInt(0xff0000ffu)),
+                        CoverageRequest.ANTIALIASED,
+                        ClipStackNode.Empty,
+                        BlendNode.SrcOver,
+                        EffectStack.Empty,
+                        Matrix3x3F32.Identity,
+                        DrawOrigin.RECT,
+                    ),
+                ),
+                SceneCommand.Draw(
+                    DrawNode(
+                        GeometryNode.RRect.of(
+                            RRectF32.of(
+                                RectF32(1f, 1f, 4f, 4f),
+                                CornerRadiiF32.of(1f, 1f),
+                                CornerRadiiF32.of(2f, 1f),
+                                CornerRadiiF32.of(1f, 2f),
+                                CornerRadiiF32.of(0.5f, 1f),
+                            ),
+                        ),
+                        MaterialNode.Solid(ColorARGB.fromPackedUInt(0x80ff0000u)),
+                        CoverageRequest.ANTIALIASED,
+                        ClipStackNode.Empty,
+                        BlendNode.SrcOver,
+                        EffectStack.Empty,
+                        Matrix3x3F32.Identity,
+                        DrawOrigin.RRECT,
+                    ),
+                ),
+            ),
+        )
+        val planCapabilities = PlanCapabilitySnapshot.of(
+            deviceGeneration = generation.value,
+            maxTextureDimension2D = 2048,
+            maxBufferSizeBytes = 1L shl 20,
+            copyBytesPerRowAlignment = 256,
+            supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+            minUniformBufferOffsetAlignment = 256,
+            maxDynamicUniformBuffersPerPipelineLayout = 1,
+            supportedOperations = PlanOperationCapability.entries.toSet(),
+            bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 4_096, 4_096),
+        )
+        val compiler = W4bAnalyticRRectPlanCompiler()
+        val candidate = assertIs<GpuPlanSelection.Candidate>(
+            compiler.select(scene, RenderTargetDescriptor(scene.extent, scene.colorSpace)),
+        ).candidate
+        val graph = assertIs<RenderPlanResult.Ready<RenderGraph>>(
+            compiler.plan(candidate, planCapabilities, PlanBudget(1L shl 20)),
+        ).plan
+        val taskList = assertIs<GpuPlanLoweringResult.Lowered>(
+            GpuPlanTaskListLowerer().lower(
+                GpuPlanLoweringRequest(
+                    graph = graph,
+                    capabilities = capabilities,
+                    deviceGeneration = generation,
+                    currentBudget = graph.budget,
+                    frameId = GPUFrameID(711),
+                    recordingId = GPURecordingID("w4b-materializer"),
+                ),
+            ),
+        ).taskList
+        val plan = GPUFramePlanner.plan(taskList)
+        check(!plan.atomicallyRefused) { plan.dumpLines().joinToString("\n") }
+        val generations = plan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+            .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+            .mapIndexed { index, request -> request.resource to (index + 1L) }
+            .toMap()
+        val targetRef = plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single().target
+        val prepared = assertIs<GPUFramePreflightResult.Prepared>(
+            GPUFramePreflighter(
+                context = GPUFramePreflightContext(
+                    targetId = targetRef.value,
+                    deviceGeneration = generation,
+                    targetGeneration = 1L,
+                    resourceGenerations = generations,
+                ),
+                capabilities = capabilities,
+                resourceProvider = GPUConcreteResourceProvider(),
+                completionProvider = object : GPUQueueCompletionProvider {
+                    override fun reserveTicket(request: GPUQueueCompletionTicketRequest) =
+                        GPUQueueCompletionTicketReservation.Reserved(
+                            GPUQueueCompletionTicket(GPUQueueCompletionTicketID("ticket.w4b.materializer"), request.frameId, request.deviceGeneration),
+                        )
+
+                    override fun abandonReservedTicket(ticket: GPUQueueCompletionTicket) =
+                        GPUQueueCompletionTicketAbandonResult.Abandoned(ticket.ticketId)
+                },
+                surfaceProvider = object : GPUSurfaceOutputProvider {
+                    override fun acquire(request: GPUSurfaceAcquisitionRequest): GPUSurfaceAcquisitionResult =
+                        error("W4b offscreen materialization must not acquire a surface")
+
+                    override fun release(output: GPUAcquiredSurfaceOutput) = GPUSurfaceReleaseResult.Released
+                },
+            ).preflight(plan),
+        ).frame
+        val native = NativeProxy()
+        val setup = GPUPreparedSceneSetupTransaction()
+        val target = GPUWgpu4kPreparedSceneTarget.create(
+            native.device,
+            4,
+            4,
             GPUTextureFormat.RGBA8UnormSrgb,
             generation,
             1L,

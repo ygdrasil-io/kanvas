@@ -27,6 +27,8 @@ import org.graphiks.kanvas.render.ir.SceneSnapshot
 import org.graphiks.kanvas.render.ir.StrokeCapNode
 import org.graphiks.kanvas.render.ir.StrokeJoinNode
 import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.CornerRadiiF32
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.matrix.Matrix3x3F32
 
@@ -78,11 +80,14 @@ class CapabilityCompilerChainTest {
     }
 
     @Test
-    fun `W3 wins aligned frames and W4a wins fractional frames`() {
-        val chain = CapabilityCompilerChain.of(listOf(W3SolidRectPlanCompiler(), W4aAnalyticRectPlanCompiler()))
+    fun `W3 W4a W4b chain keeps rect selections and chooses W4b for rrect`() {
+        val chain = CapabilityCompilerChain.of(listOf(
+            W3SolidRectPlanCompiler(), W4aAnalyticRectPlanCompiler(), W4bAnalyticRRectPlanCompiler(),
+        ))
 
         assertEquals(W3SolidRectPlanCompiler.CAPABILITY_ID, ready(chain, rectScene(0f)).capabilityId)
         assertEquals(W4aAnalyticRectPlanCompiler.CAPABILITY_ID, ready(chain, rectScene(0.25f)).capabilityId)
+        assertEquals(W4bAnalyticRRectPlanCompiler.CAPABILITY_ID, ready(chain, rrectScene()).capabilityId)
     }
 
     private class NotCandidateCompiler(private val code: String) : GpuPlanCompiler {
@@ -138,6 +143,26 @@ class CapabilityCompilerChainTest {
             effects = EffectStack.Empty,
             transform = Matrix3x3F32.Identity,
             origin = DrawOrigin.RECT,
+            paint = PaintNode(color, null, BlendMode.SRC_OVER, null, null, null, null, null,
+                PaintStyleNode.FILL, 0f, StrokeCapNode.BUTT, StrokeJoinNode.MITER, 4f, true),
+        ))))
+    }
+
+    private fun rrectScene(): SceneSnapshot {
+        val color = ColorARGB.fromPackedUInt(0x80FF0000u)
+        return SceneSnapshot.of(SceneExtent(4, 3), ColorSpace.SRGB, listOf(SceneCommand.Draw(DrawNode(
+            geometry = GeometryNode.RRect.of(RRectF32.of(
+                RectF32(0f, 0f, 3f, 2f),
+                CornerRadiiF32.of(0.5f), CornerRadiiF32.of(0.75f),
+                CornerRadiiF32.of(0.5f), CornerRadiiF32.of(0.25f),
+            )),
+            material = MaterialNode.Solid(color),
+            coverage = CoverageRequest.ANTIALIASED,
+            clip = ClipStackNode.Empty,
+            blend = BlendNode.SrcOver,
+            effects = EffectStack.Empty,
+            transform = Matrix3x3F32.Identity,
+            origin = DrawOrigin.RRECT,
             paint = PaintNode(color, null, BlendMode.SRC_OVER, null, null, null, null, null,
                 PaintStyleNode.FILL, 0f, StrokeCapNode.BUTT, StrokeJoinNode.MITER, 4f, true),
         ))))

@@ -2,11 +2,14 @@ package org.graphiks.kanvas.surface
 
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.CornerRadiiF32
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.RectI32
 import org.junit.jupiter.api.AfterEach
@@ -17,6 +20,345 @@ class GPUPlanSurfacePixelTest {
     @AfterEach
     fun disposeGpuRuntime() {
         GPUBackendRuntimeFactory.dispose()
+    }
+
+    @Test
+    fun `W4b fractional zero-radius rrect uses literal exact rectangular overlap`() {
+        val shape = RRectF32.of(RectF32(0.25f, 0.5f, 1.75f, 1.5f))
+        val draws = listOf(
+            W4bAnalyticRRectCpuOracle.Draw(ColorARGB.White, shape, RectI32(0, 0, 2, 2)),
+        )
+        val surface = Surface(2, 2)
+        surface.canvas {
+            drawRRect(shape, Paint.fill(ColorARGB.White).copy(antiAlias = true))
+        }
+
+        val result = surface.render()
+
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(
+            ubyteArrayOf(
+                165u, 165u, 165u, 96u,
+                165u, 165u, 165u, 96u,
+                165u, 165u, 165u, 96u,
+                165u, 165u, 165u, 96u,
+            ),
+            result.pixels,
+        )
+        assertPixelsEqual(W4bAnalyticRRectCpuOracle.render(2, 2, draws), result.pixels)
+    }
+
+    @Test
+    fun `W4b red radius-one rrect matches all nine SDF pixels in RGBA and BGRA`() {
+        val red = ColorARGB.Red
+        val shape = RRectF32.of(
+            RectF32(0f, 0f, 3f, 3f),
+            CornerRadiiF32.of(1f, 1f),
+            CornerRadiiF32.of(1f, 1f),
+            CornerRadiiF32.of(1f, 1f),
+            CornerRadiiF32.of(1f, 1f),
+        )
+        val draws = listOf(W4bAnalyticRRectCpuOracle.Draw(red, shape, RectI32(0, 0, 3, 3)))
+        val rgba = Surface(3, 3, PixelFormat.RGBA8).also { surface ->
+            surface.canvas { drawRRect(shape, Paint.fill(red).copy(antiAlias = true)) }
+        }.render()
+        val bgra = Surface(3, 3, PixelFormat.BGRA8).also { surface ->
+            surface.canvas { drawRRect(shape, Paint.fill(red).copy(antiAlias = true)) }
+        }.render()
+
+        assertPreparedRouteEvidence(rgba)
+        assertPreparedRouteEvidence(bgra)
+        assertPixelsEqual(W4bAnalyticRRectCpuOracle.render(3, 3, draws), rgba.pixels)
+        assertPixelsEqual(W4bAnalyticRRectCpuOracle.render(3, 3, draws, PixelFormat.BGRA8), bgra.pixels)
+    }
+
+    @Test
+    fun `W4b partial translucent Rect and RRect preserve inter-draw quantized SrcOver paint order`() {
+        val first = ColorARGB.of(137, 14, 157, 83)
+        val second = ColorARGB.of(191, 227, 62, 174)
+        val firstRect = RectF32(0.2f, 0.2f, 0.8f, 0.8f)
+        val firstShape = RRectF32.of(firstRect)
+        val secondShape = RRectF32.of(RectF32(0.1f, 0.1f, 0.9f, 0.9f), radius = 0.2f)
+        val scissor = RectI32(0, 0, 1, 1)
+        val forwardDraws = listOf(
+            W4bAnalyticRRectCpuOracle.Draw(first, firstShape, scissor),
+            W4bAnalyticRRectCpuOracle.Draw(second, secondShape, scissor),
+        )
+        val reverseDraws = listOf(
+            W4bAnalyticRRectCpuOracle.Draw(second, secondShape, scissor),
+            W4bAnalyticRRectCpuOracle.Draw(first, firstShape, scissor),
+        )
+        val forward = Surface(1, 1).also { surface ->
+            surface.canvas {
+                drawRect(firstRect, Paint.fill(first).copy(antiAlias = true))
+                drawRRect(secondShape, Paint.fill(second).copy(antiAlias = true))
+            }
+        }.render()
+        val reverse = Surface(1, 1).also { surface ->
+            surface.canvas {
+                drawRRect(secondShape, Paint.fill(second).copy(antiAlias = true))
+                drawRect(firstRect, Paint.fill(first).copy(antiAlias = true))
+            }
+        }.render()
+
+        assertPreparedRouteEvidence(forward)
+        assertPreparedRouteEvidence(reverse)
+        assertPixelsEqual(ubyteArrayOf(181u, 66u, 140u, 172u), forward.pixels)
+        assertPixelsEqual(W4bAnalyticRRectCpuOracle.render(1, 1, forwardDraws), forward.pixels)
+        assertPixelsEqual(W4bAnalyticRRectCpuOracle.render(1, 1, reverseDraws), reverse.pixels)
+        assertFalse(forward.pixels.contentEquals(reverse.pixels))
+        assertPixelsEqual(
+            ubyteArrayOf(181u, 66u, 140u, 173u),
+            W4bAnalyticRRectCpuOracle.renderWithFrameEndQuantization(1, 1, forwardDraws),
+        )
+        assertFalse(
+            forward.pixels.contentEquals(
+                W4bAnalyticRRectCpuOracle.renderWithFrameEndQuantization(1, 1, forwardDraws),
+            ),
+        )
+    }
+
+    @Test
+    fun `W4b asymmetric rrect anchors each independently visible corner`() {
+        val color = ColorARGB.Black
+        val shape = RRectF32.of(
+            RectF32(0f, 0f, 8f, 8f),
+            CornerRadiiF32.of(1f, 2f),
+            CornerRadiiF32.of(2.5f, 1f),
+            CornerRadiiF32.of(1.5f, 2.5f),
+            CornerRadiiF32.of(0.75f, 1.5f),
+        )
+        val surface = Surface(8, 8)
+        surface.canvas { drawRRect(shape, Paint.fill(color).copy(antiAlias = true)) }
+
+        val result = surface.render()
+
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(
+            W4bAnalyticRRectCpuOracle.render(
+                8,
+                8,
+                listOf(W4bAnalyticRRectCpuOracle.Draw(color, shape, RectI32(0, 0, 8, 8))),
+            ),
+            result.pixels,
+        )
+        assertPixelsEqual(ubyteArrayOf(0u, 0u, 0u, 166u), result.pixels.copyOfRange(0, 4))
+        assertPixelsEqual(ubyteArrayOf(0u, 0u, 0u, 151u), result.pixels.copyOfRange(28, 32))
+        assertPixelsEqual(ubyteArrayOf(0u, 0u, 0u, 108u), result.pixels.copyOfRange(252, 256))
+        assertPixelsEqual(ubyteArrayOf(0u, 0u, 0u, 218u), result.pixels.copyOfRange(224, 228))
+    }
+
+    @Test
+    fun `W4b supports a positive non-unit scale with exact device rrect pixels`() {
+        val color = ColorARGB.Black
+        val localShape = RRectF32.of(
+            RectF32(0f, 0f, 2f, 2f),
+            CornerRadiiF32.of(0.5f, 1f),
+            CornerRadiiF32.of(1f, 0.5f),
+            CornerRadiiF32.of(0.25f, 0.75f),
+            CornerRadiiF32.of(0.75f, 0.25f),
+        )
+        val deviceShape = RRectF32.of(
+            RectF32(0f, 0f, 3f, 1.5f),
+            CornerRadiiF32.of(0.75f, 0.75f),
+            CornerRadiiF32.of(1.5f, 0.375f),
+            CornerRadiiF32.of(0.375f, 0.5625f),
+            CornerRadiiF32.of(1.125f, 0.1875f),
+        )
+        val surface = Surface(4, 3)
+        surface.canvas {
+            scale(1.5f, 0.75f)
+            drawRRect(localShape, Paint.fill(color).copy(antiAlias = true))
+        }
+
+        val result = surface.render()
+
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(
+            W4bAnalyticRRectCpuOracle.render(
+                4,
+                3,
+                listOf(W4bAnalyticRRectCpuOracle.Draw(color, deviceShape, RectI32(0, 0, 4, 3))),
+            ),
+            result.pixels,
+        )
+    }
+
+    @Test
+    fun `W4b supports Y reflection with exact corner permutation`() {
+        val color = ColorARGB.Black
+        val localShape = asymmetricShape()
+        val deviceShape = RRectF32.of(
+            RectF32(0f, 0f, 4f, 4f),
+            CornerRadiiF32.of(0.5f, 1f),
+            CornerRadiiF32.of(1f, 2f),
+            CornerRadiiF32.of(2f, 1f),
+            CornerRadiiF32.of(1f, 1f),
+        )
+        val surface = Surface(4, 4)
+        surface.canvas {
+            translate(0f, 4f)
+            scale(1f, -1f)
+            drawRRect(localShape, Paint.fill(color).copy(antiAlias = true))
+        }
+
+        val result = surface.render()
+
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(
+            W4bAnalyticRRectCpuOracle.render(
+                4,
+                4,
+                listOf(W4bAnalyticRRectCpuOracle.Draw(color, deviceShape, RectI32(0, 0, 4, 4))),
+            ),
+            result.pixels,
+        )
+    }
+
+    @Test
+    fun `W4b supports XY reflection with exact corner permutation`() {
+        val color = ColorARGB.Black
+        val localShape = asymmetricShape()
+        val deviceShape = RRectF32.of(
+            RectF32(0f, 0f, 4f, 4f),
+            CornerRadiiF32.of(1f, 2f),
+            CornerRadiiF32.of(0.5f, 1f),
+            CornerRadiiF32.of(1f, 1f),
+            CornerRadiiF32.of(2f, 1f),
+        )
+        val surface = Surface(4, 4)
+        surface.canvas {
+            translate(4f, 4f)
+            scale(-1f, -1f)
+            drawRRect(localShape, Paint.fill(color).copy(antiAlias = true))
+        }
+
+        val result = surface.render()
+
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(
+            W4bAnalyticRRectCpuOracle.render(
+                4,
+                4,
+                listOf(W4bAnalyticRRectCpuOracle.Draw(color, deviceShape, RectI32(0, 0, 4, 4))),
+            ),
+            result.pixels,
+        )
+    }
+
+    @Test
+    fun `W4b normalizes excessive radii to the box before exact pixel comparison`() {
+        val color = ColorARGB.of(197, 146, 61, 213)
+        val excessive = RRectF32.of(RectF32(0f, 0f, 4f, 4f), radius = 3f)
+        val normalized = RRectF32.of(RectF32(0f, 0f, 4f, 4f), radius = 2f)
+        val surface = Surface(4, 4)
+        surface.canvas { drawRRect(excessive, Paint.fill(color).copy(antiAlias = true)) }
+
+        val result = surface.render()
+
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(
+            W4bAnalyticRRectCpuOracle.render(
+                4,
+                4,
+                listOf(W4bAnalyticRRectCpuOracle.Draw(color, normalized, RectI32(0, 0, 4, 4))),
+            ),
+            result.pixels,
+        )
+    }
+
+    @Test
+    fun `W4b subpixel rrect exercises a scalar SDF scale strictly between zero and one`() {
+        val color = ColorARGB.of(223, 46, 133, 202)
+        val shape = RRectF32.of(
+            RectF32(0.2f, 0.15f, 0.8f, 0.75f),
+            CornerRadiiF32.of(0.15f, 0.15f),
+            CornerRadiiF32.of(0.15f, 0.15f),
+            CornerRadiiF32.of(0.15f, 0.15f),
+            CornerRadiiF32.of(0.15f, 0.15f),
+        )
+        val surface = Surface(1, 1)
+        surface.canvas { drawRRect(shape, Paint.fill(color).copy(antiAlias = true)) }
+
+        val result = surface.render()
+
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(
+            W4bAnalyticRRectCpuOracle.render(
+                1,
+                1,
+                listOf(W4bAnalyticRRectCpuOracle.Draw(color, shape, RectI32(0, 0, 1, 1))),
+            ),
+            result.pixels,
+        )
+    }
+
+    @Test
+    fun `W4b asymmetric reflected rrect clips exactly at the integral scissor`() {
+        val color = ColorARGB.of(191, 37, 155, 229)
+        val localShape = RRectF32.of(
+            RectF32(0f, 0f, 4f, 4f),
+            CornerRadiiF32.of(1f, 1f),
+            CornerRadiiF32.of(2f, 1f),
+            CornerRadiiF32.of(1f, 2f),
+            CornerRadiiF32.of(0.5f, 1f),
+        )
+        val deviceShape = RRectF32.of(
+            RectF32(0f, 0f, 4f, 4f),
+            CornerRadiiF32.of(2f, 1f),
+            CornerRadiiF32.of(1f, 1f),
+            CornerRadiiF32.of(0.5f, 1f),
+            CornerRadiiF32.of(1f, 2f),
+        )
+        val scissor = RectI32(1, 0, 4, 4)
+        val surface = Surface(4, 4)
+        surface.canvas {
+            clipRect(RectF32(1f, 0f, 4f, 4f), antiAlias = false)
+            translate(4f, 0f)
+            scale(-1f, 1f)
+            drawRRect(localShape, Paint.fill(color).copy(antiAlias = true))
+        }
+
+        val result = surface.render()
+
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(
+            W4bAnalyticRRectCpuOracle.render(
+                4,
+                4,
+                listOf(W4bAnalyticRRectCpuOracle.Draw(color, deviceShape, scissor)),
+            ),
+            result.pixels,
+        )
+        assertTransparentOutside(result.pixels, 4, 4, scissor)
+    }
+
+    @Test
+    fun `W4b renders 512 mixed draws through the public Surface boundary`() {
+        val blue = ColorARGB.Blue
+        val translucentRed = ColorARGB.of(128, 255, 0, 0)
+        val rect = RectF32(0f, 0f, 1f, 1f)
+        val rrect = RRectF32.of(
+            rect,
+            CornerRadiiF32.of(0.25f, 0.25f),
+            CornerRadiiF32.of(0.25f, 0.25f),
+            CornerRadiiF32.of(0.25f, 0.25f),
+            CornerRadiiF32.of(0.25f, 0.25f),
+        )
+        val scissor = RectI32(0, 0, 1, 1)
+        val draws = List(511) {
+            W4bAnalyticRRectCpuOracle.Draw(blue, RRectF32.of(rect), scissor)
+        } + W4bAnalyticRRectCpuOracle.Draw(translucentRed, rrect, scissor)
+        val surface = Surface(1, 1, config = RenderConfig(frameLocalBudgetBytes = W4B_512_FRAME_BUDGET_BYTES))
+        surface.canvas {
+            repeat(511) { drawRect(rect, Paint.fill(blue).copy(antiAlias = true)) }
+            drawRRect(rrect, Paint.fill(translucentRed).copy(antiAlias = true))
+        }
+
+        val result = surface.render()
+
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(W4bAnalyticRRectCpuOracle.render(1, 1, draws), result.pixels)
     }
 
     @Test
@@ -365,6 +707,14 @@ class GPUPlanSurfacePixelTest {
         return surface.render()
     }
 
+    private fun asymmetricShape(): RRectF32 = RRectF32.of(
+        RectF32(0f, 0f, 4f, 4f),
+        CornerRadiiF32.of(1f, 1f),
+        CornerRadiiF32.of(2f, 1f),
+        CornerRadiiF32.of(1f, 2f),
+        CornerRadiiF32.of(0.5f, 1f),
+    )
+
     private fun assertW3Evidence(result: RenderResult) {
         val expectedScopeKinds = setOf("Render", "Readback")
         assertTrue(
@@ -375,6 +725,10 @@ class GPUPlanSurfacePixelTest {
     }
 
     private fun assertW4aEvidence(result: RenderResult) {
+        assertEquals(setOf("Render", "Readback"), result.nativeEvidenceScopeKinds.toSet())
+    }
+
+    private fun assertPreparedRouteEvidence(result: RenderResult) {
         assertEquals(setOf("Render", "Readback"), result.nativeEvidenceScopeKinds.toSet())
     }
 
@@ -395,5 +749,6 @@ class GPUPlanSurfacePixelTest {
 
     private companion object {
         const val W4A_512_FRAME_BUDGET_BYTES = 164_100L
+        const val W4B_512_FRAME_BUDGET_BYTES = 164_100L
     }
 }

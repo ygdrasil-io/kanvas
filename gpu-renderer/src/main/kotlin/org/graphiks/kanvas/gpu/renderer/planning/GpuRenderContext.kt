@@ -19,6 +19,7 @@ import org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat
 import org.graphiks.kanvas.gpu.plan.RenderGraph
 import org.graphiks.kanvas.gpu.plan.W3SolidRectPlanCompiler
 import org.graphiks.kanvas.gpu.plan.W4aAnalyticRectPlanCompiler
+import org.graphiks.kanvas.gpu.plan.W4bAnalyticRRectPlanCompiler
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
@@ -403,7 +404,11 @@ public class GpuPlanSurfaceExecutor internal constructor(
     ): GpuPlanSurfacePlanResult {
         val backend = GpuRenderBackend(
             compiler = CapabilityCompilerChain.of(
-                listOf(W3SolidRectPlanCompiler(), W4aAnalyticRectPlanCompiler()),
+                listOf(
+                    W3SolidRectPlanCompiler(),
+                    W4aAnalyticRectPlanCompiler(),
+                    W4bAnalyticRRectPlanCompiler(),
+                ),
             ),
             context = context,
             targetConfig = GpuRenderTargetConfig(target.extent, target.colorSpace, frameLocalBudgetBytes),

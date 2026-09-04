@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.math.color.ColorF32
+import org.graphiks.kanvas.render.ir.DrawOrigin
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.RectI32
 
@@ -82,6 +84,58 @@ public class AnalyticRectDraw private constructor(
                 "Draw rectangles must be non-empty"
             }
             return AnalyticRectDraw(commandIndex, color, deviceBounds, rasterBounds, scissor)
+        }
+    }
+}
+
+public class AnalyticRRectDraw private constructor(
+    override public val commandIndex: Int,
+    override public val color: ColorF32,
+    public val origin: DrawOrigin,
+    deviceShape: RRectF32,
+    rasterBounds: RectI32,
+    scissor: RectI32,
+) : PlanDraw {
+    override public val coverage: CoveragePlan = CoveragePlan.AnalyticScalarAA
+    override public val sample: SamplePlan = SamplePlan.SingleSample
+    override public val blend: BlendPlan = BlendPlan.SrcOver
+    private val storedDeviceShape = RRectF32.of(
+        deviceShape.rect.copy(),
+        deviceShape.topLeft,
+        deviceShape.topRight,
+        deviceShape.bottomRight,
+        deviceShape.bottomLeft,
+    )
+    private val storedRasterBounds = rasterBounds.copy()
+    private val storedScissor = scissor.copy()
+
+    public fun copyDeviceShape(): RRectF32 = RRectF32.of(
+        storedDeviceShape.rect.copy(),
+        storedDeviceShape.topLeft,
+        storedDeviceShape.topRight,
+        storedDeviceShape.bottomRight,
+        storedDeviceShape.bottomLeft,
+    )
+    public fun copyRasterBounds(): RectI32 = storedRasterBounds.copy()
+    public fun copyScissor(): RectI32 = storedScissor.copy()
+
+    public companion object {
+        public fun of(
+            commandIndex: Int,
+            color: ColorF32,
+            origin: DrawOrigin,
+            deviceShape: RRectF32,
+            rasterBounds: RectI32,
+            scissor: RectI32,
+        ): AnalyticRRectDraw {
+            require(commandIndex >= 0) { "Command index must be non-negative" }
+            require(origin == DrawOrigin.RECT || origin == DrawOrigin.RRECT) {
+                "Analytic rrect draws require RECT or RRECT origin"
+            }
+            require(!deviceShape.rect.isEmpty && !rasterBounds.isEmpty && !scissor.isEmpty) {
+                "Draw rectangles must be non-empty"
+            }
+            return AnalyticRRectDraw(commandIndex, color, origin, deviceShape, rasterBounds, scissor)
         }
     }
 }

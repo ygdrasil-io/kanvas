@@ -17,6 +17,7 @@ import org.graphiks.kanvas.gpu.plan.SolidRectDraw
 import org.graphiks.kanvas.gpu.plan.W3SolidRectPlanCompiler
 import org.graphiks.kanvas.gpu.plan.W3PlanDiagnostics
 import org.graphiks.kanvas.gpu.plan.W4aAnalyticRectPlanCompiler
+import org.graphiks.kanvas.gpu.plan.W4bAnalyticRRectPlanCompiler
 import org.graphiks.kanvas.gpu.renderer.analysis.corePrimitiveRectGeometryAuthority
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
@@ -90,7 +91,7 @@ import org.graphiks.kanvas.render.ir.RenderDiagnosticCode
 import org.graphiks.kanvas.render.ir.RenderDiagnosticDomain
 import org.graphiks.kanvas.render.ir.RenderDiagnosticSeverity
 
-/** Converts closed W3 or W4a graphs into prepared frame tasks without invoking legacy planning. */
+/** Converts closed W3, W4a, or W4b graphs into prepared frame tasks without invoking legacy planning. */
 public class GpuPlanTaskListLowerer {
     public fun lower(request: GpuPlanLoweringRequest): GpuPlanLoweringResult {
         val current = when (val adapted = request.capabilities.toPlanCapabilitySnapshot(request.deviceGeneration)) {
@@ -102,6 +103,7 @@ public class GpuPlanTaskListLowerer {
         return when (request.graph.capabilityId) {
             W3SolidRectPlanCompiler.CAPABILITY_ID -> lowerW3(request, current)
             W4aAnalyticRectPlanCompiler.CAPABILITY_ID -> W4aAnalyticRectGraphLowerer().lower(request)
+            W4bAnalyticRRectPlanCompiler.CAPABILITY_ID -> W4bAnalyticRRectGraphLowerer().lower(request)
             else -> invalid("Unknown gpu-plan capability id.")
         }
     }
@@ -171,7 +173,7 @@ public class GpuPlanTaskListLowerer {
             val pipeline = packet.renderPipelineKey
                 ?: return W3BaseTaskListResult.Invalid(invalidDiagnostic("W3 packet is missing render pipeline authority."))
             packet.attachCorePrimitivePreparedAuthority(
-                GPUCorePrimitivePreparedPacketAuthority(
+                GPUCorePrimitivePreparedPacketAuthority.plannedW3(
                     structuralPipelineKey = corePrimitiveRenderPipelineStructuralKey(
                         semantic,
                         clip,
@@ -180,8 +182,7 @@ public class GpuPlanTaskListLowerer {
                         colorFormat = GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat(),
                     ),
                     renderPipelineKey = pipeline,
-                    uniformSlabSeal = null,
-                    w3SessionScratch = scratch,
+                    scratch = scratch,
                 ),
             )
         }

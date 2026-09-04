@@ -22,6 +22,7 @@ import org.graphiks.kanvas.gpu.plan.PlanOperationCapability
 import org.graphiks.kanvas.gpu.plan.RenderGraph
 import org.graphiks.kanvas.gpu.plan.W3SolidRectPlanCompiler
 import org.graphiks.kanvas.gpu.plan.W4aAnalyticRectPlanCompiler
+import org.graphiks.kanvas.gpu.plan.W4bAnalyticRRectPlanCompiler
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
@@ -84,6 +85,8 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedPacketAut
 import org.graphiks.kanvas.gpu.renderer.passes.W3SessionScratchV1
 import org.graphiks.kanvas.gpu.renderer.passes.W4aSessionScratchV1
 import org.graphiks.kanvas.gpu.renderer.passes.W4aSessionScratchDrawV1
+import org.graphiks.kanvas.gpu.renderer.passes.W4bSessionScratchV1
+import org.graphiks.kanvas.gpu.renderer.passes.W4bSessionScratchDrawV1
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedSemanticAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticShapeUniformSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticShapeUniformBuildResult
@@ -246,6 +249,8 @@ import org.graphiks.kanvas.render.ir.SceneCommand
 import org.graphiks.kanvas.render.ir.SceneExtent
 import org.graphiks.kanvas.render.ir.SceneSnapshot
 import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.CornerRadiiF32
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.matrix.Matrix3x3F32
 import kotlin.test.Test
@@ -259,6 +264,187 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class GPUFramePreflighterTest {
+    @Test
+    fun `W4b lowerer preflights its sealed analytic RRect frame`() {
+        val fixture = w4bFixture()
+        val render = fixture.taskList.tasks.filterIsInstance<GPUTask.Render>().single()
+        val scratch = requireNotNull(render.drawPackets.first().corePrimitivePreparedAuthority?.w4bSessionScratch)
+
+        assertEquals(
+            listOf(GPUTask.PrepareResources::class, GPUTask.Render::class, GPUTask.Readback::class),
+            fixture.taskList.tasks.map { it::class },
+        )
+        assertEquals(listOf(DrawOrigin.RECT, DrawOrigin.RRECT), scratch.draws.map { it.origin })
+        assertEquals(listOf(80L, 80L), scratch.uniformPlan.slots.map { it.payloadBytes })
+        assertEquals(listOf(256L, 256L), scratch.uniformPlan.slots.map { it.allocatedBytes })
+        assertEquals(listOf(0L, 256L), scratch.uniformPlan.slots.map { it.alignedOffset })
+        assertEquals(
+            listOf(0 to 2, 1 to 2, 0 to 2, 0 to 2, 0 to 2),
+            fixture.graph.resources().map { it.firstPassIndex to it.lastPassIndexExclusive },
+        )
+
+        assertIs<GPUFramePreflightResult.Prepared>(preflightW4b(fixture.framePlan, fixture.capabilities))
+    }
+
+    @Test
+    fun `sealed W4b aggregate budget uses its checked resident transient sum`() {
+        val fixture = w4bFixture()
+        val baseline = fixture.framePlan.memoryBudget
+        val required = Math.addExact(
+            baseline.targetResidentBytes,
+            baseline.peakFrameTransientBytes,
+        )
+        val exact = fixture.framePlan.withMemoryBudget(
+            baseline.copy(configuredAggregateBudgetBytes = required),
+        )
+        val oneByteShort = fixture.framePlan.withMemoryBudget(
+            baseline.copy(configuredAggregateBudgetBytes = required - 1L),
+        )
+        val overflow = fixture.framePlan.withMemoryBudget(
+            baseline.copy(
+                targetResidentBytes = Long.MAX_VALUE,
+                peakFrameTransientBytes = 1L,
+                configuredAggregateBudgetBytes = Long.MAX_VALUE,
+            ),
+        )
+
+        assertIs<GPUFramePreflightResult.Prepared>(preflightW4b(exact, fixture.capabilities))
+        listOf(oneByteShort, overflow).forEach { forgedPlan ->
+            assertEquals(
+                "invalid.preflight.w4b_session_scratch",
+                assertIs<GPUFramePreflightResult.Refused>(
+                    preflightW4b(forgedPlan, fixture.capabilities),
+                ).diagnostic.code.value,
+            )
+        }
+    }
+
+    @Test
+    fun `sealed W4b scratch refuses a contradictory physical pool allocation budget`() {
+        val fixture = w4bFixture()
+        val baseline = fixture.framePlan.memoryBudget
+        val uniform = baseline.allocations.single { allocation ->
+            allocation.category == GPUFrameMemoryCategory.ReusableScratch &&
+                allocation.label.endsWith(".uniform")
+        }
+        val forged = fixture.framePlan.withMemoryBudget(
+            baseline.copy(
+                allocations = baseline.allocations.map { allocation ->
+                    if (allocation === uniform) allocation.copy(bytes = 8_192L) else allocation
+                },
+            ),
+        )
+
+        assertEquals(4_096L, uniform.bytes)
+        assertEquals(
+            "invalid.preflight.w4b_session_scratch",
+            assertIs<GPUFramePreflightResult.Refused>(
+                preflightW4b(forged, fixture.capabilities),
+            ).diagnostic.code.value,
+        )
+    }
+
+    @Test
+    fun `sealed W4b scratch rejects a foreign negative category total`() {
+        val fixture = w4bFixture()
+        val baseline = fixture.framePlan.memoryBudget
+        val forged = fixture.framePlan.withMemoryBudget(
+            baseline.copy(
+                categoryTotals = baseline.categoryTotals +
+                    (GPUFrameMemoryCategory.FrameLocalMsaaColor to -1L),
+            ),
+        )
+
+        assertEquals(
+            "invalid.preflight.w4b_session_scratch",
+            assertIs<GPUFramePreflightResult.Refused>(
+                preflightW4b(forged, fixture.capabilities),
+            ).diagnostic.code.value,
+        )
+    }
+
+    @Test
+    fun `W4b Uniform80 scratch rejects a 79 byte slot at public construction`() {
+        val source = requireNotNull(
+            w4bFixture().framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
+                .drawPackets.first().corePrimitivePreparedAuthority?.w4bSessionScratch,
+        )
+        val slot79Plan = GPUUniformSlabPlan(
+            planHash = "w4b-uniform79",
+            sourceLabel = source.uniformPlan.sourceLabel,
+            deviceGeneration = source.uniformPlan.deviceGeneration,
+            alignmentBytes = source.uniformPlan.alignmentBytes,
+            totalBytes = source.uniformPlan.totalBytes,
+            uploadBudgetBytes = source.uniformPlan.uploadBudgetBytes,
+            slots = source.uniformPlan.slots.mapIndexed { index, slot ->
+                if (index == 0) slot.copy(payloadBytes = 79L) else slot
+            },
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            w4bScratchForTest(source, uniformPlan = slot79Plan)
+        }
+    }
+
+    @Test
+    fun `W4b Uniform80 plan rejects an unaligned dynamic offset at public construction`() {
+        val source = requireNotNull(
+            w4bFixture().framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
+                .drawPackets.first().corePrimitivePreparedAuthority?.w4bSessionScratch,
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            GPUUniformSlabPlan(
+                planHash = "w4b-unaligned-offset",
+                sourceLabel = source.uniformPlan.sourceLabel,
+                deviceGeneration = source.uniformPlan.deviceGeneration,
+                alignmentBytes = source.uniformPlan.alignmentBytes,
+                totalBytes = source.uniformPlan.totalBytes,
+                uploadBudgetBytes = source.uniformPlan.uploadBudgetBytes,
+                slots = source.uniformPlan.slots.mapIndexed { index, slot ->
+                    if (index == 1) slot.copy(alignedOffset = 128L) else slot
+                },
+            )
+        }
+    }
+
+    @Test
+    fun `sealed W4b scratch refuses a divergent draw scissor at preflight`() {
+        val fixture = w4bFixture()
+        val packets = fixture.framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .single().drawPackets
+        val source = requireNotNull(packets.first().corePrimitivePreparedAuthority?.w4bSessionScratch)
+        val firstScissor = source.draws.first().copyScissorBounds()
+        val forgedScratch = w4bScratchForTest(
+            source,
+            draws = source.draws.mapIndexed { index, draw ->
+                if (index != 0) draw else W4bSessionScratchDrawV1(
+                    draw.packetId,
+                    draw.commandId,
+                    draw.origin,
+                    draw.copyDeviceShape(),
+                    draw.copyRasterBounds(),
+                    GPUPixelBounds(
+                        firstScissor.left,
+                        firstScissor.top,
+                        firstScissor.right - 1,
+                        firstScissor.bottom,
+                    ),
+                )
+            },
+        )
+        val forged = packets.fold(fixture.framePlan) { plan, packet ->
+            plan.replacingCorePacket(packet, cloneCorePacket(packet, w4bSessionScratch = forgedScratch))
+        }
+
+        assertEquals(
+            "invalid.preflight.w4b_session_scratch",
+            assertIs<GPUFramePreflightResult.Refused>(
+                preflightW4b(forged, fixture.capabilities),
+            ).diagnostic.code.value,
+        )
+    }
+
     @Test
     fun `sealed W4a scratch authenticates planned analytic packets`() {
         val fixture = w4aFixture()
@@ -333,7 +519,7 @@ class GPUFramePreflighterTest {
     }
 
     @Test
-    fun `sealed W4a markers require one common scratch before generic routing`() {
+    fun `sealed W4a packets reject erased scratches before routing and divergent scratches at preflight`() {
         val fixture = w4aFixture()
         val packets = fixture.framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
             .single().drawPackets
@@ -346,20 +532,18 @@ class GPUFramePreflighterTest {
                 )
             }
 
-        val cases = listOf(
-            withScratch { null },
-            withScratch { index -> if (index == 0) null else scratch },
-            withScratch { index -> if (index == 0) w4aScratchForTest(scratch) else scratch },
-        )
-
-        cases.forEach { forgedPlan ->
-            assertEquals(
-                "invalid.preflight.w4a_session_scratch",
-                assertIs<GPUFramePreflightResult.Refused>(
-                    preflightW4a(forgedPlan, fixture.capabilities),
-                ).diagnostic.code.value,
-            )
+        assertFailsWith<IllegalArgumentException> { withScratch { null } }
+        assertFailsWith<IllegalArgumentException> {
+            withScratch { index -> if (index == 0) null else scratch }
         }
+
+        val divergent = withScratch { index -> if (index == 0) w4aScratchForTest(scratch) else scratch }
+        assertEquals(
+            "invalid.preflight.w4a_session_scratch",
+            assertIs<GPUFramePreflightResult.Refused>(
+                preflightW4a(divergent, fixture.capabilities),
+            ).diagnostic.code.value,
+        )
     }
 
     @Test
@@ -421,7 +605,7 @@ class GPUFramePreflighterTest {
     }
 
     @Test
-    fun `sealed W3 scratch is accepted without logical V I U while generic and forged twins refuse`() {
+    fun `sealed W3 scratch is accepted without logical V I U while erased and forged twins refuse`() {
         val fixture = w3Fixture()
         val preparations = fixture.framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
             .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
@@ -435,8 +619,9 @@ class GPUFramePreflighterTest {
         })
         assertIs<GPUFramePreflightResult.Prepared>(preflightW3(fixture.framePlan, fixture.capabilities))
 
-        val generic = GPUFramePlanner.plan(w3Twin(fixture.taskList, scratch = null))
-        assertIs<GPUFramePreflightResult.Refused>(preflightW3(generic, fixture.capabilities))
+        assertFailsWith<IllegalArgumentException> {
+            w3Twin(fixture.taskList, scratch = null)
+        }
 
         val originalScratch = requireNotNull(
             fixture.framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
@@ -7934,6 +8119,111 @@ class GPUFramePreflighterTest {
         val capabilities: GPUCapabilities,
     )
 
+    private data class W4bFixture(
+        val graph: RenderGraph,
+        val taskList: GPUTaskList,
+        val framePlan: GPUFramePlan,
+        val capabilities: GPUCapabilities,
+    )
+
+    private fun w4bFixture(): W4bFixture {
+        val capabilities = GPUCapabilities(
+            implementation = GPUImplementationIdentity("GPU", "w4b", "adapter", "device"),
+            facts = listOf(GPUCapabilityFact("w4b.scalar_aa", "test", "supported", true, "w4b")),
+            snapshotId = "w4b-preflight",
+            limits = GPULimits(
+                maxTextureDimension2D = 2048,
+                copyBytesPerRowAlignment = 256,
+                minUniformBufferOffsetAlignment = 256,
+                maxBufferSize = 1L shl 20,
+                maxDynamicUniformBuffersPerPipelineLayout = 1,
+            ),
+            supportedTextureFormats = setOf(GPUTextureFormat.RGBA8UnormSrgb),
+            textureFormatSampleSupport = GPUTextureFormatSampleSupport(
+                mapOf(GPUTextureFormat.RGBA8UnormSrgb to GPUTextureSampleCountSupport(setOf(1))),
+            ),
+            rendererFeatures = setOf(
+                GPURendererFeature.RenderPass,
+                GPURendererFeature.CopyUpload,
+                GPURendererFeature.UniformBuffer,
+                GPURendererFeature.Readback,
+            ),
+        )
+        val scene = SceneSnapshot.of(
+            SceneExtent(4, 4),
+            ColorSpace.SRGB,
+            listOf(
+                SceneCommand.Draw(
+                    DrawNode(
+                        GeometryNode.Rect.of(RectF32(0f, 0f, 2f, 2f)),
+                        MaterialNode.Solid(ColorARGB.fromPackedUInt(0xff0000ffu)),
+                        CoverageRequest.ANTIALIASED,
+                        ClipStackNode.Empty,
+                        BlendNode.SrcOver,
+                        EffectStack.Empty,
+                        Matrix3x3F32.Identity,
+                        DrawOrigin.RECT,
+                    ),
+                ),
+                SceneCommand.Draw(
+                    DrawNode(
+                        GeometryNode.RRect.of(
+                            RRectF32.of(
+                                RectF32(1f, 1f, 4f, 4f),
+                                CornerRadiiF32.of(1f, 1f),
+                                CornerRadiiF32.of(2f, 1f),
+                                CornerRadiiF32.of(1f, 2f),
+                                CornerRadiiF32.of(0.5f, 1f),
+                            ),
+                        ),
+                        MaterialNode.Solid(ColorARGB.fromPackedUInt(0x80ff0000u)),
+                        CoverageRequest.ANTIALIASED,
+                        ClipStackNode.Empty,
+                        BlendNode.SrcOver,
+                        EffectStack.Empty,
+                        Matrix3x3F32.Identity,
+                        DrawOrigin.RRECT,
+                    ),
+                ),
+            ),
+        )
+        val planCapabilities = PlanCapabilitySnapshot.of(
+            deviceGeneration = 7,
+            maxTextureDimension2D = 2048,
+            maxBufferSizeBytes = 1L shl 20,
+            copyBytesPerRowAlignment = 256,
+            supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+            minUniformBufferOffsetAlignment = 256,
+            maxDynamicUniformBuffersPerPipelineLayout = 1,
+            supportedOperations = PlanOperationCapability.entries.toSet(),
+            bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 4_096, 4_096),
+        )
+        val compiler = W4bAnalyticRRectPlanCompiler()
+        val candidate = assertIs<GpuPlanSelection.Candidate>(
+            compiler.select(scene, RenderTargetDescriptor(scene.extent, scene.colorSpace)),
+        ).candidate
+        val graph = assertIs<RenderPlanResult.Ready<RenderGraph>>(
+            compiler.plan(candidate, planCapabilities, PlanBudget(1L shl 20)),
+        ).plan
+        val lowered = GpuPlanTaskListLowerer().lower(
+            GpuPlanLoweringRequest(
+                graph = graph,
+                capabilities = capabilities,
+                deviceGeneration = GPUDeviceGenerationID(7),
+                currentBudget = graph.budget,
+                frameId = GPUFrameID(705),
+                recordingId = GPURecordingID("w4b-preflight"),
+            ),
+        )
+        val taskList = assertIs<GpuPlanLoweringResult.Lowered>(
+            lowered,
+            (lowered as? GpuPlanLoweringResult.InvalidPlan)?.diagnostic?.message.orEmpty(),
+        ).taskList
+        val framePlan = GPUFramePlanner.plan(taskList)
+        check(!framePlan.atomicallyRefused) { framePlan.dumpLines().joinToString("\n") }
+        return W4bFixture(graph, taskList, framePlan, capabilities)
+    }
+
     private fun w4aFixture(): W4aFixture {
         val capabilities = GPUCapabilities(
             implementation = GPUImplementationIdentity("GPU", "w4a", "adapter", "device"),
@@ -8149,6 +8439,28 @@ class GPUFramePreflighterTest {
         ).preflight(framePlan)
     }
 
+    private fun preflightW4b(
+        framePlan: GPUFramePlan,
+        capabilities: GPUCapabilities,
+    ): GPUFramePreflightResult {
+        val target = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single().target
+        val generations = framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+            .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+            .associate { request -> request.resource to 1L }
+        return preflighter(
+            resources = RecordingResourceProvider(mutableListOf()),
+            completion = RecordingCompletionProvider(mutableListOf()),
+            surface = RecordingSurfaceProvider(mutableListOf()),
+            context = GPUFramePreflightContext(
+                targetId = target.value,
+                deviceGeneration = framePlan.capabilitySeal.deviceGeneration,
+                targetGeneration = 1L,
+                resourceGenerations = generations,
+            ),
+            capabilities = capabilities,
+        ).preflight(framePlan)
+    }
+
     private fun w4aScratchForTest(
         source: W4aSessionScratchV1,
         vertexResourceId: PlanResourceId = source.vertexResourceId,
@@ -8183,6 +8495,37 @@ class GPUFramePreflighterTest {
         indexCapacityBytes = indexCapacityBytes,
         uniformCapacityBytes = uniformCapacityBytes,
         poolCapacities = poolCapacities,
+        maxBufferSize = source.maxBufferSize,
+        maxDynamicUniformBuffersPerPipelineLayout = source.maxDynamicUniformBuffersPerPipelineLayout,
+    )
+
+    private fun w4bScratchForTest(
+        source: W4bSessionScratchV1,
+        uniformPlan: GPUUniformSlabPlan = source.uniformPlan,
+        draws: List<W4bSessionScratchDrawV1> = source.draws,
+    ) = W4bSessionScratchV1(
+        planId = source.planId,
+        capabilitySealHash = source.capabilitySealHash,
+        deviceGeneration = source.deviceGeneration,
+        target = source.target,
+        staging = source.staging,
+        targetBounds = source.targetBounds,
+        vertexResourceId = source.vertexResourceId,
+        indexResourceId = source.indexResourceId,
+        uniformResourceId = source.uniformResourceId,
+        packetIds = source.packetIds,
+        commandIds = source.commandIds,
+        draws = draws,
+        structuralPipelineKey = source.structuralPipelineKey,
+        uniformPlan = uniformPlan,
+        uniformStrideBytes = source.uniformStrideBytes,
+        vertexUsefulBytes = source.vertexUsefulBytes,
+        indexUsefulBytes = source.indexUsefulBytes,
+        uniformUsefulBytes = source.uniformUsefulBytes,
+        vertexCapacityBytes = source.vertexCapacityBytes,
+        indexCapacityBytes = source.indexCapacityBytes,
+        uniformCapacityBytes = source.uniformCapacityBytes,
+        poolCapacities = source.poolCapacities,
         maxBufferSize = source.maxBufferSize,
         maxDynamicUniformBuffersPerPipelineLayout = source.maxDynamicUniformBuffersPerPipelineLayout,
     )
@@ -9589,6 +9932,8 @@ class GPUFramePreflighterTest {
             packet.corePrimitivePreparedAuthority?.coverageMaskUniformSlabSeal,
         w4aSessionScratch: W4aSessionScratchV1? =
             packet.corePrimitivePreparedAuthority?.w4aSessionScratch,
+        w4bSessionScratch: W4bSessionScratchV1? =
+            packet.corePrimitivePreparedAuthority?.w4bSessionScratch,
         bindingLayoutHash: String = packet.bindingLayoutHash,
         uniformSlot: GPUUniformPayloadSlot? = packet.uniformSlot,
         resourceSlot: GPUResourceBindingSlot? = packet.resourceSlot,
@@ -9637,6 +9982,7 @@ class GPUFramePreflighterTest {
                 analyticIntersectionUniformSeal = analyticIntersectionUniformSeal,
                 coverageMaskUniformSlabSeal = coverageMaskUniformSlabSeal,
                 w4aSessionScratch = w4aSessionScratch,
+                w4bSessionScratch = w4bSessionScratch,
                 ),
             )
         }
