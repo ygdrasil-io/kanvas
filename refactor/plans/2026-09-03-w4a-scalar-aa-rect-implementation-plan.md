@@ -33,13 +33,13 @@
 
 ## Progression
 
-- [ ] Task 1 — Étendre les contrats de plan et les capacités physiques
-- [ ] Task 2 — Sélectionner W3/W4a par candidat opaque
-- [ ] Task 3 — Compiler les rectangles fractionnaires en graphe W4a
-- [ ] Task 4 — Abaisser W4a en task list scellée Uniform80
-- [ ] Task 5 — Préflighter et matérialiser W4a avec le pool exact
-- [ ] Task 6 — Brancher la chaîne dans le context et la façade Surface
-- [ ] Task 7 — Prouver les pixels et les frontières 512/513
+- [x] Task 1 — Étendre les contrats de plan et les capacités physiques
+- [x] Task 2 — Sélectionner W3/W4a par candidat opaque
+- [x] Task 3 — Compiler les rectangles fractionnaires en graphe W4a
+- [x] Task 4 — Abaisser W4a en task list scellée Uniform80
+- [x] Task 5 — Préflighter et matérialiser W4a avec le pool exact
+- [x] Task 6 — Brancher la chaîne dans le context et la façade Surface
+- [x] Task 7 — Prouver les pixels et les frontières 512/513
 - [ ] Task 8 — Vérifier globalement, publier W04 et ouvrir la PR stackée
 
 ## Carte des dépendances
@@ -1298,7 +1298,7 @@ larges restent inchangés.
 - Consumes: tous les commits W4a et leurs résultats frais.
 - Produces: preuves autoritaires W04, review Sol globale et PR stackée sur `codex/w3-gpu-plan-first-slice`.
 
-- [ ] **Step 1: Run module gates**
+- [x] **Step 1: Run module gates**
 
 ```bash
 rtk ./gradlew :math:geometry:jvmTest :math:geometry:jsTest :math:matrix:jvmTest :math:matrix:jsTest :math:color:jvmTest :math:color:jsTest
@@ -1311,7 +1311,7 @@ Expected: les gates ciblées W4a passent. La commande `:kanvas:test` ciblée peu
 encore rencontrer les 45 échecs legacy `GPUAllApiBlendSurfaceTest` uniquement si
 le pattern les inclut ; leurs noms doivent rester ceux de la baseline.
 
-- [ ] **Step 2: Run the fresh global non-GM baseline**
+- [x] **Step 2: Run the fresh global non-GM baseline**
 
 ```bash
 rtk ./gradlew :kanvas:test --rerun-tasks
@@ -1332,7 +1332,7 @@ liste doit être exactement :
 Tout nouveau nom rouge bloque W4a. Ne pas exécuter `:integration-tests:skia` ni
 aucune tâche GM.
 
-- [ ] **Step 3: Write the authoritative W04 status**
+- [x] **Step 3: Write the authoritative W04 status**
 
 Documenter : capability W4a, cinq ressources/capacités exactes, sélection
 W3/W4a, pixel proofs, commandes et résultats frais, exact 51-name baseline,
@@ -1340,7 +1340,7 @@ W3/W4a, pixel proofs, commandes et résultats frais, exact 51-name baseline,
 RRect/path/stroke/clip. Dans `refactor/README.md`, passer W4 de « Non démarrée »
 à « W4a ScalarAA Rect atteinte ; gate W4 ouverte » et lier le status.
 
-- [ ] **Step 4: Run document and diff checks**
+- [x] **Step 4: Run document and diff checks**
 
 ```bash
 rtk rg -n 'T[B]D|T[O]DO|F[I]XME|place[h]older' refactor/specs/2026-09-03-w4-geometry-coverage-stack-design.md refactor/plans/2026-09-03-w4a-scalar-aa-rect-implementation-plan.md refactor/waves/W04-geometry-coverage/status.md
