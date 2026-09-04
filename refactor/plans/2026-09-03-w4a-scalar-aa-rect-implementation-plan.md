@@ -1351,7 +1351,7 @@ rtk git status --short
 Expected: aucun marqueur incomplet, aucune erreur whitespace, uniquement les changements
 W4a attendus.
 
-- [ ] **Step 5: Commit status and request final Sol review**
+- [x] **Step 5: Commit status and request final Sol review**
 
 ```bash
 rtk git add refactor/README.md refactor/waves/W04-geometry-coverage/status.md refactor/plans/2026-09-03-w4a-scalar-aa-rect-implementation-plan.md
@@ -1364,7 +1364,7 @@ budgets, absence de fallback/double allocation et exact failure-name baseline.
 Tout finding bloquant ou important est corrigé par un nouvel agent Terra puis
 re-reviewé par Sol avant publication.
 
-- [ ] **Step 6: Push and open the stacked PR**
+- [x] **Step 6: Push and open the stacked PR**
 
 Après review Sol `APPROVE` et vérifications fraîches :
 
