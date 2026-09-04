@@ -40,7 +40,7 @@ class W4bAnalyticRRectPlanCompilerTest {
         val graph = ready(rrect(transform = Matrix3x3F32(sx = -1f, sy = 1f, tx = 4f)))
 
         val draw = assertIs<AnalyticRRectDraw>(renderPass(graph).draws().single())
-        assertEquals(W4bAnalyticRRectPlanCompiler.CAPABILITY_ID, graph.capabilityId)
+        assertEquals("solid-rect-rrect-scalar-aa-simple-scissor-src-over-srgb-v1", graph.capabilityId)
         assertEquals(DrawOrigin.RRECT, draw.origin)
         assertEquals(
             RRectF32.of(

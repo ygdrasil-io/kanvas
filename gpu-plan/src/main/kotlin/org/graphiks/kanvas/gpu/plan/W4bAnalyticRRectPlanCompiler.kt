@@ -378,7 +378,7 @@ public class W4bAnalyticRRectPlanCompiler : GpuPlanCompiler {
     }
 
     public companion object {
-        public const val CAPABILITY_ID: String = "solid-rrect-scalar-aa-simple-scissor-src-over-srgb-v1"
+        public const val CAPABILITY_ID: String = "solid-rect-rrect-scalar-aa-simple-scissor-src-over-srgb-v1"
         private val FORMAT = PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL
         private val REQUIRED_OPERATIONS = setOf(
             PlanOperationCapability.RenderPass,
