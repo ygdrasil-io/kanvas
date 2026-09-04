@@ -96,11 +96,16 @@ class W4bAnalyticRRectPlanCompilerTest {
     }
 
     @Test
-    fun `W4b accepts 512 visual draws with rrect provenance and rejects 513`() {
+    fun `W4b makes 512 mixed draws Ready and leaves 513 observably outside W4b`() {
         val accepted = List(511) { rect() } + rrect()
         val rejected = accepted + rect()
 
-        assertIs<GpuPlanSelection.Candidate>(select(accepted))
+        val candidate = assertIs<GpuPlanSelection.Candidate>(select(accepted)).candidate
+        val graph = assertIs<RenderPlanResult.Ready<RenderGraph>>(
+            compiler.plan(candidate, capabilities(), PlanBudget(1L shl 20)),
+        ).plan
+
+        assertEquals(W4bAnalyticRRectPlanCompiler.CAPABILITY_ID, graph.capabilityId)
         assertIs<GpuPlanSelection.NotCandidate>(select(rejected))
     }
 

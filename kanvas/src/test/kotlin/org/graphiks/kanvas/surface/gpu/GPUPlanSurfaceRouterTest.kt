@@ -86,9 +86,11 @@ class GPUPlanSurfaceRouterTest {
         )
 
         assertContentEquals(bytes.toUByteArray(), result.pixels)
-        val rrect = assertIs<org.graphiks.kanvas.render.ir.SceneCommand.Draw>(requireNotNull(captured).commandAt(1)).node
-        assertEquals(DrawOrigin.RRECT, rrect.origin)
-        assertIs<GeometryNode.RRect>(rrect.geometry)
+        val nodes = listOf(0, 1).map { index ->
+            assertIs<org.graphiks.kanvas.render.ir.SceneCommand.Draw>(requireNotNull(captured).commandAt(index)).node
+        }
+        assertEquals(listOf(DrawOrigin.RECT, DrawOrigin.RRECT), nodes.map { it.origin })
+        assertIs<GeometryNode.RRect>(nodes[1].geometry)
     }
 
     @Test
