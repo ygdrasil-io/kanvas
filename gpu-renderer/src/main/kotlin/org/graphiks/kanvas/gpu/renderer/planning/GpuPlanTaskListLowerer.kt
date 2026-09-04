@@ -16,6 +16,7 @@ import org.graphiks.kanvas.gpu.plan.SamplePlan
 import org.graphiks.kanvas.gpu.plan.SolidRectDraw
 import org.graphiks.kanvas.gpu.plan.W3SolidRectPlanCompiler
 import org.graphiks.kanvas.gpu.plan.W3PlanDiagnostics
+import org.graphiks.kanvas.gpu.plan.W4aAnalyticRectPlanCompiler
 import org.graphiks.kanvas.gpu.renderer.analysis.corePrimitiveRectGeometryAuthority
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
@@ -89,7 +90,7 @@ import org.graphiks.kanvas.render.ir.RenderDiagnosticCode
 import org.graphiks.kanvas.render.ir.RenderDiagnosticDomain
 import org.graphiks.kanvas.render.ir.RenderDiagnosticSeverity
 
-/** Converts exactly the closed W3 graph into prepared frame tasks; it never invokes legacy planning. */
+/** Converts closed W3 or W4a graphs into prepared frame tasks without invoking legacy planning. */
 public class GpuPlanTaskListLowerer {
     public fun lower(request: GpuPlanLoweringRequest): GpuPlanLoweringResult {
         val current = when (val adapted = request.capabilities.toPlanCapabilitySnapshot(request.deviceGeneration)) {
@@ -98,6 +99,17 @@ public class GpuPlanTaskListLowerer {
         }
         if (request.graph.capabilities != current) return unsupported("The graph capability snapshot is stale.")
         if (request.graph.budget != request.currentBudget) return invalid("The graph budget is stale.")
+        return when (request.graph.capabilityId) {
+            W3SolidRectPlanCompiler.CAPABILITY_ID -> lowerW3(request, current)
+            W4aAnalyticRectPlanCompiler.CAPABILITY_ID -> W4aAnalyticRectGraphLowerer().lower(request)
+            else -> invalid("Unknown gpu-plan capability id.")
+        }
+    }
+
+    private fun lowerW3(
+        request: GpuPlanLoweringRequest,
+        current: org.graphiks.kanvas.gpu.plan.PlanCapabilitySnapshot,
+    ): GpuPlanLoweringResult {
         val graph = validateW3Graph(request.graph) ?: return invalid("The graph is not the exact W3 topology.")
         if (graph.staging.byteSize > current.maxBufferSizeBytes) {
             return capability(
@@ -141,7 +153,7 @@ public class GpuPlanTaskListLowerer {
         targetBounds: GPUPixelBounds,
         memory: GPUFrameMemoryBudgetPlan,
     ): W3BaseTaskListResult {
-        val packets = graph.render.draws().mapIndexed { paintOrder, draw -> packet(draw, paintOrder, targetBounds) }
+        val packets = graph.draws.mapIndexed { paintOrder, draw -> packet(draw, paintOrder, targetBounds) }
         val replay = "w3:${request.graph.id.value}"
         val seal = GPUFrameCapabilitySeal.capture(request.frameId, request.deviceGeneration, request.capabilities)
         val scratch = when (val sealed = sealW3Scratch(request, target, staging, targetBounds, seal.sealHash, packets)) {
@@ -342,13 +354,22 @@ public class GpuPlanTaskListLowerer {
         } catch (_: IllegalArgumentException) { return null }
         val expectedRenderId = PlanPass.RenderPass(0, expectedTarget.id, emptyList(), AttachmentLoadPlan.ClearTransparent, AttachmentStorePlan.Store).id
         val expectedReadbackId = PlanPass.ReadbackPass(0, expectedTarget.id, expectedStagingResource.id, expectedRow).id
-        if (staging.id != expectedStagingResource.id || staging.ordinal != 0 || staging.kind != PlanResourceKind.Buffer || staging.format != null || staging.copyExtent() != null || staging.byteSize != expectedStaging || staging.usages() != setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead) || staging.lifetime != PlanResourceLifetime.FrameLocal || staging.firstPassIndex != 1 || staging.lastPassIndexExclusive != 2 || render.ordinal != 0 || readback.ordinal != 0 || render.id != expectedRenderId || readback.id != expectedReadbackId || render.target != target.id || readback.source != target.id || readback.staging != staging.id || readback.bytesPerRow != expectedRow || render.load != AttachmentLoadPlan.ClearTransparent || render.store != AttachmentStorePlan.Store || graph.dependencies().singleOrNull()?.let { it.before == render.id && it.after == readback.id } != true || graph.visualCommandCount != render.draws().size || render.draws().size !in 1..512 || graph.peakFrameLocalBytes != expectedTargetBytes + expectedStaging) return null
+        val planDraws = render.draws()
+        if (planDraws.any { it !is SolidRectDraw }) return null
+        val draws = planDraws.filterIsInstance<SolidRectDraw>()
+        if (staging.id != expectedStagingResource.id || staging.ordinal != 0 || staging.kind != PlanResourceKind.Buffer || staging.format != null || staging.copyExtent() != null || staging.byteSize != expectedStaging || staging.usages() != setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead) || staging.lifetime != PlanResourceLifetime.FrameLocal || staging.firstPassIndex != 1 || staging.lastPassIndexExclusive != 2 || render.ordinal != 0 || readback.ordinal != 0 || render.id != expectedRenderId || readback.id != expectedReadbackId || render.target != target.id || readback.source != target.id || readback.staging != staging.id || readback.bytesPerRow != expectedRow || render.load != AttachmentLoadPlan.ClearTransparent || render.store != AttachmentStorePlan.Store || render.drawDataResources != null || graph.dependencies().singleOrNull()?.let { it.before == render.id && it.after == readback.id } != true || graph.visualCommandCount != draws.size || draws.size !in 1..512 || graph.peakFrameLocalBytes != expectedTargetBytes + expectedStaging) return null
         val targetRect = org.graphiks.math.geometry.RectI32(0, 0, graph.targetExtent.width, graph.targetExtent.height)
-        if (render.draws().any { draw -> draw.coverage != CoveragePlan.FullOrScissor || draw.sample != SamplePlan.SingleSample || draw.blend != BlendPlan.SrcOver || draw.copyVisibleBounds().isEmpty || draw.copyScissor().isEmpty || !targetRect.copy().intersect(draw.copyVisibleBounds()) || !draw.copyVisibleBounds().copy().intersect(draw.copyScissor()) || draw.copyScissor() != draw.copyVisibleBounds() }) return null
-        return W3Graph(target, staging, render, readback)
+        if (draws.any { draw -> draw.coverage != CoveragePlan.FullOrScissor || draw.sample != SamplePlan.SingleSample || draw.blend != BlendPlan.SrcOver || draw.copyVisibleBounds().isEmpty || draw.copyScissor().isEmpty || !targetRect.copy().intersect(draw.copyVisibleBounds()) || !draw.copyVisibleBounds().copy().intersect(draw.copyScissor()) || draw.copyScissor() != draw.copyVisibleBounds() }) return null
+        return W3Graph(target, staging, render, readback, draws)
     }
 
-    private data class W3Graph(val target: PlanResource, val staging: PlanResource, val render: PlanPass.RenderPass, val readback: PlanPass.ReadbackPass)
+    private data class W3Graph(
+        val target: PlanResource,
+        val staging: PlanResource,
+        val render: PlanPass.RenderPass,
+        val readback: PlanPass.ReadbackPass,
+        val draws: List<SolidRectDraw>,
+    )
 
     private sealed interface W3BaseTaskListResult {
         data class Ready(val taskList: GPUTaskList) : W3BaseTaskListResult

@@ -8,6 +8,7 @@ import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.geometry.RectI32
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 
@@ -16,6 +17,181 @@ class GPUPlanSurfacePixelTest {
     @AfterEach
     fun disposeGpuRuntime() {
         GPUBackendRuntimeFactory.dispose()
+    }
+
+    @Test
+    fun `W4a oracle calculates the hand checked fractional coverage and BGRA swizzle`() {
+        val fractional = W4aAnalyticRectCpuOracle.render(
+            width = 2,
+            height = 2,
+            draws = listOf(
+                W4aAnalyticRectCpuOracle.Draw(
+                    ColorARGB.White,
+                    RectF32(0.25f, 0.5f, 1.75f, 1.5f),
+                    RectI32(0, 0, 2, 2),
+                ),
+            ),
+        )
+        val bgra = W4aAnalyticRectCpuOracle.render(
+            width = 1,
+            height = 1,
+            draws = listOf(
+                W4aAnalyticRectCpuOracle.Draw(
+                    ColorARGB.Red,
+                    RectF32(0f, 0f, 1f, 1f),
+                    RectI32(0, 0, 1, 1),
+                ),
+            ),
+            format = PixelFormat.BGRA8,
+        )
+
+        // Each touched pixel has coverage (0.75 * 0.5) = 0.375 before blending.
+        assertPixelsEqual(
+            ubyteArrayOf(
+                165u, 165u, 165u, 96u,
+                165u, 165u, 165u, 96u,
+                165u, 165u, 165u, 96u,
+                165u, 165u, 165u, 96u,
+            ),
+            fractional,
+        )
+        assertPixelsEqual(ubyteArrayOf(0u, 0u, 255u, 255u), bgra)
+    }
+
+    @Test
+    fun `opaque fractional AA rectangle matches the independent W4a oracle`() {
+        val color = ColorARGB.of(255, 40, 120, 210)
+        val draws = listOf(
+            W4aAnalyticRectCpuOracle.Draw(
+                color,
+                RectF32(0.25f, 0.5f, 3.75f, 2.25f),
+                RectI32(0, 0, 4, 3),
+            ),
+        )
+        val surface = Surface(4, 3)
+        surface.canvas {
+            drawRect(draws.single().bounds, Paint.fill(color).copy(antiAlias = true))
+        }
+
+        val result = surface.render()
+
+        assertW4aEvidence(result)
+        assertPixelsEqual(W4aAnalyticRectCpuOracle.render(4, 3, draws), result.pixels)
+    }
+
+    @Test
+    fun `overlapping translucent fractional AA rectangles quantize between draws`() {
+        val first = ColorARGB.of(137, 14, 157, 83)
+        val second = ColorARGB.of(191, 227, 62, 174)
+        val draws = listOf(
+            W4aAnalyticRectCpuOracle.Draw(first, RectF32(0.25f, 0.25f, 2.75f, 2.5f), RectI32(0, 0, 4, 3)),
+            W4aAnalyticRectCpuOracle.Draw(second, RectF32(1.5f, 0.5f, 3.75f, 2.75f), RectI32(0, 0, 4, 3)),
+        )
+        val surface = Surface(4, 3)
+        surface.canvas {
+            drawRect(draws[0].bounds, Paint.fill(first).copy(antiAlias = true))
+            drawRect(draws[1].bounds, Paint.fill(second).copy(antiAlias = true))
+        }
+
+        val result = surface.render()
+
+        assertW4aEvidence(result)
+        assertPixelsEqual(W4aAnalyticRectCpuOracle.render(4, 3, draws), result.pixels)
+    }
+
+    @Test
+    fun `integral scissor clips an AA fringe and leaves outside pixels transparent`() {
+        val color = ColorARGB.of(255, 40, 120, 210)
+        val scissor = RectI32(1, 0, 4, 2)
+        val draws = listOf(
+            W4aAnalyticRectCpuOracle.Draw(color, RectF32(0.25f, 0.5f, 3.75f, 2.25f), scissor),
+        )
+        val surface = Surface(4, 3)
+        surface.canvas {
+            clipRect(RectF32(1f, 0f, 4f, 2f), antiAlias = false)
+            drawRect(draws.single().bounds, Paint.fill(color).copy(antiAlias = true))
+        }
+
+        val result = surface.render()
+
+        assertW4aEvidence(result)
+        assertPixelsEqual(W4aAnalyticRectCpuOracle.render(4, 3, draws), result.pixels)
+        assertTransparentOutside(result.pixels, 4, 3, scissor)
+    }
+
+    @Test
+    fun `fractional W4a rectangle supports RGBA and BGRA attachment ordering`() {
+        val color = ColorARGB.of(255, 40, 120, 210)
+        val draws = listOf(
+            W4aAnalyticRectCpuOracle.Draw(color, RectF32(0.25f, 0.5f, 3.75f, 2.25f), RectI32(0, 0, 4, 3)),
+        )
+
+        val rgba = renderFractionalScene(PixelFormat.RGBA8, draws)
+        val bgra = renderFractionalScene(PixelFormat.BGRA8, draws)
+
+        assertW4aEvidence(rgba)
+        assertW4aEvidence(bgra)
+        assertPixelsEqual(W4aAnalyticRectCpuOracle.render(4, 3, draws), rgba.pixels)
+        assertPixelsEqual(W4aAnalyticRectCpuOracle.render(4, 3, draws, PixelFormat.BGRA8), bgra.pixels)
+    }
+
+    @Test
+    fun `integral and fractional AA rectangles share the W4a frame in paint order`() {
+        val integral = ColorARGB.Blue
+        val fractional = ColorARGB.Red
+        val draws = listOf(
+            W4aAnalyticRectCpuOracle.Draw(
+                integral, RectF32(0f, 0f, 2f, 2f), RectI32(0, 0, 4, 3),
+            ),
+            W4aAnalyticRectCpuOracle.Draw(
+                fractional, RectF32(1.25f, 0.5f, 3.75f, 2.25f), RectI32(0, 0, 4, 3),
+            ),
+        )
+        val surface = Surface(4, 3)
+        surface.canvas {
+            drawRect(draws[0].bounds, Paint.fill(integral).copy(antiAlias = true))
+            drawRect(draws[1].bounds, Paint.fill(fractional).copy(antiAlias = true))
+        }
+
+        val result = surface.render()
+
+        assertW4aEvidence(result)
+        assertPixelsEqual(W4aAnalyticRectCpuOracle.render(4, 3, draws), result.pixels)
+    }
+
+    @Test
+    fun `512 fractional AA rectangles plus annotation render through W4a`() {
+        val color = ColorARGB.Red
+        val draw = W4aAnalyticRectCpuOracle.Draw(
+            color,
+            RectF32(0f, 0f, 0.5f, 1f),
+            RectI32(0, 0, 1, 1),
+        )
+        val draws = List(512) { draw }
+        val surface = Surface(1, 1, config = RenderConfig(frameLocalBudgetBytes = W4A_512_FRAME_BUDGET_BYTES))
+        surface.canvas {
+            repeat(512) { drawRect(draw.bounds, Paint.fill(color).copy(antiAlias = true)) }
+            drawAnnotation(RectF32.Empty, "evidence", "w4a-512")
+        }
+
+        val result = surface.render()
+
+        assertW4aEvidence(result)
+        assertPixelsEqual(W4aAnalyticRectCpuOracle.render(1, 1, draws), result.pixels)
+    }
+
+    @Test
+    fun `513 fractional AA rectangles retain known legacy pixel under the W4a terminal budget`() {
+        val color = ColorARGB.of(255, 40, 120, 210)
+        val bounds = RectF32(0.25f, 0.25f, 0.75f, 0.75f)
+        val surface = Surface(1, 1, config = RenderConfig(frameLocalBudgetBytes = W4A_512_FRAME_BUDGET_BYTES))
+        surface.canvas {
+            repeat(513) { drawRect(bounds, Paint.fill(color).copy(antiAlias = true)) }
+        }
+
+        val result = surface.render()
+
+        assertPixelsEqual(ubyteArrayOf(38u, 119u, 209u, 253u), result.pixels)
     }
 
     @Test
@@ -159,7 +335,7 @@ class GPUPlanSurfacePixelTest {
     }
 
     @Test
-    fun `non W3 SRC frame preserves the known legacy result`() {
+    fun `unsupported SRC scene retains its known legacy pixels`() {
         val surface = Surface(1, 1)
         surface.canvas {
             drawColor(ColorARGB.Blue)
@@ -178,6 +354,17 @@ class GPUPlanSurfacePixelTest {
         return surface.render()
     }
 
+    private fun renderFractionalScene(
+        format: PixelFormat,
+        draws: List<W4aAnalyticRectCpuOracle.Draw>,
+    ): RenderResult {
+        val surface = Surface(4, 3, format)
+        surface.canvas {
+            draws.forEach { drawRect(it.bounds, Paint.fill(it.color).copy(antiAlias = true)) }
+        }
+        return surface.render()
+    }
+
     private fun assertW3Evidence(result: RenderResult) {
         val expectedScopeKinds = setOf("Render", "Readback")
         assertTrue(
@@ -187,7 +374,26 @@ class GPUPlanSurfacePixelTest {
         assertEquals(expectedScopeKinds, result.nativeEvidenceScopeKinds.toSet())
     }
 
+    private fun assertW4aEvidence(result: RenderResult) {
+        assertEquals(setOf("Render", "Readback"), result.nativeEvidenceScopeKinds.toSet())
+    }
+
+    private fun assertTransparentOutside(pixels: UByteArray, width: Int, height: Int, scissor: RectI32) {
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                if (x !in scissor.left until scissor.right || y !in scissor.top until scissor.bottom) {
+                    val offset = (y * width + x) * 4
+                    assertPixelsEqual(ubyteArrayOf(0u, 0u, 0u, 0u), pixels.copyOfRange(offset, offset + 4))
+                }
+            }
+        }
+    }
+
     private fun assertPixelsEqual(expected: UByteArray, actual: UByteArray) {
         assertContentEquals(expected, actual, "expected=${expected.toList()} actual=${actual.toList()}")
+    }
+
+    private companion object {
+        const val W4A_512_FRAME_BUDGET_BYTES = 164_100L
     }
 }

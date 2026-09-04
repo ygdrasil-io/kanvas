@@ -1,10 +1,12 @@
 package org.graphiks.kanvas.gpu.plan
 
 import java.security.MessageDigest
+import java.util.Collections
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.render.ir.BlendMode
 import org.graphiks.kanvas.render.ir.BlendNode
 import org.graphiks.kanvas.render.ir.ClipStackNode
+import org.graphiks.kanvas.render.ir.CanonicalId
 import org.graphiks.kanvas.render.ir.CoverageRequest
 import org.graphiks.kanvas.render.ir.DrawNode
 import org.graphiks.kanvas.render.ir.DrawOrigin
@@ -13,7 +15,9 @@ import org.graphiks.kanvas.render.ir.GeometryNode
 import org.graphiks.kanvas.render.ir.PaintNode
 import org.graphiks.kanvas.render.ir.PaintStyleNode
 import org.graphiks.kanvas.render.ir.RenderDiagnostic
+import org.graphiks.kanvas.render.ir.RenderDiagnosticCode
 import org.graphiks.kanvas.render.ir.RenderDiagnosticDomain
+import org.graphiks.kanvas.render.ir.RenderDiagnosticSeverity
 import org.graphiks.kanvas.render.ir.RenderPlanResult
 import org.graphiks.kanvas.render.ir.RenderTargetDescriptor
 import org.graphiks.kanvas.render.ir.SceneCommand
@@ -29,35 +33,38 @@ import org.graphiks.math.matrix.Matrix3x3F32
 
 /** W3's closed capability: pixel-aligned solid rectangles and SrcOver only. */
 public class W3SolidRectPlanCompiler : GpuPlanCompiler {
-    override fun classify(
+    override fun select(
         scene: SceneSnapshot,
         target: RenderTargetDescriptor,
-    ): RenderPlanResult<Nothing>? {
+    ): GpuPlanSelection {
         if (scene.extent != target.extent || scene.colorSpace != target.colorSpace) {
-            return invalid(diag(W3PlanDiagnostics.SceneInvalid, RenderDiagnosticDomain.SCENE, "Scene and target descriptors disagree"))
+            return invalidSelection(diag(W3PlanDiagnostics.SceneInvalid, RenderDiagnosticDomain.SCENE, "Scene and target descriptors disagree"))
+        }
+        if (scene.commandCount > MAX_W3_COMMANDS) {
+            return notCandidate(diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "W3 accepts at most 512 total commands"))
         }
         when (val recognition = recognize(scene)) {
-            is Recognition.Gap -> return gap(recognition.diagnostic)
-            is Recognition.Invalid -> return invalid(recognition.diagnostic)
-            is Recognition.Accepted -> Unit
-        }
-        return if (target.colorSpace != ColorSpace.SRGB) {
-            gap(diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.TARGET, "W3 supports only sRGB targets"))
-        } else {
-            null
+            is Recognition.Gap -> return notCandidate(recognition.diagnostic)
+            is Recognition.Invalid -> return invalidSelection(recognition.diagnostic)
+            is Recognition.Accepted -> return if (target.colorSpace != ColorSpace.SRGB) {
+                notCandidate(diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.TARGET, "W3 supports only sRGB targets"))
+            } else {
+                GpuPlanSelection.Candidate(W3Candidate(this, scene.canonicalId, target, recognition.draws))
+            }
         }
     }
 
     override fun plan(
-        scene: SceneSnapshot,
-        target: RenderTargetDescriptor,
+        candidate: GpuPlanCandidate,
         capabilities: PlanCapabilitySnapshot,
         budget: PlanBudget,
     ): RenderPlanResult<RenderGraph> {
-        classify(scene, target)?.let { return it }
-        val recognition = recognize(scene)
-        val accepted = recognition as? Recognition.Accepted
-            ?: return invalid(diag(W3PlanDiagnostics.SceneInvalid, RenderDiagnosticDomain.SCENE, "W3 semantic classification changed during planning"))
+        val selected = candidate as? W3Candidate
+            ?: return invalidCandidate()
+        if (selected.owner !== this || !selected.hasMatchingFingerprints()) {
+            return invalidCandidate()
+        }
+        val target = selected.target
 
         val targetExtent = SizeI32(target.extent.width, target.extent.height)
         if (targetExtent.width > capabilities.maxTextureDimension2D || targetExtent.height > capabilities.maxTextureDimension2D) {
@@ -100,18 +107,18 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
                 setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead), PlanResourceLifetime.FrameLocal, 1, 2,
             )
             val render = PlanPass.RenderPass(
-                0, logicalTarget.id, accepted.draws, AttachmentLoadPlan.ClearTransparent, AttachmentStorePlan.Store,
+                0, logicalTarget.id, selected.draws, AttachmentLoadPlan.ClearTransparent, AttachmentStorePlan.Store,
             )
             val readback = PlanPass.ReadbackPass(0, logicalTarget.id, staging.id, withinBudget.readbackBytesPerRow)
             RenderPlanResult.Ready(
                 RenderGraph.of(
-                    id = PlanId(planIdentity(scene, target, capabilities, budget)),
+                    id = PlanId(planIdentity(selected.sceneCanonicalId, target, capabilities, budget)),
                     capabilityId = CAPABILITY_ID,
                     targetExtent = targetExtent,
                     colorFormat = FORMAT,
                     capabilities = capabilities,
                     budget = budget,
-                    visualCommandCount = accepted.draws.size,
+                    visualCommandCount = selected.draws.size,
                     resources = listOf(logicalTarget, staging),
                     passes = listOf(render, readback),
                     dependencies = listOf(PlanPassDependency(render.id, readback.id)),
@@ -292,17 +299,30 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
     )
     private fun diag(code: org.graphiks.kanvas.render.ir.RenderDiagnosticCode, domain: RenderDiagnosticDomain, message: String): RenderDiagnostic =
         W3PlanDiagnostics.diagnostic(code, domain, message)
-    private fun gap(diagnostic: RenderDiagnostic): RenderPlanResult<Nothing> = RenderPlanResult.GapNotMigrated(listOf(diagnostic))
+    private fun notCandidate(diagnostic: RenderDiagnostic): GpuPlanSelection.NotCandidate =
+        GpuPlanSelection.NotCandidate(listOf(diagnostic))
+    private fun invalidSelection(diagnostic: RenderDiagnostic): GpuPlanSelection.InvalidScene =
+        GpuPlanSelection.InvalidScene(listOf(diagnostic))
+    private fun invalidCandidate(): RenderPlanResult<Nothing> = invalid(RenderDiagnostic(
+        RenderDiagnosticCode("gpu-plan.selection.invalid-candidate"),
+        RenderDiagnosticDomain.SCENE,
+        RenderDiagnosticSeverity.ERROR,
+        "W3 candidate does not belong to this compiler.",
+    ))
     private fun promoted(diagnostic: RenderDiagnostic): RenderPlanResult<Nothing> = RenderPlanResult.GapOnPromotedScope(listOf(diagnostic))
     private fun invalid(diagnostic: RenderDiagnostic): RenderPlanResult<Nothing> = RenderPlanResult.InvalidScene(listOf(diagnostic))
     private fun resourceLimit(diagnostic: RenderDiagnostic): RenderPlanResult<Nothing> = RenderPlanResult.ResourceLimitExceeded(listOf(diagnostic))
 
-    private fun planIdentity(scene: SceneSnapshot, target: RenderTargetDescriptor, capabilities: PlanCapabilitySnapshot, budget: PlanBudget): String {
+    private fun planIdentity(sceneCanonicalId: CanonicalId, target: RenderTargetDescriptor, capabilities: PlanCapabilitySnapshot, budget: PlanBudget): String {
         val fields = listOf(
-            "w3-plan-v1", scene.canonicalId.value, target.extent.width.toString(), target.extent.height.toString(),
+            "w3-plan-v1", sceneCanonicalId.value, target.extent.width.toString(), target.extent.height.toString(),
             target.colorSpace.name, target.colorSpace.transferFunction.name, target.colorSpace.gamut.name,
             capabilities.deviceGeneration.toString(), capabilities.maxTextureDimension2D.toString(), capabilities.maxBufferSizeBytes.toString(),
             capabilities.copyBytesPerRowAlignment.toString(), capabilities.supportedFormats().map { it.name }.sorted().joinToString(","),
+            capabilities.minUniformBufferOffsetAlignment.toString(), capabilities.maxDynamicUniformBuffersPerPipelineLayout.toString(),
+            capabilities.supportedOperations().map { it.name }.sorted().joinToString(","),
+            capabilities.bufferAllocationPolicy.vertexFloorBytes.toString(), capabilities.bufferAllocationPolicy.indexFloorBytes.toString(),
+            capabilities.bufferAllocationPolicy.uniformFloorBytes.toString(), capabilities.bufferAllocationPolicy.growth.name,
             budget.maxFrameLocalBytes.toString(),
         )
         val digest = MessageDigest.getInstance("SHA-256")
@@ -320,6 +340,21 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
         data class Accepted(val draws: List<SolidRectDraw>) : Recognition
         data class Gap(val diagnostic: RenderDiagnostic) : Recognition
         data class Invalid(val diagnostic: RenderDiagnostic) : Recognition
+    }
+
+    private class W3Candidate(
+        val owner: W3SolidRectPlanCompiler,
+        override val sceneCanonicalId: CanonicalId,
+        override val target: RenderTargetDescriptor,
+        draws: List<SolidRectDraw>,
+    ) : GpuPlanCandidate {
+        override val capabilityId: String = CAPABILITY_ID
+        val draws: List<SolidRectDraw> = Collections.unmodifiableList(draws.toList())
+        private val sceneFingerprint: CanonicalId = sceneCanonicalId
+        private val targetFingerprint: CanonicalId = target.canonicalId
+
+        fun hasMatchingFingerprints(): Boolean =
+            capabilityId == CAPABILITY_ID && sceneCanonicalId == sceneFingerprint && target.canonicalId == targetFingerprint
     }
     private sealed interface DrawRecognition {
         data class Accepted(val draw: SolidRectDraw) : DrawRecognition
@@ -341,5 +376,6 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
         public const val CAPABILITY_ID: String = "solid-rect-pixel-aligned-simple-clip-src-over-srgb-v1"
         private val FORMAT: PlanLogicalColorFormat = PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL
         private const val PIXEL_BYTES: Long = 4L
+        private const val MAX_W3_COMMANDS: Int = 512
     }
 }

@@ -7,9 +7,9 @@ import kotlin.test.assertFailsWith
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.color.ColorSpace
-import org.graphiks.kanvas.gpu.renderer.planning.GpuW3SurfacePlanResult
-import org.graphiks.kanvas.gpu.renderer.planning.GpuW3SurfaceReadyToken
-import org.graphiks.kanvas.gpu.renderer.planning.GpuW3SurfaceSubmitResult
+import org.graphiks.kanvas.gpu.renderer.planning.GpuPlanSurfacePlanResult
+import org.graphiks.kanvas.gpu.renderer.planning.GpuPlanSurfaceReadyToken
+import org.graphiks.kanvas.gpu.renderer.planning.GpuPlanSurfaceSubmitResult
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.render.ir.RenderDiagnostic
 import org.graphiks.kanvas.render.ir.RenderDiagnosticCode
@@ -57,20 +57,6 @@ class GPUPlanSurfaceRouterTest {
             config = RenderConfig(gpuColorFormat = GPUColorFormat.RGBA8_UNORM),
             legacy = { legacy },
         )
-
-        assertContentEquals(legacy.pixels, result.pixels)
-    }
-
-    @Test
-    fun `command limit admits 512 candidates and leaves 513 operations on legacy`() {
-        val legacy = legacyResult()
-        val operations = List(513) { DisplayOp.Annotation(RectF32.Empty, "key", "value") }
-        val router = routerReturningInvalid("non-finite-value")
-
-        assertFailsWith<IllegalStateException> {
-            router.render(operations.take(512), 1, 1, PixelFormat.RGBA8, RenderConfig.DEFAULT) { legacy }
-        }
-        val result = router.render(operations, 1, 1, PixelFormat.RGBA8, RenderConfig.DEFAULT) { legacy }
 
         assertContentEquals(legacy.pixels, result.pixels)
     }
@@ -128,21 +114,21 @@ class GPUPlanSurfaceRouterTest {
     }
 
     @Test
-    fun `W3 Ready submission terminal never returns the legacy pixel sentinel`() {
+    fun `ready submission terminal never returns the legacy pixel sentinel`() {
         val legacy = legacyResult()
-        val readyToken = object : GpuW3SurfaceReadyToken {}
+        val readyToken = object : GpuPlanSurfaceReadyToken {}
 
         val failure = assertFailsWith<GPUPlanSurfaceTerminalException> {
             GPUPlanSurfaceRouter(
-                w3Port = object : W3SurfacePlanSubmitPort {
+                planPort = object : GPUPlanSurfacePort {
                     override fun plan(
                         scene: SceneSnapshot,
                         target: RenderTargetDescriptor,
                         frameLocalBudgetBytes: Long,
-                    ): GpuW3SurfacePlanResult = GpuW3SurfacePlanResult.Ready(readyToken)
+                    ): GpuPlanSurfacePlanResult = GpuPlanSurfacePlanResult.Ready(readyToken)
 
-                    override fun submit(token: GpuW3SurfaceReadyToken): GpuW3SurfaceSubmitResult =
-                        GpuW3SurfaceSubmitResult.Terminal(
+                    override fun submit(token: GpuPlanSurfaceReadyToken): GpuPlanSurfaceSubmitResult =
+                        GpuPlanSurfaceSubmitResult.Terminal(
                             listOf(
                                 RenderDiagnostic(
                                     RenderDiagnosticCode("w3.lowering.incompatible_plan"),

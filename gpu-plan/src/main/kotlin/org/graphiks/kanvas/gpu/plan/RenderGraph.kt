@@ -97,7 +97,10 @@ public class RenderGraph private constructor(
         }
 
         private fun referencedResources(pass: PlanPass): List<PlanResourceId> = when (pass) {
-            is PlanPass.RenderPass -> listOf(pass.target)
+            is PlanPass.RenderPass -> buildList {
+                add(pass.target)
+                pass.drawDataResources?.let { addAll(listOf(it.vertex, it.index, it.uniform)) }
+            }
             is PlanPass.TextureCopy -> listOf(pass.source, pass.destination)
             is PlanPass.FilterPass -> pass.inputs() + pass.output
             is PlanPass.ResolvePass -> listOf(pass.source, pass.destination)

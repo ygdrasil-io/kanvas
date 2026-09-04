@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.math.color.ColorF32
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.SizeI32
 import org.junit.jupiter.api.Test
@@ -9,6 +10,30 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNotSame
 
 class RenderGraphContractTest {
+    @Test
+    fun `analytic rect draw owns exact defensive math geometry`() {
+        val exact = RectF32(0.25f, 0.5f, 2.75f, 2.25f)
+        val raster = RectI32(0, 0, 3, 3)
+        val draw = AnalyticRectDraw.of(
+            0, ColorF32.of(1f, 0f, 0f, 1f), exact, raster, RectI32(1, 0, 3, 3),
+        )
+        exact.left = 99f
+        raster.left = 99
+
+        assertEquals(RectF32(0.25f, 0.5f, 2.75f, 2.25f), draw.copyDeviceBounds())
+        assertEquals(RectI32(0, 0, 3, 3), draw.copyRasterBounds())
+        assertEquals(CoveragePlan.AnalyticScalarAA, draw.coverage)
+        assertEquals(SamplePlan.SingleSample, draw.sample)
+        assertEquals(BlendPlan.SrcOver, draw.blend)
+    }
+
+    @Test
+    fun `render pass draw resources participate in lifetime validation`() {
+        assertFailsWith<IllegalArgumentException> {
+            graphWithAnalyticDrawResources(uniformLifetime = 1 until 2)
+        }
+    }
+
     @Test
     fun `rectangles and resource collections are defensive snapshots`() {
         val source = RectI32(1, 2, 5, 7)
@@ -236,7 +261,47 @@ class RenderGraphContractTest {
         maxBufferSizeBytes = 4096,
         copyBytesPerRowAlignment = copyBytesPerRowAlignment,
         supportedFormats = formats,
+        minUniformBufferOffsetAlignment = 256,
+        maxDynamicUniformBuffersPerPipelineLayout = 1,
+        supportedOperations = setOf(PlanOperationCapability.RenderPass, PlanOperationCapability.Readback),
+        bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 4_096, 4_096),
     )
+
+    private fun graphWithAnalyticDrawResources(uniformLifetime: IntRange): RenderGraph {
+        val target = targetResource()
+        val staging = stagingResource()
+        fun scratch(
+            role: PlanResourceRole,
+            usage: PlanResourceUsage,
+            lifetime: IntRange = 0 until 2,
+        ) = PlanResource.of(
+            role, 0, PlanResourceKind.Buffer, null, null, 4_096,
+            setOf(usage, PlanResourceUsage.CopyDestination),
+            PlanResourceLifetime.FrameLocal, lifetime.first, lifetime.last + 1,
+        )
+        val vertex = scratch(PlanResourceRole.VertexData, PlanResourceUsage.Vertex)
+        val index = scratch(PlanResourceRole.IndexData, PlanResourceUsage.Index)
+        val uniform = scratch(
+            PlanResourceRole.UniformData,
+            PlanResourceUsage.Uniform,
+            uniformLifetime,
+        )
+        val draw = AnalyticRectDraw.of(
+            0, ColorF32.of(1f, 0f, 0f, 1f),
+            RectF32(0.25f, 0f, 0.75f, 1f), RectI32(0, 0, 1, 1), RectI32(0, 0, 1, 1),
+        )
+        val render = PlanPass.RenderPass(
+            0, target.id, listOf(draw), AttachmentLoadPlan.ClearTransparent,
+            AttachmentStorePlan.Store, PlanDrawDataResources(vertex.id, index.id, uniform.id),
+        )
+        val readback = PlanPass.ReadbackPass(0, target.id, staging.id, 256)
+        return validGraph(
+            resources = listOf(target, staging, vertex, index, uniform),
+            passes = listOf(render, readback),
+            dependencies = listOf(PlanPassDependency(render.id, readback.id)),
+            peakFrameLocalBytes = 12_548,
+        )
+    }
 
     private fun targetResource(
         usages: Set<PlanResourceUsage> = setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource),
@@ -280,12 +345,17 @@ class RenderGraphContractTest {
             PlanPass.RenderPass(0, targetResource().id, emptyList(), AttachmentLoadPlan.ClearTransparent, AttachmentStorePlan.Store),
             PlanPass.ReadbackPass(1, targetResource().id, stagingResource().id, 256),
         ),
+        dependencies: List<PlanPassDependency> = if (passes.size > 1) {
+            listOf(PlanPassDependency(passes[0].id, passes[1].id))
+        } else {
+            emptyList()
+        },
         targetExtent: SizeI32 = SizeI32(1, 1),
         peakFrameLocalBytes: Long = if (resources.size == 1) 4 else 260,
     ): RenderGraph = RenderGraph.of(
         PlanId("plan"), "capabilities", targetExtent, PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL,
         capabilities, budget, 0, resources, passes,
-        if (passes.size > 1) listOf(PlanPassDependency(passes[0].id, passes[1].id)) else emptyList(),
+        dependencies,
         peakFrameLocalBytes,
     )
 }

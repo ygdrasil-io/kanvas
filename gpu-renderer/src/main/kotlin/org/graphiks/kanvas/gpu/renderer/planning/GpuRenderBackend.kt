@@ -7,6 +7,7 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CompletableDeferred
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.gpu.plan.GpuPlanCompiler
+import org.graphiks.kanvas.gpu.plan.GpuPlanSelection
 import org.graphiks.kanvas.gpu.plan.PlanBudget
 import org.graphiks.kanvas.gpu.plan.PlanCapabilitySnapshot
 import org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat
@@ -86,31 +87,51 @@ public class GpuRenderBackend(
                 listOf(diag("w3.lowering.incompatible_plan", "Target does not match the bound GPU backend.")),
             )
         }
-        compiler.classify(scene, target)?.let { return it }
+        return when (val selected = compiler.select(scene, target)) {
+            is GpuPlanSelection.NotCandidate -> RenderPlanResult.GapNotMigrated(selected.diagnostics())
+            is GpuPlanSelection.InvalidScene -> RenderPlanResult.InvalidScene(selected.diagnostics())
+            is GpuPlanSelection.Candidate -> when (val acquisition = acquirePlanningCapabilitiesOrPromotedGap()) {
+                is PlanningCapabilities.Ready -> compiler.plan(
+                    selected.candidate,
+                    acquisition.snapshot,
+                    PlanBudget(targetConfig.frameLocalBudgetBytes),
+                ).also(::rememberIssuedPlanWhenReady)
+                is PlanningCapabilities.PromotedGap -> acquisition.result
+            }
+        }
+    }
+
+    private fun acquirePlanningCapabilitiesOrPromotedGap(): PlanningCapabilities {
         val acquired = try {
             context.acquirePlanningCapabilities()
         } catch (_: Throwable) {
             GpuPlanningCapabilityAcquisition.Unavailable
         }
-        val capabilities = when (acquired) {
-            is GpuPlanningCapabilityAcquisition.Ready -> acquired.snapshot
+        return when (acquired) {
+            is GpuPlanningCapabilityAcquisition.Ready -> PlanningCapabilities.Ready(acquired.snapshot)
             is GpuPlanningCapabilityAcquisition.Unsupported -> {
-                return RenderPlanResult.GapOnPromotedScope(listOf(acquired.diagnostic))
+                PlanningCapabilities.PromotedGap(RenderPlanResult.GapOnPromotedScope(listOf(acquired.diagnostic)))
             }
             GpuPlanningCapabilityAcquisition.Unavailable -> {
-                return RenderPlanResult.GapOnPromotedScope(
+                PlanningCapabilities.PromotedGap(RenderPlanResult.GapOnPromotedScope(
                     listOf(diag("w3.execution.device_failure", "GPU runtime is unavailable.")),
-                )
+                ))
             }
         }
-        return compiler.plan(scene, target, capabilities, PlanBudget(targetConfig.frameLocalBudgetBytes)).also { result ->
-            if (result is RenderPlanResult.Ready) {
-                synchronized(issuedPlans) {
-                    removeCollectedPlans()
-                    issuedPlans[WeakRenderGraphKey(result.plan, issuedPlanReferences)] = Unit
-                }
+    }
+
+    private fun rememberIssuedPlanWhenReady(result: RenderPlanResult<RenderGraph>) {
+        if (result is RenderPlanResult.Ready) {
+            synchronized(issuedPlans) {
+                removeCollectedPlans()
+                issuedPlans[WeakRenderGraphKey(result.plan, issuedPlanReferences)] = Unit
             }
         }
+    }
+
+    private sealed interface PlanningCapabilities {
+        data class Ready(val snapshot: PlanCapabilitySnapshot) : PlanningCapabilities
+        data class PromotedGap(val result: RenderPlanResult.GapOnPromotedScope) : PlanningCapabilities
     }
 
     override fun submit(plan: RenderGraph): RenderSubmission<GpuFrameOutput> {

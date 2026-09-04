@@ -215,6 +215,8 @@ internal data class GPUWgpu4kCorePrimitiveFramePoolRequirements(
     val vertexBytes: Long,
     val indexBytes: Long,
     val uniformBytes: Long,
+    /** When present, this closed lane may only lease these exact rounded capacities. */
+    val expectedCapacities: GPUWgpu4kCorePrimitiveFramePoolCapacities? = null,
     val pathDepthStencil: GPUWgpu4kCorePrimitivePathDepthStencilRequirement? = null,
     val componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity =
         PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY,
@@ -545,11 +547,24 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
             ?: return GPUWgpu4kCorePrimitiveFramePoolCheckout.Refused(
                 invalidCapacityRefusal(requirements),
             )
+        requirements.expectedCapacities?.let { expected ->
+            if (expected != requiredCapacities) {
+                return GPUWgpu4kCorePrimitiveFramePoolCheckout.Refused(
+                    GPUWgpu4kCorePrimitiveFramePoolRefusal.InvalidCapacity(
+                        GPUWgpu4kCorePrimitiveFramePoolResource.VertexBuffer,
+                        requirements.vertexBytes,
+                    ),
+                )
+            }
+        }
         val available = slots.filter {
             it.state == SlotState.Available && it.handles.sampleCount == requirements.sampleCount
         }
+        val exactCapacityEligible = requirements.expectedCapacities?.let { expected ->
+            available.filter { slot -> slot.capacities == expected }
+        } ?: available
         var slot = selectAvailableSlot(
-            available,
+            exactCapacityEligible,
             requiredCapacities,
             requirements.pathDepthStencil,
             requirements.clipDepthStencil,
@@ -659,6 +674,16 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
             }
         }
         val acquiredSlot = requireNotNull(slot)
+        if (requirements.expectedCapacities != null &&
+            acquiredSlot.capacities != requirements.expectedCapacities
+        ) {
+            return GPUWgpu4kCorePrimitiveFramePoolCheckout.Refused(
+                GPUWgpu4kCorePrimitiveFramePoolRefusal.InvalidCapacity(
+                    GPUWgpu4kCorePrimitiveFramePoolResource.VertexBuffer,
+                    requirements.vertexBytes,
+                ),
+            )
+        }
         if (requirements.coverageMask != null && previousCoverageMaskTexture != null &&
             acquiredSlot.handles.coverageMask?.texture === previousCoverageMaskTexture
         ) {
