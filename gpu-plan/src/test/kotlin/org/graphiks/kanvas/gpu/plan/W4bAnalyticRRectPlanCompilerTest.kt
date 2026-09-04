@@ -96,17 +96,27 @@ class W4bAnalyticRRectPlanCompilerTest {
     }
 
     @Test
-    fun `W4b makes 512 mixed draws Ready and leaves 513 observably outside W4b`() {
-        val accepted = List(511) { rect() } + rrect()
-        val rejected = accepted + rect()
+    fun `the same public one-pixel 512 Surface snapshot plans W4b and 513 is NotCandidate`() {
+        val onePixel = RectF32(0f, 0f, 1f, 1f)
+        val translucentRed = ColorARGB.of(128, 255, 0, 0)
+        val acceptedCommands = List(511) { rect(onePixel, ColorARGB.Blue) } + rrect(
+            RRectF32.of(onePixel, radius = 0.25f),
+            color = translucentRed,
+        )
+        val accepted = SceneSnapshot.of(SceneExtent(1, 1), ColorSpace.SRGB, acceptedCommands)
+        val rejected = SceneSnapshot.of(
+            SceneExtent(1, 1),
+            ColorSpace.SRGB,
+            acceptedCommands + rect(onePixel, ColorARGB.Blue),
+        )
 
-        val candidate = assertIs<GpuPlanSelection.Candidate>(select(accepted)).candidate
+        val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(accepted, target(accepted))).candidate
         val graph = assertIs<RenderPlanResult.Ready<RenderGraph>>(
             compiler.plan(candidate, capabilities(), PlanBudget(1L shl 20)),
         ).plan
 
-        assertEquals(W4bAnalyticRRectPlanCompiler.CAPABILITY_ID, graph.capabilityId)
-        assertIs<GpuPlanSelection.NotCandidate>(select(rejected))
+        assertEquals("solid-rect-rrect-scalar-aa-simple-scissor-src-over-srgb-v1", graph.capabilityId)
+        assertIs<GpuPlanSelection.NotCandidate>(compiler.select(rejected, target(rejected)))
     }
 
     @Test
@@ -143,35 +153,39 @@ class W4bAnalyticRRectPlanCompilerTest {
     private fun renderPass(graph: RenderGraph): PlanPass.RenderPass =
         assertIs<PlanPass.RenderPass>(graph.passes().single { it is PlanPass.RenderPass })
 
-    private fun rect(): SceneCommand.Draw = SceneCommand.Draw(DrawNode(
-        geometry = GeometryNode.Rect.of(RectF32(0f, 0f, 2f, 2f)),
-        material = MaterialNode.Solid(COLOR),
+    private fun rect(
+        bounds: RectF32 = RectF32(0f, 0f, 2f, 2f),
+        color: ColorARGB = COLOR,
+    ): SceneCommand.Draw = SceneCommand.Draw(DrawNode(
+        geometry = GeometryNode.Rect.of(bounds),
+        material = MaterialNode.Solid(color),
         coverage = CoverageRequest.ANTIALIASED,
         clip = ClipStackNode.Empty,
         blend = BlendNode.SrcOver,
         effects = EffectStack.Empty,
         transform = Matrix3x3F32.Identity,
         origin = DrawOrigin.RECT,
-        paint = paint(),
+        paint = paint(color),
     ))
 
     private fun rrect(
         shape: RRectF32 = RRECT,
         transform: Matrix3x3F32 = Matrix3x3F32.Identity,
+        color: ColorARGB = COLOR,
     ): SceneCommand.Draw = SceneCommand.Draw(DrawNode(
         geometry = GeometryNode.RRect.of(shape),
-        material = MaterialNode.Solid(COLOR),
+        material = MaterialNode.Solid(color),
         coverage = CoverageRequest.ANTIALIASED,
         clip = ClipStackNode.Empty,
         blend = BlendNode.SrcOver,
         effects = EffectStack.Empty,
         transform = transform,
         origin = DrawOrigin.RRECT,
-        paint = paint(),
+        paint = paint(color),
     ))
 
-    private fun paint(): PaintNode = PaintNode(
-        COLOR, null, BlendMode.SRC_OVER, null, null, null, null, null,
+    private fun paint(color: ColorARGB = COLOR): PaintNode = PaintNode(
+        color, null, BlendMode.SRC_OVER, null, null, null, null, null,
         PaintStyleNode.FILL, 0f, StrokeCapNode.BUTT, StrokeJoinNode.MITER, 4f, true,
     )
 

@@ -26,6 +26,25 @@ internal object W4bAnalyticRRectCpuOracle {
         height: Int,
         draws: List<Draw>,
         format: PixelFormat = PixelFormat.RGBA8,
+    ): UByteArray = renderWithAttachmentStores(width, height, draws, format, quantizeBetweenDraws = true)
+
+    /**
+     * Counterfactual reference: quantizes only once, after the frame, rather than
+     * modelling the sRGB attachment store read by every later draw.
+     */
+    internal fun renderWithFrameEndQuantization(
+        width: Int,
+        height: Int,
+        draws: List<Draw>,
+        format: PixelFormat = PixelFormat.RGBA8,
+    ): UByteArray = renderWithAttachmentStores(width, height, draws, format, quantizeBetweenDraws = false)
+
+    private fun renderWithAttachmentStores(
+        width: Int,
+        height: Int,
+        draws: List<Draw>,
+        format: PixelFormat,
+        quantizeBetweenDraws: Boolean,
     ): UByteArray {
         require(width > 0 && height > 0)
         val pixels = Array(width * height) { LinearPremul.Transparent }
@@ -39,8 +58,12 @@ internal object W4bAnalyticRRectCpuOracle {
 
                     val coverage = coverageAt(draw.shape, x, y)
                     val pixelIndex = y * width + x
-                    pixels[pixelIndex] = srcOver(source * coverage, pixels[pixelIndex])
-                        .quantizedForAttachment()
+                    val composed = srcOver(source * coverage, pixels[pixelIndex])
+                    pixels[pixelIndex] = if (quantizeBetweenDraws) {
+                        composed.quantizedForAttachment()
+                    } else {
+                        composed
+                    }
                 }
             }
         }
