@@ -14,9 +14,11 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.graphiks.kanvas.gpu.plan.PlanCapabilitySnapshot
+import org.graphiks.kanvas.gpu.plan.CapabilityCompilerChain
 import org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat
 import org.graphiks.kanvas.gpu.plan.RenderGraph
 import org.graphiks.kanvas.gpu.plan.W3SolidRectPlanCompiler
+import org.graphiks.kanvas.gpu.plan.W4aAnalyticRectPlanCompiler
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
@@ -75,8 +77,8 @@ public class GpuRenderContext internal constructor(
         private const val MAX_PREPARED_SESSIONS: Int = 8
     }
 
-    /** Creates a W3 facade whose API does not leak the internal gpu-plan module. */
-    public fun w3SurfaceExecutor(): GpuW3SurfaceExecutor = GpuW3SurfaceExecutor(this)
+    /** Creates a plan facade whose API does not leak the internal gpu-plan module. */
+    public fun planSurfaceExecutor(): GpuPlanSurfaceExecutor = GpuPlanSurfaceExecutor(this)
 
     private data class Entry(
         val session: GpuPreparedSceneSessionPort,
@@ -365,24 +367,24 @@ public class GpuRenderContext internal constructor(
     }
 }
 
-/** Opaque, handle-free proof that a W3 frame was planned and may be submitted once. */
-public interface GpuW3SurfaceReadyToken
+/** Opaque, handle-free proof that a GPU plan frame was planned and may be submitted once. */
+public interface GpuPlanSurfaceReadyToken
 
-/** Typed first phase of a W3 Surface attempt. */
-public sealed interface GpuW3SurfacePlanResult {
-    public data class Ready(public val token: GpuW3SurfaceReadyToken) : GpuW3SurfacePlanResult
-    public data class GapNotMigrated(public val diagnostics: List<RenderDiagnostic>) : GpuW3SurfacePlanResult
-    public data class Terminal(public val diagnostics: List<RenderDiagnostic>) : GpuW3SurfacePlanResult
+/** Typed first phase of a GPU plan Surface attempt. */
+public sealed interface GpuPlanSurfacePlanResult {
+    public data class Ready(public val token: GpuPlanSurfaceReadyToken) : GpuPlanSurfacePlanResult
+    public data class GapNotMigrated(public val diagnostics: List<RenderDiagnostic>) : GpuPlanSurfacePlanResult
+    public data class Terminal(public val diagnostics: List<RenderDiagnostic>) : GpuPlanSurfacePlanResult
 }
 
-/** Typed completion of submitting an already-ready W3 Surface token. */
-public sealed interface GpuW3SurfaceSubmitResult {
-    public data class Completed(public val output: GpuFrameOutput) : GpuW3SurfaceSubmitResult
-    public data class Terminal(public val diagnostics: List<RenderDiagnostic>) : GpuW3SurfaceSubmitResult
+/** Typed completion of submitting an already-ready GPU plan Surface token. */
+public sealed interface GpuPlanSurfaceSubmitResult {
+    public data class Completed(public val output: GpuFrameOutput) : GpuPlanSurfaceSubmitResult
+    public data class Terminal(public val diagnostics: List<RenderDiagnostic>) : GpuPlanSurfaceSubmitResult
 }
 
-/** Public production facade over W3 planning/submission that keeps RenderGraph module-private. */
-public class GpuW3SurfaceExecutor internal constructor(
+/** Public production facade over GPU plan planning/submission that keeps RenderGraph module-private. */
+public class GpuPlanSurfaceExecutor internal constructor(
     private val context: GpuRenderContext,
 ) {
     private class ReadyToken(
@@ -390,7 +392,7 @@ public class GpuW3SurfaceExecutor internal constructor(
         val backend: GpuRenderBackend,
         val graph: RenderGraph,
         private val submitted: AtomicBoolean = AtomicBoolean(false),
-    ) : GpuW3SurfaceReadyToken {
+    ) : GpuPlanSurfaceReadyToken {
         fun claim(): Boolean = submitted.compareAndSet(false, true)
     }
 
@@ -398,38 +400,40 @@ public class GpuW3SurfaceExecutor internal constructor(
         scene: SceneSnapshot,
         target: RenderTargetDescriptor,
         frameLocalBudgetBytes: Long,
-    ): GpuW3SurfacePlanResult {
+    ): GpuPlanSurfacePlanResult {
         val backend = GpuRenderBackend(
-            compiler = W3SolidRectPlanCompiler(),
+            compiler = CapabilityCompilerChain.of(
+                listOf(W3SolidRectPlanCompiler(), W4aAnalyticRectPlanCompiler()),
+            ),
             context = context,
             targetConfig = GpuRenderTargetConfig(target.extent, target.colorSpace, frameLocalBudgetBytes),
         )
         return when (val result = backend.plan(scene, target)) {
-            is RenderPlanResult.Ready -> GpuW3SurfacePlanResult.Ready(ReadyToken(context, backend, result.plan))
-            is RenderPlanResult.GapNotMigrated -> GpuW3SurfacePlanResult.GapNotMigrated(result.diagnostics)
-            is RenderPlanResult.GapOnPromotedScope -> GpuW3SurfacePlanResult.Terminal(result.diagnostics)
-            is RenderPlanResult.InvalidScene -> GpuW3SurfacePlanResult.Terminal(result.diagnostics)
-            is RenderPlanResult.ResourceLimitExceeded -> GpuW3SurfacePlanResult.Terminal(result.diagnostics)
+            is RenderPlanResult.Ready -> GpuPlanSurfacePlanResult.Ready(ReadyToken(context, backend, result.plan))
+            is RenderPlanResult.GapNotMigrated -> GpuPlanSurfacePlanResult.GapNotMigrated(result.diagnostics)
+            is RenderPlanResult.GapOnPromotedScope -> GpuPlanSurfacePlanResult.Terminal(result.diagnostics)
+            is RenderPlanResult.InvalidScene -> GpuPlanSurfacePlanResult.Terminal(result.diagnostics)
+            is RenderPlanResult.ResourceLimitExceeded -> GpuPlanSurfacePlanResult.Terminal(result.diagnostics)
         }
     }
 
-    public fun submit(token: GpuW3SurfaceReadyToken): GpuW3SurfaceSubmitResult {
+    public fun submit(token: GpuPlanSurfaceReadyToken): GpuPlanSurfaceSubmitResult {
         val ready = token as? ReadyToken
             ?: return invalidReadyToken("W3 submit requires a ready token issued by this facade.")
         if (ready.context !== context || !ready.claim()) {
             return invalidReadyToken("W3 ready token is stale, foreign, or already submitted.")
         }
         return when (val execution = runBlocking { ready.backend.submit(ready.graph).await() }) {
-            is RenderExecutionResult.Completed -> GpuW3SurfaceSubmitResult.Completed(execution.output)
-            is RenderExecutionResult.UnsupportedCapability -> GpuW3SurfaceSubmitResult.Terminal(execution.diagnostics)
-            is RenderExecutionResult.InvalidPlan -> GpuW3SurfaceSubmitResult.Terminal(execution.diagnostics)
-            is RenderExecutionResult.ResourceLimitExceeded -> GpuW3SurfaceSubmitResult.Terminal(execution.diagnostics)
-            is RenderExecutionResult.DeviceFailure -> GpuW3SurfaceSubmitResult.Terminal(execution.diagnostics)
+            is RenderExecutionResult.Completed -> GpuPlanSurfaceSubmitResult.Completed(execution.output)
+            is RenderExecutionResult.UnsupportedCapability -> GpuPlanSurfaceSubmitResult.Terminal(execution.diagnostics)
+            is RenderExecutionResult.InvalidPlan -> GpuPlanSurfaceSubmitResult.Terminal(execution.diagnostics)
+            is RenderExecutionResult.ResourceLimitExceeded -> GpuPlanSurfaceSubmitResult.Terminal(execution.diagnostics)
+            is RenderExecutionResult.DeviceFailure -> GpuPlanSurfaceSubmitResult.Terminal(execution.diagnostics)
         }
     }
 
-    private fun invalidReadyToken(message: String): GpuW3SurfaceSubmitResult.Terminal =
-        GpuW3SurfaceSubmitResult.Terminal(
+    private fun invalidReadyToken(message: String): GpuPlanSurfaceSubmitResult.Terminal =
+        GpuPlanSurfaceSubmitResult.Terminal(
             listOf(
                 RenderDiagnostic(
                     RenderDiagnosticCode("w3.lowering.incompatible_plan"),

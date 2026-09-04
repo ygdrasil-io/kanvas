@@ -10,9 +10,9 @@ import org.graphiks.kanvas.render.ir.SceneCaptureLimits
 import org.graphiks.kanvas.render.ir.SceneCaptureResult
 import org.graphiks.kanvas.render.ir.SceneExtent
 import org.graphiks.kanvas.render.ir.SceneSnapshot
-import org.graphiks.kanvas.gpu.renderer.planning.GpuW3SurfacePlanResult
-import org.graphiks.kanvas.gpu.renderer.planning.GpuW3SurfaceReadyToken
-import org.graphiks.kanvas.gpu.renderer.planning.GpuW3SurfaceSubmitResult
+import org.graphiks.kanvas.gpu.renderer.planning.GpuPlanSurfacePlanResult
+import org.graphiks.kanvas.gpu.renderer.planning.GpuPlanSurfaceReadyToken
+import org.graphiks.kanvas.gpu.renderer.planning.GpuPlanSurfaceSubmitResult
 import org.graphiks.kanvas.surface.Diagnostics
 import org.graphiks.kanvas.surface.PixelFormat
 import org.graphiks.kanvas.surface.RenderConfig
@@ -28,15 +28,15 @@ internal fun interface SceneCapturePort {
     ): SceneCaptureResult
 }
 
-/** Bounded W3 product seam: an admitted scene must plan before its token can submit. */
-internal interface W3SurfacePlanSubmitPort {
+/** Bounded GPU plan product seam: an admitted scene must plan before its token can submit. */
+internal interface GPUPlanSurfacePort {
     fun plan(
         scene: SceneSnapshot,
         target: RenderTargetDescriptor,
         frameLocalBudgetBytes: Long,
-    ): GpuW3SurfacePlanResult
+    ): GpuPlanSurfacePlanResult
 
-    fun submit(token: GpuW3SurfaceReadyToken): GpuW3SurfaceSubmitResult
+    fun submit(token: GpuPlanSurfaceReadyToken): GpuPlanSurfaceSubmitResult
 }
 
 internal class GPUPlanSurfaceTerminalException(
@@ -44,11 +44,11 @@ internal class GPUPlanSurfaceTerminalException(
     message: String,
 ) : IllegalStateException("$code: $message")
 
-/** Whole-frame W3 routing. A promoted frame never enters the legacy route after planning. */
+/** Whole-frame GPU plan routing. A promoted frame never enters the legacy route after planning. */
 internal class GPUPlanSurfaceRouter(
     private val capturePort: SceneCapturePort = SceneCapturePort(DisplayOpSceneAdapter::capture),
     private val captureLimits: SceneCaptureLimits = SceneCaptureLimits.DEFAULT,
-    private val w3Port: W3SurfacePlanSubmitPort = ProductionW3SurfacePlanSubmitPort(),
+    private val planPort: GPUPlanSurfacePort = ProductionGPUPlanSurfacePort(),
 ) {
     fun render(
         operations: List<DisplayOp>,
@@ -61,7 +61,7 @@ internal class GPUPlanSurfaceRouter(
         if (width <= 0 || height <= 0) {
             throw GPUPlanSurfaceTerminalException("w3.surface.invalid_dimensions", "Surface dimensions must be positive.")
         }
-        if (!GPUPlanSurfaceShallowGate.accepts(operations, config)) return legacy()
+        if (!GPUPlanSurfaceCandidateGate.accepts(operations, config)) return legacy()
 
         val extent = SceneExtent(width, height)
         val scene = when (val captured = capturePort.capture(operations, extent, ColorSpace.SRGB, captureLimits)) {
@@ -74,17 +74,17 @@ internal class GPUPlanSurfaceRouter(
             }
         }
         return when (
-            val planned = w3Port.plan(
+            val planned = planPort.plan(
                 scene,
                 RenderTargetDescriptor(extent, ColorSpace.SRGB),
                 config.frameLocalBudgetBytes,
             )
         ) {
-            is GpuW3SurfacePlanResult.GapNotMigrated -> legacy()
-            is GpuW3SurfacePlanResult.Terminal -> throw terminal(planned.diagnostics)
-            is GpuW3SurfacePlanResult.Ready -> when (val submitted = w3Port.submit(planned.token)) {
-                is GpuW3SurfaceSubmitResult.Completed -> completed(submitted.output, format)
-                is GpuW3SurfaceSubmitResult.Terminal -> throw terminal(submitted.diagnostics)
+            is GpuPlanSurfacePlanResult.GapNotMigrated -> legacy()
+            is GpuPlanSurfacePlanResult.Terminal -> throw terminal(planned.diagnostics)
+            is GpuPlanSurfacePlanResult.Ready -> when (val submitted = planPort.submit(planned.token)) {
+                is GpuPlanSurfaceSubmitResult.Completed -> completed(submitted.output, format)
+                is GpuPlanSurfaceSubmitResult.Terminal -> throw terminal(submitted.diagnostics)
             }
         }
     }
@@ -138,13 +138,13 @@ internal class GPUPlanSurfaceRouter(
     }
 }
 
-private class ProductionW3SurfacePlanSubmitPort : W3SurfacePlanSubmitPort {
+private class ProductionGPUPlanSurfacePort : GPUPlanSurfacePort {
     override fun plan(
         scene: SceneSnapshot,
         target: RenderTargetDescriptor,
         frameLocalBudgetBytes: Long,
-    ): GpuW3SurfacePlanResult = GPUPlanRenderContextOwner.plan(scene, target, frameLocalBudgetBytes)
+    ): GpuPlanSurfacePlanResult = GPUPlanRenderContextOwner.plan(scene, target, frameLocalBudgetBytes)
 
-    override fun submit(token: GpuW3SurfaceReadyToken): GpuW3SurfaceSubmitResult =
+    override fun submit(token: GpuPlanSurfaceReadyToken): GpuPlanSurfaceSubmitResult =
         GPUPlanRenderContextOwner.submit(token)
 }

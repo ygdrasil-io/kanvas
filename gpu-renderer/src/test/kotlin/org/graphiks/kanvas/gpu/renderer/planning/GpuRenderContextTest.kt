@@ -27,8 +27,95 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeNativeFactory
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendSession
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList
+import org.graphiks.kanvas.color.ColorSpace
+import org.graphiks.kanvas.render.ir.BlendNode
+import org.graphiks.kanvas.render.ir.ClipStackNode
+import org.graphiks.kanvas.render.ir.CoverageRequest
+import org.graphiks.kanvas.render.ir.DrawNode
+import org.graphiks.kanvas.render.ir.DrawOrigin
+import org.graphiks.kanvas.render.ir.EffectStack
+import org.graphiks.kanvas.render.ir.GeometryNode
+import org.graphiks.kanvas.render.ir.MaterialNode
+import org.graphiks.kanvas.render.ir.PaintNode
+import org.graphiks.kanvas.render.ir.PaintStyleNode
+import org.graphiks.kanvas.render.ir.RenderTargetDescriptor
+import org.graphiks.kanvas.render.ir.SceneCommand
+import org.graphiks.kanvas.render.ir.SceneExtent
+import org.graphiks.kanvas.render.ir.SceneSnapshot
+import org.graphiks.kanvas.render.ir.StrokeCapNode
+import org.graphiks.kanvas.render.ir.StrokeJoinNode
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.PathBuilder
+import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.matrix.Matrix3x3F32
 
 class GpuRenderContextTest {
+    @Test
+    fun `surface executor selects W3 for aligned and W4a for fractional rectangles`() {
+        val context = planningContext()
+        val executor = context.planSurfaceExecutor()
+
+        val aligned = assertIs<GpuPlanSurfacePlanResult.Ready>(executor.plan(
+            rectangleScene(RectF32(0f, 0f, 2f, 2f), CoverageRequest.HARD_EDGE),
+            target(),
+            1L shl 20,
+        ))
+        val fractional = assertIs<GpuPlanSurfacePlanResult.Ready>(executor.plan(
+            rectangleScene(RectF32(0.5f, 0.5f, 1.5f, 1.5f), CoverageRequest.ANTIALIASED),
+            target(),
+            1L shl 20,
+        ))
+
+        assertTrue(aligned.token !== fractional.token)
+    }
+
+    @Test
+    fun `surface executor keeps path scenes as typed gaps`() {
+        val result = planningContext().planSurfaceExecutor().plan(
+            SceneSnapshot.of(
+                SceneExtent(2, 2),
+                ColorSpace.SRGB,
+                listOf(
+                    SceneCommand.Draw(
+                        DrawNode(
+                            GeometryNode.Path(PathBuilder().addRect(RectF32(0f, 0f, 2f, 2f)).build()),
+                            MaterialNode.Solid(ColorARGB.Red),
+                            CoverageRequest.HARD_EDGE,
+                            ClipStackNode.Empty,
+                            BlendNode.SrcOver,
+                            EffectStack.Empty,
+                            Matrix3x3F32.Identity,
+                            DrawOrigin.PATH,
+                        ),
+                    ),
+                ),
+            ),
+            target(),
+            1L shl 20,
+        )
+
+        assertIs<GpuPlanSurfacePlanResult.GapNotMigrated>(result)
+    }
+
+    @Test
+    fun `fractional surface tokens are one shot and bound to their issuing context`() {
+        val firstContext = planningContext()
+        val firstExecutor = firstContext.planSurfaceExecutor()
+        val token = assertIs<GpuPlanSurfacePlanResult.Ready>(firstExecutor.plan(
+            rectangleScene(RectF32(0.5f, 0.5f, 1.5f, 1.5f), CoverageRequest.ANTIALIASED),
+            target(),
+            1L shl 20,
+        )).token
+
+        val foreign = planningContext().planSurfaceExecutor().submit(token)
+        val first = firstExecutor.submit(token)
+        val second = firstExecutor.submit(token)
+
+        assertEquals("w3.lowering.incompatible_plan", assertIs<GpuPlanSurfaceSubmitResult.Terminal>(foreign).diagnostics.single().code.value)
+        assertIs<GpuPlanSurfaceSubmitResult.Terminal>(first)
+        assertEquals("w3.lowering.incompatible_plan", assertIs<GpuPlanSurfaceSubmitResult.Terminal>(second).diagnostics.single().code.value)
+    }
+
     @Test fun `session keys reject invalid ownership coordinates`() {
         assertFailsWith<IllegalArgumentException> { GpuRenderSessionKey(-1, 1, 1, PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL) }
         assertFailsWith<IllegalArgumentException> { GpuRenderSessionKey(0, 0, 1, PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL) }
@@ -302,6 +389,45 @@ class GpuRenderContextTest {
     }
     private class TrackingFuture<T> : CompletableFuture<T>() { var cancelCalled = false; override fun cancel(mayInterruptIfRunning: Boolean): Boolean { cancelCalled = true; return super.cancel(mayInterruptIfRunning) } }
     private companion object {
+        fun planningContext(): GpuRenderContext {
+            val events = mutableListOf<String>()
+            return GpuRenderContext(Owner(Backend(1, Session(1, events)), events))
+        }
+        fun target(): RenderTargetDescriptor = RenderTargetDescriptor(SceneExtent(2, 2), ColorSpace.SRGB)
+        fun rectangleScene(bounds: RectF32, coverage: CoverageRequest): SceneSnapshot = SceneSnapshot.of(
+            SceneExtent(2, 2),
+            ColorSpace.SRGB,
+            listOf(
+                SceneCommand.Draw(
+                    DrawNode(
+                        GeometryNode.Rect.of(bounds),
+                        MaterialNode.Solid(ColorARGB.Red),
+                        coverage,
+                        ClipStackNode.Empty,
+                        BlendNode.SrcOver,
+                        EffectStack.Empty,
+                        Matrix3x3F32.Identity,
+                        DrawOrigin.RECT,
+                        PaintNode(
+                            ColorARGB.Red,
+                            null,
+                            org.graphiks.kanvas.render.ir.BlendMode.SRC_OVER,
+                            null,
+                            null,
+                            null,
+                            null,
+                            null,
+                            PaintStyleNode.FILL,
+                            0f,
+                            StrokeCapNode.BUTT,
+                            StrokeJoinNode.MITER,
+                            4f,
+                            true,
+                        ),
+                    ),
+                ),
+            ),
+        )
         fun sessionKey(ordinal: Int) = GpuRenderSessionKey(
             deviceGeneration = 1,
             width = ordinal + 1,
@@ -317,7 +443,12 @@ class GpuRenderContextTest {
             textureFormatSampleSupport = GPUTextureFormatSampleSupport(
                 mapOf(GPUTextureFormat.RGBA8UnormSrgb to GPUTextureSampleCountSupport(setOf(1))),
             ),
-            rendererFeatures = setOf(GPURendererFeature.RenderPass, GPURendererFeature.Readback),
+            rendererFeatures = setOf(
+                GPURendererFeature.RenderPass,
+                GPURendererFeature.CopyUpload,
+                GPURendererFeature.UniformBuffer,
+                GPURendererFeature.Readback,
+            ),
         )
     }
 }
