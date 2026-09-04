@@ -33,6 +33,7 @@ import java.util.IdentityHashMap
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotSame
@@ -442,23 +443,16 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
     }
 
     @Test
-    fun `W4a task-list marker refuses missing first scratch before generic fallback`() {
+    fun `W4a planned authority rejects scratch erasure before materialization`() {
         val fixture = w4aFixture()
         try {
             val render = fixture.plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
             val firstPacket = render.drawPackets.first()
             val authority = requireNotNull(firstPacket.corePrimitivePreparedAuthority)
-            val markedPlan = fixture.plan.replacingPacket(
-                firstPacket,
-                firstPacket.withPreparedAuthority(authority.copy(w4aSessionScratch = null)),
-            )
 
-            assertEquals(
-                "invalid.native-core-primitive.w4a-scratch",
-                assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
-                    fixture.copy(plan = markedPlan).materializeCoreResult(),
-                ).code,
-            )
+            assertFailsWith<IllegalArgumentException> {
+                authority.copy(w4aSessionScratch = null)
+            }
         } finally {
             fixture.close()
         }

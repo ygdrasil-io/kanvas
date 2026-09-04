@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.planning
 
 import io.ygdrasil.webgpu.GPUTextureFormat
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertSame
@@ -132,6 +133,19 @@ class GpuPlanTaskListLowererW4bTest {
         val divergent = graphLike(readyW4bGraph(), capabilities = planCapabilities(deviceGeneration = 8))
 
         assertIs<GpuPlanLoweringResult.UnsupportedCapability>(lowerer.lower(request(divergent)))
+    }
+
+    @Test
+    fun `planned W4b authority refuses structural scratch erasure`() {
+        val lowered = assertIs<GpuPlanLoweringResult.Lowered>(lowerer.lower(request(readyW4bGraph())))
+        val authority = requireNotNull(
+            lowered.taskList.tasks.filterIsInstance<GPUTask.Render>().single()
+                .drawPackets.first().corePrimitivePreparedAuthority,
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            authority.copy(w4bSessionScratch = null)
+        }
     }
 
     private fun readyW4bGraph(): RenderGraph {

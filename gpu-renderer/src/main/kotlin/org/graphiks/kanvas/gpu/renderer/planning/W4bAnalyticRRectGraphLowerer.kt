@@ -135,11 +135,10 @@ internal class W4bAnalyticRRectGraphLowerer {
         ) ?: return invalid("W4b scratch packing is invalid.")
         val packets = builtPackets.map { built ->
             built.packet.attachCorePrimitivePreparedAuthority(
-                GPUCorePrimitivePreparedPacketAuthority(
+                GPUCorePrimitivePreparedPacketAuthority.plannedW4b(
                     structuralPipelineKey = built.structuralPipelineKey,
                     renderPipelineKey = requireNotNull(built.packet.renderPipelineKey),
-                    uniformSlabSeal = null,
-                    w4bSessionScratch = scratch,
+                    scratch = scratch,
                 ),
             )
         }

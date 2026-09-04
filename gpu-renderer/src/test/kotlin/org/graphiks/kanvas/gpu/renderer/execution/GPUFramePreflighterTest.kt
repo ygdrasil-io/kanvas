@@ -333,7 +333,7 @@ class GPUFramePreflighterTest {
     }
 
     @Test
-    fun `sealed W4a markers require one common scratch before generic routing`() {
+    fun `sealed W4a packets reject erased scratches before routing and divergent scratches at preflight`() {
         val fixture = w4aFixture()
         val packets = fixture.framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
             .single().drawPackets
@@ -346,20 +346,18 @@ class GPUFramePreflighterTest {
                 )
             }
 
-        val cases = listOf(
-            withScratch { null },
-            withScratch { index -> if (index == 0) null else scratch },
-            withScratch { index -> if (index == 0) w4aScratchForTest(scratch) else scratch },
-        )
-
-        cases.forEach { forgedPlan ->
-            assertEquals(
-                "invalid.preflight.w4a_session_scratch",
-                assertIs<GPUFramePreflightResult.Refused>(
-                    preflightW4a(forgedPlan, fixture.capabilities),
-                ).diagnostic.code.value,
-            )
+        assertFailsWith<IllegalArgumentException> { withScratch { null } }
+        assertFailsWith<IllegalArgumentException> {
+            withScratch { index -> if (index == 0) null else scratch }
         }
+
+        val divergent = withScratch { index -> if (index == 0) w4aScratchForTest(scratch) else scratch }
+        assertEquals(
+            "invalid.preflight.w4a_session_scratch",
+            assertIs<GPUFramePreflightResult.Refused>(
+                preflightW4a(divergent, fixture.capabilities),
+            ).diagnostic.code.value,
+        )
     }
 
     @Test
@@ -421,7 +419,7 @@ class GPUFramePreflighterTest {
     }
 
     @Test
-    fun `sealed W3 scratch is accepted without logical V I U while generic and forged twins refuse`() {
+    fun `sealed W3 scratch is accepted without logical V I U while erased and forged twins refuse`() {
         val fixture = w3Fixture()
         val preparations = fixture.framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
             .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
@@ -435,8 +433,9 @@ class GPUFramePreflighterTest {
         })
         assertIs<GPUFramePreflightResult.Prepared>(preflightW3(fixture.framePlan, fixture.capabilities))
 
-        val generic = GPUFramePlanner.plan(w3Twin(fixture.taskList, scratch = null))
-        assertIs<GPUFramePreflightResult.Refused>(preflightW3(generic, fixture.capabilities))
+        assertFailsWith<IllegalArgumentException> {
+            w3Twin(fixture.taskList, scratch = null)
+        }
 
         val originalScratch = requireNotNull(
             fixture.framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()

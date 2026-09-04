@@ -173,7 +173,7 @@ public class GpuPlanTaskListLowerer {
             val pipeline = packet.renderPipelineKey
                 ?: return W3BaseTaskListResult.Invalid(invalidDiagnostic("W3 packet is missing render pipeline authority."))
             packet.attachCorePrimitivePreparedAuthority(
-                GPUCorePrimitivePreparedPacketAuthority(
+                GPUCorePrimitivePreparedPacketAuthority.plannedW3(
                     structuralPipelineKey = corePrimitiveRenderPipelineStructuralKey(
                         semantic,
                         clip,
@@ -182,8 +182,7 @@ public class GpuPlanTaskListLowerer {
                         colorFormat = GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat(),
                     ),
                     renderPipelineKey = pipeline,
-                    uniformSlabSeal = null,
-                    w3SessionScratch = scratch,
+                    scratch = scratch,
                 ),
             )
         }

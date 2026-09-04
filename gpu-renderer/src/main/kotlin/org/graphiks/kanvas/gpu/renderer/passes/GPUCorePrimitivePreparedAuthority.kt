@@ -1739,7 +1739,7 @@ internal class W3SessionScratchV1(
 }
 
 /** One-shot authority attached by the prepared-frame builder before the packet escapes. */
-internal data class GPUCorePrimitivePreparedPacketAuthority(
+internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
     val structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
     val renderPipelineKey: GPURenderPipelineKey,
     val uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal?,
@@ -1750,10 +1750,137 @@ internal data class GPUCorePrimitivePreparedPacketAuthority(
     val w3SessionScratch: W3SessionScratchV1? = null,
     val w4aSessionScratch: W4aSessionScratchV1? = null,
     val w4bSessionScratch: W4bSessionScratchV1? = null,
+    private val scratchLane: ScratchLane,
 ) {
+    internal constructor(
+        structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+        renderPipelineKey: GPURenderPipelineKey,
+        uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal?,
+        analyticShapeUniformSeal: GPUCorePrimitiveAnalyticShapeUniformSeal? = null,
+        analyticClipUniformSeal: GPUCorePrimitiveAnalyticClipUniformSeal? = null,
+        analyticIntersectionUniformSeal: GPUCorePrimitiveAnalyticIntersectionUniformSeal? = null,
+        coverageMaskUniformSlabSeal: GPUCorePrimitiveCoverageMaskUniformSlabSeal? = null,
+    ) : this(
+        structuralPipelineKey,
+        renderPipelineKey,
+        uniformSlabSeal,
+        analyticShapeUniformSeal,
+        analyticClipUniformSeal,
+        analyticIntersectionUniformSeal,
+        coverageMaskUniformSlabSeal,
+        null,
+        null,
+        null,
+        ScratchLane.Legacy,
+    )
+
     init {
-        require(listOf(w3SessionScratch, w4aSessionScratch, w4bSessionScratch).count { it != null } <= 1) {
+        val scratchCount = listOf(w3SessionScratch, w4aSessionScratch, w4bSessionScratch).count { it != null }
+        require(scratchCount <= 1) {
             "A prepared CorePrimitive packet may retain no more than one W3, W4a, or W4b session scratch"
         }
+        when (scratchLane) {
+            ScratchLane.Legacy -> require(scratchCount == 0) {
+                "A legacy CorePrimitive prepared packet may not retain a planned session scratch"
+            }
+            ScratchLane.W3 -> require(
+                w3SessionScratch != null && w4aSessionScratch == null && w4bSessionScratch == null,
+            ) { "A W3 CorePrimitive prepared packet requires its W3 session scratch" }
+            ScratchLane.W4a -> require(
+                w3SessionScratch == null && w4aSessionScratch != null && w4bSessionScratch == null,
+            ) { "A W4a CorePrimitive prepared packet requires its W4a session scratch" }
+            ScratchLane.W4b -> require(
+                w3SessionScratch == null && w4aSessionScratch == null && w4bSessionScratch != null,
+            ) { "A W4b CorePrimitive prepared packet requires its W4b session scratch" }
+        }
+    }
+
+    internal fun copy(
+        structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey = this.structuralPipelineKey,
+        renderPipelineKey: GPURenderPipelineKey = this.renderPipelineKey,
+        uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal? = this.uniformSlabSeal,
+        analyticShapeUniformSeal: GPUCorePrimitiveAnalyticShapeUniformSeal? = this.analyticShapeUniformSeal,
+        analyticClipUniformSeal: GPUCorePrimitiveAnalyticClipUniformSeal? = this.analyticClipUniformSeal,
+        analyticIntersectionUniformSeal: GPUCorePrimitiveAnalyticIntersectionUniformSeal? = this.analyticIntersectionUniformSeal,
+        coverageMaskUniformSlabSeal: GPUCorePrimitiveCoverageMaskUniformSlabSeal? = this.coverageMaskUniformSlabSeal,
+        w3SessionScratch: W3SessionScratchV1? = this.w3SessionScratch,
+        w4aSessionScratch: W4aSessionScratchV1? = this.w4aSessionScratch,
+        w4bSessionScratch: W4bSessionScratchV1? = this.w4bSessionScratch,
+    ): GPUCorePrimitivePreparedPacketAuthority = GPUCorePrimitivePreparedPacketAuthority(
+        structuralPipelineKey,
+        renderPipelineKey,
+        uniformSlabSeal,
+        analyticShapeUniformSeal,
+        analyticClipUniformSeal,
+        analyticIntersectionUniformSeal,
+        coverageMaskUniformSlabSeal,
+        w3SessionScratch,
+        w4aSessionScratch,
+        w4bSessionScratch,
+        scratchLane,
+    )
+
+    internal companion object {
+        fun plannedW3(
+            structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+            renderPipelineKey: GPURenderPipelineKey,
+            scratch: W3SessionScratchV1,
+        ): GPUCorePrimitivePreparedPacketAuthority = GPUCorePrimitivePreparedPacketAuthority(
+            structuralPipelineKey,
+            renderPipelineKey,
+            null,
+            null,
+            null,
+            null,
+            null,
+            scratch,
+            null,
+            null,
+            ScratchLane.W3,
+        )
+
+        fun plannedW4a(
+            structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+            renderPipelineKey: GPURenderPipelineKey,
+            analyticShapeUniformSeal: GPUCorePrimitiveAnalyticShapeUniformSeal,
+            scratch: W4aSessionScratchV1,
+        ): GPUCorePrimitivePreparedPacketAuthority = GPUCorePrimitivePreparedPacketAuthority(
+            structuralPipelineKey,
+            renderPipelineKey,
+            null,
+            analyticShapeUniformSeal,
+            null,
+            null,
+            null,
+            null,
+            scratch,
+            null,
+            ScratchLane.W4a,
+        )
+
+        fun plannedW4b(
+            structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+            renderPipelineKey: GPURenderPipelineKey,
+            scratch: W4bSessionScratchV1,
+        ): GPUCorePrimitivePreparedPacketAuthority = GPUCorePrimitivePreparedPacketAuthority(
+            structuralPipelineKey,
+            renderPipelineKey,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            scratch,
+            ScratchLane.W4b,
+        )
+    }
+
+    private enum class ScratchLane {
+        Legacy,
+        W3,
+        W4a,
+        W4b,
     }
 }
