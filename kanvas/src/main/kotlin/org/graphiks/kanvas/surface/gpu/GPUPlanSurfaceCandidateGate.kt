@@ -10,6 +10,7 @@ internal object GPUPlanSurfaceCandidateGate {
         config.gpuColorFormat == GPUColorFormat.RGBA8_UNORM_SRGB &&
             operations.all { operation ->
                 operation is DisplayOp.DrawRect ||
+                    operation is DisplayOp.DrawRRect ||
                     operation is DisplayOp.DrawColor ||
                     operation is DisplayOp.SetTransform ||
                     operation is DisplayOp.SetClip ||

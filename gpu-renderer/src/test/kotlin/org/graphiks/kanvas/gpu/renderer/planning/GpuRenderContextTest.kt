@@ -36,6 +36,8 @@ import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralPhase
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralTelemetrySnapshot
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.render.ir.BlendNode
+import org.graphiks.kanvas.render.ir.ClipEntry
+import org.graphiks.kanvas.render.ir.ClipOperation
 import org.graphiks.kanvas.render.ir.ClipStackNode
 import org.graphiks.kanvas.render.ir.CoverageRequest
 import org.graphiks.kanvas.render.ir.DrawNode
@@ -52,13 +54,15 @@ import org.graphiks.kanvas.render.ir.SceneSnapshot
 import org.graphiks.kanvas.render.ir.StrokeCapNode
 import org.graphiks.kanvas.render.ir.StrokeJoinNode
 import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.math.geometry.PathBuilder
 import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.matrix.Matrix3x3F32
 
 class GpuRenderContextTest {
     @Test
-    fun `surface executor selects W3 for aligned and W4a for fractional rectangles`() {
+    fun `surface executor selects W3 W4a and W4b for their public frame shapes`() {
         val context = planningContext()
         val executor = context.planSurfaceExecutor()
 
@@ -72,8 +76,38 @@ class GpuRenderContextTest {
             target(),
             1L shl 20,
         ))
+        val mixedRRect = assertIs<GpuPlanSurfacePlanResult.Ready>(executor.plan(
+            mixedRRectScene(),
+            target(),
+            1L shl 20,
+        ))
 
         assertTrue(aligned.token !== fractional.token)
+        assertTrue(fractional.token !== mixedRRect.token)
+    }
+
+    @Test
+    fun `surface executor keeps rrect clips and gradients as typed gaps`() {
+        val rrectClip = ClipStackNode.Operations.of(
+            listOf(
+                ClipEntry(
+                    GeometryNode.RRect.of(rrectShape()),
+                    ClipOperation.INTERSECT,
+                ),
+            ),
+        )
+        val gradient = MaterialNode.LinearGradient.of(
+            org.graphiks.math.geometry.Point2F32(0f, 0f),
+            org.graphiks.math.geometry.Point2F32(2f, 0f),
+            listOf(
+                org.graphiks.kanvas.render.ir.GradientStop(0f, ColorARGB.Blue),
+                org.graphiks.kanvas.render.ir.GradientStop(1f, ColorARGB.Red),
+            ),
+        )
+        val executor = planningContext().planSurfaceExecutor()
+
+        assertIs<GpuPlanSurfacePlanResult.GapNotMigrated>(executor.plan(rrectScene(clip = rrectClip), target(), 1L shl 20))
+        assertIs<GpuPlanSurfacePlanResult.GapNotMigrated>(executor.plan(rrectScene(material = gradient), target(), 1L shl 20))
     }
 
     @Test
@@ -473,6 +507,63 @@ class GpuRenderContextTest {
                         ),
                     ),
                 ),
+            ),
+        )
+        fun mixedRRectScene(): SceneSnapshot = SceneSnapshot.of(
+            SceneExtent(2, 2),
+            ColorSpace.SRGB,
+            listOf(
+                SceneCommand.Draw(fillDraw(GeometryNode.Rect.of(RectF32(0f, 0f, 1f, 1f)), ColorARGB.Blue, DrawOrigin.RECT)),
+                SceneCommand.Draw(fillDraw(GeometryNode.RRect.of(rrectShape()), ColorARGB.Red, DrawOrigin.RRECT)),
+            ),
+        )
+        fun rrectScene(
+            clip: ClipStackNode = ClipStackNode.Empty,
+            material: MaterialNode = MaterialNode.Solid(ColorARGB.Red),
+        ): SceneSnapshot = SceneSnapshot.of(
+            SceneExtent(2, 2),
+            ColorSpace.SRGB,
+            listOf(
+                SceneCommand.Draw(fillDraw(GeometryNode.RRect.of(rrectShape()), ColorARGB.Red, DrawOrigin.RRECT, clip, material)),
+            ),
+        )
+        fun rrectShape(): RRectF32 = RRectF32.of(
+            RectF32(0f, 0f, 2f, 2f),
+            CornerRadiiF32.of(0.5f, 0.5f),
+            CornerRadiiF32.of(0.75f, 0.25f),
+            CornerRadiiF32.of(0.25f, 0.75f),
+            CornerRadiiF32.of(0.5f, 0.25f),
+        )
+        fun fillDraw(
+            geometry: GeometryNode,
+            color: ColorARGB,
+            origin: DrawOrigin,
+            clip: ClipStackNode = ClipStackNode.Empty,
+            material: MaterialNode = MaterialNode.Solid(color),
+        ): DrawNode = DrawNode(
+            geometry = geometry,
+            material = material,
+            coverage = CoverageRequest.ANTIALIASED,
+            clip = clip,
+            blend = BlendNode.SrcOver,
+            effects = EffectStack.Empty,
+            transform = Matrix3x3F32.Identity,
+            origin = origin,
+            paint = PaintNode(
+                color,
+                material.takeUnless { it is MaterialNode.Solid },
+                org.graphiks.kanvas.render.ir.BlendMode.SRC_OVER,
+                null,
+                null,
+                null,
+                null,
+                null,
+                PaintStyleNode.FILL,
+                0f,
+                StrokeCapNode.BUTT,
+                StrokeJoinNode.MITER,
+                4f,
+                true,
             ),
         )
         fun sessionKey(ordinal: Int) = GpuRenderSessionKey(

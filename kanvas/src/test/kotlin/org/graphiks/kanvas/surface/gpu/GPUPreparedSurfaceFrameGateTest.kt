@@ -2,8 +2,10 @@ package org.graphiks.kanvas.surface.gpu
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.geometry.Path
@@ -28,6 +30,24 @@ import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
 
 class GPUPreparedSurfaceFrameGateTest {
+    @Test
+    fun `plan candidate gate admits rounded rectangles but excludes double rounded rectangles and paths`() {
+        val rrect = DisplayOp.DrawRRect(RRectF32.of(RECT, radius = 1f), PAINT, MATRIX, CLIP)
+        val doubleRRect = DisplayOp.DrawDRRect(
+            RRectF32.of(RECT, radius = 1f),
+            RRectF32.of(INNER_RECT, radius = 1f),
+            PAINT,
+            MATRIX,
+            CLIP,
+        )
+        val path = DisplayOp.DrawPath(Path().addRect(RECT), PAINT, MATRIX, CLIP)
+        val srgb = RenderConfig.DEFAULT.copy(gpuColorFormat = GPUColorFormat.RGBA8_UNORM_SRGB)
+
+        assertTrue(GPUPlanSurfaceCandidateGate.accepts(listOf(rrect), srgb))
+        assertFalse(GPUPlanSurfaceCandidateGate.accepts(listOf(doubleRRect), srgb))
+        assertFalse(GPUPlanSurfaceCandidateGate.accepts(listOf(path), srgb))
+    }
+
     @Test
     fun `DrawText enters prepared candidate`() {
         assertIs<GPUPreparedSurfaceEligibility.Candidate>(
