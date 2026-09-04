@@ -324,6 +324,20 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             })
             val pooledBindGroup = bindGroups.first().bindGroup.bindGroup
             assertTrue(bindGroups.all { command -> command.bindGroup.bindGroup === pooledBindGroup })
+            val nativeUniformBuffer = assertIs<GPUBuffer>(
+                fixture.native.createdHandles("Kanvas.session.corePrimitive.framePool.uniforms").single(),
+            )
+            val nativeUniformDescriptor = fixture.native.bufferDescriptors.single { descriptor ->
+                descriptor.label == "Kanvas.session.corePrimitive.framePool.uniforms"
+            }
+            val materializedBindGroupDescriptor = fixture.native.bindGroupDescriptors.single { descriptor ->
+                descriptor.label == pooledBindGroup.toString()
+            }
+            val nativeUniformBinding = assertIs<BufferBinding>(
+                materializedBindGroupDescriptor.entries.single { entry -> entry.binding == 0u }.resource,
+            )
+            assertEquals(4_096uL, nativeUniformDescriptor.size)
+            assertSame(nativeUniformBuffer, nativeUniformBinding.buffer)
             assertEquals(
                 listOf(GPUFrameResourceRole.SceneTarget, GPUFrameResourceRole.ReadbackStaging),
                 fixture.plan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
@@ -7704,6 +7718,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         val renderPipelineKinds = mutableListOf<String>()
         var readbackCopyCalls = 0
             private set
+        val bufferDescriptors = mutableListOf<BufferDescriptor>()
         val bindGroupDescriptors = mutableListOf<BindGroupDescriptor>()
         val bindGroupLayoutDescriptors = mutableListOf<BindGroupLayoutDescriptor>()
         val textureDescriptors = mutableListOf<TextureDescriptor>()
@@ -7819,7 +7834,9 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                     }
                 }
                 "createBuffer" -> {
-                    val label = (args?.firstOrNull() as BufferDescriptor).label.orEmpty()
+                    val descriptor = args?.firstOrNull() as BufferDescriptor
+                    bufferDescriptors += descriptor
+                    val label = descriptor.label.orEmpty()
                     events += "createBuffer:$label"
                     failIfRequested("createBuffer")
                     recordedHandle(GPUBuffer::class.java, label)

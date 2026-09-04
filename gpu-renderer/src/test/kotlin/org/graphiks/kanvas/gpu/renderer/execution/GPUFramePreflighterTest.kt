@@ -396,6 +396,31 @@ class GPUFramePreflighterTest {
     }
 
     @Test
+    fun `sealed W4a scratch refuses a constructible reusable uniform allocation contradiction`() {
+        val fixture = w4aFixture()
+        val baseline = fixture.framePlan.memoryBudget
+        val uniformAllocation = baseline.allocations.single { allocation ->
+            allocation.category == GPUFrameMemoryCategory.ReusableScratch &&
+                allocation.label.endsWith(".uniform")
+        }
+        val forgedPlan = fixture.framePlan.withMemoryBudget(
+            baseline.copy(
+                allocations = baseline.allocations.map { allocation ->
+                    if (allocation === uniformAllocation) allocation.copy(bytes = 8_192L) else allocation
+                },
+            ),
+        )
+
+        assertEquals(4_096L, uniformAllocation.bytes)
+        assertEquals(
+            "invalid.preflight.w4a_session_scratch",
+            assertIs<GPUFramePreflightResult.Refused>(
+                preflightW4a(forgedPlan, fixture.capabilities),
+            ).diagnostic.code.value,
+        )
+    }
+
+    @Test
     fun `sealed W3 scratch is accepted without logical V I U while generic and forged twins refuse`() {
         val fixture = w3Fixture()
         val preparations = fixture.framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
