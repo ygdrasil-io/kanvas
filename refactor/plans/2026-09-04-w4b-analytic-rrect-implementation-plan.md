@@ -39,6 +39,10 @@ Ready.
   soumission, jamais des PlanResource ni des remplaçants de staging.
 - Uniform80 est inchangé : bounds 32..47, TL/TR 48..63, BR/BL 64..79 et
   stride alignUp(80, minUniformBufferOffsetAlignment).
+- Avant `Ready`, `uniformUsefulBytes` reste représentable par l’hôte
+  (`<= Int.MAX_VALUE`) et le dernier dynamic offset
+  `(drawCount - 1) × uniformStride` reste `<= UInt.MAX_VALUE`, avec
+  arithmétique checked.
 - Après Ready, toute divergence est terminale : jamais W4b→W4a/W3, legacy ou
   direct native. GPURRectNormalizer et GPUCorePrimitiveDirectNativeRoute ne
   participent pas à W4b.

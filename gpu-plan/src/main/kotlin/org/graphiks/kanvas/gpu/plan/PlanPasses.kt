@@ -91,8 +91,8 @@ public class AnalyticRectDraw private constructor(
 public class AnalyticRRectDraw private constructor(
     override public val commandIndex: Int,
     override public val color: ColorF32,
-    deviceShape: RRectF32,
     public val origin: DrawOrigin,
+    deviceShape: RRectF32,
     rasterBounds: RectI32,
     scissor: RectI32,
 ) : PlanDraw {
@@ -123,8 +123,8 @@ public class AnalyticRRectDraw private constructor(
         public fun of(
             commandIndex: Int,
             color: ColorF32,
-            deviceShape: RRectF32,
             origin: DrawOrigin,
+            deviceShape: RRectF32,
             rasterBounds: RectI32,
             scissor: RectI32,
         ): AnalyticRRectDraw {
@@ -135,7 +135,7 @@ public class AnalyticRRectDraw private constructor(
             require(!deviceShape.rect.isEmpty && !rasterBounds.isEmpty && !scissor.isEmpty) {
                 "Draw rectangles must be non-empty"
             }
-            return AnalyticRRectDraw(commandIndex, color, deviceShape, origin, rasterBounds, scissor)
+            return AnalyticRRectDraw(commandIndex, color, origin, deviceShape, rasterBounds, scissor)
         }
     }
 }

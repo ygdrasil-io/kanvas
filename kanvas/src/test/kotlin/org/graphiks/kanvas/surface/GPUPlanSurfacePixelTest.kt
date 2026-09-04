@@ -73,11 +73,12 @@ class GPUPlanSurfacePixelTest {
     }
 
     @Test
-    fun `W4b partial translucent rrects preserve inter-draw quantized SrcOver paint order`() {
+    fun `W4b partial translucent Rect and RRect preserve inter-draw quantized SrcOver paint order`() {
         val first = ColorARGB.of(137, 14, 157, 83)
         val second = ColorARGB.of(191, 227, 62, 174)
-        val firstShape = RRectF32.of(RectF32(0.2f, 0.2f, 0.8f, 0.8f))
-        val secondShape = RRectF32.of(RectF32(0.1f, 0.1f, 0.9f, 0.9f))
+        val firstRect = RectF32(0.2f, 0.2f, 0.8f, 0.8f)
+        val firstShape = RRectF32.of(firstRect)
+        val secondShape = RRectF32.of(RectF32(0.1f, 0.1f, 0.9f, 0.9f), radius = 0.2f)
         val scissor = RectI32(0, 0, 1, 1)
         val forwardDraws = listOf(
             W4bAnalyticRRectCpuOracle.Draw(first, firstShape, scissor),
@@ -89,25 +90,25 @@ class GPUPlanSurfacePixelTest {
         )
         val forward = Surface(1, 1).also { surface ->
             surface.canvas {
-                drawRRect(firstShape, Paint.fill(first).copy(antiAlias = true))
+                drawRect(firstRect, Paint.fill(first).copy(antiAlias = true))
                 drawRRect(secondShape, Paint.fill(second).copy(antiAlias = true))
             }
         }.render()
         val reverse = Surface(1, 1).also { surface ->
             surface.canvas {
                 drawRRect(secondShape, Paint.fill(second).copy(antiAlias = true))
-                drawRRect(firstShape, Paint.fill(first).copy(antiAlias = true))
+                drawRect(firstRect, Paint.fill(first).copy(antiAlias = true))
             }
         }.render()
 
         assertPreparedRouteEvidence(forward)
         assertPreparedRouteEvidence(reverse)
-        assertPixelsEqual(ubyteArrayOf(163u, 67u, 127u, 148u), forward.pixels)
+        assertPixelsEqual(ubyteArrayOf(181u, 66u, 140u, 172u), forward.pixels)
         assertPixelsEqual(W4bAnalyticRRectCpuOracle.render(1, 1, forwardDraws), forward.pixels)
         assertPixelsEqual(W4bAnalyticRRectCpuOracle.render(1, 1, reverseDraws), reverse.pixels)
         assertFalse(forward.pixels.contentEquals(reverse.pixels))
         assertPixelsEqual(
-            ubyteArrayOf(163u, 68u, 127u, 148u),
+            ubyteArrayOf(181u, 66u, 140u, 173u),
             W4bAnalyticRRectCpuOracle.renderWithFrameEndQuantization(1, 1, forwardDraws),
         )
         assertFalse(

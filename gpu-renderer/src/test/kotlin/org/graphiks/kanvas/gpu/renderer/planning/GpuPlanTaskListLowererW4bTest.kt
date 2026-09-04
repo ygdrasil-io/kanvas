@@ -113,8 +113,8 @@ class GpuPlanTaskListLowererW4bTest {
         val rrectChangedToRect = AnalyticRRectDraw.of(
             commandIndex = analytic.last().commandIndex,
             color = analytic.last().color,
-            deviceShape = analytic.last().copyDeviceShape(),
             origin = DrawOrigin.RECT,
+            deviceShape = analytic.last().copyDeviceShape(),
             rasterBounds = analytic.last().copyRasterBounds(),
             scissor = analytic.last().copyScissor(),
         )

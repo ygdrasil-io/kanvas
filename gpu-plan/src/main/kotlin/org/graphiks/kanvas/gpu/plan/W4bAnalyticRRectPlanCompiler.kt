@@ -82,7 +82,7 @@ public class W4bAnalyticRRectPlanCompiler : GpuPlanCompiler {
                 ?: return resourceLimit(W4bPlanDiagnostics.SizeOverflow, "Selected draw became empty during planning")
             val scissor = if (sealed.clip == null) targetRaster else intersect(targetRaster, sealed.clip)
                 ?: return resourceLimit(W4bPlanDiagnostics.SizeOverflow, "Selected draw became empty during planning")
-            AnalyticRRectDraw.of(sealed.commandIndex, sealed.color, sealed.deviceShape, sealed.origin, raster, scissor)
+            AnalyticRRectDraw.of(sealed.commandIndex, sealed.color, sealed.origin, sealed.deviceShape, raster, scissor)
         }
         val footprint = when (val memory = AnalyticRRectPlanBudget.calculate(extent, plannedDraws.size, capabilities, budget)) {
             is AnalyticRRectPlanBudgetResult.WithinBudget -> memory.footprint
@@ -168,13 +168,13 @@ public class W4bAnalyticRRectPlanCompiler : GpuPlanCompiler {
         }
         if (node.coverage != CoverageRequest.ANTIALIASED) return DrawRecognition.Gap("Coverage is outside W4b")
         val normalizedSource = when (val normalization = source.normalizeForAnalyticFillF32()) {
-            is RRectNormalizationF32Result.Accepted -> normalization.shape
-            is RRectNormalizationF32Result.Rejected -> return sourceRejection(normalization.rejection)
+            is RRectNormalizationF32Result.Accepted -> normalization.copyShape()
+            is RRectNormalizationF32Result.Rejected -> return sourceRejection(normalization.reason)
         }
         if (!finite(node.transform)) return DrawRecognition.Invalid("Draw transform is non-finite")
         if (!(node.transform.isIdentity || node.transform.isScaleTranslate())) return DrawRecognition.Gap("Transform is outside W4b")
         val normalizedDevice = when (val normalization = normalizedSource.mapAxisAligned(node.transform).normalizeForAnalyticFillF32()) {
-            is RRectNormalizationF32Result.Accepted -> normalization.shape
+            is RRectNormalizationF32Result.Accepted -> normalization.copyShape()
             is RRectNormalizationF32Result.Rejected -> return DrawRecognition.Gap("Transform is outside W4b")
         }
         val clip = when (val recognized = recognizeClip(node.clip)) {
@@ -192,8 +192,8 @@ public class W4bAnalyticRRectPlanCompiler : GpuPlanCompiler {
 
     private fun sourceRejection(rejection: RRectNormalizationF32Rejection): DrawRecognition = when (rejection) {
         RRectNormalizationF32Rejection.NonFiniteBounds,
-        RRectNormalizationF32Rejection.NonFiniteRadii,
-        RRectNormalizationF32Rejection.NegativeRadii,
+        RRectNormalizationF32Rejection.NonFiniteRadius,
+        RRectNormalizationF32Rejection.NegativeRadius,
         -> DrawRecognition.Invalid("Rounded-rectangle geometry is invalid")
         RRectNormalizationF32Rejection.EmptyBounds -> DrawRecognition.Gap("Source geometry is empty or inverted")
     }

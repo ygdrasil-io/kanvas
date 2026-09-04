@@ -1,8 +1,8 @@
 # W4b — tranche verticale RRect analytique normalisée
 
-**Statut :** validé  
-**Date :** 2026-09-04  
-**Branche de base :** `codex/w4b-analytic-rrect`, empilée sur W4a  
+**Statut :** validé
+**Date :** 2026-09-04
+**Branche de base :** `codex/w4b-analytic-rrect`, empilée sur W4a
 **Référence amont :** `refactor/specs/2026-09-03-w4-geometry-coverage-stack-design.md` et `refactor/plans/2026-09-03-w4a-scalar-aa-rect-implementation-plan.md`
 
 ## 1. Décision
@@ -347,9 +347,12 @@ erreur en image différente.
 
 Chaque primitive W4b est évaluée dans l’ordre planifié. Sa couverture est
 multipliée à la couleur prémultipliée; le résultat est composé par
-`SrcOver` dans l’espace linéaire prémultiplié. La conversion vers sRGB et
-la quantification ne se produisent qu’aux frontières normales de la target,
-pas entre deux primitives de la frame.
+`SrcOver` dans l’espace linéaire prémultiplié. La target RGBA8 sRGB stockée
+et quantifiée est relue comme destination par chaque draw suivant : la
+conversion sRGB et la quantification interviennent donc entre les primitives
+aux frontières normales de cette target. Une target intermédiaire de précision
+différente exige une nouvelle capability et un oracle distincts ; W4b ne peut
+pas la réutiliser silencieusement.
 
 Pour les rayons tous nuls, l’oracle W4b est l’aire de chevauchement exacte
 du pixel et de la boîte rectangulaire. Pour les RRect à au moins un rayon

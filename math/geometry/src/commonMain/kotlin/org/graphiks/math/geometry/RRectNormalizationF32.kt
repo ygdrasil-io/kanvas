@@ -3,11 +3,16 @@ package org.graphiks.math.geometry
 /** The outcome of normalizing a rounded rectangle for analytic filling. */
 public sealed interface RRectNormalizationF32Result {
     /** A rounded rectangle whose bounds and corner radii satisfy analytic-fill constraints. */
-    public data class Accepted(public val shape: RRectF32) : RRectNormalizationF32Result
+    public class Accepted internal constructor(shape: RRectF32) : RRectNormalizationF32Result {
+        private val storedShape: RRectF32 = shape.deepCopyRRectF32()
+
+        /** Returns a defensive snapshot of the normalized rounded rectangle. */
+        public fun copyShape(): RRectF32 = storedShape.deepCopyRRectF32()
+    }
 
     /** A rounded rectangle rejected before analytic-fill normalization. */
     public data class Rejected(
-        public val rejection: RRectNormalizationF32Rejection,
+        public val reason: RRectNormalizationF32Rejection,
     ) : RRectNormalizationF32Result
 }
 
@@ -15,8 +20,8 @@ public sealed interface RRectNormalizationF32Result {
 public enum class RRectNormalizationF32Rejection {
     NonFiniteBounds,
     EmptyBounds,
-    NonFiniteRadii,
-    NegativeRadii,
+    NonFiniteRadius,
+    NegativeRadius,
 }
 
 /**
@@ -46,12 +51,12 @@ public fun RRectF32.normalizeForAnalyticFillF32(): RRectNormalizationF32Result {
     if (!materializedTopLeft.isFiniteF32() || !materializedTopRight.isFiniteF32() ||
         !materializedBottomRight.isFiniteF32() || !materializedBottomLeft.isFiniteF32()
     ) {
-        return RRectNormalizationF32Result.Rejected(RRectNormalizationF32Rejection.NonFiniteRadii)
+        return RRectNormalizationF32Result.Rejected(RRectNormalizationF32Rejection.NonFiniteRadius)
     }
     if (materializedTopLeft.hasNegativeComponentF32() || materializedTopRight.hasNegativeComponentF32() ||
         materializedBottomRight.hasNegativeComponentF32() || materializedBottomLeft.hasNegativeComponentF32()
     ) {
-        return RRectNormalizationF32Result.Rejected(RRectNormalizationF32Rejection.NegativeRadii)
+        return RRectNormalizationF32Result.Rejected(RRectNormalizationF32Rejection.NegativeRadius)
     }
 
     val canonicalTopLeft = materializedTopLeft.canonicalizedZeroPairF32()
@@ -102,6 +107,14 @@ public fun RRectF32.normalizeForAnalyticFillF32(): RRectNormalizationF32Result {
 }
 
 private fun CornerRadiiF32.isFiniteF32(): Boolean = x.isFinite() && y.isFinite()
+
+private fun RRectF32.deepCopyRRectF32(): RRectF32 = RRectF32.of(
+    rect = rect.copy(),
+    topLeft = CornerRadiiF32.of(topLeft.x, topLeft.y),
+    topRight = CornerRadiiF32.of(topRight.x, topRight.y),
+    bottomRight = CornerRadiiF32.of(bottomRight.x, bottomRight.y),
+    bottomLeft = CornerRadiiF32.of(bottomLeft.x, bottomLeft.y),
+)
 
 private fun CornerRadiiF32.materializedF32(): CornerRadiiF32 =
     CornerRadiiF32.of(materializedF32(x), materializedF32(y))

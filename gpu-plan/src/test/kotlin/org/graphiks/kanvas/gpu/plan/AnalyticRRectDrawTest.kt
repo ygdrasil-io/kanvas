@@ -23,11 +23,11 @@ class AnalyticRRectDrawTest {
             CornerRadiiF32.of(3f, 1f),
         )
         val first = AnalyticRRectDraw.of(
-            0, ColorF32.of(1f, 0f, 0f, 1f), rectShape, DrawOrigin.RECT,
+            0, ColorF32.of(1f, 0f, 0f, 1f), DrawOrigin.RECT, rectShape,
             RectI32(0, 0, 8, 4), RectI32(0, 0, 8, 4),
         )
         val second = AnalyticRRectDraw.of(
-            1, ColorF32.of(0f, 1f, 0f, 1f), rrectShape, DrawOrigin.RRECT,
+            1, ColorF32.of(0f, 1f, 0f, 1f), DrawOrigin.RRECT, rrectShape,
             RectI32(1, 2, 9, 6), RectI32(1, 2, 9, 6),
         )
         rrectShape.rect.left = 99f
@@ -54,7 +54,7 @@ class AnalyticRRectDrawTest {
     fun `analytic rrect draw rejects unsupported primitive origins`() {
         assertFailsWith<IllegalArgumentException> {
             AnalyticRRectDraw.of(
-                0, ColorF32.of(1f, 1f, 1f, 1f), RRectF32.of(RectF32(0f, 0f, 8f, 4f)), DrawOrigin.PATH,
+                0, ColorF32.of(1f, 1f, 1f, 1f), DrawOrigin.PATH, RRectF32.of(RectF32(0f, 0f, 8f, 4f)),
                 RectI32(0, 0, 8, 4), RectI32(0, 0, 8, 4),
             )
         }

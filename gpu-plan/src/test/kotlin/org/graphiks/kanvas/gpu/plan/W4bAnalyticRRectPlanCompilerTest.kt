@@ -120,6 +120,21 @@ class W4bAnalyticRRectPlanCompilerTest {
     }
 
     @Test
+    fun `Uniform80 host storage overflow keeps a 512 draw W4b candidate non Ready`() {
+        val onePixel = RectF32(0f, 0f, 1f, 1f)
+        val commands = List(511) { rect(onePixel, ColorARGB.Blue) } + rrect(
+            RRectF32.of(onePixel, radius = 0.25f),
+            color = ColorARGB.of(128, 255, 0, 0),
+        )
+        val scene = SceneSnapshot.of(SceneExtent(1, 1), ColorSpace.SRGB, commands)
+        val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target(scene))).candidate
+
+        val result = compiler.plan(candidate, rendererRepresentabilityCapabilities(), PlanBudget(Long.MAX_VALUE))
+
+        assertIs<RenderPlanResult.ResourceLimitExceeded>(result)
+    }
+
+    @Test
     fun `ready graph declares the exact five frame local resources`() {
         val graph = ready(rrect())
         val resources = graph.resources()
@@ -221,6 +236,18 @@ class W4bAnalyticRRectPlanCompilerTest {
         maxDynamicUniformBuffersPerPipelineLayout = 1,
         supportedOperations = PlanOperationCapability.entries.toSet(),
         bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 4_096, 4_096),
+    )
+
+    private fun rendererRepresentabilityCapabilities(): PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(
+        deviceGeneration = 0,
+        maxTextureDimension2D = 64,
+        maxBufferSizeBytes = Long.MAX_VALUE,
+        copyBytesPerRowAlignment = 256,
+        supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+        minUniformBufferOffsetAlignment = 1 shl 22,
+        maxDynamicUniformBuffersPerPipelineLayout = 1,
+        supportedOperations = PlanOperationCapability.entries.toSet(),
+        bufferAllocationPolicy = PlanBufferAllocationPolicy.of(1L shl 22, 1L shl 22, 1L shl 22),
     )
 
     private companion object {

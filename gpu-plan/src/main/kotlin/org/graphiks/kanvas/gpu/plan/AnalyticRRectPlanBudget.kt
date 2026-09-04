@@ -42,6 +42,13 @@ public object AnalyticRRectPlanBudget {
             val indexUsefulBytes = Math.multiplyExact(drawCount.toLong(), INDEX_BYTES_PER_DRAW)
             val uniformStrideBytes = alignUp(UNIFORM_BYTES_PER_DRAW, capabilities.minUniformBufferOffsetAlignment.toLong())
             val uniformUsefulBytes = Math.multiplyExact(drawCount.toLong(), uniformStrideBytes)
+            val lastDynamicUniformOffsetBytes = Math.multiplyExact(drawCount.toLong() - 1L, uniformStrideBytes)
+            if (lastDynamicUniformOffsetBytes > UInt.MAX_VALUE.toLong()) {
+                return AnalyticRRectPlanBudgetResult.Invalid(UNIFORM_DYNAMIC_OFFSET_OVERFLOW)
+            }
+            if (uniformUsefulBytes > Int.MAX_VALUE.toLong()) {
+                return AnalyticRRectPlanBudgetResult.Invalid(UNIFORM_HOST_SIZE_OVERFLOW)
+            }
             val policy = capabilities.bufferAllocationPolicy
             val vertexCapacityBytes = policy.reserve(PlanScratchBufferKind.Vertex, vertexUsefulBytes)
                 ?: return AnalyticRRectPlanBudgetResult.Invalid(POOL_CAPACITY_OVERFLOW)
@@ -86,4 +93,6 @@ public object AnalyticRRectPlanBudget {
     private const val INVALID_INPUT: String = "invalid-input"
     private const val SIZE_OVERFLOW: String = "size-overflow"
     private const val POOL_CAPACITY_OVERFLOW: String = "pool-capacity-overflow"
+    private const val UNIFORM_HOST_SIZE_OVERFLOW: String = "uniform-host-size-overflow"
+    private const val UNIFORM_DYNAMIC_OFFSET_OVERFLOW: String = "uniform-dynamic-offset-overflow"
 }

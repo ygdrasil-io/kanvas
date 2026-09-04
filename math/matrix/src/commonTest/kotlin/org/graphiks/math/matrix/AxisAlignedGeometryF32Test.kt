@@ -38,6 +38,42 @@ class AxisAlignedGeometryF32Test {
     }
 
     @Test
+    fun `maps X Y and XY reflected rrect corners with exact F32 bits`() {
+        val source = RRectF32.of(
+            rect = RectF32(0f, 0f, 10f, 10f),
+            topLeft = CornerRadiiF32.of(1f, 2f),
+            topRight = CornerRadiiF32.of(3f, 4f),
+            bottomRight = CornerRadiiF32.of(5f, 6f),
+            bottomLeft = CornerRadiiF32.of(7f, 8f),
+        )
+
+        assertRRectBits(
+            intArrayOf(
+                0x00000000, 0x00000000, 0x41200000, 0x41200000,
+                0x40400000, 0x40800000, 0x3f800000, 0x40000000,
+                0x40e00000, 0x41000000, 0x40a00000, 0x40c00000,
+            ),
+            source.mapAxisAligned(Matrix3x3F32(sx = -1f, sy = 1f, tx = 10f)),
+        )
+        assertRRectBits(
+            intArrayOf(
+                0x00000000, 0x00000000, 0x41200000, 0x41200000,
+                0x40e00000, 0x41000000, 0x40a00000, 0x40c00000,
+                0x40400000, 0x40800000, 0x3f800000, 0x40000000,
+            ),
+            source.mapAxisAligned(Matrix3x3F32(sx = 1f, sy = -1f, ty = 10f)),
+        )
+        assertRRectBits(
+            intArrayOf(
+                0x00000000, 0x00000000, 0x41200000, 0x41200000,
+                0x40a00000, 0x40c00000, 0x40e00000, 0x41000000,
+                0x3f800000, 0x40000000, 0x40400000, 0x40800000,
+            ),
+            source.mapAxisAligned(Matrix3x3F32(sx = -1f, sy = -1f, tx = 10f, ty = 10f)),
+        )
+    }
+
+    @Test
     fun `rejects rotated and perspective transforms for axis aligned geometry`() {
         val rect = RectF32.ofLTRB(1f, 2f, 4f, 6f)
 
@@ -65,7 +101,7 @@ class AxisAlignedGeometryF32Test {
         assertEquals(CornerRadiiF32.of(14f, 24f), device.bottomRight)
         assertEquals(CornerRadiiF32.of(10f, 18f), device.bottomLeft)
 
-        val normalized = (device.normalizeForAnalyticFillF32() as RRectNormalizationF32Result.Accepted).shape
+        val normalized = (device.normalizeForAnalyticFillF32() as RRectNormalizationF32Result.Accepted).copyShape()
         val width = normalized.rect.right.toDouble() - normalized.rect.left.toDouble()
         val height = normalized.rect.bottom.toDouble() - normalized.rect.top.toDouble()
         assertTrue(normalized.topLeft.x.toDouble() + normalized.topRight.x.toDouble() <= width)
@@ -82,7 +118,7 @@ class AxisAlignedGeometryF32Test {
         ).mapAxisAligned(Matrix3x3F32.scaling(0.1f, 1.5f))
         val accepted = assertIs<RRectNormalizationF32Result.Accepted>(
             acceptedDevice.normalizeForAnalyticFillF32(),
-        ).shape
+        ).copyShape()
 
         assertEquals(0.3f.toRawBits(), accepted.rect.right.toRawBits())
         assertEquals(7.5f.toRawBits(), accepted.rect.bottom.toRawBits())
@@ -97,7 +133,7 @@ class AxisAlignedGeometryF32Test {
             RRectNormalizationF32Rejection.NonFiniteBounds,
             assertIs<RRectNormalizationF32Result.Rejected>(
                 overflowBounds.normalizeForAnalyticFillF32(),
-            ).rejection,
+            ).reason,
         )
 
         val overflowRadii = RRectF32.of(
@@ -106,10 +142,43 @@ class AxisAlignedGeometryF32Test {
         ).mapAxisAligned(Matrix3x3F32.scaling(1.5f, 0.5f))
         assertEquals(Float.POSITIVE_INFINITY.toRawBits(), overflowRadii.topLeft.x.toRawBits())
         assertEquals(
-            RRectNormalizationF32Rejection.NonFiniteRadii,
+            RRectNormalizationF32Rejection.NonFiniteRadius,
             assertIs<RRectNormalizationF32Result.Rejected>(
                 overflowRadii.normalizeForAnalyticFillF32(),
-            ).rejection,
+            ).reason,
+        )
+    }
+
+    @Test
+    fun `normalization preserves an exactly saturated F32 boundary`() {
+        val normalized = assertIs<RRectNormalizationF32Result.Accepted>(
+            RRectF32.of(
+                rect = RectF32(0f, 0f, 10f, 6f),
+                topLeft = CornerRadiiF32.of(3f, 2f),
+                topRight = CornerRadiiF32.of(7f, 1f),
+                bottomRight = CornerRadiiF32.of(4f, 5f),
+                bottomLeft = CornerRadiiF32.of(6f, 4f),
+            ).normalizeForAnalyticFillF32(),
+        ).copyShape()
+
+        assertRRectBits(
+            intArrayOf(
+                0x00000000, 0x00000000, 0x41200000, 0x40c00000,
+                0x40400000, 0x40000000, 0x40e00000, 0x3f800000,
+                0x40800000, 0x40a00000, 0x40c00000, 0x40800000,
+            ),
+            normalized,
+        )
+    }
+
+    private fun assertRRectBits(expected: IntArray, shape: RRectF32) {
+        assertEquals(
+            expected.toList(),
+            listOf(
+                shape.rect.left, shape.rect.top, shape.rect.right, shape.rect.bottom,
+                shape.topLeft.x, shape.topLeft.y, shape.topRight.x, shape.topRight.y,
+                shape.bottomRight.x, shape.bottomRight.y, shape.bottomLeft.x, shape.bottomLeft.y,
+            ).map(Float::toRawBits),
         )
     }
 }

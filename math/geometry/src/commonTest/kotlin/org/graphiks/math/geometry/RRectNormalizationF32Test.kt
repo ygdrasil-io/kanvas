@@ -38,6 +38,23 @@ class RRectNormalizationF32Test {
     }
 
     @Test
+    fun normalizationAcceptedCopyShapeIsDefensive() {
+        val result = assertIs<RRectNormalizationF32Result.Accepted>(
+            RRectF32.of(
+                RectF32(0f, 0f, 4f, 4f),
+                topLeft = CornerRadiiF32.of(1f, 2f),
+            ).normalizeForAnalyticFillF32(),
+        )
+
+        val firstCopy = result.copyShape()
+        firstCopy.rect.left = 99f
+        val secondCopy = result.copyShape()
+
+        assertEquals(0f, secondCopy.rect.left)
+        assertEquals(CornerRadiiF32.of(1f, 2f), secondCopy.topLeft)
+    }
+
+    @Test
     fun normalizationRejectsNaNBounds() {
         assertRejected(
             RRectF32.of(RectF32(Float.NaN, 0f, 4f, 4f)).normalizeForAnalyticFillF32(),
@@ -58,7 +75,7 @@ class RRectNormalizationF32Test {
         assertRejected(
             RRectF32.of(RectF32(0f, 0f, 4f, 4f), radius = Float.POSITIVE_INFINITY)
                 .normalizeForAnalyticFillF32(),
-            RRectNormalizationF32Rejection.NonFiniteRadii,
+            RRectNormalizationF32Rejection.NonFiniteRadius,
         )
     }
 
@@ -66,7 +83,7 @@ class RRectNormalizationF32Test {
     fun normalizationRejectsNegativeRadius() {
         assertRejected(
             RRectF32.of(RectF32(0f, 0f, 4f, 4f), radius = -1f).normalizeForAnalyticFillF32(),
-            RRectNormalizationF32Rejection.NegativeRadii,
+            RRectNormalizationF32Rejection.NegativeRadius,
         )
     }
 
@@ -102,13 +119,13 @@ class RRectNormalizationF32Test {
     }
 
     private fun accepted(result: RRectNormalizationF32Result): RRectF32 =
-        assertIs<RRectNormalizationF32Result.Accepted>(result).shape
+        assertIs<RRectNormalizationF32Result.Accepted>(result).copyShape()
 
     private fun assertRejected(
         result: RRectNormalizationF32Result,
-        rejection: RRectNormalizationF32Rejection,
+        reason: RRectNormalizationF32Rejection,
     ) {
-        assertEquals(rejection, assertIs<RRectNormalizationF32Result.Rejected>(result).rejection)
+        assertEquals(reason, assertIs<RRectNormalizationF32Result.Rejected>(result).reason)
     }
 
     private fun assertConstraints(shape: RRectF32) {
