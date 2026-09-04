@@ -1749,4 +1749,11 @@ internal data class GPUCorePrimitivePreparedPacketAuthority(
     val coverageMaskUniformSlabSeal: GPUCorePrimitiveCoverageMaskUniformSlabSeal? = null,
     val w3SessionScratch: W3SessionScratchV1? = null,
     val w4aSessionScratch: W4aSessionScratchV1? = null,
-)
+    val w4bSessionScratch: W4bSessionScratchV1? = null,
+) {
+    init {
+        require(listOf(w3SessionScratch, w4aSessionScratch, w4bSessionScratch).count { it != null } <= 1) {
+            "A prepared CorePrimitive packet may retain no more than one W3, W4a, or W4b session scratch"
+        }
+    }
+}
