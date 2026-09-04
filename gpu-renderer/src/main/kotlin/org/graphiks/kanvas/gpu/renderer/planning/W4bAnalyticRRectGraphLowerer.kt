@@ -60,6 +60,9 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_ANALYTIC_SHAPE_BINDING_LAYOUT_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_RENDER_PIPELINE_KEY
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_VERTEX_SOURCE_LABEL
+import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitivePreparedFrameResult
+import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitiveW4bPreparedFrameRequest
+import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitiveW4bPreparedFrameTaskListAssembler
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameCapabilitySeal
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameReadbackRequest
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackPixelFormat
@@ -74,11 +77,17 @@ import org.graphiks.kanvas.gpu.renderer.recording.canonicalSolidRectSrcOverBlend
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveScissorAuthority
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveTargetStateHash
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryAllocation
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryResourceKind
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPayload
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlanner
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlanningResult
@@ -112,6 +121,24 @@ internal class W4bAnalyticRRectGraphLowerer {
         val sessionIdentity = w4bSessionIdentity(request.deviceGeneration, targetBounds)
         val target = GPUFrameTargetRef("$sessionIdentity.target")
         val staging = GPUFrameBufferRef("$sessionIdentity.staging")
+        val targetPreparation = GPUResourcePreparationRequest(
+            target,
+            GPUFrameTextureDescriptor(targetBounds, GPUColorFormat.RGBA8UnormSrgb, 1),
+            GPUFrameResourceRole.SceneTarget,
+            setOf(GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceUsage.CopySource),
+            GPUFrameResourceLifetime.FrameLocal,
+            graph.target.byteSize,
+            "$sessionIdentity.target",
+        )
+        val stagingPreparation = GPUResourcePreparationRequest(
+            staging,
+            GPUFrameBufferDescriptor(graph.staging.byteSize, request.graph.capabilities.copyBytesPerRowAlignment.toLong()),
+            GPUFrameResourceRole.ReadbackStaging,
+            setOf(GPUFrameResourceUsage.CopyDestination, GPUFrameResourceUsage.MapRead),
+            GPUFrameResourceLifetime.FrameLocal,
+            graph.staging.byteSize,
+            "$sessionIdentity.staging",
+        )
         val memory = memoryBudget(
             request.graph,
             graph,
@@ -133,15 +160,7 @@ internal class W4bAnalyticRRectGraphLowerer {
             maxBufferSize = maxBufferSize,
             maxDynamicUniformBuffers = maxDynamicUniformBuffers,
         ) ?: return invalid("W4b scratch packing is invalid.")
-        val packets = builtPackets.map { built ->
-            built.packet.attachCorePrimitivePreparedAuthority(
-                GPUCorePrimitivePreparedPacketAuthority.plannedW4b(
-                    structuralPipelineKey = built.structuralPipelineKey,
-                    renderPipelineKey = requireNotNull(built.packet.renderPipelineKey),
-                    scratch = scratch,
-                ),
-            )
-        }
+        val packets = builtPackets.map(W4bBuiltPacket::packet)
         val replay = "w4b:${request.graph.id.value}"
         val render = GPUTask.Render(
             taskId = GPUTaskID("task.w4b.${request.graph.id.value}.base-render"),
@@ -174,7 +193,31 @@ internal class W4bAnalyticRRectGraphLowerer {
             GPUReadbackPixelFormat.Rgba8Unorm,
             GPUColorInterpretation.EncodedPremulSrgb,
         )
-        GpuPlanLoweringResult.Lowered(base, readback.requestId.value)
+        when (val assembled = GPUCorePrimitiveW4bPreparedFrameTaskListAssembler().buildPreplanned(
+            GPUCorePrimitiveW4bPreparedFrameRequest(
+                planId = request.graph.id,
+                baseTaskList = base,
+                target = target,
+                targetBounds = targetBounds,
+                targetPreparation = targetPreparation,
+                staging = staging,
+                stagingPreparation = stagingPreparation,
+                readbackRequest = readback,
+                memoryBudget = memory,
+                renderPassId = graph.render.id,
+                readbackPassId = graph.readback.id,
+                vertexResourceId = graph.vertex.id,
+                indexResourceId = graph.index.id,
+                uniformResourceId = graph.uniform.id,
+                copyBytesPerRowAlignment = request.graph.capabilities.copyBytesPerRowAlignment.toLong(),
+                readbackBytesPerRow = graph.readback.bytesPerRow,
+                scratch = scratch,
+            ),
+        )) {
+            is GPUCorePrimitivePreparedFrameResult.Recorded ->
+                GpuPlanLoweringResult.Lowered(assembled.taskList, readback.requestId.value)
+            is GPUCorePrimitivePreparedFrameResult.Refused -> invalid(assembled.diagnostic.message)
+        }
     } catch (error: IllegalArgumentException) {
         invalid(error.message ?: "The graph cannot be lowered into W4b renderer values.")
     }
@@ -522,7 +565,7 @@ internal class W4bAnalyticRRectGraphLowerer {
                 is org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticShapeUniformBuildResult.Refused -> return null
             }
             if (bytes.size.toLong() != W4bSessionScratchV1.UNIFORM_PAYLOAD_BYTES) return null
-            GPUUniformSlabPayload("analytic-rrect-draw-${built.packet.commandIdValue}", bytes)
+            GPUUniformSlabPayload("analytic-shape-draw-${built.packet.commandIdValue}", bytes)
         }
         val uniformPlan = when (val planned = GPUUniformSlabPlanner.plan(
             sourceLabel = W4bSessionScratchV1.SOURCE_LABEL,

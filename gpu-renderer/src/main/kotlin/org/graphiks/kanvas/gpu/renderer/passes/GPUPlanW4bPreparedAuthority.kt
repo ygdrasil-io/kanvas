@@ -194,7 +194,7 @@ internal class W4bSessionScratchV1(
                 uniformPlan.totalBytes == uniformUsefulBytes &&
                 uniformPlan.slots.size == packetIds.size &&
                 uniformPlan.slots.withIndex().all { (index, slot) ->
-                    slot.slotLabel == "analytic-rrect-draw-${commandIds[index]}" &&
+                    slot.slotLabel == "analytic-shape-draw-${commandIds[index]}" &&
                         slot.payloadBytes == UNIFORM_PAYLOAD_BYTES &&
                         slot.allocatedBytes == uniformStrideBytes &&
                         slot.alignedOffset == index.toLong() * uniformStrideBytes
@@ -237,7 +237,7 @@ internal class W4bSessionScratchV1(
             commandIds == packets.map(GPUDrawPacket::commandIdValue)
 
     internal companion object {
-        const val SOURCE_LABEL: String = "w4b-analytic-rrect-uniform-pass"
+        const val SOURCE_LABEL: String = "core-primitive-analytic-shape-uniform-pass"
         const val UNIFORM_PAYLOAD_BYTES: Long = 80L
         private const val VERTEX_BYTES_PER_DRAW: Long = 32L
         private const val INDEX_BYTES_PER_DRAW: Long = 24L

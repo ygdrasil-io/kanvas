@@ -48,6 +48,41 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
     }
 
     @Test
+    fun `W4b Uniform80 lease stays exclusive through readback completion and then reuses its exact slot`() {
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, FakeFactory())
+        val capacities = GPUWgpu4kCorePrimitiveFramePoolCapacities(16_384L, 4_096L, 4_096L)
+        val request = requirements(
+            vertexBytes = 64L,
+            indexBytes = 48L,
+            uniformBytes = 512L,
+            expectedCapacities = capacities,
+            componentIdentity = PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY,
+        )
+
+        val submitted = pool.acquire(request).acquiredLease()
+        submitted.markSubmitted()
+        val liveSecond = pool.acquire(request).acquiredLease()
+        val liveThird = pool.acquire(request).acquiredLease()
+        assertEquals(
+            GPUWgpu4kCorePrimitiveFramePoolRefusal.Saturated(maxSlots = 3),
+            assertIs<GPUWgpu4kCorePrimitiveFramePoolCheckout.Refused>(pool.acquire(request)).reason,
+        )
+
+        liveSecond.rollbackBeforeSubmit()
+        liveThird.rollbackBeforeSubmit()
+        submitted.completeSuccessfully()
+        val completed = pool.acquire(request).acquiredLease()
+        assertEquals(capacities, completed.capacities)
+        assertSame(submitted.handles.vertexBuffer, completed.handles.vertexBuffer)
+        assertSame(submitted.handles.indexBuffer, completed.handles.indexBuffer)
+        assertSame(submitted.handles.uniformBuffer, completed.handles.uniformBuffer)
+        assertSame(submitted.handles.bindGroup, completed.handles.bindGroup)
+
+        completed.rollbackBeforeSubmit()
+        pool.close()
+    }
+
+    @Test
     fun `4x path or clip D24S8 requirements match the exact multisample color frame`() {
         val path = pathDepthStencil(32, 24, sampleCount = 4)
         val clip = clipDepthStencil(32, 24, sampleCount = 4)
