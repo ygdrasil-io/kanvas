@@ -86,6 +86,21 @@ class RRectNormalizationF32Test {
         assertConstraints(shape)
     }
 
+    @Test
+    fun normalizationRepairsRoundedConstraintWhenPreferredRadiusIsZero() {
+        val source = RRectF32.of(
+            rect = RectF32(Float.fromBits(0xb3c00000.toInt()), 0f, 1f, 1f),
+            topLeft = CornerRadiiF32.of(2f, 1f),
+            topRight = CornerRadiiF32.Zero,
+        )
+
+        val shape = accepted(source.normalizeForAnalyticFillF32())
+
+        assertEquals(0x3f800000, shape.topLeft.x.toRawBits())
+        assertEquals(0f.toRawBits(), shape.topRight.x.toRawBits())
+        assertConstraints(shape)
+    }
+
     private fun accepted(result: RRectNormalizationF32Result): RRectF32 =
         assertIs<RRectNormalizationF32Result.Accepted>(result).shape
 

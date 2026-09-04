@@ -3,9 +3,11 @@ package org.graphiks.math.matrix
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.math.geometry.RRectF32
+import org.graphiks.math.geometry.RRectNormalizationF32Rejection
 import org.graphiks.math.geometry.RRectNormalizationF32Result
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.normalizeForAnalyticFillF32
@@ -70,5 +72,44 @@ class AxisAlignedGeometryF32Test {
         assertTrue(normalized.bottomLeft.x.toDouble() + normalized.bottomRight.x.toDouble() <= width)
         assertTrue(normalized.topLeft.y.toDouble() + normalized.bottomLeft.y.toDouble() <= height)
         assertTrue(normalized.topRight.y.toDouble() + normalized.bottomRight.y.toDouble() <= height)
+    }
+
+    @Test
+    fun `materializes mapped F32 inputs before analytic normalization`() {
+        val acceptedDevice = RRectF32.of(
+            rect = RectF32(0f, 0f, 3f, 5f),
+            topLeft = CornerRadiiF32.of(1f, 2f),
+        ).mapAxisAligned(Matrix3x3F32.scaling(0.1f, 1.5f))
+        val accepted = assertIs<RRectNormalizationF32Result.Accepted>(
+            acceptedDevice.normalizeForAnalyticFillF32(),
+        ).shape
+
+        assertEquals(0.3f.toRawBits(), accepted.rect.right.toRawBits())
+        assertEquals(7.5f.toRawBits(), accepted.rect.bottom.toRawBits())
+        assertEquals(0.1f.toRawBits(), accepted.topLeft.x.toRawBits())
+        assertEquals(3f.toRawBits(), accepted.topLeft.y.toRawBits())
+
+        val overflowBounds = RRectF32.of(
+            rect = RectF32(0f, 0f, Float.MAX_VALUE, 1f),
+        ).mapAxisAligned(Matrix3x3F32.scaling(1.5f, 0.5f))
+        assertEquals(Float.POSITIVE_INFINITY.toRawBits(), overflowBounds.rect.right.toRawBits())
+        assertEquals(
+            RRectNormalizationF32Rejection.NonFiniteBounds,
+            assertIs<RRectNormalizationF32Result.Rejected>(
+                overflowBounds.normalizeForAnalyticFillF32(),
+            ).rejection,
+        )
+
+        val overflowRadii = RRectF32.of(
+            rect = RectF32(0f, 0f, 1f, 1f),
+            topLeft = CornerRadiiF32.of(Float.MAX_VALUE, 1f),
+        ).mapAxisAligned(Matrix3x3F32.scaling(1.5f, 0.5f))
+        assertEquals(Float.POSITIVE_INFINITY.toRawBits(), overflowRadii.topLeft.x.toRawBits())
+        assertEquals(
+            RRectNormalizationF32Rejection.NonFiniteRadii,
+            assertIs<RRectNormalizationF32Result.Rejected>(
+                overflowRadii.normalizeForAnalyticFillF32(),
+            ).rejection,
+        )
     }
 }
