@@ -27,6 +27,8 @@ import io.ygdrasil.webgpu.SamplerDescriptor
 import io.ygdrasil.webgpu.TextureDescriptor
 import java.io.File
 import java.lang.reflect.Proxy
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.util.IdentityHashMap
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -356,6 +358,50 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             })
             assertTrue(fixture.resources.outputOwnedReadbacks.isNotEmpty())
             assertTrue(materialized.draft.disposeBeforeRegistration())
+        } finally {
+            materializer.close()
+            fixture.close()
+        }
+    }
+
+    @Test
+    fun `W4a uploads raster-covering vertices while Uniform80 retains fractional device bounds`() {
+        val fixture = w4aFixture()
+        val materializer = GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
+            fixture.native.device,
+            fixture.native.queue,
+            fixture.target,
+            fixture.cache,
+            fixture.limits,
+        )
+        try {
+            val result = materializer.materializeReusable(
+                fixture.plan,
+                fixture.encoderPlan,
+                fixture.resources,
+                fixture.generationSeal,
+            )
+            val materialized = assertIs<GPUPreparedNativeFramePayloadMaterialization.Materialized>(result)
+            assertTrue(materialized.draft.disposeBeforeRegistration())
+            val vertexUpload = fixture.native.writeBufferCalls.single { call ->
+                call.bufferLabel == "Kanvas.session.corePrimitive.framePool.vertices"
+            }
+            val uniformUpload = fixture.native.writeBufferCalls.single { call ->
+                call.bufferLabel == "Kanvas.session.corePrimitive.framePool.uniforms"
+            }
+
+            assertContentEquals(
+                ArrayBuffer.of(
+                    floatArrayOf(
+                        0f, 0f, 3f, 0f, 3f, 3f, 0f, 3f,
+                        1f, 0f, 4f, 0f, 4f, 3f, 1f, 3f,
+                    ),
+                ).toByteArray(),
+                vertexUpload.snapshot,
+            )
+            val uniforms = ByteBuffer.wrap(uniformUpload.snapshot).order(ByteOrder.LITTLE_ENDIAN)
+            assertEquals(listOf(0.25f, 0.5f, 2.75f, 2.25f), uniforms.floatValuesAt(32))
+            assertEquals(listOf(1.25f, 0.5f, 3.75f, 2.25f), uniforms.floatValuesAt(256 + 32))
         } finally {
             materializer.close()
             fixture.close()
@@ -8077,6 +8123,9 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         val TARGET = GPUPixelBounds(0, 0, 16, 16)
         val EMPTY_UPLOAD_SNAPSHOT = ByteArray(0)
     }
+
+    private fun ByteBuffer.floatValuesAt(offset: Int): List<Float> =
+        List(4) { index -> getFloat(offset + index * Float.SIZE_BYTES) }
 
     private fun planW3(
         scene: SceneSnapshot,
