@@ -3880,6 +3880,66 @@ internal class GPUFramePreflighter(
         } catch (_: ArithmeticException) {
             return false
         }
+        val transientBytes = try {
+            Math.addExact(
+                Math.addExact(stagingBytes, scratch.vertexCapacityBytes),
+                Math.addExact(scratch.indexCapacityBytes, scratch.uniformCapacityBytes),
+            )
+        } catch (_: ArithmeticException) {
+            return false
+        }
+        val scratchBytes = try {
+            Math.addExact(
+                scratch.vertexCapacityBytes,
+                Math.addExact(scratch.indexCapacityBytes, scratch.uniformCapacityBytes),
+            )
+        } catch (_: ArithmeticException) {
+            return false
+        }
+        val requiredAggregateBudgetBytes = try {
+            Math.addExact(targetBytes, transientBytes)
+        } catch (_: ArithmeticException) {
+            return false
+        }
+        val identity = "w4b.session.${scratch.deviceGeneration}." +
+            "${targetBounds.width}x${targetBounds.height}.rgba8unorm-srgb"
+        val expectedAllocations = listOf(
+            GPUFrameMemoryAllocation(
+                "$identity.target",
+                GPUFrameMemoryCategory.CanonicalTarget,
+                targetBytes,
+                GPUFrameMemoryResourceKind.Texture2D,
+                targetBounds,
+            ),
+            GPUFrameMemoryAllocation(
+                "$identity.staging",
+                GPUFrameMemoryCategory.ReadbackStaging,
+                stagingBytes,
+                GPUFrameMemoryResourceKind.Buffer,
+                null,
+            ),
+            GPUFrameMemoryAllocation(
+                "$identity.vertex",
+                GPUFrameMemoryCategory.ReusableScratch,
+                scratch.vertexCapacityBytes,
+                GPUFrameMemoryResourceKind.Buffer,
+                null,
+            ),
+            GPUFrameMemoryAllocation(
+                "$identity.index",
+                GPUFrameMemoryCategory.ReusableScratch,
+                scratch.indexCapacityBytes,
+                GPUFrameMemoryResourceKind.Buffer,
+                null,
+            ),
+            GPUFrameMemoryAllocation(
+                "$identity.uniform",
+                GPUFrameMemoryCategory.ReusableScratch,
+                scratch.uniformCapacityBytes,
+                GPUFrameMemoryResourceKind.Buffer,
+                null,
+            ),
+        )
         if (scratch.uniformPlan.totalBytes !in 1L..Int.MAX_VALUE.toLong()) return false
         val packedUniforms = ByteArray(scratch.uniformPlan.totalBytes.toInt())
         val payloads = packets.mapIndexed { index, packet ->
@@ -3950,7 +4010,6 @@ internal class GPUFramePreflighter(
             if (!shape.hasExactPayloadAt(packedUniforms, shape.alignedOffset.toInt())) return false
             GPUUniformSlabPayload("analytic-shape-draw-${packet.commandIdValue}", shape.payloadBytesSnapshot())
         }
-        val identity = "w4b.session.${scratch.deviceGeneration}.${targetBounds.width}x${targetBounds.height}.rgba8unorm-srgb"
         return framePlan.steps.size == 3 && framePlan.steps[0] is GPUFrameStep.PrepareResourcesStep &&
             framePlan.steps[1] === render && framePlan.steps[2] === readback && framePlan.recordingSeals.size == 1 &&
             framePlan.recordingSeals.single().compatibilityKeyHash == "w4b:$expectedPlanId" &&
@@ -3985,7 +4044,16 @@ internal class GPUFramePreflighter(
             staging.diagnosticLabel == "$identity.staging" &&
             staging.usages == setOf(GPUFrameResourceUsage.CopyDestination, GPUFrameResourceUsage.MapRead) &&
             staging.lifetime == GPUFrameResourceLifetime.FrameLocal && staging.byteSize == stagingBytes &&
-            stagingDescriptor?.byteSize == stagingBytes && stagingDescriptor.alignmentBytes == limits.copyBytesPerRowAlignment
+            stagingDescriptor?.byteSize == stagingBytes && stagingDescriptor.alignmentBytes == limits.copyBytesPerRowAlignment &&
+            framePlan.memoryBudget.diagnostic == null &&
+            framePlan.memoryBudget.targetResidentBytes == targetBytes &&
+            framePlan.memoryBudget.peakFrameTransientBytes == transientBytes &&
+            framePlan.memoryBudget.categoryTotals.keys == GPUFrameMemoryCategory.entries.toSet() &&
+            framePlan.memoryBudget.categoryTotals[GPUFrameMemoryCategory.CanonicalTarget] == targetBytes &&
+            framePlan.memoryBudget.categoryTotals[GPUFrameMemoryCategory.ReadbackStaging] == stagingBytes &&
+            framePlan.memoryBudget.categoryTotals[GPUFrameMemoryCategory.ReusableScratch] == scratchBytes &&
+            framePlan.memoryBudget.configuredAggregateBudgetBytes >= requiredAggregateBudgetBytes &&
+            framePlan.memoryBudget.allocations == expectedAllocations
     }
 
     private fun w4bRasterBounds(geometry: GPUCorePrimitiveGeometry.RRect): RectI32? {

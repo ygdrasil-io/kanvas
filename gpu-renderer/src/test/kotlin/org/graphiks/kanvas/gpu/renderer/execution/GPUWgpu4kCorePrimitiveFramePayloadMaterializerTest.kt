@@ -400,6 +400,18 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
 
             assertEquals(listOf(0L, 256L), offsets)
             assertEquals(listOf(80L, 80L), scratch.uniformPlan.slots.map { it.payloadBytes })
+            val uniformUpload = fixture.native.writeBufferCalls.single { upload ->
+                upload.bufferLabel == "Kanvas.session.corePrimitive.framePool.uniforms"
+            }
+            val uniforms = ByteBuffer.wrap(uniformUpload.snapshot).order(ByteOrder.LITTLE_ENDIAN)
+            assertTrue(
+                (0 until 8).all { index ->
+                    uniforms.getFloat(48 + index * Float.SIZE_BYTES).toRawBits() == 0f.toRawBits()
+                },
+            )
+            assertEquals(listOf(1f, 1f, 4f, 4f), uniforms.floatValuesAt(256 + 32))
+            assertEquals(listOf(1f, 1f, 2f, 1f), uniforms.floatValuesAt(256 + 48))
+            assertEquals(listOf(1f, 2f, 0.5f, 1f), uniforms.floatValuesAt(256 + 64))
             assertEquals(
                 setOf(GPUFrameResourceRole.SceneTarget),
                 fixture.resources.ordinaryResources.map { it.role }.toSet(),
