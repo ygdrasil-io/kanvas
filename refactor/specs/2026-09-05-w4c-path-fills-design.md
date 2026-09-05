@@ -26,7 +26,7 @@ Une frame W4c est atomique : elle est entièrement rendue par cette capability o
 
 Une frame est candidate si scène/cible ont le même extent sRGB non vide, si tous ses 1–512 draws visuels sont `GeometryNode.Path`/`DrawOrigin.PATH`, et si chaque draw respecte simultanément :
 
-1. `PathF32` fini, non-inverse, de fill rule `WINDING` ou `EVEN_ODD`, dont le fill device-space est non dégénéré ;
+1. `PathF32` fini, non-inverse, de fill rule `WINDING` ou `EVEN_ODD`, dont la normalisation device-space retient au moins un contour ; « non dégénéré » ne signifie pas qu'une région de fill effective est non vide ;
 2. material solid fini, `FILL` hard-edge et `SrcOver`, sans shader, blender, filtre, effect, resource ou operation blend ;
 3. transform identité ou scale/translate axis-aligned fini, y compris une échelle négative ;
 4. clip vide ou `ClipStackNode.DeviceRect` non-AA, non vide, aux bords `I32` ;
@@ -48,14 +48,14 @@ La normalisation et la préparation sont déterministes et précèdent toute all
 
 1. copier le `PathF32` immutable de la Scene IR ; l'origine implicite avant le premier verbe dessinant est `(0,0)` ;
 2. appliquer le transform admissible dans `:math:matrix` ;
-3. un `MoveTo` clôt le contour de fill précédent, un contour ouvert est clôt à la fin, et un `Close` répété est un no-op ;
-4. aplatir quad, cubic et arc en F64 à une erreur de flèche device-space `<= 0,25 px` ; chaque arête tentée, y compris fermeture, arête nulle ou arête qui s'effondrerait en F32, débite les limites par path et frame avant émission ;
-5. retirer les sommets F32 émis consécutivement identiques et les fermetures de longueur nulle ; conserver une courbe à endpoints confondus si ses contrôles ou son rayon portent une géométrie ;
+3. un `MoveTo` clôt le contour de fill précédent, un contour ouvert est clôt à la fin, et un `Close` répété est un no-op ; un `ArcTo` SVG dont start et end sont identiques est toujours un no-op, quels que soient ses rayons ;
+4. aplatir quad, cubic et arc en F64 à une erreur de flèche device-space `<= 0,25 px` ; une quad ou cubic dont les endpoints coïncident peut néanmoins porter une géométrie par ses contrôles. Chaque arête tentée, y compris fermeture, arête nulle ou arête dont des points F64 distincts s'effondreraient en F32, débite les limites par path et frame avant émission ;
+5. retirer les sommets F32 émis consécutivement identiques et les fermetures de longueur nulle ; ce dédoublonnage peut donc retirer des points distincts en F64 après leur conversion F32 ;
 6. retirer les contours ayant moins de trois sommets distincts ou entièrement collinéaires ; préserver les retraces et auto-intersections ;
 7. vérifier finitude, fermeture, bounds et `PathFillLimitsI32` avec arithmetic checked ;
 8. émettre un snapshot `F32` profondément immutable, son scissor conservateur, ses arêtes fermées non nulles et ses coûts vertex/index exacts.
 
-Convergence impossible, limite d'arêtes tentées, limite frame, overflow ou taille host-addressable ne publient pas de contour partiel et retournent `ResourceLimitExceeded` avant allocation. Le non-fini est `InvalidScene` avant device. Si tous les contours sont retirés, le résultat est `Empty` et la frame est `NotCandidate` avant promotion. Une annulation exacte qui conserve des arêtes non nulles peut rester admise comme no-op stencil. Les deux frontières `PathFillLimitsI32` sont testées sans dépendre d'un GM ou d'une fixture.
+Convergence impossible, limite d'arêtes tentées, limite frame, overflow ou taille host-addressable ne publient pas de contour partiel et retournent `ResourceLimitExceeded` avant allocation. Le non-fini est `InvalidScene` avant device. Si tous les contours sont retirés, le résultat est `Empty` et la frame est `NotCandidate` avant promotion. À l'inverse, dès qu'au moins un contour normalisé est retenu, le draw est non dégénéré pour l'admission, même si plusieurs contours s'annulent exactement et que le stencil produit finalement un no-op. Les deux frontières `PathFillLimitsI32` sont testées sans dépendre d'un GM ou d'une fixture.
 
 `DirectTriangle` exige après préparation un seul contour fermé, exactement trois sommets distincts finis et non collinéaires, aucune courbe/arc/retrace/auto-intersection, `WINDING` non-inverse, bounds et scissor non vides. Sa preuve est calculée dans `:math` et transportée par le plan. Triangles `EVEN_ODD`, concaves, multi-contours, trous, courbes, arcs et paths de plus de trois côtés utilisent `StencilCover`.
 
@@ -68,8 +68,8 @@ Pour `StencilCover`, `EVEN_ODD` conserve la borne générale de 65 536 arêtes t
 Un triangle direct devient une passe colorée. Un draw stencil forme exactement le groupe atomique suivant, adjacent dans l'ordre de paint :
 
 ```text
-StencilProducer(command i, clear stencil = 0)
-    -> StencilCover(command i, stencil read-only, SrcOver)
+StencilProducer(command i, clear stencil = 0, stencil write)
+    -> StencilCover(command i, stencil read-write test+reset, SrcOver)
 ```
 
 Le producer applique winding/even-odd sans écrire de fragments couleur ; le cover applique le quad borné, la couleur et le scissor. La destination est stockée/quantifiée sRGB entre draws.
@@ -83,13 +83,13 @@ W4c étend `RenderGraph` de façon complète :
 - `PlanOperationCapability` gagne les faits depth/stencil et stencil/cover ;
 - `AttachmentLoadPlan` gagne `Load` ;
 - `PlanDepthStencilLoadStore` est un contrat typé séparé, avec `ClearZeroStore` pour le producer et `LoadStoreTestReset` pour le cover ;
-- `PlanPass` gagne `StencilProducer` et `StencilCover`, incluant le groupe atomique et les accès writable/read-only.
+- `PlanPass` gagne `StencilProducer` et `StencilCover`, incluant le groupe atomique et des accès depth/stencil typés : écriture pour le producer, lecture-écriture `test+reset` pour le cover.
 
-Règles exactes de passes : la première passe de frame qui touche l'attachement couleur, directe ou producer, utilise `ClearTransparent`; les suivantes utilisent `Load`. Toute passe couleur store. Un producer utilise `ClearZeroStore` pour depth/stencil, attache la couleur avec `Store` mais sans écriture couleur; il clear donc aussi la couleur transparente s'il est la première passe. Un cover utilise couleur `Load+Store` et `LoadStoreTestReset` pour depth/stencil. Un direct utilise couleur clear/load puis store, sans depth/stencil.
+Règles exactes de passes : la première passe de frame qui touche l'attachement couleur, directe ou producer, utilise `ClearTransparent`; les suivantes utilisent `Load`. Toute passe couleur store. Un producer utilise `ClearZeroStore` pour depth/stencil, attache la couleur avec `Store` mais sans écriture couleur; il clear donc aussi la couleur transparente s'il est la première passe. Un cover utilise couleur `Load+Store` et `LoadStoreTestReset` pour depth/stencil : il teste le stencil et le remet à zéro dans la même passe native (compare `NotEqual`, opération de passage `Zero`, write mask `0xff`), donc son accès stencil est obligatoirement read-write. Un direct utilise couleur clear/load puis store, sans depth/stencil.
 
 La texture porte `Depth24PlusStencil8`, le même extent que la target, un seul sample et l'usage depth/stencil. Elle n'est ni une `PlanLogicalColorFormat` ni un buffer. Elle est absente si tous les draws sont des triangles directs ; sinon une unique texture est clearée avant chaque producer. Son intervalle d'usage est du premier producer au dernier cover, mais son lifetime physique déclaré va jusqu'au readback avec vertex/index/uniform, car les quatre ressources partagent le même lease de frame-pool.
 
-Le graphe contient target, staging readback, vertex/index/uniform et éventuellement depth/stencil. Les dépendances imposent l'ordre linéaire des draws et chaque `producer -> cover`; `RenderGraph.of` valide références, lifetimes, formats, usages, adjacence atomique et pic calculé. Un graph contrefait ne peut atteindre aucune autre lane.
+Le graphe contient target, staging readback, vertex/index/uniform et éventuellement depth/stencil. Les dépendances imposent l'ordre linéaire des draws et chaque `producer -> cover`; `RenderGraph.of` valide références, lifetimes, formats, usages, les accès stencil producer-write et cover-read-write-test-reset, adjacence atomique et pic calculé. Un graph contrefait ne peut atteindre aucune autre lane.
 
 ## 5. Budget, lowering et erreurs
 
@@ -114,7 +114,7 @@ Les tests sont comportementaux, publics ou portent sur des invariants de donnée
 
 Les preuves couvrent dans `:math` triangle strict, initialisation à l'origine implicite, `MoveTo`/`Close`, vertices répétés, contours dégénérés, retraces, self-intersections, quad/cubic/arc à `0,25 px`, transform négatif, limites tentées/émises 255/256/65 536/262 144, overflow, immutabilité et parité JVM/JS ; dans planner/lowerer, sélection direct/stencil, `WINDING`/`EVEN_ODD`, ressources/budgets/lifetimes jusqu'au readback, formats/passes exacts et refus explicite quand l'atomicité multi-path n'est pas prouvée.
 
-Les bytes `Surface` sont comparés exactement à un oracle CPU indépendant pour triangle, concave, trou winding, trou even-odd, courbes, scissor, transform négatif, deux paths translucides et RGBA/BGRA. L'oracle ne réutilise ni planner, payload GPU ni flattening de production. Pour les fixtures line-only, il calcule exactement les crossings par ray casting. Pour une fixture de courbes, la comparaison whole-image byte-exact n'est autorisée que si un oracle d'intervalles F64 de test, alimenté par le `PathF32` original et non les vertices aplatis de production, prouve pour chaque centre de pixel une distance strictement supérieure à `0,25 px + 2^-20 px` de toute courbe originale et résout chaque crossing/tie de façon unique. Sans ce certificat, la fixture de courbes est invalide : elle n'obtient ni tolérance ni égalité approximative. Les tests math de tolérance restent indépendants. L'oracle certifié applique ensuite `SrcOver` linear-premultiplied et le store sRGB après chaque draw.
+Les bytes `Surface` sont comparés exactement à un oracle CPU indépendant pour triangle, concave, trou winding, trou even-odd, courbes, scissor, transform négatif, deux paths translucides et RGBA/BGRA. L'oracle ne réutilise ni planner, payload GPU ni flattening de production. Pour les fixtures line-only, il calcule exactement les crossings par ray casting. Pour une fixture de courbes, la comparaison whole-image byte-exact n'est autorisée que si un oracle d'intervalles F64 de test, alimenté par le `PathF32` original et le transform — et non les vertices aplatis de production — construit une enclosure device-space à arrondi sortant de chaque primitive. Il calcule indépendamment une borne conservative de l'erreur euclidienne introduite par la conversion finale en F32, puis prouve pour chaque centre de pixel une distance strictement supérieure à `0,25 px +` cette borne `+` l'enclosure numérique de l'oracle, avec chaque crossing/tie résolu de façon unique. Sans ce certificat, la fixture de courbes est invalide : elle n'obtient ni tolérance ni égalité approximative. Les tests math de tolérance restent indépendants. L'oracle certifié applique ensuite `SrcOver` linear-premultiplied et le store sRGB après chaque draw.
 
 Font, codec, GMs Skia, `jpg-color-cube`, régénération render/dashboard, baseline et thresholds sont hors scope et inchangés. Les GMs ne participent pas à l'admission. La dette SDF W4b reste strictement inchangée : W4c ne modifie ni sa capability, ni son oracle, ni son suivi de gap.
 
