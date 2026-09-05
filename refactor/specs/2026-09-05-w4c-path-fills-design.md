@@ -15,12 +15,12 @@ solid-path-fill-tessellation-stencil-hard-1x-simple-scissor-src-over-srgb-v1
 
 Elle rend une frame de 1 à 512 `GeometryNode.Path` de provenance `DrawOrigin.PATH`, en `SolidColor`, `PaintStyleNode.FILL`, `CoverageRequest.HARD_EDGE`, `SrcOver`, sRGB 1×, avec clip vide ou scissor non-AA intégral `I32`.
 
-Le planner choisit et scelle par draw :
+Le planner construit l'ordre total de paint et les groupes atomiques adjacents, puis choisit et scelle par draw :
 
 - `DirectTriangle` : triangle strict, `WINDING`, non-inverse ;
 - `StencilCover` : tout autre fill admis, non-inverse, `WINDING` ou `EVEN_ODD`.
 
-Une frame W4c est atomique : elle est entièrement rendue par cette capability ou reste legacy avant promotion. Après `Ready`, le renderer ne reclassifie ni la géométrie, ni le fill rule, ni la stratégie, et ne tente aucun fallback.
+Une frame W4c est atomique : elle est entièrement rendue par cette capability ou reste legacy avant promotion. `RenderGraph.of` valide cet ordre et les groupes. Après `Ready`, le renderer et le lowerer n'authentifient que mécaniquement le plan : ils ne reclassifient ni la géométrie, ni le fill rule, ni la stratégie, et ne tentent aucun fallback. Une divergence est terminale.
 
 ## 2. Admission et exclusions
 
@@ -42,20 +42,24 @@ Les inverse fills restent W4e avec clips path/inverses/booléens. L'AA path est 
 
 `:math:geometry` possède toute géométrie W4c ; `:math:matrix` possède les transforms. `:gpu-plan` et `:gpu-renderer` ne définissent aucun point, contour, triangle, fan, bounds ou tolérance géométrique.
 
-Les valeurs ajoutées sont `PathFillLimitsI32`, `PathFillFlatteningPolicyF64`, `PathFillGeometryF32`, `PathFillDirectTriangleF32` et `PathStencilEdgeFanF32`. `PathFillLimitsI32` fixe 65 536 arêtes aplaties au plus par path et 262 144 au plus par frame. Les coordonnées émises sont `F32`, les calculs de flattening/validation sont `F64`, les index, limites et compteurs portent `I32` ou `I64`. Ces types ne dépendent ni de WebGPU, WGSL, pipeline, bind group ni handle natif.
+Les valeurs ajoutées sont `PathFillLimitsI32`, `PathFillFlatteningPolicyF64`, `PathFillGeometryF32`, `PathFillDirectTriangleF32` et `PathStencilEdgeFanF32`. `PathFillLimitsI32` fixe 65 536 arêtes de flattening tentées au plus par path et 262 144 au plus par frame. Les coordonnées émises sont `F32`, les calculs de flattening/validation sont `F64`, les index, limites et compteurs portent `I32` ou `I64`. Ces types ne dépendent ni de WebGPU, WGSL, pipeline, bind group ni handle natif.
 
-La préparation est déterministe et précède toute allocation native :
+La normalisation et la préparation sont déterministes et précèdent toute allocation native :
 
-1. copier le `PathF32` immutable de la Scene IR ;
+1. copier le `PathF32` immutable de la Scene IR ; l'origine implicite avant le premier verbe dessinant est `(0,0)` ;
 2. appliquer le transform admissible dans `:math:matrix` ;
-3. fermer implicitement les contours ouverts selon la sémantique publique de fill ;
-4. aplatir quad, cubic et arc en F64 à une erreur de flèche device-space `<= 0,25 px` ;
-5. vérifier finitude, fermeture, bounds et `PathFillLimitsI32` avec arithmetic checked ;
-6. émettre un snapshot `F32` profondément immutable, son scissor conservateur et ses coûts vertex/index exacts.
+3. un `MoveTo` clôt le contour de fill précédent, un contour ouvert est clôt à la fin, et un `Close` répété est un no-op ;
+4. aplatir quad, cubic et arc en F64 à une erreur de flèche device-space `<= 0,25 px` ; chaque arête tentée, y compris fermeture, arête nulle ou arête qui s'effondrerait en F32, débite les limites par path et frame avant émission ;
+5. retirer les sommets F32 émis consécutivement identiques et les fermetures de longueur nulle ; conserver une courbe à endpoints confondus si ses contrôles ou son rayon portent une géométrie ;
+6. retirer les contours ayant moins de trois sommets distincts ou entièrement collinéaires ; préserver les retraces et auto-intersections ;
+7. vérifier finitude, fermeture, bounds et `PathFillLimitsI32` avec arithmetic checked ;
+8. émettre un snapshot `F32` profondément immutable, son scissor conservateur, ses arêtes fermées non nulles et ses coûts vertex/index exacts.
 
-Convergence impossible, limite ou overflow ne publient pas de contour partiel. Après reconnaissance de la famille, ils donnent un résultat typé de limite sans fallback ; le non-fini est `InvalidScene` avant device. Les deux frontières `PathFillLimitsI32` sont testées sans dépendre d'un GM ou d'une fixture.
+Convergence impossible, limite d'arêtes tentées, limite frame, overflow ou taille host-addressable ne publient pas de contour partiel et retournent `ResourceLimitExceeded` avant allocation. Le non-fini est `InvalidScene` avant device. Si tous les contours sont retirés, le résultat est `Empty` et la frame est `NotCandidate` avant promotion. Une annulation exacte qui conserve des arêtes non nulles peut rester admise comme no-op stencil. Les deux frontières `PathFillLimitsI32` sont testées sans dépendre d'un GM ou d'une fixture.
 
 `DirectTriangle` exige après préparation un seul contour fermé, exactement trois sommets distincts finis et non collinéaires, aucune courbe/arc/retrace/auto-intersection, `WINDING` non-inverse, bounds et scissor non vides. Sa preuve est calculée dans `:math` et transportée par le plan. Triangles `EVEN_ODD`, concaves, multi-contours, trous, courbes, arcs et paths de plus de trois côtés utilisent `StencilCover`.
+
+Pour `StencilCover`, `EVEN_ODD` conserve la borne générale de 65 536 arêtes tentées par path. Le fill `WINDING` emploie un stencil 8-bit sans tenter de calculer un winding global exact : il est admis seulement si `emittedNonZeroClosedEdgeCountI32 <= 255` pour ce draw. Ainsi toute magnitude nette par sample reste conservativement loin de l'enroulement `±256` qui wrap. La frontière est exacte : 255 est admis, 256 retourne un résultat typé de géométrie trop complexe (`ResourceLimitExceeded`) avant `Ready`. `DirectTriangle` n'est pas soumis à cette borne Winding.
 
 ## 4. Plan, ordre et `RenderGraph`
 
@@ -68,13 +72,22 @@ StencilProducer(command i, clear stencil = 0)
     -> StencilCover(command i, stencil read-only, SrcOver)
 ```
 
-Le producer applique winding/even-odd sans écrire la couleur ; le cover applique le quad borné, la couleur et le scissor. La première passe colorée clear la target transparente et les suivantes la load/store : la destination est donc stockée/quantifiée sRGB entre draws.
+Le producer applique winding/even-odd sans écrire de fragments couleur ; le cover applique le quad borné, la couleur et le scissor. La destination est stockée/quantifiée sRGB entre draws.
 
-Les 1–512 draws ne sont admis que si le lowering prouve l'ordre total et l'atomicité de chaque paire. À défaut, la frame entière est explicitement refusée au stade pertinent. Il est interdit de réduire silencieusement la capability à une path/frame, de rendre seulement le premier path ou de reclasser le reste.
+Le planner construit les 1–512 draws seulement s'il peut sceller l'ordre total et l'atomicité de chaque paire; `RenderGraph.of` les valide. À défaut, la frame entière est explicitement refusée au stade pertinent. Le lowerer ne refait pas cette preuve : il authentifie mécaniquement le plan déjà scellé. Il est interdit de réduire silencieusement la capability à une path/frame, de rendre seulement le premier path ou de reclasser le reste.
 
-W4c étend `RenderGraph` par une texture depth/stencil, le rôle `DepthStencil`, l'usage `DepthStencilAttachment`, les capabilities depth/stencil et stencil/cover, et les passes typées `StencilProducer`/`StencilCover` avec accès writable/read-only et groupe atomique scellé.
+W4c étend `RenderGraph` de façon complète :
 
-La texture porte `Depth24PlusStencil8`, le même extent que la target, un seul sample et l'usage depth/stencil. Elle n'est ni une `PlanLogicalColorFormat` ni un buffer. Elle est absente si tous les draws sont des triangles directs ; sinon une unique texture est réservée du premier producer au dernier cover et clearée avant chaque producer. Son coût entre exactement une fois dans le pic.
+- `PlanTextureFormat` devient scellé avec `Color(PlanLogicalColorFormat)` et `DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8)` ;
+- `PlanResourceKind.Texture2D` accepte `PlanTextureFormat.Color` ou `PlanTextureFormat.DepthStencil`, `PlanResourceRole` gagne `DepthStencil`, et `PlanResourceUsage` gagne `DepthStencilAttachment` ;
+- `PlanOperationCapability` gagne les faits depth/stencil et stencil/cover ;
+- `AttachmentLoadPlan` gagne `Load` ;
+- `PlanDepthStencilLoadStore` est un contrat typé séparé, avec `ClearZeroStore` pour le producer et `LoadStoreTestReset` pour le cover ;
+- `PlanPass` gagne `StencilProducer` et `StencilCover`, incluant le groupe atomique et les accès writable/read-only.
+
+Règles exactes de passes : la première passe de frame qui touche l'attachement couleur, directe ou producer, utilise `ClearTransparent`; les suivantes utilisent `Load`. Toute passe couleur store. Un producer utilise `ClearZeroStore` pour depth/stencil, attache la couleur avec `Store` mais sans écriture couleur; il clear donc aussi la couleur transparente s'il est la première passe. Un cover utilise couleur `Load+Store` et `LoadStoreTestReset` pour depth/stencil. Un direct utilise couleur clear/load puis store, sans depth/stencil.
+
+La texture porte `Depth24PlusStencil8`, le même extent que la target, un seul sample et l'usage depth/stencil. Elle n'est ni une `PlanLogicalColorFormat` ni un buffer. Elle est absente si tous les draws sont des triangles directs ; sinon une unique texture est clearée avant chaque producer. Son intervalle d'usage est du premier producer au dernier cover, mais son lifetime physique déclaré va jusqu'au readback avec vertex/index/uniform, car les quatre ressources partagent le même lease de frame-pool.
 
 Le graphe contient target, staging readback, vertex/index/uniform et éventuellement depth/stencil. Les dépendances imposent l'ordre linéaire des draws et chaque `producer -> cover`; `RenderGraph.of` valide références, lifetimes, formats, usages, adjacence atomique et pic calculé. Un graph contrefait ne peut atteindre aucune autre lane.
 
@@ -89,9 +102,9 @@ target + readback + vertexCapacity + indexCapacity + uniformCapacity
     + depthStencilBytes (si StencilCover)
 ```
 
-À 1×, `depthStencilBytes = 4 × width × height`. Offsets uniformes, tailles host-addressable, capacités de pool, `maxBufferSizeBytes` et limites device sont contrôlés avant `Ready`; les buffers restent réservés jusqu'à completion/readback. Les capacités pool arrondies sont déclarées par le graphe et comptées dans le pic.
+À 1×, `depthStencilBytes = 4 × width × height`. Offsets uniformes, tailles host-addressable, capacités de pool, `maxBufferSizeBytes` et limites device sont contrôlés avant `Ready`. Vertex, index, uniform et depth/stencil partagent un unique lease de frame-pool : leurs lifetimes physiques vont donc jusqu'à completion/readback, sans libération anticipée après le dernier cover. Le pic au readback inclut explicitement depth/stencil. Les capacités pool arrondies sont déclarées par le graphe et comptées dans ce pic.
 
-Le lowerer W4c est un sibling scellé de W4a/W4b. Il réutilise mécaniquement les pipelines natifs winding/even-odd/cover, les snapshots, l'ABI `Uniform32`, les buffers V/I, le pool, `Depth24PlusStencil8`, le preflight, completion et readback. Les mappers, prepared builders et `PathTessellator` legacy ne sont pas une autorité W4c : cette géométrie est dans `:gpu-renderer` et ne peut modifier tolérance, fan ou fill rule après `Ready`.
+Le lowerer W4c est un sibling scellé de W4a/W4b. Il réutilise mécaniquement les pipelines natifs winding/even-odd/cover, les snapshots, l'ABI `Uniform32`, les buffers V/I, le pool, `Depth24PlusStencil8`, le preflight, completion et readback. La géométrie legacy de `PathTessellator` vit dans `:gpu-renderer`; W4c ne la consomme pas comme autorité et ne consomme que les snapshots/proofs profondément immutables produits dans `:math`. Les mappers et prepared builders ne peuvent modifier tolérance, fan ou fill rule après `Ready`.
 
 Précédence : non-fini/contradiction reconnue → `InvalidScene` ; famille ou état hors scope → `GapNotMigrated` et legacy ; complexité/overflow/budget → `ResourceLimitExceeded` sans allocation ; capability physique absente après sélection → `GapOnPromotedScope`/`UnsupportedCapability` ; graph, scratch, lowering, ordre atomique ou exécution contradictoires après `Ready` → erreur terminale sans fallback.
 
@@ -99,9 +112,9 @@ Précédence : non-fini/contradiction reconnue → `InvalidScene` ; famille ou �
 
 Les tests sont comportementaux, publics ou portent sur des invariants de données. Sont interdits : inspection de source, reflection, accès privé, call-count d'infrastructure et duplication de la classification dans le renderer.
 
-Les preuves couvrent dans `:math` triangle strict, quad/cubic/arc à `0,25 px`, fermeture implicite, transform négatif, limites/overflow/immutabilité et parité JVM/JS ; dans planner/lowerer, sélection direct/stencil, `WINDING`/`EVEN_ODD`, ressources/budgets/lifetimes/frontières ±1 et refus explicite quand l'atomicité multi-path n'est pas prouvée.
+Les preuves couvrent dans `:math` triangle strict, initialisation à l'origine implicite, `MoveTo`/`Close`, vertices répétés, contours dégénérés, retraces, self-intersections, quad/cubic/arc à `0,25 px`, transform négatif, limites tentées/émises 255/256/65 536/262 144, overflow, immutabilité et parité JVM/JS ; dans planner/lowerer, sélection direct/stencil, `WINDING`/`EVEN_ODD`, ressources/budgets/lifetimes jusqu'au readback, formats/passes exacts et refus explicite quand l'atomicité multi-path n'est pas prouvée.
 
-Les bytes `Surface` sont comparés exactement à un oracle CPU indépendant pour triangle, concave, trou winding, trou even-odd, courbes, scissor, transform négatif, deux paths translucides et RGBA/BGRA. L'oracle ne réutilise ni planner, payload GPU ni flattening de production ; il implémente approximation bornée, test de fill au centre de pixel, `SrcOver` linear-premultiplied et store sRGB après chaque draw.
+Les bytes `Surface` sont comparés exactement à un oracle CPU indépendant pour triangle, concave, trou winding, trou even-odd, courbes, scissor, transform négatif, deux paths translucides et RGBA/BGRA. L'oracle ne réutilise ni planner, payload GPU ni flattening de production. Pour les fixtures line-only, il calcule exactement les crossings par ray casting. Pour une fixture de courbes, la comparaison whole-image byte-exact n'est autorisée que si un oracle d'intervalles F64 de test, alimenté par le `PathF32` original et non les vertices aplatis de production, prouve pour chaque centre de pixel une distance strictement supérieure à `0,25 px + 2^-20 px` de toute courbe originale et résout chaque crossing/tie de façon unique. Sans ce certificat, la fixture de courbes est invalide : elle n'obtient ni tolérance ni égalité approximative. Les tests math de tolérance restent indépendants. L'oracle certifié applique ensuite `SrcOver` linear-premultiplied et le store sRGB après chaque draw.
 
 Font, codec, GMs Skia, `jpg-color-cube`, régénération render/dashboard, baseline et thresholds sont hors scope et inchangés. Les GMs ne participent pas à l'admission. La dette SDF W4b reste strictement inchangée : W4c ne modifie ni sa capability, ni son oracle, ni son suivi de gap.
 
