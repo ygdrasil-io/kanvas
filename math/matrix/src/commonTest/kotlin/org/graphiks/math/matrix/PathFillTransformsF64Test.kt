@@ -87,5 +87,22 @@ class PathFillTransformsF64Test {
         }
     }
 
+    @Test
+    fun `runtime F32 matrix coefficients are canonicalized before validation and perspective classification`() {
+        val emptyPath = PathBuilder().build()
+        val runtimeTwo = listOf(2f).single()
+        val runtimeHalf = listOf(0.5f).single()
+        val overflowF32 = Float.MAX_VALUE * runtimeTwo
+        val zeroF32 = Float.MIN_VALUE * runtimeHalf
+
+        assertFailsWith<IllegalArgumentException> {
+            Matrix3x3F32(sx = overflowF32).mapPathFillInputF64(emptyPath)
+        }
+        assertEquals(
+            0,
+            Matrix3x3F32(persp0 = zeroF32).mapPathFillInputF64(emptyPath).segmentCountI32,
+        )
+    }
+
     private fun canonicalF32(value: Float): Double = Float.fromBits(value.toRawBits()).toDouble()
 }

@@ -14,27 +14,28 @@ import org.graphiks.math.vector.Vector2F64
 
 /** Maps a path into an immutable F64 device-space fill input. */
 public fun Matrix3x3F32.mapPathFillInputF64(path: PathF32): PathFillInputF64 {
-    requireFiniteMatrix()
-    require(!hasPerspective()) { "mapPathFillInputF64 requires an affine Matrix3x3F32" }
+    val matrix = toPathFillMatrixF64()
+    matrix.requireFinite()
+    require(!matrix.hasPerspective) { "mapPathFillInputF64 requires an affine Matrix3x3F32" }
 
     val source = PathFillInputF64.fromPathF32(path)
     val mapped = source.map { segment ->
         when (segment) {
-            is PathFillSegmentF64.MoveTo -> PathFillSegmentF64.MoveTo(mapPointF64(segment.point))
-            is PathFillSegmentF64.LineTo -> PathFillSegmentF64.LineTo(mapPointF64(segment.point))
+            is PathFillSegmentF64.MoveTo -> PathFillSegmentF64.MoveTo(matrix.mapPointF64(segment.point))
+            is PathFillSegmentF64.LineTo -> PathFillSegmentF64.LineTo(matrix.mapPointF64(segment.point))
             is PathFillSegmentF64.QuadTo -> PathFillSegmentF64.QuadTo(
-                control = mapPointF64(segment.control),
-                point = mapPointF64(segment.point),
+                control = matrix.mapPointF64(segment.control),
+                point = matrix.mapPointF64(segment.point),
             )
 
             is PathFillSegmentF64.CubicTo -> PathFillSegmentF64.CubicTo(
-                control1 = mapPointF64(segment.control1),
-                control2 = mapPointF64(segment.control2),
-                point = mapPointF64(segment.point),
+                control1 = matrix.mapPointF64(segment.control1),
+                control2 = matrix.mapPointF64(segment.control2),
+                point = matrix.mapPointF64(segment.point),
             )
 
             is PathFillSegmentF64.ArcTo -> {
-                val metadata = transformArcMetadataF64(
+                val metadata = matrix.transformArcMetadataF64(
                     radius = segment.radius,
                     xAxisRotationDegreesF64 = segment.xAxisRotationDegreesF64,
                     sweep = segment.sweep,
@@ -44,7 +45,7 @@ public fun Matrix3x3F32.mapPathFillInputF64(path: PathF32): PathFillInputF64 {
                     xAxisRotationDegreesF64 = metadata.xAxisRotationDegreesF64,
                     largeArc = segment.largeArc,
                     sweep = metadata.sweep,
-                    point = mapPointF64(segment.point),
+                    point = matrix.mapPointF64(segment.point),
                 )
             }
 
@@ -54,7 +55,34 @@ public fun Matrix3x3F32.mapPathFillInputF64(path: PathF32): PathFillInputF64 {
     return PathFillInputF64.of(source.fillRule, mapped)
 }
 
-private fun Matrix3x3F32.requireFiniteMatrix() {
+private data class PathFillMatrixF64(
+    val sx: Double,
+    val kx: Double,
+    val tx: Double,
+    val ky: Double,
+    val sy: Double,
+    val ty: Double,
+    val persp0: Double,
+    val persp1: Double,
+    val persp2: Double,
+) {
+    val hasPerspective: Boolean
+        get() = persp0 != 0.0 || persp1 != 0.0 || persp2 != 1.0
+}
+
+private fun Matrix3x3F32.toPathFillMatrixF64(): PathFillMatrixF64 = PathFillMatrixF64(
+    sx = exactF64(sx),
+    kx = exactF64(kx),
+    tx = exactF64(tx),
+    ky = exactF64(ky),
+    sy = exactF64(sy),
+    ty = exactF64(ty),
+    persp0 = exactF64(persp0),
+    persp1 = exactF64(persp1),
+    persp2 = exactF64(persp2),
+)
+
+private fun PathFillMatrixF64.requireFinite() {
     require(
         sx.isFinite() && kx.isFinite() && tx.isFinite() &&
             ky.isFinite() && sy.isFinite() && ty.isFinite() &&
@@ -62,10 +90,10 @@ private fun Matrix3x3F32.requireFiniteMatrix() {
     ) { "mapPathFillInputF64 requires finite Matrix3x3F32 coefficients" }
 }
 
-private fun Matrix3x3F32.mapPointF64(point: Point2F64): Point2F64 {
+private fun PathFillMatrixF64.mapPointF64(point: Point2F64): Point2F64 {
     val mapped = Point2F64(
-        exactF64(sx) * point.x + exactF64(kx) * point.y + exactF64(tx),
-        exactF64(ky) * point.x + exactF64(sy) * point.y + exactF64(ty),
+        sx * point.x + kx * point.y + tx,
+        ky * point.x + sy * point.y + ty,
     )
     require(mapped.isFinite()) { "mapPathFillInputF64 produced a non-finite coordinate" }
     return mapped
@@ -77,7 +105,7 @@ private data class TransformedArcMetadataF64(
     val sweep: Boolean,
 )
 
-private fun Matrix3x3F32.transformArcMetadataF64(
+private fun PathFillMatrixF64.transformArcMetadataF64(
     radius: Vector2F64,
     xAxisRotationDegreesF64: Double,
     sweep: Boolean,
@@ -85,7 +113,7 @@ private fun Matrix3x3F32.transformArcMetadataF64(
     require(radius.isFinite() && xAxisRotationDegreesF64.isFinite()) {
         "mapPathFillInputF64 requires finite arc metadata"
     }
-    if (sx == 1f && kx == 0f && ky == 0f && sy == 1f) {
+    if (sx == 1.0 && kx == 0.0 && ky == 0.0 && sy == 1.0) {
         return TransformedArcMetadataF64(
             radius = Vector2F64(abs(radius.x), abs(radius.y)),
             xAxisRotationDegreesF64 = xAxisRotationDegreesF64,
@@ -104,10 +132,10 @@ private fun Matrix3x3F32.transformArcMetadataF64(
     val yAxisX = -sinAngle * radiusY
     val yAxisY = cosAngle * radiusY
 
-    val transformedXAxisX = exactF64(sx) * xAxisX + exactF64(kx) * xAxisY
-    val transformedXAxisY = exactF64(ky) * xAxisX + exactF64(sy) * xAxisY
-    val transformedYAxisX = exactF64(sx) * yAxisX + exactF64(kx) * yAxisY
-    val transformedYAxisY = exactF64(ky) * yAxisX + exactF64(sy) * yAxisY
+    val transformedXAxisX = sx * xAxisX + kx * xAxisY
+    val transformedXAxisY = ky * xAxisX + sy * xAxisY
+    val transformedYAxisX = sx * yAxisX + kx * yAxisY
+    val transformedYAxisY = ky * yAxisX + sy * yAxisY
 
     val xAxisLengthSquared =
         transformedXAxisX * transformedXAxisX + transformedXAxisY * transformedXAxisY
@@ -152,7 +180,7 @@ private fun Matrix3x3F32.transformArcMetadataF64(
     return TransformedArcMetadataF64(
         radius = Vector2F64(transformed.first, transformed.second),
         xAxisRotationDegreesF64 = transformed.third,
-        sweep = if (exactF64(sx) * exactF64(sy) - exactF64(kx) * exactF64(ky) < 0.0) !sweep else sweep,
+        sweep = if (sx * sy - kx * ky < 0.0) !sweep else sweep,
     )
 }
 
