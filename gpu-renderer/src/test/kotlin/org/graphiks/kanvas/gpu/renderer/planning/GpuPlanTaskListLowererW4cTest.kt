@@ -225,13 +225,30 @@ class GpuPlanTaskListLowererW4cTest {
     }
 
     @Test
-    fun `W4c authority represents a 1025 edge fan while Unknown keeps the legacy ceiling`() {
-        val w4c = pathSemantic(GPUPathSourceAuthority.W4cPlannedPathFillV1)
+    fun `W4c lowerer refuses direct-only graph without physical D24S8 facts`() {
+        val graph = directOnlyW4cGraphWithoutDepthStencilFacts()
+
+        assertIs<GpuPlanLoweringResult.UnsupportedCapability>(
+            lowerer.lower(request(graph, rendererCapabilities(depthStencilSupported = false))),
+        )
+    }
+
+    @Test
+    fun `only sealed W4c lowering admits a 1025 edge fan while generic authorities keep the legacy ceiling`() {
+        val lowered = assertIs<GpuPlanLoweringResult.Lowered>(
+            lowerer.lower(request(readyW4cGraph(listOf(largeEvenOdd())))),
+        )
+        val w4c = assertIs<GPUDrawSemanticPayload.CorePrimitive>(
+            lowered.taskList.tasks.filterIsInstance<GPUTask.Render>().first().drawPackets.single().semanticPayload,
+        )
 
         assertEquals(
             1_025,
             assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(w4c.geometry).sourceVertexCount,
         )
+        assertFailsWith<IllegalArgumentException> {
+            pathSemantic(GPUPathSourceAuthority.W4cPlannedPathFillV1)
+        }
         assertFailsWith<IllegalArgumentException> {
             pathSemantic(GPUPathSourceAuthority.Unknown)
         }
@@ -244,15 +261,17 @@ class GpuPlanTaskListLowererW4cTest {
         else -> error("Unexpected W4c packet role")
     }
 
-    private fun readyW4cGraph(): RenderGraph {
+    private fun readyW4cGraph(
+        draws: List<SceneCommand.Draw> = listOf(
+            triangle(ClipStackNode.DeviceRect.of(RectF32(1f, 0f, 3f, 3f), antiAlias = false)),
+            concaveEvenOdd(),
+            triangle(),
+        ),
+    ): RenderGraph {
         val scene = SceneSnapshot.of(
             SceneExtent(4, 4),
             ColorSpace.SRGB,
-            listOf(
-                triangle(ClipStackNode.DeviceRect.of(RectF32(1f, 0f, 3f, 3f), antiAlias = false)),
-                concaveEvenOdd(),
-                triangle(),
-            ),
+            draws,
         )
         val compiler = W4cPathFillPlanCompiler()
         val candidate = assertIs<GpuPlanSelection.Candidate>(
@@ -307,6 +326,34 @@ class GpuPlanTaskListLowererW4cTest {
         ).plan
     }
 
+    private fun directOnlyW4cGraphWithoutDepthStencilFacts(): RenderGraph {
+        val scene = SceneSnapshot.of(
+            SceneExtent(4, 4),
+            ColorSpace.SRGB,
+            listOf(triangle()),
+        )
+        val compiler = W4cPathFillPlanCompiler()
+        val candidate = assertIs<GpuPlanSelection.Candidate>(
+            compiler.select(scene, RenderTargetDescriptor(scene.extent, scene.colorSpace)),
+        ).candidate
+        val directOnly = assertIs<RenderPlanResult.Ready<RenderGraph>>(
+            compiler.plan(candidate, planCapabilities(), PlanBudget(1L shl 20)),
+        ).plan
+        return RenderGraph.of(
+            id = directOnly.id,
+            capabilityId = directOnly.capabilityId,
+            targetExtent = directOnly.targetExtent,
+            colorFormat = directOnly.colorFormat,
+            capabilities = historicalPlanCapabilities(),
+            budget = directOnly.budget,
+            visualCommandCount = directOnly.visualCommandCount,
+            resources = directOnly.resources(),
+            passes = directOnly.passes(),
+            dependencies = directOnly.dependencies(),
+            peakFrameLocalBytes = directOnly.peakFrameLocalBytes,
+        )
+    }
+
     private fun triangle(clip: ClipStackNode = ClipStackNode.Empty): SceneCommand.Draw =
         SceneCommand.Draw(pathNode(
             PathBuilder()
@@ -327,7 +374,20 @@ class GpuPlanTaskListLowererW4cTest {
             .lineTo(0f, 3f)
             .close()
             .build(),
-    ))
+        ))
+
+    private fun largeEvenOdd(): SceneCommand.Draw {
+        val path = PathBuilder(FillRule.EVEN_ODD).apply {
+            repeat(1_025) { index ->
+                val angle = 2.0 * Math.PI * index / 1_025.0
+                val x = (2.0 + 1.5 * kotlin.math.cos(angle)).toFloat()
+                val y = (2.0 + 1.5 * kotlin.math.sin(angle)).toFloat()
+                if (index == 0) moveTo(x, y) else lineTo(x, y)
+            }
+            close()
+        }.build()
+        return SceneCommand.Draw(pathNode(path))
+    }
 
     private fun pathNode(path: org.graphiks.math.geometry.PathF32, clip: ClipStackNode = ClipStackNode.Empty): DrawNode =
         DrawNode(

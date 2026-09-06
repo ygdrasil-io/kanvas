@@ -1821,20 +1821,25 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
         w4aSessionScratch: W4aSessionScratchV1? = this.w4aSessionScratch,
         w4bSessionScratch: W4bSessionScratchV1? = this.w4bSessionScratch,
         w4cSessionScratch: W4cSessionScratchV1? = this.w4cSessionScratch,
-    ): GPUCorePrimitivePreparedPacketAuthority = GPUCorePrimitivePreparedPacketAuthority(
-        structuralPipelineKey,
-        renderPipelineKey,
-        uniformSlabSeal,
-        analyticShapeUniformSeal,
-        analyticClipUniformSeal,
-        analyticIntersectionUniformSeal,
-        coverageMaskUniformSlabSeal,
-        w3SessionScratch,
-        w4aSessionScratch,
-        w4bSessionScratch,
-        w4cSessionScratch,
-        scratchLane,
-    )
+    ): GPUCorePrimitivePreparedPacketAuthority {
+        require(scratchLane != ScratchLane.W4c) {
+            "W4c prepared packet authority is sealed to its original planned packet."
+        }
+        return GPUCorePrimitivePreparedPacketAuthority(
+            structuralPipelineKey,
+            renderPipelineKey,
+            uniformSlabSeal,
+            analyticShapeUniformSeal,
+            analyticClipUniformSeal,
+            analyticIntersectionUniformSeal,
+            coverageMaskUniformSlabSeal,
+            w3SessionScratch,
+            w4aSessionScratch,
+            w4bSessionScratch,
+            w4cSessionScratch,
+            scratchLane,
+        )
+    }
 
     internal companion object {
         fun plannedW3(
@@ -1896,23 +1901,37 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
         )
 
         fun plannedW4c(
+            packet: GPUDrawPacket,
             structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
             renderPipelineKey: GPURenderPipelineKey,
+            planId: String,
+            capabilitySealHash: String,
             scratch: W4cSessionScratchV1,
-        ): GPUCorePrimitivePreparedPacketAuthority = GPUCorePrimitivePreparedPacketAuthority(
-            structuralPipelineKey,
-            renderPipelineKey,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            scratch,
-            ScratchLane.W4c,
-        )
+        ): GPUCorePrimitivePreparedPacketAuthority {
+            require(
+                scratch.matchesPreparedPacket(
+                    expectedPlanId = planId,
+                    expectedCapabilityHash = capabilitySealHash,
+                    packet = packet,
+                    structuralPipelineKey = structuralPipelineKey,
+                    renderPipelineKey = renderPipelineKey,
+                ),
+            ) { "W4c prepared authority must match its sealed scratch draw, ranges, and hashes." }
+            return GPUCorePrimitivePreparedPacketAuthority(
+                structuralPipelineKey,
+                renderPipelineKey,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                scratch,
+                ScratchLane.W4c,
+            )
+        }
     }
 
     private enum class ScratchLane {

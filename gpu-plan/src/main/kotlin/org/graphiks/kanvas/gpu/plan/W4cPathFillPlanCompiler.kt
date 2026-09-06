@@ -373,18 +373,13 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
         if (!REQUIRED_OPERATIONS.all { it in capabilities.supportedOperations() }) {
             return promoted(W4cPlanDiagnostics.CapabilityOperation, "W4c required operation is unavailable")
         }
-        val usesStencil = selected.draws.any { it.strategy == PathFillStrategy.StencilCover }
-        if (usesStencil) {
-            if (!STENCIL_OPERATIONS.all { it in capabilities.supportedOperations() }) {
-                return promoted(W4cPlanDiagnostics.CapabilityOperation, "W4c stencil operations are unavailable")
-            }
-            if (PlanDepthStencilFormat.Depth24PlusStencil8 !in capabilities.supportedDepthStencilFormats()) {
-                return promoted(
-                    W4cPlanDiagnostics.CapabilityDepthStencilFormat,
-                    "W4c depth-stencil format is unavailable",
-                )
-            }
+        if (PlanDepthStencilFormat.Depth24PlusStencil8 !in capabilities.supportedDepthStencilFormats()) {
+            return promoted(
+                W4cPlanDiagnostics.CapabilityDepthStencilFormat,
+                "W4c depth-stencil format is unavailable",
+            )
         }
+        val usesStencil = selected.draws.any { it.strategy == PathFillStrategy.StencilCover }
         if (capabilities.maxDynamicUniformBuffersPerPipelineLayout < 1) {
             return promoted(
                 W4cPlanDiagnostics.CapabilityDynamicUniform,
@@ -784,8 +779,6 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
             PlanOperationCapability.CopyUpload,
             PlanOperationCapability.UniformBuffer,
             PlanOperationCapability.Readback,
-        )
-        private val STENCIL_OPERATIONS = setOf(
             PlanOperationCapability.DepthStencilAttachment,
             PlanOperationCapability.StencilCover,
         )

@@ -172,6 +172,28 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
     }
 
     @Test
+    fun `generic payload gathering refuses a forged 1025 edge W4c path without planned scratch`() {
+        val commandId = 2
+        val base = recording(command(commandId, 0)).taskList.withClipPlans(
+            mapOf(commandId to GPUClipExecutionPlan.NoClip),
+        )
+        val packet = base.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
+        val forgedGeometry = forgedW4cStencilGeometry()
+
+        assertEquals(
+            1_025,
+            forgedGeometry.sourceVertexCount,
+        )
+        assertFailsWith<IllegalArgumentException> {
+            semantic(
+                packet,
+                geometry = forgedGeometry,
+                coverageMode = GPUCorePrimitiveCoverageMode.Stencil1x,
+            )
+        }
+    }
+
+    @Test
     fun `linear radial and sweep fill rect semantics require their matching gradient render steps`() {
         val accepted = listOf(
             "linear.gradient.fill" to linearMaterial(),
@@ -4041,6 +4063,34 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
             ),
         )
         GPUCorePrimitiveGeometryMode.DirectTriangles -> error("Direct triangles are not stencil geometry")
+    }
+
+    private fun forgedW4cStencilGeometry(): GPUCorePrimitiveGeometryInput.TriangulatedPath {
+        val edgeCount = 1_025
+        fun point(index: Int): Pair<Float, Float> =
+            ((index % 3) + 1).toFloat() to (((index / 3) % 3) + 1).toFloat()
+        val vertices = buildList(edgeCount * 6) {
+            repeat(edgeCount) { edge ->
+                val current = point(edge)
+                val next = point((edge + 1) % edgeCount)
+                add(0f)
+                add(0f)
+                add(current.first)
+                add(current.second)
+                add(next.first)
+                add(next.second)
+            }
+        }
+        return GPUCorePrimitiveGeometryInput.TriangulatedPath(
+            vertices = vertices,
+            indices = (0 until edgeCount * 3).toList(),
+            sourceContourStarts = listOf(0),
+            sourceVertexCount = edgeCount,
+            coverBounds = targetBounds,
+            geometryMode = GPUCorePrimitiveGeometryMode.StencilEdgeFan,
+            fillRule = GPUCorePrimitiveFillRule.EvenOdd,
+            sourceAuthority = GPUPathSourceAuthority.W4cPlannedPathFillV1,
+        )
     }
 
     private fun recording(vararg commands: org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand) =

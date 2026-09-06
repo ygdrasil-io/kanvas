@@ -2055,7 +2055,18 @@ const val TEXT_A8_RENDER_STEP_IDENTITY: String = "text.a8_mask.sample"
 
 /** Gathers one immutable Slice 12A semantic without allocating native resources. */
 class GPUCorePrimitivePayloadGatherer {
-    fun gatherSemantic(input: GPUCorePrimitivePayloadInput): GPUDrawSemanticPayload.CorePrimitive {
+    fun gatherSemantic(input: GPUCorePrimitivePayloadInput): GPUDrawSemanticPayload.CorePrimitive =
+        gatherSemantic(input, CorePrimitivePathAuthorityAdmission.Generic)
+
+    internal fun gatherPlannedW4cSemantic(
+        input: GPUCorePrimitivePayloadInput,
+    ): GPUDrawSemanticPayload.CorePrimitive =
+        gatherSemantic(input, CorePrimitivePathAuthorityAdmission.SealedW4c)
+
+    private fun gatherSemantic(
+        input: GPUCorePrimitivePayloadInput,
+        pathAuthorityAdmission: CorePrimitivePathAuthorityAdmission,
+    ): GPUDrawSemanticPayload.CorePrimitive {
         require(input.commandIdValue >= 0) { "Core primitive command id must be non-negative" }
         require(input.premultipliedRgba.isPremultipliedRgba()) {
             "Core primitive color must be finite premultiplied RGBA"
@@ -2073,8 +2084,14 @@ class GPUCorePrimitivePayloadGatherer {
         require(input.blendPlanIdentity.isNotBlank()) {
             "Core primitive blend identity must not be blank"
         }
+        if (pathAuthorityAdmission == CorePrimitivePathAuthorityAdmission.SealedW4c) {
+            require(
+                (input.geometry as? GPUCorePrimitiveGeometryInput.TriangulatedPath)
+                    ?.sourceAuthority == GPUPathSourceAuthority.W4cPlannedPathFillV1,
+            ) { "Sealed W4c gathering requires a W4c planned path authority." }
+        }
 
-        val geometry = input.geometry.snapshotAndValidate(input.targetBounds)
+        val geometry = input.geometry.snapshotAndValidate(input.targetBounds, pathAuthorityAdmission)
         require(
             hasCorePrimitiveAnalysisGeometryAuthorityIntegrity(
                 input.commandIdValue,
@@ -2149,6 +2166,11 @@ class GPUCorePrimitivePayloadGatherer {
             drrectInnerGeometryAuthority = input.drrectInnerGeometryAuthority,
         )
     }
+}
+
+private enum class CorePrimitivePathAuthorityAdmission {
+    Generic,
+    SealedW4c,
 }
 
 private const val CORE_PRIMITIVE_UNIFORM_FINGERPRINT_PREFIX = "core-primitive.uniform32-v1:"
@@ -2382,6 +2404,7 @@ private fun List<Float>.rawBits(): List<Int> = map(Float::toRawBits)
 
 private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
     target: GPUPixelBounds,
+    pathAuthorityAdmission: CorePrimitivePathAuthorityAdmission,
 ): GPUCorePrimitiveGeometry = when (this) {
     is GPUCorePrimitiveGeometryInput.Rect -> {
         require(listOf(left, top, right, bottom).all(Float::isFinite) && left < right && top < bottom) {
@@ -2418,6 +2441,10 @@ private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
         )
     }
     is GPUCorePrimitiveGeometryInput.TriangulatedPath -> {
+        require(
+            sourceAuthority != GPUPathSourceAuthority.W4cPlannedPathFillV1 ||
+                pathAuthorityAdmission == CorePrimitivePathAuthorityAdmission.SealedW4c,
+        ) { "W4c path source authority requires the sealed planned W4c gathering route." }
         require(vertices.size >= 6 && vertices.size % 2 == 0 && vertices.all(Float::isFinite)) {
             "Core path geometry requires at least three finite xy vertices"
         }
@@ -2458,7 +2485,7 @@ private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
                 require(stroke == null) {
                     "Fill stencil edge fans cannot retain stroke lowering facts"
                 }
-                val maxStencilEdges = if (sourceAuthority == GPUPathSourceAuthority.W4cPlannedPathFillV1) {
+                val maxStencilEdges = if (pathAuthorityAdmission == CorePrimitivePathAuthorityAdmission.SealedW4c) {
                     PathFillLimitsI32().maxAttemptedEdgesPerPathI32
                 } else {
                     GPUPathEdgeFanPayloadContract.MAX_TRIANGLES.toInt()

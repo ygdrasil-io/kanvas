@@ -1,14 +1,23 @@
 package org.graphiks.kanvas.gpu.renderer.passes
 
+import java.security.MessageDigest
 import org.graphiks.kanvas.gpu.plan.PathFillStrategy
 import org.graphiks.kanvas.gpu.plan.PlanResourceId
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceFamily
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.resources.GPUCorePrimitiveFramePoolCapacities
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlan
 import org.graphiks.kanvas.gpu.renderer.resources.corePrimitiveFramePoolCapacitiesOrNull
+import org.graphiks.kanvas.gpu.renderer.state.GPUPathSourceAuthority
 import org.graphiks.math.geometry.FillRule
 import org.graphiks.math.geometry.PathFillGeometryF32
 import org.graphiks.math.geometry.PathFillLimitsI32
@@ -188,8 +197,140 @@ internal class W4cSessionScratchV1(
             staging == expectedStaging &&
             targetBounds == expectedBounds
 
+    internal fun matchesPreparedPacket(
+        expectedPlanId: String,
+        expectedCapabilityHash: String,
+        packet: GPUDrawPacket,
+        structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+        renderPipelineKey: GPURenderPipelineKey,
+    ): Boolean {
+        if (
+            planId != expectedPlanId ||
+                capabilitySealHash != expectedCapabilityHash ||
+                expectedPlanId.isBlank() ||
+                expectedCapabilityHash.isBlank() ||
+                packet.renderPipelineKey != renderPipelineKey ||
+                packet.originalPaintOrder < 0 ||
+                packet.sortKey != packet.originalPaintOrder.toLong() ||
+                packet.sortKeyPreimage != "paint-order:${packet.originalPaintOrder}" ||
+                structuralPipelineKey.sampleCount != 1 ||
+                structuralPipelineKey.uniformLayout !=
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2
+        ) return false
+        val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive ?: return false
+        val geometry = semantic.geometry as? GPUCorePrimitiveGeometry.TriangulatedPath ?: return false
+        val draw = draws.singleOrNull { scratchDraw -> scratchDraw.commandId == packet.commandIdValue } ?: return false
+        val uniformSlot = uniformPlan.slots.getOrNull(draw.uniformSlotIndex) ?: return false
+        val semanticUniform = semantic.payloadRef.uniformSlot ?: return false
+        val uniformBytes = semantic.payloadRef.uniformBlock?.bytes ?: return false
+        if (
+            packet.uniformSlot != semanticUniform ||
+                semantic.payloadRef.commandIdValue != packet.commandIdValue ||
+                semanticUniform.slotId.value != "core-primitive:${packet.commandIdValue}" ||
+                semanticUniform.byteOffset != 0L ||
+                uniformBytes.size.toLong() != UNIFORM_PAYLOAD_BYTES ||
+                uniformSlot.slotLabel != "path-fill-draw-${draw.commandId}" ||
+                uniformSlot.payloadBytes != UNIFORM_PAYLOAD_BYTES ||
+                uniformSlot.allocatedBytes != uniformStrideBytes ||
+                uniformSlot.alignedOffset != draw.uniformSlotIndex.toLong() * uniformStrideBytes ||
+                uniformSlot.payloadHash != sha256Hex(uniformBytes) ||
+                packet.originalPaintOrder != draw.uniformSlotIndex ||
+                packet.analysisRecordId != "analysis.w4c_path_fill.${draw.commandId}" ||
+                semantic.sourceFamily != GPUCorePrimitiveSourceFamily.Path ||
+                semantic.targetBounds != targetBounds ||
+                semantic.scissorBounds != draw.copyScissorBounds() ||
+                geometry.coverBounds != draw.copyScissorBounds() ||
+                geometry.sourceAuthority != GPUPathSourceAuthority.W4cPlannedPathFillV1 ||
+                geometry.inverseFill ||
+                geometry.strokeStyle != null ||
+                !semantic.hasCanonicalHashIntegrity() ||
+                !hasExactPacketRanges(draw)
+        ) return false
+        return when (draw.strategy) {
+            PathFillStrategy.DirectTriangle -> matchesDirectPacket(
+                draw = draw,
+                packet = packet,
+                structuralPipelineKey = structuralPipelineKey,
+                semantic = semantic,
+                geometry = geometry,
+            )
+            PathFillStrategy.StencilCover -> matchesStencilPacket(
+                draw = draw,
+                packet = packet,
+                structuralPipelineKey = structuralPipelineKey,
+                semantic = semantic,
+                geometry = geometry,
+            )
+        }
+    }
+
+    private fun hasExactPacketRanges(draw: W4cSessionScratchDrawV1): Boolean = try {
+        draw.vertexOffsetBytes + draw.vertexRangeBytes <= vertexUsefulBytes &&
+            draw.indexOffsetBytes + draw.indexRangeBytes <= indexUsefulBytes &&
+            draw.vertexRangeBytes == Math.multiplyExact(draw.copyGeometryF32().vertexCostI64, VERTEX_BYTES) &&
+            draw.indexRangeBytes == Math.multiplyExact(draw.copyGeometryF32().indexCostI64, INDEX_BYTES)
+    } catch (_: ArithmeticException) {
+        false
+    }
+
+    private fun matchesDirectPacket(
+        draw: W4cSessionScratchDrawV1,
+        packet: GPUDrawPacket,
+        structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+        semantic: GPUDrawSemanticPayload.CorePrimitive,
+        geometry: GPUCorePrimitiveGeometry.TriangulatedPath,
+    ): Boolean {
+        val direct = draw.copyGeometryF32().copyDirectTriangleF32OrNull() ?: return false
+        return packet.role == GPUDrawPacketRole.Shading &&
+            structuralPipelineKey.role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.Shading &&
+            semantic.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor &&
+            geometry.geometryMode == GPUCorePrimitiveGeometryMode.DirectTriangles &&
+            geometry.fillRule == GPUCorePrimitiveFillRule.Winding &&
+            geometry.sourceContourStarts == listOf(0) &&
+            geometry.sourceVertexCount == direct.vertexCountI32 &&
+            geometry.vertices.hasSameRawBits(direct.copyVerticesF32().toList()) &&
+            geometry.indices == direct.copyIndicesI32().toList()
+    }
+
+    private fun matchesStencilPacket(
+        draw: W4cSessionScratchDrawV1,
+        packet: GPUDrawPacket,
+        structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+        semantic: GPUDrawSemanticPayload.CorePrimitive,
+        geometry: GPUCorePrimitiveGeometry.TriangulatedPath,
+    ): Boolean {
+        val fan = draw.copyGeometryF32().copyStencilEdgeFanF32OrNull() ?: return false
+        val expectedFillRule = when (draw.fillRule) {
+            FillRule.WINDING -> GPUCorePrimitiveFillRule.Winding
+            FillRule.EVEN_ODD -> GPUCorePrimitiveFillRule.EvenOdd
+            else -> return false
+        }
+        val expectedRole = when (packet.role) {
+            GPUDrawPacketRole.PathStencilProducer -> GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer
+            GPUDrawPacketRole.PathStencilCover -> GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover
+            else -> return false
+        }
+        return structuralPipelineKey.role == expectedRole &&
+            semantic.coverageMode == GPUCorePrimitiveCoverageMode.Stencil1x &&
+            geometry.geometryMode == GPUCorePrimitiveGeometryMode.StencilEdgeFan &&
+            geometry.fillRule == expectedFillRule &&
+            geometry.sourceContourStarts == fan.copyContourStartsI32().toList() &&
+            geometry.sourceVertexCount == fan.edgeCountI32 &&
+            geometry.vertices.hasSameRawBits(fan.copyVerticesF32().toList()) &&
+            geometry.indices == fan.copyIndicesI32().toList()
+    }
+
     internal companion object {
         const val SOURCE_LABEL: String = "w4c-path-fill-uniform32-pass"
         const val UNIFORM_PAYLOAD_BYTES: Long = 32L
+        private const val VERTEX_BYTES: Long = 8L
+        private const val INDEX_BYTES: Long = 4L
     }
 }
+
+private fun List<Float>.hasSameRawBits(other: List<Float>): Boolean =
+    size == other.size && indices.all { index -> this[index].toRawBits() == other[index].toRawBits() }
+
+private fun sha256Hex(bytes: List<Int>): String = MessageDigest.getInstance("SHA-256")
+    .digest(bytes.map(Int::toByte).toByteArray())
+    .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }

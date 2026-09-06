@@ -123,6 +123,10 @@ internal class W4cPathFillGraphLowerer {
             W4cPlanDiagnostics.CapabilityOperation,
             "The W4c graph capability snapshot is stale.",
         )
+        if (!hasExactW4cCapabilityFacts(request.graph)) return capability(
+            missingW4cCapabilityFact(request.graph),
+            "The W4c graph lacks required depth-stencil capability facts.",
+        )
         if (request.graph.budget != request.currentBudget) return invalid("The W4c graph budget is stale.")
         val graph = validateW4cGraph(request.graph) ?: return invalid("The graph is not the exact W4c topology.")
         val limits = request.capabilities.limits
@@ -187,8 +191,11 @@ internal class W4cPathFillGraphLowerer {
             val publicPipelineKey = built.packet.renderPipelineKey ?: return invalid("W4c packet lacks a public pipeline key.")
             built.packet.attachCorePrimitivePreparedAuthority(
                 GPUCorePrimitivePreparedPacketAuthority.plannedW4c(
+                    packet = built.packet,
                     structuralPipelineKey = built.structuralPipelineKey,
                     renderPipelineKey = publicPipelineKey,
+                    planId = request.graph.id.value,
+                    capabilitySealHash = capabilitySeal.sealHash,
                     scratch = scratch,
                 ),
             )
@@ -313,7 +320,8 @@ internal class W4cPathFillGraphLowerer {
         val policy = capabilities.bufferAllocationPolicy
         return graph.colorFormat in capabilities.supportedFormats() &&
             capabilities.maxDynamicUniformBuffersPerPipelineLayout >= 1 &&
-            HISTORICAL_OPERATIONS.all { it in capabilities.supportedOperations() } &&
+            W4C_REQUIRED_OPERATIONS.all { it in capabilities.supportedOperations() } &&
+            PlanDepthStencilFormat.Depth24PlusStencil8 in capabilities.supportedDepthStencilFormats() &&
             capabilities.copyBytesPerRowAlignment.isPositivePowerOfTwo() &&
             capabilities.minUniformBufferOffsetAlignment.isPositivePowerOfTwo() &&
             policy.growth == PlanBufferGrowth.PowerOfTwo &&
@@ -321,6 +329,13 @@ internal class W4cPathFillGraphLowerer {
             policy.indexFloorBytes.isPositivePowerOfTwo() &&
             policy.uniformFloorBytes.isPositivePowerOfTwo()
     }
+
+    private fun missingW4cCapabilityFact(graph: RenderGraph): RenderDiagnosticCode =
+        if (PlanDepthStencilFormat.Depth24PlusStencil8 !in graph.capabilities.supportedDepthStencilFormats()) {
+            W4cPlanDiagnostics.CapabilityDepthStencilFormat
+        } else {
+            W4cPlanDiagnostics.CapabilityOperation
+        }
 
     private fun visualDraws(renderPasses: List<PlanPass>): List<W4cVisualDraw>? {
         val visual = mutableListOf<W4cVisualDraw>()
@@ -578,7 +593,7 @@ internal class W4cPathFillGraphLowerer {
         val geometry = draw.copyGeometryF32()
         val scissor = draw.copyScissorI32()
         val plannedScissor = GPUPixelBounds(scissor.left, scissor.top, scissor.right, scissor.bottom)
-        val semantic = GPUCorePrimitivePayloadGatherer().gatherSemantic(
+        val semantic = GPUCorePrimitivePayloadGatherer().gatherPlannedW4cSemantic(
             GPUCorePrimitivePayloadInput(
                 commandIdValue = draw.commandIndex,
                 sourceFamily = GPUCorePrimitiveSourceFamily.Path,
@@ -965,11 +980,13 @@ internal class W4cPathFillGraphLowerer {
         RenderDiagnostic(RenderDiagnosticCode(code), domain, RenderDiagnosticSeverity.ERROR, message)
 
     private companion object {
-        val HISTORICAL_OPERATIONS: Set<PlanOperationCapability> = setOf(
+        val W4C_REQUIRED_OPERATIONS: Set<PlanOperationCapability> = setOf(
             PlanOperationCapability.RenderPass,
             PlanOperationCapability.CopyUpload,
             PlanOperationCapability.UniformBuffer,
             PlanOperationCapability.Readback,
+            PlanOperationCapability.DepthStencilAttachment,
+            PlanOperationCapability.StencilCover,
         )
         const val VERTEX_BYTES: Long = 8L
         const val INDEX_BYTES: Long = 4L

@@ -318,8 +318,8 @@ class W4cPathFillPlanCompilerTest {
     }
 
     @Test
-    fun planningPromotesMissingD24S8ForStencilPaths() {
-        val scene = sceneOf(listOf(concave()))
+    fun planningPromotesMissingD24S8ForDirectOnlyPaths() {
+        val scene = sceneOf(listOf(triangle()))
         val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target(scene))).candidate
 
         val result = compiler.plan(
@@ -332,6 +332,28 @@ class W4cPathFillPlanCompilerTest {
             "w4c.capability.depth_stencil_format",
             assertIs<RenderPlanResult.GapOnPromotedScope>(result).diagnostics.single().code.value,
         )
+    }
+
+    @Test
+    fun planningPromotesMissingStencilOperationsForDirectOnlyPaths() {
+        val scene = sceneOf(listOf(triangle()))
+        val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target(scene))).candidate
+
+        listOf(
+            PlanOperationCapability.DepthStencilAttachment,
+            PlanOperationCapability.StencilCover,
+        ).forEach { missing ->
+            val result = compiler.plan(
+                candidate,
+                capabilities(operations = PlanOperationCapability.entries.toSet() - missing),
+                PlanBudget(1L shl 20),
+            )
+
+            assertEquals(
+                "w4c.capability.operation",
+                assertIs<RenderPlanResult.GapOnPromotedScope>(result).diagnostics.single().code.value,
+            )
+        }
     }
 
     @Test
