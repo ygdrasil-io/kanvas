@@ -1,7 +1,7 @@
 # W4d–W4e — clôture geometry/coverage
 
 Date : 2026-09-06  
-État : design validé en conversation, formalisation à relire  
+État : design et formalisation validés  
 Branche de départ : `codex/w4d-strokes-hairlines`, empilée sur `codex/w4c-path-fills`
 
 ## 1. But
@@ -110,7 +110,7 @@ générale, avec des fast paths directs ou stencil prouvés.
 
 - `PathStrokeStyleF64` : largeur, cap, join, miter et dash optionnel ;
 - `PathStrokeWidthF64` : `Finite` ou `Hairline` ;
-- `PathStrokeDashF64` : intervalles pairs strictement positifs et phase ;
+- `PathStrokeDashF64` : intervalles pairs finis non négatifs, somme strictement positive, et phase finie ;
 - `PathStrokeLimitsI32` et `PathStrokePolicyF64` ;
 - `PathStrokeGeometryF32` : contours/edge fans, coûts I64, bounds et scissor I32 ;
 - `PathStrokePreparationResult` avec raisons stables.
@@ -130,10 +130,24 @@ Corner, Discrete, Path1D, Path2D et Trim restent des effets géométriques
 ultérieurs et sont diagnostiqués avant `Ready`.
 
 Un stroke de largeur finie est expansé en source-space, puis son outline est
-transformé et aplati en device-space. Ce choix conserve correctement les
-largeurs anisotropes sous affine ou perspective. Une hairline est différente :
-la centerline est projetée en device-space puis reçoit une coverage nominale
-d'un pixel device, indépendante de l'échelle de la CTM.
+transformé et aplati en device-space. Le dash conserve des intervalles de
+primitives paramétriques source et l'outline conserve des offsets/caps/joins
+paramétriques : il est interdit d'aplatir la centerline puis de l'offseter. La
+certification de flèche de l'outline inclut explicitement la largeur et le
+miter, puis la magnification/projective deviation de la transformation. Ce
+choix conserve correctement les largeurs anisotropes sous affine ou
+perspective. Une hairline est différente : la centerline est projetée en
+device-space puis reçoit une coverage nominale d'un pixel device, indépendante
+de l'échelle de la CTM.
+
+Un `PathStrokeWorkLedgerI64` transactionnel unique traverse dash, outline,
+projection, union topologique et finalisation fill. Il vérifie les limites path
+et frame avant chaque évaluation, subdivision, fragment, candidat topologique,
+vertex/index ou allocation. `Ready`/`Empty` publient les snapshots d'usage path
+et frame; aucune étape ne réinitialise ou ne réadditionne tardivement son propre
+compteur. Dans une frame mixte W4d, les fills W4c sont eux aussi préparés par le
+worker ledger-aware et débitent attempted units, vertices, indices et snapshot
+bytes avant émission; ils ne sont pas post-comptabilisés par le planner.
 
 `STROKE_AND_FILL` produit d'abord dans `:math` l'union géométrique certifiée de
 la région fill non inverse et de l'outline du stroke. Cette union passe par le
@@ -203,15 +217,25 @@ hard-edge 1×. Elle couvre fills, strokes, hairlines et `STROKE_AND_FILL` avec :
 - une target couleur MSAA 4×, une D24S8 4× et un resolve explicite vers la
   target logique 1× ;
 - `CoveragePlan.StencilAA4` ;
-- des producer/cover/resolve atomiques dont sample count, formats, load/store
-  et lifetimes sont scellés dans le graph ;
+- pour chaque draw demandé hard-edge dans une frame AA4, un mask binaire
+  linéaire 1× produit par la route hard 1×, puis lu sans filtrage aux coordonnées
+  pixel entières par un cover 4× qui diffuse la même valeur 0/1 sur les quatre
+  samples. Le mask et sa D24S8 1× éventuelle sont réutilisables uniquement entre
+  groupes atomiques séquentiels ;
+- des producer/cover atomiques; exactement le dernier render pass physique qui
+  produit la couleur porte la target logique comme `resolveTarget`. Sample
+  count, formats, load/store et lifetimes sont scellés dans le graph. Le
+  resolve WebGPU n'est pas une commande séparée mais la fin de ce dernier
+  render pass ;
 - un calcul de pic incluant les capacités poolées, pas seulement les tailles
   logiques demandées.
 
 Le renderer peut réutiliser ses pipelines `StencilAA` et son support MSAA 4×
 uniquement après authentification de tous les faits W4d.2. L'absence de support
-4×, de D24S8 multisamplée ou de resolve compatible est un gap de capability
-avant acquisition.
+4×, de D24S8 multisamplée, de mask 1× sampleable ou de resolve compatible est
+un gap de capability avant acquisition. Une même preuve typée
+`PlanTextureResolveSupport` porte le `PlanTextureFormat` exact et certifie aussi
+bien le resolve couleur que le resolve d'un mask W4e.
 
 Aucune tolérance pixel n'est ajoutée. Les preuves byte-exact utilisent des
 fixtures dont le résultat de couverture est invariant pour les positions
@@ -248,9 +272,22 @@ round-trip et de replay. Aucun test source-shape ou reflection n'est admis.
 
 ### 7.2 Préparation math et composition
 
-`:math` prépare chaque entrée de clip avec le transform F64 commun. Rect, RRect
-et Path deviennent des snapshots device-space portant operation Intersect ou
-Difference, AA, inverse fill, coûts, bounds et scissor conservateur.
+`:math:matrix` projette chaque entrée de clip avec le transform F64 commun,
+puis transmet une `ClipDeviceGeometryF64` sans matrice à
+`:math:geometry`. Ainsi `:math:geometry` ne dépend jamais de `:math:matrix` et
+le graphe de modules reste acyclique. Rect, RRect et Path deviennent des
+snapshots device-space portant operation Intersect ou Difference, AA, inverse
+fill, coûts, bounds et scissor conservateur. Une chaîne transactionnelle de
+`ClipWorkLedgerI64` module-locaux transmet des snapshots immuables stack/frame
+de `:math:matrix` vers `:math:geometry`, puis entre toutes les stacks distinctes
+d'une frame. Elle débite avant émission les comptes d'entrées, attempted units,
+vertices, indices et snapshot bytes, avec limites entry et frame I32/I64
+explicites. Les stacks réutilisées ne sont pas préparées ni débitées une seconde
+fois; aucun ledger mutable ne traverse une frontière de module. Chaque
+`ClipDeviceInputF64` transformé porte toutefois le snapshot immuable du travail
+déjà consommé par son entrée : le sous-ledger geometry reprend ce seul snapshot
+pour cumuler projection et tessellation contre la même limite entry, sans y
+mêler les entrées précédentes.
 
 W4e étend aussi les draws `GeometryNode.Path` dont le `FillRule` est
 `INVERSE_WINDING` ou `INVERSE_EVEN_ODD`. Leur domaine fini est la target
@@ -263,9 +300,11 @@ porte explicitement le domaine I32 et l'inversion :
   à zéro ;
 - en AA, la couverture du path est produite dans un mask puis inversée dans le
   domaine avant multiplication par le clip final ;
-- un inverse `STROKE_AND_FILL` est l'union topologique, dans `:math`, de la
-  région inverse bornée au domaine et de l'outline du stroke, avec un seul
-  résultat de coverage et une seule application couleur.
+- un inverse `STROKE_AND_FILL` construit dans `:math:geometry` l'intérieur fini
+  à exclure `F \ O`, car `¬F ∪ O = ¬(F \ O)`, avec un seul résultat de coverage
+  et une seule application couleur. Si `F \ O` est vide — y compris pour une
+  source non vide de couverture nulle — un état explicite `Zero` fait couvrir
+  tout le domaine au lieu de devenir `Empty`.
 
 Le scissor d'un inverse draw ne peut jamais être dérivé des seuls bounds du
 path source : il vaut le domaine target/clip planifié. Le planner refuse toute
@@ -279,9 +318,11 @@ Le planner choisit la stratégie minimale prouvée :
 4. toute composition AA, Difference, inverse ou multi-op générale : coverage
    mask ordonnée.
 
-Le mask général utilise un format linéaire explicitement capability-gaté. Un
-producer écrit la couverture de l'entrée ; un fold lit l'accumulateur précédent
-et écrit l'autre texture de ping-pong :
+Le mask général utilise un format linéaire explicitement capability-gaté. Une
+passe d'initialisation typée écrit WideOpen (`1.0`) dans le premier
+accumulateur sur le domaine. Un producer écrit ensuite la couverture de
+l'entrée ; un fold lit l'accumulateur précédent et écrit l'autre texture de
+ping-pong :
 
 ```text
 Intersect: next = previous * source
@@ -290,9 +331,15 @@ Difference: next = previous * (1 - source)
 
 L'accumulateur initial représente WideOpen dans la target/scissor. L'inverse
 fill inverse la couverture de la géométrie dans ce domaine avant le fold. Deux
-accumulateurs et un scratch producer sont budgétés lorsque la composition
-générale l'exige. Les formats, usages RenderAttachment/Sampled, bytes, passes et
-lifetimes sont des faits `:gpu-plan`; aucun rôle de ressource n'est implicite.
+accumulateurs et un scratch resolved 1× sont budgétés lorsque la composition
+générale l'exige. Un producer Path/RRect AA ajoute son propre scratch mask
+RGBA8 linear 4×, son resolve 1× et une D24S8 mask 4×; ces ressources sont
+distinctes de la color target MSAA et de la D24S8 4× de la scène. Un producer
+path hard-edge utilisant stencil ajoute une D24S8 mask 1×. Le resolve mask est,
+comme le resolve couleur, le `resolveTarget` du render pass producteur et non
+une commande séparée. Les formats, sample counts, usages
+RenderAttachment/Sampled, bytes, passes et lifetimes sont des faits
+`:gpu-plan`; aucun rôle de ressource n'est implicite.
 
 Le draw consommateur multiplie sa coverage géométrique par le mask final. Le
 mask ne modifie pas la couleur et ne crée pas une seconde application de
