@@ -1,7 +1,7 @@
 # État W04 — geometry/coverage
 
-Révision de code W4c vérifiée : `ab389ca56d9e9897ebc2e3117bd1ee10ff990e87`
-(`fix(kanvas): reject ambiguous W4c curve endpoint ties`), empilée sur W4b. Les
+Révision de code W4c vérifiée : `546a0500f048e7b28c3f3303b55990b17245505b`
+(`fix(math): preserve anisotropic rotated arc geometry`), empilée sur W4b. Les
 vérifications fraîches ci-dessous ont été exécutées le 2026-09-06 ; elles ne
 lancent ni GM, ni Skia.
 
@@ -23,6 +23,12 @@ leur scissor conservateur et la preuve de stratégie. `:gpu-plan` scelle ensuite
 le `RenderGraph`, puis `:gpu-renderer` l'authentifie et le matérialise
 mécaniquement jusqu'à `Surface`/readback, sans mapper ni `PathTessellator`
 legacy après `Ready`.
+
+La metadata d'un arc SVG tourné sous scale axis-aligned anisotrope est
+redécomposée depuis sa covariance dès que les axes transformés ont un produit
+scalaire non nul. La voie orthogonale rapide exige désormais `axisDot == 0.0` ;
+la régression qui motivait ce verrou mesurait `0.32724927994422615 px` d'erreur
+de support, au-delà de la borne W4c de `0.25 px`.
 
 `DirectTriangle` est réservé à un unique contour `WINDING`, line-only, de trois
 sommets distincts non collinéaires, sans retrace ni auto-intersection. Tout

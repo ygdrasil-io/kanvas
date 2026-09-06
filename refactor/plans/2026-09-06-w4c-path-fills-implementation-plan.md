@@ -933,7 +933,7 @@ rtk git add refactor/README.md refactor/waves/W04-geometry-coverage/status.md re
 rtk git commit -m "docs(refactor): publish W4c path fill evidence"
 ```
 
-- [ ] **Step 7: Sol final review et corrections**
+- [x] **Step 7: Sol final review et corrections**
 
 Utiliser `superpowers:requesting-code-review`. Sol revoit le diff complet `codex/w4b-analytic-rrect...HEAD`, les résultats frais et la conformité à la spec. Tout finding valide repart vers l'agent Terra de la tâche concernée; refaire les tests proportionnés puis la revue jusqu'à `APPROVED`.
 
