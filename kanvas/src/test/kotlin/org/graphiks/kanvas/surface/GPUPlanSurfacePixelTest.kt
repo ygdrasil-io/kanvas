@@ -243,43 +243,121 @@ class GPUPlanSurfacePixelTest {
     }
 
     @Test
-    fun `W4c certified quad cubic and SVG arc fixtures match independent exact pixels`() {
-        val cases = listOf(
-            Path().apply {
-                moveTo(0f, 0f)
-                quadTo(0.5f, -2f, 1f, 0f)
-                lineTo(1f, 1f)
-                lineTo(0f, 1f)
-                close()
-            },
-            Path().apply {
-                moveTo(0f, 0f)
-                cubicTo(0.25f, -2f, 0.75f, -2f, 1f, 0f)
-                lineTo(1f, 1f)
-                lineTo(0f, 1f)
-                close()
-            },
-            Path().apply {
-                moveTo(0f, 0f)
-                arcTo(0.5f, 2f, 0f, largeArc = false, sweep = true, x = 1f, y = 0f)
-                lineTo(1f, 1f)
-                lineTo(0f, 1f)
-                close()
-            },
+    fun `W4c certified quad cubic and SVG arc fixtures differ from line-only chord counterfactuals and match exact pixels`() {
+        data class CurveFixture(
+            val name: String,
+            val curve: Path,
+            val chord: Path,
+            val widthI32: Int,
+            val heightI32: Int,
+            val scissorI32: RectI32,
         )
 
-        cases.forEach { path ->
-            val draw = w4cDraw(path, ColorARGB.of(255, 78, 126, 219), 1, 1)
-            assertIs<W4cPathFillCpuOracle.CurveFixtureCertificate.Certified>(
-                W4cPathFillCpuOracle.certifyCurveFixture(1, 1, draw),
+        fun chordPath(): Path = Path().apply {
+            moveTo(2f, 2f)
+            lineTo(6f, 3f)
+            lineTo(6f, 7f)
+            lineTo(2f, 7f)
+            close()
+        }
+
+        val fullScissor = RectI32(0, 0, 8, 8)
+        val cases = listOf(
+            CurveFixture(
+                name = "quad",
+                curve = Path().apply {
+                    moveTo(2f, 2f)
+                    quadTo(-2f, 3.5f, 6f, 3f)
+                    lineTo(6f, 7f)
+                    lineTo(2f, 7f)
+                    close()
+                },
+                chord = chordPath(),
+                widthI32 = 8,
+                heightI32 = 8,
+                scissorI32 = fullScissor,
+            ),
+            CurveFixture(
+                name = "cubic",
+                curve = Path().apply {
+                    moveTo(2f, 2f)
+                    cubicTo(5.6805553f, 2.3333333f, -0.3472222f, 2.6666667f, 6f, 3f)
+                    lineTo(6f, 7f)
+                    lineTo(2f, 7f)
+                    close()
+                },
+                chord = chordPath(),
+                widthI32 = 8,
+                heightI32 = 8,
+                scissorI32 = fullScissor,
+            ),
+            CurveFixture(
+                name = "arc",
+                curve = Path().apply {
+                    moveTo(2f, 2f)
+                    arcTo(2.5f, 2.5f, 0f, largeArc = false, sweep = false, x = 6f, y = 3f)
+                    lineTo(6f, 7f)
+                    lineTo(2f, 7f)
+                    close()
+                },
+                chord = chordPath(),
+                widthI32 = 8,
+                heightI32 = 8,
+                scissorI32 = RectI32(3, 2, 4, 3),
+            ),
+        )
+        val color = ColorARGB.of(255, 78, 126, 219)
+
+        cases.forEach { fixture ->
+            val draw = w4cDraw(
+                fixture.curve,
+                color,
+                fixture.widthI32,
+                fixture.heightI32,
+                scissorI32 = fixture.scissorI32,
             )
-            val surface = Surface(1, 1)
-            surface.canvas { drawPath(path, Paint.fill(draw.color).copy(antiAlias = false)) }
+            val certificate = W4cPathFillCpuOracle.certifyCurveFixture(
+                fixture.widthI32,
+                fixture.heightI32,
+                draw,
+            )
+            assertIs<W4cPathFillCpuOracle.CurveFixtureCertificate.Certified>(certificate, certificate.toString())
+            val expectedPixels = W4cPathFillCpuOracle.render(fixture.widthI32, fixture.heightI32, listOf(draw))
+            val chordPixels = W4cPathFillCpuOracle.render(
+                fixture.widthI32,
+                fixture.heightI32,
+                listOf(
+                    w4cDraw(
+                        fixture.chord,
+                        color,
+                        fixture.widthI32,
+                        fixture.heightI32,
+                        scissorI32 = fixture.scissorI32,
+                    ),
+                ),
+            )
+            assertFalse(expectedPixels.contentEquals(chordPixels), fixture.name)
+
+            val surface = Surface(fixture.widthI32, fixture.heightI32)
+            surface.canvas {
+                if (fixture.scissorI32 != fullScissor) {
+                    clipRect(
+                        RectF32.ofLTRB(
+                            fixture.scissorI32.left.toFloat(),
+                            fixture.scissorI32.top.toFloat(),
+                            fixture.scissorI32.right.toFloat(),
+                            fixture.scissorI32.bottom.toFloat(),
+                        ),
+                        antiAlias = false,
+                    )
+                }
+                drawPath(fixture.curve, Paint.fill(color).copy(antiAlias = false))
+            }
 
             val result = surface.render()
 
             assertPreparedRouteEvidence(result)
-            assertPixelsEqual(W4cPathFillCpuOracle.render(1, 1, listOf(draw)), result.pixels)
+            assertPixelsEqual(expectedPixels, result.pixels)
         }
     }
 
