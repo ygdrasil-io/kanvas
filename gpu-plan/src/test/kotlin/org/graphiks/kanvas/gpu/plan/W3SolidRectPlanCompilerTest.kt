@@ -344,7 +344,10 @@ class W3SolidRectPlanCompilerTest {
         assertEquals(PlanResourceRole.LogicalTarget, target.role)
         assertEquals(0, target.ordinal)
         assertEquals(PlanResourceKind.Texture2D, target.kind)
-        assertEquals(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL, target.format)
+        assertEquals(
+            PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+            target.format,
+        )
         assertEquals(64, target.byteSize)
         assertEquals(SizeI32(4, 4), target.copyExtent())
         assertEquals(setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource), target.usages())
@@ -390,6 +393,7 @@ class W3SolidRectPlanCompilerTest {
         is GpuPlanSelection.Candidate -> compiler.plan(selected.candidate, capabilities, budget)
         is GpuPlanSelection.NotCandidate -> RenderPlanResult.GapNotMigrated(selected.diagnostics())
         is GpuPlanSelection.InvalidScene -> RenderPlanResult.InvalidScene(selected.diagnostics())
+        is GpuPlanSelection.ResourceLimitExceeded -> RenderPlanResult.ResourceLimitExceeded(selected.diagnostics())
     }
 
     private fun assertGap(

@@ -1,11 +1,13 @@
 package org.graphiks.kanvas.render.ir
 
 /**
- * Backend-neutral capacity of the indexed geometry emitted for one path edge fan.
+ * Backend-neutral legacy and `Unknown` capacity of the indexed geometry emitted
+ * for one path edge fan.
  *
  * Renderers may choose their own payload ABI, but a renderer that consumes this
- * route must preserve these public admission limits so Scene IR and Surface
- * configuration make the same boundedness promise.
+ * legacy/`Unknown` route must preserve these public admission limits so Scene IR
+ * and Surface configuration make the same boundedness promise. Sealed W4c plans
+ * use their immutable source-authority limits instead of this public ceiling.
  */
 public object RenderPathFanLimits {
     /** Maximum number of triangles in one path edge fan. */

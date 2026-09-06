@@ -81,6 +81,8 @@ import org.graphiks.kanvas.types.Vertices
 class GPUFramePathApiInventoryTest {
     @Test
     fun `public path defaults expose backend-neutral capacity limits`() {
+        assertEquals(1_024u, RenderConfig.MAX_PATH_FAN_TRIANGLES)
+        assertEquals(36_864u, RenderConfig.MAX_PATH_GEOMETRY_BYTES)
         assertEquals(
             RenderConfig.MAX_PATH_FAN_TRIANGLES,
             RenderConfig.DEFAULT.maxPathFanTriangles,

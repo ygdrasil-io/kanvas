@@ -27,6 +27,7 @@ public class CapabilityCompilerChain private constructor(
                 )
                 is GpuPlanSelection.NotCandidate -> gaps += selection.diagnostics()
                 is GpuPlanSelection.InvalidScene -> return selection
+                is GpuPlanSelection.ResourceLimitExceeded -> return selection
             }
         }
         return GpuPlanSelection.NotCandidate(gaps)

@@ -29,6 +29,13 @@ public sealed interface GpuPlanSelection {
 
         public fun diagnostics(): List<RenderDiagnostic> = values
     }
+
+    /** Semantic resource limits are terminal before a physical device is acquired. */
+    public class ResourceLimitExceeded(diagnostics: List<RenderDiagnostic>) : GpuPlanSelection {
+        private val values: List<RenderDiagnostic> = immutableDiagnostics(diagnostics)
+
+        public fun diagnostics(): List<RenderDiagnostic> = values
+    }
 }
 
 private fun immutableDiagnostics(diagnostics: List<RenderDiagnostic>): List<RenderDiagnostic> {

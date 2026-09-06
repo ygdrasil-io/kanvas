@@ -18,6 +18,7 @@ enum class GPUPathSourceAuthority {
     Unknown,
     DrawPathMoveLineLineImplicitCloseV1,
     DrawPathMoveLineLineExplicitCloseV1,
+    W4cPlannedPathFillV1,
     ;
 
     val isExactDirectTriangle: Boolean

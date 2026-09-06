@@ -25,6 +25,7 @@ import org.graphiks.kanvas.gpu.plan.PlanResourceKind
 import org.graphiks.kanvas.gpu.plan.PlanResourceLifetime
 import org.graphiks.kanvas.gpu.plan.PlanResourceRole
 import org.graphiks.kanvas.gpu.plan.PlanResourceUsage
+import org.graphiks.kanvas.gpu.plan.PlanTextureFormat
 import org.graphiks.kanvas.gpu.plan.RenderGraph
 import org.graphiks.kanvas.gpu.plan.SamplePlan
 import org.graphiks.kanvas.gpu.plan.SolidRectDraw
@@ -1018,7 +1019,7 @@ class GpuPlanTaskListLowererTest {
         }
         val target = PlanResource.of(
             PlanResourceRole.LogicalTarget, targetOrdinal, PlanResourceKind.Texture2D,
-            PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL, extent, targetByteSize,
+            PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), extent, targetByteSize,
             targetUsages,
             PlanResourceLifetime.FrameLocal, 0, 2,
         )

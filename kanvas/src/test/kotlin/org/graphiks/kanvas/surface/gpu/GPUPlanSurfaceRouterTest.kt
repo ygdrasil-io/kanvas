@@ -3,20 +3,24 @@ package org.graphiks.kanvas.surface.gpu
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.canvas.DrawPathSourceOperation
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.ClipStackOp
 import org.graphiks.kanvas.color.ColorSpace
+import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
+import org.graphiks.kanvas.geometry.toPathF32
 import org.graphiks.kanvas.gpu.renderer.planning.GpuFrameChannelOrder
 import org.graphiks.kanvas.gpu.renderer.planning.GpuFrameMetrics
 import org.graphiks.kanvas.gpu.renderer.planning.GpuFrameOutput
+import org.graphiks.kanvas.gpu.renderer.planning.GpuRenderContext
 import org.graphiks.kanvas.gpu.renderer.planning.GpuPlanSurfacePlanResult
 import org.graphiks.kanvas.gpu.renderer.planning.GpuPlanSurfaceReadyToken
 import org.graphiks.kanvas.gpu.renderer.planning.GpuPlanSurfaceSubmitResult
-import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
@@ -36,6 +40,7 @@ import org.graphiks.kanvas.surface.PixelFormat
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.surface.RenderResult
 import org.graphiks.kanvas.surface.RenderStats
+import org.graphiks.kanvas.surface.W4cPathFillCpuOracle
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.math.geometry.Point2F32
@@ -43,7 +48,173 @@ import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.matrix.Matrix3x3F32
 
+@OptIn(ExperimentalUnsignedTypes::class)
 class GPUPlanSurfaceRouterTest {
+    @Test
+    fun `hard edge triangle reaches the prepared W4c route instead of the legacy sentinel`() {
+        val triangle = Path().apply {
+            moveTo(0f, 0f)
+            lineTo(4f, 0f)
+            lineTo(0f, 4f)
+            close()
+        }
+        val expected = W4cPathFillCpuOracle.render(
+            widthI32 = 4,
+            heightI32 = 4,
+            draws = listOf(
+                W4cPathFillCpuOracle.Draw(
+                    path = triangle.toPathF32(),
+                    transform = Matrix3x3F32.Identity,
+                    color = ColorARGB.Red,
+                    scissorI32 = org.graphiks.math.geometry.RectI32(0, 0, 4, 4),
+                ),
+            ),
+        )
+        val readyToken = object : GpuPlanSurfaceReadyToken {}
+        val legacy = legacyResult()
+
+        val result = GPUPlanSurfaceRouter(
+            planPort = object : GPUPlanSurfacePort {
+                override fun plan(
+                    scene: SceneSnapshot,
+                    target: RenderTargetDescriptor,
+                    frameLocalBudgetBytes: Long,
+                ): GpuPlanSurfacePlanResult = GpuPlanSurfacePlanResult.Ready(readyToken)
+
+                override fun submit(token: GpuPlanSurfaceReadyToken): GpuPlanSurfaceSubmitResult =
+                    GpuPlanSurfaceSubmitResult.Completed(
+                        GpuFrameOutput.of(
+                            width = 4,
+                            height = 4,
+                            rowStrideBytes = 16,
+                            channelOrder = GpuFrameChannelOrder.RGBA,
+                            bytes = expected.toByteArray(),
+                            metrics = GpuFrameMetrics(1, 1, 1, 1f, true),
+                            diagnostics = emptyList(),
+                            structuralSteps = emptyList(),
+                            nativeEvidenceCounters = emptyMap(),
+                            nativeEvidenceScopeKinds = listOf("Render", "Readback"),
+                        ),
+                    )
+            },
+        ).render(
+            operations = listOf(
+                DisplayOp.DrawPath(
+                    triangle,
+                    Paint.fill(ColorARGB.Red).copy(antiAlias = false),
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+            ),
+            width = 4,
+            height = 4,
+            format = PixelFormat.RGBA8,
+            config = RenderConfig.DEFAULT,
+            legacy = { legacy },
+        )
+
+        assertContentEquals(expected, result.pixels)
+        assertFalse(result.pixels.contentEquals(legacy.pixels))
+        assertEquals(setOf("Render", "Readback"), result.nativeEvidenceScopeKinds.toSet())
+    }
+
+    @Test
+    fun `text expanded paths remain on the legacy sentinel before W4c planning`() {
+        val path = Path().apply {
+            moveTo(0f, 0f)
+            lineTo(1f, 0f)
+            lineTo(0f, 1f)
+            close()
+        }
+        val legacy = legacyResult()
+
+        val result = GPUPlanSurfaceRouter(
+            planPort = object : GPUPlanSurfacePort {
+                override fun plan(
+                    scene: SceneSnapshot,
+                    target: RenderTargetDescriptor,
+                    frameLocalBudgetBytes: Long,
+                ): GpuPlanSurfacePlanResult = error("TEXT_EXPANDED_PATH must not reach prepared planning")
+
+                override fun submit(token: GpuPlanSurfaceReadyToken): GpuPlanSurfaceSubmitResult =
+                    error("TEXT_EXPANDED_PATH must not submit a prepared frame")
+            },
+        ).render(
+            operations = listOf(
+                DisplayOp.DrawPath.withSourceOperation(
+                    path = path,
+                    paint = Paint.fill(ColorARGB.Red).copy(antiAlias = false),
+                    transform = Matrix3x3F32.Identity,
+                    clip = ClipStack.WideOpen,
+                    sourceOperation = DrawPathSourceOperation.TEXT_EXPANDED,
+                ),
+            ),
+            width = 1,
+            height = 1,
+            format = PixelFormat.RGBA8,
+            config = RenderConfig.DEFAULT,
+            legacy = { legacy },
+        )
+
+        assertContentEquals(legacy.pixels, result.pixels)
+    }
+
+    @Test
+    fun `W4c semantic exclusions retain the legacy sentinel before promotion`() {
+        val triangle = Path().apply {
+            moveTo(0f, 0f)
+            lineTo(4f, 0f)
+            lineTo(0f, 4f)
+            close()
+        }
+        val hardFill = Paint.fill(ColorARGB.Red).copy(antiAlias = false)
+        val path = DisplayOp.DrawPath(triangle, hardFill, Matrix3x3F32.Identity, ClipStack.WideOpen)
+        val inverse = Path().apply {
+            moveTo(0f, 0f)
+            lineTo(4f, 0f)
+            lineTo(0f, 4f)
+            close()
+            fillType = FillType.INVERSE_WINDING
+        }
+        val cases = listOf(
+            "mixed-frame" to listOf(
+                path,
+                DisplayOp.DrawRect(
+                    RectF32.ofLTRB(0f, 0f, 1f, 1f),
+                    hardFill,
+                    Matrix3x3F32.Identity,
+                    ClipStack.WideOpen,
+                ),
+            ),
+            "antialias" to listOf(path.copy(paint = hardFill.copy(antiAlias = true))),
+            "inverse" to listOf(
+                DisplayOp.DrawPath(inverse, hardFill, Matrix3x3F32.Identity, ClipStack.WideOpen),
+            ),
+            "stroke" to listOf(
+                path.copy(paint = Paint.stroke(ColorARGB.Red, width = 1f).copy(antiAlias = false)),
+            ),
+        )
+
+        val context = GpuRenderContext.createProduction()
+        try {
+            cases.forEach { (label, operations) ->
+                val legacy = legacyResult()
+                val result = GPUPlanSurfaceRouter(planPort = capabilityChainPort(context)).render(
+                    operations = operations,
+                    width = 4,
+                    height = 4,
+                    format = PixelFormat.RGBA8,
+                    config = RenderConfig.DEFAULT,
+                    legacy = { legacy },
+                )
+
+                assertContentEquals(legacy.pixels, result.pixels, label)
+            }
+        } finally {
+            context.close()
+        }
+    }
+
     @Test
     fun `mixed solid rect and rrect frame returns the prepared result`() {
         val readyToken = object : GpuPlanSurfaceReadyToken {}
@@ -136,47 +307,36 @@ class GPUPlanSurfaceRouterTest {
     }
 
     @Test
-    fun `double rounded rectangles and paths retain the legacy frame before planning`() {
-        val cases = listOf(
-            DisplayOp.DrawDRRect(
-                roundedRect(),
-                RRectF32.of(RectF32.ofLTRB(2f, 2f, 3f, 3f), radius = 0.5f),
-                Paint.fill(ColorARGB.Red),
-                Matrix3x3F32.Identity,
-                ClipStack.WideOpen,
-            ),
-            DisplayOp.DrawPath(
-                Path().addRect(RectF32.ofLTRB(0f, 0f, 4f, 4f)),
-                Paint.fill(ColorARGB.Red),
-                Matrix3x3F32.Identity,
-                ClipStack.WideOpen,
-            ),
+    fun `double rounded rectangles retain the legacy frame before planning`() {
+        val operation = DisplayOp.DrawDRRect(
+            roundedRect(),
+            RRectF32.of(RectF32.ofLTRB(2f, 2f, 3f, 3f), radius = 0.5f),
+            Paint.fill(ColorARGB.Red),
+            Matrix3x3F32.Identity,
+            ClipStack.WideOpen,
+        )
+        val legacy = legacyResult()
+        val result = GPUPlanSurfaceRouter(
+            planPort = object : GPUPlanSurfacePort {
+                override fun plan(
+                    scene: SceneSnapshot,
+                    target: RenderTargetDescriptor,
+                    frameLocalBudgetBytes: Long,
+                ): GpuPlanSurfacePlanResult = error("DrawDRRect must not reach planning")
+
+                override fun submit(token: GpuPlanSurfaceReadyToken): GpuPlanSurfaceSubmitResult =
+                    error("DrawDRRect must not submit a prepared frame")
+            },
+        ).render(
+            operations = listOf(operation),
+            width = 4,
+            height = 4,
+            format = PixelFormat.RGBA8,
+            config = RenderConfig.DEFAULT,
+            legacy = { legacy },
         )
 
-        cases.forEach { operation ->
-            val legacy = legacyResult()
-            val result = GPUPlanSurfaceRouter(
-                planPort = object : GPUPlanSurfacePort {
-                    override fun plan(
-                        scene: SceneSnapshot,
-                        target: RenderTargetDescriptor,
-                        frameLocalBudgetBytes: Long,
-                    ): GpuPlanSurfacePlanResult = error("DrawDRRect and DrawPath must not reach planning")
-
-                    override fun submit(token: GpuPlanSurfaceReadyToken): GpuPlanSurfaceSubmitResult =
-                        error("DrawDRRect and DrawPath must not submit a prepared frame")
-                },
-            ).render(
-                operations = listOf(operation),
-                width = 4,
-                height = 4,
-                format = PixelFormat.RGBA8,
-                config = RenderConfig.DEFAULT,
-                legacy = { legacy },
-            )
-
-            assertContentEquals(legacy.pixels, result.pixels, operation::class.simpleName)
-        }
+        assertContentEquals(legacy.pixels, result.pixels)
     }
 
     @Test
@@ -264,9 +424,15 @@ class GPUPlanSurfaceRouterTest {
     }
 
     @Test
-    fun `ready submission terminal never returns the legacy pixel sentinel`() {
+    fun `ready W4c submission terminal never returns the legacy pixel sentinel`() {
         val legacy = legacyResult()
         val readyToken = object : GpuPlanSurfaceReadyToken {}
+        val triangle = Path().apply {
+            moveTo(0f, 0f)
+            lineTo(1f, 0f)
+            lineTo(0f, 1f)
+            close()
+        }
 
         val failure = assertFailsWith<GPUPlanSurfaceTerminalException> {
             GPUPlanSurfaceRouter(
@@ -291,9 +457,9 @@ class GPUPlanSurfaceRouterTest {
                 },
             ).render(
                 operations = listOf(
-                    DisplayOp.DrawColor(
-                        ColorARGB.Red,
-                        BlendMode.SRC_OVER,
+                    DisplayOp.DrawPath(
+                        triangle,
+                        Paint.fill(ColorARGB.Red).copy(antiAlias = false),
                         Matrix3x3F32.Identity,
                         ClipStack.WideOpen,
                     ),
@@ -323,6 +489,19 @@ class GPUPlanSurfaceRouterTest {
             )
         },
     )
+
+    private fun capabilityChainPort(context: GpuRenderContext): GPUPlanSurfacePort = object : GPUPlanSurfacePort {
+        private val executor = context.planSurfaceExecutor()
+
+        override fun plan(
+            scene: SceneSnapshot,
+            target: RenderTargetDescriptor,
+            frameLocalBudgetBytes: Long,
+        ): GpuPlanSurfacePlanResult = executor.plan(scene, target, frameLocalBudgetBytes)
+
+        override fun submit(token: GpuPlanSurfaceReadyToken): GpuPlanSurfaceSubmitResult =
+            executor.submit(token)
+    }
 
     private fun legacyResult() = RenderResult(
         pixels = ubyteArrayOf(9u, 8u, 7u, 6u),

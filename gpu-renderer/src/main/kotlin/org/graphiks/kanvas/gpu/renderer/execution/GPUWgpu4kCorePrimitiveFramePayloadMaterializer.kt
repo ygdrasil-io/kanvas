@@ -40,6 +40,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedSemanticA
 import org.graphiks.kanvas.gpu.renderer.passes.W3SessionScratchV1
 import org.graphiks.kanvas.gpu.renderer.passes.W4aSessionScratchV1
 import org.graphiks.kanvas.gpu.renderer.passes.W4bSessionScratchV1
+import org.graphiks.kanvas.gpu.renderer.passes.W4cSessionScratchV1
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveDirectPathDepthStencilState
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveStructuralColorFormat
@@ -90,6 +91,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedConcreteResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPayload
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
+import org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity
 
 private fun GPUColorFormat.isCorePrimitiveSceneTargetFormat(): Boolean =
     this == GPUColorFormat.RGBA8Unorm ||
@@ -198,6 +200,33 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         }
 
         val w4aCandidateRenderSteps = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        if (framePlan.hasSealedW4cSessionMarker()) {
+            val w4cPackets = w4aCandidateRenderSteps.flatMap(GPUFrameStep.RenderPassStep::drawPackets)
+            val w4cScratch = w4cPackets
+                .mapNotNull { packet -> packet.corePrimitivePreparedAuthority?.w4cSessionScratch }
+                .firstOrNull()
+                ?: return refused(
+                    "invalid.native-core-primitive.w4c-scratch",
+                    "W4c task-list markers require one common sealed scratch identity.",
+                )
+            if (w4cPackets.isEmpty() || w4cPackets.any { packet ->
+                    packet.corePrimitivePreparedAuthority?.w4cSessionScratch !== w4cScratch
+                }
+            ) {
+                return refused(
+                    "invalid.native-core-primitive.w4c-scratch",
+                    "W4c packets do not share one sealed scratch identity.",
+                )
+            }
+            return materializeW4cSessionScratch(
+                framePlan = framePlan,
+                encoderPlan = encoderPlan,
+                resources = resources,
+                generationSeal = generationSeal,
+                renderSteps = w4aCandidateRenderSteps,
+                scratch = w4cScratch,
+            )
+        }
         if (framePlan.hasSealedW4bSessionMarker()) {
             val w4bRender = w4aCandidateRenderSteps.singleOrNull()
                 ?: return refused(
@@ -1677,6 +1706,538 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 "failed.native-core-primitive.materialization",
                 "Public wgpu4k CorePrimitive materialization failed: " +
                     "${failure::class.simpleName.orEmpty()}: ${failure.message.orEmpty()}.",
+            )
+        }
+    }
+
+    private fun GPUCorePrimitivePathStencilGeometrySnapshot.hasExactW4cGeometry(
+        expectedVertices: FloatArray,
+        expectedIndices: IntArray,
+    ): Boolean {
+        if (vertexCount * 2 != expectedVertices.size || indexCount != expectedIndices.size) return false
+        val actualVertices = FloatArray(expectedVertices.size)
+        val actualIndices = IntArray(expectedIndices.size)
+        copyVerticesInto(actualVertices)
+        copyIndicesInto(actualIndices)
+        return actualVertices.indices.all { index ->
+            java.lang.Float.floatToRawIntBits(actualVertices[index]) ==
+                java.lang.Float.floatToRawIntBits(expectedVertices[index])
+        } && actualIndices.contentEquals(expectedIndices)
+    }
+
+    /**
+     * Materializes the Task5 W4c path-fill envelope without returning to any generic geometry
+     * batching path.  The only geometry admitted here is the immutable math copy retained by the
+     * scratch; V/I/U offsets, the producer/cover pairing, and the single physical D24S8 lease are
+     * all re-checked against that envelope before a native handle is acquired.
+     */
+    private fun materializeW4cSessionScratch(
+        framePlan: GPUFramePlan,
+        encoderPlan: GPUCommandEncoderPlan,
+        resources: GPUPreparedResourceSet,
+        generationSeal: GPUPreparedGenerationSeal,
+        renderSteps: List<GPUFrameStep.RenderPassStep>,
+        scratch: W4cSessionScratchV1,
+    ): GPUPreparedNativeFramePayloadMaterialization {
+        class PostCheckoutRefusal(
+            val refusalCode: String,
+            val refusalMessage: String,
+        ) : RuntimeException(refusalMessage)
+
+        data class Entry(
+            val sourceStepIndex: Int,
+            val renderStep: GPUFrameStep.RenderPassStep,
+            val scope: GPUCommandEncoderScopePlan,
+            val packet: GPUDrawPacket,
+            val semantic: GPUDrawSemanticPayload.CorePrimitive,
+            val drawIndex: Int,
+        )
+        val readbackStep = framePlan.steps.filterIsInstance<GPUFrameStep.ReadbackCopyStep>().singleOrNull()
+            ?: return refused("invalid.native-core-primitive.w4c-readback", "W4c requires one sealed readback step.")
+        val expectedPlanId = readbackStep.request.requestId.value
+            .takeIf { it.startsWith("w4c.") && it.endsWith(".readback") }
+            ?.removePrefix("w4c.")?.removeSuffix(".readback")?.takeIf(String::isNotBlank)
+            ?: return refused("invalid.native-core-primitive.w4c-scratch", "W4c readback identity cannot bind the scratch plan.")
+        val targetFormat = framePlan.corePrimitiveSceneTargetDescriptor(scratch.target)?.format
+            ?: return refused("invalid.native-core-primitive.w4c-target", "W4c target descriptor is missing.")
+        val drawIndexByCommand = scratch.draws.mapIndexed { index, draw -> draw.commandId to index }.toMap()
+        val entries = mutableListOf<Entry>()
+        for (sourceStepIndex in framePlan.steps.indices) {
+            val render = framePlan.steps[sourceStepIndex] as? GPUFrameStep.RenderPassStep ?: continue
+            val packet = render.drawPackets.singleOrNull()
+                ?: return refused("invalid.native-core-primitive.w4c-scratch", "W4c requires one packet in every render scope.")
+            val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive
+                ?: return refused("invalid.native-core-primitive.w4c-scratch", "W4c render packets require CorePrimitive semantics.")
+            val authority = packet.corePrimitivePreparedAuthority
+                ?: return refused("invalid.native-core-primitive.w4c-scratch", "W4c render packets require prepared authority.")
+            val drawIndex = drawIndexByCommand[packet.commandIdValue]
+                ?: return refused("invalid.native-core-primitive.w4c-scratch", "W4c packet command is absent from its scratch.")
+            val scope = encoderPlan.scopes.singleOrNull {
+                it.sourceStepIndex == sourceStepIndex && it.operationKind == GPUEncoderOperationKind.Render
+            } ?: return refused("invalid.native-core-primitive.w4c-scope", "W4c render scope is absent from the encoder plan.")
+            if (authority.w4cSessionScratch !== scratch ||
+                authority.w3SessionScratch != null || authority.w4aSessionScratch != null ||
+                authority.w4bSessionScratch != null || !scratch.matchesPreparedPacket(
+                    expectedPlanId,
+                    framePlan.capabilitySeal.sealHash,
+                    packet,
+                    authority.structuralPipelineKey,
+                    authority.renderPipelineKey,
+                )
+            ) {
+                return refused("invalid.native-core-primitive.w4c-scratch", "W4c prepared packet authority contradicts its scratch.")
+            }
+            entries += Entry(sourceStepIndex, render, scope, packet, semantic, drawIndex)
+        }
+        val expectedRenderCount = scratch.draws.sumOf { draw ->
+            if (draw.copyGeometryF32().copyDirectTriangleF32OrNull() != null) 1 else 2
+        }
+        val readbackScope = encoderPlan.scopes.singleOrNull {
+            it.sourceStepIndex == framePlan.steps.indexOf(readbackStep) &&
+                it.operationKind == GPUEncoderOperationKind.Readback
+        } ?: return refused("invalid.native-core-primitive.w4c-scope", "W4c readback scope is absent from the encoder plan.")
+        if (renderSteps.size != expectedRenderCount || entries.size != expectedRenderCount ||
+            encoderPlan.scopes.size != expectedRenderCount + 1 ||
+            targetFormat != GPUColorFormat.RGBA8UnormSrgb ||
+            generationSeal.capabilitySealHash != framePlan.capabilitySeal.sealHash ||
+            preparedSceneTarget.width != scratch.targetBounds.width ||
+            preparedSceneTarget.height != scratch.targetBounds.height ||
+            preparedSceneTarget.deviceGeneration != generationSeal.deviceGeneration ||
+            preparedSceneTarget.targetGeneration != generationSeal.targetGeneration ||
+            !scratch.matches(
+                expectedPlanId,
+                framePlan.capabilitySeal.sealHash,
+                generationSeal.deviceGeneration.value,
+                scratch.target,
+                scratch.staging,
+                scratch.targetBounds,
+            )
+        ) {
+            return refused("invalid.native-core-primitive.w4c-scratch", "W4c encoder scratch is stale or contradicts the closed frame authority.")
+        }
+        var entryCursor = 0
+        scratch.draws.forEachIndexed { drawIndex, draw ->
+            val direct = draw.copyGeometryF32().copyDirectTriangleF32OrNull()
+            val expectedRoles = if (direct != null) {
+                listOf(GPUDrawPacketRole.Shading)
+            } else {
+                listOf(GPUDrawPacketRole.PathStencilProducer, GPUDrawPacketRole.PathStencilCover)
+            }
+            val drawEntries = entries.subList(entryCursor, entryCursor + expectedRoles.size)
+            entryCursor += expectedRoles.size
+            if (drawEntries.map(Entry::drawIndex).any { it != drawIndex } ||
+                drawEntries.map { it.packet.role } != expectedRoles ||
+                drawEntries.any { entry ->
+                    entry.packet.commandIdValue != draw.commandId ||
+                        entry.semantic.scissorBounds != draw.copyScissorBounds() ||
+                        entry.scope.corePrimitiveNativeScopeRouteSeal.let { routeSeal ->
+                            val route = routeSeal as? GPUCorePrimitiveNativeScopeRouteSeal.Routes
+                                ?: return@any true
+                            val coverage = route.uniformCoverage as?
+                                GPUCorePrimitiveNativeScopeUniformCoverage.ExactCommandRange
+                                ?: return@any true
+                            route.uniformPlan !== scratch.uniformPlan ||
+                                route.commandIds != listOf(draw.commandId) ||
+                                route.flattenedPacketIds != listOf(entry.packet.packetId) ||
+                                coverage.startIndex != draw.uniformSlotIndex || coverage.commandCount != 1
+                        }
+                }
+            ) {
+                return refused("invalid.native-core-primitive.w4c-route", "W4c routes, packet order, or Uniform32 ranges are not exact.")
+            }
+            if (direct == null) {
+                val producer = drawEntries[0].renderStep
+                val cover = drawEntries[1].renderStep
+                val expectedDepthStencilResource = scratch.target.value
+                    .removeSuffix(".target")
+                    .plus(".depth-stencil")
+                val hasExactDepthStencilUse = { step: GPUFrameStep.RenderPassStep ->
+                    step.resourceUses.size == 1 && step.resourceUses.single().let { use ->
+                        use.role == GPUFrameResourceRole.PathDepthStencil &&
+                            use.usage == GPUFrameResourceUsage.RenderAttachment && use.write &&
+                            use.resource.value == expectedDepthStencilResource
+                    }
+                }
+                if (scratch.depthStencilResourceId == null || !hasExactDepthStencilUse(producer) ||
+                    !hasExactDepthStencilUse(cover)
+                ) {
+                    return refused("invalid.native-core-primitive.w4c-depth-stencil", "W4c path passes require one exact late-bound D24S8 authority.")
+                }
+            }
+        }
+        if (entryCursor != entries.size) {
+            return refused("invalid.native-core-primitive.w4c-route", "W4c render scope count differs from its scratch draw order.")
+        }
+        val output = resources.outputOwnedReadbacks.singleOrNull()
+            ?: return refused("invalid.native-core-primitive.w4c-readback", "W4c output-owned readback is missing.")
+        if (output.stagingResource != scratch.staging || output.request != readbackStep.request ||
+            output.layout.width != scratch.targetBounds.width || output.layout.height != scratch.targetBounds.height ||
+            output.stagingLease.backingBufferBytes < output.layout.totalBufferBytes
+        ) {
+            return refused("invalid.native-core-primitive.w4c-readback", "W4c output-owned readback contradicts its sealed staging authority.")
+        }
+
+        val vertexData = FloatArray((scratch.vertexUsefulBytes / Float.SIZE_BYTES).toInt())
+        val indexData = IntArray((scratch.indexUsefulBytes / Int.SIZE_BYTES).toInt())
+        val uniformData = ByteArray(scratch.uniformPlan.totalBytes.toInt())
+        val geometrySlicesByStep = linkedMapOf<Int, GPUW4cCorePrimitiveGeometrySlice>()
+        scratch.draws.forEachIndexed { drawIndex, draw ->
+            val geometry = draw.copyGeometryF32()
+            val matchingEntries = entries.filter { it.drawIndex == drawIndex }
+            val vertexStart = (draw.vertexOffsetBytes / Float.SIZE_BYTES).toInt()
+            val indexStart = (draw.indexOffsetBytes / Int.SIZE_BYTES).toInt()
+            if (draw.vertexOffsetBytes % Float.SIZE_BYTES != 0L ||
+                draw.indexOffsetBytes % Int.SIZE_BYTES != 0L
+            ) return refused("invalid.native-core-primitive.w4c-geometry", "W4c scratch geometry offsets are not aligned.")
+            val direct = geometry.copyDirectTriangleF32OrNull()
+            if (direct != null) {
+                val vertices = direct.copyVerticesF32()
+                val indices = direct.copyIndicesI32()
+                if (matchingEntries.size != 1 || vertices.size.toLong() * Float.SIZE_BYTES != draw.vertexRangeBytes ||
+                    indices.size.toLong() * Int.SIZE_BYTES != draw.indexRangeBytes || indices.isEmpty()
+                ) return refused("invalid.native-core-primitive.w4c-geometry", "W4c direct math ranges are not byte-exact.")
+                vertices.copyInto(vertexData, vertexStart)
+                indices.copyInto(indexData, indexStart)
+                geometrySlicesByStep[matchingEntries.single().sourceStepIndex] = GPUW4cCorePrimitiveGeometrySlice(
+                    firstIndex = indexStart,
+                    indexCount = indices.size,
+                    baseVertex = vertexStart / 2,
+                    vertexCount = vertices.size / 2,
+                    maxLocalIndex = requireNotNull(indices.maxOrNull()),
+                )
+            } else {
+                val producerEntry = matchingEntries.getOrNull(0)
+                    ?.takeIf { it.packet.role == GPUDrawPacketRole.PathStencilProducer }
+                    ?: return refused("invalid.native-core-primitive.w4c-geometry", "W4c edge fan is missing its producer route.")
+                val coverEntry = matchingEntries.getOrNull(1)
+                    ?.takeIf { it.packet.role == GPUDrawPacketRole.PathStencilCover }
+                    ?: return refused("invalid.native-core-primitive.w4c-geometry", "W4c edge fan is missing its cover route.")
+                val producerRoute = producerEntry.scope.corePrimitiveNativeScopeRouteSeal as?
+                    GPUCorePrimitiveNativeScopeRouteSeal.Routes
+                    ?: return refused("invalid.native-core-primitive.w4c-route", "W4c producer route is unavailable.")
+                val coverRoute = coverEntry.scope.corePrimitiveNativeScopeRouteSeal as?
+                    GPUCorePrimitiveNativeScopeRouteSeal.Routes
+                    ?: return refused("invalid.native-core-primitive.w4c-route", "W4c cover route is unavailable.")
+                val producerGeometry = (producerRoute.orderedUnits.singleOrNull() as?
+                    GPUCorePrimitiveNativeScopeRouteUnit.PathProducer)?.geometry
+                    ?: return refused("invalid.native-core-primitive.w4c-route", "W4c producer geometry is unavailable.")
+                val coverGeometry = (coverRoute.orderedUnits.singleOrNull() as?
+                    GPUCorePrimitiveNativeScopeRouteUnit.PathCover)?.geometry
+                    ?: return refused("invalid.native-core-primitive.w4c-route", "W4c cover geometry is unavailable.")
+                val fan = geometry.copyStencilEdgeFanF32OrNull()
+                    ?: return refused("invalid.native-core-primitive.w4c-geometry", "W4c math fan is unavailable.")
+                val producerVertices = fan.copyVerticesF32()
+                val producerIndices = fan.copyIndicesI32()
+                val coverBounds = draw.copyScissorBounds()
+                val coverVertices = floatArrayOf(
+                    coverBounds.left.toFloat(), coverBounds.top.toFloat(),
+                    coverBounds.right.toFloat(), coverBounds.top.toFloat(),
+                    coverBounds.right.toFloat(), coverBounds.bottom.toFloat(),
+                    coverBounds.left.toFloat(), coverBounds.bottom.toFloat(),
+                )
+                val coverIndices = intArrayOf(0, 2, 1, 0, 3, 2)
+                if (!producerGeometry.hasExactW4cGeometry(producerVertices, producerIndices) ||
+                    !coverGeometry.hasExactW4cGeometry(coverVertices, coverIndices)
+                ) {
+                    return refused(
+                        "invalid.native-core-primitive.w4c-route",
+                        "W4c producer and cover routes must retain the exact sealed math geometry.",
+                    )
+                }
+                val producerVertexBytes = producerVertices.size.toLong() * Float.SIZE_BYTES
+                val producerIndexBytes = producerIndices.size.toLong() * Int.SIZE_BYTES
+                val coverVertexBytes = coverVertices.size.toLong() * Float.SIZE_BYTES
+                val coverIndexBytes = coverIndices.size.toLong() * Int.SIZE_BYTES
+                if (producerVertexBytes + coverVertexBytes != draw.vertexRangeBytes ||
+                    producerIndexBytes + coverIndexBytes != draw.indexRangeBytes
+                ) return refused("invalid.native-core-primitive.w4c-geometry", "W4c fan and cover do not fill their sealed ranges.")
+                producerVertices.copyInto(vertexData, vertexStart)
+                producerIndices.copyInto(indexData, indexStart)
+                val coverVertexStart = vertexStart + producerVertices.size
+                val coverIndexStart = indexStart + producerIndices.size
+                coverVertices.copyInto(vertexData, coverVertexStart)
+                coverIndices.copyInto(indexData, coverIndexStart)
+                geometrySlicesByStep[producerEntry.sourceStepIndex] = GPUW4cCorePrimitiveGeometrySlice(
+                    firstIndex = indexStart,
+                    indexCount = producerIndices.size,
+                    baseVertex = vertexStart / 2,
+                    vertexCount = producerVertices.size / 2,
+                    maxLocalIndex = requireNotNull(producerIndices.maxOrNull()),
+                )
+                geometrySlicesByStep[coverEntry.sourceStepIndex] = GPUW4cCorePrimitiveGeometrySlice(
+                    firstIndex = coverIndexStart,
+                    indexCount = coverIndices.size,
+                    baseVertex = coverVertexStart / 2,
+                    vertexCount = coverVertices.size / 2,
+                    maxLocalIndex = requireNotNull(coverIndices.maxOrNull()),
+                )
+            }
+            val uniform = matchingEntries.firstOrNull()?.semantic?.payloadRef?.uniformBlock?.bytes
+                ?: return refused("invalid.native-core-primitive.w4c-uniform", "W4c packet is missing its Uniform32 bytes.")
+            if (matchingEntries.any { entry -> entry.semantic.payloadRef.uniformBlock?.bytes != uniform } ||
+                uniform.size.toLong() != W4cSessionScratchV1.UNIFORM_PAYLOAD_BYTES
+            ) {
+                return refused("invalid.native-core-primitive.w4c-uniform", "W4c producer and cover must retain identical Uniform32 bytes.")
+            }
+            val slot = scratch.uniformPlan.slots[draw.uniformSlotIndex]
+            if (slot.alignedOffset > Int.MAX_VALUE.toLong() ||
+                slot.alignedOffset + uniform.size > uniformData.size ||
+                slot.payloadBytes != W4cSessionScratchV1.UNIFORM_PAYLOAD_BYTES
+            ) {
+                return refused("invalid.native-core-primitive.w4c-uniform", "W4c Uniform32 slot range is not exact.")
+            }
+            uniform.forEachIndexed { index, value -> uniformData[slot.alignedOffset.toInt() + index] = value.toByte() }
+        }
+        if (vertexData.size.toLong() * Float.SIZE_BYTES != scratch.vertexUsefulBytes ||
+            indexData.size.toLong() * Int.SIZE_BYTES != scratch.indexUsefulBytes ||
+            uniformData.size.toLong() != scratch.uniformPlan.totalBytes
+        ) {
+            return refused("invalid.native-core-primitive.w4c-packing", "W4c V/I/U packing is not exact.")
+        }
+
+        val acquisitions = linkedMapOf<
+            GPUCorePrimitiveRenderPipelineStructuralKey,
+            GPUWgpu4kCorePrimitiveSessionCacheAcquire.Acquired,
+        >()
+        val cacheKeys = linkedMapOf<
+            GPUCorePrimitiveRenderPipelineStructuralKey,
+            GPUWgpu4kCorePrimitivePipelineCacheKey,
+        >()
+        entries.forEach { entry ->
+            val structural = requireNotNull(entry.packet.corePrimitivePreparedAuthority).structuralPipelineKey
+            if (structural !in cacheKeys) {
+                val mapping = mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(structural)
+                    as? GPUWgpu4kCorePrimitivePipelineMapping.Mapped
+                    ?: return refused("unsupported.native-core-primitive.w4c-pipeline", "W4c structural pipeline is unavailable.")
+                cacheKeys[structural] = GPUWgpu4kCorePrimitivePipelineCacheKey(
+                    mapping.componentIdentity,
+                    mapping.identity,
+                )
+            }
+        }
+        if (cacheKeys.values.none { it.componentIdentity == PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY }) {
+            return refused("invalid.native-core-primitive.w4c-pipeline", "W4c requires the standard shared Uniform32 component.")
+        }
+        cacheKeys.forEach { (structural, key) ->
+            when (val acquired = sessionCache.acquire(key)) {
+                is GPUWgpu4kCorePrimitiveSessionCacheAcquire.Acquired -> acquisitions[structural] = acquired
+                is GPUWgpu4kCorePrimitiveSessionCacheAcquire.Refused -> return refusedSessionCacheAcquire(acquired.reason)
+            }
+        }
+        val hasStencil = scratch.draws.any { draw ->
+            draw.copyGeometryF32().copyStencilEdgeFanF32OrNull() != null
+        }
+        val expectedCapacities = GPUWgpu4kCorePrimitiveFramePoolCapacities(
+            scratch.vertexCapacityBytes,
+            scratch.indexCapacityBytes,
+            scratch.uniformCapacityBytes,
+        )
+        val pathRequirement = if (hasStencil) {
+            GPUWgpu4kCorePrimitivePathDepthStencilRequirement(
+                width = scratch.targetBounds.width,
+                height = scratch.targetBounds.height,
+                format = GPUTextureFormat.Depth24PlusStencil8,
+                sampleCount = 1,
+                usage = GPUTextureUsage.RenderAttachment,
+                target = scratch.target,
+                depthStencilAttachment = GPUTargetIdentity(
+                    scratch.target.value.removeSuffix(".target").plus(".depth-stencil"),
+                ),
+                deviceGeneration = generationSeal.deviceGeneration,
+                targetGeneration = generationSeal.targetGeneration,
+            )
+        } else {
+            null
+        }
+        synchronized(this) {
+            if (closed) return refused("unsupported.native-core-primitive.materializer-state", "The W4c materializer is closed.")
+            materializing = true
+        }
+        var lease: GPUWgpu4kCorePrimitiveFramePoolLease? = null
+        var transferred = false
+        return try {
+            lease = when (val checkout = sessionCache.acquireFrame(
+                GPUWgpu4kCorePrimitiveFramePoolRequirements(
+                    deviceGeneration = generationSeal.deviceGeneration,
+                    vertexBytes = scratch.vertexUsefulBytes,
+                    indexBytes = scratch.indexUsefulBytes,
+                    uniformBytes = scratch.uniformPlan.totalBytes,
+                    expectedCapacities = expectedCapacities,
+                    pathDepthStencil = pathRequirement,
+                    componentIdentity = PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY,
+                    sampleCount = 1,
+                    additionalComponentIdentities = cacheKeys.values.map(
+                        GPUWgpu4kCorePrimitivePipelineCacheKey::componentIdentity,
+                    ).filterNot { it == PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY }.toSet(),
+                ),
+            )) {
+                is GPUWgpu4kCorePrimitiveFramePoolCheckout.Acquired -> checkout.lease
+                is GPUWgpu4kCorePrimitiveFramePoolCheckout.Refused -> {
+                    synchronized(this) { materializing = false }
+                    return refusedPoolCheckout(checkout.reason)
+                }
+            }
+            val pooled = requireNotNull(lease)
+            val pathHandles = pooled.handles.pathDepthStencil
+            if (pooled.capacities != expectedCapacities || pathHandles?.requirement != pathRequirement ||
+                (hasStencil != (pathHandles != null)) || pooled.handles.sampleCount != 1 ||
+                pooled.handles.msaaColor != null
+            ) {
+                throw PostCheckoutRefusal(
+                    "invalid.native-core-primitive.w4c-pool",
+                    "W4c acquired pool handles that differ from its sealed requirements.",
+                )
+            }
+            uploadExact(pooled.handles.vertexBuffer, ArrayBuffer.of(vertexData), scratch.vertexUsefulBytes, pooled.capacities.vertexBytes)
+            uploadExact(pooled.handles.indexBuffer, ArrayBuffer.of(indexData), scratch.indexUsefulBytes, pooled.capacities.indexBytes)
+            uploadExact(pooled.handles.uniformBuffer, ArrayBuffer.of(uniformData), scratch.uniformPlan.totalBytes, pooled.capacities.uniformBytes)
+            val (targetTexture, targetView) = preparedSceneTarget.borrow()
+            val stagingBuffer = device.createBuffer(
+                BufferDescriptor(
+                    size = output.stagingLease.backingBufferBytes.toULong(),
+                    usage = GPUBufferUsage.MapRead or GPUBufferUsage.CopyDst,
+                    mappedAtCreation = false,
+                    label = "Kanvas.frame.w4c.readback",
+                ),
+            ).tracked()
+            val generation = generationSeal.deviceGeneration
+            val targetOperand = GPUPreparedNativeTextureViewOperand(
+                targetView,
+                generation,
+                GPUPreparedNativeOperandOwnership.Borrowed,
+            )
+            val depthStencilOperand = pathHandles?.let { handles ->
+                GPUPreparedNativeTextureViewOperand(
+                    handles.view,
+                    generation,
+                    GPUPreparedNativeOperandOwnership.Borrowed,
+                )
+            }
+            val vertexOperand = GPUPreparedNativeBufferOperand(
+                pooled.handles.vertexBuffer,
+                generation,
+                GPUPreparedNativeOperandOwnership.Borrowed,
+                pooled.capacities.vertexBytes,
+            )
+            val indexOperand = GPUPreparedNativeBufferOperand(
+                pooled.handles.indexBuffer,
+                generation,
+                GPUPreparedNativeOperandOwnership.Borrowed,
+                pooled.capacities.indexBytes,
+            )
+            val pipelineOperands = acquisitions.mapValues { (_, acquired) ->
+                GPUPreparedNativeRenderPipelineOperand.fromCorePrimitiveAcquisition(acquired, generation)
+            }
+            val bindGroupOperands = pooled.handles.bindGroupsByComponentIdentity.mapValues { (_, bindGroup) ->
+                GPUPreparedNativeBindGroupOperand(bindGroup, generation, GPUPreparedNativeOperandOwnership.Borrowed)
+            }
+            val nativeRunPlans = entries.map { entry ->
+                val draw = scratch.draws[entry.drawIndex]
+                val slice = requireNotNull(geometrySlicesByStep[entry.sourceStepIndex]) {
+                    "W4c native geometry is absent for one sealed render scope"
+                }
+                val structural = requireNotNull(entry.packet.corePrimitivePreparedAuthority).structuralPipelineKey
+                val pipeline = requireNotNull(pipelineOperands[structural])
+                val componentIdentity = cacheKeys.getValue(structural).componentIdentity
+                val bindGroup = requireNotNull(bindGroupOperands[componentIdentity]) {
+                    "W4c requires one exact bind group for every structural component"
+                }
+                GPUW4cCorePrimitiveRenderScopePlan(
+                    sourceStepIndex = entry.sourceStepIndex,
+                    role = entry.packet.role,
+                    renderStep = entry.renderStep,
+                    semantic = entry.semantic,
+                    uniformOffset = scratch.uniformPlan.slots[draw.uniformSlotIndex].alignedOffset,
+                    geometry = slice,
+                    pipeline = pipeline,
+                    bindGroup = bindGroup,
+                )
+            }
+            val renderRun = GPUWgpu4kCorePrimitiveRenderRunMaterializer(
+                queue,
+                sessionCache,
+                limits,
+            ).materializeW4cAcceptedRuns(
+                plans = nativeRunPlans,
+                target = targetOperand,
+                pathDepthStencil = depthStencilOperand,
+                vertex = vertexOperand,
+                index = indexOperand,
+                vertexUsefulBytes = scratch.vertexUsefulBytes,
+                indexUsefulBytes = scratch.indexUsefulBytes,
+            )
+            val w4cRenderRun = when (renderRun) {
+                is GPUW4cCorePrimitiveRenderRunMaterialization.Ready -> renderRun
+                is GPUW4cCorePrimitiveRenderRunMaterialization.Refused -> throw PostCheckoutRefusal(
+                    renderRun.code,
+                    renderRun.message,
+                )
+            }
+            val renderOperands = w4cRenderRun.renderOperands
+            val pathViewAuthority = w4cRenderRun.pathDepthStencilViewAuthority
+            val readbackOperand = GPUPreparedNativeScopeOperand.Readback(
+                sourceStepIndex = readbackScope.sourceStepIndex,
+                source = GPUPreparedNativeTextureOperand(targetTexture, generation, GPUPreparedNativeOperandOwnership.Borrowed),
+                destination = GPUPreparedNativeBufferOperand(
+                    stagingBuffer,
+                    generation,
+                    GPUPreparedNativeOperandOwnership.OutputOwnedReadback,
+                ),
+                layout = GPUPreparedNativeReadbackLayout(
+                    output.request.sourceBounds.left,
+                    output.request.sourceBounds.top,
+                    output.layout.width,
+                    output.layout.height,
+                    output.layout.paddedBytesPerRow,
+                    output.layout.rowsPerImage,
+                    output.layout.bufferOffset,
+                    output.layout.totalBufferBytes,
+                    targetFormat.toCorePrimitiveGPUTextureFormat(),
+                ),
+            )
+            val operandsByStep = (renderOperands + readbackOperand).associateBy(
+                GPUPreparedNativeScopeOperand::sourceStepIndex,
+            )
+            val scopeOperandKeys = encoderPlan.scopes.map { it.nativeOperandKeys }
+            val scopeKeys = encoderPlan.scopes.mapIndexed { index, scope ->
+                GPUPreparedNativeScopeKey(
+                    scope.sourceStepIndex,
+                    scope.operationKind,
+                    scope.resourceGenerationLabels,
+                    scopeOperandKeys[index],
+                )
+            }
+            val payload = GPUPreparedNativeFramePayload(
+                identity = GPUPreparedNativeFrameIdentity(
+                    framePlan.frameId,
+                    encoderPlan.contextIdentity,
+                    encoderPlan.planId,
+                    generation,
+                    generationSeal.targetGeneration,
+                    scopeKeys,
+                ),
+                scopeOperands = encoderPlan.scopes.map { scope -> requireNotNull(operandsByStep[scope.sourceStepIndex]) },
+                scopeOperandKeys = scopeOperandKeys,
+                leaseLifecycle = GPUWgpu4kCorePrimitivePayloadLeaseLifecycle(pooled),
+                pathDepthStencilViewAuthority = pathViewAuthority,
+            )
+            synchronized(this) {
+                check(!closed) { "Native W4c materializer closed during materialization" }
+                preRegistrationHandles.transferAll()
+                materializing = false
+                transferred = true
+            }
+            GPUPreparedNativeFramePayloadMaterialization.Materialized(GPUPreparedNativeFrameDraft(payload))
+        } catch (refusal: PostCheckoutRefusal) {
+            if (!transferred) terminalizePooledLeaseBeforeRegistration(lease)
+            synchronized(this) { materializing = false; preRegistrationHandles.closeRetainingFailures() }
+            refused(refusal.refusalCode, refusal.refusalMessage)
+        } catch (failure: Throwable) {
+            if (!transferred) terminalizePooledLeaseBeforeRegistration(lease)
+            synchronized(this) { materializing = false; preRegistrationHandles.closeRetainingFailures() }
+            refused(
+                "failed.native-core-primitive.w4c-materialization",
+                "W4c native materialization failed: ${failure::class.simpleName.orEmpty()}: ${failure.message.orEmpty()}.",
             )
         }
     }

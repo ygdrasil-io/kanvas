@@ -391,9 +391,9 @@ class PathTessellatorTest {
     }
 
     @Test
-    fun `default edge fan contract refuses over 1024 triangles before allocation`() {
+    fun `legacy default edge fan contract refuses 1025 triangles before allocation`() {
         val flattened = FlattenedPath(
-            points = List(GPUPathEdgeFanPayloadContract.MAX_TRIANGLES.toInt() + 1) { index ->
+            points = List(1_025) { index ->
                 Point(index.toFloat(), (index % 2).toFloat())
             },
             contourStarts = listOf(0),

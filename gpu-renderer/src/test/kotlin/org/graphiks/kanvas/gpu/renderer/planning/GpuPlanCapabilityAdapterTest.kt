@@ -4,6 +4,8 @@ import io.ygdrasil.webgpu.GPUTextureFormat
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
+import org.graphiks.kanvas.gpu.plan.PlanDepthStencilFormat
 import org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat
 import org.graphiks.kanvas.gpu.plan.PlanOperationCapability
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
@@ -15,6 +17,58 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureFormatSampleSuppo
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureSampleCountSupport
 
 class GpuPlanCapabilityAdapterTest {
+    @Test
+    fun `adapter publishes W4c facts for render only D24S8 sample evidence`() {
+        val snapshot = assertIs<GpuPlanCapabilityAdapterResult.Supported>(
+            capabilities(depthStencilFormatSupported = false, depthStencilSamples = setOf(1))
+                .toPlanCapabilitySnapshot(GPUDeviceGenerationID(7)),
+        ).snapshot
+
+        assertEquals(
+            setOf(PlanDepthStencilFormat.Depth24PlusStencil8),
+            snapshot.supportedDepthStencilFormats(),
+        )
+        assertTrue(PlanOperationCapability.DepthStencilAttachment in snapshot.supportedOperations())
+        assertTrue(PlanOperationCapability.StencilCover in snapshot.supportedOperations())
+    }
+
+    @Test
+    fun `adapter publishes W4c D24S8 facts when depth stencil supports one sample`() {
+        val snapshot = assertIs<GpuPlanCapabilityAdapterResult.Supported>(
+            capabilities(depthStencilFormatSupported = true, depthStencilSamples = setOf(1))
+                .toPlanCapabilitySnapshot(GPUDeviceGenerationID(7)),
+        ).snapshot
+
+        assertEquals(
+            setOf(PlanDepthStencilFormat.Depth24PlusStencil8),
+            snapshot.supportedDepthStencilFormats(),
+        )
+        assertTrue(PlanOperationCapability.DepthStencilAttachment in snapshot.supportedOperations())
+        assertTrue(PlanOperationCapability.StencilCover in snapshot.supportedOperations())
+    }
+
+    @Test
+    fun `adapter leaves W4c depth stencil facts absent without one sample evidence`() {
+        val absentEvidence = capabilities(
+            depthStencilFormatSupported = false,
+            depthStencilSamples = emptySet(),
+        )
+        val fourSamplesOnly = capabilities(
+            depthStencilFormatSupported = false,
+            depthStencilSamples = setOf(4),
+        )
+
+        listOf(absentEvidence, fourSamplesOnly).forEach { physical ->
+            val snapshot = assertIs<GpuPlanCapabilityAdapterResult.Supported>(
+                physical.toPlanCapabilitySnapshot(GPUDeviceGenerationID(7)),
+            ).snapshot
+
+            assertEquals(emptySet(), snapshot.supportedDepthStencilFormats())
+            assertEquals(false, PlanOperationCapability.DepthStencilAttachment in snapshot.supportedOperations())
+            assertEquals(false, PlanOperationCapability.StencilCover in snapshot.supportedOperations())
+        }
+    }
+
     @Test
     fun `adapter publishes exact W4 planning facts`() {
         val snapshot = assertIs<GpuPlanCapabilityAdapterResult.Supported>(
@@ -135,6 +189,8 @@ class GpuPlanCapabilityAdapterTest {
 
     private fun capabilities(
         rendererFeatures: Set<GPURendererFeature> = requiredPlanFeatures(),
+        depthStencilFormatSupported: Boolean = false,
+        depthStencilSamples: Set<Int> = emptySet(),
     ) = GPUCapabilities(
         implementation = GPUImplementationIdentity("GPU", "test", "adapter", "device"),
         facts = emptyList(),
@@ -146,13 +202,23 @@ class GpuPlanCapabilityAdapterTest {
             maxBufferSize = 1L shl 20,
             maxDynamicUniformBuffersPerPipelineLayout = 1,
         ),
-        supportedTextureFormats = setOf(GPUTextureFormat.RGBA8UnormSrgb),
+        supportedTextureFormats = buildSet {
+            add(GPUTextureFormat.RGBA8UnormSrgb)
+            if (depthStencilFormatSupported) add(GPUTextureFormat.Depth24PlusStencil8)
+        },
         textureFormatSampleSupport = GPUTextureFormatSampleSupport(
-            mapOf(
-                GPUTextureFormat.RGBA8UnormSrgb to GPUTextureSampleCountSupport(
-                    renderAttachmentSampleCounts = setOf(1),
-                ),
-            ),
+            buildMap {
+                put(
+                    GPUTextureFormat.RGBA8UnormSrgb,
+                    GPUTextureSampleCountSupport(renderAttachmentSampleCounts = setOf(1)),
+                )
+                if (depthStencilSamples.isNotEmpty()) {
+                    put(
+                        GPUTextureFormat.Depth24PlusStencil8,
+                        GPUTextureSampleCountSupport(renderAttachmentSampleCounts = depthStencilSamples),
+                    )
+                }
+            },
         ),
         rendererFeatures = rendererFeatures,
     )

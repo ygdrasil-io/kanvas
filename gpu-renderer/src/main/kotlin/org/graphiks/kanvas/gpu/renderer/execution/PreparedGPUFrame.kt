@@ -1440,6 +1440,60 @@ internal class PreparedGPUFrame(
                 // path render may retain a non-writable stencil authority too.
                 val hasPathStencilLoadStore = pathUses.size == 1 &&
                     step.depthStencilLoadStore != null
+                val w4cFrame = semanticPlan.hasSealedW4cSessionMarker()
+                val w4cPacket = step.drawPackets.singleOrNull()
+                val w4cAuthority = w4cPacket?.corePrimitivePreparedAuthority
+                    ?.w4cSessionScratch
+                val expectedW4cPathLoadStore = when (w4cPacket?.role) {
+                    org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.PathStencilProducer ->
+                        org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan
+                            .WritableStencil(
+                                org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Clear,
+                                org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan.Store,
+                                0u,
+                            )
+                    org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.PathStencilCover ->
+                        org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan
+                            .WritableStencil(
+                                org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Load,
+                                org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan.Store,
+                                null,
+                            )
+                    else -> null
+                }
+                val unplannedWritablePathLoad =
+                    step.depthStencilLoadStore as?
+                        org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan
+                            .WritableStencil
+                if (w4cFrame) {
+                    require(w4cPacket != null && w4cAuthority != null) {
+                        "Prepared W4c frames require one planned W4c packet authority per render scope"
+                    }
+                    if (pathSealed) {
+                        require(
+                            expectedW4cPathLoadStore != null &&
+                                step.depthStencilLoadStore == expectedW4cPathLoadStore &&
+                                pathUses.singleOrNull()?.write == true,
+                        ) {
+                            "Prepared W4c path scopes require their exact producer or writable-load cover authority"
+                        }
+                    } else {
+                        require(
+                            w4cPacket.role ==
+                                org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.Shading &&
+                                step.depthStencilLoadStore == null && pathUses.isEmpty(),
+                        ) {
+                            "Prepared W4c direct scopes must remain color-only planned shading packets"
+                        }
+                    }
+                } else if (
+                    unplannedWritablePathLoad?.loadOperation ==
+                    org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Load
+                ) {
+                    require(false) {
+                        "WritableStencil(Load, Store, null) is reserved for planned W4c path covers"
+                    }
+                }
                 val depthStencilKeys = scope.nativeOperandKeys.filter {
                     it.role == GPUPreparedNativeOperandRole.RenderDepthStencilTarget
                 }

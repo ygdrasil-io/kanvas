@@ -1,7 +1,15 @@
 package org.graphiks.kanvas.gpu.plan
 
 public enum class PlanLogicalColorFormat { RGBA8_UNORM_SRGB_LINEAR_PREMUL }
-public enum class PlanOperationCapability { RenderPass, CopyUpload, UniformBuffer, Readback }
+public enum class PlanDepthStencilFormat { Depth24PlusStencil8 }
+public enum class PlanOperationCapability {
+    RenderPass,
+    CopyUpload,
+    UniformBuffer,
+    Readback,
+    DepthStencilAttachment,
+    StencilCover,
+}
 
 public class PlanCapabilitySnapshot private constructor(
     public val deviceGeneration: Long,
@@ -13,12 +21,16 @@ public class PlanCapabilitySnapshot private constructor(
     public val maxDynamicUniformBuffersPerPipelineLayout: Int,
     supportedOperations: Set<PlanOperationCapability>,
     public val bufferAllocationPolicy: PlanBufferAllocationPolicy,
+    supportedDepthStencilFormats: Set<PlanDepthStencilFormat>,
 ) {
     private val formats: Set<PlanLogicalColorFormat> = supportedFormats.toSet().let(::immutableSet)
     private val operations: Set<PlanOperationCapability> = supportedOperations.toSet().let(::immutableSet)
+    private val depthStencilFormats: Set<PlanDepthStencilFormat> =
+        supportedDepthStencilFormats.toSet().let(::immutableSet)
 
     public fun supportedFormats(): Set<PlanLogicalColorFormat> = formats
     public fun supportedOperations(): Set<PlanOperationCapability> = operations
+    public fun supportedDepthStencilFormats(): Set<PlanDepthStencilFormat> = depthStencilFormats
 
     override fun equals(other: Any?): Boolean = other is PlanCapabilitySnapshot &&
         deviceGeneration == other.deviceGeneration &&
@@ -29,11 +41,13 @@ public class PlanCapabilitySnapshot private constructor(
         minUniformBufferOffsetAlignment == other.minUniformBufferOffsetAlignment &&
         maxDynamicUniformBuffersPerPipelineLayout == other.maxDynamicUniformBuffersPerPipelineLayout &&
         operations == other.operations &&
-        bufferAllocationPolicy == other.bufferAllocationPolicy
+        bufferAllocationPolicy == other.bufferAllocationPolicy &&
+        depthStencilFormats == other.depthStencilFormats
 
     override fun hashCode(): Int = listOf(
         deviceGeneration, maxTextureDimension2D, maxBufferSizeBytes, copyBytesPerRowAlignment, formats,
         minUniformBufferOffsetAlignment, maxDynamicUniformBuffersPerPipelineLayout, operations, bufferAllocationPolicy,
+        depthStencilFormats,
     ).hashCode()
 
     public companion object {
@@ -47,6 +61,7 @@ public class PlanCapabilitySnapshot private constructor(
             maxDynamicUniformBuffersPerPipelineLayout: Int,
             supportedOperations: Set<PlanOperationCapability>,
             bufferAllocationPolicy: PlanBufferAllocationPolicy,
+            supportedDepthStencilFormats: Set<PlanDepthStencilFormat> = emptySet(),
         ): PlanCapabilitySnapshot {
             require(deviceGeneration >= 0) { "Device generation must be non-negative" }
             require(maxTextureDimension2D > 0) { "Maximum texture dimension must be positive" }
@@ -56,7 +71,8 @@ public class PlanCapabilitySnapshot private constructor(
             require(maxDynamicUniformBuffersPerPipelineLayout >= 0) { "Maximum dynamic uniform buffers must be non-negative" }
             return PlanCapabilitySnapshot(deviceGeneration, maxTextureDimension2D, maxBufferSizeBytes,
                 copyBytesPerRowAlignment, supportedFormats, minUniformBufferOffsetAlignment,
-                maxDynamicUniformBuffersPerPipelineLayout, supportedOperations, bufferAllocationPolicy)
+                maxDynamicUniformBuffersPerPipelineLayout, supportedOperations, bufferAllocationPolicy,
+                supportedDepthStencilFormats)
         }
     }
 }

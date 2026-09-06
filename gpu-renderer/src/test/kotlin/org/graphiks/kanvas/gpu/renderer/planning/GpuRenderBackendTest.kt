@@ -23,7 +23,16 @@ import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.gpu.plan.PlanId
 import org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat
 import org.graphiks.kanvas.gpu.plan.RenderGraph
+import org.graphiks.kanvas.gpu.plan.CapabilityCompilerChain
+import org.graphiks.kanvas.gpu.plan.GpuPlanCandidate
+import org.graphiks.kanvas.gpu.plan.GpuPlanCompiler
+import org.graphiks.kanvas.gpu.plan.GpuPlanSelection
+import org.graphiks.kanvas.gpu.plan.PlanBudget
+import org.graphiks.kanvas.gpu.plan.PlanCapabilitySnapshot
 import org.graphiks.kanvas.gpu.plan.W3SolidRectPlanCompiler
+import org.graphiks.kanvas.gpu.plan.W4aAnalyticRectPlanCompiler
+import org.graphiks.kanvas.gpu.plan.W4bAnalyticRRectPlanCompiler
+import org.graphiks.kanvas.gpu.plan.W4cPathFillPlanCompiler
 import org.graphiks.kanvas.gpu.renderer.capabilities.*
 import org.graphiks.kanvas.gpu.renderer.diagnostics.*
 import org.graphiks.kanvas.gpu.renderer.execution.*
@@ -32,6 +41,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList
 import org.graphiks.kanvas.gpu.renderer.telemetry.*
 import org.graphiks.kanvas.render.ir.*
 import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.PathBuilder
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.matrix.Matrix3x3F32
 
@@ -377,6 +387,67 @@ class GpuRenderBackendTest {
         assertEquals("w3.execution.readback_failure", executionCode(malformedSubmission.await()))
     }
 
+    @Test
+    fun terminalW4cPreparationLimitReturnsBeforeGpuRuntimeAcquisition() {
+        val backend = GpuRenderBackend(
+            CapabilityCompilerChain.of(
+                listOf(
+                    W3SolidRectPlanCompiler(),
+                    W4aAnalyticRectPlanCompiler(),
+                    W4bAnalyticRRectPlanCompiler(),
+                    W4cPathFillPlanCompiler(),
+                    LaterInvalidCompiler(),
+                ),
+            ),
+            GpuRenderContext(ThrowingOwner()),
+            GpuRenderTargetConfig(SceneExtent(64, 64), ColorSpace.SRGB, 1L shl 20),
+        )
+        val path = PathBuilder()
+            .moveTo(0f, 0f)
+            .lineTo(Float.MAX_VALUE, 0f)
+            .lineTo(0f, 1f)
+            .close()
+            .build()
+        val scene = SceneSnapshot.of(
+            SceneExtent(64, 64),
+            ColorSpace.SRGB,
+            listOf(
+                SceneCommand.Draw(
+                    DrawNode(
+                        GeometryNode.Path(path),
+                        MaterialNode.Solid(ColorARGB.Red),
+                        CoverageRequest.HARD_EDGE,
+                        ClipStackNode.Empty,
+                        BlendNode.SrcOver,
+                        EffectStack.Empty,
+                        Matrix3x3F32.Identity,
+                        DrawOrigin.PATH,
+                        PaintNode(
+                            ColorARGB.Red,
+                            null,
+                            BlendMode.SRC_OVER,
+                            null,
+                            null,
+                            null,
+                            null,
+                            null,
+                            PaintStyleNode.FILL,
+                            0f,
+                            StrokeCapNode.BUTT,
+                            StrokeJoinNode.MITER,
+                            4f,
+                            false,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        val result = assertIs<RenderPlanResult.ResourceLimitExceeded>(backend.plan(scene, target(64, 64)))
+
+        assertEquals("w4c.path.resource_limit", result.diagnostics.single().code.value)
+    }
+
     private fun renderer(owner: FakeOwner, context: GpuRenderContext = GpuRenderContext(owner), width: Int = 2, height: Int = 2) = GpuRenderBackend(W3SolidRectPlanCompiler(), context, GpuRenderTargetConfig(SceneExtent(width, height), ColorSpace.SRGB, 1L shl 20))
     private fun issue(renderer: GpuRenderBackend, width: Int, height: Int, color: ColorARGB = ColorARGB.fromPackedUInt(0xFF4080C0u)) = assertIs<RenderPlanResult.Ready<RenderGraph>>(renderer.plan(scene(width, height, color), target(width, height))).plan
     private fun target(w: Int, h: Int) = RenderTargetDescriptor(SceneExtent(w, h), ColorSpace.SRGB)
@@ -462,6 +533,25 @@ class GpuRenderBackendTest {
         override fun createOrNull(): GpuBackendSessionPort? = error("runtime must not be acquired for semantic classification")
         override fun disposeGeneration(deviceGeneration: GPUDeviceGenerationID) = Unit
         override fun close() = Unit
+    }
+    private class LaterInvalidCompiler : GpuPlanCompiler {
+        override fun select(scene: SceneSnapshot, target: RenderTargetDescriptor): GpuPlanSelection =
+            GpuPlanSelection.InvalidScene(
+                listOf(
+                    RenderDiagnostic(
+                        RenderDiagnosticCode("later.compiler.must.not-be-authority"),
+                        RenderDiagnosticDomain.SCENE,
+                        RenderDiagnosticSeverity.ERROR,
+                        "The terminal W4c result must prevent this compiler from becoming authoritative.",
+                    ),
+                ),
+            )
+
+        override fun plan(
+            candidate: GpuPlanCandidate,
+            capabilities: PlanCapabilitySnapshot,
+            budget: PlanBudget,
+        ): RenderPlanResult<RenderGraph> = error("A selection refusal must never receive plan()")
     }
     private class FakePrepared(
         generation: Long,

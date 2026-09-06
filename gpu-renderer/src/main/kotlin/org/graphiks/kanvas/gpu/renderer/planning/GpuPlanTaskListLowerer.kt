@@ -11,6 +11,7 @@ import org.graphiks.kanvas.gpu.plan.PlanResourceKind
 import org.graphiks.kanvas.gpu.plan.PlanResourceLifetime
 import org.graphiks.kanvas.gpu.plan.PlanResourceRole
 import org.graphiks.kanvas.gpu.plan.PlanResourceUsage
+import org.graphiks.kanvas.gpu.plan.PlanTextureFormat
 import org.graphiks.kanvas.gpu.plan.RenderGraph
 import org.graphiks.kanvas.gpu.plan.SamplePlan
 import org.graphiks.kanvas.gpu.plan.SolidRectDraw
@@ -18,6 +19,7 @@ import org.graphiks.kanvas.gpu.plan.W3SolidRectPlanCompiler
 import org.graphiks.kanvas.gpu.plan.W3PlanDiagnostics
 import org.graphiks.kanvas.gpu.plan.W4aAnalyticRectPlanCompiler
 import org.graphiks.kanvas.gpu.plan.W4bAnalyticRRectPlanCompiler
+import org.graphiks.kanvas.gpu.plan.W4cPathFillPlanCompiler
 import org.graphiks.kanvas.gpu.renderer.analysis.corePrimitiveRectGeometryAuthority
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
@@ -91,7 +93,7 @@ import org.graphiks.kanvas.render.ir.RenderDiagnosticCode
 import org.graphiks.kanvas.render.ir.RenderDiagnosticDomain
 import org.graphiks.kanvas.render.ir.RenderDiagnosticSeverity
 
-/** Converts closed W3, W4a, or W4b graphs into prepared frame tasks without invoking legacy planning. */
+/** Converts closed W3, W4a, W4b, or W4c graphs into prepared frame tasks without invoking legacy planning. */
 public class GpuPlanTaskListLowerer {
     public fun lower(request: GpuPlanLoweringRequest): GpuPlanLoweringResult {
         val current = when (val adapted = request.capabilities.toPlanCapabilitySnapshot(request.deviceGeneration)) {
@@ -104,6 +106,7 @@ public class GpuPlanTaskListLowerer {
             W3SolidRectPlanCompiler.CAPABILITY_ID -> lowerW3(request, current)
             W4aAnalyticRectPlanCompiler.CAPABILITY_ID -> W4aAnalyticRectGraphLowerer().lower(request)
             W4bAnalyticRRectPlanCompiler.CAPABILITY_ID -> W4bAnalyticRRectGraphLowerer().lower(request)
+            W4cPathFillPlanCompiler.CAPABILITY_ID -> W4cPathFillGraphLowerer().lower(request)
             else -> invalid("Unknown gpu-plan capability id.")
         }
     }
@@ -340,9 +343,9 @@ public class GpuPlanTaskListLowerer {
         val staging = resources.singleOrNull { it.role == PlanResourceRole.ReadbackStaging } ?: return null
         val expectedTargetBytes = try { Math.multiplyExact(Math.multiplyExact(graph.targetExtent.width.toLong(), graph.targetExtent.height.toLong()), 4L) } catch (_: ArithmeticException) { return null }
         val expectedTarget = try {
-            PlanResource.of(PlanResourceRole.LogicalTarget, 0, PlanResourceKind.Texture2D, graph.colorFormat, graph.targetExtent, expectedTargetBytes, setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource), PlanResourceLifetime.FrameLocal, 0, 2)
+            PlanResource.of(PlanResourceRole.LogicalTarget, 0, PlanResourceKind.Texture2D, PlanTextureFormat.Color(graph.colorFormat), graph.targetExtent, expectedTargetBytes, setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource), PlanResourceLifetime.FrameLocal, 0, 2)
         } catch (_: IllegalArgumentException) { return null }
-        if (target.id != expectedTarget.id || target.ordinal != 0 || target.kind != PlanResourceKind.Texture2D || target.format != graph.colorFormat || target.copyExtent() != graph.targetExtent || target.byteSize != expectedTargetBytes || target.usages() != setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource) || target.lifetime != PlanResourceLifetime.FrameLocal || target.firstPassIndex != 0 || target.lastPassIndexExclusive != 2) return null
+        if (target.id != expectedTarget.id || target.ordinal != 0 || target.kind != PlanResourceKind.Texture2D || target.format != PlanTextureFormat.Color(graph.colorFormat) || target.copyExtent() != graph.targetExtent || target.byteSize != expectedTargetBytes || target.usages() != setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource) || target.lifetime != PlanResourceLifetime.FrameLocal || target.firstPassIndex != 0 || target.lastPassIndexExclusive != 2) return null
         val passes = graph.passes()
         val render = passes.getOrNull(0) as? PlanPass.RenderPass ?: return null
         val readback = passes.getOrNull(1) as? PlanPass.ReadbackPass ?: return null

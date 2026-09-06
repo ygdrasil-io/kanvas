@@ -1,0 +1,106 @@
+package org.graphiks.math.geometry
+
+/** Immutable indexed payload for the strictly-proven direct-triangle route. */
+public class PathFillDirectTriangleF32 internal constructor(
+    verticesF32: FloatArray,
+    indicesI32: IntArray,
+) {
+    private val verticesSnapshotF32: FloatArray = verticesF32.copyOf()
+    private val indicesSnapshotI32: IntArray = indicesI32.copyOf()
+
+    init {
+        require(verticesSnapshotF32.size == 6)
+        require(indicesSnapshotI32.size == 3)
+        require(verticesSnapshotF32.all(Float::isFinite))
+    }
+
+    public val vertexCountI32: Int get() = verticesSnapshotF32.size / 2
+
+    public val indexCountI32: Int get() = indicesSnapshotI32.size
+
+    public fun copyVerticesF32(): FloatArray = verticesSnapshotF32.copyOf()
+
+    public fun copyIndicesI32(): IntArray = indicesSnapshotI32.copyOf()
+}
+
+/** Immutable expanded edge-fan payload for the stencil route. */
+public class PathStencilEdgeFanF32 internal constructor(
+    verticesF32: FloatArray,
+    indicesI32: IntArray,
+    contourStartsI32: IntArray,
+) {
+    private val verticesSnapshotF32: FloatArray = verticesF32.copyOf()
+    private val indicesSnapshotI32: IntArray = indicesI32.copyOf()
+    private val contourStartsSnapshotI32: IntArray = contourStartsI32.copyOf()
+
+    init {
+        require(verticesSnapshotF32.size % 6 == 0)
+        require(indicesSnapshotI32.size == edgeCountI32 * 3)
+        require(verticesSnapshotF32.all(Float::isFinite))
+        require(contourStartsSnapshotI32.isNotEmpty())
+        require(contourStartsSnapshotI32.first() == 0)
+        require((1 until contourStartsSnapshotI32.size).all { indexI32 ->
+            contourStartsSnapshotI32[indexI32 - 1] < contourStartsSnapshotI32[indexI32]
+        })
+        require(contourStartsSnapshotI32.last() in 0 until edgeCountI32)
+    }
+
+    public val edgeCountI32: Int get() = verticesSnapshotF32.size / 6
+
+    public val vertexCountI32: Int get() = verticesSnapshotF32.size / 2
+
+    public val indexCountI32: Int get() = indicesSnapshotI32.size
+
+    public fun copyVerticesF32(): FloatArray = verticesSnapshotF32.copyOf()
+
+    public fun copyIndicesI32(): IntArray = indicesSnapshotI32.copyOf()
+
+    public fun copyContourStartsI32(): IntArray = contourStartsSnapshotI32.copyOf()
+}
+
+/** Immutable geometry authority emitted by W4c device-space preparation. */
+public class PathFillGeometryF32 internal constructor(
+    public val fillRule: FillRule,
+    public val attemptedEdgeCountI32: Int,
+    public val emittedNonZeroClosedEdgeCountI32: Int,
+    conservativeScissorI32: RectI32,
+    directTriangleF32: PathFillDirectTriangleF32?,
+    stencilEdgeFanF32: PathStencilEdgeFanF32?,
+) {
+    private val conservativeScissorSnapshotI32 = copyRectI32(conservativeScissorI32)
+    private val directTriangleSnapshotF32 = directTriangleF32?.copySnapshotF32()
+    private val stencilEdgeFanSnapshotF32 = stencilEdgeFanF32?.copySnapshotF32()
+
+    init {
+        require(attemptedEdgeCountI32 >= 0)
+        require(emittedNonZeroClosedEdgeCountI32 > 0)
+        require((directTriangleSnapshotF32 == null) != (stencilEdgeFanSnapshotF32 == null))
+    }
+
+    public val vertexCostI64: Long
+        get() = directTriangleSnapshotF32?.vertexCountI32?.toLong()
+            ?: stencilEdgeFanSnapshotF32!!.edgeCountI32.toLong() * 3L + 4L
+
+    public val indexCostI64: Long
+        get() = directTriangleSnapshotF32?.indexCountI32?.toLong()
+            ?: stencilEdgeFanSnapshotF32!!.edgeCountI32.toLong() * 3L + 6L
+
+    public fun copyConservativeScissorI32(): RectI32 = copyRectI32(conservativeScissorSnapshotI32)
+
+    public fun copyDirectTriangleF32OrNull(): PathFillDirectTriangleF32? = directTriangleSnapshotF32?.copySnapshotF32()
+
+    public fun copyStencilEdgeFanF32OrNull(): PathStencilEdgeFanF32? = stencilEdgeFanSnapshotF32?.copySnapshotF32()
+}
+
+private fun PathFillDirectTriangleF32.copySnapshotF32(): PathFillDirectTriangleF32 = PathFillDirectTriangleF32(
+    copyVerticesF32(),
+    copyIndicesI32(),
+)
+
+private fun PathStencilEdgeFanF32.copySnapshotF32(): PathStencilEdgeFanF32 = PathStencilEdgeFanF32(
+    copyVerticesF32(),
+    copyIndicesI32(),
+    copyContourStartsI32(),
+)
+
+private fun copyRectI32(source: RectI32): RectI32 = RectI32(source.left, source.top, source.right, source.bottom)

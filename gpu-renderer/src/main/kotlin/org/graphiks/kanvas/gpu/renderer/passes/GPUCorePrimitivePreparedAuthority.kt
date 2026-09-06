@@ -1750,6 +1750,7 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
     val w3SessionScratch: W3SessionScratchV1? = null,
     val w4aSessionScratch: W4aSessionScratchV1? = null,
     val w4bSessionScratch: W4bSessionScratchV1? = null,
+    val w4cSessionScratch: W4cSessionScratchV1? = null,
     private val scratchLane: ScratchLane,
 ) {
     internal constructor(
@@ -1771,27 +1772,40 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
         null,
         null,
         null,
+        null,
         ScratchLane.Legacy,
     )
 
     init {
-        val scratchCount = listOf(w3SessionScratch, w4aSessionScratch, w4bSessionScratch).count { it != null }
+        val scratchCount = listOf(
+            w3SessionScratch,
+            w4aSessionScratch,
+            w4bSessionScratch,
+            w4cSessionScratch,
+        ).count { it != null }
         require(scratchCount <= 1) {
-            "A prepared CorePrimitive packet may retain no more than one W3, W4a, or W4b session scratch"
+            "A prepared CorePrimitive packet may retain no more than one planned session scratch"
         }
         when (scratchLane) {
             ScratchLane.Legacy -> require(scratchCount == 0) {
                 "A legacy CorePrimitive prepared packet may not retain a planned session scratch"
             }
             ScratchLane.W3 -> require(
-                w3SessionScratch != null && w4aSessionScratch == null && w4bSessionScratch == null,
+                w3SessionScratch != null && w4aSessionScratch == null && w4bSessionScratch == null &&
+                    w4cSessionScratch == null,
             ) { "A W3 CorePrimitive prepared packet requires its W3 session scratch" }
             ScratchLane.W4a -> require(
-                w3SessionScratch == null && w4aSessionScratch != null && w4bSessionScratch == null,
+                w3SessionScratch == null && w4aSessionScratch != null && w4bSessionScratch == null &&
+                    w4cSessionScratch == null,
             ) { "A W4a CorePrimitive prepared packet requires its W4a session scratch" }
             ScratchLane.W4b -> require(
-                w3SessionScratch == null && w4aSessionScratch == null && w4bSessionScratch != null,
+                w3SessionScratch == null && w4aSessionScratch == null && w4bSessionScratch != null &&
+                    w4cSessionScratch == null,
             ) { "A W4b CorePrimitive prepared packet requires its W4b session scratch" }
+            ScratchLane.W4c -> require(
+                w3SessionScratch == null && w4aSessionScratch == null && w4bSessionScratch == null &&
+                    w4cSessionScratch != null,
+            ) { "A W4c CorePrimitive prepared packet requires its W4c session scratch" }
         }
     }
 
@@ -1806,19 +1820,26 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
         w3SessionScratch: W3SessionScratchV1? = this.w3SessionScratch,
         w4aSessionScratch: W4aSessionScratchV1? = this.w4aSessionScratch,
         w4bSessionScratch: W4bSessionScratchV1? = this.w4bSessionScratch,
-    ): GPUCorePrimitivePreparedPacketAuthority = GPUCorePrimitivePreparedPacketAuthority(
-        structuralPipelineKey,
-        renderPipelineKey,
-        uniformSlabSeal,
-        analyticShapeUniformSeal,
-        analyticClipUniformSeal,
-        analyticIntersectionUniformSeal,
-        coverageMaskUniformSlabSeal,
-        w3SessionScratch,
-        w4aSessionScratch,
-        w4bSessionScratch,
-        scratchLane,
-    )
+        w4cSessionScratch: W4cSessionScratchV1? = this.w4cSessionScratch,
+    ): GPUCorePrimitivePreparedPacketAuthority {
+        require(scratchLane != ScratchLane.W4c) {
+            "W4c prepared packet authority is sealed to its original planned packet."
+        }
+        return GPUCorePrimitivePreparedPacketAuthority(
+            structuralPipelineKey,
+            renderPipelineKey,
+            uniformSlabSeal,
+            analyticShapeUniformSeal,
+            analyticClipUniformSeal,
+            analyticIntersectionUniformSeal,
+            coverageMaskUniformSlabSeal,
+            w3SessionScratch,
+            w4aSessionScratch,
+            w4bSessionScratch,
+            w4cSessionScratch,
+            scratchLane,
+        )
+    }
 
     internal companion object {
         fun plannedW3(
@@ -1834,6 +1855,7 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
             null,
             null,
             scratch,
+            null,
             null,
             null,
             ScratchLane.W3,
@@ -1855,6 +1877,7 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
             null,
             scratch,
             null,
+            null,
             ScratchLane.W4a,
         )
 
@@ -1873,8 +1896,42 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
             null,
             null,
             scratch,
+            null,
             ScratchLane.W4b,
         )
+
+        fun plannedW4c(
+            packet: GPUDrawPacket,
+            structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+            renderPipelineKey: GPURenderPipelineKey,
+            planId: String,
+            capabilitySealHash: String,
+            scratch: W4cSessionScratchV1,
+        ): GPUCorePrimitivePreparedPacketAuthority {
+            require(
+                scratch.matchesPreparedPacket(
+                    expectedPlanId = planId,
+                    expectedCapabilityHash = capabilitySealHash,
+                    packet = packet,
+                    structuralPipelineKey = structuralPipelineKey,
+                    renderPipelineKey = renderPipelineKey,
+                ),
+            ) { "W4c prepared authority must match its sealed scratch draw, ranges, and hashes." }
+            return GPUCorePrimitivePreparedPacketAuthority(
+                structuralPipelineKey,
+                renderPipelineKey,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                scratch,
+                ScratchLane.W4c,
+            )
+        }
     }
 
     private enum class ScratchLane {
@@ -1882,5 +1939,6 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
         W3,
         W4a,
         W4b,
+        W4c,
     }
 }
