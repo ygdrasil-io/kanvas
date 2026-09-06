@@ -393,6 +393,7 @@ class W3SolidRectPlanCompilerTest {
         is GpuPlanSelection.Candidate -> compiler.plan(selected.candidate, capabilities, budget)
         is GpuPlanSelection.NotCandidate -> RenderPlanResult.GapNotMigrated(selected.diagnostics())
         is GpuPlanSelection.InvalidScene -> RenderPlanResult.InvalidScene(selected.diagnostics())
+        is GpuPlanSelection.ResourceLimitExceeded -> RenderPlanResult.ResourceLimitExceeded(selected.diagnostics())
     }
 
     private fun assertGap(

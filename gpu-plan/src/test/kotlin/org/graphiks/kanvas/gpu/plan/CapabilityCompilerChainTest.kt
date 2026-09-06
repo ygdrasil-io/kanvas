@@ -90,6 +90,47 @@ class CapabilityCompilerChainTest {
         assertEquals(W4bAnalyticRRectPlanCompiler.CAPABILITY_ID, ready(chain, rrectScene()).capabilityId)
     }
 
+    @Test
+    fun resourceLimitSelectionIsTerminalAndSnapshotsImmutableDiagnostics() {
+        val diagnostics = mutableListOf(resourceDiagnostic("w4c.path.resource_limit"))
+        val direct = GpuPlanSelection.ResourceLimitExceeded(diagnostics)
+        diagnostics.clear()
+
+        assertEquals(listOf("w4c.path.resource_limit"), direct.diagnostics().map { it.code.value })
+        kotlin.test.assertFailsWith<UnsupportedOperationException> {
+            (direct.diagnostics() as MutableList<RenderDiagnostic>).clear()
+        }
+
+        val result = CapabilityCompilerChain.of(
+            listOf(
+                ResourceLimitCompiler("w4c.path.resource_limit"),
+                InvalidSceneCompiler("later.compiler.must.not-be-authority"),
+            ),
+        ).select(scene(), target())
+
+        assertEquals(
+            listOf("w4c.path.resource_limit"),
+            assertIs<GpuPlanSelection.ResourceLimitExceeded>(result).diagnostics().map { it.code.value },
+        )
+    }
+
+    @Test
+    fun W3W4aW4bW4cChainKeepsHistoricalSelectionsAndChoosesW4cForPaths() {
+        val chain = CapabilityCompilerChain.of(
+            listOf(
+                W3SolidRectPlanCompiler(),
+                W4aAnalyticRectPlanCompiler(),
+                W4bAnalyticRRectPlanCompiler(),
+                W4cPathFillPlanCompiler(),
+            ),
+        )
+
+        assertEquals(W3SolidRectPlanCompiler.CAPABILITY_ID, ready(chain, rectScene(0f)).capabilityId)
+        assertEquals(W4aAnalyticRectPlanCompiler.CAPABILITY_ID, ready(chain, rectScene(0.25f)).capabilityId)
+        assertEquals(W4bAnalyticRRectPlanCompiler.CAPABILITY_ID, ready(chain, rrectScene()).capabilityId)
+        assertEquals(W4cPathFillPlanCompiler.CAPABILITY_ID, ready(chain, pathScene()).capabilityId)
+    }
+
     private class NotCandidateCompiler(private val code: String) : GpuPlanCompiler {
         override fun select(scene: SceneSnapshot, target: RenderTargetDescriptor): GpuPlanSelection =
             GpuPlanSelection.NotCandidate(listOf(RenderDiagnostic(
@@ -116,6 +157,17 @@ class CapabilityCompilerChainTest {
             capabilities: PlanCapabilitySnapshot,
             budget: PlanBudget,
         ): RenderPlanResult<RenderGraph> = error("An invalid compiler must never receive plan()")
+    }
+
+    private class ResourceLimitCompiler(private val code: String) : GpuPlanCompiler {
+        override fun select(scene: SceneSnapshot, target: RenderTargetDescriptor): GpuPlanSelection =
+            GpuPlanSelection.ResourceLimitExceeded(listOf(resourceDiagnostic(code)))
+
+        override fun plan(
+            candidate: GpuPlanCandidate,
+            capabilities: PlanCapabilitySnapshot,
+            budget: PlanBudget,
+        ): RenderPlanResult<RenderGraph> = error("A terminal compiler must never receive plan")
     }
 
     private fun scene(): SceneSnapshot = SceneSnapshot.of(
@@ -168,6 +220,28 @@ class CapabilityCompilerChainTest {
         ))))
     }
 
+    private fun pathScene(): SceneSnapshot {
+        val color = ColorARGB.fromPackedUInt(0x80FF0000u)
+        val path = org.graphiks.math.geometry.PathBuilder()
+            .moveTo(0f, 0f)
+            .lineTo(3f, 0f)
+            .lineTo(0f, 2f)
+            .close()
+            .build()
+        return SceneSnapshot.of(SceneExtent(4, 3), ColorSpace.SRGB, listOf(SceneCommand.Draw(DrawNode(
+            geometry = GeometryNode.Path(path),
+            material = MaterialNode.Solid(color),
+            coverage = CoverageRequest.HARD_EDGE,
+            clip = ClipStackNode.Empty,
+            blend = BlendNode.SrcOver,
+            effects = EffectStack.Empty,
+            transform = Matrix3x3F32.Identity,
+            origin = DrawOrigin.PATH,
+            paint = PaintNode(color, null, BlendMode.SRC_OVER, null, null, null, null, null,
+                PaintStyleNode.FILL, 0f, StrokeCapNode.BUTT, StrokeJoinNode.MITER, 4f, false),
+        ))))
+    }
+
     private fun capabilities(): PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(
         deviceGeneration = 0,
         maxTextureDimension2D = 64,
@@ -181,3 +255,10 @@ class CapabilityCompilerChainTest {
     )
 
 }
+
+private fun resourceDiagnostic(code: String): RenderDiagnostic = RenderDiagnostic(
+    RenderDiagnosticCode(code),
+    RenderDiagnosticDomain.RESOURCE,
+    RenderDiagnosticSeverity.ERROR,
+    "Fixture diagnostic $code",
+)

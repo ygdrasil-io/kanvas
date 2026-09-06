@@ -23,7 +23,11 @@ import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.gpu.plan.PlanId
 import org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat
 import org.graphiks.kanvas.gpu.plan.RenderGraph
+import org.graphiks.kanvas.gpu.plan.CapabilityCompilerChain
 import org.graphiks.kanvas.gpu.plan.W3SolidRectPlanCompiler
+import org.graphiks.kanvas.gpu.plan.W4aAnalyticRectPlanCompiler
+import org.graphiks.kanvas.gpu.plan.W4bAnalyticRRectPlanCompiler
+import org.graphiks.kanvas.gpu.plan.W4cPathFillPlanCompiler
 import org.graphiks.kanvas.gpu.renderer.capabilities.*
 import org.graphiks.kanvas.gpu.renderer.diagnostics.*
 import org.graphiks.kanvas.gpu.renderer.execution.*
@@ -32,6 +36,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList
 import org.graphiks.kanvas.gpu.renderer.telemetry.*
 import org.graphiks.kanvas.render.ir.*
 import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.PathBuilder
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.matrix.Matrix3x3F32
 
@@ -375,6 +380,50 @@ class GpuRenderBackendTest {
         malformed.awaitEvent("render")
         malformed.future.complete(success(1, 1))
         assertEquals("w3.execution.readback_failure", executionCode(malformedSubmission.await()))
+    }
+
+    @Test
+    fun terminalW4cPreparationLimitReturnsBeforeGpuRuntimeAcquisition() {
+        val backend = GpuRenderBackend(
+            CapabilityCompilerChain.of(
+                listOf(
+                    W3SolidRectPlanCompiler(),
+                    W4aAnalyticRectPlanCompiler(),
+                    W4bAnalyticRRectPlanCompiler(),
+                    W4cPathFillPlanCompiler(),
+                ),
+            ),
+            GpuRenderContext(ThrowingOwner()),
+            GpuRenderTargetConfig(SceneExtent(64, 64), ColorSpace.SRGB, 1L shl 20),
+        )
+        val path = PathBuilder()
+            .moveTo(0f, 0f)
+            .lineTo(Float.MAX_VALUE, 0f)
+            .lineTo(0f, 1f)
+            .close()
+            .build()
+        val scene = SceneSnapshot.of(
+            SceneExtent(64, 64),
+            ColorSpace.SRGB,
+            listOf(
+                SceneCommand.Draw(
+                    DrawNode(
+                        GeometryNode.Path(path),
+                        MaterialNode.Solid(ColorARGB.Red),
+                        CoverageRequest.HARD_EDGE,
+                        ClipStackNode.Empty,
+                        BlendNode.SrcOver,
+                        EffectStack.Empty,
+                        Matrix3x3F32.Identity,
+                        DrawOrigin.PATH,
+                    ),
+                ),
+            ),
+        )
+
+        val result = assertIs<RenderPlanResult.ResourceLimitExceeded>(backend.plan(scene, target(64, 64)))
+
+        assertEquals("w4c.path.resource_limit", result.diagnostics.single().code.value)
     }
 
     private fun renderer(owner: FakeOwner, context: GpuRenderContext = GpuRenderContext(owner), width: Int = 2, height: Int = 2) = GpuRenderBackend(W3SolidRectPlanCompiler(), context, GpuRenderTargetConfig(SceneExtent(width, height), ColorSpace.SRGB, 1L shl 20))
