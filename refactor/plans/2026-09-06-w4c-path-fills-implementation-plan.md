@@ -937,7 +937,7 @@ rtk git commit -m "docs(refactor): publish W4c path fill evidence"
 
 Utiliser `superpowers:requesting-code-review`. Sol revoit le diff complet `codex/w4b-analytic-rrect...HEAD`, les résultats frais et la conformité à la spec. Tout finding valide repart vers l'agent Terra de la tâche concernée; refaire les tests proportionnés puis la revue jusqu'à `APPROVED`.
 
-- [ ] **Step 8: Pousser et créer/mettre à jour la PR stackée**
+- [x] **Step 8: Pousser et créer/mettre à jour la PR stackée**
 
 Créer avec `apply_patch` `/tmp/w4c-pr-body.md` contenant exactement les sections suivantes, renseignées à partir des preuves fraîches de cette tâche :
 
