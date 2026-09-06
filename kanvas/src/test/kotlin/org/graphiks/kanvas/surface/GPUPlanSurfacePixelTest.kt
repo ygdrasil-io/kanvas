@@ -362,6 +362,36 @@ class GPUPlanSurfacePixelTest {
     }
 
     @Test
+    fun `W4c curve certificate rejects a far X endpoint tied to the pixel ray`() {
+        val path = Path().apply {
+            moveTo(64f, -1f)
+            quadTo(96f, 0f, 128f, 0.5f)
+        }
+        val certificate = W4cPathFillCpuOracle.certifyCurveFixture(
+            widthI32 = 1,
+            heightI32 = 1,
+            draw = w4cDraw(path, ColorARGB.Red, 1, 1),
+        )
+
+        assertIs<W4cPathFillCpuOracle.CurveFixtureCertificate.Uncertified>(certificate, certificate.toString())
+    }
+
+    @Test
+    fun `W4c curve certificate retains a monotonic curve across an internal subdivision ray`() {
+        val path = Path().apply {
+            moveTo(2f, 2f)
+            quadTo(-2f, 3.5f, 6f, 3f)
+        }
+        val certificate = W4cPathFillCpuOracle.certifyCurveFixture(
+            widthI32 = 8,
+            heightI32 = 8,
+            draw = w4cDraw(path, ColorARGB.Red, 8, 8),
+        )
+
+        assertIs<W4cPathFillCpuOracle.CurveFixtureCertificate.Certified>(certificate, certificate.toString())
+    }
+
+    @Test
     fun `W4b fractional zero-radius rrect uses literal exact rectangular overlap`() {
         val shape = RRectF32.of(RectF32(0.25f, 0.5f, 1.75f, 1.5f))
         val draws = listOf(

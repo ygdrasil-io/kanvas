@@ -527,11 +527,20 @@ internal object W4cPathFillCpuOracle {
         }
     }
 
+    /**
+     * Only source curve-verb endpoints can be ray-crossing ties.  A de
+     * Casteljau split endpoint is one continuous boundary shared by two
+     * monotone intervals: the half-open crossing rule retains that boundary
+     * exactly once, while the enclosure-distance check protects its position.
+     * This applies to arcs too because both recursive children share `middle`.
+     */
     private data class DirectedCurveInterval(
         val bounds: DirectedBoundsF64,
         val start: DirectedPointF64,
         val end: DirectedPointF64,
         val monotonicY: Boolean,
+        val isCurveStart: Boolean,
+        val isCurveEnd: Boolean,
     ) {
         fun marginUpperF64(): Double? = DirectedF64.exact(W4C_MAXIMUM_SAGITTA_ERROR)
             ?.plus(DirectedF64.exact(bounds.f32RoundTripUpperF64() ?: return null) ?: return null)
@@ -640,14 +649,21 @@ internal object W4cPathFillCpuOracle {
                                 "pixel centre ($xI32,$yI32) has a non-unique curve crossing",
                             )
                         }
-                        val startDistanceSquaredLowerF64 = interval.start.squaredDistanceLowerF64(centerX, centerY)
-                            ?: return CurveFixtureCertificate.Uncertified("curve start enclosure is non-finite")
-                        val endDistanceSquaredLowerF64 = interval.end.squaredDistanceLowerF64(centerX, centerY)
-                            ?: return CurveFixtureCertificate.Uncertified("curve end enclosure is non-finite")
-                        if (
-                            startDistanceSquaredLowerF64 <= marginSquaredUpperF64 ||
-                            endDistanceSquaredLowerF64 <= marginSquaredUpperF64
-                        ) {
+                        val startTiedToRay = if (interval.isCurveStart) {
+                            val distance = interval.start.y.lowerDistanceTo(centerY)
+                                ?: return CurveFixtureCertificate.Uncertified("curve start vertical enclosure is non-finite")
+                            distance <= marginUpperF64
+                        } else {
+                            false
+                        }
+                        val endTiedToRay = if (interval.isCurveEnd) {
+                            val distance = interval.end.y.lowerDistanceTo(centerY)
+                                ?: return CurveFixtureCertificate.Uncertified("curve end vertical enclosure is non-finite")
+                            distance <= marginUpperF64
+                        } else {
+                            false
+                        }
+                        if (startTiedToRay || endTiedToRay) {
                             return CurveFixtureCertificate.Uncertified(
                                 "pixel centre ($xI32,$yI32) is tied to a curve interval endpoint",
                             )
@@ -693,7 +709,15 @@ internal object W4cPathFillCpuOracle {
                     failure = if (start == null || control == null || destination == null) {
                         "non-finite quadratic curve input"
                     } else {
-                        subdivideDirectedQuad(start, control, destination, 0, intervals)
+                        subdivideDirectedQuad(
+                            start = start,
+                            control = control,
+                            end = destination,
+                            depthI32 = 0,
+                            isCurveStart = true,
+                            isCurveEnd = true,
+                            destination = intervals,
+                        )
                     }
                     sourceCurrent = end
                 }
@@ -710,7 +734,16 @@ internal object W4cPathFillCpuOracle {
                     failure = if (start == null || control1 == null || control2 == null || destination == null) {
                         "non-finite cubic curve input"
                     } else {
-                        subdivideDirectedCubic(start, control1, control2, destination, 0, intervals)
+                        subdivideDirectedCubic(
+                            start = start,
+                            control1 = control1,
+                            control2 = control2,
+                            end = destination,
+                            depthI32 = 0,
+                            isCurveStart = true,
+                            isCurveEnd = true,
+                            destination = intervals,
+                        )
                     }
                     sourceCurrent = end
                 }
@@ -719,7 +752,16 @@ internal object W4cPathFillCpuOracle {
                     when (val arc = directedSvgArc(sourceCurrent, segment, end)) {
                         DirectedSvgArcResult.Line -> Unit
                         is DirectedSvgArcResult.Ready -> {
-                            failure = subdivideDirectedArc(arc.value, transform, 0.0, 1.0, 0, intervals)
+                            failure = subdivideDirectedArc(
+                                arc = arc.value,
+                                transform = transform,
+                                fromT = 0.0,
+                                toT = 1.0,
+                                depthI32 = 0,
+                                isCurveStart = true,
+                                isCurveEnd = true,
+                                destination = intervals,
+                            )
                         }
                         is DirectedSvgArcResult.Uncertified -> failure = arc.reason
                     }
@@ -737,6 +779,8 @@ internal object W4cPathFillCpuOracle {
         control: DirectedPointF64,
         end: DirectedPointF64,
         depthI32: Int,
+        isCurveStart: Boolean,
+        isCurveEnd: Boolean,
         destination: MutableList<DirectedCurveInterval>,
     ): String? {
         val bounds = DirectedBoundsF64.of(start, control, end)
@@ -745,12 +789,34 @@ internal object W4cPathFillCpuOracle {
             val startControl = start.midpoint(control) ?: return "quadratic de Casteljau enclosure overflowed"
             val controlEnd = control.midpoint(end) ?: return "quadratic de Casteljau enclosure overflowed"
             val middle = startControl.midpoint(controlEnd) ?: return "quadratic de Casteljau enclosure overflowed"
-            return subdivideDirectedQuad(start, startControl, middle, depthI32 + 1, destination)
-                ?: subdivideDirectedQuad(middle, controlEnd, end, depthI32 + 1, destination)
+            return subdivideDirectedQuad(
+                start = start,
+                control = startControl,
+                end = middle,
+                depthI32 = depthI32 + 1,
+                isCurveStart = isCurveStart,
+                isCurveEnd = false,
+                destination = destination,
+            ) ?: subdivideDirectedQuad(
+                start = middle,
+                control = controlEnd,
+                end = end,
+                depthI32 = depthI32 + 1,
+                isCurveStart = false,
+                isCurveEnd = isCurveEnd,
+                destination = destination,
+            )
         }
         return appendDirectedCurveInterval(
             destination,
-            DirectedCurveInterval(bounds, start, end, directedMonotonicY(start, control, end)),
+            DirectedCurveInterval(
+                bounds = bounds,
+                start = start,
+                end = end,
+                monotonicY = directedMonotonicY(start, control, end),
+                isCurveStart = isCurveStart,
+                isCurveEnd = isCurveEnd,
+            ),
         )
     }
 
@@ -760,6 +826,8 @@ internal object W4cPathFillCpuOracle {
         control2: DirectedPointF64,
         end: DirectedPointF64,
         depthI32: Int,
+        isCurveStart: Boolean,
+        isCurveEnd: Boolean,
         destination: MutableList<DirectedCurveInterval>,
     ): String? {
         val bounds = DirectedBoundsF64.of(start, control1, control2, end)
@@ -771,12 +839,36 @@ internal object W4cPathFillCpuOracle {
             val leftControl2 = startControl1.midpoint(control1Control2) ?: return "cubic de Casteljau enclosure overflowed"
             val rightControl1 = control1Control2.midpoint(control2End) ?: return "cubic de Casteljau enclosure overflowed"
             val middle = leftControl2.midpoint(rightControl1) ?: return "cubic de Casteljau enclosure overflowed"
-            return subdivideDirectedCubic(start, startControl1, leftControl2, middle, depthI32 + 1, destination)
-                ?: subdivideDirectedCubic(middle, rightControl1, control2End, end, depthI32 + 1, destination)
+            return subdivideDirectedCubic(
+                start = start,
+                control1 = startControl1,
+                control2 = leftControl2,
+                end = middle,
+                depthI32 = depthI32 + 1,
+                isCurveStart = isCurveStart,
+                isCurveEnd = false,
+                destination = destination,
+            ) ?: subdivideDirectedCubic(
+                start = middle,
+                control1 = rightControl1,
+                control2 = control2End,
+                end = end,
+                depthI32 = depthI32 + 1,
+                isCurveStart = false,
+                isCurveEnd = isCurveEnd,
+                destination = destination,
+            )
         }
         return appendDirectedCurveInterval(
             destination,
-            DirectedCurveInterval(bounds, start, end, directedMonotonicY(start, control1, control2, end)),
+            DirectedCurveInterval(
+                bounds = bounds,
+                start = start,
+                end = end,
+                monotonicY = directedMonotonicY(start, control1, control2, end),
+                isCurveStart = isCurveStart,
+                isCurveEnd = isCurveEnd,
+            ),
         )
     }
 
@@ -981,19 +1073,48 @@ internal object W4cPathFillCpuOracle {
         fromT: Double,
         toT: Double,
         depthI32: Int,
+        isCurveStart: Boolean,
+        isCurveEnd: Boolean,
         destination: MutableList<DirectedCurveInterval>,
     ): String? {
         val bounds = arc.bounds(transform, fromT, toT) ?: return "SVG arc bounds cannot be enclosed"
         val span = bounds.maximumSpanUpperF64() ?: return "SVG arc enclosure overflowed"
         if (depthI32 < ORACLE_MAX_SUBDIVISION_DEPTH && span > CERTIFICATE_INTERVAL_MAXIMUM_SPAN) {
             val middle = (fromT + toT) * 0.5
-            return subdivideDirectedArc(arc, transform, fromT, middle, depthI32 + 1, destination)
-                ?: subdivideDirectedArc(arc, transform, middle, toT, depthI32 + 1, destination)
+            return subdivideDirectedArc(
+                arc = arc,
+                transform = transform,
+                fromT = fromT,
+                toT = middle,
+                depthI32 = depthI32 + 1,
+                isCurveStart = isCurveStart,
+                isCurveEnd = false,
+                destination = destination,
+            ) ?: subdivideDirectedArc(
+                arc = arc,
+                transform = transform,
+                fromT = middle,
+                toT = toT,
+                depthI32 = depthI32 + 1,
+                isCurveStart = false,
+                isCurveEnd = isCurveEnd,
+                destination = destination,
+            )
         }
         val start = arc.pointAt(transform, fromT) ?: return "SVG arc start cannot be enclosed"
         val end = arc.pointAt(transform, toT) ?: return "SVG arc end cannot be enclosed"
         val monotonicY = arc.isMonotonicY(transform, fromT, toT) ?: return "SVG arc derivative cannot be enclosed"
-        return appendDirectedCurveInterval(destination, DirectedCurveInterval(bounds, start, end, monotonicY))
+        return appendDirectedCurveInterval(
+            destination,
+            DirectedCurveInterval(
+                bounds = bounds,
+                start = start,
+                end = end,
+                monotonicY = monotonicY,
+                isCurveStart = isCurveStart,
+                isCurveEnd = isCurveEnd,
+            ),
+        )
     }
 
     /**
