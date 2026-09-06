@@ -75,10 +75,6 @@ public class PlanResource private constructor(
                             }
                         }
                     }
-                    require(
-                        PlanResourceUsage.DepthStencilAttachment !in usages ||
-                            format is PlanTextureFormat.DepthStencil,
-                    ) { "Depth-stencil attachment usage requires a depth-stencil format" }
                     require(byteSize >= minimumTextureByteSize(extent)) {
                         "Texture byte size is smaller than its extent"
                     }
@@ -86,6 +82,12 @@ public class PlanResource private constructor(
                 PlanResourceKind.Buffer -> require(format == null && extent == null) {
                     "Buffers cannot declare a format or extent"
                 }
+            }
+            val isD24S8DepthStencilTexture = kind == PlanResourceKind.Texture2D &&
+                role == PlanResourceRole.DepthStencil &&
+                format == PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8)
+            require(PlanResourceUsage.DepthStencilAttachment !in usages || isD24S8DepthStencilTexture) {
+                "Depth-stencil attachment usage requires a D24S8 depth-stencil texture"
             }
             return PlanResource(planResourceId(role, ordinal), role, ordinal, kind, format, extent, byteSize,
                 usages, lifetime, firstPassIndex, lastPassIndexExclusive)

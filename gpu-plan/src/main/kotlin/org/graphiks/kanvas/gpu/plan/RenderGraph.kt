@@ -91,6 +91,14 @@ public class RenderGraph private constructor(
             validateColorPasses(passes, resourcesById, targetExtent, colorFormat)
             validateStencilAtomicContracts(passes, dependencies, resources, resourcesById, capabilities, targetExtent)
             validateVisualCommandOrder(passes)
+            validatePathFillContracts(
+                passes,
+                dependencies,
+                resources,
+                resourcesById,
+                capabilities,
+                visualCommandCount,
+            )
             passes.filterIsInstance<PlanPass.ReadbackPass>().forEach { pass ->
                 require(pass.bytesPerRow % capabilities.copyBytesPerRowAlignment == 0L) {
                     "Readback row bytes do not satisfy alignment"
@@ -221,6 +229,9 @@ public class RenderGraph private constructor(
             }
             require(depthStencilResources.size == 1) { "Stencil graphs require one depth-stencil texture" }
             require(producers.size == covers.size) { "Stencil producer and cover counts must match" }
+            require(producers.map { it.atomicGroup }.distinct().size == producers.size) {
+                "Stencil atomic groups must be unique"
+            }
 
             val depthStencil = depthStencilResources.single()
             require(depthStencil.kind == PlanResourceKind.Texture2D) { "Depth-stencil must be a texture" }
@@ -297,6 +308,10 @@ public class RenderGraph private constructor(
                 "Stencil pairs must share vertex, index, and uniform resources"
             }
             require(producer.atomicGroup == cover.atomicGroup) { "Stencil pairs must share an atomic group" }
+            val expectedAtomicGroup = PlanAtomicGroupId("w4c:${producer.draw.commandIndex}")
+            require(producer.atomicGroup == expectedAtomicGroup && cover.atomicGroup == expectedAtomicGroup) {
+                "Stencil pairs require the canonical command atomic group"
+            }
             require(producer.depthStencilAccess == PlanDepthStencilAccess.Write) {
                 "Stencil producers require write access"
             }
@@ -309,29 +324,143 @@ public class RenderGraph private constructor(
             require(cover.depthStencilLoadStore == PlanDepthStencilLoadStore.LoadStoreTestReset) {
                 "Stencil covers require load-store test-reset"
             }
+            validatePathDrawDataShape(producer.drawDataResources, resourcesById)
+        }
+
+        private fun validatePathFillContracts(
+            passes: List<PlanPass>,
+            dependencies: List<PlanPassDependency>,
+            resources: List<PlanResource>,
+            resourcesById: Map<PlanResourceId, PlanResource>,
+            capabilities: PlanCapabilitySnapshot,
+            visualCommandCount: Int,
+        ) {
+            val visualDraws = visualDraws(passes)
+            if (visualDraws.none { it is PathFillDraw }) return
+
+            require(PlanOperationCapability.CopyUpload in capabilities.supportedOperations()) {
+                "Path fills require copy upload support"
+            }
+            require(PlanOperationCapability.UniformBuffer in capabilities.supportedOperations()) {
+                "Path fills require uniform buffer support"
+            }
+            val logicalTargets = resources.filter { it.role == PlanResourceRole.LogicalTarget }
+            require(logicalTargets.size == 1) { "Path fills require one logical color target" }
+            val target = logicalTargets.single().id
+            passes.forEach { pass ->
+                val colorTarget = when (pass) {
+                    is PlanPass.RenderPass -> pass.target
+                    is PlanPass.StencilProducer -> pass.target
+                    is PlanPass.StencilCover -> pass.target
+                    else -> null
+                }
+                if (colorTarget != null) {
+                    require(colorTarget == target) { "Path fills must use one color target" }
+                }
+            }
+            val readbacks = passes.filterIsInstance<PlanPass.ReadbackPass>()
+            require(readbacks.size == 1) { "Path fills require one readback" }
+            val terminalReadback = readbacks.single()
+            require(passes.last() === terminalReadback) { "Path fill readback must be terminal" }
+            require(terminalReadback.source == target) { "Path fills must read back their color target" }
+            val expectedDependencies = passes.zipWithNext().map { (before, after) ->
+                PlanPassDependency(before.id, after.id)
+            }.toSet()
+            require(dependencies.toSet() == expectedDependencies) {
+                "Path fills require consecutive linear dependencies"
+            }
+            require(visualCommandCount == visualDraws.map { it.commandIndex }.distinct().size) {
+                "Path visual command count must match unique draws"
+            }
+            val terminalReadbackIndex = passes.lastIndex
+            passes.forEach { pass ->
+                when (pass) {
+                    is PlanPass.RenderPass -> {
+                        if (pass.draws().any { it is PathFillDraw }) {
+                            require(pass.draws().size == 1) {
+                                "Path render passes require exactly one draw"
+                            }
+                            val draw = pass.draws().single()
+                            require(draw is PathFillDraw && draw.strategy == PathFillStrategy.DirectTriangle) {
+                                "Path render passes require one direct-triangle draw"
+                            }
+                            val drawDataResources = requireNotNull(pass.drawDataResources) {
+                                "Path render passes require vertex, index, and uniform resources"
+                            }
+                            validatePathDrawDataShape(drawDataResources, resourcesById)
+                            validatePathDrawDataLifetime(
+                                drawDataResources,
+                                resourcesById,
+                                terminalReadbackIndex,
+                            )
+                        }
+                    }
+                    is PlanPass.StencilProducer -> {
+                        validatePathDrawDataShape(pass.drawDataResources, resourcesById)
+                        validatePathDrawDataLifetime(
+                            pass.drawDataResources,
+                            resourcesById,
+                            terminalReadbackIndex,
+                        )
+                    }
+                    is PlanPass.StencilCover -> {
+                        validatePathDrawDataShape(pass.drawDataResources, resourcesById)
+                        validatePathDrawDataLifetime(
+                            pass.drawDataResources,
+                            resourcesById,
+                            terminalReadbackIndex,
+                        )
+                    }
+                    else -> Unit
+                }
+            }
+        }
+
+        private fun validatePathDrawDataShape(
+            drawDataResources: PlanDrawDataResources,
+            resourcesById: Map<PlanResourceId, PlanResource>,
+        ) {
             listOf(
-                Triple(producer.drawDataResources.vertex, PlanResourceRole.VertexData, PlanResourceUsage.Vertex),
-                Triple(producer.drawDataResources.index, PlanResourceRole.IndexData, PlanResourceUsage.Index),
-                Triple(producer.drawDataResources.uniform, PlanResourceRole.UniformData, PlanResourceUsage.Uniform),
+                Triple(drawDataResources.vertex, PlanResourceRole.VertexData, PlanResourceUsage.Vertex),
+                Triple(drawDataResources.index, PlanResourceRole.IndexData, PlanResourceUsage.Index),
+                Triple(drawDataResources.uniform, PlanResourceRole.UniformData, PlanResourceUsage.Uniform),
             ).forEach { (resourceId, requiredRole, requiredUsage) ->
                 val resource = requireNotNull(resourcesById[resourceId])
-                require(resource.role == requiredRole) { "Stencil draw data resource has the wrong role" }
-                require(requiredUsage in resource.usages()) { "Stencil draw data resource has the wrong usage" }
+                require(resource.role == requiredRole) { "Path draw data resource has the wrong role" }
+                require(resource.kind == PlanResourceKind.Buffer) { "Path draw data resources must be buffers" }
+                require(requiredUsage in resource.usages()) { "Path draw data resource has the wrong usage" }
+                require(PlanResourceUsage.CopyDestination in resource.usages()) {
+                    "Path draw data resources require copy destination usage"
+                }
+            }
+        }
+
+        private fun validatePathDrawDataLifetime(
+            drawDataResources: PlanDrawDataResources,
+            resourcesById: Map<PlanResourceId, PlanResource>,
+            terminalReadbackIndex: Int,
+        ) {
+            listOf(drawDataResources.vertex, drawDataResources.index, drawDataResources.uniform).forEach { resourceId ->
+                val resource = requireNotNull(resourcesById[resourceId])
+                require(resource.lastPassIndexExclusive > terminalReadbackIndex) {
+                    "Path draw data resources must remain alive through readback"
+                }
             }
         }
 
         private fun validateVisualCommandOrder(passes: List<PlanPass>) {
-            val draws = buildList {
-                passes.forEach { pass ->
-                    when (pass) {
-                        is PlanPass.RenderPass -> addAll(pass.draws())
-                        is PlanPass.StencilProducer -> add(pass.draw)
-                        else -> Unit
-                    }
-                }
-            }
-            draws.zipWithNext().forEach { (before, after) ->
+            visualDraws(passes).zipWithNext().forEach { (before, after) ->
                 require(before.commandIndex < after.commandIndex) { "Visual commands must be strictly ascending" }
+            }
+        }
+
+        private fun visualDraws(passes: List<PlanPass>): List<PlanDraw> = buildList {
+            passes.forEach { pass ->
+                when (pass) {
+                    is PlanPass.RenderPass -> addAll(pass.draws())
+                    is PlanPass.StencilProducer -> add(pass.draw)
+                    else -> Unit
+                }
             }
         }
 

@@ -595,6 +595,354 @@ class RenderGraphContractTest {
         }
     }
 
+    @Test
+    fun `direct path frames require a final readback and consecutive dependencies`() {
+        val resources = directPathResources(passCount = 1, readbackPassIndex = 0)
+        val render = directRenderPass(
+            ordinal = 0,
+            target = resources.target.id,
+            draws = listOf(directDraw(0)),
+            load = AttachmentLoadPlan.ClearTransparent,
+            drawDataResources = directDrawDataResources(resources),
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            graphOf(
+                resources = listOf(resources.target, resources.vertex, resources.index, resources.uniform),
+                passes = listOf(render),
+                dependencies = emptyList(),
+                visualCommandCount = 1,
+                capabilities = w4cCapabilities(),
+            )
+        }
+    }
+
+    @Test
+    fun `path frames reject a readback that is not terminal`() {
+        val resources = directPathResources(passCount = 3, readbackPassIndex = 1)
+        val first = directRenderPass(
+            ordinal = 0,
+            target = resources.target.id,
+            draws = listOf(directDraw(0)),
+            load = AttachmentLoadPlan.ClearTransparent,
+            drawDataResources = directDrawDataResources(resources),
+        )
+        val readback = directReadback(resources)
+        val second = directRenderPass(
+            ordinal = 1,
+            target = resources.target.id,
+            draws = listOf(directDraw(1)),
+            load = AttachmentLoadPlan.Load,
+            drawDataResources = directDrawDataResources(resources),
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            graphOf(
+                resources = resources.all,
+                passes = listOf(first, readback, second),
+                dependencies = listOf(
+                    PlanPassDependency(first.id, readback.id),
+                    PlanPassDependency(readback.id, second.id),
+                ),
+                visualCommandCount = 2,
+                capabilities = w4cCapabilities(),
+            )
+        }
+    }
+
+    @Test
+    fun `path frames reject a second color target`() {
+        val resources = directPathResources(passCount = 3, readbackPassIndex = 2)
+        val secondTarget = PlanResource.of(
+            role = PlanResourceRole.LogicalTarget,
+            ordinal = 1,
+            kind = PlanResourceKind.Texture2D,
+            format = PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+            extent = SizeI32(1, 1),
+            byteSize = 4,
+            usages = setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource),
+            lifetime = PlanResourceLifetime.FrameLocal,
+            firstPassIndex = 0,
+            lastPassIndexExclusive = 3,
+        )
+        val first = directRenderPass(
+            ordinal = 0,
+            target = resources.target.id,
+            draws = listOf(directDraw(0)),
+            load = AttachmentLoadPlan.ClearTransparent,
+            drawDataResources = directDrawDataResources(resources),
+        )
+        val second = directRenderPass(
+            ordinal = 1,
+            target = secondTarget.id,
+            draws = listOf(directDraw(1)),
+            load = AttachmentLoadPlan.Load,
+            drawDataResources = directDrawDataResources(resources),
+        )
+        val readback = directReadback(resources)
+
+        assertFailsWith<IllegalArgumentException> {
+            graphOf(
+                resources = resources.all + secondTarget,
+                passes = listOf(first, second, readback),
+                dependencies = listOf(
+                    PlanPassDependency(first.id, second.id),
+                    PlanPassDependency(second.id, readback.id),
+                ),
+                visualCommandCount = 2,
+                capabilities = w4cCapabilities(),
+            )
+        }
+    }
+
+    @Test
+    fun `path frames count their unique visual draws`() {
+        assertFailsWith<IllegalArgumentException> {
+            directPathGraph(visualCommandCount = 0)
+        }
+    }
+
+    @Test
+    fun `direct path render requires vertex index and uniform resources`() {
+        assertFailsWith<IllegalArgumentException> {
+            directPathGraph(drawDataResources = null)
+        }
+    }
+
+    @Test
+    fun `direct path render contains exactly one draw`() {
+        assertFailsWith<IllegalArgumentException> {
+            directPathGraph(
+                draws = listOf(directDraw(0), directDraw(1)),
+                visualCommandCount = 2,
+            )
+        }
+    }
+
+    @Test
+    fun `direct path render cannot mix a non path draw`() {
+        val solidRect = SolidRectDraw.of(
+            commandIndex = 1,
+            color = ColorF32.of(0f, 0f, 1f, 1f),
+            visibleBounds = RectI32(0, 0, 1, 1),
+            scissor = RectI32(0, 0, 1, 1),
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            directPathGraph(
+                draws = listOf(directDraw(0), solidRect),
+                visualCommandCount = 2,
+            )
+        }
+    }
+
+    @Test
+    fun `path vertex data cannot be a texture`() {
+        val resources = directPathResources()
+        val textureVertex = PlanResource.of(
+            role = PlanResourceRole.VertexData,
+            ordinal = 0,
+            kind = PlanResourceKind.Texture2D,
+            format = PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+            extent = SizeI32(1, 1),
+            byteSize = 4,
+            usages = setOf(PlanResourceUsage.Vertex, PlanResourceUsage.CopyDestination),
+            lifetime = PlanResourceLifetime.FrameLocal,
+            firstPassIndex = 0,
+            lastPassIndexExclusive = 2,
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            directPathGraph(
+                resources = resources,
+                graphResources = resources.all.map { resource ->
+                    if (resource.id == resources.vertex.id) textureVertex else resource
+                },
+            )
+        }
+    }
+
+    @Test
+    fun `path vertex data cannot use a different resource role`() {
+        val resources = directPathResources()
+        val wrongRoleVertex = PlanResource.of(
+            role = PlanResourceRole.ReadbackStaging,
+            ordinal = 1,
+            kind = PlanResourceKind.Buffer,
+            format = null,
+            extent = null,
+            byteSize = 4,
+            usages = setOf(PlanResourceUsage.Vertex, PlanResourceUsage.CopyDestination),
+            lifetime = PlanResourceLifetime.FrameLocal,
+            firstPassIndex = 0,
+            lastPassIndexExclusive = 2,
+        )
+        val bindings = PlanDrawDataResources(
+            wrongRoleVertex.id,
+            resources.index.id,
+            resources.uniform.id,
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            directPathGraph(
+                resources = resources,
+                graphResources = resources.all + wrongRoleVertex,
+                drawDataResources = bindings,
+            )
+        }
+    }
+
+    @Test
+    fun `path vertex data requires its semantic usage`() {
+        val resources = directPathResources()
+        val missingVertexUsage = PlanResource.of(
+            role = PlanResourceRole.VertexData,
+            ordinal = 0,
+            kind = PlanResourceKind.Buffer,
+            format = null,
+            extent = null,
+            byteSize = 4,
+            usages = setOf(PlanResourceUsage.CopyDestination),
+            lifetime = PlanResourceLifetime.FrameLocal,
+            firstPassIndex = 0,
+            lastPassIndexExclusive = 2,
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            directPathGraph(
+                resources = resources,
+                graphResources = resources.all.map { resource ->
+                    if (resource.id == resources.vertex.id) missingVertexUsage else resource
+                },
+            )
+        }
+    }
+
+    @Test
+    fun `path vertex data requires copy destination usage`() {
+        val resources = directPathResources()
+        val missingCopyDestination = PlanResource.of(
+            role = PlanResourceRole.VertexData,
+            ordinal = 0,
+            kind = PlanResourceKind.Buffer,
+            format = null,
+            extent = null,
+            byteSize = 4,
+            usages = setOf(PlanResourceUsage.Vertex),
+            lifetime = PlanResourceLifetime.FrameLocal,
+            firstPassIndex = 0,
+            lastPassIndexExclusive = 2,
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            directPathGraph(
+                resources = resources,
+                graphResources = resources.all.map { resource ->
+                    if (resource.id == resources.vertex.id) missingCopyDestination else resource
+                },
+            )
+        }
+    }
+
+    @Test
+    fun `depth stencil attachment usage is reserved for D24S8 textures`() {
+        assertFailsWith<IllegalArgumentException> {
+            PlanResource.of(
+                role = PlanResourceRole.VertexData,
+                ordinal = 0,
+                kind = PlanResourceKind.Buffer,
+                format = null,
+                extent = null,
+                byteSize = 4,
+                usages = setOf(PlanResourceUsage.DepthStencilAttachment),
+                lifetime = PlanResourceLifetime.FrameLocal,
+                firstPassIndex = 0,
+                lastPassIndexExclusive = 1,
+            )
+        }
+    }
+
+    @Test
+    fun `path graphs require copy upload and uniform buffer capabilities`() {
+        assertFailsWith<IllegalArgumentException> {
+            directPathGraph(
+                capabilities = w4cCapabilities(
+                    supportedOperations = setOf(
+                        PlanOperationCapability.RenderPass,
+                        PlanOperationCapability.Readback,
+                    ),
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun `path draw data keeps its shared lease through terminal readback`() {
+        val resources = directPathResources(dataLastPassExclusive = 1)
+
+        assertFailsWith<IllegalArgumentException> {
+            directPathGraph(
+                resources = resources,
+                peakFrameLocalBytes = 260,
+            )
+        }
+    }
+
+    @Test
+    fun `stencil atomic groups are canonical command identities`() {
+        val resources = atomicResources()
+        val arbitraryGroup = PlanAtomicGroupId("not-w4c-command")
+
+        assertFailsWith<IllegalArgumentException> {
+            atomicGraph(
+                resources,
+                atomicPasses(
+                    resources,
+                    stencilDraw(0),
+                    producerGroup = arbitraryGroup,
+                    coverGroup = arbitraryGroup,
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun `stencil atomic groups cannot be reused by different commands`() {
+        val resources = atomicResources(passCount = 5)
+        val reused = PlanAtomicGroupId("w4c:0")
+        val first = atomicPasses(
+            resources = resources,
+            producerDraw = stencilDraw(0),
+            producerGroup = reused,
+            coverGroup = reused,
+        )
+        val second = atomicPasses(
+            resources = resources,
+            producerDraw = stencilDraw(1),
+            producerOrdinal = 1,
+            coverOrdinal = 1,
+            producerLoad = AttachmentLoadPlan.Load,
+            producerGroup = reused,
+            coverGroup = reused,
+        )
+        val readback = atomicReadback(resources)
+
+        assertFailsWith<IllegalArgumentException> {
+            graphOf(
+                resources = resources.all,
+                passes = listOf(first.producer, first.cover, second.producer, second.cover, readback),
+                dependencies = listOf(
+                    PlanPassDependency(first.producer.id, first.cover.id),
+                    PlanPassDependency(first.cover.id, second.producer.id),
+                    PlanPassDependency(second.producer.id, second.cover.id),
+                    PlanPassDependency(second.cover.id, readback.id),
+                ),
+                visualCommandCount = 2,
+                capabilities = w4cCapabilities(),
+            )
+        }
+    }
+
     private fun supportedCapabilities(
         formats: Set<PlanLogicalColorFormat>,
         copyBytesPerRowAlignment: Int = 256,
@@ -615,6 +963,120 @@ class RenderGraphContractTest {
         bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 4_096, 4_096),
         supportedDepthStencilFormats = supportedDepthStencilFormats,
     )
+
+    private data class DirectPathResources(
+        val target: PlanResource,
+        val staging: PlanResource,
+        val vertex: PlanResource,
+        val index: PlanResource,
+        val uniform: PlanResource,
+        val all: List<PlanResource>,
+    )
+
+    private fun directPathResources(
+        passCount: Int = 2,
+        readbackPassIndex: Int = passCount - 1,
+        dataLastPassExclusive: Int = passCount,
+    ): DirectPathResources {
+        val target = PlanResource.of(
+            PlanResourceRole.LogicalTarget,
+            0,
+            PlanResourceKind.Texture2D,
+            PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+            SizeI32(1, 1),
+            4,
+            setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource),
+            PlanResourceLifetime.FrameLocal,
+            0,
+            passCount,
+        )
+        val staging = PlanResource.of(
+            PlanResourceRole.ReadbackStaging,
+            0,
+            PlanResourceKind.Buffer,
+            null,
+            null,
+            256,
+            setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead),
+            PlanResourceLifetime.FrameLocal,
+            readbackPassIndex,
+            readbackPassIndex + 1,
+        )
+        fun data(role: PlanResourceRole, usage: PlanResourceUsage) = PlanResource.of(
+            role,
+            0,
+            PlanResourceKind.Buffer,
+            null,
+            null,
+            4,
+            setOf(usage, PlanResourceUsage.CopyDestination),
+            PlanResourceLifetime.FrameLocal,
+            0,
+            dataLastPassExclusive,
+        )
+        val vertex = data(PlanResourceRole.VertexData, PlanResourceUsage.Vertex)
+        val index = data(PlanResourceRole.IndexData, PlanResourceUsage.Index)
+        val uniform = data(PlanResourceRole.UniformData, PlanResourceUsage.Uniform)
+        return DirectPathResources(
+            target,
+            staging,
+            vertex,
+            index,
+            uniform,
+            listOf(target, staging, vertex, index, uniform),
+        )
+    }
+
+    private fun directDrawDataResources(resources: DirectPathResources): PlanDrawDataResources = PlanDrawDataResources(
+        resources.vertex.id,
+        resources.index.id,
+        resources.uniform.id,
+    )
+
+    private fun directRenderPass(
+        ordinal: Int,
+        target: PlanResourceId,
+        draws: List<PlanDraw>,
+        load: AttachmentLoadPlan,
+        drawDataResources: PlanDrawDataResources?,
+    ): PlanPass.RenderPass = PlanPass.RenderPass(
+        ordinal,
+        target,
+        draws,
+        load,
+        AttachmentStorePlan.Store,
+        drawDataResources,
+    )
+
+    private fun directReadback(resources: DirectPathResources): PlanPass.ReadbackPass =
+        PlanPass.ReadbackPass(0, resources.target.id, resources.staging.id, 256)
+
+    private fun directPathGraph(
+        resources: DirectPathResources = directPathResources(),
+        graphResources: List<PlanResource> = resources.all,
+        draws: List<PlanDraw> = listOf(directDraw(0)),
+        drawDataResources: PlanDrawDataResources? = directDrawDataResources(resources),
+        visualCommandCount: Int = draws.size,
+        capabilities: PlanCapabilitySnapshot = w4cCapabilities(),
+        peakFrameLocalBytes: Long = peak(graphResources, 2),
+    ): RenderGraph {
+        val render = directRenderPass(
+            ordinal = 0,
+            target = resources.target.id,
+            draws = draws,
+            load = AttachmentLoadPlan.ClearTransparent,
+            drawDataResources = drawDataResources,
+        )
+        val readback = directReadback(resources)
+        return graphOf(
+            resources = graphResources,
+            passes = listOf(render, readback),
+            dependencies = listOf(PlanPassDependency(render.id, readback.id)),
+            visualCommandCount = visualCommandCount,
+            capabilities = capabilities,
+            peakFrameLocalBytes = peakFrameLocalBytes,
+        )
+    }
 
     private fun graphWithAnalyticDrawResources(uniformLifetime: IntRange): RenderGraph {
         val target = targetResource()
@@ -726,6 +1188,7 @@ class RenderGraphContractTest {
     private fun atomicResources(
         passCount: Int = 3,
         depthStencilLastPassExclusive: Int = passCount,
+        dataLastPassExclusive: Int = passCount,
         duplicateDepthStencil: Boolean = false,
     ): AtomicResources {
         val target = PlanResource.of(
@@ -762,7 +1225,7 @@ class RenderGraphContractTest {
             setOf(usage, PlanResourceUsage.CopyDestination),
             PlanResourceLifetime.FrameLocal,
             0,
-            passCount,
+            dataLastPassExclusive,
         )
         val vertex = data(PlanResourceRole.VertexData, PlanResourceUsage.Vertex)
         val index = data(PlanResourceRole.IndexData, PlanResourceUsage.Index)
@@ -805,8 +1268,12 @@ class RenderGraphContractTest {
         producerDraw: PathFillDraw,
         coverDraw: PathFillDraw = producerDraw,
         coverTarget: PlanResourceId = resources.target.id,
+        producerOrdinal: Int = 0,
+        coverOrdinal: Int = producerOrdinal,
         producerGroup: PlanAtomicGroupId = PlanAtomicGroupId("w4c:${producerDraw.commandIndex}"),
         coverGroup: PlanAtomicGroupId = producerGroup,
+        producerLoad: AttachmentLoadPlan = AttachmentLoadPlan.ClearTransparent,
+        coverLoad: AttachmentLoadPlan = AttachmentLoadPlan.Load,
         producerDepthStencilLoadStore: PlanDepthStencilLoadStore = PlanDepthStencilLoadStore.ClearZeroStore,
         coverDepthStencilLoadStore: PlanDepthStencilLoadStore = PlanDepthStencilLoadStore.LoadStoreTestReset,
         producerDepthStencilAccess: PlanDepthStencilAccess = PlanDepthStencilAccess.Write,
@@ -816,25 +1283,25 @@ class RenderGraphContractTest {
         val drawDataResources = PlanDrawDataResources(resources.vertex.id, resources.index.id, resources.uniform.id)
         return AtomicPassPair(
             PlanPass.StencilProducer(
-                ordinal = 0,
+                ordinal = producerOrdinal,
                 target = resources.target.id,
                 depthStencil = resources.depthStencil.id,
                 draw = producerDraw,
                 drawDataResources = drawDataResources,
                 atomicGroup = producerGroup,
-                load = AttachmentLoadPlan.ClearTransparent,
+                load = producerLoad,
                 store = AttachmentStorePlan.Store,
                 depthStencilAccess = producerDepthStencilAccess,
                 depthStencilLoadStore = producerDepthStencilLoadStore,
             ),
             PlanPass.StencilCover(
-                ordinal = 0,
+                ordinal = coverOrdinal,
                 target = coverTarget,
                 depthStencil = resources.depthStencil.id,
                 draw = coverDraw,
                 drawDataResources = coverDrawDataResources ?: drawDataResources,
                 atomicGroup = coverGroup,
-                load = AttachmentLoadPlan.Load,
+                load = coverLoad,
                 store = AttachmentStorePlan.Store,
                 depthStencilAccess = coverDepthStencilAccess,
                 depthStencilLoadStore = coverDepthStencilLoadStore,
@@ -868,6 +1335,7 @@ class RenderGraphContractTest {
         dependencies: List<PlanPassDependency>,
         visualCommandCount: Int,
         capabilities: PlanCapabilitySnapshot = atomicCapabilities(),
+        peakFrameLocalBytes: Long = peak(resources, passes.size),
     ): RenderGraph = RenderGraph.of(
         id = PlanId("atomic-plan"),
         capabilityId = "atomic-stencil-contract",
@@ -879,19 +1347,25 @@ class RenderGraphContractTest {
         resources = resources,
         passes = passes,
         dependencies = dependencies,
-        peakFrameLocalBytes = peak(resources, passes.size),
+        peakFrameLocalBytes = peakFrameLocalBytes,
     )
 
-    private fun atomicCapabilities(): PlanCapabilitySnapshot = supportedCapabilities(
+    private fun w4cCapabilities(
+        supportedOperations: Set<PlanOperationCapability> = setOf(
+            PlanOperationCapability.RenderPass,
+            PlanOperationCapability.CopyUpload,
+            PlanOperationCapability.UniformBuffer,
+            PlanOperationCapability.Readback,
+            PlanOperationCapability.DepthStencilAttachment,
+            PlanOperationCapability.StencilCover,
+        ),
+    ): PlanCapabilitySnapshot = supportedCapabilities(
             formats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
             supportedDepthStencilFormats = setOf(PlanDepthStencilFormat.Depth24PlusStencil8),
-            supportedOperations = setOf(
-                PlanOperationCapability.RenderPass,
-                PlanOperationCapability.Readback,
-                PlanOperationCapability.DepthStencilAttachment,
-                PlanOperationCapability.StencilCover,
-            ),
+            supportedOperations = supportedOperations,
         )
+
+    private fun atomicCapabilities(): PlanCapabilitySnapshot = w4cCapabilities()
 
     private fun peak(resources: List<PlanResource>, passCount: Int): Long =
         (0 until passCount).maxOf { passIndex ->
@@ -907,6 +1381,28 @@ class RenderGraphContractTest {
         strategy = PathFillStrategy.StencilCover,
         scissorI32 = RectI32(0, 0, 1, 1),
     )
+
+    private fun directDraw(commandIndex: Int): PathFillDraw = PathFillDraw.of(
+        commandIndex = commandIndex,
+        color = ColorF32.of(0.5f, 0f, 0f, 0.5f),
+        geometryF32 = directGeometry(),
+        strategy = PathFillStrategy.DirectTriangle,
+        scissorI32 = RectI32(0, 0, 1, 1),
+    )
+
+    private fun directGeometry(): PathFillGeometryF32 = assertIs<PathFillPreparationResult.Ready>(
+        preparePathFillGeometryF32(
+            PathFillInputF64.of(
+                FillRule.WINDING,
+                listOf(
+                    PathFillSegmentF64.MoveTo(Point2F64(0.0, 0.0)),
+                    PathFillSegmentF64.LineTo(Point2F64(1.0, 0.0)),
+                    PathFillSegmentF64.LineTo(Point2F64(0.0, 1.0)),
+                    PathFillSegmentF64.Close,
+                ),
+            ),
+        ),
+    ).geometryF32
 
     private fun stencilGeometry(): PathFillGeometryF32 = assertIs<PathFillPreparationResult.Ready>(
         preparePathFillGeometryF32(
