@@ -143,9 +143,8 @@ private fun PathFillMatrixF64.transformArcMetadataF64(
         transformedYAxisX * transformedYAxisX + transformedYAxisY * transformedYAxisY
     val axisDot =
         transformedXAxisX * transformedYAxisX + transformedXAxisY * transformedYAxisY
-    val dotTolerance = 1e-6 * sqrt(xAxisLengthSquared * yAxisLengthSquared)
 
-    val transformed = if (abs(axisDot) <= dotTolerance) {
+    val transformed = if (axisDot == 0.0) {
         val transformedRadiusX = sqrt(xAxisLengthSquared)
         val transformedRadiusY = sqrt(yAxisLengthSquared)
         val transformedRotation = when {

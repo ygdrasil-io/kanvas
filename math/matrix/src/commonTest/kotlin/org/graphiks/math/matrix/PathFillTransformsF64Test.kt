@@ -1,10 +1,16 @@
 package org.graphiks.math.matrix
 
+import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertTrue
 import org.graphiks.math.geometry.PathBuilder
 import org.graphiks.math.geometry.PathFillSegmentF64
 import org.graphiks.math.geometry.Point2F64
@@ -37,6 +43,51 @@ class PathFillTransformsF64Test {
         assertEquals(15.0, arc.radius.y)
         assertEquals(180.0, arc.xAxisRotationDegreesF64)
         assertFalse(arc.sweep)
+    }
+
+    @Test
+    fun `anisotropic scale preserves a rotated arc ellipse within the device tolerance`() {
+        val radiusX = 250_000f
+        val radiusY = 1_000_000f
+        val rotationDegrees = 0.00001f
+        val scaleX = 4f
+        val scaleY = 1f
+        val source = PathBuilder()
+            .moveTo(0f, 0f)
+            .arcTo(
+                radiusX,
+                radiusY,
+                rotationDegrees,
+                largeArc = false,
+                sweep = true,
+                x = 1f,
+                y = 1f,
+            )
+            .build()
+
+        val arc = Matrix3x3F32.scaling(scaleX, scaleY)
+            .mapPathFillInputF64(source)
+            .segmentAtI32(1) as PathFillSegmentF64.ArcTo
+
+        val expected = transformedEllipseCovariance(
+            radiusX = radiusX.toDouble(),
+            radiusY = radiusY.toDouble(),
+            rotationDegrees = rotationDegrees.toDouble(),
+            scaleX = scaleX.toDouble(),
+            scaleY = scaleY.toDouble(),
+        )
+        val actual = ellipseCovariance(
+            radiusX = arc.radius.x,
+            radiusY = arc.radius.y,
+            rotationDegrees = arc.xAxisRotationDegreesF64,
+        )
+
+        val supportErrorPx = abs(diagonalSupport(expected) - diagonalSupport(actual))
+        assertTrue(
+            supportErrorPx <= 0.25,
+            "transformed ellipse support differs by $supportErrorPx px, exceeding 0.25 px",
+        )
+        assertCovarianceClose(expected, actual, tolerance = 1.0)
     }
 
     @Test
@@ -105,4 +156,65 @@ class PathFillTransformsF64Test {
     }
 
     private fun canonicalF32(value: Float): Double = Float.fromBits(value.toRawBits()).toDouble()
+
+    private fun transformedEllipseCovariance(
+        radiusX: Double,
+        radiusY: Double,
+        rotationDegrees: Double,
+        scaleX: Double,
+        scaleY: Double,
+    ): EllipseCovariance {
+        val angle = rotationDegrees * PI / 180.0
+        return covarianceFromAxes(
+            xAxisX = scaleX * radiusX * cos(angle),
+            xAxisY = scaleY * radiusX * sin(angle),
+            yAxisX = -scaleX * radiusY * sin(angle),
+            yAxisY = scaleY * radiusY * cos(angle),
+        )
+    }
+
+    private fun ellipseCovariance(
+        radiusX: Double,
+        radiusY: Double,
+        rotationDegrees: Double,
+    ): EllipseCovariance {
+        val angle = rotationDegrees * PI / 180.0
+        return covarianceFromAxes(
+            xAxisX = radiusX * cos(angle),
+            xAxisY = radiusX * sin(angle),
+            yAxisX = -radiusY * sin(angle),
+            yAxisY = radiusY * cos(angle),
+        )
+    }
+
+    private fun covarianceFromAxes(
+        xAxisX: Double,
+        xAxisY: Double,
+        yAxisX: Double,
+        yAxisY: Double,
+    ): EllipseCovariance = EllipseCovariance(
+        xx = xAxisX * xAxisX + yAxisX * yAxisX,
+        xy = xAxisX * xAxisY + yAxisX * yAxisY,
+        yy = xAxisY * xAxisY + yAxisY * yAxisY,
+    )
+
+    private fun diagonalSupport(covariance: EllipseCovariance): Double = sqrt(
+        (covariance.xx + 2.0 * covariance.xy + covariance.yy) / 2.0,
+    )
+
+    private fun assertCovarianceClose(
+        expected: EllipseCovariance,
+        actual: EllipseCovariance,
+        tolerance: Double,
+    ) {
+        assertTrue(abs(expected.xx - actual.xx) <= tolerance)
+        assertTrue(abs(expected.xy - actual.xy) <= tolerance)
+        assertTrue(abs(expected.yy - actual.yy) <= tolerance)
+    }
+
+    private data class EllipseCovariance(
+        val xx: Double,
+        val xy: Double,
+        val yy: Double,
+    )
 }
