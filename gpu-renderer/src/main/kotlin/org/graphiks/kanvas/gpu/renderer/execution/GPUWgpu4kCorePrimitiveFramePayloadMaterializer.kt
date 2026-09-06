@@ -1710,6 +1710,21 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         }
     }
 
+    private fun GPUCorePrimitivePathStencilGeometrySnapshot.hasExactW4cGeometry(
+        expectedVertices: FloatArray,
+        expectedIndices: IntArray,
+    ): Boolean {
+        if (vertexCount * 2 != expectedVertices.size || indexCount != expectedIndices.size) return false
+        val actualVertices = FloatArray(expectedVertices.size)
+        val actualIndices = IntArray(expectedIndices.size)
+        copyVerticesInto(actualVertices)
+        copyIndicesInto(actualIndices)
+        return actualVertices.indices.all { index ->
+            java.lang.Float.floatToRawIntBits(actualVertices[index]) ==
+                java.lang.Float.floatToRawIntBits(expectedVertices[index])
+        } && actualIndices.contentEquals(expectedIndices)
+    }
+
     /**
      * Materializes the Task5 W4c path-fill envelope without returning to any generic geometry
      * batching path.  The only geometry admitted here is the immutable math copy retained by the
@@ -1909,32 +1924,52 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 val coverGeometry = (coverRoute.orderedUnits.singleOrNull() as?
                     GPUCorePrimitiveNativeScopeRouteUnit.PathCover)?.geometry
                     ?: return refused("invalid.native-core-primitive.w4c-route", "W4c cover geometry is unavailable.")
-                val producerVertexBytes = producerGeometry.vertexCount.toLong() * 2L * Float.SIZE_BYTES
-                val producerIndexBytes = producerGeometry.indexCount.toLong() * Int.SIZE_BYTES
-                val coverVertexBytes = coverGeometry.vertexCount.toLong() * 2L * Float.SIZE_BYTES
-                val coverIndexBytes = coverGeometry.indexCount.toLong() * Int.SIZE_BYTES
+                val fan = geometry.copyStencilEdgeFanF32OrNull()
+                    ?: return refused("invalid.native-core-primitive.w4c-geometry", "W4c math fan is unavailable.")
+                val producerVertices = fan.copyVerticesF32()
+                val producerIndices = fan.copyIndicesI32()
+                val coverBounds = draw.copyScissorBounds()
+                val coverVertices = floatArrayOf(
+                    coverBounds.left.toFloat(), coverBounds.top.toFloat(),
+                    coverBounds.right.toFloat(), coverBounds.top.toFloat(),
+                    coverBounds.right.toFloat(), coverBounds.bottom.toFloat(),
+                    coverBounds.left.toFloat(), coverBounds.bottom.toFloat(),
+                )
+                val coverIndices = intArrayOf(0, 2, 1, 0, 3, 2)
+                if (!producerGeometry.hasExactW4cGeometry(producerVertices, producerIndices) ||
+                    !coverGeometry.hasExactW4cGeometry(coverVertices, coverIndices)
+                ) {
+                    return refused(
+                        "invalid.native-core-primitive.w4c-route",
+                        "W4c producer and cover routes must retain the exact sealed math geometry.",
+                    )
+                }
+                val producerVertexBytes = producerVertices.size.toLong() * Float.SIZE_BYTES
+                val producerIndexBytes = producerIndices.size.toLong() * Int.SIZE_BYTES
+                val coverVertexBytes = coverVertices.size.toLong() * Float.SIZE_BYTES
+                val coverIndexBytes = coverIndices.size.toLong() * Int.SIZE_BYTES
                 if (producerVertexBytes + coverVertexBytes != draw.vertexRangeBytes ||
                     producerIndexBytes + coverIndexBytes != draw.indexRangeBytes
                 ) return refused("invalid.native-core-primitive.w4c-geometry", "W4c fan and cover do not fill their sealed ranges.")
-                producerGeometry.copyVerticesInto(vertexData, vertexStart)
-                producerGeometry.copyIndicesInto(indexData, indexStart)
-                val coverVertexStart = vertexStart + producerGeometry.vertexCount * 2
-                val coverIndexStart = indexStart + producerGeometry.indexCount
-                coverGeometry.copyVerticesInto(vertexData, coverVertexStart)
-                coverGeometry.copyIndicesInto(indexData, coverIndexStart)
+                producerVertices.copyInto(vertexData, vertexStart)
+                producerIndices.copyInto(indexData, indexStart)
+                val coverVertexStart = vertexStart + producerVertices.size
+                val coverIndexStart = indexStart + producerIndices.size
+                coverVertices.copyInto(vertexData, coverVertexStart)
+                coverIndices.copyInto(indexData, coverIndexStart)
                 geometrySlicesByStep[producerEntry.sourceStepIndex] = GPUW4cCorePrimitiveGeometrySlice(
                     firstIndex = indexStart,
-                    indexCount = producerGeometry.indexCount,
+                    indexCount = producerIndices.size,
                     baseVertex = vertexStart / 2,
-                    vertexCount = producerGeometry.vertexCount,
-                    maxLocalIndex = producerGeometry.maxLocalIndex,
+                    vertexCount = producerVertices.size / 2,
+                    maxLocalIndex = requireNotNull(producerIndices.maxOrNull()),
                 )
                 geometrySlicesByStep[coverEntry.sourceStepIndex] = GPUW4cCorePrimitiveGeometrySlice(
                     firstIndex = coverIndexStart,
-                    indexCount = coverGeometry.indexCount,
+                    indexCount = coverIndices.size,
                     baseVertex = coverVertexStart / 2,
-                    vertexCount = coverGeometry.vertexCount,
-                    maxLocalIndex = coverGeometry.maxLocalIndex,
+                    vertexCount = coverVertices.size / 2,
+                    maxLocalIndex = requireNotNull(coverIndices.maxOrNull()),
                 )
             }
             val uniform = matchingEntries.firstOrNull()?.semantic?.payloadRef?.uniformBlock?.bytes

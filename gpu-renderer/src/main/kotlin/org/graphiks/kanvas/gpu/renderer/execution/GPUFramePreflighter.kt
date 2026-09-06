@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
 import io.ygdrasil.webgpu.GPUTextureFormat
+import org.graphiks.kanvas.gpu.plan.PlanResourceId
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureFormatSampleSupport
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
@@ -2142,6 +2143,7 @@ internal class GPUFramePreflighter(
         }
         val readback = framePlan.steps.filterIsInstance<GPUFrameStep.ReadbackCopyStep>()
             .singleOrNull() ?: return null
+        val taskPrefix = "task.w4c.${scratch.planId}"
         val expectedReadbackId = "w4c.${scratch.planId}.readback"
         val preparations = framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
             .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
@@ -2151,7 +2153,13 @@ internal class GPUFramePreflighter(
             ?: return null
         val targetDescriptor = targetPreparation.descriptor as? GPUFrameTextureDescriptor ?: return null
         val stagingDescriptor = stagingPreparation.descriptor as? GPUFrameBufferDescriptor ?: return null
-        if (framePlan.recordingSeals.size != 1 ||
+        if (framePlan.steps.size != renders.size + 2 ||
+            framePlan.steps.firstOrNull() !is GPUFrameStep.PrepareResourcesStep ||
+            framePlan.steps.lastOrNull() !is GPUFrameStep.ReadbackCopyStep ||
+            framePlan.steps.drop(1).dropLast(1).any { step -> step !is GPUFrameStep.RenderPassStep } ||
+            framePlan.steps.first().sourceTaskIds.singleOrNull()?.value != "$taskPrefix.prepare" ||
+            readback.sourceTaskIds.singleOrNull()?.value != "$taskPrefix.readback.Readback:0" ||
+            framePlan.recordingSeals.size != 1 ||
             framePlan.recordingSeals.single().compatibilityKeyHash != "w4c:${scratch.planId}" ||
             framePlan.recordingSeals.single().replayKeyHash != "w4c:${scratch.planId}" ||
             framePlan.recordingSeals.single().capabilitySealHash != framePlan.capabilitySeal.sealHash ||
@@ -2199,6 +2207,24 @@ internal class GPUFramePreflighter(
             )
         ) return null
 
+        val usesStencil = scratch.draws.any { draw -> draw.strategy == PathFillStrategy.StencilCover }
+        val expectedDepthStencilBytes = if (usesStencil) {
+            Math.multiplyExact(
+                Math.multiplyExact(scratch.targetBounds.width.toLong(), scratch.targetBounds.height.toLong()),
+                4L,
+            )
+        } else {
+            0L
+        }
+        if (
+            scratch.vertexResourceId != PlanResourceId("VertexData:0") ||
+                scratch.indexResourceId != PlanResourceId("IndexData:0") ||
+                scratch.uniformResourceId != PlanResourceId("UniformData:0") ||
+                scratch.depthStencilResourceId !=
+                (if (usesStencil) PlanResourceId("DepthStencil:0") else null) ||
+                scratch.depthStencilBytes != expectedDepthStencilBytes
+        ) return null
+
         val locations = renders.flatMap { (stepIndex, render) ->
             render.drawPackets.map { packet -> Triple(stepIndex, render, packet) }
         }
@@ -2229,6 +2255,10 @@ internal class GPUFramePreflighter(
             GPUCorePrimitiveNativeScopeRouteSeal.Routes,
         >()
         var locationCursor = 0
+        var directPassOrdinal = 0
+        var producerPassOrdinal = 0
+        var coverPassOrdinal = 0
+        val expectedAtomicGroupByFromTaskId = linkedMapOf<String, String?>()
         scratch.draws.forEachIndexed { drawIndex, draw ->
             val expectedPacketCount = if (draw.strategy == PathFillStrategy.DirectTriangle) 1 else 2
             val scopedLocations = locations.subList(locationCursor, locationCursor + expectedPacketCount)
@@ -2270,11 +2300,18 @@ internal class GPUFramePreflighter(
                     val semantic = requireNotNull(semantics.single())
                     val direct = draw.copyGeometryF32().copyDirectTriangleF32OrNull() ?: return null
                     val authority = requireNotNull(packet.corePrimitivePreparedAuthority)
-                    if (packet.role != GPUDrawPacketRole.Shading ||
+                    val expectedPassId = "MainRender:${directPassOrdinal++}"
+                    val sourceTaskId = render.sourceTaskIds.singleOrNull()?.value ?: return null
+                    if (draw.atomicGroupId != null ||
+                        packet.packetId.value != "packet.w4c.${draw.commandId}.direct" ||
+                        packet.passId != expectedPassId ||
+                        sourceTaskId != "$taskPrefix.render.$expectedPassId" ||
+                        packet.role != GPUDrawPacketRole.Shading ||
                         render.loadStore != GPULoadStorePlan(expectedLoad, GPUStorePlan.Store) ||
                         render.depthStencilLoadStore != null || render.resourceUses.isNotEmpty() ||
                         semantic.scissorBounds != draw.copyScissorBounds()
                     ) return null
+                    expectedAtomicGroupByFromTaskId[sourceTaskId] = null
                     val route = GPUCorePrimitiveDirectNativeRoute.Accepted(
                         direct.copyVerticesF32(),
                         direct.copyIndicesI32(),
@@ -2304,6 +2341,11 @@ internal class GPUFramePreflighter(
                     val producerAuthority = requireNotNull(producer.corePrimitivePreparedAuthority)
                     val coverAuthority = requireNotNull(cover.corePrimitivePreparedAuthority)
                     val fan = draw.copyGeometryF32().copyStencilEdgeFanF32OrNull() ?: return null
+                    val expectedAtomicGroupId = "w4c:${draw.commandId}"
+                    val expectedProducerPassId = "StencilProducer:${producerPassOrdinal++}"
+                    val expectedCoverPassId = "StencilCover:${coverPassOrdinal++}"
+                    val producerTaskId = producerLocation.second.sourceTaskIds.singleOrNull()?.value ?: return null
+                    val coverTaskId = coverLocation.second.sourceTaskIds.singleOrNull()?.value ?: return null
                     val expectedDepthStencilResource = scratch.target.value
                         .removeSuffix(".target")
                         .plus(".depth-stencil")
@@ -2316,6 +2358,12 @@ internal class GPUFramePreflighter(
                         } != null && render.resourceUses.size == 1
                     }
                     if (scratch.depthStencilResourceId == null ||
+                        draw.atomicGroupId != expectedAtomicGroupId ||
+                        producer.packetId.value != "packet.w4c.${draw.commandId}.producer" ||
+                        cover.packetId.value != "packet.w4c.${draw.commandId}.cover" ||
+                        producer.passId != expectedProducerPassId || cover.passId != expectedCoverPassId ||
+                        producerTaskId != "$taskPrefix.render.$expectedProducerPassId" ||
+                        coverTaskId != "$taskPrefix.render.$expectedCoverPassId" ||
                         producer.role != GPUDrawPacketRole.PathStencilProducer ||
                         cover.role != GPUDrawPacketRole.PathStencilCover ||
                         producer.commandIdValue != draw.commandId || cover.commandIdValue != draw.commandId ||
@@ -2334,6 +2382,8 @@ internal class GPUFramePreflighter(
                             null,
                         ) || !expectedUse(producerLocation.second) || !expectedUse(coverLocation.second)
                     ) return null
+                    expectedAtomicGroupByFromTaskId[producerTaskId] = expectedAtomicGroupId
+                    expectedAtomicGroupByFromTaskId[coverTaskId] = null
                     val pair = GPUCorePrimitivePathStencilNativeRoute.AcceptedPair(
                         producer.packetId,
                         cover.packetId,
@@ -2396,13 +2446,8 @@ internal class GPUFramePreflighter(
             framePlan.dependencies.map { dependency -> dependency.fromTaskId to dependency.toTaskId } !=
             taskIds.zipWithNext() ||
             framePlan.dependencies.any { dependency ->
-                val fromRender = renders.firstOrNull { (_, render) ->
-                    render.sourceTaskIds.single() == dependency.fromTaskId
-                }?.second
-                val expectedAtomic = fromRender?.drawPackets?.singleOrNull()
-                    ?.takeIf { it.role == GPUDrawPacketRole.PathStencilProducer }
-                    ?.let { "w4c:${it.commandIdValue}" }
-                dependency.atomicGroupId?.value != expectedAtomic
+                dependency.atomicGroupId?.value !=
+                    expectedAtomicGroupByFromTaskId[dependency.fromTaskId.value]
             }
         ) return null
         W4cSessionValidation(

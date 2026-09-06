@@ -4,6 +4,7 @@ import java.security.MessageDigest
 import org.graphiks.kanvas.gpu.plan.PathFillStrategy
 import org.graphiks.kanvas.gpu.plan.PlanResourceId
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
@@ -17,6 +18,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlan
 import org.graphiks.kanvas.gpu.renderer.resources.corePrimitiveFramePoolCapacitiesOrNull
+import org.graphiks.kanvas.gpu.renderer.recording.canonicalSolidRectSrcOverBlendPlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUPathSourceAuthority
 import org.graphiks.math.geometry.FillRule
 import org.graphiks.math.geometry.PathFillGeometryF32
@@ -246,7 +248,7 @@ internal class W4cSessionScratchV1(
                 !semantic.hasCanonicalHashIntegrity() ||
                 !hasExactPacketRanges(draw)
         ) return false
-        return when (draw.strategy) {
+        val matchesGeometry = when (draw.strategy) {
             PathFillStrategy.DirectTriangle -> matchesDirectPacket(
                 draw = draw,
                 packet = packet,
@@ -262,6 +264,72 @@ internal class W4cSessionScratchV1(
                 geometry = geometry,
             )
         }
+        return matchesGeometry && matchesExactW4cStructuralPipeline(
+            draw = draw,
+            packet = packet,
+            semantic = semantic,
+            structuralPipelineKey = structuralPipelineKey,
+            renderPipelineKey = renderPipelineKey,
+        )
+    }
+
+    /**
+     * Re-derives W4c's executable key from sealed math and packet facts before sealing an
+     * authority. This binds the producer fill rule, regular cover state, direct family,
+     * single-sample target, canonical SrcOver blend, and scissor/no-clip facts together.
+     */
+    private fun matchesExactW4cStructuralPipeline(
+        draw: W4cSessionScratchDrawV1,
+        packet: GPUDrawPacket,
+        semantic: GPUDrawSemanticPayload.CorePrimitive,
+        structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+        renderPipelineKey: GPURenderPipelineKey,
+    ): Boolean {
+        val clipExecutionPlan = packet.clipExecutionPlan ?: return false
+        val canonicalBlend = canonicalSolidRectSrcOverBlendPlan()
+        if (
+            !clipExecutionPlan.isCorePrimitiveNoClipOrScissorExecution() ||
+                packet.blendPlan?.canonicalIdentity() != canonicalBlend.canonicalIdentity() ||
+                semantic.blendPlanIdentity != canonicalBlend.canonicalIdentity() ||
+                semantic.clipExecutionPlanIdentity != clipExecutionPlan.canonicalIdentity()
+        ) return false
+        val expected = try {
+            when (draw.strategy) {
+                PathFillStrategy.DirectTriangle -> {
+                    if (packet.role != GPUDrawPacketRole.Shading) return false
+                    corePrimitiveRenderPipelineStructuralKey(
+                        semantic = semantic,
+                        clipExecutionPlan = clipExecutionPlan,
+                        blendPlan = canonicalBlend,
+                        sampleCount = 1,
+                        colorFormat = GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat(),
+                    )
+                }
+                PathFillStrategy.StencilCover -> {
+                    val role = when (packet.role) {
+                        GPUDrawPacketRole.PathStencilProducer ->
+                            GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer
+                        GPUDrawPacketRole.PathStencilCover ->
+                            GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover
+                        else -> return false
+                    }
+                    corePrimitivePathStencilRenderPipelineStructuralKey(
+                        semantic = semantic,
+                        role = role,
+                        clipExecutionPlan = clipExecutionPlan,
+                        blendPlan = canonicalBlend,
+                        sampleCount = 1,
+                        colorFormat = GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat(),
+                    )
+                }
+            }
+        } catch (_: IllegalArgumentException) {
+            return false
+        }
+        return structuralPipelineKey == expected &&
+            renderPipelineKey == expected.stableRenderPipelineKey(
+                CORE_PRIMITIVE_STRUCTURAL_PIPELINE_BASE_KEY,
+            )
     }
 
     private fun hasExactPacketRanges(draw: W4cSessionScratchDrawV1): Boolean = try {

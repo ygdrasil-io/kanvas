@@ -1493,20 +1493,16 @@ internal class GPUFrameExecutor(
             }
             sharedPathDepthStencilView = depthStencil.view
         }
-        val hasPath = renders.any { (_, _, packet) ->
-            packet?.role in setOf(
-                org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.PathStencilProducer,
-                org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.PathStencilCover,
-            )
+        val coverStepIndices = renders.mapNotNull { (stepIndex, _, packet) ->
+            stepIndex.takeIf {
+                packet?.role ==
+                    org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.PathStencilCover
+            }
         }
-        if ((hasPath && (writableLoads.size != 1 ||
-                writableLoads.single().third?.role !=
-                org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.PathStencilCover)) ||
-            (!hasPath && writableLoads.isNotEmpty())
-        ) {
+        if (writableLoads.map { (stepIndex, _, _) -> stepIndex } != coverStepIndices) {
             return executionDiagnostic(
                 "invalid.native-frame-payload.w4c-writable-load",
-                "A planned W4c path frame must contain exactly one writable stencil Load cover scope.",
+                "Every planned W4c cover, and no other scope, must retain writable stencil Load.",
             )
         }
         return null

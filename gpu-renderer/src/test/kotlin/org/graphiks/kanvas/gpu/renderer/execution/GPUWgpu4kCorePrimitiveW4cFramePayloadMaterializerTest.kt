@@ -9,6 +9,7 @@ import java.util.concurrent.CompletableFuture
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
@@ -22,6 +23,7 @@ import org.graphiks.kanvas.gpu.plan.PlanCapabilitySnapshot
 import org.graphiks.kanvas.gpu.plan.PlanDepthStencilFormat
 import org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat
 import org.graphiks.kanvas.gpu.plan.PlanOperationCapability
+import org.graphiks.kanvas.gpu.plan.PlanResourceId
 import org.graphiks.kanvas.gpu.plan.RenderGraph
 import org.graphiks.kanvas.gpu.plan.W4cPathFillPlanCompiler
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
@@ -34,20 +36,33 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureSampleCountSuppor
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilCompare
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
-import org.graphiks.kanvas.gpu.renderer.passes.W4cSessionScratchV1
+import org.graphiks.kanvas.gpu.renderer.passes.CORE_PRIMITIVE_STRUCTURAL_PIPELINE_BASE_KEY
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedPacketAuthority
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+import org.graphiks.kanvas.gpu.renderer.passes.W4cSessionScratchDrawV1
+import org.graphiks.kanvas.gpu.renderer.passes.W4cSessionScratchV1
 import org.graphiks.kanvas.gpu.renderer.planning.GpuPlanLoweringRequest
 import org.graphiks.kanvas.gpu.renderer.planning.GpuPlanLoweringResult
 import org.graphiks.kanvas.gpu.renderer.planning.GpuPlanTaskListLowerer
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlanner
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
+import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameRenderBatch
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
+import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskDependency
+import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID
 import org.graphiks.kanvas.gpu.renderer.resources.GPUConcreteResourceProvider
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
 import org.graphiks.kanvas.gpu.renderer.resources.GPUSceneTarget
@@ -233,8 +248,30 @@ class GPUWgpu4kCorePrimitiveW4cFramePayloadMaterializerTest {
     }
 
     @Test
-    fun `W4c writable Load cover reaches native execution with its prepared payload`() {
-        val fixture = W4cExecutionFixture.nativeMaterializationFixture()
+    fun `W4c materializer refuses a post-preflight producer route with same-size altered bytes`() {
+        assertEquals(
+            "invalid.native-core-primitive.w4c-route",
+            W4cExecutionFixture.nativeMaterializationFixture().materializeW4cAlteredRoute(
+                GPUDrawPacketRole.PathStencilProducer,
+            ),
+        )
+    }
+
+    @Test
+    fun `W4c materializer refuses a post-preflight cover route with same-size altered bytes`() {
+        assertEquals(
+            "invalid.native-core-primitive.w4c-route",
+            W4cExecutionFixture.nativeMaterializationFixture().materializeW4cAlteredRoute(
+                GPUDrawPacketRole.PathStencilCover,
+            ),
+        )
+    }
+
+    @Test
+    fun `W4c two writable Load covers reach native execution with their prepared payload`() {
+        val fixture = W4cExecutionFixture.nativeMaterializationFixture(
+            W4cExecutionFixture.twoStencilPairsFramePlan(),
+        )
         val materializer = GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             fixture.native.device,
             fixture.native.queue,
@@ -244,6 +281,12 @@ class GPUWgpu4kCorePrimitiveW4cFramePayloadMaterializerTest {
         )
         val adapter = GPURuntimeResourceAdapter()
         try {
+            assertEquals(
+                2,
+                fixture.frame.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().count { render ->
+                    render.drawPackets.single().role == GPUDrawPacketRole.PathStencilCover
+                },
+            )
             val materialized = assertIs<GPUPreparedNativeFramePayloadMaterialization.Materialized>(
                 materializer.materializeReusable(
                     fixture.frame,
@@ -655,6 +698,196 @@ class GPUWgpu4kCorePrimitiveW4cFramePayloadMaterializerTest {
         }
     }
 
+    @Test
+    fun `W4c authority refuses a winding producer reauthenticated as EvenOdd`() {
+        val windingFrame = W4cExecutionFixture.windingFramePlan()
+        val windingProducer = windingFrame.w4cPacket(GPUDrawPacketRole.PathStencilProducer)
+        val evenOddProducer = W4cExecutionFixture.framePlan()
+            .w4cPacket(GPUDrawPacketRole.PathStencilProducer)
+        assertFailsWith<IllegalArgumentException> {
+            windingProducer.reauthenticatedW4cPacket(
+                requireNotNull(evenOddProducer.corePrimitivePreparedAuthority).structuralPipelineKey,
+            )
+        }
+    }
+
+    @Test
+    fun `W4c authority refuses a regular cover reauthenticated as inverse`() {
+        val frame = W4cExecutionFixture.framePlan()
+        val cover = frame.w4cPacket(GPUDrawPacketRole.PathStencilCover)
+        val regularKey = requireNotNull(cover.corePrimitivePreparedAuthority).structuralPipelineKey
+        val inverseKey = regularKey.copy(
+            depthStencil = GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.Stencil(
+                format = GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencilFormat.Depth24PlusStencil8,
+                front = GPUCorePrimitiveRenderPipelineStructuralKey.StencilFace(
+                    compare = GPUClipStencilCompare.Equal,
+                    passOperation = GPUClipStencilOperation.Keep,
+                    failOperation = GPUClipStencilOperation.Zero,
+                    depthFailOperation = GPUClipStencilOperation.Keep,
+                ),
+                back = GPUCorePrimitiveRenderPipelineStructuralKey.StencilFace(
+                    compare = GPUClipStencilCompare.Equal,
+                    passOperation = GPUClipStencilOperation.Keep,
+                    failOperation = GPUClipStencilOperation.Zero,
+                    depthFailOperation = GPUClipStencilOperation.Keep,
+                ),
+                readMask = 0xffu,
+                writeMask = 0xffu,
+            ),
+        )
+        assertFailsWith<IllegalArgumentException> {
+            cover.reauthenticatedW4cPacket(inverseKey)
+        }
+    }
+
+    @Test
+    fun `W4c authority refuses a direct packet reauthenticated with the path stencil shader`() {
+        val frame = W4cExecutionFixture.framePlan()
+        val direct = frame.w4cPacket(GPUDrawPacketRole.Shading)
+        val forgedKey = requireNotNull(direct.corePrimitivePreparedAuthority)
+            .structuralPipelineKey
+            .copy(shader = GPUCorePrimitiveRenderPipelineStructuralKey.Shader.PathStencil)
+        assertFailsWith<IllegalArgumentException> {
+            direct.reauthenticatedW4cPacket(forgedKey)
+        }
+    }
+
+    @Test
+    fun `W4c authority refuses a direct packet reauthenticated with destination read`() {
+        val frame = W4cExecutionFixture.framePlan()
+        val direct = frame.w4cPacket(GPUDrawPacketRole.Shading)
+        val destinationRead = GPUBlendPlan.ShaderBlendWithDstRead(
+            mode = GPUBlendMode.MULTIPLY,
+            formulaId = "multiply",
+            sourceCoverageEncoding = GPUSourceCoverageEncoding.None,
+        )
+        val forgedKey = requireNotNull(direct.corePrimitivePreparedAuthority)
+            .structuralPipelineKey
+            .copy(
+                blend = GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination(
+                    destinationRead.mode,
+                    destinationRead.formulaId,
+                    destinationRead.sourceCoverageEncoding,
+                ),
+            )
+        assertFailsWith<IllegalArgumentException> {
+            direct.reauthenticatedW4cPacket(forgedKey, destinationRead)
+        }
+    }
+
+    @Test
+    fun `W4c preflight rejects a forged vertex plan resource identity`() {
+        val frame = W4cExecutionFixture.framePlan()
+        val forgedScratch = frame.w4cScratch().copyForW4cTest(
+            vertexResourceId = PlanResourceId("VertexData:99"),
+        )
+
+        assertW4cScratchRefused(frame.withW4cScratch(forgedScratch))
+    }
+
+    @Test
+    fun `W4c preflight rejects a forged index plan resource identity`() {
+        val frame = W4cExecutionFixture.framePlan()
+        val forgedScratch = frame.w4cScratch().copyForW4cTest(
+            indexResourceId = PlanResourceId("IndexData:99"),
+        )
+
+        assertW4cScratchRefused(frame.withW4cScratch(forgedScratch))
+    }
+
+    @Test
+    fun `W4c preflight rejects a forged uniform plan resource identity`() {
+        val frame = W4cExecutionFixture.framePlan()
+        val forgedScratch = frame.w4cScratch().copyForW4cTest(
+            uniformResourceId = PlanResourceId("UniformData:99"),
+        )
+
+        assertW4cScratchRefused(frame.withW4cScratch(forgedScratch))
+    }
+
+    @Test
+    fun `W4c preflight rejects a forged D24S8 plan resource identity`() {
+        val frame = W4cExecutionFixture.framePlan()
+        val forgedScratch = frame.w4cScratch().copyForW4cTest(
+            depthStencilResourceId = PlanResourceId("DepthStencil:99"),
+        )
+
+        assertW4cScratchRefused(frame.withW4cScratch(forgedScratch))
+    }
+
+    @Test
+    fun `W4c preflight rejects a forged D24S8 byte size`() {
+        val frame = W4cExecutionFixture.framePlan()
+        val scratch = frame.w4cScratch()
+        val forgedScratch = scratch.copyForW4cTest(
+            depthStencilBytes = scratch.depthStencilBytes + 4L,
+        )
+
+        assertW4cScratchRefused(frame.withW4cScratch(forgedScratch))
+    }
+
+    @Test
+    fun `W4c preflight rejects a forged stencil atomic group`() {
+        val frame = W4cExecutionFixture.framePlan()
+        val scratch = frame.w4cScratch()
+        val stencilDrawIndex = scratch.draws.indexOfFirst { draw ->
+            draw.strategy == org.graphiks.kanvas.gpu.plan.PathFillStrategy.StencilCover
+        }
+        assertTrue(stencilDrawIndex >= 0)
+        val forgedDraws = scratch.draws.mapIndexed { index, draw ->
+            if (index == stencilDrawIndex) draw.copyForW4cTest(atomicGroupId = "w4c:forged") else draw
+        }
+
+        assertW4cScratchRefused(
+            frame.withW4cScratch(scratch.copyForW4cTest(draws = forgedDraws)),
+        )
+    }
+
+    @Test
+    fun `W4c preflight rejects a forged packet identity`() {
+        val frame = W4cExecutionFixture.framePlan()
+        val cover = frame.w4cPacket(GPUDrawPacketRole.PathStencilCover)
+
+        assertW4cScratchRefused(
+            frame.withW4cScratch(
+                frame.w4cScratch(),
+                packetIdFor = { packet ->
+                    if (packet === cover) GPUDrawPacketID("packet.w4c.forged.cover") else packet.packetId
+                },
+            ),
+        )
+    }
+
+    @Test
+    fun `W4c preflight rejects a forged pass identity`() {
+        val frame = W4cExecutionFixture.framePlan()
+        val cover = frame.w4cPacket(GPUDrawPacketRole.PathStencilCover)
+
+        assertW4cScratchRefused(
+            frame.withW4cScratch(
+                frame.w4cScratch(),
+                passIdFor = { packet ->
+                    if (packet === cover) "StencilCover:99" else packet.passId
+                },
+            ),
+        )
+    }
+
+    @Test
+    fun `W4c preflight rejects a forged task identity`() {
+        val frame = W4cExecutionFixture.framePlan()
+        val coverTask = frame.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .first { render ->
+                render.drawPackets.single().role == GPUDrawPacketRole.PathStencilCover
+            }
+            .sourceTaskIds
+            .single()
+
+        assertW4cScratchRefused(
+            frame.withW4cTaskIdReplaced(coverTask, GPUTaskID("task.w4c.forged.cover")),
+        )
+    }
+
     private fun expectedVertexBytes(scratch: W4cSessionScratchV1): ByteArray = ArrayBuffer.of(
         scratch.draws.flatMap { draw ->
             val geometry = draw.copyGeometryF32()
@@ -764,6 +997,373 @@ class GPUWgpu4kCorePrimitiveW4cFramePayloadMaterializerTest {
         }
         .distinct()
 
+    private fun GPUFramePlan.w4cPacket(role: GPUDrawPacketRole): GPUDrawPacket = steps
+        .filterIsInstance<GPUFrameStep.RenderPassStep>()
+        .flatMap(GPUFrameStep.RenderPassStep::drawPackets)
+        .first { packet -> packet.role == role }
+
+    private fun W4cExecutionFixture.NativeMaterializationFixture.materializeW4cAlteredRoute(
+        role: GPUDrawPacketRole,
+    ): String {
+        val materializer = GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
+            native.device,
+            native.queue,
+            target,
+            cache,
+            requireNotNull(W4cExecutionFixture.capabilities().limits),
+        )
+        try {
+            return when (val result = materializer.materializeReusable(
+                frame,
+                prepared.encoderPlan.withW4cAlteredRoute(frame, role),
+                prepared.resources,
+                prepared.generationSeal,
+            )) {
+                is GPUPreparedNativeFramePayloadMaterialization.Refused -> result.code
+                is GPUPreparedNativeFramePayloadMaterialization.Materialized -> try {
+                    "materialized"
+                } finally {
+                    assertTrue(result.draft.disposeBeforeRegistration())
+                }
+            }
+        } finally {
+            materializer.close()
+            close()
+        }
+    }
+
+    private fun GPUCommandEncoderPlan.withW4cAlteredRoute(
+        frame: GPUFramePlan,
+        role: GPUDrawPacketRole,
+    ): GPUCommandEncoderPlan {
+        require(role in setOf(GPUDrawPacketRole.PathStencilProducer, GPUDrawPacketRole.PathStencilCover))
+        val packet = frame.w4cPacket(role)
+        val originalScope = scopes.single { scope -> scope.sourcePacketIds == listOf(packet.packetId) }
+        val originalRoute = assertIs<GPUCorePrimitiveNativeScopeRouteSeal.Routes>(
+            originalScope.corePrimitiveNativeScopeRouteSeal,
+        )
+        val originalUnit = originalRoute.orderedUnits.single()
+        val originalGeometry = when (role) {
+            GPUDrawPacketRole.PathStencilProducer -> assertIs<GPUCorePrimitiveNativeScopeRouteUnit.PathProducer>(
+                originalUnit,
+            ).geometry
+            GPUDrawPacketRole.PathStencilCover -> assertIs<GPUCorePrimitiveNativeScopeRouteUnit.PathCover>(
+                originalUnit,
+            ).geometry
+            else -> error("W4c route corruption supports only producer or cover")
+        }
+        val alteredVertices = FloatArray(originalGeometry.vertexCount * 2)
+        val alteredIndices = IntArray(originalGeometry.indexCount)
+        originalGeometry.copyVerticesInto(alteredVertices)
+        originalGeometry.copyIndicesInto(alteredIndices)
+        alteredVertices[0] += 0.25f
+        val distinctIndex = alteredIndices.indexOfFirst { index -> index != alteredIndices.first() }
+        require(distinctIndex > 0) { "W4c route fixture needs distinct local indices" }
+        val firstIndex = alteredIndices[0]
+        alteredIndices[0] = alteredIndices[distinctIndex]
+        alteredIndices[distinctIndex] = firstIndex
+        val alteredGeometry = GPUCorePrimitivePathStencilGeometrySnapshot(
+            alteredVertices,
+            alteredIndices,
+        )
+        val alteredUnit = when (role) {
+            GPUDrawPacketRole.PathStencilProducer -> {
+                val unit = assertIs<GPUCorePrimitiveNativeScopeRouteUnit.PathProducer>(originalUnit)
+                GPUCorePrimitiveNativeScopeRouteUnit.PathProducer(
+                    unit.commandIdValue,
+                    unit.packetId,
+                    unit.structuralPipelineKey,
+                    alteredGeometry,
+                )
+            }
+            GPUDrawPacketRole.PathStencilCover -> {
+                val unit = assertIs<GPUCorePrimitiveNativeScopeRouteUnit.PathCover>(originalUnit)
+                GPUCorePrimitiveNativeScopeRouteUnit.PathCover(
+                    unit.commandIdValue,
+                    unit.packetId,
+                    unit.structuralPipelineKey,
+                    alteredGeometry,
+                )
+            }
+            else -> error("W4c route corruption supports only producer or cover")
+        }
+        val uniformSlab = (originalRoute.uniformAuthority as?
+            GPUCorePrimitiveNativeScopeUniformAuthority.Uniform32Slab)?.seal
+            ?: error("W4c route fixture requires Uniform32 slab authority")
+        val alteredRoute = GPUCorePrimitiveNativeScopeRouteSeal.Routes(
+            listOf(alteredUnit),
+            uniformSlab,
+            originalRoute.uniformCoverage,
+        )
+        val alteredScope = GPUCommandEncoderScopePlan(
+            sourceStepIndex = originalScope.sourceStepIndex,
+            operationKind = originalScope.operationKind,
+            scopeLabel = originalScope.scopeLabel,
+            sourceTaskIds = originalScope.sourceTaskIds,
+            sourcePacketIds = originalScope.sourcePacketIds,
+            facadeOperationClasses = originalScope.facadeOperationClasses,
+            targetGeneration = originalScope.targetGeneration,
+            resourceGenerationLabels = originalScope.resourceGenerationLabels,
+            passCommandStream = originalScope.passCommandStream,
+            corePrimitiveDirectNativeRouteSeal = originalScope.corePrimitiveDirectNativeRouteSeal,
+            corePrimitivePathStencilNativeRouteSeal = originalScope.corePrimitivePathStencilNativeRouteSeal,
+            corePrimitiveNativeScopeRouteSeal = alteredRoute,
+            corePrimitiveClipStencilPreparedRouteSeal =
+                originalScope.corePrimitiveClipStencilPreparedRouteSeal,
+            corePrimitiveCoverageMaskPreparedRouteSeal =
+                originalScope.corePrimitiveCoverageMaskPreparedRouteSeal,
+            targetResource = originalScope.targetResource,
+            mixedCorePrimitiveAndImage = originalScope.mixedCorePrimitiveAndImage,
+        ).attachNativeOperandKeys(
+            originalScope.nativeOperandKeys,
+            originalScope.allowsClipStencilPrefixDepthStencil,
+        )
+        return GPUCommandEncoderPlan.ordered(
+            planId,
+            contextIdentity,
+            deviceGeneration,
+            targetGeneration,
+            scopes.map { scope -> alteredScope.takeIf { scope === originalScope } ?: scope },
+        )
+    }
+
+    private fun GPUDrawPacket.reauthenticatedW4cPacket(
+        structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+        blendPlan: GPUBlendPlan? = this.blendPlan,
+        scratch: W4cSessionScratchV1 = requireNotNull(corePrimitivePreparedAuthority?.w4cSessionScratch),
+        packetId: GPUDrawPacketID = this.packetId,
+        passId: String = this.passId,
+    ): GPUDrawPacket {
+        val pipelineKey = structuralPipelineKey.stableRenderPipelineKey(
+            CORE_PRIMITIVE_STRUCTURAL_PIPELINE_BASE_KEY,
+        )
+        val reauthenticated = GPUDrawPacket(
+            packetId = packetId,
+            commandIdValue = commandIdValue,
+            analysisRecordId = analysisRecordId,
+            passId = passId,
+            layerId = layerId,
+            bindingListId = bindingListId,
+            insertionReasonCode = insertionReasonCode,
+            sortKey = sortKey,
+            sortKeyPreimage = sortKeyPreimage,
+            renderStepId = renderStepId,
+            renderStepVersion = renderStepVersion,
+            role = role,
+            blendPlan = blendPlan,
+            renderPipelineKey = pipelineKey,
+            computePipelineKey = computePipelineKey,
+            bindingLayoutHash = bindingLayoutHash,
+            uniformSlot = uniformSlot,
+            resourceSlot = resourceSlot,
+            semanticPayload = semanticPayload,
+            vertexSourceLabel = vertexSourceLabel,
+            scissorBoundsHash = scissorBoundsHash,
+            targetStateHash = targetStateHash,
+            originalPaintOrder = originalPaintOrder,
+            resourceGeneration = resourceGeneration,
+            frameProvenance = frameProvenance,
+            clipCoveragePlan = clipCoveragePlan,
+            clipExecutionPlan = clipExecutionPlan,
+            diagnostics = diagnostics,
+            clipProducerAuthority = clipProducerAuthority,
+        )
+        return reauthenticated.attachCorePrimitivePreparedAuthority(
+            GPUCorePrimitivePreparedPacketAuthority.plannedW4c(
+                packet = reauthenticated,
+                structuralPipelineKey = structuralPipelineKey,
+                renderPipelineKey = pipelineKey,
+                planId = scratch.planId,
+                capabilitySealHash = scratch.capabilitySealHash,
+                scratch = scratch,
+            ),
+        )
+    }
+
+    private fun GPUFramePlan.w4cScratch(): W4cSessionScratchV1 = requireNotNull(
+        steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .first()
+            .drawPackets
+            .single()
+            .corePrimitivePreparedAuthority
+            ?.w4cSessionScratch,
+    )
+
+    private fun W4cSessionScratchDrawV1.copyForW4cTest(
+        atomicGroupId: String? = this.atomicGroupId,
+    ): W4cSessionScratchDrawV1 = W4cSessionScratchDrawV1(
+        commandId = commandId,
+        strategy = strategy,
+        geometryF32 = copyGeometryF32(),
+        scissorBounds = copyScissorBounds(),
+        vertexOffsetBytes = vertexOffsetBytes,
+        vertexRangeBytes = vertexRangeBytes,
+        indexOffsetBytes = indexOffsetBytes,
+        indexRangeBytes = indexRangeBytes,
+        uniformSlotIndex = uniformSlotIndex,
+        atomicGroupId = atomicGroupId,
+    )
+
+    private fun W4cSessionScratchV1.copyForW4cTest(
+        vertexResourceId: PlanResourceId = this.vertexResourceId,
+        indexResourceId: PlanResourceId = this.indexResourceId,
+        uniformResourceId: PlanResourceId = this.uniformResourceId,
+        depthStencilResourceId: PlanResourceId? = this.depthStencilResourceId,
+        draws: List<W4cSessionScratchDrawV1> = this.draws,
+        depthStencilBytes: Long = this.depthStencilBytes,
+    ): W4cSessionScratchV1 = W4cSessionScratchV1(
+        planId = planId,
+        capabilitySealHash = capabilitySealHash,
+        deviceGeneration = deviceGeneration,
+        target = target,
+        staging = staging,
+        targetBounds = targetBounds,
+        vertexResourceId = vertexResourceId,
+        indexResourceId = indexResourceId,
+        uniformResourceId = uniformResourceId,
+        depthStencilResourceId = depthStencilResourceId,
+        draws = draws,
+        uniformPlan = uniformPlan,
+        uniformStrideBytes = uniformStrideBytes,
+        vertexUsefulBytes = vertexUsefulBytes,
+        indexUsefulBytes = indexUsefulBytes,
+        uniformUsefulBytes = uniformUsefulBytes,
+        vertexCapacityBytes = vertexCapacityBytes,
+        indexCapacityBytes = indexCapacityBytes,
+        uniformCapacityBytes = uniformCapacityBytes,
+        depthStencilBytes = depthStencilBytes,
+        poolCapacities = poolCapacities,
+        maxBufferSize = maxBufferSize,
+        maxDynamicUniformBuffersPerPipelineLayout = maxDynamicUniformBuffersPerPipelineLayout,
+    )
+
+    private fun GPUFramePlan.withW4cScratch(
+        scratch: W4cSessionScratchV1,
+        packetIdFor: (GPUDrawPacket) -> GPUDrawPacketID = GPUDrawPacket::packetId,
+        passIdFor: (GPUDrawPacket) -> String = GPUDrawPacket::passId,
+    ): GPUFramePlan = copyForW4cTest(
+        steps = steps.map { step ->
+            val render = step as? GPUFrameStep.RenderPassStep ?: return@map step
+            val packet = render.drawPackets.single()
+            val structural = requireNotNull(packet.corePrimitivePreparedAuthority).structuralPipelineKey
+            val replacement = packet.reauthenticatedW4cPacket(
+                structuralPipelineKey = structural,
+                scratch = scratch,
+                packetId = packetIdFor(packet),
+                passId = passIdFor(packet),
+            )
+            GPUFrameStep.RenderPassStep(
+                target = render.target,
+                loadStore = render.loadStore,
+                samplePlan = render.samplePlan,
+                resourceUses = render.resourceUses,
+                drawPackets = listOf(replacement),
+                sourceTaskIds = render.sourceTaskIds,
+                batches = render.batches.map { batch ->
+                    GPUFrameRenderBatch(
+                        batchId = batch.batchId,
+                        kind = batch.kind,
+                        packets = listOf(replacement),
+                        sourceTaskIds = batch.sourceTaskIds,
+                    )
+                },
+                sampleContinuation = render.sampleContinuation,
+                depthStencilLoadStore = render.depthStencilLoadStore,
+                preparedImageBindingsByPacketId = render.preparedImageBindingsByPacketId,
+                preparedTextBindingsByPacketId = render.preparedTextBindingsByPacketId,
+            )
+        },
+    )
+
+    private fun GPUFramePlan.withW4cTaskIdReplaced(
+        original: GPUTaskID,
+        replacement: GPUTaskID,
+    ): GPUFramePlan {
+        fun replaceTaskIds(sourceTaskIds: List<GPUTaskID>): List<GPUTaskID> = sourceTaskIds.map { taskId ->
+            replacement.takeIf { taskId == original } ?: taskId
+        }
+        return copyForW4cTest(
+            steps = steps.map { step ->
+                when (step) {
+                    is GPUFrameStep.PrepareResourcesStep -> GPUFrameStep.PrepareResourcesStep(
+                        step.requests,
+                        replaceTaskIds(step.sourceTaskIds),
+                    )
+                    is GPUFrameStep.RenderPassStep -> GPUFrameStep.RenderPassStep(
+                        target = step.target,
+                        loadStore = step.loadStore,
+                        samplePlan = step.samplePlan,
+                        resourceUses = step.resourceUses,
+                        drawPackets = step.drawPackets,
+                        sourceTaskIds = replaceTaskIds(step.sourceTaskIds),
+                        batches = step.batches.map { batch ->
+                            GPUFrameRenderBatch(
+                                batchId = batch.batchId,
+                                kind = batch.kind,
+                                packets = batch.packets,
+                                sourceTaskIds = replaceTaskIds(batch.sourceTaskIds),
+                            )
+                        },
+                        sampleContinuation = step.sampleContinuation,
+                        depthStencilLoadStore = step.depthStencilLoadStore,
+                        preparedImageBindingsByPacketId = step.preparedImageBindingsByPacketId,
+                        preparedTextBindingsByPacketId = step.preparedTextBindingsByPacketId,
+                    )
+                    is GPUFrameStep.ReadbackCopyStep -> GPUFrameStep.ReadbackCopyStep(
+                        source = step.source,
+                        staging = step.staging,
+                        request = step.request,
+                        sourceTaskIds = replaceTaskIds(step.sourceTaskIds),
+                    )
+                    else -> error("W4c test frame contains an unsupported step")
+                }
+            },
+            dependencies = dependencies.map { dependency ->
+                GPUTaskDependency(
+                    fromTaskId = replacement.takeIf { dependency.fromTaskId == original }
+                        ?: dependency.fromTaskId,
+                    toTaskId = replacement.takeIf { dependency.toTaskId == original } ?: dependency.toTaskId,
+                    dependencyKind = dependency.dependencyKind,
+                    useToken = dependency.useToken,
+                    reasonCode = dependency.reasonCode,
+                    atomicGroupId = dependency.atomicGroupId,
+                )
+            },
+        )
+    }
+
+    private fun GPUFramePlan.copyForW4cTest(
+        steps: List<GPUFrameStep> = this.steps,
+        dependencies: List<GPUTaskDependency> = this.dependencies,
+    ): GPUFramePlan = GPUFramePlan(
+        frameId = frameId,
+        capabilitySeal = capabilitySeal,
+        recordingSeals = recordingSeals,
+        steps = steps,
+        memoryBudget = memoryBudget,
+        diagnostics = diagnostics,
+        dependencies = dependencies,
+        phaseOrder = phaseOrder,
+        elidedNoOpDraws = elidedNoOpDraws,
+        atomicallyRefused = atomicallyRefused,
+    )
+
+    private fun assertW4cScratchRefused(frame: GPUFramePlan) {
+        assertEquals("invalid.preflight.w4c_session_scratch", w4cPreflightCode(frame))
+    }
+
+    private fun w4cPreflightCode(frame: GPUFramePlan): String = when (
+        val result = W4cExecutionFixture.preflight(frame)
+    ) {
+        is GPUFramePreflightResult.Refused -> result.diagnostic.code.value
+        is GPUFramePreflightResult.Prepared -> try {
+            "prepared"
+        } finally {
+            assertTrue(result.frame.claimForRollback())
+            assertTrue(result.frame.rollback.execute().successful)
+        }
+    }
+
     private fun GPUFramePlan.withW4cCoverSamplePlan(samplePlan: GPUSamplePlan): GPUFramePlan {
         val coverIndex = steps.indexOfFirst { step ->
             (step as? GPUFrameStep.RenderPassStep)?.drawPackets?.singleOrNull()?.role ==
@@ -803,6 +1403,8 @@ internal object W4cExecutionFixture {
     private val color = ColorARGB.fromPackedUInt(0x80ff0000u)
 
     fun framePlan() = GPUFramePlanner.plan(taskList())
+
+    fun twoStencilPairsFramePlan() = GPUFramePlanner.plan(taskList(twoStencilPairs = true))
 
     fun directOnlyFramePlan() = GPUFramePlanner.plan(taskList(directOnly = true))
 
@@ -926,13 +1528,14 @@ internal object W4cExecutionFixture {
     private fun taskList(
         directOnly: Boolean = false,
         windingOnly: Boolean = false,
+        twoStencilPairs: Boolean = false,
     ) = assertIs<GpuPlanLoweringResult.Lowered>(
         GpuPlanTaskListLowerer().lower(
             GpuPlanLoweringRequest(
-                graph = graph(directOnly, windingOnly),
+                graph = graph(directOnly, windingOnly, twoStencilPairs),
                 capabilities = capabilities(),
                 deviceGeneration = generation,
-                currentBudget = graph(directOnly, windingOnly).budget,
+                currentBudget = graph(directOnly, windingOnly, twoStencilPairs).budget,
                 frameId = GPUFrameID(4),
                 recordingId = GPURecordingID("w4c-execution"),
             ),
@@ -942,6 +1545,7 @@ internal object W4cExecutionFixture {
     private fun graph(
         directOnly: Boolean = false,
         windingOnly: Boolean = false,
+        twoStencilPairs: Boolean = false,
     ): RenderGraph {
         val scene = SceneSnapshot.of(
             SceneExtent(4, 4),
@@ -949,6 +1553,7 @@ internal object W4cExecutionFixture {
             when {
                 directOnly -> listOf(triangle())
                 windingOnly -> listOf(concaveWinding())
+                twoStencilPairs -> listOf(triangle(), concaveEvenOdd(), concaveWinding(), triangle())
                 else -> listOf(triangle(), concaveEvenOdd(), triangle())
             },
         )
