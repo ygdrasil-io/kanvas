@@ -1,6 +1,10 @@
 package org.graphiks.math.geometry
 
 import org.graphiks.math.vector.Vector2F64
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -76,6 +80,55 @@ class PathFillGeometryF32Test {
         assertNull(ready.geometryF32.copyDirectTriangleF32OrNull())
         assertEquals(3, ready.attemptedEdgeCountI32)
         assertEquals(3, fan.edgeCountI32)
+    }
+
+    @Test
+    fun `eccentric rotated arc keeps every sampled point within the sagitta tolerance`() {
+        val fixture = EccentricArcFixture(
+            start = point(79.71098790227113, 59.97919320328897),
+            end = point(79.36314331652267, 59.93530189120385),
+            radius = Vector2F64(100.0, 1.0),
+            rotationDegreesF64 = 37.0,
+            startAngleRadiansF64 = -0.06981317007977318,
+            sweepAngleRadiansF64 = 0.17453292519943295,
+            closingPoint = point(75.0, 65.0),
+        )
+
+        val fan = assertNotNull(
+            assertIs<PathFillPreparationResult.Ready>(preparePathFillGeometryF32(eccentricArcInput(fixture)))
+                .geometryF32.copyStencilEdgeFanF32OrNull(),
+        )
+
+        val maximumDistanceF64 = maximumSampledArcDistanceToFanF64(fixture, fan)
+        assertTrue(
+            maximumDistanceF64 <= 0.25,
+            "maximum sampled arc distance was $maximumDistanceF64",
+        )
+    }
+
+    @Test
+    fun `nondegenerate eccentric rotated arc converges within the default sagitta tolerance`() {
+        val fixture = EccentricArcFixture(
+            start = point(19.314969523370742, 7.48325829376045),
+            end = point(3.1247934920285765, 5.149111097923239),
+            radius = Vector2F64(60.0, 3.0),
+            rotationDegreesF64 = 29.0,
+            startAngleRadiansF64 = -1.2217304763960306,
+            sweepAngleRadiansF64 = 2.705260340591211,
+            closingPoint = point(-15.0, 10.0),
+        )
+
+        val fan = assertNotNull(
+            assertIs<PathFillPreparationResult.Ready>(preparePathFillGeometryF32(eccentricArcInput(fixture)))
+                .geometryF32.copyStencilEdgeFanF32OrNull(),
+        )
+
+        assertTrue(fan.edgeCountI32 > 3)
+        val maximumDistanceF64 = maximumSampledArcDistanceToFanF64(fixture, fan)
+        assertTrue(
+            maximumDistanceF64 <= 0.25,
+            "maximum sampled arc distance was $maximumDistanceF64",
+        )
     }
 
     @Test
@@ -243,8 +296,8 @@ class PathFillGeometryF32Test {
         assertEquals(5, fan.edgeCountI32)
         assertEquals(15, fan.vertexCountI32)
         assertEquals(15, fan.indexCountI32)
-        assertEquals(15L, geometry.vertexCostI64)
-        assertEquals(15L, geometry.indexCostI64)
+        assertEquals(19L, geometry.vertexCostI64)
+        assertEquals(21L, geometry.indexCostI64)
         assertContentEquals(
             floatArrayOf(
                 0f, 0f, 0f, 0f, 4f, 0f,
@@ -314,5 +367,82 @@ class PathFillGeometryF32Test {
         fillRule: FillRule = FillRule.WINDING,
     ): PathFillInputF64 = PathFillInputF64.of(fillRule, segments.asList())
 
+    private fun eccentricArcInput(fixture: EccentricArcFixture): PathFillInputF64 = fillInput(
+        PathFillSegmentF64.MoveTo(fixture.start),
+        PathFillSegmentF64.ArcTo(
+            radius = fixture.radius,
+            xAxisRotationDegreesF64 = fixture.rotationDegreesF64,
+            largeArc = false,
+            sweep = true,
+            point = fixture.end,
+        ),
+        PathFillSegmentF64.LineTo(fixture.closingPoint),
+        PathFillSegmentF64.Close,
+    )
+
+    private fun maximumSampledArcDistanceToFanF64(
+        fixture: EccentricArcFixture,
+        fan: PathStencilEdgeFanF32,
+    ): Double {
+        val verticesF32 = fan.copyVerticesF32()
+        val arcEdgeCountI32 = fan.edgeCountI32 - 2
+        var maximumDistanceF64 = 0.0
+        for (sampleIndexI32 in 0..1_024) {
+            val point = fixture.pointAt(sampleIndexI32.toDouble() / 1_024.0)
+            var minimumDistanceF64 = Double.POSITIVE_INFINITY
+            for (edgeIndexI32 in 0 until arcEdgeCountI32) {
+                val offsetI32 = edgeIndexI32 * 6
+                val start = Point2F64(
+                    verticesF32[offsetI32 + 2].toDouble(),
+                    verticesF32[offsetI32 + 3].toDouble(),
+                )
+                val end = Point2F64(
+                    verticesF32[offsetI32 + 4].toDouble(),
+                    verticesF32[offsetI32 + 5].toDouble(),
+                )
+                minimumDistanceF64 = minOf(minimumDistanceF64, distanceToSegmentF64(point, start, end))
+            }
+            maximumDistanceF64 = maxOf(maximumDistanceF64, minimumDistanceF64)
+        }
+        return maximumDistanceF64
+    }
+
+    private fun EccentricArcFixture.pointAt(parameterF64: Double): Point2F64 {
+        val angleRadiansF64 = startAngleRadiansF64 + sweepAngleRadiansF64 * parameterF64
+        val rotationRadiansF64 = rotationDegreesF64 * PI / 180.0
+        val cosRotationF64 = cos(rotationRadiansF64)
+        val sinRotationF64 = sin(rotationRadiansF64)
+        val cosAngleF64 = cos(angleRadiansF64)
+        val sinAngleF64 = sin(angleRadiansF64)
+        return Point2F64(
+            radius.x * cosRotationF64 * cosAngleF64 - radius.y * sinRotationF64 * sinAngleF64,
+            radius.x * sinRotationF64 * cosAngleF64 + radius.y * cosRotationF64 * sinAngleF64,
+        )
+    }
+
+    private fun distanceToSegmentF64(point: Point2F64, start: Point2F64, end: Point2F64): Double {
+        val deltaX = end.x - start.x
+        val deltaY = end.y - start.y
+        val lengthSquaredF64 = deltaX * deltaX + deltaY * deltaY
+        if (lengthSquaredF64 == 0.0) return sqrt((point.x - start.x) * (point.x - start.x) + (point.y - start.y) * (point.y - start.y))
+        val projectionF64 = (
+            (point.x - start.x) * deltaX + (point.y - start.y) * deltaY
+            ) / lengthSquaredF64
+        val clampedProjectionF64 = projectionF64.coerceIn(0.0, 1.0)
+        val distanceX = point.x - (start.x + clampedProjectionF64 * deltaX)
+        val distanceY = point.y - (start.y + clampedProjectionF64 * deltaY)
+        return sqrt(distanceX * distanceX + distanceY * distanceY)
+    }
+
     private fun point(x: Double, y: Double): Point2F64 = Point2F64(x, y)
+
+    private data class EccentricArcFixture(
+        val start: Point2F64,
+        val end: Point2F64,
+        val radius: Vector2F64,
+        val rotationDegreesF64: Double,
+        val startAngleRadiansF64: Double,
+        val sweepAngleRadiansF64: Double,
+        val closingPoint: Point2F64,
+    )
 }

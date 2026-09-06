@@ -1,5 +1,6 @@
 package org.graphiks.math.geometry
 
+import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
 
@@ -328,14 +329,13 @@ private class PathFillPreparerF64(
         endT: Double,
         depthI32: Int,
     ) {
-        val middleT = (startT + endT) * 0.5
-        val middle = arc.pointAt(middleT)
-        if (!middle.isFinite()) abortInvalid(PathFillInvalidSceneReason.NonFiniteProjection)
-        val sagitta = pathFillPointToSegmentDistanceF64(middle, start, end)
-        if (sagitta <= policyF64.maximumSagittaErrorF64) {
+        if (isArcChordDeviationWithinToleranceF64(arc, startT, endT, policyF64.maximumSagittaErrorF64)) {
             attemptEdge(end)
             return
         }
+        val middleT = (startT + endT) * 0.5
+        val middle = arc.pointAt(middleT)
+        if (!middle.isFinite()) abortInvalid(PathFillInvalidSceneReason.NonFiniteProjection)
         if (depthI32 >= policyF64.limitsI32.maxSubdivisionDepthI32) {
             abortResource(PathFillResourceLimitReason.FlatteningDidNotConverge)
         }
@@ -467,6 +467,23 @@ private fun quadPointF64(start: Point2F64, control: Point2F64, end: Point2F64, p
         )
     }
     return result
+}
+
+private fun isArcChordDeviationWithinToleranceF64(
+    arc: ArcCenterF64,
+    startT: Double,
+    endT: Double,
+    maximumSagittaErrorF64: Double,
+): Boolean {
+    val angularSpanF64 = abs(arc.sweepAngle * (endT - startT))
+    if (!angularSpanF64.isFinite()) abortInvalid(PathFillInvalidSceneReason.NonFiniteProjection)
+
+    // For a rotated ellipse p(theta), ||p''(theta)|| is at most max(rx, ry).
+    // The linear-interpolation error over the entire angular interval is bounded
+    // by max(rx, ry) * angularSpan^2 / 8, not merely its angular midpoint.
+    val maximumRadiusF64 = maxOf(arc.radiusX, arc.radiusY)
+    val deviationBoundF64 = maximumRadiusF64 * angularSpanF64 * angularSpanF64 * 0.125
+    return deviationBoundF64.isFinite() && deviationBoundF64 <= maximumSagittaErrorF64
 }
 
 private fun pathFillPointToSegmentDistanceF64(point: Point2F64, start: Point2F64, end: Point2F64): Double {

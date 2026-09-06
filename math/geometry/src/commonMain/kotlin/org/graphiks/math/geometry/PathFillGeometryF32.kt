@@ -78,10 +78,12 @@ public class PathFillGeometryF32 internal constructor(
     }
 
     public val vertexCostI64: Long
-        get() = (directTriangleSnapshotF32?.vertexCountI32 ?: stencilEdgeFanSnapshotF32!!.vertexCountI32).toLong()
+        get() = directTriangleSnapshotF32?.vertexCountI32?.toLong()
+            ?: stencilEdgeFanSnapshotF32!!.edgeCountI32.toLong() * 3L + 4L
 
     public val indexCostI64: Long
-        get() = (directTriangleSnapshotF32?.indexCountI32 ?: stencilEdgeFanSnapshotF32!!.indexCountI32).toLong()
+        get() = directTriangleSnapshotF32?.indexCountI32?.toLong()
+            ?: stencilEdgeFanSnapshotF32!!.edgeCountI32.toLong() * 3L + 6L
 
     public fun copyConservativeScissorI32(): RectI32 = copyRectI32(conservativeScissorSnapshotI32)
 
