@@ -59,6 +59,14 @@ class GpuPlanTaskListLowererW4aTest {
     private val lowerer = GpuPlanTaskListLowerer()
 
     @Test
+    fun `W4a lowerer accepts its historical operation snapshot`() {
+        val graph = readyW4aGraph()
+
+        assertEquals(HISTORICAL_OPERATIONS, graph.capabilities.supportedOperations())
+        assertIs<GpuPlanLoweringResult.Lowered>(lowerer.lower(request(graph)))
+    }
+
+    @Test
     fun `valid W4a graph lowers to sealed analytic Uniform80 packets`() {
         val lowered = assertIs<GpuPlanLoweringResult.Lowered>(lowerer.lower(request(readyW4aGraph())))
         val preparation = assertIs<GPUTask.PrepareResources>(lowered.taskList.tasks.first())
@@ -290,9 +298,18 @@ class GpuPlanTaskListLowererW4aTest {
         supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
         minUniformBufferOffsetAlignment = minUniformAlignment,
         maxDynamicUniformBuffersPerPipelineLayout = 1,
-        supportedOperations = PlanOperationCapability.entries.toSet(),
+        supportedOperations = HISTORICAL_OPERATIONS,
         bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384L, 4_096L, 4_096L),
     )
+
+    private companion object {
+        val HISTORICAL_OPERATIONS: Set<PlanOperationCapability> = setOf(
+            PlanOperationCapability.RenderPass,
+            PlanOperationCapability.CopyUpload,
+            PlanOperationCapability.UniformBuffer,
+            PlanOperationCapability.Readback,
+        )
+    }
 
     private fun assertInvalid(
         graph: RenderGraph,

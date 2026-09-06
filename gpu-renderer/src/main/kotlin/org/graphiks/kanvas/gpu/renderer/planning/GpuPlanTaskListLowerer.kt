@@ -11,6 +11,7 @@ import org.graphiks.kanvas.gpu.plan.PlanResourceKind
 import org.graphiks.kanvas.gpu.plan.PlanResourceLifetime
 import org.graphiks.kanvas.gpu.plan.PlanResourceRole
 import org.graphiks.kanvas.gpu.plan.PlanResourceUsage
+import org.graphiks.kanvas.gpu.plan.PlanTextureFormat
 import org.graphiks.kanvas.gpu.plan.RenderGraph
 import org.graphiks.kanvas.gpu.plan.SamplePlan
 import org.graphiks.kanvas.gpu.plan.SolidRectDraw
@@ -340,9 +341,9 @@ public class GpuPlanTaskListLowerer {
         val staging = resources.singleOrNull { it.role == PlanResourceRole.ReadbackStaging } ?: return null
         val expectedTargetBytes = try { Math.multiplyExact(Math.multiplyExact(graph.targetExtent.width.toLong(), graph.targetExtent.height.toLong()), 4L) } catch (_: ArithmeticException) { return null }
         val expectedTarget = try {
-            PlanResource.of(PlanResourceRole.LogicalTarget, 0, PlanResourceKind.Texture2D, graph.colorFormat, graph.targetExtent, expectedTargetBytes, setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource), PlanResourceLifetime.FrameLocal, 0, 2)
+            PlanResource.of(PlanResourceRole.LogicalTarget, 0, PlanResourceKind.Texture2D, PlanTextureFormat.Color(graph.colorFormat), graph.targetExtent, expectedTargetBytes, setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource), PlanResourceLifetime.FrameLocal, 0, 2)
         } catch (_: IllegalArgumentException) { return null }
-        if (target.id != expectedTarget.id || target.ordinal != 0 || target.kind != PlanResourceKind.Texture2D || target.format != graph.colorFormat || target.copyExtent() != graph.targetExtent || target.byteSize != expectedTargetBytes || target.usages() != setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource) || target.lifetime != PlanResourceLifetime.FrameLocal || target.firstPassIndex != 0 || target.lastPassIndexExclusive != 2) return null
+        if (target.id != expectedTarget.id || target.ordinal != 0 || target.kind != PlanResourceKind.Texture2D || target.format != PlanTextureFormat.Color(graph.colorFormat) || target.copyExtent() != graph.targetExtent || target.byteSize != expectedTargetBytes || target.usages() != setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource) || target.lifetime != PlanResourceLifetime.FrameLocal || target.firstPassIndex != 0 || target.lastPassIndexExclusive != 2) return null
         val passes = graph.passes()
         val render = passes.getOrNull(0) as? PlanPass.RenderPass ?: return null
         val readback = passes.getOrNull(1) as? PlanPass.ReadbackPass ?: return null

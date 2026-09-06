@@ -3,16 +3,30 @@ package org.graphiks.kanvas.gpu.plan
 import org.graphiks.math.geometry.SizeI32
 
 public enum class PlanResourceKind { Texture2D, Buffer }
-public enum class PlanResourceRole { LogicalTarget, ReadbackStaging, VertexData, IndexData, UniformData }
-public enum class PlanResourceUsage { RenderAttachment, CopySource, CopyDestination, MapRead, Vertex, Index, Uniform }
+public enum class PlanResourceRole { LogicalTarget, ReadbackStaging, VertexData, IndexData, UniformData, DepthStencil }
+public enum class PlanResourceUsage {
+    RenderAttachment,
+    CopySource,
+    CopyDestination,
+    MapRead,
+    Vertex,
+    Index,
+    Uniform,
+    DepthStencilAttachment,
+}
 public enum class PlanResourceLifetime { FrameLocal }
+
+public sealed interface PlanTextureFormat {
+    public data class Color(public val value: PlanLogicalColorFormat) : PlanTextureFormat
+    public data class DepthStencil(public val value: PlanDepthStencilFormat) : PlanTextureFormat
+}
 
 public class PlanResource private constructor(
     public val id: PlanResourceId,
     public val role: PlanResourceRole,
     public val ordinal: Int,
     public val kind: PlanResourceKind,
-    public val format: PlanLogicalColorFormat?,
+    public val format: PlanTextureFormat?,
     extent: SizeI32?,
     public val byteSize: Long,
     usages: Set<PlanResourceUsage>,
@@ -31,7 +45,7 @@ public class PlanResource private constructor(
             role: PlanResourceRole,
             ordinal: Int,
             kind: PlanResourceKind,
-            format: PlanLogicalColorFormat?,
+            format: PlanTextureFormat?,
             extent: SizeI32?,
             byteSize: Long,
             usages: Set<PlanResourceUsage>,
@@ -48,6 +62,23 @@ public class PlanResource private constructor(
                     require(format != null && extent != null && !extent.isEmpty()) {
                         "Textures require a format and non-empty extent"
                     }
+                    when (format) {
+                        is PlanTextureFormat.Color -> require(role != PlanResourceRole.DepthStencil) {
+                            "Depth-stencil resources require a depth-stencil format"
+                        }
+                        is PlanTextureFormat.DepthStencil -> {
+                            require(role == PlanResourceRole.DepthStencil) {
+                                "Depth-stencil textures require the depth-stencil role"
+                            }
+                            require(PlanResourceUsage.DepthStencilAttachment in usages) {
+                                "Depth-stencil textures require depth-stencil attachment usage"
+                            }
+                        }
+                    }
+                    require(
+                        PlanResourceUsage.DepthStencilAttachment !in usages ||
+                            format is PlanTextureFormat.DepthStencil,
+                    ) { "Depth-stencil attachment usage requires a depth-stencil format" }
                     require(byteSize >= minimumTextureByteSize(extent)) {
                         "Texture byte size is smaller than its extent"
                     }

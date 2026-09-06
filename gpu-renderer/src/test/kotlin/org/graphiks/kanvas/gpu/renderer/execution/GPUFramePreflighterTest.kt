@@ -8195,7 +8195,7 @@ class GPUFramePreflighterTest {
             supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
             minUniformBufferOffsetAlignment = 256,
             maxDynamicUniformBuffersPerPipelineLayout = 1,
-            supportedOperations = PlanOperationCapability.entries.toSet(),
+            supportedOperations = historicalPlanOperations(),
             bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 4_096, 4_096),
         )
         val compiler = W4bAnalyticRRectPlanCompiler()
@@ -8291,7 +8291,7 @@ class GPUFramePreflighterTest {
             supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
             minUniformBufferOffsetAlignment = 256,
             maxDynamicUniformBuffersPerPipelineLayout = 1,
-            supportedOperations = PlanOperationCapability.entries.toSet(),
+            supportedOperations = historicalPlanOperations(),
             bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 4_096, 4_096),
         )
         val compiler = W4aAnalyticRectPlanCompiler()
@@ -11643,4 +11643,11 @@ class GPUFramePreflighterTest {
         val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target)).candidate
         return assertIs<RenderPlanResult.Ready<RenderGraph>>(compiler.plan(candidate, capabilities, budget)).plan
     }
+
+    private fun historicalPlanOperations(): Set<PlanOperationCapability> = setOf(
+        PlanOperationCapability.RenderPass,
+        PlanOperationCapability.CopyUpload,
+        PlanOperationCapability.UniformBuffer,
+        PlanOperationCapability.Readback,
+    )
 }

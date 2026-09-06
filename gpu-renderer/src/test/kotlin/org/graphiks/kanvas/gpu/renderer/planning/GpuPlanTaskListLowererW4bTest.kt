@@ -63,6 +63,14 @@ class GpuPlanTaskListLowererW4bTest {
     private val lowerer = GpuPlanTaskListLowerer()
 
     @Test
+    fun `W4b lowerer accepts its historical operation snapshot`() {
+        val graph = readyW4bGraph()
+
+        assertEquals(HISTORICAL_OPERATIONS, graph.capabilities.supportedOperations())
+        assertIs<GpuPlanLoweringResult.Lowered>(lowerer.lower(request(graph)))
+    }
+
+    @Test
     fun `sealed W4b graph lowers ordered RRect packets with shared W4b scratch`() {
         val lowered = assertIs<GpuPlanLoweringResult.Lowered>(lowerer.lower(request(readyW4bGraph())))
         val render = lowered.taskList.tasks.filterIsInstance<GPUTask.Render>().single()
@@ -294,9 +302,18 @@ class GpuPlanTaskListLowererW4bTest {
         supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
         minUniformBufferOffsetAlignment = 256,
         maxDynamicUniformBuffersPerPipelineLayout = 1,
-        supportedOperations = PlanOperationCapability.entries.toSet(),
+        supportedOperations = HISTORICAL_OPERATIONS,
         bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384L, 4_096L, 4_096L),
     )
+
+    private companion object {
+        val HISTORICAL_OPERATIONS: Set<PlanOperationCapability> = setOf(
+            PlanOperationCapability.RenderPass,
+            PlanOperationCapability.CopyUpload,
+            PlanOperationCapability.UniformBuffer,
+            PlanOperationCapability.Readback,
+        )
+    }
 
     private fun rendererCapabilities(): GPUCapabilities = GPUCapabilities(
         implementation = GPUImplementationIdentity("GPU", "test", "adapter", "device"),

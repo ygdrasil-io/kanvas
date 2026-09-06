@@ -99,7 +99,7 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
 
         return try {
             val logicalTarget = PlanResource.of(
-                PlanResourceRole.LogicalTarget, 0, PlanResourceKind.Texture2D, FORMAT, targetExtent, targetBytes,
+                PlanResourceRole.LogicalTarget, 0, PlanResourceKind.Texture2D, PlanTextureFormat.Color(FORMAT), targetExtent, targetBytes,
                 setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource), PlanResourceLifetime.FrameLocal, 0, 2,
             )
             val staging = PlanResource.of(

@@ -15,6 +15,11 @@ public value class PlanPassId(public val value: String) {
     init { require(value.isNotBlank()) { "Plan pass ID must not be blank" } }
 }
 
+@JvmInline
+public value class PlanAtomicGroupId(public val value: String) {
+    init { require(value.isNotBlank()) { "Plan atomic group ID must not be blank" } }
+}
+
 internal fun planResourceId(role: PlanResourceRole, ordinal: Int): PlanResourceId =
     PlanResourceId("${role.name}:$ordinal")
 

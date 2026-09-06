@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.math.color.ColorF32
+import org.graphiks.math.geometry.PathFillGeometryF32
 import org.graphiks.kanvas.render.ir.DrawOrigin
 import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
@@ -9,9 +10,12 @@ import org.graphiks.math.geometry.RectI32
 public enum class CoveragePlan { FullOrScissor, AnalyticScalarAA }
 public enum class SamplePlan { SingleSample }
 public enum class BlendPlan { SrcOver }
-public enum class AttachmentLoadPlan { ClearTransparent }
+public enum class AttachmentLoadPlan { ClearTransparent, Load }
 public enum class AttachmentStorePlan { Store }
-public enum class PlanPassRole { MainRender, TextureCopy, Filter, Resolve, Readback }
+public enum class PlanDepthStencilLoadStore { ClearZeroStore, LoadStoreTestReset }
+public enum class PlanDepthStencilAccess { Write, ReadWrite }
+public enum class PlanPassRole { MainRender, StencilProducer, StencilCover, TextureCopy, Filter, Resolve, Readback }
+public enum class PathFillStrategy { DirectTriangle, StencilCover }
 
 public sealed interface PlanDraw {
     public val commandIndex: Int
@@ -140,6 +144,49 @@ public class AnalyticRRectDraw private constructor(
     }
 }
 
+/** A sealed W4c path-fill draw whose geometry authority remains owned by `:math`. */
+public class PathFillDraw private constructor(
+    override public val commandIndex: Int,
+    override public val color: ColorF32,
+    geometryF32: PathFillGeometryF32,
+    public val strategy: PathFillStrategy,
+    scissorI32: RectI32,
+) : PlanDraw {
+    override public val coverage: CoveragePlan = CoveragePlan.FullOrScissor
+    override public val sample: SamplePlan = SamplePlan.SingleSample
+    override public val blend: BlendPlan = BlendPlan.SrcOver
+    private val geometrySnapshotF32: PathFillGeometryF32 = geometryF32
+    private val scissorSnapshotI32 = scissorI32.copy()
+
+    public fun copyGeometryF32(): PathFillGeometryF32 = geometrySnapshotF32
+
+    public fun copyScissorI32(): RectI32 = scissorSnapshotI32.copy()
+
+    public companion object {
+        public fun of(
+            commandIndex: Int,
+            color: ColorF32,
+            geometryF32: PathFillGeometryF32,
+            strategy: PathFillStrategy,
+            scissorI32: RectI32,
+        ): PathFillDraw {
+            require(commandIndex >= 0) { "Command index must not be negative" }
+            require(!scissorI32.isEmpty) { "Path fill scissor must be non-empty" }
+            when (strategy) {
+                PathFillStrategy.DirectTriangle -> require(
+                    geometryF32.copyDirectTriangleF32OrNull() != null &&
+                        geometryF32.copyStencilEdgeFanF32OrNull() == null,
+                ) { "Direct path fills require direct-triangle geometry" }
+                PathFillStrategy.StencilCover -> require(
+                    geometryF32.copyDirectTriangleF32OrNull() == null &&
+                        geometryF32.copyStencilEdgeFanF32OrNull() != null,
+                ) { "Stencil path fills require edge-fan geometry" }
+            }
+            return PathFillDraw(commandIndex, color, geometryF32, strategy, scissorI32)
+        }
+    }
+}
+
 public data class PlanDrawDataResources(
     public val vertex: PlanResourceId,
     public val index: PlanResourceId,
@@ -163,6 +210,38 @@ public sealed interface PlanPass {
         override val id: PlanPassId = checkedPassId(role, ordinal)
         private val storedDraws = immutableList(draws)
         public fun draws(): List<PlanDraw> = storedDraws
+    }
+
+    public class StencilProducer(
+        override val ordinal: Int,
+        public val target: PlanResourceId,
+        public val depthStencil: PlanResourceId,
+        public val draw: PathFillDraw,
+        public val drawDataResources: PlanDrawDataResources,
+        public val atomicGroup: PlanAtomicGroupId,
+        public val load: AttachmentLoadPlan,
+        public val store: AttachmentStorePlan,
+        public val depthStencilAccess: PlanDepthStencilAccess,
+        public val depthStencilLoadStore: PlanDepthStencilLoadStore,
+    ) : PlanPass {
+        override val role: PlanPassRole = PlanPassRole.StencilProducer
+        override val id: PlanPassId = checkedPassId(role, ordinal)
+    }
+
+    public class StencilCover(
+        override val ordinal: Int,
+        public val target: PlanResourceId,
+        public val depthStencil: PlanResourceId,
+        public val draw: PathFillDraw,
+        public val drawDataResources: PlanDrawDataResources,
+        public val atomicGroup: PlanAtomicGroupId,
+        public val load: AttachmentLoadPlan,
+        public val store: AttachmentStorePlan,
+        public val depthStencilAccess: PlanDepthStencilAccess,
+        public val depthStencilLoadStore: PlanDepthStencilLoadStore,
+    ) : PlanPass {
+        override val role: PlanPassRole = PlanPassRole.StencilCover
+        override val id: PlanPassId = checkedPassId(role, ordinal)
     }
 
     public data class TextureCopy(

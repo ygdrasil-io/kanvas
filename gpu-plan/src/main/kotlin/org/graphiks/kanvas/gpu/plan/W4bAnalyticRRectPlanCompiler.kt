@@ -94,7 +94,7 @@ public class W4bAnalyticRRectPlanCompiler : GpuPlanCompiler {
             return terminal(W4bPlanDiagnostics.CapabilityBufferSize, RenderDiagnosticDomain.CAPABILITY, "W4b buffer exceeds device limits")
         }
         return try {
-            val logicalTarget = PlanResource.of(PlanResourceRole.LogicalTarget, 0, PlanResourceKind.Texture2D, FORMAT, extent,
+            val logicalTarget = PlanResource.of(PlanResourceRole.LogicalTarget, 0, PlanResourceKind.Texture2D, PlanTextureFormat.Color(FORMAT), extent,
                 footprint.targetBytes, setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource), PlanResourceLifetime.FrameLocal, 0, 2)
             val staging = PlanResource.of(PlanResourceRole.ReadbackStaging, 0, PlanResourceKind.Buffer, null, null,
                 footprint.readbackBytes, setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead), PlanResourceLifetime.FrameLocal, 1, 2)

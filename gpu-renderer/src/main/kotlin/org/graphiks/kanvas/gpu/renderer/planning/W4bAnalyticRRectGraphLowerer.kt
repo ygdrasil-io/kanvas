@@ -21,6 +21,7 @@ import org.graphiks.kanvas.gpu.plan.PlanResourceKind
 import org.graphiks.kanvas.gpu.plan.PlanResourceLifetime
 import org.graphiks.kanvas.gpu.plan.PlanResourceRole
 import org.graphiks.kanvas.gpu.plan.PlanResourceUsage
+import org.graphiks.kanvas.gpu.plan.PlanTextureFormat
 import org.graphiks.kanvas.gpu.plan.RenderGraph
 import org.graphiks.kanvas.gpu.plan.SamplePlan
 import org.graphiks.kanvas.gpu.plan.W4bAnalyticRRectPlanCompiler
@@ -104,6 +105,13 @@ import org.graphiks.math.geometry.RectI32
 
 /** Lowers only the closed W4b analytic-RRect graph; it never re-enters Scene IR or legacy routes. */
 internal class W4bAnalyticRRectGraphLowerer {
+    private val HISTORICAL_OPERATIONS: Set<PlanOperationCapability> = setOf(
+        PlanOperationCapability.RenderPass,
+        PlanOperationCapability.CopyUpload,
+        PlanOperationCapability.UniformBuffer,
+        PlanOperationCapability.Readback,
+    )
+
     fun lower(request: GpuPlanLoweringRequest): GpuPlanLoweringResult = try {
         val graph = validateW4bGraph(request.graph)
             ?: return invalid("The graph is not the exact W4b topology.")
@@ -289,7 +297,7 @@ internal class W4bAnalyticRRectGraphLowerer {
         val capabilities = graph.capabilities
         val policy = capabilities.bufferAllocationPolicy
         return capabilities.maxDynamicUniformBuffersPerPipelineLayout >= 1 &&
-            capabilities.supportedOperations() == PlanOperationCapability.entries.toSet() &&
+            HISTORICAL_OPERATIONS.all { it in capabilities.supportedOperations() } &&
             capabilities.copyBytesPerRowAlignment.isPositivePowerOfTwo() &&
             capabilities.minUniformBufferOffsetAlignment.isPositivePowerOfTwo() &&
             policy.growth == PlanBufferGrowth.PowerOfTwo &&
@@ -307,7 +315,7 @@ internal class W4bAnalyticRRectGraphLowerer {
                 PlanResourceRole.LogicalTarget,
                 0,
                 PlanResourceKind.Texture2D,
-                graph.colorFormat,
+                PlanTextureFormat.Color(graph.colorFormat),
                 graph.targetExtent,
                 footprint.targetBytes,
                 setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource),

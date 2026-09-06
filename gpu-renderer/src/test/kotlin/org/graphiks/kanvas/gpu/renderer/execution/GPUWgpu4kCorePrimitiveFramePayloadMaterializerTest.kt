@@ -6227,7 +6227,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
             minUniformBufferOffsetAlignment = minUniformBufferOffsetAlignment.toInt(),
             maxDynamicUniformBuffersPerPipelineLayout = 1,
-            supportedOperations = PlanOperationCapability.entries.toSet(),
+            supportedOperations = historicalPlanOperations(),
             bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 4_096, 4_096),
         )
         val compiler = W4aAnalyticRectPlanCompiler()
@@ -6394,7 +6394,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
             minUniformBufferOffsetAlignment = 256,
             maxDynamicUniformBuffersPerPipelineLayout = 1,
-            supportedOperations = PlanOperationCapability.entries.toSet(),
+            supportedOperations = historicalPlanOperations(),
             bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 4_096, 4_096),
         )
         val compiler = W4bAnalyticRRectPlanCompiler()
@@ -8452,6 +8452,13 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
 
     private fun ByteBuffer.floatValuesAt(offset: Int): List<Float> =
         List(4) { index -> getFloat(offset + index * Float.SIZE_BYTES) }
+
+    private fun historicalPlanOperations(): Set<PlanOperationCapability> = setOf(
+        PlanOperationCapability.RenderPass,
+        PlanOperationCapability.CopyUpload,
+        PlanOperationCapability.UniformBuffer,
+        PlanOperationCapability.Readback,
+    )
 
     private fun planW3(
         scene: SceneSnapshot,
