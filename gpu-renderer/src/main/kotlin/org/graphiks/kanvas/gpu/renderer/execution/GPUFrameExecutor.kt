@@ -334,6 +334,21 @@ internal class GPUFrameExecutor(
             }
         }
 
+        preparedFramePayloadW4cDiagnostic(preparedFrame, consumedNativePayload)?.let { diagnostic ->
+            preparedFrame.rollbackAfterExecutionClaim()
+            telemetry.record(
+                GPUFrameStructuralPhase.Preflight,
+                GPUFrameStructuralEventKind.PreflightRefused,
+            )
+            return completedFailure(
+                attemptId,
+                diagnostic,
+                GPUFrameStructuralPhase.Preflight,
+                telemetry,
+                GPUFrameImmediateState.FailedBeforeSubmit(diagnostic),
+            )
+        }
+
         preparedFramePayloadMsaaDiagnostic(preparedFrame, consumedNativePayload)?.let { diagnostic ->
             preparedFrame.rollbackAfterExecutionClaim()
             telemetry.record(
@@ -1349,6 +1364,150 @@ internal class GPUFrameExecutor(
                 )
             }
             canonicalResolveViews[expectedResolveBinding] = resolve.view
+        }
+        return null
+    }
+
+    private fun preparedFramePayloadW4cDiagnostic(
+        frame: PreparedGPUFrame,
+        payload: GPUPreparedNativeFramePayload?,
+    ): GPUDiagnostic? {
+        val renders = frame.semanticPlan.steps.mapIndexedNotNull { stepIndex, step ->
+            (step as? GPUFrameStep.RenderPassStep)?.let { render -> Triple(stepIndex, render, render.drawPackets.singleOrNull()) }
+        }
+        val writableLoads = renders.filter { (_, render, _) ->
+            (render.depthStencilLoadStore as?
+                org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan
+                    .WritableStencil)?.loadOperation ==
+                org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Load
+        }
+        if (!frame.semanticPlan.hasSealedW4cSessionMarker()) {
+            return if (writableLoads.isEmpty()) {
+                null
+            } else {
+                executionDiagnostic(
+                    "invalid.native-frame-payload.w4c-writable-load",
+                    "Writable stencil Load is reserved for one planned W4c path-cover scope.",
+                )
+            }
+        }
+        val exactPayload = payload ?: return executionDiagnostic(
+            "unsupported.native-frame-payload.w4c-missing",
+            "A planned W4c frame requires one consumed native payload before encoding.",
+        )
+        val w4cScratch = renders.mapNotNull { (_, _, packet) ->
+            packet?.corePrimitivePreparedAuthority?.w4cSessionScratch
+        }.firstOrNull() ?: return executionDiagnostic(
+            "invalid.native-frame-payload.w4c-authority",
+            "A planned W4c frame is missing its common packet authority.",
+        )
+        var sharedPathDepthStencilView: Any? = null
+        renders.forEach { (stepIndex, render, packet) ->
+            val exactPacket = packet ?: return executionDiagnostic(
+                "invalid.native-frame-payload.w4c-authority",
+                "Each planned W4c render scope must contain exactly one packet.",
+            )
+            if (exactPacket.corePrimitivePreparedAuthority?.w4cSessionScratch !== w4cScratch) {
+                return executionDiagnostic(
+                    "invalid.native-frame-payload.w4c-authority",
+                    "W4c render packets must retain one shared planned scratch authority.",
+                )
+            }
+            val scopeIndex = frame.encoderPlan.scopes.indexOfFirst { scope ->
+                scope.sourceStepIndex == stepIndex
+            }
+            val native = exactPayload.scopeOperands.getOrNull(scopeIndex) as?
+                GPUPreparedNativeScopeOperand.Render ?: return executionDiagnostic(
+                "invalid.native-frame-payload.w4c-scope",
+                "Each planned W4c render step requires one exact native render operand.",
+            )
+            val pathUses = render.resourceUses.filter { use ->
+                use.role == GPUFrameResourceRole.PathDepthStencil
+            }
+            val expectedLoadStore = when (exactPacket.role) {
+                org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.PathStencilProducer ->
+                    org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan
+                        .WritableStencil(
+                            org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Clear,
+                            org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan.Store,
+                            0u,
+                        )
+                org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.PathStencilCover ->
+                    org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan
+                        .WritableStencil(
+                            org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Load,
+                            org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan.Store,
+                            null,
+                        )
+                org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.Shading -> null
+                else -> return executionDiagnostic(
+                    "invalid.native-frame-payload.w4c-role",
+                    "A planned W4c frame admits only direct shading, path producer, and path cover roles.",
+                )
+            }
+            if (expectedLoadStore == null) {
+                if (render.depthStencilLoadStore != null || pathUses.isNotEmpty() ||
+                    native.pass.depthStencilTarget != null || native.pass.stencilLoadOperation != null ||
+                    native.pass.stencilStoreOperation != null || native.pass.stencilClearValue != null
+                ) {
+                    return executionDiagnostic(
+                        "invalid.native-frame-payload.w4c-direct-state",
+                        "W4c direct shading must remain color-only without a stencil attachment.",
+                    )
+                }
+                return@forEach
+            }
+            val depthStencil = native.pass.depthStencilTarget
+            val sealedDepthStencil = exactPayload.pathDepthStencilViewAuthority[stepIndex]
+            val expectedNativeLoad = when (expectedLoadStore.loadOperation) {
+                org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Clear ->
+                    GPUPreparedNativeLoadOperation.Clear
+                org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Load ->
+                    GPUPreparedNativeLoadOperation.Load
+            }
+            if (render.depthStencilLoadStore != expectedLoadStore ||
+                pathUses.singleOrNull()?.let { use ->
+                    use.write &&
+                        use.usage == org.graphiks.kanvas.gpu.renderer.resources
+                            .GPUFrameResourceUsage.RenderAttachment
+                } != true ||
+                depthStencil == null || sealedDepthStencil !== depthStencil.view ||
+                depthStencil.deviceGeneration != frame.generationSeal.deviceGeneration ||
+                depthStencil.ownership != GPUPreparedNativeOperandOwnership.Borrowed ||
+                native.pass.stencilReadOnly ||
+                native.pass.stencilLoadOperation != expectedNativeLoad ||
+                native.pass.stencilStoreOperation != GPUPreparedNativeStoreOperation.Store ||
+                native.pass.stencilClearValue !=
+                    expectedLoadStore.clearValue
+            ) {
+                return executionDiagnostic(
+                    "invalid.native-frame-payload.w4c-stencil-state",
+                    "W4c path producer and cover operands must retain their exact writable stencil state.",
+                )
+            }
+            if (sharedPathDepthStencilView != null && sharedPathDepthStencilView !== depthStencil.view) {
+                return executionDiagnostic(
+                    "invalid.native-frame-payload.w4c-depth-stencil-continuity",
+                    "W4c producer and cover operands must share one D24S8 view.",
+                )
+            }
+            sharedPathDepthStencilView = depthStencil.view
+        }
+        val hasPath = renders.any { (_, _, packet) ->
+            packet?.role in setOf(
+                org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.PathStencilProducer,
+                org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.PathStencilCover,
+            )
+        }
+        if ((hasPath && (writableLoads.size != 1 ||
+                writableLoads.single().third?.role !=
+                org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.PathStencilCover)) ||
+            (!hasPath && writableLoads.isNotEmpty())
+        ) {
+            return executionDiagnostic(
+                "invalid.native-frame-payload.w4c-writable-load",
+                "A planned W4c path frame must contain exactly one writable stencil Load cover scope.",
+            )
         }
         return null
     }

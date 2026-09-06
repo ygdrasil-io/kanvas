@@ -9,11 +9,15 @@ import io.ygdrasil.webgpu.GPUTextureView
 import java.util.Collections
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan
+import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 
 internal sealed interface GPUCorePrimitiveRenderRunMaterialization {
@@ -48,6 +52,63 @@ internal sealed interface GPUCorePrimitiveRenderRunMaterialization {
     }
 }
 
+/** One sealed W4c draw range passed from the frame materializer without geometry recomposition. */
+internal data class GPUW4cCorePrimitiveGeometrySlice(
+    val firstIndex: Int,
+    val indexCount: Int,
+    val baseVertex: Int,
+    val vertexCount: Int,
+    val maxLocalIndex: Int,
+) {
+    init {
+        require(firstIndex >= 0 && indexCount > 0 && baseVertex >= 0)
+        require(vertexCount > 0 && maxLocalIndex in 0 until vertexCount)
+    }
+}
+
+/** Exact W4c scope evidence consumed by the dedicated native render-run emitter. */
+internal class GPUW4cCorePrimitiveRenderScopePlan(
+    val sourceStepIndex: Int,
+    val role: GPUDrawPacketRole,
+    val renderStep: GPUFrameStep.RenderPassStep,
+    val semantic: GPUDrawSemanticPayload.CorePrimitive,
+    val uniformOffset: Long,
+    val geometry: GPUW4cCorePrimitiveGeometrySlice,
+    val pipeline: GPUPreparedNativeRenderPipelineOperand,
+    val bindGroup: GPUPreparedNativeBindGroupOperand,
+) {
+    init {
+        require(sourceStepIndex >= 0 && uniformOffset >= 0L)
+        require(renderStep.drawPackets.singleOrNull()?.role == role)
+        require(renderStep.drawPackets.singleOrNull()?.semanticPayload === semantic)
+    }
+}
+
+internal sealed interface GPUW4cCorePrimitiveRenderRunMaterialization {
+    class Ready(
+        renderOperands: List<GPUPreparedNativeScopeOperand.Render>,
+        pathDepthStencilViewAuthority: Map<Int, GPUTextureView>,
+    ) : GPUW4cCorePrimitiveRenderRunMaterialization {
+        val renderOperands: List<GPUPreparedNativeScopeOperand.Render> = immutableList(renderOperands)
+        val pathDepthStencilViewAuthority: Map<Int, GPUTextureView> =
+            Collections.unmodifiableMap(pathDepthStencilViewAuthority.toMap())
+
+        init {
+            require(this.renderOperands.isNotEmpty())
+            require(this.renderOperands.map(GPUPreparedNativeScopeOperand.Render::sourceStepIndex).distinct().size ==
+                this.renderOperands.size
+            )
+        }
+    }
+
+    data class Refused(val code: String, val message: String) :
+        GPUW4cCorePrimitiveRenderRunMaterialization {
+        init {
+            require(code.isNotBlank() && message.isNotBlank())
+        }
+    }
+}
+
 /**
  * Materializes the frame-global CorePrimitive geometry/uniform arena into one pooled V/I/U lease
  * and, when required, one pooled D24S8 attachment. The caller already owns the global preflight,
@@ -58,6 +119,164 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
     private val sessionCache: GPUWgpu4kCorePrimitiveSessionCache,
     private val limits: GPULimits,
 ) : AutoCloseable {
+    /**
+     * Emits the closed Task5 W4c direct/producer/cover stream.  This intentionally accepts
+     * already sealed math slices and never calls the generic geometry batching route.
+     */
+    fun materializeW4cAcceptedRuns(
+        plans: List<GPUW4cCorePrimitiveRenderScopePlan>,
+        target: GPUPreparedNativeTextureViewOperand,
+        pathDepthStencil: GPUPreparedNativeTextureViewOperand?,
+        vertex: GPUPreparedNativeBufferOperand,
+        index: GPUPreparedNativeBufferOperand,
+        vertexUsefulBytes: Long,
+        indexUsefulBytes: Long,
+    ): GPUW4cCorePrimitiveRenderRunMaterialization {
+        if (plans.isEmpty() || vertexUsefulBytes <= 0L || indexUsefulBytes <= 0L ||
+            plans.map(GPUW4cCorePrimitiveRenderScopePlan::sourceStepIndex) !=
+            plans.map(GPUW4cCorePrimitiveRenderScopePlan::sourceStepIndex).sorted() ||
+            plans.map(GPUW4cCorePrimitiveRenderScopePlan::sourceStepIndex).distinct().size !=
+            plans.size
+        ) {
+            return w4cRefused(
+                "invalid.native-core-primitive.w4c-render-run",
+                "W4c render runs require one non-empty strictly ordered sealed scope stream.",
+            )
+        }
+        val pathPlans = plans.filter { plan ->
+            plan.role in setOf(
+                GPUDrawPacketRole.PathStencilProducer,
+                GPUDrawPacketRole.PathStencilCover,
+            )
+        }
+        if ((pathPlans.isNotEmpty()) != (pathDepthStencil != null) ||
+            pathPlans.chunked(2).any { pair ->
+                pair.size != 2 ||
+                    pair[0].role != GPUDrawPacketRole.PathStencilProducer ||
+                    pair[1].role != GPUDrawPacketRole.PathStencilCover ||
+                    pair[0].renderStep.drawPackets.single().commandIdValue !=
+                    pair[1].renderStep.drawPackets.single().commandIdValue
+            }
+        ) {
+            return w4cRefused(
+                "invalid.native-core-primitive.w4c-render-run",
+                "W4c path producer and cover scopes require one adjacent shared D24S8 run.",
+            )
+        }
+        val pathViewAuthority = linkedMapOf<Int, GPUTextureView>()
+        val operands = ArrayList<GPUPreparedNativeScopeOperand.Render>(plans.size)
+        plans.forEach { plan ->
+            val path = plan.role in setOf(
+                GPUDrawPacketRole.PathStencilProducer,
+                GPUDrawPacketRole.PathStencilCover,
+            )
+            val expectedDepthStencil = when (plan.role) {
+                GPUDrawPacketRole.PathStencilProducer -> GPUDepthStencilLoadStorePlan.WritableStencil(
+                    GPUStencilLoadOperation.Clear,
+                    GPUStorePlan.Store,
+                    0u,
+                )
+                GPUDrawPacketRole.PathStencilCover -> GPUDepthStencilLoadStorePlan.WritableStencil(
+                    GPUStencilLoadOperation.Load,
+                    GPUStorePlan.Store,
+                    null,
+                )
+                GPUDrawPacketRole.Shading -> null
+                else -> return w4cRefused(
+                    "invalid.native-core-primitive.w4c-render-run",
+                    "W4c permits only direct shading, path producer, and path cover packets.",
+                )
+            }
+            val pathUse = plan.renderStep.resourceUses.singleOrNull { use ->
+                use.role == GPUFrameResourceRole.PathDepthStencil
+            }
+            if (plan.renderStep.samplePlan != GPUSamplePlan.SingleSampleFrame ||
+                plan.renderStep.loadStore.storePlan != GPUStorePlan.Store ||
+                plan.renderStep.loadStore.loadOp !in setOf("clear", "load") ||
+                plan.pipeline.bindingPolicy != GPUPreparedNativeRenderPipelineBindingPolicy.BindGroupRequired ||
+                if (path) {
+                    plan.renderStep.depthStencilLoadStore != expectedDepthStencil ||
+                        pathUse?.write != true ||
+                        pathUse.usage != GPUFrameResourceUsage.RenderAttachment
+                } else {
+                    plan.renderStep.depthStencilLoadStore != null || pathUse != null
+                }
+            ) {
+                return w4cRefused(
+                    "invalid.native-core-primitive.w4c-render-run",
+                    "W4c render scopes contradict their sealed load/store, resource, or binding authority.",
+                )
+            }
+            val colorLoad = when (plan.renderStep.loadStore.loadOp) {
+                "clear" -> GPUPreparedNativeLoadOperation.Clear
+                "load" -> GPUPreparedNativeLoadOperation.Load
+                else -> error("W4c load operation was checked before native emission")
+            }
+            val stencil = when (plan.role) {
+                GPUDrawPacketRole.PathStencilProducer -> GPUPreparedNativeLoadOperation.Clear to 0u
+                GPUDrawPacketRole.PathStencilCover -> GPUPreparedNativeLoadOperation.Load to null
+                GPUDrawPacketRole.Shading -> null
+            }
+            val scissor = plan.semantic.scissorBounds
+            val commands = buildList {
+                add(GPUPreparedNativeRenderCommand.SetPipeline(plan.pipeline))
+                add(GPUPreparedNativeRenderCommand.SetVertexBuffer(
+                    0,
+                    vertex,
+                    0L,
+                    vertexUsefulBytes,
+                    8L,
+                ))
+                add(GPUPreparedNativeRenderCommand.SetIndexBuffer(
+                    index,
+                    GPUPreparedNativeIndexFormat.Uint32,
+                    0L,
+                    indexUsefulBytes,
+                ))
+                if (path) add(GPUPreparedNativeRenderCommand.SetStencilReference(0u))
+                add(GPUPreparedNativeRenderCommand.SetBindGroup(0, plan.bindGroup, listOf(plan.uniformOffset)))
+                add(GPUPreparedNativeRenderCommand.SetScissor(
+                    scissor.left,
+                    scissor.top,
+                    scissor.width,
+                    scissor.height,
+                ))
+                add(GPUPreparedNativeRenderCommand.DrawIndexed(
+                    GPUPreparedNativeDrawCall.DrawIndexed(
+                        indexCount = plan.geometry.indexCount,
+                        firstIndex = plan.geometry.firstIndex,
+                        baseVertex = plan.geometry.baseVertex,
+                        vertexCount = plan.geometry.vertexCount,
+                        maxLocalIndex = plan.geometry.maxLocalIndex,
+                    ),
+                ))
+            }
+            val depth = pathDepthStencil.takeIf { path }
+            if (path) pathViewAuthority[plan.sourceStepIndex] = requireNotNull(depth).view
+            operands += GPUPreparedNativeScopeOperand.Render(
+                sourceStepIndex = plan.sourceStepIndex,
+                pass = GPUPreparedNativeRenderPassConfig(
+                    colorTarget = target,
+                    depthStencilTarget = depth,
+                    loadOperation = colorLoad,
+                    storeOperation = GPUPreparedNativeStoreOperation.Store,
+                    clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)
+                        .takeIf { colorLoad == GPUPreparedNativeLoadOperation.Clear },
+                    depthReadOnly = true,
+                    stencilClearValue = stencil?.second,
+                    stencilLoadOperation = stencil?.first,
+                    stencilStoreOperation = GPUPreparedNativeStoreOperation.Store.takeIf {
+                        stencil != null
+                    },
+                    stencilReadOnly = stencil == null,
+                ),
+                commands = commands,
+                semanticPayloads = listOf(plan.semantic),
+            )
+        }
+        return GPUW4cCorePrimitiveRenderRunMaterialization.Ready(operands, pathViewAuthority)
+    }
+
     @Suppress("UNUSED_PARAMETER")
     fun materializeAcceptedRuns(
         plans: List<GPUCorePrimitiveRenderRunPlan>,
@@ -967,6 +1186,11 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
         code: String,
         message: String,
     ) = GPUCorePrimitiveRenderRunMaterialization.Refused(code, message)
+
+    private fun w4cRefused(
+        code: String,
+        message: String,
+    ) = GPUW4cCorePrimitiveRenderRunMaterialization.Refused(code, message)
 
     override fun close() = Unit
 }

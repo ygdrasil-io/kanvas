@@ -31,6 +31,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStr
 import org.graphiks.kanvas.gpu.renderer.passes.W3SessionScratchV1
 import org.graphiks.kanvas.gpu.renderer.passes.W4aSessionScratchV1
 import org.graphiks.kanvas.gpu.renderer.passes.W4bSessionScratchV1
+import org.graphiks.kanvas.gpu.renderer.passes.W4cSessionScratchV1
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPreparedImageClipAuthorityValidation
 import org.graphiks.kanvas.gpu.renderer.passes.validateGPUCorePrimitiveCoverageMaskPreparedAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.validateCorePrimitiveCoverageSampleAuthority
@@ -152,6 +153,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUTargetPreparationContext
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 import org.graphiks.math.geometry.RectI32
+import org.graphiks.kanvas.gpu.plan.PathFillStrategy
 import org.graphiks.kanvas.render.ir.DrawOrigin
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -191,6 +193,17 @@ internal fun GPUFramePlan.hasSealedW4bSessionMarker(): Boolean =
         steps.filterIsInstance<GPUFrameStep.RenderPassStep>().any { render ->
             render.drawPackets.any { packet ->
                 packet.corePrimitivePreparedAuthority?.w4bSessionScratch != null
+            }
+        }
+
+/** W4c owns a closed multi-render path-fill envelope and must bypass generic path classification. */
+internal fun GPUFramePlan.hasSealedW4cSessionMarker(): Boolean =
+    recordingSeals.any { seal ->
+        seal.compatibilityKeyHash.startsWith("w4c:") || seal.replayKeyHash.startsWith("w4c:")
+    } ||
+        steps.filterIsInstance<GPUFrameStep.RenderPassStep>().any { render ->
+            render.drawPackets.any { packet ->
+                packet.corePrimitivePreparedAuthority?.w4cSessionScratch != null
             }
         }
 
@@ -264,6 +277,7 @@ internal class GPUFramePreflighter(
             .flatMap(GPUFrameStep.RenderPassStep::drawPackets)
         val hasW4aSessionMarker = framePlan.hasSealedW4aSessionMarker()
         val hasW4bSessionMarker = framePlan.hasSealedW4bSessionMarker()
+        val hasW4cSessionMarker = framePlan.hasSealedW4cSessionMarker()
         val w4aScratch = renderPackets
             .mapNotNull { packet -> packet.corePrimitivePreparedAuthority?.w4aSessionScratch }
             .firstOrNull()
@@ -298,14 +312,42 @@ internal class GPUFramePreflighter(
                 ),
             )
         }
+        val w4cScratch = renderPackets
+            .mapNotNull { packet -> packet.corePrimitivePreparedAuthority?.w4cSessionScratch }
+            .firstOrNull()
+        val w4cValidation = if (hasW4cSessionMarker) {
+            if (hasW4aSessionMarker || hasW4bSessionMarker || w4cScratch == null ||
+                renderPackets.any { packet ->
+                    packet.corePrimitivePreparedAuthority?.w4cSessionScratch !== w4cScratch
+                }
+            ) {
+                null
+            } else {
+                validateW4cSessionScratch(framePlan, w4cScratch)
+            }
+        } else {
+            null
+        }
+        if (hasW4cSessionMarker && w4cValidation == null) {
+            return GPUFramePreflightResult.Refused(
+                diagnostic(
+                    "invalid.preflight.w4c_session_scratch",
+                    "W4c encoder scratch is absent, stale, or contradicts the closed frame envelope.",
+                ),
+            )
+        }
         val pureValidation = pureValidation(
             framePlan,
-            skipNativeCorePrimitiveClassification = hasW4aSessionMarker || hasW4bSessionMarker,
+            skipNativeCorePrimitiveClassification =
+                hasW4aSessionMarker || hasW4bSessionMarker || hasW4cSessionMarker,
         )
         pureValidation.diagnostic?.let { return GPUFramePreflightResult.Refused(it) }
-        val corePrimitiveDirectRoutes = pureValidation.corePrimitiveDirectRoutes
-        val corePrimitivePathStencilRoutes = pureValidation.corePrimitivePathStencilRoutes
-        val corePrimitiveNativeScopeRoutes = pureValidation.corePrimitiveNativeScopeRoutes
+        val corePrimitiveDirectRoutes = w4cValidation?.directRouteSeal
+            ?: pureValidation.corePrimitiveDirectRoutes
+        val corePrimitivePathStencilRoutes = w4cValidation?.pathRouteSeal
+            ?: pureValidation.corePrimitivePathStencilRoutes
+        val corePrimitiveNativeScopeRoutes = w4cValidation?.unifiedRouteSeal
+            ?: pureValidation.corePrimitiveNativeScopeRoutes
         val corePrimitiveClipStencilPreparedRoutes =
             pureValidation.corePrimitiveClipStencilPreparedRoutes
         val corePrimitiveCoverageMaskPreparedRoutes =
@@ -363,7 +405,19 @@ internal class GPUFramePreflighter(
                 ),
             )
         }
-        referencedResources(framePlan).firstOrNull { it !in declaredByRef && it !in context.resourceGenerations }?.let { missing ->
+        val w4cSessionResources = if (w4cValidation == null) {
+            emptySet()
+        } else {
+            framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+                .flatMap(GPUFrameStep.RenderPassStep::resourceUses)
+                .filter { use -> use.role == GPUFrameResourceRole.PathDepthStencil }
+                .map(GPUFrameResourceUse::resource)
+                .toSet()
+        }
+        referencedResources(framePlan).firstOrNull { resource ->
+            resource !in declaredByRef && resource !in context.resourceGenerations &&
+                resource !in w4cSessionResources
+        }?.let { missing ->
             return GPUFramePreflightResult.Refused(
                 diagnostic(
                     "invalid.preflight.resource_undeclared",
@@ -401,6 +455,9 @@ internal class GPUFramePreflighter(
         val semanticResourceRefs = referencedResources(framePlan) + declared.map { it.resource }
         context.resourceGenerations.forEach { (resource, generation) ->
             if (resource in semanticResourceRefs) preparedGenerationMap[resource] = generation
+        }
+        w4cSessionResources.forEach { resource ->
+            preparedGenerationMap[resource] = PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION
         }
 
         for (indexed in preparationSteps) {
@@ -2063,6 +2120,310 @@ internal class GPUFramePreflighter(
         }
         return CorePrimitiveClipStencilPreparedValidation(routeSeal)
     }
+
+    private data class W4cSessionValidation(
+        val directRouteSeal: GPUCorePrimitiveDirectNativeFrameRouteSeal,
+        val pathRouteSeal: GPUCorePrimitivePathStencilNativeFrameRouteSeal,
+        val unifiedRouteSeal: GPUCorePrimitiveNativeScopeFrameRouteSeal,
+    )
+
+    /**
+     * Re-authenticates the Task5 W4c envelope mechanically before generic path classification.
+     * The retained routes copy only already-planned math geometry; no tessellation or fallback
+     * enters this lane.
+     */
+    private fun validateW4cSessionScratch(
+        framePlan: GPUFramePlan,
+        scratch: W4cSessionScratchV1,
+    ): W4cSessionValidation? = try {
+        val limits = capabilities.limits ?: return null
+        val renders = framePlan.steps.withIndex().mapNotNull { indexed ->
+            (indexed.value as? GPUFrameStep.RenderPassStep)?.let { indexed.index to it }
+        }
+        val readback = framePlan.steps.filterIsInstance<GPUFrameStep.ReadbackCopyStep>()
+            .singleOrNull() ?: return null
+        val expectedReadbackId = "w4c.${scratch.planId}.readback"
+        val preparations = framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+            .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+        val targetPreparation = preparations.singleOrNull { it.role == GPUFrameResourceRole.SceneTarget }
+            ?: return null
+        val stagingPreparation = preparations.singleOrNull { it.role == GPUFrameResourceRole.ReadbackStaging }
+            ?: return null
+        val targetDescriptor = targetPreparation.descriptor as? GPUFrameTextureDescriptor ?: return null
+        val stagingDescriptor = stagingPreparation.descriptor as? GPUFrameBufferDescriptor ?: return null
+        if (framePlan.recordingSeals.size != 1 ||
+            framePlan.recordingSeals.single().compatibilityKeyHash != "w4c:${scratch.planId}" ||
+            framePlan.recordingSeals.single().replayKeyHash != "w4c:${scratch.planId}" ||
+            framePlan.recordingSeals.single().capabilitySealHash != framePlan.capabilitySeal.sealHash ||
+            readback.request.requestId.value != expectedReadbackId ||
+            readback.staging != scratch.staging || readback.source != scratch.target ||
+            readback.request.sourceBounds != scratch.targetBounds ||
+            targetPreparation.resource != scratch.target ||
+            targetPreparation.usages != setOf(
+                GPUFrameResourceUsage.RenderAttachment,
+                GPUFrameResourceUsage.CopySource,
+            ) ||
+            targetPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
+            targetDescriptor.logicalBounds != scratch.targetBounds ||
+            targetDescriptor.format != GPUColorFormat.RGBA8UnormSrgb || targetDescriptor.sampleCount != 1 ||
+            stagingPreparation.resource != scratch.staging ||
+            stagingPreparation.usages != setOf(
+                GPUFrameResourceUsage.CopyDestination,
+                GPUFrameResourceUsage.MapRead,
+            ) ||
+            stagingPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
+            stagingDescriptor.alignmentBytes != limits.copyBytesPerRowAlignment ||
+            preparations.any { request ->
+                request.role in setOf(
+                    GPUFrameResourceRole.VertexData,
+                    GPUFrameResourceRole.IndexData,
+                    GPUFrameResourceRole.UniformData,
+                    GPUFrameResourceRole.PathDepthStencil,
+                )
+            } ||
+            scratch.deviceGeneration != context.deviceGeneration.value ||
+            scratch.maxBufferSize != limits.maxBufferSize ||
+            scratch.maxDynamicUniformBuffersPerPipelineLayout !=
+            limits.maxDynamicUniformBuffersPerPipelineLayout ||
+            scratch.uniformStrideBytes != limits.minUniformBufferOffsetAlignment ||
+            scratch.vertexCapacityBytes != scratch.poolCapacities.vertexBytes ||
+            scratch.indexCapacityBytes != scratch.poolCapacities.indexBytes ||
+            scratch.uniformCapacityBytes != scratch.poolCapacities.uniformBytes ||
+            !scratch.matches(
+                scratch.planId,
+                framePlan.capabilitySeal.sealHash,
+                context.deviceGeneration.value,
+                scratch.target,
+                scratch.staging,
+                scratch.targetBounds,
+            )
+        ) return null
+
+        val locations = renders.flatMap { (stepIndex, render) ->
+            render.drawPackets.map { packet -> Triple(stepIndex, render, packet) }
+        }
+        if (locations.size != scratch.draws.sumOf { draw ->
+                if (draw.strategy == PathFillStrategy.DirectTriangle) 1 else 2
+            } ||
+            locations.map { it.third.packetId }.distinct().size != locations.size ||
+            renders.any { (_, render) ->
+                render.drawPackets.size != 1 || render.sourceTaskIds.size != 1 ||
+                    render.batches.singleOrNull()?.packets != render.drawPackets ||
+                    render.batches.singleOrNull()?.sourceTaskIds != render.sourceTaskIds ||
+                    render.samplePlan != GPUSamplePlan.SingleSampleFrame || render.target != scratch.target
+            }
+        ) return null
+
+        val uniformBytes = ByteArray(scratch.uniformPlan.totalBytes.toInt())
+        val uniformBytesByDraw = ArrayList<List<Int>>(scratch.draws.size)
+        val directRoutes = linkedMapOf<
+            GPUCorePrimitiveDirectNativeFrameRouteKey,
+            GPUCorePrimitiveDirectNativeRoute.Accepted,
+        >()
+        val pathRoutes = linkedMapOf<
+            GPUCorePrimitivePathStencilNativeFrameRouteKey,
+            GPUCorePrimitivePathStencilNativeRoute.AcceptedPair,
+        >()
+        val unifiedRoutes = linkedMapOf<
+            GPUCorePrimitiveNativeScopeFrameRouteKey,
+            GPUCorePrimitiveNativeScopeRouteSeal.Routes,
+        >()
+        var locationCursor = 0
+        scratch.draws.forEachIndexed { drawIndex, draw ->
+            val expectedPacketCount = if (draw.strategy == PathFillStrategy.DirectTriangle) 1 else 2
+            val scopedLocations = locations.subList(locationCursor, locationCursor + expectedPacketCount)
+            locationCursor += expectedPacketCount
+            val packets = scopedLocations.map(Triple<Int, GPUFrameStep.RenderPassStep, GPUDrawPacket>::third)
+            val semantics = packets.map { it.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive }
+            val uniform = semantics.firstOrNull()?.payloadRef?.uniformBlock?.bytes ?: return null
+            val slot = scratch.uniformPlan.slots.getOrNull(draw.uniformSlotIndex) ?: return null
+            if (semantics.any { semantic -> semantic == null || semantic.payloadRef.uniformBlock?.bytes != uniform } ||
+                uniform.size.toLong() != W4cSessionScratchV1.UNIFORM_PAYLOAD_BYTES ||
+                slot.payloadBytes != W4cSessionScratchV1.UNIFORM_PAYLOAD_BYTES ||
+                slot.alignedOffset != draw.uniformSlotIndex.toLong() * scratch.uniformStrideBytes ||
+                slot.alignedOffset > Int.MAX_VALUE.toLong() ||
+                slot.alignedOffset + uniform.size > uniformBytes.size
+            ) return null
+            uniform.forEachIndexed { index, value -> uniformBytes[slot.alignedOffset.toInt() + index] = value.toByte() }
+            uniformBytesByDraw += uniform
+            if (packets.any { packet ->
+                    val authority = packet.corePrimitivePreparedAuthority ?: return@any true
+                    authority.w4cSessionScratch !== scratch || authority.w3SessionScratch != null ||
+                        authority.w4aSessionScratch != null || authority.w4bSessionScratch != null ||
+                        authority.uniformSlabSeal != null || authority.analyticShapeUniformSeal != null ||
+                        authority.analyticClipUniformSeal != null || authority.analyticIntersectionUniformSeal != null ||
+                        authority.coverageMaskUniformSlabSeal != null ||
+                        !scratch.matchesPreparedPacket(
+                            scratch.planId,
+                            framePlan.capabilitySeal.sealHash,
+                            packet,
+                            authority.structuralPipelineKey,
+                            authority.renderPipelineKey,
+                        )
+                }
+            ) return null
+
+            val expectedLoad = if (drawIndex == 0) "clear" else "load"
+            when (draw.strategy) {
+                PathFillStrategy.DirectTriangle -> {
+                    val (stepIndex, render, packet) = scopedLocations.single()
+                    val semantic = requireNotNull(semantics.single())
+                    val direct = draw.copyGeometryF32().copyDirectTriangleF32OrNull() ?: return null
+                    val authority = requireNotNull(packet.corePrimitivePreparedAuthority)
+                    if (packet.role != GPUDrawPacketRole.Shading ||
+                        render.loadStore != GPULoadStorePlan(expectedLoad, GPUStorePlan.Store) ||
+                        render.depthStencilLoadStore != null || render.resourceUses.isNotEmpty() ||
+                        semantic.scissorBounds != draw.copyScissorBounds()
+                    ) return null
+                    val route = GPUCorePrimitiveDirectNativeRoute.Accepted(
+                        direct.copyVerticesF32(),
+                        direct.copyIndicesI32(),
+                        GPUCorePrimitiveDirectNativeRoute.Lane.DirectGeometry,
+                        draw.copyScissorBounds(),
+                    )
+                    directRoutes[GPUCorePrimitiveDirectNativeFrameRouteKey(stepIndex, packet.packetId)] = route
+                    unifiedRoutes[GPUCorePrimitiveNativeScopeFrameRouteKey(stepIndex, packet.packetId)] =
+                        GPUCorePrimitiveNativeScopeRouteSeal.Routes(
+                            listOf(
+                                GPUCorePrimitiveNativeScopeRouteUnit.Direct(
+                                    draw.commandId,
+                                    packet.packetId,
+                                    route,
+                                    authority.structuralPipelineKey,
+                                ),
+                            ),
+                            scratchUniformSeal(scratch, uniformBytes),
+                            GPUCorePrimitiveNativeScopeUniformCoverage.ExactCommandRange(draw.uniformSlotIndex, 1),
+                        )
+                }
+                PathFillStrategy.StencilCover -> {
+                    val producerLocation = scopedLocations[0]
+                    val coverLocation = scopedLocations[1]
+                    val producer = producerLocation.third
+                    val cover = coverLocation.third
+                    val producerAuthority = requireNotNull(producer.corePrimitivePreparedAuthority)
+                    val coverAuthority = requireNotNull(cover.corePrimitivePreparedAuthority)
+                    val fan = draw.copyGeometryF32().copyStencilEdgeFanF32OrNull() ?: return null
+                    val expectedDepthStencilResource = scratch.target.value
+                        .removeSuffix(".target")
+                        .plus(".depth-stencil")
+                    val expectedUse = { render: GPUFrameStep.RenderPassStep ->
+                        render.resourceUses.singleOrNull { use ->
+                            use.role == GPUFrameResourceRole.PathDepthStencil &&
+                                use.usage == GPUFrameResourceUsage.RenderAttachment &&
+                                use.lifetime == GPUFrameResourceLifetime.FrameLocal && use.write &&
+                                use.resource.value == expectedDepthStencilResource
+                        } != null && render.resourceUses.size == 1
+                    }
+                    if (scratch.depthStencilResourceId == null ||
+                        producer.role != GPUDrawPacketRole.PathStencilProducer ||
+                        cover.role != GPUDrawPacketRole.PathStencilCover ||
+                        producer.commandIdValue != draw.commandId || cover.commandIdValue != draw.commandId ||
+                        producerLocation.second.loadStore != GPULoadStorePlan(expectedLoad, GPUStorePlan.Store) ||
+                        coverLocation.second.loadStore != GPULoadStorePlan("load", GPUStorePlan.Store) ||
+                        producerLocation.second.depthStencilLoadStore !=
+                        org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan.WritableStencil(
+                            org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Clear,
+                            GPUStorePlan.Store,
+                            0u,
+                        ) ||
+                        coverLocation.second.depthStencilLoadStore !=
+                        org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan.WritableStencil(
+                            org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Load,
+                            GPUStorePlan.Store,
+                            null,
+                        ) || !expectedUse(producerLocation.second) || !expectedUse(coverLocation.second)
+                    ) return null
+                    val pair = GPUCorePrimitivePathStencilNativeRoute.AcceptedPair(
+                        producer.packetId,
+                        cover.packetId,
+                        fan.copyVerticesF32(),
+                        fan.copyIndicesI32(),
+                        draw.copyScissorBounds(),
+                        scratch.targetBounds,
+                        inverseFill = false,
+                    )
+                    pathRoutes[
+                        GPUCorePrimitivePathStencilNativeFrameRouteKey(
+                            producerLocation.first,
+                            producer.packetId,
+                            cover.packetId,
+                        )
+                    ] = pair
+                    val uniformSeal = scratchUniformSeal(scratch, uniformBytes)
+                    unifiedRoutes[
+                        GPUCorePrimitiveNativeScopeFrameRouteKey(producerLocation.first, producer.packetId)
+                    ] = GPUCorePrimitiveNativeScopeRouteSeal.Routes(
+                        listOf(
+                            GPUCorePrimitiveNativeScopeRouteUnit.PathProducer(
+                                draw.commandId,
+                                producer.packetId,
+                                producerAuthority.structuralPipelineKey,
+                                pair.producer,
+                            ),
+                        ),
+                        uniformSeal,
+                        GPUCorePrimitiveNativeScopeUniformCoverage.ExactCommandRange(draw.uniformSlotIndex, 1),
+                    )
+                    unifiedRoutes[
+                        GPUCorePrimitiveNativeScopeFrameRouteKey(coverLocation.first, cover.packetId)
+                    ] = GPUCorePrimitiveNativeScopeRouteSeal.Routes(
+                        listOf(
+                            GPUCorePrimitiveNativeScopeRouteUnit.PathCover(
+                                draw.commandId,
+                                cover.packetId,
+                                coverAuthority.structuralPipelineKey,
+                                pair.cover,
+                            ),
+                        ),
+                        uniformSeal,
+                        GPUCorePrimitiveNativeScopeUniformCoverage.ExactCommandRange(draw.uniformSlotIndex, 1),
+                    )
+                }
+            }
+        }
+        if (locationCursor != locations.size ||
+            !GPUCorePrimitiveUniformSlabSeal(
+                scratch.uniformPlan,
+                scratch.draws.map { it.commandId },
+                uniformBytes,
+            ).hasExactPayloads(scratch.draws.map { it.commandId }, uniformBytesByDraw) ||
+            scratch.depthStencilResourceId == null && pathRoutes.isNotEmpty() ||
+            scratch.depthStencilResourceId != null && pathRoutes.isEmpty()
+        ) return null
+        val taskIds = framePlan.steps.map { step -> step.sourceTaskIds.singleOrNull() ?: return null }
+        if (framePlan.dependencies.size != taskIds.size - 1 ||
+            framePlan.dependencies.map { dependency -> dependency.fromTaskId to dependency.toTaskId } !=
+            taskIds.zipWithNext() ||
+            framePlan.dependencies.any { dependency ->
+                val fromRender = renders.firstOrNull { (_, render) ->
+                    render.sourceTaskIds.single() == dependency.fromTaskId
+                }?.second
+                val expectedAtomic = fromRender?.drawPackets?.singleOrNull()
+                    ?.takeIf { it.role == GPUDrawPacketRole.PathStencilProducer }
+                    ?.let { "w4c:${it.commandIdValue}" }
+                dependency.atomicGroupId?.value != expectedAtomic
+            }
+        ) return null
+        W4cSessionValidation(
+            GPUCorePrimitiveDirectNativeFrameRouteSeal(directRoutes),
+            GPUCorePrimitivePathStencilNativeFrameRouteSeal(pathRoutes),
+            GPUCorePrimitiveNativeScopeFrameRouteSeal(unifiedRoutes),
+        )
+    } catch (_: IllegalArgumentException) {
+        null
+    } catch (_: ArithmeticException) {
+        null
+    }
+
+    private fun scratchUniformSeal(
+        scratch: W4cSessionScratchV1,
+        packedBytes: ByteArray,
+    ): GPUCorePrimitiveUniformSlabSeal = GPUCorePrimitiveUniformSlabSeal(
+        scratch.uniformPlan,
+        scratch.draws.map { it.commandId },
+        packedBytes,
+    )
 
     private data class PureValidationResult(
         val diagnostic: GPUDiagnostic?,
@@ -7416,6 +7777,52 @@ internal class GPUFramePreflighter(
         return when (step) {
             is GPUFrameStep.RenderPassStep -> {
                 val targetResourceLabel = resources.first()
+                val w4cScratch = step.drawPackets.firstOrNull()
+                    ?.corePrimitivePreparedAuthority?.w4cSessionScratch
+                if (w4cScratch != null && step.drawPackets.all {
+                        it.corePrimitivePreparedAuthority?.w4cSessionScratch === w4cScratch
+                    }
+                ) {
+                    val packet = requireNotNull(step.drawPackets.singleOrNull())
+                    val depthStencilKey = step.resourceUses.singleOrNull { use ->
+                        use.role == GPUFrameResourceRole.PathDepthStencil
+                    }?.let { use ->
+                        val resourceIndex = step.resourceUses.indexOf(use)
+                        key(
+                            GPUPreparedNativeOperandRole.RenderDepthStencilTarget,
+                            GPUPreparedNativeOperandKind.TextureView,
+                            resources[resourceIndex + 1],
+                        )
+                    }
+                    return listOf(
+                        key(
+                            GPUPreparedNativeOperandRole.RenderColorTarget,
+                            GPUPreparedNativeOperandKind.TextureView,
+                            targetResourceLabel,
+                        ),
+                    ) + listOfNotNull(depthStencilKey) + listOf(
+                        key(
+                            GPUPreparedNativeOperandRole.RenderPipeline,
+                            GPUPreparedNativeOperandKind.RenderPipeline,
+                            "w4c.${w4cScratch.planId}.pipeline.${packet.packetId.value}",
+                        ),
+                        key(
+                            GPUPreparedNativeOperandRole.RenderVertexBuffer,
+                            GPUPreparedNativeOperandKind.Buffer,
+                            "w4c.${w4cScratch.planId}.scratch.vertex",
+                        ),
+                        key(
+                            GPUPreparedNativeOperandRole.RenderIndexBuffer,
+                            GPUPreparedNativeOperandKind.Buffer,
+                            "w4c.${w4cScratch.planId}.scratch.index",
+                        ),
+                        key(
+                            GPUPreparedNativeOperandRole.RenderBindGroup,
+                            GPUPreparedNativeOperandKind.BindGroup,
+                            "w4c.${w4cScratch.planId}.scratch.uniform.${packet.commandIdValue}",
+                        ),
+                    )
+                }
                 val w4bScratch = step.drawPackets.firstOrNull()
                     ?.corePrimitivePreparedAuthority?.w4bSessionScratch
                 if (w4bScratch != null && step.drawPackets.all {
