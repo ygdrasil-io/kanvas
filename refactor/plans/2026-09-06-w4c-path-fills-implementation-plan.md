@@ -422,18 +422,24 @@ Le controller soumet le commit aux deux gates Sol avant Task 3.
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/planning/W4aAnalyticRectGraphLowerer.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/planning/W4bAnalyticRRectGraphLowerer.kt`
 - Modify: `gpu-plan/src/test/kotlin/org/graphiks/kanvas/gpu/plan/RenderGraphContractTest.kt`
+- Modify: `gpu-plan/src/test/kotlin/org/graphiks/kanvas/gpu/plan/W3SolidRectPlanCompilerTest.kt`
 - Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/planning/GpuPlanTaskListLowererTest.kt`
 - Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/planning/GpuPlanTaskListLowererW4aTest.kt`
 - Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/planning/GpuPlanTaskListLowererW4bTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFramePreflighterTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUCorePrimitiveAnalyticShapeUniformAbiTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest.kt`
 
 **Interfaces:**
 
 - Consumes: `PathFillGeometryF32` de Task 2.
 - Produces: `PlanTextureFormat`, `PlanDepthStencilFormat`, `PlanDepthStencilLoadStore`, `PlanAtomicGroupId`, `PathFillDraw`, `PathFillStrategy`, `PlanPass.StencilProducer`, `PlanPass.StencilCover`.
 
-- [ ] **Step 1: Écrire les tests RED du format et de la ressource D24S8**
+- [ ] **Step 1: Écrire les tests RED du format, de la ressource D24S8 et de la migration W3**
 
 Vérifier qu'une texture couleur exige `PlanTextureFormat.Color`, que D24S8 exige rôle `DepthStencil` + usage `DepthStencilAttachment`, qu'un buffer refuse tout format, et que le support D24S8 est distinct de `supportedFormats()` couleur.
+
+Adapter les fixtures W3 directement liées à `PlanResource.format` : `W3SolidRectPlanCompilerTest.kt`, `GpuPlanTaskListLowererTest.kt`, `GPUFramePreflighterTest.kt`, `GPUCorePrimitiveAnalyticShapeUniformAbiTest.kt` et `GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest.kt` attendent ou construisent le wrapper `PlanTextureFormat.Color(...)`, sans modifier leur comportement W3 historique.
 
 ```kotlin
 assertFailsWith<IllegalArgumentException> {
@@ -446,9 +452,11 @@ assertFailsWith<IllegalArgumentException> {
 }
 ```
 
-- [ ] **Step 2: Écrire les tests RED des passes et de l'atomicité**
+- [ ] **Step 2: Écrire les tests RED des passes, de l'atomicité et des capabilities historiques**
 
 Construire publiquement un graph `producer → cover → readback` valide, puis des graphes invalides : cover non adjacent, groupe différent, commande différente, depth texture absente, load/store inversé, cover sans accès read-write, dépendance manquante, lifetime D24S8 expirant avant readback, ordre de commandes décroissant.
+
+Dans les tests publics W4a et W4b, vérifier que leurs lowerers acceptent à la fois un snapshot des opérations historiques exactes `{ RenderPass, CopyUpload, UniformBuffer, Readback }` et un snapshot W4c-capable qui contient ce sous-ensemble plus les opérations stencil. Ces tests n'inspectent aucune forme source ou détail privé.
 
 - [ ] **Step 3: Vérifier RED**
 
@@ -456,14 +464,15 @@ Run:
 
 ```bash
 rtk ./gradlew :gpu-plan:test --tests '*RenderGraphContractTest*'
-rtk ./gradlew :gpu-renderer:test --tests '*GpuPlanTaskListLowererTest*' --tests '*GpuPlanTaskListLowererW4aTest*' --tests '*GpuPlanTaskListLowererW4bTest*'
+rtk ./gradlew :gpu-plan:test --tests '*W3SolidRectPlanCompilerTest*'
+rtk ./gradlew :gpu-renderer:test --tests '*GpuPlanTaskListLowererTest*' --tests '*GpuPlanTaskListLowererW4aTest*' --tests '*GpuPlanTaskListLowererW4bTest*' --tests '*GPUFramePreflighterTest*' --tests '*GPUCorePrimitiveAnalyticShapeUniformAbiTest*' --tests '*GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest*'
 ```
 
 Expected: FAIL à la compilation sur les nouveaux formats/passes.
 
 - [ ] **Step 4: Implémenter les types en préservant W3/W4a/W4b**
 
-Remplacer `PlanResource.format: PlanLogicalColorFormat?` par `PlanTextureFormat?`; envelopper tous les call sites W3/W4a/W4b et ceux de `GpuPlanTaskListLowerer` avec `PlanTextureFormat.Color(...)`. Adapter dans cette même tâche les builders et assertions publics W4a/W4b qui construisent ou authentifient des `PlanResource`, afin que Task 3 compile seule sans attendre W4c. Dans `W4aAnalyticRectGraphLowerer.kt` et `W4bAnalyticRRectGraphLowerer.kt`, remplacer l'égalité à `PlanOperationCapability.entries` par l'ensemble historique explicite `{ RenderPass, CopyUpload, UniformBuffer, Readback }`; mettre les fixtures publiques W4a/W4b et le test W3 direct `GpuPlanTaskListLowererTest.kt` au même contrat. Ainsi l'ajout des opérations stencil ne change pas rétroactivement les lanes W3/W4a/W4b. Ajouter à `PlanCapabilitySnapshot.of(...)` un paramètre final `supportedDepthStencilFormats: Set<PlanDepthStencilFormat> = emptySet()` et une copie immuable exposée par `supportedDepthStencilFormats()`.
+Remplacer `PlanResource.format: PlanLogicalColorFormat?` par `PlanTextureFormat?`; envelopper tous les call sites W3/W4a/W4b et ceux de `GpuPlanTaskListLowerer` avec `PlanTextureFormat.Color(...)`. Adapter dans cette même tâche les builders et assertions publics W3/W4a/W4b qui construisent ou authentifient des `PlanResource`, y compris les fixtures de preflight, ABI uniforme et materializer listées ci-dessus, afin que Task 3 compile seule sans attendre W4c. Dans `W4aAnalyticRectGraphLowerer.kt` et `W4bAnalyticRRectGraphLowerer.kt`, remplacer l'égalité à `PlanOperationCapability.entries` par `HISTORICAL_OPERATIONS.all { it in capabilities.supportedOperations() }`, avec `private val HISTORICAL_OPERATIONS = setOf(PlanOperationCapability.RenderPass, PlanOperationCapability.CopyUpload, PlanOperationCapability.UniformBuffer, PlanOperationCapability.Readback)`. Les deux lowerers acceptent donc le snapshot historique seul comme le snapshot W4c-capable qui ajoute les opérations stencil; mettre leurs fixtures publiques à ce contrat de sous-ensemble et adapter le test W3 direct `GpuPlanTaskListLowererTest.kt` seulement au wrapper de format. Ainsi l'ajout des opérations stencil ne change pas rétroactivement les lanes W3/W4a/W4b. Ajouter à `PlanCapabilitySnapshot.of(...)` un paramètre final `supportedDepthStencilFormats: Set<PlanDepthStencilFormat> = emptySet()` et une copie immuable exposée par `supportedDepthStencilFormats()`.
 
 Ajouter `DepthStencilAttachment` et les opérations `DepthStencilAttachment`/`StencilCover` sans modifier les opérations W3 existantes. Ajouter `AttachmentLoadPlan.Load`.
 
@@ -477,7 +486,7 @@ Run:
 
 ```bash
 rtk ./gradlew :gpu-plan:test --rerun-tasks
-rtk ./gradlew :gpu-renderer:test --tests '*GpuPlanTaskListLowererTest*' --tests '*GpuPlanTaskListLowererW4aTest*' --tests '*GpuPlanTaskListLowererW4bTest*' --rerun-tasks
+rtk ./gradlew :gpu-renderer:test --tests '*GpuPlanTaskListLowererTest*' --tests '*GpuPlanTaskListLowererW4aTest*' --tests '*GpuPlanTaskListLowererW4bTest*' --tests '*GPUFramePreflighterTest*' --tests '*GPUCorePrimitiveAnalyticShapeUniformAbiTest*' --tests '*GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest*' --rerun-tasks
 ```
 
 Expected: BUILD SUCCESSFUL, contrats W3/W4a/W4b inchangés.
@@ -485,7 +494,7 @@ Expected: BUILD SUCCESSFUL, contrats W3/W4a/W4b inchangés.
 - [ ] **Step 7: Self-review et commit Terra**
 
 ```bash
-rtk git add gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/PlanIdentity.kt gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/PlanCapabilities.kt gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/PlanResources.kt gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/PlanPasses.kt gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/RenderGraph.kt gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/W3SolidRectPlanCompiler.kt gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/W4aAnalyticRectPlanCompiler.kt gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/W4bAnalyticRRectPlanCompiler.kt gpu-plan/src/test/kotlin/org/graphiks/kanvas/gpu/plan/RenderGraphContractTest.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/planning/GpuPlanTaskListLowerer.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/planning/W4aAnalyticRectGraphLowerer.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/planning/W4bAnalyticRRectGraphLowerer.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/planning/GpuPlanTaskListLowererTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/planning/GpuPlanTaskListLowererW4aTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/planning/GpuPlanTaskListLowererW4bTest.kt
+rtk git add gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/PlanIdentity.kt gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/PlanCapabilities.kt gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/PlanResources.kt gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/PlanPasses.kt gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/RenderGraph.kt gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/W3SolidRectPlanCompiler.kt gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/W4aAnalyticRectPlanCompiler.kt gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/W4bAnalyticRRectPlanCompiler.kt gpu-plan/src/test/kotlin/org/graphiks/kanvas/gpu/plan/RenderGraphContractTest.kt gpu-plan/src/test/kotlin/org/graphiks/kanvas/gpu/plan/W3SolidRectPlanCompilerTest.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/planning/GpuPlanTaskListLowerer.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/planning/W4aAnalyticRectGraphLowerer.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/planning/W4bAnalyticRRectGraphLowerer.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/planning/GpuPlanTaskListLowererTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/planning/GpuPlanTaskListLowererW4aTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/planning/GpuPlanTaskListLowererW4bTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFramePreflighterTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUCorePrimitiveAnalyticShapeUniformAbiTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest.kt
 rtk git commit -m "feat(gpu-plan): model atomic stencil cover passes"
 ```
 
