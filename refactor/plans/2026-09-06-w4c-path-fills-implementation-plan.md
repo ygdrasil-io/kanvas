@@ -456,7 +456,7 @@ assertFailsWith<IllegalArgumentException> {
 
 Construire publiquement un graph `producer → cover → readback` valide, puis des graphes invalides : cover non adjacent, groupe différent, commande différente, depth texture absente, load/store inversé, cover sans accès read-write, dépendance manquante, lifetime D24S8 expirant avant readback, ordre de commandes décroissant.
 
-Dans les tests publics W4a et W4b, vérifier que leurs lowerers acceptent à la fois un snapshot des opérations historiques exactes `{ RenderPass, CopyUpload, UniformBuffer, Readback }` et un snapshot W4c-capable qui contient ce sous-ensemble plus les opérations stencil. Ces tests n'inspectent aucune forme source ou détail privé.
+Dans les tests publics W4a et W4b, vérifier que leurs lowerers acceptent le snapshot des opérations historiques exactes `{ RenderPass, CopyUpload, UniformBuffer, Readback }`. La preuve publique du snapshot W4c-capable est reportée à Task 5, après que l'adapter peut le produire. Ces tests n'inspectent aucune forme source ou détail privé.
 
 - [ ] **Step 3: Vérifier RED**
 
@@ -472,7 +472,7 @@ Expected: FAIL à la compilation sur les nouveaux formats/passes.
 
 - [ ] **Step 4: Implémenter les types en préservant W3/W4a/W4b**
 
-Remplacer `PlanResource.format: PlanLogicalColorFormat?` par `PlanTextureFormat?`; envelopper tous les call sites W3/W4a/W4b et ceux de `GpuPlanTaskListLowerer` avec `PlanTextureFormat.Color(...)`. Adapter dans cette même tâche les builders et assertions publics W3/W4a/W4b qui construisent ou authentifient des `PlanResource`, y compris les fixtures de preflight, ABI uniforme et materializer listées ci-dessus, afin que Task 3 compile seule sans attendre W4c. Dans `W4aAnalyticRectGraphLowerer.kt` et `W4bAnalyticRRectGraphLowerer.kt`, remplacer l'égalité à `PlanOperationCapability.entries` par `HISTORICAL_OPERATIONS.all { it in capabilities.supportedOperations() }`, avec `private val HISTORICAL_OPERATIONS = setOf(PlanOperationCapability.RenderPass, PlanOperationCapability.CopyUpload, PlanOperationCapability.UniformBuffer, PlanOperationCapability.Readback)`. Les deux lowerers acceptent donc le snapshot historique seul comme le snapshot W4c-capable qui ajoute les opérations stencil; mettre leurs fixtures publiques à ce contrat de sous-ensemble et adapter le test W3 direct `GpuPlanTaskListLowererTest.kt` seulement au wrapper de format. Ainsi l'ajout des opérations stencil ne change pas rétroactivement les lanes W3/W4a/W4b. Ajouter à `PlanCapabilitySnapshot.of(...)` un paramètre final `supportedDepthStencilFormats: Set<PlanDepthStencilFormat> = emptySet()` et une copie immuable exposée par `supportedDepthStencilFormats()`.
+Remplacer `PlanResource.format: PlanLogicalColorFormat?` par `PlanTextureFormat?`; envelopper tous les call sites W3/W4a/W4b et ceux de `GpuPlanTaskListLowerer` avec `PlanTextureFormat.Color(...)`. Adapter dans cette même tâche les builders et assertions publics W3/W4a/W4b qui construisent ou authentifient des `PlanResource`, y compris les fixtures de preflight, ABI uniforme et materializer listées ci-dessus, afin que Task 3 compile seule sans attendre W4c. Dans `W4aAnalyticRectGraphLowerer.kt` et `W4bAnalyticRRectGraphLowerer.kt`, remplacer l'égalité à `PlanOperationCapability.entries` par `HISTORICAL_OPERATIONS.all { it in capabilities.supportedOperations() }`, avec `private val HISTORICAL_OPERATIONS = setOf(PlanOperationCapability.RenderPass, PlanOperationCapability.CopyUpload, PlanOperationCapability.UniformBuffer, PlanOperationCapability.Readback)`. Ce check de sous-ensemble assure la compatibilité future avec des opérations additionnelles; Task 3 ne prouve publiquement que le snapshot historique exact. Mettre les fixtures publiques W4a/W4b à ce contrat historique et adapter le test W3 direct `GpuPlanTaskListLowererTest.kt` seulement au wrapper de format. Ainsi l'ajout des opérations stencil ne change pas rétroactivement les lanes W3/W4a/W4b. Ajouter à `PlanCapabilitySnapshot.of(...)` un paramètre final `supportedDepthStencilFormats: Set<PlanDepthStencilFormat> = emptySet()` et une copie immuable exposée par `supportedDepthStencilFormats()`.
 
 Ajouter `DepthStencilAttachment` et les opérations `DepthStencilAttachment`/`StencilCover` sans modifier les opérations W3 existantes. Ajouter `AttachmentLoadPlan.Load`.
 
@@ -621,6 +621,8 @@ Le controller soumet le commit aux deux gates Sol avant Task 5.
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/payloads/PayloadContracts.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/geometry/GPUPathEdgeFanPayloadContract.kt`
 - Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/planning/GpuPlanCapabilityAdapterTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/planning/GpuPlanTaskListLowererW4aTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/planning/GpuPlanTaskListLowererW4bTest.kt`
 - Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/geometry/PathTessellatorTest.kt`
 - Modify: `render-ir/src/main/kotlin/org/graphiks/kanvas/render/ir/RenderPathFanLimits.kt`
 - Modify: `render-ir/src/test/kotlin/org/graphiks/kanvas/render/ir/RenderPathFanLimitsTest.kt`
@@ -634,7 +636,7 @@ Le controller soumet le commit aux deux gates Sol avant Task 5.
 
 - [ ] **Step 1: Écrire les tests RED du capability adapter**
 
-Quand `GPUTextureFormat.Depth24PlusStencil8` supporte 1 sample, le snapshot expose `PlanDepthStencilFormat.Depth24PlusStencil8` et les opérations depth/stencil + stencil/cover. Si le format ou 1× manque, W3/W4a/W4b restent planifiables mais W4c retourne `UnsupportedCapability` après sélection.
+Quand `GPUTextureFormat.Depth24PlusStencil8` supporte 1 sample, le snapshot expose `PlanDepthStencilFormat.Depth24PlusStencil8` et les opérations depth/stencil + stencil/cover. Via l'API publique de `GpuPlanCapabilityAdapter`, construire ces capabilities physiques W4c et vérifier le snapshot superset obtenu. Si le format ou 1× manque, W3/W4a/W4b restent planifiables mais W4c retourne `UnsupportedCapability` après sélection.
 
 - [ ] **Step 2: Écrire les tests RED du lowerer**
 
@@ -651,7 +653,7 @@ assertEquals(
 )
 ```
 
-Le producer utilise `WritableStencil(Clear, Store, 0u)`; le cover `WritableStencil(Load, Store, null)` et son `GPUFrameResourceUse(PathDepthStencil)` porte `write=true`. Tester Uniform32, offsets V/I/U exacts, scissor, fill rule, source authority W4c et ordre de paint.
+Le producer utilise `WritableStencil(Clear, Store, 0u)`; le cover `WritableStencil(Load, Store, null)` et son `GPUFrameResourceUse(PathDepthStencil)` porte `write=true`. Tester Uniform32, offsets V/I/U exacts, scissor, fill rule, source authority W4c et ordre de paint. Transmettre aussi ce snapshot superset obtenu par l'adapter aux lowerers W4a et W4b avec un graph public valide de leur lane; vérifier qu'ils restent prêts, sans interception ni refus par W4c.
 
 Ne pas reconstruire au lowerer des graphes impossibles à fabriquer publiquement : non-adjacence, groupe divergent, lifetime/ressource/budget incohérents sont déjà des refus de `RenderGraph.of` dans Task 3. Garder ici seulement des contrefaçons constructibles par API publique : capability snapshot périmé face au renderer courant (`UnsupportedCapability`) et graph valide d'une autre lane transmis directement au lowerer W4c (`InvalidPlan`, jamais une autre lane). Tous les tests restent sans reflection, accès privé, inspection source ou call-count.
 
@@ -660,7 +662,7 @@ Ne pas reconstruire au lowerer des graphes impossibles à fabriquer publiquement
 Run:
 
 ```bash
-rtk ./gradlew :gpu-renderer:test --tests '*GpuPlanCapabilityAdapterTest*' --tests '*GpuPlanTaskListLowererW4cTest*'
+rtk ./gradlew :gpu-renderer:test --tests '*GpuPlanCapabilityAdapterTest*' --tests '*GpuPlanTaskListLowererW4cTest*' --tests '*GpuPlanTaskListLowererW4aTest*' --tests '*GpuPlanTaskListLowererW4bTest*'
 ```
 
 Expected: FAIL à la compilation.
