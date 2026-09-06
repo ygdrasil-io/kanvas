@@ -5,9 +5,15 @@ import org.graphiks.kanvas.render.ir.RenderPathFanLimits
 data class RenderConfig(
     val gpuColorFormat: GPUColorFormat = GPUColorFormat.RGBA8_UNORM_SRGB,
     val maxPathVertices: UInt = 131072u,
-    /** Maximum stencil edge-fan triangles admitted by the public Surface path route. */
+    /**
+     * Maximum stencil edge-fan triangles admitted by the legacy/`Unknown`
+     * public Surface path route.
+     */
     val maxPathFanTriangles: UInt = MAX_PATH_FAN_TRIANGLES,
-    /** Maximum bytes for the public Surface path edge-fan position/index buffers. */
+    /**
+     * Maximum bytes for the legacy/`Unknown` public Surface path edge-fan
+     * position/index buffers.
+     */
     val maxPathGeometryBytes: UInt = MAX_PATH_GEOMETRY_BYTES,
     /** Maximum transient memory used by one promoted W3 frame. */
     val frameLocalBudgetBytes: Long = 1L shl 30,
@@ -27,8 +33,9 @@ data class RenderConfig(
     }
 
     /**
-     * Validates the public path edge-fan configuration before the mapper can
-     * convert unsigned limits to backend `Int` values or allocate geometry.
+     * Validates legacy/`Unknown` public path edge-fan configuration before the
+     * mapper can convert unsigned limits to backend `Int` values or allocate
+     * geometry. Sealed W4c plans use immutable source-authority limits instead.
      */
     internal fun pathEdgeFanBudgetRefusalCodeOrNull(): String? = when {
         maxPathVertices > Int.MAX_VALUE.toUInt() ->
@@ -45,12 +52,13 @@ data class RenderConfig(
     }
 
     companion object {
-        /** Maximum path edge-fan triangles admitted by the public Surface route. */
+        /** Maximum path edge-fan triangles admitted by the legacy/`Unknown` public Surface route. */
         public const val MAX_PATH_FAN_TRIANGLES: UInt = RenderPathFanLimits.MAX_TRIANGLES
 
-        /** Maximum path edge-fan geometry bytes admitted by the public Surface route. */
+        /** Maximum path edge-fan geometry bytes admitted by the legacy/`Unknown` public Surface route. */
         public const val MAX_PATH_GEOMETRY_BYTES: UInt = RenderPathFanLimits.MAX_GEOMETRY_BYTES
 
+        /** Default configuration retains legacy/`Unknown` path edge-fan budgets only. */
         val DEFAULT = RenderConfig()
 
         fun fromEnvironment(): RenderConfig {

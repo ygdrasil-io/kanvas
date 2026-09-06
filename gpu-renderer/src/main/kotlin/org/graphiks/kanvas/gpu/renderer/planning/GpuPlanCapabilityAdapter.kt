@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.planning
 import io.ygdrasil.webgpu.GPUTextureFormat
 import org.graphiks.kanvas.gpu.plan.PlanCapabilitySnapshot
 import org.graphiks.kanvas.gpu.plan.PlanBufferAllocationPolicy
+import org.graphiks.kanvas.gpu.plan.PlanDepthStencilFormat
 import org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat
 import org.graphiks.kanvas.gpu.plan.PlanOperationCapability
 import org.graphiks.kanvas.gpu.plan.W3PlanDiagnostics
@@ -50,6 +51,25 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
             code = W3PlanDiagnostics.CapabilityFormat,
         )
     }
+    val hasSingleSampleD24S8 =
+        GPUTextureFormat.Depth24PlusStencil8 in supportedTextureFormats &&
+            1 in textureFormatSampleSupport[GPUTextureFormat.Depth24PlusStencil8]
+                ?.renderAttachmentSampleCounts.orEmpty()
+    val operations = rendererFeatures.mapNotNull { feature ->
+        when (feature) {
+            GPURendererFeature.RenderPass -> PlanOperationCapability.RenderPass
+            GPURendererFeature.CopyUpload -> PlanOperationCapability.CopyUpload
+            GPURendererFeature.UniformBuffer -> PlanOperationCapability.UniformBuffer
+            GPURendererFeature.Readback -> PlanOperationCapability.Readback
+            else -> null
+        }
+    }.toMutableSet()
+    val depthStencilFormats = mutableSetOf<PlanDepthStencilFormat>()
+    if (hasSingleSampleD24S8) {
+        operations += PlanOperationCapability.DepthStencilAttachment
+        operations += PlanOperationCapability.StencilCover
+        depthStencilFormats += PlanDepthStencilFormat.Depth24PlusStencil8
+    }
     return try {
         GpuPlanCapabilityAdapterResult.Supported(
             PlanCapabilitySnapshot.of(
@@ -61,20 +81,13 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
                 minUniformBufferOffsetAlignment = observedLimits.minUniformBufferOffsetAlignment.toInt(),
                 maxDynamicUniformBuffersPerPipelineLayout =
                     observedLimits.maxDynamicUniformBuffersPerPipelineLayout?.toInt() ?: 0,
-                supportedOperations = rendererFeatures.mapNotNull { feature ->
-                    when (feature) {
-                        GPURendererFeature.RenderPass -> PlanOperationCapability.RenderPass
-                        GPURendererFeature.CopyUpload -> PlanOperationCapability.CopyUpload
-                        GPURendererFeature.UniformBuffer -> PlanOperationCapability.UniformBuffer
-                        GPURendererFeature.Readback -> PlanOperationCapability.Readback
-                        else -> null
-                    }
-                }.toSet(),
+                supportedOperations = operations,
                 bufferAllocationPolicy = PlanBufferAllocationPolicy.of(
                     CORE_PRIMITIVE_FRAME_POOL_VERTEX_FLOOR_BYTES,
                     CORE_PRIMITIVE_FRAME_POOL_INDEX_FLOOR_BYTES,
                     CORE_PRIMITIVE_FRAME_POOL_UNIFORM_FLOOR_BYTES,
                 ),
+                supportedDepthStencilFormats = depthStencilFormats,
             ),
         )
     } catch (_: IllegalArgumentException) {

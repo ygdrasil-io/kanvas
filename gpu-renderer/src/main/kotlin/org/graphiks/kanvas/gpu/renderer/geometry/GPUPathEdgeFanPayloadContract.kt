@@ -3,11 +3,14 @@ package org.graphiks.kanvas.gpu.renderer.geometry
 import org.graphiks.kanvas.render.ir.RenderPathFanLimits
 
 /**
- * Immutable ABI capacity for one non-AA stencil edge-fan payload.
+ * Immutable legacy and `Unknown` ABI capacity for one non-AA stencil edge-fan
+ * payload.
  *
  * The public limits are owned by [RenderPathFanLimits]. This adapter keeps the
- * payload validator on that same authority so a mapped path cannot be accepted
- * by one side and refused by the other after recording begins.
+ * legacy/`Unknown` payload validator on that same authority so a mapped path
+ * cannot be accepted by one side and refused by the other after recording
+ * begins. Sealed W4c payloads are bounded by their immutable source authority,
+ * not this legacy contract.
  */
 object GPUPathEdgeFanPayloadContract {
     /** One emitted edge fan triangle contains three two-float positions and three indices. */

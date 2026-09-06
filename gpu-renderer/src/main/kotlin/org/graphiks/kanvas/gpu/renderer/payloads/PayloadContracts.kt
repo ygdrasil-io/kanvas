@@ -19,6 +19,7 @@ import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialP
 import org.graphiks.kanvas.gpu.renderer.materials.preparedMaterialSrgbToLinear
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.state.GPUPathSourceAuthority
+import org.graphiks.math.geometry.PathFillLimitsI32
 
 /** Opaque payload slot identifier. */
 @JvmInline
@@ -2457,7 +2458,12 @@ private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
                 require(stroke == null) {
                     "Fill stencil edge fans cannot retain stroke lowering facts"
                 }
-                require(sourceVertexCount <= GPUPathEdgeFanPayloadContract.MAX_TRIANGLES.toInt()) {
+                val maxStencilEdges = if (sourceAuthority == GPUPathSourceAuthority.W4cPlannedPathFillV1) {
+                    PathFillLimitsI32().maxAttemptedEdgesPerPathI32
+                } else {
+                    GPUPathEdgeFanPayloadContract.MAX_TRIANGLES.toInt()
+                }
+                require(sourceVertexCount <= maxStencilEdges) {
                     CORE_PRIMITIVE_STENCIL_EDGE_FAN_BUDGET_DIAGNOSTIC
                 }
                 require(sourceContourStarts.hasCanonicalContourLengths(sourceVertexCount)) {

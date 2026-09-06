@@ -11,6 +11,7 @@ import org.graphiks.kanvas.gpu.plan.CoveragePlan
 import org.graphiks.kanvas.gpu.plan.PlanBudget
 import org.graphiks.kanvas.gpu.plan.PlanBufferAllocationPolicy
 import org.graphiks.kanvas.gpu.plan.PlanCapabilitySnapshot
+import org.graphiks.kanvas.gpu.plan.PlanDepthStencilFormat
 import org.graphiks.kanvas.gpu.plan.PlanDrawDataResources
 import org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat
 import org.graphiks.kanvas.gpu.plan.PlanOperationCapability
@@ -57,6 +58,23 @@ import org.junit.jupiter.api.Test
 
 class GpuPlanTaskListLowererW4aTest {
     private val lowerer = GpuPlanTaskListLowerer()
+
+    @Test
+    fun `W4a lowerer accepts a W4c capable snapshot superset`() {
+        val graph = readyW4aGraph(
+            planCapabilities(
+                operations = HISTORICAL_OPERATIONS + setOf(
+                    PlanOperationCapability.DepthStencilAttachment,
+                    PlanOperationCapability.StencilCover,
+                ),
+                depthStencilFormats = setOf(PlanDepthStencilFormat.Depth24PlusStencil8),
+            ),
+        )
+
+        assertIs<GpuPlanLoweringResult.Lowered>(
+            lowerer.lower(request(graph, rendererCapabilities(depthStencilSupported = true))),
+        )
+    }
 
     @Test
     fun `W4a lowerer accepts its historical operation snapshot`() {
@@ -237,7 +255,9 @@ class GpuPlanTaskListLowererW4aTest {
         assertUnsupported(graphLike(base, capabilities = planCapabilities(deviceGeneration = 8)))
     }
 
-    private fun readyW4aGraph(): RenderGraph {
+    private fun readyW4aGraph(
+        capabilities: PlanCapabilitySnapshot = planCapabilities(),
+    ): RenderGraph {
         val scene = SceneSnapshot.of(
             SceneExtent(4, 3),
             ColorSpace.SRGB,
@@ -251,7 +271,7 @@ class GpuPlanTaskListLowererW4aTest {
             compiler.select(scene, RenderTargetDescriptor(scene.extent, scene.colorSpace)),
         ).candidate
         return assertIs<RenderPlanResult.Ready<RenderGraph>>(
-            compiler.plan(candidate, planCapabilities(), PlanBudget(1L shl 20)),
+            compiler.plan(candidate, capabilities, PlanBudget(1L shl 20)),
         ).plan
     }
 
@@ -290,6 +310,8 @@ class GpuPlanTaskListLowererW4aTest {
         deviceGeneration: Int = 7,
         copyBytesPerRowAlignment: Int = 256,
         minUniformAlignment: Int = 256,
+        operations: Set<PlanOperationCapability> = HISTORICAL_OPERATIONS,
+        depthStencilFormats: Set<PlanDepthStencilFormat> = emptySet(),
     ): PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(
         deviceGeneration = deviceGeneration.toLong(),
         maxTextureDimension2D = 2048,
@@ -298,8 +320,9 @@ class GpuPlanTaskListLowererW4aTest {
         supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
         minUniformBufferOffsetAlignment = minUniformAlignment,
         maxDynamicUniformBuffersPerPipelineLayout = 1,
-        supportedOperations = HISTORICAL_OPERATIONS,
+        supportedOperations = operations,
         bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384L, 4_096L, 4_096L),
+        supportedDepthStencilFormats = depthStencilFormats,
     )
 
     private companion object {
@@ -389,6 +412,7 @@ class GpuPlanTaskListLowererW4aTest {
     private fun rendererCapabilities(
         copyBytesPerRowAlignment: Long = 256L,
         minUniformBufferOffsetAlignment: Long = 256L,
+        depthStencilSupported: Boolean = false,
     ): GPUCapabilities = GPUCapabilities(
         implementation = GPUImplementationIdentity("GPU", "test", "adapter", "device"),
         facts = listOf(
@@ -402,13 +426,23 @@ class GpuPlanTaskListLowererW4aTest {
             maxBufferSize = 1L shl 20,
             maxDynamicUniformBuffersPerPipelineLayout = 1L,
         ),
-        supportedTextureFormats = setOf(GPUTextureFormat.RGBA8UnormSrgb),
+        supportedTextureFormats = buildSet {
+            add(GPUTextureFormat.RGBA8UnormSrgb)
+            if (depthStencilSupported) add(GPUTextureFormat.Depth24PlusStencil8)
+        },
         textureFormatSampleSupport = GPUTextureFormatSampleSupport(
-            mapOf(
-                GPUTextureFormat.RGBA8UnormSrgb to GPUTextureSampleCountSupport(
-                    renderAttachmentSampleCounts = setOf(1),
-                ),
-            ),
+            buildMap {
+                put(
+                    GPUTextureFormat.RGBA8UnormSrgb,
+                    GPUTextureSampleCountSupport(renderAttachmentSampleCounts = setOf(1)),
+                )
+                if (depthStencilSupported) {
+                    put(
+                        GPUTextureFormat.Depth24PlusStencil8,
+                        GPUTextureSampleCountSupport(renderAttachmentSampleCounts = setOf(1)),
+                    )
+                }
+            },
         ),
         rendererFeatures = setOf(
             GPURendererFeature.RenderPass,
