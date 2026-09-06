@@ -39,12 +39,12 @@
 | Préparation math | `PathFillLimitsI32.kt`; `PathFillFlatteningPolicyF64.kt`; `PathFillGeometryF32.kt`; `PathFillPreparationF64.kt` | aucun type géométrique hors `:math` |
 | Graphe | aucun fichier générique nouveau | `PlanIdentity.kt`; `PlanCapabilities.kt`; `PlanResources.kt`; `PlanPasses.kt`; `RenderGraph.kt` |
 | Planner W4c | `PathFillPlanBudget.kt`; `W4cPlanDiagnostics.kt`; `W4cPathFillPlanCompiler.kt` | `GpuPlanCompiler.kt`; `CapabilityCompilerChain.kt` |
-| Lowering W4c | `W4cPathFillGraphLowerer.kt`; `GPUPlanW4cPreparedAuthority.kt`; `GPUCorePrimitiveW4cPreparedFrameTaskListAssembler.kt` | `GpuPlanCapabilityAdapter.kt`; `GpuPlanTaskListLowerer.kt`; `GPUCorePrimitivePreparedAuthority.kt` |
+| Lowering W4c | `W4cPathFillGraphLowerer.kt`; `GPUPlanW4cPreparedAuthority.kt`; `GPUCorePrimitiveW4cPreparedFrameTaskListAssembler.kt` | `GpuPlanCapabilityAdapter.kt`; `GpuPlanTaskListLowerer.kt`; `GPUCorePrimitivePreparedAuthority.kt`; `RenderPathFanLimits.kt` |
 | Native | tests W4c dédiés | branches scellées dans `GPUFramePreflighter.kt`; `PreparedGPUFrame.kt`; `GPUWgpu4kCorePrimitiveFramePayloadMaterializer.kt`; `GPUWgpu4kCorePrimitiveRenderRunMaterializer.kt`; `GPUFrameExecutor.kt` |
 | Surface/pixels | `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W4cPathFillCpuOracle.kt` | `GpuRenderContext.kt`; `GPUPlanSurfaceCandidateGate.kt`; `GPUPlanSurfacePixelTest.kt`; `GPUPlanSurfaceRouterTest.kt` |
 | Suivi | ce plan | `refactor/README.md`; `refactor/waves/W04-geometry-coverage/status.md` |
 
-Les fichiers `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/geometry/PathTessellator.kt` et `render-ir/src/main/kotlin/org/graphiks/kanvas/render/ir/RenderPathFanLimits.kt` restent inchangés : leur plafond 1 024 est legacy. Seul `GPUPathSourceAuthority.W4cPlannedPathFillV1`, authentifié par le scratch W4c, peut transporter jusqu'à 65 536 arêtes dans l'ABI natif existant.
+`gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/geometry/PathTessellator.kt` reste inchangé : son plafond 1 024 est legacy. `render-ir/src/main/kotlin/org/graphiks/kanvas/render/ir/RenderPathFanLimits.kt` est modifié seulement pour qualifier explicitement `MAX_TRIANGLES` et `MAX_GEOMETRY_BYTES` comme limites de cette route legacy; il ne reçoit ni limite W4c ni objet géométrique W4c. Seul `GPUPathSourceAuthority.W4cPlannedPathFillV1`, authentifié par le scratch W4c, peut transporter jusqu'à 65 536 arêtes dans l'ABI natif existant; cette admission vient exclusivement de `PathFillLimitsI32` de `:math`.
 
 ## Interfaces partagées
 
@@ -110,6 +110,7 @@ public enum class PathFillResourceLimitReason {
     FlatteningDidNotConverge,
     PathAttemptedEdgeLimit,
     FrameAttemptedEdgeLimit,
+    WindingStencilEdgeLimit,
     RasterBoundsOverflow,
     HostSizeOverflow,
 }
@@ -282,7 +283,8 @@ Implémenter les signatures partagées. Toutes les coordonnées sont reconstruit
 Run:
 
 ```bash
-rtk ./gradlew :math:geometry:jvmTest --tests '*PathFillInputF64Test*' :math:matrix:jvmTest --tests '*PathFillTransformsF64Test*' :math:geometry:jsNodeTest :math:matrix:jsNodeTest --rerun-tasks
+rtk ./gradlew :math:geometry:jvmTest --tests '*PathFillInputF64Test*' :math:matrix:jvmTest --tests '*PathFillTransformsF64Test*' --rerun-tasks
+rtk ./gradlew :math:geometry:jsNodeTest :math:matrix:jsNodeTest --rerun-tasks
 ```
 
 Expected: BUILD SUCCESSFUL, mêmes doubles et mêmes payloads F32 d'entrée sur JVM/JS.
@@ -351,7 +353,18 @@ assertIs<PathFillPreparationResult.ResourceLimitExceeded>(prepareWithPathLimit(3
 assertIs<PathFillPreparationResult.ResourceLimitExceeded>(prepareWithFrameTotal(before = 7, limit = 8, attemptedEdges = 2))
 ```
 
-Ajouter les frontières Winding 255/256, non-fini, non-convergence à profondeur bornée, overflow de raster bounds, mutation des tableaux retournés et parité JVM/JS.
+Ajouter les frontières Winding 255/256, non-fini, non-convergence à profondeur bornée, overflow de raster bounds, mutation des tableaux retournés et parité JVM/JS. La frontière Winding doit vérifier le reason exact, pas seulement le sous-type :
+
+```kotlin
+assertEquals(
+    PathFillResourceLimitReason.WindingStencilEdgeLimit,
+    assertIs<PathFillPreparationResult.ResourceLimitExceeded>(
+        prepareWindingStencilPath(edgeCountI32 = 256),
+    ).reason,
+)
+```
+
+Le même helper à 255 arêtes doit retourner `Ready`; il ne doit pas être routé par le proof `DirectTriangle`.
 
 - [ ] **Step 3: Vérifier RED**
 
@@ -376,7 +389,8 @@ Le proof direct est créé seulement si le flux source était line-only et si le
 Run:
 
 ```bash
-rtk ./gradlew :math:geometry:jvmTest --tests '*PathFill*' :math:geometry:jsNodeTest --rerun-tasks
+rtk ./gradlew :math:geometry:jvmTest --tests '*PathFillGeometryF32Test*' --tests '*PathFillLimitsI32Test*' --rerun-tasks
+rtk ./gradlew :math:geometry:jsNodeTest --rerun-tasks
 ```
 
 Expected: BUILD SUCCESSFUL; aucun test topology existant ne régresse.
@@ -404,7 +418,10 @@ Le controller soumet le commit aux deux gates Sol avant Task 3.
 - Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/W3SolidRectPlanCompiler.kt`
 - Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/W4aAnalyticRectPlanCompiler.kt`
 - Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/W4bAnalyticRRectPlanCompiler.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/planning/GpuPlanTaskListLowerer.kt`
 - Modify: `gpu-plan/src/test/kotlin/org/graphiks/kanvas/gpu/plan/RenderGraphContractTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/planning/GpuPlanTaskListLowererW4aTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/planning/GpuPlanTaskListLowererW4bTest.kt`
 
 **Interfaces:**
 
@@ -436,13 +453,14 @@ Run:
 
 ```bash
 rtk ./gradlew :gpu-plan:test --tests '*RenderGraphContractTest*'
+rtk ./gradlew :gpu-renderer:test --tests '*GpuPlanTaskListLowererW4aTest*' --tests '*GpuPlanTaskListLowererW4bTest*'
 ```
 
 Expected: FAIL à la compilation sur les nouveaux formats/passes.
 
 - [ ] **Step 4: Implémenter les types en préservant W3/W4a/W4b**
 
-Remplacer `PlanResource.format: PlanLogicalColorFormat?` par `PlanTextureFormat?`; envelopper tous les call sites existants avec `PlanTextureFormat.Color(...)`. Ajouter à `PlanCapabilitySnapshot.of(...)` un paramètre final `supportedDepthStencilFormats: Set<PlanDepthStencilFormat> = emptySet()` et une copie immuable exposée par `supportedDepthStencilFormats()`.
+Remplacer `PlanResource.format: PlanLogicalColorFormat?` par `PlanTextureFormat?`; envelopper tous les call sites W3/W4a/W4b et ceux de `GpuPlanTaskListLowerer` avec `PlanTextureFormat.Color(...)`. Adapter dans cette même tâche les builders et assertions publics W4a/W4b qui construisent ou authentifient des `PlanResource`, afin que Task 3 compile seule sans attendre W4c. Ajouter à `PlanCapabilitySnapshot.of(...)` un paramètre final `supportedDepthStencilFormats: Set<PlanDepthStencilFormat> = emptySet()` et une copie immuable exposée par `supportedDepthStencilFormats()`.
 
 Ajouter `DepthStencilAttachment` et les opérations `DepthStencilAttachment`/`StencilCover` sans modifier les opérations W3 existantes. Ajouter `AttachmentLoadPlan.Load`.
 
@@ -456,6 +474,7 @@ Run:
 
 ```bash
 rtk ./gradlew :gpu-plan:test --rerun-tasks
+rtk ./gradlew :gpu-renderer:test --tests '*GpuPlanTaskListLowererW4aTest*' --tests '*GpuPlanTaskListLowererW4bTest*' --rerun-tasks
 ```
 
 Expected: BUILD SUCCESSFUL, contrats W3/W4a/W4b inchangés.
@@ -463,7 +482,7 @@ Expected: BUILD SUCCESSFUL, contrats W3/W4a/W4b inchangés.
 - [ ] **Step 7: Self-review et commit Terra**
 
 ```bash
-rtk git add gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/PlanIdentity.kt gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/PlanCapabilities.kt gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/PlanResources.kt gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/PlanPasses.kt gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/RenderGraph.kt gpu-plan/src/test/kotlin/org/graphiks/kanvas/gpu/plan
+rtk git add gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/PlanIdentity.kt gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/PlanCapabilities.kt gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/PlanResources.kt gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/PlanPasses.kt gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/RenderGraph.kt gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/W3SolidRectPlanCompiler.kt gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/W4aAnalyticRectPlanCompiler.kt gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/W4bAnalyticRRectPlanCompiler.kt gpu-plan/src/test/kotlin/org/graphiks/kanvas/gpu/plan/RenderGraphContractTest.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/planning/GpuPlanTaskListLowerer.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/planning/GpuPlanTaskListLowererW4aTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/planning/GpuPlanTaskListLowererW4bTest.kt
 rtk git commit -m "feat(gpu-plan): model atomic stencil cover passes"
 ```
 
@@ -484,6 +503,7 @@ Le controller soumet le commit aux deux gates Sol avant Task 4.
 - Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/CapabilityCompilerChain.kt`
 - Modify: `gpu-plan/src/test/kotlin/org/graphiks/kanvas/gpu/plan/CapabilityCompilerChainTest.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/planning/GpuRenderBackend.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/planning/GpuRenderBackendTest.kt`
 
 **Interfaces:**
 
@@ -500,7 +520,7 @@ public class ResourceLimitExceeded(diagnostics: List<RenderDiagnostic>) : GpuPla
 }
 ```
 
-Tester que `CapabilityCompilerChain` et `GpuRenderBackend.plan` propagent ce résultat terminal. Utiliser des compilateurs suivants dont le résultat public serait un sentinel distinct s'ils devenaient autorité; vérifier que la réponse reste le `ResourceLimitExceeded` W4c. Ne pas instrumenter l'acquisition de capability et ne compter aucun appel.
+Tester que `CapabilityCompilerChain` et `GpuRenderBackend.plan` propagent ce résultat terminal. Dans `GpuRenderBackendTest.kt`, construire une scène W4c qui dépasse une limite de préparation avant device avec un `GpuRenderContext(ThrowingOwner())`, puis observer publiquement `RenderPlanResult.ResourceLimitExceeded` et son diagnostic W4c. Le `ThrowingOwner` rend le test comportemental : toute acquisition device ferait échouer le test, sans reflection ni call-count. Utiliser des compilateurs suivants dont le résultat public serait un sentinel distinct s'ils devenaient autorité; vérifier que la réponse reste le `ResourceLimitExceeded` W4c.
 
 - [ ] **Step 2: Écrire les tests RED d'admission W4c**
 
@@ -537,6 +557,7 @@ Run:
 
 ```bash
 rtk ./gradlew :gpu-plan:test --tests '*W4cPathFillPlanCompilerTest*' --tests '*PathFillPlanBudgetTest*' --tests '*CapabilityCompilerChainTest*'
+rtk ./gradlew :gpu-renderer:test --tests '*GpuRenderBackendTest*'
 ```
 
 Expected: FAIL à la compilation.
@@ -557,6 +578,7 @@ Run:
 
 ```bash
 rtk ./gradlew :render-ir:test :gpu-plan:test --rerun-tasks
+rtk ./gradlew :gpu-renderer:test --tests '*GpuRenderBackendTest*' --rerun-tasks
 ```
 
 Expected: BUILD SUCCESSFUL.
@@ -564,7 +586,7 @@ Expected: BUILD SUCCESSFUL.
 - [ ] **Step 8: Self-review et commit Terra**
 
 ```bash
-rtk git add gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan gpu-plan/src/test/kotlin/org/graphiks/kanvas/gpu/plan gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/planning/GpuRenderBackend.kt
+rtk git add gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan gpu-plan/src/test/kotlin/org/graphiks/kanvas/gpu/plan gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/planning/GpuRenderBackend.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/planning/GpuRenderBackendTest.kt
 rtk git commit -m "feat(gpu-plan): compile bounded W4c path fills"
 ```
 
@@ -586,6 +608,8 @@ Le controller soumet le commit aux deux gates Sol avant Task 5.
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/state/StateContracts.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/payloads/PayloadContracts.kt`
 - Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/planning/GpuPlanCapabilityAdapterTest.kt`
+- Modify: `render-ir/src/main/kotlin/org/graphiks/kanvas/render/ir/RenderPathFanLimits.kt`
+- Modify: `render-ir/src/test/kotlin/org/graphiks/kanvas/render/ir/RenderPathFanLimitsTest.kt`
 
 **Interfaces:**
 
@@ -613,7 +637,7 @@ assertEquals(
 
 Le producer utilise `WritableStencil(Clear, Store, 0u)`; le cover `WritableStencil(Load, Store, null)` et son `GPUFrameResourceUse(PathDepthStencil)` porte `write=true`. Tester Uniform32, offsets V/I/U exacts, scissor, fill rule, source authority W4c et ordre de paint.
 
-Ajouter des graphes contrefaits : draw/type/strategy/fill rule modifié, pair non adjacent, group différent, ressource/lifetime/budget modifié, stale capability. Tous donnent `InvalidPlan` ou `UnsupportedCapability`, jamais une autre lane.
+Ne pas reconstruire au lowerer des graphes impossibles à fabriquer publiquement : non-adjacence, groupe divergent, lifetime/ressource/budget incohérents sont déjà des refus de `RenderGraph.of` dans Task 3. Garder ici seulement des contrefaçons constructibles par API publique : capability snapshot périmé face au renderer courant (`UnsupportedCapability`) et graph valide d'une autre lane transmis directement au lowerer W4c (`InvalidPlan`, jamais une autre lane). Tous les tests restent sans reflection, accès privé, inspection source ou call-count.
 
 - [ ] **Step 3: Vérifier RED**
 
@@ -629,7 +653,7 @@ Expected: FAIL à la compilation.
 
 `W4cSessionScratchDrawV1` conserve une copie de `PathFillGeometryF32`, la stratégie, le scissor, le groupe, le slot uniform et les ranges V/I. `W4cSessionScratchV1` conserve l'ordre complet, les capacités pool exactes, les IDs target/staging/D24S8 et les hashes de graph/capability. Ajouter `ScratchLane.W4c` et `plannedW4c(...)`.
 
-Ajouter `GPUPathSourceAuthority.W4cPlannedPathFillV1`. Dans la validation `TriangulatedPath`, conserver le plafond legacy 1 024 pour toute autre authority; pour cette seule authority, autoriser au plus `PathFillLimitsI32().maxAttemptedEdgesPerPathI32`, sachant que le scratch W4c vérifie séparément 255 pour Winding.
+Ajouter `GPUPathSourceAuthority.W4cPlannedPathFillV1`. Modifier `RenderPathFanLimits.kt` pour documenter que `MAX_TRIANGLES = 1_024` et `MAX_GEOMETRY_BYTES` ne bornent que les routes legacy/`Unknown`; conserver leurs valeurs exactes. Dans la validation `TriangulatedPath`, conserver ce plafond legacy pour toute autre authority; pour cette seule authority, autoriser au plus `PathFillLimitsI32().maxAttemptedEdgesPerPathI32`, sachant que le scratch W4c vérifie séparément 255 pour Winding. Le test public `RenderPathFanLimitsTest` vérifie encore exactement 1 024 et son libellé legacy; un test public du lowerer vérifie qu'un fan W4c à 1 025 arêtes est représentable seulement avec l'authority W4c, alors que l'authority `Unknown` est refusée. Aucune limite W4c n'est dupliquée dans `:render-ir` et aucun type géométrique W4c ne sort de `:math`.
 
 - [ ] **Step 5: Implémenter le lowerer et l'assembler**
 
@@ -642,6 +666,7 @@ L'assembler émet `PrepareResources`, un `GPUTask.Render` par passe planifiée e
 Run:
 
 ```bash
+rtk ./gradlew :render-ir:test --tests '*RenderPathFanLimitsTest*' --rerun-tasks
 rtk ./gradlew :gpu-renderer:test --tests '*GpuPlanCapabilityAdapterTest*' --tests '*GpuPlanTaskListLowererW4cTest*' --tests '*GpuPlanTaskListLowererW4aTest*' --tests '*GpuPlanTaskListLowererW4bTest*' --rerun-tasks
 ```
 
@@ -650,7 +675,7 @@ Expected: BUILD SUCCESSFUL.
 - [ ] **Step 7: Self-review et commit Terra**
 
 ```bash
-rtk git add gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/planning gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUPlanW4cPreparedAuthority.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUCorePrimitivePreparedAuthority.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPUCorePrimitiveW4cPreparedFrameTaskListAssembler.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/state/StateContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/payloads/PayloadContracts.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/planning
+rtk git add gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/planning gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUPlanW4cPreparedAuthority.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUCorePrimitivePreparedAuthority.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPUCorePrimitiveW4cPreparedFrameTaskListAssembler.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/state/StateContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/payloads/PayloadContracts.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/planning render-ir/src/main/kotlin/org/graphiks/kanvas/render/ir/RenderPathFanLimits.kt render-ir/src/test/kotlin/org/graphiks/kanvas/render/ir/RenderPathFanLimitsTest.kt
 rtk git commit -m "feat(gpu-renderer): lower sealed W4c path plans"
 ```
 
