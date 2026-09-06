@@ -252,6 +252,7 @@ class CapabilityCompilerChainTest {
         maxDynamicUniformBuffersPerPipelineLayout = 1,
         supportedOperations = PlanOperationCapability.entries.toSet(),
         bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 4_096, 4_096),
+        supportedDepthStencilFormats = setOf(PlanDepthStencilFormat.Depth24PlusStencil8),
     )
 
 }

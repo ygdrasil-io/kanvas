@@ -18,6 +18,21 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureSampleCountSuppor
 
 class GpuPlanCapabilityAdapterTest {
     @Test
+    fun `adapter publishes W4c facts for render only D24S8 sample evidence`() {
+        val snapshot = assertIs<GpuPlanCapabilityAdapterResult.Supported>(
+            capabilities(depthStencilFormatSupported = false, depthStencilSamples = setOf(1))
+                .toPlanCapabilitySnapshot(GPUDeviceGenerationID(7)),
+        ).snapshot
+
+        assertEquals(
+            setOf(PlanDepthStencilFormat.Depth24PlusStencil8),
+            snapshot.supportedDepthStencilFormats(),
+        )
+        assertTrue(PlanOperationCapability.DepthStencilAttachment in snapshot.supportedOperations())
+        assertTrue(PlanOperationCapability.StencilCover in snapshot.supportedOperations())
+    }
+
+    @Test
     fun `adapter publishes W4c D24S8 facts when depth stencil supports one sample`() {
         val snapshot = assertIs<GpuPlanCapabilityAdapterResult.Supported>(
             capabilities(depthStencilFormatSupported = true, depthStencilSamples = setOf(1))
@@ -33,17 +48,17 @@ class GpuPlanCapabilityAdapterTest {
     }
 
     @Test
-    fun `adapter leaves W4c depth stencil facts absent without a one sample D24S8 attachment`() {
-        val absentFormat = capabilities(
+    fun `adapter leaves W4c depth stencil facts absent without one sample evidence`() {
+        val absentEvidence = capabilities(
             depthStencilFormatSupported = false,
-            depthStencilSamples = setOf(1),
+            depthStencilSamples = emptySet(),
         )
         val fourSamplesOnly = capabilities(
-            depthStencilFormatSupported = true,
+            depthStencilFormatSupported = false,
             depthStencilSamples = setOf(4),
         )
 
-        listOf(absentFormat, fourSamplesOnly).forEach { physical ->
+        listOf(absentEvidence, fourSamplesOnly).forEach { physical ->
             val snapshot = assertIs<GpuPlanCapabilityAdapterResult.Supported>(
                 physical.toPlanCapabilitySnapshot(GPUDeviceGenerationID(7)),
             ).snapshot

@@ -52,9 +52,8 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
         )
     }
     val hasSingleSampleD24S8 =
-        GPUTextureFormat.Depth24PlusStencil8 in supportedTextureFormats &&
-            1 in textureFormatSampleSupport[GPUTextureFormat.Depth24PlusStencil8]
-                ?.renderAttachmentSampleCounts.orEmpty()
+        1 in textureFormatSampleSupport[GPUTextureFormat.Depth24PlusStencil8]
+            ?.renderAttachmentSampleCounts.orEmpty()
     val operations = rendererFeatures.mapNotNull { feature ->
         when (feature) {
             GPURendererFeature.RenderPass -> PlanOperationCapability.RenderPass

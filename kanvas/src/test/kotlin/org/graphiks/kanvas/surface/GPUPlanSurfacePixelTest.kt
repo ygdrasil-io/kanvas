@@ -3,8 +3,12 @@ package org.graphiks.kanvas.surface
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
+import org.graphiks.kanvas.geometry.FillType
+import org.graphiks.kanvas.geometry.Path
+import org.graphiks.kanvas.geometry.toPathF32
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.math.color.ColorARGB
@@ -12,6 +16,7 @@ import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.RectI32
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 
@@ -20,6 +25,262 @@ class GPUPlanSurfacePixelTest {
     @AfterEach
     fun disposeGpuRuntime() {
         GPUBackendRuntimeFactory.dispose()
+    }
+
+    @Test
+    fun `W4c hard edge triangle matches the independent line oracle through Surface`() {
+        val triangle = Path().apply {
+            moveTo(0f, 0f)
+            lineTo(4f, 0f)
+            lineTo(0f, 4f)
+            close()
+        }
+        val draw = W4cPathFillCpuOracle.Draw(
+            path = triangle.toPathF32(),
+            transform = Matrix3x3F32.Identity,
+            color = ColorARGB.Red,
+            scissorI32 = RectI32(0, 0, 4, 4),
+        )
+        val surface = Surface(4, 4)
+        surface.canvas {
+            drawPath(triangle, Paint.fill(ColorARGB.Red).copy(antiAlias = false))
+        }
+
+        val result = surface.render()
+
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(W4cPathFillCpuOracle.render(4, 4, listOf(draw)), result.pixels)
+    }
+
+    @Test
+    fun `W4c concave hard edge path matches the independent line oracle`() {
+        val concave = Path().apply {
+            moveTo(0f, 0f)
+            lineTo(5f, 0f)
+            lineTo(5f, 1f)
+            lineTo(2f, 1f)
+            lineTo(2f, 5f)
+            lineTo(0f, 5f)
+            close()
+        }
+        val draw = w4cDraw(concave, ColorARGB.Blue, 5, 5)
+        val surface = Surface(5, 5)
+        surface.canvas { drawPath(concave, Paint.fill(ColorARGB.Blue).copy(antiAlias = false)) }
+
+        val result = surface.render()
+
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(W4cPathFillCpuOracle.render(5, 5, listOf(draw)), result.pixels)
+    }
+
+    @Test
+    fun `W4c Winding contour with an opposite winding hole matches the independent line oracle`() {
+        val windingHole = Path().apply {
+            moveTo(0f, 0f)
+            lineTo(6f, 0f)
+            lineTo(6f, 6f)
+            lineTo(0f, 6f)
+            close()
+            moveTo(1f, 1f)
+            lineTo(1f, 5f)
+            lineTo(5f, 5f)
+            lineTo(5f, 1f)
+            close()
+        }
+        val draw = w4cDraw(windingHole, ColorARGB.of(255, 37, 151, 88), 6, 6)
+        val surface = Surface(6, 6)
+        surface.canvas { drawPath(windingHole, Paint.fill(draw.color).copy(antiAlias = false)) }
+
+        val result = surface.render()
+
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(W4cPathFillCpuOracle.render(6, 6, listOf(draw)), result.pixels)
+    }
+
+    @Test
+    fun `W4c EvenOdd contour with a same winding hole matches the independent line oracle`() {
+        val evenOddHole = Path().apply {
+            moveTo(0f, 0f)
+            lineTo(6f, 0f)
+            lineTo(6f, 6f)
+            lineTo(0f, 6f)
+            close()
+            moveTo(1f, 1f)
+            lineTo(5f, 1f)
+            lineTo(5f, 5f)
+            lineTo(1f, 5f)
+            close()
+            fillType = FillType.EVEN_ODD
+        }
+        val draw = w4cDraw(evenOddHole, ColorARGB.of(255, 167, 66, 245), 6, 6)
+        val surface = Surface(6, 6)
+        surface.canvas { drawPath(evenOddHole, Paint.fill(draw.color).copy(antiAlias = false)) }
+
+        val result = surface.render()
+
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(W4cPathFillCpuOracle.render(6, 6, listOf(draw)), result.pixels)
+    }
+
+    @Test
+    fun `W4c preserves a retraced self-intersection through the stencil path`() {
+        val retracedBowTie = Path().apply {
+            moveTo(0f, 0f)
+            lineTo(4f, 4f)
+            lineTo(0f, 4f)
+            lineTo(4f, 0f)
+            lineTo(0f, 0f)
+            lineTo(4f, 4f)
+            close()
+        }
+        val draw = w4cDraw(retracedBowTie, ColorARGB.of(255, 238, 136, 42), 4, 4)
+        val surface = Surface(4, 4)
+        surface.canvas { drawPath(retracedBowTie, Paint.fill(draw.color).copy(antiAlias = false)) }
+
+        val result = surface.render()
+
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(W4cPathFillCpuOracle.render(4, 4, listOf(draw)), result.pixels)
+    }
+
+    @Test
+    fun `W4c scissor limits a path while retaining exact independent line pixels`() {
+        val path = Path().apply {
+            moveTo(0f, 0f)
+            lineTo(5f, 0f)
+            lineTo(0f, 5f)
+            close()
+        }
+        val scissor = RectI32(1, 1, 4, 4)
+        val draw = w4cDraw(path, ColorARGB.of(255, 68, 203, 157), 5, 5, scissorI32 = scissor)
+        val surface = Surface(5, 5)
+        surface.canvas {
+            clipRect(RectF32.ofLTRB(1f, 1f, 4f, 4f), antiAlias = false)
+            drawPath(path, Paint.fill(draw.color).copy(antiAlias = false))
+        }
+
+        val result = surface.render()
+
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(W4cPathFillCpuOracle.render(5, 5, listOf(draw)), result.pixels)
+        assertTransparentOutside(result.pixels, 5, 5, scissor)
+    }
+
+    @Test
+    fun `W4c negative axis scale maps a path in device space before exact comparison`() {
+        val localTriangle = Path().apply {
+            moveTo(0f, 0f)
+            lineTo(4f, 0f)
+            lineTo(0f, 4f)
+            close()
+        }
+        val transform = Matrix3x3F32(sx = -1f, sy = 1f, tx = 4f)
+        val draw = w4cDraw(localTriangle, ColorARGB.of(255, 227, 71, 49), 4, 4, transform = transform)
+        val surface = Surface(4, 4)
+        surface.canvas {
+            translate(4f, 0f)
+            scale(-1f, 1f)
+            drawPath(localTriangle, Paint.fill(draw.color).copy(antiAlias = false))
+        }
+
+        val result = surface.render()
+
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(W4cPathFillCpuOracle.render(4, 4, listOf(draw)), result.pixels)
+    }
+
+    @Test
+    fun `W4c quantizes sRGB attachment contents between translucent path draws`() {
+        val first = ColorARGB.of(182, 145, 133, 48)
+        val second = ColorARGB.of(23, 221, 204, 240)
+        val fullPixel = Path().apply {
+            moveTo(0f, 0f)
+            lineTo(1f, 0f)
+            lineTo(1f, 1f)
+            lineTo(0f, 1f)
+            close()
+        }
+        val draws = listOf(
+            w4cDraw(fullPixel, first, 1, 1),
+            w4cDraw(fullPixel, second, 1, 1),
+        )
+        val surface = Surface(1, 1)
+        surface.canvas {
+            drawPath(fullPixel, Paint.fill(first).copy(antiAlias = false))
+            drawPath(fullPixel, Paint.fill(second).copy(antiAlias = false))
+        }
+
+        val result = surface.render()
+        val attachmentQuantized = W4cPathFillCpuOracle.render(1, 1, draws)
+        val frameEndQuantized = W4cPathFillCpuOracle.renderWithFrameEndQuantization(1, 1, draws)
+
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(attachmentQuantized, result.pixels)
+        assertFalse(attachmentQuantized.contentEquals(frameEndQuantized))
+    }
+
+    @Test
+    fun `W4c path bytes use the requested RGBA and BGRA channel order`() {
+        val path = Path().apply {
+            moveTo(0f, 0f)
+            lineTo(3f, 0f)
+            lineTo(0f, 3f)
+            close()
+        }
+        val color = ColorARGB.of(255, 231, 37, 19)
+        val draw = w4cDraw(path, color, 3, 3)
+        val rgba = Surface(3, 3, PixelFormat.RGBA8).also { surface ->
+            surface.canvas { drawPath(path, Paint.fill(color).copy(antiAlias = false)) }
+        }.render()
+        val bgra = Surface(3, 3, PixelFormat.BGRA8).also { surface ->
+            surface.canvas { drawPath(path, Paint.fill(color).copy(antiAlias = false)) }
+        }.render()
+
+        assertPreparedRouteEvidence(rgba)
+        assertPreparedRouteEvidence(bgra)
+        assertPixelsEqual(W4cPathFillCpuOracle.render(3, 3, listOf(draw)), rgba.pixels)
+        assertPixelsEqual(W4cPathFillCpuOracle.render(3, 3, listOf(draw), PixelFormat.BGRA8), bgra.pixels)
+    }
+
+    @Test
+    fun `W4c certified quad cubic and SVG arc fixtures match independent exact pixels`() {
+        val cases = listOf(
+            Path().apply {
+                moveTo(0f, 0f)
+                quadTo(0.5f, -2f, 1f, 0f)
+                lineTo(1f, 1f)
+                lineTo(0f, 1f)
+                close()
+            },
+            Path().apply {
+                moveTo(0f, 0f)
+                cubicTo(0.25f, -2f, 0.75f, -2f, 1f, 0f)
+                lineTo(1f, 1f)
+                lineTo(0f, 1f)
+                close()
+            },
+            Path().apply {
+                moveTo(0f, 0f)
+                arcTo(0.5f, 2f, 0f, largeArc = false, sweep = true, x = 1f, y = 0f)
+                lineTo(1f, 1f)
+                lineTo(0f, 1f)
+                close()
+            },
+        )
+
+        cases.forEach { path ->
+            val draw = w4cDraw(path, ColorARGB.of(255, 78, 126, 219), 1, 1)
+            assertIs<W4cPathFillCpuOracle.CurveFixtureCertificate.Certified>(
+                W4cPathFillCpuOracle.certifyCurveFixture(1, 1, draw),
+            )
+            val surface = Surface(1, 1)
+            surface.canvas { drawPath(path, Paint.fill(draw.color).copy(antiAlias = false)) }
+
+            val result = surface.render()
+
+            assertPreparedRouteEvidence(result)
+            assertPixelsEqual(W4cPathFillCpuOracle.render(1, 1, listOf(draw)), result.pixels)
+        }
     }
 
     @Test
@@ -695,6 +956,20 @@ class GPUPlanSurfacePixelTest {
         }
         return surface.render()
     }
+
+    private fun w4cDraw(
+        path: Path,
+        color: ColorARGB,
+        widthI32: Int,
+        heightI32: Int,
+        transform: Matrix3x3F32 = Matrix3x3F32.Identity,
+        scissorI32: RectI32 = RectI32(0, 0, widthI32, heightI32),
+    ): W4cPathFillCpuOracle.Draw = W4cPathFillCpuOracle.Draw(
+        path = path.toPathF32(),
+        transform = transform,
+        color = color,
+        scissorI32 = scissorI32,
+    )
 
     private fun renderFractionalScene(
         format: PixelFormat,

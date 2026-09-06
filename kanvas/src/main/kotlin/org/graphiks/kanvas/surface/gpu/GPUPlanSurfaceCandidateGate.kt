@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.canvas.DrawPathSourceOperation
 import org.graphiks.kanvas.surface.GPUColorFormat
 import org.graphiks.kanvas.surface.RenderConfig
 
@@ -11,6 +12,8 @@ internal object GPUPlanSurfaceCandidateGate {
             operations.all { operation ->
                 operation is DisplayOp.DrawRect ||
                     operation is DisplayOp.DrawRRect ||
+                    (operation is DisplayOp.DrawPath &&
+                        operation.sourceOperation == DrawPathSourceOperation.DRAW_PATH.stableName) ||
                     operation is DisplayOp.DrawColor ||
                     operation is DisplayOp.SetTransform ||
                     operation is DisplayOp.SetClip ||
