@@ -112,6 +112,28 @@ class PathFillPlanBudgetTest {
         assertEquals(PathFillPlanBudgetResult.Invalid("uniform-host-size-overflow"), result)
     }
 
+    @Test
+    fun budgetRejectsReadbackAndPoolCapacitiesThatCannotBeHostAddressed() {
+        val readback = PathFillPlanBudget.calculate(
+            targetExtent = SizeI32(1, Int.MAX_VALUE),
+            geometriesF32 = listOf(directGeometry()),
+            capabilities = capabilities(maxTextureDimension2D = Int.MAX_VALUE),
+            budget = PlanBudget(Long.MAX_VALUE),
+        )
+        val pool = PathFillPlanBudget.calculate(
+            targetExtent = SizeI32(1, 1),
+            geometriesF32 = listOf(directGeometry()),
+            capabilities = capabilities(
+                policy = PlanBufferAllocationPolicy.of(1L shl 31, 4_096, 4_096),
+                maxBufferSizeBytes = Long.MAX_VALUE,
+            ),
+            budget = PlanBudget(Long.MAX_VALUE),
+        )
+
+        assertEquals(PathFillPlanBudgetResult.Invalid("readback-host-size-overflow"), readback)
+        assertEquals(PathFillPlanBudgetResult.Invalid("pool-host-size-overflow"), pool)
+    }
+
     private fun directGeometry(): PathFillGeometryF32 = prepared(
         PathBuilder()
             .moveTo(0f, 0f)

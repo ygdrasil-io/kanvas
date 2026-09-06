@@ -22,6 +22,8 @@ import org.graphiks.kanvas.render.ir.RenderDiagnosticSeverity
 import org.graphiks.kanvas.render.ir.RenderPlanResult
 import org.graphiks.kanvas.render.ir.RenderTargetDescriptor
 import org.graphiks.kanvas.render.ir.SceneCommand
+import org.graphiks.kanvas.render.ir.SceneSemanticValidationResult
+import org.graphiks.kanvas.render.ir.SceneSemanticValidator
 import org.graphiks.kanvas.render.ir.SceneSnapshot
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.color.ColorF32
@@ -49,6 +51,10 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
     ): GpuPlanSelection {
         if (scene.extent != target.extent || scene.colorSpace != target.colorSpace) {
             return invalidSelection("Scene and target descriptors disagree")
+        }
+        when (val validation = SceneSemanticValidator.validate(scene)) {
+            is SceneSemanticValidationResult.Invalid -> return invalidSelection(validation.message)
+            SceneSemanticValidationResult.Valid -> Unit
         }
         if (target.colorSpace != ColorSpace.SRGB) {
             return notCandidate("W4c supports only sRGB targets")
@@ -209,7 +215,7 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
         ) {
             return false
         }
-        val paint = node.paint ?: return true
+        val paint = node.paint ?: return false
         return finite(paint) &&
             paint.shader == null &&
             paint.blender == null &&

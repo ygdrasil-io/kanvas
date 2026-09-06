@@ -16,6 +16,7 @@ import org.graphiks.kanvas.render.ir.DrawNode
 import org.graphiks.kanvas.render.ir.DrawOrigin
 import org.graphiks.kanvas.render.ir.EffectStack
 import org.graphiks.kanvas.render.ir.GeometryNode
+import org.graphiks.kanvas.render.ir.ImageResourceSnapshot
 import org.graphiks.kanvas.render.ir.MaterialNode
 import org.graphiks.kanvas.render.ir.PaintNode
 import org.graphiks.kanvas.render.ir.PaintStyleNode
@@ -160,6 +161,26 @@ class W4cPathFillPlanCompilerTest {
     }
 
     @Test
+    fun selectionClassifiesStructuralPathContradictionsBeforeW4cAdmission() {
+        val base = triangle().node
+        val image = ImageResourceSnapshot.rgba8(1, 1, ByteArray(4), ColorSpace.SRGB)
+        val contradictory = listOf(
+            base.copy(paint = null),
+            base.copy(origin = DrawOrigin.RECT),
+            base.copy(geometry = GeometryNode.Rect.of(RectF32(0f, 0f, 4f, 4f))),
+            base.copy(resource = image),
+            base.copy(operationBlendMode = BlendMode.SRC_OVER),
+        )
+
+        contradictory.forEach { node ->
+            assertIs<GpuPlanSelection.InvalidScene>(select(SceneCommand.Draw(node)))
+        }
+        assertIs<GpuPlanSelection.NotCandidate>(
+            select(SceneCommand.Draw(base.copy(origin = DrawOrigin.TEXT_EXPANDED_PATH))),
+        )
+    }
+
+    @Test
     fun selectionClassifiesNonFiniteInputsBeforeScopeGaps() {
         val base = triangle().node
         val nonFinitePath = SceneCommand.Draw(base.copy(
@@ -197,6 +218,31 @@ class W4cPathFillPlanCompilerTest {
     }
 
     @Test
+    fun selectionAdmitsWindingStencilAtIts255EdgeBoundary() {
+        val winding255 = SceneCommand.Draw(pathNode(regularPolygon(255)))
+
+        val graph = ready(listOf(winding255))
+
+        assertEquals(
+            PathFillStrategy.StencilCover,
+            assertIs<PlanPass.StencilProducer>(graph.passes().first()).draw.strategy,
+        )
+    }
+
+    @Test
+    fun selectionAppliesTheAttemptedEdgeLimitAcrossTheWholeFrame() {
+        val evenOdd513 = pathNode(regularPolygon(513, FillRule.EVEN_ODD))
+        val scene = sceneOf(List(512) { SceneCommand.Draw(evenOdd513) })
+
+        val result = compiler.select(scene, target(scene))
+
+        assertEquals(
+            "w4c.path.resource_limit",
+            assertIs<GpuPlanSelection.ResourceLimitExceeded>(result).diagnostics().single().code.value,
+        )
+    }
+
+    @Test
     fun planningKeepsHostOverflowTerminalAndCapabilityAbsencePromoted() {
         val manyTriangles = sceneOf(List(512) { triangle() })
         val candidate = assertIs<GpuPlanSelection.Candidate>(
@@ -226,6 +272,88 @@ class W4cPathFillPlanCompilerTest {
             "w4c.capability.operation",
             assertIs<RenderPlanResult.GapOnPromotedScope>(absentRenderPass).diagnostics.single().code.value,
         )
+    }
+
+    @Test
+    fun planningAcceptsTheExactMaxBufferSizeAndPromotesOneByteLess() {
+        val scene = sceneOf(listOf(triangle()))
+        val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target(scene))).candidate
+        val policy = PlanBufferAllocationPolicy.of(64, 64, 512)
+
+        val exact = compiler.plan(
+            candidate,
+            capabilities(maxBufferSizeBytes = 1_024, policy = policy),
+            PlanBudget(4_096),
+        )
+        val below = compiler.plan(
+            candidate,
+            capabilities(maxBufferSizeBytes = 1_023, policy = policy),
+            PlanBudget(4_096),
+        )
+
+        assertIs<RenderPlanResult.Ready<RenderGraph>>(exact)
+        assertEquals(
+            "w4c.capability.buffer_size",
+            assertIs<RenderPlanResult.GapOnPromotedScope>(below).diagnostics.single().code.value,
+        )
+    }
+
+    @Test
+    fun planningPromotesInvalidAllocationAlignments() {
+        val scene = sceneOf(listOf(triangle()))
+        val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target(scene))).candidate
+        val invalidCapabilities = listOf(
+            capabilities(copyBytesPerRowAlignment = 3),
+            capabilities(uniformAlignment = 3),
+            capabilities(policy = PlanBufferAllocationPolicy.of(3, 4, 4)),
+        )
+
+        invalidCapabilities.forEach { capabilities ->
+            val result = compiler.plan(candidate, capabilities, PlanBudget(1L shl 20))
+            assertEquals(
+                "w4c.capability.allocation_policy",
+                assertIs<RenderPlanResult.GapOnPromotedScope>(result).diagnostics.single().code.value,
+            )
+        }
+    }
+
+    @Test
+    fun planningPromotesMissingD24S8ForStencilPaths() {
+        val scene = sceneOf(listOf(concave()))
+        val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target(scene))).candidate
+
+        val result = compiler.plan(
+            candidate,
+            capabilities(depthStencilFormats = emptySet()),
+            PlanBudget(1L shl 20),
+        )
+
+        assertEquals(
+            "w4c.capability.depth_stencil_format",
+            assertIs<RenderPlanResult.GapOnPromotedScope>(result).diagnostics.single().code.value,
+        )
+    }
+
+    @Test
+    fun planningRejectsCounterfeitAndForeignCandidates() {
+        val scene = sceneOf(listOf(triangle()))
+        val selected = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target(scene))).candidate
+        val counterfeit = object : GpuPlanCandidate {
+            override val capabilityId: String = selected.capabilityId
+            override val sceneCanonicalId = selected.sceneCanonicalId
+            override val target: RenderTargetDescriptor = selected.target
+        }
+        val otherCompiler = W4cPathFillPlanCompiler()
+
+        listOf(
+            compiler.plan(counterfeit, capabilities(), PlanBudget(1L shl 20)),
+            otherCompiler.plan(selected, capabilities(), PlanBudget(1L shl 20)),
+        ).forEach { result ->
+            assertEquals(
+                "gpu-plan.selection.invalid-candidate",
+                assertIs<RenderPlanResult.InvalidScene>(result).diagnostics.single().code.value,
+            )
+        }
     }
 
     private fun ready(commands: Collection<SceneCommand>): RenderGraph {
@@ -288,8 +416,11 @@ class W4cPathFillPlanCompilerTest {
         .close()
         .build()
 
-    private fun regularPolygon(sideCount: Int): PathF32 {
-        val builder = PathBuilder()
+    private fun regularPolygon(
+        sideCount: Int,
+        fillRule: FillRule = FillRule.WINDING,
+    ): PathF32 {
+        val builder = PathBuilder(fillRule)
         repeat(sideCount) { index ->
             val angle = index * 2.0 * Math.PI / sideCount
             val x = (2.0 + cos(angle)).toFloat()
@@ -354,17 +485,19 @@ class W4cPathFillPlanCompilerTest {
         maxBufferSizeBytes: Long = 1L shl 20,
         policy: PlanBufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 4_096, 4_096),
         operations: Set<PlanOperationCapability> = PlanOperationCapability.entries.toSet(),
+        copyBytesPerRowAlignment: Int = 256,
+        depthStencilFormats: Set<PlanDepthStencilFormat> = setOf(PlanDepthStencilFormat.Depth24PlusStencil8),
     ): PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(
         deviceGeneration = 0,
         maxTextureDimension2D = 64,
         maxBufferSizeBytes = maxBufferSizeBytes,
-        copyBytesPerRowAlignment = 256,
+        copyBytesPerRowAlignment = copyBytesPerRowAlignment,
         supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
         minUniformBufferOffsetAlignment = uniformAlignment,
         maxDynamicUniformBuffersPerPipelineLayout = 1,
         supportedOperations = operations,
         bufferAllocationPolicy = policy,
-        supportedDepthStencilFormats = setOf(PlanDepthStencilFormat.Depth24PlusStencil8),
+        supportedDepthStencilFormats = depthStencilFormats,
     )
 
     private companion object {

@@ -24,6 +24,11 @@ import org.graphiks.kanvas.gpu.plan.PlanId
 import org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat
 import org.graphiks.kanvas.gpu.plan.RenderGraph
 import org.graphiks.kanvas.gpu.plan.CapabilityCompilerChain
+import org.graphiks.kanvas.gpu.plan.GpuPlanCandidate
+import org.graphiks.kanvas.gpu.plan.GpuPlanCompiler
+import org.graphiks.kanvas.gpu.plan.GpuPlanSelection
+import org.graphiks.kanvas.gpu.plan.PlanBudget
+import org.graphiks.kanvas.gpu.plan.PlanCapabilitySnapshot
 import org.graphiks.kanvas.gpu.plan.W3SolidRectPlanCompiler
 import org.graphiks.kanvas.gpu.plan.W4aAnalyticRectPlanCompiler
 import org.graphiks.kanvas.gpu.plan.W4bAnalyticRRectPlanCompiler
@@ -391,6 +396,7 @@ class GpuRenderBackendTest {
                     W4aAnalyticRectPlanCompiler(),
                     W4bAnalyticRRectPlanCompiler(),
                     W4cPathFillPlanCompiler(),
+                    LaterInvalidCompiler(),
                 ),
             ),
             GpuRenderContext(ThrowingOwner()),
@@ -416,6 +422,22 @@ class GpuRenderBackendTest {
                         EffectStack.Empty,
                         Matrix3x3F32.Identity,
                         DrawOrigin.PATH,
+                        PaintNode(
+                            ColorARGB.Red,
+                            null,
+                            BlendMode.SRC_OVER,
+                            null,
+                            null,
+                            null,
+                            null,
+                            null,
+                            PaintStyleNode.FILL,
+                            0f,
+                            StrokeCapNode.BUTT,
+                            StrokeJoinNode.MITER,
+                            4f,
+                            false,
+                        ),
                     ),
                 ),
             ),
@@ -511,6 +533,25 @@ class GpuRenderBackendTest {
         override fun createOrNull(): GpuBackendSessionPort? = error("runtime must not be acquired for semantic classification")
         override fun disposeGeneration(deviceGeneration: GPUDeviceGenerationID) = Unit
         override fun close() = Unit
+    }
+    private class LaterInvalidCompiler : GpuPlanCompiler {
+        override fun select(scene: SceneSnapshot, target: RenderTargetDescriptor): GpuPlanSelection =
+            GpuPlanSelection.InvalidScene(
+                listOf(
+                    RenderDiagnostic(
+                        RenderDiagnosticCode("later.compiler.must.not-be-authority"),
+                        RenderDiagnosticDomain.SCENE,
+                        RenderDiagnosticSeverity.ERROR,
+                        "The terminal W4c result must prevent this compiler from becoming authoritative.",
+                    ),
+                ),
+            )
+
+        override fun plan(
+            candidate: GpuPlanCandidate,
+            capabilities: PlanCapabilitySnapshot,
+            budget: PlanBudget,
+        ): RenderPlanResult<RenderGraph> = error("A selection refusal must never receive plan()")
     }
     private class FakePrepared(
         generation: Long,
