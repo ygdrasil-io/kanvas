@@ -7,6 +7,38 @@ import kotlin.test.assertFailsWith
 
 class PathStrokeStyleF64Test {
     @Test
+    fun `stroke policy exposes documented defaults and accepts finite positive tolerances`() {
+        val defaults = PathStrokePolicyF64()
+        assertEquals(0.25, defaults.maximumSagittaErrorF64)
+        assertEquals(0.0625, defaults.maximumDashArcLengthErrorF64)
+        assertEquals(PathStrokeLimitsI32(), defaults.limitsI32)
+        assertEquals(PathStrokeLimitsI64(), defaults.limitsI64)
+
+        val configured = PathStrokePolicyF64(
+            maximumSagittaErrorF64 = 0.5,
+            maximumDashArcLengthErrorF64 = 0.125,
+        )
+        assertEquals(0.5, configured.maximumSagittaErrorF64)
+        assertEquals(0.125, configured.maximumDashArcLengthErrorF64)
+    }
+
+    @Test
+    fun `stroke policy rejects non-finite zero and negative tolerances`() {
+        assertFailsWith<IllegalArgumentException> { PathStrokePolicyF64(maximumSagittaErrorF64 = Double.NaN) }
+        assertFailsWith<IllegalArgumentException> {
+            PathStrokePolicyF64(maximumSagittaErrorF64 = Double.POSITIVE_INFINITY)
+        }
+        assertFailsWith<IllegalArgumentException> { PathStrokePolicyF64(maximumDashArcLengthErrorF64 = Double.NaN) }
+        assertFailsWith<IllegalArgumentException> {
+            PathStrokePolicyF64(maximumDashArcLengthErrorF64 = Double.POSITIVE_INFINITY)
+        }
+        assertFailsWith<IllegalArgumentException> { PathStrokePolicyF64(maximumSagittaErrorF64 = 0.0) }
+        assertFailsWith<IllegalArgumentException> { PathStrokePolicyF64(maximumDashArcLengthErrorF64 = 0.0) }
+        assertFailsWith<IllegalArgumentException> { PathStrokePolicyF64(maximumSagittaErrorF64 = -0.25) }
+        assertFailsWith<IllegalArgumentException> { PathStrokePolicyF64(maximumDashArcLengthErrorF64 = -0.0625) }
+    }
+
+    @Test
     fun `dash rejects malformed intervals and phase while preserving valid zero intervals`() {
         assertFailsWith<IllegalArgumentException> { PathStrokeDashF64.of(doubleArrayOf(1.0), 0.0) }
         assertFailsWith<IllegalArgumentException> { PathStrokeDashF64.of(doubleArrayOf(1.0, -1.0), 0.0) }
