@@ -1,8 +1,8 @@
 # W4c — fills de paths par tessellation directe et stencil/cover
 
-**Statut :** validé  
-**Date :** 2026-09-05  
-**Branche de base :** `codex/w4c-path-fills`, empilée sur W4b  
+**Statut :** validé
+**Date :** 2026-09-05
+**Branche de base :** `codex/w4c-path-fills`, empilée sur W4b
 **Références :** `refactor/specs/2026-08-29-skia-renderer-remediation-design.md`, `refactor/specs/2026-09-03-w4-geometry-coverage-stack-design.md`, `refactor/specs/2026-09-04-w4b-analytic-rrect-design.md`
 
 ## 1. Décision
