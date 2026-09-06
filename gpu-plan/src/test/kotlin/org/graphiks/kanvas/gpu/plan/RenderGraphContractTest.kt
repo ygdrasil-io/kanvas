@@ -943,6 +943,244 @@ class RenderGraphContractTest {
         }
     }
 
+    @Test
+    fun `path graphs reject a separate solid rect render pass`() {
+        assertFailsWith<IllegalArgumentException> {
+            directPathGraphWithInterposedPass(visualCommandCount = 2) { resources ->
+                directRenderPass(
+                    ordinal = 1,
+                    target = resources.target.id,
+                    draws = listOf(
+                        SolidRectDraw.of(
+                            commandIndex = 1,
+                            color = ColorF32.of(0f, 0f, 1f, 1f),
+                            visibleBounds = RectI32(0, 0, 1, 1),
+                            scissor = RectI32(0, 0, 1, 1),
+                        ),
+                    ),
+                    load = AttachmentLoadPlan.Load,
+                    drawDataResources = null,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `path graphs reject empty render passes`() {
+        assertFailsWith<IllegalArgumentException> {
+            directPathGraphWithInterposedPass { resources ->
+                directRenderPass(
+                    ordinal = 1,
+                    target = resources.target.id,
+                    draws = emptyList(),
+                    load = AttachmentLoadPlan.Load,
+                    drawDataResources = null,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `path graphs reject texture copy passes`() {
+        assertFailsWith<IllegalArgumentException> {
+            directPathGraphWithInterposedPass { resources ->
+                PlanPass.TextureCopy(0, resources.target.id, resources.target.id)
+            }
+        }
+    }
+
+    @Test
+    fun `path graphs reject filter passes`() {
+        assertFailsWith<IllegalArgumentException> {
+            directPathGraphWithInterposedPass { resources ->
+                PlanPass.FilterPass(0, listOf(resources.target.id), resources.target.id)
+            }
+        }
+    }
+
+    @Test
+    fun `path graphs reject resolve passes`() {
+        assertFailsWith<IllegalArgumentException> {
+            directPathGraphWithInterposedPass { resources ->
+                PlanPass.ResolvePass(0, resources.target.id, resources.target.id)
+            }
+        }
+    }
+
+    @Test
+    fun `path graphs reject duplicate staging and data resources`() {
+        val resources = directPathResources()
+        val duplicateStaging = frameBufferResource(
+            role = PlanResourceRole.ReadbackStaging,
+            ordinal = 1,
+            byteSize = 256,
+            usages = setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead),
+            firstPassIndex = 1,
+            lastPassIndexExclusive = 2,
+        )
+        val duplicateVertex = frameBufferResource(
+            role = PlanResourceRole.VertexData,
+            ordinal = 1,
+            byteSize = 4,
+            usages = setOf(PlanResourceUsage.Vertex, PlanResourceUsage.CopyDestination),
+        )
+        val duplicateIndex = frameBufferResource(
+            role = PlanResourceRole.IndexData,
+            ordinal = 1,
+            byteSize = 4,
+            usages = setOf(PlanResourceUsage.Index, PlanResourceUsage.CopyDestination),
+        )
+        val duplicateUniform = frameBufferResource(
+            role = PlanResourceRole.UniformData,
+            ordinal = 1,
+            byteSize = 4,
+            usages = setOf(PlanResourceUsage.Uniform, PlanResourceUsage.CopyDestination),
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            directPathGraph(
+                resources = resources,
+                graphResources = resources.all + listOf(
+                    duplicateStaging,
+                    duplicateVertex,
+                    duplicateIndex,
+                    duplicateUniform,
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun `path readback requires a readback staging resource`() {
+        val resources = directPathResources()
+        val wrongStaging = frameBufferResource(
+            role = PlanResourceRole.VertexData,
+            ordinal = 1,
+            byteSize = 256,
+            usages = setOf(
+                PlanResourceUsage.Vertex,
+                PlanResourceUsage.CopyDestination,
+                PlanResourceUsage.MapRead,
+            ),
+            firstPassIndex = 1,
+            lastPassIndexExclusive = 2,
+        )
+        val render = directRenderPass(
+            ordinal = 0,
+            target = resources.target.id,
+            draws = listOf(directDraw(0)),
+            load = AttachmentLoadPlan.ClearTransparent,
+            drawDataResources = directDrawDataResources(resources),
+        )
+        val readback = PlanPass.ReadbackPass(0, resources.target.id, wrongStaging.id, 256)
+
+        assertFailsWith<IllegalArgumentException> {
+            graphOf(
+                resources = resources.all.filterNot { it.id == resources.staging.id } + wrongStaging,
+                passes = listOf(render, readback),
+                dependencies = listOf(PlanPassDependency(render.id, readback.id)),
+                visualCommandCount = 1,
+                capabilities = w4cCapabilities(),
+            )
+        }
+    }
+
+    @Test
+    fun `path graphs reject staging aliased with vertex data`() {
+        val resources = directPathResources()
+        val aliasedVertex = frameBufferResource(
+            role = PlanResourceRole.VertexData,
+            ordinal = 0,
+            byteSize = 256,
+            usages = setOf(
+                PlanResourceUsage.Vertex,
+                PlanResourceUsage.CopyDestination,
+                PlanResourceUsage.MapRead,
+            ),
+        )
+        val bindings = PlanDrawDataResources(
+            aliasedVertex.id,
+            resources.index.id,
+            resources.uniform.id,
+        )
+        val render = directRenderPass(
+            ordinal = 0,
+            target = resources.target.id,
+            draws = listOf(directDraw(0)),
+            load = AttachmentLoadPlan.ClearTransparent,
+            drawDataResources = bindings,
+        )
+        val readback = PlanPass.ReadbackPass(0, resources.target.id, aliasedVertex.id, 256)
+
+        assertFailsWith<IllegalArgumentException> {
+            graphOf(
+                resources = listOf(resources.target, aliasedVertex, resources.index, resources.uniform),
+                passes = listOf(render, readback),
+                dependencies = listOf(PlanPassDependency(render.id, readback.id)),
+                visualCommandCount = 1,
+                capabilities = w4cCapabilities(),
+            )
+        }
+    }
+
+    @Test
+    fun `path graphs share one vertex index uniform triplet`() {
+        val resources = directPathResources(passCount = 3, readbackPassIndex = 2)
+        val alternateVertex = frameBufferResource(
+            role = PlanResourceRole.VertexData,
+            ordinal = 1,
+            byteSize = 4,
+            usages = setOf(PlanResourceUsage.Vertex, PlanResourceUsage.CopyDestination),
+            lastPassIndexExclusive = 3,
+        )
+        val alternateIndex = frameBufferResource(
+            role = PlanResourceRole.IndexData,
+            ordinal = 1,
+            byteSize = 4,
+            usages = setOf(PlanResourceUsage.Index, PlanResourceUsage.CopyDestination),
+            lastPassIndexExclusive = 3,
+        )
+        val alternateUniform = frameBufferResource(
+            role = PlanResourceRole.UniformData,
+            ordinal = 1,
+            byteSize = 4,
+            usages = setOf(PlanResourceUsage.Uniform, PlanResourceUsage.CopyDestination),
+            lastPassIndexExclusive = 3,
+        )
+        val first = directRenderPass(
+            ordinal = 0,
+            target = resources.target.id,
+            draws = listOf(directDraw(0)),
+            load = AttachmentLoadPlan.ClearTransparent,
+            drawDataResources = directDrawDataResources(resources),
+        )
+        val second = directRenderPass(
+            ordinal = 1,
+            target = resources.target.id,
+            draws = listOf(directDraw(1)),
+            load = AttachmentLoadPlan.Load,
+            drawDataResources = PlanDrawDataResources(
+                alternateVertex.id,
+                alternateIndex.id,
+                alternateUniform.id,
+            ),
+        )
+        val readback = directReadback(resources)
+
+        assertFailsWith<IllegalArgumentException> {
+            graphOf(
+                resources = resources.all + listOf(alternateVertex, alternateIndex, alternateUniform),
+                passes = listOf(first, second, readback),
+                dependencies = listOf(
+                    PlanPassDependency(first.id, second.id),
+                    PlanPassDependency(second.id, readback.id),
+                ),
+                visualCommandCount = 2,
+                capabilities = w4cCapabilities(),
+            )
+        }
+    }
+
     private fun supportedCapabilities(
         formats: Set<PlanLogicalColorFormat>,
         copyBytesPerRowAlignment: Int = 256,
@@ -1077,6 +1315,52 @@ class RenderGraphContractTest {
             peakFrameLocalBytes = peakFrameLocalBytes,
         )
     }
+
+    private fun directPathGraphWithInterposedPass(
+        visualCommandCount: Int = 1,
+        intermediate: (DirectPathResources) -> PlanPass,
+    ): RenderGraph {
+        val resources = directPathResources(passCount = 3, readbackPassIndex = 2)
+        val render = directRenderPass(
+            ordinal = 0,
+            target = resources.target.id,
+            draws = listOf(directDraw(0)),
+            load = AttachmentLoadPlan.ClearTransparent,
+            drawDataResources = directDrawDataResources(resources),
+        )
+        val middle = intermediate(resources)
+        val readback = directReadback(resources)
+        return graphOf(
+            resources = resources.all,
+            passes = listOf(render, middle, readback),
+            dependencies = listOf(
+                PlanPassDependency(render.id, middle.id),
+                PlanPassDependency(middle.id, readback.id),
+            ),
+            visualCommandCount = visualCommandCount,
+            capabilities = w4cCapabilities(),
+        )
+    }
+
+    private fun frameBufferResource(
+        role: PlanResourceRole,
+        ordinal: Int,
+        byteSize: Long,
+        usages: Set<PlanResourceUsage>,
+        firstPassIndex: Int = 0,
+        lastPassIndexExclusive: Int = 2,
+    ): PlanResource = PlanResource.of(
+        role,
+        ordinal,
+        PlanResourceKind.Buffer,
+        null,
+        null,
+        byteSize,
+        usages,
+        PlanResourceLifetime.FrameLocal,
+        firstPassIndex,
+        lastPassIndexExclusive,
+    )
 
     private fun graphWithAnalyticDrawResources(uniformLifetime: IntRange): RenderGraph {
         val target = targetResource()

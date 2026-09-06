@@ -338,15 +338,45 @@ public class RenderGraph private constructor(
             val visualDraws = visualDraws(passes)
             if (visualDraws.none { it is PathFillDraw }) return
 
+            require(passes.all {
+                it is PlanPass.RenderPass ||
+                    it is PlanPass.StencilProducer ||
+                    it is PlanPass.StencilCover ||
+                    it is PlanPass.ReadbackPass
+            }) { "Path graphs may contain only W4c passes" }
             require(PlanOperationCapability.CopyUpload in capabilities.supportedOperations()) {
                 "Path fills require copy upload support"
             }
             require(PlanOperationCapability.UniformBuffer in capabilities.supportedOperations()) {
                 "Path fills require uniform buffer support"
             }
-            val logicalTargets = resources.filter { it.role == PlanResourceRole.LogicalTarget }
-            require(logicalTargets.size == 1) { "Path fills require one logical color target" }
-            val target = logicalTargets.single().id
+            val targetResource = requireSinglePathResource(resources, PlanResourceRole.LogicalTarget)
+            val stagingResource = requireSinglePathResource(resources, PlanResourceRole.ReadbackStaging)
+            val vertexResource = requireSinglePathResource(resources, PlanResourceRole.VertexData)
+            val indexResource = requireSinglePathResource(resources, PlanResourceRole.IndexData)
+            val uniformResource = requireSinglePathResource(resources, PlanResourceRole.UniformData)
+            val usesStencil = passes.any {
+                it is PlanPass.StencilProducer || it is PlanPass.StencilCover
+            }
+            val depthStencilResources = resources.filter { it.role == PlanResourceRole.DepthStencil }
+            require(depthStencilResources.size == if (usesStencil) 1 else 0) {
+                "Path graphs require a depth-stencil resource only for stencil pairs"
+            }
+            val inventory = buildList {
+                add(targetResource)
+                add(stagingResource)
+                add(vertexResource)
+                add(indexResource)
+                add(uniformResource)
+                depthStencilResources.singleOrNull()?.let(::add)
+            }
+            require(inventory.map { it.id }.distinct().size == inventory.size) {
+                "W4c resources must have distinct identities"
+            }
+            require(resources.map { it.id }.toSet() == inventory.map { it.id }.toSet()) {
+                "Path graphs must declare only the W4c resource inventory"
+            }
+            val target = targetResource.id
             passes.forEach { pass ->
                 val colorTarget = when (pass) {
                     is PlanPass.RenderPass -> pass.target
@@ -363,6 +393,9 @@ public class RenderGraph private constructor(
             val terminalReadback = readbacks.single()
             require(passes.last() === terminalReadback) { "Path fill readback must be terminal" }
             require(terminalReadback.source == target) { "Path fills must read back their color target" }
+            require(terminalReadback.staging == stagingResource.id) {
+                "Path readback must use the readback staging resource"
+            }
             val expectedDependencies = passes.zipWithNext().map { (before, after) ->
                 PlanPassDependency(before.id, after.id)
             }.toSet()
@@ -372,30 +405,39 @@ public class RenderGraph private constructor(
             require(visualCommandCount == visualDraws.map { it.commandIndex }.distinct().size) {
                 "Path visual command count must match unique draws"
             }
+            val sharedDrawDataResources = PlanDrawDataResources(
+                vertexResource.id,
+                indexResource.id,
+                uniformResource.id,
+            )
             val terminalReadbackIndex = passes.lastIndex
             passes.forEach { pass ->
                 when (pass) {
                     is PlanPass.RenderPass -> {
-                        if (pass.draws().any { it is PathFillDraw }) {
-                            require(pass.draws().size == 1) {
-                                "Path render passes require exactly one draw"
-                            }
-                            val draw = pass.draws().single()
-                            require(draw is PathFillDraw && draw.strategy == PathFillStrategy.DirectTriangle) {
-                                "Path render passes require one direct-triangle draw"
-                            }
-                            val drawDataResources = requireNotNull(pass.drawDataResources) {
-                                "Path render passes require vertex, index, and uniform resources"
-                            }
-                            validatePathDrawDataShape(drawDataResources, resourcesById)
-                            validatePathDrawDataLifetime(
-                                drawDataResources,
-                                resourcesById,
-                                terminalReadbackIndex,
-                            )
+                        require(pass.draws().size == 1) {
+                            "Path render passes require exactly one draw"
                         }
+                        val draw = pass.draws().single()
+                        require(draw is PathFillDraw && draw.strategy == PathFillStrategy.DirectTriangle) {
+                            "Path render passes require one direct-triangle draw"
+                        }
+                        val drawDataResources = requireNotNull(pass.drawDataResources) {
+                            "Path render passes require vertex, index, and uniform resources"
+                        }
+                        require(drawDataResources == sharedDrawDataResources) {
+                            "Path passes must share one vertex, index, and uniform triplet"
+                        }
+                        validatePathDrawDataShape(drawDataResources, resourcesById)
+                        validatePathDrawDataLifetime(
+                            drawDataResources,
+                            resourcesById,
+                            terminalReadbackIndex,
+                        )
                     }
                     is PlanPass.StencilProducer -> {
+                        require(pass.drawDataResources == sharedDrawDataResources) {
+                            "Path passes must share one vertex, index, and uniform triplet"
+                        }
                         validatePathDrawDataShape(pass.drawDataResources, resourcesById)
                         validatePathDrawDataLifetime(
                             pass.drawDataResources,
@@ -404,6 +446,9 @@ public class RenderGraph private constructor(
                         )
                     }
                     is PlanPass.StencilCover -> {
+                        require(pass.drawDataResources == sharedDrawDataResources) {
+                            "Path passes must share one vertex, index, and uniform triplet"
+                        }
                         validatePathDrawDataShape(pass.drawDataResources, resourcesById)
                         validatePathDrawDataLifetime(
                             pass.drawDataResources,
@@ -414,6 +459,15 @@ public class RenderGraph private constructor(
                     else -> Unit
                 }
             }
+        }
+
+        private fun requireSinglePathResource(
+            resources: List<PlanResource>,
+            role: PlanResourceRole,
+        ): PlanResource {
+            val matches = resources.filter { it.role == role }
+            require(matches.size == 1) { "Path graphs require one $role resource" }
+            return matches.single()
         }
 
         private fun validatePathDrawDataShape(
