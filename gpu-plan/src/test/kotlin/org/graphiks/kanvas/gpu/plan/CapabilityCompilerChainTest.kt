@@ -134,7 +134,7 @@ class CapabilityCompilerChainTest {
     }
 
     @Test
-    fun `real W4 chain keeps the W4d stroke draw limit terminal without claiming fill-only frames`() {
+    fun `real W4 chain keeps the W4d stroke draw limit terminal without claiming unsupported frames`() {
         val chain = CapabilityCompilerChain.of(
             listOf(
                 W3SolidRectPlanCompiler(),
@@ -146,10 +146,27 @@ class CapabilityCompilerChainTest {
         )
         val strokes = repeatedPathScene(513, PaintStyleNode.STROKE)
         val fills = repeatedPathScene(513, PaintStyleNode.FILL)
+        val base = assertIs<SceneCommand.Draw>(pathScene(PaintStyleNode.STROKE).commandAt(0)).node
+        val unsupported = listOf(
+            base.copy(coverage = CoverageRequest.ANTIALIASED),
+            base.copy(transform = Matrix3x3F32.rotation(0.25f)),
+            base.copy(
+                clip = ClipStackNode.Operations.of(
+                    listOf(org.graphiks.kanvas.render.ir.ClipEntry(base.geometry, org.graphiks.kanvas.render.ir.ClipOperation.INTERSECT)),
+                ),
+            ),
+            base.copy(blend = BlendNode.Mode(BlendMode.SRC)),
+            base.copy(material = MaterialNode.Transparent),
+        ).map { node ->
+            SceneSnapshot.of(SceneExtent(4, 3), ColorSpace.SRGB, List(513) { SceneCommand.Draw(node) })
+        }
 
         val refused = assertIs<GpuPlanSelection.ResourceLimitExceeded>(chain.select(strokes, targetFor(strokes)))
         assertEquals(W4dPlanDiagnostics.PathResourceLimit, refused.diagnostics().single().code)
         assertIs<GpuPlanSelection.NotCandidate>(chain.select(fills, targetFor(fills)))
+        unsupported.forEach { scene ->
+            assertIs<GpuPlanSelection.NotCandidate>(chain.select(scene, targetFor(scene)))
+        }
     }
 
     private class NotCandidateCompiler(private val code: String) : GpuPlanCompiler {

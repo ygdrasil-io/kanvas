@@ -86,11 +86,11 @@ public class W4dPathStrokePlanCompiler internal constructor(
         scene.forEach { command ->
             when (command) {
                 is SceneCommand.Draw -> {
-                    val path = (command.node.geometry as? GeometryNode.Path)?.path
-                    val paint = command.node.paint
-                    if (path != null && paint != null &&
-                        (!finite(path) || !finite(command.node.transform) || !finite(paint) ||
-                            !finite(command.node.effects) || !finiteClip(command.node.clip))
+                    val node = command.node
+                    val path = (node.geometry as? GeometryNode.Path)?.path
+                    val paint = node.paint
+                    if (!finite(node.transform) || !finite(node.effects) || !finiteClip(node.clip) ||
+                        (path != null && !finite(path)) || (paint != null && !finite(paint))
                     ) {
                         return FramePreflight.Invalid("Draw facts are non-finite")
                     }
@@ -109,18 +109,20 @@ public class W4dPathStrokePlanCompiler internal constructor(
         }
 
         var visualDrawCountI32 = 0
+        scene.forEach { command ->
+            if (command is SceneCommand.Draw) visualDrawCountI32 = Math.addExact(visualDrawCountI32, 1)
+        }
+        if (visualDrawCountI32 <= MAX_DRAWS) return FramePreflight.Member
+
         var sawStroke = false
         scene.forEach { command ->
             when (command) {
                 is SceneCommand.Draw -> {
-                    val node = command.node
-                    val paint = node.paint
-                    if (node.geometry !is GeometryNode.Path || node.origin != DrawOrigin.PATH || paint == null) {
-                        return FramePreflight.Outside
+                    when (val scope = classifyDrawScope(command.node)) {
+                        is DrawScope.Ready -> sawStroke = sawStroke || scope.stroke
+                        is DrawScope.Gap -> return FramePreflight.Outside
+                        is DrawScope.Invalid -> return FramePreflight.Invalid(scope.message)
                     }
-                    visualDrawCountI32 = Math.addExact(visualDrawCountI32, 1)
-                    sawStroke = sawStroke ||
-                        paint.style == PaintStyleNode.STROKE || paint.style == PaintStyleNode.STROKE_AND_FILL
                 }
                 is SceneCommand.SetTransform,
                 is SceneCommand.SetClip,
@@ -130,11 +132,7 @@ public class W4dPathStrokePlanCompiler internal constructor(
             }
         }
         if (!sawStroke) return FramePreflight.Outside
-        return if (visualDrawCountI32 > MAX_DRAWS) {
-            FramePreflight.Limit("W4d accepts at most 512 visual path draws")
-        } else {
-            FramePreflight.Member
-        }
+        return FramePreflight.Limit("W4d accepts at most 512 visual path draws")
     }
 
     private fun recognize(scene: SceneSnapshot): Recognition {
@@ -168,45 +166,82 @@ public class W4dPathStrokePlanCompiler internal constructor(
     }
 
     private fun recognizeDraw(node: DrawNode, commandIndex: Int, targetBounds: RectI32, frameWork: PathStrokeWorkUsageI64): DrawResult {
-        val path = (node.geometry as? GeometryNode.Path)?.path ?: return DrawResult.Gap("Draw geometry is outside W4d")
-        val paint = node.paint ?: return DrawResult.Gap("W4d requires paint")
-        if (!finite(path) || !finite(node.transform) || !finite(paint) || !finite(node.effects)) return DrawResult.Invalid("Draw facts are non-finite")
-        if (node.origin != DrawOrigin.PATH || path.fillRule !in setOf(FillRule.WINDING, FillRule.EVEN_ODD)) return DrawResult.Gap("Path provenance or fill rule is outside W4d")
-        if (node.coverage != CoverageRequest.HARD_EDGE || !(node.transform.isIdentity || node.transform.isScaleTranslate())) return DrawResult.Gap("Coverage or transform is outside W4d")
-        if (!finiteClip(node.clip)) return DrawResult.Invalid("Clip metadata is non-finite")
-        val clip = when (val value = node.clip) {
-            ClipStackNode.Empty -> null
-            is ClipStackNode.DeviceRect -> {
-                if (value.antiAlias) return DrawResult.Gap("Clip is outside W4d")
-                integral(value.copyBounds()) ?: return DrawResult.Gap("Clip is outside W4d")
-            }
-            else -> return DrawResult.Gap("Clip is outside W4d")
+        val scope = when (val classified = classifyDrawScope(node)) {
+            is DrawScope.Ready -> classified
+            is DrawScope.Gap -> return DrawResult.Gap(classified.message)
+            is DrawScope.Invalid -> return DrawResult.Invalid(classified.message)
         }
-        if (!solid(node, paint)) return DrawResult.Gap("Material, blend, or effect is outside W4d")
-        val fill = paint.style == PaintStyleNode.FILL
-        if (fill && paint.pathEffect != null) return DrawResult.Gap("Path effects require a stroke in W4d")
-        val stroke = paint.style == PaintStyleNode.STROKE || paint.style == PaintStyleNode.STROKE_AND_FILL
-        val result = if (fill) prepareFill(path, node.transform, frameWork) else prepareStroke(path, node.transform, paint, frameWork)
+        val result = if (scope.fill) {
+            prepareFill(scope.path, node.transform, frameWork)
+        } else {
+            prepareStroke(
+                scope.path,
+                node.transform,
+                requireNotNull(scope.mode),
+                requireNotNull(scope.styleF64),
+                frameWork,
+            )
+        }
         return when (result) {
             is Prepared.Ready -> {
                 val targetScissor = intersect(result.geometry.copyConservativeScissorI32(), targetBounds)
-                    ?: return DrawResult.Empty(result.work, stroke)
-                val scissor = if (clip == null) targetScissor else intersect(targetScissor, clip)
-                    ?: return DrawResult.Empty(result.work, stroke)
-                if (scissor.isEmpty) DrawResult.Empty(result.work, stroke) else if (
+                    ?: return DrawResult.Empty(result.work, scope.stroke)
+                val scissor = if (scope.clip == null) targetScissor else intersect(targetScissor, scope.clip)
+                    ?: return DrawResult.Empty(result.work, scope.stroke)
+                if (scissor.isEmpty) DrawResult.Empty(result.work, scope.stroke) else if (
                     result.geometry.fillRule == FillRule.WINDING &&
                     result.geometry.copyStencilEdgeFanF32OrNull() != null &&
                     result.geometry.emittedNonZeroClosedEdgeCountI32 > UByte.MAX_VALUE.toInt()
                 ) DrawResult.Limit("Winding path exceeds the W4d stencil edge limit") else DrawResult.Ready(
                     SealedDraw(commandIndex, linear(node.material.let { (it as MaterialNode.Solid).color }), result.geometry, result.strokeGeometry, result.mode, result.styleF64, scissor),
                     result.work,
-                    stroke,
+                    scope.stroke,
                 )
             }
-            is Prepared.Empty -> DrawResult.Empty(result.work, stroke)
+            is Prepared.Empty -> DrawResult.Empty(result.work, scope.stroke)
             is Prepared.Invalid -> DrawResult.Invalid(result.message)
             is Prepared.Limit -> DrawResult.Limit(result.message)
         }
+    }
+
+    private fun classifyDrawScope(node: DrawNode): DrawScope {
+        val path = (node.geometry as? GeometryNode.Path)?.path
+            ?: return DrawScope.Gap("Draw geometry is outside W4d")
+        val paint = node.paint ?: return DrawScope.Gap("W4d requires paint")
+        if (!finite(path) || !finite(node.transform) || !finite(paint) || !finite(node.effects)) {
+            return DrawScope.Invalid("Draw facts are non-finite")
+        }
+        if (node.origin != DrawOrigin.PATH || path.fillRule !in setOf(FillRule.WINDING, FillRule.EVEN_ODD)) {
+            return DrawScope.Gap("Path provenance or fill rule is outside W4d")
+        }
+        if (node.coverage != CoverageRequest.HARD_EDGE || !(node.transform.isIdentity || node.transform.isScaleTranslate())) {
+            return DrawScope.Gap("Coverage or transform is outside W4d")
+        }
+        if (!finiteClip(node.clip)) return DrawScope.Invalid("Clip metadata is non-finite")
+        val clip = when (val value = node.clip) {
+            ClipStackNode.Empty -> null
+            is ClipStackNode.DeviceRect -> {
+                if (value.antiAlias) return DrawScope.Gap("Clip is outside W4d")
+                integral(value.copyBounds()) ?: return DrawScope.Gap("Clip is outside W4d")
+            }
+            else -> return DrawScope.Gap("Clip is outside W4d")
+        }
+        if (!solid(node, paint)) return DrawScope.Gap("Material, blend, or effect is outside W4d")
+        val fill = paint.style == PaintStyleNode.FILL
+        if (fill && paint.pathEffect != null) return DrawScope.Gap("Path effects require a stroke in W4d")
+        val stroke = paint.style == PaintStyleNode.STROKE || paint.style == PaintStyleNode.STROKE_AND_FILL
+        if (!stroke) return DrawScope.Ready(path, clip, fill = true, stroke = false, mode = null, styleF64 = null)
+        val mode = if (paint.style == PaintStyleNode.STROKE_AND_FILL) {
+            PathStrokeDrawMode.StrokeAndFill
+        } else {
+            PathStrokeDrawMode.Stroke
+        }
+        val styleF64 = try {
+            style(paint, mode)
+        } catch (_: IllegalArgumentException) {
+            return DrawScope.Invalid("Stroke style is invalid")
+        }
+        return DrawScope.Ready(path, clip, fill = false, stroke = true, mode, styleF64)
     }
 
     private fun prepareFill(path: org.graphiks.math.geometry.PathF32, matrix: Matrix3x3F32, frame: PathStrokeWorkUsageI64): Prepared {
@@ -219,11 +254,9 @@ public class W4dPathStrokePlanCompiler internal constructor(
         }
     }
 
-    private fun prepareStroke(path: org.graphiks.math.geometry.PathF32, matrix: Matrix3x3F32, paint: PaintNode, frame: PathStrokeWorkUsageI64): Prepared {
-        val mode = if (paint.style == PaintStyleNode.STROKE_AND_FILL) PathStrokeDrawMode.StrokeAndFill else PathStrokeDrawMode.Stroke
-        val style = try { style(paint, mode) } catch (_: IllegalArgumentException) { return Prepared.Invalid("Stroke style is invalid") }
-        return when (val prepared = matrix.preparePathStrokeGeometryF32(path, style, mode, policyF64 = strokePolicyF64, frameWorkUsageBeforeI64 = frame)) {
-            is PathStrokePreparationResult.Ready -> Prepared.Ready(prepared.geometryF32.copyFillGeometryF32(), prepared.geometryF32, mode, style, prepared.frameWorkUsageAfterI64)
+    private fun prepareStroke(path: org.graphiks.math.geometry.PathF32, matrix: Matrix3x3F32, mode: PathStrokeDrawMode, styleF64: PathStrokeStyleF64, frame: PathStrokeWorkUsageI64): Prepared {
+        return when (val prepared = matrix.preparePathStrokeGeometryF32(path, styleF64, mode, policyF64 = strokePolicyF64, frameWorkUsageBeforeI64 = frame)) {
+            is PathStrokePreparationResult.Ready -> Prepared.Ready(prepared.geometryF32.copyFillGeometryF32(), prepared.geometryF32, mode, styleF64, prepared.frameWorkUsageAfterI64)
             is PathStrokePreparationResult.Empty -> Prepared.Empty(prepared.frameWorkUsageAfterI64)
             is PathStrokePreparationResult.InvalidScene -> Prepared.Invalid("Math rejected stroke scene: ${prepared.reason}")
             is PathStrokePreparationResult.ResourceLimitExceeded -> Prepared.Limit("Math stroke limit: ${prepared.reason}")
@@ -336,6 +369,18 @@ public class W4dPathStrokePlanCompiler internal constructor(
 
     private sealed interface Recognition { data class Ready(val draws: List<SealedDraw>) : Recognition; data class Gap(val message: String) : Recognition; data class Invalid(val message: String) : Recognition; data class Limit(val message: String) : Recognition }
     private sealed interface FramePreflight { data object Member : FramePreflight; data object Outside : FramePreflight; data class Invalid(val message: String) : FramePreflight; data class Limit(val message: String) : FramePreflight }
+    private sealed interface DrawScope {
+        data class Ready(
+            val path: org.graphiks.math.geometry.PathF32,
+            val clip: RectI32?,
+            val fill: Boolean,
+            val stroke: Boolean,
+            val mode: PathStrokeDrawMode?,
+            val styleF64: PathStrokeStyleF64?,
+        ) : DrawScope
+        data class Gap(val message: String) : DrawScope
+        data class Invalid(val message: String) : DrawScope
+    }
     private sealed interface DrawResult { data class Ready(val draw: SealedDraw, val frameWork: PathStrokeWorkUsageI64, val stroke: Boolean) : DrawResult; data class Empty(val frameWork: PathStrokeWorkUsageI64, val stroke: Boolean) : DrawResult; data class Gap(val message: String) : DrawResult; data class Invalid(val message: String) : DrawResult; data class Limit(val message: String) : DrawResult }
     private sealed interface Prepared { data class Ready(val geometry: org.graphiks.math.geometry.PathFillGeometryF32, val strokeGeometry: org.graphiks.math.geometry.PathStrokeGeometryF32?, val mode: PathStrokeDrawMode?, val styleF64: PathStrokeStyleF64?, val work: PathStrokeWorkUsageI64) : Prepared; data class Empty(val work: PathStrokeWorkUsageI64) : Prepared; data class Invalid(val message: String) : Prepared; data class Limit(val message: String) : Prepared }
     private data class SealedDraw(val commandIndex: Int, val color: ColorF32, val geometry: org.graphiks.math.geometry.PathFillGeometryF32, val stroke: org.graphiks.math.geometry.PathStrokeGeometryF32?, val mode: PathStrokeDrawMode?, val styleF64: PathStrokeStyleF64?, val scissor: RectI32) { val strategy: PathFillStrategy = if (geometry.copyDirectTriangleF32OrNull() != null) PathFillStrategy.DirectTriangle else PathFillStrategy.StencilCover }

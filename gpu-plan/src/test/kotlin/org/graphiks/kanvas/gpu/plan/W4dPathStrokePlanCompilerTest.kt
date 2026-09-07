@@ -10,21 +10,30 @@ import kotlin.test.assertTrue
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.render.ir.BlendMode
 import org.graphiks.kanvas.render.ir.BlendNode
+import org.graphiks.kanvas.render.ir.BlenderNode
 import org.graphiks.kanvas.render.ir.ClipStackNode
 import org.graphiks.kanvas.render.ir.ClipEntry
 import org.graphiks.kanvas.render.ir.ClipOperation
+import org.graphiks.kanvas.render.ir.ColorFilterNode
 import org.graphiks.kanvas.render.ir.CoverageRequest
 import org.graphiks.kanvas.render.ir.DrawNode
 import org.graphiks.kanvas.render.ir.DrawOrigin
 import org.graphiks.kanvas.render.ir.EffectStack
 import org.graphiks.kanvas.render.ir.GeometryNode
+import org.graphiks.kanvas.render.ir.ImageFilterNode
+import org.graphiks.kanvas.render.ir.ImageResourceSnapshot
 import org.graphiks.kanvas.render.ir.MaterialNode
+import org.graphiks.kanvas.render.ir.MaskBlurStyle
+import org.graphiks.kanvas.render.ir.MaskFilterNode
+import org.graphiks.kanvas.render.ir.MeshPrimitiveMode
 import org.graphiks.kanvas.render.ir.PaintNode
 import org.graphiks.kanvas.render.ir.PaintStyleNode
 import org.graphiks.kanvas.render.ir.PathEffectNode
 import org.graphiks.kanvas.render.ir.ImmutableFloats
 import org.graphiks.kanvas.render.ir.RenderPlanResult
 import org.graphiks.kanvas.render.ir.RenderTargetDescriptor
+import org.graphiks.kanvas.render.ir.ResourceId
+import org.graphiks.kanvas.render.ir.ResourceReference
 import org.graphiks.kanvas.render.ir.SceneCommand
 import org.graphiks.kanvas.render.ir.SceneExtent
 import org.graphiks.kanvas.render.ir.SceneSnapshot
@@ -45,6 +54,8 @@ import org.graphiks.math.geometry.PathStrokePreparationResult
 import org.graphiks.math.geometry.PathStrokeStyleF64
 import org.graphiks.math.geometry.PathStrokeWidthF64
 import org.graphiks.math.geometry.PathStrokeWorkUsageI64
+import org.graphiks.math.geometry.Point2F32
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.prepareMappedPathFillGeometryWithStrokeWorkF32
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.matrix.pathStrokeDeviceFillSegmentMapperF64
@@ -80,6 +91,94 @@ class W4dPathStrokePlanCompilerTest {
         val fills = sceneOf(List(513) { pathDraw(PaintStyleNode.FILL) })
 
         assertIs<GpuPlanSelection.NotCandidate>(compiler.select(fills, target(fills)))
+    }
+
+    @Test
+    fun `513 draws remain outside W4d ownership when any structural capability family is unsupported`() {
+        val base = pathDraw(PaintStyleNode.STROKE).node
+        val inversePath = PathBuilder(org.graphiks.math.geometry.FillRule.INVERSE_WINDING)
+            .moveTo(2f, 2f)
+            .lineTo(12f, 2f)
+            .lineTo(2f, 12f)
+            .close()
+            .build()
+        val image = ImageResourceSnapshot.rgba8(1, 1, ByteArray(4), ColorSpace.SRGB)
+        val imageDraw = base.copy(
+            geometry = GeometryNode.ImagePatch.of(
+                ResourceReference(ResourceId(image.sourceId)),
+                RectF32(0f, 0f, 1f, 1f),
+                RectF32(0f, 0f, 1f, 1f),
+            ),
+            origin = DrawOrigin.IMAGE,
+            paint = null,
+            resource = image,
+        )
+        val operationBlendDraw = base.copy(
+            geometry = GeometryNode.IndexedMesh.of(
+                MeshPrimitiveMode.TRIANGLES,
+                listOf(Point2F32(0f, 0f), Point2F32(1f, 0f), Point2F32(0f, 1f)),
+                bounds = RectF32(0f, 0f, 1f, 1f),
+            ),
+            origin = DrawOrigin.MESH,
+            operationBlendMode = BlendMode.SRC_OVER,
+        )
+        val unsupportedDraws = linkedMapOf(
+            "coverage" to base.copy(coverage = CoverageRequest.ANTIALIASED),
+            "general transform" to base.copy(transform = Matrix3x3F32.rotation(0.25f)),
+            "fill rule" to base.copy(geometry = GeometryNode.Path(inversePath)),
+            "path provenance" to base.copy(origin = DrawOrigin.TEXT_EXPANDED_PATH),
+            "clip kind" to base.copy(
+                clip = ClipStackNode.Operations.of(listOf(ClipEntry(base.geometry, ClipOperation.INTERSECT))),
+            ),
+            "clip antialiasing" to base.copy(
+                clip = ClipStackNode.DeviceRect.of(RectF32(0f, 0f, 16f, 16f), true),
+            ),
+            "clip pixel alignment" to base.copy(
+                clip = ClipStackNode.DeviceRect.of(RectF32(0.25f, 0f, 16f, 16f), false),
+            ),
+            "material" to base.copy(material = MaterialNode.Transparent),
+            "draw blend" to base.copy(blend = BlendNode.Mode(BlendMode.SRC)),
+            "draw effect" to base.copy(
+                paint = requireNotNull(base.paint).copy(pathEffect = PathEffectNode.Corner(1f)),
+            ),
+            "paint shader" to base.copy(
+                paint = requireNotNull(base.paint).copy(shader = MaterialNode.Solid(ColorARGB.White)),
+            ),
+            "paint blender" to base.copy(
+                paint = requireNotNull(base.paint).copy(blender = BlenderNode.Mode(BlendMode.SRC_OVER)),
+            ),
+            "paint color filter" to base.copy(
+                paint = requireNotNull(base.paint).copy(colorFilter = ColorFilterNode.Luma),
+            ),
+            "paint mask filter" to base.copy(
+                paint = requireNotNull(base.paint).copy(maskFilter = MaskFilterNode.Blur(MaskBlurStyle.NORMAL, 1f)),
+            ),
+            "paint image filter" to base.copy(
+                paint = requireNotNull(base.paint).copy(imageFilter = ImageFilterNode.Blur(1f, 1f)),
+            ),
+            "resource" to imageDraw,
+            "operation blend" to operationBlendDraw,
+            "geometry" to base.copy(
+                geometry = GeometryNode.Rect.of(RectF32(1f, 1f, 3f, 3f)),
+                origin = DrawOrigin.RECT,
+            ),
+        )
+
+        unsupportedDraws.forEach { (family, node) ->
+            val scene = sceneOf(List(512) { SceneCommand.Draw(base) } + SceneCommand.Draw(node))
+            assertIs<GpuPlanSelection.NotCandidate>(compiler.select(scene, target(scene)), family)
+        }
+
+        val unsupportedCommandScene = SceneSnapshot.of(
+            SceneExtent(16, 16),
+            ColorSpace.SRGB,
+            List<SceneCommand>(513) { pathDraw(PaintStyleNode.STROKE) } +
+                SceneCommand.State.of("unsupported", emptyMap()),
+        )
+        assertIs<GpuPlanSelection.NotCandidate>(
+            compiler.select(unsupportedCommandScene, target(unsupportedCommandScene)),
+            "command",
+        )
     }
 
     @Test
