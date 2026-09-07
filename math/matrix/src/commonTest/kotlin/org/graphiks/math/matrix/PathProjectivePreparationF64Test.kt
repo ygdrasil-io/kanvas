@@ -648,6 +648,39 @@ class PathProjectivePreparationF64Test {
     }
 
     @Test
+    fun `cubic discriminant distinguishes a nonunit tangent from its exact false positive neighbor`() {
+        fun classify(
+            firstControlF32: Float,
+            secondControlF32: Float,
+            thirdControlF32: Float,
+            lastControlF32: Float,
+            policyF64: PathFillFlatteningPolicyF64 = PathFillFlatteningPolicyF64(),
+        ): PathProjectivePreparationResult =
+            Matrix3x3F64(persp0F64 = 1.0, persp2F64 = 0.0).prepareProjectedPathFillInputF64(
+                PathBuilder().moveTo(firstControlF32, 0f)
+                    .cubicTo(secondControlF32, 0f, thirdControlF32, 0f, lastControlF32, 0f)
+                    .lineTo(firstControlF32, 1f).close().build(),
+                policyF64 = policyF64,
+            )
+
+        val depthZeroF64 = PathFillFlatteningPolicyF64(limitsI32 = PathFillLimitsI32(maxSubdivisionDepthI32 = 0))
+        listOf(PathFillFlatteningPolicyF64(), depthZeroF64).forEach { policyF64 ->
+            assertEquals(
+                PathProjectiveInvalidSceneReason.PerspectiveHorizonCrossing,
+                assertIs<PathProjectivePreparationResult.InvalidScene>(classify(2f, -0.5f, -6f, 26f, policyF64)).reason,
+            )
+        }
+
+        assertIs<PathProjectivePreparationResult.Ready>(classify(12f, -6f, -6f, 57f))
+        assertEquals(
+            PathProjectiveResourceLimitReason.FlatteningDidNotConverge,
+            assertIs<PathProjectivePreparationResult.ResourceLimitExceeded>(
+                classify(12f, -6f, -6f, 57f, depthZeroF64),
+            ).reason,
+        )
+    }
+
+    @Test
     fun `long arc horizon is classified before a zero subdivision budget is exhausted`() {
         val result = Matrix3x3F64(persp0F64 = 1.0, persp2F64 = 0.0).prepareProjectedPathFillInputF64(
             path = PathBuilder().moveTo(1f, 0f).arcTo(1f, 1f, 0f, false, true, -1f, 0f)

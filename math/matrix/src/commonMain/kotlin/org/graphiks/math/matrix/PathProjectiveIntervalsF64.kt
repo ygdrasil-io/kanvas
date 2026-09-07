@@ -512,7 +512,10 @@ private fun projectiveCubicDiscriminantF64(
 
     val eighteenAbcdF64 = scale(multiply(multiply(aF64, bF64) ?: return null, multiply(cF64, dF64) ?: return null)
         ?: return null, 18.0) ?: return null
-    val fourBCubedF64 = scale(multiply(bF64, multiply(bF64, bF64) ?: return null) ?: return null, -4.0) ?: return null
+    val fourBCubedF64 = scale(
+        multiply(multiply(bF64, multiply(bF64, bF64) ?: return null) ?: return null, dF64) ?: return null,
+        -4.0,
+    ) ?: return null
     val bSquaredCSquaredF64 = multiply(multiply(bF64, bF64) ?: return null, multiply(cF64, cF64) ?: return null) ?: return null
     val fourACubedF64 = scale(multiply(aF64, multiply(cF64, multiply(cF64, cF64) ?: return null) ?: return null)
         ?: return null, -4.0) ?: return null
