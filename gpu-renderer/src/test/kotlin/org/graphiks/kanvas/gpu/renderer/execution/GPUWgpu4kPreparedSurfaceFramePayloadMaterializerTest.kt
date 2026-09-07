@@ -573,10 +573,20 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
             assertTrue(ownership.releaseAfterCompletion())
             assertTrue(frameHandles.all { fixture.native.closeCounts[it] == 1 })
             assertTrue(ownership.claimOutputMapping())
-            assertTrue(ownership.releaseOutputAfterReadback())
+            assertTrue(ownership.closeOutputAfterReadback())
+            assertTrue(
+                ownership.finalizeOutputAfterReadback(
+                    GPUPreparedNativeFrameOutputLeaseFinalization.ReleaseAfterReadback,
+                ),
+            )
             val closed = fixture.native.closeCounts.toMap()
             assertFalse(ownership.releaseAfterCompletion())
-            assertFalse(ownership.releaseOutputAfterReadback())
+            assertFalse(ownership.closeOutputAfterReadback())
+            assertFalse(
+                ownership.finalizeOutputAfterReadback(
+                    GPUPreparedNativeFrameOutputLeaseFinalization.ReleaseAfterReadback,
+                ),
+            )
             assertEquals(closed, fixture.native.closeCounts)
         } finally {
             ownership?.rollback()
@@ -1102,7 +1112,12 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
             assertTrue(ownership.markSubmitted())
             assertTrue(ownership.releaseAfterCompletion())
             assertTrue(ownership.claimOutputMapping())
-            assertTrue(ownership.releaseOutputAfterReadback())
+            assertTrue(ownership.closeOutputAfterReadback())
+            assertTrue(
+                ownership.finalizeOutputAfterReadback(
+                    GPUPreparedNativeFrameOutputLeaseFinalization.ReleaseAfterReadback,
+                ),
+            )
         } finally {
             ownership?.rollback()
             if (witness.claimForRollback()) witness.rollback.execute()
@@ -1209,7 +1224,7 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
             assertTrue(ownership.claimOutputMapping())
             fixture.native.failCloseOnce("Kanvas.frame.preparedSurface.readback")
 
-            assertFalse(ownership.releaseOutputAfterReadback())
+            assertFalse(ownership.closeOutputAfterReadback())
             assertEquals(1, fixture.native.closeCounts[atlas])
             assertEquals(
                 1,
@@ -1591,10 +1606,20 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
             assertTrue(registeredOwnership.markSubmitted())
             assertTrue(registeredOwnership.releaseAfterCompletion())
             assertTrue(registeredOwnership.claimOutputMapping())
-            assertTrue(registeredOwnership.releaseOutputAfterReadback())
+            assertTrue(registeredOwnership.closeOutputAfterReadback())
+            assertTrue(
+                registeredOwnership.finalizeOutputAfterReadback(
+                    GPUPreparedNativeFrameOutputLeaseFinalization.ReleaseAfterReadback,
+                ),
+            )
             val closeCountsAfterCompletion = native.closeCounts.toMap()
             assertFalse(registeredOwnership.releaseAfterCompletion())
-            assertFalse(registeredOwnership.releaseOutputAfterReadback())
+            assertFalse(registeredOwnership.closeOutputAfterReadback())
+            assertFalse(
+                registeredOwnership.finalizeOutputAfterReadback(
+                    GPUPreparedNativeFrameOutputLeaseFinalization.ReleaseAfterReadback,
+                ),
+            )
             assertEquals(closeCountsAfterCompletion, native.closeCounts)
             assertTrue(native.closeCounts.values.all { it == 1 })
         } finally {

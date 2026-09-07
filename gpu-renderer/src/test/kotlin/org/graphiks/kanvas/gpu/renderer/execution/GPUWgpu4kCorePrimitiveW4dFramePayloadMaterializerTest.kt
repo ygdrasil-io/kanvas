@@ -98,6 +98,19 @@ import org.graphiks.math.geometry.PathStrokeDrawMode
 import org.graphiks.math.geometry.PathStrokeWidthF64
 import org.graphiks.math.matrix.Matrix3x3F32
 
+private typealias W4dNativeFailureTarget =
+    GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest.NativeProxy.SemanticFailureTarget
+private typealias W4dBufferCreationFailure =
+    GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest.NativeProxy.SemanticFailureTarget.BufferCreation
+private typealias W4dTextureCreationFailure =
+    GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest.NativeProxy.SemanticFailureTarget.TextureCreation
+private typealias W4dTextureViewCreationFailure =
+    GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest.NativeProxy.SemanticFailureTarget.TextureViewCreation
+private typealias W4dBindGroupCreationFailure =
+    GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest.NativeProxy.SemanticFailureTarget.BindGroupCreation
+private typealias W4dBufferUploadFailure =
+    GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest.NativeProxy.SemanticFailureTarget.BufferUpload
+
 class GPUWgpu4kCorePrimitiveW4dFramePayloadMaterializerTest {
     @Test
     fun `W4d marker reaches preflight with one authenticated shared scratch`() {
@@ -678,7 +691,11 @@ class GPUWgpu4kCorePrimitiveW4dFramePayloadMaterializerTest {
     @Test
     fun `W4d upload failure rolls the pool lease back before any native frame escapes`() {
         val fixture = W4dExecutionFixture.nativeMaterializationFixture()
-        fixture.native.fail("writeBuffer", 2)
+        fixture.native.refuse(
+            W4dBufferUploadFailure(
+                "Kanvas.session.corePrimitive.framePool.indices",
+            ),
+        )
         val first = GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             fixture.native.device,
             fixture.native.queue,
@@ -733,8 +750,7 @@ class GPUWgpu4kCorePrimitiveW4dFramePayloadMaterializerTest {
     @Test
     fun `W4d acquisition upload and staging failures are transactional at every boundary`() {
         data class FailureScenario(
-            val operation: String,
-            val ordinal: Int,
+            val target: W4dNativeFailureTarget,
             val publishedPoolSlot: Boolean,
             val refusalCode: String = if (publishedPoolSlot) {
                 "failed.native-core-primitive.w4d-materialization"
@@ -743,33 +759,86 @@ class GPUWgpu4kCorePrimitiveW4dFramePayloadMaterializerTest {
             },
         )
         val scenarios = listOf(
-            FailureScenario("createBuffer", 1, false),
-            FailureScenario("createBuffer", 2, false),
-            FailureScenario("createBuffer", 3, false),
-            FailureScenario("createTexture", 1, false),
-            FailureScenario("createView", 1, false),
-            FailureScenario("createBindGroup", 1, false),
-            FailureScenario("writeBuffer", 1, true),
-            FailureScenario("writeBuffer", 2, true),
-            FailureScenario("writeBuffer", 3, true),
-            FailureScenario("createBuffer", 4, true),
+            FailureScenario(
+                W4dBufferCreationFailure(
+                    "Kanvas.session.corePrimitive.framePool.vertices",
+                ),
+                false,
+            ),
+            FailureScenario(
+                W4dBufferCreationFailure(
+                    "Kanvas.session.corePrimitive.framePool.indices",
+                ),
+                false,
+            ),
+            FailureScenario(
+                W4dBufferCreationFailure(
+                    "Kanvas.session.corePrimitive.framePool.uniforms",
+                ),
+                false,
+            ),
+            FailureScenario(
+                W4dTextureCreationFailure(
+                    "Kanvas.session.corePrimitive.framePool.pathDepthStencil",
+                ),
+                false,
+            ),
+            FailureScenario(
+                W4dTextureViewCreationFailure(
+                    "Kanvas.session.corePrimitive.framePool.pathDepthStencil.view",
+                ),
+                false,
+            ),
+            FailureScenario(
+                W4dBindGroupCreationFailure(
+                    "Kanvas.session.corePrimitive.framePool.bindGroup0",
+                ),
+                false,
+            ),
+            FailureScenario(
+                W4dBufferUploadFailure(
+                    "Kanvas.session.corePrimitive.framePool.vertices",
+                ),
+                true,
+            ),
+            FailureScenario(
+                W4dBufferUploadFailure(
+                    "Kanvas.session.corePrimitive.framePool.indices",
+                ),
+                true,
+            ),
+            FailureScenario(
+                W4dBufferUploadFailure(
+                    "Kanvas.session.corePrimitive.framePool.uniforms",
+                ),
+                true,
+            ),
+            FailureScenario(
+                W4dBufferCreationFailure(
+                    "Kanvas.frame.w4d.readback",
+                ),
+                true,
+            ),
         )
 
         scenarios.forEach { scenario ->
             val fixture = W4dExecutionFixture.nativeMaterializationFixture()
-            fixture.native.fail(scenario.operation, scenario.ordinal)
+            fixture.native.refuse(scenario.target)
             val first = fixture.materializer()
             var retryDraft: GPUPreparedNativeFrameDraft? = null
-            val label = "${scenario.operation}#${scenario.ordinal}"
+            val label = scenario.target.toString()
             try {
+                val firstResult = first.materializeReusable(
+                    fixture.frame,
+                    fixture.prepared.encoderPlan,
+                    fixture.prepared.resources,
+                    fixture.prepared.generationSeal,
+                )
+                (firstResult as? GPUPreparedNativeFramePayloadMaterialization.Materialized)
+                    ?.draft?.disposeBeforeRegistration()
                 val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
-                    first.materializeReusable(
-                        fixture.frame,
-                        fixture.prepared.encoderPlan,
-                        fixture.prepared.resources,
-                        fixture.prepared.generationSeal,
-                    ),
-                    label,
+                    firstResult,
+                    "$label; observed=${fixture.native.bufferDescriptors.map { it.label }}",
                 )
                 assertEquals(scenario.refusalCode, refused.code, label)
                 first.close()
@@ -869,64 +938,71 @@ class GPUWgpu4kCorePrimitiveW4dFramePayloadMaterializerTest {
     }
 
     @Test
-    fun `W4d native registration faults return or terminalize the exact pool lease`() {
-        GPUPreparedNativeFrameRegistrationFaultPoint.entries.forEach { faultPoint ->
-            val fixture = W4dExecutionFixture.nativeMaterializationFixture()
-            val materializer = fixture.materializer()
-            val adapter = GPURuntimeResourceAdapter { point ->
-                if (point == faultPoint) error("injected W4d registration failure")
-            }
-            var checkout: GPUWgpu4kCorePrimitiveFramePoolLease? = null
-            try {
-                val draft = assertIs<GPUPreparedNativeFramePayloadMaterialization.Materialized>(
-                    materializer.materializeReusable(
-                        fixture.frame,
-                        fixture.prepared.encoderPlan,
-                        fixture.prepared.resources,
-                        fixture.prepared.generationSeal,
-                    ),
-                ).draft
-                val originalVertex = fixture.native.writeBufferCalls.single { call ->
-                    call.bufferLabel == "Kanvas.session.corePrimitive.framePool.vertices"
-                }.buffer
-                val originalDepthStencil = requireNotNull(
-                    draft.payload.scopeOperands.filterIsInstance<GPUPreparedNativeScopeOperand.Render>()[1]
-                        .pass.depthStencilTarget,
-                ).view
-                val refused = assertIs<GPUPreparedNativeFrameRegistration.Refused>(
-                    adapter.registerPreparedNativeFrameDraft(draft),
-                    faultPoint.name,
-                )
-                if (faultPoint == GPUPreparedNativeFrameRegistrationFaultPoint.BeforeOwnershipTransfer) {
-                    assertEquals(
-                        GPUPreparedNativeFrameRegistration.RefusalOwnership.CallerRetained,
-                        refused.ownership,
-                    )
-                    assertTrue(draft.disposeBeforeRegistration())
-                } else {
-                    assertEquals(
-                        GPUPreparedNativeFrameRegistration.RefusalOwnership.ReleasedOrAdapterQuarantined,
-                        refused.ownership,
-                    )
-                }
-                assertEquals(0, adapter.activePreparedNativeFramePayloadCount)
-                assertEquals(0, adapter.quarantinedPreparedNativeFramePayloadCount)
-                checkout = assertIs<GPUWgpu4kCorePrimitiveFramePoolCheckout.Acquired>(
-                    fixture.cache.acquireFrame(fixture.exactPoolRequirements()),
-                    faultPoint.name,
-                ).lease
-                assertSame(originalVertex, checkout.handles.vertexBuffer, faultPoint.name)
-                assertSame(
-                    originalDepthStencil,
-                    requireNotNull(checkout.handles.pathDepthStencil).view,
-                    faultPoint.name,
-                )
-            } finally {
-                checkout?.rollbackBeforeSubmit()
-                adapter.close()
-                materializer.close()
-                fixture.close()
-            }
+    fun `W4d duplicate registration preserves the first owner until its explicit rollback`() {
+        val fixture = W4dExecutionFixture.nativeMaterializationFixture()
+        val materializer = fixture.materializer()
+        val adapter = GPURuntimeResourceAdapter()
+        var competing: GPUWgpu4kCorePrimitiveFramePoolLease? = null
+        var recovered: GPUWgpu4kCorePrimitiveFramePoolLease? = null
+        try {
+            val draft = assertIs<GPUPreparedNativeFramePayloadMaterialization.Materialized>(
+                materializer.materializeReusable(
+                    fixture.frame,
+                    fixture.prepared.encoderPlan,
+                    fixture.prepared.resources,
+                    fixture.prepared.generationSeal,
+                ),
+            ).draft
+            val originalVertex = fixture.native.writeBufferCalls.single { call ->
+                call.bufferLabel == "Kanvas.session.corePrimitive.framePool.vertices"
+            }.buffer
+            val originalDepthStencil = requireNotNull(
+                draft.payload.scopeOperands.filterIsInstance<GPUPreparedNativeScopeOperand.Render>()[1]
+                    .pass.depthStencilTarget,
+            ).view
+            val first = assertIs<GPUPreparedNativeFrameRegistration.Registered>(
+                adapter.registerPreparedNativeFrameDraft(draft),
+            )
+
+            val duplicate = assertIs<GPUPreparedNativeFrameRegistration.Refused>(
+                adapter.registerPreparedNativeFrameDraft(draft),
+            )
+
+            assertEquals("invalid.native-frame-payload.draft-ownership", duplicate.code)
+            assertEquals(
+                GPUPreparedNativeFrameRegistration.RefusalOwnership.ReleasedOrAdapterQuarantined,
+                duplicate.ownership,
+            )
+            assertEquals(1, adapter.activePreparedNativeFramePayloadCount)
+            competing = assertIs<GPUWgpu4kCorePrimitiveFramePoolCheckout.Acquired>(
+                fixture.cache.acquireFrame(fixture.exactPoolRequirements()),
+            ).lease
+            assertNotSame(originalVertex, competing.handles.vertexBuffer)
+            assertNotSame(
+                originalDepthStencil,
+                requireNotNull(competing.handles.pathDepthStencil).view,
+            )
+            assertIs<GPUWgpu4kCorePrimitiveFramePoolLeaseTransition.Applied>(
+                competing.rollbackBeforeSubmit(),
+            )
+            competing = null
+
+            assertTrue(first.ownership.rollback())
+            assertEquals(0, adapter.activePreparedNativeFramePayloadCount)
+            recovered = assertIs<GPUWgpu4kCorePrimitiveFramePoolCheckout.Acquired>(
+                fixture.cache.acquireFrame(fixture.exactPoolRequirements()),
+            ).lease
+            assertSame(originalVertex, recovered.handles.vertexBuffer)
+            assertSame(
+                originalDepthStencil,
+                requireNotNull(recovered.handles.pathDepthStencil).view,
+            )
+        } finally {
+            recovered?.rollbackBeforeSubmit()
+            competing?.rollbackBeforeSubmit()
+            adapter.close()
+            materializer.close()
+            fixture.close()
         }
     }
 
@@ -968,6 +1044,229 @@ class GPUWgpu4kCorePrimitiveW4dFramePayloadMaterializerTest {
                 )
             } finally {
                 checkout?.rollbackBeforeSubmit()
+                adapter.close()
+                registered.materializer.close()
+                fixture.close()
+            }
+        }
+    }
+
+    @Test
+    fun `W4d synchronous submit failure quarantines the exact native pool slot`() {
+        val fixture = W4dExecutionFixture.nativeMaterializationFixture()
+        val adapter = GPURuntimeResourceAdapter()
+        val registered = fixture.registerNativeFrame(adapter)
+        var firstCheckout: GPUWgpu4kCorePrimitiveFramePoolLease? = null
+        var secondCheckout: GPUWgpu4kCorePrimitiveFramePoolLease? = null
+        try {
+            val handle = GPUFrameExecutor(
+                fixture.sceneTarget(),
+                fixture.backend(W4dBackendFailureStage.Submit),
+                HeldCompletionAccess(),
+                noOpRetention(),
+                HeldReadbackAccess(),
+            ).execute(fixture.prepared)
+
+            assertIs<GPUFrameImmediateState.FailedAfterSubmit>(handle.immediateState)
+            assertEquals(
+                GPUFrameStructuralOutcome.Failed,
+                handle.completion.toCompletableFuture().join().outcome,
+            )
+            assertEquals(0, adapter.activePreparedNativeFramePayloadCount)
+            assertEquals(1, adapter.quarantinedPreparedNativeFramePayloadCount)
+            firstCheckout = assertIs<GPUWgpu4kCorePrimitiveFramePoolCheckout.Acquired>(
+                fixture.cache.acquireFrame(fixture.exactPoolRequirements()),
+            ).lease
+            assertNotSame(registered.originalVertex, firstCheckout.handles.vertexBuffer)
+            assertNotSame(
+                registered.originalDepthStencil,
+                requireNotNull(firstCheckout.handles.pathDepthStencil).view,
+            )
+            secondCheckout = assertIs<GPUWgpu4kCorePrimitiveFramePoolCheckout.Acquired>(
+                fixture.cache.acquireFrame(fixture.exactPoolRequirements()),
+            ).lease
+            assertNotSame(registered.originalVertex, secondCheckout.handles.vertexBuffer)
+            assertNotSame(
+                registered.originalDepthStencil,
+                requireNotNull(secondCheckout.handles.pathDepthStencil).view,
+            )
+        } finally {
+            secondCheckout?.rollbackBeforeSubmit()
+            firstCheckout?.rollbackBeforeSubmit()
+            adapter.close()
+            registered.materializer.close()
+            fixture.close()
+        }
+    }
+
+    @Test
+    fun `W4d mark submitted refusal and throw quarantine the exact slot`() {
+        W4dReadbackFailureMode.entries.forEach { failureMode ->
+            val fixture = W4dExecutionFixture.nativeMaterializationFixture()
+            val adapter = GPURuntimeResourceAdapter()
+            val registered = fixture.registerNativeFrame(adapter)
+            var checkout: GPUWgpu4kCorePrimitiveFramePoolLease? = null
+            try {
+                val handle = GPUFrameExecutor(
+                    fixture.sceneTarget(),
+                    fixture.backend(),
+                    HeldCompletionAccess(),
+                    noOpRetention(),
+                    HeldReadbackAccess(W4dReadbackFailureStage.MarkSubmitted, failureMode),
+                ).execute(fixture.prepared)
+
+                assertIs<GPUFrameImmediateState.FailedAfterSubmit>(handle.immediateState, failureMode.name)
+                assertEquals(
+                    GPUFrameStructuralOutcome.Failed,
+                    handle.completion.toCompletableFuture().join().outcome,
+                    failureMode.name,
+                )
+                assertEquals(0, adapter.activePreparedNativeFramePayloadCount, failureMode.name)
+                assertEquals(1, adapter.quarantinedPreparedNativeFramePayloadCount, failureMode.name)
+                checkout = assertIs<GPUWgpu4kCorePrimitiveFramePoolCheckout.Acquired>(
+                    fixture.cache.acquireFrame(fixture.exactPoolRequirements()),
+                    failureMode.name,
+                ).lease
+                assertNotSame(registered.originalVertex, checkout.handles.vertexBuffer, failureMode.name)
+                assertNotSame(
+                    registered.originalDepthStencil,
+                    requireNotNull(checkout.handles.pathDepthStencil).view,
+                    failureMode.name,
+                )
+            } finally {
+                checkout?.rollbackBeforeSubmit()
+                adapter.close()
+                registered.materializer.close()
+                fixture.close()
+            }
+        }
+    }
+
+    @Test
+    fun `W4d completion acceptance and map arm failures quarantine one exact slot`() {
+        listOf(
+            W4dReadbackFailureStage.AcceptGPUCompletion,
+            W4dReadbackFailureStage.MapArm,
+        ).forEach { failureStage ->
+            W4dReadbackFailureMode.entries.forEach { failureMode ->
+                val label = "${failureStage.name}.${failureMode.name}"
+                val fixture = W4dExecutionFixture.nativeMaterializationFixture()
+                val adapter = GPURuntimeResourceAdapter()
+                val registered = fixture.registerNativeFrame(adapter)
+                val completion = HeldCompletionAccess()
+                var firstCheckout: GPUWgpu4kCorePrimitiveFramePoolLease? = null
+                var secondCheckout: GPUWgpu4kCorePrimitiveFramePoolLease? = null
+                try {
+                    val handle = GPUFrameExecutor(
+                        fixture.sceneTarget(),
+                        fixture.backend(),
+                        completion,
+                        noOpRetention(),
+                        HeldReadbackAccess(failureStage, failureMode),
+                    ).execute(fixture.prepared)
+                    assertIs<GPUFrameImmediateState.Submitted>(handle.immediateState, label)
+                    val delivery = GPUQueueCompletionOutcome.Success
+                    completion.deliver(fixture.prepared.completionTicket, delivery)
+
+                    assertEquals(
+                        GPUFrameStructuralOutcome.Failed,
+                        handle.completion.toCompletableFuture().join().outcome,
+                        label,
+                    )
+                    assertEquals(0, adapter.activePreparedNativeFramePayloadCount, label)
+                    assertEquals(1, adapter.quarantinedPreparedNativeFramePayloadCount, label)
+                    firstCheckout = assertIs<GPUWgpu4kCorePrimitiveFramePoolCheckout.Acquired>(
+                        fixture.cache.acquireFrame(fixture.exactPoolRequirements()),
+                        label,
+                    ).lease
+                    assertNotSame(registered.originalVertex, firstCheckout.handles.vertexBuffer, label)
+                    assertNotSame(
+                        registered.originalDepthStencil,
+                        requireNotNull(firstCheckout.handles.pathDepthStencil).view,
+                        label,
+                    )
+
+                    completion.deliver(fixture.prepared.completionTicket, delivery)
+                    assertEquals(1, adapter.quarantinedPreparedNativeFramePayloadCount, label)
+                    secondCheckout = assertIs<GPUWgpu4kCorePrimitiveFramePoolCheckout.Acquired>(
+                        fixture.cache.acquireFrame(fixture.exactPoolRequirements()),
+                        label,
+                    ).lease
+                    assertNotSame(registered.originalVertex, secondCheckout.handles.vertexBuffer, label)
+                    assertNotSame(firstCheckout.handles.vertexBuffer, secondCheckout.handles.vertexBuffer, label)
+                } finally {
+                    secondCheckout?.rollbackBeforeSubmit()
+                    firstCheckout?.rollbackBeforeSubmit()
+                    adapter.close()
+                    registered.materializer.close()
+                    fixture.close()
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `W4d finalize refusal and throw retain the exact slot during callback then quarantine it`() {
+        W4dReadbackFailureMode.entries.forEach { failureMode ->
+            val fixture = W4dExecutionFixture.nativeMaterializationFixture()
+            val adapter = GPURuntimeResourceAdapter()
+            val registered = fixture.registerNativeFrame(adapter)
+            val completion = HeldCompletionAccess()
+            var duringFinalize: GPUWgpu4kCorePrimitiveFramePoolLease? = null
+            var afterFinalize: GPUWgpu4kCorePrimitiveFramePoolLease? = null
+            val readback = HeldReadbackAccess(
+                failureStage = W4dReadbackFailureStage.Finalize,
+                failureMode = failureMode,
+                duringFinalize = {
+                    duringFinalize = assertIs<GPUWgpu4kCorePrimitiveFramePoolCheckout.Acquired>(
+                        fixture.cache.acquireFrame(fixture.exactPoolRequirements()),
+                    ).lease
+                },
+            )
+            try {
+                val handle = GPUFrameExecutor(
+                    fixture.sceneTarget(),
+                    fixture.backend(),
+                    completion,
+                    noOpRetention(),
+                    readback,
+                ).execute(fixture.prepared)
+                val completionDelivery = GPUQueueCompletionOutcome.Success
+                completion.deliver(fixture.prepared.completionTicket, completionDelivery)
+                val pixels = GPUFrameReadbackMapDelivery.Pixels(
+                    fixture.prepared.resources.outputOwnedReadbacks.single().request.requestId,
+                    ByteArray(
+                        fixture.scratch.targetBounds.width * fixture.scratch.targetBounds.height * 4,
+                    ),
+                )
+                readback.deliver(pixels)
+
+                assertEquals(
+                    GPUFrameStructuralOutcome.Failed,
+                    handle.completion.toCompletableFuture().join().outcome,
+                    failureMode.name,
+                )
+                val competing = requireNotNull(duringFinalize)
+                assertNotSame(registered.originalVertex, competing.handles.vertexBuffer, failureMode.name)
+                assertNotSame(
+                    registered.originalDepthStencil,
+                    requireNotNull(competing.handles.pathDepthStencil).view,
+                    failureMode.name,
+                )
+                assertEquals(1, adapter.quarantinedPreparedNativeFramePayloadCount, failureMode.name)
+
+                readback.deliver(pixels)
+                completion.deliver(fixture.prepared.completionTicket, completionDelivery)
+                assertEquals(1, adapter.quarantinedPreparedNativeFramePayloadCount, failureMode.name)
+                afterFinalize = assertIs<GPUWgpu4kCorePrimitiveFramePoolCheckout.Acquired>(
+                    fixture.cache.acquireFrame(fixture.exactPoolRequirements()),
+                    failureMode.name,
+                ).lease
+                assertNotSame(registered.originalVertex, afterFinalize.handles.vertexBuffer, failureMode.name)
+                assertNotSame(competing.handles.vertexBuffer, afterFinalize.handles.vertexBuffer, failureMode.name)
+            } finally {
+                afterFinalize?.rollbackBeforeSubmit()
+                duringFinalize?.rollbackBeforeSubmit()
                 adapter.close()
                 registered.materializer.close()
                 fixture.close()
@@ -1101,6 +1400,7 @@ class GPUWgpu4kCorePrimitiveW4dFramePayloadMaterializerTest {
             requireNotNull(W4dExecutionFixture.capabilities().limits),
         )
         val adapter = GPURuntimeResourceAdapter()
+        var duringFinalize: GPUWgpu4kCorePrimitiveFramePoolLease? = null
         try {
             val materialized = assertIs<GPUPreparedNativeFramePayloadMaterialization.Materialized>(
                 materializer.materializeReusable(
@@ -1193,7 +1493,12 @@ class GPUWgpu4kCorePrimitiveW4dFramePayloadMaterializerTest {
                     output: GPUPreparedReadbackOutput,
                     operand: GPUPreparedNativeScopeOperand.Readback,
                     safety: GPUFrameReadbackNativeOutputSafety,
-                ) = GPUFrameReadbackLifecycleResult.Applied
+                ): GPUFrameReadbackLifecycleResult {
+                    duringFinalize = assertIs<GPUWgpu4kCorePrimitiveFramePoolCheckout.Acquired>(
+                        fixture.cache.acquireFrame(fixture.exactPoolRequirements()),
+                    ).lease
+                    return GPUFrameReadbackLifecycleResult.Applied
+                }
             }
             val handle = GPUFrameExecutor(
                 sceneTarget = sceneTarget,
@@ -1281,6 +1586,12 @@ class GPUWgpu4kCorePrimitiveW4dFramePayloadMaterializerTest {
                 GPUFrameStructuralOutcome.Succeeded,
                 handle.completion.toCompletableFuture().join().outcome,
             )
+            val competingDuringFinalize = requireNotNull(duringFinalize)
+            assertNotSame(originalVertex, competingDuringFinalize.handles.vertexBuffer)
+            assertNotSame(
+                originalDepthStencil,
+                requireNotNull(competingDuringFinalize.handles.pathDepthStencil).view,
+            )
             assertEquals(0, adapter.activePreparedNativeFramePayloadCount)
             val afterFinalize = assertIs<GPUWgpu4kCorePrimitiveFramePoolCheckout.Acquired>(
                 fixture.cache.acquireFrame(fixture.exactPoolRequirements()),
@@ -1304,6 +1615,7 @@ class GPUWgpu4kCorePrimitiveW4dFramePayloadMaterializerTest {
                 afterFinalize.rollbackBeforeSubmit(),
             )
         } finally {
+            duringFinalize?.rollbackBeforeSubmit()
             materializer.close()
             adapter.close()
             fixture.close()
@@ -1355,6 +1667,18 @@ class GPUWgpu4kCorePrimitiveW4dFramePayloadMaterializerTest {
         Submit,
     }
 
+    private enum class W4dReadbackFailureStage {
+        MarkSubmitted,
+        AcceptGPUCompletion,
+        MapArm,
+        Finalize,
+    }
+
+    private enum class W4dReadbackFailureMode {
+        Refused,
+        Throw,
+    }
+
     private class HeldCompletionAccess(
         private val armResult: ((GPUQueueCompletionTicket) -> GPUQueueCompletionArmResult)? = null,
     ) : GPUQueueCompletionAccess {
@@ -1388,7 +1712,11 @@ class GPUWgpu4kCorePrimitiveW4dFramePayloadMaterializerTest {
         }
     }
 
-    private class HeldReadbackAccess : GPUFrameReadbackAccess {
+    private class HeldReadbackAccess(
+        private val failureStage: W4dReadbackFailureStage? = null,
+        private val failureMode: W4dReadbackFailureMode = W4dReadbackFailureMode.Refused,
+        private val duringFinalize: (() -> Unit)? = null,
+    ) : GPUFrameReadbackAccess {
         private var sink: GPUFrameReadbackMapSink? = null
         var finalizedSafety: GPUFrameReadbackNativeOutputSafety? = null
             private set
@@ -1397,13 +1725,13 @@ class GPUWgpu4kCorePrimitiveW4dFramePayloadMaterializerTest {
             ticket: GPUQueueCompletionTicket,
             output: GPUPreparedReadbackOutput,
             operand: GPUPreparedNativeScopeOperand.Readback,
-        ) = GPUFrameReadbackLifecycleResult.Applied
+        ) = lifecycle(W4dReadbackFailureStage.MarkSubmitted)
 
         override fun acceptGPUCompletion(
             ticket: GPUQueueCompletionTicket,
             output: GPUPreparedReadbackOutput,
             operand: GPUPreparedNativeScopeOperand.Readback,
-        ) = GPUFrameReadbackLifecycleResult.Applied
+        ) = lifecycle(W4dReadbackFailureStage.AcceptGPUCompletion)
 
         override fun rejectGPUCompletion(
             ticket: GPUQueueCompletionTicket,
@@ -1417,6 +1745,14 @@ class GPUWgpu4kCorePrimitiveW4dFramePayloadMaterializerTest {
             operand: GPUPreparedNativeScopeOperand.Readback,
             sink: GPUFrameReadbackMapSink,
         ): GPUFrameReadbackMapArmResult {
+            if (failureStage == W4dReadbackFailureStage.MapArm) {
+                return when (failureMode) {
+                    W4dReadbackFailureMode.Refused -> GPUFrameReadbackMapArmResult.Refused(
+                        failureDiagnostic("failed.w4d.readback.MapArm.Refused"),
+                    )
+                    W4dReadbackFailureMode.Throw -> error("failed.w4d.readback.MapArm.Throw")
+                }
+            }
             this.sink = sink
             return GPUFrameReadbackMapArmResult.Armed
         }
@@ -1427,10 +1763,28 @@ class GPUWgpu4kCorePrimitiveW4dFramePayloadMaterializerTest {
             safety: GPUFrameReadbackNativeOutputSafety,
         ): GPUFrameReadbackLifecycleResult {
             finalizedSafety = safety
-            return GPUFrameReadbackLifecycleResult.Applied
+            duringFinalize?.invoke()
+            return lifecycle(W4dReadbackFailureStage.Finalize)
         }
 
         fun deliver(delivery: GPUFrameReadbackMapDelivery) = requireNotNull(sink).accept(delivery)
+
+        private fun lifecycle(stage: W4dReadbackFailureStage): GPUFrameReadbackLifecycleResult {
+            if (failureStage != stage) return GPUFrameReadbackLifecycleResult.Applied
+            return when (failureMode) {
+                W4dReadbackFailureMode.Refused -> GPUFrameReadbackLifecycleResult.Refused(
+                    failureDiagnostic("failed.w4d.readback.${stage.name}.Refused"),
+                )
+                W4dReadbackFailureMode.Throw -> error("failed.w4d.readback.${stage.name}.Throw")
+            }
+        }
+
+        private fun failureDiagnostic(code: String) = GPUDiagnostic(
+            GPUDiagnosticCode(code),
+            GPUDiagnosticDomain.Execution,
+            GPUDiagnosticSeverity.Error,
+            code,
+        )
     }
 
     private fun W4dExecutionFixture.NativeMaterializationFixture.sceneTarget(): GPUSceneTarget =

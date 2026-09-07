@@ -8083,6 +8083,14 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
     }
 
     internal class NativeProxy {
+        internal sealed interface SemanticFailureTarget {
+            data class BufferCreation(val descriptorLabel: String) : SemanticFailureTarget
+            data class TextureCreation(val descriptorLabel: String) : SemanticFailureTarget
+            data class TextureViewCreation(val textureViewLabel: String) : SemanticFailureTarget
+            data class BindGroupCreation(val descriptorLabel: String) : SemanticFailureTarget
+            data class BufferUpload(val destinationBufferLabel: String) : SemanticFailureTarget
+        }
+
         val events = mutableListOf<String>()
         val writeBufferCalls = mutableListOf<WriteBufferCall>()
         var writeTextureCalls = 0
@@ -8101,6 +8109,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         private var failingOperation: String? = null
         private var failingOperationOrdinal = 0
         private var operationInvocationCount = 0
+        private var semanticFailureTarget: SemanticFailureTarget? = null
         private var failingCloseLabel: String? = null
         private var closeFailureConsumed = false
         private val view = handle(GPUTextureView::class.java, "target.view")
@@ -8114,6 +8123,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                     textureDescriptors += descriptor
                     val label = descriptor.label.orEmpty()
                     events += "createTexture:$label"
+                    refuseIfRequested(SemanticFailureTarget.TextureCreation(label))
                     failIfRequested("createTexture")
                     if (label == "Kanvas.session.corePrimitive.framePool.pathDepthStencil" ||
                         label == "Kanvas.session.corePrimitive.framePool.clipDepthStencil" ||
@@ -8124,6 +8134,9 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                         handle(GPUTexture::class.java, label) { textureMethod ->
                             if (textureMethod.name == "createView") {
                                 events += "createView:$attachmentViewLabel"
+                                refuseIfRequested(
+                                    SemanticFailureTarget.TextureViewCreation(attachmentViewLabel),
+                                )
                                 failIfRequested("createView")
                                 recordedHandle(
                                     GPUTextureView::class.java,
@@ -8210,6 +8223,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                     bufferDescriptors += descriptor
                     val label = descriptor.label.orEmpty()
                     events += "createBuffer:$label"
+                    refuseIfRequested(SemanticFailureTarget.BufferCreation(label))
                     failIfRequested("createBuffer")
                     recordedHandle(GPUBuffer::class.java, label)
                 }
@@ -8218,6 +8232,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                     bindGroupDescriptors += descriptor
                     val label = descriptor.label.orEmpty()
                     events += "createBindGroup:$label"
+                    refuseIfRequested(SemanticFailureTarget.BindGroupCreation(label))
                     failIfRequested("createBindGroup")
                     recordedHandle(method.returnType, label)
                 }
@@ -8263,6 +8278,9 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                         snapshot = data.toByteArray(),
                         buffer = args[0] as GPUBuffer,
                     )
+                    refuseIfRequested(
+                        SemanticFailureTarget.BufferUpload(args[0].toString()),
+                    )
                     failIfRequested("writeBuffer")
                 }
                 method.name.startsWith("writeTexture") -> {
@@ -8287,6 +8305,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             failingOperation = operation
             failingOperationOrdinal = ordinal
             operationInvocationCount = 0
+        }
+
+        fun refuse(target: SemanticFailureTarget) {
+            semanticFailureTarget = target
         }
 
         fun failCloseOnce(label: String) {
@@ -8352,6 +8374,12 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             if (operationInvocationCount == failingOperationOrdinal) {
                 error("injected $operation failure")
             }
+        }
+
+        private fun refuseIfRequested(target: SemanticFailureTarget) {
+            if (semanticFailureTarget != target) return
+            semanticFailureTarget = null
+            error("injected semantic native failure: $target")
         }
 
         private fun <T> handle(

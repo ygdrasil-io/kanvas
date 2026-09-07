@@ -14,16 +14,8 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLeaseKind
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabLeaseRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLeaseFactory
 
-internal enum class GPUPreparedNativeFrameRegistrationFaultPoint {
-    BeforeOwnershipTransfer,
-    AfterOwnershipTransfer,
-    AfterOwnedHandleReservation,
-    AfterBorrowedHandleReservation,
-}
-
 internal class GPURuntimeResourceAdapter(
     private val requirePreparedResources: Boolean = false,
-    private val nativeRegistrationFaultInjector: (GPUPreparedNativeFrameRegistrationFaultPoint) -> Unit = {},
 ) : GPUResourceLeaseFactory,
     GPUPreparedNativeFramePayloadAccess,
     AutoCloseable {
@@ -213,9 +205,6 @@ internal class GPURuntimeResourceAdapter(
                 Collections.newSetFromMap(IdentityHashMap<AutoCloseable, Boolean>()),
             ) { ownedHandleOwners.containsKey(it) }
 
-            nativeRegistrationFaultInjector(
-                GPUPreparedNativeFrameRegistrationFaultPoint.BeforeOwnershipTransfer,
-            )
             if (!draft.transferOwnershipToAdapter()) {
                 return GPUPreparedNativeFrameRegistration.Refused(
                     "invalid.native-frame-payload.draft-ownership",
@@ -227,9 +216,6 @@ internal class GPURuntimeResourceAdapter(
                 )
             }
             adapterOwnsDraft = true
-            nativeRegistrationFaultInjector(
-                GPUPreparedNativeFrameRegistrationFaultPoint.AfterOwnershipTransfer,
-            )
 
             if (ownedConflicts.isNotEmpty() || borrowedConflicts.isNotEmpty()) {
                 entry.removeOwnedHandles(ownedConflicts)
@@ -243,13 +229,7 @@ internal class GPURuntimeResourceAdapter(
             }
 
             reservePayloadHandles(entry)
-            nativeRegistrationFaultInjector(
-                GPUPreparedNativeFrameRegistrationFaultPoint.AfterOwnedHandleReservation,
-            )
             reserveBorrowedHandles(entry)
-            nativeRegistrationFaultInjector(
-                GPUPreparedNativeFrameRegistrationFaultPoint.AfterBorrowedHandleReservation,
-            )
             if (closed) {
                 terminalizeAdapterOwnedRegistration(entry)
                 return GPUPreparedNativeFrameRegistration.Refused(
@@ -599,20 +579,44 @@ internal class GPURuntimeResourceAdapter(
     }
 
     @Synchronized
-    override fun releaseOutputOwnedPreparedNativeFramePayload(token: GPUPreparedNativeFrameToken): Boolean {
+    override fun closeOutputOwnedPreparedNativeFramePayload(token: GPUPreparedNativeFrameToken): Boolean {
         val entry = outputOwnedNativePayloads[token] ?: return false
-        if (!entry.outputMappingClaimed) return false
+        if (!entry.outputMappingClaimed || !entry.hasOutputOwned) return false
         val handlesReleased = entry.closeOutputOwned { releasePayloadHandle(token, it) }
-        val leaseReleased = handlesReleased && entry.releaseLeaseAfterCompletion()
-        if (handlesReleased && leaseReleased) {
-            outputOwnedNativePayloads.remove(token)
-            releaseBorrowedHandles(entry)
-            return true
-        }
+        if (handlesReleased) return true
         outputOwnedNativePayloads.remove(token)
         entry.quarantineLeaseUncertain()
         quarantinedNativePayloads[token] = entry
         return false
+    }
+
+    @Synchronized
+    override fun finalizeOutputOwnedPreparedNativeFramePayload(
+        token: GPUPreparedNativeFrameToken,
+        finalization: GPUPreparedNativeFrameOutputLeaseFinalization,
+    ): Boolean {
+        val entry = outputOwnedNativePayloads[token] ?: return false
+        if (!entry.outputMappingClaimed || entry.hasOutputOwned) return false
+        return when (finalization) {
+            GPUPreparedNativeFrameOutputLeaseFinalization.ReleaseAfterReadback -> {
+                val leaseReleased = entry.releaseLeaseAfterCompletion()
+                outputOwnedNativePayloads.remove(token)
+                if (leaseReleased) {
+                    releaseBorrowedHandles(entry)
+                    true
+                } else {
+                    entry.quarantineLeaseUncertain()
+                    quarantinedNativePayloads[token] = entry
+                    false
+                }
+            }
+            GPUPreparedNativeFrameOutputLeaseFinalization.QuarantineUncertain -> {
+                outputOwnedNativePayloads.remove(token)
+                val leaseQuarantined = entry.quarantineLeaseUncertain()
+                quarantinedNativePayloads[token] = entry
+                leaseQuarantined
+            }
+        }
     }
 
     @Synchronized

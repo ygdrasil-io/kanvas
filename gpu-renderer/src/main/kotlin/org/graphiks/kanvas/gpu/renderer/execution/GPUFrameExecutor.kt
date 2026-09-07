@@ -641,8 +641,8 @@ internal class GPUFrameExecutor(
                         )
                         else -> null
                     }
-                    val nativeReleased = preparedFrame.rollback.releaseNativeReadbackAfterOutput()
-                    if (!nativeReleased) {
+                    val nativeClosed = preparedFrame.rollback.closeNativeReadbackAfterOutput()
+                    if (!nativeClosed) {
                         diagnostic = executionDiagnostic(
                             "failed.native-frame-payload.readback-release",
                             "Output-owned native readback payload could not be released after unmap.",
@@ -653,12 +653,27 @@ internal class GPUFrameExecutor(
                         readback.finalizeAfterNativeClose(
                             expected,
                             operand,
-                            if (nativeReleased) {
+                            if (nativeClosed) {
                                 GPUFrameReadbackNativeOutputSafety.Released
                             } else {
                                 GPUFrameReadbackNativeOutputSafety.Quarantined
                             },
                         )
+                    }
+                    if (nativeClosed) {
+                        val finalization = if (finalizedPool == GPUFrameReadbackLifecycleResult.Applied) {
+                            GPUPreparedNativeFrameOutputLeaseFinalization.ReleaseAfterReadback
+                        } else {
+                            GPUPreparedNativeFrameOutputLeaseFinalization.QuarantineUncertain
+                        }
+                        if (!preparedFrame.rollback.finalizeNativeReadbackAfterOutput(finalization) &&
+                            finalizedPool == GPUFrameReadbackLifecycleResult.Applied
+                        ) {
+                            diagnostic = executionDiagnostic(
+                                "failed.native-frame-payload.readback-release",
+                                "Output-owned native readback lease could not be finalized safely.",
+                            )
+                        }
                     }
                     if (finalizedPool is GPUFrameReadbackLifecycleResult.Refused) {
                         diagnostic = finalizedPool.diagnostic
@@ -673,27 +688,34 @@ internal class GPUFrameExecutor(
                     }
                 }
                 is GPUFrameReadbackMapDelivery.Failed -> {
-                    val nativeReleased = when (delivery.safety) {
+                    val nativeClosed = when (delivery.safety) {
                         GPUFrameReadbackMapFailureSafety.SafeToRelease -> {
-                            preparedFrame.rollback.releaseNativeReadbackAfterOutput().also { released ->
-                                if (!released) preparedFrame.rollback.quarantineNativeReadbackAfterOutput()
+                            preparedFrame.rollback.closeNativeReadbackAfterOutput().also { closed ->
+                                if (!closed) preparedFrame.rollback.quarantineNativeReadbackAfterOutput()
                             }
                         }
-                        GPUFrameReadbackMapFailureSafety.Quarantine -> {
-                            preparedFrame.rollback.quarantineNativeReadbackAfterOutput()
-                            false
-                        }
+                        GPUFrameReadbackMapFailureSafety.Quarantine -> false
                     }
                     val finalizedPool = safeReadbackLifecycle("finalizeAfterNativeClose") {
                         readback.finalizeAfterNativeClose(
                             expected,
                             operand,
-                            if (nativeReleased) {
+                            if (nativeClosed) {
                                 GPUFrameReadbackNativeOutputSafety.Released
                             } else {
                                 GPUFrameReadbackNativeOutputSafety.Quarantined
                             },
                         )
+                    }
+                    if (nativeClosed) {
+                        val finalization = if (finalizedPool == GPUFrameReadbackLifecycleResult.Applied) {
+                            GPUPreparedNativeFrameOutputLeaseFinalization.ReleaseAfterReadback
+                        } else {
+                            GPUPreparedNativeFrameOutputLeaseFinalization.QuarantineUncertain
+                        }
+                        preparedFrame.rollback.finalizeNativeReadbackAfterOutput(finalization)
+                    } else {
+                        preparedFrame.rollback.quarantineNativeReadbackAfterOutput()
                     }
                     if (finalizedPool is GPUFrameReadbackLifecycleResult.Refused) {
                         finishTerminal(finalizedPool.diagnostic)
@@ -782,7 +804,6 @@ internal class GPUFrameExecutor(
             }
             var diagnostic = completionDiagnostic ?: postSubmitPresentDiagnostic
             if (diagnostic != null && completionDiagnostic == null && preparedReadbackOutput != null) {
-                preparedFrame.rollback.quarantineNativeReadbackAfterOutput()
                 val finalizedPool = safeReadbackLifecycle("finalizeAfterNativeClose") {
                     readback.finalizeAfterNativeClose(
                         preparedReadbackOutput,
@@ -790,6 +811,7 @@ internal class GPUFrameExecutor(
                         GPUFrameReadbackNativeOutputSafety.Quarantined,
                     )
                 }
+                preparedFrame.rollback.quarantineNativeReadbackAfterOutput()
                 if (finalizedPool is GPUFrameReadbackLifecycleResult.Refused) {
                     diagnostic = finalizedPool.diagnostic
                 }
@@ -814,7 +836,6 @@ internal class GPUFrameExecutor(
                 return
             }
             if (!preparedFrame.rollback.claimNativeReadbackMapping()) {
-                preparedFrame.rollback.quarantineNativeReadbackAfterOutput()
                 val claimDiagnostic = executionDiagnostic(
                     "failed.native-frame-payload.readback-mapping-claim",
                     "Output-owned native readback payload could not be claimed for mapping.",
@@ -826,6 +847,7 @@ internal class GPUFrameExecutor(
                         GPUFrameReadbackNativeOutputSafety.Quarantined,
                     )
                 }
+                preparedFrame.rollback.quarantineNativeReadbackAfterOutput()
                 finishTerminal(
                     (finalizedPool as? GPUFrameReadbackLifecycleResult.Refused)?.diagnostic
                         ?: claimDiagnostic,

@@ -1159,8 +1159,17 @@ class GPUFrameRollback internal constructor(
     }
 
     @Synchronized
-    internal fun releaseNativeReadbackAfterOutput(): Boolean = try {
-        nativePayloadOwnership?.releaseOutputAfterReadback() ?: true
+    internal fun closeNativeReadbackAfterOutput(): Boolean = try {
+        nativePayloadOwnership?.closeOutputAfterReadback() ?: true
+    } catch (_: Throwable) {
+        false
+    }
+
+    @Synchronized
+    internal fun finalizeNativeReadbackAfterOutput(
+        finalization: GPUPreparedNativeFrameOutputLeaseFinalization,
+    ): Boolean = try {
+        nativePayloadOwnership?.finalizeOutputAfterReadback(finalization) ?: true
     } catch (_: Throwable) {
         false
     }
