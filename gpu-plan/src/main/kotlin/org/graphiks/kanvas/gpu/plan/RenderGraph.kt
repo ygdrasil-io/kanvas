@@ -91,7 +91,7 @@ public class RenderGraph private constructor(
             validateColorPasses(passes, resourcesById, targetExtent, colorFormat)
             validateStencilAtomicContracts(passes, dependencies, resources, resourcesById, capabilities, targetExtent)
             validateVisualCommandOrder(passes)
-            validatePathFillContracts(
+            validatePathDrawContracts(
                 passes,
                 dependencies,
                 resources,
@@ -146,7 +146,7 @@ public class RenderGraph private constructor(
             val colorPasses = passes.mapNotNull { pass ->
                 when (pass) {
                     is PlanPass.RenderPass -> {
-                        pass.draws().filterIsInstance<PathFillDraw>().forEach { draw ->
+                        pass.draws().filterIsInstance<PathDraw>().forEach { draw ->
                             require(draw.strategy == PathFillStrategy.DirectTriangle) {
                                 "Stencil path fills require atomic stencil passes"
                             }
@@ -308,7 +308,7 @@ public class RenderGraph private constructor(
                 "Stencil pairs must share vertex, index, and uniform resources"
             }
             require(producer.atomicGroup == cover.atomicGroup) { "Stencil pairs must share an atomic group" }
-            val expectedAtomicGroup = PlanAtomicGroupId("w4c:${producer.draw.commandIndex}")
+            val expectedAtomicGroup = canonicalPathAtomicGroup(producer.draw)
             require(producer.atomicGroup == expectedAtomicGroup && cover.atomicGroup == expectedAtomicGroup) {
                 "Stencil pairs require the canonical command atomic group"
             }
@@ -327,7 +327,7 @@ public class RenderGraph private constructor(
             validatePathDrawDataShape(producer.drawDataResources, resourcesById)
         }
 
-        private fun validatePathFillContracts(
+        private fun validatePathDrawContracts(
             passes: List<PlanPass>,
             dependencies: List<PlanPassDependency>,
             resources: List<PlanResource>,
@@ -336,7 +336,7 @@ public class RenderGraph private constructor(
             visualCommandCount: Int,
         ) {
             val visualDraws = visualDraws(passes)
-            if (visualDraws.none { it is PathFillDraw }) return
+            if (visualDraws.none { it is PathDraw }) return
 
             require(passes.all {
                 it is PlanPass.RenderPass ||
@@ -418,7 +418,7 @@ public class RenderGraph private constructor(
                             "Path render passes require exactly one draw"
                         }
                         val draw = pass.draws().single()
-                        require(draw is PathFillDraw && draw.strategy == PathFillStrategy.DirectTriangle) {
+                        require(draw is PathDraw && draw.strategy == PathFillStrategy.DirectTriangle) {
                             "Path render passes require one direct-triangle draw"
                         }
                         val drawDataResources = requireNotNull(pass.drawDataResources) {
