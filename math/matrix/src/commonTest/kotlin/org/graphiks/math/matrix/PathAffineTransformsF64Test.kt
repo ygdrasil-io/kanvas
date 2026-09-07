@@ -26,6 +26,40 @@ import org.graphiks.math.vector.Vector2F64
 
 class PathAffineTransformsF64Test {
     @Test
+    fun `public fill facade preserves weak-axis support for an extremely anisotropic affine arc`() {
+        val matrixF32 = Matrix3x3F32(sx = 1f, kx = 1e-6f, sy = 1e8f)
+        val source = PathBuilder().moveTo(1f, 0f).arcTo(1f, 1f, 0f, false, true, -1f, 0f).build()
+
+        val arcF64 = matrixF32.mapPathFillInputF64(source).segmentAtI32(1) as PathFillSegmentF64.ArcTo
+        val actualWeakAxisSupportF64 = ellipseSupportAlongXForTestF64(arcF64)
+        val expectedWeakAxisSupportF64 = sqrt(1.0 + matrixF32.kx.toDouble() * matrixF32.kx.toDouble())
+
+        assertTrue(abs(actualWeakAxisSupportF64 - expectedWeakAxisSupportF64) <= 0.25)
+    }
+
+    @Test
+    fun `tight transform budget aborts before inspecting a later non finite command`() {
+        val inputF64 = PathFillInputF64.of(
+            FillRule.WINDING,
+            listOf(
+                PathFillSegmentF64.MoveTo(Point2F64(0.0, 0.0)),
+                PathFillSegmentF64.LineTo(Point2F64(Double.NaN, 1.0)),
+            ),
+        )
+        var attemptedUnitsI64 = 0L
+
+        assertFailsWith<TransformBudgetExhaustedForTest> {
+            Matrix3x3F64().mapAffinePathFillInputF64(
+                inputF64,
+                PathTransformWorkDebitI64 { deltaI64 ->
+                    attemptedUnitsI64 += deltaI64.attemptedGeometryUnitCountI64
+                    if (attemptedUnitsI64 > 1L) throw TransformBudgetExhaustedForTest()
+                },
+            )
+        }
+    }
+
+    @Test
     fun `affine F64 mapping applies an arbitrary rotation to lines and controls`() {
         val matrixF64 = Matrix3x3F64(
             sxF64 = 0.6,
@@ -62,8 +96,8 @@ class PathAffineTransformsF64Test {
     @Test
     fun `tiny nonzero skew keeps a rotated SVG arc on its affine covariance`() {
         val matrixF64 = Matrix3x3F64(kxF64 = 1e-12)
-        val sourceRadiusF64 = Vector2F64(250_000.0, 1_000_000.0)
-        val rotationDegreesF64 = 0.00001
+        val sourceRadiusF64 = Vector2F64(1e12, 1e12)
+        val rotationDegreesF64 = 0.0
         val inputF64 = PathFillInputF64.of(
             FillRule.WINDING,
             listOf(
@@ -81,12 +115,16 @@ class PathAffineTransformsF64Test {
         val actualArcF64 = (matrixF64.mapAffinePathFillInputF64(inputF64, PathTransformWorkDebitI64 { })
             .segmentAtI32(1) as PathFillSegmentF64.ArcTo)
         val expectedCovarianceF64 = oracleTransformedCovarianceF64(matrixF64, sourceRadiusF64, rotationDegreesF64)
-        val actualCovarianceF64 = ellipseCovarianceF64(
-            actualArcF64.radius,
-            actualArcF64.xAxisRotationDegreesF64,
+        val expectedDiagonalSupportF64 = diagonalSupportF64(expectedCovarianceF64)
+        val zeroSkewDiagonalSupportF64 = diagonalSupportF64(
+            oracleTransformedCovarianceF64(Matrix3x3F64(), sourceRadiusF64, rotationDegreesF64),
+        )
+        val actualDiagonalSupportF64 = diagonalSupportF64(
+            ellipseCovarianceF64(actualArcF64.radius, actualArcF64.xAxisRotationDegreesF64),
         )
 
-        assertCovarianceWithinDeviceToleranceF64(expectedCovarianceF64, actualCovarianceF64)
+        assertTrue(abs(expectedDiagonalSupportF64 - zeroSkewDiagonalSupportF64) > 0.25)
+        assertTrue(abs(expectedDiagonalSupportF64 - actualDiagonalSupportF64) <= 0.25)
     }
 
     @Test
@@ -154,6 +192,19 @@ class PathAffineTransformsF64Test {
     }
 
     @Test
+    fun `public general affine hairline remains one device pixel wide`() {
+        val result = Matrix3x3F32(sx = 0f, kx = -1f, ky = 1f, sy = 0.25f).preparePathStrokeGeometryF32(
+            path = PathBuilder().moveTo(0f, 0f).lineTo(10f, 0f).build(),
+            styleF64 = hairlineStyleF64(),
+            mode = PathStrokeDrawMode.Stroke,
+        )
+
+        val boundsF32 = assertIs<PathStrokePreparationResult.Ready>(result).geometryF32.copyConservativeBoundsF32()
+        assertEquals(1f, boundsF32.width())
+        assertEquals(10f, boundsF32.height())
+    }
+
+    @Test
     fun `public fill facade maps a rotated SVG arc from the F64 affine seam`() {
         val matrixF32 = Matrix3x3F32(sx = 0f, kx = -1f, ky = 1f, sy = 0f)
         val source = PathBuilder().moveTo(1f, 2f).arcTo(4f, 5f, 15f, false, true, 8f, 3f).build()
@@ -188,6 +239,13 @@ class PathAffineTransformsF64Test {
 
     private fun finiteStyleF64(widthF64: Double): PathStrokeStyleF64 = PathStrokeStyleF64(
         widthF64 = PathStrokeWidthF64.Finite(widthF64),
+        cap = PathStrokeCap.Butt,
+        join = PathStrokeJoin.Miter,
+        miterLimitF64 = 4.0,
+    )
+
+    private fun hairlineStyleF64(): PathStrokeStyleF64 = PathStrokeStyleF64(
+        widthF64 = PathStrokeWidthF64.Hairline,
         cap = PathStrokeCap.Butt,
         join = PathStrokeJoin.Miter,
         miterLimitF64 = 4.0,
@@ -251,6 +309,15 @@ class PathAffineTransformsF64Test {
         assertTrue(abs(expectedF64.yyF64 - actualF64.yyF64) <= 1.0)
     }
 
+    private fun ellipseSupportAlongXForTestF64(arcF64: PathFillSegmentF64.ArcTo): Double {
+        val covarianceF64 = ellipseCovarianceF64(arcF64.radius, arcF64.xAxisRotationDegreesF64)
+        return sqrt(covarianceF64.xxF64)
+    }
+
+    private fun diagonalSupportF64(covarianceF64: EllipseCovarianceF64): Double = sqrt(
+        (covarianceF64.xxF64 + 2.0 * covarianceF64.xyF64 + covarianceF64.yyF64) / 2.0,
+    )
+
     private fun addUsageForTestI64(
         firstI64: PathStrokeWorkUsageI64,
         secondI64: PathStrokeWorkUsageI64,
@@ -266,4 +333,6 @@ class PathAffineTransformsF64Test {
         val xyF64: Double,
         val yyF64: Double,
     )
+
+    private class TransformBudgetExhaustedForTest : RuntimeException()
 }

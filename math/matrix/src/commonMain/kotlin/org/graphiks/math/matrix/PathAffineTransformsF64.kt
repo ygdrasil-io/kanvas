@@ -31,16 +31,15 @@ internal fun Matrix3x3F64.mapAffinePathFillInputF64(
     require(isFinite() && classifyPathTransform() != PathTransformClass.Perspective) {
         "mapAffinePathFillInputF64 requires finite affine Matrix3x3F64 coefficients"
     }
-    require(inputF64.all(::isFinitePathFillSegmentF64)) {
-        "mapAffinePathFillInputF64 requires finite path input"
-    }
-
     debitI64.debitBeforeTransformWorkI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
     val mappedSegmentsF64 = ArrayList<PathFillSegmentF64>(inputF64.segmentCountI32)
     inputF64.forEach { segmentF64 ->
         debitI64.debitBeforeTransformWorkI64(
             PathStrokeWorkUsageI64(attemptedGeometryUnitCountI64 = 1L, snapshotByteCountI64 = 64L),
         )
+        require(isFinitePathFillSegmentF64(segmentF64)) {
+            "mapAffinePathFillInputF64 requires finite path input"
+        }
         mappedSegmentsF64 += mapAffinePathFillSegmentF64(segmentF64)
     }
     debitI64.debitBeforeTransformWorkI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
@@ -146,24 +145,47 @@ private fun Matrix3x3F64.transformAffineArcMetadataF64(
             sweep = if (sxF64 * syF64 - kxF64 * kyF64 < 0.0) !sweep else sweep,
         )
     }
-    val covarianceXXF64 = transformedXAxisXF64 * transformedXAxisXF64 + transformedYAxisXF64 * transformedYAxisXF64
-    val covarianceXYF64 = transformedXAxisXF64 * transformedXAxisYF64 + transformedYAxisXF64 * transformedYAxisYF64
-    val covarianceYYF64 = transformedXAxisYF64 * transformedXAxisYF64 + transformedYAxisYF64 * transformedYAxisYF64
+    val axesScaleF64 = max(
+        max(abs(transformedXAxisXF64), abs(transformedXAxisYF64)),
+        max(abs(transformedYAxisXF64), abs(transformedYAxisYF64)),
+    )
+    if (axesScaleF64 == 0.0) {
+        return TransformedAffineArcMetadataF64(
+            radiusF64 = Vector2F64(0.0, 0.0),
+            xAxisRotationDegreesF64 = xAxisRotationDegreesF64,
+            sweep = if (sxF64 * syF64 - kxF64 * kyF64 < 0.0) !sweep else sweep,
+        )
+    }
+    val normalizedXAxisXF64 = transformedXAxisXF64 / axesScaleF64
+    val normalizedXAxisYF64 = transformedXAxisYF64 / axesScaleF64
+    val normalizedYAxisXF64 = transformedYAxisXF64 / axesScaleF64
+    val normalizedYAxisYF64 = transformedYAxisYF64 / axesScaleF64
+    val covarianceXXF64 = normalizedXAxisXF64 * normalizedXAxisXF64 + normalizedYAxisXF64 * normalizedYAxisXF64
+    val covarianceXYF64 = normalizedXAxisXF64 * normalizedXAxisYF64 + normalizedYAxisXF64 * normalizedYAxisYF64
+    val covarianceYYF64 = normalizedXAxisYF64 * normalizedXAxisYF64 + normalizedYAxisYF64 * normalizedYAxisYF64
     val traceF64 = covarianceXXF64 + covarianceYYF64
     val differenceF64 = covarianceXXF64 - covarianceYYF64
-    val rootF64 = sqrt(differenceF64 * differenceF64 + 4.0 * covarianceXYF64 * covarianceXYF64)
-    val majorF64 = ((traceF64 + rootF64) / 2.0).coerceAtLeast(0.0)
-    val minorF64 = ((traceF64 - rootF64) / 2.0).coerceAtLeast(0.0)
-    val transformedRotationDegreesF64 = if (majorF64 > 0.0) {
+    val majorSquaredF64 = ((traceF64 + sqrt(differenceF64 * differenceF64 + 4.0 * covarianceXYF64 * covarianceXYF64)) / 2.0)
+        .coerceAtLeast(0.0)
+    val determinantF64 = normalizedXAxisXF64 * normalizedYAxisYF64 - normalizedXAxisYF64 * normalizedYAxisXF64
+    val minorSquaredF64 = if (majorSquaredF64 == 0.0) 0.0 else {
+        (determinantF64 * determinantF64 / majorSquaredF64).coerceAtLeast(0.0)
+    }
+    val transformedRotationDegreesF64 = if (majorSquaredF64 > 0.0) {
         0.5 * atan2(2.0 * covarianceXYF64, differenceF64) * 180.0 / PI
     } else {
         xAxisRotationDegreesF64
     }
     require(
-        majorF64.isFinite() && minorF64.isFinite() && transformedRotationDegreesF64.isFinite(),
+        majorSquaredF64.isFinite() && minorSquaredF64.isFinite() && transformedRotationDegreesF64.isFinite(),
     ) { "mapAffinePathFillInputF64 produced non-finite arc metadata" }
+    val majorRadiusF64 = axesScaleF64 * sqrt(majorSquaredF64)
+    val minorRadiusF64 = axesScaleF64 * sqrt(minorSquaredF64)
+    require(majorRadiusF64.isFinite() && minorRadiusF64.isFinite()) {
+        "mapAffinePathFillInputF64 produced non-finite arc metadata"
+    }
     return TransformedAffineArcMetadataF64(
-        radiusF64 = Vector2F64(sqrt(majorF64), sqrt(minorF64)),
+        radiusF64 = Vector2F64(majorRadiusF64, minorRadiusF64),
         xAxisRotationDegreesF64 = transformedRotationDegreesF64,
         sweep = if (sxF64 * syF64 - kxF64 * kyF64 < 0.0) !sweep else sweep,
     )
