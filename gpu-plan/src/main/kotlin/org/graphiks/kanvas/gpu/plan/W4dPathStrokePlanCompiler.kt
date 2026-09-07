@@ -204,7 +204,8 @@ public class W4dPathStrokePlanCompiler internal constructor(
             clear = false
         }
         passes += PlanPass.ReadbackPass(0, target.id, staging.id, memory.readbackBytesPerRow)
-        return RenderPlanResult.Ready(RenderGraph.of(PlanId(identity(selected, caps, budget)), CAPABILITY_ID, extent, FORMAT, caps, budget, selected.draws.size, buildList { add(target); add(staging); add(vertex); add(index); add(uniform); depth?.let(::add) }, passes, passes.zipWithNext().map { PlanPassDependency(it.first.id, it.second.id) }, memory.peakBytes))
+        val graph = RenderGraph.of(PlanId(identity(selected, caps, budget)), CAPABILITY_ID, extent, FORMAT, caps, budget, selected.draws.size, buildList { add(target); add(staging); add(vertex); add(index); add(uniform); depth?.let(::add) }, passes, passes.zipWithNext().map { PlanPassDependency(it.first.id, it.second.id) }, memory.peakBytes)
+        return RenderPlanResult.Ready(RenderGraph.issueW4dCompilerWitness(graph))
     }
 
     private fun solid(node: DrawNode, paint: PaintNode): Boolean = node.material is MaterialNode.Solid && node.effects is EffectStack.Empty && node.resource == null && node.operationBlendMode == null && w4Blend(node.blend) && paint.shader == null && paint.blender == null && paint.colorFilter == null && paint.maskFilter == null && paint.imageFilter == null && paint.blendMode == BlendMode.SRC_OVER && (paint.pathEffect == null || paint.pathEffect is PathEffectNode.Dash)

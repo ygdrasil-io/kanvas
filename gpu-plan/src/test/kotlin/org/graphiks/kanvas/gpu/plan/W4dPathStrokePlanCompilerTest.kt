@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.plan
 import kotlin.test.assertEquals
 import kotlin.test.assertContentEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
@@ -82,7 +83,55 @@ class W4dPathStrokePlanCompilerTest {
         ).plan
 
         assertEquals(W4dPathStrokePlanCompiler.CAPABILITY_ID, graph.capabilityId)
+        assertTrue(graph.verifyW4dCompilerWitness())
         assertIs<PathStrokeDraw>(assertIs<PlanPass.StencilProducer>(graph.passes().first()).draw)
+    }
+
+    @Test
+    fun compilerWitnessIsStableDefensiveAndAbsentFromPublicGraphReconstruction() {
+        val scene = sceneOf(
+            listOf(
+                pathDraw(
+                    PaintStyleNode.STROKE,
+                    effect = PathEffectNode.Dash(ImmutableFloats.copyOf(floatArrayOf(3f, 1f)), -2f),
+                ),
+            ),
+        )
+        fun compile(): RenderGraph {
+            val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target(scene))).candidate
+            return assertIs<RenderPlanResult.Ready<RenderGraph>>(
+                compiler.plan(candidate, capabilities(), PlanBudget(1L shl 20)),
+            ).plan
+        }
+
+        val graph = compile()
+        val repeated = compile()
+        assertEquals(graph.id, repeated.id)
+        assertTrue(graph.verifyW4dCompilerWitness())
+        assertTrue(repeated.verifyW4dCompilerWitness())
+
+        val stroke = assertIs<PathStrokeDraw>(assertIs<PlanPass.StencilProducer>(graph.passes().first()).draw)
+        val vertices = stroke.copyGeometryF32().copyFillGeometryF32()
+            .copyStencilEdgeFanF32OrNull()!!.copyVerticesF32()
+        val dash = stroke.styleF64.dashF64!!.copyIntervalsF64()
+        vertices[0] = 99f
+        dash[0] = 99.0
+        assertTrue(graph.verifyW4dCompilerWitness())
+
+        val reconstructed = RenderGraph.of(
+            id = graph.id,
+            capabilityId = graph.capabilityId,
+            targetExtent = graph.targetExtent,
+            colorFormat = graph.colorFormat,
+            capabilities = graph.capabilities,
+            budget = graph.budget,
+            visualCommandCount = graph.visualCommandCount,
+            resources = graph.resources(),
+            passes = graph.passes(),
+            dependencies = graph.dependencies(),
+            peakFrameLocalBytes = graph.peakFrameLocalBytes,
+        )
+        assertFalse(reconstructed.verifyW4dCompilerWitness())
     }
 
     @Test

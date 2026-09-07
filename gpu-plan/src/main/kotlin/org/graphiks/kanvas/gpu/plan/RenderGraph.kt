@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.plan
 
+import java.security.MessageDigest
 import org.graphiks.math.geometry.SizeI32
 
 public class RenderGraph private constructor(
@@ -14,6 +15,7 @@ public class RenderGraph private constructor(
     passes: List<PlanPass>,
     dependencies: List<PlanPassDependency>,
     public val peakFrameLocalBytes: Long,
+    private val w4dCompilerWitness: W4dCompilerWitness?,
 ) {
     private val storedTargetExtent: SizeI32 = targetExtent.copy()
     public val targetExtent: SizeI32
@@ -25,6 +27,10 @@ public class RenderGraph private constructor(
     public fun resources(): List<PlanResource> = storedResources
     public fun passes(): List<PlanPass> = storedPasses
     public fun dependencies(): List<PlanPassDependency> = storedDependencies
+
+    /** Verifies that this exact immutable graph snapshot was issued by the W4d compiler. */
+    public fun verifyW4dCompilerWitness(): Boolean =
+        w4dCompilerWitness?.matches(this) == true
 
     public companion object {
         public fun of(
@@ -109,7 +115,29 @@ public class RenderGraph private constructor(
             require(calculatedPeak == peakFrameLocalBytes) { "Peak memory does not match resource lifetimes" }
             require(calculatedPeak <= budget.maxFrameLocalBytes) { "Peak memory exceeds budget" }
             return RenderGraph(id, capabilityId, targetExtent, colorFormat, capabilities, budget, visualCommandCount,
-                resources, passes, dependencies, peakFrameLocalBytes)
+                resources, passes, dependencies, peakFrameLocalBytes, null)
+        }
+
+        /** Trust-boundary factory available only to the W4d compiler after public validation. */
+        internal fun issueW4dCompilerWitness(graph: RenderGraph): RenderGraph {
+            require(graph.capabilityId == W4dPathStrokePlanCompiler.CAPABILITY_ID) {
+                "Only a W4d graph may receive a W4d compiler witness"
+            }
+            require(graph.w4dCompilerWitness == null) { "A W4d compiler witness may be issued only once" }
+            return RenderGraph(
+                graph.id,
+                graph.capabilityId,
+                graph.storedTargetExtent,
+                graph.colorFormat,
+                graph.capabilities,
+                graph.budget,
+                graph.visualCommandCount,
+                graph.storedResources,
+                graph.storedPasses,
+                graph.storedDependencies,
+                graph.peakFrameLocalBytes,
+                W4dCompilerWitness.issue(graph),
+            )
         }
 
         private fun referencedResources(pass: PlanPass): List<PlanResourceId> = when (pass) {
@@ -555,5 +583,23 @@ public class RenderGraph private constructor(
         } ?: 0L
 
         private const val LOGICAL_PIXEL_BYTES: Long = 4L
+    }
+
+    /** Opaque proof whose digest never crosses the public API. */
+    private class W4dCompilerWitness private constructor(digest: ByteArray) {
+        private val digestSnapshot: ByteArray = digest.copyOf()
+
+        fun matches(graph: RenderGraph): Boolean = try {
+            MessageDigest.isEqual(digestSnapshot, canonicalW4dGraphDigest(graph))
+        } catch (_: IllegalArgumentException) {
+            false
+        } catch (_: ArithmeticException) {
+            false
+        }
+
+        companion object {
+            fun issue(graph: RenderGraph): W4dCompilerWitness =
+                W4dCompilerWitness(canonicalW4dGraphDigest(graph))
+        }
     }
 }

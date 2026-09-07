@@ -120,6 +120,9 @@ internal class W4dPathStrokeGraphLowerer {
         if (request.graph.capabilityId != W4dPathStrokePlanCompiler.CAPABILITY_ID) {
             return invalid("The graph is not a W4d path-draw graph.")
         }
+        if (!request.graph.verifyW4dCompilerWitness()) {
+            return invalid("The W4d graph lacks its compiler-issued witness.")
+        }
         val current = when (val adapted = request.capabilities.toPlanCapabilitySnapshot(request.deviceGeneration)) {
             is GpuPlanCapabilityAdapterResult.Supported -> adapted.snapshot
             is GpuPlanCapabilityAdapterResult.Unsupported -> return GpuPlanLoweringResult.UnsupportedCapability(adapted.diagnostic)
