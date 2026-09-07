@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.plan
 
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.render.ir.BlendMode
 import org.graphiks.kanvas.render.ir.BlendNode
@@ -171,6 +172,35 @@ class W4dPathStrokePlanCompilerTest {
         assertIs<PathStrokeWidthF64.Hairline>(assertIs<PathStrokeDraw>(draw).styleF64.widthF64)
     }
 
+    @Test
+    fun compilerEmitsOrderedMixedGraphWithExactlyOneStencilResource() {
+        val scene = sceneOf(listOf(pathDraw(PaintStyleNode.FILL), pathDraw(PaintStyleNode.STROKE)))
+        val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target(scene))).candidate
+        val graph = assertIs<RenderPlanResult.Ready<RenderGraph>>(compiler.plan(candidate, capabilities(), PlanBudget(1L shl 20))).plan
+
+        assertEquals(1, graph.resources().count { it.role == PlanResourceRole.DepthStencil })
+        assertIs<PlanPass.RenderPass>(graph.passes().first())
+        assertIs<PlanPass.StencilProducer>(graph.passes()[1])
+        assertIs<PlanPass.StencilCover>(graph.passes()[2])
+        assertEquals(graph.passes().lastIndex + 1, graph.resources().first { it.role == PlanResourceRole.DepthStencil }.lastPassIndexExclusive)
+    }
+
+    @Test
+    fun compilerCapabilityPlanIdentityAndCandidateOwnershipAreTerminal() {
+        val scene = sceneOf(listOf(pathDraw(PaintStyleNode.STROKE)))
+        val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target(scene))).candidate
+        val base = capabilities()
+        val ready = assertIs<RenderPlanResult.Ready<RenderGraph>>(compiler.plan(candidate, base, PlanBudget(1L shl 20))).plan
+        val changed = assertIs<RenderPlanResult.Ready<RenderGraph>>(compiler.plan(candidate, capabilities(deviceGeneration = 1), PlanBudget(1L shl 20))).plan
+        assertNotEquals(ready.id, changed.id)
+        assertIs<RenderPlanResult.GapOnPromotedScope>(compiler.plan(candidate, capabilities(operations = setOf(PlanOperationCapability.Readback)), PlanBudget(1L shl 20)))
+        val foreign = W4dPathStrokePlanCompiler()
+        assertIs<RenderPlanResult.InvalidScene>(foreign.plan(candidate, base, PlanBudget(1L shl 20)))
+        val chain = CapabilityCompilerChain.of(listOf(W4cPathFillPlanCompiler(), compiler))
+        val chainCandidate = assertIs<GpuPlanSelection.Candidate>(chain.select(scene, target(scene))).candidate
+        assertIs<RenderPlanResult.GapOnPromotedScope>(chain.plan(chainCandidate, capabilities(operations = setOf(PlanOperationCapability.Readback)), PlanBudget(1L shl 20)))
+    }
+
     private fun sceneOf(draws: List<SceneCommand.Draw>): SceneSnapshot = SceneSnapshot.of(
         SceneExtent(16, 16), ColorSpace.SRGB, draws,
     )
@@ -178,15 +208,15 @@ class W4dPathStrokePlanCompilerTest {
     private fun target(scene: SceneSnapshot): RenderTargetDescriptor =
         RenderTargetDescriptor(scene.extent, scene.colorSpace)
 
-    private fun capabilities(): PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(
-        deviceGeneration = 0,
+    private fun capabilities(deviceGeneration: Long = 0, operations: Set<PlanOperationCapability> = PlanOperationCapability.entries.toSet()): PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(
+        deviceGeneration = deviceGeneration,
         maxTextureDimension2D = 64,
         maxBufferSizeBytes = 1L shl 20,
         copyBytesPerRowAlignment = 256,
         supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
         minUniformBufferOffsetAlignment = 256,
         maxDynamicUniformBuffersPerPipelineLayout = 1,
-        supportedOperations = PlanOperationCapability.entries.toSet(),
+        supportedOperations = operations,
         bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 4_096, 4_096),
         supportedDepthStencilFormats = setOf(PlanDepthStencilFormat.Depth24PlusStencil8),
     )
