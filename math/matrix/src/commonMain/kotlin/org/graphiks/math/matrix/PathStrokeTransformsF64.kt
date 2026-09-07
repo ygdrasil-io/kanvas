@@ -77,7 +77,7 @@ public class AxisAlignedPathStrokeProjectionF64 private constructor(
     }
 }
 
-/** Prepares a W4d device-space stroke for identity, translation, and axis-aligned scales. */
+/** Prepares a W4d device-space stroke or `StrokeAndFill` union for axis-aligned affine matrices. */
 public fun Matrix3x3F32.preparePathStrokeGeometryF32(
     path: PathF32,
     styleF64: PathStrokeStyleF64,
@@ -95,6 +95,15 @@ public fun Matrix3x3F32.preparePathStrokeGeometryF32(
     ) {
         return PathStrokePreparationResult.InvalidScene(PathStrokeInvalidSceneReason.InvalidStyle)
     }
+    val deviceFillInputF64 = if (mode == PathStrokeDrawMode.StrokeAndFill) {
+        try {
+            mapPathFillInputF64(path)
+        } catch (_: IllegalArgumentException) {
+            return PathStrokePreparationResult.InvalidScene(PathStrokeInvalidSceneReason.NonFiniteInput)
+        }
+    } else {
+        null
+    }
     return prepareProjectedPathStrokeGeometryF32(
         inputF64 = PathFillInputF64.fromPathF32(path),
         styleF64 = styleF64,
@@ -102,6 +111,7 @@ public fun Matrix3x3F32.preparePathStrokeGeometryF32(
         projectionF64 = AxisAlignedPathStrokeProjectionF64.of(this),
         policyF64 = policyF64,
         frameWorkUsageBeforeI64 = frameWorkUsageBeforeI64,
+        deviceFillInputF64 = deviceFillInputF64,
     )
 }
 

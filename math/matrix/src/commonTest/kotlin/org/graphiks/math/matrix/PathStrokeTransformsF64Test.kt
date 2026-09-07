@@ -1,10 +1,15 @@
 package org.graphiks.math.matrix
 
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.graphiks.math.geometry.PathBuilder
+import org.graphiks.math.geometry.PathFillGeometryF32
+import org.graphiks.math.geometry.PathFillPreparationResult
 import org.graphiks.math.geometry.PathStrokeCap
 import org.graphiks.math.geometry.PathStrokeDrawMode
 import org.graphiks.math.geometry.PathStrokeGeometryF32
@@ -15,6 +20,7 @@ import org.graphiks.math.geometry.PathStrokePreparationResult
 import org.graphiks.math.geometry.PathStrokeResourceLimitReason
 import org.graphiks.math.geometry.PathStrokeStyleF64
 import org.graphiks.math.geometry.PathStrokeWidthF64
+import org.graphiks.math.geometry.preparePathFillGeometryF32
 
 class PathStrokeTransformsF64Test {
     @Test
@@ -32,6 +38,71 @@ class PathStrokeTransformsF64Test {
         assertEquals(14f, geometry.copyConservativeBoundsF32().right)
         assertEquals(4f, geometry.copyConservativeBoundsF32().top)
         assertEquals(16f, geometry.copyConservativeBoundsF32().bottom)
+    }
+
+    @Test
+    fun `zero width stroke and fill matches anisotropically mapped arc fill geometry`() {
+        val path = PathBuilder()
+            .moveTo(0f, 0f)
+            .arcTo(6f, 3f, 25f, largeArc = false, sweep = true, x = 12f, y = 8f)
+            .lineTo(0f, 0f)
+            .close()
+            .build()
+        val matrix = Matrix3x3F32.scaling(2f, 3f)
+
+        val expectedF32 = assertIs<PathFillPreparationResult.Ready>(
+            preparePathFillGeometryF32(matrix.mapPathFillInputF64(path)),
+        ).geometryF32
+        val actualF32 = assertReady(
+            matrix.preparePathStrokeGeometryF32(
+                path = path,
+                styleF64 = finiteStyle(0.0),
+                mode = PathStrokeDrawMode.StrokeAndFill,
+            ),
+        ).copyFillGeometryF32()
+
+        assertEquivalentPublicFillGeometry(expectedF32, actualF32)
+    }
+
+    @Test
+    fun `zero width stroke and fill preserves reflected arc coverage`() {
+        val path = PathBuilder()
+            .moveTo(1f, 2f)
+            .arcTo(4f, 5f, 15f, largeArc = true, sweep = true, x = 8f, y = 3f)
+            .lineTo(1f, 2f)
+            .close()
+            .build()
+        val matrix = Matrix3x3F32.scaling(-2f, 3f)
+
+        val expectedF32 = assertIs<PathFillPreparationResult.Ready>(
+            preparePathFillGeometryF32(matrix.mapPathFillInputF64(path)),
+        ).geometryF32
+        val actualF32 = assertReady(
+            matrix.preparePathStrokeGeometryF32(
+                path = path,
+                styleF64 = finiteStyle(0.0),
+                mode = PathStrokeDrawMode.StrokeAndFill,
+            ),
+        ).copyFillGeometryF32()
+
+        assertEquivalentPublicFillGeometry(expectedF32, actualF32)
+    }
+
+    @Test
+    fun `stroke and fill preserves frame work limit exhausted during union`() {
+        val result = Matrix3x3F32.Identity.preparePathStrokeGeometryF32(
+            path = PathBuilder().moveTo(0f, 0f).lineTo(10f, 0f).lineTo(10f, 10f).lineTo(0f, 10f).close().build(),
+            styleF64 = finiteStyle(2.0),
+            mode = PathStrokeDrawMode.StrokeAndFill,
+            policyF64 = PathStrokePolicyF64(
+                limitsI32 = PathStrokeLimitsI32(maxAttemptedGeometryUnitsPerFrameI32 = 100),
+            ),
+        )
+
+        assertEquals(
+            PathStrokeResourceLimitReason.FrameWorkLimit,
+            assertIs<PathStrokePreparationResult.ResourceLimitExceeded>(result).reason,
+        )
     }
 
     @Test
@@ -327,4 +398,28 @@ class PathStrokeTransformsF64Test {
         join = PathStrokeJoin.Miter,
         miterLimitF64 = 4.0,
     )
+
+    private fun assertEquivalentPublicFillGeometry(
+        expectedF32: PathFillGeometryF32,
+        actualF32: PathFillGeometryF32,
+    ) {
+        assertEquals(expectedF32.fillRule, actualF32.fillRule)
+        assertEquals(expectedF32.emittedNonZeroClosedEdgeCountI32, actualF32.emittedNonZeroClosedEdgeCountI32)
+        assertEquals(expectedF32.copyConservativeScissorI32(), actualF32.copyConservativeScissorI32())
+        val expectedTriangleF32 = expectedF32.copyDirectTriangleF32OrNull()
+        val actualTriangleF32 = actualF32.copyDirectTriangleF32OrNull()
+        assertEquals(expectedTriangleF32 != null, actualTriangleF32 != null)
+        if (expectedTriangleF32 != null && actualTriangleF32 != null) {
+            assertContentEquals(expectedTriangleF32.copyVerticesF32(), actualTriangleF32.copyVerticesF32())
+            assertContentEquals(expectedTriangleF32.copyIndicesI32(), actualTriangleF32.copyIndicesI32())
+            return
+        }
+        assertNull(expectedTriangleF32)
+        assertNull(actualTriangleF32)
+        val expectedFanF32 = assertNotNull(expectedF32.copyStencilEdgeFanF32OrNull())
+        val actualFanF32 = assertNotNull(actualF32.copyStencilEdgeFanF32OrNull())
+        assertContentEquals(expectedFanF32.copyVerticesF32(), actualFanF32.copyVerticesF32())
+        assertContentEquals(expectedFanF32.copyIndicesI32(), actualFanF32.copyIndicesI32())
+        assertContentEquals(expectedFanF32.copyContourStartsI32(), actualFanF32.copyContourStartsI32())
+    }
 }

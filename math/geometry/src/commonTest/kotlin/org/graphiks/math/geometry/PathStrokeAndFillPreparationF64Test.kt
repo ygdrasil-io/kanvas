@@ -53,11 +53,13 @@ class PathStrokeAndFillPreparationF64Test {
             .build()
 
         // The F64 arrangement can reduce to non-zero sections that have no safe F32 embedding.
+        val inputF64 = PathFillInputF64.fromPathF32(path)
         val result = prepareProjectedPathStrokeGeometryF32(
-            inputF64 = PathFillInputF64.fromPathF32(path),
+            inputF64 = inputF64,
             styleF64 = finiteStyleF64(2.0),
             mode = PathStrokeDrawMode.StrokeAndFill,
             projectionF64 = identityProjectionF64,
+            deviceFillInputF64 = inputF64,
         )
 
         assertEquals(
@@ -116,29 +118,34 @@ class PathStrokeAndFillPreparationF64Test {
     }
 
     @Test
-    fun `topology work limit rejects the union before a geometry snapshot is published`() {
+    fun `shared path work limit rejects the union before a geometry snapshot is published`() {
+        val inputF64 = PathFillInputF64.fromPathF32(overlappingRectanglesPathF32())
         val result = prepareProjectedPathStrokeGeometryF32(
-            inputF64 = PathFillInputF64.fromPathF32(overlappingRectanglesPathF32()),
+            inputF64 = inputF64,
             styleF64 = finiteStyleF64(2.0),
             mode = PathStrokeDrawMode.StrokeAndFill,
             projectionF64 = identityProjectionF64,
+            deviceFillInputF64 = inputF64,
         )
 
         assertEquals(
-            PathStrokeResourceLimitReason.TopologyLimit,
+            PathStrokeResourceLimitReason.PathWorkLimit,
             assertIs<PathStrokePreparationResult.ResourceLimitExceeded>(result).reason,
         )
     }
 
-    private fun readyGeometryF32(path: PathF32, widthF64: Double): PathStrokeGeometryF32 =
-        assertIs<PathStrokePreparationResult.Ready>(
+    private fun readyGeometryF32(path: PathF32, widthF64: Double): PathStrokeGeometryF32 {
+        val inputF64 = PathFillInputF64.fromPathF32(path)
+        return assertIs<PathStrokePreparationResult.Ready>(
             prepareProjectedPathStrokeGeometryF32(
-                inputF64 = PathFillInputF64.fromPathF32(path),
+                inputF64 = inputF64,
                 styleF64 = finiteStyleF64(widthF64),
                 mode = PathStrokeDrawMode.StrokeAndFill,
                 projectionF64 = identityProjectionF64,
+                deviceFillInputF64 = inputF64,
             ),
         ).geometryF32
+    }
 
     private fun finiteStyleF64(
         widthF64: Double,

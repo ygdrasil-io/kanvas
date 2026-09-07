@@ -49,8 +49,6 @@ private fun unionClosedContoursF64(
         topologyWorkDebitI64 = topologyWorkDebitI64,
     )
     PathTopologyUnionResult.Ready(PathFillInputF64.fromPathF32(unionF32))
-} catch (_: PathStrokeResourceLimitAbort) {
-    PathTopologyUnionResult.Limit
 } catch (error: IllegalStateException) {
     if (error.isExpectedPathTopologyLimit()) {
         PathTopologyUnionResult.Limit
