@@ -95,6 +95,20 @@ class PathStrokeOutlinePreparationF64Test {
     }
 
     @Test
+    fun `round join expands an antiparallel reversal as a semicircle`() {
+        val outline = finiteOutline(
+            centerline(
+                PathFillSegmentF64.MoveTo(Point2F64(0.0, 0.0)),
+                PathFillSegmentF64.LineTo(Point2F64(10.0, 0.0)),
+                PathFillSegmentF64.LineTo(Point2F64(0.0, 0.0)),
+            ),
+            finiteStyle(join = PathStrokeJoin.Round),
+        )
+
+        assertTrue(boundaryPoints(outline).any { pointF64 -> pointF64.near(12.0, 0.0) })
+    }
+
+    @Test
     fun `closed contour has no cap-dependent geometry`() {
         val buttBoundsF64 = boundsOf(
             finiteOutline(closedSquareCenterline(), finiteStyle(cap = PathStrokeCap.Butt)),
@@ -150,6 +164,77 @@ class PathStrokeOutlinePreparationF64Test {
     }
 
     @Test
+    fun `hairline cubic cusp materializes device intervals whose bounds contain their evaluated points`() {
+        val result = assertIs<PathStrokeOutlinePreparationResult.Ready>(
+            prepareProjectedHairlineOutlineF64(
+                centerline(
+                    PathFillSegmentF64.MoveTo(Point2F64(0.0, 0.0)),
+                    PathFillSegmentF64.CubicTo(
+                        Point2F64(1.0, 0.0),
+                        Point2F64(0.0, 0.0),
+                        Point2F64(0.0, 0.0),
+                    ),
+                ),
+                hairlineStyle(),
+                IdentityProjectionF64,
+            ),
+        )
+
+        assertOutlineIntervalBoundsContainEvaluatedPoints(result.outlineF64)
+    }
+
+    @Test
+    fun `hairline subdivision honors the certified device sagitta limit`() {
+        val result = assertIs<PathStrokeOutlinePreparationResult.Ready>(
+            prepareProjectedHairlineOutlineF64(
+                lineCenterline(),
+                hairlineStyle(),
+                object : PathStrokeProjectionF64 {
+                    override fun projectPointF64(pointF64: Point2F64): PathStrokeProjectionPointResultF64 =
+                        PathStrokeProjectionPointResultF64.Ready(pointF64)
+
+                    override fun certifyOutlineIntervalF64(
+                        intervalF64: PathStrokeOutlineIntervalF64,
+                    ): PathStrokeProjectionIntervalResultF64 = if (
+                        intervalF64.endParameterF64 - intervalF64.startParameterF64 > 0.25
+                    ) {
+                        PathStrokeProjectionIntervalResultF64.Bounded(0.5)
+                    } else {
+                        PathStrokeProjectionIntervalResultF64.Bounded(0.0)
+                    }
+                },
+                PathStrokePolicyF64(maximumSagittaErrorF64 = 0.25),
+            ),
+        )
+
+        assertTrue(boundaryPoints(result.outlineF64).any { pointF64 -> pointF64.near(2.5, 0.5) })
+    }
+
+    @Test
+    fun `published hairline remains finite after its projection becomes non-finite`() {
+        var projectionIsFinite = true
+        val projectionF64 = object : PathStrokeProjectionF64 {
+            override fun projectPointF64(pointF64: Point2F64): PathStrokeProjectionPointResultF64 =
+                if (projectionIsFinite) {
+                    PathStrokeProjectionPointResultF64.Ready(pointF64)
+                } else {
+                    PathStrokeProjectionPointResultF64.NonFinite
+                }
+
+            override fun certifyOutlineIntervalF64(
+                intervalF64: PathStrokeOutlineIntervalF64,
+            ): PathStrokeProjectionIntervalResultF64 = PathStrokeProjectionIntervalResultF64.Bounded(0.0)
+        }
+        val outlineF64 = assertIs<PathStrokeOutlinePreparationResult.Ready>(
+            prepareProjectedHairlineOutlineF64(lineCenterline(), hairlineStyle(), projectionF64),
+        ).outlineF64
+
+        projectionIsFinite = false
+
+        assertAllPointsFinite(outlineF64)
+    }
+
+    @Test
     fun `projection refusal yields an invalid scene before an outline is published`() {
         val result = prepareProjectedHairlineOutlineF64(
             lineCenterline(),
@@ -168,6 +253,56 @@ class PathStrokeOutlinePreparationF64Test {
             PathStrokeInvalidSceneReason.NonFiniteInput,
             assertIs<PathStrokeOutlinePreparationResult.InvalidScene>(result).reason,
         )
+    }
+
+    @Test
+    fun `non-finite horizon and unbounded certification refusals are atomic`() {
+        listOf(
+            PathStrokeProjectionIntervalResultF64.NonFinite,
+            PathStrokeProjectionIntervalResultF64.HorizonCrossing,
+            PathStrokeProjectionIntervalResultF64.Unbounded,
+        ).forEach { certificationResultF64 ->
+            val result = prepareProjectedHairlineOutlineF64(
+                lineCenterline(),
+                hairlineStyle(),
+                object : PathStrokeProjectionF64 {
+                    override fun projectPointF64(pointF64: Point2F64): PathStrokeProjectionPointResultF64 =
+                        PathStrokeProjectionPointResultF64.Ready(pointF64)
+
+                    override fun certifyOutlineIntervalF64(
+                        intervalF64: PathStrokeOutlineIntervalF64,
+                    ): PathStrokeProjectionIntervalResultF64 = certificationResultF64
+                },
+            )
+
+            assertEquals(
+                PathStrokeInvalidSceneReason.NonFiniteInput,
+                assertIs<PathStrokeOutlinePreparationResult.InvalidScene>(result).reason,
+            )
+        }
+    }
+
+    @Test
+    fun `outline contours expose connected intervals that close in order`() {
+        val outlinesF64 = listOf(
+            finiteOutline(rightAngleCenterline(), finiteStyle(join = PathStrokeJoin.Round)),
+            finiteOutline(closedSquareCenterline(), finiteStyle(join = PathStrokeJoin.Round)),
+        )
+
+        outlinesF64.forEach { outlineF64 ->
+            repeat(outlineF64.contourCountI32) { contourIndexI32 ->
+                val intervalsF64 = outlineF64.copyContourIntervalsF64(contourIndexI32)
+                assertTrue(intervalsF64.isNotEmpty())
+                intervalsF64.indices.forEach { intervalIndexI32 ->
+                    val currentF64 = intervalsF64[intervalIndexI32]
+                    val nextF64 = intervalsF64[(intervalIndexI32 + 1) % intervalsF64.size]
+                    assertPointNear(
+                        currentF64.primitiveF64.pointAtF64(currentF64.endParameterF64),
+                        nextF64.primitiveF64.pointAtF64(nextF64.startParameterF64),
+                    )
+                }
+            }
+        }
     }
 
     @Test
@@ -272,6 +407,22 @@ class PathStrokeOutlinePreparationF64Test {
         assertTrue(boundaryPoints(outlineF64).all(Point2F64::isFinite))
     }
 
+    private fun assertOutlineIntervalBoundsContainEvaluatedPoints(outlineF64: PathStrokeOutlineF64) {
+        repeat(outlineF64.contourCountI32) { contourIndexI32 ->
+            outlineF64.copyContourIntervalsF64(contourIndexI32).forEach { intervalF64 ->
+                listOf(0.0, 1.0 / 3.0, 0.5, 2.0 / 3.0, 1.0).forEach { fractionF64 ->
+                    val parameterF64 = intervalF64.startParameterF64 +
+                        (intervalF64.endParameterF64 - intervalF64.startParameterF64) * fractionF64
+                    val pointF64 = intervalF64.primitiveF64.pointAtF64(parameterF64)
+                    assertTrue(pointF64.x >= intervalF64.boundsF64.leftF64 - 1e-9)
+                    assertTrue(pointF64.y >= intervalF64.boundsF64.topF64 - 1e-9)
+                    assertTrue(pointF64.x <= intervalF64.boundsF64.rightF64 + 1e-9)
+                    assertTrue(pointF64.y <= intervalF64.boundsF64.bottomF64 + 1e-9)
+                }
+            }
+        }
+    }
+
     private fun assertBoundsEquals(
         leftF64: Double,
         topF64: Double,
@@ -287,6 +438,11 @@ class PathStrokeOutlinePreparationF64Test {
 
     private fun Point2F64.near(xF64: Double, yF64: Double): Boolean =
         abs(x - xF64) <= 1e-9 && abs(y - yF64) <= 1e-9
+
+    private fun assertPointNear(expectedF64: Point2F64, actualF64: Point2F64) {
+        assertEquals(expectedF64.x, actualF64.x, absoluteTolerance = 1e-9)
+        assertEquals(expectedF64.y, actualF64.y, absoluteTolerance = 1e-9)
+    }
 
     private object IdentityProjectionF64 : PathStrokeProjectionF64 {
         override fun projectPointF64(pointF64: Point2F64): PathStrokeProjectionPointResultF64 =

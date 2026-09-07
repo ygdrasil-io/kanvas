@@ -23,6 +23,10 @@ public class PathStrokeCenterlineF64 private constructor(
     public fun copyContourSpansF64(indexI32: Int): List<PathStrokePrimitiveSpanF64> =
         contoursSnapshotF64[indexI32].toList()
 
+    /** Internal read-only view that avoids an unbudgeted defensive-copy round trip. */
+    internal fun contourSpansViewF64(indexI32: Int): List<PathStrokePrimitiveSpanF64> =
+        contoursSnapshotF64[indexI32]
+
     public fun isContourClosed(indexI32: Int): Boolean = closedContoursSnapshot[indexI32]
 
     internal companion object {
@@ -420,11 +424,6 @@ private class PathStrokeDashPreparerF64(
             is PathStrokeSvgArcPrimitiveF64 -> primitiveF64.arcF64?.let { arcF64 ->
                 abs(arcF64.sweepAngle) * max(arcF64.radiusX, arcF64.radiusY)
             } ?: strokeVectorLengthF64(primitiveF64.endF64 - primitiveF64.startF64)
-
-            is ProjectedStrokePrimitiveF64 -> max(
-                evaluatedDerivativeLengthF64(primitiveF64, startParameterF64),
-                evaluatedDerivativeLengthF64(primitiveF64, endParameterF64),
-            )
         }
         if (!speedF64.isFinite()) throw PathStrokeInvalidInputAbort()
         return speedF64
