@@ -148,7 +148,7 @@ public class RenderGraph private constructor(
                     is PlanPass.RenderPass -> {
                         pass.draws().filterIsInstance<PathDraw>().forEach { draw ->
                             require(draw.strategy == PathFillStrategy.DirectTriangle) {
-                                "Stencil path fills require atomic stencil passes"
+                                "Stencil path draws require atomic stencil passes"
                             }
                         }
                         ColorAttachment(pass.target, pass.load, pass.store)
@@ -345,10 +345,10 @@ public class RenderGraph private constructor(
                     it is PlanPass.ReadbackPass
             }) { "Path graphs may contain only W4c passes" }
             require(PlanOperationCapability.CopyUpload in capabilities.supportedOperations()) {
-                "Path fills require copy upload support"
+                "Path draws require copy upload support"
             }
             require(PlanOperationCapability.UniformBuffer in capabilities.supportedOperations()) {
-                "Path fills require uniform buffer support"
+                "Path draws require uniform buffer support"
             }
             val targetResource = requireSinglePathResource(resources, PlanResourceRole.LogicalTarget)
             val stagingResource = requireSinglePathResource(resources, PlanResourceRole.ReadbackStaging)
@@ -371,10 +371,10 @@ public class RenderGraph private constructor(
                 depthStencilResources.singleOrNull()?.let(::add)
             }
             require(inventory.map { it.id }.distinct().size == inventory.size) {
-                "W4c resources must have distinct identities"
+                "Path draw resources must have distinct identities"
             }
             require(resources.map { it.id }.toSet() == inventory.map { it.id }.toSet()) {
-                "Path graphs must declare only the W4c resource inventory"
+                "Path graphs must declare only the path draw resource inventory"
             }
             val target = targetResource.id
             passes.forEach { pass ->
@@ -385,14 +385,14 @@ public class RenderGraph private constructor(
                     else -> null
                 }
                 if (colorTarget != null) {
-                    require(colorTarget == target) { "Path fills must use one color target" }
+                    require(colorTarget == target) { "Path draws must use one color target" }
                 }
             }
             val readbacks = passes.filterIsInstance<PlanPass.ReadbackPass>()
-            require(readbacks.size == 1) { "Path fills require one readback" }
+            require(readbacks.size == 1) { "Path draws require one readback" }
             val terminalReadback = readbacks.single()
-            require(passes.last() === terminalReadback) { "Path fill readback must be terminal" }
-            require(terminalReadback.source == target) { "Path fills must read back their color target" }
+            require(passes.last() === terminalReadback) { "Path draw readback must be terminal" }
+            require(terminalReadback.source == target) { "Path draws must read back their color target" }
             require(terminalReadback.staging == stagingResource.id) {
                 "Path readback must use the readback staging resource"
             }
@@ -400,7 +400,7 @@ public class RenderGraph private constructor(
                 PlanPassDependency(before.id, after.id)
             }.toSet()
             require(dependencies.toSet() == expectedDependencies) {
-                "Path fills require consecutive linear dependencies"
+                "Path draws require consecutive linear dependencies"
             }
             require(visualCommandCount == visualDraws.map { it.commandIndex }.distinct().size) {
                 "Path visual command count must match unique draws"
