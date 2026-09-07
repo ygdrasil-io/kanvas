@@ -1,8 +1,11 @@
 package org.graphiks.kanvas.gpu.plan
 
 import kotlin.test.assertEquals
+import kotlin.test.assertContentEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
+import kotlin.test.assertTrue
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.render.ir.BlendMode
 import org.graphiks.kanvas.render.ir.BlendNode
@@ -29,12 +32,22 @@ import org.graphiks.kanvas.render.ir.StrokeJoinNode
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.PathBuilder
 import org.graphiks.math.geometry.PathF32
+import org.graphiks.math.geometry.PathFillInputF64
+import org.graphiks.math.geometry.PathFillWithStrokeWorkPreparationResult
+import org.graphiks.math.geometry.PathStrokeCap
 import org.graphiks.math.geometry.PathStrokeDrawMode
+import org.graphiks.math.geometry.PathStrokeJoin
 import org.graphiks.math.geometry.PathStrokeLimitsI32
 import org.graphiks.math.geometry.PathStrokeLimitsI64
 import org.graphiks.math.geometry.PathStrokePolicyF64
+import org.graphiks.math.geometry.PathStrokePreparationResult
+import org.graphiks.math.geometry.PathStrokeStyleF64
 import org.graphiks.math.geometry.PathStrokeWidthF64
+import org.graphiks.math.geometry.PathStrokeWorkUsageI64
+import org.graphiks.math.geometry.prepareMappedPathFillGeometryWithStrokeWorkF32
 import org.graphiks.math.matrix.Matrix3x3F32
+import org.graphiks.math.matrix.pathStrokeDeviceFillSegmentMapperF64
+import org.graphiks.math.matrix.preparePathStrokeGeometryF32
 import org.junit.jupiter.api.Test
 
 class W4dPathStrokePlanCompilerTest {
@@ -166,8 +179,11 @@ class W4dPathStrokePlanCompilerTest {
             } }.filterIsInstance<PathStrokeDraw>().single()
             assertEquals(cap.name.lowercase().replaceFirstChar(Char::uppercase), draw.styleF64.cap.name)
             assertEquals(join.name.lowercase().replaceFirstChar(Char::uppercase), draw.styleF64.join.name)
+            assertEquals(2.0, assertIs<PathStrokeWidthF64.Finite>(draw.styleF64.widthF64).valueF64)
             assertEquals(0.5, draw.styleF64.miterLimitF64)
             assertEquals(2, draw.styleF64.dashF64!!.intervalCountI32)
+            assertContentEquals(doubleArrayOf(2.0, 1.0), draw.styleF64.dashF64!!.copyIntervalsF64())
+            assertEquals(-1.0, draw.styleF64.dashF64!!.phaseF64)
         } }
         val hairlineScene = sceneOf(listOf(pathDraw(PaintStyleNode.STROKE, 0f)))
         val hairline = assertIs<GpuPlanSelection.Candidate>(compiler.select(hairlineScene, target(hairlineScene))).candidate
@@ -206,6 +222,84 @@ class W4dPathStrokePlanCompilerTest {
     }
 
     @Test
+    fun compilerFailsClosedForEveryRequiredCapabilityAndExactBudgetBoundary() {
+        val scene = sceneOf(listOf(pathDraw(PaintStyleNode.STROKE)))
+        val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target(scene))).candidate
+        val baseline = assertIs<RenderPlanResult.Ready<RenderGraph>>(compiler.plan(candidate, capabilities(), PlanBudget(1L shl 20))).plan
+        assertIs<RenderPlanResult.Ready<RenderGraph>>(compiler.plan(candidate, capabilities(), PlanBudget(baseline.peakFrameLocalBytes)))
+        assertEquals(W4dPlanDiagnostics.BudgetFrameLocalExceeded.value, assertIs<RenderPlanResult.ResourceLimitExceeded>(compiler.plan(candidate, capabilities(), PlanBudget(baseline.peakFrameLocalBytes - 1L))).diagnostics.single().code.value)
+
+        listOf(
+            capabilities(maxTextureDimension2D = 8),
+            capabilities(maxBufferSizeBytes = 1L),
+            capabilities(supportedFormats = emptySet()),
+            capabilities(operations = PlanOperationCapability.entries.toSet() - PlanOperationCapability.Readback),
+            capabilities(operations = PlanOperationCapability.entries.toSet() - PlanOperationCapability.DepthStencilAttachment),
+            capabilities(depthStencilFormats = emptySet()),
+            capabilities(copyBytesPerRowAlignment = 3),
+            capabilities(minUniformBufferOffsetAlignment = 3),
+            capabilities(bufferAllocationPolicy = PlanBufferAllocationPolicy.of(3, 4_096, 4_096)),
+            capabilities(bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 3, 4_096)),
+            capabilities(bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 4_096, 3)),
+        ).forEach { unavailable ->
+            assertIs<RenderPlanResult.GapOnPromotedScope>(compiler.plan(candidate, unavailable, PlanBudget(1L shl 20)))
+        }
+    }
+
+    @Test
+    fun planIdIsStableAndIncludesEveryAdmittedW4dPolicyAndCapabilityFact() {
+        val scene = sceneOf(listOf(pathDraw(PaintStyleNode.STROKE)))
+        val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target(scene))).candidate
+        fun id(caps: PlanCapabilitySnapshot = capabilities(), budget: PlanBudget = PlanBudget(1L shl 20)): String =
+            assertIs<RenderPlanResult.Ready<RenderGraph>>(compiler.plan(candidate, caps, budget)).plan.id.value
+        val stable = id()
+        assertEquals(stable, id())
+        listOf(
+            capabilities(deviceGeneration = 1),
+            capabilities(maxTextureDimension2D = 128),
+            capabilities(maxBufferSizeBytes = 2L shl 20),
+            capabilities(copyBytesPerRowAlignment = 512),
+            capabilities(minUniformBufferOffsetAlignment = 512),
+            capabilities(bufferAllocationPolicy = PlanBufferAllocationPolicy.of(32_768, 8_192, 8_192)),
+        ).forEach { changed -> assertNotEquals(stable, id(changed)) }
+        assertNotEquals(stable, id(budget = PlanBudget(2L shl 20)))
+
+        val policyBase = generousPolicy()
+        listOf(
+            policyBase.copy(maximumSagittaErrorF64 = 0.125),
+            policyBase.copy(maximumDashArcLengthErrorF64 = 0.03125),
+            policyBase.copy(limitsI32 = policyBase.limitsI32.copy(maxSubdivisionDepthI32 = 31)),
+            policyBase.copy(limitsI32 = policyBase.limitsI32.copy(maxAttemptedGeometryUnitsPerPathI32 = 100_000)),
+            policyBase.copy(limitsI32 = policyBase.limitsI32.copy(maxAttemptedGeometryUnitsPerFrameI32 = 100_000)),
+            policyBase.copy(limitsI32 = policyBase.limitsI32.copy(maxEmittedVertexCountPerPathI32 = 100_000)),
+            policyBase.copy(limitsI32 = policyBase.limitsI32.copy(maxEmittedVertexCountPerFrameI32 = 100_000)),
+            policyBase.copy(limitsI32 = policyBase.limitsI32.copy(maxEmittedIndexCountPerPathI32 = 100_000)),
+            policyBase.copy(limitsI32 = policyBase.limitsI32.copy(maxEmittedIndexCountPerFrameI32 = 100_000)),
+            policyBase.copy(limitsI64 = policyBase.limitsI64.copy(maxSnapshotByteCountPerPathI64 = 1L shl 20)),
+            policyBase.copy(limitsI64 = policyBase.limitsI64.copy(maxSnapshotByteCountPerFrameI64 = 2L shl 20)),
+        ).forEach { policy ->
+            val policyCompiler = W4dPathStrokePlanCompiler(policy)
+            val policyCandidate = assertIs<GpuPlanSelection.Candidate>(policyCompiler.select(scene, target(scene))).candidate
+            val policyId = assertIs<RenderPlanResult.Ready<RenderGraph>>(policyCompiler.plan(policyCandidate, capabilities(), PlanBudget(1L shl 20))).plan.id.value
+            assertNotEquals(stable, policyId)
+        }
+    }
+
+    @Test
+    fun compilerSealsDashInputsAndPublishesImmutableDiagnostics() {
+        val mutableIntervals = floatArrayOf(2f, 1f)
+        val draw = pathDraw(PaintStyleNode.STROKE, effect = PathEffectNode.Dash(ImmutableFloats.copyOf(mutableIntervals), -1f))
+        mutableIntervals[0] = 99f
+        val scene = sceneOf(listOf(draw))
+        val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target(scene))).candidate
+        val graph = assertIs<RenderPlanResult.Ready<RenderGraph>>(compiler.plan(candidate, capabilities(), PlanBudget(1L shl 20))).plan
+        val sealed = assertIs<PathStrokeDraw>(assertIs<PlanPass.StencilProducer>(graph.passes().first()).draw)
+        assertContentEquals(doubleArrayOf(2.0, 1.0), sealed.styleF64.dashF64!!.copyIntervalsF64())
+        val diagnostic = assertIs<GpuPlanSelection.NotCandidate>(compiler.select(sceneOf(listOf(pathDraw(PaintStyleNode.FILL))), target(sceneOf(listOf(pathDraw(PaintStyleNode.FILL)))))).diagnostics()
+        assertFailsWith<UnsupportedOperationException> { (diagnostic as MutableList).add(diagnostic.single()) }
+    }
+
+    @Test
     fun emptyStrokeIsCountedButDoesNotManufactureAGraphDraw() {
         val emptyPath = PathBuilder().moveTo(1f, 1f).build()
         val empty = pathDraw(PaintStyleNode.STROKE).let { SceneCommand.Draw(it.node.copy(geometry = GeometryNode.Path(emptyPath))) }
@@ -221,11 +315,16 @@ class W4dPathStrokePlanCompilerTest {
     @Test
     fun mixedFillThenStrokeUsesOneCumulativeLedgerAtEveryFrameBudgetBoundary() {
         val scene = sceneOf(listOf(pathDraw(PaintStyleNode.FILL), pathDraw(PaintStyleNode.STROKE)))
+        val expected = mixedExpectedWork(generousPolicy())
         FrameAxis.entries.forEach { axis ->
-            val required = firstCandidateFrameLimit(scene, axis)
+            val fill = axis.valueOf(expected.fillAfter)
+            val stroke = axis.valueOf(expected.strokeAfter) - fill
+            val required = axis.valueOf(expected.strokeAfter)
             val ready = compilerWithFrameLimit(axis, required).select(scene, target(scene))
             val refused = compilerWithFrameLimit(axis, required - 1L).select(scene, target(scene))
 
+            assertEquals(true, fill > 0L, "fill must contribute ${axis.name}")
+            assertEquals(true, stroke > 0L, "stroke must contribute ${axis.name}")
             assertIs<GpuPlanSelection.Candidate>(ready, "${axis.name} at its exact mixed fill→stroke limit")
             assertEquals(
                 W4dPlanDiagnostics.PathResourceLimit.value,
@@ -256,17 +355,17 @@ class W4dPathStrokePlanCompilerTest {
     private fun target(scene: SceneSnapshot): RenderTargetDescriptor =
         RenderTargetDescriptor(scene.extent, scene.colorSpace)
 
-    private fun capabilities(deviceGeneration: Long = 0, operations: Set<PlanOperationCapability> = PlanOperationCapability.entries.toSet()): PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(
+    private fun capabilities(deviceGeneration: Long = 0, operations: Set<PlanOperationCapability> = PlanOperationCapability.entries.toSet(), maxTextureDimension2D: Int = 64, maxBufferSizeBytes: Long = 1L shl 20, copyBytesPerRowAlignment: Int = 256, supportedFormats: Set<PlanLogicalColorFormat> = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), minUniformBufferOffsetAlignment: Int = 256, bufferAllocationPolicy: PlanBufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 4_096, 4_096), depthStencilFormats: Set<PlanDepthStencilFormat> = setOf(PlanDepthStencilFormat.Depth24PlusStencil8)): PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(
         deviceGeneration = deviceGeneration,
-        maxTextureDimension2D = 64,
-        maxBufferSizeBytes = 1L shl 20,
-        copyBytesPerRowAlignment = 256,
-        supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
-        minUniformBufferOffsetAlignment = 256,
+        maxTextureDimension2D = maxTextureDimension2D,
+        maxBufferSizeBytes = maxBufferSizeBytes,
+        copyBytesPerRowAlignment = copyBytesPerRowAlignment,
+        supportedFormats = supportedFormats,
+        minUniformBufferOffsetAlignment = minUniformBufferOffsetAlignment,
         maxDynamicUniformBuffersPerPipelineLayout = 1,
         supportedOperations = operations,
-        bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 4_096, 4_096),
-        supportedDepthStencilFormats = setOf(PlanDepthStencilFormat.Depth24PlusStencil8),
+        bufferAllocationPolicy = bufferAllocationPolicy,
+        supportedDepthStencilFormats = depthStencilFormats,
     )
 
     private fun pathDraw(style: PaintStyleNode, width: Float = 2f, cap: StrokeCapNode = StrokeCapNode.BUTT, join: StrokeJoinNode = StrokeJoinNode.MITER, miter: Float = 4f, effect: PathEffectNode? = null, path: PathF32 = trianglePath()): SceneCommand.Draw {
@@ -301,21 +400,14 @@ class W4dPathStrokePlanCompilerTest {
         }.build()
     }
 
-    private fun firstCandidateFrameLimit(scene: SceneSnapshot, axis: FrameAxis): Long {
-        var low = 1L
-        var high = 1L
-        while (compilerWithFrameLimit(axis, high).select(scene, target(scene)) !is GpuPlanSelection.Candidate) high *= 2L
-        while (low < high) {
-            val middle = low + (high - low) / 2L
-            if (compilerWithFrameLimit(axis, middle).select(scene, target(scene)) is GpuPlanSelection.Candidate) high = middle else low = middle + 1L
-        }
-        return low
-    }
-
     private fun compilerWithFrameLimit(axis: FrameAxis, limit: Long): W4dPathStrokePlanCompiler {
         require(limit > 0L)
-        val baseI32 = PathStrokeLimitsI32()
-        val baseI64 = PathStrokeLimitsI64()
+        val baseI32 = PathStrokeLimitsI32(
+            maxAttemptedGeometryUnitsPerFrameI32 = Int.MAX_VALUE,
+            maxEmittedVertexCountPerFrameI32 = Int.MAX_VALUE,
+            maxEmittedIndexCountPerFrameI32 = Int.MAX_VALUE,
+        )
+        val baseI64 = PathStrokeLimitsI64(maxSnapshotByteCountPerFrameI64 = Long.MAX_VALUE)
         val limitsI32 = when (axis) {
             FrameAxis.Attempted -> baseI32.copy(maxAttemptedGeometryUnitsPerFrameI32 = limit.toInt())
             FrameAxis.Vertices -> baseI32.copy(maxEmittedVertexCountPerFrameI32 = limit.toInt())
@@ -326,5 +418,44 @@ class W4dPathStrokePlanCompilerTest {
         return W4dPathStrokePlanCompiler(PathStrokePolicyF64(limitsI32 = limitsI32, limitsI64 = limitsI64))
     }
 
-    private enum class FrameAxis { Attempted, Vertices, Indices, Bytes }
+    private fun generousPolicy(): PathStrokePolicyF64 = PathStrokePolicyF64(
+        limitsI32 = PathStrokeLimitsI32(
+            maxAttemptedGeometryUnitsPerFrameI32 = Int.MAX_VALUE,
+            maxEmittedVertexCountPerFrameI32 = Int.MAX_VALUE,
+            maxEmittedIndexCountPerFrameI32 = Int.MAX_VALUE,
+        ),
+        limitsI64 = PathStrokeLimitsI64(maxSnapshotByteCountPerFrameI64 = Long.MAX_VALUE),
+    )
+
+    private fun mixedExpectedWork(policy: PathStrokePolicyF64): MixedWork {
+        val fill = assertIs<PathFillWithStrokeWorkPreparationResult.Ready>(
+            prepareMappedPathFillGeometryWithStrokeWorkF32(
+                PathFillInputF64.fromPathF32(trianglePath()),
+                Matrix3x3F32.Identity.pathStrokeDeviceFillSegmentMapperF64(),
+                strokePolicyF64 = policy,
+            ),
+        )
+        val stroke = assertIs<PathStrokePreparationResult.Ready>(
+            Matrix3x3F32.Identity.preparePathStrokeGeometryF32(
+                trianglePath(),
+                PathStrokeStyleF64(PathStrokeWidthF64.Finite(2.0), PathStrokeCap.Butt, PathStrokeJoin.Miter, 4.0),
+                PathStrokeDrawMode.Stroke,
+                policyF64 = policy,
+                frameWorkUsageBeforeI64 = fill.frameWorkUsageAfterI64,
+            ),
+        )
+        return MixedWork(fill.frameWorkUsageAfterI64, stroke.frameWorkUsageAfterI64)
+    }
+
+    private data class MixedWork(val fillAfter: PathStrokeWorkUsageI64, val strokeAfter: PathStrokeWorkUsageI64)
+
+    private enum class FrameAxis {
+        Attempted { override fun valueOf(work: PathStrokeWorkUsageI64): Long = work.attemptedGeometryUnitCountI64 },
+        Vertices { override fun valueOf(work: PathStrokeWorkUsageI64): Long = work.emittedVertexCountI64 },
+        Indices { override fun valueOf(work: PathStrokeWorkUsageI64): Long = work.emittedIndexCountI64 },
+        Bytes { override fun valueOf(work: PathStrokeWorkUsageI64): Long = work.snapshotByteCountI64 },
+        ;
+
+        abstract fun valueOf(work: PathStrokeWorkUsageI64): Long
+    }
 }

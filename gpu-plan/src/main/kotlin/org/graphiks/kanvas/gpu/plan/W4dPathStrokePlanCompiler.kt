@@ -40,6 +40,7 @@ import org.graphiks.math.geometry.PathStrokePreparationResult
 import org.graphiks.math.geometry.PathStrokeStyleF64
 import org.graphiks.math.geometry.PathStrokeWidthF64
 import org.graphiks.math.geometry.PathStrokeWorkUsageI64
+import org.graphiks.math.geometry.PathStrokePolicyF64
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.SizeI32
@@ -52,13 +53,13 @@ import org.graphiks.math.matrix.preparePathStrokeGeometryF32
 /**
  * Closed W4d.1 capability for bounded hard-edge sRGB path stroke frames.
  *
- * [strokePolicyF64] is the public bounded-geometry policy selected by the
- * embedding planner; it defines the frame work domain that W4d accepts.
+ * Policy injection is internal to the planner module so the public compiler
+ * stays a closed capability with its default W4d bounds.
  */
-public class W4dPathStrokePlanCompiler(
-    private val strokePolicyF64: org.graphiks.math.geometry.PathStrokePolicyF64 =
-        org.graphiks.math.geometry.PathStrokePolicyF64(),
+public class W4dPathStrokePlanCompiler internal constructor(
+    private val strokePolicyF64: PathStrokePolicyF64,
 ) : GpuPlanCompiler {
+    public constructor() : this(PathStrokePolicyF64())
     override fun select(scene: SceneSnapshot, target: RenderTargetDescriptor): GpuPlanSelection {
         if (scene.extent != target.extent || scene.colorSpace != target.colorSpace) return invalid("Scene and target differ")
         if (SceneSemanticValidator.validate(scene) is SceneSemanticValidationResult.Invalid) return invalid("Scene validation failed")
@@ -233,7 +234,7 @@ public class W4dPathStrokePlanCompiler(
         capabilities.bufferAllocationPolicy.vertexFloorBytes, capabilities.bufferAllocationPolicy.indexFloorBytes,
         capabilities.bufferAllocationPolicy.uniformFloorBytes,
     ).all { value -> value > 0L && value and (value - 1L) == 0L }
-    private fun identity(selected: Candidate, caps: PlanCapabilitySnapshot, budget: PlanBudget): String { val d = MessageDigest.getInstance("SHA-256"); listOf("w4d-plan-v1", selected.sceneCanonicalId.value, selected.target.canonicalId.value, caps.deviceGeneration.toString(), caps.maxTextureDimension2D.toString(), caps.maxBufferSizeBytes.toString(), caps.copyBytesPerRowAlignment.toString(), caps.supportedFormats().map { it.name }.sorted().joinToString(","), caps.minUniformBufferOffsetAlignment.toString(), caps.maxDynamicUniformBuffersPerPipelineLayout.toString(), caps.supportedOperations().map { it.name }.sorted().joinToString(","), caps.bufferAllocationPolicy.vertexFloorBytes.toString(), caps.bufferAllocationPolicy.indexFloorBytes.toString(), caps.bufferAllocationPolicy.uniformFloorBytes.toString(), caps.bufferAllocationPolicy.growth.name, caps.supportedDepthStencilFormats().map { it.name }.sorted().joinToString(","), budget.maxFrameLocalBytes.toString()).forEach { value -> d.update(value.encodeToByteArray().size.toString().encodeToByteArray()); d.update(0); d.update(value.encodeToByteArray()); d.update(0) }; return d.digest().joinToString("") { "%02x".format(it) } }
+    private fun identity(selected: Candidate, caps: PlanCapabilitySnapshot, budget: PlanBudget): String { val d = MessageDigest.getInstance("SHA-256"); listOf("w4d-plan-v1", selected.sceneCanonicalId.value, selected.target.canonicalId.value, caps.deviceGeneration.toString(), caps.maxTextureDimension2D.toString(), caps.maxBufferSizeBytes.toString(), caps.copyBytesPerRowAlignment.toString(), caps.supportedFormats().map { it.name }.sorted().joinToString(","), caps.minUniformBufferOffsetAlignment.toString(), caps.maxDynamicUniformBuffersPerPipelineLayout.toString(), caps.supportedOperations().map { it.name }.sorted().joinToString(","), caps.bufferAllocationPolicy.vertexFloorBytes.toString(), caps.bufferAllocationPolicy.indexFloorBytes.toString(), caps.bufferAllocationPolicy.uniformFloorBytes.toString(), caps.bufferAllocationPolicy.growth.name, caps.supportedDepthStencilFormats().map { it.name }.sorted().joinToString(","), budget.maxFrameLocalBytes.toString(), strokePolicyF64.maximumSagittaErrorF64.toRawBits().toString(), strokePolicyF64.maximumDashArcLengthErrorF64.toRawBits().toString(), strokePolicyF64.limitsI32.maxSubdivisionDepthI32.toString(), strokePolicyF64.limitsI32.maxAttemptedGeometryUnitsPerPathI32.toString(), strokePolicyF64.limitsI32.maxAttemptedGeometryUnitsPerFrameI32.toString(), strokePolicyF64.limitsI32.maxEmittedVertexCountPerPathI32.toString(), strokePolicyF64.limitsI32.maxEmittedVertexCountPerFrameI32.toString(), strokePolicyF64.limitsI32.maxEmittedIndexCountPerPathI32.toString(), strokePolicyF64.limitsI32.maxEmittedIndexCountPerFrameI32.toString(), strokePolicyF64.limitsI64.maxSnapshotByteCountPerPathI64.toString(), strokePolicyF64.limitsI64.maxSnapshotByteCountPerFrameI64.toString()).forEach { value -> d.update(value.encodeToByteArray().size.toString().encodeToByteArray()); d.update(0); d.update(value.encodeToByteArray()); d.update(0) }; return d.digest().joinToString("") { "%02x".format(it) } }
     private fun gap(message: String) = GpuPlanSelection.NotCandidate(listOf(diag(W4dPlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, message)))
     private fun invalid(message: String) = GpuPlanSelection.InvalidScene(listOf(diag(W4dPlanDiagnostics.SceneInvalid, RenderDiagnosticDomain.SCENE, message)))
     private fun limitSelection(message: String) = GpuPlanSelection.ResourceLimitExceeded(listOf(diag(W4dPlanDiagnostics.PathResourceLimit, RenderDiagnosticDomain.RESOURCE, message)))
