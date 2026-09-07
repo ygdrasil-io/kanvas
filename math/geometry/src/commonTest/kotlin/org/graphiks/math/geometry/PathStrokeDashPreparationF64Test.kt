@@ -63,6 +63,50 @@ class PathStrokeDashPreparationF64Test {
     }
 
     @Test
+    fun `dash cuts a nonuniform cubic at its source arclength`() {
+        val result = assertIs<PathStrokeCenterlinePreparationResult.Ready>(
+            preparePathStrokeCenterlinesF64(
+                input(
+                    PathFillSegmentF64.MoveTo(Point2F64(0.0, 0.0)),
+                    PathFillSegmentF64.CubicTo(
+                        Point2F64(0.0, 0.0),
+                        Point2F64(0.0, 0.0),
+                        Point2F64(10.0, 0.0),
+                    ),
+                ),
+                PathStrokeDashF64.of(doubleArrayOf(2.0, 100.0), phaseF64 = 0.0),
+            ),
+        )
+
+        val spanF64 = result.centerlineF64.copyContourSpansF64(0).single()
+        val endF64 = spanF64.primitiveF64.pointAtF64(spanF64.endParameterF64)
+        assertEquals(2.0, endF64.x, absoluteTolerance = 0.0625)
+        assertEquals(0.0, endF64.y, absoluteTolerance = 1e-9)
+    }
+
+    @Test
+    fun `dash retains a collinear cubic retracing through its extrema`() {
+        val result = assertIs<PathStrokeCenterlinePreparationResult.Ready>(
+            preparePathStrokeCenterlinesF64(
+                input(
+                    PathFillSegmentF64.MoveTo(Point2F64(0.0, 0.0)),
+                    PathFillSegmentF64.CubicTo(
+                        Point2F64(10.0, 0.0),
+                        Point2F64(-10.0, 0.0),
+                        Point2F64(0.0, 0.0),
+                    ),
+                ),
+                PathStrokeDashF64.of(doubleArrayOf(2.0, 100.0), phaseF64 = 0.0),
+            ),
+        )
+
+        val spanF64 = result.centerlineF64.copyContourSpansF64(0).single()
+        val endF64 = spanF64.primitiveF64.pointAtF64(spanF64.endParameterF64)
+        assertEquals(2.0, endF64.x, absoluteTolerance = 0.0625)
+        assertEquals(0.0, endF64.y, absoluteTolerance = 1e-9)
+    }
+
+    @Test
     fun `closed contour keeps its explicit closing source span`() {
         val result = assertIs<PathStrokeCenterlinePreparationResult.Ready>(
             preparePathStrokeCenterlinesF64(
@@ -81,6 +125,35 @@ class PathStrokeDashPreparationF64Test {
         val closing = result.centerlineF64.copyContourSpansF64(0).last()
         assertPointEquals(Point2F64(10.0, 10.0), closing.primitiveF64.pointAtF64(closing.startParameterF64))
         assertPointEquals(Point2F64(0.0, 0.0), closing.primitiveF64.pointAtF64(closing.endParameterF64))
+    }
+
+    @Test
+    fun `closed dash joins only the on run that crosses its closure`() {
+        val result = assertIs<PathStrokeCenterlinePreparationResult.Ready>(
+            preparePathStrokeCenterlinesF64(
+                input(
+                    PathFillSegmentF64.MoveTo(Point2F64(0.0, 0.0)),
+                    PathFillSegmentF64.LineTo(Point2F64(10.0, 0.0)),
+                    PathFillSegmentF64.LineTo(Point2F64(10.0, 10.0)),
+                    PathFillSegmentF64.LineTo(Point2F64(0.0, 10.0)),
+                    PathFillSegmentF64.Close,
+                ),
+                PathStrokeDashF64.of(doubleArrayOf(6.0, 4.0), phaseF64 = 2.0),
+            ),
+        )
+
+        assertEquals(4, result.centerlineF64.contourCountI32)
+        val closureRunF64 = (0 until result.centerlineF64.contourCountI32)
+            .map(result.centerlineF64::copyContourSpansF64)
+            .single { spansF64 ->
+                spansF64.size == 2 &&
+                    spansF64.first().primitiveF64.pointAtF64(spansF64.first().startParameterF64) == Point2F64(0.0, 2.0)
+            }
+        assertPointEquals(Point2F64(0.0, 2.0), closureRunF64[0].primitiveF64.pointAtF64(closureRunF64[0].startParameterF64))
+        assertPointEquals(Point2F64(0.0, 0.0), closureRunF64[0].primitiveF64.pointAtF64(closureRunF64[0].endParameterF64))
+        assertPointEquals(Point2F64(0.0, 0.0), closureRunF64[1].primitiveF64.pointAtF64(closureRunF64[1].startParameterF64))
+        assertPointEquals(Point2F64(4.0, 0.0), closureRunF64[1].primitiveF64.pointAtF64(closureRunF64[1].endParameterF64))
+        assertTrue((0 until result.centerlineF64.contourCountI32).all { !result.centerlineF64.isContourClosed(it) })
     }
 
     @Test

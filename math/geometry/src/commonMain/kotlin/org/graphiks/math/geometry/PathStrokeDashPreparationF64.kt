@@ -1,5 +1,7 @@
 package org.graphiks.math.geometry
 
+import org.graphiks.math.vector.Vector2F64
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
@@ -110,6 +112,19 @@ private data class StrokeArcLengthLeafF64(
     val startParameterF64: Double,
     val endParameterF64: Double,
     val lengthF64: Double,
+)
+
+private data class StrokeArcLengthBoundsF64(
+    val lowerLengthF64: Double,
+    val upperLengthF64: Double,
+    val isExactlyLinear: Boolean,
+)
+
+private data class DashedStrokeRunF64(
+    val spansF64: List<PathStrokePrimitiveSpanF64>,
+    val startDistanceF64: Double,
+    val endDistanceF64: Double,
+    val continuesThroughClosure: Boolean,
 )
 
 private data class MeasuredStrokePrimitiveF64(
@@ -285,25 +300,32 @@ private class PathStrokeDashPreparerF64(
         depthI32: Int,
         leavesF64: MutableList<StrokeArcLengthLeafF64>,
     ) {
-        val middleParameterF64 = (startParameterF64 + endParameterF64) * 0.5
-        ledgerI64.debitTopologyBeforeEmissionI64(1L)
-        val middleF64 = evaluatedPointF64(primitiveF64, middleParameterF64)
-        val chordLengthF64 = strokeDistanceF64(startF64, endF64)
-        val firstLengthF64 = strokeDistanceF64(startF64, middleF64)
-        val secondLengthF64 = strokeDistanceF64(middleF64, endF64)
-        val twoChordLengthF64 = firstLengthF64 + secondLengthF64
-        if (!twoChordLengthF64.isFinite()) throw PathStrokeInvalidInputAbort()
-        val arclengthErrorEstimateF64 = max(0.0, twoChordLengthF64 - chordLengthF64)
-        val intervalErrorBudgetF64 = policyF64.maximumDashArcLengthErrorF64 *
-            (endParameterF64 - startParameterF64)
-        if (arclengthErrorEstimateF64 <= intervalErrorBudgetF64) {
-            leavesF64 += StrokeArcLengthLeafF64(startParameterF64, endParameterF64, chordLengthF64)
+        val boundsF64 = arclengthBoundsF64(primitiveF64, startParameterF64, startF64, endParameterF64, endF64)
+        val parameterWidthF64 = endParameterF64 - startParameterF64
+        // Leaf parameter widths partition [0, 1], so their uncertainty sums to
+        // at most one quarter of the public arclength tolerance.  The separate
+        // leaf-length bound also limits distance-to-parameter inversion inside
+        // one leaf without materializing a centerline polyline.
+        val intervalErrorBudgetF64 = policyF64.maximumDashArcLengthErrorF64 * parameterWidthF64 * 0.25
+        val maximumLeafLengthF64 = policyF64.maximumDashArcLengthErrorF64 * 0.25
+        if (boundsF64.isExactlyLinear ||
+            (boundsF64.upperLengthF64 - boundsF64.lowerLengthF64 <= intervalErrorBudgetF64 &&
+                boundsF64.upperLengthF64 <= maximumLeafLengthF64)
+        ) {
+            val lengthF64 = if (boundsF64.isExactlyLinear) {
+                boundsF64.lowerLengthF64
+            } else {
+                (boundsF64.lowerLengthF64 + boundsF64.upperLengthF64) * 0.5
+            }
+            leavesF64 += StrokeArcLengthLeafF64(startParameterF64, endParameterF64, lengthF64)
             return
         }
         if (depthI32 >= policyF64.limitsI32.maxSubdivisionDepthI32) {
             throw PathStrokeResourceLimitAbort(PathStrokeResourceLimitReason.FlatteningDidNotConverge)
         }
+        val middleParameterF64 = (startParameterF64 + endParameterF64) * 0.5
         ledgerI64.debitTopologyBeforeEmissionI64(1L)
+        val middleF64 = evaluatedPointF64(primitiveF64, middleParameterF64)
         measurePrimitiveIntervalF64(
             primitiveF64,
             startParameterF64,
@@ -322,6 +344,68 @@ private class PathStrokeDashPreparerF64(
             depthI32 + 1,
             leavesF64,
         )
+    }
+
+    private fun arclengthBoundsF64(
+        primitiveF64: PathStrokePrimitiveF64,
+        startParameterF64: Double,
+        startF64: Point2F64,
+        endParameterF64: Double,
+        endF64: Point2F64,
+    ): StrokeArcLengthBoundsF64 {
+        val lowerLengthF64 = strokeDistanceF64(startF64, endF64)
+        val maximumSpeedF64 = maximumDerivativeSpeedF64(primitiveF64, startParameterF64, endParameterF64)
+        val upperLengthF64 = max(lowerLengthF64, maximumSpeedF64 * (endParameterF64 - startParameterF64))
+        if (!upperLengthF64.isFinite()) throw PathStrokeInvalidInputAbort()
+        return StrokeArcLengthBoundsF64(
+            lowerLengthF64 = lowerLengthF64,
+            upperLengthF64 = upperLengthF64,
+            isExactlyLinear = primitiveF64 is PathStrokeLinePrimitiveF64 ||
+                (primitiveF64 is PathStrokeSvgArcPrimitiveF64 && primitiveF64.arcF64 == null),
+        )
+    }
+
+    private fun maximumDerivativeSpeedF64(
+        primitiveF64: PathStrokePrimitiveF64,
+        startParameterF64: Double,
+        endParameterF64: Double,
+    ): Double {
+        val speedF64 = when (primitiveF64) {
+            is PathStrokeLinePrimitiveF64 -> strokeVectorLengthF64(primitiveF64.endF64 - primitiveF64.startF64)
+
+            is PathStrokeQuadPrimitiveF64 -> max(
+                evaluatedDerivativeLengthF64(primitiveF64, startParameterF64),
+                evaluatedDerivativeLengthF64(primitiveF64, endParameterF64),
+            )
+
+            is PathStrokeCubicPrimitiveF64 -> {
+                ledgerI64.debitTopologyBeforeEmissionI64(1L)
+                val controlsF64 = cubicDerivativeControlsOnIntervalF64(
+                    primitiveF64,
+                    startParameterF64,
+                    endParameterF64,
+                )
+                maxOf(
+                    strokeVectorLengthF64(controlsF64.first),
+                    strokeVectorLengthF64(controlsF64.second),
+                    strokeVectorLengthF64(controlsF64.third),
+                )
+            }
+
+            is PathStrokeSvgArcPrimitiveF64 -> primitiveF64.arcF64?.let { arcF64 ->
+                abs(arcF64.sweepAngle) * max(arcF64.radiusX, arcF64.radiusY)
+            } ?: strokeVectorLengthF64(primitiveF64.endF64 - primitiveF64.startF64)
+        }
+        if (!speedF64.isFinite()) throw PathStrokeInvalidInputAbort()
+        return speedF64
+    }
+
+    private fun evaluatedDerivativeLengthF64(
+        primitiveF64: PathStrokePrimitiveF64,
+        parameterF64: Double,
+    ): Double {
+        ledgerI64.debitTopologyBeforeEmissionI64(1L)
+        return strokeVectorLengthF64(primitiveF64.derivativeAtF64(parameterF64))
     }
 
     private fun evaluatedPointF64(primitiveF64: PathStrokePrimitiveF64, parameterF64: Double): Point2F64 {
@@ -355,6 +439,7 @@ private class PathStrokeDashPreparerF64(
         if (totalLengthF64 == 0.0) return
 
         val cursorF64 = DashCursorF64(dashF64)
+        val runsF64 = mutableListOf<DashedStrokeRunF64>()
         var distanceF64 = 0.0
         while (distanceF64 < totalLengthF64) {
             if (cursorF64.remainingLengthF64 == 0.0) {
@@ -366,12 +451,47 @@ private class PathStrokeDashPreparerF64(
             if (cursorF64.isOn) {
                 val spansF64 = mutableListOf<PathStrokePrimitiveSpanF64>()
                 appendDashedRangeF64(measuredPrimitivesF64, distanceF64, nextDistanceF64, spansF64)
-                retainContour(spansF64, sourceClosed && distanceF64 == 0.0 && nextDistanceF64 == totalLengthF64)
+                if (spansF64.isNotEmpty()) {
+                    ledgerI64.debitTopologyBeforeEmissionI64(1L)
+                    runsF64 += DashedStrokeRunF64(
+                        spansF64 = spansF64,
+                        startDistanceF64 = distanceF64,
+                        endDistanceF64 = nextDistanceF64,
+                        continuesThroughClosure = nextDistanceF64 == totalLengthF64 &&
+                            nextDistanceF64 < distanceF64 + cursorF64.remainingLengthF64,
+                    )
+                }
             }
             val consumedLengthF64 = nextDistanceF64 - distanceF64
             distanceF64 = nextDistanceF64
             cursorF64.consume(consumedLengthF64)
             if (cursorF64.remainingLengthF64 == 0.0) cursorF64.advance()
+        }
+        retainDashedRunsF64(runsF64, sourceClosed, totalLengthF64)
+    }
+
+    private fun retainDashedRunsF64(
+        runsF64: List<DashedStrokeRunF64>,
+        sourceClosed: Boolean,
+        totalLengthF64: Double,
+    ) {
+        val firstRunF64 = runsF64.firstOrNull() ?: return
+        val lastRunF64 = runsF64.last()
+        val joinsClosure = sourceClosed && runsF64.size > 1 &&
+            firstRunF64.startDistanceF64 == 0.0 && lastRunF64.endDistanceF64 == totalLengthF64 &&
+            lastRunF64.continuesThroughClosure
+        if (joinsClosure) {
+            retainContour(lastRunF64.spansF64 + firstRunF64.spansF64, closed = false)
+            for (indexI32 in 1 until runsF64.lastIndex) {
+                retainContour(runsF64[indexI32].spansF64, closed = false)
+            }
+            return
+        }
+        runsF64.forEach { runF64 ->
+            retainContour(
+                runF64.spansF64,
+                closed = sourceClosed && runF64.startDistanceF64 == 0.0 && runF64.endDistanceF64 == totalLengthF64,
+            )
         }
     }
 
@@ -465,6 +585,62 @@ private class DashCursorF64(dashF64: PathStrokeDashF64) {
 private fun normalizedDashPhaseF64(phaseF64: Double, periodF64: Double): Double =
     ((phaseF64 % periodF64) + periodF64) % periodF64
 
+private fun cubicDerivativeControlsOnIntervalF64(
+    primitiveF64: PathStrokeCubicPrimitiveF64,
+    startParameterF64: Double,
+    endParameterF64: Double,
+): Triple<Vector2F64, Vector2F64, Vector2F64> {
+    val firstF64 = Vector2F64(
+        3.0 * (primitiveF64.control1F64.x - primitiveF64.startF64.x),
+        3.0 * (primitiveF64.control1F64.y - primitiveF64.startF64.y),
+    )
+    val controlF64 = Vector2F64(
+        3.0 * (primitiveF64.control2F64.x - primitiveF64.control1F64.x),
+        3.0 * (primitiveF64.control2F64.y - primitiveF64.control1F64.y),
+    )
+    val lastF64 = Vector2F64(
+        3.0 * (primitiveF64.endF64.x - primitiveF64.control2F64.x),
+        3.0 * (primitiveF64.endF64.y - primitiveF64.control2F64.y),
+    )
+    val startF64 = quadraticVectorPointF64(firstF64, controlF64, lastF64, startParameterF64)
+    val rightControlF64 = interpolatedStrokeVectorF64(controlF64, lastF64, startParameterF64)
+    val remainingParameterF64 = 1.0 - startParameterF64
+    val relativeEndParameterF64 = if (remainingParameterF64 == 0.0) {
+        0.0
+    } else {
+        (endParameterF64 - startParameterF64) / remainingParameterF64
+    }
+    return Triple(
+        startF64,
+        interpolatedStrokeVectorF64(startF64, rightControlF64, relativeEndParameterF64),
+        quadraticVectorPointF64(firstF64, controlF64, lastF64, endParameterF64),
+    )
+}
+
+private fun quadraticVectorPointF64(
+    firstF64: Vector2F64,
+    controlF64: Vector2F64,
+    lastF64: Vector2F64,
+    parameterF64: Double,
+): Vector2F64 {
+    val inverseF64 = 1.0 - parameterF64
+    return Vector2F64(
+        firstF64.x * inverseF64 * inverseF64 + controlF64.x * 2.0 * inverseF64 * parameterF64 +
+            lastF64.x * parameterF64 * parameterF64,
+        firstF64.y * inverseF64 * inverseF64 + controlF64.y * 2.0 * inverseF64 * parameterF64 +
+            lastF64.y * parameterF64 * parameterF64,
+    )
+}
+
+private fun interpolatedStrokeVectorF64(
+    firstF64: Vector2F64,
+    secondF64: Vector2F64,
+    parameterF64: Double,
+): Vector2F64 = Vector2F64(
+    firstF64.x + (secondF64.x - firstF64.x) * parameterF64,
+    firstF64.y + (secondF64.y - firstF64.y) * parameterF64,
+)
+
 private fun isFiniteStrokeInputSegmentF64(segmentF64: PathFillSegmentF64): Boolean = when (segmentF64) {
     is PathFillSegmentF64.MoveTo -> segmentF64.point.isFinite()
     is PathFillSegmentF64.LineTo -> segmentF64.point.isFinite()
@@ -482,4 +658,10 @@ private fun strokeDistanceF64(firstF64: Point2F64, secondF64: Point2F64): Double
     val distanceF64 = stableHypotF64(secondF64.x - firstF64.x, secondF64.y - firstF64.y)
     if (!distanceF64.isFinite()) throw PathStrokeInvalidInputAbort()
     return distanceF64
+}
+
+private fun strokeVectorLengthF64(vectorF64: Vector2F64): Double {
+    val lengthF64 = stableHypotF64(vectorF64.x, vectorF64.y)
+    if (!lengthF64.isFinite()) throw PathStrokeInvalidInputAbort()
+    return lengthF64
 }
