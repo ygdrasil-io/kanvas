@@ -17,6 +17,7 @@ import org.graphiks.kanvas.render.ir.MaterialNode
 import org.graphiks.kanvas.render.ir.PaintNode
 import org.graphiks.kanvas.render.ir.PaintStyleNode
 import org.graphiks.kanvas.render.ir.PathEffectNode
+import org.graphiks.kanvas.render.ir.ImmutableFloats
 import org.graphiks.kanvas.render.ir.RenderPlanResult
 import org.graphiks.kanvas.render.ir.RenderTargetDescriptor
 import org.graphiks.kanvas.render.ir.SceneCommand
@@ -144,6 +145,32 @@ class W4dPathStrokePlanCompilerTest {
         assertEquals(org.graphiks.math.geometry.RectI32(0, 0, 4, 3), draw.copyScissorI32())
     }
 
+    @Test
+    fun compilerSealsEveryPublicStrokeStyleAxis() {
+        val caps = StrokeCapNode.entries
+        val joins = StrokeJoinNode.entries
+        caps.forEach { cap -> joins.forEach { join ->
+            val scene = sceneOf(listOf(pathDraw(PaintStyleNode.STROKE, 2f, cap, join, 0.5f,
+                PathEffectNode.Dash(ImmutableFloats.copyOf(floatArrayOf(2f, 1f)), -1f))))
+            val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target(scene))).candidate
+            val graph = assertIs<RenderPlanResult.Ready<RenderGraph>>(compiler.plan(candidate, capabilities(), PlanBudget(1L shl 20))).plan
+            val draw = graph.passes().mapNotNull { pass -> when (pass) {
+                is PlanPass.RenderPass -> pass.draws().singleOrNull()
+                is PlanPass.StencilProducer -> pass.draw
+                else -> null
+            } }.filterIsInstance<PathStrokeDraw>().single()
+            assertEquals(cap.name.lowercase().replaceFirstChar(Char::uppercase), draw.styleF64.cap.name)
+            assertEquals(join.name.lowercase().replaceFirstChar(Char::uppercase), draw.styleF64.join.name)
+            assertEquals(0.5, draw.styleF64.miterLimitF64)
+            assertEquals(2, draw.styleF64.dashF64!!.intervalCountI32)
+        } }
+        val hairlineScene = sceneOf(listOf(pathDraw(PaintStyleNode.STROKE, 0f)))
+        val hairline = assertIs<GpuPlanSelection.Candidate>(compiler.select(hairlineScene, target(hairlineScene))).candidate
+        val hairlineGraph = assertIs<RenderPlanResult.Ready<RenderGraph>>(compiler.plan(hairline, capabilities(), PlanBudget(1L shl 20))).plan
+        val draw = hairlineGraph.passes().filterIsInstance<PlanPass.StencilProducer>().first().draw
+        assertIs<PathStrokeWidthF64.Hairline>(assertIs<PathStrokeDraw>(draw).styleF64.widthF64)
+    }
+
     private fun sceneOf(draws: List<SceneCommand.Draw>): SceneSnapshot = SceneSnapshot.of(
         SceneExtent(16, 16), ColorSpace.SRGB, draws,
     )
@@ -164,17 +191,17 @@ class W4dPathStrokePlanCompilerTest {
         supportedDepthStencilFormats = setOf(PlanDepthStencilFormat.Depth24PlusStencil8),
     )
 
-    private fun pathDraw(style: PaintStyleNode, width: Float = 2f): SceneCommand.Draw {
+    private fun pathDraw(style: PaintStyleNode, width: Float = 2f, cap: StrokeCapNode = StrokeCapNode.BUTT, join: StrokeJoinNode = StrokeJoinNode.MITER, miter: Float = 4f, effect: PathEffectNode? = null): SceneCommand.Draw {
         val color = ColorARGB.fromPackedUInt(0xFFFF0000u)
         val paint = PaintNode(
             color, null, BlendMode.SRC_OVER, null, null, null, null, null,
-            style, width, StrokeCapNode.BUTT, StrokeJoinNode.MITER, 4f, false,
+            style, width, cap, join, miter, false,
         )
         val path = PathBuilder().moveTo(2f, 2f).lineTo(12f, 2f).lineTo(2f, 12f).close().build()
         return SceneCommand.Draw(DrawNode(
             GeometryNode.Path(path), MaterialNode.Solid(color), CoverageRequest.HARD_EDGE,
             ClipStackNode.Empty, BlendNode.SrcOver, EffectStack.Empty, Matrix3x3F32.Identity,
-            DrawOrigin.PATH, paint,
+            DrawOrigin.PATH, paint.copy(pathEffect = effect),
         ))
     }
 }

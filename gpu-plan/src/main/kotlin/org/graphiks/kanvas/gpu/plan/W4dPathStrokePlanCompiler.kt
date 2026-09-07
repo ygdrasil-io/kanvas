@@ -50,7 +50,10 @@ import org.graphiks.math.matrix.pathStrokeDeviceFillSegmentMapperF64
 import org.graphiks.math.matrix.preparePathStrokeGeometryF32
 
 /** Closed W4d.1 capability for bounded hard-edge sRGB path stroke frames. */
-public class W4dPathStrokePlanCompiler : GpuPlanCompiler {
+public class W4dPathStrokePlanCompiler(
+    private val strokePolicyF64: org.graphiks.math.geometry.PathStrokePolicyF64 =
+        org.graphiks.math.geometry.PathStrokePolicyF64(),
+) : GpuPlanCompiler {
     override fun select(scene: SceneSnapshot, target: RenderTargetDescriptor): GpuPlanSelection {
         if (scene.extent != target.extent || scene.colorSpace != target.colorSpace) return invalid("Scene and target differ")
         if (SceneSemanticValidator.validate(scene) is SceneSemanticValidationResult.Invalid) return invalid("Scene validation failed")
@@ -137,7 +140,7 @@ public class W4dPathStrokePlanCompiler : GpuPlanCompiler {
 
     private fun prepareFill(path: org.graphiks.math.geometry.PathF32, matrix: Matrix3x3F32, frame: PathStrokeWorkUsageI64): Prepared {
         val mapper = try { matrix.pathStrokeDeviceFillSegmentMapperF64() } catch (_: IllegalArgumentException) { return Prepared.Invalid("Path transform is non-finite") }
-        return when (val prepared = prepareMappedPathFillGeometryWithStrokeWorkF32(PathFillInputF64.fromPathF32(path), mapper, frameWorkUsageBeforeI64 = frame)) {
+        return when (val prepared = prepareMappedPathFillGeometryWithStrokeWorkF32(PathFillInputF64.fromPathF32(path), mapper, strokePolicyF64 = strokePolicyF64, frameWorkUsageBeforeI64 = frame)) {
             is PathFillWithStrokeWorkPreparationResult.Ready -> Prepared.Ready(prepared.geometryF32, null, null, null, prepared.frameWorkUsageAfterI64)
             is PathFillWithStrokeWorkPreparationResult.Empty -> Prepared.Empty(prepared.frameWorkUsageAfterI64)
             is PathFillWithStrokeWorkPreparationResult.InvalidScene -> Prepared.Invalid("Math rejected fill scene: ${prepared.reason}")
@@ -148,7 +151,7 @@ public class W4dPathStrokePlanCompiler : GpuPlanCompiler {
     private fun prepareStroke(path: org.graphiks.math.geometry.PathF32, matrix: Matrix3x3F32, paint: PaintNode, frame: PathStrokeWorkUsageI64): Prepared {
         val mode = if (paint.style == PaintStyleNode.STROKE_AND_FILL) PathStrokeDrawMode.StrokeAndFill else PathStrokeDrawMode.Stroke
         val style = try { style(paint, mode) } catch (_: IllegalArgumentException) { return Prepared.Invalid("Stroke style is invalid") }
-        return when (val prepared = matrix.preparePathStrokeGeometryF32(path, style, mode, frameWorkUsageBeforeI64 = frame)) {
+        return when (val prepared = matrix.preparePathStrokeGeometryF32(path, style, mode, policyF64 = strokePolicyF64, frameWorkUsageBeforeI64 = frame)) {
             is PathStrokePreparationResult.Ready -> Prepared.Ready(prepared.geometryF32.copyFillGeometryF32(), prepared.geometryF32, mode, style, prepared.frameWorkUsageAfterI64)
             is PathStrokePreparationResult.Empty -> Prepared.Empty(prepared.frameWorkUsageAfterI64)
             is PathStrokePreparationResult.InvalidScene -> Prepared.Invalid("Math rejected stroke scene: ${prepared.reason}")
