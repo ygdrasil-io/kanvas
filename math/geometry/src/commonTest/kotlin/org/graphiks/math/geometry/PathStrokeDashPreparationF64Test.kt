@@ -85,6 +85,36 @@ class PathStrokeDashPreparationF64Test {
     }
 
     @Test
+    fun `dash cut across cubic primitives stays within the contour arclength error`() {
+        val result = assertIs<PathStrokeCenterlinePreparationResult.Ready>(
+            preparePathStrokeCenterlinesF64(
+                PathFillInputF64.of(
+                    FillRule.WINDING,
+                    listOf(PathFillSegmentF64.MoveTo(Point2F64(0.0, 0.0))) + List(24) { indexI32 ->
+                        PathFillSegmentF64.CubicTo(
+                            Point2F64(indexI32.toDouble(), 0.0),
+                            Point2F64(indexI32.toDouble(), 0.0),
+                            Point2F64(indexI32 + 1.0, 0.0),
+                        )
+                    },
+                ),
+                PathStrokeDashF64.of(doubleArrayOf(23.5, 100.0), phaseF64 = 0.0),
+                PathStrokePolicyF64(
+                    limitsI32 = PathStrokeLimitsI32(
+                        maxAttemptedGeometryUnitsPerPathI32 = 1_000_000,
+                        maxAttemptedGeometryUnitsPerFrameI32 = 1_000_000,
+                    ),
+                ),
+            ),
+        )
+
+        val spanF64 = result.centerlineF64.copyContourSpansF64(0).last()
+        val endF64 = spanF64.primitiveF64.pointAtF64(spanF64.endParameterF64)
+        assertEquals(23.5, endF64.x, absoluteTolerance = 0.0625)
+        assertEquals(0.0, endF64.y, absoluteTolerance = 1e-9)
+    }
+
+    @Test
     fun `dash retains a collinear cubic retracing through its extrema`() {
         val result = assertIs<PathStrokeCenterlinePreparationResult.Ready>(
             preparePathStrokeCenterlinesF64(

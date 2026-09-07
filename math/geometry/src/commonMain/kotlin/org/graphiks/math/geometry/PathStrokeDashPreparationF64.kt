@@ -264,7 +264,15 @@ private class PathStrokeDashPreparerF64(
         if (currentF64 == null) return
 
         val sourceContourF64 = SourceStrokeContourF64(sourcePrimitivesF64.toList(), contourClosed)
-        val measuredPrimitivesF64 = sourceContourF64.primitivesF64.mapNotNull(::measurePrimitiveF64)
+        val primitiveCountI32 = sourceContourF64.primitivesF64.size
+        val measurementErrorPerPrimitiveF64 = if (primitiveCountI32 == 0) {
+            0.0
+        } else {
+            policyF64.maximumDashArcLengthErrorF64 / primitiveCountI32
+        }
+        val measuredPrimitivesF64 = sourceContourF64.primitivesF64.mapNotNull { primitiveF64 ->
+            measurePrimitiveF64(primitiveF64, measurementErrorPerPrimitiveF64)
+        }
         if (measuredPrimitivesF64.isNotEmpty()) {
             if (dashF64 == null) {
                 retainUndashedContour(measuredPrimitivesF64, sourceContourF64.closed)
@@ -278,11 +286,23 @@ private class PathStrokeDashPreparerF64(
         sourcePrimitivesF64 = mutableListOf()
     }
 
-    private fun measurePrimitiveF64(primitiveF64: PathStrokePrimitiveF64): MeasuredStrokePrimitiveF64? {
+    private fun measurePrimitiveF64(
+        primitiveF64: PathStrokePrimitiveF64,
+        measurementErrorBudgetF64: Double,
+    ): MeasuredStrokePrimitiveF64? {
         val leavesF64 = mutableListOf<StrokeArcLengthLeafF64>()
         val startF64 = evaluatedPointF64(primitiveF64, 0.0)
         val endF64 = evaluatedPointF64(primitiveF64, 1.0)
-        measurePrimitiveIntervalF64(primitiveF64, 0.0, startF64, 1.0, endF64, 0, leavesF64)
+        measurePrimitiveIntervalF64(
+            primitiveF64,
+            0.0,
+            startF64,
+            1.0,
+            endF64,
+            0,
+            measurementErrorBudgetF64,
+            leavesF64,
+        )
         var lengthF64 = 0.0
         leavesF64.forEach { leafF64 ->
             lengthF64 += leafF64.lengthF64
@@ -298,15 +318,18 @@ private class PathStrokeDashPreparerF64(
         endParameterF64: Double,
         endF64: Point2F64,
         depthI32: Int,
+        measurementErrorBudgetF64: Double,
         leavesF64: MutableList<StrokeArcLengthLeafF64>,
     ) {
         val boundsF64 = arclengthBoundsF64(primitiveF64, startParameterF64, startF64, endParameterF64, endF64)
         val parameterWidthF64 = endParameterF64 - startParameterF64
-        // Leaf parameter widths partition [0, 1], so their uncertainty sums to
-        // at most one quarter of the public arclength tolerance.  The separate
-        // leaf-length bound also limits distance-to-parameter inversion inside
-        // one leaf without materializing a centerline polyline.
-        val intervalErrorBudgetF64 = policyF64.maximumDashArcLengthErrorF64 * parameterWidthF64 * 0.25
+        // This contour shares one measurement budget across all of its source
+        // primitives. The sum of the leaf-bound widths is at most one quarter
+        // of the public tolerance, so midpoint measurement error is at most an
+        // eighth even for a dash cut that crosses several primitives. The
+        // separate leaf-length bound limits local inversion without
+        // materializing a centerline polyline.
+        val intervalErrorBudgetF64 = measurementErrorBudgetF64 * parameterWidthF64 * 0.25
         val maximumLeafLengthF64 = policyF64.maximumDashArcLengthErrorF64 * 0.25
         if (boundsF64.isExactlyLinear ||
             (boundsF64.upperLengthF64 - boundsF64.lowerLengthF64 <= intervalErrorBudgetF64 &&
@@ -333,6 +356,7 @@ private class PathStrokeDashPreparerF64(
             middleParameterF64,
             middleF64,
             depthI32 + 1,
+            measurementErrorBudgetF64,
             leavesF64,
         )
         measurePrimitiveIntervalF64(
@@ -342,6 +366,7 @@ private class PathStrokeDashPreparerF64(
             endParameterF64,
             endF64,
             depthI32 + 1,
+            measurementErrorBudgetF64,
             leavesF64,
         )
     }
