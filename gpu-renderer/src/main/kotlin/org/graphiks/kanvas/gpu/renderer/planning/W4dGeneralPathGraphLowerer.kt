@@ -35,6 +35,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchQueueGuard
 import org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUW4dBinaryMaskConsumerPlan
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveStructuralColorFormat
@@ -46,6 +47,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceFamily
+import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_BINDING_LAYOUT_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_RENDER_PIPELINE_KEY
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_VERTEX_SOURCE_LABEL
@@ -300,9 +302,17 @@ internal class W4dGeneralPathGraphLowerer {
         bounds: GPUPixelBounds,
     ): BuiltPacket {
         val draw = pass.draw
-        val geometry = fillGeometry(draw.copyPathGeometry())
         val scissor = draw.copyScissorI32()
         val scissorBounds = GPUPixelBounds(scissor.left, scissor.top, scissor.right, scissor.bottom)
+        val binaryMaskConsumer = (draw as? BinaryMaskedPathDraw)?.let { binary ->
+            GPUW4dBinaryMaskConsumerPlan.exact(
+                maskResourceId = binary.mask.value,
+                commandIdValue = binary.commandIndex,
+                renderPipelineKey = GPURenderPipelineKey(
+                    "$CORE_PRIMITIVE_RENDER_PIPELINE_KEY.w4d-binary-mask-consumer-v1",
+                ),
+            )
+        }
         val scissorClip = if (scissorBounds == bounds) {
             GPUClipCoveragePlan.NoClip to GPUClipExecutionPlan.NoClip
         } else {
@@ -313,38 +323,43 @@ internal class W4dGeneralPathGraphLowerer {
         }
         val producer = pass.phase.isStencilProducer()
         val clip = if (producer) GPUClipCoveragePlan.NoClip to GPUClipExecutionPlan.NoClip else scissorClip
-        val geometryInput = when (draw.strategy) {
-            PathFillStrategy.DirectTriangle -> {
-                val direct = requireNotNull(geometry.copyDirectTriangleF32OrNull())
-                GPUCorePrimitiveGeometryInput.TriangulatedPath(
-                    vertices = direct.copyVerticesF32().toList(),
-                    indices = direct.copyIndicesI32().toList(),
-                    sourceContourStarts = listOf(0),
-                    sourceVertexCount = direct.vertexCountI32,
-                    coverBounds = scissorBounds,
-                    geometryMode = GPUCorePrimitiveGeometryMode.DirectTriangles,
-                    fillRule = GPUCorePrimitiveFillRule.Winding,
-                    inverseFill = false,
-                    sourceAuthority = GPUPathSourceAuthority.W4dPlannedPathStrokeV1,
-                )
-            }
-            PathFillStrategy.StencilCover -> {
-                val fan = requireNotNull(geometry.copyStencilEdgeFanF32OrNull())
-                GPUCorePrimitiveGeometryInput.TriangulatedPath(
-                    vertices = fan.copyVerticesF32().toList(),
-                    indices = fan.copyIndicesI32().toList(),
-                    sourceContourStarts = fan.copyContourStartsI32().toList(),
-                    sourceVertexCount = fan.edgeCountI32,
-                    coverBounds = scissorBounds,
-                    geometryMode = GPUCorePrimitiveGeometryMode.StencilEdgeFan,
-                    fillRule = when (geometry.fillRule) {
-                        FillRule.WINDING -> GPUCorePrimitiveFillRule.Winding
-                        FillRule.EVEN_ODD -> GPUCorePrimitiveFillRule.EvenOdd
-                        else -> error("W4d.2 rejects inverse path fills")
-                    },
-                    inverseFill = false,
-                    sourceAuthority = GPUPathSourceAuthority.W4dPlannedPathStrokeV1,
-                )
+        val geometryInput = if (binaryMaskConsumer != null) {
+            binaryMaskCoverGeometryInput(scissorBounds)
+        } else {
+            val geometry = fillGeometry(draw.copyPathGeometry())
+            when (draw.strategy) {
+                PathFillStrategy.DirectTriangle -> {
+                    val direct = requireNotNull(geometry.copyDirectTriangleF32OrNull())
+                    GPUCorePrimitiveGeometryInput.TriangulatedPath(
+                        vertices = direct.copyVerticesF32().toList(),
+                        indices = direct.copyIndicesI32().toList(),
+                        sourceContourStarts = listOf(0),
+                        sourceVertexCount = direct.vertexCountI32,
+                        coverBounds = scissorBounds,
+                        geometryMode = GPUCorePrimitiveGeometryMode.DirectTriangles,
+                        fillRule = GPUCorePrimitiveFillRule.Winding,
+                        inverseFill = false,
+                        sourceAuthority = GPUPathSourceAuthority.W4dPlannedPathStrokeV1,
+                    )
+                }
+                PathFillStrategy.StencilCover -> {
+                    val fan = requireNotNull(geometry.copyStencilEdgeFanF32OrNull())
+                    GPUCorePrimitiveGeometryInput.TriangulatedPath(
+                        vertices = fan.copyVerticesF32().toList(),
+                        indices = fan.copyIndicesI32().toList(),
+                        sourceContourStarts = fan.copyContourStartsI32().toList(),
+                        sourceVertexCount = fan.edgeCountI32,
+                        coverBounds = scissorBounds,
+                        geometryMode = GPUCorePrimitiveGeometryMode.StencilEdgeFan,
+                        fillRule = when (geometry.fillRule) {
+                            FillRule.WINDING -> GPUCorePrimitiveFillRule.Winding
+                            FillRule.EVEN_ODD -> GPUCorePrimitiveFillRule.EvenOdd
+                            else -> error("W4d.2 rejects inverse path fills")
+                        },
+                        inverseFill = false,
+                        sourceAuthority = GPUPathSourceAuthority.W4dPlannedPathStrokeV1,
+                    )
+                }
             }
         }
         val semantic = GPUCorePrimitivePayloadGatherer().gatherPlannedW4dSemantic(
@@ -413,9 +428,12 @@ internal class W4dGeneralPathGraphLowerer {
             renderStepVersion = 1,
             role = role,
             blendPlan = blend,
-            renderPipelineKey = structural.stableRenderPipelineKey(CORE_PRIMITIVE_RENDER_PIPELINE_KEY),
-            bindingLayoutHash = CORE_PRIMITIVE_BINDING_LAYOUT_HASH,
+            renderPipelineKey = binaryMaskConsumer?.renderPipelineKey
+                ?: structural.stableRenderPipelineKey(CORE_PRIMITIVE_RENDER_PIPELINE_KEY),
+            bindingLayoutHash = binaryMaskConsumer?.bindingLayoutHash ?: CORE_PRIMITIVE_BINDING_LAYOUT_HASH,
             uniformSlot = semantic.payloadRef.uniformSlot,
+            resourceSlot = binaryMaskConsumer?.resourceSlot,
+            w4dBinaryMaskConsumer = binaryMaskConsumer,
             semanticPayload = semantic,
             vertexSourceLabel = CORE_PRIMITIVE_VERTEX_SOURCE_LABEL,
             scissorBoundsHash = corePrimitiveScissorAuthority(scissorBounds),
@@ -432,6 +450,26 @@ internal class W4dGeneralPathGraphLowerer {
         is PathDrawGeometry.Fill -> geometry.valueF32
         is PathDrawGeometry.Stroke -> geometry.valueF32.copyFillGeometryF32()
     }
+
+    /** The binary mask is sampled over the exact target scissor, never over the producer edges. */
+    private fun binaryMaskCoverGeometryInput(
+        scissorBounds: GPUPixelBounds,
+    ): GPUCorePrimitiveGeometryInput.TriangulatedPath = GPUCorePrimitiveGeometryInput.TriangulatedPath(
+        vertices = listOf(
+            scissorBounds.left.toFloat(), scissorBounds.top.toFloat(),
+            scissorBounds.right.toFloat(), scissorBounds.top.toFloat(),
+            scissorBounds.right.toFloat(), scissorBounds.bottom.toFloat(),
+            scissorBounds.left.toFloat(), scissorBounds.bottom.toFloat(),
+        ),
+        indices = listOf(0, 1, 2, 0, 2, 3),
+        sourceContourStarts = listOf(0),
+        sourceVertexCount = 4,
+        coverBounds = scissorBounds,
+        geometryMode = GPUCorePrimitiveGeometryMode.DirectTriangles,
+        fillRule = GPUCorePrimitiveFillRule.Winding,
+        inverseFill = false,
+        sourceAuthority = GPUPathSourceAuthority.W4dPlannedPathStrokeV1,
+    )
 
     private fun samplePlan(sample: SamplePlan): GPUSamplePlan = when (sample) {
         SamplePlan.SingleSample -> GPUSamplePlan.SingleSampleFrame

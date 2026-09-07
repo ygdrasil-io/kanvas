@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.planning
 
 import io.ygdrasil.webgpu.GPUTextureFormat
+import io.ygdrasil.webgpu.GPUTextureUsage
 import org.graphiks.kanvas.gpu.plan.PlanCapabilitySnapshot
 import org.graphiks.kanvas.gpu.plan.PlanBufferAllocationPolicy
 import org.graphiks.kanvas.gpu.plan.PlanDepthStencilFormat
@@ -55,10 +56,21 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
             code = W3PlanDiagnostics.CapabilityFormat,
         )
     }
-    val hasSingleSampleD24S8 =
-        1 in textureFormatSampleSupport[GPUTextureFormat.Depth24PlusStencil8]
+    val hasW4dTextureUsages = supportedTextureUsage?.supports(
+        GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding or GPUTextureUsage.CopySrc,
+    ) == true
+    // W4c's historical single-sample depth/stencil contract predates the optional
+    // physical-usage observation.  Its sample evidence remains authoritative; the
+    // stricter W4d.2 physical topology is deliberately confined to 4x/resolve/mask.
+    val hasSingleSampleD24S8 = 1 in textureFormatSampleSupport[GPUTextureFormat.Depth24PlusStencil8]
             ?.renderAttachmentSampleCounts.orEmpty()
-    val hasFourSampleSrgb = 4 in srgbSamples.orEmpty()
+    val hasW4dPhysicalFormats = setOf(
+        GPUTextureFormat.RGBA8UnormSrgb,
+        GPUTextureFormat.RGBA8Unorm,
+        GPUTextureFormat.Depth24PlusStencil8,
+    ).all { format -> format in supportedTextureFormats }
+    val hasW4dPhysicalTopology = hasW4dPhysicalFormats && hasW4dTextureUsages
+    val hasFourSampleSrgb = hasW4dPhysicalTopology && 4 in srgbSamples.orEmpty()
     val operations = rendererFeatures.mapNotNull { feature ->
         when (feature) {
             GPURendererFeature.RenderPass -> PlanOperationCapability.RenderPass
@@ -75,7 +87,9 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
         depthStencilFormats += PlanDepthStencilFormat.Depth24PlusStencil8
     }
     val sampleSupports = buildSet {
-        srgbSamples.orEmpty().filter { it in setOf(1, 4) }.forEach { sampleCount ->
+        srgbSamples.orEmpty().filter { sampleCount ->
+            sampleCount == 1 || sampleCount == 4 && hasFourSampleSrgb
+        }.forEach { sampleCount ->
             add(
                 PlanTextureSampleSupport.of(
                     PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
@@ -90,7 +104,7 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
         }
         textureFormatSampleSupport[GPUTextureFormat.Depth24PlusStencil8]
             ?.renderAttachmentSampleCounts.orEmpty()
-            .filter { it in setOf(1, 4) }
+            .filter { sampleCount -> hasSingleSampleD24S8 && sampleCount in setOf(1, 4) }
             .forEach { sampleCount ->
                 add(
                     PlanTextureSampleSupport.of(
@@ -100,7 +114,8 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
                     ),
                 )
             }
-        if (hasFourSampleSrgb && 1 in textureFormatSampleSupport[GPUTextureFormat.RGBA8Unorm]
+        if (hasW4dPhysicalTopology && hasFourSampleSrgb &&
+            1 in textureFormatSampleSupport[GPUTextureFormat.RGBA8Unorm]
                 ?.renderAttachmentSampleCounts.orEmpty()
         ) {
             add(
@@ -172,6 +187,9 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
 }
 
 private fun Long.isPositivePowerOfTwo(): Boolean = this > 0L && this and (this - 1L) == 0L
+
+private fun GPUTextureUsage.supports(required: GPUTextureUsage): Boolean =
+    (value and required.value) == required.value
 
 private fun unsupported(
     message: String,

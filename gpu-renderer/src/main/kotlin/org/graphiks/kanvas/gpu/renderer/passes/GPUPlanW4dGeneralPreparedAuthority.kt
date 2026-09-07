@@ -10,6 +10,9 @@ import org.graphiks.kanvas.gpu.plan.PlanPass
 import org.graphiks.kanvas.gpu.plan.RenderGraph
 import org.graphiks.kanvas.gpu.plan.SamplePlan
 import org.graphiks.kanvas.gpu.plan.W4dGeneralPathPlanCompiler
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 
 /** The only W4d.2 binary-mask fetch ABI: a target-texel integer load without filtering. */
@@ -90,8 +93,26 @@ public class GPUPlanW4dGeneralPreparedAuthority private constructor(
     ): Boolean {
         val fact = passFacts.singleOrNull { it.pathPassId == pass.id.value } ?: return false
         val binaryContracts = binaryMaskCoverageContracts(listOf(pass)) ?: return false
+        val binaryConsumerMatches = when (val expected = fact.draw) {
+            is W4dGeneralPreparedDrawFact.General -> packet.w4dBinaryMaskConsumer == null
+            is W4dGeneralPreparedDrawFact.BinaryMaskCover -> {
+                val consumer = packet.w4dBinaryMaskConsumer
+                consumer != null &&
+                    consumer.maskResourceId == expected.maskResourceId &&
+                    consumer.resourceSlot == packet.resourceSlot &&
+                    consumer.bindingLayoutHash == packet.bindingLayoutHash &&
+                    consumer.renderPipelineKey == renderPipelineKey &&
+                    consumer.pipelineIntent == GPUW4dBinaryMaskPipelineIntent.CoverageMaskConsumer &&
+                    consumer.fetch == GPUW4dBinaryMaskFetch.TextureLoadIntegerAtTargetTexelUnfiltered &&
+                    consumer.coverGeometry == GPUW4dBinaryMaskCoverGeometry.TargetScissorQuad &&
+                    consumer.broadcastSampleCountI32 == 4 &&
+                    consumer.broadcastsSameBinaryColorAndAlpha &&
+                    packetHasExactBinaryMaskCoverGeometry(packet, pass)
+            }
+        }
         return fact == passFact(pass) &&
             binaryContracts.all { it in binaryMaskCoverageContracts } &&
+            binaryConsumerMatches &&
             packet.passId == fact.pathPassId &&
             packet.commandIdValue == fact.commandIdValue &&
             packet.renderPipelineKey == renderPipelineKey &&
@@ -176,13 +197,8 @@ public class GPUPlanW4dGeneralPreparedAuthority private constructor(
             }
             val draw = pass.draw
             val source = when (draw) {
-                is GeneralPathDraw -> W4dGeneralPreparedDrawFact(
-                    isBinaryMaskCover = false,
-                    maskResourceId = null,
-                    sourceCommandIdValue = draw.commandIndex,
-                )
-                is BinaryMaskedPathDraw -> W4dGeneralPreparedDrawFact(
-                    isBinaryMaskCover = true,
+                is GeneralPathDraw -> W4dGeneralPreparedDrawFact.General(draw.commandIndex)
+                is BinaryMaskedPathDraw -> W4dGeneralPreparedDrawFact.BinaryMaskCover(
                     maskResourceId = draw.mask.value,
                     sourceCommandIdValue = draw.producer.commandIndex,
                 )
@@ -207,6 +223,27 @@ public class GPUPlanW4dGeneralPreparedAuthority private constructor(
     }
 }
 
+private fun packetHasExactBinaryMaskCoverGeometry(
+    packet: GPUDrawPacket,
+    pass: PlanPass.PathRenderPass,
+): Boolean {
+    val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive ?: return false
+    val geometry = semantic.geometry as? GPUCorePrimitiveGeometry.TriangulatedPath ?: return false
+    val scissor = pass.draw.copyScissorI32()
+    val expectedVertices = listOf(
+        scissor.left.toFloat(), scissor.top.toFloat(),
+        scissor.right.toFloat(), scissor.top.toFloat(),
+        scissor.right.toFloat(), scissor.bottom.toFloat(),
+        scissor.left.toFloat(), scissor.bottom.toFloat(),
+    )
+    return geometry.geometryMode == GPUCorePrimitiveGeometryMode.DirectTriangles &&
+        geometry.sourceVertexCount == 4 &&
+        geometry.vertices == expectedVertices &&
+        geometry.indices == listOf(0, 1, 2, 0, 2, 3) &&
+        geometry.coverBounds.left == scissor.left && geometry.coverBounds.top == scissor.top &&
+        geometry.coverBounds.right == scissor.right && geometry.coverBounds.bottom == scissor.bottom
+}
+
 /** Immutable scalar snapshot; no graph or mutable geometry object crosses the authority boundary. */
 private data class W4dGeneralPreparedPassFact(
     val pathPassId: String,
@@ -225,8 +262,11 @@ private data class W4dGeneralPreparedPassFact(
     val draw: W4dGeneralPreparedDrawFact,
 )
 
-private data class W4dGeneralPreparedDrawFact(
-    val isBinaryMaskCover: Boolean,
-    val maskResourceId: String?,
-    val sourceCommandIdValue: Int,
-)
+private sealed interface W4dGeneralPreparedDrawFact {
+    data class General(val sourceCommandIdValue: Int) : W4dGeneralPreparedDrawFact
+
+    data class BinaryMaskCover(
+        val maskResourceId: String,
+        val sourceCommandIdValue: Int,
+    ) : W4dGeneralPreparedDrawFact
+}

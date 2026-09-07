@@ -1,13 +1,12 @@
 package org.graphiks.kanvas.gpu.renderer.planning
 
 import io.ygdrasil.webgpu.GPUTextureFormat
+import io.ygdrasil.webgpu.GPUTextureUsage
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
-import kotlin.test.assertSame
-import kotlin.test.assertTrue
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.gpu.plan.PlanBudget
 import org.graphiks.kanvas.gpu.plan.PlanBufferAllocationPolicy
@@ -16,11 +15,17 @@ import org.graphiks.kanvas.gpu.plan.PlanDepthStencilFormat
 import org.graphiks.kanvas.gpu.plan.PlanId
 import org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat
 import org.graphiks.kanvas.gpu.plan.PlanOperationCapability
+import org.graphiks.kanvas.gpu.plan.PlanPass
+import org.graphiks.kanvas.gpu.plan.PlanResource
+import org.graphiks.kanvas.gpu.plan.PlanResourceKind
+import org.graphiks.kanvas.gpu.plan.PlanResourceLifetime
+import org.graphiks.kanvas.gpu.plan.PlanResourceRole
 import org.graphiks.kanvas.gpu.plan.PlanResourceUsage
 import org.graphiks.kanvas.gpu.plan.PlanTextureFormat
 import org.graphiks.kanvas.gpu.plan.PlanTextureResolveSupport
 import org.graphiks.kanvas.gpu.plan.PlanTextureSampleSupport
 import org.graphiks.kanvas.gpu.plan.RenderGraph
+import org.graphiks.kanvas.gpu.plan.BinaryMaskedPathDraw
 import org.graphiks.kanvas.gpu.plan.W4dGeneralPathPlanCompiler
 import org.graphiks.kanvas.gpu.plan.GpuPlanSelection
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
@@ -33,10 +38,11 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureSampleCountSuppor
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
-import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleLoadTransition
-import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleResolveAction
+import org.graphiks.kanvas.gpu.renderer.passes.GPUW4dBinaryMaskCoverGeometry
 import org.graphiks.kanvas.gpu.renderer.passes.GPUW4dBinaryMaskFetch
-import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleStoreAction
+import org.graphiks.kanvas.gpu.renderer.passes.GPUW4dBinaryMaskPipelineIntent
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.render.ir.BlendMode
 import org.graphiks.kanvas.render.ir.BlendNode
 import org.graphiks.kanvas.render.ir.ClipStackNode
@@ -99,6 +105,134 @@ class GpuPlanTaskListLowererW4dGeneralTest {
     }
 
     @Test
+    fun `public graph contracts reject forged W4d resolve sample resource and atomic facts`() {
+        val graph = graphOf(pathDraw(), pathDraw(antiAlias = false))
+        val passes = graph.passes()
+        val binary = passes.filterIsInstance<PlanPass.PathRenderPass>().single { pass ->
+            pass.phase == org.graphiks.kanvas.gpu.plan.PathRenderPhase.HardEdgeBinaryColorCover
+        }
+        val firstAaColor = passes.filterIsInstance<PlanPass.PathRenderPass>().first { pass ->
+            pass.draw.sample == org.graphiks.kanvas.gpu.plan.SamplePlan.Multisample4 && pass !== binary
+        }
+        val binaryDraw = assertIs<BinaryMaskedPathDraw>(binary.draw)
+        val logicalTarget = graph.resources().single { resource ->
+            resource.role == PlanResourceRole.LogicalTarget
+        }
+        val mask = graph.resources().single { resource ->
+            resource.role == PlanResourceRole.PathHardEdgeMask
+        }
+
+        val noResolve = copyPathPass(binary, resolveTarget = null)
+        val earlyResolve = copyPathPass(firstAaColor, resolveTarget = binary.resolveTarget)
+        val wrongSample = copyPathPass(binary, draw = binaryDraw.producer)
+        val wrongMask = copyPathPass(
+            binary,
+            draw = BinaryMaskedPathDraw.of(binaryDraw.producer, logicalTarget.id),
+        )
+        val wrongAtomicGroup = copyPathPass(binary, atomicGroup = null)
+        val wrongMaskFormatAndUsage = PlanResource.of(
+            role = mask.role,
+            ordinal = mask.ordinal,
+            kind = PlanResourceKind.Texture2D,
+            format = PlanTextureFormat.Color(graph.colorFormat),
+            extent = requireNotNull(mask.copyExtent()),
+            byteSize = mask.byteSize,
+            usages = setOf(PlanResourceUsage.RenderAttachment),
+            lifetime = PlanResourceLifetime.FrameLocal,
+            firstPassIndex = mask.firstPassIndex,
+            lastPassIndexExclusive = mask.lastPassIndexExclusive,
+            sampleCountI32 = mask.sampleCountI32,
+        )
+
+        listOf(
+            { rebuild(graph, replacePasses = mapOf(binary.id to noResolve)) },
+            {
+                rebuild(
+                    graph,
+                    replacePasses = mapOf(firstAaColor.id to earlyResolve, binary.id to noResolve),
+                )
+            },
+            { rebuild(graph, replacePasses = mapOf(binary.id to wrongSample)) },
+            { rebuild(graph, replacePasses = mapOf(binary.id to wrongMask)) },
+            { rebuild(graph, replacePasses = mapOf(binary.id to wrongAtomicGroup)) },
+            { rebuild(graph, resources = graph.resources().map { if (it.id == mask.id) wrongMaskFormatAndUsage else it }) },
+        ).forEach { forge ->
+            assertFailsWith<IllegalArgumentException> { forge() }
+        }
+
+        val depthGraph = graphOf(pathDraw(concave = true))
+        val depth = depthGraph.resources().single { resource ->
+            resource.role == PlanResourceRole.DepthStencil
+        }
+        listOf(
+            {
+                PlanResource.of(
+                    role = depth.role,
+                    ordinal = depth.ordinal,
+                    kind = PlanResourceKind.Texture2D,
+                    format = PlanTextureFormat.Color(depthGraph.colorFormat),
+                    extent = requireNotNull(depth.copyExtent()),
+                    byteSize = depth.byteSize,
+                    usages = setOf(PlanResourceUsage.DepthStencilAttachment),
+                    lifetime = depth.lifetime,
+                    firstPassIndex = depth.firstPassIndex,
+                    lastPassIndexExclusive = depth.lastPassIndexExclusive,
+                    sampleCountI32 = depth.sampleCountI32,
+                )
+            },
+            {
+                PlanResource.of(
+                    role = depth.role,
+                    ordinal = depth.ordinal,
+                    kind = PlanResourceKind.Texture2D,
+                    format = requireNotNull(depth.format),
+                    extent = requireNotNull(depth.copyExtent()),
+                    byteSize = depth.byteSize,
+                    usages = setOf(PlanResourceUsage.RenderAttachment),
+                    lifetime = depth.lifetime,
+                    firstPassIndex = depth.firstPassIndex,
+                    lastPassIndexExclusive = depth.lastPassIndexExclusive,
+                    sampleCountI32 = depth.sampleCountI32,
+                )
+            },
+        ).forEach { forgeDepth ->
+            assertFailsWith<IllegalArgumentException> { forgeDepth() }
+        }
+    }
+
+    @Test
+    fun `lowerer rejects stale public budget and capability snapshots`() {
+        val graph = aaGraph()
+
+        assertIs<GpuPlanLoweringResult.InvalidPlan>(
+            GpuPlanTaskListLowerer().lower(
+                GpuPlanLoweringRequest(
+                    graph = graph,
+                    capabilities = rendererCapabilities(),
+                    deviceGeneration = GPUDeviceGenerationID(7),
+                    currentBudget = PlanBudget(graph.budget.maxFrameLocalBytes + 1L),
+                    frameId = GPUFrameID(8),
+                    recordingId = GPURecordingID("w4d-general-stale-budget"),
+                ),
+            ),
+        )
+        assertIs<GpuPlanLoweringResult.UnsupportedCapability>(
+            GpuPlanTaskListLowerer().lower(
+                GpuPlanLoweringRequest(
+                    graph = graph,
+                    capabilities = rendererCapabilities().copy(
+                        supportedTextureUsage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.CopySrc,
+                    ),
+                    deviceGeneration = GPUDeviceGenerationID(7),
+                    currentBudget = graph.budget,
+                    frameId = GPUFrameID(8),
+                    recordingId = GPURecordingID("w4d-general-stale-capabilities"),
+                ),
+            ),
+        )
+    }
+
+    @Test
     fun `lowers a transformed hard path at one sample without a resolve task`() {
         val lowered = assertIs<GpuPlanLoweringResult.Lowered>(
             lower(graphOf(pathDraw(antiAlias = false)))
@@ -107,8 +241,7 @@ class GpuPlanTaskListLowererW4dGeneralTest {
         val renders = lowered.taskList.tasks.filterIsInstance<GPUTask.Render>()
         assertEquals(listOf(org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan.SingleSampleFrame), renders.map { it.samplePlan })
         assertEquals(listOf(0), renders.map { it.drawPackets.single().commandIdValue })
-        val authority = assertNotNull(renders.single().drawPackets.single().corePrimitivePreparedAuthority)
-        assertEquals(null, authority.w4dGeneralPreparedAuthority?.sampleContinuation)
+        assertEquals(null, renders.single().sampleContinuationKey)
     }
 
     @Test
@@ -126,54 +259,25 @@ class GpuPlanTaskListLowererW4dGeneralTest {
     }
 
     @Test
-    fun `seals every AA path packet before preserving its continuation`() {
+    fun `lowers every AA path packet as an ordered four sample render`() {
         val lowered = assertIs<GpuPlanLoweringResult.Lowered>(
             lower(graphOf(pathDraw(), pathDraw(concave = true))),
         )
 
-        val packets = lowered.taskList.tasks
-            .filterIsInstance<GPUTask.Render>()
-            .flatMap { it.drawPackets }
-
-        assertEquals(3, packets.size)
-        val authority = assertNotNull(
-            assertNotNull(packets.first().corePrimitivePreparedAuthority).w4dGeneralPreparedAuthority,
-        )
-        packets.drop(1).forEach { packet ->
-            assertSame(authority, assertNotNull(packet.corePrimitivePreparedAuthority).w4dGeneralPreparedAuthority)
-        }
-        assertEquals("w4d.2-general-prepared-authority-v1", authority.version)
-        val continuation = assertNotNull(authority.sampleContinuation)
-        assertEquals("w4d.2-path-sample-continuation-v1", continuation.version)
+        val renders = lowered.taskList.tasks.filterIsInstance<GPUTask.Render>()
+        assertEquals(3, renders.size)
         assertEquals(
-            listOf(
-                GPUSampleLoadTransition.FreshClear,
-                GPUSampleLoadTransition.RetainedLoad,
-                GPUSampleLoadTransition.RetainedLoad,
-            ),
-            continuation.transitions.map { it.loadTransition },
+            List(3) { org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan.MultisampleFrame(4) },
+            renders.map { it.samplePlan },
         )
-        assertEquals(
-            List(3) { GPUSampleStoreAction.Store },
-            continuation.transitions.map { it.storeAction },
-        )
-        assertEquals(
-            listOf(
-                GPUSampleResolveAction.Skip,
-                GPUSampleResolveAction.Skip,
-                GPUSampleResolveAction.ResolveCanonical,
-            ),
-            continuation.transitions.map { it.resolveAction },
-        )
-        assertFailsWith<UnsupportedOperationException> {
-            (continuation.transitions as MutableList).clear()
-        }
+        assertEquals(listOf("clear", "load", "load"), renders.map { it.loadStore.loadOp })
     }
 
     @Test
     fun `lowers mixed AA and hard paths without changing visual order`() {
+        val graph = graphOf(pathDraw(), pathDraw(antiAlias = false))
         val lowered = assertIs<GpuPlanLoweringResult.Lowered>(
-            lower(graphOf(pathDraw(), pathDraw(antiAlias = false))),
+            lower(graph),
         )
 
         val renders = lowered.taskList.tasks.filterIsInstance<GPUTask.Render>()
@@ -187,20 +291,33 @@ class GpuPlanTaskListLowererW4dGeneralTest {
             renders.map { it.samplePlan },
         )
         assertEquals(listOf("clear", "clear", "load"), renders.map { it.loadStore.loadOp })
-        val authority = assertNotNull(
-            assertNotNull(renders.first().drawPackets.single().corePrimitivePreparedAuthority)
-                .w4dGeneralPreparedAuthority,
-        )
-        val continuation = assertNotNull(authority.sampleContinuation)
-        assertEquals(listOf(0, 1), continuation.transitions.map { it.commandIdValue })
+        val binaryMaskPacket = renders.last().drawPackets.single()
+        val consumer = assertNotNull(binaryMaskPacket.w4dBinaryMaskConsumer)
+        val mask = graph.resources().single { resource ->
+            resource.role == org.graphiks.kanvas.gpu.plan.PlanResourceRole.PathHardEdgeMask
+        }
+        assertEquals(mask.id.value, consumer.maskResourceId)
+        assertEquals(consumer.resourceSlot, binaryMaskPacket.resourceSlot)
+        assertEquals(consumer.bindingLayoutHash, binaryMaskPacket.bindingLayoutHash)
+        assertEquals(consumer.renderPipelineKey, binaryMaskPacket.renderPipelineKey)
+        assertEquals(GPUW4dBinaryMaskPipelineIntent.CoverageMaskConsumer, consumer.pipelineIntent)
+        assertEquals(GPUW4dBinaryMaskFetch.TextureLoadIntegerAtTargetTexelUnfiltered, consumer.fetch)
+        assertEquals(GPUW4dBinaryMaskCoverGeometry.TargetScissorQuad, consumer.coverGeometry)
+        assertEquals(4, consumer.broadcastSampleCountI32)
+        assertEquals(true, consumer.broadcastsSameBinaryColorAndAlpha)
+        assertEquals(null, renders.first().drawPackets.single().w4dBinaryMaskConsumer)
+        val semantic = assertIs<GPUDrawSemanticPayload.CorePrimitive>(binaryMaskPacket.semanticPayload)
+        val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
         assertEquals(
-            listOf(GPUSampleResolveAction.Skip, GPUSampleResolveAction.ResolveCanonical),
-            continuation.transitions.map { it.resolveAction },
+            listOf(
+                semantic.scissorBounds.left.toFloat(), semantic.scissorBounds.top.toFloat(),
+                semantic.scissorBounds.right.toFloat(), semantic.scissorBounds.top.toFloat(),
+                semantic.scissorBounds.right.toFloat(), semantic.scissorBounds.bottom.toFloat(),
+                semantic.scissorBounds.left.toFloat(), semantic.scissorBounds.bottom.toFloat(),
+            ),
+            geometry.vertices,
         )
-        val binaryMask = authority.binaryMaskCoverageContracts.single()
-        assertEquals(GPUW4dBinaryMaskFetch.TextureLoadIntegerAtTargetTexelUnfiltered, binaryMask.fetch)
-        assertEquals(4, binaryMask.broadcastSampleCountI32)
-        assertTrue(binaryMask.broadcastsSameBinaryColorAndAlpha)
+        assertEquals(listOf(0, 1, 2, 0, 2, 3), geometry.indices)
     }
 
     @Test
@@ -293,6 +410,44 @@ class GpuPlanTaskListLowererW4dGeneralTest {
         ),
     )
 
+    private fun copyPathPass(
+        pass: PlanPass.PathRenderPass,
+        draw: org.graphiks.kanvas.gpu.plan.PathRenderDraw = pass.draw,
+        atomicGroup: org.graphiks.kanvas.gpu.plan.PlanAtomicGroupId? = pass.atomicGroup,
+        resolveTarget: org.graphiks.kanvas.gpu.plan.PlanResourceId? = pass.resolveTarget,
+    ): PlanPass.PathRenderPass = PlanPass.PathRenderPass(
+        ordinal = pass.ordinal,
+        target = pass.target,
+        draw = draw,
+        phase = pass.phase,
+        drawDataResources = pass.drawDataResources,
+        atomicGroup = atomicGroup,
+        depthStencil = pass.depthStencil,
+        load = pass.load,
+        store = pass.store,
+        depthStencilAccess = pass.depthStencilAccess,
+        depthStencilLoadStore = pass.depthStencilLoadStore,
+        resolveTarget = resolveTarget,
+    )
+
+    private fun rebuild(
+        graph: RenderGraph,
+        resources: List<PlanResource> = graph.resources(),
+        replacePasses: Map<org.graphiks.kanvas.gpu.plan.PlanPassId, PlanPass.PathRenderPass> = emptyMap(),
+    ): RenderGraph = RenderGraph.of(
+        id = PlanId("forged-${graph.id.value}"),
+        capabilityId = graph.capabilityId,
+        targetExtent = graph.targetExtent,
+        colorFormat = graph.colorFormat,
+        capabilities = graph.capabilities,
+        budget = graph.budget,
+        visualCommandCount = graph.visualCommandCount,
+        resources = resources,
+        passes = graph.passes().map { pass -> replacePasses[pass.id] ?: pass },
+        dependencies = graph.dependencies(),
+        peakFrameLocalBytes = graph.peakFrameLocalBytes,
+    )
+
     private fun planCapabilities(): PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(
         deviceGeneration = 7,
         maxTextureDimension2D = 2048,
@@ -356,6 +511,8 @@ class GpuPlanTaskListLowererW4dGeneralTest {
             GPUTextureFormat.RGBA8Unorm,
             GPUTextureFormat.Depth24PlusStencil8,
         ),
+        supportedTextureUsage = GPUTextureUsage.RenderAttachment or
+            GPUTextureUsage.TextureBinding or GPUTextureUsage.CopySrc,
         textureFormatSampleSupport = GPUTextureFormatSampleSupport(
             mapOf(
                 GPUTextureFormat.RGBA8UnormSrgb to GPUTextureSampleCountSupport(
