@@ -2063,6 +2063,11 @@ class GPUCorePrimitivePayloadGatherer {
     ): GPUDrawSemanticPayload.CorePrimitive =
         gatherSemantic(input, CorePrimitivePathAuthorityAdmission.SealedW4c)
 
+    internal fun gatherPlannedW4dSemantic(
+        input: GPUCorePrimitivePayloadInput,
+    ): GPUDrawSemanticPayload.CorePrimitive =
+        gatherSemantic(input, CorePrimitivePathAuthorityAdmission.SealedW4d)
+
     private fun gatherSemantic(
         input: GPUCorePrimitivePayloadInput,
         pathAuthorityAdmission: CorePrimitivePathAuthorityAdmission,
@@ -2084,11 +2089,16 @@ class GPUCorePrimitivePayloadGatherer {
         require(input.blendPlanIdentity.isNotBlank()) {
             "Core primitive blend identity must not be blank"
         }
-        if (pathAuthorityAdmission == CorePrimitivePathAuthorityAdmission.SealedW4c) {
+        if (pathAuthorityAdmission != CorePrimitivePathAuthorityAdmission.Generic) {
+            val requiredAuthority = when (pathAuthorityAdmission) {
+                CorePrimitivePathAuthorityAdmission.SealedW4c -> GPUPathSourceAuthority.W4cPlannedPathFillV1
+                CorePrimitivePathAuthorityAdmission.SealedW4d -> GPUPathSourceAuthority.W4dPlannedPathStrokeV1
+                CorePrimitivePathAuthorityAdmission.Generic -> error("Generic admission has no sealed path authority")
+            }
             require(
                 (input.geometry as? GPUCorePrimitiveGeometryInput.TriangulatedPath)
-                    ?.sourceAuthority == GPUPathSourceAuthority.W4cPlannedPathFillV1,
-            ) { "Sealed W4c gathering requires a W4c planned path authority." }
+                    ?.sourceAuthority == requiredAuthority,
+            ) { "Sealed path gathering requires its matching planned path authority." }
         }
 
         val geometry = input.geometry.snapshotAndValidate(input.targetBounds, pathAuthorityAdmission)
@@ -2171,6 +2181,7 @@ class GPUCorePrimitivePayloadGatherer {
 private enum class CorePrimitivePathAuthorityAdmission {
     Generic,
     SealedW4c,
+    SealedW4d,
 }
 
 private const val CORE_PRIMITIVE_UNIFORM_FINGERPRINT_PREFIX = "core-primitive.uniform32-v1:"
@@ -2442,9 +2453,17 @@ private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
     }
     is GPUCorePrimitiveGeometryInput.TriangulatedPath -> {
         require(
-            sourceAuthority != GPUPathSourceAuthority.W4cPlannedPathFillV1 ||
-                pathAuthorityAdmission == CorePrimitivePathAuthorityAdmission.SealedW4c,
-        ) { "W4c path source authority requires the sealed planned W4c gathering route." }
+            pathAuthorityAdmission != CorePrimitivePathAuthorityAdmission.SealedW4d || strokeStyle == null,
+        ) { "Sealed W4d path geometry retains stroke style only in its prepared authority." }
+        require(
+            when (sourceAuthority) {
+                GPUPathSourceAuthority.W4cPlannedPathFillV1 ->
+                    pathAuthorityAdmission == CorePrimitivePathAuthorityAdmission.SealedW4c
+                GPUPathSourceAuthority.W4dPlannedPathStrokeV1 ->
+                    pathAuthorityAdmission == CorePrimitivePathAuthorityAdmission.SealedW4d
+                else -> pathAuthorityAdmission == CorePrimitivePathAuthorityAdmission.Generic
+            },
+        ) { "Planned path source authority requires its matching sealed gathering route." }
         require(vertices.size >= 6 && vertices.size % 2 == 0 && vertices.all(Float::isFinite)) {
             "Core path geometry requires at least three finite xy vertices"
         }
@@ -2485,7 +2504,7 @@ private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
                 require(stroke == null) {
                     "Fill stencil edge fans cannot retain stroke lowering facts"
                 }
-                val maxStencilEdges = if (pathAuthorityAdmission == CorePrimitivePathAuthorityAdmission.SealedW4c) {
+                val maxStencilEdges = if (pathAuthorityAdmission != CorePrimitivePathAuthorityAdmission.Generic) {
                     PathFillLimitsI32().maxAttemptedEdgesPerPathI32
                 } else {
                     GPUPathEdgeFanPayloadContract.MAX_TRIANGLES.toInt()
