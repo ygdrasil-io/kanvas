@@ -201,6 +201,19 @@ class W4dPathStrokePlanCompilerTest {
         assertIs<RenderPlanResult.GapOnPromotedScope>(chain.plan(chainCandidate, capabilities(operations = setOf(PlanOperationCapability.Readback)), PlanBudget(1L shl 20)))
     }
 
+    @Test
+    fun emptyStrokeIsCountedButDoesNotManufactureAGraphDraw() {
+        val emptyPath = PathBuilder().moveTo(1f, 1f).build()
+        val empty = pathDraw(PaintStyleNode.STROKE).let { SceneCommand.Draw(it.node.copy(geometry = GeometryNode.Path(emptyPath))) }
+        val visible = pathDraw(PaintStyleNode.STROKE)
+        val scene = sceneOf(listOf(empty, visible))
+        val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target(scene))).candidate
+        val graph = assertIs<RenderPlanResult.Ready<RenderGraph>>(compiler.plan(candidate, capabilities(), PlanBudget(1L shl 20))).plan
+
+        assertEquals(1, graph.visualCommandCount)
+        assertEquals(1, graph.passes().filterIsInstance<PlanPass.StencilProducer>().size)
+    }
+
     private fun sceneOf(draws: List<SceneCommand.Draw>): SceneSnapshot = SceneSnapshot.of(
         SceneExtent(16, 16), ColorSpace.SRGB, draws,
     )
