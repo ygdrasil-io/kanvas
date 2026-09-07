@@ -118,6 +118,8 @@ internal data class ProjectiveCompensatedF64(
     val upperTailF64: Double = uncertaintyF64,
     /** Exact multiples of [Double.MIN_VALUE] retained when a product underflows its F64 limb. */
     val subnormalUnitsF64: Double = 0.0,
+    /** Low-order exact units retained when the subnormal-unit accumulator crosses a binade. */
+    val subnormalResidualUnitsF64: Double = 0.0,
 )
 
 /** A denominator fact.  Only [Root] is sufficient to publish a horizon. */
@@ -151,8 +153,20 @@ internal fun projectiveWSignF64(valueF64: ProjectiveCompensatedF64): ProjectiveW
         !valueF64.upperTailF64.isFinite() || valueF64.lowerTailF64 > valueF64.upperTailF64
     ) return ProjectiveWSignF64.NonFinite
     if (valueF64.leadingF64 == 0.0 && valueF64.residualF64 == 0.0 &&
-        valueF64.lowerTailF64 == 0.0 && valueF64.upperTailF64 == 0.0 && valueF64.subnormalUnitsF64 == 0.0
+        valueF64.lowerTailF64 == 0.0 && valueF64.upperTailF64 == 0.0 && valueF64.subnormalUnitsF64 == 0.0 &&
+            valueF64.subnormalResidualUnitsF64 == 0.0
     ) return ProjectiveWSignF64.Root
+    // With no unrepresented tail, evaluate the retained finite expansion at its own binary
+    // scale before constructing a Double interval.  Directed addition at the subnormal boundary
+    // cannot represent a half-MIN endpoint, but the scaled expansion can still prove its sign.
+    if (valueF64.lowerTailF64 == 0.0 && valueF64.upperTailF64 == 0.0 && valueF64.uncertaintyF64 == 0.0) {
+        val exponentI32 = projectiveCompensatedMaximumExponentI32(valueF64)
+        val scaledF64 = exponentI32?.let { projectiveCompensatedScaledCentralValueF64(valueF64, -it) }
+        if (scaledF64 != null) {
+            if (scaledF64 > 0.0) return ProjectiveWSignF64.Positive
+            if (scaledF64 < 0.0) return ProjectiveWSignF64.Negative
+        }
+    }
     val intervalF64 = projectiveCompensatedIntervalF64(valueF64) ?: return ProjectiveWSignF64.NonFinite
     return when {
         intervalF64.minimumF64 == 0.0 && intervalF64.maximumF64 == 0.0 -> ProjectiveWSignF64.Root
@@ -163,7 +177,101 @@ internal fun projectiveWSignF64(valueF64: ProjectiveCompensatedF64): ProjectiveW
 }
 
 internal fun projectiveCompensatedValueF64(valueF64: ProjectiveCompensatedF64): Double =
-    valueF64.leadingF64 + valueF64.residualF64 + valueF64.subnormalUnitsF64 * Double.MIN_VALUE
+    valueF64.leadingF64 + valueF64.residualF64 +
+        (valueF64.subnormalUnitsF64 + valueF64.subnormalResidualUnitsF64) * Double.MIN_VALUE
+
+/**
+ * Divides two retained expansions after bringing both to the denominator's binary scale.
+ *
+ * In particular, this must not first round a value such as `1.5 * MIN_VALUE` to one limb: that
+ * would turn the exact quotient `MIN_VALUE / (1.5 * MIN_VALUE)` into `1.0`.  The scale is a
+ * power of two, so it changes neither the represented real values nor their signs.
+ */
+internal fun projectiveCompensatedDivideF64(
+    numeratorF64: ProjectiveCompensatedF64,
+    denominatorF64: ProjectiveCompensatedF64,
+): Double? {
+    when (projectiveWSignF64(denominatorF64)) {
+        ProjectiveWSignF64.Positive,
+        ProjectiveWSignF64.Negative,
+        -> Unit
+
+        ProjectiveWSignF64.Root,
+        ProjectiveWSignF64.Unknown,
+        ProjectiveWSignF64.NonFinite,
+        -> return null
+    }
+    val denominatorExponentI32 = projectiveCompensatedMaximumExponentI32(denominatorF64) ?: return null
+    val scaleExponentI32 = -denominatorExponentI32
+    val scaledNumeratorF64 = projectiveCompensatedScaledCentralValueF64(numeratorF64, scaleExponentI32) ?: return null
+    val scaledDenominatorF64 = projectiveCompensatedScaledCentralValueF64(denominatorF64, scaleExponentI32) ?: return null
+    if (scaledDenominatorF64 == 0.0 || !scaledNumeratorF64.isFinite() || !scaledDenominatorF64.isFinite()) return null
+    val quotientF64 = scaledNumeratorF64 / scaledDenominatorF64
+    return (if (quotientF64 == 0.0) 0.0 else quotientF64).takeIf(Double::isFinite)
+}
+
+private fun projectiveCompensatedMaximumExponentI32(valueF64: ProjectiveCompensatedF64): Int? {
+    val exponentsI32 = listOfNotNull(
+        projectiveBinaryExponentI32(valueF64.leadingF64),
+        projectiveBinaryExponentI32(valueF64.residualF64),
+        projectiveBinaryExponentI32(valueF64.subnormalUnitsF64)?.plus(-1074),
+        projectiveBinaryExponentI32(valueF64.subnormalResidualUnitsF64)?.plus(-1074),
+    )
+    return exponentsI32.maxOrNull()
+}
+
+private fun projectiveCompensatedScaledCentralValueF64(
+    valueF64: ProjectiveCompensatedF64,
+    scaleExponentI32: Int,
+): Double? {
+    val scaledMinimumF64 = projectiveScalePowerOfTwoF64(Double.MIN_VALUE, scaleExponentI32) ?: return null
+    val termsF64 = listOf(
+        projectiveScalePowerOfTwoF64(valueF64.leadingF64, scaleExponentI32),
+        projectiveScalePowerOfTwoF64(valueF64.residualF64, scaleExponentI32),
+        valueF64.subnormalUnitsF64 * scaledMinimumF64,
+        valueF64.subnormalResidualUnitsF64 * scaledMinimumF64,
+    )
+    if (termsF64.any { it == null || !it.isFinite() }) return null
+    var sumF64 = 0.0
+    termsF64.filterNotNull().forEach { termF64 ->
+        val additionF64 = projectiveTwoSumF64(sumF64, termF64) ?: return null
+        sumF64 = additionF64.leadingF64 + additionF64.residualF64
+    }
+    return sumF64.takeIf(Double::isFinite)
+}
+
+private fun projectiveBinaryExponentI32(valueF64: Double): Int? {
+    if (!valueF64.isFinite() || valueF64 == 0.0) return null
+    val bitsI64 = valueF64.toBits() and Long.MAX_VALUE
+    val exponentFieldI32 = ((bitsI64 ushr 52) and 0x7ffL).toInt()
+    if (exponentFieldI32 != 0) return exponentFieldI32 - 1023
+    var fractionI64 = bitsI64 and 0x000f_ffff_ffff_ffffL
+    var exponentI32 = -1074
+    while (fractionI64 > 1L) {
+        fractionI64 = fractionI64 ushr 1
+        exponentI32 += 1
+    }
+    return exponentI32
+}
+
+private fun projectiveScalePowerOfTwoF64(valueF64: Double, scaleExponentI32: Int): Double? {
+    if (!valueF64.isFinite() || valueF64 == 0.0) return valueF64.takeIf(Double::isFinite)
+    var resultF64 = valueF64
+    var remainingI32 = scaleExponentI32
+    while (remainingI32 > 0) {
+        val stepI32 = minOf(remainingI32, 1023)
+        resultF64 *= Double.fromBits((stepI32 + 1023).toLong() shl 52)
+        if (!resultF64.isFinite()) return null
+        remainingI32 -= stepI32
+    }
+    while (remainingI32 < 0) {
+        val stepI32 = maxOf(remainingI32, -1022)
+        resultF64 *= Double.fromBits((stepI32 + 1023).toLong() shl 52)
+        if (resultF64 == 0.0) return 0.0
+        remainingI32 -= stepI32
+    }
+    return resultF64
+}
 
 /** Outward enclosure of a retained double-double value and its unrepresented tail. */
 internal fun projectiveCompensatedIntervalF64(valueF64: ProjectiveCompensatedF64): PathProjectiveIntervalF64? {
@@ -188,6 +296,15 @@ internal fun projectiveCompensatedIntervalF64(valueF64: ProjectiveCompensatedF64
     } else if (valueF64.subnormalUnitsF64 > 0.0) {
         upperF64 = projectiveDirectedAddUpF64(upperF64, Double.MIN_VALUE) ?: return null
     } else if (valueF64.subnormalUnitsF64 < 0.0) {
+        lowerF64 = projectiveDirectedAddDownF64(lowerF64, -Double.MIN_VALUE) ?: return null
+    }
+    val subnormalResidualF64 = valueF64.subnormalResidualUnitsF64 * Double.MIN_VALUE
+    if (subnormalResidualF64 != 0.0) {
+        lowerF64 = projectiveDirectedAddDownF64(lowerF64, subnormalResidualF64) ?: return null
+        upperF64 = projectiveDirectedAddUpF64(upperF64, subnormalResidualF64) ?: return null
+    } else if (valueF64.subnormalResidualUnitsF64 > 0.0) {
+        upperF64 = projectiveDirectedAddUpF64(upperF64, Double.MIN_VALUE) ?: return null
+    } else if (valueF64.subnormalResidualUnitsF64 < 0.0) {
         lowerF64 = projectiveDirectedAddDownF64(lowerF64, -Double.MIN_VALUE) ?: return null
     }
     if (!lowerF64.isFinite() || !upperF64.isFinite()) return null
@@ -283,8 +400,62 @@ internal fun projectiveQuadraticRootCertificateF64(controlsF64: List<ProjectiveC
  */
 internal fun projectiveBezierRootCertificateF64(controlsF64: List<ProjectiveCompensatedF64>): Boolean = when (controlsF64.size) {
     3 -> projectiveQuadraticRootCertificateF64(controlsF64)
-    4 -> projectiveCubicDegreeReducedRootCertificateF64(controlsF64)
+    4 -> projectiveCubicDegreeReducedRootCertificateF64(controlsF64) ||
+        projectiveGeneralCubicRootCertificateF64(controlsF64)
     else -> false
+}
+
+/**
+ * A cubic tangent has no sign variation.  We therefore inspect only the exact stationary points
+ * of its power-basis derivative, and publish Horizon only when a retained de Casteljau evaluation
+ * proves an exact root.  Floating candidate generation is never itself a root proof.
+ */
+private fun projectiveGeneralCubicRootCertificateF64(controlsF64: List<ProjectiveCompensatedF64>): Boolean {
+    if (controlsF64.any {
+            it.lowerTailF64 != 0.0 || it.upperTailF64 != 0.0 ||
+                it.subnormalUnitsF64 != 0.0 || it.subnormalResidualUnitsF64 != 0.0
+        }
+    ) return false
+    val rawF64 = controlsF64.map(::projectiveCompensatedValueF64)
+    val magnitudeF64 = rawF64.maxOf(::abs)
+    if (magnitudeF64 == 0.0 || !magnitudeF64.isFinite()) return false
+    val controlsScaledF64 = rawF64.map { it / magnitudeF64 }
+    val aF64 = -controlsScaledF64[0] + 3.0 * controlsScaledF64[1] - 3.0 * controlsScaledF64[2] + controlsScaledF64[3]
+    val bF64 = 3.0 * controlsScaledF64[0] - 6.0 * controlsScaledF64[1] + 3.0 * controlsScaledF64[2]
+    val cF64 = -3.0 * controlsScaledF64[0] + 3.0 * controlsScaledF64[1]
+    if (!aF64.isFinite() || !bF64.isFinite() || !cF64.isFinite()) return false
+    val candidatesF64 = mutableListOf<Double>()
+    val derivativeAF64 = 3.0 * aF64
+    val derivativeBF64 = 2.0 * bF64
+    when {
+        derivativeAF64 == 0.0 && derivativeBF64 != 0.0 -> candidatesF64 += -cF64 / derivativeBF64
+        derivativeAF64 != 0.0 -> {
+            val discriminantF64 = derivativeBF64 * derivativeBF64 - 4.0 * derivativeAF64 * cF64
+            if (discriminantF64 >= 0.0 && discriminantF64.isFinite()) {
+                val squareRootF64 = kotlin.math.sqrt(discriminantF64)
+                candidatesF64 += (-derivativeBF64 - squareRootF64) / (2.0 * derivativeAF64)
+                candidatesF64 += (-derivativeBF64 + squareRootF64) / (2.0 * derivativeAF64)
+            }
+        }
+    }
+    return candidatesF64.any { parameterF64 ->
+        parameterF64 > 0.0 && parameterF64 < 1.0 &&
+            projectiveWSignF64(projectiveEvaluateBezierF64(controlsF64, parameterF64) ?: return@any false) ==
+                ProjectiveWSignF64.Root
+    }
+}
+
+private fun projectiveEvaluateBezierF64(
+    controlsF64: List<ProjectiveCompensatedF64>,
+    parameterF64: Double,
+): ProjectiveCompensatedF64? {
+    var levelF64 = controlsF64
+    while (levelF64.size > 1) {
+        levelF64 = levelF64.zipWithNext { firstF64, secondF64 ->
+            interpolateProjectiveCompensatedF64(firstF64, secondF64, parameterF64) ?: return null
+        }
+    }
+    return levelF64.single()
 }
 
 private fun projectiveCubicDegreeReducedRootCertificateF64(controlsF64: List<ProjectiveCompensatedF64>): Boolean {
@@ -329,6 +500,10 @@ private fun projectiveCompensatedProductF64(firstF64: Double, secondF64: Double)
     when {
         !firstF64.isFinite() || !secondF64.isFinite() -> null
         firstF64 == 0.0 || secondF64 == 0.0 -> ProjectiveCompensatedF64(0.0, 0.0)
+        firstF64 == 1.0 -> ProjectiveCompensatedF64(secondF64, 0.0)
+        secondF64 == 1.0 -> ProjectiveCompensatedF64(firstF64, 0.0)
+        firstF64 == -1.0 -> ProjectiveCompensatedF64(-secondF64, 0.0)
+        secondF64 == -1.0 -> ProjectiveCompensatedF64(-firstF64, 0.0)
         else -> {
             val productF64 = firstF64 * secondF64
             if (!productF64.isFinite()) return null
@@ -381,6 +556,7 @@ private fun projectiveCompensatedScaleF64(
         projectiveDirectedAddDownF64(scaledF64.lowerTailF64, scaledLowerTailF64) ?: return null,
         projectiveDirectedAddUpF64(scaledF64.upperTailF64, scaledUpperTailF64) ?: return null,
         scaledF64.subnormalUnitsF64 * factorF64,
+        scaledF64.subnormalResidualUnitsF64 * factorF64,
     )
 }
 
@@ -391,6 +567,7 @@ private fun projectiveCompensatedNegateF64(valueF64: ProjectiveCompensatedF64): 
         -valueF64.upperTailF64,
         -valueF64.lowerTailF64,
         -valueF64.subnormalUnitsF64,
+        -valueF64.subnormalResidualUnitsF64,
     )
 
 /** Multiplies two short expansions and carries all products through the same directed tail. */
@@ -421,6 +598,7 @@ private fun projectiveCompensatedMultiplyF64(
         projectiveDirectedAddDownF64(combinedF64.lowerTailF64, -inheritedUncertaintyF64) ?: return null,
         projectiveDirectedAddUpF64(combinedF64.upperTailF64, inheritedUncertaintyF64) ?: return null,
         combinedF64.subnormalUnitsF64,
+        combinedF64.subnormalResidualUnitsF64,
     )
 }
 
@@ -457,7 +635,9 @@ private fun projectiveCompensatedAddF64(
             projectiveDirectedAddUpF64(normalizedF64.upperTailF64, firstF64.upperTailF64) ?: return null,
             secondF64.upperTailF64,
         ) ?: return null,
-        firstF64.subnormalUnitsF64 + secondF64.subnormalUnitsF64,
+        projectiveTwoSumF64(firstF64.subnormalUnitsF64, secondF64.subnormalUnitsF64)?.leadingF64 ?: return null,
+        (projectiveTwoSumF64(firstF64.subnormalUnitsF64, secondF64.subnormalUnitsF64)?.residualF64 ?: return null) +
+            firstF64.subnormalResidualUnitsF64 + secondF64.subnormalResidualUnitsF64,
     )
 }
 
@@ -493,6 +673,7 @@ private fun projectiveCompensatedDirectedF64(
     lowerTailF64: Double,
     upperTailF64: Double,
     subnormalUnitsF64: Double = 0.0,
+    subnormalResidualUnitsF64: Double = 0.0,
 ): ProjectiveCompensatedF64 = ProjectiveCompensatedF64(
     leadingF64 = leadingF64,
     residualF64 = residualF64,
@@ -500,6 +681,7 @@ private fun projectiveCompensatedDirectedF64(
     lowerTailF64 = lowerTailF64,
     upperTailF64 = upperTailF64,
     subnormalUnitsF64 = subnormalUnitsF64,
+    subnormalResidualUnitsF64 = subnormalResidualUnitsF64,
 )
 
 /** Exact in the useful subnormal family: MIN_VALUE times a finite binary factor. */

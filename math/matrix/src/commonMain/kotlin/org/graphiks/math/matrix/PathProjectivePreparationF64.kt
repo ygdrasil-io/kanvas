@@ -430,6 +430,7 @@ private class PathProjectiveFillPreparerF64(
                 homogeneousF64.wLowerTailF64,
                 homogeneousF64.wUpperTailF64,
                 homogeneousF64.wSubnormalUnitsF64,
+                homogeneousF64.wSubnormalResidualUnitsF64,
             ))) {
             ProjectiveWSignF64.Root -> abortInvalid(PathProjectiveInvalidSceneReason.PerspectiveHorizonCrossing)
             ProjectiveWSignF64.Unknown,
@@ -496,14 +497,21 @@ private fun certifyWSignF64(controlsF64: List<ProjectiveHomogeneousPointF64>): P
                 controlF64.wF64,
                 controlF64.wResidualF64,
                 controlF64.wUncertaintyF64,
-                controlF64.wLowerTailF64,
-                controlF64.wUpperTailF64,
-                controlF64.wSubnormalUnitsF64,
+            controlF64.wLowerTailF64,
+            controlF64.wUpperTailF64,
+            controlF64.wSubnormalUnitsF64,
+            controlF64.wSubnormalResidualUnitsF64,
             ),
         )
     }
     if (signsF64.any { it == ProjectiveWSignF64.NonFinite }) return ProjectiveWCertificateF64.NonFinite
     if (signsF64.first() == ProjectiveWSignF64.Root || signsF64.last() == ProjectiveWSignF64.Root) {
+        return ProjectiveWCertificateF64.Horizon
+    }
+    if ((signsF64.first() == ProjectiveWSignF64.Positive && signsF64.last() == ProjectiveWSignF64.Negative) ||
+        (signsF64.first() == ProjectiveWSignF64.Negative && signsF64.last() == ProjectiveWSignF64.Positive)
+    ) {
+        // Continuity makes unlike strict endpoint signs a whole-interval root certificate.
         return ProjectiveWCertificateF64.Horizon
     }
     if (signsF64.all { it == ProjectiveWSignF64.Positive } || signsF64.all { it == ProjectiveWSignF64.Negative }) {
@@ -513,7 +521,12 @@ private fun certifyWSignF64(controlsF64: List<ProjectiveHomogeneousPointF64>): P
     // Bernstein's variation-diminishing property makes an odd number of strict sign variations
     // a root certificate on this whole interval.  It catches non-dyadic roots without relying on
     // a sampled parameter or an epsilon comparison.
-    val signVariationCountI32 = signsF64.zipWithNext().count { (firstF64, secondF64) -> firstF64 != secondF64 }
+    // An internal zero Bernstein control is not a polynomial root.  Variation count ignores it;
+    // only a certified endpoint zero or a certificate below may publish a horizon.
+    val strictSignsF64 = signsF64.filter {
+        it == ProjectiveWSignF64.Positive || it == ProjectiveWSignF64.Negative
+    }
+    val signVariationCountI32 = strictSignsF64.zipWithNext().count { (firstF64, secondF64) -> firstF64 != secondF64 }
     if (signVariationCountI32 % 2 == 1) return ProjectiveWCertificateF64.Horizon
     if (projectiveBezierRootCertificateF64(controlsF64.map { controlF64 ->
             ProjectiveCompensatedF64(
@@ -523,6 +536,7 @@ private fun certifyWSignF64(controlsF64: List<ProjectiveHomogeneousPointF64>): P
                 controlF64.wLowerTailF64,
                 controlF64.wUpperTailF64,
                 controlF64.wSubnormalUnitsF64,
+                controlF64.wSubnormalResidualUnitsF64,
             )
         })
     ) {
@@ -682,25 +696,54 @@ private fun interpolatedHomogeneousPointF64(
             firstF64.wF64, firstF64.wResidualF64, firstF64.wUncertaintyF64,
             firstF64.wLowerTailF64, firstF64.wUpperTailF64,
             firstF64.wSubnormalUnitsF64,
+            firstF64.wSubnormalResidualUnitsF64,
         ),
         ProjectiveCompensatedF64(
             secondF64.wF64, secondF64.wResidualF64, secondF64.wUncertaintyF64,
             secondF64.wLowerTailF64, secondF64.wUpperTailF64,
             secondF64.wSubnormalUnitsF64,
+            secondF64.wSubnormalResidualUnitsF64,
         ),
         parameterF64,
     ) ?: return ProjectiveHomogeneousPointF64(Double.NaN, Double.NaN, Double.NaN)
+    val xF64 = interpolateProjectiveCompensatedF64(firstF64.xExpansionF64(), secondF64.xExpansionF64(), parameterF64)
+        ?: return ProjectiveHomogeneousPointF64(Double.NaN, Double.NaN, Double.NaN)
+    val yF64 = interpolateProjectiveCompensatedF64(firstF64.yExpansionF64(), secondF64.yExpansionF64(), parameterF64)
+        ?: return ProjectiveHomogeneousPointF64(Double.NaN, Double.NaN, Double.NaN)
     return ProjectiveHomogeneousPointF64(
-        xF64 = firstF64.xF64 * (1.0 - parameterF64) + secondF64.xF64 * parameterF64,
-        yF64 = firstF64.yF64 * (1.0 - parameterF64) + secondF64.yF64 * parameterF64,
+        xF64 = xF64.leadingF64,
+        yF64 = yF64.leadingF64,
         wF64 = wF64.leadingF64,
         wResidualF64 = wF64.residualF64,
         wUncertaintyF64 = wF64.uncertaintyF64,
         wLowerTailF64 = wF64.lowerTailF64,
         wUpperTailF64 = wF64.upperTailF64,
         wSubnormalUnitsF64 = wF64.subnormalUnitsF64,
+        wSubnormalResidualUnitsF64 = wF64.subnormalResidualUnitsF64,
+        xResidualF64 = xF64.residualF64,
+        xUncertaintyF64 = xF64.uncertaintyF64,
+        xLowerTailF64 = xF64.lowerTailF64,
+        xUpperTailF64 = xF64.upperTailF64,
+        xSubnormalUnitsF64 = xF64.subnormalUnitsF64,
+        xSubnormalResidualUnitsF64 = xF64.subnormalResidualUnitsF64,
+        yResidualF64 = yF64.residualF64,
+        yUncertaintyF64 = yF64.uncertaintyF64,
+        yLowerTailF64 = yF64.lowerTailF64,
+        yUpperTailF64 = yF64.upperTailF64,
+        ySubnormalUnitsF64 = yF64.subnormalUnitsF64,
+        ySubnormalResidualUnitsF64 = yF64.subnormalResidualUnitsF64,
     )
 }
+
+private fun ProjectiveHomogeneousPointF64.xExpansionF64(): ProjectiveCompensatedF64 = ProjectiveCompensatedF64(
+    xF64, xResidualF64, xUncertaintyF64, xLowerTailF64, xUpperTailF64,
+    xSubnormalUnitsF64, xSubnormalResidualUnitsF64,
+)
+
+private fun ProjectiveHomogeneousPointF64.yExpansionF64(): ProjectiveCompensatedF64 = ProjectiveCompensatedF64(
+    yF64, yResidualF64, yUncertaintyF64, yLowerTailF64, yUpperTailF64,
+    ySubnormalUnitsF64, ySubnormalResidualUnitsF64,
+)
 
 private fun effectiveProjectiveWF64(pointF64: ProjectiveHomogeneousPointF64): Double =
     projectiveCompensatedValueF64(
@@ -708,6 +751,7 @@ private fun effectiveProjectiveWF64(pointF64: ProjectiveHomogeneousPointF64): Do
             pointF64.wF64, pointF64.wResidualF64, pointF64.wUncertaintyF64,
             pointF64.wLowerTailF64, pointF64.wUpperTailF64,
             pointF64.wSubnormalUnitsF64,
+            pointF64.wSubnormalResidualUnitsF64,
         ),
     )
 
@@ -855,6 +899,7 @@ private data class ProjectiveArcCenterF64(
                     homogeneousF64.wLowerTailF64,
                     homogeneousF64.wUpperTailF64,
                     homogeneousF64.wSubnormalUnitsF64,
+                    homogeneousF64.wSubnormalResidualUnitsF64,
                 ),
             )
         }

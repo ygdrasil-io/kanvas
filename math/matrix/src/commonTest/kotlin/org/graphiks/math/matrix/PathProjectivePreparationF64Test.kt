@@ -131,7 +131,27 @@ class PathProjectivePreparationF64Test {
             PathBuilder().moveTo(0.5f, 0f).lineTo(0.25f, 0f).lineTo(0f, 0f).close().build(),
         )
 
-        assertIs<PathProjectivePreparationResult.Ready>(result)
+        val ready = assertIs<PathProjectivePreparationResult.Ready>(result)
+        assertEquals(
+            2.0 / 3.0,
+            assertIs<PathFillSegmentF64.MoveTo>(ready.inputF64.first()).point.x,
+        )
+    }
+
+    @Test
+    fun `scaled subnormal stroke quotient remains finite and non horizon`() {
+        val unitsF64 = 4_503_599_627_370_496.0
+        val projectionF64 = Matrix3x3F64(
+            sxF64 = 0.0,
+            syF64 = 0.0,
+            txF64 = Double.MIN_VALUE,
+            persp0F64 = Double.MIN_VALUE,
+            persp1F64 = Double.MIN_VALUE,
+            persp2F64 = -Double.fromBits(0x0020_0000_0000_0000L),
+        ).toPathStrokeProjectionF64()
+
+        val point = projectionF64.projectPointF64(Point2F64(unitsF64, unitsF64 - 0.5))
+        assertEquals(Point2F64(-2.0, 0.0), assertIs<PathStrokeProjectionPointResultF64.Ready>(point).pointF64)
     }
 
     @Test
@@ -143,6 +163,20 @@ class PathProjectivePreparationF64Test {
             persp2F64 = 1e300,
         ).prepareProjectedPathFillInputF64(
             PathBuilder().moveTo(1f, 0f).quadTo(1f, 1f, 1f, 0f).lineTo(1f, 0f).close().build(),
+        )
+
+        assertIs<PathProjectivePreparationResult.Ready>(result)
+    }
+
+    @Test
+    fun `maximum finite homogeneous denominator remains projectable`() {
+        val result = Matrix3x3F64(
+            sxF64 = 1.0,
+            syF64 = 1.0,
+            persp0F64 = Double.MAX_VALUE,
+            persp2F64 = 0.0,
+        ).prepareProjectedPathFillInputF64(
+            PathBuilder().moveTo(1f, 0f).lineTo(1f, 1f).lineTo(1f, 0f).close().build(),
         )
 
         assertIs<PathProjectivePreparationResult.Ready>(result)
@@ -228,6 +262,38 @@ class PathProjectivePreparationF64Test {
     }
 
     @Test
+    fun `scaled stroke gradient bounds the exact curved interval that naive hypot would miss`() {
+        val inputF64 = PathFillInputF64.of(
+            FillRule.WINDING,
+            listOf(
+                PathFillSegmentF64.MoveTo(Point2F64(0.0, 0.0)),
+                PathFillSegmentF64.QuadTo(Point2F64(-4e162, 1e162), Point2F64(0.0, 0.0)),
+            ),
+        )
+        val policyF64 = PathStrokePolicyF64(
+            maximumSagittaErrorF64 = 1e163,
+            maximumDashArcLengthErrorF64 = 1e163,
+        )
+        val centerlineF64 = assertIs<PathStrokeCenterlinePreparationResult.Ready>(
+            preparePathStrokeCenterlinesF64(inputF64, dashF64 = null, policyF64 = policyF64),
+        ).centerlineF64
+        val outlineF64 = assertIs<PathStrokeOutlinePreparationResult.Ready>(
+            prepareFinitePathStrokeOutlineF64(centerlineF64, finiteStrokeStyleForTest(), policyF64 = policyF64),
+        ).outlineF64
+        val projectionF64 = Matrix3x3F64(persp0F64 = 1e-162, persp2F64 = 5.0).toPathStrokeProjectionF64()
+        val curvedIntervalsF64 = (0 until outlineF64.contourCountI32)
+            .flatMap { outlineF64.copyContourIntervalsF64(it) }
+            .filter { it.sourceSagittaUpperBoundF64 > 0.0 }
+
+        assertEquals(4, curvedIntervalsF64.size)
+        curvedIntervalsF64.forEach { intervalF64 ->
+            // Both endpoints have W=5, but the retained sagitta can consume that margin only
+            // when the 1e-162 projective gradient is measured with a scaled hypotenuse.
+            assertIs<PathStrokeProjectionIntervalResultF64.Unbounded>(projectionF64.certifyOutlineIntervalF64(intervalF64))
+        }
+    }
+
+    @Test
     fun `stroke interval preserves correlated diagonal w instead of crossing its AABB`() {
         val path = PathBuilder().moveTo(0f, 0f).lineTo(1f, 1f).build()
         val centerline = assertIs<PathStrokeCenterlinePreparationResult.Ready>(
@@ -257,23 +323,29 @@ class PathProjectivePreparationF64Test {
     @Test
     fun `negative w stroke certificates cover source offsets reversed segments arcs joins and caps`() {
         val paths = listOf(
-            PathBuilder().moveTo(2f, 0f).lineTo(0f, 0f).build(),
-            PathBuilder().moveTo(0f, 0f).lineTo(2f, 0f).build(),
-            PathBuilder().moveTo(0f, 0f).lineTo(2f, 0f).lineTo(2f, 2f).build(),
-            PathBuilder().moveTo(1f, 0f).arcTo(1f, 1f, 0f, false, true, -1f, 0f).build(),
+            "reversed source segment" to PathBuilder().moveTo(2f, 0f).lineTo(0f, 0f).build(),
+            "forward source segment" to PathBuilder().moveTo(0f, 0f).lineTo(2f, 0f).build(),
+            "offset join" to PathBuilder().moveTo(0f, 0f).lineTo(2f, 0f).lineTo(2f, 2f).build(),
+            "source arc" to PathBuilder().moveTo(1f, 0f).arcTo(1f, 1f, 0f, false, true, -1f, 0f).build(),
         )
         val styles = listOf(
             PathStrokeCap.Butt to PathStrokeJoin.Miter,
             PathStrokeCap.Round to PathStrokeJoin.Round,
             PathStrokeCap.Square to PathStrokeJoin.Bevel,
         )
+        val expectedIntervalCountsI32 = listOf(
+            listOf(4, 4, 8),  // reversed source: butt/miter, round/round, square/bevel
+            listOf(4, 4, 8),  // forward source: proves independent source direction handling
+            listOf(10, 9, 13), // offset join: retains every join family
+            listOf(4, 4, 8),  // source arc: retains the parametric arc and its caps
+        )
         val projectionF64 = Matrix3x3F64(persp0F64 = -0.01, persp2F64 = -1.0).toPathStrokeProjectionF64()
 
-        paths.forEach { path ->
+        paths.forEachIndexed { pathIndexI32, (sourceNameF64, path) ->
             val centerlineF64 = assertIs<PathStrokeCenterlinePreparationResult.Ready>(
                 preparePathStrokeCenterlinesF64(PathFillInputF64.fromPathF32(path), dashF64 = null),
             ).centerlineF64
-            styles.forEach { (capF64, joinF64) ->
+            styles.forEachIndexed { styleIndexI32, (capF64, joinF64) ->
                 val outlineF64 = assertIs<PathStrokeOutlinePreparationResult.Ready>(
                     prepareFinitePathStrokeOutlineF64(
                         centerlineF64,
@@ -285,12 +357,17 @@ class PathProjectivePreparationF64Test {
                         ),
                     ),
                 ).outlineF64
-                (0 until outlineF64.contourCountI32).forEach { contourIndexI32 ->
-                    outlineF64.copyContourIntervalsF64(contourIndexI32).forEach { intervalF64 ->
-                        assertIs<PathStrokeProjectionIntervalResultF64.Bounded>(
-                            projectionF64.certifyOutlineIntervalF64(intervalF64),
-                        )
-                    }
+                val intervalsF64 = (0 until outlineF64.contourCountI32)
+                    .flatMap { outlineF64.copyContourIntervalsF64(it) }
+                assertEquals(
+                    expectedIntervalCountsI32[pathIndexI32][styleIndexI32],
+                    intervalsF64.size,
+                    "$sourceNameF64 $capF64/$joinF64 must retain its own outline primitive family",
+                )
+                intervalsF64.forEach { intervalF64 ->
+                    assertIs<PathStrokeProjectionIntervalResultF64.Bounded>(
+                        projectionF64.certifyOutlineIntervalF64(intervalF64),
+                    )
                 }
             }
         }
@@ -513,6 +590,35 @@ class PathProjectivePreparationF64Test {
         assertEquals(
             PathProjectiveInvalidSceneReason.PerspectiveHorizonCrossing,
             assertIs<PathProjectivePreparationResult.InvalidScene>(result).reason,
+        )
+    }
+
+    @Test
+    fun `general cubic root certificates ignore internal zero controls and prove crossings and tangencies`() {
+        val policyF64 = PathFillFlatteningPolicyF64(limitsI32 = PathFillLimitsI32(maxSubdivisionDepthI32 = 0))
+        fun classify(vararg controlsF64: Float): PathProjectivePreparationResult =
+            Matrix3x3F64(persp0F64 = 1.0, persp2F64 = 0.0).prepareProjectedPathFillInputF64(
+                PathBuilder().moveTo(controlsF64[0], 0f)
+                    .cubicTo(controlsF64[1], 0f, controlsF64[2], 0f, controlsF64[3], 0f)
+                    .lineTo(controlsF64[0], 1f).close().build(),
+                policyF64 = policyF64,
+            )
+
+        val strictInternalZero = Matrix3x3F64(persp0F64 = 1.0, persp2F64 = 0.0).prepareProjectedPathFillInputF64(
+            PathBuilder().moveTo(1f, 0f).cubicTo(0f, 0f, -0.25f, 0f, 1f, 0f)
+                .lineTo(1f, 1f).close().build(),
+        )
+        val crossing = classify(1f, 0f, -1f, -1f)
+        val tangency = classify(1f, -0.25f, -0.5f, 1.25f)
+
+        assertIs<PathProjectivePreparationResult.Ready>(strictInternalZero)
+        assertEquals(
+            PathProjectiveInvalidSceneReason.PerspectiveHorizonCrossing,
+            assertIs<PathProjectivePreparationResult.InvalidScene>(crossing).reason,
+        )
+        assertEquals(
+            PathProjectiveInvalidSceneReason.PerspectiveHorizonCrossing,
+            assertIs<PathProjectivePreparationResult.InvalidScene>(tangency).reason,
         )
     }
 
