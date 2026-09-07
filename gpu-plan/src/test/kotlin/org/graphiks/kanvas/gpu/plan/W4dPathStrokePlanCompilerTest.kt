@@ -191,6 +191,38 @@ class W4dPathStrokePlanCompilerTest {
     }
 
     @Test
+    fun `sub 513 structural gap precedes earlier geometry work limits`() {
+        val base = pathDraw(PaintStyleNode.STROKE)
+        val unsupported = SceneCommand.Draw(
+            base.node.copy(coverage = CoverageRequest.ANTIALIASED),
+        )
+        val scene = sceneOf(listOf(base, unsupported))
+
+        assertIs<GpuPlanSelection.NotCandidate>(
+            compilerWithFrameLimit(FrameAxis.Attempted, 1L).select(scene, target(scene)),
+        )
+    }
+
+    @Test
+    fun `sub 513 finite invalid style takes priority over gap and geometry work`() {
+        val base = pathDraw(PaintStyleNode.STROKE)
+        val unsupported = SceneCommand.Draw(
+            base.node.copy(coverage = CoverageRequest.ANTIALIASED),
+        )
+        val finiteInvalidStyle = pathDraw(
+            PaintStyleNode.STROKE,
+            effect = PathEffectNode.Dash(
+                ImmutableFloats.copyOf(floatArrayOf(-1f, 1f)),
+            ),
+        )
+        val scene = sceneOf(listOf(base, unsupported, finiteInvalidStyle))
+
+        assertIs<GpuPlanSelection.InvalidScene>(
+            compilerWithFrameLimit(FrameAxis.Attempted, 1L).select(scene, target(scene)),
+        )
+    }
+
+    @Test
     fun `nonfinite facts stay invalid before the 513 draw limit`() {
         val malformed = pathDraw(PaintStyleNode.STROKE).let { draw ->
             SceneCommand.Draw(

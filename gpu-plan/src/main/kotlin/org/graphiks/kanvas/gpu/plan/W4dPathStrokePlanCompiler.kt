@@ -109,18 +109,15 @@ public class W4dPathStrokePlanCompiler internal constructor(
         }
 
         var visualDrawCountI32 = 0
-        scene.forEach { command ->
-            if (command is SceneCommand.Draw) visualDrawCountI32 = Math.addExact(visualDrawCountI32, 1)
-        }
-        if (visualDrawCountI32 <= MAX_DRAWS) return FramePreflight.Member
-
         var sawStroke = false
+        var outside = false
         scene.forEach { command ->
             when (command) {
                 is SceneCommand.Draw -> {
+                    visualDrawCountI32 = Math.addExact(visualDrawCountI32, 1)
                     when (val scope = classifyDrawScope(command.node)) {
                         is DrawScope.Ready -> sawStroke = sawStroke || scope.stroke
-                        is DrawScope.Gap -> return FramePreflight.Outside
+                        is DrawScope.Gap -> outside = true
                         is DrawScope.Invalid -> return FramePreflight.Invalid(scope.message)
                     }
                 }
@@ -128,11 +125,15 @@ public class W4dPathStrokePlanCompiler internal constructor(
                 is SceneCommand.SetClip,
                 is SceneCommand.Annotation,
                 -> Unit
-                else -> return FramePreflight.Outside
+                else -> outside = true
             }
         }
-        if (!sawStroke) return FramePreflight.Outside
-        return FramePreflight.Limit("W4d accepts at most 512 visual path draws")
+        if (outside || !sawStroke) return FramePreflight.Outside
+        return if (visualDrawCountI32 > MAX_DRAWS) {
+            FramePreflight.Limit("W4d accepts at most 512 visual path draws")
+        } else {
+            FramePreflight.Member
+        }
     }
 
     private fun recognize(scene: SceneSnapshot): Recognition {
