@@ -16,6 +16,97 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlan
 import org.graphiks.math.geometry.PathFillGeometryF32
 
+/** One native byte range that must be safe before any host allocation or pool checkout. */
+internal data class GPUPlannedPathNativeByteRange(
+    val resource: Resource,
+    val offsetBytes: Long,
+    val sizeBytes: Long,
+    val capacityBytes: Long,
+    val alignmentBytes: Long,
+    val deviceLimitBytes: Long? = null,
+    val requiresHostI32Addressing: Boolean = true,
+) {
+    enum class Resource {
+        Vertex,
+        Index,
+        Uniform,
+        Readback,
+        DepthStencil,
+    }
+}
+
+internal sealed interface GPUPlannedPathNativeByteRangeValidation {
+    data object Accepted : GPUPlannedPathNativeByteRangeValidation
+
+    data class Refused(
+        val resource: GPUPlannedPathNativeByteRange.Resource,
+        val reason: Reason,
+    ) : GPUPlannedPathNativeByteRangeValidation
+
+    enum class Reason {
+        NonPositive,
+        Misaligned,
+        I64Overflow,
+        CapacityUndersized,
+        DeviceLimitExceeded,
+        I32HostOverflow,
+    }
+}
+
+/**
+ * Shared numeric gate for W4c/W4d native packing.  It is deliberately handle-free so every
+ * byte/range boundary can be proved without allocating pathological multi-gigabyte arrays.
+ */
+internal fun validatePlannedPathNativeByteRanges(
+    ranges: List<GPUPlannedPathNativeByteRange>,
+): GPUPlannedPathNativeByteRangeValidation {
+    for (range in ranges) {
+        if (range.offsetBytes < 0L || range.sizeBytes <= 0L || range.capacityBytes <= 0L ||
+            range.alignmentBytes <= 0L
+        ) {
+            return GPUPlannedPathNativeByteRangeValidation.Refused(
+                range.resource,
+                GPUPlannedPathNativeByteRangeValidation.Reason.NonPositive,
+            )
+        }
+        if (range.offsetBytes % range.alignmentBytes != 0L ||
+            range.sizeBytes % range.alignmentBytes != 0L
+        ) {
+            return GPUPlannedPathNativeByteRangeValidation.Refused(
+                range.resource,
+                GPUPlannedPathNativeByteRangeValidation.Reason.Misaligned,
+            )
+        }
+        val end = try {
+            Math.addExact(range.offsetBytes, range.sizeBytes)
+        } catch (_: ArithmeticException) {
+            return GPUPlannedPathNativeByteRangeValidation.Refused(
+                range.resource,
+                GPUPlannedPathNativeByteRangeValidation.Reason.I64Overflow,
+            )
+        }
+        if (end > range.capacityBytes) {
+            return GPUPlannedPathNativeByteRangeValidation.Refused(
+                range.resource,
+                GPUPlannedPathNativeByteRangeValidation.Reason.CapacityUndersized,
+            )
+        }
+        if (range.deviceLimitBytes?.let { limit -> range.capacityBytes > limit } == true) {
+            return GPUPlannedPathNativeByteRangeValidation.Refused(
+                range.resource,
+                GPUPlannedPathNativeByteRangeValidation.Reason.DeviceLimitExceeded,
+            )
+        }
+        if (range.requiresHostI32Addressing && end > Int.MAX_VALUE.toLong()) {
+            return GPUPlannedPathNativeByteRangeValidation.Refused(
+                range.resource,
+                GPUPlannedPathNativeByteRangeValidation.Reason.I32HostOverflow,
+            )
+        }
+    }
+    return GPUPlannedPathNativeByteRangeValidation.Accepted
+}
+
 /** Execution-only view over the already sealed W4c/W4d path authority. */
 internal class GPUPlannedPathSessionScratch private constructor(
     val lane: Lane,

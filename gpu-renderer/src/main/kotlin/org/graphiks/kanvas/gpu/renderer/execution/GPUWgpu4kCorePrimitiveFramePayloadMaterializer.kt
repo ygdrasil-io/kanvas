@@ -1945,6 +1945,87 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         ) {
             return refused("invalid.native-core-primitive.$lane-readback", "$laneName output-owned readback contradicts its sealed staging authority.")
         }
+        val nativeByteRanges = buildList {
+            add(
+                GPUPlannedPathNativeByteRange(
+                    GPUPlannedPathNativeByteRange.Resource.Vertex,
+                    0L,
+                    scratch.vertexUsefulBytes,
+                    scratch.vertexCapacityBytes,
+                    Float.SIZE_BYTES.toLong(),
+                    limits.maxBufferSize,
+                ),
+            )
+            add(
+                GPUPlannedPathNativeByteRange(
+                    GPUPlannedPathNativeByteRange.Resource.Index,
+                    0L,
+                    scratch.indexUsefulBytes,
+                    scratch.indexCapacityBytes,
+                    Int.SIZE_BYTES.toLong(),
+                    limits.maxBufferSize,
+                ),
+            )
+            add(
+                GPUPlannedPathNativeByteRange(
+                    GPUPlannedPathNativeByteRange.Resource.Uniform,
+                    0L,
+                    scratch.uniformPlan.totalBytes,
+                    scratch.uniformCapacityBytes,
+                    1L,
+                    limits.maxBufferSize,
+                ),
+            )
+            add(
+                GPUPlannedPathNativeByteRange(
+                    GPUPlannedPathNativeByteRange.Resource.Readback,
+                    0L,
+                    output.layout.totalBufferBytes,
+                    output.stagingLease.backingBufferBytes,
+                    1L,
+                    limits.maxBufferSize,
+                ),
+            )
+            if (scratch.depthStencilBytes > 0L) {
+                add(
+                    GPUPlannedPathNativeByteRange(
+                        GPUPlannedPathNativeByteRange.Resource.DepthStencil,
+                        0L,
+                        scratch.depthStencilBytes,
+                        scratch.depthStencilBytes,
+                        4L,
+                    ),
+                )
+            }
+            scratch.draws.forEach { draw ->
+                add(
+                    GPUPlannedPathNativeByteRange(
+                        GPUPlannedPathNativeByteRange.Resource.Vertex,
+                        draw.vertexOffsetBytes,
+                        draw.vertexRangeBytes,
+                        scratch.vertexUsefulBytes,
+                        Float.SIZE_BYTES.toLong(),
+                    ),
+                )
+                add(
+                    GPUPlannedPathNativeByteRange(
+                        GPUPlannedPathNativeByteRange.Resource.Index,
+                        draw.indexOffsetBytes,
+                        draw.indexRangeBytes,
+                        scratch.indexUsefulBytes,
+                        Int.SIZE_BYTES.toLong(),
+                    ),
+                )
+            }
+        }
+        val nativeRangeRefusal = validatePlannedPathNativeByteRanges(nativeByteRanges) as?
+            GPUPlannedPathNativeByteRangeValidation.Refused
+        if (nativeRangeRefusal != null) {
+            return refused(
+                "invalid.native-core-primitive.$lane-host-range",
+                "$laneName ${nativeRangeRefusal.resource} native range is ${nativeRangeRefusal.reason}.",
+            )
+        }
 
         val vertexData = FloatArray((scratch.vertexUsefulBytes / Float.SIZE_BYTES).toInt())
         val indexData = IntArray((scratch.indexUsefulBytes / Int.SIZE_BYTES).toInt())

@@ -2318,6 +2318,82 @@ internal class GPUFramePreflighter(
         } else {
             null
         }
+        val nativeByteRanges = buildList {
+            add(
+                GPUPlannedPathNativeByteRange(
+                    GPUPlannedPathNativeByteRange.Resource.Vertex,
+                    0L,
+                    scratch.vertexUsefulBytes,
+                    scratch.vertexCapacityBytes,
+                    Float.SIZE_BYTES.toLong(),
+                    scratch.maxBufferSize,
+                ),
+            )
+            add(
+                GPUPlannedPathNativeByteRange(
+                    GPUPlannedPathNativeByteRange.Resource.Index,
+                    0L,
+                    scratch.indexUsefulBytes,
+                    scratch.indexCapacityBytes,
+                    Int.SIZE_BYTES.toLong(),
+                    scratch.maxBufferSize,
+                ),
+            )
+            add(
+                GPUPlannedPathNativeByteRange(
+                    GPUPlannedPathNativeByteRange.Resource.Uniform,
+                    0L,
+                    scratch.uniformPlan.totalBytes,
+                    scratch.uniformCapacityBytes,
+                    1L,
+                    scratch.maxBufferSize,
+                ),
+            )
+            add(
+                GPUPlannedPathNativeByteRange(
+                    GPUPlannedPathNativeByteRange.Resource.Readback,
+                    0L,
+                    stagingBytes,
+                    stagingPreparation.byteSize,
+                    1L,
+                    scratch.maxBufferSize,
+                ),
+            )
+            if (usesStencil) {
+                add(
+                    GPUPlannedPathNativeByteRange(
+                        GPUPlannedPathNativeByteRange.Resource.DepthStencil,
+                        0L,
+                        expectedDepthStencilBytes,
+                        scratch.depthStencilBytes,
+                        4L,
+                    ),
+                )
+            }
+            scratch.draws.forEach { draw ->
+                add(
+                    GPUPlannedPathNativeByteRange(
+                        GPUPlannedPathNativeByteRange.Resource.Vertex,
+                        draw.vertexOffsetBytes,
+                        draw.vertexRangeBytes,
+                        scratch.vertexUsefulBytes,
+                        Float.SIZE_BYTES.toLong(),
+                    ),
+                )
+                add(
+                    GPUPlannedPathNativeByteRange(
+                        GPUPlannedPathNativeByteRange.Resource.Index,
+                        draw.indexOffsetBytes,
+                        draw.indexRangeBytes,
+                        scratch.indexUsefulBytes,
+                        Int.SIZE_BYTES.toLong(),
+                    ),
+                )
+            }
+        }
+        if (validatePlannedPathNativeByteRanges(nativeByteRanges) !is
+            GPUPlannedPathNativeByteRangeValidation.Accepted
+        ) return null
         if (
             scratch.vertexResourceId != PlanResourceId("VertexData:0") ||
                 scratch.indexResourceId != PlanResourceId("IndexData:0") ||

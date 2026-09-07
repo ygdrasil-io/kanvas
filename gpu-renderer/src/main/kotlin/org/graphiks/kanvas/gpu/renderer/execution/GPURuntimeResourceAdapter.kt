@@ -562,20 +562,28 @@ internal class GPURuntimeResourceAdapter(
         if (closed) return false
         val entry = preparedNativePayloads[token] ?: return false
         if (entry.state != PreparedNativePayloadState.Submitted) return false
-        val leaseReleased = entry.releaseLeaseAfterCompletion()
         val handlesReleased = entry.closeCompletionOwned { releasePayloadHandle(token, it) }
-        if (!leaseReleased || !handlesReleased) {
+        if (!handlesReleased) {
             preparedNativePayloads.remove(token)
-            if (!leaseReleased) entry.quarantineLeaseUncertain()
+            entry.quarantineLeaseUncertain()
             quarantinedNativePayloads[token] = entry
             return false
         }
         preparedNativePayloads.remove(token)
         if (entry.hasOutputOwned) {
+            // The frame-pool lease backs every W4d operand, including the readback staging
+            // copy.  Queue completion only makes mapping legal: it does not end output
+            // ownership.  Keep the lease attached to the output registry until mapping is
+            // finalized so the same buffers and D24S8 attachment cannot be checked out early.
             outputOwnedNativePayloads[token] = entry
-        } else {
-            releaseBorrowedHandles(entry)
+            return true
         }
+        if (!entry.releaseLeaseAfterCompletion()) {
+            entry.quarantineLeaseUncertain()
+            quarantinedNativePayloads[token] = entry
+            return false
+        }
+        releaseBorrowedHandles(entry)
         return true
     }
 
@@ -594,12 +602,15 @@ internal class GPURuntimeResourceAdapter(
     override fun releaseOutputOwnedPreparedNativeFramePayload(token: GPUPreparedNativeFrameToken): Boolean {
         val entry = outputOwnedNativePayloads[token] ?: return false
         if (!entry.outputMappingClaimed) return false
-        if (entry.closeOutputOwned { releasePayloadHandle(token, it) }) {
+        val handlesReleased = entry.closeOutputOwned { releasePayloadHandle(token, it) }
+        val leaseReleased = handlesReleased && entry.releaseLeaseAfterCompletion()
+        if (handlesReleased && leaseReleased) {
             outputOwnedNativePayloads.remove(token)
             releaseBorrowedHandles(entry)
             return true
         }
         outputOwnedNativePayloads.remove(token)
+        entry.quarantineLeaseUncertain()
         quarantinedNativePayloads[token] = entry
         return false
     }
@@ -609,8 +620,9 @@ internal class GPURuntimeResourceAdapter(
         val entry = outputOwnedNativePayloads[token] ?: return false
         if (closed && !entry.outputMappingClaimed) return false
         outputOwnedNativePayloads.remove(token)
+        val leaseQuarantined = entry.quarantineLeaseUncertain()
         quarantinedNativePayloads[token] = entry
-        return true
+        return leaseQuarantined
     }
 
     @Synchronized
