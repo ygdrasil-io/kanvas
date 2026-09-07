@@ -11,6 +11,10 @@ import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.geometry.toPathF32
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.PaintStyle
+import org.graphiks.kanvas.paint.PathEffect
+import org.graphiks.kanvas.paint.StrokeCap
+import org.graphiks.kanvas.paint.StrokeJoin
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.math.geometry.RRectF32
@@ -25,6 +29,187 @@ class GPUPlanSurfacePixelTest {
     @AfterEach
     fun disposeGpuRuntime() {
         GPUBackendRuntimeFactory.dispose()
+    }
+
+    @Test
+    fun `W4d Butt Round and Square caps match the independent public-path oracle`() {
+        val path = Path().apply {
+            moveTo(3.25f, 3.25f)
+            lineTo(6.75f, 3.25f)
+        }
+        StrokeCap.entries.forEach { cap ->
+            val paint = Paint.stroke(ColorARGB.of(255, 219, 47, 91), width = 2f).copy(
+                strokeCap = cap,
+                antiAlias = false,
+            )
+            val expected = w4dOracle(10, 7, path, paint)
+            val surface = Surface(10, 7)
+            surface.canvas { drawPath(path, paint) }
+
+            val result = surface.render()
+
+            assertPreparedRouteEvidence(result)
+            assertPixelsEqual(expected, result.pixels)
+        }
+    }
+
+    @Test
+    fun `W4d Miter Round Bevel and miter-limit fallback match the independent oracle`() {
+        val path = Path().apply {
+            moveTo(1.25f, 6.75f)
+            lineTo(4.25f, 1.75f)
+            lineTo(7.25f, 6.75f)
+        }
+        val cases = listOf(
+            StrokeJoin.MITER to 8f,
+            StrokeJoin.ROUND to 8f,
+            StrokeJoin.BEVEL to 8f,
+            StrokeJoin.MITER to 1f,
+        )
+        cases.forEach { (join, miter) ->
+            val paint = Paint.stroke(ColorARGB.of(255, 36, 143, 227), width = 1.5f).copy(
+                strokeJoin = join,
+                strokeMiter = miter,
+                antiAlias = false,
+            )
+            val expected = w4dOracle(9, 8, path, paint)
+            val surface = Surface(9, 8)
+            surface.canvas { drawPath(path, paint) }
+
+            val result = surface.render()
+
+            assertPreparedRouteEvidence(result)
+            assertPixelsEqual(expected, result.pixels)
+        }
+    }
+
+    @Test
+    fun `W4d negative dash phase matches an independent source-arclength oracle`() {
+        val path = Path().apply {
+            moveTo(1f, 2.125f)
+            lineTo(11f, 2.125f)
+        }
+        val paint = Paint.stroke(ColorARGB.of(255, 41, 207, 126), width = 1.5f).copy(
+            strokeCap = StrokeCap.BUTT,
+            pathEffect = PathEffect.Dash(floatArrayOf(2f, 2f), phase = -1f),
+            antiAlias = false,
+        )
+        val surface = Surface(12, 5)
+        surface.canvas { drawPath(path, paint) }
+
+        val result = surface.render()
+
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(w4dOracle(12, 5, path, paint), result.pixels)
+    }
+
+    @Test
+    fun `W4d hairline remains one device pixel under four-times scale`() {
+        val path = Path().apply {
+            moveTo(0.5f, 1.125f)
+            lineTo(2.5f, 1.125f)
+        }
+        val paint = Paint.stroke(ColorARGB.White, width = 0f).copy(antiAlias = false)
+        val transform = Matrix3x3F32(sx = 4f, sy = 4f)
+        val draw = W4dPathStrokeCpuOracle.Draw(
+            path = path.toPathF32(),
+            paint = paint,
+            transform = transform,
+            scissorI32 = RectI32(0, 0, 12, 8),
+        )
+        val surface = Surface(12, 8)
+        surface.canvas {
+            scale(4f, 4f)
+            drawPath(path, paint)
+        }
+
+        val result = surface.render()
+
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(W4dPathStrokeCpuOracle.render(12, 8, listOf(draw)), result.pixels)
+        val opaquePixelCountI32 = result.pixels.indices.step(4).count { result.pixels[it + 3] == 255.toUByte() }
+        assertEquals(8, opaquePixelCountI32)
+    }
+
+    @Test
+    fun `W4d stroke-and-fill donut applies translucent SrcOver once over its union`() {
+        val donut = Path().apply {
+            addRect(RectF32.ofLTRB(1f, 1f, 7f, 7f))
+            moveTo(3f, 3f)
+            lineTo(3f, 5f)
+            lineTo(5f, 5f)
+            lineTo(5f, 3f)
+            close()
+        }
+        val color = ColorARGB.of(128, 225, 74, 35)
+        val paint = Paint(
+            color = color,
+            style = PaintStyle.STROKE_AND_FILL,
+            strokeWidth = 1.5f,
+            strokeJoin = StrokeJoin.BEVEL,
+            antiAlias = false,
+        )
+        val draw = W4dPathStrokeCpuOracle.Draw(
+            donut.toPathF32(),
+            paint,
+            scissorI32 = RectI32(0, 0, 8, 8),
+        )
+        val surface = Surface(8, 8)
+        surface.canvas { drawPath(donut, paint) }
+
+        val result = surface.render()
+
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(W4dPathStrokeCpuOracle.render(8, 8, listOf(draw)), result.pixels)
+        assertEquals(128.toUByte(), result.pixels[((1 * 8 + 1) * 4) + 3])
+    }
+
+    @Test
+    fun `W4d mixed fill-stroke paint order and integral scissor are byte exact`() {
+        val fillPath = Path().addRect(RectF32.ofLTRB(0f, 0f, 6f, 5f))
+        val strokePath = Path().apply {
+            moveTo(0.25f, 2.125f)
+            lineTo(6.75f, 2.125f)
+        }
+        val fillPaint = Paint.fill(ColorARGB.of(173, 42, 93, 221)).copy(antiAlias = false)
+        val strokePaint = Paint.stroke(ColorARGB.of(139, 238, 167, 31), 1.5f).copy(
+            strokeCap = StrokeCap.SQUARE,
+            antiAlias = false,
+        )
+        val scissor = RectI32(1, 1, 6, 4)
+        val draws = listOf(
+            W4dPathStrokeCpuOracle.Draw(fillPath.toPathF32(), fillPaint, scissorI32 = scissor),
+            W4dPathStrokeCpuOracle.Draw(strokePath.toPathF32(), strokePaint, scissorI32 = scissor),
+        )
+        val surface = Surface(7, 5)
+        surface.canvas {
+            clipRect(RectF32.ofLTRB(1f, 1f, 6f, 4f), antiAlias = false)
+            drawPath(fillPath, fillPaint)
+            drawPath(strokePath, strokePaint)
+        }
+
+        val result = surface.render()
+
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(W4dPathStrokeCpuOracle.render(7, 5, draws), result.pixels)
+        assertTransparentOutside(result.pixels, 7, 5, scissor)
+    }
+
+    @Test
+    fun `W4d RGBA8 and BGRA8 readback preserve public channel interpretation`() {
+        val path = Path().apply {
+            moveTo(1f, 2.125f)
+            lineTo(6f, 2.125f)
+        }
+        val paint = Paint.stroke(ColorARGB.of(255, 231, 37, 19), 1.5f).copy(antiAlias = false)
+        val draw = W4dPathStrokeCpuOracle.Draw(path.toPathF32(), paint, scissorI32 = RectI32(0, 0, 7, 5))
+        val rgba = Surface(7, 5, PixelFormat.RGBA8).also { it.canvas { drawPath(path, paint) } }.render()
+        val bgra = Surface(7, 5, PixelFormat.BGRA8).also { it.canvas { drawPath(path, paint) } }.render()
+
+        assertPreparedRouteEvidence(rgba)
+        assertPreparedRouteEvidence(bgra)
+        assertPixelsEqual(W4dPathStrokeCpuOracle.render(7, 5, listOf(draw), PixelFormat.RGBA8), rgba.pixels)
+        assertPixelsEqual(W4dPathStrokeCpuOracle.render(7, 5, listOf(draw), PixelFormat.BGRA8), bgra.pixels)
     }
 
     @Test
@@ -1078,6 +1263,19 @@ class GPUPlanSurfacePixelTest {
         color = color,
         scissorI32 = scissorI32,
     )
+
+    private fun w4dOracle(widthI32: Int, heightI32: Int, path: Path, paint: Paint): UByteArray =
+        W4dPathStrokeCpuOracle.render(
+            widthI32,
+            heightI32,
+            listOf(
+                W4dPathStrokeCpuOracle.Draw(
+                    path.toPathF32(),
+                    paint,
+                    scissorI32 = RectI32(0, 0, widthI32, heightI32),
+                ),
+            ),
+        )
 
     private fun renderFractionalScene(
         format: PixelFormat,

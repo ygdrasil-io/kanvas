@@ -24,6 +24,10 @@ import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.PaintStyle
+import org.graphiks.kanvas.paint.PathEffect
+import org.graphiks.kanvas.paint.StrokeCap
+import org.graphiks.kanvas.paint.StrokeJoin
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.RRectF32
@@ -35,6 +39,55 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class DisplayOpSceneAdapterTest {
+    @Test
+    fun `W4d public adapter preserves every stroke style and dash fact`() {
+        val path = Path().apply {
+            moveTo(1f, 2f)
+            lineTo(7f, 5f)
+        }
+        val intervals = floatArrayOf(3f, 1f, 2f, 4f)
+        val paint = Paint(
+            color = ColorARGB.of(137, 19, 173, 241),
+            style = PaintStyle.STROKE_AND_FILL,
+            strokeWidth = 2.75f,
+            strokeCap = StrokeCap.SQUARE,
+            strokeJoin = StrokeJoin.BEVEL,
+            strokeMiter = 1.25f,
+            pathEffect = PathEffect.Dash(intervals, phase = -5.5f),
+            antiAlias = false,
+        )
+        val operation = DisplayOp.DrawPath(
+            path,
+            paint,
+            Matrix3x3F32(sx = -2f, sy = 3f, tx = 11f, ty = -7f),
+            ClipStack.DeviceRect(RectF32.ofLTRB(1f, 2f, 8f, 9f), antiAlias = false),
+        )
+
+        val scene = assertInstanceOf(
+            SceneCaptureResult.Captured::class.java,
+            DisplayOpSceneAdapter.capture(listOf(operation), SceneExtent(16, 16), ColorSpace.SRGB),
+        ).scene
+        val node = assertInstanceOf(SceneCommand.Draw::class.java, scene.commandAt(0)).node
+        val capturedPaint = requireNotNull(node.paint)
+        val capturedDash = assertInstanceOf(PathEffectNode.Dash::class.java, capturedPaint.pathEffect)
+
+        assertEquals(PaintStyleNode.STROKE_AND_FILL, capturedPaint.style)
+        assertEquals(2.75f, capturedPaint.strokeWidth)
+        assertEquals(StrokeCapNode.SQUARE, capturedPaint.strokeCap)
+        assertEquals(StrokeJoinNode.BEVEL, capturedPaint.strokeJoin)
+        assertEquals(1.25f, capturedPaint.strokeMiter)
+        assertEquals(-5.5f, capturedDash.phase)
+        assertTrue(intervals.contentEquals(capturedDash.intervals.copyToFloatArray()))
+        val restored = assertInstanceOf(
+            DisplayOp.DrawPath::class.java,
+            SceneDisplayOpAdapter.toDisplayOps(scene).single(),
+        )
+        assertEquals(operation.path.toPathF32(), restored.path.toPathF32())
+        assertEquals(operation.paint, restored.paint)
+        assertEquals(operation.transform, restored.transform)
+        assertEquals(operation.clip, restored.clip)
+    }
+
     @Test
     fun `capture rejects a shared material DAG at its graph budget before expansion`() {
         var shared: org.graphiks.kanvas.paint.Shader = org.graphiks.kanvas.paint.Shader.SolidColor(ColorARGB.Red)

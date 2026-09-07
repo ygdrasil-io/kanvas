@@ -26,6 +26,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.render.ir.DrawOrigin
+import org.graphiks.kanvas.render.ir.DisplayOpSceneAdapter
 import org.graphiks.kanvas.render.ir.GeometryNode
 import org.graphiks.kanvas.render.ir.RenderDiagnostic
 import org.graphiks.kanvas.render.ir.RenderDiagnosticCode
@@ -41,15 +42,130 @@ import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.surface.RenderResult
 import org.graphiks.kanvas.surface.RenderStats
 import org.graphiks.kanvas.surface.W4cPathFillCpuOracle
+import org.graphiks.kanvas.surface.W4dPathStrokeCpuOracle
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.matrix.Matrix3x3F32
 
 @OptIn(ExperimentalUnsignedTypes::class)
 class GPUPlanSurfaceRouterTest {
+    @Test
+    fun `W4d public DrawPath uses the generic Scene route and completes native readback`() {
+        val path = Path().apply {
+            moveTo(1f, 2.125f)
+            lineTo(6f, 2.125f)
+        }
+        val paint = Paint.stroke(ColorARGB.of(255, 49, 173, 224), 1.5f).copy(antiAlias = false)
+        val expected = W4dPathStrokeCpuOracle.render(
+            7,
+            5,
+            listOf(W4dPathStrokeCpuOracle.Draw(path.toPathF32(), paint, scissorI32 = RectI32(0, 0, 7, 5))),
+        )
+        val context = GpuRenderContext.createProduction()
+        try {
+            val result = GPUPlanSurfaceRouter(planPort = capabilityChainPort(context)).render(
+                operations = listOf(DisplayOp.DrawPath(path, paint, Matrix3x3F32.Identity, ClipStack.WideOpen)),
+                width = 7,
+                height = 5,
+                format = PixelFormat.RGBA8,
+                config = RenderConfig.DEFAULT,
+                legacy = { error("A W4d stroke must not enter the legacy Surface route") },
+            )
+
+            assertContentEquals(expected, result.pixels)
+            assertEquals(setOf("Render", "Readback"), result.nativeEvidenceScopeKinds.toSet())
+        } finally {
+            context.close()
+        }
+    }
+
+    @Test
+    fun `W4d one and 512 draws plan while 513 is terminal before submit or legacy publication`() {
+        val path = Path().apply {
+            moveTo(0.25f, 0.5f)
+            lineTo(0.75f, 0.5f)
+        }
+        val paint = Paint.stroke(ColorARGB.White, 0.5f).copy(antiAlias = false)
+        val operation = DisplayOp.DrawPath(path, paint, Matrix3x3F32.Identity, ClipStack.WideOpen)
+        val context = GpuRenderContext.createProduction()
+        try {
+            val executor = context.planSurfaceExecutor()
+            listOf(1, 512).forEach { countI32 ->
+                val scene = assertIs<SceneCaptureResult.Captured>(
+                    DisplayOpSceneAdapter.capture(List(countI32) { operation }, org.graphiks.kanvas.render.ir.SceneExtent(1, 1), ColorSpace.SRGB),
+                ).scene
+                assertIs<GpuPlanSurfacePlanResult.Ready>(
+                    executor.plan(scene, RenderTargetDescriptor(scene.extent, scene.colorSpace), RenderConfig.DEFAULT.frameLocalBudgetBytes),
+                )
+            }
+
+            val failure = assertFailsWith<GPUPlanSurfaceTerminalException> {
+                GPUPlanSurfaceRouter(planPort = capabilityChainPort(context)).render(
+                    operations = List(513) { operation },
+                    width = 1,
+                    height = 1,
+                    format = PixelFormat.RGBA8,
+                    config = RenderConfig.DEFAULT,
+                    legacy = { error("A promoted W4d limit must not publish legacy pixels") },
+                )
+            }
+            assertEquals("w4d.path-resource-limit", failure.code)
+        } finally {
+            context.close()
+        }
+    }
+
+    @Test
+    fun `W4d terminal planner and submit outcomes never fall back`() {
+        val path = Path().apply {
+            moveTo(0f, 0.5f)
+            lineTo(1f, 0.5f)
+        }
+        val operation = DisplayOp.DrawPath(
+            path,
+            Paint.stroke(ColorARGB.Red, 1f).copy(antiAlias = false),
+            Matrix3x3F32.Identity,
+            ClipStack.WideOpen,
+        )
+        listOf("w4d.scene-invalid", "w4d.path-resource-limit", "w4d.capability-unavailable").forEach { code ->
+            val failure = assertFailsWith<GPUPlanSurfaceTerminalException>(code) {
+                GPUPlanSurfaceRouter(
+                    planPort = object : GPUPlanSurfacePort {
+                        override fun plan(
+                            scene: SceneSnapshot,
+                            target: RenderTargetDescriptor,
+                            frameLocalBudgetBytes: Long,
+                        ): GpuPlanSurfacePlanResult = GpuPlanSurfacePlanResult.Terminal(
+                            listOf(
+                                RenderDiagnostic(
+                                    RenderDiagnosticCode(code),
+                                    RenderDiagnosticDomain.RESOURCE,
+                                    RenderDiagnosticSeverity.ERROR,
+                                    code,
+                                ),
+                            ),
+                        )
+
+                        override fun submit(token: GpuPlanSurfaceReadyToken): GpuPlanSurfaceSubmitResult =
+                            error("A terminal W4d plan cannot submit")
+                    },
+                ).render(
+                    operations = listOf(operation),
+                    width = 1,
+                    height = 1,
+                    format = PixelFormat.RGBA8,
+                    config = RenderConfig.DEFAULT,
+                    legacy = { error("A terminal W4d result cannot fall back") },
+                )
+            }
+            assertEquals(code, failure.code)
+        }
+    }
+
     @Test
     fun `hard edge triangle reaches the prepared W4c route instead of the legacy sentinel`() {
         val triangle = Path().apply {
@@ -189,9 +305,6 @@ class GPUPlanSurfaceRouterTest {
             "antialias" to listOf(path.copy(paint = hardFill.copy(antiAlias = true))),
             "inverse" to listOf(
                 DisplayOp.DrawPath(inverse, hardFill, Matrix3x3F32.Identity, ClipStack.WideOpen),
-            ),
-            "stroke" to listOf(
-                path.copy(paint = Paint.stroke(ColorARGB.Red, width = 1f).copy(antiAlias = false)),
             ),
         )
 
