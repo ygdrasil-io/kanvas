@@ -793,43 +793,82 @@ private fun restrictedOffsetOutlineGeometryF64(
 
 /** Bounds the deviation of a unit-normal curve from its chord on an analytically restricted source. */
 private fun normalDeviationUpperBoundF64(primitiveF64: PathStrokePrimitiveF64): Double? {
-    val derivativeBoundsF64 = when (primitiveF64) {
+    return when (primitiveF64) {
         is PathStrokeLinePrimitiveF64 -> return 0.0
 
         is PathStrokeQuadPrimitiveF64 -> {
             val firstF64 = (primitiveF64.controlF64 - primitiveF64.startF64) * 2.0
             val secondF64 = (primitiveF64.endF64 - primitiveF64.controlF64) * 2.0
-            NormalDerivativeBoundsF64(
-                minimumSpeedF64 = distanceFromOriginToSegmentF64(firstF64, secondF64),
-                maximumDerivativeF64 = (secondF64 - firstF64).length(),
-            )
+            normalDeviationForLinearDerivativeF64(firstF64, secondF64)
         }
 
         is PathStrokeCubicPrimitiveF64 -> {
             val firstF64 = (primitiveF64.control1F64 - primitiveF64.startF64) * 3.0
             val secondF64 = (primitiveF64.control2F64 - primitiveF64.control1F64) * 3.0
             val thirdF64 = (primitiveF64.endF64 - primitiveF64.control2F64) * 3.0
-            NormalDerivativeBoundsF64(
-                minimumSpeedF64 = distanceFromOriginToTriangleF64(firstF64, secondF64, thirdF64),
-                maximumDerivativeF64 = 2.0 * max((secondF64 - firstF64).length(), (thirdF64 - secondF64).length()),
-            )
+            normalDeviationForQuadraticDerivativeF64(firstF64, secondF64, thirdF64)
         }
 
         is PathStrokeSvgArcPrimitiveF64 -> primitiveF64.arcF64?.let { arcF64 ->
-            NormalDerivativeBoundsF64(
+            normalDeviationForDerivativeBoundsF64(NormalDerivativeBoundsF64(
                 minimumSpeedF64 = min(arcF64.radiusX, arcF64.radiusY) * abs(arcF64.sweepAngle),
                 maximumDerivativeF64 = max(arcF64.radiusX, arcF64.radiusY) * arcF64.sweepAngle * arcF64.sweepAngle,
-            )
+            ))
         } ?: return 0.0
     }
+}
+
+/** Factors exact endpoint zeros before bounding the direction of a linear derivative field. */
+private fun normalDeviationForLinearDerivativeF64(
+    firstF64: Vector2F64,
+    secondF64: Vector2F64,
+): Double? {
+    if (isExactlyZeroVectorF64(firstF64) || isExactlyZeroVectorF64(secondF64)) {
+        return if (isExactlyZeroVectorF64(firstF64) && isExactlyZeroVectorF64(secondF64)) null else 0.0
+    }
+    return normalDeviationForDerivativeBoundsF64(
+        NormalDerivativeBoundsF64(
+            minimumSpeedF64 = distanceFromOriginToSegmentF64(firstF64, secondF64),
+            maximumDerivativeF64 = stableVectorLengthF64(secondF64 - firstF64),
+        ),
+    )
+}
+
+/** Factors t or (1 - t) from a quadratic derivative before evaluating its unit direction. */
+private fun normalDeviationForQuadraticDerivativeF64(
+    firstF64: Vector2F64,
+    secondF64: Vector2F64,
+    thirdF64: Vector2F64,
+): Double? {
+    if (isExactlyZeroVectorF64(firstF64)) {
+        return normalDeviationForLinearDerivativeF64(secondF64 * 2.0, thirdF64)
+    }
+    if (isExactlyZeroVectorF64(thirdF64)) {
+        return normalDeviationForLinearDerivativeF64(firstF64, secondF64 * 2.0)
+    }
+    return normalDeviationForDerivativeBoundsF64(
+        NormalDerivativeBoundsF64(
+            minimumSpeedF64 = distanceFromOriginToTriangleF64(firstF64, secondF64, thirdF64),
+            maximumDerivativeF64 = 2.0 * max(
+                stableVectorLengthF64(secondF64 - firstF64),
+                stableVectorLengthF64(thirdF64 - secondF64),
+            ),
+        ),
+    )
+}
+
+private fun normalDeviationForDerivativeBoundsF64(derivativeBoundsF64: NormalDerivativeBoundsF64): Double? {
     if (!derivativeBoundsF64.minimumSpeedF64.isFinite() || !derivativeBoundsF64.maximumDerivativeF64.isFinite()) {
         throw PathStrokeOutlineInvalidAbort()
     }
-    if (derivativeBoundsF64.minimumSpeedF64 <= strokeOutlineEpsilonF64) return null
+    if (derivativeBoundsF64.minimumSpeedF64 == 0.0) return null
     return (derivativeBoundsF64.maximumDerivativeF64 / derivativeBoundsF64.minimumSpeedF64)
         .takeIf(Double::isFinite)
         ?.coerceAtMost(2.0)
 }
+
+private fun isExactlyZeroVectorF64(vectorF64: Vector2F64): Boolean =
+    vectorF64.x == 0.0 && vectorF64.y == 0.0
 
 private data class NormalDerivativeBoundsF64(
     val minimumSpeedF64: Double,
@@ -837,14 +876,24 @@ private data class NormalDerivativeBoundsF64(
 )
 
 private fun distanceFromOriginToSegmentF64(startF64: Vector2F64, endF64: Vector2F64): Double {
-    val deltaF64 = endF64 - startF64
-    val lengthSquaredF64 = deltaF64.lengthSquared()
-    if (!lengthSquaredF64.isFinite()) throw PathStrokeOutlineInvalidAbort()
-    if (lengthSquaredF64 <= strokeOutlineEpsilonF64) return startF64.length()
-    val parameterF64 = (-startF64.dot(deltaF64) / lengthSquaredF64).coerceIn(0.0, 1.0)
-    return (startF64 + deltaF64 * parameterF64).length().also { resultF64 ->
-        if (!resultF64.isFinite()) throw PathStrokeOutlineInvalidAbort()
+    val scaleF64 = max(
+        max(abs(startF64.x), abs(startF64.y)),
+        max(abs(endF64.x), abs(endF64.y)),
+    )
+    if (!scaleF64.isFinite()) throw PathStrokeOutlineInvalidAbort()
+    if (scaleF64 == 0.0) return 0.0
+    val scaledStartF64 = Vector2F64(startF64.x / scaleF64, startF64.y / scaleF64)
+    val scaledEndF64 = Vector2F64(endF64.x / scaleF64, endF64.y / scaleF64)
+    val scaledDeltaF64 = scaledEndF64 - scaledStartF64
+    val scaledLengthSquaredF64 = scaledDeltaF64.lengthSquared()
+    if (!scaledLengthSquaredF64.isFinite()) throw PathStrokeOutlineInvalidAbort()
+    if (scaledLengthSquaredF64 == 0.0) {
+        return if (startF64 == endF64) stableVectorLengthF64(startF64) else 0.0
     }
+    val parameterF64 = (-scaledStartF64.dot(scaledDeltaF64) / scaledLengthSquaredF64).coerceIn(0.0, 1.0)
+    val resultF64 = stableVectorLengthF64(scaledStartF64 + scaledDeltaF64 * parameterF64) * scaleF64
+    if (!resultF64.isFinite()) throw PathStrokeOutlineInvalidAbort()
+    return resultF64
 }
 
 private fun distanceFromOriginToTriangleF64(
@@ -852,15 +901,7 @@ private fun distanceFromOriginToTriangleF64(
     secondF64: Vector2F64,
     thirdF64: Vector2F64,
 ): Double {
-    val firstCrossF64 = firstF64.cross(secondF64)
-    val secondCrossF64 = secondF64.cross(thirdF64)
-    val thirdCrossF64 = thirdF64.cross(firstF64)
-    if (!firstCrossF64.isFinite() || !secondCrossF64.isFinite() || !thirdCrossF64.isFinite()) {
-        throw PathStrokeOutlineInvalidAbort()
-    }
-    if ((firstCrossF64 >= 0.0 && secondCrossF64 >= 0.0 && thirdCrossF64 >= 0.0) ||
-        (firstCrossF64 <= 0.0 && secondCrossF64 <= 0.0 && thirdCrossF64 <= 0.0)
-    ) return 0.0
+    if (originIsInsideNonDegenerateTriangleF64(firstF64, secondF64, thirdF64)) return 0.0
     return min(
         distanceFromOriginToSegmentF64(firstF64, secondF64),
         min(
@@ -868,6 +909,48 @@ private fun distanceFromOriginToTriangleF64(
             distanceFromOriginToSegmentF64(thirdF64, firstF64),
         ),
     )
+}
+
+private fun originIsInsideNonDegenerateTriangleF64(
+    firstF64: Vector2F64,
+    secondF64: Vector2F64,
+    thirdF64: Vector2F64,
+): Boolean {
+    val scaleF64 = max(
+        max(abs(firstF64.x), abs(firstF64.y)),
+        max(max(abs(secondF64.x), abs(secondF64.y)), max(abs(thirdF64.x), abs(thirdF64.y))),
+    )
+    if (!scaleF64.isFinite()) throw PathStrokeOutlineInvalidAbort()
+    if (scaleF64 == 0.0) return true
+    val scaledFirstF64 = Vector2F64(firstF64.x / scaleF64, firstF64.y / scaleF64)
+    val scaledSecondF64 = Vector2F64(secondF64.x / scaleF64, secondF64.y / scaleF64)
+    val scaledThirdF64 = Vector2F64(thirdF64.x / scaleF64, thirdF64.y / scaleF64)
+    val orientationF64 = (scaledSecondF64 - scaledFirstF64).cross(scaledThirdF64 - scaledFirstF64)
+    if (!orientationF64.isFinite()) throw PathStrokeOutlineInvalidAbort()
+    if (orientationF64 == 0.0) return false
+    val firstCrossF64 = scaledFirstF64.cross(scaledSecondF64)
+    val secondCrossF64 = scaledSecondF64.cross(scaledThirdF64)
+    val thirdCrossF64 = scaledThirdF64.cross(scaledFirstF64)
+    if (!firstCrossF64.isFinite() || !secondCrossF64.isFinite() || !thirdCrossF64.isFinite()) {
+        throw PathStrokeOutlineInvalidAbort()
+    }
+    return if (orientationF64 > 0.0) {
+        firstCrossF64 >= 0.0 && secondCrossF64 >= 0.0 && thirdCrossF64 >= 0.0
+    } else {
+        firstCrossF64 <= 0.0 && secondCrossF64 <= 0.0 && thirdCrossF64 <= 0.0
+    }
+}
+
+private fun stableVectorLengthF64(vectorF64: Vector2F64): Double {
+    val scaleF64 = max(abs(vectorF64.x), abs(vectorF64.y))
+    if (!scaleF64.isFinite()) throw PathStrokeOutlineInvalidAbort()
+    if (scaleF64 == 0.0) return 0.0
+    val resultF64 = scaleF64 * sqrt(
+        (vectorF64.x / scaleF64) * (vectorF64.x / scaleF64) +
+            (vectorF64.y / scaleF64) * (vectorF64.y / scaleF64),
+    )
+    if (!resultF64.isFinite()) throw PathStrokeOutlineInvalidAbort()
+    return resultF64
 }
 
 /** Analytically reparameterizes one source interval before deriving its conservative certificate. */

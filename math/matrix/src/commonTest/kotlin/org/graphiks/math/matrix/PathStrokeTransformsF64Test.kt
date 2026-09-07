@@ -60,6 +60,54 @@ class PathStrokeTransformsF64Test {
     }
 
     @Test
+    fun `finite cubic with collinear forward derivative controls converges`() {
+        val result = Matrix3x3F32.Identity.preparePathStrokeGeometryF32(
+            PathBuilder().moveTo(0f, 0f).cubicTo(1f, 0f, 3f, 0f, 6f, 0f).build(),
+            finiteStyle(2.0),
+            PathStrokeDrawMode.Stroke,
+        )
+
+        assertTrue(result is PathStrokePreparationResult.Ready, "$result")
+    }
+
+    @Test
+    fun `finite quadratic with an endpoint tangent zero converges`() {
+        val result = Matrix3x3F32.Identity.preparePathStrokeGeometryF32(
+            PathBuilder().moveTo(0f, 0f).quadTo(1f, 0f, 1f, 0f).build(),
+            finiteStyle(2.0),
+            PathStrokeDrawMode.Stroke,
+        )
+
+        assertIs<PathStrokePreparationResult.Ready>(result)
+    }
+
+    @Test
+    fun `finite cubic cusp pieces with endpoint tangent zeros converge`() {
+        val result = Matrix3x3F32.Identity.preparePathStrokeGeometryF32(
+            PathBuilder().moveTo(-1f, 0f).cubicTo(1f, 0f, -1f, 0f, 1f, 0f).build(),
+            finiteStyle(2.0),
+            PathStrokeDrawMode.Stroke,
+        )
+
+        assertIs<PathStrokePreparationResult.Ready>(result)
+    }
+
+    @Test
+    fun `finite quadratic with a tiny derivative hull near the origin converges conservatively`() {
+        val result = Matrix3x3F32.Identity.preparePathStrokeGeometryF32(
+            PathBuilder().moveTo(0f, 0f).quadTo(0.0000005f, 0.000000005f, 0.0000005f, 0.00000001f).build(),
+            finiteStyle(0.5),
+            PathStrokeDrawMode.Stroke,
+        )
+
+        val geometry = assertReady(result)
+        val fan = assertIs<org.graphiks.math.geometry.PathStencilEdgeFanF32>(
+            geometry.copyFillGeometryF32().copyStencilEdgeFanF32OrNull(),
+        )
+        assertTrue(fan.edgeCountI32 > 16, "expected a conservative normal bound, got ${fan.edgeCountI32} edges")
+    }
+
+    @Test
     fun `axis aligned identity translation and negative scales retain finite stroke coverage`() {
         val source = linePath()
 
