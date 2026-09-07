@@ -126,6 +126,24 @@ class W4dPathStrokePlanCompilerTest {
         }
     }
 
+    @Test
+    fun wideExactI32ClipIntersectsTheTargetWithoutOverflow() {
+        val command = pathDraw(PaintStyleNode.STROKE).let { draw ->
+            val path = PathBuilder().moveTo(-10f, -10f).lineTo(10f, -10f).lineTo(-10f, 10f).close().build()
+            SceneCommand.Draw(draw.node.copy(geometry = GeometryNode.Path(path), clip = ClipStackNode.DeviceRect.of(
+                org.graphiks.math.geometry.RectF32(-2_147_483_648f, 0f, 4f, 3f), false,
+            )))
+        }
+        val scene = sceneOf(listOf(command))
+        val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target(scene))).candidate
+        val graph = assertIs<RenderPlanResult.Ready<RenderGraph>>(
+            compiler.plan(candidate, capabilities(), PlanBudget(1L shl 20)),
+        ).plan
+        val draw = assertIs<PathStrokeDraw>(assertIs<PlanPass.StencilProducer>(graph.passes().first()).draw)
+
+        assertEquals(org.graphiks.math.geometry.RectI32(0, 0, 4, 3), draw.copyScissorI32())
+    }
+
     private fun sceneOf(draws: List<SceneCommand.Draw>): SceneSnapshot = SceneSnapshot.of(
         SceneExtent(16, 16), ColorSpace.SRGB, draws,
     )
