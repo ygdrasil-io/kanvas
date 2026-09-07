@@ -223,6 +223,24 @@ class W4dPathStrokePlanCompilerTest {
     }
 
     @Test
+    fun `same draw finite invalid stroke style precedes capability gap`() {
+        fun antialiasedDash(intervals: FloatArray): SceneSnapshot {
+            val draw = pathDraw(
+                PaintStyleNode.STROKE,
+                effect = PathEffectNode.Dash(ImmutableFloats.copyOf(intervals)),
+            )
+            return sceneOf(listOf(SceneCommand.Draw(draw.node.copy(coverage = CoverageRequest.ANTIALIASED))))
+        }
+
+        val invalid = antialiasedDash(floatArrayOf(-1f, 1f))
+        val validNeighbor = antialiasedDash(floatArrayOf(1f, 1f))
+        val tightCompiler = compilerWithFrameLimit(FrameAxis.Attempted, 1L)
+
+        assertIs<GpuPlanSelection.InvalidScene>(tightCompiler.select(invalid, target(invalid)))
+        assertIs<GpuPlanSelection.NotCandidate>(tightCompiler.select(validNeighbor, target(validNeighbor)))
+    }
+
+    @Test
     fun `nonfinite facts stay invalid before the 513 draw limit`() {
         val malformed = pathDraw(PaintStyleNode.STROKE).let { draw ->
             SceneCommand.Draw(
