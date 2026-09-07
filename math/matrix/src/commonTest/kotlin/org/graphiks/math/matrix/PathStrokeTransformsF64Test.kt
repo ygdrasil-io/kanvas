@@ -71,6 +71,17 @@ class PathStrokeTransformsF64Test {
     }
 
     @Test
+    fun `finite cubic splits a rounded double cusp before certification`() {
+        val result = Matrix3x3F32.Identity.preparePathStrokeGeometryF32(
+            PathBuilder().moveTo(0f, 0f).cubicTo(9f, 0f, -3f, 0f, 13f, 0f).build(),
+            finiteStyle(2.0),
+            PathStrokeDrawMode.Stroke,
+        )
+
+        assertIs<PathStrokePreparationResult.Ready>(result)
+    }
+
+    @Test
     fun `finite quadratic with an endpoint tangent zero converges`() {
         val result = Matrix3x3F32.Identity.preparePathStrokeGeometryF32(
             PathBuilder().moveTo(0f, 0f).quadTo(1f, 0f, 1f, 0f).build(),

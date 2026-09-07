@@ -1377,13 +1377,75 @@ private fun quadraticRootsF64(aF64: Double, bF64: Double, cF64: Double): List<Do
     val scaledBF64 = bF64 / coefficientScaleF64
     val scaledCF64 = cF64 / coefficientScaleF64
     if (scaledAF64 == 0.0) return listOfNotNull(linearRootF64(scaledBF64, scaledCF64))
-    val discriminantF64 = scaledBF64 * scaledBF64 - 4.0 * scaledAF64 * scaledCF64
-    if (!discriminantF64.isFinite() || discriminantF64 < 0.0) return emptyList()
-    val rootF64 = sqrt(max(0.0, discriminantF64))
-    return listOf(
-        (-scaledBF64 - rootF64) / (2.0 * scaledAF64),
-        (-scaledBF64 + rootF64) / (2.0 * scaledAF64),
-    )
+    val squaredBF64 = scaledBF64 * scaledBF64
+    val fourTimesAF64 = 4.0 * scaledAF64
+    val fourTimesACF64 = fourTimesAF64 * scaledCF64
+    val rawDiscriminantF64 = squaredBF64 - fourTimesACF64
+    if (!rawDiscriminantF64.isFinite()) return emptyList()
+    val discriminantF64 = if (rawDiscriminantF64 < 0.0 &&
+        -rawDiscriminantF64 <= discriminantRoundingErrorBoundF64(
+            scaledAF64,
+            scaledBF64,
+            scaledCF64,
+            squaredBF64,
+            fourTimesACF64,
+            rawDiscriminantF64,
+        )
+    ) {
+        0.0
+    } else {
+        rawDiscriminantF64
+    }
+    if (discriminantF64 < 0.0) return emptyList()
+    val rootF64 = sqrt(discriminantF64)
+    if (rootF64 == 0.0) return listOf(-scaledBF64 / (2.0 * scaledAF64))
+    val signedRootF64 = if (scaledBF64 >= 0.0) rootF64 else -rootF64
+    val stableTermF64 = -0.5 * (scaledBF64 + signedRootF64)
+    return if (stableTermF64 == 0.0) {
+        listOf(
+            (-scaledBF64 - rootF64) / (2.0 * scaledAF64),
+            (-scaledBF64 + rootF64) / (2.0 * scaledAF64),
+        )
+    } else {
+        listOf(stableTermF64 / scaledAF64, scaledCF64 / stableTermF64)
+    }
+}
+
+/** Bounds coefficient normalization and evaluation rounding in `b² - 4ac` by local ULPs. */
+private fun discriminantRoundingErrorBoundF64(
+    scaledAF64: Double,
+    scaledBF64: Double,
+    scaledCF64: Double,
+    squaredBF64: Double,
+    fourTimesACF64: Double,
+    discriminantF64: Double,
+): Double {
+    val aUlpF64 = nonNegativeUlpF64(scaledAF64)
+    val bUlpF64 = nonNegativeUlpF64(scaledBF64)
+    val cUlpF64 = nonNegativeUlpF64(scaledCF64)
+    val coefficientPropagationF64 =
+        2.0 * abs(scaledBF64) * bUlpF64 + bUlpF64 * bUlpF64 +
+            4.0 * (
+                abs(scaledCF64) * aUlpF64 +
+                    abs(scaledAF64) * cUlpF64 +
+                    aUlpF64 * cUlpF64
+                )
+    val evaluationRoundingF64 =
+        nonNegativeUlpF64(squaredBF64) + nonNegativeUlpF64(fourTimesACF64) + nonNegativeUlpF64(discriminantF64)
+    return nextUpNonNegativeF64(coefficientPropagationF64 + evaluationRoundingF64)
+}
+
+private fun nonNegativeUlpF64(valueF64: Double): Double {
+    val magnitudeF64 = abs(valueF64)
+    if (!magnitudeF64.isFinite()) return Double.POSITIVE_INFINITY
+    if (magnitudeF64 == 0.0) return Double.fromBits(1L)
+    return Double.fromBits(magnitudeF64.toBits() + 1L) - magnitudeF64
+}
+
+private fun nextUpNonNegativeF64(valueF64: Double): Double = when {
+    !valueF64.isFinite() -> valueF64
+    valueF64 == 0.0 -> Double.fromBits(1L)
+    else -> Double.fromBits(valueF64.toBits() + 1L)
 }
 
 private fun oneSidedTangentF64(
