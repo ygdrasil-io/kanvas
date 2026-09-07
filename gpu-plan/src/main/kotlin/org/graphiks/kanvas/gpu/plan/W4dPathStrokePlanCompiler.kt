@@ -49,7 +49,12 @@ import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.matrix.pathStrokeDeviceFillSegmentMapperF64
 import org.graphiks.math.matrix.preparePathStrokeGeometryF32
 
-/** Closed W4d.1 capability for bounded hard-edge sRGB path stroke frames. */
+/**
+ * Closed W4d.1 capability for bounded hard-edge sRGB path stroke frames.
+ *
+ * [strokePolicyF64] is the public bounded-geometry policy selected by the
+ * embedding planner; it defines the frame work domain that W4d accepts.
+ */
 public class W4dPathStrokePlanCompiler(
     private val strokePolicyF64: org.graphiks.math.geometry.PathStrokePolicyF64 =
         org.graphiks.math.geometry.PathStrokePolicyF64(),

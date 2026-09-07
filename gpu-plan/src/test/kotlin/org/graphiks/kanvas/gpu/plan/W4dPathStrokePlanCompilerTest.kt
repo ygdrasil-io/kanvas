@@ -28,7 +28,12 @@ import org.graphiks.kanvas.render.ir.StrokeCapNode
 import org.graphiks.kanvas.render.ir.StrokeJoinNode
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.PathBuilder
+import org.graphiks.math.geometry.FillRule
+import org.graphiks.math.geometry.PathF32
 import org.graphiks.math.geometry.PathStrokeDrawMode
+import org.graphiks.math.geometry.PathStrokeLimitsI32
+import org.graphiks.math.geometry.PathStrokeLimitsI64
+import org.graphiks.math.geometry.PathStrokePolicyF64
 import org.graphiks.math.geometry.PathStrokeWidthF64
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.junit.jupiter.api.Test
@@ -214,6 +219,37 @@ class W4dPathStrokePlanCompilerTest {
         assertEquals(1, graph.passes().filterIsInstance<PlanPass.StencilProducer>().size)
     }
 
+    @Test
+    fun mixedFillThenStrokeUsesOneCumulativeLedgerAtEveryFrameBudgetBoundary() {
+        val scene = sceneOf(listOf(pathDraw(PaintStyleNode.FILL), pathDraw(PaintStyleNode.STROKE)))
+        FrameAxis.entries.forEach { axis ->
+            val required = firstCandidateFrameLimit(scene, axis)
+            val ready = compilerWithFrameLimit(axis, required).select(scene, target(scene))
+            val refused = compilerWithFrameLimit(axis, required - 1L).select(scene, target(scene))
+
+            assertIs<GpuPlanSelection.Candidate>(ready, "${axis.name} at its exact mixed fill→stroke limit")
+            assertEquals(
+                W4dPlanDiagnostics.PathResourceLimit.value,
+                assertIs<GpuPlanSelection.ResourceLimitExceeded>(refused, "${axis.name} one unit below the mixed limit")
+                    .diagnostics().single().code.value,
+            )
+        }
+    }
+
+    @Test
+    fun compilerAppliesWindingStencilEdgeBoundaryWithoutCappingEvenOdd() {
+        val winding255 = sceneOf(listOf(pathDraw(PaintStyleNode.FILL, path = regularPolygon(255)), pathDraw(PaintStyleNode.STROKE)))
+        val winding256 = sceneOf(listOf(pathDraw(PaintStyleNode.FILL, path = regularPolygon(256)), pathDraw(PaintStyleNode.STROKE)))
+        val evenOdd256 = sceneOf(listOf(pathDraw(PaintStyleNode.FILL, path = regularPolygon(256, FillRule.EVEN_ODD)), pathDraw(PaintStyleNode.STROKE)))
+
+        assertIs<GpuPlanSelection.Candidate>(compiler.select(winding255, target(winding255)))
+        assertEquals(
+            W4dPlanDiagnostics.PathResourceLimit.value,
+            assertIs<GpuPlanSelection.ResourceLimitExceeded>(compiler.select(winding256, target(winding256))).diagnostics().single().code.value,
+        )
+        assertIs<GpuPlanSelection.Candidate>(compiler.select(evenOdd256, target(evenOdd256)))
+    }
+
     private fun sceneOf(draws: List<SceneCommand.Draw>): SceneSnapshot = SceneSnapshot.of(
         SceneExtent(16, 16), ColorSpace.SRGB, draws,
     )
@@ -234,17 +270,54 @@ class W4dPathStrokePlanCompilerTest {
         supportedDepthStencilFormats = setOf(PlanDepthStencilFormat.Depth24PlusStencil8),
     )
 
-    private fun pathDraw(style: PaintStyleNode, width: Float = 2f, cap: StrokeCapNode = StrokeCapNode.BUTT, join: StrokeJoinNode = StrokeJoinNode.MITER, miter: Float = 4f, effect: PathEffectNode? = null): SceneCommand.Draw {
+    private fun pathDraw(style: PaintStyleNode, width: Float = 2f, cap: StrokeCapNode = StrokeCapNode.BUTT, join: StrokeJoinNode = StrokeJoinNode.MITER, miter: Float = 4f, effect: PathEffectNode? = null, path: PathF32 = trianglePath()): SceneCommand.Draw {
         val color = ColorARGB.fromPackedUInt(0xFFFF0000u)
         val paint = PaintNode(
             color, null, BlendMode.SRC_OVER, null, null, null, null, null,
             style, width, cap, join, miter, false,
         )
-        val path = PathBuilder().moveTo(2f, 2f).lineTo(12f, 2f).lineTo(2f, 12f).close().build()
         return SceneCommand.Draw(DrawNode(
             GeometryNode.Path(path), MaterialNode.Solid(color), CoverageRequest.HARD_EDGE,
             ClipStackNode.Empty, BlendNode.SrcOver, EffectStack.Empty, Matrix3x3F32.Identity,
             DrawOrigin.PATH, paint.copy(pathEffect = effect),
         ))
     }
+
+    private fun trianglePath(): PathF32 = PathBuilder().moveTo(2f, 2f).lineTo(12f, 2f).lineTo(2f, 12f).close().build()
+
+    private fun regularPolygon(sideCount: Int, fillRule: FillRule = FillRule.WINDING): PathF32 = PathBuilder(fillRule).also { builder ->
+        repeat(sideCount) { index ->
+            val angle = index * 2.0 * Math.PI / sideCount
+            val x = (8.0 + 6.0 * kotlin.math.cos(angle)).toFloat()
+            val y = (8.0 + 6.0 * kotlin.math.sin(angle)).toFloat()
+            if (index == 0) builder.moveTo(x, y) else builder.lineTo(x, y)
+        }
+    }.close().build()
+
+    private fun firstCandidateFrameLimit(scene: SceneSnapshot, axis: FrameAxis): Long {
+        var low = 1L
+        var high = 1L
+        while (compilerWithFrameLimit(axis, high).select(scene, target(scene)) !is GpuPlanSelection.Candidate) high *= 2L
+        while (low < high) {
+            val middle = low + (high - low) / 2L
+            if (compilerWithFrameLimit(axis, middle).select(scene, target(scene)) is GpuPlanSelection.Candidate) high = middle else low = middle + 1L
+        }
+        return low
+    }
+
+    private fun compilerWithFrameLimit(axis: FrameAxis, limit: Long): W4dPathStrokePlanCompiler {
+        require(limit > 0L)
+        val baseI32 = PathStrokeLimitsI32()
+        val baseI64 = PathStrokeLimitsI64()
+        val limitsI32 = when (axis) {
+            FrameAxis.Attempted -> baseI32.copy(maxAttemptedGeometryUnitsPerFrameI32 = limit.toInt())
+            FrameAxis.Vertices -> baseI32.copy(maxEmittedVertexCountPerFrameI32 = limit.toInt())
+            FrameAxis.Indices -> baseI32.copy(maxEmittedIndexCountPerFrameI32 = limit.toInt())
+            FrameAxis.Bytes -> baseI32
+        }
+        val limitsI64 = if (axis == FrameAxis.Bytes) baseI64.copy(maxSnapshotByteCountPerFrameI64 = limit) else baseI64
+        return W4dPathStrokePlanCompiler(PathStrokePolicyF64(limitsI32 = limitsI32, limitsI64 = limitsI64))
+    }
+
+    private enum class FrameAxis { Attempted, Vertices, Indices, Bytes }
 }
