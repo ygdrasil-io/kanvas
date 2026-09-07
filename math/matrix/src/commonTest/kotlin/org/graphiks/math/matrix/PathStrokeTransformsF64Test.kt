@@ -313,13 +313,18 @@ class PathStrokeTransformsF64Test {
     }
 
     @Test
-    fun `empty path stays empty and unsupported or non finite matrices are rejected`() {
+    fun `empty path stays empty while perspective and non finite matrices are rejected`() {
         val empty = Matrix3x3F32.Identity.preparePathStrokeGeometryF32(
             PathBuilder().build(),
             finiteStyle(2.0),
             PathStrokeDrawMode.Stroke,
         )
         val skew = Matrix3x3F32(kx = 1f).preparePathStrokeGeometryF32(
+            linePath(),
+            finiteStyle(2.0),
+            PathStrokeDrawMode.Stroke,
+        )
+        val perspective = Matrix3x3F32(persp0 = 0.1f).preparePathStrokeGeometryF32(
             linePath(),
             finiteStyle(2.0),
             PathStrokeDrawMode.Stroke,
@@ -331,7 +336,8 @@ class PathStrokeTransformsF64Test {
         )
 
         assertIs<PathStrokePreparationResult.Empty>(empty)
-        assertIs<PathStrokePreparationResult.InvalidScene>(skew)
+        assertIs<PathStrokePreparationResult.Ready>(skew)
+        assertIs<PathStrokePreparationResult.InvalidScene>(perspective)
         assertIs<PathStrokePreparationResult.InvalidScene>(nonFinite)
     }
 

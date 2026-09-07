@@ -85,15 +85,20 @@ public fun Matrix3x3F32.preparePathStrokeGeometryF32(
     policyF64: PathStrokePolicyF64 = PathStrokePolicyF64(),
     frameWorkUsageBeforeI64: PathStrokeWorkUsageI64 = PathStrokeWorkUsageI64(),
 ): PathStrokePreparationResult {
-    val coefficientsF64 = try {
-        AxisAlignedMatrixCoefficientsF64.from(this)
+    val matrixF64 = try {
+        toMatrix3x3F64().also { require(it.isFinite()) }
     } catch (_: IllegalArgumentException) {
         return PathStrokePreparationResult.InvalidScene(PathStrokeInvalidSceneReason.NonFiniteInput)
     }
-    if (coefficientsF64.kxF64 != 0.0 || coefficientsF64.kyF64 != 0.0 ||
-        coefficientsF64.persp0F64 != 0.0 || coefficientsF64.persp1F64 != 0.0 || coefficientsF64.persp2F64 != 1.0
-    ) {
+    if (matrixF64.classifyPathTransform() == PathTransformClass.Perspective) {
         return PathStrokePreparationResult.InvalidScene(PathStrokeInvalidSceneReason.InvalidStyle)
+    }
+    val projectionF64 = when (matrixF64.classifyPathTransform()) {
+        PathTransformClass.Identity,
+        PathTransformClass.AxisAlignedAffine -> AxisAlignedPathStrokeProjectionF64.of(this)
+
+        PathTransformClass.GeneralAffine -> matrixF64.toAffinePathStrokeProjectionF64()
+        PathTransformClass.Perspective -> error("perspective was rejected above")
     }
     val deviceFillSegmentMapperF64 = if (mode == PathStrokeDrawMode.StrokeAndFill) {
         try {
@@ -108,7 +113,7 @@ public fun Matrix3x3F32.preparePathStrokeGeometryF32(
         inputF64 = PathFillInputF64.fromPathF32(path),
         styleF64 = styleF64,
         mode = mode,
-        projectionF64 = AxisAlignedPathStrokeProjectionF64.of(this),
+        projectionF64 = projectionF64,
         policyF64 = policyF64,
         frameWorkUsageBeforeI64 = frameWorkUsageBeforeI64,
         deviceFillSegmentMapperF64 = deviceFillSegmentMapperF64,
