@@ -28,7 +28,6 @@ import org.graphiks.kanvas.render.ir.StrokeCapNode
 import org.graphiks.kanvas.render.ir.StrokeJoinNode
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.PathBuilder
-import org.graphiks.math.geometry.FillRule
 import org.graphiks.math.geometry.PathF32
 import org.graphiks.math.geometry.PathStrokeDrawMode
 import org.graphiks.math.geometry.PathStrokeLimitsI32
@@ -238,9 +237,9 @@ class W4dPathStrokePlanCompilerTest {
 
     @Test
     fun compilerAppliesWindingStencilEdgeBoundaryWithoutCappingEvenOdd() {
-        val winding255 = sceneOf(listOf(pathDraw(PaintStyleNode.FILL, path = regularPolygon(255)), pathDraw(PaintStyleNode.STROKE)))
-        val winding256 = sceneOf(listOf(pathDraw(PaintStyleNode.FILL, path = regularPolygon(256)), pathDraw(PaintStyleNode.STROKE)))
-        val evenOdd256 = sceneOf(listOf(pathDraw(PaintStyleNode.FILL, path = regularPolygon(256, FillRule.EVEN_ODD)), pathDraw(PaintStyleNode.STROKE)))
+        val winding255 = sceneOf(listOf(pathDraw(PaintStyleNode.FILL, path = multiContourStencilPath(255)), pathDraw(PaintStyleNode.STROKE)))
+        val winding256 = sceneOf(listOf(pathDraw(PaintStyleNode.FILL, path = multiContourStencilPath(256)), pathDraw(PaintStyleNode.STROKE)))
+        val evenOdd256 = sceneOf(listOf(pathDraw(PaintStyleNode.FILL, path = multiContourStencilPath(256, org.graphiks.math.geometry.FillRule.EVEN_ODD)), pathDraw(PaintStyleNode.STROKE)))
 
         assertIs<GpuPlanSelection.Candidate>(compiler.select(winding255, target(winding255)))
         assertEquals(
@@ -285,14 +284,22 @@ class W4dPathStrokePlanCompilerTest {
 
     private fun trianglePath(): PathF32 = PathBuilder().moveTo(2f, 2f).lineTo(12f, 2f).lineTo(2f, 12f).close().build()
 
-    private fun regularPolygon(sideCount: Int, fillRule: FillRule = FillRule.WINDING): PathF32 = PathBuilder(fillRule).also { builder ->
-        repeat(sideCount) { index ->
-            val angle = index * 2.0 * Math.PI / sideCount
-            val x = (8.0 + 6.0 * kotlin.math.cos(angle)).toFloat()
-            val y = (8.0 + 6.0 * kotlin.math.sin(angle)).toFloat()
-            if (index == 0) builder.moveTo(x, y) else builder.lineTo(x, y)
-        }
-    }.close().build()
+    private fun multiContourStencilPath(edgeCount: Int, fillRule: org.graphiks.math.geometry.FillRule = org.graphiks.math.geometry.FillRule.WINDING): PathF32 {
+        require(edgeCount == 255 || edgeCount == 256)
+        return PathBuilder(fillRule).also { builder ->
+            repeat(62) { index ->
+                val left = index * 0.2f
+                builder.addRect(org.graphiks.math.geometry.RectF32(left, 1f, left + 0.1f, 2f))
+            }
+            builder.moveTo(13f, 8f).lineTo(15f, 8f).lineTo(15f, 10f)
+            if (edgeCount == 255) {
+                builder.lineTo(14f, 10f).lineTo(14f, 9f).lineTo(13.5f, 9f).lineTo(13f, 10f)
+            } else {
+                builder.lineTo(14.5f, 10f).lineTo(14.5f, 9f).lineTo(14f, 9f).lineTo(14f, 10f).lineTo(13f, 10f)
+            }
+            builder.close()
+        }.build()
+    }
 
     private fun firstCandidateFrameLimit(scene: SceneSnapshot, axis: FrameAxis): Long {
         var low = 1L
