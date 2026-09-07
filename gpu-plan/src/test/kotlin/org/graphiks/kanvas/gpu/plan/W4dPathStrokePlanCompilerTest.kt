@@ -169,6 +169,15 @@ class W4dPathStrokePlanCompilerTest {
             assertIs<GpuPlanSelection.NotCandidate>(compiler.select(scene, target(scene)), family)
         }
 
+        val lateUnsupported = sceneOf(
+            List(512) { SceneCommand.Draw(base) } +
+                SceneCommand.Draw(base.copy(coverage = CoverageRequest.ANTIALIASED)),
+        )
+        assertIs<GpuPlanSelection.NotCandidate>(
+            compilerWithFrameLimit(FrameAxis.Attempted, 1L).select(lateUnsupported, target(lateUnsupported)),
+            "structural gap must precede geometry work",
+        )
+
         val unsupportedCommandScene = SceneSnapshot.of(
             SceneExtent(16, 16),
             ColorSpace.SRGB,

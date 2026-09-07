@@ -66,7 +66,7 @@ public class W4dPathStrokePlanCompiler internal constructor(
         if (scene.colorSpace != ColorSpace.SRGB) return gap("W4d supports only sRGB")
         when (val preflight = preflightStrokeFrame(scene)) {
             FramePreflight.Member -> Unit
-            FramePreflight.Outside -> Unit
+            FramePreflight.Outside -> return gap("Scene is outside W4d")
             is FramePreflight.Invalid -> return invalid(preflight.message)
             is FramePreflight.Limit -> return limitSelection(preflight.message)
         }
