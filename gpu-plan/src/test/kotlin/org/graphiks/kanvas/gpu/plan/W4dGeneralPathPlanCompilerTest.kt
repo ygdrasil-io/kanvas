@@ -179,6 +179,37 @@ class W4dGeneralPathPlanCompilerTest {
         assertEquals(W4dGeneralPlanDiagnostics.ResolveUnsupported, missingResolve.diagnostics.single().code)
     }
 
+    @Test
+    fun `AA direct path accepts its unused depth attachment without stencil cover support`() {
+        val scene = sceneOf(pathDraw(coverage = CoverageRequest.ANTIALIASED))
+        val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target(scene))).candidate
+        val capabilities = aaCapabilities(
+            operations = PlanOperationCapability.entries.toSet() - PlanOperationCapability.StencilCover,
+        )
+
+        val graph = assertIs<RenderPlanResult.Ready<RenderGraph>>(
+            compiler.plan(candidate, capabilities, PlanBudget(1L shl 20)),
+        ).plan
+
+        assertEquals(W4dGeneralPathPlanCompiler.AA_CAPABILITY_ID, graph.capabilityId)
+        val direct = graph.passes().filterIsInstance<PlanPass.PathRenderPass>().single()
+        assertEquals(PathRenderPhase.MultisampleDirectColor, direct.phase)
+        assertEquals(PlanResourceRole.DepthStencil, graph.resources().single { it.id == direct.depthStencil }.role)
+    }
+
+    @Test
+    fun `AA stencil path still requires stencil cover support`() {
+        val scene = sceneOf(pathDraw(coverage = CoverageRequest.ANTIALIASED, path = concavePath()))
+        val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target(scene))).candidate
+        val capabilities = aaCapabilities(
+            operations = PlanOperationCapability.entries.toSet() - PlanOperationCapability.StencilCover,
+        )
+
+        assertIs<RenderPlanResult.GapOnPromotedScope>(
+            compiler.plan(candidate, capabilities, PlanBudget(1L shl 20)),
+        )
+    }
+
     private fun compile(compiler: GpuPlanCompiler, scene: SceneSnapshot): RenderGraph {
         val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target(scene))).candidate
         return assertIs<RenderPlanResult.Ready<RenderGraph>>(
@@ -246,7 +277,9 @@ class W4dGeneralPathPlanCompilerTest {
     private fun concavePath(): PathF32 = PathBuilder()
         .moveTo(2f, 2f).lineTo(12f, 2f).lineTo(12f, 12f).lineTo(7f, 6f).lineTo(2f, 12f).close().build()
 
-    private fun aaCapabilities(): PlanCapabilitySnapshot = capabilities(
+    private fun aaCapabilities(
+        operations: Set<PlanOperationCapability> = PlanOperationCapability.entries.toSet(),
+    ): PlanCapabilitySnapshot = capabilities(
         sampleSupports = setOf(
             PlanTextureSampleSupport.of(
                 PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
@@ -274,6 +307,7 @@ class W4dGeneralPathPlanCompilerTest {
                 setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled),
             ),
         ),
+        operations = operations,
     )
 
     private fun capabilities(
@@ -285,6 +319,7 @@ class W4dGeneralPathPlanCompilerTest {
                 1,
             ),
         ),
+        operations: Set<PlanOperationCapability> = PlanOperationCapability.entries.toSet(),
     ): PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(
         deviceGeneration = 0,
         maxTextureDimension2D = 64,
@@ -293,7 +328,7 @@ class W4dGeneralPathPlanCompilerTest {
         supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
         minUniformBufferOffsetAlignment = 256,
         maxDynamicUniformBuffersPerPipelineLayout = 1,
-        supportedOperations = PlanOperationCapability.entries.toSet(),
+        supportedOperations = operations,
         bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 4_096, 4_096),
         supportedDepthStencilFormats = setOf(PlanDepthStencilFormat.Depth24PlusStencil8),
         supportedTextureSampleSupports = sampleSupports,

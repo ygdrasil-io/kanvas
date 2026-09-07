@@ -591,17 +591,21 @@ public class RenderGraph private constructor(
                 pathPasses.any { (_, pass) -> pass.draw.sample == SamplePlan.Multisample4 }) {
                 "AA4 resources and four-sample path draws must appear together"
             }
-            val usesDepthStencil = pathPasses.any { (_, pass) ->
+            val usesDepthStencilAttachment = pathPasses.any { (_, pass) ->
+                pass.depthStencil != null
+            }
+            if (usesDepthStencilAttachment) {
+                require(PlanOperationCapability.DepthStencilAttachment in capabilities.supportedOperations()) {
+                    "AA4 depth-stencil attachments require depth-stencil attachment support"
+                }
+            }
+            val usesStencilCover = pathPasses.any { (_, pass) ->
                 pass.phase == PathRenderPhase.MultisampleStencilProducer ||
                     pass.phase == PathRenderPhase.MultisampleStencilColorCover ||
                     pass.phase == PathRenderPhase.HardEdgeMaskStencilProducer ||
-                    pass.phase == PathRenderPhase.HardEdgeMaskStencilCover ||
-                    pass.depthStencil != null
+                    pass.phase == PathRenderPhase.HardEdgeMaskStencilCover
             }
-            if (usesDepthStencil) {
-                require(PlanOperationCapability.DepthStencilAttachment in capabilities.supportedOperations()) {
-                    "AA4 stencil paths require depth-stencil attachment support"
-                }
+            if (usesStencilCover) {
                 require(PlanOperationCapability.StencilCover in capabilities.supportedOperations()) {
                     "AA4 stencil paths require stencil cover support"
                 }
