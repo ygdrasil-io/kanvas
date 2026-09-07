@@ -6,11 +6,23 @@ import org.graphiks.math.geometry.PathFillGeometryF32
 import org.graphiks.math.geometry.PathFillInputF64
 import org.graphiks.math.geometry.PathFillPreparationResult
 import org.graphiks.math.geometry.PathFillSegmentF64
+import org.graphiks.math.geometry.PathStrokeCap
+import org.graphiks.math.geometry.PathStrokeDeviceFillSegmentMapperF64
+import org.graphiks.math.geometry.PathStrokeDrawMode
+import org.graphiks.math.geometry.PathStrokeGeometryF32
+import org.graphiks.math.geometry.PathStrokeJoin
+import org.graphiks.math.geometry.PathStrokePreparationResult
+import org.graphiks.math.geometry.PathStrokeProjectionF64
+import org.graphiks.math.geometry.PathStrokeProjectionIntervalResultF64
+import org.graphiks.math.geometry.PathStrokeProjectionPointResultF64
+import org.graphiks.math.geometry.PathStrokeStyleF64
+import org.graphiks.math.geometry.PathStrokeWidthF64
 import org.graphiks.math.geometry.Point2F64
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.SizeI32
 import org.graphiks.math.geometry.preparePathFillGeometryF32
+import org.graphiks.math.geometry.prepareProjectedPathStrokeGeometryF32
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -1181,6 +1193,106 @@ class RenderGraphContractTest {
         }
     }
 
+    @Test
+    fun `W4d stroke draw snapshots its immutable geometry and scissor`() {
+        val sourceScissor = RectI32(0, 0, 1, 1)
+        val draw = PathStrokeDraw.of(
+            commandIndex = 2,
+            color = ColorF32.of(0.25f, 0.5f, 0.75f, 1f),
+            geometryF32 = directStrokeAndFillGeometry(),
+            scissorI32 = sourceScissor,
+        )
+        sourceScissor.left = 99
+
+        assertEquals(RectI32(0, 0, 1, 1), draw.copyScissorI32())
+        assertEquals(FillRule.WINDING, draw.copyGeometryF32().copyFillGeometryF32().fillRule)
+        assertEquals(PathFillStrategy.DirectTriangle, draw.strategy)
+        assertEquals(CoveragePlan.FullOrScissor, draw.coverage)
+        assertEquals(SamplePlan.SingleSample, draw.sample)
+        assertEquals(BlendPlan.SrcOver, draw.blend)
+        assertFailsWith<IllegalArgumentException> {
+            PathStrokeDraw.of(-1, draw.color, draw.copyGeometryF32(), RectI32(0, 0, 1, 1))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            PathStrokeDraw.of(0, draw.color, draw.copyGeometryF32(), RectI32(0, 0, 0, 1))
+        }
+    }
+
+    @Test
+    fun `W4d graph preserves mixed fill and stroke direct paint order`() {
+        val resources = directPathResources(passCount = 3, readbackPassIndex = 2)
+        val first = directRenderPass(
+            ordinal = 0,
+            target = resources.target.id,
+            draws = listOf(directDraw(0)),
+            load = AttachmentLoadPlan.ClearTransparent,
+            drawDataResources = directDrawDataResources(resources),
+        )
+        val second = directRenderPass(
+            ordinal = 1,
+            target = resources.target.id,
+            draws = listOf(directStrokeDraw(1)),
+            load = AttachmentLoadPlan.Load,
+            drawDataResources = directDrawDataResources(resources),
+        )
+        val readback = directReadback(resources)
+
+        val graph = graphOf(
+            resources = resources.all,
+            passes = listOf(first, second, readback),
+            dependencies = listOf(
+                PlanPassDependency(first.id, second.id),
+                PlanPassDependency(second.id, readback.id),
+            ),
+            visualCommandCount = 2,
+            capabilities = w4cCapabilities(),
+        )
+
+        assertEquals(0, graph.passes().filterIsInstance<PlanPass.RenderPass>().first().draws().single().commandIndex)
+        assertEquals(1, graph.passes().filterIsInstance<PlanPass.RenderPass>()[1].draws().single().commandIndex)
+        assertIs<PathFillDraw>(graph.passes().filterIsInstance<PlanPass.RenderPass>().first().draws().single())
+        assertIs<PathStrokeDraw>(graph.passes().filterIsInstance<PlanPass.RenderPass>()[1].draws().single())
+    }
+
+    @Test
+    fun `W4d stroke and fill uses one adjacent stencil producer cover group`() {
+        val resources = atomicResources()
+        val draw = stencilStrokeAndFillDraw(0)
+        val pair = atomicPasses(resources, draw)
+        val graph = atomicGraph(resources, pair)
+
+        assertSame(draw, pair.producer.draw)
+        assertSame(draw, pair.cover.draw)
+        assertEquals(PlanAtomicGroupId("w4d:0"), pair.producer.atomicGroup)
+        assertEquals(pair.producer.atomicGroup, pair.cover.atomicGroup)
+        assertEquals(pair.producer.id, graph.dependencies().first().before)
+        assertEquals(pair.cover.id, graph.dependencies().first().after)
+        assertEquals(1, graph.resources().count { it.format == PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8) })
+    }
+
+    @Test
+    fun `W4d graph rejects incoherent stroke atomic geometry and resources`() {
+        val resources = atomicResources()
+        val draw = stencilStrokeAndFillDraw(0)
+
+        assertFailsWith<IllegalArgumentException> {
+            atomicGraph(
+                resources,
+                atomicPasses(resources, draw, coverDraw = directStrokeDraw(0)),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            atomicGraph(
+                resources,
+                atomicPasses(
+                    resources,
+                    draw,
+                    coverGroup = PlanAtomicGroupId("w4c:0"),
+                ),
+            )
+        }
+    }
+
     private fun supportedCapabilities(
         formats: Set<PlanLogicalColorFormat>,
         copyBytesPerRowAlignment: Int = 256,
@@ -1549,12 +1661,12 @@ class RenderGraphContractTest {
 
     private fun atomicPasses(
         resources: AtomicResources,
-        producerDraw: PathFillDraw,
-        coverDraw: PathFillDraw = producerDraw,
+        producerDraw: PathDraw,
+        coverDraw: PathDraw = producerDraw,
         coverTarget: PlanResourceId = resources.target.id,
         producerOrdinal: Int = 0,
         coverOrdinal: Int = producerOrdinal,
-        producerGroup: PlanAtomicGroupId = PlanAtomicGroupId("w4c:${producerDraw.commandIndex}"),
+        producerGroup: PlanAtomicGroupId = canonicalPathAtomicGroup(producerDraw),
         coverGroup: PlanAtomicGroupId = producerGroup,
         producerLoad: AttachmentLoadPlan = AttachmentLoadPlan.ClearTransparent,
         coverLoad: AttachmentLoadPlan = AttachmentLoadPlan.Load,
@@ -1685,6 +1797,71 @@ class RenderGraphContractTest {
                     PathFillSegmentF64.Close,
                 ),
             ),
+        ),
+    ).geometryF32
+
+    private fun directStrokeDraw(commandIndex: Int): PathStrokeDraw = PathStrokeDraw.of(
+        commandIndex = commandIndex,
+        color = ColorF32.of(0.5f, 0f, 0f, 0.5f),
+        geometryF32 = directStrokeAndFillGeometry(),
+        scissorI32 = RectI32(0, 0, 1, 1),
+    )
+
+    private fun stencilStrokeAndFillDraw(commandIndex: Int): PathStrokeDraw = PathStrokeDraw.of(
+        commandIndex = commandIndex,
+        color = ColorF32.of(0.5f, 0f, 0f, 0.5f),
+        geometryF32 = stencilStrokeAndFillGeometry(),
+        scissorI32 = RectI32(0, 0, 1, 1),
+    )
+
+    private fun directStrokeAndFillGeometry(): PathStrokeGeometryF32 = readyStrokeGeometry(
+        inputF64 = PathFillInputF64.of(
+            FillRule.WINDING,
+            listOf(
+                PathFillSegmentF64.MoveTo(Point2F64(0.0, 0.0)),
+                PathFillSegmentF64.LineTo(Point2F64(1.0, 0.0)),
+                PathFillSegmentF64.LineTo(Point2F64(0.0, 1.0)),
+                PathFillSegmentF64.Close,
+            ),
+        ),
+        widthF64 = 0.0,
+    )
+
+    private fun stencilStrokeAndFillGeometry(): PathStrokeGeometryF32 = readyStrokeGeometry(
+        inputF64 = PathFillInputF64.of(
+            FillRule.WINDING,
+            listOf(
+                PathFillSegmentF64.MoveTo(Point2F64(0.0, 0.0)),
+                PathFillSegmentF64.LineTo(Point2F64(1.0, 0.0)),
+                PathFillSegmentF64.LineTo(Point2F64(1.0, 1.0)),
+                PathFillSegmentF64.LineTo(Point2F64(0.0, 1.0)),
+                PathFillSegmentF64.Close,
+            ),
+        ),
+        widthF64 = 0.25,
+    )
+
+    private fun readyStrokeGeometry(
+        inputF64: PathFillInputF64,
+        widthF64: Double,
+    ): PathStrokeGeometryF32 = assertIs<PathStrokePreparationResult.Ready>(
+        prepareProjectedPathStrokeGeometryF32(
+            inputF64 = inputF64,
+            styleF64 = PathStrokeStyleF64(
+                widthF64 = PathStrokeWidthF64.Finite(widthF64),
+                cap = PathStrokeCap.Butt,
+                join = PathStrokeJoin.Miter,
+                miterLimitF64 = 4.0,
+            ),
+            mode = PathStrokeDrawMode.StrokeAndFill,
+            projectionF64 = object : PathStrokeProjectionF64 {
+                override fun projectPointF64(pointF64: Point2F64): PathStrokeProjectionPointResultF64 =
+                    PathStrokeProjectionPointResultF64.Ready(pointF64)
+
+                override fun certifyOutlineIntervalF64(intervalF64: org.graphiks.math.geometry.PathStrokeOutlineIntervalF64): PathStrokeProjectionIntervalResultF64 =
+                    PathStrokeProjectionIntervalResultF64.Bounded(intervalF64.sourceSagittaUpperBoundF64)
+            },
+            deviceFillSegmentMapperF64 = PathStrokeDeviceFillSegmentMapperF64 { it },
         ),
     ).geometryF32
 

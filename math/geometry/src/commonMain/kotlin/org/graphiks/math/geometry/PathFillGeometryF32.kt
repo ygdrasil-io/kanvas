@@ -51,6 +51,8 @@ public class PathStencilEdgeFanF32 internal constructor(
 
     public val indexCountI32: Int get() = indicesSnapshotI32.size
 
+    public val contourCountI32: Int get() = contourStartsSnapshotI32.size
+
     public fun copyVerticesF32(): FloatArray = verticesSnapshotF32.copyOf()
 
     public fun copyIndicesI32(): IntArray = indicesSnapshotI32.copyOf()
@@ -85,6 +87,26 @@ public class PathFillGeometryF32 internal constructor(
         get() = directTriangleSnapshotF32?.indexCountI32?.toLong()
             ?: stencilEdgeFanSnapshotF32!!.edgeCountI32.toLong() * 3L + 6L
 
+    /** Exact byte cost of the mutable numeric payload retained by this snapshot. */
+    public val snapshotByteCostI64: Long
+        get() {
+            val arrayBytesI64 = directTriangleSnapshotF32?.let { triangleF32 ->
+                checkedPathFillSnapshotAddI64(
+                    checkedPathFillSnapshotMultiplyI64(triangleF32.vertexCountI32.toLong(), 8L),
+                    checkedPathFillSnapshotMultiplyI64(triangleF32.indexCountI32.toLong(), 4L),
+                )
+            } ?: stencilEdgeFanSnapshotF32!!.let { fanF32 ->
+                checkedPathFillSnapshotAddI64(
+                    checkedPathFillSnapshotAddI64(
+                        checkedPathFillSnapshotMultiplyI64(fanF32.edgeCountI32.toLong(), 24L),
+                        checkedPathFillSnapshotMultiplyI64(fanF32.indexCountI32.toLong(), 4L),
+                    ),
+                    checkedPathFillSnapshotMultiplyI64(fanF32.contourCountI32.toLong(), 4L),
+                )
+            }
+            return checkedPathFillSnapshotAddI64(arrayBytesI64, 16L)
+        }
+
     public fun copyConservativeScissorI32(): RectI32 = copyRectI32(conservativeScissorSnapshotI32)
 
     public fun copyDirectTriangleF32OrNull(): PathFillDirectTriangleF32? = directTriangleSnapshotF32?.copySnapshotF32()
@@ -104,3 +126,13 @@ private fun PathStencilEdgeFanF32.copySnapshotF32(): PathStencilEdgeFanF32 = Pat
 )
 
 private fun copyRectI32(source: RectI32): RectI32 = RectI32(source.left, source.top, source.right, source.bottom)
+
+private fun checkedPathFillSnapshotAddI64(firstI64: Long, secondI64: Long): Long {
+    check(firstI64 >= 0L && secondI64 >= 0L && firstI64 <= Long.MAX_VALUE - secondI64)
+    return firstI64 + secondI64
+}
+
+private fun checkedPathFillSnapshotMultiplyI64(firstI64: Long, secondI64: Long): Long {
+    check(firstI64 >= 0L && secondI64 >= 0L && (firstI64 == 0L || secondI64 <= Long.MAX_VALUE / firstI64))
+    return firstI64 * secondI64
+}

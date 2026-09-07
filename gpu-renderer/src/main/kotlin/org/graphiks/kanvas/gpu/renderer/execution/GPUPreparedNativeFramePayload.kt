@@ -2193,6 +2193,12 @@ internal sealed interface GPUPreparedNativeFramePayloadMaterialization {
     ) : GPUPreparedNativeFramePayloadMaterialization
 }
 
+/** Terminal disposition of a submitted native lease after output mapping has finalized. */
+internal enum class GPUPreparedNativeFrameOutputLeaseFinalization {
+    ReleaseAfterReadback,
+    QuarantineUncertain,
+}
+
 /** One-way executor access to the adapter-owned registry. */
 internal interface GPUPreparedNativeFramePayloadAccess {
     fun consumePreparedNativeFramePayload(
@@ -2204,7 +2210,11 @@ internal interface GPUPreparedNativeFramePayloadAccess {
     fun markPreparedNativeFrameSubmitted(token: GPUPreparedNativeFrameToken): Boolean
     fun releasePreparedNativeFramePayload(token: GPUPreparedNativeFrameToken): Boolean
     fun claimOutputOwnedPreparedNativeFramePayloadMapping(token: GPUPreparedNativeFrameToken): Boolean = false
-    fun releaseOutputOwnedPreparedNativeFramePayload(token: GPUPreparedNativeFrameToken): Boolean = false
+    fun closeOutputOwnedPreparedNativeFramePayload(token: GPUPreparedNativeFrameToken): Boolean = false
+    fun finalizeOutputOwnedPreparedNativeFramePayload(
+        token: GPUPreparedNativeFrameToken,
+        finalization: GPUPreparedNativeFrameOutputLeaseFinalization,
+    ): Boolean = false
     fun quarantinePreparedNativeFramePayload(token: GPUPreparedNativeFrameToken): Boolean
     fun quarantineOutputOwnedPreparedNativeFramePayload(token: GPUPreparedNativeFrameToken): Boolean = false
     fun bindLateSurface(
@@ -2226,8 +2236,11 @@ internal class GPUPreparedNativeFrameOwnership internal constructor(
     internal fun releaseAfterCompletion(): Boolean = access.releasePreparedNativeFramePayload(token)
     internal fun claimOutputMapping(): Boolean =
         access.claimOutputOwnedPreparedNativeFramePayloadMapping(token)
-    internal fun releaseOutputAfterReadback(): Boolean =
-        access.releaseOutputOwnedPreparedNativeFramePayload(token)
+    internal fun closeOutputAfterReadback(): Boolean =
+        access.closeOutputOwnedPreparedNativeFramePayload(token)
+    internal fun finalizeOutputAfterReadback(
+        finalization: GPUPreparedNativeFrameOutputLeaseFinalization,
+    ): Boolean = access.finalizeOutputOwnedPreparedNativeFramePayload(token, finalization)
     internal fun quarantine(): Boolean = access.quarantinePreparedNativeFramePayload(token)
     internal fun quarantineOutputAfterReadback(): Boolean =
         access.quarantineOutputOwnedPreparedNativeFramePayload(token)

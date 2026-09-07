@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.plan
 
+import java.security.MessageDigest
 import org.graphiks.math.geometry.SizeI32
 
 public class RenderGraph private constructor(
@@ -14,6 +15,7 @@ public class RenderGraph private constructor(
     passes: List<PlanPass>,
     dependencies: List<PlanPassDependency>,
     public val peakFrameLocalBytes: Long,
+    private val w4dCompilerWitness: W4dCompilerWitness?,
 ) {
     private val storedTargetExtent: SizeI32 = targetExtent.copy()
     public val targetExtent: SizeI32
@@ -25,6 +27,10 @@ public class RenderGraph private constructor(
     public fun resources(): List<PlanResource> = storedResources
     public fun passes(): List<PlanPass> = storedPasses
     public fun dependencies(): List<PlanPassDependency> = storedDependencies
+
+    /** Verifies that this exact immutable graph snapshot was issued by the W4d compiler. */
+    public fun verifyW4dCompilerWitness(): Boolean =
+        w4dCompilerWitness?.matches(this) == true
 
     public companion object {
         public fun of(
@@ -91,7 +97,7 @@ public class RenderGraph private constructor(
             validateColorPasses(passes, resourcesById, targetExtent, colorFormat)
             validateStencilAtomicContracts(passes, dependencies, resources, resourcesById, capabilities, targetExtent)
             validateVisualCommandOrder(passes)
-            validatePathFillContracts(
+            validatePathDrawContracts(
                 passes,
                 dependencies,
                 resources,
@@ -109,7 +115,30 @@ public class RenderGraph private constructor(
             require(calculatedPeak == peakFrameLocalBytes) { "Peak memory does not match resource lifetimes" }
             require(calculatedPeak <= budget.maxFrameLocalBytes) { "Peak memory exceeds budget" }
             return RenderGraph(id, capabilityId, targetExtent, colorFormat, capabilities, budget, visualCommandCount,
-                resources, passes, dependencies, peakFrameLocalBytes)
+                resources, passes, dependencies, peakFrameLocalBytes, null)
+        }
+
+        /** Trust-boundary factory available only to the W4d compiler after public validation. */
+        @JvmSynthetic
+        internal fun issueW4dCompilerWitness(graph: RenderGraph): RenderGraph {
+            require(graph.capabilityId == W4dPathStrokePlanCompiler.CAPABILITY_ID) {
+                "Only a W4d graph may receive a W4d compiler witness"
+            }
+            require(graph.w4dCompilerWitness == null) { "A W4d compiler witness may be issued only once" }
+            return RenderGraph(
+                graph.id,
+                graph.capabilityId,
+                graph.storedTargetExtent,
+                graph.colorFormat,
+                graph.capabilities,
+                graph.budget,
+                graph.visualCommandCount,
+                graph.storedResources,
+                graph.storedPasses,
+                graph.storedDependencies,
+                graph.peakFrameLocalBytes,
+                W4dCompilerWitness.issue(graph),
+            )
         }
 
         private fun referencedResources(pass: PlanPass): List<PlanResourceId> = when (pass) {
@@ -146,9 +175,9 @@ public class RenderGraph private constructor(
             val colorPasses = passes.mapNotNull { pass ->
                 when (pass) {
                     is PlanPass.RenderPass -> {
-                        pass.draws().filterIsInstance<PathFillDraw>().forEach { draw ->
+                        pass.draws().filterIsInstance<PathDraw>().forEach { draw ->
                             require(draw.strategy == PathFillStrategy.DirectTriangle) {
-                                "Stencil path fills require atomic stencil passes"
+                                "Stencil path draws require atomic stencil passes"
                             }
                         }
                         ColorAttachment(pass.target, pass.load, pass.store)
@@ -308,7 +337,7 @@ public class RenderGraph private constructor(
                 "Stencil pairs must share vertex, index, and uniform resources"
             }
             require(producer.atomicGroup == cover.atomicGroup) { "Stencil pairs must share an atomic group" }
-            val expectedAtomicGroup = PlanAtomicGroupId("w4c:${producer.draw.commandIndex}")
+            val expectedAtomicGroup = canonicalPathAtomicGroup(producer.draw)
             require(producer.atomicGroup == expectedAtomicGroup && cover.atomicGroup == expectedAtomicGroup) {
                 "Stencil pairs require the canonical command atomic group"
             }
@@ -327,7 +356,7 @@ public class RenderGraph private constructor(
             validatePathDrawDataShape(producer.drawDataResources, resourcesById)
         }
 
-        private fun validatePathFillContracts(
+        private fun validatePathDrawContracts(
             passes: List<PlanPass>,
             dependencies: List<PlanPassDependency>,
             resources: List<PlanResource>,
@@ -336,7 +365,7 @@ public class RenderGraph private constructor(
             visualCommandCount: Int,
         ) {
             val visualDraws = visualDraws(passes)
-            if (visualDraws.none { it is PathFillDraw }) return
+            if (visualDraws.none { it is PathDraw }) return
 
             require(passes.all {
                 it is PlanPass.RenderPass ||
@@ -345,10 +374,10 @@ public class RenderGraph private constructor(
                     it is PlanPass.ReadbackPass
             }) { "Path graphs may contain only W4c passes" }
             require(PlanOperationCapability.CopyUpload in capabilities.supportedOperations()) {
-                "Path fills require copy upload support"
+                "Path draws require copy upload support"
             }
             require(PlanOperationCapability.UniformBuffer in capabilities.supportedOperations()) {
-                "Path fills require uniform buffer support"
+                "Path draws require uniform buffer support"
             }
             val targetResource = requireSinglePathResource(resources, PlanResourceRole.LogicalTarget)
             val stagingResource = requireSinglePathResource(resources, PlanResourceRole.ReadbackStaging)
@@ -371,10 +400,10 @@ public class RenderGraph private constructor(
                 depthStencilResources.singleOrNull()?.let(::add)
             }
             require(inventory.map { it.id }.distinct().size == inventory.size) {
-                "W4c resources must have distinct identities"
+                "Path draw resources must have distinct identities"
             }
             require(resources.map { it.id }.toSet() == inventory.map { it.id }.toSet()) {
-                "Path graphs must declare only the W4c resource inventory"
+                "Path graphs must declare only the path draw resource inventory"
             }
             val target = targetResource.id
             passes.forEach { pass ->
@@ -385,14 +414,14 @@ public class RenderGraph private constructor(
                     else -> null
                 }
                 if (colorTarget != null) {
-                    require(colorTarget == target) { "Path fills must use one color target" }
+                    require(colorTarget == target) { "Path draws must use one color target" }
                 }
             }
             val readbacks = passes.filterIsInstance<PlanPass.ReadbackPass>()
-            require(readbacks.size == 1) { "Path fills require one readback" }
+            require(readbacks.size == 1) { "Path draws require one readback" }
             val terminalReadback = readbacks.single()
-            require(passes.last() === terminalReadback) { "Path fill readback must be terminal" }
-            require(terminalReadback.source == target) { "Path fills must read back their color target" }
+            require(passes.last() === terminalReadback) { "Path draw readback must be terminal" }
+            require(terminalReadback.source == target) { "Path draws must read back their color target" }
             require(terminalReadback.staging == stagingResource.id) {
                 "Path readback must use the readback staging resource"
             }
@@ -400,7 +429,7 @@ public class RenderGraph private constructor(
                 PlanPassDependency(before.id, after.id)
             }.toSet()
             require(dependencies.toSet() == expectedDependencies) {
-                "Path fills require consecutive linear dependencies"
+                "Path draws require consecutive linear dependencies"
             }
             require(visualCommandCount == visualDraws.map { it.commandIndex }.distinct().size) {
                 "Path visual command count must match unique draws"
@@ -418,7 +447,7 @@ public class RenderGraph private constructor(
                             "Path render passes require exactly one draw"
                         }
                         val draw = pass.draws().single()
-                        require(draw is PathFillDraw && draw.strategy == PathFillStrategy.DirectTriangle) {
+                        require(draw is PathDraw && draw.strategy == PathFillStrategy.DirectTriangle) {
                             "Path render passes require one direct-triangle draw"
                         }
                         val drawDataResources = requireNotNull(pass.drawDataResources) {
@@ -555,5 +584,23 @@ public class RenderGraph private constructor(
         } ?: 0L
 
         private const val LOGICAL_PIXEL_BYTES: Long = 4L
+    }
+
+    /** Opaque proof whose digest never crosses the public API. */
+    private class W4dCompilerWitness private constructor(digest: ByteArray) {
+        private val digestSnapshot: ByteArray = digest.copyOf()
+
+        fun matches(graph: RenderGraph): Boolean = try {
+            MessageDigest.isEqual(digestSnapshot, canonicalW4dGraphDigest(graph))
+        } catch (_: IllegalArgumentException) {
+            false
+        } catch (_: ArithmeticException) {
+            false
+        }
+
+        companion object {
+            fun issue(graph: RenderGraph): W4dCompilerWitness =
+                W4dCompilerWitness(canonicalW4dGraphDigest(graph))
+        }
     }
 }

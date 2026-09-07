@@ -37,6 +37,28 @@ public sealed interface PathFillPreparationResult {
     ) : PathFillPreparationResult
 }
 
+/** Fill preparation outcome carrying the shared W4d stroke-work snapshots. */
+public sealed interface PathFillWithStrokeWorkPreparationResult {
+    public data class Ready(
+        public val geometryF32: PathFillGeometryF32,
+        public val pathWorkUsageI64: PathStrokeWorkUsageI64,
+        public val frameWorkUsageAfterI64: PathStrokeWorkUsageI64,
+    ) : PathFillWithStrokeWorkPreparationResult
+
+    public data class Empty(
+        public val pathWorkUsageI64: PathStrokeWorkUsageI64,
+        public val frameWorkUsageAfterI64: PathStrokeWorkUsageI64,
+    ) : PathFillWithStrokeWorkPreparationResult
+
+    public data class InvalidScene(
+        public val reason: PathFillInvalidSceneReason,
+    ) : PathFillWithStrokeWorkPreparationResult
+
+    public data class ResourceLimitExceeded(
+        public val reason: PathStrokeResourceLimitReason,
+    ) : PathFillWithStrokeWorkPreparationResult
+}
+
 /**
  * Produces the sole device-space geometry authority for a W4c path fill.
  *
@@ -64,6 +86,130 @@ public fun preparePathFillGeometryF32(
     }
 }
 
+/**
+ * Produces W4c-compatible fill geometry while accounting every retained output through the
+ * stroke work ledger used by mixed W4d frames.
+ */
+public fun preparePathFillGeometryWithStrokeWorkF32(
+    inputF64: PathFillInputF64,
+    fillPolicyF64: PathFillFlatteningPolicyF64 = PathFillFlatteningPolicyF64(),
+    strokePolicyF64: PathStrokePolicyF64 = PathStrokePolicyF64(),
+    pathWorkUsageBeforeI64: PathStrokeWorkUsageI64 = PathStrokeWorkUsageI64(),
+    frameWorkUsageBeforeI64: PathStrokeWorkUsageI64 = PathStrokeWorkUsageI64(),
+): PathFillWithStrokeWorkPreparationResult {
+    if (!inputF64.all(::isFinitePathFillInputSegmentF64)) {
+        return PathFillWithStrokeWorkPreparationResult.InvalidScene(PathFillInvalidSceneReason.NonFiniteInput)
+    }
+
+    return try {
+        val ledgerI64 = PathStrokeWorkLedgerI64(
+            pathWorkUsageBeforeI64 = pathWorkUsageBeforeI64,
+            frameWorkUsageBeforeI64 = frameWorkUsageBeforeI64,
+            limitsI32 = strokePolicyF64.limitsI32,
+            limitsI64 = strokePolicyF64.limitsI64,
+        )
+        when (
+            val result = preparePathFillGeometryWithStrokeWorkF32(
+                inputF64 = inputF64,
+                fillPolicyF64 = fillPolicyF64,
+                ledgerI64 = ledgerI64,
+            )
+        ) {
+            is PathFillPreparationResult.Ready -> PathFillWithStrokeWorkPreparationResult.Ready(
+                geometryF32 = result.geometryF32,
+                pathWorkUsageI64 = ledgerI64.snapshotPathUsageI64(),
+                frameWorkUsageAfterI64 = ledgerI64.snapshotFrameUsageAfterI64(),
+            )
+
+            is PathFillPreparationResult.Empty -> PathFillWithStrokeWorkPreparationResult.Empty(
+                pathWorkUsageI64 = ledgerI64.snapshotPathUsageI64(),
+                frameWorkUsageAfterI64 = ledgerI64.snapshotFrameUsageAfterI64(),
+            )
+
+            is PathFillPreparationResult.InvalidScene ->
+                PathFillWithStrokeWorkPreparationResult.InvalidScene(result.reason)
+
+            is PathFillPreparationResult.ResourceLimitExceeded ->
+                PathFillWithStrokeWorkPreparationResult.ResourceLimitExceeded(
+                    result.reason.toPathStrokeResourceLimitReason(),
+                )
+        }
+    } catch (abort: PathStrokeResourceLimitAbort) {
+        PathFillWithStrokeWorkPreparationResult.ResourceLimitExceeded(abort.reason)
+    }
+}
+
+/**
+ * Maps one source segment only after charging it to the same W4d ledger that
+ * finalizes the device fill.  This prevents planner-side whole-path mapping
+ * from escaping the transactional frame budget.
+ */
+public fun prepareMappedPathFillGeometryWithStrokeWorkF32(
+    inputF64: PathFillInputF64,
+    deviceSegmentMapperF64: PathStrokeDeviceFillSegmentMapperF64,
+    fillPolicyF64: PathFillFlatteningPolicyF64 = PathFillFlatteningPolicyF64(),
+    strokePolicyF64: PathStrokePolicyF64 = PathStrokePolicyF64(),
+    frameWorkUsageBeforeI64: PathStrokeWorkUsageI64 = PathStrokeWorkUsageI64(),
+): PathFillWithStrokeWorkPreparationResult {
+    if (!inputF64.all(::isFinitePathFillInputSegmentF64)) {
+        return PathFillWithStrokeWorkPreparationResult.InvalidScene(PathFillInvalidSceneReason.NonFiniteInput)
+    }
+    return try {
+        val ledgerI64 = PathStrokeWorkLedgerI64(
+            pathWorkUsageBeforeI64 = PathStrokeWorkUsageI64(),
+            frameWorkUsageBeforeI64 = frameWorkUsageBeforeI64,
+            limitsI32 = strokePolicyF64.limitsI32,
+            limitsI64 = strokePolicyF64.limitsI64,
+        )
+        val mapped = buildList {
+            inputF64.forEach { source ->
+                ledgerI64.debitTopologyBeforeEmissionI64(1L)
+                add(deviceSegmentMapperF64.mapDeviceFillSegmentF64(source) ?: throw PathFillDeviceMappingAbort())
+            }
+        }
+        val mappedInput = PathFillInputF64.of(inputF64.fillRule, mapped)
+        when (val result = preparePathFillGeometryWithStrokeWorkF32(mappedInput, fillPolicyF64, ledgerI64)) {
+            is PathFillPreparationResult.Ready -> PathFillWithStrokeWorkPreparationResult.Ready(
+                result.geometryF32, ledgerI64.snapshotPathUsageI64(), ledgerI64.snapshotFrameUsageAfterI64(),
+            )
+            is PathFillPreparationResult.Empty -> PathFillWithStrokeWorkPreparationResult.Empty(
+                ledgerI64.snapshotPathUsageI64(), ledgerI64.snapshotFrameUsageAfterI64(),
+            )
+            is PathFillPreparationResult.InvalidScene ->
+                PathFillWithStrokeWorkPreparationResult.InvalidScene(result.reason)
+            is PathFillPreparationResult.ResourceLimitExceeded ->
+                PathFillWithStrokeWorkPreparationResult.ResourceLimitExceeded(result.reason.toPathStrokeResourceLimitReason())
+        }
+    } catch (abort: PathStrokeResourceLimitAbort) {
+        PathFillWithStrokeWorkPreparationResult.ResourceLimitExceeded(abort.reason)
+    } catch (_: PathFillDeviceMappingAbort) {
+        PathFillWithStrokeWorkPreparationResult.InvalidScene(PathFillInvalidSceneReason.NonFiniteProjection)
+    }
+}
+
+private class PathFillDeviceMappingAbort : RuntimeException()
+
+/** Internal finalizer overload for a stroke pipeline already holding one transactional ledger. */
+internal fun preparePathFillGeometryWithStrokeWorkF32(
+    inputF64: PathFillInputF64,
+    fillPolicyF64: PathFillFlatteningPolicyF64,
+    ledgerI64: PathStrokeWorkLedgerI64,
+): PathFillPreparationResult {
+    if (!inputF64.all(::isFinitePathFillInputSegmentF64)) {
+        return PathFillPreparationResult.InvalidScene(PathFillInvalidSceneReason.NonFiniteInput)
+    }
+    return try {
+        PathFillPreparerF64(
+            inputF64 = inputF64,
+            policyF64 = fillPolicyF64,
+            frameAttemptedEdgesBeforeI32 = 0,
+            strokeWorkLedgerI64 = ledgerI64,
+        ).prepare()
+    } catch (abort: PathFillPreparationAbort) {
+        abort.result
+    }
+}
+
 private class PathFillPreparationAbort(
     val result: PathFillPreparationResult,
 ) : RuntimeException()
@@ -76,6 +222,7 @@ private class PathFillPreparerF64(
     private val inputF64: PathFillInputF64,
     private val policyF64: PathFillFlatteningPolicyF64,
     private val frameAttemptedEdgesBeforeI32: Int,
+    private val strokeWorkLedgerI64: PathStrokeWorkLedgerI64? = null,
 ) {
     private val retainedContoursF32 = mutableListOf<PreparedPathFillContourF32>()
     private var contourVerticesF32 = mutableListOf<Point2F32>()
@@ -197,6 +344,9 @@ private class PathFillPreparerF64(
     }
 
     private fun debitAttempt() {
+        strokeWorkLedgerI64?.debitBeforeEmissionI64(
+            PathStrokeWorkUsageI64(attemptedGeometryUnitCountI64 = 1L),
+        )
         val nextPathAttemptCountI64 = attemptedEdgeCountI32.toLong() + 1L
         if (nextPathAttemptCountI64 > policyF64.limitsI32.maxAttemptedEdgesPerPathI32.toLong()) {
             abortResource(PathFillResourceLimitReason.PathAttemptedEdgeLimit)
@@ -356,6 +506,11 @@ private class PathFillPreparerF64(
 
         if (isDirect) {
             val vertices = directContour.verticesF32
+            debitFinalGeometryBeforeEmission(
+                vertexCountI64 = 3L,
+                indexCountI64 = 3L,
+                snapshotByteCountI64 = directPathFillSnapshotByteCostI64(),
+            )
             return PathFillGeometryF32(
                 fillRule = inputF64.fillRule,
                 attemptedEdgeCountI32 = attemptedEdgeCountI32,
@@ -381,6 +536,15 @@ private class PathFillPreparerF64(
         ) {
             abortResource(PathFillResourceLimitReason.HostSizeOverflow)
         }
+
+        debitFinalGeometryBeforeEmission(
+            vertexCountI64 = emittedEdgeCountI64 * 3L + 4L,
+            indexCountI64 = emittedEdgeCountI64 * 3L + 6L,
+            snapshotByteCountI64 = stencilPathFillSnapshotByteCostI64(
+                edgeCountI64 = emittedEdgeCountI64,
+                contourCountI64 = retainedContoursF32.size.toLong(),
+            ),
+        )
 
         val fan = createStencilEdgeFanF32(emittedEdgeCountI32)
         return PathFillGeometryF32(
@@ -419,6 +583,20 @@ private class PathFillPreparerF64(
             }
         }
         return PathStencilEdgeFanF32(vertices, indices, contourStarts)
+    }
+
+    private fun debitFinalGeometryBeforeEmission(
+        vertexCountI64: Long,
+        indexCountI64: Long,
+        snapshotByteCountI64: Long,
+    ) {
+        strokeWorkLedgerI64?.debitBeforeEmissionI64(
+            PathStrokeWorkUsageI64(
+                emittedVertexCountI64 = vertexCountI64,
+                emittedIndexCountI64 = indexCountI64,
+                snapshotByteCountI64 = snapshotByteCountI64,
+            ),
+        )
     }
 }
 
@@ -574,3 +752,23 @@ private fun abortInvalid(reason: PathFillInvalidSceneReason): Nothing =
 
 private fun abortResource(reason: PathFillResourceLimitReason): Nothing =
     throw PathFillPreparationAbort(PathFillPreparationResult.ResourceLimitExceeded(reason))
+
+internal fun PathFillResourceLimitReason.toPathStrokeResourceLimitReason(): PathStrokeResourceLimitReason = when (this) {
+    PathFillResourceLimitReason.FlatteningDidNotConverge -> PathStrokeResourceLimitReason.FlatteningDidNotConverge
+    PathFillResourceLimitReason.PathAttemptedEdgeLimit -> PathStrokeResourceLimitReason.PathWorkLimit
+    PathFillResourceLimitReason.FrameAttemptedEdgeLimit -> PathStrokeResourceLimitReason.FrameWorkLimit
+    PathFillResourceLimitReason.WindingStencilEdgeLimit -> PathStrokeResourceLimitReason.VertexLimit
+    PathFillResourceLimitReason.RasterBoundsOverflow -> PathStrokeResourceLimitReason.RasterBoundsOverflow
+    PathFillResourceLimitReason.HostSizeOverflow -> PathStrokeResourceLimitReason.HostSizeOverflow
+}
+
+private fun directPathFillSnapshotByteCostI64(): Long = 52L
+
+private fun stencilPathFillSnapshotByteCostI64(edgeCountI64: Long, contourCountI64: Long): Long {
+    if (edgeCountI64 < 0L || contourCountI64 < 0L || edgeCountI64 > (Long.MAX_VALUE - 16L) / 36L ||
+        contourCountI64 > (Long.MAX_VALUE - 16L - edgeCountI64 * 36L) / 4L
+    ) {
+        throw PathStrokeResourceLimitAbort(PathStrokeResourceLimitReason.HostSizeOverflow)
+    }
+    return 16L + edgeCountI64 * 36L + contourCountI64 * 4L
+}

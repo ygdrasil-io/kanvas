@@ -18,6 +18,7 @@ import org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat
 import org.graphiks.kanvas.gpu.plan.PlanOperationCapability
 import org.graphiks.kanvas.gpu.plan.PlanPass
 import org.graphiks.kanvas.gpu.plan.PathFillDraw
+import org.graphiks.kanvas.gpu.plan.PathStrokeDraw
 import org.graphiks.kanvas.gpu.plan.RenderGraph
 import org.graphiks.kanvas.gpu.plan.W4aAnalyticRectPlanCompiler
 import org.graphiks.kanvas.gpu.plan.W4cPathFillPlanCompiler
@@ -71,8 +72,16 @@ import org.graphiks.kanvas.render.ir.StrokeJoinNode
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.FillRule
 import org.graphiks.math.geometry.PathBuilder
+import org.graphiks.math.geometry.PathStrokeCap
+import org.graphiks.math.geometry.PathStrokeDrawMode
+import org.graphiks.math.geometry.PathStrokeGeometryF32
+import org.graphiks.math.geometry.PathStrokeJoin
+import org.graphiks.math.geometry.PathStrokePreparationResult
+import org.graphiks.math.geometry.PathStrokeStyleF64
+import org.graphiks.math.geometry.PathStrokeWidthF64
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.matrix.Matrix3x3F32
+import org.graphiks.math.matrix.preparePathStrokeGeometryF32
 import org.junit.jupiter.api.Test as JunitTest
 
 class GpuPlanTaskListLowererW4cTest {
@@ -166,7 +175,9 @@ class GpuPlanTaskListLowererW4cTest {
         val firstGraphDraw = assertIs<PathFillDraw>(
             assertIs<PlanPass.RenderPass>(graph.passes()[0]).draws().single(),
         )
-        val stencilGraphDraw = assertIs<PlanPass.StencilProducer>(graph.passes()[1]).draw
+        val stencilGraphDraw = assertIs<PathFillDraw>(
+            assertIs<PlanPass.StencilProducer>(graph.passes()[1]).draw,
+        )
         assertEquals(
             firstGraphDraw.copyGeometryF32().copyDirectTriangleF32OrNull()!!.copyVerticesF32().toList(),
             assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantics[0].geometry).vertices,
@@ -231,6 +242,43 @@ class GpuPlanTaskListLowererW4cTest {
         assertIs<GpuPlanLoweringResult.UnsupportedCapability>(
             lowerer.lower(request(graph, rendererCapabilities(depthStencilSupported = false))),
         )
+    }
+
+    @Test
+    fun `W4c lowerer rejects a forged W4c graph containing a stroke draw`() {
+        val fillGraph = readyW4cGraph(listOf(triangle()))
+        val fillPass = assertIs<PlanPass.RenderPass>(fillGraph.passes().first())
+        val fillDraw = assertIs<PathFillDraw>(fillPass.draws().single())
+        val strokePass = PlanPass.RenderPass(
+            ordinal = fillPass.ordinal,
+            target = fillPass.target,
+            draws = listOf(
+                PathStrokeDraw.of(
+                    commandIndex = fillDraw.commandIndex,
+                    color = fillDraw.color,
+                    geometryF32 = directStrokeAndFillGeometry(),
+                    scissorI32 = fillDraw.copyScissorI32(),
+                ),
+            ),
+            load = fillPass.load,
+            store = fillPass.store,
+            drawDataResources = fillPass.drawDataResources,
+        )
+        val forged = RenderGraph.of(
+            id = fillGraph.id,
+            capabilityId = fillGraph.capabilityId,
+            targetExtent = fillGraph.targetExtent,
+            colorFormat = fillGraph.colorFormat,
+            capabilities = fillGraph.capabilities,
+            budget = fillGraph.budget,
+            visualCommandCount = fillGraph.visualCommandCount,
+            resources = fillGraph.resources(),
+            passes = listOf(strokePass) + fillGraph.passes().drop(1),
+            dependencies = fillGraph.dependencies(),
+            peakFrameLocalBytes = fillGraph.peakFrameLocalBytes,
+        )
+
+        assertIs<GpuPlanLoweringResult.InvalidPlan>(W4cPathFillGraphLowerer().lower(request(forged)))
     }
 
     @Test
@@ -353,6 +401,24 @@ class GpuPlanTaskListLowererW4cTest {
             peakFrameLocalBytes = directOnly.peakFrameLocalBytes,
         )
     }
+
+    private fun directStrokeAndFillGeometry(): PathStrokeGeometryF32 = assertIs<PathStrokePreparationResult.Ready>(
+        Matrix3x3F32.Identity.preparePathStrokeGeometryF32(
+            path = PathBuilder()
+                .moveTo(0f, 0f)
+                .lineTo(4f, 0f)
+                .lineTo(0f, 3f)
+                .close()
+                .build(),
+            styleF64 = PathStrokeStyleF64(
+                widthF64 = PathStrokeWidthF64.Finite(0.0),
+                cap = PathStrokeCap.Butt,
+                join = PathStrokeJoin.Miter,
+                miterLimitF64 = 4.0,
+            ),
+            mode = PathStrokeDrawMode.StrokeAndFill,
+        ),
+    ).geometryF32
 
     private fun triangle(clip: ClipStackNode = ClipStackNode.Empty): SceneCommand.Draw =
         SceneCommand.Draw(pathNode(

@@ -9,50 +9,28 @@ import kotlin.math.sqrt
 import org.graphiks.math.geometry.PathF32
 import org.graphiks.math.geometry.PathFillInputF64
 import org.graphiks.math.geometry.PathFillSegmentF64
+import org.graphiks.math.geometry.PathStrokeDeviceFillSegmentMapperF64
 import org.graphiks.math.geometry.Point2F64
 import org.graphiks.math.vector.Vector2F64
 
 /** Maps a path into an immutable F64 device-space fill input. */
 public fun Matrix3x3F32.mapPathFillInputF64(path: PathF32): PathFillInputF64 {
-    val matrix = toPathFillMatrixF64()
-    matrix.requireFinite()
-    require(!matrix.hasPerspective) { "mapPathFillInputF64 requires an affine Matrix3x3F32" }
-
+    val matrix = toAffinePathFillMatrixF64()
     val source = PathFillInputF64.fromPathF32(path)
-    val mapped = source.map { segment ->
-        when (segment) {
-            is PathFillSegmentF64.MoveTo -> PathFillSegmentF64.MoveTo(matrix.mapPointF64(segment.point))
-            is PathFillSegmentF64.LineTo -> PathFillSegmentF64.LineTo(matrix.mapPointF64(segment.point))
-            is PathFillSegmentF64.QuadTo -> PathFillSegmentF64.QuadTo(
-                control = matrix.mapPointF64(segment.control),
-                point = matrix.mapPointF64(segment.point),
-            )
+    val mapped = source.map(matrix::mapSegmentF64)
+    return PathFillInputF64.of(source.fillRule, mapped)
+}
 
-            is PathFillSegmentF64.CubicTo -> PathFillSegmentF64.CubicTo(
-                control1 = matrix.mapPointF64(segment.control1),
-                control2 = matrix.mapPointF64(segment.control2),
-                point = matrix.mapPointF64(segment.point),
-            )
-
-            is PathFillSegmentF64.ArcTo -> {
-                val metadata = matrix.transformArcMetadataF64(
-                    radius = segment.radius,
-                    xAxisRotationDegreesF64 = segment.xAxisRotationDegreesF64,
-                    sweep = segment.sweep,
-                )
-                PathFillSegmentF64.ArcTo(
-                    radius = metadata.radius,
-                    xAxisRotationDegreesF64 = metadata.xAxisRotationDegreesF64,
-                    largeArc = segment.largeArc,
-                    sweep = metadata.sweep,
-                    point = matrix.mapPointF64(segment.point),
-                )
-            }
-
-            PathFillSegmentF64.Close -> PathFillSegmentF64.Close
+/** Supplies the shared affine fill mapping one source command at a time for W4d geometry. */
+public fun Matrix3x3F32.pathStrokeDeviceFillSegmentMapperF64(): PathStrokeDeviceFillSegmentMapperF64 {
+    val matrix = toAffinePathFillMatrixF64()
+    return PathStrokeDeviceFillSegmentMapperF64 { sourceSegmentF64 ->
+        try {
+            matrix.mapSegmentF64(sourceSegmentF64)
+        } catch (_: IllegalArgumentException) {
+            null
         }
     }
-    return PathFillInputF64.of(source.fillRule, mapped)
 }
 
 private data class PathFillMatrixF64(
@@ -82,6 +60,13 @@ private fun Matrix3x3F32.toPathFillMatrixF64(): PathFillMatrixF64 = PathFillMatr
     persp2 = exactF64(persp2),
 )
 
+private fun Matrix3x3F32.toAffinePathFillMatrixF64(): PathFillMatrixF64 {
+    val matrix = toPathFillMatrixF64()
+    matrix.requireFinite()
+    require(!matrix.hasPerspective) { "mapPathFillInputF64 requires an affine Matrix3x3F32" }
+    return matrix
+}
+
 private fun PathFillMatrixF64.requireFinite() {
     require(
         sx.isFinite() && kx.isFinite() && tx.isFinite() &&
@@ -97,6 +82,38 @@ private fun PathFillMatrixF64.mapPointF64(point: Point2F64): Point2F64 {
     )
     require(mapped.isFinite()) { "mapPathFillInputF64 produced a non-finite coordinate" }
     return mapped
+}
+
+private fun PathFillMatrixF64.mapSegmentF64(segment: PathFillSegmentF64): PathFillSegmentF64 = when (segment) {
+    is PathFillSegmentF64.MoveTo -> PathFillSegmentF64.MoveTo(mapPointF64(segment.point))
+    is PathFillSegmentF64.LineTo -> PathFillSegmentF64.LineTo(mapPointF64(segment.point))
+    is PathFillSegmentF64.QuadTo -> PathFillSegmentF64.QuadTo(
+        control = mapPointF64(segment.control),
+        point = mapPointF64(segment.point),
+    )
+
+    is PathFillSegmentF64.CubicTo -> PathFillSegmentF64.CubicTo(
+        control1 = mapPointF64(segment.control1),
+        control2 = mapPointF64(segment.control2),
+        point = mapPointF64(segment.point),
+    )
+
+    is PathFillSegmentF64.ArcTo -> {
+        val metadata = transformArcMetadataF64(
+            radius = segment.radius,
+            xAxisRotationDegreesF64 = segment.xAxisRotationDegreesF64,
+            sweep = segment.sweep,
+        )
+        PathFillSegmentF64.ArcTo(
+            radius = metadata.radius,
+            xAxisRotationDegreesF64 = metadata.xAxisRotationDegreesF64,
+            largeArc = segment.largeArc,
+            sweep = metadata.sweep,
+            point = mapPointF64(segment.point),
+        )
+    }
+
+    PathFillSegmentF64.Close -> PathFillSegmentF64.Close
 }
 
 private data class TransformedArcMetadataF64(

@@ -358,7 +358,7 @@ internal class W4cPathFillGraphLowerer {
                 }
                 is PlanPass.StencilProducer -> {
                     val cover = renderPasses.getOrNull(passIndex + 1) as? PlanPass.StencilCover ?: return null
-                    val draw = pass.draw
+                    val draw = pass.draw as? PathFillDraw ?: return null
                     if (pass.ordinal != producerOrdinal++ || cover.ordinal != coverOrdinal++ ||
                         draw !== cover.draw || draw.strategy != PathFillStrategy.StencilCover ||
                         pass.load != (if (firstColor) AttachmentLoadPlan.ClearTransparent else AttachmentLoadPlan.Load) ||
@@ -536,7 +536,8 @@ internal class W4cPathFillGraphLowerer {
         targetBounds: GPUPixelBounds,
     ): W4cBuiltPass = when (pass) {
         is PlanPass.RenderPass -> {
-            val draw = pass.draws().single() as PathFillDraw
+            val draw = pass.draws().singleOrNull() as? PathFillDraw
+                ?: error("Validated W4c graph contains a non-fill direct draw")
             val clip = clipFor(draw, targetBounds)
             packet(
                 draw = draw,
@@ -549,21 +550,27 @@ internal class W4cPathFillGraphLowerer {
                 targetBounds = targetBounds,
             )
         }
-        is PlanPass.StencilProducer -> packet(
-            draw = pass.draw,
-            paintOrder = paintOrder(pass.draw, visualDraws),
-            passId = pass.id.value,
-            role = GPUDrawPacketRole.PathStencilProducer,
-            coverageMode = GPUCorePrimitiveCoverageMode.Stencil1x,
-            clipCoverage = GPUClipCoveragePlan.NoClip,
-            clipExecution = GPUClipExecutionPlan.NoClip,
-            targetBounds = targetBounds,
-        )
-        is PlanPass.StencilCover -> {
-            val clip = clipFor(pass.draw, targetBounds)
+        is PlanPass.StencilProducer -> {
+            val draw = pass.draw as? PathFillDraw
+                ?: error("Validated W4c graph contains a non-fill stencil producer")
             packet(
-                draw = pass.draw,
-                paintOrder = paintOrder(pass.draw, visualDraws),
+                draw = draw,
+                paintOrder = paintOrder(draw, visualDraws),
+                passId = pass.id.value,
+                role = GPUDrawPacketRole.PathStencilProducer,
+                coverageMode = GPUCorePrimitiveCoverageMode.Stencil1x,
+                clipCoverage = GPUClipCoveragePlan.NoClip,
+                clipExecution = GPUClipExecutionPlan.NoClip,
+                targetBounds = targetBounds,
+            )
+        }
+        is PlanPass.StencilCover -> {
+            val draw = pass.draw as? PathFillDraw
+                ?: error("Validated W4c graph contains a non-fill stencil cover")
+            val clip = clipFor(draw, targetBounds)
+            packet(
+                draw = draw,
+                paintOrder = paintOrder(draw, visualDraws),
                 passId = pass.id.value,
                 role = GPUDrawPacketRole.PathStencilCover,
                 coverageMode = GPUCorePrimitiveCoverageMode.Stencil1x,

@@ -2,6 +2,12 @@ package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.math.color.ColorF32
 import org.graphiks.math.geometry.PathFillGeometryF32
+import org.graphiks.math.geometry.PathStrokeGeometryF32
+import org.graphiks.math.geometry.PathStrokeDrawMode
+import org.graphiks.math.geometry.PathStrokeStyleF64
+import org.graphiks.math.geometry.PathStrokeCap
+import org.graphiks.math.geometry.PathStrokeJoin
+import org.graphiks.math.geometry.PathStrokeWidthF64
 import org.graphiks.kanvas.render.ir.DrawOrigin
 import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
@@ -17,12 +23,25 @@ public enum class PlanDepthStencilAccess { Write, ReadWrite }
 public enum class PlanPassRole { MainRender, StencilProducer, StencilCover, TextureCopy, Filter, Resolve, Readback }
 public enum class PathFillStrategy { DirectTriangle, StencilCover }
 
+/** Immutable geometry authority for a path draw, retained by `:math`. */
+public sealed interface PathDrawGeometry {
+    public data class Fill(public val valueF32: PathFillGeometryF32) : PathDrawGeometry
+    public data class Stroke(public val valueF32: PathStrokeGeometryF32) : PathDrawGeometry
+}
+
 public sealed interface PlanDraw {
     public val commandIndex: Int
     public val color: ColorF32
     public val coverage: CoveragePlan
     public val sample: SamplePlan
     public val blend: BlendPlan
+}
+
+/** Common sealed contract for W4c fills and W4d stroke snapshots. */
+public sealed interface PathDraw : PlanDraw {
+    public val strategy: PathFillStrategy
+    public fun copyPathGeometry(): PathDrawGeometry
+    public fun copyScissorI32(): RectI32
 }
 
 public class SolidRectDraw private constructor(
@@ -149,9 +168,9 @@ public class PathFillDraw private constructor(
     override public val commandIndex: Int,
     override public val color: ColorF32,
     geometryF32: PathFillGeometryF32,
-    public val strategy: PathFillStrategy,
+    override public val strategy: PathFillStrategy,
     scissorI32: RectI32,
-) : PlanDraw {
+) : PathDraw {
     override public val coverage: CoveragePlan = CoveragePlan.FullOrScissor
     override public val sample: SamplePlan = SamplePlan.SingleSample
     override public val blend: BlendPlan = BlendPlan.SrcOver
@@ -160,7 +179,9 @@ public class PathFillDraw private constructor(
 
     public fun copyGeometryF32(): PathFillGeometryF32 = geometrySnapshotF32
 
-    public fun copyScissorI32(): RectI32 = scissorSnapshotI32.copy()
+    override fun copyPathGeometry(): PathDrawGeometry = PathDrawGeometry.Fill(geometrySnapshotF32)
+
+    override fun copyScissorI32(): RectI32 = scissorSnapshotI32.copy()
 
     public companion object {
         public fun of(
@@ -185,6 +206,55 @@ public class PathFillDraw private constructor(
             return PathFillDraw(commandIndex, color, geometryF32, strategy, scissorI32)
         }
     }
+}
+
+/** A sealed W4d stroke draw whose immutable geometry authority remains owned by `:math`. */
+public class PathStrokeDraw private constructor(
+    override public val commandIndex: Int,
+    override public val color: ColorF32,
+    geometryF32: PathStrokeGeometryF32,
+    public val mode: PathStrokeDrawMode,
+    public val styleF64: PathStrokeStyleF64,
+    scissorI32: RectI32,
+) : PathDraw {
+    override public val coverage: CoveragePlan = CoveragePlan.FullOrScissor
+    override public val sample: SamplePlan = SamplePlan.SingleSample
+    override public val blend: BlendPlan = BlendPlan.SrcOver
+    private val geometrySnapshotF32: PathStrokeGeometryF32 = geometryF32
+    private val scissorSnapshotI32 = scissorI32.copy()
+    override val strategy: PathFillStrategy = pathFillStrategy(geometryF32.copyFillGeometryF32())
+
+    public fun copyGeometryF32(): PathStrokeGeometryF32 = geometrySnapshotF32
+
+    override fun copyPathGeometry(): PathDrawGeometry = PathDrawGeometry.Stroke(geometrySnapshotF32)
+
+    override fun copyScissorI32(): RectI32 = scissorSnapshotI32.copy()
+
+    public companion object {
+        public fun of(
+            commandIndex: Int,
+            color: ColorF32,
+            geometryF32: PathStrokeGeometryF32,
+            scissorI32: RectI32,
+            mode: PathStrokeDrawMode = PathStrokeDrawMode.Stroke,
+            styleF64: PathStrokeStyleF64 = PathStrokeStyleF64(
+                PathStrokeWidthF64.Hairline, PathStrokeCap.Butt, PathStrokeJoin.Miter, 4.0,
+            ),
+        ): PathStrokeDraw {
+            require(commandIndex >= 0) { "Command index must not be negative" }
+            require(!scissorI32.isEmpty) { "Path stroke scissor must be non-empty" }
+            pathFillStrategy(geometryF32.copyFillGeometryF32())
+            return PathStrokeDraw(commandIndex, color, geometryF32, mode, styleF64, scissorI32)
+        }
+    }
+}
+
+private fun pathFillStrategy(geometryF32: PathFillGeometryF32): PathFillStrategy = when {
+    geometryF32.copyDirectTriangleF32OrNull() != null && geometryF32.copyStencilEdgeFanF32OrNull() == null ->
+        PathFillStrategy.DirectTriangle
+    geometryF32.copyDirectTriangleF32OrNull() == null && geometryF32.copyStencilEdgeFanF32OrNull() != null ->
+        PathFillStrategy.StencilCover
+    else -> throw IllegalArgumentException("Path geometry must select exactly one fill strategy")
 }
 
 public data class PlanDrawDataResources(
@@ -216,7 +286,7 @@ public sealed interface PlanPass {
         override val ordinal: Int,
         public val target: PlanResourceId,
         public val depthStencil: PlanResourceId,
-        public val draw: PathFillDraw,
+        public val draw: PathDraw,
         public val drawDataResources: PlanDrawDataResources,
         public val atomicGroup: PlanAtomicGroupId,
         public val load: AttachmentLoadPlan,
@@ -232,7 +302,7 @@ public sealed interface PlanPass {
         override val ordinal: Int,
         public val target: PlanResourceId,
         public val depthStencil: PlanResourceId,
-        public val draw: PathFillDraw,
+        public val draw: PathDraw,
         public val drawDataResources: PlanDrawDataResources,
         public val atomicGroup: PlanAtomicGroupId,
         public val load: AttachmentLoadPlan,

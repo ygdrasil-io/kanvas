@@ -22,6 +22,7 @@ public object PathOpsF32 {
         second: PathF32,
         op: PathBooleanOp,
         limits: PathOpsLimitsI32,
+        topologyWorkDebitI64: PathTopologyWorkDebitI64? = null,
     ): PathF32 {
         require(!first.fillRule.isInverse() && !second.fillRule.isInverse()) {
             "Boolean operations require finite fill rules"
@@ -30,7 +31,10 @@ public object PathOpsF32 {
         validateFinitePathF32(second)
 
         val normalization = pathNormalizationF64(listOf(first, second))
-        val candidateWorkBudget = PathCandidateWorkBudgetI32(limits.maxCandidateProbes)
+        val candidateWorkBudget = PathCandidateWorkBudgetI32(
+            maxCandidateProbes = limits.maxCandidateProbes,
+            topologyWorkDebitI64 = topologyWorkDebitI64,
+        )
         val arrangementF64F32 = buildHybridArrangementF64F32(
             inputs = listOf(
                 PathOperandInputF32(PathOperand.FIRST, first),

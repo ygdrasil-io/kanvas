@@ -25,3 +25,8 @@ internal fun planResourceId(role: PlanResourceRole, ordinal: Int): PlanResourceI
 
 internal fun planPassId(role: PlanPassRole, ordinal: Int): PlanPassId =
     PlanPassId("${role.name}:$ordinal")
+
+internal fun canonicalPathAtomicGroup(draw: PathDraw): PlanAtomicGroupId = when (draw) {
+    is PathFillDraw -> PlanAtomicGroupId("w4c:${draw.commandIndex}")
+    is PathStrokeDraw -> PlanAtomicGroupId("w4d:${draw.commandIndex}")
+}

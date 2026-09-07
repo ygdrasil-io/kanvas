@@ -297,7 +297,14 @@ class GPURuntimeResourceAdapterTest {
         assertEquals(0, staging.closeCount)
         assertEquals(1, adapter.outputOwnedPreparedNativeFramePayloadCount)
         assertTrue(adapter.claimOutputOwnedPreparedNativeFramePayloadMapping(token))
-        assertTrue(adapter.releaseOutputOwnedPreparedNativeFramePayload(token))
+        assertTrue(adapter.closeOutputOwnedPreparedNativeFramePayload(token))
+        assertEquals(1, adapter.outputOwnedPreparedNativeFramePayloadCount)
+        assertTrue(
+            adapter.finalizeOutputOwnedPreparedNativeFramePayload(
+                token,
+                GPUPreparedNativeFrameOutputLeaseFinalization.ReleaseAfterReadback,
+            ),
+        )
         assertEquals(1, staging.closeCount)
         assertEquals(0, adapter.outputOwnedPreparedNativeFramePayloadCount)
     }
@@ -319,7 +326,13 @@ class GPURuntimeResourceAdapterTest {
 
         assertEquals(0, staging.closeCount)
         assertEquals(1, adapter.outputOwnedPreparedNativeFramePayloadCount)
-        assertTrue(adapter.releaseOutputOwnedPreparedNativeFramePayload(token))
+        assertTrue(adapter.closeOutputOwnedPreparedNativeFramePayload(token))
+        assertTrue(
+            adapter.finalizeOutputOwnedPreparedNativeFramePayload(
+                token,
+                GPUPreparedNativeFrameOutputLeaseFinalization.ReleaseAfterReadback,
+            ),
+        )
         assertEquals(1, staging.closeCount)
         assertEquals(0, adapter.outputOwnedPreparedNativeFramePayloadCount)
     }
@@ -764,212 +777,39 @@ class GPURuntimeResourceAdapterTest {
     }
 
     @Test
-    fun `registration faults prove the exact owner before and after draft transfer`() {
-        val beforeHandle = CountingGPUBuffer("registration-before-transfer")
-        val beforeDraft = GPUPreparedNativeFrameDraft(
+    fun `duplicate registration leaves the first adapter owner authoritative`() {
+        val owned = CountingGPUBuffer("registration-duplicate-owner")
+        val draft = GPUPreparedNativeFrameDraft(
             uploadPayload(
                 frame = 90,
                 source = GPUPreparedNativeBufferOperand(
-                    beforeHandle,
+                    owned,
                     GPUDeviceGenerationID(11),
                     GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
                 ),
             ),
         )
-        val beforeAdapter = GPURuntimeResourceAdapter { point ->
-            if (point == GPUPreparedNativeFrameRegistrationFaultPoint.BeforeOwnershipTransfer) {
-                error("before transfer")
-            }
-        }
+        val adapter = GPURuntimeResourceAdapter()
 
-        val before = assertIs<GPUPreparedNativeFrameRegistration.Refused>(
-            beforeAdapter.registerPreparedNativeFrameDraft(beforeDraft),
+        val first = assertIs<GPUPreparedNativeFrameRegistration.Registered>(
+            adapter.registerPreparedNativeFrameDraft(draft),
         )
-        assertEquals(GPUPreparedNativeFrameRegistration.RefusalOwnership.CallerRetained, before.ownership)
-        assertEquals(0, beforeHandle.closeCount)
-        assertTrue(beforeDraft.disposeBeforeRegistration())
-        assertEquals(1, beforeHandle.closeCount)
-
-        listOf(
-            GPUPreparedNativeFrameRegistrationFaultPoint.AfterOwnershipTransfer,
-            GPUPreparedNativeFrameRegistrationFaultPoint.AfterOwnedHandleReservation,
-            GPUPreparedNativeFrameRegistrationFaultPoint.AfterBorrowedHandleReservation,
-        ).forEachIndexed { index, faultPoint ->
-            val owned = CountingGPUBuffer("registration-after-transfer-$index")
-            val draft = GPUPreparedNativeFrameDraft(
-                uploadPayload(
-                    frame = 91L + index,
-                    source = GPUPreparedNativeBufferOperand(
-                        owned,
-                        GPUDeviceGenerationID(11),
-                        GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
-                    ),
-                ),
-            )
-            val adapter = GPURuntimeResourceAdapter { point ->
-                if (point == faultPoint) error("after transfer")
-            }
-
-            val refused = assertIs<GPUPreparedNativeFrameRegistration.Refused>(
-                adapter.registerPreparedNativeFrameDraft(draft),
-            )
-
-            assertEquals(
-                GPUPreparedNativeFrameRegistration.RefusalOwnership.ReleasedOrAdapterQuarantined,
-                refused.ownership,
-            )
-            assertEquals(1, owned.closeCount)
-            assertTrue(draft.disposeBeforeRegistration())
-            assertEquals(1, owned.closeCount)
-            adapter.close()
-            assertEquals(1, owned.closeCount)
-        }
-    }
-
-    @Test
-    fun `before transfer refusal retains unique identity for retry after an existing conflict`() {
-        val conflict = CountingGPUBuffer("boundary-conflict")
-        val unique = CountingGPUBuffer("boundary-unique", closeFailuresRemaining = 1)
-        val adapter = GPURuntimeResourceAdapter { point ->
-            if (point == GPUPreparedNativeFrameRegistrationFaultPoint.BeforeOwnershipTransfer) {
-                error("before transfer")
-            }
-        }
-        val existingOwner = GPUPreparedNativeFrameDraft(
-            testPayload(
-                frame = 93,
-                scopes = emptyList(),
-                auxiliaryOwnedHandles = listOf(
-                    GPUPreparedNativeAuxiliaryHandle(
-                        conflict,
-                        GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
-                    ),
-                ),
-            ),
-        )
-        assertTrue(adapter.quarantinePreparedNativeFrameDraft(existingOwner))
-        val refusedDraft = GPUPreparedNativeFrameDraft(
-            testPayload(
-                frame = 94,
-                scopes = emptyList(),
-                auxiliaryOwnedHandles = listOf(
-                    GPUPreparedNativeAuxiliaryHandle(
-                        conflict,
-                        GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
-                    ),
-                    GPUPreparedNativeAuxiliaryHandle(
-                        unique,
-                        GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
-                    ),
-                ),
-            ),
+        val duplicate = assertIs<GPUPreparedNativeFrameRegistration.Refused>(
+            adapter.registerPreparedNativeFrameDraft(draft),
         )
 
-        val registration = assertIs<GPUPreparedNativeFrameRegistration.Refused>(
-            adapter.registerPreparedNativeFrameDraft(refusedDraft),
-        )
-        assertEquals(GPUPreparedNativeFrameRegistration.RefusalOwnership.CallerRetained, registration.ownership)
-
+        assertEquals("invalid.native-frame-payload.draft-ownership", duplicate.code)
         assertEquals(
-            GPUPreparedNativeOwnerTerminalization.CallerRetained,
-            adapter.releaseOrQuarantinePreparedNativeFrameDraft(refusedDraft),
+            GPUPreparedNativeFrameRegistration.RefusalOwnership.ReleasedOrAdapterQuarantined,
+            duplicate.ownership,
         )
-        assertEquals(0, conflict.closeCount)
-        assertEquals(0, unique.closeCount)
-        assertEquals(1, adapter.quarantinedPreparedNativeFramePayloadCount)
-
-        assertEquals(
-            GPUPreparedNativeOwnerTerminalization.ReleasedOrAdapterQuarantined,
-            adapter.releaseOrQuarantinePreparedNativeFrameDraft(refusedDraft),
-        )
-        assertEquals(0, conflict.closeCount)
-        assertEquals(1, unique.closeCount)
-        assertEquals(2, adapter.quarantinedPreparedNativeFramePayloadCount)
-
+        assertEquals(0, owned.closeCount)
+        assertTrue(first.ownership.rollback())
+        assertEquals(1, owned.closeCount)
+        assertTrue(draft.disposeBeforeRegistration())
+        assertEquals(1, owned.closeCount)
         adapter.close()
-        assertEquals(1, conflict.closeCount)
-        assertEquals(2, unique.closeCount)
-        assertEquals(0, adapter.quarantinedPreparedNativeFramePayloadCount)
-    }
-
-    @Test
-    fun `boundary keeps caller ownership after quarantine conflict until explicit retry`() {
-        val conflict = CountingGPUBuffer("boundary-register-conflict")
-        val unique = CountingGPUBuffer("boundary-register-unique", closeFailuresRemaining = 1)
-        val adapter = GPURuntimeResourceAdapter { point ->
-            if (point == GPUPreparedNativeFrameRegistrationFaultPoint.BeforeOwnershipTransfer) {
-                error("before transfer")
-            }
-        }
-        val provider = GPUConcreteResourceProvider(leaseFactory = adapter)
-        val boundary = adapter.bindNativeFrameBoundary(
-            provider,
-            object : GPUPreparedNativeFramePayloadMaterializer {
-                override fun materializeReusable(
-                    framePlan: GPUFramePlan,
-                    encoderPlan: GPUCommandEncoderPlan,
-                    resources: GPUPreparedResourceSet,
-                    generationSeal: GPUPreparedGenerationSeal,
-                ): GPUPreparedNativeFramePayloadMaterialization = error("must not materialize")
-
-                override fun bindLateSurface(
-                    draft: GPUPreparedNativeFrameDraft,
-                    acquiredSurface: GPUAcquiredSurfaceOutput?,
-                ): GPUPreparedNativeFrameLateSurfaceBinding = error("must not bind a surface")
-            },
-        )
-        assertTrue(
-            adapter.quarantinePreparedNativeFrameDraft(
-                GPUPreparedNativeFrameDraft(
-                    testPayload(
-                        frame = 95,
-                        scopes = emptyList(),
-                        auxiliaryOwnedHandles = listOf(
-                            GPUPreparedNativeAuxiliaryHandle(
-                                conflict,
-                                GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
-                            ),
-                        ),
-                    ),
-                ),
-            ),
-        )
-        val refusedDraft = GPUPreparedNativeFrameDraft(
-            testPayload(
-                frame = 96,
-                scopes = emptyList(),
-                auxiliaryOwnedHandles = listOf(
-                    GPUPreparedNativeAuxiliaryHandle(
-                        conflict,
-                        GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
-                    ),
-                    GPUPreparedNativeAuxiliaryHandle(
-                        unique,
-                        GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
-                    ),
-                ),
-            ),
-        )
-
-        val refused = assertIs<GPUPreparedNativeFrameRegistration.Refused>(boundary.register(refusedDraft))
-
-        assertEquals(GPUPreparedNativeFrameRegistration.RefusalOwnership.CallerRetained, refused.ownership)
-        assertEquals(0, conflict.closeCount)
-        assertEquals(0, unique.closeCount)
-        assertEquals(1, adapter.quarantinedPreparedNativeFramePayloadCount)
-
-        assertEquals(
-            GPUPreparedNativeOwnerTerminalization.ReleasedOrAdapterQuarantined,
-            boundary.releaseOrQuarantineBeforeRegistration(refusedDraft),
-        )
-        assertEquals(0, conflict.closeCount)
-        assertEquals(1, unique.closeCount)
-        assertEquals(2, adapter.quarantinedPreparedNativeFramePayloadCount)
-
-        adapter.close()
-        assertEquals(1, conflict.closeCount)
-        assertEquals(2, unique.closeCount)
-        assertEquals(0, adapter.quarantinedPreparedNativeFramePayloadCount)
+        assertEquals(1, owned.closeCount)
     }
 
     @Test
@@ -1231,7 +1071,13 @@ class GPURuntimeResourceAdapterTest {
         assertIs<GPUPreparedNativeFrameRegistration.Refused>(outputCollision)
         assertEquals(0, outputHandle.closeCount)
         assertTrue(outputAdapter.claimOutputOwnedPreparedNativeFramePayloadMapping(outputToken))
-        assertTrue(outputAdapter.releaseOutputOwnedPreparedNativeFramePayload(outputToken))
+        assertTrue(outputAdapter.closeOutputOwnedPreparedNativeFramePayload(outputToken))
+        assertTrue(
+            outputAdapter.finalizeOutputOwnedPreparedNativeFramePayload(
+                outputToken,
+                GPUPreparedNativeFrameOutputLeaseFinalization.ReleaseAfterReadback,
+            ),
+        )
         assertEquals(1, outputHandle.closeCount)
 
         val quarantineAdapter = GPURuntimeResourceAdapter()

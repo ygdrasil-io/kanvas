@@ -26,6 +26,7 @@ Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :
 - [Stack W4 geometry/coverage et tranche W4a ScalarAA Rect](specs/2026-09-03-w4-geometry-coverage-stack-design.md)
 - [Tranche W4b — RRect analytique normalisée](specs/2026-09-04-w4b-analytic-rrect-design.md)
 - [Tranche W4c — fills de paths par tessellation/stencil](specs/2026-09-05-w4c-path-fills-design.md)
+- [Clôture W4d–W4e — strokes, transforms/AA et clips complexes](specs/2026-09-06-w4-remaining-geometry-coverage-design.md)
 
 ### Plans
 
@@ -36,6 +37,9 @@ Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :
 - [Plan W4a — rectangles fractionnaires ScalarAA](plans/2026-09-03-w4a-scalar-aa-rect-implementation-plan.md)
 - [Plan W4b — RRect analytique normalisée](plans/2026-09-04-w4b-analytic-rrect-implementation-plan.md)
 - [Plan W4c — fills de paths hard-edge](plans/2026-09-06-w4c-path-fills-implementation-plan.md)
+- [Plan W4d.1 — strokes et hairlines hard-edge](plans/2026-09-06-w4d-strokes-hairlines-implementation-plan.md)
+- [Plan W4d.2 — transforms généraux et path AA](plans/2026-09-06-w4d-general-transform-aa-implementation-plan.md)
+- [Plan W4e — clips complexes et inverse paths](plans/2026-09-06-w4e-complex-clips-implementation-plan.md)
 
 ### État et rapports finaux
 
@@ -48,8 +52,12 @@ Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :
 - [État W03 — `gpu-plan` et première tranche compositionnelle](waves/W03-gpu-plan/status.md)
   — preuve pixel exacte publiée ; baseline globale W0–W2 préservée.
 - [État W04 — geometry/coverage](waves/W04-geometry-coverage/status.md)
-  — W4a ScalarAA Rect, W4b RRect analytique et W4c fills de paths hard-edge
-  atteintes ; gate W4 ouverte pour W4d/W4e.
+  — W4a ScalarAA Rect, W4b RRect analytique, W4c fills de paths hard-edge et
+  W4d.1 strokes/hairlines hard-edge sont atteints ; W4d.2
+  (transforms généraux/path AA) et W4e (clips complexes/inverses/booléens)
+  restent ouverts. La gate Surface filtrée W4d.1 reproduit exactement la
+  baseline historique de 45 échecs `GPUAllApiBlendSurfaceTest::DrawPoint` sur
+  2 073 tests, sans échec W4d.1 ni erreur XML.
 - [État consolidé de la topologie hybride](progress/2026-08-31-hybrid-f64-f32-path-topology/progress.md)
 - [Rapport d'implémentation de l'admission conservative](progress/2026-09-01-conservative-hybrid-topology-admission/implementation-report.md)
 - [Revue de spécification de l'admission conservative](progress/2026-09-01-conservative-hybrid-topology-admission/spec-review.md)
@@ -63,7 +71,7 @@ Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :
 | W1 | Géométrie immuable dans `:math` | Périmètre fonctionnel implémenté et prouvé ciblé pour les frontières d'enregistrement/Picture : snapshots profonds immuables d'images/effets, copie itérative résistante aux cycles avec limites reportées à `SceneCaptureLimits`, writer `Picture` v8 stable et enregistrement détaché/transactionnel des `RuntimeEffect`. Gate stricte **NON ATTEINTE / bloquée** par la validation globale fraîche de 51 échecs sur 3 585 tests, qui confirme la baseline globale ; topologie source, topologie hybride F64/F32 et admission conservative restent documentées séparément |
 | W2 | `Scene IR` et frontières de modules | Capture backend-neutral et frontières de modules implémentées ; gate stricte **NON ATTEINTE** (431/443 captures, 12 dettes), rendu public encore legacy |
 | W3 | `gpu-plan` et premier `RenderGraph` | Capability rectangles solides/clip simple/`SrcOver` branchée et prouvée par pixels exacts ; baseline globale conservée (51 échecs connus, 0 erreur) |
-| W4 | Geometry/coverage | W4a ScalarAA Rect, W4b RRect analytique et W4c fills de paths hard-edge atteintes ; W4d strokes/hairlines et W4e clips/inverse/booléens restent ouvertes, gate W4 ouvert ([status](waves/W04-geometry-coverage/status.md)) |
+| W4 | Geometry/coverage | W4a ScalarAA Rect, W4b RRect analytique, W4c fills hard-edge et W4d.1 strokes/hairlines hard-edge atteints : capability `solid-path-stroke-tessellation-stencil-hard-1x-simple-scissor-src-over-srgb-v1`, snapshots F64/F32 scellés, parcours Surface public et preuves byte-exact. Restent ouverts : `TopologyLimit` conservative F64→F32 pour auto-intersections, W4d.2 transforms généraux/path AA, W4e clips complexes/inverses/booléens et la baseline historique DrawPoint (45/2 073 dans la gate filtrée). Les tests font exception de `font`/`codec`, GM/dashboard/baseline et `jpg-color-cube` ([status](waves/W04-geometry-coverage/status.md)) |
 | W5 | Material graph | Non démarrée |
 | W6 | Layers et effets | Non démarrée |
 | W7 | Convergence GM | Non démarrée |

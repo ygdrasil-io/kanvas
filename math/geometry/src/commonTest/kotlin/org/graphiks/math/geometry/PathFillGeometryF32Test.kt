@@ -261,6 +261,34 @@ class PathFillGeometryF32Test {
     }
 
     @Test
+    fun `snapshot byte cost includes every retained numeric fill payload`() {
+        val direct = assertIs<PathFillPreparationResult.Ready>(
+            preparePathFillGeometryF32(
+                fillInput(
+                    PathFillSegmentF64.MoveTo(point(0.0, 0.0)),
+                    PathFillSegmentF64.LineTo(point(2.0, 0.0)),
+                    PathFillSegmentF64.LineTo(point(0.0, 2.0)),
+                    PathFillSegmentF64.Close,
+                ),
+            ),
+        ).geometryF32
+        val fan = assertIs<PathFillPreparationResult.Ready>(
+            preparePathFillGeometryF32(
+                fillInput(
+                    PathFillSegmentF64.MoveTo(point(0.0, 0.0)),
+                    PathFillSegmentF64.LineTo(point(2.0, 0.0)),
+                    PathFillSegmentF64.LineTo(point(2.0, 2.0)),
+                    PathFillSegmentF64.LineTo(point(0.0, 2.0)),
+                    PathFillSegmentF64.Close,
+                ),
+            ),
+        ).geometryF32
+
+        assertEquals(52L, direct.snapshotByteCostI64)
+        assertEquals(164L, fan.snapshotByteCostI64)
+    }
+
+    @Test
     fun `even odd triangle uses a stencil edge fan`() {
         val result = preparePathFillGeometryF32(
             fillInput(

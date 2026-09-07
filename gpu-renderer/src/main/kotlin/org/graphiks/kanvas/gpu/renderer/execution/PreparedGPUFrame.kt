@@ -1159,8 +1159,17 @@ class GPUFrameRollback internal constructor(
     }
 
     @Synchronized
-    internal fun releaseNativeReadbackAfterOutput(): Boolean = try {
-        nativePayloadOwnership?.releaseOutputAfterReadback() ?: true
+    internal fun closeNativeReadbackAfterOutput(): Boolean = try {
+        nativePayloadOwnership?.closeOutputAfterReadback() ?: true
+    } catch (_: Throwable) {
+        false
+    }
+
+    @Synchronized
+    internal fun finalizeNativeReadbackAfterOutput(
+        finalization: GPUPreparedNativeFrameOutputLeaseFinalization,
+    ): Boolean = try {
+        nativePayloadOwnership?.finalizeOutputAfterReadback(finalization) ?: true
     } catch (_: Throwable) {
         false
     }
@@ -1440,11 +1449,13 @@ internal class PreparedGPUFrame(
                 // path render may retain a non-writable stencil authority too.
                 val hasPathStencilLoadStore = pathUses.size == 1 &&
                     step.depthStencilLoadStore != null
-                val w4cFrame = semanticPlan.hasSealedW4cSessionMarker()
-                val w4cPacket = step.drawPackets.singleOrNull()
-                val w4cAuthority = w4cPacket?.corePrimitivePreparedAuthority
-                    ?.w4cSessionScratch
-                val expectedW4cPathLoadStore = when (w4cPacket?.role) {
+                val plannedPathFrame = semanticPlan.hasSealedW4cSessionMarker() ||
+                    semanticPlan.hasSealedW4dSessionMarker()
+                val plannedPathPacket = step.drawPackets.singleOrNull()
+                val plannedPathAuthority = plannedPathPacket?.corePrimitivePreparedAuthority
+                val hasPlannedPathAuthority = plannedPathAuthority?.w4cSessionScratch != null ||
+                    plannedPathAuthority?.w4dSessionScratch != null
+                val expectedPlannedPathLoadStore = when (plannedPathPacket?.role) {
                     org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.PathStencilProducer ->
                         org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan
                             .WritableStencil(
@@ -1465,25 +1476,25 @@ internal class PreparedGPUFrame(
                     step.depthStencilLoadStore as?
                         org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan
                             .WritableStencil
-                if (w4cFrame) {
-                    require(w4cPacket != null && w4cAuthority != null) {
-                        "Prepared W4c frames require one planned W4c packet authority per render scope"
+                if (plannedPathFrame) {
+                    require(plannedPathPacket != null && hasPlannedPathAuthority) {
+                        "Prepared planned-path frames require one matching packet authority per render scope"
                     }
                     if (pathSealed) {
                         require(
-                            expectedW4cPathLoadStore != null &&
-                                step.depthStencilLoadStore == expectedW4cPathLoadStore &&
+                            expectedPlannedPathLoadStore != null &&
+                                step.depthStencilLoadStore == expectedPlannedPathLoadStore &&
                                 pathUses.singleOrNull()?.write == true,
                         ) {
-                            "Prepared W4c path scopes require their exact producer or writable-load cover authority"
+                            "Prepared planned-path scopes require their exact producer or writable-load cover authority"
                         }
                     } else {
                         require(
-                            w4cPacket.role ==
+                            plannedPathPacket.role ==
                                 org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.Shading &&
                                 step.depthStencilLoadStore == null && pathUses.isEmpty(),
                         ) {
-                            "Prepared W4c direct scopes must remain color-only planned shading packets"
+                            "Prepared planned-path direct scopes must remain color-only shading packets"
                         }
                     }
                 } else if (
@@ -1491,7 +1502,7 @@ internal class PreparedGPUFrame(
                     org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Load
                 ) {
                     require(false) {
-                        "WritableStencil(Load, Store, null) is reserved for planned W4c path covers"
+                        "WritableStencil(Load, Store, null) is reserved for planned path covers"
                     }
                 }
                 val depthStencilKeys = scope.nativeOperandKeys.filter {

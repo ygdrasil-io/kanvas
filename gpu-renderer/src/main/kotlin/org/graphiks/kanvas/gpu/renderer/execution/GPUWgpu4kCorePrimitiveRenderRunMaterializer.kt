@@ -52,8 +52,8 @@ internal sealed interface GPUCorePrimitiveRenderRunMaterialization {
     }
 }
 
-/** One sealed W4c draw range passed from the frame materializer without geometry recomposition. */
-internal data class GPUW4cCorePrimitiveGeometrySlice(
+/** One sealed planned-path draw range passed without geometry recomposition. */
+internal data class GPUPlannedPathCorePrimitiveGeometrySlice(
     val firstIndex: Int,
     val indexCount: Int,
     val baseVertex: Int,
@@ -66,14 +66,14 @@ internal data class GPUW4cCorePrimitiveGeometrySlice(
     }
 }
 
-/** Exact W4c scope evidence consumed by the dedicated native render-run emitter. */
-internal class GPUW4cCorePrimitiveRenderScopePlan(
+/** Exact W4c/W4d scope evidence consumed by the dedicated native render-run emitter. */
+internal class GPUPlannedPathCorePrimitiveRenderScopePlan(
     val sourceStepIndex: Int,
     val role: GPUDrawPacketRole,
     val renderStep: GPUFrameStep.RenderPassStep,
     val semantic: GPUDrawSemanticPayload.CorePrimitive,
     val uniformOffset: Long,
-    val geometry: GPUW4cCorePrimitiveGeometrySlice,
+    val geometry: GPUPlannedPathCorePrimitiveGeometrySlice,
     val pipeline: GPUPreparedNativeRenderPipelineOperand,
     val bindGroup: GPUPreparedNativeBindGroupOperand,
 ) {
@@ -84,11 +84,11 @@ internal class GPUW4cCorePrimitiveRenderScopePlan(
     }
 }
 
-internal sealed interface GPUW4cCorePrimitiveRenderRunMaterialization {
+internal sealed interface GPUPlannedPathCorePrimitiveRenderRunMaterialization {
     class Ready(
         renderOperands: List<GPUPreparedNativeScopeOperand.Render>,
         pathDepthStencilViewAuthority: Map<Int, GPUTextureView>,
-    ) : GPUW4cCorePrimitiveRenderRunMaterialization {
+    ) : GPUPlannedPathCorePrimitiveRenderRunMaterialization {
         val renderOperands: List<GPUPreparedNativeScopeOperand.Render> = immutableList(renderOperands)
         val pathDepthStencilViewAuthority: Map<Int, GPUTextureView> =
             Collections.unmodifiableMap(pathDepthStencilViewAuthority.toMap())
@@ -102,7 +102,7 @@ internal sealed interface GPUW4cCorePrimitiveRenderRunMaterialization {
     }
 
     data class Refused(val code: String, val message: String) :
-        GPUW4cCorePrimitiveRenderRunMaterialization {
+        GPUPlannedPathCorePrimitiveRenderRunMaterialization {
         init {
             require(code.isNotBlank() && message.isNotBlank())
         }
@@ -120,27 +120,30 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
     private val limits: GPULimits,
 ) : AutoCloseable {
     /**
-     * Emits the closed Task5 W4c direct/producer/cover stream.  This intentionally accepts
+     * Emits a closed W4c/W4d direct/producer/cover stream. This intentionally accepts
      * already sealed math slices and never calls the generic geometry batching route.
      */
-    fun materializeW4cAcceptedRuns(
-        plans: List<GPUW4cCorePrimitiveRenderScopePlan>,
+    fun materializePlannedPathAcceptedRuns(
+        plans: List<GPUPlannedPathCorePrimitiveRenderScopePlan>,
+        lane: GPUPlannedPathSessionScratch.Lane,
         target: GPUPreparedNativeTextureViewOperand,
         pathDepthStencil: GPUPreparedNativeTextureViewOperand?,
         vertex: GPUPreparedNativeBufferOperand,
         index: GPUPreparedNativeBufferOperand,
         vertexUsefulBytes: Long,
         indexUsefulBytes: Long,
-    ): GPUW4cCorePrimitiveRenderRunMaterialization {
+    ): GPUPlannedPathCorePrimitiveRenderRunMaterialization {
+        val laneLabel = lane.label
+        val laneName = laneLabel.replaceFirstChar(Char::uppercaseChar)
         if (plans.isEmpty() || vertexUsefulBytes <= 0L || indexUsefulBytes <= 0L ||
-            plans.map(GPUW4cCorePrimitiveRenderScopePlan::sourceStepIndex) !=
-            plans.map(GPUW4cCorePrimitiveRenderScopePlan::sourceStepIndex).sorted() ||
-            plans.map(GPUW4cCorePrimitiveRenderScopePlan::sourceStepIndex).distinct().size !=
+            plans.map(GPUPlannedPathCorePrimitiveRenderScopePlan::sourceStepIndex) !=
+            plans.map(GPUPlannedPathCorePrimitiveRenderScopePlan::sourceStepIndex).sorted() ||
+            plans.map(GPUPlannedPathCorePrimitiveRenderScopePlan::sourceStepIndex).distinct().size !=
             plans.size
         ) {
-            return w4cRefused(
-                "invalid.native-core-primitive.w4c-render-run",
-                "W4c render runs require one non-empty strictly ordered sealed scope stream.",
+            return plannedPathRefused(
+                "invalid.native-core-primitive.$laneLabel-render-run",
+                "$laneName render runs require one non-empty strictly ordered sealed scope stream.",
             )
         }
         val pathPlans = plans.filter { plan ->
@@ -158,9 +161,9 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                     pair[1].renderStep.drawPackets.single().commandIdValue
             }
         ) {
-            return w4cRefused(
-                "invalid.native-core-primitive.w4c-render-run",
-                "W4c path producer and cover scopes require one adjacent shared D24S8 run.",
+            return plannedPathRefused(
+                "invalid.native-core-primitive.$laneLabel-render-run",
+                "$laneName path producer and cover scopes require one adjacent shared D24S8 run.",
             )
         }
         val pathViewAuthority = linkedMapOf<Int, GPUTextureView>()
@@ -182,9 +185,9 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                     null,
                 )
                 GPUDrawPacketRole.Shading -> null
-                else -> return w4cRefused(
-                    "invalid.native-core-primitive.w4c-render-run",
-                    "W4c permits only direct shading, path producer, and path cover packets.",
+                else -> return plannedPathRefused(
+                    "invalid.native-core-primitive.$laneLabel-render-run",
+                    "$laneName permits only direct shading, path producer, and path cover packets.",
                 )
             }
             val pathUse = plan.renderStep.resourceUses.singleOrNull { use ->
@@ -202,15 +205,15 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                     plan.renderStep.depthStencilLoadStore != null || pathUse != null
                 }
             ) {
-                return w4cRefused(
-                    "invalid.native-core-primitive.w4c-render-run",
-                    "W4c render scopes contradict their sealed load/store, resource, or binding authority.",
+                return plannedPathRefused(
+                    "invalid.native-core-primitive.$laneLabel-render-run",
+                    "$laneName render scopes contradict their sealed load/store, resource, or binding authority.",
                 )
             }
             val colorLoad = when (plan.renderStep.loadStore.loadOp) {
                 "clear" -> GPUPreparedNativeLoadOperation.Clear
                 "load" -> GPUPreparedNativeLoadOperation.Load
-                else -> error("W4c load operation was checked before native emission")
+                else -> error("$laneName load operation was checked before native emission")
             }
             val stencil = when (plan.role) {
                 GPUDrawPacketRole.PathStencilProducer -> GPUPreparedNativeLoadOperation.Clear to 0u
@@ -274,7 +277,7 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                 semanticPayloads = listOf(plan.semantic),
             )
         }
-        return GPUW4cCorePrimitiveRenderRunMaterialization.Ready(operands, pathViewAuthority)
+        return GPUPlannedPathCorePrimitiveRenderRunMaterialization.Ready(operands, pathViewAuthority)
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -1187,10 +1190,10 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
         message: String,
     ) = GPUCorePrimitiveRenderRunMaterialization.Refused(code, message)
 
-    private fun w4cRefused(
+    private fun plannedPathRefused(
         code: String,
         message: String,
-    ) = GPUW4cCorePrimitiveRenderRunMaterialization.Refused(code, message)
+    ) = GPUPlannedPathCorePrimitiveRenderRunMaterialization.Refused(code, message)
 
     override fun close() = Unit
 }
