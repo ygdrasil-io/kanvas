@@ -2,10 +2,7 @@ package org.graphiks.math.matrix
 
 import kotlin.math.abs
 import org.graphiks.math.geometry.PathF32
-import org.graphiks.math.geometry.PathFillInputF64
 import org.graphiks.math.geometry.PathStrokeDrawMode
-import org.graphiks.math.geometry.PathStrokeGeometryF32
-import org.graphiks.math.geometry.PathStrokeInvalidSceneReason
 import org.graphiks.math.geometry.PathStrokeOutlineIntervalF64
 import org.graphiks.math.geometry.PathStrokePolicyF64
 import org.graphiks.math.geometry.PathStrokePreparationResult
@@ -15,7 +12,6 @@ import org.graphiks.math.geometry.PathStrokeProjectionPointResultF64
 import org.graphiks.math.geometry.PathStrokeStyleF64
 import org.graphiks.math.geometry.PathStrokeWorkUsageI64
 import org.graphiks.math.geometry.Point2F64
-import org.graphiks.math.geometry.prepareProjectedPathStrokeGeometryF32
 
 /**
  * Finite affine projection for the axis-aligned W4d transform lane.
@@ -77,48 +73,20 @@ public class AxisAlignedPathStrokeProjectionF64 private constructor(
     }
 }
 
-/** Prepares a W4d device-space stroke or `StrokeAndFill` union for axis-aligned affine matrices. */
+/** Widens the matrix before dispatching shared transformed stroke preparation. */
 public fun Matrix3x3F32.preparePathStrokeGeometryF32(
     path: PathF32,
     styleF64: PathStrokeStyleF64,
     mode: PathStrokeDrawMode,
     policyF64: PathStrokePolicyF64 = PathStrokePolicyF64(),
     frameWorkUsageBeforeI64: PathStrokeWorkUsageI64 = PathStrokeWorkUsageI64(),
-): PathStrokePreparationResult {
-    val matrixF64 = try {
-        toMatrix3x3F64().also { require(it.isFinite()) }
-    } catch (_: IllegalArgumentException) {
-        return PathStrokePreparationResult.InvalidScene(PathStrokeInvalidSceneReason.NonFiniteInput)
-    }
-    if (matrixF64.classifyPathTransform() == PathTransformClass.Perspective) {
-        return PathStrokePreparationResult.InvalidScene(PathStrokeInvalidSceneReason.InvalidStyle)
-    }
-    val projectionF64 = when (matrixF64.classifyPathTransform()) {
-        PathTransformClass.Identity,
-        PathTransformClass.AxisAlignedAffine -> AxisAlignedPathStrokeProjectionF64.of(this)
-
-        PathTransformClass.GeneralAffine -> matrixF64.toAffinePathStrokeProjectionF64()
-        PathTransformClass.Perspective -> error("perspective was rejected above")
-    }
-    val deviceFillSegmentMapperF64 = if (mode == PathStrokeDrawMode.StrokeAndFill) {
-        try {
-            pathStrokeDeviceFillSegmentMapperF64()
-        } catch (_: IllegalArgumentException) {
-            return PathStrokePreparationResult.InvalidScene(PathStrokeInvalidSceneReason.NonFiniteInput)
-        }
-    } else {
-        null
-    }
-    return prepareProjectedPathStrokeGeometryF32(
-        inputF64 = PathFillInputF64.fromPathF32(path),
-        styleF64 = styleF64,
-        mode = mode,
-        projectionF64 = projectionF64,
-        policyF64 = policyF64,
-        frameWorkUsageBeforeI64 = frameWorkUsageBeforeI64,
-        deviceFillSegmentMapperF64 = deviceFillSegmentMapperF64,
-    )
-}
+): PathStrokePreparationResult = toMatrix3x3F64().preparePathStrokeGeometryF32(
+    path = path,
+    styleF64 = styleF64,
+    mode = mode,
+    policyF64 = policyF64,
+    frameWorkUsageBeforeI64 = frameWorkUsageBeforeI64,
+)
 
 private data class AxisAlignedMatrixCoefficientsF64(
     val sxF64: Double,

@@ -99,9 +99,9 @@ private fun RectF32.copyStrokeSnapshotF32(): RectF32 = RectF32(left, top, right,
 /**
  * Runs the source dash/outline pipeline and finalizes either the device stroke or one
  * topological `StrokeAndFill` union through the shared fill worker. `StrokeAndFill` callers
- * supply a device-fill segment mapper so its matrix owner can preserve arc metadata; geometry
- * invokes it once per charged source command. This affine contract must not be
- * reused for future projective curve mapping.
+ * supply either a device-fill segment mapper, which geometry charges before every affine mapping,
+ * or an already-certified device fill snapshot carrying [pathWorkUsageBeforeI64]. The latter
+ * allows matrix-owned projective preparation to retain its transactional work ledger.
  */
 public fun prepareProjectedPathStrokeGeometryF32(
     inputF64: PathFillInputF64,
@@ -109,10 +109,15 @@ public fun prepareProjectedPathStrokeGeometryF32(
     mode: PathStrokeDrawMode,
     projectionF64: PathStrokeProjectionF64,
     policyF64: PathStrokePolicyF64 = PathStrokePolicyF64(),
+    pathWorkUsageBeforeI64: PathStrokeWorkUsageI64 = PathStrokeWorkUsageI64(),
     frameWorkUsageBeforeI64: PathStrokeWorkUsageI64 = PathStrokeWorkUsageI64(),
     deviceFillSegmentMapperF64: PathStrokeDeviceFillSegmentMapperF64? = null,
+    deviceFillInputF64: PathFillInputF64? = null,
 ): PathStrokePreparationResult {
-    if (mode == PathStrokeDrawMode.StrokeAndFill && deviceFillSegmentMapperF64 == null) {
+    if (
+        mode == PathStrokeDrawMode.StrokeAndFill &&
+        (deviceFillSegmentMapperF64 == null) == (deviceFillInputF64 == null)
+    ) {
         return PathStrokePreparationResult.InvalidScene(PathStrokeInvalidSceneReason.InvalidStyle)
     }
     if (mode == PathStrokeDrawMode.StrokeAndFill && inputF64.fillRule.isInverse()) {
@@ -121,10 +126,13 @@ public fun prepareProjectedPathStrokeGeometryF32(
     if (!inputF64.all(::isFiniteStrokePipelineInputSegmentF64)) {
         return PathStrokePreparationResult.InvalidScene(PathStrokeInvalidSceneReason.NonFiniteInput)
     }
+    if (deviceFillInputF64 != null && !deviceFillInputF64.all(::isFiniteStrokePipelineInputSegmentF64)) {
+        return PathStrokePreparationResult.InvalidScene(PathStrokeInvalidSceneReason.NonFiniteInput)
+    }
 
     return try {
         val ledgerI64 = PathStrokeWorkLedgerI64(
-            pathWorkUsageBeforeI64 = PathStrokeWorkUsageI64(),
+            pathWorkUsageBeforeI64 = pathWorkUsageBeforeI64,
             frameWorkUsageBeforeI64 = frameWorkUsageBeforeI64,
             limitsI32 = policyF64.limitsI32,
             limitsI64 = policyF64.limitsI64,
@@ -133,6 +141,12 @@ public fun prepareProjectedPathStrokeGeometryF32(
         var materializedDeviceFillInputF64: PathFillInputF64? = null
         fun materializeDeviceFillInputF64(): PathFillInputF64 {
             if (didMaterializeDeviceFillInputF64) return requireNotNull(materializedDeviceFillInputF64)
+
+            if (deviceFillInputF64 != null) {
+                materializedDeviceFillInputF64 = deviceFillInputF64
+                didMaterializeDeviceFillInputF64 = true
+                return deviceFillInputF64
+            }
 
             val mappedSegmentsF64 = mutableListOf<PathFillSegmentF64>()
             val mapperF64 = requireNotNull(deviceFillSegmentMapperF64)
