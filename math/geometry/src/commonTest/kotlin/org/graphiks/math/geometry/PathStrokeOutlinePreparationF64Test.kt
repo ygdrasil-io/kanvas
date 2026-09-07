@@ -109,6 +109,23 @@ class PathStrokeOutlinePreparationF64Test {
     }
 
     @Test
+    fun `ordinary obtuse joins retain their Miter Round and Bevel geometry`() {
+        val centerlineF64 = centerline(
+            PathFillSegmentF64.MoveTo(Point2F64(0.0, 0.0)),
+            PathFillSegmentF64.LineTo(Point2F64(10.0, 0.0)),
+            PathFillSegmentF64.LineTo(Point2F64(5.0, 8.660254037844386)),
+        )
+
+        val miterF64 = finiteOutline(centerlineF64, finiteStyle(join = PathStrokeJoin.Miter))
+        val roundF64 = finiteOutline(centerlineF64, finiteStyle(join = PathStrokeJoin.Round))
+        val bevelF64 = finiteOutline(centerlineF64, finiteStyle(join = PathStrokeJoin.Bevel))
+
+        assertTrue(boundaryPoints(miterF64).any { pointF64 -> pointF64.near(13.464101615137755, -2.0) })
+        assertTrue(boundaryPoints(roundF64).any { pointF64 -> pointF64.near(11.732050807568877, -1.0) })
+        assertTrue(boundaryPoints(bevelF64).any { pointF64 -> pointF64.near(10.86602540378444, -0.5) })
+    }
+
+    @Test
     fun `closed contour has no cap-dependent geometry`() {
         val buttBoundsF64 = boundsOf(
             finiteOutline(closedSquareCenterline(), finiteStyle(cap = PathStrokeCap.Butt)),
@@ -211,6 +228,33 @@ class PathStrokeOutlinePreparationF64Test {
     }
 
     @Test
+    fun `hairline certified subdivision tightens source sagitta for each child interval`() {
+        val result = prepareProjectedHairlineOutlineF64(
+            centerline(
+                PathFillSegmentF64.MoveTo(Point2F64(0.0, 0.0)),
+                PathFillSegmentF64.QuadTo(Point2F64(0.0, 1.0), Point2F64(1.0, 0.0)),
+            ),
+            hairlineStyle(),
+            object : PathStrokeProjectionF64 {
+                override fun projectPointF64(pointF64: Point2F64): PathStrokeProjectionPointResultF64 =
+                    PathStrokeProjectionPointResultF64.Ready(pointF64)
+
+                override fun certifyOutlineIntervalF64(
+                    intervalF64: PathStrokeOutlineIntervalF64,
+                ): PathStrokeProjectionIntervalResultF64 = PathStrokeProjectionIntervalResultF64.Bounded(
+                    intervalF64.sourceSagittaUpperBoundF64 * 0.5,
+                )
+            },
+            PathStrokePolicyF64(
+                maximumSagittaErrorF64 = 0.25,
+                limitsI32 = PathStrokeLimitsI32(maxSubdivisionDepthI32 = 3),
+            ),
+        )
+
+        assertAllPointsFinite(assertIs<PathStrokeOutlinePreparationResult.Ready>(result).outlineF64)
+    }
+
+    @Test
     fun `published hairline remains finite after its projection becomes non-finite`() {
         var projectionIsFinite = true
         val projectionF64 = object : PathStrokeProjectionF64 {
@@ -232,6 +276,34 @@ class PathStrokeOutlinePreparationF64Test {
         projectionIsFinite = false
 
         assertAllPointsFinite(outlineF64)
+    }
+
+    @Test
+    fun `hairline drops a fully degenerate contour without losing a later contour`() {
+        val result = assertIs<PathStrokeOutlinePreparationResult.Ready>(
+            prepareProjectedHairlineOutlineF64(
+                centerline(
+                    PathFillSegmentF64.MoveTo(Point2F64(0.0, 0.0)),
+                    PathFillSegmentF64.LineTo(Point2F64(10.0, 0.0)),
+                    PathFillSegmentF64.MoveTo(Point2F64(100.0, 0.0)),
+                    PathFillSegmentF64.LineTo(Point2F64(110.0, 0.0)),
+                ),
+                hairlineStyle(),
+                object : PathStrokeProjectionF64 {
+                    override fun projectPointF64(pointF64: Point2F64): PathStrokeProjectionPointResultF64 =
+                        PathStrokeProjectionPointResultF64.Ready(
+                            if (pointF64.x < 50.0) Point2F64.Origin else pointF64,
+                        )
+
+                    override fun certifyOutlineIntervalF64(
+                        intervalF64: PathStrokeOutlineIntervalF64,
+                    ): PathStrokeProjectionIntervalResultF64 = PathStrokeProjectionIntervalResultF64.Bounded(0.0)
+                },
+            ),
+        )
+
+        assertEquals(1, result.outlineF64.contourCountI32)
+        assertBoundsEquals(100.0, -0.5, 110.0, 0.5, boundsOf(result.outlineF64))
     }
 
     @Test
