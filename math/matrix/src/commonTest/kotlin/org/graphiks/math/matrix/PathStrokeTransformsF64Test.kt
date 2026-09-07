@@ -82,6 +82,33 @@ class PathStrokeTransformsF64Test {
     }
 
     @Test
+    fun `tiny finite endpoint tangent retains its analytic normal side`() {
+        val geometry = assertReady(
+            Matrix3x3F32.Identity.preparePathStrokeGeometryF32(
+                PathBuilder().moveTo(0f, 0f).quadTo(0.0000000002f, 0f, 0.0000000002f, 0f).build(),
+                finiteStyle(2.0),
+                PathStrokeDrawMode.Stroke,
+            ),
+        )
+        val fan = assertIs<org.graphiks.math.geometry.PathStencilEdgeFanF32>(
+            geometry.copyFillGeometryF32().copyStencilEdgeFanF32OrNull(),
+        )
+        val vertices = fan.copyVerticesF32()
+
+        assertTrue(vertices.all(Float::isFinite), "finite source derivatives must publish finite device geometry")
+        assertTrue(
+            vertices.indices.step(6).none { offsetI32 ->
+                val startX = vertices[offsetI32 + 2]
+                val startY = vertices[offsetI32 + 3]
+                val endX = vertices[offsetI32 + 4]
+                val endY = vertices[offsetI32 + 5]
+                startX != endX && startY * endY < 0f
+            },
+            "finite offset must not join opposite normal sides diagonally",
+        )
+    }
+
+    @Test
     fun `finite cubic cusp pieces with endpoint tangent zeros converge`() {
         val result = Matrix3x3F32.Identity.preparePathStrokeGeometryF32(
             PathBuilder().moveTo(-1f, 0f).cubicTo(1f, 0f, -1f, 0f, 1f, 0f).build(),

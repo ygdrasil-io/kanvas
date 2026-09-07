@@ -1290,7 +1290,7 @@ private fun splitParametersF64(
         .filter { parameterF64 -> parameterF64.isFinite() && parameterF64 >= startParameterF64 && parameterF64 <= endParameterF64 }
         .sorted()
         .fold(mutableListOf<Double>()) { valuesF64, parameterF64 ->
-            if (valuesF64.isEmpty() || abs(valuesF64.last() - parameterF64) > strokeOutlineEpsilonF64) valuesF64 += parameterF64
+            if (valuesF64.isEmpty() || valuesF64.last() != parameterF64) valuesF64 += parameterF64
             valuesF64
         }
 }
@@ -1325,19 +1325,65 @@ private fun commonCuspCandidatesF64(
     candidatesF64: List<Double>,
     primitiveF64: PathStrokePrimitiveF64,
 ): List<Double> = candidatesF64.filter { parameterF64 ->
-    parameterF64 > strokeOutlineEpsilonF64 && parameterF64 < 1.0 - strokeOutlineEpsilonF64 &&
-        primitiveF64.derivativeAtF64(parameterF64).length() <= 1e-7
+    parameterF64 > 0.0 && parameterF64 < 1.0 &&
+        cuspCandidateHasZeroDerivativeF64(primitiveF64, parameterF64)
 }
 
+/**
+ * Root formulae normally leave a small relative residual in the other coordinate, even for a
+ * mathematical cusp.  Compare that residual to this primitive's derivative scale so tiny paths
+ * retain the same decision as large ones without treating a finite tangent as zero.
+ */
+private fun cuspCandidateHasZeroDerivativeF64(
+    primitiveF64: PathStrokePrimitiveF64,
+    parameterF64: Double,
+): Boolean {
+    val derivativeF64 = primitiveF64.derivativeAtF64(parameterF64)
+    if (!derivativeF64.isFinite()) return false
+    val scaleF64 = derivativeControlScaleF64(primitiveF64)
+    if (!scaleF64.isFinite()) return false
+    if (scaleF64 == 0.0) return isExactlyZeroVectorF64(derivativeF64)
+    val scaledX = derivativeF64.x / scaleF64
+    val scaledY = derivativeF64.y / scaleF64
+    return sqrt(scaledX * scaledX + scaledY * scaledY) <= cuspRootRelativeResidualF64
+}
+
+private fun derivativeControlScaleF64(primitiveF64: PathStrokePrimitiveF64): Double = when (primitiveF64) {
+    is PathStrokeQuadPrimitiveF64 -> max(
+        vectorComponentScaleF64((primitiveF64.controlF64 - primitiveF64.startF64) * 2.0),
+        vectorComponentScaleF64((primitiveF64.endF64 - primitiveF64.controlF64) * 2.0),
+    )
+
+    is PathStrokeCubicPrimitiveF64 -> max(
+        vectorComponentScaleF64((primitiveF64.control1F64 - primitiveF64.startF64) * 3.0),
+        max(
+            vectorComponentScaleF64((primitiveF64.control2F64 - primitiveF64.control1F64) * 3.0),
+            vectorComponentScaleF64((primitiveF64.endF64 - primitiveF64.control2F64) * 3.0),
+        ),
+    )
+
+    else -> vectorComponentScaleF64(primitiveF64.derivativeAtF64(0.0))
+}
+
+private fun vectorComponentScaleF64(vectorF64: Vector2F64): Double = max(abs(vectorF64.x), abs(vectorF64.y))
+
 private fun linearRootF64(aF64: Double, bF64: Double): Double? =
-    if (abs(aF64) <= strokeOutlineEpsilonF64) null else -bF64 / aF64
+    if (!aF64.isFinite() || !bF64.isFinite() || aF64 == 0.0) null else -bF64 / aF64
 
 private fun quadraticRootsF64(aF64: Double, bF64: Double, cF64: Double): List<Double> {
-    if (abs(aF64) <= strokeOutlineEpsilonF64) return listOfNotNull(linearRootF64(bF64, cF64))
-    val discriminantF64 = bF64 * bF64 - 4.0 * aF64 * cF64
+    val coefficientScaleF64 = max(abs(aF64), max(abs(bF64), abs(cF64)))
+    if (!coefficientScaleF64.isFinite() || coefficientScaleF64 == 0.0) return emptyList()
+    val scaledAF64 = aF64 / coefficientScaleF64
+    val scaledBF64 = bF64 / coefficientScaleF64
+    val scaledCF64 = cF64 / coefficientScaleF64
+    if (scaledAF64 == 0.0) return listOfNotNull(linearRootF64(scaledBF64, scaledCF64))
+    val discriminantF64 = scaledBF64 * scaledBF64 - 4.0 * scaledAF64 * scaledCF64
     if (!discriminantF64.isFinite() || discriminantF64 < 0.0) return emptyList()
     val rootF64 = sqrt(max(0.0, discriminantF64))
-    return listOf((-bF64 - rootF64) / (2.0 * aF64), (-bF64 + rootF64) / (2.0 * aF64))
+    return listOf(
+        (-scaledBF64 - rootF64) / (2.0 * scaledAF64),
+        (-scaledBF64 + rootF64) / (2.0 * scaledAF64),
+    )
 }
 
 private fun oneSidedTangentF64(
@@ -1348,7 +1394,7 @@ private fun oneSidedTangentF64(
 ): Vector2F64? {
     val parameterF64 = if (forward) startParameterF64 else endParameterF64
     val directF64 = primitiveF64.derivativeAtF64(parameterF64)
-    if (isUsableTangentF64(directF64)) return directF64.normalized()
+    normalizedStrokeTangentF64(directF64)?.let { tangentF64 -> return tangentF64 }
     val widthF64 = endParameterF64 - startParameterF64
     val sampleF64 = if (forward) {
         min(endParameterF64, startParameterF64 + max(widthF64 * 1e-5, 1e-8))
@@ -1356,20 +1402,30 @@ private fun oneSidedTangentF64(
         max(startParameterF64, endParameterF64 - max(widthF64 * 1e-5, 1e-8))
     }
     val sampledF64 = primitiveF64.derivativeAtF64(sampleF64)
-    if (isUsableTangentF64(sampledF64)) return sampledF64.normalized()
+    normalizedStrokeTangentF64(sampledF64)?.let { tangentF64 -> return tangentF64 }
     val firstPointF64 = finiteSourcePointF64(primitiveF64, startParameterF64)
     val secondPointF64 = finiteSourcePointF64(primitiveF64, endParameterF64)
-    val chordF64 = if (forward) secondPointF64 - firstPointF64 else firstPointF64 - secondPointF64
-    return chordF64.takeIf(::isUsableTangentF64)?.normalized()
+    return normalizedStrokeTangentF64(secondPointF64 - firstPointF64)
 }
 
 private fun isUsableTangentF64(tangentF64: Vector2F64): Boolean =
-    tangentF64.isFinite() && tangentF64.length() > strokeOutlineEpsilonF64
+    normalizedStrokeTangentF64(tangentF64) != null
 
 private fun leftNormalF64(tangentF64: Vector2F64): Vector2F64 {
-    val unitF64 = tangentF64.normalized()
-    if (!isUsableTangentF64(unitF64)) throw PathStrokeOutlineInvalidAbort()
+    val unitF64 = normalizedStrokeTangentF64(tangentF64) ?: throw PathStrokeOutlineInvalidAbort()
     return Vector2F64(-unitF64.y, unitF64.x)
+}
+
+/** Normalizes every finite non-zero tangent in its own scale, including subnormal derivatives. */
+private fun normalizedStrokeTangentF64(tangentF64: Vector2F64): Vector2F64? {
+    if (!tangentF64.isFinite()) return null
+    val scaleF64 = max(abs(tangentF64.x), abs(tangentF64.y))
+    if (scaleF64 == 0.0) return null
+    val scaledX = tangentF64.x / scaleF64
+    val scaledY = tangentF64.y / scaleF64
+    val scaledLengthF64 = sqrt(scaledX * scaledX + scaledY * scaledY)
+    if (!scaledLengthF64.isFinite() || scaledLengthF64 == 0.0) return null
+    return Vector2F64(scaledX / scaledLengthF64, scaledY / scaledLengthF64)
 }
 
 private fun finiteSourcePointF64(primitiveF64: PathStrokePrimitiveF64, parameterF64: Double): Point2F64 {
@@ -1486,3 +1542,4 @@ private fun interpolatedOutlineCoordinateF64(firstF64: Double, secondF64: Double
     }
 
 private const val strokeOutlineEpsilonF64: Double = 1e-10
+private const val cuspRootRelativeResidualF64: Double = 1e-12
