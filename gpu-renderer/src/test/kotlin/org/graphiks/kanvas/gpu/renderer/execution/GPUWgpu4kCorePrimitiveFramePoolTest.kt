@@ -22,6 +22,67 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity
 
 class GPUWgpu4kCorePrimitiveFramePoolTest {
     @Test
+    fun `W4d direct and stencil reservations retain their exact sealed pool requirements`() {
+        fun scratch(frame: org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan) = requireNotNull(
+            frame.steps.filterIsInstance<org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep>()
+                .first().drawPackets.single().corePrimitivePreparedAuthority?.w4dSessionScratch,
+        )
+
+        val direct = scratch(W4dExecutionFixture.directOnlyFramePlan())
+        val mixed = scratch(W4dExecutionFixture.framePlan())
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, FakeFactory())
+        val directCapacities = GPUWgpu4kCorePrimitiveFramePoolCapacities(
+            direct.vertexCapacityBytes,
+            direct.indexCapacityBytes,
+            direct.uniformCapacityBytes,
+        )
+        val directLease = pool.acquire(
+            requirements(
+                vertexBytes = direct.vertexUsefulBytes,
+                indexBytes = direct.indexUsefulBytes,
+                uniformBytes = direct.uniformPlan.totalBytes,
+                expectedCapacities = directCapacities,
+            ),
+        ).acquiredLease()
+        assertEquals(directCapacities, directLease.capacities)
+        assertEquals(null, directLease.handles.pathDepthStencil)
+        directLease.rollbackBeforeSubmit()
+
+        val mixedCapacities = GPUWgpu4kCorePrimitiveFramePoolCapacities(
+            mixed.vertexCapacityBytes,
+            mixed.indexCapacityBytes,
+            mixed.uniformCapacityBytes,
+        )
+        val depthStencil = GPUWgpu4kCorePrimitivePathDepthStencilRequirement(
+            width = mixed.targetBounds.width,
+            height = mixed.targetBounds.height,
+            format = GPUTextureFormat.Depth24PlusStencil8,
+            sampleCount = 1,
+            usage = GPUTextureUsage.RenderAttachment,
+            target = mixed.target,
+            depthStencilAttachment = GPUTargetIdentity(
+                mixed.target.value.removeSuffix(".target").plus(".depth-stencil"),
+            ),
+            deviceGeneration = GENERATION,
+            targetGeneration = 1L,
+        )
+        val mixedLease = pool.acquire(
+            requirements(
+                vertexBytes = mixed.vertexUsefulBytes,
+                indexBytes = mixed.indexUsefulBytes,
+                uniformBytes = mixed.uniformPlan.totalBytes,
+                expectedCapacities = mixedCapacities,
+                pathDepthStencil = depthStencil,
+            ),
+        ).acquiredLease()
+        assertEquals(mixedCapacities, mixedLease.capacities)
+        assertEquals(depthStencil, requireNotNull(mixedLease.handles.pathDepthStencil).requirement)
+
+        mixedLease.rollbackBeforeSubmit()
+        pool.close()
+    }
+
+    @Test
     fun `exact capacity reservation materializes W4a rounded capacities without reusing larger slot`() {
         val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, FakeFactory())
         val larger = pool.acquire(
