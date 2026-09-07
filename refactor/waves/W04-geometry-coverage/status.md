@@ -1,11 +1,11 @@
-# État W04 — geometry/coverage
+# État W04 — geometry/coverage — W4d.1
 
-Révision de code W4c vérifiée : `546a0500f048e7b28c3f3303b55990b17245505b`
-(`fix(math): preserve anisotropic rotated arc geometry`), empilée sur W4b. Les
-vérifications fraîches ci-dessous ont été exécutées le 2026-09-06 ; elles ne
-lancent ni GM, ni Skia.
+Révision W4d.1 vérifiée : `ce8e1d44f65d6539235d084e75ac19246908a5ec`
+(`docs(refactor): publish W4d stroke evidence`), empilée sur W4c. Les
+vérifications W4d.1 publiées dans ce status ont été exécutées le 2026-09-07 et
+n'ont lancé ni GM, ni Skia.
 
-## Tranches W4a, W4b et W4c atteintes
+## Tranches W4a, W4b, W4c et W4d.1 atteintes
 
 W4a publie `solid-rect-scalar-aa-simple-scissor-src-over-srgb-v1` pour les frames de `Rect` solides, axis-aligned et fractionnaires. W4b ajoute sa branche sœur fermée, `solid-rect-rrect-scalar-aa-simple-scissor-src-over-srgb-v1`, pour une frame ordonnée de `Rect` et `RRect` remplis, `SolidColor` prémultipliée, `SrcOver`, AA scalaire, cible sRGB 1× et scissor entier simple.
 
@@ -136,6 +136,11 @@ crossings/ties ne sont pas séparés au-delà de `0.25 + f32Bound + intervalBoun
 est `Uncertified` et ne peut produire aucun attendu ni tolérance.
 
 ## Commandes fraîches W4c
+
+Révision de code W4c vérifiée : `546a0500f048e7b28c3f3303b55990b17245505b`
+(`fix(math): preserve anisotropic rotated arc geometry`), empilée sur W4b. Les
+vérifications W4c ci-dessous ont été exécutées le 2026-09-06 ; elles n'ont
+lancé ni GM, ni Skia.
 
 | Commande | Résultat frais du 2026-09-06 |
 | --- | --- |
