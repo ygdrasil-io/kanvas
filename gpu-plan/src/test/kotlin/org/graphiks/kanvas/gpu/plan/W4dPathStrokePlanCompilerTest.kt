@@ -384,6 +384,58 @@ class W4dPathStrokePlanCompilerTest {
     }
 
     @Test
+    fun `compiler accepts the public adapter dash effect stack only when it matches paint`() {
+        val dash = PathEffectNode.Dash(ImmutableFloats.copyOf(floatArrayOf(2f, 1f)), -1f)
+        val publicAdapterDraw = pathDraw(PaintStyleNode.STROKE, effect = dash).let { draw ->
+            SceneCommand.Draw(draw.node.copy(effects = EffectStack.of(listOf(dash))))
+        }
+        val acceptedScene = sceneOf(listOf(publicAdapterDraw))
+        val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(acceptedScene, target(acceptedScene))).candidate
+        val graph = assertIs<RenderPlanResult.Ready<RenderGraph>>(
+            compiler.plan(candidate, capabilities(), PlanBudget(1L shl 20)),
+        ).plan
+        val plannedDraw = assertIs<PathStrokeDraw>(
+            graph.passes().mapNotNull { pass -> (pass as? PlanPass.StencilProducer)?.draw }.single(),
+        )
+
+        assertContentEquals(doubleArrayOf(2.0, 1.0), requireNotNull(plannedDraw.styleF64.dashF64).copyIntervalsF64())
+        assertEquals(-1.0, plannedDraw.styleF64.dashF64?.phaseF64)
+
+        val rawBitPaintDash = PathEffectNode.Dash(ImmutableFloats.copyOf(floatArrayOf(2f, 1f)), 0.0f)
+        val rawBitMismatch = pathDraw(PaintStyleNode.STROKE, effect = rawBitPaintDash).let { draw ->
+            SceneCommand.Draw(
+                draw.node.copy(
+                    effects = EffectStack.of(
+                        listOf(PathEffectNode.Dash(ImmutableFloats.copyOf(floatArrayOf(2f, 1f)), -0.0f)),
+                    ),
+                ),
+            )
+        }
+        val rawBitMismatchScene = sceneOf(listOf(rawBitMismatch))
+        assertIs<GpuPlanSelection.NotCandidate>(compiler.select(rawBitMismatchScene, target(rawBitMismatchScene)))
+
+        val finiteMismatches = listOf(
+            EffectStack.of(listOf(PathEffectNode.Dash(ImmutableFloats.copyOf(floatArrayOf(2f, 1.0000001f)), -1f))),
+            EffectStack.of(listOf(dash, PathEffectNode.Corner(1f))),
+        )
+        finiteMismatches.forEach { effects ->
+            val mismatched = SceneCommand.Draw(publicAdapterDraw.node.copy(effects = effects))
+            val scene = sceneOf(listOf(mismatched))
+            assertIs<GpuPlanSelection.NotCandidate>(compiler.select(scene, target(scene)))
+        }
+
+        val nonfiniteDuplicate = SceneCommand.Draw(
+            publicAdapterDraw.node.copy(
+                effects = EffectStack.of(
+                    listOf(PathEffectNode.Dash(ImmutableFloats.copyOf(floatArrayOf(2f, 1f)), Float.NaN)),
+                ),
+            ),
+        )
+        val invalidScene = sceneOf(listOf(nonfiniteDuplicate))
+        assertIs<GpuPlanSelection.InvalidScene>(compiler.select(invalidScene, target(invalidScene)))
+    }
+
+    @Test
     fun emptyStrokeIsCountedButDoesNotManufactureAGraphDraw() {
         val emptyPath = PathBuilder().moveTo(1f, 1f).build()
         val empty = pathDraw(PaintStyleNode.STROKE).let { SceneCommand.Draw(it.node.copy(geometry = GeometryNode.Path(emptyPath))) }

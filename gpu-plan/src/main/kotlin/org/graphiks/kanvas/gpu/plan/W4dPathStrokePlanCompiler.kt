@@ -89,7 +89,8 @@ public class W4dPathStrokePlanCompiler internal constructor(
                     val path = (command.node.geometry as? GeometryNode.Path)?.path
                     val paint = command.node.paint
                     if (path != null && paint != null &&
-                        (!finite(path) || !finite(command.node.transform) || !finite(paint) || !finiteClip(command.node.clip))
+                        (!finite(path) || !finite(command.node.transform) || !finite(paint) ||
+                            !finite(command.node.effects) || !finiteClip(command.node.clip))
                     ) {
                         return FramePreflight.Invalid("Draw facts are non-finite")
                     }
@@ -169,7 +170,7 @@ public class W4dPathStrokePlanCompiler internal constructor(
     private fun recognizeDraw(node: DrawNode, commandIndex: Int, targetBounds: RectI32, frameWork: PathStrokeWorkUsageI64): DrawResult {
         val path = (node.geometry as? GeometryNode.Path)?.path ?: return DrawResult.Gap("Draw geometry is outside W4d")
         val paint = node.paint ?: return DrawResult.Gap("W4d requires paint")
-        if (!finite(path) || !finite(node.transform) || !finite(paint)) return DrawResult.Invalid("Draw facts are non-finite")
+        if (!finite(path) || !finite(node.transform) || !finite(paint) || !finite(node.effects)) return DrawResult.Invalid("Draw facts are non-finite")
         if (node.origin != DrawOrigin.PATH || path.fillRule !in setOf(FillRule.WINDING, FillRule.EVEN_ODD)) return DrawResult.Gap("Path provenance or fill rule is outside W4d")
         if (node.coverage != CoverageRequest.HARD_EDGE || !(node.transform.isIdentity || node.transform.isScaleTranslate())) return DrawResult.Gap("Coverage or transform is outside W4d")
         if (!finiteClip(node.clip)) return DrawResult.Invalid("Clip metadata is non-finite")
@@ -272,7 +273,27 @@ public class W4dPathStrokePlanCompiler internal constructor(
         return RenderPlanResult.Ready(RenderGraph.issueW4dCompilerWitness(graph))
     }
 
-    private fun solid(node: DrawNode, paint: PaintNode): Boolean = node.material is MaterialNode.Solid && node.effects is EffectStack.Empty && node.resource == null && node.operationBlendMode == null && w4Blend(node.blend) && paint.shader == null && paint.blender == null && paint.colorFilter == null && paint.maskFilter == null && paint.imageFilter == null && paint.blendMode == BlendMode.SRC_OVER && (paint.pathEffect == null || paint.pathEffect is PathEffectNode.Dash)
+    private fun solid(node: DrawNode, paint: PaintNode): Boolean = node.material is MaterialNode.Solid && effectsMatchPaintPathEffect(node.effects, paint.pathEffect) && node.resource == null && node.operationBlendMode == null && w4Blend(node.blend) && paint.shader == null && paint.blender == null && paint.colorFilter == null && paint.maskFilter == null && paint.imageFilter == null && paint.blendMode == BlendMode.SRC_OVER && (paint.pathEffect == null || paint.pathEffect is PathEffectNode.Dash)
+    private fun effectsMatchPaintPathEffect(effects: EffectStack, pathEffect: PathEffectNode?): Boolean = when (effects) {
+        EffectStack.Empty -> true
+        is EffectStack.Entries -> {
+            if (effects.effectCount != 1) {
+                false
+            } else {
+                val sealedDash = pathEffect as? PathEffectNode.Dash
+                val duplicatedDash = effects.effectAt(0) as? PathEffectNode.Dash
+                sealedDash != null && duplicatedDash != null && sameDashBits(sealedDash, duplicatedDash)
+            }
+        }
+    }
+    private fun sameDashBits(first: PathEffectNode.Dash, second: PathEffectNode.Dash): Boolean {
+        if (first.phase.toRawBits() != second.phase.toRawBits()) return false
+        val firstIntervals = first.intervals.copyToFloatArray()
+        val secondIntervals = second.intervals.copyToFloatArray()
+        return firstIntervals.size == secondIntervals.size && firstIntervals.indices.all { index ->
+            firstIntervals[index].toRawBits() == secondIntervals[index].toRawBits()
+        }
+    }
     private fun style(paint: PaintNode, mode: PathStrokeDrawMode): PathStrokeStyleF64 = PathStrokeStyleF64(if (paint.strokeWidth == 0f && mode == PathStrokeDrawMode.Stroke) PathStrokeWidthF64.Hairline else PathStrokeWidthF64.Finite(paint.strokeWidth.toDouble()), when (paint.strokeCap) { StrokeCapNode.BUTT -> PathStrokeCap.Butt; StrokeCapNode.ROUND -> PathStrokeCap.Round; StrokeCapNode.SQUARE -> PathStrokeCap.Square }, when (paint.strokeJoin) { StrokeJoinNode.MITER -> PathStrokeJoin.Miter; StrokeJoinNode.ROUND -> PathStrokeJoin.Round; StrokeJoinNode.BEVEL -> PathStrokeJoin.Bevel }, paint.strokeMiter.toDouble(), (paint.pathEffect as? PathEffectNode.Dash)?.let { PathStrokeDashF64.of(it.intervals.copyToFloatArray().map(Float::toDouble).toDoubleArray(), it.phase.toDouble()) })
     private fun integral(bounds: RectF32): RectI32? = if (!finite(bounds)) null else listOf(bounds.left, bounds.top, bounds.right, bounds.bottom).map { value -> value.toLong().takeIf { it in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong() && it.toFloat() == value } }.takeIf { it.none { value -> value == null } }?.let { RectI32(it[0]!!.toInt(), it[1]!!.toInt(), it[2]!!.toInt(), it[3]!!.toInt()).takeUnless(RectI32::isEmpty64) }
     private fun intersect(a: RectI32, b: RectI32): RectI32? = a.copy().takeIf { it.intersect(b) }
@@ -282,6 +303,10 @@ public class W4dPathStrokePlanCompiler internal constructor(
     private fun finite(bounds: RectF32): Boolean = listOf(bounds.left, bounds.top, bounds.right, bounds.bottom).all(Float::isFinite)
     private fun finite(matrix: Matrix3x3F32): Boolean = listOf(matrix.sx, matrix.kx, matrix.tx, matrix.ky, matrix.sy, matrix.ty, matrix.persp0, matrix.persp1, matrix.persp2).all(Float::isFinite)
     private fun finite(paint: PaintNode): Boolean = paint.strokeWidth.isFinite() && paint.strokeMiter.isFinite() && finite(paint.pathEffect)
+    private fun finite(effects: EffectStack): Boolean = when (effects) {
+        EffectStack.Empty -> true
+        is EffectStack.Entries -> effects.all { effect -> (effect as? PathEffectNode)?.let(::finite) ?: true }
+    }
     private fun finite(effect: PathEffectNode?): Boolean = when (effect) {
         null -> true
         is PathEffectNode.Dash -> effect.phase.isFinite() && effect.intervals.copyToFloatArray().all(Float::isFinite)
