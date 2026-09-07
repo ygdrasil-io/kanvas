@@ -1,5 +1,6 @@
 package org.graphiks.math.matrix
 
+import kotlin.math.PI
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -28,6 +29,90 @@ import org.graphiks.math.geometry.preparePathFillGeometryWithStrokeWorkF32
 
 class PathProjectivePreparationF64Test {
     @Test
+    fun `whole interval certificate subdivides the cubic whose unsampled bulge exceeds a quarter pixel`() {
+        listOf(-0.011, -0.01, -0.009).forEach { perspectiveXF64 ->
+            val result = assertIs<PathProjectivePreparationResult.Ready>(
+                Matrix3x3F64(persp0F64 = perspectiveXF64).prepareProjectedPathFillInputF64(unsampledBulgeCubic()),
+            )
+            val projectedPolylineF64 = projectedPolylineForTest(result.inputF64)
+            val maximumDistanceF64 = (0..4_096).maxOf { sampleI32 ->
+                val parameterF64 = sampleI32.toDouble() / 4_096.0
+                distanceToPolylineForTest(
+                    oracleProjectF64(
+                        perspectiveXF64,
+                        Point2F64(
+                            parameterF64,
+                            0.32 * parameterF64 * (1.0 - parameterF64) * (4.0 * parameterF64 + 1.0),
+                        ),
+                    ),
+                    projectedPolylineF64,
+                )
+            }
+
+            assertTrue(projectedPolylineF64.size > 3)
+            assertTrue(maximumDistanceF64 <= 0.25)
+        }
+    }
+
+    @Test
+    fun `constant positive w after cancellation is ready for fill and bounded for stroke`() {
+        val matrix = Matrix3x3F64(persp0F64 = 1.0, persp2F64 = -0.9999999999999999)
+        val path = PathBuilder().moveTo(1f, 0f).lineTo(1f, 1f).lineTo(1f, 2f).close().build()
+        val fill = matrix.prepareProjectedPathFillInputF64(path)
+        val centerline = assertIs<PathStrokeCenterlinePreparationResult.Ready>(
+            preparePathStrokeCenterlinesF64(PathFillInputF64.fromPathF32(path), dashF64 = null),
+        ).centerlineF64
+        val interval = assertIs<PathStrokeOutlinePreparationResult.Ready>(
+            prepareFinitePathStrokeOutlineF64(
+                centerline,
+                PathStrokeStyleF64(
+                    widthF64 = PathStrokeWidthF64.Finite(1e-20),
+                    cap = PathStrokeCap.Butt,
+                    join = PathStrokeJoin.Miter,
+                    miterLimitF64 = 4.0,
+                ),
+            ),
+        ).outlineF64.copyContourIntervalsF64(0).first()
+
+        assertIs<PathProjectivePreparationResult.Ready>(fill)
+        assertIs<PathStrokeProjectionIntervalResultF64.Bounded>(matrix.toPathStrokeProjectionF64().certifyOutlineIntervalF64(interval))
+        assertIs<PathStrokeProjectionIntervalResultF64.Bounded>(
+            Matrix3x3F64(persp2F64 = -1.0 / (1L shl 53).toDouble()).toPathStrokeProjectionF64()
+                .certifyOutlineIntervalF64(interval),
+        )
+    }
+
+    @Test
+    fun `snapshot counter overflow is not classified as raster overflow`() {
+        val result = Matrix3x3F64(persp0F64 = 0.1).prepareProjectedPathFillInputF64(
+            path = unitTriangle(),
+            workPolicyF64 = PathStrokePolicyF64(
+                limitsI64 = PathStrokeLimitsI64(Long.MAX_VALUE, Long.MAX_VALUE),
+            ),
+            pathWorkUsageBeforeI64 = PathStrokeWorkUsageI64(snapshotByteCountI64 = Long.MAX_VALUE - 8L),
+            frameWorkUsageBeforeI64 = PathStrokeWorkUsageI64(snapshotByteCountI64 = Long.MAX_VALUE - 8L),
+        )
+
+        assertEquals(
+            PathProjectiveResourceLimitReason.SnapshotByteLimit,
+            assertIs<PathProjectivePreparationResult.ResourceLimitExceeded>(result).reason,
+        )
+    }
+
+    @Test
+    fun `source command budget is debited before inspecting a later non finite command`() {
+        val result = Matrix3x3F64(persp0F64 = 0.1).prepareProjectedPathFillInputF64(
+            path = PathBuilder().moveTo(0f, 0f).lineTo(Float.NaN, 1f).build(),
+            workPolicyF64 = policyWithLimits(maxAttemptedGeometryUnitsPerPathI32 = 1),
+        )
+
+        assertEquals(
+            PathProjectiveResourceLimitReason.PathWorkLimit,
+            assertIs<PathProjectivePreparationResult.ResourceLimitExceeded>(result).reason,
+        )
+    }
+
+    @Test
     fun `positive and negative w lines quads cubics and arcs project to finite device input`() {
         val paths = listOf(
             PathBuilder().moveTo(0f, 0f).lineTo(1f, 1f).lineTo(0f, 1f).close().build(),
@@ -46,6 +131,60 @@ class PathProjectivePreparationF64Test {
             }
             assertIs<PathProjectivePreparationResult.Ready>(negative).inputF64.forEach { segment ->
                 assertTrue(segmentIsFiniteForTest(segment))
+            }
+        }
+    }
+
+    @Test
+    fun `independent parametric oracles keep every line quad cubic and arc within the public tolerance`() {
+        val cases = listOf(
+            ProjectiveOracleCase(
+                path = PathBuilder().moveTo(0f, 0f).lineTo(1f, 0.75f).lineTo(0f, 0f).close().build(),
+                pointAtF64 = { tF64 -> Point2F64(tF64, 0.75 * tF64) },
+            ),
+            ProjectiveOracleCase(
+                path = PathBuilder().moveTo(0f, 0f).quadTo(0.5f, 1f, 1f, 0f).lineTo(0f, 0f).close().build(),
+                pointAtF64 = { tF64 ->
+                    Point2F64(
+                        2.0 * (1.0 - tF64) * tF64 * 0.5 + tF64 * tF64,
+                        2.0 * (1.0 - tF64) * tF64,
+                    )
+                },
+            ),
+            ProjectiveOracleCase(
+                path = unsampledBulgeCubic(),
+                pointAtF64 = { tF64 ->
+                    Point2F64(tF64, 0.32 * tF64 * (1.0 - tF64) * (4.0 * tF64 + 1.0))
+                },
+            ),
+            ProjectiveOracleCase(
+                path = PathBuilder().moveTo(1f, 0f).arcTo(1f, 1f, 0f, false, true, 0f, 1f)
+                    .lineTo(1f, 0f).close().build(),
+                pointAtF64 = { tF64 ->
+                    Point2F64(kotlin.math.cos(PI * tF64 * 0.5), kotlin.math.sin(PI * tF64 * 0.5))
+                },
+            ),
+        )
+        val matrices = listOf(
+            Matrix3x3F64(sxF64 = 1.2, kxF64 = 0.15, kyF64 = -0.1, syF64 = 0.9, persp0F64 = 0.08, persp1F64 = 0.03),
+            Matrix3x3F64(sxF64 = 1.2, kxF64 = 0.15, kyF64 = -0.1, syF64 = 0.9, persp0F64 = 0.08, persp1F64 = 0.03, persp2F64 = -2.0),
+        )
+
+        cases.forEach { case ->
+            matrices.forEach { matrix ->
+                val inputF64 = assertIs<PathProjectivePreparationResult.Ready>(
+                    matrix.prepareProjectedPathFillInputF64(case.path),
+                ).inputF64
+                val polylineF64 = projectedPolylineForTest(inputF64)
+                val maximumDeviationF64 = (0..1_024).maxOf { sampleI32 ->
+                    val parameterF64 = sampleI32.toDouble() / 1_024.0
+                    distanceToPolylineForTest(
+                        oracleMatrixProjectF64(matrix, case.pointAtF64(parameterF64)),
+                        polylineF64,
+                    )
+                }
+
+                assertTrue(maximumDeviationF64 <= 0.25 + 1e-12)
             }
         }
     }
@@ -94,6 +233,18 @@ class PathProjectivePreparationF64Test {
         assertEquals(
             PathProjectiveInvalidSceneReason.PerspectiveHorizonCrossing,
             assertIs<PathProjectivePreparationResult.InvalidScene>(crossing).reason,
+        )
+    }
+
+    @Test
+    fun `non dyadic quadratic w root is a horizon rather than a subdivision exhaustion`() {
+        val result = Matrix3x3F64(persp0F64 = 1.0, persp2F64 = -0.3).prepareProjectedPathFillInputF64(
+            PathBuilder().moveTo(0f, 0f).quadTo(0.5f, 1f, 1f, 0f).lineTo(0f, 0f).close().build(),
+        )
+
+        assertEquals(
+            PathProjectiveInvalidSceneReason.PerspectiveHorizonCrossing,
+            assertIs<PathProjectivePreparationResult.InvalidScene>(result).reason,
         )
     }
 
@@ -154,6 +305,65 @@ class PathProjectivePreparationF64Test {
         assertEquals(
             PathProjectiveResourceLimitReason.SnapshotByteLimit,
             assertIs<PathProjectivePreparationResult.ResourceLimitExceeded>(snapshotBytes).reason,
+        )
+    }
+
+    @Test
+    fun `projection ledger admits exact boundaries and rejects the immediately smaller path frame and snapshot budgets`() {
+        val exactPolicy = policyWithLimits(
+            maxAttemptedGeometryUnitsPerPathI32 = 13,
+            maxAttemptedGeometryUnitsPerFrameI32 = 13,
+            maxSnapshotByteCountPerPathI64 = 208L,
+            maxSnapshotByteCountPerFrameI64 = 208L,
+        )
+        val ready = assertIs<PathProjectivePreparationResult.Ready>(
+            Matrix3x3F64(persp0F64 = 0.1).prepareProjectedPathFillInputF64(unitTriangle(), workPolicyF64 = exactPolicy),
+        )
+
+        assertEquals(13L, ready.pathWorkUsageAfterI64.attemptedGeometryUnitCountI64)
+        assertEquals(208L, ready.pathWorkUsageAfterI64.snapshotByteCountI64)
+        assertEquals(ready.pathWorkUsageAfterI64, ready.frameWorkUsageAfterI64)
+        assertEquals(
+            PathProjectiveResourceLimitReason.PathWorkLimit,
+            assertIs<PathProjectivePreparationResult.ResourceLimitExceeded>(
+                Matrix3x3F64(persp0F64 = 0.1).prepareProjectedPathFillInputF64(
+                    unitTriangle(),
+                    workPolicyF64 = policyWithLimits(maxAttemptedGeometryUnitsPerPathI32 = 12),
+                ),
+            ).reason,
+        )
+        assertEquals(
+            PathProjectiveResourceLimitReason.FrameWorkLimit,
+            assertIs<PathProjectivePreparationResult.ResourceLimitExceeded>(
+                Matrix3x3F64(persp0F64 = 0.1).prepareProjectedPathFillInputF64(
+                    unitTriangle(),
+                    workPolicyF64 = policyWithLimits(
+                        maxAttemptedGeometryUnitsPerPathI32 = 13,
+                        maxAttemptedGeometryUnitsPerFrameI32 = 12,
+                    ),
+                ),
+            ).reason,
+        )
+        assertEquals(
+            PathProjectiveResourceLimitReason.SnapshotByteLimit,
+            assertIs<PathProjectivePreparationResult.ResourceLimitExceeded>(
+                Matrix3x3F64(persp0F64 = 0.1).prepareProjectedPathFillInputF64(
+                    unitTriangle(),
+                    workPolicyF64 = policyWithLimits(maxSnapshotByteCountPerPathI64 = 207L),
+                ),
+            ).reason,
+        )
+        assertEquals(
+            PathProjectiveResourceLimitReason.SnapshotByteLimit,
+            assertIs<PathProjectivePreparationResult.ResourceLimitExceeded>(
+                Matrix3x3F64(persp0F64 = 0.1).prepareProjectedPathFillInputF64(
+                    unitTriangle(),
+                    workPolicyF64 = policyWithLimits(
+                        maxSnapshotByteCountPerPathI64 = 208L,
+                        maxSnapshotByteCountPerFrameI64 = 207L,
+                    ),
+                ),
+            ).reason,
         )
     }
 
@@ -222,16 +432,77 @@ class PathProjectivePreparationF64Test {
 
     private fun unitTriangle() = PathBuilder().moveTo(0f, 0f).lineTo(2f, 0f).lineTo(0f, 2f).close().build()
 
+    private fun unsampledBulgeCubic() = PathBuilder()
+        .moveTo(0f, 0f)
+        .cubicTo(1f / 3f, 0.32f / 3f, 2f / 3f, 0.32f * 5f / 3f, 1f, 0f)
+        .lineTo(0f, 0f)
+        .close()
+        .build()
+
+    private fun finiteStrokeStyleForTest(): PathStrokeStyleF64 = PathStrokeStyleF64(
+        widthF64 = PathStrokeWidthF64.Finite(1.0),
+        cap = PathStrokeCap.Butt,
+        join = PathStrokeJoin.Miter,
+        miterLimitF64 = 4.0,
+    )
+
+    private fun oracleProjectF64(perspectiveXF64: Double, sourceF64: Point2F64): Point2F64 {
+        val wF64 = 1.0 + perspectiveXF64 * sourceF64.x
+        return Point2F64(sourceF64.x / wF64, sourceF64.y / wF64)
+    }
+
+    private fun oracleMatrixProjectF64(matrixF64: Matrix3x3F64, sourceF64: Point2F64): Point2F64 {
+        val wF64 = matrixF64.persp0F64 * sourceF64.x + matrixF64.persp1F64 * sourceF64.y + matrixF64.persp2F64
+        return Point2F64(
+            (matrixF64.sxF64 * sourceF64.x + matrixF64.kxF64 * sourceF64.y + matrixF64.txF64) / wF64,
+            (matrixF64.kyF64 * sourceF64.x + matrixF64.syF64 * sourceF64.y + matrixF64.tyF64) / wF64,
+        )
+    }
+
+    private fun projectedPolylineForTest(inputF64: PathFillInputF64): List<Point2F64> = buildList {
+        inputF64.forEach { segmentF64 ->
+            when (segmentF64) {
+                is PathFillSegmentF64.MoveTo -> add(segmentF64.point)
+                is PathFillSegmentF64.LineTo -> add(segmentF64.point)
+                else -> Unit
+            }
+        }
+    }
+
+    private fun distanceToPolylineForTest(pointF64: Point2F64, polylineF64: List<Point2F64>): Double =
+        polylineF64.zipWithNext().minOf { (startF64, endF64) ->
+            val dxF64 = endF64.x - startF64.x
+            val dyF64 = endF64.y - startF64.y
+            val lengthSquaredF64 = dxF64 * dxF64 + dyF64 * dyF64
+            val parameterF64 = if (lengthSquaredF64 == 0.0) 0.0 else {
+                (((pointF64.x - startF64.x) * dxF64 + (pointF64.y - startF64.y) * dyF64) / lengthSquaredF64)
+                    .coerceIn(0.0, 1.0)
+            }
+            val nearestXF64 = startF64.x + dxF64 * parameterF64
+            val nearestYF64 = startF64.y + dyF64 * parameterF64
+            kotlin.math.sqrt((pointF64.x - nearestXF64) * (pointF64.x - nearestXF64) +
+                (pointF64.y - nearestYF64) * (pointF64.y - nearestYF64))
+        }
+
     private fun policyWithLimits(
         maxAttemptedGeometryUnitsPerPathI32: Int = 65_536,
         maxAttemptedGeometryUnitsPerFrameI32: Int = 262_144,
         maxSnapshotByteCountPerPathI64: Long = 16L * 1024L * 1024L,
+        maxSnapshotByteCountPerFrameI64: Long = 64L * 1024L * 1024L,
     ): PathStrokePolicyF64 = PathStrokePolicyF64(
         limitsI32 = PathStrokeLimitsI32(
             maxAttemptedGeometryUnitsPerPathI32 = maxAttemptedGeometryUnitsPerPathI32,
             maxAttemptedGeometryUnitsPerFrameI32 = maxAttemptedGeometryUnitsPerFrameI32,
         ),
-        limitsI64 = PathStrokeLimitsI64(maxSnapshotByteCountPerPathI64 = maxSnapshotByteCountPerPathI64),
+        limitsI64 = PathStrokeLimitsI64(
+            maxSnapshotByteCountPerPathI64 = maxSnapshotByteCountPerPathI64,
+            maxSnapshotByteCountPerFrameI64 = maxSnapshotByteCountPerFrameI64,
+        ),
+    )
+
+    private data class ProjectiveOracleCase(
+        val path: org.graphiks.math.geometry.PathF32,
+        val pointAtF64: (Double) -> Point2F64,
     )
 
     private fun segmentIsFiniteForTest(segment: PathFillSegmentF64): Boolean = when (segment) {

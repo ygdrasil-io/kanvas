@@ -91,10 +91,19 @@ internal data class ProjectiveHomogeneousPointF64(
 )
 
 internal fun Matrix3x3F64.projectHomogeneousPointF64(pointF64: Point2F64): ProjectiveHomogeneousPointF64? {
-    val xF64 = sxF64 * pointF64.x + kxF64 * pointF64.y + txF64
-    val yF64 = kyF64 * pointF64.x + syF64 * pointF64.y + tyF64
-    val wF64 = persp0F64 * pointF64.x + persp1F64 * pointF64.y + persp2F64
-    return ProjectiveHomogeneousPointF64(xF64, yF64, wF64)
+    return projectHomogeneousCoordinatesF64(pointF64.x, pointF64.y, 1.0)
+}
+
+/** Applies the matrix to a homogeneous source control without performing the projective divide. */
+internal fun Matrix3x3F64.projectHomogeneousCoordinatesF64(
+    xF64: Double,
+    yF64: Double,
+    wF64: Double,
+): ProjectiveHomogeneousPointF64? {
+    val transformedXF64 = sxF64 * xF64 + kxF64 * yF64 + txF64 * wF64
+    val transformedYF64 = kyF64 * xF64 + syF64 * yF64 + tyF64 * wF64
+    val transformedWF64 = persp0F64 * xF64 + persp1F64 * yF64 + persp2F64 * wF64
+    return ProjectiveHomogeneousPointF64(transformedXF64, transformedYF64, transformedWF64)
         .takeIf { it.xF64.isFinite() && it.yF64.isFinite() && it.wF64.isFinite() }
 }
 

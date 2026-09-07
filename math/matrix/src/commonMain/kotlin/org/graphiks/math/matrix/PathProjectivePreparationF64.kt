@@ -11,10 +11,12 @@ import org.graphiks.math.geometry.PathF32
 import org.graphiks.math.geometry.PathFillFlatteningPolicyF64
 import org.graphiks.math.geometry.PathFillInputF64
 import org.graphiks.math.geometry.PathFillSegmentF64
+import org.graphiks.math.geometry.PathSegmentF32
 import org.graphiks.math.geometry.PathStrokeLimitsI32
 import org.graphiks.math.geometry.PathStrokeLimitsI64
 import org.graphiks.math.geometry.PathStrokePolicyF64
 import org.graphiks.math.geometry.PathStrokeWorkUsageI64
+import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.Point2F64
 import org.graphiks.math.vector.Vector2F64
 
@@ -107,8 +109,16 @@ private class PathProjectiveWorkLedgerF64(
     }
 
     fun debitBeforeWorkI64(deltaI64: PathStrokeWorkUsageI64) {
-        val nextPathI64 = checkedAddUsageI64(pathUsageI64, deltaI64)
-        val nextFrameI64 = checkedAddUsageI64(frameUsageI64, deltaI64)
+        val nextPathI64 = checkedAddUsageI64(
+            firstI64 = pathUsageI64,
+            secondI64 = deltaI64,
+            workLimitReason = PathProjectiveResourceLimitReason.PathWorkLimit,
+        )
+        val nextFrameI64 = checkedAddUsageI64(
+            firstI64 = frameUsageI64,
+            secondI64 = deltaI64,
+            workLimitReason = PathProjectiveResourceLimitReason.FrameWorkLimit,
+        )
         requireWithinLimits(nextPathI64, isPath = true)
         requireWithinLimits(nextFrameI64, isPath = false)
         pathUsageI64 = nextPathI64
@@ -142,23 +152,37 @@ private class PathProjectiveWorkLedgerF64(
 private fun checkedAddUsageI64(
     firstI64: PathStrokeWorkUsageI64,
     secondI64: PathStrokeWorkUsageI64,
-): PathStrokeWorkUsageI64 = try {
-    PathStrokeWorkUsageI64(
-        attemptedGeometryUnitCountI64 = checkedProjectiveAddI64(
-            firstI64.attemptedGeometryUnitCountI64,
-            secondI64.attemptedGeometryUnitCountI64,
-        ),
-        emittedVertexCountI64 = checkedProjectiveAddI64(firstI64.emittedVertexCountI64, secondI64.emittedVertexCountI64),
-        emittedIndexCountI64 = checkedProjectiveAddI64(firstI64.emittedIndexCountI64, secondI64.emittedIndexCountI64),
-        snapshotByteCountI64 = checkedProjectiveAddI64(firstI64.snapshotByteCountI64, secondI64.snapshotByteCountI64),
-    )
-} catch (_: IllegalStateException) {
-    throw PathProjectiveResourceAbort(PathProjectiveResourceLimitReason.RasterBoundsOverflow)
-}
+    workLimitReason: PathProjectiveResourceLimitReason,
+): PathStrokeWorkUsageI64 = PathStrokeWorkUsageI64(
+    attemptedGeometryUnitCountI64 = checkedProjectiveAddI64(
+        firstI64.attemptedGeometryUnitCountI64,
+        secondI64.attemptedGeometryUnitCountI64,
+        workLimitReason,
+    ),
+    emittedVertexCountI64 = checkedProjectiveAddI64(
+        firstI64.emittedVertexCountI64,
+        secondI64.emittedVertexCountI64,
+        workLimitReason,
+    ),
+    emittedIndexCountI64 = checkedProjectiveAddI64(
+        firstI64.emittedIndexCountI64,
+        secondI64.emittedIndexCountI64,
+        workLimitReason,
+    ),
+    snapshotByteCountI64 = checkedProjectiveAddI64(
+        firstI64.snapshotByteCountI64,
+        secondI64.snapshotByteCountI64,
+        PathProjectiveResourceLimitReason.SnapshotByteLimit,
+    ),
+)
 
-private fun checkedProjectiveAddI64(firstI64: Long, secondI64: Long): Long {
+private fun checkedProjectiveAddI64(
+    firstI64: Long,
+    secondI64: Long,
+    overflowReason: PathProjectiveResourceLimitReason,
+): Long {
     if (firstI64 < 0L || secondI64 < 0L || firstI64 > Long.MAX_VALUE - secondI64) {
-        throw IllegalStateException("projective-work-overflow")
+        throw PathProjectiveResourceAbort(overflowReason)
     }
     return firstI64 + secondI64
 }
@@ -177,7 +201,6 @@ private class PathProjectiveFillPreparerF64(
         limitsI32 = workPolicyF64.limitsI32,
         limitsI64 = workPolicyF64.limitsI64,
     )
-    private lateinit var inputF64: PathFillInputF64
     private lateinit var outputF64: MutableList<PathFillSegmentF64>
     private var currentPointF64: Point2F64? = null
     private var contourStartF64: Point2F64? = null
@@ -185,64 +208,86 @@ private class PathProjectiveFillPreparerF64(
 
     fun prepare(): PathProjectivePreparationResult {
         ledgerI64.debitBeforeWorkI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
-        inputF64 = PathFillInputF64.fromPathF32(pathF32)
-        ledgerI64.debitBeforeWorkI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
         outputF64 = mutableListOf()
-        inputF64.forEach { segmentF64 ->
-            if (!isFiniteProjectiveInputSegmentF64(segmentF64)) {
-                abortInvalid(PathProjectiveInvalidSceneReason.NonFiniteProjection)
-            }
-            when (segmentF64) {
-                is PathFillSegmentF64.MoveTo -> beginContour(segmentF64.point)
-                is PathFillSegmentF64.LineTo -> {
+        pathF32.forEach { segmentF32 ->
+            ledgerI64.debitBeforeWorkI64(PathStrokeWorkUsageI64(attemptedGeometryUnitCountI64 = 1L))
+            when (segmentF32) {
+                is PathSegmentF32.MoveTo -> beginContour(exactProjectivePointF64(segmentF32.point))
+                is PathSegmentF32.LineTo -> {
                     ensureContour()
-                    appendPrimitiveF64(ProjectiveLinePrimitiveF64(requireNotNull(currentPointF64), segmentF64.point))
-                    currentPointF64 = segmentF64.point
+                    val endF64 = exactProjectivePointF64(segmentF32.point)
+                    appendPrimitiveF64(ProjectiveLinePrimitiveF64(requireNotNull(currentPointF64), endF64))
+                    currentPointF64 = endF64
                 }
 
-                is PathFillSegmentF64.QuadTo -> {
+                is PathSegmentF32.QuadTo -> {
                     ensureContour()
+                    val controlF64 = exactProjectivePointF64(segmentF32.control)
+                    val endF64 = exactProjectivePointF64(segmentF32.point)
                     appendPrimitiveF64(
                         ProjectiveBezierPrimitiveF64(
-                            listOf(requireNotNull(currentPointF64), segmentF64.control, segmentF64.point),
+                            arrayOf(requireNotNull(currentPointF64), controlF64, endF64),
                         ),
                     )
-                    currentPointF64 = segmentF64.point
+                    currentPointF64 = endF64
                 }
 
-                is PathFillSegmentF64.CubicTo -> {
+                is PathSegmentF32.CubicTo -> {
                     ensureContour()
+                    val control1F64 = exactProjectivePointF64(segmentF32.control1)
+                    val control2F64 = exactProjectivePointF64(segmentF32.control2)
+                    val endF64 = exactProjectivePointF64(segmentF32.point)
                     appendPrimitiveF64(
                         ProjectiveBezierPrimitiveF64(
-                            listOf(
+                            arrayOf(
                                 requireNotNull(currentPointF64),
-                                segmentF64.control1,
-                                segmentF64.control2,
-                                segmentF64.point,
+                                control1F64,
+                                control2F64,
+                                endF64,
                             ),
                         ),
                     )
-                    currentPointF64 = segmentF64.point
+                    currentPointF64 = endF64
                 }
 
-                is PathFillSegmentF64.ArcTo -> {
+                is PathSegmentF32.ArcTo -> {
                     ensureContour()
                     val startF64 = requireNotNull(currentPointF64)
-                    if (startF64 != segmentF64.point) {
-                        appendPrimitiveF64(ProjectiveSvgArcPrimitiveF64.of(startF64, segmentF64))
+                    val endF64 = exactProjectivePointF64(segmentF32.point)
+                    val radiusF64 = Vector2F64(
+                        exactProjectiveF64(segmentF32.radius.x),
+                        exactProjectiveF64(segmentF32.radius.y),
+                    )
+                    val rotationF64 = exactProjectiveF64(segmentF32.xAxisRotation)
+                    if (!radiusF64.x.isFinite() || !radiusF64.y.isFinite() || !rotationF64.isFinite()) {
+                        abortInvalid(PathProjectiveInvalidSceneReason.NonFiniteProjection)
                     }
-                    currentPointF64 = segmentF64.point
+                    if (startF64 != endF64) {
+                        appendPrimitiveF64(
+                            ProjectiveSvgArcPrimitiveF64.of(
+                                startF64 = startF64,
+                                endF64 = endF64,
+                                radiusF64 = radiusF64,
+                                xAxisRotationDegreesF64 = rotationF64,
+                                largeArc = segmentF32.largeArc,
+                                sweep = segmentF32.sweep,
+                            ),
+                        )
+                    }
+                    currentPointF64 = endF64
                 }
 
-                PathFillSegmentF64.Close -> closeContour()
+                PathSegmentF32.Close -> closeContour()
             }
         }
         if (!hasDrawableSegment) {
             return PathProjectivePreparationResult.Empty(ledgerI64.pathSnapshotI64(), ledgerI64.frameSnapshotI64())
         }
-        ledgerI64.debitBeforeWorkI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
+        ledgerI64.debitBeforeWorkI64(
+            PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L + outputF64.size.toLong() * 8L),
+        )
         return PathProjectivePreparationResult.Ready(
-            inputF64 = PathFillInputF64.of(inputF64.fillRule, outputF64),
+            inputF64 = PathFillInputF64.of(pathF32.fillRule, outputF64),
             transformClass = matrixF64.classifyPathTransform(),
             pathWorkUsageAfterI64 = ledgerI64.pathSnapshotI64(),
             frameWorkUsageAfterI64 = ledgerI64.frameSnapshotI64(),
@@ -256,7 +301,12 @@ private class PathProjectiveFillPreparerF64(
     }
 
     private fun ensureContour() {
-        if (currentPointF64 == null) beginContour(Point2F64.Origin)
+        if (currentPointF64 == null) {
+            ledgerI64.debitBeforeWorkI64(
+                PathStrokeWorkUsageI64(attemptedGeometryUnitCountI64 = 1L, snapshotByteCountI64 = 32L),
+            )
+            beginContour(Point2F64.Origin)
+        }
     }
 
     private fun closeContour() {
@@ -270,7 +320,7 @@ private class PathProjectiveFillPreparerF64(
 
     private fun appendMoveF64(sourcePointF64: Point2F64) {
         ledgerI64.debitBeforeWorkI64(
-            PathStrokeWorkUsageI64(attemptedGeometryUnitCountI64 = 1L, snapshotByteCountI64 = 32L),
+            PathStrokeWorkUsageI64(snapshotByteCountI64 = 32L),
         )
         outputF64 += PathFillSegmentF64.MoveTo(projectPointF64(sourcePointF64))
     }
@@ -286,62 +336,74 @@ private class PathProjectiveFillPreparerF64(
         depthI32: Int,
     ) {
         ledgerI64.debitBeforeWorkI64(PathStrokeWorkUsageI64(attemptedGeometryUnitCountI64 = 1L))
-        val wIntervalF64 = primitiveF64.wIntervalF64(matrixF64, startParameterF64, endParameterF64)
-            ?: abortInvalid(PathProjectiveInvalidSceneReason.NonFiniteProjection)
-        if (wIntervalF64.containsZeroF64()) {
-            val middleParameterF64 = splitParameterF64(startParameterF64, endParameterF64)
-            ledgerI64.debitBeforeWorkI64(PathStrokeWorkUsageI64(attemptedGeometryUnitCountI64 = 3L))
-            val startW = homogeneousWAtF64(primitiveF64, startParameterF64)
-            val middleW = homogeneousWAtF64(primitiveF64, middleParameterF64)
-            val endW = homogeneousWAtF64(primitiveF64, endParameterF64)
-            if (startW == 0.0 || middleW == 0.0 || endW == 0.0 ||
-                (startW < 0.0) != (middleW < 0.0) || (middleW < 0.0) != (endW < 0.0)
-            ) {
-                abortInvalid(PathProjectiveInvalidSceneReason.PerspectiveHorizonCrossing)
+        val controlsF64 = when (val controlsResultF64 = primitiveF64.homogeneousControlsF64(
+            matrixF64,
+            startParameterF64,
+            endParameterF64,
+        )) {
+            is ProjectiveHomogeneousControlsResultF64.Ready -> controlsResultF64.controlsF64
+            ProjectiveHomogeneousControlsResultF64.NeedsSubdivision -> {
+                subdividePrimitiveIntervalF64(
+                    primitiveF64,
+                    startParameterF64,
+                    endParameterF64,
+                    depthI32,
+                    horizonAtLimit = false,
+                )
+                return
             }
-            if (depthI32 >= policyF64.limitsI32.maxSubdivisionDepthI32) {
-                abortInvalid(PathProjectiveInvalidSceneReason.PerspectiveHorizonCrossing)
-            }
-            appendPrimitiveIntervalF64(primitiveF64, startParameterF64, middleParameterF64, depthI32 + 1)
-            appendPrimitiveIntervalF64(primitiveF64, middleParameterF64, endParameterF64, depthI32 + 1)
-            return
+            ProjectiveHomogeneousControlsResultF64.NonFinite -> abortInvalid(PathProjectiveInvalidSceneReason.NonFiniteProjection)
         }
-
-        val middleParameterF64 = splitParameterF64(startParameterF64, endParameterF64)
-        val firstQuarterParameterF64 = splitParameterF64(startParameterF64, middleParameterF64)
-        val thirdQuarterParameterF64 = splitParameterF64(middleParameterF64, endParameterF64)
-        ledgerI64.debitBeforeWorkI64(PathStrokeWorkUsageI64(attemptedGeometryUnitCountI64 = 5L))
-        val startF64 = projectPointF64(primitiveF64.pointAtF64(startParameterF64))
-        val firstQuarterF64 = projectPointF64(primitiveF64.pointAtF64(firstQuarterParameterF64))
-        val middleF64 = projectPointF64(primitiveF64.pointAtF64(middleParameterF64))
-        val thirdQuarterF64 = projectPointF64(primitiveF64.pointAtF64(thirdQuarterParameterF64))
-        val endF64 = projectPointF64(primitiveF64.pointAtF64(endParameterF64))
-        val sagittaF64 = max(
-            max(
-                distanceToChordF64(firstQuarterF64, startF64, endF64),
-                distanceToChordF64(middleF64, startF64, endF64),
-            ),
-            distanceToChordF64(thirdQuarterF64, startF64, endF64),
-        )
-        if (!sagittaF64.isFinite()) abortInvalid(PathProjectiveInvalidSceneReason.NonFiniteProjection)
-        if (sagittaF64 > policyF64.maximumSagittaErrorF64) {
-            if (depthI32 >= policyF64.limitsI32.maxSubdivisionDepthI32) {
-                throw PathProjectiveResourceAbort(PathProjectiveResourceLimitReason.FlatteningDidNotConverge)
+        when (certifyWSignF64(controlsF64)) {
+            ProjectiveWCertificateF64.Horizon -> abortInvalid(PathProjectiveInvalidSceneReason.PerspectiveHorizonCrossing)
+            ProjectiveWCertificateF64.NeedsSubdivision -> {
+                subdividePrimitiveIntervalF64(
+                    primitiveF64,
+                    startParameterF64,
+                    endParameterF64,
+                    depthI32,
+                    horizonAtLimit = true,
+                )
+                return
             }
-            appendPrimitiveIntervalF64(primitiveF64, startParameterF64, middleParameterF64, depthI32 + 1)
-            appendPrimitiveIntervalF64(primitiveF64, middleParameterF64, endParameterF64, depthI32 + 1)
+            ProjectiveWCertificateF64.StrictlySeparated -> Unit
+        }
+        ledgerI64.debitBeforeWorkI64(
+            PathStrokeWorkUsageI64(attemptedGeometryUnitCountI64 = controlsF64.size.toLong()),
+        )
+        val projectedControlsF64 = controlsF64.map(::projectControlPointF64)
+        val errorBoundF64 = projectedControlHullErrorBoundF64(projectedControlsF64)
+        if (!errorBoundF64.isFinite()) abortInvalid(PathProjectiveInvalidSceneReason.NonFiniteProjection)
+        if (errorBoundF64 > policyF64.maximumSagittaErrorF64) {
+            subdividePrimitiveIntervalF64(
+                primitiveF64,
+                startParameterF64,
+                endParameterF64,
+                depthI32,
+                horizonAtLimit = false,
+            )
             return
         }
         ledgerI64.debitBeforeWorkI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 32L))
-        outputF64 += PathFillSegmentF64.LineTo(endF64)
+        outputF64 += PathFillSegmentF64.LineTo(projectOutputControlPointF64(controlsF64.last()))
         hasDrawableSegment = true
     }
 
-    private fun homogeneousWAtF64(primitiveF64: ProjectiveFillPrimitiveF64, parameterF64: Double): Double {
-        val pointF64 = primitiveF64.pointAtF64(parameterF64)
-        val homogeneousF64 = matrixF64.projectHomogeneousPointF64(pointF64)
-            ?: abortInvalid(PathProjectiveInvalidSceneReason.NonFiniteProjection)
-        return homogeneousF64.wF64
+    private fun subdividePrimitiveIntervalF64(
+        primitiveF64: ProjectiveFillPrimitiveF64,
+        startParameterF64: Double,
+        endParameterF64: Double,
+        depthI32: Int,
+        horizonAtLimit: Boolean,
+    ) {
+        if (depthI32 >= policyF64.limitsI32.maxSubdivisionDepthI32) {
+            if (horizonAtLimit) abortInvalid(PathProjectiveInvalidSceneReason.PerspectiveHorizonCrossing)
+            throw PathProjectiveResourceAbort(PathProjectiveResourceLimitReason.FlatteningDidNotConverge)
+        }
+        ledgerI64.debitBeforeWorkI64(PathStrokeWorkUsageI64(attemptedGeometryUnitCountI64 = 1L))
+        val middleParameterF64 = splitParameterF64(startParameterF64, endParameterF64)
+        appendPrimitiveIntervalF64(primitiveF64, startParameterF64, middleParameterF64, depthI32 + 1)
+        appendPrimitiveIntervalF64(primitiveF64, middleParameterF64, endParameterF64, depthI32 + 1)
     }
 
     private fun projectPointF64(pointF64: Point2F64): Point2F64 {
@@ -356,7 +418,56 @@ private class PathProjectiveFillPreparerF64(
         return projectedF64
     }
 
+    private fun projectOutputControlPointF64(controlF64: ProjectiveHomogeneousPointF64): Point2F64 {
+        val projectedF64 = projectControlPointF64(controlF64)
+        if (!projectedF64.x.isF32RepresentableF64() || !projectedF64.y.isF32RepresentableF64()) {
+            throw PathProjectiveResourceAbort(PathProjectiveResourceLimitReason.RasterBoundsOverflow)
+        }
+        return projectedF64
+    }
+
     private fun abortInvalid(reason: PathProjectiveInvalidSceneReason): Nothing = throw PathProjectiveInvalidAbort(reason)
+}
+
+/** Restores the exact Float payload at the JS boundary before any projective arithmetic. */
+private fun exactProjectiveF64(valueF32: Float): Double = Float.fromBits(valueF32.toRawBits()).toDouble()
+
+private fun exactProjectivePointF64(pointF32: Point2F32): Point2F64 {
+    val pointF64 = Point2F64(exactProjectiveF64(pointF32.x), exactProjectiveF64(pointF32.y))
+    if (!pointF64.isFinite()) throw PathProjectiveInvalidAbort(PathProjectiveInvalidSceneReason.NonFiniteProjection)
+    return pointF64
+}
+
+private fun projectControlPointF64(controlF64: ProjectiveHomogeneousPointF64): Point2F64 =
+    projectFiniteHomogeneousPointF64(controlF64)
+        ?: throw PathProjectiveInvalidAbort(PathProjectiveInvalidSceneReason.NonFiniteProjection)
+
+/**
+ * A rational Bezier with a sign-separated denominator is contained by the convex hull of its
+ * divided homogeneous controls. The maximum control-to-chord distance is thus a whole-interval
+ * upper bound, rather than a sampled estimate.
+ */
+private fun projectedControlHullErrorBoundF64(controlsF64: List<Point2F64>): Double {
+    if (controlsF64.size < 2) return Double.NaN
+    val startF64 = controlsF64.first()
+    val endF64 = controlsF64.last()
+    return controlsF64.maxOf { controlF64 -> distanceToChordF64(controlF64, startF64, endF64) }
+}
+
+private fun certifyWSignF64(controlsF64: List<ProjectiveHomogeneousPointF64>): ProjectiveWCertificateF64 {
+    if (controlsF64.isEmpty() || controlsF64.any { !it.wF64.isFinite() }) return ProjectiveWCertificateF64.Horizon
+    val weightsF64 = controlsF64.map(ProjectiveHomogeneousPointF64::wF64)
+    if (weightsF64.first() == 0.0 || weightsF64.last() == 0.0) return ProjectiveWCertificateF64.Horizon
+    if (weightsF64.all { it > 0.0 } || weightsF64.all { it < 0.0 }) {
+        return ProjectiveWCertificateF64.StrictlySeparated
+    }
+    // Bernstein's variation-diminishing property makes an odd number of strict sign variations
+    // a root certificate on this whole interval.  It catches non-dyadic roots without relying on
+    // a sampled parameter or an epsilon comparison.
+    val signsF64 = weightsF64.filter { it != 0.0 }.map { if (it > 0.0) 1 else -1 }
+    val signVariationCountI32 = signsF64.zipWithNext().count { (firstI32, secondI32) -> firstI32 != secondI32 }
+    if (signVariationCountI32 % 2 == 1) return ProjectiveWCertificateF64.Horizon
+    return ProjectiveWCertificateF64.NeedsSubdivision
 }
 
 private fun splitParameterF64(startParameterF64: Double, endParameterF64: Double): Double {
@@ -384,145 +495,145 @@ private fun distanceToChordF64(pointF64: Point2F64, startF64: Point2F64, endF64:
     }
 }
 
-private fun isFiniteProjectiveInputSegmentF64(segmentF64: PathFillSegmentF64): Boolean = when (segmentF64) {
-    is PathFillSegmentF64.MoveTo -> segmentF64.point.isFinite()
-    is PathFillSegmentF64.LineTo -> segmentF64.point.isFinite()
-    is PathFillSegmentF64.QuadTo -> segmentF64.control.isFinite() && segmentF64.point.isFinite()
-    is PathFillSegmentF64.CubicTo -> segmentF64.control1.isFinite() && segmentF64.control2.isFinite() && segmentF64.point.isFinite()
-    is PathFillSegmentF64.ArcTo ->
-        segmentF64.radius.isFinite() && segmentF64.xAxisRotationDegreesF64.isFinite() && segmentF64.point.isFinite()
-    PathFillSegmentF64.Close -> true
-}
-
 private sealed interface ProjectiveFillPrimitiveF64 {
-    fun pointAtF64(parameterF64: Double): Point2F64
-
-    fun wIntervalF64(
+    fun homogeneousControlsF64(
         matrixF64: Matrix3x3F64,
         startParameterF64: Double,
         endParameterF64: Double,
-    ): PathProjectiveIntervalF64?
+    ): ProjectiveHomogeneousControlsResultF64
+}
+
+private sealed interface ProjectiveHomogeneousControlsResultF64 {
+    data class Ready(val controlsF64: List<ProjectiveHomogeneousPointF64>) : ProjectiveHomogeneousControlsResultF64
+
+    data object NeedsSubdivision : ProjectiveHomogeneousControlsResultF64
+
+    data object NonFinite : ProjectiveHomogeneousControlsResultF64
+}
+
+private enum class ProjectiveWCertificateF64 {
+    StrictlySeparated,
+    NeedsSubdivision,
+    Horizon,
 }
 
 private class ProjectiveLinePrimitiveF64(
     private val startF64: Point2F64,
     private val endF64: Point2F64,
 ) : ProjectiveFillPrimitiveF64 {
-    override fun pointAtF64(parameterF64: Double): Point2F64 = interpolatedProjectivePointF64(startF64, endF64, parameterF64)
-
-    override fun wIntervalF64(
+    override fun homogeneousControlsF64(
         matrixF64: Matrix3x3F64,
         startParameterF64: Double,
         endParameterF64: Double,
-    ): PathProjectiveIntervalF64? = projectiveBezierWIntervalF64(
-        matrixF64,
-        listOf(startF64, endF64),
-        startParameterF64,
-        endParameterF64,
+    ): ProjectiveHomogeneousControlsResultF64 = projectiveBezierControlsF64(
+        matrixF64 = matrixF64,
+        controlsF64 = listOf(startF64, endF64),
+        startParameterF64 = startParameterF64,
+        endParameterF64 = endParameterF64,
     )
 }
 
 private class ProjectiveBezierPrimitiveF64(
-    private val controlsF64: List<Point2F64>,
+    private val controlsF64: Array<Point2F64>,
 ) : ProjectiveFillPrimitiveF64 {
-    override fun pointAtF64(parameterF64: Double): Point2F64 = bezierPointAtF64(controlsF64, parameterF64)
-
-    override fun wIntervalF64(
+    override fun homogeneousControlsF64(
         matrixF64: Matrix3x3F64,
         startParameterF64: Double,
         endParameterF64: Double,
-    ): PathProjectiveIntervalF64? = projectiveBezierWIntervalF64(
-        matrixF64,
-        controlsF64,
-        startParameterF64,
-        endParameterF64,
+    ): ProjectiveHomogeneousControlsResultF64 = projectiveBezierControlsF64(
+        matrixF64 = matrixF64,
+        controlsF64 = controlsF64.asList(),
+        startParameterF64 = startParameterF64,
+        endParameterF64 = endParameterF64,
     )
 }
 
-private fun projectiveBezierWIntervalF64(
+private fun projectiveBezierControlsF64(
     matrixF64: Matrix3x3F64,
     controlsF64: List<Point2F64>,
     startParameterF64: Double,
     endParameterF64: Double,
-): PathProjectiveIntervalF64? {
-    val restrictedControlsF64 = bezierControlsOnIntervalF64(controlsF64, startParameterF64, endParameterF64)
-    val intervalsF64 = restrictedControlsF64.map { pointF64 ->
-        when (val resultF64 = matrixF64.projectiveWIntervalForPointF64(pointF64)) {
-            is PathProjectiveIntervalResultF64.Ready -> resultF64.intervalF64
-            PathProjectiveIntervalResultF64.NonFinite -> return null
-        }
-    }
-    return projectiveHullIntervalF64(intervalsF64)
+): ProjectiveHomogeneousControlsResultF64 {
+    val homogeneousControlsF64 = controlsF64.map { pointF64 -> matrixF64.projectHomogeneousPointF64(pointF64) }
+    if (homogeneousControlsF64.any { it == null }) return ProjectiveHomogeneousControlsResultF64.NonFinite
+    return ProjectiveHomogeneousControlsResultF64.Ready(
+        homogeneousControlsOnIntervalF64(
+            homogeneousControlsF64.filterNotNull(),
+            startParameterF64,
+            endParameterF64,
+        ),
+    )
 }
 
-private fun bezierControlsOnIntervalF64(
-    controlsF64: List<Point2F64>,
+private fun homogeneousControlsOnIntervalF64(
+    controlsF64: List<ProjectiveHomogeneousPointF64>,
     startParameterF64: Double,
     endParameterF64: Double,
-): List<Point2F64> {
+): List<ProjectiveHomogeneousPointF64> {
     if (startParameterF64 == 0.0 && endParameterF64 == 1.0) return controlsF64
-    val (_, afterStartF64) = splitBezierControlsF64(controlsF64, startParameterF64)
+    val (_, afterStartF64) = splitHomogeneousControlsF64(controlsF64, startParameterF64)
     val localEndF64 = (endParameterF64 - startParameterF64) / (1.0 - startParameterF64)
-    return splitBezierControlsF64(afterStartF64, localEndF64).first
+    return splitHomogeneousControlsF64(afterStartF64, localEndF64).first
 }
 
-private fun splitBezierControlsF64(controlsF64: List<Point2F64>, parameterF64: Double): Pair<List<Point2F64>, List<Point2F64>> {
+private fun splitHomogeneousControlsF64(
+    controlsF64: List<ProjectiveHomogeneousPointF64>,
+    parameterF64: Double,
+): Pair<List<ProjectiveHomogeneousPointF64>, List<ProjectiveHomogeneousPointF64>> {
     var levelF64 = controlsF64
     val leftF64 = mutableListOf(levelF64.first())
     val rightF64 = mutableListOf(levelF64.last())
     while (levelF64.size > 1) {
-        levelF64 = levelF64.zipWithNext { firstF64, secondF64 ->
-            interpolatedProjectivePointF64(firstF64, secondF64, parameterF64)
-        }
+        levelF64 = levelF64.zipWithNext { firstF64, secondF64 -> interpolatedHomogeneousPointF64(firstF64, secondF64, parameterF64) }
         leftF64 += levelF64.first()
         rightF64 += levelF64.last()
     }
     return leftF64 to rightF64.asReversed()
 }
 
-private fun bezierPointAtF64(controlsF64: List<Point2F64>, parameterF64: Double): Point2F64 {
-    var levelF64 = controlsF64
-    while (levelF64.size > 1) {
-        levelF64 = levelF64.zipWithNext { firstF64, secondF64 ->
-            interpolatedProjectivePointF64(firstF64, secondF64, parameterF64)
-        }
-    }
-    return levelF64.single()
-}
-
-private fun interpolatedProjectivePointF64(firstF64: Point2F64, secondF64: Point2F64, parameterF64: Double): Point2F64 = Point2F64(
-    x = firstF64.x * (1.0 - parameterF64) + secondF64.x * parameterF64,
-    y = firstF64.y * (1.0 - parameterF64) + secondF64.y * parameterF64,
+private fun interpolatedHomogeneousPointF64(
+    firstF64: ProjectiveHomogeneousPointF64,
+    secondF64: ProjectiveHomogeneousPointF64,
+    parameterF64: Double,
+): ProjectiveHomogeneousPointF64 = ProjectiveHomogeneousPointF64(
+    xF64 = firstF64.xF64 * (1.0 - parameterF64) + secondF64.xF64 * parameterF64,
+    yF64 = firstF64.yF64 * (1.0 - parameterF64) + secondF64.yF64 * parameterF64,
+    wF64 = firstF64.wF64 * (1.0 - parameterF64) + secondF64.wF64 * parameterF64,
 )
 
 private class ProjectiveSvgArcPrimitiveF64 private constructor(
     private val fallbackF64: ProjectiveLinePrimitiveF64?,
     private val centerF64: ProjectiveArcCenterF64?,
 ) : ProjectiveFillPrimitiveF64 {
-    override fun pointAtF64(parameterF64: Double): Point2F64 = fallbackF64?.pointAtF64(parameterF64)
-        ?: requireNotNull(centerF64).pointAtF64(parameterF64)
-
-    override fun wIntervalF64(
+    override fun homogeneousControlsF64(
         matrixF64: Matrix3x3F64,
         startParameterF64: Double,
         endParameterF64: Double,
-    ): PathProjectiveIntervalF64? {
-        fallbackF64?.let { return it.wIntervalF64(matrixF64, startParameterF64, endParameterF64) }
-        return requireNotNull(centerF64).wIntervalF64(matrixF64, startParameterF64, endParameterF64)
-    }
+    ): ProjectiveHomogeneousControlsResultF64 = fallbackF64?.homogeneousControlsF64(
+        matrixF64,
+        startParameterF64,
+        endParameterF64,
+    ) ?: requireNotNull(centerF64).homogeneousControlsF64(matrixF64, startParameterF64, endParameterF64)
 
     companion object {
-        fun of(startF64: Point2F64, segmentF64: PathFillSegmentF64.ArcTo): ProjectiveSvgArcPrimitiveF64 {
+        fun of(
+            startF64: Point2F64,
+            endF64: Point2F64,
+            radiusF64: Vector2F64,
+            xAxisRotationDegreesF64: Double,
+            largeArc: Boolean,
+            sweep: Boolean,
+        ): ProjectiveSvgArcPrimitiveF64 {
             val centerF64 = projectiveArcCenterF64(
                 startF64 = startF64,
-                endF64 = segmentF64.point,
-                radiusF64 = segmentF64.radius,
-                xAxisRotationDegreesF64 = segmentF64.xAxisRotationDegreesF64,
-                largeArc = segmentF64.largeArc,
-                sweep = segmentF64.sweep,
+                endF64 = endF64,
+                radiusF64 = radiusF64,
+                xAxisRotationDegreesF64 = xAxisRotationDegreesF64,
+                largeArc = largeArc,
+                sweep = sweep,
             )
             return ProjectiveSvgArcPrimitiveF64(
-                fallbackF64 = if (centerF64 == null) ProjectiveLinePrimitiveF64(startF64, segmentF64.point) else null,
+                fallbackF64 = if (centerF64 == null) ProjectiveLinePrimitiveF64(startF64, endF64) else null,
                 centerF64 = centerF64,
             )
         }
@@ -537,7 +648,7 @@ private data class ProjectiveArcCenterF64(
     val startAngleF64: Double,
     val sweepAngleF64: Double,
 ) {
-    fun pointAtF64(parameterF64: Double): Point2F64 {
+    private fun pointAtF64(parameterF64: Double): Point2F64 {
         val angleF64 = startAngleF64 + sweepAngleF64 * parameterF64
         val cosAngleF64 = cos(angleF64)
         val sinAngleF64 = sin(angleF64)
@@ -549,44 +660,50 @@ private data class ProjectiveArcCenterF64(
         )
     }
 
-    fun wIntervalF64(
+    fun homogeneousControlsF64(
         matrixF64: Matrix3x3F64,
         startParameterF64: Double,
         endParameterF64: Double,
-    ): PathProjectiveIntervalF64? {
+    ): ProjectiveHomogeneousControlsResultF64 {
+        val angularSpanF64 = abs(sweepAngleF64 * (endParameterF64 - startParameterF64))
+        if (angularSpanF64 > PI * 0.5) return ProjectiveHomogeneousControlsResultF64.NeedsSubdivision
+        val intervalStartAngleF64 = this.startAngleF64 + sweepAngleF64 * startParameterF64
+        val intervalEndAngleF64 = this.startAngleF64 + sweepAngleF64 * endParameterF64
+        val halfSpanF64 = (intervalEndAngleF64 - intervalStartAngleF64) * 0.5
+        val middleAngleF64 = (intervalStartAngleF64 + intervalEndAngleF64) * 0.5
+        val middleWeightF64 = cos(halfSpanF64)
+        if (!middleWeightF64.isFinite() || middleWeightF64 <= 0.0) {
+            return ProjectiveHomogeneousControlsResultF64.NeedsSubdivision
+        }
         val cosRotationF64 = cos(rotationRadiansF64)
         val sinRotationF64 = sin(rotationRadiansF64)
-        val cosineCoefficientF64 = matrixF64.persp0F64 * radiusXF64 * cosRotationF64 +
-            matrixF64.persp1F64 * radiusXF64 * sinRotationF64
-        val sineCoefficientF64 = -matrixF64.persp0F64 * radiusYF64 * sinRotationF64 +
-            matrixF64.persp1F64 * radiusYF64 * cosRotationF64
-        val extremumAngleF64 = atan2(sineCoefficientF64, cosineCoefficientF64)
-        val parametersF64 = buildList {
-            add(startParameterF64)
-            add(endParameterF64)
-            listOf(extremumAngleF64, extremumAngleF64 + PI).forEach { angleF64 ->
-                parameterForAngleOrNullF64(angleF64)?.takeIf { it > startParameterF64 && it < endParameterF64 }?.let(::add)
-            }
+        val middlePointF64 = Point2F64(
+            centerF64.x * middleWeightF64 + radiusXF64 * cosRotationF64 * cos(middleAngleF64) -
+                radiusYF64 * sinRotationF64 * sin(middleAngleF64),
+            centerF64.y * middleWeightF64 + radiusXF64 * sinRotationF64 * cos(middleAngleF64) +
+                radiusYF64 * cosRotationF64 * sin(middleAngleF64),
+        )
+        val controlsF64 = listOf(
+            projectArcControlF64(matrixF64, pointAtF64(startParameterF64), 1.0),
+            projectArcControlF64(matrixF64, middlePointF64, middleWeightF64),
+            projectArcControlF64(matrixF64, pointAtF64(endParameterF64), 1.0),
+        )
+        return if (controlsF64.any { it == null }) {
+            ProjectiveHomogeneousControlsResultF64.NonFinite
         }
-        val intervalsF64 = parametersF64.map { parameterF64 ->
-            when (val resultF64 = matrixF64.projectiveWIntervalForPointF64(pointAtF64(parameterF64))) {
-                is PathProjectiveIntervalResultF64.Ready -> resultF64.intervalF64
-                PathProjectiveIntervalResultF64.NonFinite -> return null
-            }
-        }
-        return projectiveHullIntervalF64(intervalsF64)
-    }
-
-    private fun parameterForAngleOrNullF64(angleF64: Double): Double? {
-        if (sweepAngleF64 == 0.0) return null
-        val signedDistanceF64 = if (sweepAngleF64 > 0.0) {
-            positiveProjectiveAngleF64(angleF64 - startAngleF64)
-        } else {
-            -positiveProjectiveAngleF64(startAngleF64 - angleF64)
-        }
-        return (signedDistanceF64 / sweepAngleF64).takeIf { it in 0.0..1.0 }
+        else ProjectiveHomogeneousControlsResultF64.Ready(controlsF64.filterNotNull())
     }
 }
+
+private fun projectArcControlF64(
+    matrixF64: Matrix3x3F64,
+    pointF64: Point2F64,
+    weightF64: Double,
+): ProjectiveHomogeneousPointF64? = matrixF64.projectHomogeneousCoordinatesF64(
+    xF64 = pointF64.x,
+    yF64 = pointF64.y,
+    wF64 = weightF64,
+)
 
 private fun projectiveArcCenterF64(
     startF64: Point2F64,
