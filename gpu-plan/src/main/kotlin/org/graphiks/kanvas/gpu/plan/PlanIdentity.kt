@@ -30,3 +30,6 @@ internal fun canonicalPathAtomicGroup(draw: PathDraw): PlanAtomicGroupId = when 
     is PathFillDraw -> PlanAtomicGroupId("w4c:${draw.commandIndex}")
     is PathStrokeDraw -> PlanAtomicGroupId("w4d:${draw.commandIndex}")
 }
+
+internal fun canonicalGeneralPathAtomicGroup(draw: GeneralPathDraw): PlanAtomicGroupId =
+    PlanAtomicGroupId("w4d.2:${draw.commandIndex}")

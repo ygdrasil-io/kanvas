@@ -13,15 +13,33 @@ import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.RectI32
 
-public enum class CoveragePlan { FullOrScissor, AnalyticScalarAA }
-public enum class SamplePlan { SingleSample }
+public enum class CoveragePlan { FullOrScissor, AnalyticScalarAA, StencilAA4, BinaryMaskCover4 }
+public enum class SamplePlan { SingleSample, Multisample4 }
 public enum class BlendPlan { SrcOver }
 public enum class AttachmentLoadPlan { ClearTransparent, Load }
 public enum class AttachmentStorePlan { Store }
 public enum class PlanDepthStencilLoadStore { ClearZeroStore, LoadStoreTestReset }
 public enum class PlanDepthStencilAccess { Write, ReadWrite }
-public enum class PlanPassRole { MainRender, StencilProducer, StencilCover, TextureCopy, Filter, Resolve, Readback }
+public enum class PlanPassRole {
+    MainRender,
+    PathMaskClear,
+    PathRender,
+    StencilProducer,
+    StencilCover,
+    TextureCopy,
+    Filter,
+    Resolve,
+    Readback,
+}
 public enum class PathFillStrategy { DirectTriangle, StencilCover }
+public enum class PathRenderPhase {
+    MultisampleStencilColor,
+    HardEdgeMaskProducer,
+    HardEdgeMaskStencilProducer,
+    HardEdgeMaskStencilCover,
+    HardEdgeBinaryColorCover,
+}
+public enum class BinaryMaskFetchPlan { TextureLoadUnfiltered }
 
 /** Immutable geometry authority for a path draw, retained by `:math`. */
 public sealed interface PathDrawGeometry {
@@ -39,6 +57,82 @@ public sealed interface PlanDraw {
 
 /** Common sealed contract for W4c fills and W4d stroke snapshots. */
 public sealed interface PathDraw : PlanDraw {
+    public val strategy: PathFillStrategy
+    public fun copyPathGeometry(): PathDrawGeometry
+    public fun copyScissorI32(): RectI32
+}
+
+/** Typed W4d.2 path draw snapshot for a single-sample hard producer or a four-sample AA color draw. */
+public class GeneralPathDraw private constructor(
+    override public val commandIndex: Int,
+    override public val color: ColorF32,
+    geometry: PathDrawGeometry,
+    override public val strategy: PathFillStrategy,
+    scissorI32: RectI32,
+    override public val coverage: CoveragePlan,
+    override public val sample: SamplePlan,
+) : PathRenderDraw {
+    private val geometrySnapshot: PathDrawGeometry = geometry
+    private val scissorSnapshotI32 = scissorI32.copy()
+
+    override public val blend: BlendPlan = BlendPlan.SrcOver
+
+    override fun copyPathGeometry(): PathDrawGeometry = geometrySnapshot
+
+    override fun copyScissorI32(): RectI32 = scissorSnapshotI32.copy()
+
+    public companion object {
+        public fun of(
+            commandIndex: Int,
+            color: ColorF32,
+            geometry: PathDrawGeometry,
+            strategy: PathFillStrategy,
+            scissorI32: RectI32,
+            coverage: CoveragePlan,
+            sample: SamplePlan,
+        ): GeneralPathDraw {
+            require(commandIndex >= 0) { "Command index must not be negative" }
+            require(!scissorI32.isEmpty) { "General path scissor must be non-empty" }
+            require(
+                (coverage == CoveragePlan.FullOrScissor && sample == SamplePlan.SingleSample) ||
+                    (coverage == CoveragePlan.StencilAA4 && sample == SamplePlan.Multisample4),
+            ) { "General path draws require an explicit hard or four-sample AA contract" }
+            requirePathRenderGeometryForStrategy(geometry, strategy)
+            return GeneralPathDraw(commandIndex, color, geometry, strategy, scissorI32, coverage, sample)
+        }
+    }
+}
+
+/** A four-sample color cover driven by one unfiltered binary texel from a single-sample mask. */
+public class BinaryMaskedPathDraw private constructor(
+    public val producer: GeneralPathDraw,
+    public val mask: PlanResourceId,
+) : PathRenderDraw {
+    override public val commandIndex: Int = producer.commandIndex
+    override public val color: ColorF32 = producer.color
+    override public val strategy: PathFillStrategy = producer.strategy
+    override public val coverage: CoveragePlan = CoveragePlan.BinaryMaskCover4
+    override public val sample: SamplePlan = SamplePlan.Multisample4
+    override public val blend: BlendPlan = BlendPlan.SrcOver
+    public val maskFetch: BinaryMaskFetchPlan = BinaryMaskFetchPlan.TextureLoadUnfiltered
+    public val broadcastSampleCountI32: Int = 4
+
+    override fun copyPathGeometry(): PathDrawGeometry = producer.copyPathGeometry()
+
+    override fun copyScissorI32(): RectI32 = producer.copyScissorI32()
+
+    public companion object {
+        public fun of(source: GeneralPathDraw, mask: PlanResourceId): BinaryMaskedPathDraw {
+            require(source.coverage == CoveragePlan.FullOrScissor && source.sample == SamplePlan.SingleSample) {
+                "Binary mask covers require a single-sample hard-edge producer"
+            }
+            return BinaryMaskedPathDraw(source, mask)
+        }
+    }
+}
+
+/** Common typed path draw contract owned by W4d.2 path render passes. */
+public sealed interface PathRenderDraw : PlanDraw {
     public val strategy: PathFillStrategy
     public fun copyPathGeometry(): PathDrawGeometry
     public fun copyScissorI32(): RectI32
@@ -257,6 +351,19 @@ private fun pathFillStrategy(geometryF32: PathFillGeometryF32): PathFillStrategy
     else -> throw IllegalArgumentException("Path geometry must select exactly one fill strategy")
 }
 
+private fun requirePathRenderGeometryForStrategy(
+    geometry: PathDrawGeometry,
+    strategy: PathFillStrategy,
+) {
+    val fillGeometry = when (geometry) {
+        is PathDrawGeometry.Fill -> geometry.valueF32
+        is PathDrawGeometry.Stroke -> geometry.valueF32.copyFillGeometryF32()
+    }
+    require(pathFillStrategy(fillGeometry) == strategy) {
+        "Path geometry must select the declared fill strategy"
+    }
+}
+
 public data class PlanDrawDataResources(
     public val vertex: PlanResourceId,
     public val index: PlanResourceId,
@@ -280,6 +387,37 @@ public sealed interface PlanPass {
         override val id: PlanPassId = checkedPassId(role, ordinal)
         private val storedDraws = immutableList(draws)
         public fun draws(): List<PlanDraw> = storedDraws
+    }
+
+    /** Clears one single-sample hard-edge coverage mask before its atomic producer sequence. */
+    public class PathMaskClearPass(
+        override val ordinal: Int,
+        public val target: PlanResourceId,
+        public val atomicGroup: PlanAtomicGroupId,
+    ) : PlanPass {
+        override val role: PlanPassRole = PlanPassRole.PathMaskClear
+        override val id: PlanPassId = checkedPassId(role, ordinal)
+        public val load: AttachmentLoadPlan = AttachmentLoadPlan.ClearTransparent
+        public val store: AttachmentStorePlan = AttachmentStorePlan.Store
+    }
+
+    /** Typed W4d.2 path pass for multisample AA and hard-edge mask production/color cover. */
+    public class PathRenderPass(
+        override val ordinal: Int,
+        public val target: PlanResourceId,
+        public val draw: PathRenderDraw,
+        public val phase: PathRenderPhase,
+        public val drawDataResources: PlanDrawDataResources,
+        public val atomicGroup: PlanAtomicGroupId?,
+        public val depthStencil: PlanResourceId?,
+        public val load: AttachmentLoadPlan,
+        public val store: AttachmentStorePlan,
+        public val depthStencilAccess: PlanDepthStencilAccess?,
+        public val depthStencilLoadStore: PlanDepthStencilLoadStore?,
+        public val resolveTarget: PlanResourceId?,
+    ) : PlanPass {
+        override val role: PlanPassRole = PlanPassRole.PathRender
+        override val id: PlanPassId = checkedPassId(role, ordinal)
     }
 
     public class StencilProducer(

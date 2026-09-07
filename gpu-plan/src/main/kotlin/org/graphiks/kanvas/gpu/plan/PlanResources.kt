@@ -3,9 +3,20 @@ package org.graphiks.kanvas.gpu.plan
 import org.graphiks.math.geometry.SizeI32
 
 public enum class PlanResourceKind { Texture2D, Buffer }
-public enum class PlanResourceRole { LogicalTarget, ReadbackStaging, VertexData, IndexData, UniformData, DepthStencil }
+public enum class PlanResourceRole {
+    LogicalTarget,
+    MultisampleColorTarget,
+    PathHardEdgeMask,
+    PathHardEdgeDepthStencil,
+    ReadbackStaging,
+    VertexData,
+    IndexData,
+    UniformData,
+    DepthStencil,
+}
 public enum class PlanResourceUsage {
     RenderAttachment,
+    Sampled,
     CopySource,
     CopyDestination,
     MapRead,
@@ -19,6 +30,7 @@ public enum class PlanResourceLifetime { FrameLocal }
 public sealed interface PlanTextureFormat {
     public data class Color(public val value: PlanLogicalColorFormat) : PlanTextureFormat
     public data class DepthStencil(public val value: PlanDepthStencilFormat) : PlanTextureFormat
+    public object CoverageMask : PlanTextureFormat
 }
 
 public class PlanResource private constructor(
@@ -33,6 +45,7 @@ public class PlanResource private constructor(
     public val lifetime: PlanResourceLifetime,
     public val firstPassIndex: Int,
     public val lastPassIndexExclusive: Int,
+    public val sampleCountI32: Int,
 ) {
     private val storedExtent = extent?.copy()
     private val storedUsages = immutableSet(usages)
@@ -52,6 +65,7 @@ public class PlanResource private constructor(
             lifetime: PlanResourceLifetime,
             firstPassIndex: Int,
             lastPassIndexExclusive: Int,
+            sampleCountI32: Int = 1,
         ): PlanResource {
             require(ordinal >= 0) { "Resource ordinal must be non-negative" }
             require(byteSize > 0) { "Resource byte size must be positive" }
@@ -59,6 +73,9 @@ public class PlanResource private constructor(
             require(firstPassIndex >= 0 && lastPassIndexExclusive > firstPassIndex) { "Resource lifetime must be non-empty" }
             when (kind) {
                 PlanResourceKind.Texture2D -> {
+                    require(sampleCountI32 == 1 || sampleCountI32 == 4) {
+                        "Textures must be single-sample or four-sample"
+                    }
                     require(format != null && extent != null && !extent.isEmpty()) {
                         "Textures require a format and non-empty extent"
                     }
@@ -67,38 +84,83 @@ public class PlanResource private constructor(
                             "Depth-stencil resources require a depth-stencil format"
                         }
                         is PlanTextureFormat.DepthStencil -> {
-                            require(role == PlanResourceRole.DepthStencil) {
+                            require(
+                                role == PlanResourceRole.DepthStencil ||
+                                    role == PlanResourceRole.PathHardEdgeDepthStencil,
+                            ) {
                                 "Depth-stencil textures require the depth-stencil role"
                             }
                             require(PlanResourceUsage.DepthStencilAttachment in usages) {
                                 "Depth-stencil textures require depth-stencil attachment usage"
                             }
                         }
+                        PlanTextureFormat.CoverageMask -> {
+                            require(role == PlanResourceRole.PathHardEdgeMask) {
+                                "Coverage masks require the hard-edge mask role"
+                            }
+                            require(sampleCountI32 == 1) { "Coverage masks must be single-sample" }
+                            require(usages == setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled)) {
+                                "Coverage masks require render-attachment and sampled usage"
+                            }
+                        }
                     }
-                    require(byteSize >= minimumTextureByteSize(extent)) {
-                        "Texture byte size is smaller than its extent"
+                    require(
+                        byteSize == checkedTextureBytesI64(
+                            textureBytesPerPixelI32(format),
+                            extent.width,
+                            extent.height,
+                            sampleCountI32,
+                        ),
+                    ) {
+                        "Texture byte size must equal its checked logical size"
                     }
                 }
-                PlanResourceKind.Buffer -> require(format == null && extent == null) {
-                    "Buffers cannot declare a format or extent"
+                PlanResourceKind.Buffer -> {
+                    require(format == null && extent == null) { "Buffers cannot declare a format or extent" }
+                    require(sampleCountI32 == 1) { "Buffers must be single-sample" }
                 }
             }
             val isD24S8DepthStencilTexture = kind == PlanResourceKind.Texture2D &&
-                role == PlanResourceRole.DepthStencil &&
+                (role == PlanResourceRole.DepthStencil || role == PlanResourceRole.PathHardEdgeDepthStencil) &&
                 format == PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8)
             require(PlanResourceUsage.DepthStencilAttachment !in usages || isD24S8DepthStencilTexture) {
                 "Depth-stencil attachment usage requires a D24S8 depth-stencil texture"
             }
             return PlanResource(planResourceId(role, ordinal), role, ordinal, kind, format, extent, byteSize,
-                usages, lifetime, firstPassIndex, lastPassIndexExclusive)
+                usages, lifetime, firstPassIndex, lastPassIndexExclusive, sampleCountI32)
         }
 
-        private fun minimumTextureByteSize(extent: SizeI32): Long = try {
-            Math.multiplyExact(Math.multiplyExact(extent.width.toLong(), extent.height.toLong()), LOGICAL_PIXEL_BYTES)
-        } catch (error: ArithmeticException) {
-            throw IllegalArgumentException("Texture byte size calculation overflows", error)
+        private fun textureBytesPerPixelI32(format: PlanTextureFormat): Int = when (format) {
+            is PlanTextureFormat.Color,
+            is PlanTextureFormat.DepthStencil,
+            PlanTextureFormat.CoverageMask,
+            -> 4
         }
-
-        private const val LOGICAL_PIXEL_BYTES: Long = 4L
     }
+}
+
+/** Checked logical allocation size for a texture, including its sample planes. */
+public fun checkedTextureBytesI64(
+    bytesPerPixelI32: Int,
+    widthI32: Int,
+    heightI32: Int,
+    sampleCountI32: Int,
+): Long {
+    require(bytesPerPixelI32 > 0) { "Texture bytes per pixel must be positive" }
+    require(widthI32 > 0 && heightI32 > 0) { "Texture extent must be positive" }
+    require(sampleCountI32 == 1 || sampleCountI32 == 4) {
+        "Texture sample count must be single-sample or four-sample"
+    }
+    return checkedTextureMultiplyI64(
+        checkedTextureMultiplyI64(bytesPerPixelI32.toLong(), widthI32.toLong()),
+        checkedTextureMultiplyI64(heightI32.toLong(), sampleCountI32.toLong()),
+    )
+}
+
+private fun checkedTextureMultiplyI64(first: Long, second: Long): Long {
+    require(first >= 0 && second >= 0) { "Texture allocation factors must be non-negative" }
+    if (first != 0L && second > Long.MAX_VALUE / first) {
+        throw IllegalArgumentException("Texture byte size calculation overflows")
+    }
+    return first * second
 }
