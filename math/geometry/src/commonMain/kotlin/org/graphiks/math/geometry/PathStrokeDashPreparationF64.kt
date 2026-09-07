@@ -420,6 +420,11 @@ private class PathStrokeDashPreparerF64(
             is PathStrokeSvgArcPrimitiveF64 -> primitiveF64.arcF64?.let { arcF64 ->
                 abs(arcF64.sweepAngle) * max(arcF64.radiusX, arcF64.radiusY)
             } ?: strokeVectorLengthF64(primitiveF64.endF64 - primitiveF64.startF64)
+
+            is ProjectedStrokePrimitiveF64 -> max(
+                evaluatedDerivativeLengthF64(primitiveF64, startParameterF64),
+                evaluatedDerivativeLengthF64(primitiveF64, endParameterF64),
+            )
         }
         if (!speedF64.isFinite()) throw PathStrokeInvalidInputAbort()
         return speedF64
