@@ -6,6 +6,8 @@ import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.render.ir.BlendMode
 import org.graphiks.kanvas.render.ir.BlendNode
 import org.graphiks.kanvas.render.ir.ClipStackNode
+import org.graphiks.kanvas.render.ir.ClipEntry
+import org.graphiks.kanvas.render.ir.ClipOperation
 import org.graphiks.kanvas.render.ir.CoverageRequest
 import org.graphiks.kanvas.render.ir.DrawNode
 import org.graphiks.kanvas.render.ir.DrawOrigin
@@ -14,6 +16,7 @@ import org.graphiks.kanvas.render.ir.GeometryNode
 import org.graphiks.kanvas.render.ir.MaterialNode
 import org.graphiks.kanvas.render.ir.PaintNode
 import org.graphiks.kanvas.render.ir.PaintStyleNode
+import org.graphiks.kanvas.render.ir.PathEffectNode
 import org.graphiks.kanvas.render.ir.RenderPlanResult
 import org.graphiks.kanvas.render.ir.RenderTargetDescriptor
 import org.graphiks.kanvas.render.ir.SceneCommand
@@ -90,6 +93,37 @@ class W4dPathStrokePlanCompilerTest {
         val scene = sceneOf(List(512) { offTarget } + pathDraw(PaintStyleNode.STROKE))
 
         assertIs<GpuPlanSelection.NotCandidate>(compiler.select(scene, target(scene)))
+    }
+
+    @Test
+    fun nonFiniteUnsupportedPathEffectIsInvalidBeforeItsCapabilityGap() {
+        val command = pathDraw(PaintStyleNode.STROKE).let { draw ->
+            SceneCommand.Draw(draw.node.copy(paint = draw.node.paint!!.copy(pathEffect = PathEffectNode.Corner(Float.NaN))))
+        }
+        val result = compiler.select(sceneOf(listOf(command)), target(sceneOf(listOf(command))))
+
+        assertIs<GpuPlanSelection.InvalidScene>(result)
+    }
+
+    @Test
+    fun unsupportedCoverageInverseTransformClipEffectBlendAndMaterialAreAtomicGaps() {
+        val base = pathDraw(PaintStyleNode.STROKE).node
+        val inverse = GeometryNode.Path(PathBuilder(org.graphiks.math.geometry.FillRule.INVERSE_WINDING)
+            .moveTo(2f, 2f).lineTo(12f, 2f).lineTo(2f, 12f).close().build())
+        val rejected = listOf(
+            base.copy(coverage = CoverageRequest.ANTIALIASED),
+            base.copy(geometry = inverse),
+            base.copy(transform = Matrix3x3F32.rotation(0.25f)),
+            base.copy(clip = ClipStackNode.Operations.of(listOf(ClipEntry(base.geometry, ClipOperation.INTERSECT)))),
+            base.copy(paint = base.paint!!.copy(pathEffect = PathEffectNode.Corner(1f))),
+            base.copy(blend = BlendNode.Mode(BlendMode.SRC)),
+            base.copy(material = MaterialNode.Transparent),
+        )
+
+        rejected.forEach { node ->
+            val scene = sceneOf(listOf(SceneCommand.Draw(node)))
+            assertIs<GpuPlanSelection.NotCandidate>(compiler.select(scene, target(scene)))
+        }
     }
 
     private fun sceneOf(draws: List<SceneCommand.Draw>): SceneSnapshot = SceneSnapshot.of(
