@@ -367,6 +367,7 @@ private class PathProjectiveFillPreparerF64(
         }
         when (certifyWSignF64(controlsF64)) {
             ProjectiveWCertificateF64.Horizon -> abortInvalid(PathProjectiveInvalidSceneReason.PerspectiveHorizonCrossing)
+            ProjectiveWCertificateF64.NonFinite -> abortInvalid(PathProjectiveInvalidSceneReason.NonFiniteProjection)
             ProjectiveWCertificateF64.NeedsSubdivision -> {
                 subdividePrimitiveIntervalF64(
                     primitiveF64,
@@ -422,13 +423,21 @@ private class PathProjectiveFillPreparerF64(
     private fun projectPointF64(pointF64: Point2F64): Point2F64 {
         val homogeneousF64 = matrixF64.projectHomogeneousPointF64(pointF64)
             ?: abortInvalid(PathProjectiveInvalidSceneReason.NonFiniteProjection)
-        if (projectiveCompensatedSignF64(ProjectiveCompensatedF64(
+        when (projectiveWSignF64(ProjectiveCompensatedF64(
                 homogeneousF64.wF64,
                 homogeneousF64.wResidualF64,
                 homogeneousF64.wUncertaintyF64,
-            )) == 0
-        ) {
-            abortInvalid(PathProjectiveInvalidSceneReason.PerspectiveHorizonCrossing)
+                homogeneousF64.wLowerTailF64,
+                homogeneousF64.wUpperTailF64,
+                homogeneousF64.wSubnormalUnitsF64,
+            ))) {
+            ProjectiveWSignF64.Root -> abortInvalid(PathProjectiveInvalidSceneReason.PerspectiveHorizonCrossing)
+            ProjectiveWSignF64.Unknown,
+            ProjectiveWSignF64.NonFinite,
+            -> abortInvalid(PathProjectiveInvalidSceneReason.NonFiniteProjection)
+            ProjectiveWSignF64.Positive,
+            ProjectiveWSignF64.Negative,
+            -> Unit
         }
         val projectedF64 = projectFiniteHomogeneousPointF64(homogeneousF64)
             ?: abortInvalid(PathProjectiveInvalidSceneReason.NonFiniteProjection)
@@ -476,35 +485,44 @@ private fun projectedControlHullErrorBoundF64(controlsF64: List<Point2F64>): Dou
 
 private fun certifyWSignF64(controlsF64: List<ProjectiveHomogeneousPointF64>): ProjectiveWCertificateF64 {
     if (controlsF64.isEmpty() || controlsF64.any {
-            !it.wF64.isFinite() || !it.wResidualF64.isFinite() || !it.wUncertaintyF64.isFinite()
+            !it.wF64.isFinite() || !it.wResidualF64.isFinite() || !it.wUncertaintyF64.isFinite() ||
+                !it.wLowerTailF64.isFinite() || !it.wUpperTailF64.isFinite()
         }
     ) {
-        return ProjectiveWCertificateF64.Horizon
+        return ProjectiveWCertificateF64.NonFinite
     }
-    val signsF64 = controlsF64.map { controlF64 ->
-        projectiveCompensatedSignF64(
+    val signsF64 = controlsF64.map { controlF64 -> projectiveWSignF64(
             ProjectiveCompensatedF64(
                 controlF64.wF64,
                 controlF64.wResidualF64,
                 controlF64.wUncertaintyF64,
+                controlF64.wLowerTailF64,
+                controlF64.wUpperTailF64,
+                controlF64.wSubnormalUnitsF64,
             ),
         )
     }
-    if (signsF64.first() == 0 || signsF64.last() == 0) return ProjectiveWCertificateF64.Horizon
-    if (signsF64.all { it > 0 } || signsF64.all { it < 0 }) {
+    if (signsF64.any { it == ProjectiveWSignF64.NonFinite }) return ProjectiveWCertificateF64.NonFinite
+    if (signsF64.first() == ProjectiveWSignF64.Root || signsF64.last() == ProjectiveWSignF64.Root) {
+        return ProjectiveWCertificateF64.Horizon
+    }
+    if (signsF64.all { it == ProjectiveWSignF64.Positive } || signsF64.all { it == ProjectiveWSignF64.Negative }) {
         return ProjectiveWCertificateF64.StrictlySeparated
     }
+    if (signsF64.any { it == ProjectiveWSignF64.Unknown }) return ProjectiveWCertificateF64.NeedsSubdivision
     // Bernstein's variation-diminishing property makes an odd number of strict sign variations
     // a root certificate on this whole interval.  It catches non-dyadic roots without relying on
     // a sampled parameter or an epsilon comparison.
-    val nonZeroSignsF64 = signsF64.filter { it != 0 }
-    val signVariationCountI32 = nonZeroSignsF64.zipWithNext().count { (firstI32, secondI32) -> firstI32 != secondI32 }
+    val signVariationCountI32 = signsF64.zipWithNext().count { (firstF64, secondF64) -> firstF64 != secondF64 }
     if (signVariationCountI32 % 2 == 1) return ProjectiveWCertificateF64.Horizon
-    if (projectiveQuadraticRootCertificateF64(controlsF64.map { controlF64 ->
+    if (projectiveBezierRootCertificateF64(controlsF64.map { controlF64 ->
             ProjectiveCompensatedF64(
                 controlF64.wF64,
                 controlF64.wResidualF64,
                 controlF64.wUncertaintyF64,
+                controlF64.wLowerTailF64,
+                controlF64.wUpperTailF64,
+                controlF64.wSubnormalUnitsF64,
             )
         })
     ) {
@@ -570,6 +588,7 @@ private enum class ProjectiveWCertificateF64 {
     StrictlySeparated,
     NeedsSubdivision,
     Horizon,
+    NonFinite,
 }
 
 private enum class ProjectiveHorizonCertificateF64 {
@@ -659,8 +678,16 @@ private fun interpolatedHomogeneousPointF64(
     parameterF64: Double,
 ): ProjectiveHomogeneousPointF64 {
     val wF64 = interpolateProjectiveCompensatedF64(
-        ProjectiveCompensatedF64(firstF64.wF64, firstF64.wResidualF64, firstF64.wUncertaintyF64),
-        ProjectiveCompensatedF64(secondF64.wF64, secondF64.wResidualF64, secondF64.wUncertaintyF64),
+        ProjectiveCompensatedF64(
+            firstF64.wF64, firstF64.wResidualF64, firstF64.wUncertaintyF64,
+            firstF64.wLowerTailF64, firstF64.wUpperTailF64,
+            firstF64.wSubnormalUnitsF64,
+        ),
+        ProjectiveCompensatedF64(
+            secondF64.wF64, secondF64.wResidualF64, secondF64.wUncertaintyF64,
+            secondF64.wLowerTailF64, secondF64.wUpperTailF64,
+            secondF64.wSubnormalUnitsF64,
+        ),
         parameterF64,
     ) ?: return ProjectiveHomogeneousPointF64(Double.NaN, Double.NaN, Double.NaN)
     return ProjectiveHomogeneousPointF64(
@@ -669,12 +696,19 @@ private fun interpolatedHomogeneousPointF64(
         wF64 = wF64.leadingF64,
         wResidualF64 = wF64.residualF64,
         wUncertaintyF64 = wF64.uncertaintyF64,
+        wLowerTailF64 = wF64.lowerTailF64,
+        wUpperTailF64 = wF64.upperTailF64,
+        wSubnormalUnitsF64 = wF64.subnormalUnitsF64,
     )
 }
 
 private fun effectiveProjectiveWF64(pointF64: ProjectiveHomogeneousPointF64): Double =
     projectiveCompensatedValueF64(
-        ProjectiveCompensatedF64(pointF64.wF64, pointF64.wResidualF64, pointF64.wUncertaintyF64),
+        ProjectiveCompensatedF64(
+            pointF64.wF64, pointF64.wResidualF64, pointF64.wUncertaintyF64,
+            pointF64.wLowerTailF64, pointF64.wUpperTailF64,
+            pointF64.wSubnormalUnitsF64,
+        ),
     )
 
 private class ProjectiveSvgArcPrimitiveF64 private constructor(
@@ -809,16 +843,33 @@ private data class ProjectiveArcCenterF64(
                     ?.let(::add)
             }
         }.sorted()
-        val weightsF64 = parametersF64.map { parameterF64 ->
+        val signsF64 = parametersF64.map { parameterF64 ->
             val pointF64 = pointAtF64(parameterF64)
-            matrixF64.persp0F64 * pointF64.x + matrixF64.persp1F64 * pointF64.y + matrixF64.persp2F64
+            val homogeneousF64 = matrixF64.projectHomogeneousPointF64(pointF64)
+                ?: return ProjectiveHorizonCertificateF64.NonFinite
+            projectiveWSignF64(
+                ProjectiveCompensatedF64(
+                    homogeneousF64.wF64,
+                    homogeneousF64.wResidualF64,
+                    homogeneousF64.wUncertaintyF64,
+                    homogeneousF64.wLowerTailF64,
+                    homogeneousF64.wUpperTailF64,
+                    homogeneousF64.wSubnormalUnitsF64,
+                ),
+            )
         }
-        if (weightsF64.any { !it.isFinite() }) return ProjectiveHorizonCertificateF64.NonFinite
-        if (weightsF64.any { it == 0.0 }) return ProjectiveHorizonCertificateF64.Crossing
-        if (weightsF64.zipWithNext().any { (firstF64, secondF64) -> (firstF64 < 0.0) != (secondF64 < 0.0) }) {
+        if (signsF64.any { it == ProjectiveWSignF64.NonFinite }) return ProjectiveHorizonCertificateF64.NonFinite
+        if (signsF64.any { it == ProjectiveWSignF64.Root }) return ProjectiveHorizonCertificateF64.Crossing
+        if (signsF64.zipWithNext().any { (firstF64, secondF64) ->
+                (firstF64 == ProjectiveWSignF64.Positive && secondF64 == ProjectiveWSignF64.Negative) ||
+                    (firstF64 == ProjectiveWSignF64.Negative && secondF64 == ProjectiveWSignF64.Positive)
+            }
+        ) {
             return ProjectiveHorizonCertificateF64.Crossing
         }
-        return ProjectiveHorizonCertificateF64.Separated
+        return if (signsF64.all { it == ProjectiveWSignF64.Positive } ||
+            signsF64.all { it == ProjectiveWSignF64.Negative }
+        ) ProjectiveHorizonCertificateF64.Separated else ProjectiveHorizonCertificateF64.Unknown
     }
 
     private fun parameterForAngleOrNullF64(angleF64: Double): Double? {

@@ -106,20 +106,32 @@ private fun correlatedOutlineWIntervalF64(
         startHomogeneousF64.wF64,
         startHomogeneousF64.wResidualF64,
         startHomogeneousF64.wUncertaintyF64,
+        startHomogeneousF64.wLowerTailF64,
+        startHomogeneousF64.wUpperTailF64,
+        startHomogeneousF64.wSubnormalUnitsF64,
     )
     val endWExpansionF64 = ProjectiveCompensatedF64(
         endHomogeneousF64.wF64,
         endHomogeneousF64.wResidualF64,
         endHomogeneousF64.wUncertaintyF64,
+        endHomogeneousF64.wLowerTailF64,
+        endHomogeneousF64.wUpperTailF64,
+        endHomogeneousF64.wSubnormalUnitsF64,
     )
     val startWIntervalF64 = projectiveCompensatedIntervalF64(startWExpansionF64)
         ?: return CorrelatedOutlineWResultF64.NonFinite
     val endWIntervalF64 = projectiveCompensatedIntervalF64(endWExpansionF64)
         ?: return CorrelatedOutlineWResultF64.NonFinite
-    val startSignI32 = projectiveCompensatedSignF64(startWExpansionF64)
-    val endSignI32 = projectiveCompensatedSignF64(endWExpansionF64)
-    if (startSignI32 == 0 || endSignI32 == 0 || startSignI32 != endSignI32) {
-        return CorrelatedOutlineWResultF64.Horizon
+    val startSignF64 = projectiveWSignF64(startWExpansionF64)
+    val endSignF64 = projectiveWSignF64(endWExpansionF64)
+    if (startSignF64 == ProjectiveWSignF64.Root || endSignF64 == ProjectiveWSignF64.Root ||
+        (startSignF64 == ProjectiveWSignF64.Positive && endSignF64 == ProjectiveWSignF64.Negative) ||
+        (startSignF64 == ProjectiveWSignF64.Negative && endSignF64 == ProjectiveWSignF64.Positive)
+    ) return CorrelatedOutlineWResultF64.Horizon
+    if (startSignF64 != ProjectiveWSignF64.Positive && startSignF64 != ProjectiveWSignF64.Negative ||
+        endSignF64 != ProjectiveWSignF64.Positive && endSignF64 != ProjectiveWSignF64.Negative
+    ) {
+        return CorrelatedOutlineWResultF64.Unbounded
     }
     val gradientLengthF64 = projectiveHypotF64(matrixF64.persp0F64, matrixF64.persp1F64)
     val maximumWDeviationF64 = nextUpProjectiveF64(gradientLengthF64 * intervalF64.sourceSagittaUpperBoundF64)
@@ -143,6 +155,12 @@ internal data class ProjectiveHomogeneousPointF64(
     val wResidualF64: Double = 0.0,
     /** Directed absolute enclosure for W terms below [wResidualF64]. */
     val wUncertaintyF64: Double = 0.0,
+    /** Inclusive directed W tail lower bound. */
+    val wLowerTailF64: Double = -wUncertaintyF64,
+    /** Inclusive directed W tail upper bound. */
+    val wUpperTailF64: Double = wUncertaintyF64,
+    /** Exact W tail in units of [Double.MIN_VALUE]. */
+    val wSubnormalUnitsF64: Double = 0.0,
 )
 
 internal fun Matrix3x3F64.projectHomogeneousPointF64(pointF64: Point2F64): ProjectiveHomogeneousPointF64? {
@@ -157,6 +175,9 @@ internal fun Matrix3x3F64.projectHomogeneousPointF64(pointF64: Point2F64): Proje
         wF64 = wExpansionF64.leadingF64,
         wResidualF64 = wExpansionF64.residualF64,
         wUncertaintyF64 = wExpansionF64.uncertaintyF64,
+        wLowerTailF64 = wExpansionF64.lowerTailF64,
+        wUpperTailF64 = wExpansionF64.upperTailF64,
+        wSubnormalUnitsF64 = wExpansionF64.subnormalUnitsF64,
     )
 }
 
@@ -182,9 +203,13 @@ internal fun Matrix3x3F64.projectHomogeneousCoordinatesF64(
         transformedWExpansionF64.leadingF64,
         transformedWExpansionF64.residualF64,
         transformedWExpansionF64.uncertaintyF64,
+        transformedWExpansionF64.lowerTailF64,
+        transformedWExpansionF64.upperTailF64,
+        transformedWExpansionF64.subnormalUnitsF64,
     ).takeIf {
         it.xF64.isFinite() && it.yF64.isFinite() && it.wF64.isFinite() &&
-            it.wResidualF64.isFinite() && it.wUncertaintyF64.isFinite()
+            it.wResidualF64.isFinite() && it.wUncertaintyF64.isFinite() &&
+            it.wLowerTailF64.isFinite() && it.wUpperTailF64.isFinite()
     }
 }
 
@@ -193,6 +218,9 @@ internal fun projectFiniteHomogeneousPointF64(pointF64: ProjectiveHomogeneousPoi
         pointF64.wF64,
         pointF64.wResidualF64,
         pointF64.wUncertaintyF64,
+        pointF64.wLowerTailF64,
+        pointF64.wUpperTailF64,
+        pointF64.wSubnormalUnitsF64,
     )
     val effectiveWF64 = projectiveCompensatedValueF64(wExpansionF64)
     if (!pointF64.xF64.isFinite() || !pointF64.yF64.isFinite() || !effectiveWF64.isFinite() ||
