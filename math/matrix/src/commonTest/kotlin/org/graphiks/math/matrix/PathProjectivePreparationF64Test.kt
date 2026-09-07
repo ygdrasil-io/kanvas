@@ -623,6 +623,31 @@ class PathProjectivePreparationF64Test {
     }
 
     @Test
+    fun `cubic tangent at one third is certified without rounding its stationary point`() {
+        fun classify(lastControlF32: Float, policyF64: PathFillFlatteningPolicyF64 = PathFillFlatteningPolicyF64()):
+            PathProjectivePreparationResult =
+            Matrix3x3F64(persp0F64 = 1.0, persp2F64 = 0.0).prepareProjectedPathFillInputF64(
+                PathBuilder().moveTo(1f, 0f).cubicTo(-0.5f, 0f, -2f, 0f, lastControlF32, 0f)
+                    .lineTo(1f, 1f).close().build(),
+                policyF64 = policyF64,
+            )
+
+        val depthZeroF64 = PathFillFlatteningPolicyF64(limitsI32 = PathFillLimitsI32(maxSubdivisionDepthI32 = 0))
+        listOf(PathFillFlatteningPolicyF64(), depthZeroF64).forEach { policyF64 ->
+            assertEquals(
+                PathProjectiveInvalidSceneReason.PerspectiveHorizonCrossing,
+                assertIs<PathProjectivePreparationResult.InvalidScene>(classify(10f, policyF64)).reason,
+            )
+        }
+
+        assertIs<PathProjectivePreparationResult.Ready>(classify(10.25f))
+        assertEquals(
+            PathProjectiveResourceLimitReason.FlatteningDidNotConverge,
+            assertIs<PathProjectivePreparationResult.ResourceLimitExceeded>(classify(10.25f, depthZeroF64)).reason,
+        )
+    }
+
+    @Test
     fun `long arc horizon is classified before a zero subdivision budget is exhausted`() {
         val result = Matrix3x3F64(persp0F64 = 1.0, persp2F64 = 0.0).prepareProjectedPathFillInputF64(
             path = PathBuilder().moveTo(1f, 0f).arcTo(1f, 1f, 0f, false, true, -1f, 0f)

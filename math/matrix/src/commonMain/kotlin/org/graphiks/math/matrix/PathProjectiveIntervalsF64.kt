@@ -401,8 +401,132 @@ internal fun projectiveQuadraticRootCertificateF64(controlsF64: List<ProjectiveC
 internal fun projectiveBezierRootCertificateF64(controlsF64: List<ProjectiveCompensatedF64>): Boolean = when (controlsF64.size) {
     3 -> projectiveQuadraticRootCertificateF64(controlsF64)
     4 -> projectiveCubicDegreeReducedRootCertificateF64(controlsF64) ||
+        projectiveCubicMultipleRootCertificateF64(controlsF64) ||
         projectiveGeneralCubicRootCertificateF64(controlsF64)
     else -> false
+}
+
+/**
+ * Certifies a non-triple repeated cubic root without materializing its generally non-dyadic
+ * parameter.  For `p(t) = a*t^3 + b*t^2 + c*t + d`, a repeated root has
+ *
+ *     t = (9*a*d - b*c) / (2*(b*b - 3*a*c)).
+ *
+ * when the denominator is nonzero.  The cubic discriminant proves that this stationary point is
+ * a root; strict retained signs of numerator, denominator and their difference prove it lies in
+ * `(0, 1)`.  Every decision uses the compensated expansions, so an inexact `Double` such as
+ * `1.0 / 3.0` is never substituted for the actual polynomial parameter.
+ */
+private fun projectiveCubicMultipleRootCertificateF64(controlsF64: List<ProjectiveCompensatedF64>): Boolean {
+    if (controlsF64.any {
+            it.lowerTailF64 != 0.0 || it.upperTailF64 != 0.0 ||
+                it.subnormalUnitsF64 != 0.0 || it.subnormalResidualUnitsF64 != 0.0
+        }
+    ) return false
+    val normalizedControlsF64 = projectiveNormalizeCubicControlsF64(controlsF64) ?: return false
+    val coefficientsF64 = projectiveCubicPowerCoefficientsF64(normalizedControlsF64) ?: return false
+    val aF64 = coefficientsF64[0]
+    val bF64 = coefficientsF64[1]
+    val cF64 = coefficientsF64[2]
+    val dF64 = coefficientsF64[3]
+    if (projectiveCompensatedSignF64(aF64) == 0) return false
+
+    val denominatorHalfF64 = projectiveCompensatedAddF64(
+        projectiveCompensatedMultiplyF64(bF64, bF64) ?: return false,
+        projectiveCompensatedScaleF64(projectiveCompensatedMultiplyF64(aF64, cF64) ?: return false, -3.0)
+            ?: return false,
+    ) ?: return false
+    val denominatorF64 = projectiveCompensatedScaleF64(denominatorHalfF64, 2.0) ?: return false
+    val numeratorF64 = projectiveCompensatedAddF64(
+        projectiveCompensatedScaleF64(projectiveCompensatedMultiplyF64(aF64, dF64) ?: return false, 9.0)
+            ?: return false,
+        projectiveCompensatedNegateF64(projectiveCompensatedMultiplyF64(bF64, cF64) ?: return false),
+    ) ?: return false
+    val denominatorSignI32 = projectiveCompensatedSignF64(denominatorF64)
+    if (denominatorSignI32 == 0 || denominatorSignI32 != projectiveCompensatedSignF64(numeratorF64)) return false
+    val remainingF64 = projectiveCompensatedAddF64(
+        denominatorF64,
+        projectiveCompensatedNegateF64(numeratorF64),
+    ) ?: return false
+    if (projectiveCompensatedSignF64(remainingF64) != denominatorSignI32) return false
+
+    val discriminantF64 = projectiveCubicDiscriminantF64(aF64, bF64, cF64, dF64) ?: return false
+    return projectiveWSignF64(discriminantF64) == ProjectiveWSignF64.Root
+}
+
+/** Keeps all cubic invariants near unit scale without using a JVM-only wide-number type. */
+private fun projectiveNormalizeCubicControlsF64(
+    controlsF64: List<ProjectiveCompensatedF64>,
+): List<ProjectiveCompensatedF64>? {
+    val maximumExponentI32 = controlsF64.mapNotNull(::projectiveCompensatedMaximumExponentI32).maxOrNull()
+        ?: return null
+    // A one-limb power of two is enough to keep MAX-scale products finite and to lift MIN-scale
+    // products above the underflow boundary.  If a still smaller mixed term disappears, the
+    // subsequent sign certificate simply remains inconclusive rather than manufacturing a root.
+    val shiftI32 = (-maximumExponentI32).coerceIn(-1022, 1023)
+    val factorF64 = Double.fromBits((shiftI32 + 1023).toLong() shl 52)
+    return controlsF64.map { projectiveCompensatedScaleF64(it, factorF64) ?: return null }
+}
+
+/** Returns power-basis `(a, b, c, d)` from cubic Bernstein controls. */
+private fun projectiveCubicPowerCoefficientsF64(
+    controlsF64: List<ProjectiveCompensatedF64>,
+): List<ProjectiveCompensatedF64>? {
+    val dF64 = controlsF64[0]
+    val cF64 = projectiveCompensatedScaleF64(
+        projectiveCompensatedAddF64(controlsF64[1], projectiveCompensatedNegateF64(controlsF64[0])) ?: return null,
+        3.0,
+    ) ?: return null
+    val bF64 = projectiveCompensatedScaleF64(
+        projectiveCompensatedAddF64(
+            projectiveCompensatedAddF64(controlsF64[0], projectiveCompensatedScaleF64(controlsF64[1], -2.0) ?: return null)
+                ?: return null,
+            controlsF64[2],
+        ) ?: return null,
+        3.0,
+    ) ?: return null
+    val aF64 = projectiveCompensatedAddF64(
+        projectiveCompensatedAddF64(
+            projectiveCompensatedAddF64(projectiveCompensatedNegateF64(controlsF64[0]),
+                projectiveCompensatedScaleF64(controlsF64[1], 3.0) ?: return null) ?: return null,
+            projectiveCompensatedScaleF64(controlsF64[2], -3.0) ?: return null,
+        ) ?: return null,
+        controlsF64[3],
+    ) ?: return null
+    return listOf(aF64, bF64, cF64, dF64)
+}
+
+/** Exact-sign discriminant of `a*t³ + b*t² + c*t + d`, retaining all product expansions. */
+private fun projectiveCubicDiscriminantF64(
+    aF64: ProjectiveCompensatedF64,
+    bF64: ProjectiveCompensatedF64,
+    cF64: ProjectiveCompensatedF64,
+    dF64: ProjectiveCompensatedF64,
+): ProjectiveCompensatedF64? {
+    fun multiply(leftF64: ProjectiveCompensatedF64, rightF64: ProjectiveCompensatedF64): ProjectiveCompensatedF64? =
+        projectiveCompensatedMultiplyF64(leftF64, rightF64)
+    fun scale(valueF64: ProjectiveCompensatedF64, factorF64: Double): ProjectiveCompensatedF64? =
+        projectiveCompensatedScaleF64(valueF64, factorF64)
+    fun add(leftF64: ProjectiveCompensatedF64, rightF64: ProjectiveCompensatedF64): ProjectiveCompensatedF64? =
+        projectiveCompensatedAddF64(leftF64, rightF64)
+
+    val eighteenAbcdF64 = scale(multiply(multiply(aF64, bF64) ?: return null, multiply(cF64, dF64) ?: return null)
+        ?: return null, 18.0) ?: return null
+    val fourBCubedF64 = scale(multiply(bF64, multiply(bF64, bF64) ?: return null) ?: return null, -4.0) ?: return null
+    val bSquaredCSquaredF64 = multiply(multiply(bF64, bF64) ?: return null, multiply(cF64, cF64) ?: return null) ?: return null
+    val fourACubedF64 = scale(multiply(aF64, multiply(cF64, multiply(cF64, cF64) ?: return null) ?: return null)
+        ?: return null, -4.0) ?: return null
+    val twentySevenASquaredDSquaredF64 = scale(
+        multiply(multiply(aF64, aF64) ?: return null, multiply(dF64, dF64) ?: return null) ?: return null,
+        -27.0,
+    ) ?: return null
+    return listOf(
+        eighteenAbcdF64,
+        fourBCubedF64,
+        bSquaredCSquaredF64,
+        fourACubedF64,
+        twentySevenASquaredDSquaredF64,
+    ).fold(ProjectiveCompensatedF64(0.0, 0.0)) { resultF64, termF64 -> add(resultF64, termF64) ?: return null }
 }
 
 /**
