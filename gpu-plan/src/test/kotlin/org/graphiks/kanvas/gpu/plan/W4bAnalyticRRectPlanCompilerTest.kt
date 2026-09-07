@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.plan
 
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.render.ir.BlendMode
 import org.graphiks.kanvas.render.ir.BlendNode
@@ -155,13 +156,26 @@ class W4bAnalyticRRectPlanCompilerTest {
         assertEquals(resources.fold(0L) { sum, resource -> Math.addExact(sum, resource.byteSize) }, graph.peakFrameLocalBytes)
     }
 
+    @Test
+    fun `plan identity changes when only resolve support changes`() {
+        val commands = listOf(rrect())
+
+        assertNotEquals(
+            ready(commands, capabilities = capabilities()).id,
+            ready(commands, capabilities = capabilities(textureResolveSupports = setOf(colorResolveSupport()))).id,
+        )
+    }
+
     private fun ready(command: SceneCommand.Draw): RenderGraph = ready(listOf(command))
 
-    private fun ready(commands: Collection<SceneCommand>): RenderGraph {
+    private fun ready(
+        commands: Collection<SceneCommand>,
+        capabilities: PlanCapabilitySnapshot = capabilities(),
+    ): RenderGraph {
         val scene = SceneSnapshot.of(SceneExtent(4, 4), ColorSpace.SRGB, commands)
         val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target(scene))).candidate
         return assertIs<RenderPlanResult.Ready<RenderGraph>>(
-            compiler.plan(candidate, capabilities(), PlanBudget(1L shl 20)),
+            compiler.plan(candidate, capabilities, PlanBudget(1L shl 20)),
         ).plan
     }
 
@@ -226,7 +240,9 @@ class W4bAnalyticRRectPlanCompilerTest {
         ).forEach { radius -> assertEquals(0, radius.toRawBits()) }
     }
 
-    private fun capabilities(): PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(
+    private fun capabilities(
+        textureResolveSupports: Set<PlanTextureResolveSupport> = emptySet(),
+    ): PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(
         deviceGeneration = 0,
         maxTextureDimension2D = 64,
         maxBufferSizeBytes = 1L shl 20,
@@ -236,6 +252,13 @@ class W4bAnalyticRRectPlanCompilerTest {
         maxDynamicUniformBuffersPerPipelineLayout = 1,
         supportedOperations = PlanOperationCapability.entries.toSet(),
         bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 4_096, 4_096),
+        supportedTextureResolveSupports = textureResolveSupports,
+    )
+
+    private fun colorResolveSupport(): PlanTextureResolveSupport = PlanTextureResolveSupport.of(
+        PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+        4,
+        1,
     )
 
     private fun rendererRepresentabilityCapabilities(): PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(

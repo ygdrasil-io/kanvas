@@ -314,6 +314,15 @@ class W3SolidRectPlanCompilerTest {
         assertNotEquals(base.id, ready(sceneOf(solidRect(0f, 0f, 3f, 2f, 0xFFFFFFFFu))).id)
         assertNotEquals(base.id, ready(SceneSnapshot.of(SceneExtent(5, 4), ColorSpace.SRGB, listOf(solidRect(0f, 0f, 2f, 2f, 0xFFFFFFFFu)))).id)
         assertNotEquals(base.id, ready(scene, capabilities = supportedCapabilities(generation = 1)).id)
+        assertNotEquals(
+            base.id,
+            ready(
+                scene,
+                capabilities = supportedCapabilities(
+                    textureResolveSupports = setOf(colorResolveSupport()),
+                ),
+            ).id,
+        )
         assertNotEquals(base.id, ready(scene, budget = PlanBudget(4097)).id)
     }
 
@@ -424,6 +433,7 @@ class W3SolidRectPlanCompilerTest {
         maxTextureDimension2D: Int = 64,
         maxBufferSizeBytes: Long = 1L shl 20,
         formats: Set<PlanLogicalColorFormat> = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+        textureResolveSupports: Set<PlanTextureResolveSupport> = emptySet(),
     ): PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(
         generation,
         maxTextureDimension2D,
@@ -434,6 +444,13 @@ class W3SolidRectPlanCompilerTest {
         maxDynamicUniformBuffersPerPipelineLayout = 1,
         supportedOperations = setOf(PlanOperationCapability.RenderPass, PlanOperationCapability.Readback),
         bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 4_096, 4_096),
+        supportedTextureResolveSupports = textureResolveSupports,
+    )
+
+    private fun colorResolveSupport(): PlanTextureResolveSupport = PlanTextureResolveSupport.of(
+        PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+        4,
+        1,
     )
 
     private fun diagnosticCode(result: RenderPlanResult<*>): String = when (result) {

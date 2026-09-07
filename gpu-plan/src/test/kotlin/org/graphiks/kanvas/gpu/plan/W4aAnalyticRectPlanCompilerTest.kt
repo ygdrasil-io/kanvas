@@ -217,6 +217,16 @@ class W4aAnalyticRectPlanCompilerTest {
         val commands = twoFractionalRects()
         assertEquals(ready(commands, label = "first").id, ready(commands, label = "second").id)
         assertNotEquals(ready(commands).id, ready(commands, generation = 1).id)
+        val baseCapabilities = supportedCapabilities()
+        assertNotEquals(
+            ready(commands, capabilities = baseCapabilities).id,
+            ready(
+                commands,
+                capabilities = supportedCapabilities(
+                    textureResolveSupports = setOf(colorResolveSupport()),
+                ),
+            ).id,
+        )
         assertNotEquals(ready(commands).id, ready(commands, budget = PlanBudget(25_393)).id)
     }
 
@@ -229,13 +239,14 @@ class W4aAnalyticRectPlanCompilerTest {
         label: String? = null,
         generation: Long = 0,
         budget: PlanBudget = PlanBudget(1L shl 20),
+        capabilities: PlanCapabilitySnapshot = supportedCapabilities(generation = generation),
     ): RenderGraph {
         val scene = SceneSnapshot.of(SceneExtent(width, height), ColorSpace.SRGB, commands)
         val selected = assertIs<GpuPlanSelection.Candidate>(
             compiler.select(scene, RenderTargetDescriptor(scene.extent, scene.colorSpace, label)),
         )
         return assertIs<RenderPlanResult.Ready<RenderGraph>>(
-            compiler.plan(selected.candidate, supportedCapabilities(generation = generation), budget),
+            compiler.plan(selected.candidate, capabilities, budget),
         ).plan
     }
 
@@ -295,6 +306,7 @@ class W4aAnalyticRectPlanCompilerTest {
         maxDynamicUniformBuffers: Int = 1,
         supportedOperations: Set<PlanOperationCapability> = PlanOperationCapability.entries.toSet(),
         policy: PlanBufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 4_096, 4_096),
+        textureResolveSupports: Set<PlanTextureResolveSupport> = emptySet(),
     ): PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(
         deviceGeneration = generation,
         maxTextureDimension2D = maxTextureDimension2D,
@@ -305,5 +317,12 @@ class W4aAnalyticRectPlanCompilerTest {
         maxDynamicUniformBuffersPerPipelineLayout = maxDynamicUniformBuffers,
         supportedOperations = supportedOperations,
         bufferAllocationPolicy = policy,
+        supportedTextureResolveSupports = textureResolveSupports,
+    )
+
+    private fun colorResolveSupport(): PlanTextureResolveSupport = PlanTextureResolveSupport.of(
+        PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+        4,
+        1,
     )
 }

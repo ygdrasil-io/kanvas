@@ -1337,16 +1337,27 @@ class RenderGraphContractTest {
         val resolveTarget = graph.resources().single { it.role == PlanResourceRole.LogicalTarget }
         val mask = graph.resources().single { it.role == PlanResourceRole.PathHardEdgeMask }
         val hardDepth = graph.resources().single { it.role == PlanResourceRole.PathHardEdgeDepthStencil }
-        val maskClear = assertIs<PlanPass.PathMaskClearPass>(passes[1])
-        val producer = assertIs<PlanPass.PathRenderPass>(passes[2])
-        val cover = assertIs<PlanPass.PathRenderPass>(passes[3])
-        val binaryCover = assertIs<PlanPass.PathRenderPass>(passes[4])
+        val aaProducer = assertIs<PlanPass.PathRenderPass>(passes[0])
+        val aaCover = assertIs<PlanPass.PathRenderPass>(passes[1])
+        val maskClear = assertIs<PlanPass.PathMaskClearPass>(passes[2])
+        val producer = assertIs<PlanPass.PathRenderPass>(passes[3])
+        val cover = assertIs<PlanPass.PathRenderPass>(passes[4])
+        val binaryCover = assertIs<PlanPass.PathRenderPass>(passes[5])
         val binaryDraw = assertIs<BinaryMaskedPathDraw>(binaryCover.draw)
 
         assertEquals(4, colorTarget.sampleCountI32)
         assertEquals(1, resolveTarget.sampleCountI32)
         assertEquals(1, mask.sampleCountI32)
         assertEquals(1, hardDepth.sampleCountI32)
+        assertEquals(PathRenderPhase.MultisampleStencilProducer, aaProducer.phase)
+        assertEquals(PathRenderPhase.MultisampleStencilColorCover, aaCover.phase)
+        assertSame(aaProducer.draw, aaCover.draw)
+        assertEquals(aaProducer.drawDataResources, aaCover.drawDataResources)
+        assertEquals(aaProducer.target, aaCover.target)
+        assertEquals(aaProducer.depthStencil, aaCover.depthStencil)
+        assertEquals(aaProducer.atomicGroup, aaCover.atomicGroup)
+        assertEquals(null, aaProducer.resolveTarget)
+        assertEquals(null, aaCover.resolveTarget)
         assertEquals(mask.id, maskClear.target)
         assertEquals(PathRenderPhase.HardEdgeMaskStencilProducer, producer.phase)
         assertEquals(PathRenderPhase.HardEdgeMaskStencilCover, cover.phase)
@@ -1358,8 +1369,8 @@ class RenderGraphContractTest {
         assertEquals(mask.id, binaryDraw.mask)
         assertEquals(BinaryMaskFetchPlan.TextureLoadUnfiltered, binaryDraw.maskFetch)
         assertEquals(4, binaryDraw.broadcastSampleCountI32)
-        assertEquals(1, mask.firstPassIndex)
-        assertEquals(5, mask.lastPassIndexExclusive)
+        assertEquals(2, mask.firstPassIndex)
+        assertEquals(6, mask.lastPassIndexExclusive)
         assertTrue(passes.dropLast(1).filterIsInstance<PlanPass.PathRenderPass>().dropLast(1).all {
             it.resolveTarget == null
         })
@@ -1390,6 +1401,112 @@ class RenderGraphContractTest {
         }
     }
 
+    @Test
+    fun `explicit hard-only direct graph remains single-sample and never resolves`() {
+        val graph = hardOnlyDirectPathGraph()
+        val pathPass = assertIs<PlanPass.PathRenderPass>(graph.passes().first())
+
+        assertEquals(PathRenderPhase.SingleSampleDirectColor, pathPass.phase)
+        assertEquals(SamplePlan.SingleSample, pathPass.draw.sample)
+        assertEquals(PlanResourceRole.LogicalTarget, graph.resources().single { it.id == pathPass.target }.role)
+        assertEquals(null, pathPass.resolveTarget)
+        assertTrue(graph.resources().none { it.role == PlanResourceRole.MultisampleColorTarget })
+        assertTrue(graph.resources().none { it.role == PlanResourceRole.PathHardEdgeMask })
+    }
+
+    @Test
+    fun `explicit hard-only stencil graph keeps adjacent atomic producer and color cover`() {
+        val graph = hardOnlyStencilPathGraph()
+        val producer = assertIs<PlanPass.PathRenderPass>(graph.passes()[0])
+        val cover = assertIs<PlanPass.PathRenderPass>(graph.passes()[1])
+
+        assertEquals(PathRenderPhase.SingleSampleStencilProducer, producer.phase)
+        assertEquals(PathRenderPhase.SingleSampleStencilColorCover, cover.phase)
+        assertSame(producer.draw, cover.draw)
+        assertEquals(producer.drawDataResources, cover.drawDataResources)
+        assertEquals(producer.target, cover.target)
+        assertEquals(producer.depthStencil, cover.depthStencil)
+        assertEquals(producer.atomicGroup, cover.atomicGroup)
+        assertEquals(null, producer.resolveTarget)
+        assertEquals(null, cover.resolveTarget)
+        assertEquals(PlanPassDependency(producer.id, cover.id), graph.dependencies().first())
+    }
+
+    @Test
+    fun `explicit resolved target requires render attachment and copy source support`() {
+        assertFailsWith<IllegalArgumentException> {
+            aa4MixedPathGraph(resolvedColorUsages = setOf(PlanResourceUsage.CopySource))
+        }
+    }
+
+    @Test
+    fun `legacy render passes reject general path draw bypasses`() {
+        val legacyGeneralPath = GeneralPathDraw.of(
+            commandIndex = 0,
+            color = ColorF32.of(0.5f, 0f, 0f, 0.5f),
+            geometry = PathDrawGeometry.Fill(directGeometry()),
+            strategy = PathFillStrategy.DirectTriangle,
+            scissorI32 = RectI32(0, 0, 1, 1),
+            coverage = CoveragePlan.FullOrScissor,
+            sample = SamplePlan.SingleSample,
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            directPathGraph(draws = listOf(legacyGeneralPath))
+        }
+    }
+
+    @Test
+    fun `standalone resolve passes are rejected globally`() {
+        val target = targetResource(lastPassIndexExclusive = 3)
+        val staging = PlanResource.of(
+            PlanResourceRole.ReadbackStaging,
+            0,
+            PlanResourceKind.Buffer,
+            null,
+            null,
+            256,
+            setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead),
+            PlanResourceLifetime.FrameLocal,
+            2,
+            3,
+        )
+        val render = renderPass(target)
+        val resolve = PlanPass.ResolvePass(0, target.id, target.id)
+        val readback = PlanPass.ReadbackPass(0, target.id, staging.id, 256)
+
+        assertFailsWith<IllegalArgumentException> {
+            validGraph(
+                resources = listOf(target, staging),
+                passes = listOf(render, resolve, readback),
+                dependencies = listOf(
+                    PlanPassDependency(render.id, resolve.id),
+                    PlanPassDependency(resolve.id, readback.id),
+                ),
+                peakFrameLocalBytes = 260,
+            )
+        }
+    }
+
+    @Test
+    fun `legacy W4c D24S8 resource rejects a four-sample mutant`() {
+        val resources = atomicResources(depthStencilSampleCountI32 = 4)
+
+        assertFailsWith<IllegalArgumentException> {
+            atomicGraph(resources, capabilities = aa4Capabilities())
+        }
+    }
+
+    @Test
+    fun `sequential hard masks have disjoint lifetimes and pooled peak is their maximum`() {
+        val graph = aa4SequentialHardMaskGraph()
+        val masks = graph.resources().filter { it.role == PlanResourceRole.PathHardEdgeMask }.sortedBy { it.ordinal }
+
+        assertEquals(2, masks.size)
+        assertEquals(masks[0].lastPassIndexExclusive, masks[1].firstPassIndex)
+        assertEquals(260, graph.peakFrameLocalBytes)
+    }
+
     private fun aa4Capabilities(): PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(
         deviceGeneration = 0,
         maxTextureDimension2D = 1024,
@@ -1412,7 +1529,7 @@ class RenderGraphContractTest {
             PlanTextureSampleSupport.of(
                 PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
                 1,
-                setOf(PlanResourceUsage.CopySource),
+                setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource),
             ),
             PlanTextureSampleSupport.of(
                 PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
@@ -1447,6 +1564,10 @@ class RenderGraphContractTest {
     private fun aa4MixedPathGraph(
         resolveOnFinalColor: Boolean = true,
         resolveOnMaskProducer: Boolean = false,
+        resolvedColorUsages: Set<PlanResourceUsage> = setOf(
+            PlanResourceUsage.RenderAttachment,
+            PlanResourceUsage.CopySource,
+        ),
     ): RenderGraph {
         val extent = SizeI32(1, 1)
         fun texture(
@@ -1481,7 +1602,7 @@ class RenderGraphContractTest {
             usages = setOf(usage, PlanResourceUsage.CopyDestination),
             lifetime = PlanResourceLifetime.FrameLocal,
             firstPassIndex = 0,
-            lastPassIndexExclusive = 5,
+            lastPassIndexExclusive = 6,
         )
         val multisampleColor = texture(
             PlanResourceRole.MultisampleColorTarget,
@@ -1490,17 +1611,17 @@ class RenderGraphContractTest {
             16,
             setOf(PlanResourceUsage.RenderAttachment),
             0,
-            5,
+            6,
             4,
         )
         val resolvedColor = texture(
             PlanResourceRole.LogicalTarget,
             0,
             PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
-            if (resolveOnMaskProducer) 2 else 4,
-            setOf(PlanResourceUsage.CopySource),
             4,
-            6,
+            resolvedColorUsages,
+            5,
+            7,
             1,
         )
         val multisampleDepth = texture(
@@ -1510,7 +1631,7 @@ class RenderGraphContractTest {
             16,
             setOf(PlanResourceUsage.DepthStencilAttachment),
             0,
-            1,
+            2,
             4,
         )
         val mask = texture(
@@ -1519,8 +1640,8 @@ class RenderGraphContractTest {
             PlanTextureFormat.CoverageMask,
             4,
             setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled),
-            1,
-            5,
+            2,
+            6,
             1,
         )
         val hardDepth = texture(
@@ -1529,8 +1650,8 @@ class RenderGraphContractTest {
             PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8),
             4,
             setOf(PlanResourceUsage.DepthStencilAttachment),
-            2,
-            4,
+            3,
+            5,
             1,
         )
         val staging = PlanResource.of(
@@ -1542,8 +1663,8 @@ class RenderGraphContractTest {
             256,
             setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead),
             PlanResourceLifetime.FrameLocal,
-            5,
             6,
+            7,
         )
         val vertex = data(PlanResourceRole.VertexData, PlanResourceUsage.Vertex)
         val index = data(PlanResourceRole.IndexData, PlanResourceUsage.Index)
@@ -1568,17 +1689,32 @@ class RenderGraphContractTest {
             coverage = CoveragePlan.FullOrScissor,
             sample = SamplePlan.SingleSample,
         )
+        val aaGroup = canonicalGeneralPathAtomicGroup(antiAliased)
         val group = canonicalGeneralPathAtomicGroup(hard)
         val passes = listOf(
             PlanPass.PathRenderPass(
                 ordinal = 0,
                 target = multisampleColor.id,
                 draw = antiAliased,
-                phase = PathRenderPhase.MultisampleStencilColor,
+                phase = PathRenderPhase.MultisampleStencilProducer,
                 drawDataResources = drawData,
-                atomicGroup = null,
+                atomicGroup = aaGroup,
                 depthStencil = multisampleDepth.id,
                 load = AttachmentLoadPlan.ClearTransparent,
+                store = AttachmentStorePlan.Store,
+                depthStencilAccess = PlanDepthStencilAccess.Write,
+                depthStencilLoadStore = PlanDepthStencilLoadStore.ClearZeroStore,
+                resolveTarget = null,
+            ),
+            PlanPass.PathRenderPass(
+                ordinal = 1,
+                target = multisampleColor.id,
+                draw = antiAliased,
+                phase = PathRenderPhase.MultisampleStencilColorCover,
+                drawDataResources = drawData,
+                atomicGroup = aaGroup,
+                depthStencil = multisampleDepth.id,
+                load = AttachmentLoadPlan.Load,
                 store = AttachmentStorePlan.Store,
                 depthStencilAccess = PlanDepthStencilAccess.ReadWrite,
                 depthStencilLoadStore = PlanDepthStencilLoadStore.LoadStoreTestReset,
@@ -1586,7 +1722,7 @@ class RenderGraphContractTest {
             ),
             PlanPass.PathMaskClearPass(0, mask.id, group),
             PlanPass.PathRenderPass(
-                ordinal = 1,
+                ordinal = 2,
                 target = mask.id,
                 draw = hard,
                 phase = PathRenderPhase.HardEdgeMaskStencilProducer,
@@ -1600,7 +1736,7 @@ class RenderGraphContractTest {
                 resolveTarget = if (resolveOnMaskProducer) resolvedColor.id else null,
             ),
             PlanPass.PathRenderPass(
-                ordinal = 2,
+                ordinal = 3,
                 target = mask.id,
                 draw = hard,
                 phase = PathRenderPhase.HardEdgeMaskStencilCover,
@@ -1614,7 +1750,7 @@ class RenderGraphContractTest {
                 resolveTarget = null,
             ),
             PlanPass.PathRenderPass(
-                ordinal = 3,
+                ordinal = 4,
                 target = multisampleColor.id,
                 draw = BinaryMaskedPathDraw.of(hard, mask.id),
                 phase = PathRenderPhase.HardEdgeBinaryColorCover,
@@ -1649,6 +1785,207 @@ class RenderGraphContractTest {
             passes = passes,
             dependencies = passes.zipWithNext().map { (before, after) -> PlanPassDependency(before.id, after.id) },
             peakFrameLocalBytes = 260,
+        )
+    }
+
+    private fun hardOnlyDirectPathGraph(): RenderGraph = hardOnlyPathGraph(stencil = false)
+
+    private fun hardOnlyStencilPathGraph(): RenderGraph = hardOnlyPathGraph(stencil = true)
+
+    private fun hardOnlyPathGraph(stencil: Boolean): RenderGraph {
+        val passCount = if (stencil) 3 else 2
+        val target = PlanResource.of(
+            PlanResourceRole.LogicalTarget,
+            0,
+            PlanResourceKind.Texture2D,
+            PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+            SizeI32(1, 1),
+            4,
+            setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource),
+            PlanResourceLifetime.FrameLocal,
+            0,
+            passCount,
+        )
+        val staging = PlanResource.of(
+            PlanResourceRole.ReadbackStaging,
+            0,
+            PlanResourceKind.Buffer,
+            null,
+            null,
+            256,
+            setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead),
+            PlanResourceLifetime.FrameLocal,
+            passCount - 1,
+            passCount,
+        )
+        fun data(role: PlanResourceRole, usage: PlanResourceUsage) = PlanResource.of(
+            role,
+            0,
+            PlanResourceKind.Buffer,
+            null,
+            null,
+            4,
+            setOf(usage, PlanResourceUsage.CopyDestination),
+            PlanResourceLifetime.FrameLocal,
+            0,
+            passCount - 1,
+        )
+        val vertex = data(PlanResourceRole.VertexData, PlanResourceUsage.Vertex)
+        val index = data(PlanResourceRole.IndexData, PlanResourceUsage.Index)
+        val uniform = data(PlanResourceRole.UniformData, PlanResourceUsage.Uniform)
+        val drawData = PlanDrawDataResources(vertex.id, index.id, uniform.id)
+        val draw = GeneralPathDraw.of(
+            commandIndex = 0,
+            color = ColorF32.of(0.5f, 0f, 0f, 0.5f),
+            geometry = PathDrawGeometry.Fill(if (stencil) stencilGeometry() else directGeometry()),
+            strategy = if (stencil) PathFillStrategy.StencilCover else PathFillStrategy.DirectTriangle,
+            scissorI32 = RectI32(0, 0, 1, 1),
+            coverage = CoveragePlan.FullOrScissor,
+            sample = SamplePlan.SingleSample,
+        )
+        val depth = if (stencil) {
+            PlanResource.of(
+                PlanResourceRole.DepthStencil,
+                0,
+                PlanResourceKind.Texture2D,
+                PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8),
+                SizeI32(1, 1),
+                4,
+                setOf(PlanResourceUsage.DepthStencilAttachment),
+                PlanResourceLifetime.FrameLocal,
+                0,
+                2,
+            )
+        } else {
+            null
+        }
+        val pathPasses = if (stencil) {
+            val group = canonicalGeneralPathAtomicGroup(draw)
+            listOf(
+                PlanPass.PathRenderPass(
+                    0, target.id, draw, PathRenderPhase.SingleSampleStencilProducer, drawData, group,
+                    requireNotNull(depth).id, AttachmentLoadPlan.ClearTransparent, AttachmentStorePlan.Store,
+                    PlanDepthStencilAccess.Write, PlanDepthStencilLoadStore.ClearZeroStore, null,
+                ),
+                PlanPass.PathRenderPass(
+                    1, target.id, draw, PathRenderPhase.SingleSampleStencilColorCover, drawData, group,
+                    depth.id, AttachmentLoadPlan.Load, AttachmentStorePlan.Store,
+                    PlanDepthStencilAccess.ReadWrite, PlanDepthStencilLoadStore.LoadStoreTestReset, null,
+                ),
+            )
+        } else {
+            listOf(
+                PlanPass.PathRenderPass(
+                    0, target.id, draw, PathRenderPhase.SingleSampleDirectColor, drawData, null, null,
+                    AttachmentLoadPlan.ClearTransparent, AttachmentStorePlan.Store, null, null, null,
+                ),
+            )
+        }
+        val readback = PlanPass.ReadbackPass(0, target.id, staging.id, 256)
+        val passes = pathPasses + readback
+        val resources = listOfNotNull(target, staging, vertex, index, uniform, depth)
+        return RenderGraph.of(
+            PlanId(if (stencil) "hard-stencil" else "hard-direct"),
+            "w4d-general-path-aa",
+            SizeI32(1, 1),
+            PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL,
+            aa4Capabilities(),
+            PlanBudget(4096),
+            1,
+            resources,
+            passes,
+            passes.zipWithNext().map { (before, after) -> PlanPassDependency(before.id, after.id) },
+            peak(resources, passes.size),
+        )
+    }
+
+    private fun aa4SequentialHardMaskGraph(): RenderGraph {
+        val extent = SizeI32(1, 1)
+        fun texture(
+            role: PlanResourceRole,
+            ordinal: Int,
+            format: PlanTextureFormat,
+            bytes: Long,
+            usages: Set<PlanResourceUsage>,
+            first: Int,
+            last: Int,
+            samples: Int,
+        ) = PlanResource.of(
+            role, ordinal, PlanResourceKind.Texture2D, format, extent, bytes, usages,
+            PlanResourceLifetime.FrameLocal, first, last, samples,
+        )
+        fun data(role: PlanResourceRole, usage: PlanResourceUsage) = PlanResource.of(
+            role, 0, PlanResourceKind.Buffer, null, null, 4,
+            setOf(usage, PlanResourceUsage.CopyDestination), PlanResourceLifetime.FrameLocal, 0, 7,
+        )
+        val multisampleColor = texture(
+            PlanResourceRole.MultisampleColorTarget, 0,
+            PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), 16,
+            setOf(PlanResourceUsage.RenderAttachment), 0, 7, 4,
+        )
+        val resolved = texture(
+            PlanResourceRole.LogicalTarget, 0,
+            PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), 4,
+            setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource), 6, 8, 1,
+        )
+        val firstMask = texture(
+            PlanResourceRole.PathHardEdgeMask, 0, PlanTextureFormat.CoverageMask, 4,
+            setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled), 1, 4, 1,
+        )
+        val secondMask = texture(
+            PlanResourceRole.PathHardEdgeMask, 1, PlanTextureFormat.CoverageMask, 4,
+            setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled), 4, 7, 1,
+        )
+        val staging = PlanResource.of(
+            PlanResourceRole.ReadbackStaging, 0, PlanResourceKind.Buffer, null, null, 256,
+            setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead), PlanResourceLifetime.FrameLocal, 7, 8,
+        )
+        val vertex = data(PlanResourceRole.VertexData, PlanResourceUsage.Vertex)
+        val index = data(PlanResourceRole.IndexData, PlanResourceUsage.Index)
+        val uniform = data(PlanResourceRole.UniformData, PlanResourceUsage.Uniform)
+        val drawData = PlanDrawDataResources(vertex.id, index.id, uniform.id)
+        fun path(commandIndex: Int, coverage: CoveragePlan, sample: SamplePlan) = GeneralPathDraw.of(
+            commandIndex, ColorF32.of(0.5f, 0f, 0f, 0.5f), PathDrawGeometry.Fill(directGeometry()),
+            PathFillStrategy.DirectTriangle, RectI32(0, 0, 1, 1), coverage, sample,
+        )
+        val aa = path(0, CoveragePlan.StencilAA4, SamplePlan.Multisample4)
+        val firstHard = path(1, CoveragePlan.FullOrScissor, SamplePlan.SingleSample)
+        val secondHard = path(2, CoveragePlan.FullOrScissor, SamplePlan.SingleSample)
+        fun directMaskProducer(ordinal: Int, mask: PlanResource, draw: GeneralPathDraw): PlanPass.PathRenderPass =
+            PlanPass.PathRenderPass(
+                ordinal, mask.id, draw, PathRenderPhase.HardEdgeMaskProducer, drawData,
+                canonicalGeneralPathAtomicGroup(draw), null, AttachmentLoadPlan.Load, AttachmentStorePlan.Store,
+                null, null, null,
+            )
+        fun binaryCover(
+            ordinal: Int,
+            mask: PlanResource,
+            draw: GeneralPathDraw,
+            resolveTarget: PlanResourceId?,
+        ): PlanPass.PathRenderPass = PlanPass.PathRenderPass(
+            ordinal, multisampleColor.id, BinaryMaskedPathDraw.of(draw, mask.id), PathRenderPhase.HardEdgeBinaryColorCover,
+            drawData, canonicalGeneralPathAtomicGroup(draw), null, AttachmentLoadPlan.Load, AttachmentStorePlan.Store,
+            null, null, resolveTarget,
+        )
+        val passes = listOf(
+            PlanPass.PathRenderPass(
+                0, multisampleColor.id, aa, PathRenderPhase.MultisampleDirectColor, drawData, null, null,
+                AttachmentLoadPlan.ClearTransparent, AttachmentStorePlan.Store, null, null, null,
+            ),
+            PlanPass.PathMaskClearPass(0, firstMask.id, canonicalGeneralPathAtomicGroup(firstHard)),
+            directMaskProducer(1, firstMask, firstHard),
+            binaryCover(2, firstMask, firstHard, null),
+            PlanPass.PathMaskClearPass(1, secondMask.id, canonicalGeneralPathAtomicGroup(secondHard)),
+            directMaskProducer(3, secondMask, secondHard),
+            binaryCover(4, secondMask, secondHard, resolved.id),
+            PlanPass.ReadbackPass(0, resolved.id, staging.id, 256),
+        )
+        val resources = listOf(multisampleColor, resolved, firstMask, secondMask, staging, vertex, index, uniform)
+        return RenderGraph.of(
+            PlanId("aa4-sequential-hard-masks"), "w4d-general-path-aa", extent,
+            PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL, aa4Capabilities(), PlanBudget(4096), 3,
+            resources, passes, passes.zipWithNext().map { (before, after) -> PlanPassDependency(before.id, after.id) },
+            peak(resources, passes.size),
         )
     }
 
@@ -1945,6 +2282,7 @@ class RenderGraphContractTest {
         depthStencilLastPassExclusive: Int = passCount,
         dataLastPassExclusive: Int = passCount,
         duplicateDepthStencil: Boolean = false,
+        depthStencilSampleCountI32: Int = 1,
     ): AtomicResources {
         val target = PlanResource.of(
             PlanResourceRole.LogicalTarget,
@@ -1991,11 +2329,12 @@ class RenderGraphContractTest {
             PlanResourceKind.Texture2D,
             PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8),
             SizeI32(1, 1),
-            4,
+            4L * depthStencilSampleCountI32,
             setOf(PlanResourceUsage.DepthStencilAttachment),
             PlanResourceLifetime.FrameLocal,
             0,
             depthStencilLastPassExclusive,
+            depthStencilSampleCountI32,
         )
         val duplicate = if (duplicateDepthStencil) {
             listOf(
@@ -2005,11 +2344,12 @@ class RenderGraphContractTest {
                     PlanResourceKind.Texture2D,
                     PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8),
                     SizeI32(1, 1),
-                    4,
+                    4L * depthStencilSampleCountI32,
                     setOf(PlanResourceUsage.DepthStencilAttachment),
                     PlanResourceLifetime.FrameLocal,
                     0,
                     passCount,
+                    depthStencilSampleCountI32,
                 ),
             )
         } else {

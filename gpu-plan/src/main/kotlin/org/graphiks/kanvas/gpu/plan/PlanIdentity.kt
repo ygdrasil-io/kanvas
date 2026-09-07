@@ -33,3 +33,27 @@ internal fun canonicalPathAtomicGroup(draw: PathDraw): PlanAtomicGroupId = when 
 
 internal fun canonicalGeneralPathAtomicGroup(draw: GeneralPathDraw): PlanAtomicGroupId =
     PlanAtomicGroupId("w4d.2:${draw.commandIndex}")
+
+/** Canonical capability facts that affect texture allocation or resolve availability. */
+internal fun planCapabilityIdentityFacts(capabilities: PlanCapabilitySnapshot): List<String> = buildList {
+    add("texture-sample-supports-v1")
+    capabilities.supportedTextureSampleSupports()
+        .map { support ->
+            "${textureFormatIdentity(support.format)}:${support.sampleCountI32}:${support.usages().map { it.name }.sorted().joinToString(",")}" 
+        }
+        .sorted()
+        .forEach(::add)
+    add("texture-resolve-supports-v1")
+    capabilities.supportedTextureResolveSupports()
+        .map { support ->
+            "${textureFormatIdentity(support.format)}:${support.sourceSampleCountI32}:${support.destinationSampleCountI32}"
+        }
+        .sorted()
+        .forEach(::add)
+}
+
+private fun textureFormatIdentity(format: PlanTextureFormat): String = when (format) {
+    is PlanTextureFormat.Color -> "color:${format.value.name}"
+    is PlanTextureFormat.DepthStencil -> "depth-stencil:${format.value.name}"
+    PlanTextureFormat.CoverageMask -> "coverage-mask"
+}

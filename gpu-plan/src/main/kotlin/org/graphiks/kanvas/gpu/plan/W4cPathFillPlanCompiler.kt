@@ -696,7 +696,7 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
             capabilities.bufferAllocationPolicy.growth.name,
             capabilities.supportedDepthStencilFormats().map { it.name }.sorted().joinToString(","),
             budget.maxFrameLocalBytes.toString(),
-        )
+        ) + planCapabilityIdentityFacts(capabilities)
         val digest = MessageDigest.getInstance("SHA-256")
         fields.forEach { value ->
             val bytes = value.encodeToByteArray()

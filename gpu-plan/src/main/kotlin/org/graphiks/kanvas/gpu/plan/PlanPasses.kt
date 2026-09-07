@@ -33,7 +33,12 @@ public enum class PlanPassRole {
 }
 public enum class PathFillStrategy { DirectTriangle, StencilCover }
 public enum class PathRenderPhase {
-    MultisampleStencilColor,
+    SingleSampleDirectColor,
+    SingleSampleStencilProducer,
+    SingleSampleStencilColorCover,
+    MultisampleDirectColor,
+    MultisampleStencilProducer,
+    MultisampleStencilColorCover,
     HardEdgeMaskProducer,
     HardEdgeMaskStencilProducer,
     HardEdgeMaskStencilCover,

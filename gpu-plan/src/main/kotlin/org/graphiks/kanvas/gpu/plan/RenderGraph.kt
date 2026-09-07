@@ -58,6 +58,9 @@ public class RenderGraph private constructor(
             val passIds = passes.map { it.id }
             require(passIds.distinct().size == passIds.size) { "Pass IDs must be unique" }
             require(passes.map { it.role to it.ordinal }.distinct().size == passes.size) { "Pass role ordinals must be unique" }
+            require(passes.none { it is PlanPass.ResolvePass }) {
+                "Standalone resolve passes are forbidden; resolve only from an explicit path color pass"
+            }
             resources.forEach { resource ->
                 require(resource.lastPassIndexExclusive <= passes.size) { "Resource lifetime exceeds pass count" }
                 when (resource.kind) {
@@ -212,6 +215,9 @@ public class RenderGraph private constructor(
                         require(pass.draws().all { it.sample == SamplePlan.SingleSample }) {
                             "Legacy render passes require single-sample draws"
                         }
+                        require(pass.draws().none { it is PathRenderDraw }) {
+                            "General and binary masked path draws require explicit path render passes"
+                        }
                         pass.draws().filterIsInstance<PathDraw>().forEach { draw ->
                             require(draw.strategy == PathFillStrategy.DirectTriangle) {
                                 "Stencil path draws require atomic stencil passes"
@@ -232,7 +238,12 @@ public class RenderGraph private constructor(
                         SamplePlan.SingleSample,
                     )
                     is PlanPass.PathRenderPass -> when (pass.phase) {
-                        PathRenderPhase.MultisampleStencilColor,
+                        PathRenderPhase.SingleSampleDirectColor,
+                        PathRenderPhase.SingleSampleStencilProducer,
+                        PathRenderPhase.SingleSampleStencilColorCover,
+                        PathRenderPhase.MultisampleDirectColor,
+                        PathRenderPhase.MultisampleStencilProducer,
+                        PathRenderPhase.MultisampleStencilColorCover,
                         PathRenderPhase.HardEdgeBinaryColorCover,
                         -> ColorAttachment(pass.target, pass.load, pass.store, pass.draw.sample)
                         PathRenderPhase.HardEdgeMaskProducer,
@@ -338,6 +349,7 @@ public class RenderGraph private constructor(
                 depthStencil.format == PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8),
             ) { "Stencil graphs require Depth24PlusStencil8" }
             require(depthStencil.copyExtent() == targetExtent) { "Depth-stencil extent must match the target" }
+            require(depthStencil.sampleCountI32 == 1) { "W4c D24S8 must be single-sample" }
             require(PlanResourceUsage.DepthStencilAttachment in depthStencil.usages()) {
                 "Depth-stencil texture must allow depth-stencil attachment usage"
             }
@@ -436,20 +448,162 @@ public class RenderGraph private constructor(
             colorFormat: PlanLogicalColorFormat,
             visualCommandCount: Int,
         ) {
-            require(passes.any { it is PlanPass.PathRenderPass }) { "AA4 graphs require path render passes" }
+            require(passes.any { it is PlanPass.PathRenderPass }) { "Explicit path graphs require path render passes" }
             require(passes.all {
                 it is PlanPass.PathMaskClearPass ||
                     it is PlanPass.PathRenderPass ||
                     it is PlanPass.ReadbackPass
-            }) { "AA4 graphs may contain only explicit path, mask, and readback passes" }
+            }) { "Explicit path graphs may contain only path, mask, and readback passes" }
             require(PlanOperationCapability.CopyUpload in capabilities.supportedOperations()) {
-                "AA4 path draws require copy upload support"
+                "Explicit path draws require copy upload support"
             }
             require(PlanOperationCapability.UniformBuffer in capabilities.supportedOperations()) {
-                "AA4 path draws require uniform buffer support"
+                "Explicit path draws require uniform buffer support"
             }
-            require(PlanOperationCapability.DepthStencilAttachment in capabilities.supportedOperations()) {
-                "AA4 path draws require depth-stencil attachment support"
+            val pathPasses = passes.mapIndexedNotNull { index, pass ->
+                (pass as? PlanPass.PathRenderPass)?.let { index to it }
+            }
+            val usesAa4 = pathPasses.any { (_, pass) -> pass.draw.sample == SamplePlan.Multisample4 } ||
+                resources.any { it.role == PlanResourceRole.MultisampleColorTarget }
+            if (usesAa4) {
+                validateFourSampleExplicitPathContracts(
+                    passes, dependencies, resources, resourcesById, capabilities, targetExtent, colorFormat,
+                    visualCommandCount, pathPasses,
+                )
+            } else {
+                validateSingleSampleExplicitPathContracts(
+                    passes, dependencies, resources, resourcesById, targetExtent, colorFormat,
+                    visualCommandCount, pathPasses,
+                )
+            }
+        }
+
+        private fun validateSingleSampleExplicitPathContracts(
+            passes: List<PlanPass>,
+            dependencies: List<PlanPassDependency>,
+            resources: List<PlanResource>,
+            resourcesById: Map<PlanResourceId, PlanResource>,
+            targetExtent: SizeI32,
+            colorFormat: PlanLogicalColorFormat,
+            visualCommandCount: Int,
+            pathPasses: List<Pair<Int, PlanPass.PathRenderPass>>,
+        ) {
+            require(passes.none { it is PlanPass.PathMaskClearPass }) {
+                "Single-sample explicit paths may not allocate hard-edge masks"
+            }
+            require(resources.none {
+                it.role == PlanResourceRole.MultisampleColorTarget ||
+                    it.role == PlanResourceRole.PathHardEdgeMask ||
+                    it.role == PlanResourceRole.PathHardEdgeDepthStencil
+            }) { "Single-sample explicit paths may not declare AA4 resources" }
+            require(resources.all {
+                it.role in setOf(
+                    PlanResourceRole.LogicalTarget,
+                    PlanResourceRole.ReadbackStaging,
+                    PlanResourceRole.VertexData,
+                    PlanResourceRole.IndexData,
+                    PlanResourceRole.UniformData,
+                    PlanResourceRole.DepthStencil,
+                )
+            }) { "Single-sample explicit paths may declare only their direct resource inventory" }
+            val referencedResourceIds = passes.flatMap(::referencedResources).toSet()
+            require(resources.all { it.id in referencedResourceIds }) {
+                "Single-sample explicit path resources must be consumed by a pass"
+            }
+            require(pathPasses.all { (_, pass) -> pass.draw.sample == SamplePlan.SingleSample }) {
+                "Single-sample explicit paths may not contain four-sample draws"
+            }
+            val target = requireExplicitLogicalTarget(resources, targetExtent, colorFormat)
+            val readback = requireExplicitTerminalReadback(passes, target.id)
+            requireLinearDependencies(passes, dependencies, "Explicit path graphs")
+            val drawData = requireExplicitDrawData(resources, resourcesById, pathPasses)
+            require(pathPasses.all { (_, pass) -> pass.resolveTarget == null }) {
+                "Single-sample explicit paths must not resolve"
+            }
+
+            val stencilPairs = mutableListOf<Pair<Int, Int>>()
+            pathPasses.forEach { (index, pass) ->
+                when (pass.phase) {
+                    PathRenderPhase.SingleSampleDirectColor -> {
+                        require(pass.draw is GeneralPathDraw &&
+                            pass.draw.coverage == CoveragePlan.FullOrScissor &&
+                            pass.draw.strategy == PathFillStrategy.DirectTriangle &&
+                            pass.target == target.id && pass.atomicGroup == null && pass.depthStencil == null &&
+                            pass.depthStencilAccess == null && pass.depthStencilLoadStore == null) {
+                            "Single-sample direct color passes require a direct hard draw and logical target"
+                        }
+                    }
+                    PathRenderPhase.SingleSampleStencilProducer -> {
+                        val cover = passes.getOrNull(index + 1) as? PlanPass.PathRenderPass
+                            ?: throw IllegalArgumentException("Single-sample stencil producers require an adjacent cover")
+                        validateExplicitStencilPair(
+                            pass, index, cover, index + 1, target.id, PlanResourceRole.DepthStencil,
+                            SamplePlan.SingleSample, CoveragePlan.FullOrScissor, resourcesById, targetExtent,
+                        )
+                        stencilPairs += index to (index + 1)
+                    }
+                    PathRenderPhase.SingleSampleStencilColorCover -> require(
+                        passes.getOrNull(index - 1) is PlanPass.PathRenderPass &&
+                            (passes[index - 1] as PlanPass.PathRenderPass).phase ==
+                                PathRenderPhase.SingleSampleStencilProducer,
+                    ) { "Single-sample stencil covers must immediately follow their producer" }
+                    else -> throw IllegalArgumentException("Single-sample explicit paths use only single-sample phases")
+                }
+            }
+            val usesStencil = stencilPairs.isNotEmpty()
+            val depthResources = resources.filter { it.role == PlanResourceRole.DepthStencil }
+            require(depthResources.size == if (usesStencil) 1 else 0) {
+                "Single-sample explicit paths require one D24S8 resource exactly when using stencil"
+            }
+            if (usesStencil) {
+                val depth = depthResources.single()
+                require(depth.firstPassIndex <= stencilPairs.first().first &&
+                    depth.lastPassIndexExclusive > stencilPairs.last().second) {
+                    "Single-sample D24S8 lifetime must cover its stencil pairs"
+                }
+            }
+            validateExplicitVisualDraws(
+                pathPasses.filter { (_, pass) ->
+                    pass.phase == PathRenderPhase.SingleSampleDirectColor ||
+                        pass.phase == PathRenderPhase.SingleSampleStencilColorCover
+                },
+                visualCommandCount,
+            )
+            require(target.lastPassIndexExclusive > passes.lastIndex &&
+                target.firstPassIndex <= pathPasses.first().first) {
+                "Single-sample logical target must remain alive through readback"
+            }
+            require(readback.source == target.id) { "Single-sample readback must consume the logical target" }
+        }
+
+        private fun validateFourSampleExplicitPathContracts(
+            passes: List<PlanPass>,
+            dependencies: List<PlanPassDependency>,
+            resources: List<PlanResource>,
+            resourcesById: Map<PlanResourceId, PlanResource>,
+            capabilities: PlanCapabilitySnapshot,
+            targetExtent: SizeI32,
+            colorFormat: PlanLogicalColorFormat,
+            visualCommandCount: Int,
+            pathPasses: List<Pair<Int, PlanPass.PathRenderPass>>,
+        ) {
+            require(resources.any { it.role == PlanResourceRole.MultisampleColorTarget } &&
+                pathPasses.any { (_, pass) -> pass.draw.sample == SamplePlan.Multisample4 }) {
+                "AA4 resources and four-sample path draws must appear together"
+            }
+            val usesStencil = pathPasses.any { (_, pass) ->
+                pass.phase == PathRenderPhase.MultisampleStencilProducer ||
+                    pass.phase == PathRenderPhase.MultisampleStencilColorCover ||
+                    pass.phase == PathRenderPhase.HardEdgeMaskStencilProducer ||
+                    pass.phase == PathRenderPhase.HardEdgeMaskStencilCover
+            }
+            if (usesStencil) {
+                require(PlanOperationCapability.DepthStencilAttachment in capabilities.supportedOperations()) {
+                    "AA4 stencil paths require depth-stencil attachment support"
+                }
+                require(PlanOperationCapability.StencilCover in capabilities.supportedOperations()) {
+                    "AA4 stencil paths require stencil cover support"
+                }
             }
             val explicitRoles = setOf(
                 PlanResourceRole.LogicalTarget,
@@ -499,6 +653,9 @@ public class RenderGraph private constructor(
             require(PlanResourceUsage.CopySource in resolvedTarget.usages()) {
                 "AA4 resolved target must support readback copies"
             }
+            require(PlanResourceUsage.RenderAttachment in resolvedTarget.usages()) {
+                "AA4 resolved target must support render attachment usage"
+            }
 
             val readbacks = passes.filterIsInstance<PlanPass.ReadbackPass>()
             require(readbacks.size == 1 && passes.last() === readbacks.single()) {
@@ -507,12 +664,7 @@ public class RenderGraph private constructor(
             require(readbacks.single().source == resolvedTarget.id) {
                 "AA4 readback must consume the resolved logical target"
             }
-            val expectedDependencies = passes.zipWithNext().map { (before, after) ->
-                PlanPassDependency(before.id, after.id)
-            }.toSet()
-            require(dependencies.toSet() == expectedDependencies) {
-                "AA4 graphs require consecutive linear dependencies"
-            }
+            requireLinearDependencies(passes, dependencies, "AA4 graphs")
 
             val vertex = requireSinglePathResource(resources, PlanResourceRole.VertexData)
             val index = requireSinglePathResource(resources, PlanResourceRole.IndexData)
@@ -527,9 +679,6 @@ public class RenderGraph private constructor(
                     "AA4 path draw data must remain alive through the consuming color draw"
                 }
             }
-            val pathPasses = pathPassIndices.map { index ->
-                index to (passes[index] as PlanPass.PathRenderPass)
-            }
             pathPasses.forEach { (_, pass) ->
                 require(pass.drawDataResources == drawDataResources) {
                     "AA4 path passes must share one vertex, index, and uniform triplet"
@@ -538,26 +687,21 @@ public class RenderGraph private constructor(
             }
 
             val colorPasses = pathPasses.filter { (_, pass) ->
-                pass.phase == PathRenderPhase.MultisampleStencilColor ||
+                pass.phase == PathRenderPhase.MultisampleDirectColor ||
+                    pass.phase == PathRenderPhase.MultisampleStencilColorCover ||
                     pass.phase == PathRenderPhase.HardEdgeBinaryColorCover
             }
             require(colorPasses.isNotEmpty()) { "AA4 graphs require a color-producing path pass" }
             require(pathPasses.filter { (_, pass) -> pass !in colorPasses.map { it.second } }.all { (_, pass) ->
                 pass.resolveTarget == null
             }) { "Only AA4 color-producing passes may resolve" }
-            colorPasses.forEachIndexed { colorPassIndex, (_, pass) ->
+            colorPasses.forEach { (_, pass) ->
                 require(pass.target == multisampleTarget.id) {
                     "AA4 color-producing passes must target the multisample color target"
                 }
                 require(pass.draw.sample == SamplePlan.Multisample4) {
                     "AA4 color-producing passes must use four-sample draws"
                 }
-                val expectedLoad = if (colorPassIndex == 0) {
-                    AttachmentLoadPlan.ClearTransparent
-                } else {
-                    AttachmentLoadPlan.Load
-                }
-                require(pass.load == expectedLoad) { "AA4 color loads must preserve paint order" }
             }
             val visualDraws = colorPasses.map { (_, pass) -> pass.draw }
             require(visualCommandCount == visualDraws.map { it.commandIndex }.distinct().size) {
@@ -594,18 +738,28 @@ public class RenderGraph private constructor(
             val coveredMaskClearIndices = mutableSetOf<Int>()
             pathPasses.forEach { (passIndex, pass) ->
                 when (pass.phase) {
-                    PathRenderPhase.MultisampleStencilColor -> {
-                        require(pass.draw is GeneralPathDraw &&
-                            pass.draw.coverage == CoveragePlan.StencilAA4 &&
-                            pass.draw.strategy == PathFillStrategy.StencilCover) {
-                            "AA4 stencil color passes require a typed stencil AA draw"
-                        }
-                        require(pass.atomicGroup == null) { "AA4 stencil color passes are not hard-edge atomic groups" }
-                        require(PlanOperationCapability.StencilCover in capabilities.supportedOperations()) {
-                            "AA4 stencil color passes require stencil cover support"
-                        }
-                        validateMultisampleDepthStencil(pass, resourcesById, targetExtent)
+                    PathRenderPhase.MultisampleDirectColor -> require(pass.draw is GeneralPathDraw &&
+                        pass.draw.coverage == CoveragePlan.StencilAA4 &&
+                        pass.draw.strategy == PathFillStrategy.DirectTriangle &&
+                        pass.target == multisampleTarget.id && pass.atomicGroup == null &&
+                        pass.depthStencil == null && pass.depthStencilAccess == null &&
+                        pass.depthStencilLoadStore == null) {
+                        "AA4 direct color passes require a four-sample direct path draw"
                     }
+                    PathRenderPhase.MultisampleStencilProducer -> {
+                        val cover = passes.getOrNull(passIndex + 1) as? PlanPass.PathRenderPass
+                            ?: throw IllegalArgumentException("AA4 stencil producers require an adjacent cover")
+                        validateExplicitStencilPair(
+                            pass, passIndex, cover, passIndex + 1, multisampleTarget.id,
+                            PlanResourceRole.DepthStencil, SamplePlan.Multisample4, CoveragePlan.StencilAA4,
+                            resourcesById, targetExtent,
+                        )
+                    }
+                    PathRenderPhase.MultisampleStencilColorCover -> require(
+                        passes.getOrNull(passIndex - 1) is PlanPass.PathRenderPass &&
+                            (passes[passIndex - 1] as PlanPass.PathRenderPass).phase ==
+                                PathRenderPhase.MultisampleStencilProducer,
+                    ) { "AA4 stencil covers must immediately follow their producer" }
                     PathRenderPhase.HardEdgeBinaryColorCover -> {
                         val binaryDraw = pass.draw as? BinaryMaskedPathDraw
                             ?: throw IllegalArgumentException("AA4 hard color covers require binary masked draws")
@@ -681,6 +835,10 @@ public class RenderGraph private constructor(
                     PathRenderPhase.HardEdgeMaskStencilProducer,
                     PathRenderPhase.HardEdgeMaskStencilCover,
                     -> Unit
+                    PathRenderPhase.SingleSampleDirectColor,
+                    PathRenderPhase.SingleSampleStencilProducer,
+                    PathRenderPhase.SingleSampleStencilColorCover,
+                    -> throw IllegalArgumentException("AA4 paths may not use single-sample color phases")
                 }
             }
             val allHardPassIndices = pathPasses.filter { (_, pass) ->
@@ -694,6 +852,148 @@ public class RenderGraph private constructor(
             val allMaskClearIndices = passes.indices.filter { passes[it] is PlanPass.PathMaskClearPass }.toSet()
             require(coveredMaskClearIndices == allMaskClearIndices) {
                 "Every AA4 hard mask clear must feed one ordered binary color cover"
+            }
+        }
+
+        private fun requireExplicitLogicalTarget(
+            resources: List<PlanResource>,
+            targetExtent: SizeI32,
+            colorFormat: PlanLogicalColorFormat,
+        ): PlanResource {
+            val targets = resources.filter { it.role == PlanResourceRole.LogicalTarget }
+            require(targets.size == 1) { "Explicit path graphs require one logical target" }
+            val target = targets.single()
+            require(target.kind == PlanResourceKind.Texture2D &&
+                target.format == PlanTextureFormat.Color(colorFormat) &&
+                target.copyExtent() == targetExtent && target.sampleCountI32 == 1 &&
+                PlanResourceUsage.RenderAttachment in target.usages() &&
+                PlanResourceUsage.CopySource in target.usages()) {
+                "Explicit logical targets require one-sample render-attachment and copy-source usage"
+            }
+            return target
+        }
+
+        private fun requireExplicitTerminalReadback(
+            passes: List<PlanPass>,
+            target: PlanResourceId,
+        ): PlanPass.ReadbackPass {
+            val readbacks = passes.filterIsInstance<PlanPass.ReadbackPass>()
+            require(readbacks.size == 1 && passes.last() === readbacks.single()) {
+                "Explicit path graphs require one terminal readback"
+            }
+            return readbacks.single().also { readback ->
+                require(readback.source == target) { "Explicit path readback must consume the logical target" }
+            }
+        }
+
+        private fun requireLinearDependencies(
+            passes: List<PlanPass>,
+            dependencies: List<PlanPassDependency>,
+            label: String,
+        ) {
+            val expected = passes.zipWithNext().map { (before, after) ->
+                PlanPassDependency(before.id, after.id)
+            }.toSet()
+            require(dependencies.toSet() == expected) { "$label require consecutive linear dependencies" }
+        }
+
+        private fun requireExplicitDrawData(
+            resources: List<PlanResource>,
+            resourcesById: Map<PlanResourceId, PlanResource>,
+            pathPasses: List<Pair<Int, PlanPass.PathRenderPass>>,
+        ): PlanDrawDataResources {
+            val vertex = requireSinglePathResource(resources, PlanResourceRole.VertexData)
+            val index = requireSinglePathResource(resources, PlanResourceRole.IndexData)
+            val uniform = requireSinglePathResource(resources, PlanResourceRole.UniformData)
+            val drawData = PlanDrawDataResources(vertex.id, index.id, uniform.id)
+            validatePathDrawDataShape(drawData, resourcesById)
+            val lastPathPassIndex = pathPasses.last().first
+            listOf(vertex, index, uniform).forEach { resource ->
+                require(resource.lastPassIndexExclusive > lastPathPassIndex) {
+                    "Explicit path draw data must remain alive through the consuming path pass"
+                }
+            }
+            require(pathPasses.all { (_, pass) -> pass.drawDataResources == drawData }) {
+                "Explicit path passes must share one vertex, index, and uniform triplet"
+            }
+            return drawData
+        }
+
+        private fun validateExplicitVisualDraws(
+            colorPasses: List<Pair<Int, PlanPass.PathRenderPass>>,
+            visualCommandCount: Int,
+        ) {
+            require(colorPasses.isNotEmpty()) { "Explicit path graphs require a color-producing path pass" }
+            val draws = colorPasses.map { (_, pass) -> pass.draw }
+            require(visualCommandCount == draws.map { it.commandIndex }.distinct().size) {
+                "Explicit path visual command count must match unique color draws"
+            }
+            draws.zipWithNext().forEach { (before, after) ->
+                require(before.commandIndex < after.commandIndex) {
+                    "Explicit path visual commands must be strictly ascending"
+                }
+            }
+        }
+
+        private fun validateExplicitStencilPair(
+            producer: PlanPass.PathRenderPass,
+            producerIndex: Int,
+            cover: PlanPass.PathRenderPass,
+            coverIndex: Int,
+            target: PlanResourceId,
+            depthRole: PlanResourceRole,
+            sample: SamplePlan,
+            coverage: CoveragePlan,
+            resourcesById: Map<PlanResourceId, PlanResource>,
+            targetExtent: SizeI32,
+        ) {
+            val producerPhase = when (sample) {
+                SamplePlan.SingleSample -> PathRenderPhase.SingleSampleStencilProducer
+                SamplePlan.Multisample4 -> PathRenderPhase.MultisampleStencilProducer
+            }
+            val coverPhase = when (sample) {
+                SamplePlan.SingleSample -> PathRenderPhase.SingleSampleStencilColorCover
+                SamplePlan.Multisample4 -> PathRenderPhase.MultisampleStencilColorCover
+            }
+            require(producer.phase == producerPhase && cover.phase == coverPhase) {
+                "Explicit stencil pairs require matching producer and color-cover phases"
+            }
+            require(producer.target == target && cover.target == target &&
+                producer.draw === cover.draw && producer.drawDataResources == cover.drawDataResources &&
+                producer.depthStencil == cover.depthStencil && producer.atomicGroup == cover.atomicGroup) {
+                "Explicit stencil producer and cover must share draw, data, target, depth, and group"
+            }
+            val draw = producer.draw as? GeneralPathDraw
+                ?: throw IllegalArgumentException("Explicit stencil producers require general path draws")
+            require(draw.coverage == coverage && draw.sample == sample &&
+                draw.strategy == PathFillStrategy.StencilCover) {
+                "Explicit stencil pairs require a typed stencil path draw"
+            }
+            val group = requireNotNull(producer.atomicGroup) {
+                "Explicit stencil pairs require an atomic group"
+            }
+            require(group == canonicalGeneralPathAtomicGroup(draw)) {
+                "Explicit stencil pairs require the canonical atomic group"
+            }
+            require(producer.resolveTarget == null &&
+                producer.depthStencilAccess == PlanDepthStencilAccess.Write &&
+                producer.depthStencilLoadStore == PlanDepthStencilLoadStore.ClearZeroStore &&
+                cover.depthStencilAccess == PlanDepthStencilAccess.ReadWrite &&
+                cover.depthStencilLoadStore == PlanDepthStencilLoadStore.LoadStoreTestReset) {
+                "Explicit stencil pairs require clear/write then read-write/reset stencil access"
+            }
+            val depth = requireNotNull(producer.depthStencil).let { resourcesById[it] }
+                ?: throw IllegalArgumentException("Explicit stencil pairs require a depth-stencil resource")
+            val sampleCount = when (sample) {
+                SamplePlan.SingleSample -> 1
+                SamplePlan.Multisample4 -> 4
+            }
+            require(depth.role == depthRole && depth.kind == PlanResourceKind.Texture2D &&
+                depth.format == PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8) &&
+                depth.copyExtent() == targetExtent && depth.sampleCountI32 == sampleCount &&
+                PlanResourceUsage.DepthStencilAttachment in depth.usages() &&
+                depth.firstPassIndex <= producerIndex && depth.lastPassIndexExclusive > coverIndex) {
+                "Explicit stencil pairs require a live matching D24S8 attachment"
             }
         }
 
@@ -961,9 +1261,14 @@ public class RenderGraph private constructor(
                     is PlanPass.RenderPass -> addAll(pass.draws())
                     is PlanPass.StencilProducer -> add(pass.draw)
                     is PlanPass.PathRenderPass -> when (pass.phase) {
-                        PathRenderPhase.MultisampleStencilColor,
+                        PathRenderPhase.SingleSampleDirectColor,
+                        PathRenderPhase.SingleSampleStencilColorCover,
+                        PathRenderPhase.MultisampleDirectColor,
+                        PathRenderPhase.MultisampleStencilColorCover,
                         PathRenderPhase.HardEdgeBinaryColorCover,
                         -> add(pass.draw)
+                        PathRenderPhase.SingleSampleStencilProducer,
+                        PathRenderPhase.MultisampleStencilProducer,
                         PathRenderPhase.HardEdgeMaskProducer,
                         PathRenderPhase.HardEdgeMaskStencilProducer,
                         PathRenderPhase.HardEdgeMaskStencilCover,
