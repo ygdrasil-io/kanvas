@@ -225,22 +225,24 @@ class W4dPathStrokePlanCompilerTest {
     fun compilerFailsClosedForEveryRequiredCapabilityAndExactBudgetBoundary() {
         val scene = sceneOf(listOf(pathDraw(PaintStyleNode.STROKE)))
         val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target(scene))).candidate
-        val baseline = assertIs<RenderPlanResult.Ready<RenderGraph>>(compiler.plan(candidate, capabilities(), PlanBudget(1L shl 20))).plan
-        assertIs<RenderPlanResult.Ready<RenderGraph>>(compiler.plan(candidate, capabilities(), PlanBudget(baseline.peakFrameLocalBytes)))
-        assertEquals(W4dPlanDiagnostics.BudgetFrameLocalExceeded.value, assertIs<RenderPlanResult.ResourceLimitExceeded>(compiler.plan(candidate, capabilities(), PlanBudget(baseline.peakFrameLocalBytes - 1L))).diagnostics.single().code.value)
+        val capsBase = capabilities()
+        val baseline = assertIs<RenderPlanResult.Ready<RenderGraph>>(compiler.plan(candidate, capsBase, PlanBudget(1L shl 20))).plan
+        assertIs<RenderPlanResult.Ready<RenderGraph>>(compiler.plan(candidate, capsBase, PlanBudget(baseline.peakFrameLocalBytes)))
+        assertEquals(W4dPlanDiagnostics.BudgetFrameLocalExceeded.value, assertIs<RenderPlanResult.ResourceLimitExceeded>(compiler.plan(candidate, capsBase, PlanBudget(baseline.peakFrameLocalBytes - 1L))).diagnostics.single().code.value)
 
         listOf(
-            capabilities(maxTextureDimension2D = 8),
-            capabilities(maxBufferSizeBytes = 1L),
-            capabilities(supportedFormats = emptySet()),
-            capabilities(operations = PlanOperationCapability.entries.toSet() - PlanOperationCapability.Readback),
-            capabilities(operations = PlanOperationCapability.entries.toSet() - PlanOperationCapability.DepthStencilAttachment),
-            capabilities(depthStencilFormats = emptySet()),
-            capabilities(copyBytesPerRowAlignment = 3),
-            capabilities(minUniformBufferOffsetAlignment = 3),
-            capabilities(bufferAllocationPolicy = PlanBufferAllocationPolicy.of(3, 4_096, 4_096)),
-            capabilities(bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 3, 4_096)),
-            capabilities(bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 4_096, 3)),
+            mutateCapabilities(capsBase, maxTextureDimension2D = 8),
+            mutateCapabilities(capsBase, maxBufferSizeBytes = 1L),
+            mutateCapabilities(capsBase, supportedFormats = emptySet()),
+            *setOf(PlanOperationCapability.RenderPass, PlanOperationCapability.CopyUpload, PlanOperationCapability.UniformBuffer, PlanOperationCapability.Readback, PlanOperationCapability.DepthStencilAttachment, PlanOperationCapability.StencilCover)
+                .map { operation -> mutateCapabilities(capsBase, operations = capsBase.supportedOperations() - operation) }.toTypedArray(),
+            mutateCapabilities(capsBase, depthStencilFormats = emptySet()),
+            mutateCapabilities(capsBase, maxDynamicUniformBuffersPerPipelineLayout = 0),
+            mutateCapabilities(capsBase, copyBytesPerRowAlignment = 3),
+            mutateCapabilities(capsBase, minUniformBufferOffsetAlignment = 3),
+            mutateCapabilities(capsBase, bufferAllocationPolicy = PlanBufferAllocationPolicy.of(3, capsBase.bufferAllocationPolicy.indexFloorBytes, capsBase.bufferAllocationPolicy.uniformFloorBytes)),
+            mutateCapabilities(capsBase, bufferAllocationPolicy = PlanBufferAllocationPolicy.of(capsBase.bufferAllocationPolicy.vertexFloorBytes, 3, capsBase.bufferAllocationPolicy.uniformFloorBytes)),
+            mutateCapabilities(capsBase, bufferAllocationPolicy = PlanBufferAllocationPolicy.of(capsBase.bufferAllocationPolicy.vertexFloorBytes, capsBase.bufferAllocationPolicy.indexFloorBytes, 3)),
         ).forEach { unavailable ->
             assertIs<RenderPlanResult.GapOnPromotedScope>(compiler.plan(candidate, unavailable, PlanBudget(1L shl 20)))
         }
@@ -250,21 +252,32 @@ class W4dPathStrokePlanCompilerTest {
     fun planIdIsStableAndIncludesEveryAdmittedW4dPolicyAndCapabilityFact() {
         val scene = sceneOf(listOf(pathDraw(PaintStyleNode.STROKE)))
         val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target(scene))).candidate
-        fun id(caps: PlanCapabilitySnapshot = capabilities(), budget: PlanBudget = PlanBudget(1L shl 20)): String =
+        val capsBase = capabilities()
+        fun id(caps: PlanCapabilitySnapshot = capsBase, budget: PlanBudget = PlanBudget(1L shl 20)): String =
             assertIs<RenderPlanResult.Ready<RenderGraph>>(compiler.plan(candidate, caps, budget)).plan.id.value
         val stable = id()
         assertEquals(stable, id())
         listOf(
-            capabilities(deviceGeneration = 1),
-            capabilities(maxTextureDimension2D = 128),
-            capabilities(maxBufferSizeBytes = 2L shl 20),
-            capabilities(copyBytesPerRowAlignment = 512),
-            capabilities(minUniformBufferOffsetAlignment = 512),
-            capabilities(bufferAllocationPolicy = PlanBufferAllocationPolicy.of(32_768, 8_192, 8_192)),
+            mutateCapabilities(capsBase, deviceGeneration = 1),
+            mutateCapabilities(capsBase, maxTextureDimension2D = 128),
+            mutateCapabilities(capsBase, maxBufferSizeBytes = 2L shl 20),
+            mutateCapabilities(capsBase, copyBytesPerRowAlignment = 512),
+            mutateCapabilities(capsBase, minUniformBufferOffsetAlignment = 512),
+            mutateCapabilities(capsBase, maxDynamicUniformBuffersPerPipelineLayout = 2),
+            mutateCapabilities(capsBase, bufferAllocationPolicy = PlanBufferAllocationPolicy.of(32_768, capsBase.bufferAllocationPolicy.indexFloorBytes, capsBase.bufferAllocationPolicy.uniformFloorBytes)),
+            mutateCapabilities(capsBase, bufferAllocationPolicy = PlanBufferAllocationPolicy.of(capsBase.bufferAllocationPolicy.vertexFloorBytes, 8_192, capsBase.bufferAllocationPolicy.uniformFloorBytes)),
+            mutateCapabilities(capsBase, bufferAllocationPolicy = PlanBufferAllocationPolicy.of(capsBase.bufferAllocationPolicy.vertexFloorBytes, capsBase.bufferAllocationPolicy.indexFloorBytes, 8_192)),
         ).forEach { changed -> assertNotEquals(stable, id(changed)) }
         assertNotEquals(stable, id(budget = PlanBudget(2L shl 20)))
 
         val policyBase = generousPolicy()
+        fun policyId(policy: PathStrokePolicyF64): String {
+            val policyCompiler = W4dPathStrokePlanCompiler(policy)
+            val policyCandidate = assertIs<GpuPlanSelection.Candidate>(policyCompiler.select(scene, target(scene))).candidate
+            return assertIs<RenderPlanResult.Ready<RenderGraph>>(policyCompiler.plan(policyCandidate, capsBase, PlanBudget(1L shl 20))).plan.id.value
+        }
+        val policyBaseId = policyId(policyBase)
+        assertEquals(policyBaseId, policyId(policyBase))
         listOf(
             policyBase.copy(maximumSagittaErrorF64 = 0.125),
             policyBase.copy(maximumDashArcLengthErrorF64 = 0.03125),
@@ -277,12 +290,7 @@ class W4dPathStrokePlanCompilerTest {
             policyBase.copy(limitsI32 = policyBase.limitsI32.copy(maxEmittedIndexCountPerFrameI32 = 100_000)),
             policyBase.copy(limitsI64 = policyBase.limitsI64.copy(maxSnapshotByteCountPerPathI64 = 1L shl 20)),
             policyBase.copy(limitsI64 = policyBase.limitsI64.copy(maxSnapshotByteCountPerFrameI64 = 2L shl 20)),
-        ).forEach { policy ->
-            val policyCompiler = W4dPathStrokePlanCompiler(policy)
-            val policyCandidate = assertIs<GpuPlanSelection.Candidate>(policyCompiler.select(scene, target(scene))).candidate
-            val policyId = assertIs<RenderPlanResult.Ready<RenderGraph>>(policyCompiler.plan(policyCandidate, capabilities(), PlanBudget(1L shl 20))).plan.id.value
-            assertNotEquals(stable, policyId)
-        }
+        ).forEach { policy -> assertNotEquals(policyBaseId, policyId(policy)) }
     }
 
     @Test
@@ -366,6 +374,24 @@ class W4dPathStrokePlanCompilerTest {
         supportedOperations = operations,
         bufferAllocationPolicy = bufferAllocationPolicy,
         supportedDepthStencilFormats = depthStencilFormats,
+    )
+
+    private fun mutateCapabilities(
+        base: PlanCapabilitySnapshot,
+        deviceGeneration: Long = base.deviceGeneration,
+        maxTextureDimension2D: Int = base.maxTextureDimension2D,
+        maxBufferSizeBytes: Long = base.maxBufferSizeBytes,
+        copyBytesPerRowAlignment: Int = base.copyBytesPerRowAlignment,
+        supportedFormats: Set<PlanLogicalColorFormat> = base.supportedFormats(),
+        minUniformBufferOffsetAlignment: Int = base.minUniformBufferOffsetAlignment,
+        maxDynamicUniformBuffersPerPipelineLayout: Int = base.maxDynamicUniformBuffersPerPipelineLayout,
+        operations: Set<PlanOperationCapability> = base.supportedOperations(),
+        bufferAllocationPolicy: PlanBufferAllocationPolicy = base.bufferAllocationPolicy,
+        depthStencilFormats: Set<PlanDepthStencilFormat> = base.supportedDepthStencilFormats(),
+    ): PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(
+        deviceGeneration, maxTextureDimension2D, maxBufferSizeBytes, copyBytesPerRowAlignment, supportedFormats,
+        minUniformBufferOffsetAlignment, maxDynamicUniformBuffersPerPipelineLayout, operations,
+        bufferAllocationPolicy, depthStencilFormats,
     )
 
     private fun pathDraw(style: PaintStyleNode, width: Float = 2f, cap: StrokeCapNode = StrokeCapNode.BUTT, join: StrokeJoinNode = StrokeJoinNode.MITER, miter: Float = 4f, effect: PathEffectNode? = null, path: PathF32 = trianglePath()): SceneCommand.Draw {
