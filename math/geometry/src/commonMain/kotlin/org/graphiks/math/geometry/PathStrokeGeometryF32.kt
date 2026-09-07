@@ -239,8 +239,8 @@ public fun prepareProjectedPathStrokeGeometryF32(
         PathStrokePreparationResult.InvalidScene(PathStrokeInvalidSceneReason.NonFiniteInput)
     } catch (_: PathStrokeOutlineInvalidAbort) {
         PathStrokePreparationResult.InvalidScene(PathStrokeInvalidSceneReason.NonFiniteInput)
-    } catch (_: PathStrokeProjectionAbort) {
-        PathStrokePreparationResult.InvalidScene(PathStrokeInvalidSceneReason.NonFiniteInput)
+    } catch (abort: PathStrokeProjectionAbort) {
+        PathStrokePreparationResult.InvalidScene(abort.reason)
     }
 }
 
@@ -412,7 +412,9 @@ private fun appendProjectedStrokeIntervalF64(
             }
         }
 
-        PathStrokeProjectionIntervalResultF64.HorizonCrossing,
+        PathStrokeProjectionIntervalResultF64.HorizonCrossing ->
+            throw PathStrokeProjectionAbort(PathStrokeInvalidSceneReason.ProjectionHorizonCrossing)
+
         PathStrokeProjectionIntervalResultF64.NonFinite,
         PathStrokeProjectionIntervalResultF64.Unbounded,
         -> throw PathStrokeProjectionAbort()

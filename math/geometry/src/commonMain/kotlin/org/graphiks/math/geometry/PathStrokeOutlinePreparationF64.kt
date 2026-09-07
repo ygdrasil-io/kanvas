@@ -128,8 +128,7 @@ public fun prepareFinitePathStrokeOutlineF64(
 /**
  * Projects a hairline centerline first, then expands it by one device pixel in device space.
  *
- * Projection refusal deliberately collapses to the stable Task 1 invalid-scene reason.  The
- * projective reason algebra is introduced by the later projective preparation lane.
+ * Projection refusal preserves a horizon crossing independently from a non-finite projection.
  */
 public fun prepareProjectedHairlineOutlineF64(
     centerlineF64: PathStrokeCenterlineF64,
@@ -211,15 +210,17 @@ private inline fun prepareOutlineResultF64(
     }
 } catch (_: PathStrokeOutlineInvalidAbort) {
     PathStrokeOutlinePreparationResult.InvalidScene(PathStrokeInvalidSceneReason.NonFiniteInput)
-} catch (_: PathStrokeProjectionAbort) {
-    PathStrokeOutlinePreparationResult.InvalidScene(PathStrokeInvalidSceneReason.NonFiniteInput)
+} catch (abort: PathStrokeProjectionAbort) {
+    PathStrokeOutlinePreparationResult.InvalidScene(abort.reason)
 } catch (abort: PathStrokeResourceLimitAbort) {
     PathStrokeOutlinePreparationResult.ResourceLimitExceeded(abort.reason)
 }
 
 internal class PathStrokeOutlineInvalidAbort : RuntimeException()
 
-internal class PathStrokeProjectionAbort : RuntimeException()
+internal class PathStrokeProjectionAbort(
+    val reason: PathStrokeInvalidSceneReason = PathStrokeInvalidSceneReason.NonFiniteInput,
+) : RuntimeException()
 
 private data class StrokeOutlinePieceF64(
     val primitiveF64: PathStrokePrimitiveF64,
@@ -1222,7 +1223,9 @@ private fun materializeProjectedHairlineIntervalF64(
             )
         }
 
-        PathStrokeProjectionIntervalResultF64.HorizonCrossing,
+        PathStrokeProjectionIntervalResultF64.HorizonCrossing ->
+            throw PathStrokeProjectionAbort(PathStrokeInvalidSceneReason.ProjectionHorizonCrossing)
+
         PathStrokeProjectionIntervalResultF64.NonFinite,
         PathStrokeProjectionIntervalResultF64.Unbounded,
         -> throw PathStrokeProjectionAbort()

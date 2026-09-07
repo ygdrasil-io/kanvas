@@ -75,6 +75,7 @@ public data class PathStrokeStyleF64(
 /** Stable reason for rejecting an input scene before geometry is emitted. */
 public enum class PathStrokeInvalidSceneReason {
     NonFiniteInput,
+    ProjectionHorizonCrossing,
     InvalidStyle,
 }
 

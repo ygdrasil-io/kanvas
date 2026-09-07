@@ -382,8 +382,9 @@ private fun buildContactWitnessesF64(
     }
     val pointsF64 = splitTopologyF64.pointContactsF64.map { contactF64 ->
         candidateWorkBudgetI32.consume()
-        val incidentSpanIdsI64 = sourceTopologyIndexF64.spanIdsByEndpointIdentityF64
-            .getValue(contactF64.vertexIdentityF64)
+        val incidentSpanIdsI64 = sourceTopologyIndexF64.spanIdsByEndpointIdentityF64[
+            contactF64.vertexIdentityF64
+        ] ?: throw IllegalStateException("path-arrangement-inconsistent")
         if (incidentSpanIdsI64.isEmpty()) throw IllegalStateException("path-arrangement-inconsistent")
         PathUnidentifiedContactWitnessF64.PointF64(
             vertexIdentityF64 = contactF64.vertexIdentityF64,

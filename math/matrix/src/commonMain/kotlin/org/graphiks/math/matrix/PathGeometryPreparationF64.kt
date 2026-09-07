@@ -256,8 +256,16 @@ private fun Matrix3x3F64.preparePerspectivePathStrokeGeometryF32(
             frameWorkUsageAfterI64 = projectedF64.frameWorkUsageAfterI64,
         )
 
-        is PathProjectivePreparationResult.InvalidScene ->
-            PathStrokePreparationResult.InvalidScene(PathStrokeInvalidSceneReason.NonFiniteInput)
+        is PathProjectivePreparationResult.InvalidScene -> PathStrokePreparationResult.InvalidScene(
+            when (projectedF64.reason) {
+                PathProjectiveInvalidSceneReason.PerspectiveHorizonCrossing ->
+                    PathStrokeInvalidSceneReason.ProjectionHorizonCrossing
+
+                PathProjectiveInvalidSceneReason.NonFiniteMatrix,
+                PathProjectiveInvalidSceneReason.NonFiniteProjection,
+                -> PathStrokeInvalidSceneReason.NonFiniteInput
+            },
+        )
 
         is PathProjectivePreparationResult.ResourceLimitExceeded ->
             PathStrokePreparationResult.ResourceLimitExceeded(projectedF64.reason.toPathStrokeResourceLimitReason())
