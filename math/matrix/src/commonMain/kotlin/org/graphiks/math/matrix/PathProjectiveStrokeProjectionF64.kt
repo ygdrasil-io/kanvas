@@ -102,19 +102,32 @@ private fun correlatedOutlineWIntervalF64(
     if (!startF64.isFinite() || !endF64.isFinite()) return CorrelatedOutlineWResultF64.NonFinite
     val startHomogeneousF64 = matrixF64.projectHomogeneousPointF64(startF64) ?: return CorrelatedOutlineWResultF64.NonFinite
     val endHomogeneousF64 = matrixF64.projectHomogeneousPointF64(endF64) ?: return CorrelatedOutlineWResultF64.NonFinite
-    val startWF64 = startHomogeneousF64.wF64 + startHomogeneousF64.wResidualF64
-    val endWF64 = endHomogeneousF64.wF64 + endHomogeneousF64.wResidualF64
-    if (!startWF64.isFinite() || !endWF64.isFinite()) return CorrelatedOutlineWResultF64.NonFinite
-    if (startWF64 == 0.0 || endWF64 == 0.0 || (startWF64 < 0.0) != (endWF64 < 0.0)) {
+    val startWExpansionF64 = ProjectiveCompensatedF64(
+        startHomogeneousF64.wF64,
+        startHomogeneousF64.wResidualF64,
+        startHomogeneousF64.wUncertaintyF64,
+    )
+    val endWExpansionF64 = ProjectiveCompensatedF64(
+        endHomogeneousF64.wF64,
+        endHomogeneousF64.wResidualF64,
+        endHomogeneousF64.wUncertaintyF64,
+    )
+    val startWIntervalF64 = projectiveCompensatedIntervalF64(startWExpansionF64)
+        ?: return CorrelatedOutlineWResultF64.NonFinite
+    val endWIntervalF64 = projectiveCompensatedIntervalF64(endWExpansionF64)
+        ?: return CorrelatedOutlineWResultF64.NonFinite
+    val startSignI32 = projectiveCompensatedSignF64(startWExpansionF64)
+    val endSignI32 = projectiveCompensatedSignF64(endWExpansionF64)
+    if (startSignI32 == 0 || endSignI32 == 0 || startSignI32 != endSignI32) {
         return CorrelatedOutlineWResultF64.Horizon
     }
-    val gradientLengthF64 = sqrt(matrixF64.persp0F64 * matrixF64.persp0F64 + matrixF64.persp1F64 * matrixF64.persp1F64)
+    val gradientLengthF64 = projectiveHypotF64(matrixF64.persp0F64, matrixF64.persp1F64)
     val maximumWDeviationF64 = nextUpProjectiveF64(gradientLengthF64 * intervalF64.sourceSagittaUpperBoundF64)
     if (!gradientLengthF64.isFinite() || !maximumWDeviationF64.isFinite()) {
         return CorrelatedOutlineWResultF64.Unbounded
     }
-    val minimumEndpointWF64 = minOf(startWF64, endWF64)
-    val maximumEndpointWF64 = maxOf(startWF64, endWF64)
+    val minimumEndpointWF64 = minOf(startWIntervalF64.minimumF64, endWIntervalF64.minimumF64)
+    val maximumEndpointWF64 = maxOf(startWIntervalF64.maximumF64, endWIntervalF64.maximumF64)
     val minimumWF64 = nextDownProjectiveF64(minimumEndpointWF64 - maximumWDeviationF64)
     val maximumWF64 = nextUpProjectiveF64(maximumEndpointWF64 + maximumWDeviationF64)
     if (!minimumWF64.isFinite() || !maximumWF64.isFinite()) return CorrelatedOutlineWResultF64.Unbounded
@@ -128,6 +141,8 @@ internal data class ProjectiveHomogeneousPointF64(
     val wF64: Double,
     /** Exact low-order W contribution retained across de Casteljau subdivision. */
     val wResidualF64: Double = 0.0,
+    /** Directed absolute enclosure for W terms below [wResidualF64]. */
+    val wUncertaintyF64: Double = 0.0,
 )
 
 internal fun Matrix3x3F64.projectHomogeneousPointF64(pointF64: Point2F64): ProjectiveHomogeneousPointF64? {
@@ -138,7 +153,11 @@ internal fun Matrix3x3F64.projectHomogeneousPointF64(pointF64: Point2F64): Proje
         translationF64 = persp2F64,
         pointF64 = pointF64,
     ) ?: return null
-    return transformedF64.copy(wF64 = wExpansionF64.leadingF64, wResidualF64 = wExpansionF64.residualF64)
+    return transformedF64.copy(
+        wF64 = wExpansionF64.leadingF64,
+        wResidualF64 = wExpansionF64.residualF64,
+        wUncertaintyF64 = wExpansionF64.uncertaintyF64,
+    )
 }
 
 /** Applies the matrix to a homogeneous source control without performing the projective divide. */
@@ -149,16 +168,48 @@ internal fun Matrix3x3F64.projectHomogeneousCoordinatesF64(
 ): ProjectiveHomogeneousPointF64? {
     val transformedXF64 = sxF64 * xF64 + kxF64 * yF64 + txF64 * wF64
     val transformedYF64 = kyF64 * xF64 + syF64 * yF64 + tyF64 * wF64
-    val transformedWF64 = persp0F64 * xF64 + persp1F64 * yF64 + persp2F64 * wF64
-    return ProjectiveHomogeneousPointF64(transformedXF64, transformedYF64, transformedWF64)
-        .takeIf { it.xF64.isFinite() && it.yF64.isFinite() && it.wF64.isFinite() }
+    val transformedWExpansionF64 = projectiveCompensatedHomogeneousCombinationF64(
+        firstCoefficientF64 = persp0F64,
+        firstValueF64 = xF64,
+        secondCoefficientF64 = persp1F64,
+        secondValueF64 = yF64,
+        thirdCoefficientF64 = persp2F64,
+        thirdValueF64 = wF64,
+    ) ?: return null
+    return ProjectiveHomogeneousPointF64(
+        transformedXF64,
+        transformedYF64,
+        transformedWExpansionF64.leadingF64,
+        transformedWExpansionF64.residualF64,
+        transformedWExpansionF64.uncertaintyF64,
+    ).takeIf {
+        it.xF64.isFinite() && it.yF64.isFinite() && it.wF64.isFinite() &&
+            it.wResidualF64.isFinite() && it.wUncertaintyF64.isFinite()
+    }
 }
 
 internal fun projectFiniteHomogeneousPointF64(pointF64: ProjectiveHomogeneousPointF64): Point2F64? {
-    val effectiveWF64 = pointF64.wF64 + pointF64.wResidualF64
-    if (!pointF64.xF64.isFinite() || !pointF64.yF64.isFinite() || !effectiveWF64.isFinite() || effectiveWF64 == 0.0) {
+    val wExpansionF64 = ProjectiveCompensatedF64(
+        pointF64.wF64,
+        pointF64.wResidualF64,
+        pointF64.wUncertaintyF64,
+    )
+    val effectiveWF64 = projectiveCompensatedValueF64(wExpansionF64)
+    if (!pointF64.xF64.isFinite() || !pointF64.yF64.isFinite() || !effectiveWF64.isFinite() ||
+        projectiveCompensatedSignF64(wExpansionF64) == 0
+    ) {
         return null
     }
     return Point2F64(pointF64.xF64 / effectiveWF64, pointF64.yF64 / effectiveWF64)
         .takeIf(Point2F64::isFinite)
+}
+
+/** Scaled hypotenuse avoids both overflow and underflow in `sqrt(x*x + y*y)`. */
+private fun projectiveHypotF64(xF64: Double, yF64: Double): Double {
+    val maximumF64 = maxOf(kotlin.math.abs(xF64), kotlin.math.abs(yF64))
+    if (!maximumF64.isFinite()) return Double.NaN
+    if (maximumF64 == 0.0) return 0.0
+    val minimumF64 = minOf(kotlin.math.abs(xF64), kotlin.math.abs(yF64))
+    val ratioF64 = minimumF64 / maximumF64
+    return nextUpProjectiveF64(maximumF64 * sqrt(1.0 + ratioF64 * ratioF64))
 }

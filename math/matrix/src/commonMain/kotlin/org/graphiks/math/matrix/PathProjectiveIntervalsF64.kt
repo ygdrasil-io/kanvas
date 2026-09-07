@@ -103,7 +103,10 @@ private fun dependencyAwareProjectiveCombinationF64(
         pointF64.x,
         pointF64.y,
     ).let { it as? PathProjectiveIntervalResultF64.Ready }?.intervalF64
-    val residualBoundF64 = projectiveUpwardAbsoluteSumF64(expansionF64.residualF64) ?: return null
+    val residualBoundF64 = projectiveUpwardAbsoluteSumF64(
+        expansionF64.residualF64,
+        expansionF64.uncertaintyF64,
+    ) ?: return null
     val minimumF64 = expansionF64.leadingF64 - residualBoundF64
     val maximumF64 = expansionF64.leadingF64 + residualBoundF64
     if (!minimumF64.isFinite() || !maximumF64.isFinite()) return null
@@ -114,7 +117,51 @@ private fun dependencyAwareProjectiveCombinationF64(
 internal data class ProjectiveCompensatedF64(
     val leadingF64: Double,
     val residualF64: Double,
+    /** Directed absolute enclosure for terms below the retained double-double limbs. */
+    val uncertaintyF64: Double = 0.0,
 )
+
+/**
+ * The two fields form a normalized double-double expansion: `leadingF64 + residualF64`, with the
+ * residual too small to reverse the leading term.  Do not first collapse it to one [Double] when
+ * deciding a denominator's sign: that reintroduces precisely the cancellation this expansion
+ * records.
+ */
+internal fun projectiveCompensatedSignF64(valueF64: ProjectiveCompensatedF64): Int = when {
+    !valueF64.leadingF64.isFinite() || !valueF64.residualF64.isFinite() || !valueF64.uncertaintyF64.isFinite() -> 0
+    valueF64.uncertaintyF64 == 0.0 && valueF64.leadingF64 > 0.0 -> 1
+    valueF64.uncertaintyF64 == 0.0 && valueF64.leadingF64 < 0.0 -> -1
+    valueF64.uncertaintyF64 == 0.0 && valueF64.residualF64 > 0.0 -> 1
+    valueF64.uncertaintyF64 == 0.0 && valueF64.residualF64 < 0.0 -> -1
+    else -> projectiveCompensatedEnclosureSignF64(valueF64)
+}
+
+internal fun projectiveCompensatedValueF64(valueF64: ProjectiveCompensatedF64): Double =
+    valueF64.leadingF64 + valueF64.residualF64
+
+/** Outward enclosure of a retained double-double value and its unrepresented tail. */
+internal fun projectiveCompensatedIntervalF64(valueF64: ProjectiveCompensatedF64): PathProjectiveIntervalF64? {
+    if (!valueF64.leadingF64.isFinite() || !valueF64.residualF64.isFinite() || !valueF64.uncertaintyF64.isFinite()) {
+        return null
+    }
+    val estimateF64 = projectiveCompensatedValueF64(valueF64)
+    if (!estimateF64.isFinite()) return null
+    val lowerF64 = nextDownProjectiveF64(nextDownProjectiveF64(estimateF64) - valueF64.uncertaintyF64)
+    val upperF64 = nextUpProjectiveF64(nextUpProjectiveF64(estimateF64) + valueF64.uncertaintyF64)
+    if (!lowerF64.isFinite() || !upperF64.isFinite()) return null
+    return PathProjectiveIntervalF64(lowerF64, upperF64)
+}
+
+/** Decides an uncertain sign from a directed enclosure, never from a nearest-rounded estimate. */
+private fun projectiveCompensatedEnclosureSignF64(valueF64: ProjectiveCompensatedF64): Int {
+    if (valueF64.leadingF64 == 0.0 && valueF64.residualF64 == 0.0 && valueF64.uncertaintyF64 == 0.0) return 0
+    val intervalF64 = projectiveCompensatedIntervalF64(valueF64) ?: return 0
+    return when {
+        intervalF64.minimumF64 > 0.0 -> 1
+        intervalF64.maximumF64 < 0.0 -> -1
+        else -> 0
+    }
+}
 
 /**
  * Computes `a*x + b*y + c` as a short expansion.  Fill keeps this representation through
@@ -127,20 +174,76 @@ internal fun projectiveCompensatedCombinationF64(
     translationF64: Double,
     pointF64: Point2F64,
 ): ProjectiveCompensatedF64? {
-    val firstProductF64 = projectiveTwoProductF64(firstCoefficientF64, pointF64.x) ?: return null
-    val secondProductF64 = projectiveTwoProductF64(secondCoefficientF64, pointF64.y) ?: return null
-    val productSumF64 = projectiveTwoSumF64(firstProductF64.leadingF64, secondProductF64.leadingF64) ?: return null
-    val totalF64 = projectiveTwoSumF64(productSumF64.leadingF64, translationF64) ?: return null
-    val firstResidualSumF64 = projectiveTwoSumF64(firstProductF64.residualF64, secondProductF64.residualF64)
-        ?: return null
-    val secondResidualSumF64 = projectiveTwoSumF64(firstResidualSumF64.leadingF64, productSumF64.residualF64)
-        ?: return null
-    val thirdResidualSumF64 = projectiveTwoSumF64(secondResidualSumF64.leadingF64, totalF64.residualF64)
-        ?: return null
-    val residualF64 = thirdResidualSumF64.leadingF64 + firstResidualSumF64.residualF64 +
-        secondResidualSumF64.residualF64 + thirdResidualSumF64.residualF64
-    return ProjectiveCompensatedF64(totalF64.leadingF64, residualF64)
-        .takeIf { it.leadingF64.isFinite() && it.residualF64.isFinite() }
+    val firstProductF64 = projectiveCompensatedProductF64(firstCoefficientF64, pointF64.x) ?: return null
+    val secondProductF64 = projectiveCompensatedProductF64(secondCoefficientF64, pointF64.y) ?: return null
+    return projectiveCompensatedAddF64(
+        projectiveCompensatedAddF64(firstProductF64, secondProductF64) ?: return null,
+        ProjectiveCompensatedF64(translationF64, 0.0),
+    )
+}
+
+/** Computes `a*x + b*y + c*w` while retaining the denominator as a normalized double-double. */
+internal fun projectiveCompensatedHomogeneousCombinationF64(
+    firstCoefficientF64: Double,
+    firstValueF64: Double,
+    secondCoefficientF64: Double,
+    secondValueF64: Double,
+    thirdCoefficientF64: Double,
+    thirdValueF64: Double,
+): ProjectiveCompensatedF64? {
+    val firstProductF64 = projectiveCompensatedProductF64(firstCoefficientF64, firstValueF64) ?: return null
+    val secondProductF64 = projectiveCompensatedProductF64(secondCoefficientF64, secondValueF64) ?: return null
+    val thirdProductF64 = projectiveCompensatedProductF64(thirdCoefficientF64, thirdValueF64) ?: return null
+    return projectiveCompensatedAddF64(
+        projectiveCompensatedAddF64(firstProductF64, secondProductF64) ?: return null,
+        thirdProductF64,
+    )
+}
+
+/**
+ * Certifies a real root of a quadratic Bernstein denominator without depending on a dyadic split
+ * point.  It intentionally proves only the easy, decisive case: equal nonzero endpoint signs,
+ * an interior extremum on the opposite side, and a nonnegative discriminant enclosure.  The
+ * caller still subdivides if this certificate cannot decide.
+ */
+internal fun projectiveQuadraticRootCertificateF64(controlsF64: List<ProjectiveCompensatedF64>): Boolean {
+    if (controlsF64.size != 3 || controlsF64.any { it.uncertaintyF64 != 0.0 }) return false
+    val endpointSignI32 = projectiveCompensatedSignF64(controlsF64.first())
+    if (endpointSignI32 == 0 || endpointSignI32 != projectiveCompensatedSignF64(controlsF64.last())) return false
+    val normalizedControlsF64 = if (endpointSignI32 > 0) controlsF64 else controlsF64.map(::projectiveCompensatedNegateF64)
+    if (projectiveCompensatedSignF64(normalizedControlsF64[1]) >= 0) return false
+
+    // B(t) = a + b*t + c*t² for quadratic Bernstein weights (a, middle, end).
+    val aF64 = normalizedControlsF64[0]
+    val bF64 = projectiveCompensatedAddF64(
+        projectiveCompensatedScaleF64(normalizedControlsF64[1], 2.0) ?: return false,
+        projectiveCompensatedScaleF64(aF64, -2.0) ?: return false,
+    ) ?: return false
+    val cF64 = projectiveCompensatedAddF64(
+        projectiveCompensatedAddF64(
+            aF64,
+            projectiveCompensatedScaleF64(normalizedControlsF64[1], -2.0) ?: return false,
+        ) ?: return false,
+        normalizedControlsF64[2],
+    ) ?: return false
+    if (projectiveCompensatedSignF64(cF64) <= 0) return false
+
+    val minusBF64 = projectiveCompensatedScaleF64(bF64, -1.0) ?: return false
+    val twiceCF64 = projectiveCompensatedScaleF64(cF64, 2.0) ?: return false
+    // The minimizer -b/(2c) lies strictly inside (0, 1).
+    if (projectiveCompensatedSignF64(minusBF64) <= 0 ||
+        projectiveCompensatedSignF64(projectiveCompensatedAddF64(minusBF64, projectiveCompensatedNegateF64(twiceCF64))
+            ?: return false) >= 0
+    ) return false
+
+    val discriminantF64 = projectiveCompensatedAddF64(
+        projectiveCompensatedMultiplyF64(bF64, bF64) ?: return false,
+        projectiveCompensatedScaleF64(projectiveCompensatedMultiplyF64(aF64, cF64) ?: return false, -4.0)
+            ?: return false,
+    ) ?: return false
+    return projectiveCompensatedSignF64(discriminantF64) > 0 ||
+        (discriminantF64.leadingF64 == 0.0 && discriminantF64.residualF64 == 0.0 &&
+            discriminantF64.uncertaintyF64 == 0.0)
 }
 
 /** Preserves the low-order term while linearly interpolating a W expansion. */
@@ -150,35 +253,135 @@ internal fun interpolateProjectiveCompensatedF64(
     parameterF64: Double,
 ): ProjectiveCompensatedF64? {
     val inverseParameterF64 = 1.0 - parameterF64
-    val firstLeadingF64 = projectiveTwoProductF64(firstF64.leadingF64, inverseParameterF64) ?: return null
-    val secondLeadingF64 = projectiveTwoProductF64(secondF64.leadingF64, parameterF64) ?: return null
-    val leadingSumF64 = projectiveTwoSumF64(firstLeadingF64.leadingF64, secondLeadingF64.leadingF64) ?: return null
-    val firstResidualF64 = projectiveTwoProductF64(firstF64.residualF64, inverseParameterF64) ?: return null
-    val secondResidualF64 = projectiveTwoProductF64(secondF64.residualF64, parameterF64) ?: return null
-    val residualF64 = projectiveCompensatedSumF64(
-        firstLeadingF64.residualF64,
-        secondLeadingF64.residualF64,
-        leadingSumF64.residualF64,
-        firstResidualF64.leadingF64,
-        firstResidualF64.residualF64,
-        secondResidualF64.leadingF64,
-        secondResidualF64.residualF64,
-    ) ?: return null
-    return ProjectiveCompensatedF64(leadingSumF64.leadingF64, residualF64)
-        .takeIf { it.leadingF64.isFinite() && it.residualF64.isFinite() }
+    val firstScaledF64 = projectiveCompensatedScaleF64(firstF64, inverseParameterF64) ?: return null
+    val secondScaledF64 = projectiveCompensatedScaleF64(secondF64, parameterF64) ?: return null
+    return projectiveCompensatedAddF64(firstScaledF64, secondScaledF64)
 }
 
-private fun projectiveCompensatedSumF64(vararg valuesF64: Double): Double? {
-    var leadingF64 = 0.0
-    var residualF64 = 0.0
-    valuesF64.forEach { valueF64 ->
-        val sumF64 = projectiveTwoSumF64(leadingF64, valueF64) ?: return null
-        leadingF64 = sumF64.leadingF64
-        residualF64 += sumF64.residualF64
-        if (!residualF64.isFinite()) return null
+/** Error-free product followed by normalization to a non-overlapping double-double. */
+private fun projectiveCompensatedProductF64(firstF64: Double, secondF64: Double): ProjectiveCompensatedF64? =
+    when {
+        !firstF64.isFinite() || !secondF64.isFinite() -> null
+        firstF64 == 0.0 || secondF64 == 0.0 -> ProjectiveCompensatedF64(0.0, 0.0)
+        abs(firstF64 * secondF64) <= PROJECTIVE_MIN_NORMAL_F64 -> {
+            // Dekker residuals below the subnormal floor are not representable.  Keep an outward
+            // tail instead of fabricating a sign for MIN*.5 + MIN*.5 - MIN.
+            ProjectiveCompensatedF64(firstF64 * secondF64, 0.0, Double.MIN_VALUE)
+        }
+        else -> projectiveTwoProductF64(firstF64, secondF64)
+            ?.let { ProjectiveCompensatedF64(it.leadingF64, it.residualF64) }
     }
-    return (leadingF64 + residualF64).takeIf(Double::isFinite)
+
+/** Multiplies both expansion limbs and retains the cross-limb product before normalization. */
+private fun projectiveCompensatedScaleF64(
+    valueF64: ProjectiveCompensatedF64,
+    factorF64: Double,
+): ProjectiveCompensatedF64? {
+    val leadingProductF64 = projectiveCompensatedProductF64(valueF64.leadingF64, factorF64) ?: return null
+    val residualProductF64 = projectiveCompensatedProductF64(valueF64.residualF64, factorF64) ?: return null
+    val scaledF64 = projectiveCompensatedAddF64(leadingProductF64, residualProductF64) ?: return null
+    val inheritedUncertaintyF64 = projectiveUpwardProductF64(valueF64.uncertaintyF64, abs(factorF64)) ?: return null
+    return scaledF64.copy(
+        uncertaintyF64 = projectiveUpwardAbsoluteSumF64(scaledF64.uncertaintyF64, inheritedUncertaintyF64)
+            ?: return null,
+    )
 }
+
+private fun projectiveCompensatedNegateF64(valueF64: ProjectiveCompensatedF64): ProjectiveCompensatedF64 =
+    ProjectiveCompensatedF64(-valueF64.leadingF64, -valueF64.residualF64, valueF64.uncertaintyF64)
+
+/** Multiplies two short expansions and carries all products through the same directed tail. */
+private fun projectiveCompensatedMultiplyF64(
+    firstF64: ProjectiveCompensatedF64,
+    secondF64: ProjectiveCompensatedF64,
+): ProjectiveCompensatedF64? {
+    val productsF64 = listOf(
+        projectiveCompensatedProductF64(firstF64.leadingF64, secondF64.leadingF64),
+        projectiveCompensatedProductF64(firstF64.leadingF64, secondF64.residualF64),
+        projectiveCompensatedProductF64(firstF64.residualF64, secondF64.leadingF64),
+        projectiveCompensatedProductF64(firstF64.residualF64, secondF64.residualF64),
+    )
+    if (productsF64.any { it == null }) return null
+    val combinedF64 = productsF64.filterNotNull().fold(ProjectiveCompensatedF64(0.0, 0.0)) { resultF64, productF64 ->
+        projectiveCompensatedAddF64(resultF64, productF64) ?: return null
+    }
+    val firstMagnitudeF64 = projectiveCompensatedMagnitudeUpperF64(firstF64) ?: return null
+    val secondMagnitudeF64 = projectiveCompensatedMagnitudeUpperF64(secondF64) ?: return null
+    val inheritedUncertaintyF64 = projectiveUpwardAbsoluteSumF64(
+        projectiveUpwardProductF64(firstMagnitudeF64, secondF64.uncertaintyF64) ?: return null,
+        projectiveUpwardProductF64(secondMagnitudeF64, firstF64.uncertaintyF64) ?: return null,
+        projectiveUpwardProductF64(firstF64.uncertaintyF64, secondF64.uncertaintyF64) ?: return null,
+    ) ?: return null
+    return combinedF64.copy(
+        uncertaintyF64 = projectiveUpwardAbsoluteSumF64(combinedF64.uncertaintyF64, inheritedUncertaintyF64)
+            ?: return null,
+    )
+}
+
+private fun projectiveCompensatedMagnitudeUpperF64(valueF64: ProjectiveCompensatedF64): Double? =
+    projectiveUpwardAbsoluteSumF64(valueF64.leadingF64, valueF64.residualF64, valueF64.uncertaintyF64)
+
+/**
+ * Adds two normalized double-doubles using only error-free transforms before the final
+ * normalization.  In particular this does not accumulate residuals with ordinary `+`, which
+ * could discard a small positive denominator after cancellation.
+ */
+private fun projectiveCompensatedAddF64(
+    firstF64: ProjectiveCompensatedF64,
+    secondF64: ProjectiveCompensatedF64,
+): ProjectiveCompensatedF64? {
+    val leadingSumF64 = projectiveTwoSumF64(firstF64.leadingF64, secondF64.leadingF64) ?: return null
+    val residualSumF64 = projectiveTwoSumF64(firstF64.residualF64, secondF64.residualF64) ?: return null
+    val middleSumF64 = projectiveTwoSumF64(leadingSumF64.residualF64, residualSumF64.leadingF64) ?: return null
+    val normalizedLeadingF64 = projectiveTwoSumF64(leadingSumF64.leadingF64, middleSumF64.leadingF64) ?: return null
+    val normalizedF64 = projectiveCompensatedNormalizeF64(
+        normalizedLeadingF64.leadingF64,
+        normalizedLeadingF64.residualF64,
+        middleSumF64.residualF64,
+        residualSumF64.residualF64,
+    ) ?: return null
+    return normalizedF64.copy(
+        uncertaintyF64 = projectiveUpwardAbsoluteSumF64(
+            normalizedF64.uncertaintyF64,
+            firstF64.uncertaintyF64,
+            secondF64.uncertaintyF64,
+        ) ?: return null,
+    )
+}
+
+/** Compresses the remaining low-order expansion terms and encloses any third limb outward. */
+private fun projectiveCompensatedNormalizeF64(
+    leadingF64: Double,
+    firstResidualF64: Double,
+    secondResidualF64: Double,
+    thirdResidualF64: Double,
+): ProjectiveCompensatedF64? {
+    val firstSumF64 = projectiveTwoSumF64(firstResidualF64, secondResidualF64) ?: return null
+    val secondSumF64 = projectiveTwoSumF64(firstSumF64.leadingF64, thirdResidualF64) ?: return null
+    val lowSumF64 = projectiveTwoSumF64(firstSumF64.residualF64, secondSumF64.residualF64) ?: return null
+    val leadingWithLowF64 = projectiveTwoSumF64(leadingF64, secondSumF64.leadingF64) ?: return null
+    val finalF64 = projectiveTwoSumF64(leadingWithLowF64.residualF64, lowSumF64.leadingF64) ?: return null
+    val resultF64 = projectiveTwoSumF64(leadingWithLowF64.leadingF64, finalF64.leadingF64) ?: return null
+    val tailF64 = projectiveTwoSumF64(finalF64.residualF64, lowSumF64.residualF64) ?: return null
+    val normalizedF64 = projectiveTwoSumF64(resultF64.residualF64, tailF64.leadingF64) ?: return null
+    val resultWithLowF64 = projectiveTwoSumF64(resultF64.leadingF64, normalizedF64.leadingF64) ?: return null
+    return ProjectiveCompensatedF64(
+        leadingF64 = resultWithLowF64.leadingF64,
+        residualF64 = resultWithLowF64.residualF64,
+        uncertaintyF64 = projectiveUpwardAbsoluteSumF64(normalizedF64.residualF64, tailF64.residualF64)
+            ?: return null,
+    ).takeIf { it.leadingF64.isFinite() && it.residualF64.isFinite() && it.uncertaintyF64.isFinite() }
+}
+
+private fun projectiveUpwardProductF64(firstF64: Double, secondF64: Double): Double? {
+    if (!firstF64.isFinite() || !secondF64.isFinite()) return null
+    if (firstF64 == 0.0 || secondF64 == 0.0) return 0.0
+    val productF64 = firstF64 * secondF64
+    if (!productF64.isFinite()) return null
+    return if (productF64 == 0.0) Double.MIN_VALUE else nextUpProjectiveF64(productF64)
+}
+
+private val PROJECTIVE_MIN_NORMAL_F64: Double = Double.fromBits(0x0010_0000_0000_0000L)
 
 private data class ProjectiveTwoTermF64(
     val leadingF64: Double,
@@ -219,6 +422,7 @@ private fun projectiveUpwardAbsoluteSumF64(vararg valuesF64: Double): Double? {
     var resultF64 = 0.0
     valuesF64.forEach { valueF64 ->
         if (!valueF64.isFinite()) return null
+        if (valueF64 == 0.0) return@forEach
         resultF64 = nextUpProjectiveF64(resultF64 + abs(valueF64))
         if (!resultF64.isFinite()) return null
     }

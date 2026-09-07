@@ -373,7 +373,9 @@ private class PathProjectiveFillPreparerF64(
                     startParameterF64,
                     endParameterF64,
                     depthI32,
-                    horizonAtLimit = true,
+                    // Alternating Bernstein controls need isolation; even sign variation alone
+                    // is not a root proof and must not be upgraded to a Horizon at the limit.
+                    horizonAtLimit = false,
                 )
                 return
             }
@@ -420,7 +422,14 @@ private class PathProjectiveFillPreparerF64(
     private fun projectPointF64(pointF64: Point2F64): Point2F64 {
         val homogeneousF64 = matrixF64.projectHomogeneousPointF64(pointF64)
             ?: abortInvalid(PathProjectiveInvalidSceneReason.NonFiniteProjection)
-        if (homogeneousF64.wF64 == 0.0) abortInvalid(PathProjectiveInvalidSceneReason.PerspectiveHorizonCrossing)
+        if (projectiveCompensatedSignF64(ProjectiveCompensatedF64(
+                homogeneousF64.wF64,
+                homogeneousF64.wResidualF64,
+                homogeneousF64.wUncertaintyF64,
+            )) == 0
+        ) {
+            abortInvalid(PathProjectiveInvalidSceneReason.PerspectiveHorizonCrossing)
+        }
         val projectedF64 = projectFiniteHomogeneousPointF64(homogeneousF64)
             ?: abortInvalid(PathProjectiveInvalidSceneReason.NonFiniteProjection)
         if (!projectedF64.x.isF32RepresentableF64() || !projectedF64.y.isF32RepresentableF64()) {
@@ -466,20 +475,41 @@ private fun projectedControlHullErrorBoundF64(controlsF64: List<Point2F64>): Dou
 }
 
 private fun certifyWSignF64(controlsF64: List<ProjectiveHomogeneousPointF64>): ProjectiveWCertificateF64 {
-    if (controlsF64.isEmpty() || controlsF64.any { !it.wF64.isFinite() || !it.wResidualF64.isFinite() }) {
+    if (controlsF64.isEmpty() || controlsF64.any {
+            !it.wF64.isFinite() || !it.wResidualF64.isFinite() || !it.wUncertaintyF64.isFinite()
+        }
+    ) {
         return ProjectiveWCertificateF64.Horizon
     }
-    val weightsF64 = controlsF64.map(::effectiveProjectiveWF64)
-    if (weightsF64.first() == 0.0 || weightsF64.last() == 0.0) return ProjectiveWCertificateF64.Horizon
-    if (weightsF64.all { it > 0.0 } || weightsF64.all { it < 0.0 }) {
+    val signsF64 = controlsF64.map { controlF64 ->
+        projectiveCompensatedSignF64(
+            ProjectiveCompensatedF64(
+                controlF64.wF64,
+                controlF64.wResidualF64,
+                controlF64.wUncertaintyF64,
+            ),
+        )
+    }
+    if (signsF64.first() == 0 || signsF64.last() == 0) return ProjectiveWCertificateF64.Horizon
+    if (signsF64.all { it > 0 } || signsF64.all { it < 0 }) {
         return ProjectiveWCertificateF64.StrictlySeparated
     }
     // Bernstein's variation-diminishing property makes an odd number of strict sign variations
     // a root certificate on this whole interval.  It catches non-dyadic roots without relying on
     // a sampled parameter or an epsilon comparison.
-    val signsF64 = weightsF64.filter { it != 0.0 }.map { if (it > 0.0) 1 else -1 }
-    val signVariationCountI32 = signsF64.zipWithNext().count { (firstI32, secondI32) -> firstI32 != secondI32 }
+    val nonZeroSignsF64 = signsF64.filter { it != 0 }
+    val signVariationCountI32 = nonZeroSignsF64.zipWithNext().count { (firstI32, secondI32) -> firstI32 != secondI32 }
     if (signVariationCountI32 % 2 == 1) return ProjectiveWCertificateF64.Horizon
+    if (projectiveQuadraticRootCertificateF64(controlsF64.map { controlF64 ->
+            ProjectiveCompensatedF64(
+                controlF64.wF64,
+                controlF64.wResidualF64,
+                controlF64.wUncertaintyF64,
+            )
+        })
+    ) {
+        return ProjectiveWCertificateF64.Horizon
+    }
     return ProjectiveWCertificateF64.NeedsSubdivision
 }
 
@@ -629,8 +659,8 @@ private fun interpolatedHomogeneousPointF64(
     parameterF64: Double,
 ): ProjectiveHomogeneousPointF64 {
     val wF64 = interpolateProjectiveCompensatedF64(
-        ProjectiveCompensatedF64(firstF64.wF64, firstF64.wResidualF64),
-        ProjectiveCompensatedF64(secondF64.wF64, secondF64.wResidualF64),
+        ProjectiveCompensatedF64(firstF64.wF64, firstF64.wResidualF64, firstF64.wUncertaintyF64),
+        ProjectiveCompensatedF64(secondF64.wF64, secondF64.wResidualF64, secondF64.wUncertaintyF64),
         parameterF64,
     ) ?: return ProjectiveHomogeneousPointF64(Double.NaN, Double.NaN, Double.NaN)
     return ProjectiveHomogeneousPointF64(
@@ -638,11 +668,14 @@ private fun interpolatedHomogeneousPointF64(
         yF64 = firstF64.yF64 * (1.0 - parameterF64) + secondF64.yF64 * parameterF64,
         wF64 = wF64.leadingF64,
         wResidualF64 = wF64.residualF64,
+        wUncertaintyF64 = wF64.uncertaintyF64,
     )
 }
 
 private fun effectiveProjectiveWF64(pointF64: ProjectiveHomogeneousPointF64): Double =
-    pointF64.wF64 + pointF64.wResidualF64
+    projectiveCompensatedValueF64(
+        ProjectiveCompensatedF64(pointF64.wF64, pointF64.wResidualF64, pointF64.wUncertaintyF64),
+    )
 
 private class ProjectiveSvgArcPrimitiveF64 private constructor(
     private val fallbackF64: ProjectiveLinePrimitiveF64?,

@@ -102,6 +102,54 @@ class PathProjectivePreparationF64Test {
     }
 
     @Test
+    fun `subnormal denominator cancellation remains a horizon rather than a ready snapshot`() {
+        val result = Matrix3x3F64(
+            persp0F64 = Double.MIN_VALUE,
+            persp1F64 = Double.MIN_VALUE,
+            persp2F64 = -Double.MIN_VALUE,
+        ).prepareProjectedPathFillInputF64(
+            PathBuilder().moveTo(0.5f, 0.5f).lineTo(0.5f, 0.75f).lineTo(0.5f, 0.5f).close().build(),
+        )
+
+        assertEquals(
+            PathProjectiveInvalidSceneReason.PerspectiveHorizonCrossing,
+            assertIs<PathProjectivePreparationResult.InvalidScene>(result).reason,
+        )
+    }
+
+    @Test
+    fun `double double denominator retains the nonzero product residual after cancellation`() {
+        val result = Matrix3x3F64(
+            sxF64 = 1e-20,
+            syF64 = 1e-20,
+            persp0F64 = 1.0 / 3.0,
+            persp2F64 = -1.0,
+        ).prepareProjectedPathFillInputF64(
+            PathBuilder().moveTo(3f, 0f).lineTo(3f, 1f).lineTo(3f, 0f).close().build(),
+        )
+
+        assertIs<PathProjectivePreparationResult.Ready>(result)
+    }
+
+    @Test
+    fun `stroke gradient norm does not underflow past an interior quadratic horizon`() {
+        val path = PathBuilder().moveTo(1f, 0f).quadTo(-3f, 1f, 1f, 0f).build()
+        val centerline = assertIs<PathStrokeCenterlinePreparationResult.Ready>(
+            preparePathStrokeCenterlinesF64(PathFillInputF64.fromPathF32(path), dashF64 = null),
+        ).centerlineF64
+        val outlineF64 = assertIs<PathStrokeOutlinePreparationResult.Ready>(
+            prepareFinitePathStrokeOutlineF64(centerline, finiteStrokeStyleForTest()),
+        ).outlineF64
+        val projectionF64 = Matrix3x3F64(persp0F64 = 1e-162, persp2F64 = 0.0).toPathStrokeProjectionF64()
+
+        assertTrue(
+            (0 until outlineF64.contourCountI32)
+                .flatMap { outlineF64.copyContourIntervalsF64(it) }
+                .any { projectionF64.certifyOutlineIntervalF64(it) !is PathStrokeProjectionIntervalResultF64.Bounded },
+        )
+    }
+
+    @Test
     fun `stroke interval preserves correlated diagonal w instead of crossing its AABB`() {
         val path = PathBuilder().moveTo(0f, 0f).lineTo(1f, 1f).build()
         val centerline = assertIs<PathStrokeCenterlinePreparationResult.Ready>(
@@ -298,6 +346,34 @@ class PathProjectivePreparationF64Test {
     fun `non dyadic quadratic w root is a horizon rather than a subdivision exhaustion`() {
         val result = Matrix3x3F64(persp0F64 = 1.0, persp2F64 = -0.3).prepareProjectedPathFillInputF64(
             PathBuilder().moveTo(0f, 0f).quadTo(0.5f, 1f, 1f, 0f).lineTo(0f, 0f).close().build(),
+        )
+
+        assertEquals(
+            PathProjectiveInvalidSceneReason.PerspectiveHorizonCrossing,
+            assertIs<PathProjectivePreparationResult.InvalidScene>(result).reason,
+        )
+    }
+
+    @Test
+    fun `inconclusive alternating w controls at depth limit are not a fabricated horizon`() {
+        val result = Matrix3x3F64(persp0F64 = 1.0, persp2F64 = 0.0).prepareProjectedPathFillInputF64(
+            path = PathBuilder().moveTo(1f, 0f).quadTo(-0.1f, 0f, 1f, 0f)
+                .lineTo(1f, 1f).close().build(),
+            policyF64 = PathFillFlatteningPolicyF64(limitsI32 = PathFillLimitsI32(maxSubdivisionDepthI32 = 0)),
+        )
+
+        assertEquals(
+            PathProjectiveResourceLimitReason.FlatteningDidNotConverge,
+            assertIs<PathProjectivePreparationResult.ResourceLimitExceeded>(result).reason,
+        )
+    }
+
+    @Test
+    fun `non dyadic quadratic tangent horizon is certified before the subdivision limit`() {
+        val result = Matrix3x3F64(persp0F64 = 1.0, persp2F64 = 0.0).prepareProjectedPathFillInputF64(
+            path = PathBuilder().moveTo(1f, 0f).quadTo(-2f, 0f, 4f, 0f)
+                .lineTo(1f, 1f).close().build(),
+            policyF64 = PathFillFlatteningPolicyF64(limitsI32 = PathFillLimitsI32(maxSubdivisionDepthI32 = 0)),
         )
 
         assertEquals(
@@ -572,7 +648,7 @@ class PathProjectivePreparationF64Test {
         ),
     )
 
-    private data class ProjectiveOracleCase(
+private data class ProjectiveOracleCase(
         val path: org.graphiks.math.geometry.PathF32,
         val pointAtF64: (Double) -> Point2F64,
     )
