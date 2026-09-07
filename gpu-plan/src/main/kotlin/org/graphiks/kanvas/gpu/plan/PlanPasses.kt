@@ -3,6 +3,11 @@ package org.graphiks.kanvas.gpu.plan
 import org.graphiks.math.color.ColorF32
 import org.graphiks.math.geometry.PathFillGeometryF32
 import org.graphiks.math.geometry.PathStrokeGeometryF32
+import org.graphiks.math.geometry.PathStrokeDrawMode
+import org.graphiks.math.geometry.PathStrokeStyleF64
+import org.graphiks.math.geometry.PathStrokeCap
+import org.graphiks.math.geometry.PathStrokeJoin
+import org.graphiks.math.geometry.PathStrokeWidthF64
 import org.graphiks.kanvas.render.ir.DrawOrigin
 import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
@@ -208,6 +213,8 @@ public class PathStrokeDraw private constructor(
     override public val commandIndex: Int,
     override public val color: ColorF32,
     geometryF32: PathStrokeGeometryF32,
+    public val mode: PathStrokeDrawMode,
+    public val styleF64: PathStrokeStyleF64,
     scissorI32: RectI32,
 ) : PathDraw {
     override public val coverage: CoveragePlan = CoveragePlan.FullOrScissor
@@ -229,11 +236,15 @@ public class PathStrokeDraw private constructor(
             color: ColorF32,
             geometryF32: PathStrokeGeometryF32,
             scissorI32: RectI32,
+            mode: PathStrokeDrawMode = PathStrokeDrawMode.Stroke,
+            styleF64: PathStrokeStyleF64 = PathStrokeStyleF64(
+                PathStrokeWidthF64.Hairline, PathStrokeCap.Butt, PathStrokeJoin.Miter, 4.0,
+            ),
         ): PathStrokeDraw {
             require(commandIndex >= 0) { "Command index must not be negative" }
             require(!scissorI32.isEmpty) { "Path stroke scissor must be non-empty" }
             pathFillStrategy(geometryF32.copyFillGeometryF32())
-            return PathStrokeDraw(commandIndex, color, geometryF32, scissorI32)
+            return PathStrokeDraw(commandIndex, color, geometryF32, mode, styleF64, scissorI32)
         }
     }
 }

@@ -22,7 +22,7 @@ public fun Matrix3x3F32.mapPathFillInputF64(path: PathF32): PathFillInputF64 {
 }
 
 /** Supplies the shared affine fill mapping one source command at a time for W4d geometry. */
-internal fun Matrix3x3F32.pathStrokeDeviceFillSegmentMapperF64(): PathStrokeDeviceFillSegmentMapperF64 {
+public fun Matrix3x3F32.pathStrokeDeviceFillSegmentMapperF64(): PathStrokeDeviceFillSegmentMapperF64 {
     val matrix = toAffinePathFillMatrixF64()
     return PathStrokeDeviceFillSegmentMapperF64 { sourceSegmentF64 ->
         try {

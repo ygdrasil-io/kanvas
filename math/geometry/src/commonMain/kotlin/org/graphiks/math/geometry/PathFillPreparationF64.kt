@@ -139,6 +139,56 @@ public fun preparePathFillGeometryWithStrokeWorkF32(
     }
 }
 
+/**
+ * Maps one source segment only after charging it to the same W4d ledger that
+ * finalizes the device fill.  This prevents planner-side whole-path mapping
+ * from escaping the transactional frame budget.
+ */
+public fun prepareMappedPathFillGeometryWithStrokeWorkF32(
+    inputF64: PathFillInputF64,
+    deviceSegmentMapperF64: PathStrokeDeviceFillSegmentMapperF64,
+    fillPolicyF64: PathFillFlatteningPolicyF64 = PathFillFlatteningPolicyF64(),
+    strokePolicyF64: PathStrokePolicyF64 = PathStrokePolicyF64(),
+    frameWorkUsageBeforeI64: PathStrokeWorkUsageI64 = PathStrokeWorkUsageI64(),
+): PathFillWithStrokeWorkPreparationResult {
+    if (!inputF64.all(::isFinitePathFillInputSegmentF64)) {
+        return PathFillWithStrokeWorkPreparationResult.InvalidScene(PathFillInvalidSceneReason.NonFiniteInput)
+    }
+    return try {
+        val ledgerI64 = PathStrokeWorkLedgerI64(
+            pathWorkUsageBeforeI64 = PathStrokeWorkUsageI64(),
+            frameWorkUsageBeforeI64 = frameWorkUsageBeforeI64,
+            limitsI32 = strokePolicyF64.limitsI32,
+            limitsI64 = strokePolicyF64.limitsI64,
+        )
+        val mapped = buildList {
+            inputF64.forEach { source ->
+                ledgerI64.debitTopologyBeforeEmissionI64(1L)
+                add(deviceSegmentMapperF64.mapDeviceFillSegmentF64(source) ?: throw PathFillDeviceMappingAbort())
+            }
+        }
+        val mappedInput = PathFillInputF64.of(inputF64.fillRule, mapped)
+        when (val result = preparePathFillGeometryWithStrokeWorkF32(mappedInput, fillPolicyF64, ledgerI64)) {
+            is PathFillPreparationResult.Ready -> PathFillWithStrokeWorkPreparationResult.Ready(
+                result.geometryF32, ledgerI64.snapshotPathUsageI64(), ledgerI64.snapshotFrameUsageAfterI64(),
+            )
+            is PathFillPreparationResult.Empty -> PathFillWithStrokeWorkPreparationResult.Empty(
+                ledgerI64.snapshotPathUsageI64(), ledgerI64.snapshotFrameUsageAfterI64(),
+            )
+            is PathFillPreparationResult.InvalidScene ->
+                PathFillWithStrokeWorkPreparationResult.InvalidScene(result.reason)
+            is PathFillPreparationResult.ResourceLimitExceeded ->
+                PathFillWithStrokeWorkPreparationResult.ResourceLimitExceeded(result.reason.toPathStrokeResourceLimitReason())
+        }
+    } catch (abort: PathStrokeResourceLimitAbort) {
+        PathFillWithStrokeWorkPreparationResult.ResourceLimitExceeded(abort.reason)
+    } catch (_: PathFillDeviceMappingAbort) {
+        PathFillWithStrokeWorkPreparationResult.InvalidScene(PathFillInvalidSceneReason.NonFiniteProjection)
+    }
+}
+
+private class PathFillDeviceMappingAbort : RuntimeException()
+
 /** Internal finalizer overload for a stroke pipeline already holding one transactional ledger. */
 internal fun preparePathFillGeometryWithStrokeWorkF32(
     inputF64: PathFillInputF64,

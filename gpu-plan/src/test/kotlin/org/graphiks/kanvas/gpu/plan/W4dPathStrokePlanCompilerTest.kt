@@ -23,6 +23,8 @@ import org.graphiks.kanvas.render.ir.StrokeCapNode
 import org.graphiks.kanvas.render.ir.StrokeJoinNode
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.PathBuilder
+import org.graphiks.math.geometry.PathStrokeDrawMode
+import org.graphiks.math.geometry.PathStrokeWidthF64
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.junit.jupiter.api.Test
 
@@ -61,6 +63,35 @@ class W4dPathStrokePlanCompilerTest {
         assertIs<PathStrokeDraw>(assertIs<PlanPass.StencilProducer>(graph.passes().first()).draw)
     }
 
+    @Test
+    fun zeroWidthStrokeAndFillSealsFiniteZeroInsteadOfHairline() {
+        val scene = sceneOf(listOf(pathDraw(PaintStyleNode.STROKE_AND_FILL, 0f)))
+        val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target(scene))).candidate
+        val graph = assertIs<RenderPlanResult.Ready<RenderGraph>>(
+            compiler.plan(candidate, capabilities(), PlanBudget(1L shl 20)),
+        ).plan
+
+        val draw = assertIs<PathStrokeDraw>(graph.passes().mapNotNull { pass ->
+            when (pass) {
+                is PlanPass.RenderPass -> pass.draws().singleOrNull()
+                is PlanPass.StencilProducer -> pass.draw
+                else -> null
+            }
+        }.single())
+        assertEquals(PathStrokeDrawMode.StrokeAndFill, draw.mode)
+        assertEquals(0.0, assertIs<PathStrokeWidthF64.Finite>(draw.styleF64.widthF64).valueF64)
+    }
+
+    @Test
+    fun `513 visual draws are refused even when the first 512 are off target`() {
+        val offTarget = pathDraw(PaintStyleNode.STROKE).let { command ->
+            SceneCommand.Draw(command.node.copy(transform = Matrix3x3F32(tx = 1_000f, ty = 1_000f)))
+        }
+        val scene = sceneOf(List(512) { offTarget } + pathDraw(PaintStyleNode.STROKE))
+
+        assertIs<GpuPlanSelection.NotCandidate>(compiler.select(scene, target(scene)))
+    }
+
     private fun sceneOf(draws: List<SceneCommand.Draw>): SceneSnapshot = SceneSnapshot.of(
         SceneExtent(16, 16), ColorSpace.SRGB, draws,
     )
@@ -81,11 +112,11 @@ class W4dPathStrokePlanCompilerTest {
         supportedDepthStencilFormats = setOf(PlanDepthStencilFormat.Depth24PlusStencil8),
     )
 
-    private fun pathDraw(style: PaintStyleNode): SceneCommand.Draw {
+    private fun pathDraw(style: PaintStyleNode, width: Float = 2f): SceneCommand.Draw {
         val color = ColorARGB.fromPackedUInt(0xFFFF0000u)
         val paint = PaintNode(
             color, null, BlendMode.SRC_OVER, null, null, null, null, null,
-            style, 2f, StrokeCapNode.BUTT, StrokeJoinNode.MITER, 4f, false,
+            style, width, StrokeCapNode.BUTT, StrokeJoinNode.MITER, 4f, false,
         )
         val path = PathBuilder().moveTo(2f, 2f).lineTo(12f, 2f).lineTo(2f, 12f).close().build()
         return SceneCommand.Draw(DrawNode(
