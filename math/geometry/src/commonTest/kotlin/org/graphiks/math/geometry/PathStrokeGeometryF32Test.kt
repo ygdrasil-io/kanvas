@@ -65,7 +65,7 @@ class PathStrokeGeometryF32Test {
     }
 
     @Test
-    fun `stroke and fill remains refused before the union lane exists`() {
+    fun `stroke and fill publishes a device geometry through the union lane`() {
         val result = prepareProjectedPathStrokeGeometryF32(
             inputF64 = lineInputF64(),
             styleF64 = finiteStyleF64(),
@@ -73,10 +73,7 @@ class PathStrokeGeometryF32Test {
             projectionF64 = identityProjectionF64,
         )
 
-        assertEquals(
-            PathStrokeInvalidSceneReason.InvalidStyle,
-            assertIs<PathStrokePreparationResult.InvalidScene>(result).reason,
-        )
+        assertIs<PathStrokePreparationResult.Ready>(result)
     }
 
     @Test

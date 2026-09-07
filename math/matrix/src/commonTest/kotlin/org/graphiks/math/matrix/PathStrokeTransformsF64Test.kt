@@ -18,6 +18,23 @@ import org.graphiks.math.geometry.PathStrokeWidthF64
 
 class PathStrokeTransformsF64Test {
     @Test
+    fun `matrix route prepares a single stroke and fill geometry`() {
+        val geometry = assertReady(
+            Matrix3x3F32.translation(3f, 5f).preparePathStrokeGeometryF32(
+                path = PathBuilder().moveTo(0f, 0f).lineTo(10f, 0f).lineTo(10f, 10f).lineTo(0f, 10f).close().build(),
+                styleF64 = finiteStyle(2.0),
+                mode = PathStrokeDrawMode.StrokeAndFill,
+            ),
+        )
+
+        assertEquals(org.graphiks.math.geometry.FillRule.WINDING, geometry.copyFillGeometryF32().fillRule)
+        assertEquals(2f, geometry.copyConservativeBoundsF32().left)
+        assertEquals(14f, geometry.copyConservativeBoundsF32().right)
+        assertEquals(4f, geometry.copyConservativeBoundsF32().top)
+        assertEquals(16f, geometry.copyConservativeBoundsF32().bottom)
+    }
+
+    @Test
     fun `finite stroke expands before anisotropic scale but hairline stays one device pixel`() {
         val matrix = Matrix3x3F32(sx = 4f, sy = 2f)
 

@@ -96,7 +96,10 @@ private fun comparePathTopologicalCoordinateF64(firstF64: Double, secondF64: Dou
 // One operation owns this work budget across its broad phase and intersection registry.  Every
 // candidate-facing action consumes before it executes, so a dense AABB workload cannot evade the
 // same deterministic `path-candidate-limit` that bounds the registry's profile work.
-internal class PathCandidateWorkBudgetI32(maxCandidateProbes: Int) {
+internal class PathCandidateWorkBudgetI32(
+    maxCandidateProbes: Int,
+    private val topologyWorkDebitI64: PathTopologyWorkDebitI64? = null,
+) {
     // The public bound is I32, but every derived debit is I64.  Keeping the running balance in
     // I64 prevents an unchecked `Long.toInt()` from turning a very large preflight into a credit.
     private var remainingI64: Long = maxCandidateProbes.toLong()
@@ -122,6 +125,7 @@ internal class PathCandidateWorkBudgetI32(maxCandidateProbes: Int) {
      */
     fun consumePreflightI64(unitsI64: Long) {
         requireRemainingAtLeast(unitsI64)
+        topologyWorkDebitI64?.debitBeforeTopologyWorkI64(unitsI64)
         remainingI64 -= unitsI64
     }
 
