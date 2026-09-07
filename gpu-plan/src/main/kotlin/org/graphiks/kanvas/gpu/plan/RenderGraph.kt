@@ -119,6 +119,7 @@ public class RenderGraph private constructor(
         }
 
         /** Trust-boundary factory available only to the W4d compiler after public validation. */
+        @JvmSynthetic
         internal fun issueW4dCompilerWitness(graph: RenderGraph): RenderGraph {
             require(graph.capabilityId == W4dPathStrokePlanCompiler.CAPABILITY_ID) {
                 "Only a W4d graph may receive a W4d compiler witness"

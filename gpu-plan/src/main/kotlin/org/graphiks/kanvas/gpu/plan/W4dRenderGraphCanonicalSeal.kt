@@ -8,6 +8,7 @@ import org.graphiks.math.geometry.PathStrokeWidthF64
 import org.graphiks.math.geometry.RectI32
 
 /** Canonical, length-delimited, raw-bit-stable snapshot used only by the opaque W4d witness. */
+@JvmSynthetic
 internal fun canonicalW4dGraphDigest(graph: RenderGraph): ByteArray {
     val writer = W4dGraphDigestWriter()
     writer.text("schema", "w4d-render-graph-witness-v1")
