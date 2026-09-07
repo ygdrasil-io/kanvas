@@ -934,12 +934,12 @@ class GpuPlanTaskListLowererTest {
                 targetUsages = setOf(
                     PlanResourceUsage.RenderAttachment,
                     PlanResourceUsage.CopySource,
-                    PlanResourceUsage.MapRead,
+                    PlanResourceUsage.CopyDestination,
                 ),
             ),
             "resource-id" to graph(targetOrdinal = 1),
             "lifetime" to graph(stagingFirstPassIndex = 0),
-            "cost" to graph(targetByteSize = 32L),
+            "command-count" to graph(visualCommandCount = 2),
             "dependency" to graph(includeDependency = false),
             "layout" to graph(readbackBytesPerRow = 512L, budget = PlanBudget(2048)),
         )
@@ -983,6 +983,7 @@ class GpuPlanTaskListLowererTest {
         readbackBytesPerRow: Long = 256L,
         includeDependency: Boolean = true,
         budget: PlanBudget = PlanBudget(1024),
+        visualCommandCount: Int = 1,
     ): RenderGraph {
         if (capabilityId == W3SolidRectPlanCompiler.CAPABILITY_ID && extent == SizeI32(2, 2) &&
             capabilities == w3PlanCapabilities() &&
@@ -990,7 +991,7 @@ class GpuPlanTaskListLowererTest {
             targetOrdinal == 0 && targetByteSize == 16L &&
             targetUsages == setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource) &&
             stagingFirstPassIndex == 1 && readbackBytesPerRow == 256L && includeDependency &&
-            budget == PlanBudget(1024)
+            budget == PlanBudget(1024) && visualCommandCount == 1
         ) {
             val scene = SceneSnapshot.of(
                 SceneExtent(2, 2),
@@ -1053,7 +1054,7 @@ class GpuPlanTaskListLowererTest {
             PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL,
             capabilities,
             budget,
-            1,
+            visualCommandCount,
             listOf(target, staging),
             listOf(render, readback),
             if (includeDependency) listOf(PlanPassDependency(render.id, readback.id)) else emptyList(),

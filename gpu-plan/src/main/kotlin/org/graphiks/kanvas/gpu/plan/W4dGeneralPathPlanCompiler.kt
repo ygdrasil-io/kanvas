@@ -339,7 +339,11 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             is PathStrokePlanBudgetResult.Invalid -> return resource(W4dGeneralPlanDiagnostics.SizeOverflow, "W4d.2 size is unrepresentable: ${value.code}")
         }
         if (!buffersFit(memory, capabilities)) return promoted("W4d.2 buffer capability is unavailable")
-        return RenderPlanResult.Ready(hardGraph(selected, capabilities, budget, memory, usesStencil))
+        return RenderPlanResult.Ready(
+            RenderGraph.issueW4dGeneralCompilerWitness(
+                hardGraph(selected, capabilities, budget, memory, usesStencil),
+            ),
+        )
     }
 
     private fun planAa(
@@ -364,7 +368,11 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             is PathAaPlanBudgetResult.Invalid -> return resource(W4dGeneralPlanDiagnostics.SizeOverflow, "W4d.2 size is unrepresentable: ${value.code}")
         }
         if (!buffersFit(memory.base, capabilities)) return promoted("W4d.2 buffer capability is unavailable")
-        return RenderPlanResult.Ready(aaGraph(selected, capabilities, budget, memory, hardStencil))
+        return RenderPlanResult.Ready(
+            RenderGraph.issueW4dGeneralCompilerWitness(
+                aaGraph(selected, capabilities, budget, memory, hardStencil),
+            ),
+        )
     }
 
     private fun hardGraph(

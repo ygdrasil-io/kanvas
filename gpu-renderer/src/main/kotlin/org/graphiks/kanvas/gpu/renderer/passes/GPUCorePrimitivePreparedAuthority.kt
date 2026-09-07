@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.passes
 
 import java.security.MessageDigest
+import org.graphiks.kanvas.gpu.plan.PlanPass
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
@@ -1753,6 +1754,7 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
     val w4cSessionScratch: W4cSessionScratchV1? = null,
     val w4dSessionScratch: W4dSessionScratchV1? = null,
     private val scratchLane: ScratchLane,
+    val w4dGeneralPreparedAuthority: GPUPlanW4dGeneralPreparedAuthority? = null,
 ) {
     internal constructor(
         structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
@@ -1789,6 +1791,9 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
         require(scratchCount <= 1) {
             "A prepared CorePrimitive packet may retain no more than one planned session scratch"
         }
+        require(w4dGeneralPreparedAuthority == null ||
+            (scratchLane == ScratchLane.Legacy && scratchCount == 0)
+        ) { "W4d.2 general prepared authority cannot be combined with another planned scratch" }
         when (scratchLane) {
             ScratchLane.Legacy -> require(scratchCount == 0) {
                 "A legacy CorePrimitive prepared packet may not retain a planned session scratch"
@@ -1830,7 +1835,10 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
         w4cSessionScratch: W4cSessionScratchV1? = this.w4cSessionScratch,
         w4dSessionScratch: W4dSessionScratchV1? = this.w4dSessionScratch,
     ): GPUCorePrimitivePreparedPacketAuthority {
-        require(scratchLane != ScratchLane.W4c && scratchLane != ScratchLane.W4d) {
+        require(
+            scratchLane != ScratchLane.W4c && scratchLane != ScratchLane.W4d &&
+                w4dGeneralPreparedAuthority == null,
+        ) {
             "Planned path prepared packet authority is sealed to its original packet."
         }
         return GPUCorePrimitivePreparedPacketAuthority(
@@ -1977,6 +1985,34 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
                 null,
                 scratch,
                 ScratchLane.W4d,
+            )
+        }
+
+        fun plannedW4dGeneral(
+            packet: GPUDrawPacket,
+            pass: PlanPass.PathRenderPass,
+            structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+            renderPipelineKey: GPURenderPipelineKey,
+            authority: GPUPlanW4dGeneralPreparedAuthority,
+        ): GPUCorePrimitivePreparedPacketAuthority {
+            require(
+                authority.matchesPreparedPacket(packet, pass, structuralPipelineKey, renderPipelineKey),
+            ) { "W4d.2 prepared authority must match the sealed graph pass and packet." }
+            return GPUCorePrimitivePreparedPacketAuthority(
+                structuralPipelineKey,
+                renderPipelineKey,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                ScratchLane.Legacy,
+                authority,
             )
         }
     }

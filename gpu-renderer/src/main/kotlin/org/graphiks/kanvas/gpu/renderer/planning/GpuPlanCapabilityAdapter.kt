@@ -6,6 +6,10 @@ import org.graphiks.kanvas.gpu.plan.PlanBufferAllocationPolicy
 import org.graphiks.kanvas.gpu.plan.PlanDepthStencilFormat
 import org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat
 import org.graphiks.kanvas.gpu.plan.PlanOperationCapability
+import org.graphiks.kanvas.gpu.plan.PlanResourceUsage
+import org.graphiks.kanvas.gpu.plan.PlanTextureFormat
+import org.graphiks.kanvas.gpu.plan.PlanTextureResolveSupport
+import org.graphiks.kanvas.gpu.plan.PlanTextureSampleSupport
 import org.graphiks.kanvas.gpu.plan.W3PlanDiagnostics
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
@@ -54,6 +58,7 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
     val hasSingleSampleD24S8 =
         1 in textureFormatSampleSupport[GPUTextureFormat.Depth24PlusStencil8]
             ?.renderAttachmentSampleCounts.orEmpty()
+    val hasFourSampleSrgb = 4 in srgbSamples.orEmpty()
     val operations = rendererFeatures.mapNotNull { feature ->
         when (feature) {
             GPURendererFeature.RenderPass -> PlanOperationCapability.RenderPass
@@ -69,8 +74,59 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
         operations += PlanOperationCapability.StencilCover
         depthStencilFormats += PlanDepthStencilFormat.Depth24PlusStencil8
     }
+    val sampleSupports = buildSet {
+        srgbSamples.orEmpty().filter { it in setOf(1, 4) }.forEach { sampleCount ->
+            add(
+                PlanTextureSampleSupport.of(
+                    PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+                    sampleCount,
+                    if (sampleCount == 1) {
+                        setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource)
+                    } else {
+                        setOf(PlanResourceUsage.RenderAttachment)
+                    },
+                ),
+            )
+        }
+        textureFormatSampleSupport[GPUTextureFormat.Depth24PlusStencil8]
+            ?.renderAttachmentSampleCounts.orEmpty()
+            .filter { it in setOf(1, 4) }
+            .forEach { sampleCount ->
+                add(
+                    PlanTextureSampleSupport.of(
+                        PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8),
+                        sampleCount,
+                        setOf(PlanResourceUsage.DepthStencilAttachment),
+                    ),
+                )
+            }
+        if (hasFourSampleSrgb && 1 in textureFormatSampleSupport[GPUTextureFormat.RGBA8Unorm]
+                ?.renderAttachmentSampleCounts.orEmpty()
+        ) {
+            add(
+                PlanTextureSampleSupport.of(
+                    PlanTextureFormat.CoverageMask,
+                    1,
+                    setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled),
+                ),
+            )
+        }
+    }
+    val resolveSupports = buildSet {
+        if (hasFourSampleSrgb && 4 in textureFormatSampleSupport[GPUTextureFormat.RGBA8UnormSrgb]
+                ?.resolveSourceSampleCounts.orEmpty()
+        ) {
+            add(
+                PlanTextureResolveSupport.of(
+                    PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+                    4,
+                    1,
+                ),
+            )
+        }
+    }
     return try {
-        GpuPlanCapabilityAdapterResult.Supported(
+        val snapshot = if (hasFourSampleSrgb) {
             PlanCapabilitySnapshot.of(
                 deviceGeneration = deviceGeneration.value,
                 maxTextureDimension2D = observedLimits.maxTextureDimension2D.toInt(),
@@ -87,8 +143,29 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
                     CORE_PRIMITIVE_FRAME_POOL_UNIFORM_FLOOR_BYTES,
                 ),
                 supportedDepthStencilFormats = depthStencilFormats,
-            ),
-        )
+                supportedTextureSampleSupports = sampleSupports,
+                supportedTextureResolveSupports = resolveSupports,
+            )
+        } else {
+            PlanCapabilitySnapshot.of(
+                deviceGeneration = deviceGeneration.value,
+                maxTextureDimension2D = observedLimits.maxTextureDimension2D.toInt(),
+                maxBufferSizeBytes = maxBuffer,
+                copyBytesPerRowAlignment = observedLimits.copyBytesPerRowAlignment.toInt(),
+                supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+                minUniformBufferOffsetAlignment = observedLimits.minUniformBufferOffsetAlignment.toInt(),
+                maxDynamicUniformBuffersPerPipelineLayout =
+                    observedLimits.maxDynamicUniformBuffersPerPipelineLayout?.toInt() ?: 0,
+                supportedOperations = operations,
+                bufferAllocationPolicy = PlanBufferAllocationPolicy.of(
+                    CORE_PRIMITIVE_FRAME_POOL_VERTEX_FLOOR_BYTES,
+                    CORE_PRIMITIVE_FRAME_POOL_INDEX_FLOOR_BYTES,
+                    CORE_PRIMITIVE_FRAME_POOL_UNIFORM_FLOOR_BYTES,
+                ),
+                supportedDepthStencilFormats = depthStencilFormats,
+            )
+        }
+        GpuPlanCapabilityAdapterResult.Supported(snapshot)
     } catch (_: IllegalArgumentException) {
         unsupported("Renderer capabilities are incoherent for W3 planning.")
     }
