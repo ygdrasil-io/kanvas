@@ -31,18 +31,12 @@ private class MatrixPathStrokeProjectionF64(
             return PathStrokeProjectionIntervalResultF64.NonFinite
         }
         val boundsF64 = intervalF64.boundsF64
-        val wIntervalF64 = when (
-            val resultF64 = matrixF64.projectiveWIntervalForBoundsF64(
-                boundsF64.leftF64,
-                boundsF64.topF64,
-                boundsF64.rightF64,
-                boundsF64.bottomF64,
-            )
-        ) {
-            is PathProjectiveIntervalResultF64.Ready -> resultF64.intervalF64
-            PathProjectiveIntervalResultF64.NonFinite -> return PathStrokeProjectionIntervalResultF64.NonFinite
+        val wIntervalF64 = when (val certificateF64 = correlatedOutlineWIntervalF64(matrixF64, intervalF64)) {
+            is CorrelatedOutlineWResultF64.Ready -> certificateF64.intervalF64
+            CorrelatedOutlineWResultF64.Horizon -> return PathStrokeProjectionIntervalResultF64.HorizonCrossing
+            CorrelatedOutlineWResultF64.NonFinite -> return PathStrokeProjectionIntervalResultF64.NonFinite
+            CorrelatedOutlineWResultF64.Unbounded -> return PathStrokeProjectionIntervalResultF64.Unbounded
         }
-        if (wIntervalF64.containsZeroF64()) return PathStrokeProjectionIntervalResultF64.HorizonCrossing
 
         val xyIntervalsF64 = matrixF64.projectiveXYIntervalForBoundsF64(
             boundsF64.leftF64,
@@ -84,14 +78,67 @@ private class MatrixPathStrokeProjectionF64(
     }
 }
 
+private sealed interface CorrelatedOutlineWResultF64 {
+    data class Ready(val intervalF64: PathProjectiveIntervalF64) : CorrelatedOutlineWResultF64
+
+    data object Horizon : CorrelatedOutlineWResultF64
+
+    data object NonFinite : CorrelatedOutlineWResultF64
+
+    data object Unbounded : CorrelatedOutlineWResultF64
+}
+
+/**
+ * Retains the source-parameter correlation that an AABB loses.  The outline's sagitta certificate
+ * bounds its displacement from the endpoint chord, so a linear W functional is sign-separated
+ * whenever the endpoint chord has more margin than that displacement can consume.
+ */
+private fun correlatedOutlineWIntervalF64(
+    matrixF64: Matrix3x3F64,
+    intervalF64: PathStrokeOutlineIntervalF64,
+): CorrelatedOutlineWResultF64 {
+    val startF64 = intervalF64.primitiveF64.pointAtF64(intervalF64.startParameterF64)
+    val endF64 = intervalF64.primitiveF64.pointAtF64(intervalF64.endParameterF64)
+    if (!startF64.isFinite() || !endF64.isFinite()) return CorrelatedOutlineWResultF64.NonFinite
+    val startHomogeneousF64 = matrixF64.projectHomogeneousPointF64(startF64) ?: return CorrelatedOutlineWResultF64.NonFinite
+    val endHomogeneousF64 = matrixF64.projectHomogeneousPointF64(endF64) ?: return CorrelatedOutlineWResultF64.NonFinite
+    val startWF64 = startHomogeneousF64.wF64 + startHomogeneousF64.wResidualF64
+    val endWF64 = endHomogeneousF64.wF64 + endHomogeneousF64.wResidualF64
+    if (!startWF64.isFinite() || !endWF64.isFinite()) return CorrelatedOutlineWResultF64.NonFinite
+    if (startWF64 == 0.0 || endWF64 == 0.0 || (startWF64 < 0.0) != (endWF64 < 0.0)) {
+        return CorrelatedOutlineWResultF64.Horizon
+    }
+    val gradientLengthF64 = sqrt(matrixF64.persp0F64 * matrixF64.persp0F64 + matrixF64.persp1F64 * matrixF64.persp1F64)
+    val maximumWDeviationF64 = nextUpProjectiveF64(gradientLengthF64 * intervalF64.sourceSagittaUpperBoundF64)
+    if (!gradientLengthF64.isFinite() || !maximumWDeviationF64.isFinite()) {
+        return CorrelatedOutlineWResultF64.Unbounded
+    }
+    val minimumEndpointWF64 = minOf(startWF64, endWF64)
+    val maximumEndpointWF64 = maxOf(startWF64, endWF64)
+    val minimumWF64 = nextDownProjectiveF64(minimumEndpointWF64 - maximumWDeviationF64)
+    val maximumWF64 = nextUpProjectiveF64(maximumEndpointWF64 + maximumWDeviationF64)
+    if (!minimumWF64.isFinite() || !maximumWF64.isFinite()) return CorrelatedOutlineWResultF64.Unbounded
+    if (minimumWF64 <= 0.0 && maximumWF64 >= 0.0) return CorrelatedOutlineWResultF64.Unbounded
+    return CorrelatedOutlineWResultF64.Ready(PathProjectiveIntervalF64(minimumWF64, maximumWF64))
+}
+
 internal data class ProjectiveHomogeneousPointF64(
     val xF64: Double,
     val yF64: Double,
     val wF64: Double,
+    /** Exact low-order W contribution retained across de Casteljau subdivision. */
+    val wResidualF64: Double = 0.0,
 )
 
 internal fun Matrix3x3F64.projectHomogeneousPointF64(pointF64: Point2F64): ProjectiveHomogeneousPointF64? {
-    return projectHomogeneousCoordinatesF64(pointF64.x, pointF64.y, 1.0)
+    val transformedF64 = projectHomogeneousCoordinatesF64(pointF64.x, pointF64.y, 1.0) ?: return null
+    val wExpansionF64 = projectiveCompensatedCombinationF64(
+        firstCoefficientF64 = persp0F64,
+        secondCoefficientF64 = persp1F64,
+        translationF64 = persp2F64,
+        pointF64 = pointF64,
+    ) ?: return null
+    return transformedF64.copy(wF64 = wExpansionF64.leadingF64, wResidualF64 = wExpansionF64.residualF64)
 }
 
 /** Applies the matrix to a homogeneous source control without performing the projective divide. */
@@ -108,9 +155,10 @@ internal fun Matrix3x3F64.projectHomogeneousCoordinatesF64(
 }
 
 internal fun projectFiniteHomogeneousPointF64(pointF64: ProjectiveHomogeneousPointF64): Point2F64? {
-    if (!pointF64.xF64.isFinite() || !pointF64.yF64.isFinite() || !pointF64.wF64.isFinite() || pointF64.wF64 == 0.0) {
+    val effectiveWF64 = pointF64.wF64 + pointF64.wResidualF64
+    if (!pointF64.xF64.isFinite() || !pointF64.yF64.isFinite() || !effectiveWF64.isFinite() || effectiveWF64 == 0.0) {
         return null
     }
-    return Point2F64(pointF64.xF64 / pointF64.wF64, pointF64.yF64 / pointF64.wF64)
+    return Point2F64(pointF64.xF64 / effectiveWF64, pointF64.yF64 / effectiveWF64)
         .takeIf(Point2F64::isFinite)
 }

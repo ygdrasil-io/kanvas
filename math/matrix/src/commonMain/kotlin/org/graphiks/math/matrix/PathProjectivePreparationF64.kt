@@ -343,6 +343,17 @@ private class PathProjectiveFillPreparerF64(
         )) {
             is ProjectiveHomogeneousControlsResultF64.Ready -> controlsResultF64.controlsF64
             ProjectiveHomogeneousControlsResultF64.NeedsSubdivision -> {
+                when (primitiveF64.horizonCertificateF64(matrixF64, startParameterF64, endParameterF64)) {
+                    ProjectiveHorizonCertificateF64.Crossing -> {
+                        abortInvalid(PathProjectiveInvalidSceneReason.PerspectiveHorizonCrossing)
+                    }
+                    ProjectiveHorizonCertificateF64.NonFinite -> {
+                        abortInvalid(PathProjectiveInvalidSceneReason.NonFiniteProjection)
+                    }
+                    ProjectiveHorizonCertificateF64.Separated,
+                    ProjectiveHorizonCertificateF64.Unknown,
+                    -> Unit
+                }
                 subdividePrimitiveIntervalF64(
                     primitiveF64,
                     startParameterF64,
@@ -455,8 +466,10 @@ private fun projectedControlHullErrorBoundF64(controlsF64: List<Point2F64>): Dou
 }
 
 private fun certifyWSignF64(controlsF64: List<ProjectiveHomogeneousPointF64>): ProjectiveWCertificateF64 {
-    if (controlsF64.isEmpty() || controlsF64.any { !it.wF64.isFinite() }) return ProjectiveWCertificateF64.Horizon
-    val weightsF64 = controlsF64.map(ProjectiveHomogeneousPointF64::wF64)
+    if (controlsF64.isEmpty() || controlsF64.any { !it.wF64.isFinite() || !it.wResidualF64.isFinite() }) {
+        return ProjectiveWCertificateF64.Horizon
+    }
+    val weightsF64 = controlsF64.map(::effectiveProjectiveWF64)
     if (weightsF64.first() == 0.0 || weightsF64.last() == 0.0) return ProjectiveWCertificateF64.Horizon
     if (weightsF64.all { it > 0.0 } || weightsF64.all { it < 0.0 }) {
         return ProjectiveWCertificateF64.StrictlySeparated
@@ -491,7 +504,12 @@ private fun distanceToChordF64(pointF64: Point2F64, startF64: Point2F64, endF64:
     return if (chordLengthSquaredF64 == 0.0) {
         sqrt(pointXF64 * pointXF64 + pointYF64 * pointYF64)
     } else {
-        abs(pointXF64 * chordYF64 - pointYF64 * chordXF64) / sqrt(chordLengthSquaredF64)
+        val projectionParameterF64 = ((pointXF64 * chordXF64 + pointYF64 * chordYF64) / chordLengthSquaredF64)
+            .coerceIn(0.0, 1.0)
+        val nearestXF64 = startF64.x + chordXF64 * projectionParameterF64
+        val nearestYF64 = startF64.y + chordYF64 * projectionParameterF64
+        sqrt((pointF64.x - nearestXF64) * (pointF64.x - nearestXF64) +
+            (pointF64.y - nearestYF64) * (pointF64.y - nearestYF64))
     }
 }
 
@@ -501,6 +519,13 @@ private sealed interface ProjectiveFillPrimitiveF64 {
         startParameterF64: Double,
         endParameterF64: Double,
     ): ProjectiveHomogeneousControlsResultF64
+
+    /** Detects a root before a primitive that is not yet representable as one rational conic is split. */
+    fun horizonCertificateF64(
+        matrixF64: Matrix3x3F64,
+        startParameterF64: Double,
+        endParameterF64: Double,
+    ): ProjectiveHorizonCertificateF64 = ProjectiveHorizonCertificateF64.Unknown
 }
 
 private sealed interface ProjectiveHomogeneousControlsResultF64 {
@@ -515,6 +540,13 @@ private enum class ProjectiveWCertificateF64 {
     StrictlySeparated,
     NeedsSubdivision,
     Horizon,
+}
+
+private enum class ProjectiveHorizonCertificateF64 {
+    Crossing,
+    Separated,
+    Unknown,
+    NonFinite,
 }
 
 private class ProjectiveLinePrimitiveF64(
@@ -595,11 +627,22 @@ private fun interpolatedHomogeneousPointF64(
     firstF64: ProjectiveHomogeneousPointF64,
     secondF64: ProjectiveHomogeneousPointF64,
     parameterF64: Double,
-): ProjectiveHomogeneousPointF64 = ProjectiveHomogeneousPointF64(
-    xF64 = firstF64.xF64 * (1.0 - parameterF64) + secondF64.xF64 * parameterF64,
-    yF64 = firstF64.yF64 * (1.0 - parameterF64) + secondF64.yF64 * parameterF64,
-    wF64 = firstF64.wF64 * (1.0 - parameterF64) + secondF64.wF64 * parameterF64,
-)
+): ProjectiveHomogeneousPointF64 {
+    val wF64 = interpolateProjectiveCompensatedF64(
+        ProjectiveCompensatedF64(firstF64.wF64, firstF64.wResidualF64),
+        ProjectiveCompensatedF64(secondF64.wF64, secondF64.wResidualF64),
+        parameterF64,
+    ) ?: return ProjectiveHomogeneousPointF64(Double.NaN, Double.NaN, Double.NaN)
+    return ProjectiveHomogeneousPointF64(
+        xF64 = firstF64.xF64 * (1.0 - parameterF64) + secondF64.xF64 * parameterF64,
+        yF64 = firstF64.yF64 * (1.0 - parameterF64) + secondF64.yF64 * parameterF64,
+        wF64 = wF64.leadingF64,
+        wResidualF64 = wF64.residualF64,
+    )
+}
+
+private fun effectiveProjectiveWF64(pointF64: ProjectiveHomogeneousPointF64): Double =
+    pointF64.wF64 + pointF64.wResidualF64
 
 private class ProjectiveSvgArcPrimitiveF64 private constructor(
     private val fallbackF64: ProjectiveLinePrimitiveF64?,
@@ -614,6 +657,16 @@ private class ProjectiveSvgArcPrimitiveF64 private constructor(
         startParameterF64,
         endParameterF64,
     ) ?: requireNotNull(centerF64).homogeneousControlsF64(matrixF64, startParameterF64, endParameterF64)
+
+    override fun horizonCertificateF64(
+        matrixF64: Matrix3x3F64,
+        startParameterF64: Double,
+        endParameterF64: Double,
+    ): ProjectiveHorizonCertificateF64 = fallbackF64?.horizonCertificateF64(
+        matrixF64,
+        startParameterF64,
+        endParameterF64,
+    ) ?: requireNotNull(centerF64).horizonCertificateF64(matrixF64, startParameterF64, endParameterF64)
 
     companion object {
         fun of(
@@ -692,6 +745,57 @@ private data class ProjectiveArcCenterF64(
             ProjectiveHomogeneousControlsResultF64.NonFinite
         }
         else ProjectiveHomogeneousControlsResultF64.Ready(controlsF64.filterNotNull())
+    }
+
+    /**
+     * W around an ellipse is a sinusoid plus a constant. Its extrema are therefore the endpoints
+     * and the two stationary angles, which certify a true root even before an arc is split into
+     * rational conics.
+     */
+    fun horizonCertificateF64(
+        matrixF64: Matrix3x3F64,
+        startParameterF64: Double,
+        endParameterF64: Double,
+    ): ProjectiveHorizonCertificateF64 {
+        val cosRotationF64 = cos(rotationRadiansF64)
+        val sinRotationF64 = sin(rotationRadiansF64)
+        val cosineCoefficientF64 = matrixF64.persp0F64 * radiusXF64 * cosRotationF64 +
+            matrixF64.persp1F64 * radiusXF64 * sinRotationF64
+        val sineCoefficientF64 = -matrixF64.persp0F64 * radiusYF64 * sinRotationF64 +
+            matrixF64.persp1F64 * radiusYF64 * cosRotationF64
+        if (!cosineCoefficientF64.isFinite() || !sineCoefficientF64.isFinite()) {
+            return ProjectiveHorizonCertificateF64.NonFinite
+        }
+        val extremumAngleF64 = atan2(sineCoefficientF64, cosineCoefficientF64)
+        val parametersF64 = buildList {
+            add(startParameterF64)
+            add(endParameterF64)
+            listOf(extremumAngleF64, extremumAngleF64 + PI).forEach { angleF64 ->
+                parameterForAngleOrNullF64(angleF64)
+                    ?.takeIf { it > startParameterF64 && it < endParameterF64 }
+                    ?.let(::add)
+            }
+        }.sorted()
+        val weightsF64 = parametersF64.map { parameterF64 ->
+            val pointF64 = pointAtF64(parameterF64)
+            matrixF64.persp0F64 * pointF64.x + matrixF64.persp1F64 * pointF64.y + matrixF64.persp2F64
+        }
+        if (weightsF64.any { !it.isFinite() }) return ProjectiveHorizonCertificateF64.NonFinite
+        if (weightsF64.any { it == 0.0 }) return ProjectiveHorizonCertificateF64.Crossing
+        if (weightsF64.zipWithNext().any { (firstF64, secondF64) -> (firstF64 < 0.0) != (secondF64 < 0.0) }) {
+            return ProjectiveHorizonCertificateF64.Crossing
+        }
+        return ProjectiveHorizonCertificateF64.Separated
+    }
+
+    private fun parameterForAngleOrNullF64(angleF64: Double): Double? {
+        if (sweepAngleF64 == 0.0) return null
+        val signedDistanceF64 = if (sweepAngleF64 > 0.0) {
+            positiveProjectiveAngleF64(angleF64 - startAngleF64)
+        } else {
+            -positiveProjectiveAngleF64(startAngleF64 - angleF64)
+        }
+        return (signedDistanceF64 / sweepAngleF64).takeIf { it in 0.0..1.0 }
     }
 }
 

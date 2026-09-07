@@ -91,34 +91,93 @@ private fun dependencyAwareProjectiveCombinationF64(
     translationF64: Double,
     pointF64: Point2F64,
 ): PathProjectiveIntervalF64? {
-    val firstProductF64 = projectiveTwoProductF64(firstCoefficientF64, pointF64.x)
-        ?: return directedProjectiveCombinationF64(
-            firstCoefficientF64,
-            secondCoefficientF64,
-            translationF64,
-            pointF64.x,
-            pointF64.y,
-        ).let { it as? PathProjectiveIntervalResultF64.Ready }?.intervalF64
-    val secondProductF64 = projectiveTwoProductF64(secondCoefficientF64, pointF64.y)
-        ?: return directedProjectiveCombinationF64(
-            firstCoefficientF64,
-            secondCoefficientF64,
-            translationF64,
-            pointF64.x,
-            pointF64.y,
-        ).let { it as? PathProjectiveIntervalResultF64.Ready }?.intervalF64
-    val productSumF64 = projectiveTwoSumF64(firstProductF64.leadingF64, secondProductF64.leadingF64) ?: return null
-    val totalF64 = projectiveTwoSumF64(productSumF64.leadingF64, translationF64) ?: return null
-    val residualBoundF64 = projectiveUpwardAbsoluteSumF64(
-        firstProductF64.residualF64,
-        secondProductF64.residualF64,
-        productSumF64.residualF64,
-        totalF64.residualF64,
-    ) ?: return null
-    val minimumF64 = totalF64.leadingF64 - residualBoundF64
-    val maximumF64 = totalF64.leadingF64 + residualBoundF64
+    val expansionF64 = projectiveCompensatedCombinationF64(
+        firstCoefficientF64,
+        secondCoefficientF64,
+        translationF64,
+        pointF64,
+    ) ?: return directedProjectiveCombinationF64(
+        firstCoefficientF64,
+        secondCoefficientF64,
+        translationF64,
+        pointF64.x,
+        pointF64.y,
+    ).let { it as? PathProjectiveIntervalResultF64.Ready }?.intervalF64
+    val residualBoundF64 = projectiveUpwardAbsoluteSumF64(expansionF64.residualF64) ?: return null
+    val minimumF64 = expansionF64.leadingF64 - residualBoundF64
+    val maximumF64 = expansionF64.leadingF64 + residualBoundF64
     if (!minimumF64.isFinite() || !maximumF64.isFinite()) return null
     return PathProjectiveIntervalF64(nextDownProjectiveF64(minimumF64), nextUpProjectiveF64(maximumF64))
+}
+
+/** A leading W value plus its retained low-order cancellation contribution. */
+internal data class ProjectiveCompensatedF64(
+    val leadingF64: Double,
+    val residualF64: Double,
+)
+
+/**
+ * Computes `a*x + b*y + c` as a short expansion.  Fill keeps this representation through
+ * de Casteljau subdivision so a tiny positive `c` cannot disappear from an initially cancelling
+ * Bernstein control tuple.
+ */
+internal fun projectiveCompensatedCombinationF64(
+    firstCoefficientF64: Double,
+    secondCoefficientF64: Double,
+    translationF64: Double,
+    pointF64: Point2F64,
+): ProjectiveCompensatedF64? {
+    val firstProductF64 = projectiveTwoProductF64(firstCoefficientF64, pointF64.x) ?: return null
+    val secondProductF64 = projectiveTwoProductF64(secondCoefficientF64, pointF64.y) ?: return null
+    val productSumF64 = projectiveTwoSumF64(firstProductF64.leadingF64, secondProductF64.leadingF64) ?: return null
+    val totalF64 = projectiveTwoSumF64(productSumF64.leadingF64, translationF64) ?: return null
+    val firstResidualSumF64 = projectiveTwoSumF64(firstProductF64.residualF64, secondProductF64.residualF64)
+        ?: return null
+    val secondResidualSumF64 = projectiveTwoSumF64(firstResidualSumF64.leadingF64, productSumF64.residualF64)
+        ?: return null
+    val thirdResidualSumF64 = projectiveTwoSumF64(secondResidualSumF64.leadingF64, totalF64.residualF64)
+        ?: return null
+    val residualF64 = thirdResidualSumF64.leadingF64 + firstResidualSumF64.residualF64 +
+        secondResidualSumF64.residualF64 + thirdResidualSumF64.residualF64
+    return ProjectiveCompensatedF64(totalF64.leadingF64, residualF64)
+        .takeIf { it.leadingF64.isFinite() && it.residualF64.isFinite() }
+}
+
+/** Preserves the low-order term while linearly interpolating a W expansion. */
+internal fun interpolateProjectiveCompensatedF64(
+    firstF64: ProjectiveCompensatedF64,
+    secondF64: ProjectiveCompensatedF64,
+    parameterF64: Double,
+): ProjectiveCompensatedF64? {
+    val inverseParameterF64 = 1.0 - parameterF64
+    val firstLeadingF64 = projectiveTwoProductF64(firstF64.leadingF64, inverseParameterF64) ?: return null
+    val secondLeadingF64 = projectiveTwoProductF64(secondF64.leadingF64, parameterF64) ?: return null
+    val leadingSumF64 = projectiveTwoSumF64(firstLeadingF64.leadingF64, secondLeadingF64.leadingF64) ?: return null
+    val firstResidualF64 = projectiveTwoProductF64(firstF64.residualF64, inverseParameterF64) ?: return null
+    val secondResidualF64 = projectiveTwoProductF64(secondF64.residualF64, parameterF64) ?: return null
+    val residualF64 = projectiveCompensatedSumF64(
+        firstLeadingF64.residualF64,
+        secondLeadingF64.residualF64,
+        leadingSumF64.residualF64,
+        firstResidualF64.leadingF64,
+        firstResidualF64.residualF64,
+        secondResidualF64.leadingF64,
+        secondResidualF64.residualF64,
+    ) ?: return null
+    return ProjectiveCompensatedF64(leadingSumF64.leadingF64, residualF64)
+        .takeIf { it.leadingF64.isFinite() && it.residualF64.isFinite() }
+}
+
+private fun projectiveCompensatedSumF64(vararg valuesF64: Double): Double? {
+    var leadingF64 = 0.0
+    var residualF64 = 0.0
+    valuesF64.forEach { valueF64 ->
+        val sumF64 = projectiveTwoSumF64(leadingF64, valueF64) ?: return null
+        leadingF64 = sumF64.leadingF64
+        residualF64 += sumF64.residualF64
+        if (!residualF64.isFinite()) return null
+    }
+    return (leadingF64 + residualF64).takeIf(Double::isFinite)
 }
 
 private data class ProjectiveTwoTermF64(
