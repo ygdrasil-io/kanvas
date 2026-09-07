@@ -56,30 +56,42 @@ class GPUPlanSurfacePixelTest {
     @Test
     fun `W4d Miter Round Bevel and miter-limit fallback match the independent oracle`() {
         val path = Path().apply {
-            moveTo(1.25f, 6.75f)
-            lineTo(4.25f, 1.75f)
-            lineTo(7.25f, 6.75f)
+            moveTo(1.125f, 9.8125f)
+            lineTo(5.125f, 2.3125f)
+            lineTo(9.125f, 9.8125f)
         }
         val cases = listOf(
-            StrokeJoin.MITER to 8f,
-            StrokeJoin.ROUND to 8f,
-            StrokeJoin.BEVEL to 8f,
-            StrokeJoin.MITER to 1f,
+            Triple("high miter", StrokeJoin.MITER, 8f),
+            Triple("round", StrokeJoin.ROUND, 8f),
+            Triple("bevel", StrokeJoin.BEVEL, 8f),
+            Triple("low miter", StrokeJoin.MITER, 1f),
         )
-        cases.forEach { (join, miter) ->
-            val paint = Paint.stroke(ColorARGB.of(255, 36, 143, 227), width = 1.5f).copy(
+        val expectedByCase = cases.associate { (label, join, miter) ->
+            val paint = Paint.stroke(ColorARGB.of(255, 36, 143, 227), width = 2.5f).copy(
                 strokeJoin = join,
                 strokeMiter = miter,
                 antiAlias = false,
             )
-            val expected = w4dOracle(9, 8, path, paint)
-            val surface = Surface(9, 8)
+            label to w4dOracle(12, 12, path, paint)
+        }
+        assertFalse(expectedByCase.getValue("high miter").contentEquals(expectedByCase.getValue("round")))
+        assertFalse(expectedByCase.getValue("high miter").contentEquals(expectedByCase.getValue("bevel")))
+        assertFalse(expectedByCase.getValue("round").contentEquals(expectedByCase.getValue("bevel")))
+        assertContentEquals(expectedByCase.getValue("bevel"), expectedByCase.getValue("low miter"))
+
+        cases.forEach { (label, join, miter) ->
+            val paint = Paint.stroke(ColorARGB.of(255, 36, 143, 227), width = 2.5f).copy(
+                strokeJoin = join,
+                strokeMiter = miter,
+                antiAlias = false,
+            )
+            val surface = Surface(12, 12)
             surface.canvas { drawPath(path, paint) }
 
             val result = surface.render()
 
             assertPreparedRouteEvidence(result)
-            assertPixelsEqual(expected, result.pixels)
+            assertContentEquals(expectedByCase.getValue(label), result.pixels, label)
         }
     }
 
