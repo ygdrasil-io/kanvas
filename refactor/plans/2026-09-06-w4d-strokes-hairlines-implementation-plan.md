@@ -234,6 +234,26 @@ public fun Matrix3x3F32.preparePathStrokeGeometryF32(
 `PathFillGeometryF32` reste la seule autorité direct/stencil et aucun tableau
 mutable n'est rendu directement.
 
+## Exécution W4d.1 — 2026-09-07
+
+Les tâches 1 à 10 sont intégrées sur `codex/w4d-strokes-hairlines`. La tâche
+11 a publié les preuves fraîches dans `refactor/README.md` et le status W04 :
+la capability livrée est
+`solid-path-stroke-tessellation-stencil-hard-1x-simple-scissor-src-over-srgb-v1`.
+Les garanties sont la préparation F64/F32 dans `:math`, le ledger unique
+débitant avant émission, le `RenderGraph` et les ressources scellés dans
+`:gpu-plan`, l'authentification mécanique dans `:gpu-renderer`, l'atomicité
+direct/stencil, et les leases V/I/Uniform32/D24S8 retenus jusqu'à
+completion/readback avec rollback transactionnel.
+
+Checklist de clôture : Tasks 1–10 réalisées ; Task 11 Steps 1–3 réalisés.
+Le Step 4 est la revue Sol finale, réservée au contrôleur ; le Step 5 (push et
+PR) est également réservé au contrôleur et ne doit pas être coché ici. Les
+gates autorisées ont exclu `font`/`codec`, GM/dashboard/baseline et
+`jpg-color-cube`, hormis la compilation transitive de `font` sans exécution de
+ses tests. Les ouvertures restent `TopologyLimit` F64→F32 des
+auto-intersections, W4d.2, W4e et le ledger historique DrawPoint.
+
 ---
 
 ### Task 1: Valeurs stroke F64, validation et limites
@@ -1102,16 +1122,19 @@ rtk git commit -m "feat(kanvas): route W4d strokes through Surface"
 - Modify: `refactor/waves/W04-geometry-coverage/status.md`
 - Modify: ce plan
 
-- [ ] **Step 1: Exécuter les gates fraîches**
+- [x] **Step 1: Exécuter les gates fraîches**
 
 ```bash
 rtk ./gradlew :math:geometry:jvmTest :math:geometry:jsNodeTest :math:matrix:jvmTest :math:matrix:jsNodeTest :render-ir:test :gpu-plan:test --rerun-tasks
 rtk ./gradlew :gpu-renderer:test --tests '*GpuPlan*' --tests '*W4d*' --tests '*GPUCorePrimitivePathStencil*' --tests '*GPUFramePreflighterTest*' --tests '*GPUWgpu4kCorePrimitiveFramePoolTest*' --rerun-tasks
 rtk ./gradlew :kanvas:test --tests '*GPUPlanSurface*' --tests '*SurfaceTest*' --tests '*DisplayOpSceneAdapterTest*' --rerun-tasks
-rtk ./gradlew :kanvas:test --rerun-tasks
 ```
 
-- [ ] **Step 2: Vérifier XML, scope et diff**
+La gate Kanvas globale est hors portée de cette clôture documentaire. La gate
+Surface filtrée reproduit 2 073 tests, 45 failures historiques DrawPoint et 0
+error ; elle ne contient aucun échec W4d.1.
+
+- [x] **Step 2: Vérifier XML, scope et diff**
 
 ```bash
 rtk rg -n '<failure|<error' kanvas/build/test-results/test/TEST-*.xml
@@ -1121,7 +1144,7 @@ rtk git diff --name-only codex/w4c-path-fills...HEAD
 
 Confirmer zéro nouveau nom de failure/error et aucun fichier exclu.
 
-- [ ] **Step 3: Publier le status W4d.1**
+- [x] **Step 3: Publier le status W4d.1**
 
 Documenter capability, architecture, limites, ressources, preuves fraîches,
 ledger exact et ouverture W4d.2/W4e. Commit :
@@ -1131,13 +1154,13 @@ rtk git add refactor
 rtk git commit -m "docs(refactor): publish W4d stroke evidence"
 ```
 
-- [ ] **Step 4: Sol final review**
+- [ ] **Step 4: Sol final review (contrôleur)**
 
 Sol relit `codex/w4c-path-fills...HEAD`. Corriger tous les findings
 Critical/Important avec un fresh Terra et refaire les gates proportionnées
 jusqu'à `Approved`.
 
-- [ ] **Step 5: Pousser et créer la PR stackée**
+- [ ] **Step 5: Pousser et créer la PR stackée (contrôleur)**
 
 Créer par `apply_patch` un body complet avec `## Summary`, `## Verification`,
 `## Scope and follow-ups`, puis :

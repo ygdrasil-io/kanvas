@@ -49,6 +49,49 @@ générale. Inverse fills, AA/MSAA, strokes/hairlines, rotation/skew/perspective
 clips complexes, images, gradients, shaders, filtres et blends non-`SrcOver`
 restent hors promotion W4c et conservent leur route legacy avant `Ready`.
 
+W4d.1 atteint la capability
+`solid-path-stroke-tessellation-stencil-hard-1x-simple-scissor-src-over-srgb-v1`.
+Elle accepte une frame atomique de 1 à 512 `GeometryNode.Path` de provenance
+`DrawOrigin.PATH`, mélangeant `FILL`, `STROKE` et `STROKE_AND_FILL` et contenant
+au moins un stroke. Son enveloppe demeure non inverse, `HARD_EDGE`,
+`SolidColor`, `SrcOver`, sRGB 1×, layer racine, transform
+identity/scale/translate et clip vide ou scissor `I32` non-AA. Caps Butt/Round/
+Square, joins Miter/Round/Bevel, dash et hairline sont préparés dans `:math` :
+le finite stroke garde dash et outline paramétriques source avant projection et
+flattening F64→F32, tandis que la hairline reçoit une couverture nominale d'un
+pixel device après projection. `STROKE_AND_FILL` non inverse publie une unique
+union topologique certifiée ; une largeur nulle est un `FILL`, jamais une
+hairline ajoutée.
+
+La chaîne d'autorité W4d.1 est fermée : `:math:geometry` possède styles,
+ledger transactionnel et snapshots immuables ; `:math:matrix` prépare le
+device-space axis-aligned ; `:gpu-plan` sélectionne, budgète et scelle le
+`RenderGraph` ; `:gpu-renderer` authentifie l'identité canonique, le graph, le
+scratch et les payloads, puis matérialise mécaniquement jusqu'à `Surface` et
+readback. Après `Ready`, aucun mapper, `PathTessellator`,
+`AdvancedStrokePlan`, `GPUStroke`, `GPUPathHairlineContract` ou fallback
+legacy ne peut être rappelé. Toute divergence de style, géométrie, capability,
+graph, ressources, payload, scratch, pipeline ou ordre est un refus terminal
+avant submit : elle ne reclassifie pas la frame et ne publie aucun rendu
+partiel.
+
+Les unités de travail, vertices, indices et bytes sont débités avant émission
+ou dédoublonnage par un seul `PathStrokeWorkLedgerI64`, de 65 536 unités
+tentées par path et 262 144 par frame, profondeur 32 et flèche device-space
+0,25 px. Les limites explicites I32/I64 de vertices, indices, snapshots et
+taille hôte restent terminales. Direct mesh est réservé au contour prouvé
+simple ; le cas général est un groupe atomique adjacent
+`StencilProducer → StencilCover`, et un `STROKE_AND_FILL` ne double jamais
+deux windings ni deux composites `SrcOver` dans son recouvrement.
+
+W4d.1 planifie V/I/Uniform32 et, seulement lorsqu'un stencil est requis, une
+unique texture `Depth24PlusStencil8` 1×. Target, staging de readback, buffers
+et D24S8 sont décidés et validés avant `Ready`, avec arithmetic checked,
+capacités poolées et pic physique fermé. Le lease des ressources reste détenu
+jusqu'à completion et readback ; acquisition, upload, preflight, submit et
+finalisation rollbackent ou mettent le slot en quarantaine sur chaque échec,
+sans fuite ni réutilisation prématurée.
+
 ## Ressources, durées de vie et ABI
 
 Un graphe W4b matérialise exactement cinq `PlanResource`; pipeline et bind group sont des faits scellés, jamais des substituts au staging de readback.
@@ -103,6 +146,26 @@ est `Uncertified` et ne peut produire aucun attendu ni tolérance.
 
 Les compilations transitives n'ont exécuté aucun test `font`; aucun test `codec` n'a été lancé.
 
+## Commandes fraîches W4d.1
+
+| Commande | Résultat frais du 2026-09-07 |
+| --- | --- |
+| `rtk ./gradlew :math:geometry:jvmTest :math:geometry:jsNodeTest :math:matrix:jvmTest :math:matrix:jsNodeTest :render-ir:test :gpu-plan:test --rerun-tasks` | `BUILD SUCCESSFUL` ; 85 tâches exécutées. |
+| `rtk ./gradlew :gpu-renderer:test --tests '*GpuPlan*' --tests '*W4d*' --tests '*GPUCorePrimitivePathStencil*' --tests '*GPUFramePreflighterTest*' --tests '*GPUWgpu4kCorePrimitiveFramePoolTest*' --rerun-tasks` | `BUILD SUCCESSFUL` ; 53 tâches exécutées. |
+| `rtk ./gradlew :kanvas:test --tests '*GPUPlanSurface*' --tests '*SurfaceTest*' --tests '*DisplayOpSceneAdapterTest*' --rerun-tasks` | `BUILD FAILED` uniquement sur le ledger historique : 2 073 tests, 45 failures, 0 error. |
+
+Le scan XML frais `rtk rg -n '<failure|<error'
+kanvas/build/test-results/test/TEST-*.xml` retourne 45 matches dans un seul
+fichier, `TEST-org.graphiks.kanvas.surface.gpu.GPUAllApiBlendSurfaceTest.xml`.
+Il contient exactement `GPUAllApiBlendSurfaceTest :: DrawPoint` pour les 15
+blends avancés `PLUS`, `MULTIPLY`, `OVERLAY`, `DARKEN`, `LIGHTEN`,
+`COLOR_DODGE`, `COLOR_BURN`, `HARD_LIGHT`, `SOFT_LIGHT`, `DIFFERENCE`,
+`EXCLUSION`, `HUE`, `SATURATION`, `COLOR`, `LUMINOSITY`, chacun sous
+`UNCLIPPED`, `SCISSOR` et `ALPHA_MASK` ; `rg -o '<error'` retourne 0. Il n'y a
+donc aucun nom nouveau ni échec W4d.1 dans la gate filtrée. La compilation
+transitive de `font` a eu lieu, sans sélection ni exécution de test `font` ;
+aucun test `codec` n'a été lancé.
+
 ## Ledger XML global exact
 
 Le scan `rtk rg -n '<failure|<error' kanvas/build/test-results/test/TEST-*.xml`,
@@ -137,7 +200,14 @@ Pour les RRect non nuls, la SDF native n'est pas l'aire analytique Skia exacte. 
 
 ## Limites ouvertes
 
-W4 reste ouverte : W4c livre les fills de paths hard-edge, mais W4d couvre
-encore les strokes/hairlines et W4e les clips path, inverse et booléens. W5
+W4 reste ouverte. W4d.1 laisse explicitement : la limite conservative
+`TopologyLimit` de l'union F64→F32 pour les auto-intersections, W4d.2
+(transforms généraux et AA commune fill/stroke), W4e (clips path complexes,
+inverse et booléens) et la baseline historique DrawPoint ci-dessus. W5
 (materials), W6 (layers/effets) et W7 (convergence GM, y compris la
-réévaluation de la dette SDF RRect W4b) ne font pas partie de W4c.
+réévaluation de la dette SDF RRect W4b) ne font pas partie de W4d.1.
+
+W4d.1 n'a exécuté ni GM Skia, dashboard ou baseline, ni `jpg-color-cube`, ni
+test `font` ou `codec`; aucun de ces chemins, ni seuil/tolérance de similarité,
+n'est modifié par le diff `codex/w4c-path-fills...HEAD`. Ces exclusions restent
+des frontières de portée, non une rebaseline de la dette DrawPoint.
