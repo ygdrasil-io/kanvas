@@ -59,7 +59,7 @@ class PathStrokeAndFillPreparationF64Test {
             styleF64 = finiteStyleF64(2.0),
             mode = PathStrokeDrawMode.StrokeAndFill,
             projectionF64 = identityProjectionF64,
-            deviceFillInputF64 = inputF64,
+            deviceFillMaterializerF64 = PathStrokeDeviceFillMaterializerF64 { inputF64 },
         )
 
         assertEquals(
@@ -125,7 +125,7 @@ class PathStrokeAndFillPreparationF64Test {
             styleF64 = finiteStyleF64(2.0),
             mode = PathStrokeDrawMode.StrokeAndFill,
             projectionF64 = identityProjectionF64,
-            deviceFillInputF64 = inputF64,
+            deviceFillMaterializerF64 = PathStrokeDeviceFillMaterializerF64 { inputF64 },
         )
 
         assertEquals(
@@ -142,7 +142,7 @@ class PathStrokeAndFillPreparationF64Test {
                 styleF64 = finiteStyleF64(widthF64),
                 mode = PathStrokeDrawMode.StrokeAndFill,
                 projectionF64 = identityProjectionF64,
-                deviceFillInputF64 = inputF64,
+                deviceFillMaterializerF64 = PathStrokeDeviceFillMaterializerF64 { inputF64 },
             ),
         ).geometryF32
     }

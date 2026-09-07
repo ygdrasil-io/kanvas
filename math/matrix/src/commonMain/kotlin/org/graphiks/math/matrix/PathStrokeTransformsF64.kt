@@ -3,6 +3,7 @@ package org.graphiks.math.matrix
 import kotlin.math.abs
 import org.graphiks.math.geometry.PathF32
 import org.graphiks.math.geometry.PathFillInputF64
+import org.graphiks.math.geometry.PathStrokeDeviceFillMaterializerF64
 import org.graphiks.math.geometry.PathStrokeDrawMode
 import org.graphiks.math.geometry.PathStrokeGeometryF32
 import org.graphiks.math.geometry.PathStrokeInvalidSceneReason
@@ -95,11 +96,13 @@ public fun Matrix3x3F32.preparePathStrokeGeometryF32(
     ) {
         return PathStrokePreparationResult.InvalidScene(PathStrokeInvalidSceneReason.InvalidStyle)
     }
-    val deviceFillInputF64 = if (mode == PathStrokeDrawMode.StrokeAndFill) {
-        try {
-            mapPathFillInputF64(path)
-        } catch (_: IllegalArgumentException) {
-            return PathStrokePreparationResult.InvalidScene(PathStrokeInvalidSceneReason.NonFiniteInput)
+    val deviceFillMaterializerF64 = if (mode == PathStrokeDrawMode.StrokeAndFill) {
+        PathStrokeDeviceFillMaterializerF64 {
+            try {
+                mapPathFillInputF64(path)
+            } catch (_: IllegalArgumentException) {
+                null
+            }
         }
     } else {
         null
@@ -111,7 +114,7 @@ public fun Matrix3x3F32.preparePathStrokeGeometryF32(
         projectionF64 = AxisAlignedPathStrokeProjectionF64.of(this),
         policyF64 = policyF64,
         frameWorkUsageBeforeI64 = frameWorkUsageBeforeI64,
-        deviceFillInputF64 = deviceFillInputF64,
+        deviceFillMaterializerF64 = deviceFillMaterializerF64,
     )
 }
 

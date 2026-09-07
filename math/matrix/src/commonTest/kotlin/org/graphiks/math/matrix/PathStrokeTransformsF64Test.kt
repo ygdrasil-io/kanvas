@@ -20,6 +20,7 @@ import org.graphiks.math.geometry.PathStrokePreparationResult
 import org.graphiks.math.geometry.PathStrokeResourceLimitReason
 import org.graphiks.math.geometry.PathStrokeStyleF64
 import org.graphiks.math.geometry.PathStrokeWidthF64
+import org.graphiks.math.geometry.PathStrokeWorkUsageI64
 import org.graphiks.math.geometry.preparePathFillGeometryF32
 
 class PathStrokeTransformsF64Test {
@@ -89,16 +90,44 @@ class PathStrokeTransformsF64Test {
     }
 
     @Test
-    fun `stroke and fill preserves frame work limit exhausted during union`() {
-        val result = Matrix3x3F32.Identity.preparePathStrokeGeometryF32(
-            path = PathBuilder().moveTo(0f, 0f).lineTo(10f, 0f).lineTo(10f, 10f).lineTo(0f, 10f).close().build(),
-            styleF64 = finiteStyle(2.0),
+    fun `zero width stroke and fill charges mapped device fill commands to work usage`() {
+        val path = PathBuilder().moveTo(3f, 4f).close().build()
+        val result = Matrix3x3F32.translation(7f, -2f).preparePathStrokeGeometryF32(
+            path = path,
+            styleF64 = finiteStyle(0.0),
             mode = PathStrokeDrawMode.StrokeAndFill,
-            policyF64 = PathStrokePolicyF64(
-                limitsI32 = PathStrokeLimitsI32(maxAttemptedGeometryUnitsPerFrameI32 = 100),
-            ),
         )
 
+        assertTrue(
+            assertIs<PathStrokePreparationResult.Empty>(result).pathWorkUsageI64
+                .attemptedGeometryUnitCountI64 >= path.segmentCount.toLong(),
+            "the source commands mapped to the immutable device fill must be charged before fill preparation",
+        )
+    }
+
+    @Test
+    fun `stroke and fill preserves inherited frame work limit exhausted during topology union`() {
+        val path = overlappingRectanglesPath(rectangleCountI32 = 1)
+        val policy = PathStrokePolicyF64(
+            limitsI32 = PathStrokeLimitsI32(maxAttemptedGeometryUnitsPerFrameI32 = 1_000),
+        )
+        val frameWorkUsageBeforeI64 = PathStrokeWorkUsageI64(attemptedGeometryUnitCountI64 = 500L)
+        val stroke = Matrix3x3F32.Identity.preparePathStrokeGeometryF32(
+            path = path,
+            styleF64 = finiteStyle(2.0),
+            mode = PathStrokeDrawMode.Stroke,
+            policyF64 = policy,
+            frameWorkUsageBeforeI64 = frameWorkUsageBeforeI64,
+        )
+        val result = Matrix3x3F32.Identity.preparePathStrokeGeometryF32(
+            path = path,
+            styleF64 = finiteStyle(2.0),
+            mode = PathStrokeDrawMode.StrokeAndFill,
+            policyF64 = policy,
+            frameWorkUsageBeforeI64 = frameWorkUsageBeforeI64,
+        )
+
+        assertIs<PathStrokePreparationResult.Ready>(stroke)
         assertEquals(
             PathStrokeResourceLimitReason.FrameWorkLimit,
             assertIs<PathStrokePreparationResult.ResourceLimitExceeded>(result).reason,
@@ -384,6 +413,18 @@ class PathStrokeTransformsF64Test {
         assertIs<PathStrokePreparationResult.Ready>(result).geometryF32
 
     private fun linePath() = PathBuilder().moveTo(0f, 0f).lineTo(10f, 0f).build()
+
+    private fun overlappingRectanglesPath(rectangleCountI32: Int) = PathBuilder().also { builder ->
+        repeat(rectangleCountI32) { indexI32 ->
+            val offsetF32 = indexI32 * 0.01f
+            builder
+                .moveTo(offsetF32, offsetF32)
+                .lineTo(offsetF32 + 10f, offsetF32)
+                .lineTo(offsetF32 + 10f, offsetF32 + 10f)
+                .lineTo(offsetF32, offsetF32 + 10f)
+                .close()
+        }
+    }.build()
 
     private fun finiteStyle(widthF64: Double): PathStrokeStyleF64 = PathStrokeStyleF64(
         widthF64 = PathStrokeWidthF64.Finite(widthF64),
