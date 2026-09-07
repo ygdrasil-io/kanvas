@@ -115,13 +115,14 @@ class CapabilityCompilerChainTest {
     }
 
     @Test
-    fun W3W4aW4bW4cChainKeepsHistoricalSelectionsAndChoosesW4cForPaths() {
+    fun W3W4aW4bW4cW4dChainKeepsHistoricalSelectionsAndOrdersW4dAfterW4c() {
         val chain = CapabilityCompilerChain.of(
             listOf(
                 W3SolidRectPlanCompiler(),
                 W4aAnalyticRectPlanCompiler(),
                 W4bAnalyticRRectPlanCompiler(),
                 W4cPathFillPlanCompiler(),
+                W4dPathStrokePlanCompiler(),
             ),
         )
 
@@ -129,6 +130,7 @@ class CapabilityCompilerChainTest {
         assertEquals(W4aAnalyticRectPlanCompiler.CAPABILITY_ID, ready(chain, rectScene(0.25f)).capabilityId)
         assertEquals(W4bAnalyticRRectPlanCompiler.CAPABILITY_ID, ready(chain, rrectScene()).capabilityId)
         assertEquals(W4cPathFillPlanCompiler.CAPABILITY_ID, ready(chain, pathScene()).capabilityId)
+        assertEquals(W4dPathStrokePlanCompiler.CAPABILITY_ID, ready(chain, pathScene(PaintStyleNode.STROKE)).capabilityId)
     }
 
     private class NotCandidateCompiler(private val code: String) : GpuPlanCompiler {
@@ -220,7 +222,7 @@ class CapabilityCompilerChainTest {
         ))))
     }
 
-    private fun pathScene(): SceneSnapshot {
+    private fun pathScene(style: PaintStyleNode = PaintStyleNode.FILL): SceneSnapshot {
         val color = ColorARGB.fromPackedUInt(0x80FF0000u)
         val path = org.graphiks.math.geometry.PathBuilder()
             .moveTo(0f, 0f)
@@ -238,7 +240,7 @@ class CapabilityCompilerChainTest {
             transform = Matrix3x3F32.Identity,
             origin = DrawOrigin.PATH,
             paint = PaintNode(color, null, BlendMode.SRC_OVER, null, null, null, null, null,
-                PaintStyleNode.FILL, 0f, StrokeCapNode.BUTT, StrokeJoinNode.MITER, 4f, false),
+                style, 2f, StrokeCapNode.BUTT, StrokeJoinNode.MITER, 4f, false),
         ))))
     }
 
