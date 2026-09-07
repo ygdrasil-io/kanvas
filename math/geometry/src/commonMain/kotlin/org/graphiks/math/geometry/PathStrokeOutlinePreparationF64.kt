@@ -217,9 +217,9 @@ private inline fun prepareOutlineResultF64(
     PathStrokeOutlinePreparationResult.ResourceLimitExceeded(abort.reason)
 }
 
-private class PathStrokeOutlineInvalidAbort : RuntimeException()
+internal class PathStrokeOutlineInvalidAbort : RuntimeException()
 
-private class PathStrokeProjectionAbort : RuntimeException()
+internal class PathStrokeProjectionAbort : RuntimeException()
 
 private data class StrokeOutlinePieceF64(
     val primitiveF64: PathStrokePrimitiveF64,
@@ -540,9 +540,9 @@ private class PathStrokeOutlinePreparerF64(
 }
 
 private class OffsetStrokeOutlinePrimitiveF64(
-    private val pieceF64: StrokeOutlinePieceF64,
-    private val sideF64: Double,
-    private val halfWidthF64: Double,
+    val pieceF64: StrokeOutlinePieceF64,
+    val sideF64: Double,
+    val halfWidthF64: Double,
 ) : PathStrokeOutlinePrimitiveF64 {
     override fun pointAtF64(parameterF64: Double): Point2F64 {
         val sourceF64 = finiteSourcePointF64(pieceF64.primitiveF64, parameterF64)
@@ -571,8 +571,8 @@ private class OffsetStrokeOutlinePrimitiveF64(
 }
 
 private class LineStrokeOutlinePrimitiveF64(
-    private val startF64: Point2F64,
-    private val endF64: Point2F64,
+    val startF64: Point2F64,
+    val endF64: Point2F64,
 ) : PathStrokeOutlinePrimitiveF64 {
     override fun pointAtF64(parameterF64: Double): Point2F64 = Point2F64(
         interpolatedOutlineCoordinateF64(startF64.x, endF64.x, parameterF64),
@@ -583,11 +583,11 @@ private class LineStrokeOutlinePrimitiveF64(
 }
 
 private class ReversedStrokeOutlinePrimitiveF64(
-    private val sourceF64: PathStrokeOutlinePrimitiveF64,
-    private val startParameterF64: Double,
-    private val endParameterF64: Double,
+    val sourceF64: PathStrokeOutlinePrimitiveF64,
+    val startParameterF64: Double,
+    val endParameterF64: Double,
 ) : PathStrokeOutlinePrimitiveF64 {
-    private val parameterSumF64 = startParameterF64 + endParameterF64
+    val parameterSumF64 = startParameterF64 + endParameterF64
 
     override fun pointAtF64(parameterF64: Double): Point2F64 = sourceF64.pointAtF64(parameterSumF64 - parameterF64)
 
@@ -595,10 +595,10 @@ private class ReversedStrokeOutlinePrimitiveF64(
 }
 
 private class ArcStrokeOutlinePrimitiveF64(
-    private val centerF64: Point2F64,
-    private val radiusF64: Double,
-    private val startAngleF64: Double,
-    private val sweepAngleF64: Double,
+    val centerF64: Point2F64,
+    val radiusF64: Double,
+    val startAngleF64: Double,
+    val sweepAngleF64: Double,
 ) : PathStrokeOutlinePrimitiveF64 {
     override fun pointAtF64(parameterF64: Double): Point2F64 {
         val angleF64 = startAngleF64 + sweepAngleF64 * parameterF64
@@ -618,7 +618,7 @@ private class ArcStrokeOutlinePrimitiveF64(
 }
 
 private class SourceStrokeOutlinePrimitiveF64(
-    private val sourceF64: PathStrokePrimitiveF64,
+    val sourceF64: PathStrokePrimitiveF64,
 ) : PathStrokeOutlinePrimitiveF64 {
     override fun pointAtF64(parameterF64: Double): Point2F64 = finiteSourcePointF64(sourceF64, parameterF64)
 
@@ -630,13 +630,268 @@ private data class SourceStrokeIntervalGeometryF64(
     val sagittaUpperBoundF64: Double,
 )
 
+/** Internal finalization authority for one analytically restricted stroke-outline interval. */
+internal sealed interface PathStrokeOutlineRestrictionResultF64 {
+    public data class Ready(
+        public val intervalF64: PathStrokeOutlineIntervalF64,
+    ) : PathStrokeOutlineRestrictionResultF64
+
+    /** The source tangent becomes singular on this interval; recursively bisect it. */
+    public data object NeedsSubdivision : PathStrokeOutlineRestrictionResultF64
+}
+
+/**
+ * Recomputes the source certificate for the exact retained parameter range.
+ *
+ * Offset intervals restrict their source Bezier/arc analytically and bound unit-normal variation
+ * using derivative control hulls.  The bound shrinks with each non-singular restriction; a cusp
+ * is explicitly returned for subdivision rather than hidden by a constant whole-curve bound.
+ */
+internal fun restrictPathStrokeOutlineIntervalF64(
+    intervalF64: PathStrokeOutlineIntervalF64,
+    startParameterF64: Double,
+    endParameterF64: Double,
+): PathStrokeOutlineRestrictionResultF64 {
+    if (!startParameterF64.isFinite() || !endParameterF64.isFinite() ||
+        startParameterF64 < intervalF64.startParameterF64 ||
+        endParameterF64 > intervalF64.endParameterF64 ||
+        startParameterF64 >= endParameterF64
+    ) throw PathStrokeOutlineInvalidAbort()
+
+    val restrictedGeometryF64 = restrictedOutlineGeometryF64(
+        primitiveF64 = intervalF64.primitiveF64,
+        startParameterF64 = startParameterF64,
+        endParameterF64 = endParameterF64,
+    ) ?: return PathStrokeOutlineRestrictionResultF64.NeedsSubdivision
+    return PathStrokeOutlineRestrictionResultF64.Ready(
+        intervalF64.copy(
+            startParameterF64 = startParameterF64,
+            endParameterF64 = endParameterF64,
+            boundsF64 = restrictedGeometryF64.boundsF64,
+            sourceSagittaUpperBoundF64 = restrictedGeometryF64.sagittaUpperBoundF64,
+        ),
+    )
+}
+
+private data class RestrictedOutlineGeometryF64(
+    val boundsF64: PathStrokeBoundsF64,
+    val sagittaUpperBoundF64: Double,
+)
+
+private fun restrictedOutlineGeometryF64(
+    primitiveF64: PathStrokeOutlinePrimitiveF64,
+    startParameterF64: Double,
+    endParameterF64: Double,
+): RestrictedOutlineGeometryF64? = when (primitiveF64) {
+    is LineStrokeOutlinePrimitiveF64 -> RestrictedOutlineGeometryF64(
+        boundsF64 = boundsOfPointsF64(
+            listOf(
+                primitiveF64.pointAtF64(startParameterF64),
+                primitiveF64.pointAtF64(endParameterF64),
+            ),
+        ),
+        sagittaUpperBoundF64 = 0.0,
+    )
+
+    is ArcStrokeOutlinePrimitiveF64 -> restrictedArcOutlineGeometryF64(
+        primitiveF64,
+        startParameterF64,
+        endParameterF64,
+    )
+
+    is SourceStrokeOutlinePrimitiveF64 -> sourceIntervalGeometryF64(
+        primitiveF64.sourceF64,
+        startParameterF64,
+        endParameterF64,
+    ).let { sourceGeometryF64 ->
+        RestrictedOutlineGeometryF64(
+            sourceGeometryF64.boundsF64,
+            sourceGeometryF64.sagittaUpperBoundF64,
+        )
+    }
+
+    is OffsetStrokeOutlinePrimitiveF64 -> restrictedOffsetOutlineGeometryF64(
+        primitiveF64,
+        startParameterF64,
+        endParameterF64,
+    )
+
+    is ReversedStrokeOutlinePrimitiveF64 -> {
+        val sourceStartParameterF64 = primitiveF64.parameterSumF64 - endParameterF64
+        val sourceEndParameterF64 = primitiveF64.parameterSumF64 - startParameterF64
+        restrictedOutlineGeometryF64(
+            primitiveF64.sourceF64,
+            sourceStartParameterF64,
+            sourceEndParameterF64,
+        )
+    }
+}
+
+private fun restrictedArcOutlineGeometryF64(
+    primitiveF64: ArcStrokeOutlinePrimitiveF64,
+    startParameterF64: Double,
+    endParameterF64: Double,
+): RestrictedOutlineGeometryF64 {
+    val startAngleF64 = primitiveF64.startAngleF64 + primitiveF64.sweepAngleF64 * startParameterF64
+    val sweepAngleF64 = primitiveF64.sweepAngleF64 * (endParameterF64 - startParameterF64)
+    if (!startAngleF64.isFinite() || !sweepAngleF64.isFinite() || primitiveF64.radiusF64 < 0.0) {
+        throw PathStrokeOutlineInvalidAbort()
+    }
+    val pointsF64 = buildList {
+        add(primitiveF64.pointAtF64(startParameterF64))
+        add(primitiveF64.pointAtF64(endParameterF64))
+        listOf(0.0, PI * 0.5, PI, PI * 1.5)
+            .filter { angleF64 -> angleIsInOutlineSweepF64(angleF64, startAngleF64, sweepAngleF64) }
+            .forEach { angleF64 ->
+                add(
+                    Point2F64(
+                        primitiveF64.centerF64.x + primitiveF64.radiusF64 * cos(angleF64),
+                        primitiveF64.centerF64.y + primitiveF64.radiusF64 * sin(angleF64),
+                    ),
+                )
+            }
+    }
+    val sagittaUpperBoundF64 = primitiveF64.radiusF64 * abs(sweepAngleF64) * abs(sweepAngleF64) * 0.125
+    if (!sagittaUpperBoundF64.isFinite()) throw PathStrokeOutlineInvalidAbort()
+    return RestrictedOutlineGeometryF64(boundsOfPointsF64(pointsF64), sagittaUpperBoundF64)
+}
+
+private fun angleIsInOutlineSweepF64(angleF64: Double, startAngleF64: Double, sweepAngleF64: Double): Boolean {
+    val distanceF64 = if (sweepAngleF64 >= 0.0) {
+        positiveOutlineAngleF64(angleF64 - startAngleF64)
+    } else {
+        positiveOutlineAngleF64(startAngleF64 - angleF64)
+    }
+    return distanceF64 <= abs(sweepAngleF64) + 1e-12
+}
+
+private fun positiveOutlineAngleF64(angleF64: Double): Double {
+    val resultF64 = angleF64 % (2.0 * PI)
+    return if (resultF64 < 0.0) resultF64 + 2.0 * PI else resultF64
+}
+
+private fun restrictedOffsetOutlineGeometryF64(
+    primitiveF64: OffsetStrokeOutlinePrimitiveF64,
+    startParameterF64: Double,
+    endParameterF64: Double,
+): RestrictedOutlineGeometryF64? {
+    val sourcePrimitiveF64 = restrictedSourcePrimitiveF64(
+        primitiveF64.pieceF64.primitiveF64,
+        startParameterF64,
+        endParameterF64,
+    )
+    val normalDeviationUpperBoundF64 = normalDeviationUpperBoundF64(sourcePrimitiveF64)
+        ?: return null
+    val sourceSagittaUpperBoundF64 = centerlineSagittaUpperBoundF64(sourcePrimitiveF64)
+    val sagittaUpperBoundF64 = sourceSagittaUpperBoundF64 + primitiveF64.halfWidthF64 * normalDeviationUpperBoundF64
+    if (!sagittaUpperBoundF64.isFinite() || sagittaUpperBoundF64 < 0.0) throw PathStrokeOutlineInvalidAbort()
+    return RestrictedOutlineGeometryF64(
+        boundsF64 = expandedBoundsF64(sourceBoundsF64(sourcePrimitiveF64), primitiveF64.halfWidthF64),
+        sagittaUpperBoundF64 = sagittaUpperBoundF64,
+    )
+}
+
+/** Bounds the deviation of a unit-normal curve from its chord on an analytically restricted source. */
+private fun normalDeviationUpperBoundF64(primitiveF64: PathStrokePrimitiveF64): Double? {
+    val derivativeBoundsF64 = when (primitiveF64) {
+        is PathStrokeLinePrimitiveF64 -> return 0.0
+
+        is PathStrokeQuadPrimitiveF64 -> {
+            val firstF64 = (primitiveF64.controlF64 - primitiveF64.startF64) * 2.0
+            val secondF64 = (primitiveF64.endF64 - primitiveF64.controlF64) * 2.0
+            NormalDerivativeBoundsF64(
+                minimumSpeedF64 = distanceFromOriginToSegmentF64(firstF64, secondF64),
+                maximumDerivativeF64 = (secondF64 - firstF64).length(),
+            )
+        }
+
+        is PathStrokeCubicPrimitiveF64 -> {
+            val firstF64 = (primitiveF64.control1F64 - primitiveF64.startF64) * 3.0
+            val secondF64 = (primitiveF64.control2F64 - primitiveF64.control1F64) * 3.0
+            val thirdF64 = (primitiveF64.endF64 - primitiveF64.control2F64) * 3.0
+            NormalDerivativeBoundsF64(
+                minimumSpeedF64 = distanceFromOriginToTriangleF64(firstF64, secondF64, thirdF64),
+                maximumDerivativeF64 = 2.0 * max((secondF64 - firstF64).length(), (thirdF64 - secondF64).length()),
+            )
+        }
+
+        is PathStrokeSvgArcPrimitiveF64 -> primitiveF64.arcF64?.let { arcF64 ->
+            NormalDerivativeBoundsF64(
+                minimumSpeedF64 = min(arcF64.radiusX, arcF64.radiusY) * abs(arcF64.sweepAngle),
+                maximumDerivativeF64 = max(arcF64.radiusX, arcF64.radiusY) * arcF64.sweepAngle * arcF64.sweepAngle,
+            )
+        } ?: return 0.0
+    }
+    if (!derivativeBoundsF64.minimumSpeedF64.isFinite() || !derivativeBoundsF64.maximumDerivativeF64.isFinite()) {
+        throw PathStrokeOutlineInvalidAbort()
+    }
+    if (derivativeBoundsF64.minimumSpeedF64 <= strokeOutlineEpsilonF64) return null
+    return (derivativeBoundsF64.maximumDerivativeF64 / derivativeBoundsF64.minimumSpeedF64)
+        .takeIf(Double::isFinite)
+        ?.coerceAtMost(2.0)
+}
+
+private data class NormalDerivativeBoundsF64(
+    val minimumSpeedF64: Double,
+    val maximumDerivativeF64: Double,
+)
+
+private fun distanceFromOriginToSegmentF64(startF64: Vector2F64, endF64: Vector2F64): Double {
+    val deltaF64 = endF64 - startF64
+    val lengthSquaredF64 = deltaF64.lengthSquared()
+    if (!lengthSquaredF64.isFinite()) throw PathStrokeOutlineInvalidAbort()
+    if (lengthSquaredF64 <= strokeOutlineEpsilonF64) return startF64.length()
+    val parameterF64 = (-startF64.dot(deltaF64) / lengthSquaredF64).coerceIn(0.0, 1.0)
+    return (startF64 + deltaF64 * parameterF64).length().also { resultF64 ->
+        if (!resultF64.isFinite()) throw PathStrokeOutlineInvalidAbort()
+    }
+}
+
+private fun distanceFromOriginToTriangleF64(
+    firstF64: Vector2F64,
+    secondF64: Vector2F64,
+    thirdF64: Vector2F64,
+): Double {
+    val firstCrossF64 = firstF64.cross(secondF64)
+    val secondCrossF64 = secondF64.cross(thirdF64)
+    val thirdCrossF64 = thirdF64.cross(firstF64)
+    if (!firstCrossF64.isFinite() || !secondCrossF64.isFinite() || !thirdCrossF64.isFinite()) {
+        throw PathStrokeOutlineInvalidAbort()
+    }
+    if ((firstCrossF64 >= 0.0 && secondCrossF64 >= 0.0 && thirdCrossF64 >= 0.0) ||
+        (firstCrossF64 <= 0.0 && secondCrossF64 <= 0.0 && thirdCrossF64 <= 0.0)
+    ) return 0.0
+    return min(
+        distanceFromOriginToSegmentF64(firstF64, secondF64),
+        min(
+            distanceFromOriginToSegmentF64(secondF64, thirdF64),
+            distanceFromOriginToSegmentF64(thirdF64, firstF64),
+        ),
+    )
+}
+
 /** Analytically reparameterizes one source interval before deriving its conservative certificate. */
 private fun sourceIntervalGeometryF64(
     primitiveF64: PathStrokePrimitiveF64,
     startParameterF64: Double,
     endParameterF64: Double,
 ): SourceStrokeIntervalGeometryF64 {
-    val intervalPrimitiveF64 = when (primitiveF64) {
+    val intervalPrimitiveF64 = restrictedSourcePrimitiveF64(
+        primitiveF64,
+        startParameterF64,
+        endParameterF64,
+    )
+    return SourceStrokeIntervalGeometryF64(
+        boundsF64 = sourceBoundsF64(intervalPrimitiveF64),
+        sagittaUpperBoundF64 = centerlineSagittaUpperBoundF64(intervalPrimitiveF64),
+    )
+}
+
+private fun restrictedSourcePrimitiveF64(
+    primitiveF64: PathStrokePrimitiveF64,
+    startParameterF64: Double,
+    endParameterF64: Double,
+): PathStrokePrimitiveF64 = when (primitiveF64) {
         is PathStrokeLinePrimitiveF64 -> PathStrokeLinePrimitiveF64(
             finiteSourcePointF64(primitiveF64, startParameterF64),
             finiteSourcePointF64(primitiveF64, endParameterF64),
@@ -660,11 +915,6 @@ private fun sourceIntervalGeometryF64(
             endParameterF64,
         )
     }
-    return SourceStrokeIntervalGeometryF64(
-        boundsF64 = sourceBoundsF64(intervalPrimitiveF64),
-        sagittaUpperBoundF64 = centerlineSagittaUpperBoundF64(intervalPrimitiveF64),
-    )
-}
 
 private fun restrictedQuadPrimitiveF64(
     primitiveF64: PathStrokeQuadPrimitiveF64,

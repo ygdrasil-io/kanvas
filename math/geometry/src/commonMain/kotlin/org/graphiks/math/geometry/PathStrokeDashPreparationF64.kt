@@ -105,7 +105,7 @@ internal fun preparePathStrokeCenterlinesF64(
     ledgerI64: PathStrokeWorkLedgerI64,
 ): PathStrokeCenterlineF64? = PathStrokeDashPreparerF64(inputF64, dashF64, policyF64, ledgerI64).prepare()
 
-private class PathStrokeInvalidInputAbort : RuntimeException()
+internal class PathStrokeInvalidInputAbort : RuntimeException()
 
 private data class SourceStrokeContourF64(
     val primitivesF64: List<PathStrokePrimitiveF64>,

@@ -3,6 +3,7 @@ package org.graphiks.math.matrix
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 import org.graphiks.math.geometry.PathBuilder
 import org.graphiks.math.geometry.PathStrokeCap
 import org.graphiks.math.geometry.PathStrokeDrawMode
@@ -40,6 +41,25 @@ class PathStrokeTransformsF64Test {
     }
 
     @Test
+    fun `finite quadratic with a rapid normal turn is subdivided at the device tolerance`() {
+        val result = Matrix3x3F32.Identity.preparePathStrokeGeometryF32(
+            PathBuilder().moveTo(0f, 0f).quadTo(10f, 0f, 0f, 4f).build(),
+            finiteStyle(5.0),
+            PathStrokeDrawMode.Stroke,
+        )
+        assertTrue(result is PathStrokePreparationResult.Ready, "$result")
+        val geometry = assertReady(result)
+        val fan = assertIs<org.graphiks.math.geometry.PathStencilEdgeFanF32>(
+            geometry.copyFillGeometryF32().copyStencilEdgeFanF32OrNull(),
+        )
+
+        assertTrue(
+            fan.edgeCountI32 > 128,
+            "expected certified finite-outline subdivision, got ${fan.edgeCountI32} edges",
+        )
+    }
+
+    @Test
     fun `axis aligned identity translation and negative scales retain finite stroke coverage`() {
         val source = linePath()
 
@@ -71,6 +91,22 @@ class PathStrokeTransformsF64Test {
         assertEquals(0f, mirrored.copyConservativeBoundsF32().right)
         assertEquals(-3f, mirrored.copyConservativeBoundsF32().top)
         assertEquals(3f, mirrored.copyConservativeBoundsF32().bottom)
+    }
+
+    @Test
+    fun `one negative scale reflects a finite stroke without changing its coverage`() {
+        val geometry = assertReady(
+            Matrix3x3F32.scaling(-2f, 3f).preparePathStrokeGeometryF32(
+                linePath(),
+                finiteStyle(2.0),
+                PathStrokeDrawMode.Stroke,
+            ),
+        )
+
+        assertEquals(-20f, geometry.copyConservativeBoundsF32().left)
+        assertEquals(0f, geometry.copyConservativeBoundsF32().right)
+        assertEquals(-3f, geometry.copyConservativeBoundsF32().top)
+        assertEquals(3f, geometry.copyConservativeBoundsF32().bottom)
     }
 
     @Test

@@ -207,7 +207,11 @@ public fun prepareProjectedPathStrokeGeometryF32(
         }
     } catch (abort: PathStrokeResourceLimitAbort) {
         PathStrokePreparationResult.ResourceLimitExceeded(abort.reason)
-    } catch (_: RuntimeException) {
+    } catch (_: PathStrokeInvalidInputAbort) {
+        PathStrokePreparationResult.InvalidScene(PathStrokeInvalidSceneReason.NonFiniteInput)
+    } catch (_: PathStrokeOutlineInvalidAbort) {
+        PathStrokePreparationResult.InvalidScene(PathStrokeInvalidSceneReason.NonFiniteInput)
+    } catch (_: PathStrokeProjectionAbort) {
         PathStrokePreparationResult.InvalidScene(PathStrokeInvalidSceneReason.NonFiniteInput)
     }
 }
@@ -269,51 +273,59 @@ private fun appendProjectedStrokeIntervalF64(
 ) {
     if (startParameterF64 >= endParameterF64) return
     ledgerI64.debitTopologyBeforeEmissionI64(1L)
-    val scaledIntervalF64 = intervalF64.copy(
-        startParameterF64 = startParameterF64,
-        endParameterF64 = endParameterF64,
-        sourceSagittaUpperBoundF64 = scaledOutlineSagittaUpperBoundF64(
-            intervalF64 = intervalF64,
-            startParameterF64 = startParameterF64,
-            endParameterF64 = endParameterF64,
-        ),
-    )
-    when (val certificationF64 = projectionF64.certifyOutlineIntervalF64(scaledIntervalF64)) {
+    fun subdivideF64() {
+        if (depthI32 >= policyF64.limitsI32.maxSubdivisionDepthI32) {
+            throw PathStrokeResourceLimitAbort(PathStrokeResourceLimitReason.FlatteningDidNotConverge)
+        }
+        val middleParameterF64 = startParameterF64 + (endParameterF64 - startParameterF64) * 0.5
+        if (!middleParameterF64.isFinite() || middleParameterF64 <= startParameterF64 ||
+            middleParameterF64 >= endParameterF64
+        ) {
+            throw PathStrokeProjectionAbort()
+        }
+        appendProjectedStrokeIntervalF64(
+            destinationF64,
+            intervalF64,
+            startParameterF64,
+            middleParameterF64,
+            projectionF64,
+            policyF64,
+            ledgerI64,
+            depthI32 + 1,
+        )
+        appendProjectedStrokeIntervalF64(
+            destinationF64,
+            intervalF64,
+            middleParameterF64,
+            endParameterF64,
+            projectionF64,
+            policyF64,
+            ledgerI64,
+            depthI32 + 1,
+        )
+    }
+
+    val restrictedIntervalF64 = when (
+        val restrictionF64 = restrictPathStrokeOutlineIntervalF64(
+            intervalF64,
+            startParameterF64,
+            endParameterF64,
+        )
+    ) {
+        is PathStrokeOutlineRestrictionResultF64.Ready -> restrictionF64.intervalF64
+        PathStrokeOutlineRestrictionResultF64.NeedsSubdivision -> {
+            subdivideF64()
+            return
+        }
+    }
+    when (val certificationF64 = projectionF64.certifyOutlineIntervalF64(restrictedIntervalF64)) {
         is PathStrokeProjectionIntervalResultF64.Bounded -> {
             val maximumSagittaF64 = certificationF64.maximumDeviceSagittaUpperBoundF64
             if (!maximumSagittaF64.isFinite() || maximumSagittaF64 < 0.0) {
-                throw PathStrokePipelineInvalidAbort()
+                throw PathStrokeProjectionAbort()
             }
             if (maximumSagittaF64 > policyF64.maximumSagittaErrorF64) {
-                if (depthI32 >= policyF64.limitsI32.maxSubdivisionDepthI32) {
-                    throw PathStrokeResourceLimitAbort(PathStrokeResourceLimitReason.FlatteningDidNotConverge)
-                }
-                val middleParameterF64 = startParameterF64 + (endParameterF64 - startParameterF64) * 0.5
-                if (!middleParameterF64.isFinite() || middleParameterF64 <= startParameterF64 ||
-                    middleParameterF64 >= endParameterF64
-                ) {
-                    throw PathStrokePipelineInvalidAbort()
-                }
-                appendProjectedStrokeIntervalF64(
-                    destinationF64,
-                    intervalF64,
-                    startParameterF64,
-                    middleParameterF64,
-                    projectionF64,
-                    policyF64,
-                    ledgerI64,
-                    depthI32 + 1,
-                )
-                appendProjectedStrokeIntervalF64(
-                    destinationF64,
-                    intervalF64,
-                    middleParameterF64,
-                    endParameterF64,
-                    projectionF64,
-                    policyF64,
-                    ledgerI64,
-                    depthI32 + 1,
-                )
+                subdivideF64()
             } else {
                 val endPointF64 = projectStrokePointF64(
                     projectionF64,
@@ -326,24 +338,8 @@ private fun appendProjectedStrokeIntervalF64(
         PathStrokeProjectionIntervalResultF64.HorizonCrossing,
         PathStrokeProjectionIntervalResultF64.NonFinite,
         PathStrokeProjectionIntervalResultF64.Unbounded,
-        -> throw PathStrokePipelineInvalidAbort()
+        -> throw PathStrokeProjectionAbort()
     }
-}
-
-private fun scaledOutlineSagittaUpperBoundF64(
-    intervalF64: PathStrokeOutlineIntervalF64,
-    startParameterF64: Double,
-    endParameterF64: Double,
-): Double {
-    val wholeSpanF64 = intervalF64.endParameterF64 - intervalF64.startParameterF64
-    val partSpanF64 = endParameterF64 - startParameterF64
-    if (!wholeSpanF64.isFinite() || !partSpanF64.isFinite() || wholeSpanF64 <= 0.0 || partSpanF64 < 0.0) {
-        throw PathStrokePipelineInvalidAbort()
-    }
-    val proportionF64 = partSpanF64 / wholeSpanF64
-    val resultF64 = intervalF64.sourceSagittaUpperBoundF64 * proportionF64 * proportionF64
-    if (!resultF64.isFinite() || resultF64 < 0.0) throw PathStrokePipelineInvalidAbort()
-    return resultF64
 }
 
 private fun projectStrokePointF64(
@@ -351,8 +347,8 @@ private fun projectStrokePointF64(
     pointF64: Point2F64,
 ): Point2F64 = when (val resultF64 = projectionF64.projectPointF64(pointF64)) {
     is PathStrokeProjectionPointResultF64.Ready -> resultF64.pointF64.takeIf(Point2F64::isFinite)
-        ?: throw PathStrokePipelineInvalidAbort()
-    PathStrokeProjectionPointResultF64.NonFinite -> throw PathStrokePipelineInvalidAbort()
+        ?: throw PathStrokeProjectionAbort()
+    PathStrokeProjectionPointResultF64.NonFinite -> throw PathStrokeProjectionAbort()
 }
 
 private fun PathFillGeometryF32.strokeConservativeBoundsF32(): RectF32 {
@@ -377,7 +373,7 @@ private fun PathFillGeometryF32.strokeConservativeBoundsF32(): RectF32 {
         }
     }
     if (!leftF32.isFinite() || !topF32.isFinite() || !rightF32.isFinite() || !bottomF32.isFinite()) {
-        throw PathStrokePipelineInvalidAbort()
+        throw PathStrokeOutlineInvalidAbort()
     }
     return RectF32(
         canonicalStrokeF32(leftF32),
@@ -404,5 +400,3 @@ private fun checkedStrokeGeometryPublicationBytesI64(fillSnapshotByteCountI64: L
 }
 
 private fun canonicalStrokeF32(valueF32: Float): Float = if (valueF32 == 0f) 0f else valueF32
-
-private class PathStrokePipelineInvalidAbort : RuntimeException()
