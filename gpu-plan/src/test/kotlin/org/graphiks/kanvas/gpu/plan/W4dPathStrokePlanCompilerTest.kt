@@ -64,14 +64,41 @@ class W4dPathStrokePlanCompilerTest {
     }
 
     @Test
-    fun acceptsOneAnd512StrokeDrawsButNot513() {
+    fun acceptsOneAnd512StrokeDrawsButMakes513Terminal() {
         val one = sceneOf(listOf(pathDraw(PaintStyleNode.STROKE)))
         val many = sceneOf(List(512) { pathDraw(PaintStyleNode.STROKE) })
         val tooMany = sceneOf(List(513) { pathDraw(PaintStyleNode.STROKE) })
 
         assertIs<GpuPlanSelection.Candidate>(compiler.select(one, target(one)))
         assertIs<GpuPlanSelection.Candidate>(compiler.select(many, target(many)))
-        assertIs<GpuPlanSelection.NotCandidate>(compiler.select(tooMany, target(tooMany)))
+        val refused = assertIs<GpuPlanSelection.ResourceLimitExceeded>(compiler.select(tooMany, target(tooMany)))
+        assertEquals(W4dPlanDiagnostics.PathResourceLimit, refused.diagnostics().single().code)
+    }
+
+    @Test
+    fun `513 fill-only draws remain outside W4d ownership`() {
+        val fills = sceneOf(List(513) { pathDraw(PaintStyleNode.FILL) })
+
+        assertIs<GpuPlanSelection.NotCandidate>(compiler.select(fills, target(fills)))
+    }
+
+    @Test
+    fun `nonfinite facts stay invalid before the 513 draw limit`() {
+        val malformed = pathDraw(PaintStyleNode.STROKE).let { draw ->
+            SceneCommand.Draw(
+                draw.node.copy(
+                    paint = requireNotNull(draw.node.paint).copy(
+                        pathEffect = PathEffectNode.Dash(
+                            org.graphiks.kanvas.render.ir.ImmutableFloats.copyOf(floatArrayOf(1f, 1f)),
+                            Float.NaN,
+                        ),
+                    ),
+                ),
+            )
+        }
+        val scene = sceneOf(List(512) { pathDraw(PaintStyleNode.STROKE) } + malformed)
+
+        assertIs<GpuPlanSelection.InvalidScene>(compiler.select(scene, target(scene)))
     }
 
     @Test
@@ -154,13 +181,13 @@ class W4dPathStrokePlanCompilerTest {
     }
 
     @Test
-    fun `513 visual draws are refused even when the first 512 are off target`() {
+    fun `513 visual draws are terminal even when the first 512 are off target`() {
         val offTarget = pathDraw(PaintStyleNode.STROKE).let { command ->
             SceneCommand.Draw(command.node.copy(transform = Matrix3x3F32(tx = 1_000f, ty = 1_000f)))
         }
         val scene = sceneOf(List(512) { offTarget } + pathDraw(PaintStyleNode.STROKE))
 
-        assertIs<GpuPlanSelection.NotCandidate>(compiler.select(scene, target(scene)))
+        assertIs<GpuPlanSelection.ResourceLimitExceeded>(compiler.select(scene, target(scene)))
     }
 
     @Test

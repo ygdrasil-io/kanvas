@@ -64,11 +64,75 @@ public class W4dPathStrokePlanCompiler internal constructor(
         if (scene.extent != target.extent || scene.colorSpace != target.colorSpace) return invalid("Scene and target differ")
         if (SceneSemanticValidator.validate(scene) is SceneSemanticValidationResult.Invalid) return invalid("Scene validation failed")
         if (scene.colorSpace != ColorSpace.SRGB) return gap("W4d supports only sRGB")
+        when (val preflight = preflightStrokeFrame(scene)) {
+            FramePreflight.Member -> Unit
+            FramePreflight.Outside -> Unit
+            is FramePreflight.Invalid -> return invalid(preflight.message)
+            is FramePreflight.Limit -> return limitSelection(preflight.message)
+        }
         return when (val recognized = recognize(scene)) {
             is Recognition.Ready -> GpuPlanSelection.Candidate(Candidate(this, scene.canonicalId, target, recognized.draws))
             is Recognition.Gap -> gap(recognized.message)
             is Recognition.Invalid -> invalid(recognized.message)
             is Recognition.Limit -> limitSelection(recognized.message)
+        }
+    }
+
+    /**
+     * Establishes lane ownership before geometry preparation so a frame-size
+     * overflow is terminal only for structurally W4d path-stroke traffic.
+     */
+    private fun preflightStrokeFrame(scene: SceneSnapshot): FramePreflight {
+        scene.forEach { command ->
+            when (command) {
+                is SceneCommand.Draw -> {
+                    val path = (command.node.geometry as? GeometryNode.Path)?.path
+                    val paint = command.node.paint
+                    if (path != null && paint != null &&
+                        (!finite(path) || !finite(command.node.transform) || !finite(paint) || !finiteClip(command.node.clip))
+                    ) {
+                        return FramePreflight.Invalid("Draw facts are non-finite")
+                    }
+                }
+                is SceneCommand.SetTransform -> if (!finite(command.matrix)) {
+                    return FramePreflight.Invalid("Transform metadata is non-finite")
+                }
+                is SceneCommand.SetClip -> if (!finiteClip(command.clip)) {
+                    return FramePreflight.Invalid("Clip metadata is non-finite")
+                }
+                is SceneCommand.Annotation -> if (!finite(command.copyBounds())) {
+                    return FramePreflight.Invalid("Annotation bounds are non-finite")
+                }
+                else -> Unit
+            }
+        }
+
+        var visualDrawCountI32 = 0
+        var sawStroke = false
+        scene.forEach { command ->
+            when (command) {
+                is SceneCommand.Draw -> {
+                    val node = command.node
+                    val paint = node.paint
+                    if (node.geometry !is GeometryNode.Path || node.origin != DrawOrigin.PATH || paint == null) {
+                        return FramePreflight.Outside
+                    }
+                    visualDrawCountI32 = Math.addExact(visualDrawCountI32, 1)
+                    sawStroke = sawStroke ||
+                        paint.style == PaintStyleNode.STROKE || paint.style == PaintStyleNode.STROKE_AND_FILL
+                }
+                is SceneCommand.SetTransform,
+                is SceneCommand.SetClip,
+                is SceneCommand.Annotation,
+                -> Unit
+                else -> return FramePreflight.Outside
+            }
+        }
+        if (!sawStroke) return FramePreflight.Outside
+        return if (visualDrawCountI32 > MAX_DRAWS) {
+            FramePreflight.Limit("W4d accepts at most 512 visual path draws")
+        } else {
+            FramePreflight.Member
         }
     }
 
@@ -246,6 +310,7 @@ public class W4dPathStrokePlanCompiler internal constructor(
     private fun diag(code: RenderDiagnosticCode, domain: RenderDiagnosticDomain, message: String): RenderDiagnostic = W4dPlanDiagnostics.diagnostic(code, domain, message)
 
     private sealed interface Recognition { data class Ready(val draws: List<SealedDraw>) : Recognition; data class Gap(val message: String) : Recognition; data class Invalid(val message: String) : Recognition; data class Limit(val message: String) : Recognition }
+    private sealed interface FramePreflight { data object Member : FramePreflight; data object Outside : FramePreflight; data class Invalid(val message: String) : FramePreflight; data class Limit(val message: String) : FramePreflight }
     private sealed interface DrawResult { data class Ready(val draw: SealedDraw, val frameWork: PathStrokeWorkUsageI64, val stroke: Boolean) : DrawResult; data class Empty(val frameWork: PathStrokeWorkUsageI64, val stroke: Boolean) : DrawResult; data class Gap(val message: String) : DrawResult; data class Invalid(val message: String) : DrawResult; data class Limit(val message: String) : DrawResult }
     private sealed interface Prepared { data class Ready(val geometry: org.graphiks.math.geometry.PathFillGeometryF32, val strokeGeometry: org.graphiks.math.geometry.PathStrokeGeometryF32?, val mode: PathStrokeDrawMode?, val styleF64: PathStrokeStyleF64?, val work: PathStrokeWorkUsageI64) : Prepared; data class Empty(val work: PathStrokeWorkUsageI64) : Prepared; data class Invalid(val message: String) : Prepared; data class Limit(val message: String) : Prepared }
     private data class SealedDraw(val commandIndex: Int, val color: ColorF32, val geometry: org.graphiks.math.geometry.PathFillGeometryF32, val stroke: org.graphiks.math.geometry.PathStrokeGeometryF32?, val mode: PathStrokeDrawMode?, val styleF64: PathStrokeStyleF64?, val scissor: RectI32) { val strategy: PathFillStrategy = if (geometry.copyDirectTriangleF32OrNull() != null) PathFillStrategy.DirectTriangle else PathFillStrategy.StencilCover }
