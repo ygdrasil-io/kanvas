@@ -157,11 +157,16 @@ class W4bAnalyticRRectPlanCompilerTest {
     }
 
     @Test
-    fun `plan identity changes when only resolve support changes`() {
+    fun `plan identity changes when only sample or resolve support changes`() {
         val commands = listOf(rrect())
+        val baseCapabilities = capabilities()
 
         assertNotEquals(
-            ready(commands, capabilities = capabilities()).id,
+            ready(commands, capabilities = baseCapabilities).id,
+            ready(commands, capabilities = withAdditionalFourSampleColorSupport(baseCapabilities)).id,
+        )
+        assertNotEquals(
+            ready(commands, capabilities = baseCapabilities).id,
             ready(commands, capabilities = capabilities(textureResolveSupports = setOf(colorResolveSupport()))).id,
         )
     }
@@ -260,6 +265,26 @@ class W4bAnalyticRRectPlanCompilerTest {
         4,
         1,
     )
+
+    private fun withAdditionalFourSampleColorSupport(base: PlanCapabilitySnapshot): PlanCapabilitySnapshot =
+        PlanCapabilitySnapshot.of(
+            deviceGeneration = base.deviceGeneration,
+            maxTextureDimension2D = base.maxTextureDimension2D,
+            maxBufferSizeBytes = base.maxBufferSizeBytes,
+            copyBytesPerRowAlignment = base.copyBytesPerRowAlignment,
+            supportedFormats = base.supportedFormats(),
+            minUniformBufferOffsetAlignment = base.minUniformBufferOffsetAlignment,
+            maxDynamicUniformBuffersPerPipelineLayout = base.maxDynamicUniformBuffersPerPipelineLayout,
+            supportedOperations = base.supportedOperations(),
+            bufferAllocationPolicy = base.bufferAllocationPolicy,
+            supportedDepthStencilFormats = base.supportedDepthStencilFormats(),
+            supportedTextureSampleSupports = base.supportedTextureSampleSupports() + PlanTextureSampleSupport.of(
+                PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+                4,
+                setOf(PlanResourceUsage.RenderAttachment),
+            ),
+            supportedTextureResolveSupports = base.supportedTextureResolveSupports(),
+        )
 
     private fun rendererRepresentabilityCapabilities(): PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(
         deviceGeneration = 0,

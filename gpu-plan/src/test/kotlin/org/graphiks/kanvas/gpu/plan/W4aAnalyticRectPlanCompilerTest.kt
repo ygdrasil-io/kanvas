@@ -220,6 +220,10 @@ class W4aAnalyticRectPlanCompilerTest {
         val baseCapabilities = supportedCapabilities()
         assertNotEquals(
             ready(commands, capabilities = baseCapabilities).id,
+            ready(commands, capabilities = withAdditionalFourSampleColorSupport(baseCapabilities)).id,
+        )
+        assertNotEquals(
+            ready(commands, capabilities = baseCapabilities).id,
             ready(
                 commands,
                 capabilities = supportedCapabilities(
@@ -325,4 +329,24 @@ class W4aAnalyticRectPlanCompilerTest {
         4,
         1,
     )
+
+    private fun withAdditionalFourSampleColorSupport(base: PlanCapabilitySnapshot): PlanCapabilitySnapshot =
+        PlanCapabilitySnapshot.of(
+            deviceGeneration = base.deviceGeneration,
+            maxTextureDimension2D = base.maxTextureDimension2D,
+            maxBufferSizeBytes = base.maxBufferSizeBytes,
+            copyBytesPerRowAlignment = base.copyBytesPerRowAlignment,
+            supportedFormats = base.supportedFormats(),
+            minUniformBufferOffsetAlignment = base.minUniformBufferOffsetAlignment,
+            maxDynamicUniformBuffersPerPipelineLayout = base.maxDynamicUniformBuffersPerPipelineLayout,
+            supportedOperations = base.supportedOperations(),
+            bufferAllocationPolicy = base.bufferAllocationPolicy,
+            supportedDepthStencilFormats = base.supportedDepthStencilFormats(),
+            supportedTextureSampleSupports = base.supportedTextureSampleSupports() + PlanTextureSampleSupport.of(
+                PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+                4,
+                setOf(PlanResourceUsage.RenderAttachment),
+            ),
+            supportedTextureResolveSupports = base.supportedTextureResolveSupports(),
+        )
 }

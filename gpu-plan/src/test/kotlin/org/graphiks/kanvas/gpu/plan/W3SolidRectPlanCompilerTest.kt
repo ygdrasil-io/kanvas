@@ -309,11 +309,16 @@ class W3SolidRectPlanCompilerTest {
     @Test
     fun `plan identity includes semantic inputs but excludes target label`() {
         val scene = sceneOf(solidRect(0f, 0f, 2f, 2f, 0xFFFFFFFFu))
-        val base = ready(scene, target = target(4, 4, "first"))
+        val baseCapabilities = supportedCapabilities()
+        val base = ready(scene, target = target(4, 4, "first"), capabilities = baseCapabilities)
         assertEquals(base.id, ready(scene, target = target(4, 4, "second")).id)
         assertNotEquals(base.id, ready(sceneOf(solidRect(0f, 0f, 3f, 2f, 0xFFFFFFFFu))).id)
         assertNotEquals(base.id, ready(SceneSnapshot.of(SceneExtent(5, 4), ColorSpace.SRGB, listOf(solidRect(0f, 0f, 2f, 2f, 0xFFFFFFFFu)))).id)
         assertNotEquals(base.id, ready(scene, capabilities = supportedCapabilities(generation = 1)).id)
+        assertNotEquals(
+            base.id,
+            ready(scene, capabilities = withAdditionalFourSampleColorSupport(baseCapabilities)).id,
+        )
         assertNotEquals(
             base.id,
             ready(
@@ -452,6 +457,26 @@ class W3SolidRectPlanCompilerTest {
         4,
         1,
     )
+
+    private fun withAdditionalFourSampleColorSupport(base: PlanCapabilitySnapshot): PlanCapabilitySnapshot =
+        PlanCapabilitySnapshot.of(
+            deviceGeneration = base.deviceGeneration,
+            maxTextureDimension2D = base.maxTextureDimension2D,
+            maxBufferSizeBytes = base.maxBufferSizeBytes,
+            copyBytesPerRowAlignment = base.copyBytesPerRowAlignment,
+            supportedFormats = base.supportedFormats(),
+            minUniformBufferOffsetAlignment = base.minUniformBufferOffsetAlignment,
+            maxDynamicUniformBuffersPerPipelineLayout = base.maxDynamicUniformBuffersPerPipelineLayout,
+            supportedOperations = base.supportedOperations(),
+            bufferAllocationPolicy = base.bufferAllocationPolicy,
+            supportedDepthStencilFormats = base.supportedDepthStencilFormats(),
+            supportedTextureSampleSupports = base.supportedTextureSampleSupports() + PlanTextureSampleSupport.of(
+                PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+                4,
+                setOf(PlanResourceUsage.RenderAttachment),
+            ),
+            supportedTextureResolveSupports = base.supportedTextureResolveSupports(),
+        )
 
     private fun diagnosticCode(result: RenderPlanResult<*>): String = when (result) {
         is RenderPlanResult.GapNotMigrated -> result.diagnostics.single().code.value

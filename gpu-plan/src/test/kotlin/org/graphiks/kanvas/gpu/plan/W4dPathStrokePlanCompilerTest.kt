@@ -503,6 +503,14 @@ class W4dPathStrokePlanCompilerTest {
             mutateCapabilities(capsBase, bufferAllocationPolicy = PlanBufferAllocationPolicy.of(capsBase.bufferAllocationPolicy.vertexFloorBytes, capsBase.bufferAllocationPolicy.indexFloorBytes, 8_192)),
             mutateCapabilities(
                 capsBase,
+                textureSampleSupports = capsBase.supportedTextureSampleSupports() + PlanTextureSampleSupport.of(
+                    PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+                    4,
+                    setOf(PlanResourceUsage.RenderAttachment),
+                ),
+            ),
+            mutateCapabilities(
+                capsBase,
                 textureResolveSupports = setOf(colorResolveSupport()),
             ),
         ).forEach { changed -> assertNotEquals(stable, id(changed)) }

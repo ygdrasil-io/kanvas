@@ -1498,13 +1498,13 @@ class RenderGraphContractTest {
     }
 
     @Test
-    fun `sequential hard masks have disjoint lifetimes and pooled peak is their maximum`() {
+    fun `sequential hard masks have disjoint lifetimes and pooled peak excludes their sum`() {
         val graph = aa4SequentialHardMaskGraph()
         val masks = graph.resources().filter { it.role == PlanResourceRole.PathHardEdgeMask }.sortedBy { it.ordinal }
 
         assertEquals(2, masks.size)
         assertEquals(masks[0].lastPassIndexExclusive, masks[1].firstPassIndex)
-        assertEquals(260, graph.peakFrameLocalBytes)
+        assertEquals(6_156, graph.peakFrameLocalBytes)
     }
 
     private fun aa4Capabilities(): PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(
@@ -1900,7 +1900,7 @@ class RenderGraphContractTest {
     }
 
     private fun aa4SequentialHardMaskGraph(): RenderGraph {
-        val extent = SizeI32(1, 1)
+        val extent = SizeI32(16, 16)
         fun texture(
             role: PlanResourceRole,
             ordinal: Int,
@@ -1920,24 +1920,24 @@ class RenderGraphContractTest {
         )
         val multisampleColor = texture(
             PlanResourceRole.MultisampleColorTarget, 0,
-            PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), 16,
+            PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), 4_096,
             setOf(PlanResourceUsage.RenderAttachment), 0, 7, 4,
         )
         val resolved = texture(
             PlanResourceRole.LogicalTarget, 0,
-            PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), 4,
+            PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), 1_024,
             setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource), 6, 8, 1,
         )
         val firstMask = texture(
-            PlanResourceRole.PathHardEdgeMask, 0, PlanTextureFormat.CoverageMask, 4,
+            PlanResourceRole.PathHardEdgeMask, 0, PlanTextureFormat.CoverageMask, 1_024,
             setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled), 1, 4, 1,
         )
         val secondMask = texture(
-            PlanResourceRole.PathHardEdgeMask, 1, PlanTextureFormat.CoverageMask, 4,
+            PlanResourceRole.PathHardEdgeMask, 1, PlanTextureFormat.CoverageMask, 1_024,
             setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled), 4, 7, 1,
         )
         val staging = PlanResource.of(
-            PlanResourceRole.ReadbackStaging, 0, PlanResourceKind.Buffer, null, null, 256,
+            PlanResourceRole.ReadbackStaging, 0, PlanResourceKind.Buffer, null, null, 4_096,
             setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead), PlanResourceLifetime.FrameLocal, 7, 8,
         )
         val vertex = data(PlanResourceRole.VertexData, PlanResourceUsage.Vertex)
@@ -1946,7 +1946,7 @@ class RenderGraphContractTest {
         val drawData = PlanDrawDataResources(vertex.id, index.id, uniform.id)
         fun path(commandIndex: Int, coverage: CoveragePlan, sample: SamplePlan) = GeneralPathDraw.of(
             commandIndex, ColorF32.of(0.5f, 0f, 0f, 0.5f), PathDrawGeometry.Fill(directGeometry()),
-            PathFillStrategy.DirectTriangle, RectI32(0, 0, 1, 1), coverage, sample,
+            PathFillStrategy.DirectTriangle, RectI32(0, 0, 16, 16), coverage, sample,
         )
         val aa = path(0, CoveragePlan.StencilAA4, SamplePlan.Multisample4)
         val firstHard = path(1, CoveragePlan.FullOrScissor, SamplePlan.SingleSample)
@@ -1983,7 +1983,7 @@ class RenderGraphContractTest {
         val resources = listOf(multisampleColor, resolved, firstMask, secondMask, staging, vertex, index, uniform)
         return RenderGraph.of(
             PlanId("aa4-sequential-hard-masks"), "w4d-general-path-aa", extent,
-            PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL, aa4Capabilities(), PlanBudget(4096), 3,
+            PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL, aa4Capabilities(), PlanBudget(16_384), 3,
             resources, passes, passes.zipWithNext().map { (before, after) -> PlanPassDependency(before.id, after.id) },
             peak(resources, passes.size),
         )
