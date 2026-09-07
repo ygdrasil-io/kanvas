@@ -7,14 +7,14 @@ public enum class PathStrokeDrawMode {
 }
 
 /**
- * Lazily supplies an immutable device-space fill to `StrokeAndFill` preparation.
+ * Maps one source fill command to its device-space command for `StrokeAndFill` preparation.
  *
- * Geometry invokes this authority only after it has charged the source command bound to its
- * shared ledger. A `null` result denotes a non-finite materialization. The authority never
- * receives the ledger, so callers cannot perform uncharged work through this contract.
+ * Geometry owns the destination input and invokes this authority only after charging each source
+ * command to its shared ledger. A `null` result rejects a non-finite mapping. The authority
+ * cannot fan out commands and never receives the ledger.
  */
-public fun interface PathStrokeDeviceFillMaterializerF64 {
-    public fun materializeDeviceFillInputF64(): PathFillInputF64?
+public fun interface PathStrokeDeviceFillSegmentMapperF64 {
+    public fun mapDeviceFillSegmentF64(sourceSegmentF64: PathFillSegmentF64): PathFillSegmentF64?
 }
 
 /** Outcome of bounded stroke preparation in final device-space F32 geometry. */
@@ -99,8 +99,8 @@ private fun RectF32.copyStrokeSnapshotF32(): RectF32 = RectF32(left, top, right,
 /**
  * Runs the source dash/outline pipeline and finalizes either the device stroke or one
  * topological `StrokeAndFill` union through the shared fill worker. `StrokeAndFill` callers
- * supply a device-fill materializer so its matrix owner can preserve arc metadata; geometry
- * invokes it only after charging the source command bound. This affine contract must not be
+ * supply a device-fill segment mapper so its matrix owner can preserve arc metadata; geometry
+ * invokes it once per charged source command. This affine contract must not be
  * reused for future projective curve mapping.
  */
 public fun prepareProjectedPathStrokeGeometryF32(
@@ -110,9 +110,9 @@ public fun prepareProjectedPathStrokeGeometryF32(
     projectionF64: PathStrokeProjectionF64,
     policyF64: PathStrokePolicyF64 = PathStrokePolicyF64(),
     frameWorkUsageBeforeI64: PathStrokeWorkUsageI64 = PathStrokeWorkUsageI64(),
-    deviceFillMaterializerF64: PathStrokeDeviceFillMaterializerF64? = null,
+    deviceFillSegmentMapperF64: PathStrokeDeviceFillSegmentMapperF64? = null,
 ): PathStrokePreparationResult {
-    if (mode == PathStrokeDrawMode.StrokeAndFill && deviceFillMaterializerF64 == null) {
+    if (mode == PathStrokeDrawMode.StrokeAndFill && deviceFillSegmentMapperF64 == null) {
         return PathStrokePreparationResult.InvalidScene(PathStrokeInvalidSceneReason.InvalidStyle)
     }
     if (mode == PathStrokeDrawMode.StrokeAndFill && inputF64.fillRule.isInverse()) {
@@ -134,13 +134,17 @@ public fun prepareProjectedPathStrokeGeometryF32(
         fun materializeDeviceFillInputF64(): PathFillInputF64 {
             if (didMaterializeDeviceFillInputF64) return requireNotNull(materializedDeviceFillInputF64)
 
-            ledgerI64.debitTopologyBeforeEmissionI64(inputF64.segmentCountI32.toLong())
-            val deviceFillInputF64 = requireNotNull(deviceFillMaterializerF64)
-                .materializeDeviceFillInputF64()
-                ?: throw PathStrokeDeviceFillMaterializationAbort()
-            if (deviceFillInputF64.fillRule.isInverse()) throw PathStrokeDeviceFillInvalidStyleAbort()
+            val mappedSegmentsF64 = mutableListOf<PathFillSegmentF64>()
+            val mapperF64 = requireNotNull(deviceFillSegmentMapperF64)
+            inputF64.forEach { sourceSegmentF64 ->
+                ledgerI64.debitTopologyBeforeEmissionI64(1L)
+                val mappedSegmentF64 = mapperF64.mapDeviceFillSegmentF64(sourceSegmentF64)
+                    ?: throw PathStrokeDeviceFillSegmentMappingAbort()
+                mappedSegmentsF64 += mappedSegmentF64
+            }
+            val deviceFillInputF64 = PathFillInputF64.of(inputF64.fillRule, mappedSegmentsF64)
             if (!deviceFillInputF64.all(::isFiniteStrokePipelineInputSegmentF64)) {
-                throw PathStrokeDeviceFillMaterializationAbort()
+                throw PathStrokeDeviceFillSegmentMappingAbort()
             }
             materializedDeviceFillInputF64 = deviceFillInputF64
             didMaterializeDeviceFillInputF64 = true
@@ -215,9 +219,7 @@ public fun prepareProjectedPathStrokeGeometryF32(
         }
     } catch (abort: PathStrokeResourceLimitAbort) {
         PathStrokePreparationResult.ResourceLimitExceeded(abort.reason)
-    } catch (_: PathStrokeDeviceFillInvalidStyleAbort) {
-        PathStrokePreparationResult.InvalidScene(PathStrokeInvalidSceneReason.InvalidStyle)
-    } catch (_: PathStrokeDeviceFillMaterializationAbort) {
+    } catch (_: PathStrokeDeviceFillSegmentMappingAbort) {
         PathStrokePreparationResult.InvalidScene(PathStrokeInvalidSceneReason.NonFiniteInput)
     } catch (_: PathStrokeInvalidInputAbort) {
         PathStrokePreparationResult.InvalidScene(PathStrokeInvalidSceneReason.NonFiniteInput)
@@ -228,9 +230,7 @@ public fun prepareProjectedPathStrokeGeometryF32(
     }
 }
 
-private class PathStrokeDeviceFillInvalidStyleAbort : RuntimeException()
-
-private class PathStrokeDeviceFillMaterializationAbort : RuntimeException()
+private class PathStrokeDeviceFillSegmentMappingAbort : RuntimeException()
 
 internal fun finalizePathStrokeFillInputF32(
     inputF64: PathFillInputF64,

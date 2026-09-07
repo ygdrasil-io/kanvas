@@ -98,10 +98,10 @@ class PathStrokeTransformsF64Test {
             mode = PathStrokeDrawMode.StrokeAndFill,
         )
 
-        assertTrue(
+        assertEquals(
+            3L,
             assertIs<PathStrokePreparationResult.Empty>(result).pathWorkUsageI64
-                .attemptedGeometryUnitCountI64 >= path.segmentCount.toLong(),
-            "the source commands mapped to the immutable device fill must be charged before fill preparation",
+                .attemptedGeometryUnitCountI64,
         )
     }
 

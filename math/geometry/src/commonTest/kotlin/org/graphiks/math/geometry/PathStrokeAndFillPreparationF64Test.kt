@@ -59,7 +59,7 @@ class PathStrokeAndFillPreparationF64Test {
             styleF64 = finiteStyleF64(2.0),
             mode = PathStrokeDrawMode.StrokeAndFill,
             projectionF64 = identityProjectionF64,
-            deviceFillMaterializerF64 = PathStrokeDeviceFillMaterializerF64 { inputF64 },
+            deviceFillSegmentMapperF64 = PathStrokeDeviceFillSegmentMapperF64 { sourceSegmentF64 -> sourceSegmentF64 },
         )
 
         assertEquals(
@@ -106,6 +106,28 @@ class PathStrokeAndFillPreparationF64Test {
     }
 
     @Test
+    fun `zero width stroke and fill cannot add device commands beyond the source authority`() {
+        val inputF64 = PathFillInputF64.of(
+            FillRule.WINDING,
+            listOf(
+                PathFillSegmentF64.MoveTo(Point2F64(0.0, 0.0)),
+                PathFillSegmentF64.LineTo(Point2F64(10.0, 0.0)),
+                PathFillSegmentF64.Close,
+            ),
+        )
+
+        val result = prepareProjectedPathStrokeGeometryF32(
+            inputF64 = inputF64,
+            styleF64 = finiteStyleF64(0.0),
+            mode = PathStrokeDrawMode.StrokeAndFill,
+            projectionF64 = identityProjectionF64,
+            deviceFillSegmentMapperF64 = PathStrokeDeviceFillSegmentMapperF64 { sourceSegmentF64 -> sourceSegmentF64 },
+        )
+
+        assertIs<PathStrokePreparationResult.Empty>(result)
+    }
+
+    @Test
     fun `zero finite width preserves the legacy empty stroke result`() {
         val result = prepareProjectedPathStrokeGeometryF32(
             inputF64 = PathFillInputF64.fromPathF32(closedRectanglePathF32(0f, 0f, 10f, 10f)),
@@ -125,7 +147,7 @@ class PathStrokeAndFillPreparationF64Test {
             styleF64 = finiteStyleF64(2.0),
             mode = PathStrokeDrawMode.StrokeAndFill,
             projectionF64 = identityProjectionF64,
-            deviceFillMaterializerF64 = PathStrokeDeviceFillMaterializerF64 { inputF64 },
+            deviceFillSegmentMapperF64 = PathStrokeDeviceFillSegmentMapperF64 { sourceSegmentF64 -> sourceSegmentF64 },
         )
 
         assertEquals(
@@ -142,7 +164,7 @@ class PathStrokeAndFillPreparationF64Test {
                 styleF64 = finiteStyleF64(widthF64),
                 mode = PathStrokeDrawMode.StrokeAndFill,
                 projectionF64 = identityProjectionF64,
-                deviceFillMaterializerF64 = PathStrokeDeviceFillMaterializerF64 { inputF64 },
+                deviceFillSegmentMapperF64 = PathStrokeDeviceFillSegmentMapperF64 { sourceSegmentF64 -> sourceSegmentF64 },
             ),
         ).geometryF32
     }
