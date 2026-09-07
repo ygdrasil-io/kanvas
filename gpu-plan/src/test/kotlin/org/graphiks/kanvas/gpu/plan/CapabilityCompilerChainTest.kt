@@ -134,7 +134,7 @@ class CapabilityCompilerChainTest {
     }
 
     @Test
-    fun `real W4 chain keeps the W4d stroke draw limit terminal without claiming unsupported frames`() {
+    fun `real W4 chain keeps terminal limits and routes AA or general-transform paths to W4d general`() {
         val chain = CapabilityCompilerChain.of(
             listOf(
                 W3SolidRectPlanCompiler(),
@@ -147,9 +147,13 @@ class CapabilityCompilerChainTest {
         val strokes = repeatedPathScene(513, PaintStyleNode.STROKE)
         val fills = repeatedPathScene(513, PaintStyleNode.FILL)
         val base = assertIs<SceneCommand.Draw>(pathScene(PaintStyleNode.STROKE).commandAt(0)).node
-        val unsupported = listOf(
+        val general = listOf(
             base.copy(coverage = CoverageRequest.ANTIALIASED),
             base.copy(transform = Matrix3x3F32.rotation(0.25f)),
+        ).map { node ->
+            SceneSnapshot.of(SceneExtent(4, 3), ColorSpace.SRGB, List(513) { SceneCommand.Draw(node) })
+        }
+        val unsupported = listOf(
             base.copy(
                 clip = ClipStackNode.Operations.of(
                     listOf(org.graphiks.kanvas.render.ir.ClipEntry(base.geometry, org.graphiks.kanvas.render.ir.ClipOperation.INTERSECT)),
@@ -164,6 +168,10 @@ class CapabilityCompilerChainTest {
         val refused = assertIs<GpuPlanSelection.ResourceLimitExceeded>(chain.select(strokes, targetFor(strokes)))
         assertEquals(W4dPlanDiagnostics.PathResourceLimit, refused.diagnostics().single().code)
         assertIs<GpuPlanSelection.NotCandidate>(chain.select(fills, targetFor(fills)))
+        general.forEach { scene ->
+            val generalLimit = assertIs<GpuPlanSelection.ResourceLimitExceeded>(chain.select(scene, targetFor(scene)))
+            assertEquals(W4dGeneralPlanDiagnostics.PathResourceLimit, generalLimit.diagnostics().single().code)
+        }
         unsupported.forEach { scene ->
             assertIs<GpuPlanSelection.NotCandidate>(chain.select(scene, targetFor(scene)))
         }

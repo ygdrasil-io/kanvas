@@ -71,7 +71,14 @@ public class CapabilityCompilerChain private constructor(
     public companion object {
         public fun of(compilers: List<GpuPlanCompiler>): CapabilityCompilerChain {
             require(compilers.isNotEmpty()) { "CapabilityCompilerChain requires at least one compiler" }
-            return CapabilityCompilerChain(compilers.toList())
+            val ordered = compilers.toMutableList()
+            val lastNarrowPathIndex = ordered.indexOfLast { compiler ->
+                compiler is W4cPathFillPlanCompiler || compiler is W4dPathStrokePlanCompiler
+            }
+            if (lastNarrowPathIndex >= 0 && ordered.none { it is W4dGeneralPathPlanCompiler }) {
+                ordered.add(lastNarrowPathIndex + 1, W4dGeneralPathPlanCompiler())
+            }
+            return CapabilityCompilerChain(ordered)
         }
     }
 }

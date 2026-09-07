@@ -591,13 +591,14 @@ public class RenderGraph private constructor(
                 pathPasses.any { (_, pass) -> pass.draw.sample == SamplePlan.Multisample4 }) {
                 "AA4 resources and four-sample path draws must appear together"
             }
-            val usesStencil = pathPasses.any { (_, pass) ->
+            val usesDepthStencil = pathPasses.any { (_, pass) ->
                 pass.phase == PathRenderPhase.MultisampleStencilProducer ||
                     pass.phase == PathRenderPhase.MultisampleStencilColorCover ||
                     pass.phase == PathRenderPhase.HardEdgeMaskStencilProducer ||
-                    pass.phase == PathRenderPhase.HardEdgeMaskStencilCover
+                    pass.phase == PathRenderPhase.HardEdgeMaskStencilCover ||
+                    pass.depthStencil != null
             }
-            if (usesStencil) {
+            if (usesDepthStencil) {
                 require(PlanOperationCapability.DepthStencilAttachment in capabilities.supportedOperations()) {
                     "AA4 stencil paths require depth-stencil attachment support"
                 }
@@ -738,13 +739,25 @@ public class RenderGraph private constructor(
             val coveredMaskClearIndices = mutableSetOf<Int>()
             pathPasses.forEach { (passIndex, pass) ->
                 when (pass.phase) {
-                    PathRenderPhase.MultisampleDirectColor -> require(pass.draw is GeneralPathDraw &&
-                        pass.draw.coverage == CoveragePlan.StencilAA4 &&
-                        pass.draw.strategy == PathFillStrategy.DirectTriangle &&
-                        pass.target == multisampleTarget.id && pass.atomicGroup == null &&
-                        pass.depthStencil == null && pass.depthStencilAccess == null &&
-                        pass.depthStencilLoadStore == null) {
+                    PathRenderPhase.MultisampleDirectColor -> {
+                        val depthStencil = pass.depthStencil?.let { resourceId ->
+                            requireNotNull(resourcesById[resourceId])
+                        }
+                        require(pass.draw is GeneralPathDraw &&
+                            pass.draw.coverage == CoveragePlan.StencilAA4 &&
+                            pass.draw.strategy == PathFillStrategy.DirectTriangle &&
+                            pass.target == multisampleTarget.id && pass.atomicGroup == null &&
+                            pass.depthStencilAccess == null && pass.depthStencilLoadStore == null &&
+                            (depthStencil == null ||
+                                depthStencil.role == PlanResourceRole.DepthStencil &&
+                                    depthStencil.format == PlanTextureFormat.DepthStencil(
+                                        PlanDepthStencilFormat.Depth24PlusStencil8,
+                                    ) &&
+                                    depthStencil.copyExtent() == targetExtent &&
+                                    depthStencil.sampleCountI32 == 4 &&
+                                    PlanResourceUsage.DepthStencilAttachment in depthStencil.usages())) {
                         "AA4 direct color passes require a four-sample direct path draw"
+                    }
                     }
                     PathRenderPhase.MultisampleStencilProducer -> {
                         val cover = passes.getOrNull(passIndex + 1) as? PlanPass.PathRenderPass
