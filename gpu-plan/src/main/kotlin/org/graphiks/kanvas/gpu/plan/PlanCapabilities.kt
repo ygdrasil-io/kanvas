@@ -62,7 +62,9 @@ public class PlanTextureResolveSupport private constructor(
             sourceSampleCountI32: Int,
             destinationSampleCountI32: Int,
         ): PlanTextureResolveSupport {
-            require(format is PlanTextureFormat.Color) { "Only color textures may resolve" }
+            require(format is PlanTextureFormat.Color || format === PlanTextureFormat.CoverageMask) {
+                "Only color and coverage-mask textures may resolve"
+            }
             require(sourceSampleCountI32 == 4 && destinationSampleCountI32 == 1) {
                 "Texture resolve support must be four-sample to single-sample"
             }
@@ -114,7 +116,7 @@ public class PlanCapabilitySnapshot private constructor(
         format: PlanTextureFormat,
         sourceSampleCountI32: Int,
         destinationSampleCountI32: Int,
-    ): Boolean = format is PlanTextureFormat.Color &&
+    ): Boolean = (format is PlanTextureFormat.Color || format === PlanTextureFormat.CoverageMask) &&
         sourceSampleCountI32 == 4 &&
         destinationSampleCountI32 == 1 &&
         textureResolveSupports.any { support ->
@@ -179,8 +181,15 @@ public class PlanCapabilitySnapshot private constructor(
                 }
             }
             supportedTextureResolveSupports.forEach { support ->
-                val color = support.format as PlanTextureFormat.Color
-                require(color.value in supportedFormats) { "Texture resolve support declares an unsupported color format" }
+                when (val format = support.format) {
+                    is PlanTextureFormat.Color -> require(format.value in supportedFormats) {
+                        "Texture resolve support declares an unsupported color format"
+                    }
+                    PlanTextureFormat.CoverageMask -> require(PlanTextureFormat.CoverageMask.value == PlanCoverageMaskFormat.RGBA8_UNORM_LINEAR) {
+                        "Texture resolve support declares an unsupported coverage-mask format"
+                    }
+                    is PlanTextureFormat.DepthStencil -> error("Depth-stencil resolve support is impossible")
+                }
             }
             return PlanCapabilitySnapshot(deviceGeneration, maxTextureDimension2D, maxBufferSizeBytes,
                 copyBytesPerRowAlignment, supportedFormats, minUniformBufferOffsetAlignment,

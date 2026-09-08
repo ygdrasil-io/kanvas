@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.plan
 
 import java.security.MessageDigest
+import org.graphiks.math.geometry.ClipGeometryF32
 import org.graphiks.math.geometry.SizeI32
 
 public class RenderGraph private constructor(
@@ -114,7 +115,12 @@ public class RenderGraph private constructor(
             val usesExplicitAa4PathPasses = passes.any {
                 it is PlanPass.PathMaskClearPass || it is PlanPass.PathRenderPass
             }
-            if (usesExplicitAa4PathPasses) {
+            val usesClipMasks = passes.any {
+                it is PlanPass.ClipMaskInitialize || it is PlanPass.ClipMaskProducer || it is PlanPass.ClipMaskFold
+            }
+            if (usesClipMasks) {
+                validateClipMaskContracts(passes, dependencies, resources, resourcesById, capabilities, targetExtent)
+            } else if (usesExplicitAa4PathPasses) {
                 validateExplicitAa4PathContracts(
                     passes,
                     dependencies,
@@ -205,6 +211,9 @@ public class RenderGraph private constructor(
             is PlanPass.RenderPass -> buildList {
                 add(pass.target)
                 pass.drawDataResources?.let { addAll(listOf(it.vertex, it.index, it.uniform)) }
+                pass.draws().filterIsInstance<ClippedPlanDraw>().forEach { draw ->
+                    draw.strategy.clipMaskResourceOrNull()?.let(::add)
+                }
             }
             is PlanPass.PathMaskClearPass -> listOf(pass.target)
             is PlanPass.PathRenderPass -> buildList {
@@ -234,6 +243,13 @@ public class RenderGraph private constructor(
             is PlanPass.FilterPass -> pass.inputs() + pass.output
             is PlanPass.ResolvePass -> listOf(pass.source, pass.destination)
             is PlanPass.ReadbackPass -> listOf(pass.source, pass.staging)
+            is PlanPass.ClipMaskInitialize -> listOf(pass.output)
+            is PlanPass.ClipMaskProducer -> buildList {
+                add(pass.target)
+                pass.resolveTarget?.let(::add)
+                pass.depthStencil?.let(::add)
+            }
+            is PlanPass.ClipMaskFold -> listOf(pass.previous, pass.source, pass.output)
         }
 
         private fun validateColorPasses(
@@ -332,7 +348,10 @@ public class RenderGraph private constructor(
                         it is PlanPass.PathMaskClearPass ||
                         it is PlanPass.PathRenderPass ||
                         it is PlanPass.StencilProducer ||
-                        it is PlanPass.StencilCover
+                        it is PlanPass.StencilCover ||
+                        it is PlanPass.ClipMaskInitialize ||
+                        it is PlanPass.ClipMaskProducer ||
+                        it is PlanPass.ClipMaskFold
                 }
             ) {
                 require(PlanOperationCapability.RenderPass in capabilities.supportedOperations()) {
@@ -344,6 +363,188 @@ public class RenderGraph private constructor(
                     "Readback passes are unsupported"
                 }
             }
+        }
+
+        private fun validateClipMaskContracts(
+            passes: List<PlanPass>,
+            dependencies: List<PlanPassDependency>,
+            resources: List<PlanResource>,
+            resourcesById: Map<PlanResourceId, PlanResource>,
+            capabilities: PlanCapabilitySnapshot,
+            targetExtent: SizeI32,
+        ) {
+            val clipPasses = passes.filter {
+                it is PlanPass.ClipMaskInitialize || it is PlanPass.ClipMaskProducer || it is PlanPass.ClipMaskFold
+            }
+            require(clipPasses.isNotEmpty()) { "Clip-mask validation requires clip passes" }
+            val initialize = clipPasses.filterIsInstance<PlanPass.ClipMaskInitialize>()
+            require(initialize.size == 1) { "Clip-mask graphs require one initializer" }
+            val initializePass = initialize.single()
+            val initializeIndex = passes.indexOf(initializePass)
+            require(initializeIndex == 0 && initializePass.clearCoverageF32 == 1f) {
+                "Clip-mask graphs must begin by initializing coverage to one"
+            }
+            validateClipDomain(initializePass.copyDomainI32(), targetExtent)
+            val accumulators = resources.filter { it.role == PlanResourceRole.CoverageMaskAccumulator }
+            require(accumulators.size >= 1) { "Clip-mask graphs require an accumulator" }
+            fun coverage(id: PlanResourceId, role: PlanResourceRole, samples: Int): PlanResource {
+                val resource = requireNotNull(resourcesById[id])
+                require(resource.role == role && resource.kind == PlanResourceKind.Texture2D &&
+                    resource.format == PlanTextureFormat.CoverageMask(PlanCoverageMaskFormat.RGBA8_UNORM_LINEAR) &&
+                    resource.copyExtent() == targetExtent && resource.sampleCountI32 == samples &&
+                    PlanResourceUsage.RenderAttachment in resource.usages()) {
+                    "Clip-mask resource does not have the required linear coverage contract"
+                }
+                if (samples == 1) require(PlanResourceUsage.Sampled in resource.usages()) {
+                    "Single-sample clip masks must be sampleable"
+                }
+                return resource
+            }
+            coverage(initializePass.output, PlanResourceRole.CoverageMaskAccumulator, 1)
+
+            val dependencySet = dependencies.toSet()
+            var currentAccumulator = initializePass.output
+            var index = initializeIndex + 1
+            while (index < passes.size && passes[index] is PlanPass.ClipMaskProducer) {
+                val producer = passes[index] as PlanPass.ClipMaskProducer
+                val fold = passes.getOrNull(index + 1) as? PlanPass.ClipMaskFold
+                    ?: throw IllegalArgumentException("Each clip-mask producer requires an adjacent fold")
+                require(PlanPassDependency(producer.id, fold.id) in dependencySet) {
+                    "Clip-mask producer and fold require a direct dependency"
+                }
+                validateClipMaskProducer(producer, resourcesById, capabilities, targetExtent)
+                validateClipMaskFold(fold, targetExtent)
+                require(fold.previous == currentAccumulator && fold.source == producer.resolveTargetOrTarget()) {
+                    "Clip-mask folds must consume the current accumulator and preceding producer"
+                }
+                coverage(fold.previous, PlanResourceRole.CoverageMaskAccumulator, 1)
+                coverage(fold.source, PlanResourceRole.CoverageMaskScratch, 1)
+                coverage(fold.output, PlanResourceRole.CoverageMaskAccumulator, 1)
+                currentAccumulator = fold.output
+                index += 2
+            }
+            require(passes.drop(index).none {
+                it is PlanPass.ClipMaskInitialize || it is PlanPass.ClipMaskProducer || it is PlanPass.ClipMaskFold
+            }) { "Clip-mask passes must form one ordered initialization/producer/fold prefix" }
+
+            resources.filter { it.role in setOf(
+                PlanResourceRole.CoverageMaskAccumulator,
+                PlanResourceRole.CoverageMaskScratch,
+                PlanResourceRole.CoverageMaskMultisampleScratch,
+                PlanResourceRole.CoverageMaskDepthStencil,
+            ) }.forEach { resource ->
+                val lastUse = passes.indices.lastOrNull { resource.id in referencedResources(passes[it]) }
+                require(lastUse != null && resource.lastPassIndexExclusive == lastUse + 1) {
+                    "Clip-mask resource lifetimes must end at their final consumer"
+                }
+            }
+
+            val writers = mutableMapOf<PlanResourceId, PlanPassId>(initializePass.output to initializePass.id)
+            passes.forEach { pass ->
+                when (pass) {
+                    is PlanPass.ClipMaskFold -> writers[pass.output] = pass.id
+                    else -> Unit
+                }
+            }
+            passes.forEach { pass ->
+                if (pass !is PlanPass.RenderPass) return@forEach
+                pass.draws().filterIsInstance<ClippedPlanDraw>().forEach { draw ->
+                    val mask = draw.strategy.clipMaskResourceOrNull() ?: return@forEach
+                    require(mask == currentAccumulator) { "Clip consumers must sample the final accumulator" }
+                    val writer = requireNotNull(writers[mask]) { "Clip consumer mask has no producer" }
+                    require(pathExists(writer, pass.id, dependencies)) {
+                        "Clip consumers require a dependency from their mask producer"
+                    }
+                    if (draw.strategy is ClipPlanStrategy.InverseMask &&
+                        draw.strategy.geometryF32.interiorCoverageF32 == org.graphiks.math.geometry.InverseInteriorCoverageF32.Zero
+                    ) require(passes.none { it is PlanPass.ClipMaskProducer }) {
+                        "Zero inverse interiors use the initialized domain without a producer"
+                    }
+                }
+            }
+        }
+
+        private fun validateClipMaskProducer(
+            pass: PlanPass.ClipMaskProducer,
+            resourcesById: Map<PlanResourceId, PlanResource>,
+            capabilities: PlanCapabilitySnapshot,
+            targetExtent: SizeI32,
+        ) {
+            require(pass.sampleCountI32 == 1 || pass.sampleCountI32 == 4) {
+                "Clip-mask producers must be single-sample or AA4"
+            }
+            require(pass.copyGeometryF32() != ClipGeometryF32.Empty) {
+                "Zero inverse interiors must not allocate a clip-mask producer"
+            }
+            val target = requireNotNull(resourcesById[pass.target])
+            if (pass.sampleCountI32 == 1) {
+                require(pass.resolveTarget == null && target.role == PlanResourceRole.CoverageMaskScratch &&
+                    target.sampleCountI32 == 1) { "Hard clip producers require a single-sample scratch target" }
+                pass.depthStencil?.let { id ->
+                    validateClipMaskDepthStencil(requireNotNull(resourcesById[id]), 1, targetExtent)
+                }
+            } else {
+                require(target.role == PlanResourceRole.CoverageMaskMultisampleScratch && target.sampleCountI32 == 4) {
+                    "AA4 clip producers require a multisample scratch target"
+                }
+                val resolve = requireNotNull(pass.resolveTarget) { "AA4 clip producers require a resolve target" }
+                val resolved = requireNotNull(resourcesById[resolve])
+                require(resolved.role == PlanResourceRole.CoverageMaskScratch && resolved.sampleCountI32 == 1 &&
+                    capabilities.supportsResolve(target.format!!, 4, 1)) {
+                    "AA4 clip producers require supported linear coverage resolve"
+                }
+                val depth = requireNotNull(pass.depthStencil) { "AA4 clip producers require D24S8" }
+                validateClipMaskDepthStencil(requireNotNull(resourcesById[depth]), 4, targetExtent)
+            }
+        }
+
+        private fun validateClipMaskDepthStencil(resource: PlanResource, samples: Int, targetExtent: SizeI32) {
+            require(resource.role == PlanResourceRole.CoverageMaskDepthStencil &&
+                resource.format == PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8) &&
+                resource.copyExtent() == targetExtent && resource.sampleCountI32 == samples &&
+                PlanResourceUsage.DepthStencilAttachment in resource.usages()) {
+                "Clip-mask depth-stencil must be matching D24S8"
+            }
+        }
+
+        private fun validateClipMaskFold(pass: PlanPass.ClipMaskFold, targetExtent: SizeI32) {
+            require(pass.previous != pass.output) { "Clip mask fold cannot sample its output attachment" }
+            require(pass.source != pass.output) { "Clip mask producer cannot alias fold output" }
+            require(pass.previous != pass.source) { "Clip mask fold inputs must be distinct" }
+            validateClipDomain(pass.copyDomainI32(), targetExtent)
+        }
+
+        private fun validateClipDomain(domain: org.graphiks.math.geometry.RectI32, targetExtent: SizeI32) {
+            require(!domain.isEmpty && domain.left >= 0 && domain.top >= 0 &&
+                domain.right <= targetExtent.width && domain.bottom <= targetExtent.height) {
+                "Clip-mask domain must be a non-empty target-domain rectangle"
+            }
+        }
+
+        private fun PlanPass.ClipMaskProducer.resolveTargetOrTarget(): PlanResourceId = resolveTarget ?: target
+
+        private fun ClipPlanStrategy.clipMaskResourceOrNull(): PlanResourceId? = when (this) {
+            is ClipPlanStrategy.Mask -> resource
+            is ClipPlanStrategy.InverseMask -> resource
+            is ClipPlanStrategy.Scissor, is ClipPlanStrategy.Stencil -> null
+        }
+
+        private fun pathExists(
+            before: PlanPassId,
+            after: PlanPassId,
+            dependencies: List<PlanPassDependency>,
+        ): Boolean {
+            val outgoing = dependencies.groupBy({ it.before }, { it.after })
+            val pending = ArrayDeque<PlanPassId>()
+            val visited = mutableSetOf<PlanPassId>()
+            pending += before
+            while (pending.isNotEmpty()) {
+                val current = pending.removeFirst()
+                if (!visited.add(current)) continue
+                if (current == after) return true
+                outgoing[current].orEmpty().forEach { pending += it }
+            }
+            return false
         }
 
         private fun validateStencilAtomicContracts(

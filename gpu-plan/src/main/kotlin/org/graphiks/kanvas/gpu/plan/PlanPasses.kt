@@ -12,6 +12,8 @@ import org.graphiks.kanvas.render.ir.DrawOrigin
 import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.RectI32
+import org.graphiks.math.geometry.ClipGeometryF32
+import org.graphiks.math.geometry.InversePathGeometryF32
 
 public enum class CoveragePlan { FullOrScissor, AnalyticScalarAA, StencilAA4, BinaryMaskCover4 }
 public enum class SamplePlan { SingleSample, Multisample4 }
@@ -30,6 +32,24 @@ public enum class PlanPassRole {
     Filter,
     Resolve,
     Readback,
+    ClipMaskInitialize,
+    ClipMaskProducer,
+    ClipMaskFold,
+}
+public enum class ClipCombineOperation { Intersect, Difference }
+
+/** The clip realization selected for one consumer draw. */
+public sealed interface ClipPlanStrategy {
+    public class Scissor(domainI32: RectI32) : ClipPlanStrategy {
+        private val domainSnapshotI32: RectI32 = domainI32.copy()
+        public fun copyDomainI32(): RectI32 = domainSnapshotI32.copy()
+    }
+    public class Stencil(public val depthStencil: PlanResourceId) : ClipPlanStrategy
+    public class Mask(public val resource: PlanResourceId) : ClipPlanStrategy
+    public class InverseMask(
+        public val geometryF32: InversePathGeometryF32,
+        public val resource: PlanResourceId,
+    ) : ClipPlanStrategy
 }
 public enum class PathFillStrategy { DirectTriangle, StencilCover }
 public enum class PathRenderPhase {
@@ -58,6 +78,23 @@ public sealed interface PlanDraw {
     public val coverage: CoveragePlan
     public val sample: SamplePlan
     public val blend: BlendPlan
+}
+
+/** A visual draw whose coverage is constrained by a separately planned clip strategy. */
+public class ClippedPlanDraw private constructor(
+    public val source: PlanDraw,
+    public val strategy: ClipPlanStrategy,
+) : PlanDraw {
+    override public val commandIndex: Int get() = source.commandIndex
+    override public val color: ColorF32 get() = source.color
+    override public val coverage: CoveragePlan get() = source.coverage
+    override public val sample: SamplePlan get() = source.sample
+    override public val blend: BlendPlan get() = source.blend
+
+    public companion object {
+        public fun of(source: PlanDraw, strategy: ClipPlanStrategy): ClippedPlanDraw =
+            ClippedPlanDraw(source, strategy)
+    }
 }
 
 /** Common sealed contract for W4c fills and W4d stroke snapshots. */
@@ -406,6 +443,52 @@ public sealed interface PlanPass {
         public val store: AttachmentStorePlan = AttachmentStorePlan.Store
     }
 
+    /** Initializes the finite coverage domain to opaque coverage before ordered clip folds. */
+    public class ClipMaskInitialize(
+        override public val ordinal: Int,
+        public val output: PlanResourceId,
+        domainI32: RectI32,
+        public val clearCoverageF32: Float = 1f,
+        public val atomicGroup: PlanAtomicGroupId,
+    ) : PlanPass {
+        override public val role: PlanPassRole = PlanPassRole.ClipMaskInitialize
+        override public val id: PlanPassId = checkedPassId(role, ordinal)
+        private val domainSnapshotI32: RectI32 = domainI32.copy()
+        public fun copyDomainI32(): RectI32 = domainSnapshotI32.copy()
+    }
+
+    /** Rasterizes one finite clip element into its own scratch attachment. */
+    public class ClipMaskProducer(
+        override public val ordinal: Int,
+        public val target: PlanResourceId,
+        public val resolveTarget: PlanResourceId?,
+        public val depthStencil: PlanResourceId?,
+        public val sampleCountI32: Int,
+        geometryF32: ClipGeometryF32,
+        public val atomicGroup: PlanAtomicGroupId,
+    ) : PlanPass {
+        override public val role: PlanPassRole = PlanPassRole.ClipMaskProducer
+        override public val id: PlanPassId = checkedPassId(role, ordinal)
+        private val geometrySnapshotF32: ClipGeometryF32 = geometryF32.copyClipMaskGeometryF32()
+        public fun copyGeometryF32(): ClipGeometryF32 = geometrySnapshotF32.copyClipMaskGeometryF32()
+    }
+
+    /** Combines the previous accumulator and one scratch producer in insertion order. */
+    public class ClipMaskFold(
+        override public val ordinal: Int,
+        public val previous: PlanResourceId,
+        public val source: PlanResourceId,
+        public val output: PlanResourceId,
+        public val operation: ClipCombineOperation,
+        domainI32: RectI32,
+        public val atomicGroup: PlanAtomicGroupId,
+    ) : PlanPass {
+        override public val role: PlanPassRole = PlanPassRole.ClipMaskFold
+        override public val id: PlanPassId = checkedPassId(role, ordinal)
+        private val domainSnapshotI32: RectI32 = domainI32.copy()
+        public fun copyDomainI32(): RectI32 = domainSnapshotI32.copy()
+    }
+
     /** Typed W4d.2 path pass for multisample AA and hard-edge mask production/color cover. */
     public class PathRenderPass(
         override val ordinal: Int,
@@ -503,6 +586,13 @@ public data class PlanPassDependency(public val before: PlanPassId, public val a
 private fun checkedPassId(role: PlanPassRole, ordinal: Int): PlanPassId {
     require(ordinal >= 0) { "Pass ordinal must be non-negative" }
     return planPassId(role, ordinal)
+}
+
+private fun ClipGeometryF32.copyClipMaskGeometryF32(): ClipGeometryF32 = when (this) {
+    is ClipGeometryF32.Rect -> ClipGeometryF32.Rect(copyRectF32())
+    is ClipGeometryF32.RRect -> ClipGeometryF32.RRect(copyRRectF32())
+    is ClipGeometryF32.Path -> ClipGeometryF32.Path(copyPathGeometryF32())
+    ClipGeometryF32.Empty -> ClipGeometryF32.Empty
 }
 
 internal fun <T> immutableList(values: List<T>): List<T> = java.util.Collections.unmodifiableList(values.toList())
