@@ -3513,7 +3513,14 @@ internal class GPUFramePreflighter(
             }
         ) return refused("W4e render scopes require one sealed prepared frame authority.")
 
-        val msaa = renders.filter { render -> render.samplePlan == GPUSamplePlan.MultisampleFrame(4) }
+        // W4e has two independent AA4 attachment families: clip-mask producers and scene paths.
+        // Only a sealed scene path owns the typed scene continuation; requiring it on an AA4
+        // mask producer rejects an otherwise exact producer/fold/scene sequence before it can
+        // allocate its declared attachments.
+        val msaa = renders.filter { render ->
+            render.samplePlan == GPUSamplePlan.MultisampleFrame(4) &&
+                render.drawPackets.singleOrNull()?.w4ePreparedPath != null
+        }
         if (renders.filter { render -> render.samplePlan == GPUSamplePlan.SingleSampleFrame }
                 .any { render -> render.w4eSceneContinuation != null || render.sampleContinuation != null }
         ) return refused("W4e single-sample scopes cannot carry scene MSAA authority.")

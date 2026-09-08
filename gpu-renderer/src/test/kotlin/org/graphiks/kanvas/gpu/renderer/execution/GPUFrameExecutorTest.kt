@@ -8,6 +8,7 @@ import io.ygdrasil.webgpu.GPUBindGroup
 import io.ygdrasil.webgpu.GPURenderPipeline
 import io.ygdrasil.webgpu.GPUTexture
 import io.ygdrasil.webgpu.GPUTextureFormat
+import io.ygdrasil.webgpu.GPUTextureUsage
 import io.ygdrasil.webgpu.GPUTextureView
 import java.lang.reflect.Proxy
 import java.util.concurrent.CountDownLatch
@@ -21,11 +22,27 @@ import kotlin.test.assertIs
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.test.assertFailsWith
+import org.graphiks.kanvas.gpu.plan.GpuPlanSelection
+import org.graphiks.kanvas.gpu.plan.PlanBudget
+import org.graphiks.kanvas.gpu.plan.PlanBufferAllocationPolicy
+import org.graphiks.kanvas.gpu.plan.PlanCapabilitySnapshot
+import org.graphiks.kanvas.gpu.plan.PlanDepthStencilFormat
+import org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat
+import org.graphiks.kanvas.gpu.plan.PlanOperationCapability
+import org.graphiks.kanvas.gpu.plan.PlanResourceUsage
+import org.graphiks.kanvas.gpu.plan.PlanTextureFormat
+import org.graphiks.kanvas.gpu.plan.PlanTextureResolveSupport
+import org.graphiks.kanvas.gpu.plan.PlanTextureSampleSupport
+import org.graphiks.kanvas.gpu.plan.RenderGraph
+import org.graphiks.kanvas.gpu.plan.W4eClipPlanCompiler
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureFormatSampleSupport
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureSampleCountSupport
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilCompare
@@ -60,6 +77,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUDestinationSnapshotConsumer
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameCapabilitySeal
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
+import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlanner
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
@@ -103,6 +121,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabSlot
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTargetPreparationContext
 import org.graphiks.kanvas.gpu.renderer.resources.GPUCommandOperandMaterializationRequest
+import org.graphiks.kanvas.gpu.renderer.resources.GPUConcreteResourceProvider
 import org.graphiks.kanvas.gpu.renderer.resources.GPUSceneTarget
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralEventKind
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralCounter
@@ -111,6 +130,35 @@ import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralPhase
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity
+import org.graphiks.kanvas.gpu.renderer.planning.GpuPlanLoweringRequest
+import org.graphiks.kanvas.gpu.renderer.planning.GpuPlanLoweringResult
+import org.graphiks.kanvas.gpu.renderer.planning.GpuPlanTaskListLowerer
+import org.graphiks.kanvas.color.ColorSpace
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.FillRule
+import org.graphiks.math.geometry.PathBuilder
+import org.graphiks.math.matrix.Matrix3x3F32
+import org.graphiks.kanvas.render.ir.BlendMode
+import org.graphiks.kanvas.render.ir.BlendNode
+import org.graphiks.kanvas.render.ir.ClipEntry
+import org.graphiks.kanvas.render.ir.ClipOperation
+import org.graphiks.kanvas.render.ir.ClipStackNode
+import org.graphiks.kanvas.render.ir.ClipTransformSnapshot
+import org.graphiks.kanvas.render.ir.CoverageRequest
+import org.graphiks.kanvas.render.ir.DrawNode
+import org.graphiks.kanvas.render.ir.DrawOrigin
+import org.graphiks.kanvas.render.ir.EffectStack
+import org.graphiks.kanvas.render.ir.GeometryNode
+import org.graphiks.kanvas.render.ir.MaterialNode
+import org.graphiks.kanvas.render.ir.PaintNode
+import org.graphiks.kanvas.render.ir.PaintStyleNode
+import org.graphiks.kanvas.render.ir.RenderPlanResult
+import org.graphiks.kanvas.render.ir.RenderTargetDescriptor
+import org.graphiks.kanvas.render.ir.SceneCommand
+import org.graphiks.kanvas.render.ir.SceneExtent
+import org.graphiks.kanvas.render.ir.SceneSnapshot
+import org.graphiks.kanvas.render.ir.StrokeCapNode
+import org.graphiks.kanvas.render.ir.StrokeJoinNode
 
 class GPUFrameExecutorTest {
     @Test
@@ -1579,6 +1627,534 @@ class GPUFrameExecutorTest {
         assertEquals(GPUFrameStructuralOutcome.Succeeded, result.outcome)
         assertEquals(listOf("ticket.7:Success"), retention.completed)
         assertEquals(1, result.telemetry.events.count { it.kind == GPUFrameStructuralEventKind.CompletionSucceeded })
+    }
+
+    @Test
+    fun `sealed W4e encoder failure rolls back the native payload and leaves no submitted frame`() {
+        val fixture = w4eExecutionFixture()
+        val events = mutableListOf<String>()
+        val handle = GPUFrameExecutor(
+            sceneTarget = fixture.sceneTarget,
+            backend = RecordingEncodingBackend(
+                events,
+                failScope = fixture.prepared.encoderPlan.scopes.first().scopeLabel.removePrefix("scope."),
+                requireNativeOperands = true,
+                expectedNativeOperands = fixture.payload.scopeOperands,
+                canonicalResolveView = fixture.canonicalResolveView,
+            ),
+            completion = fixture.completion,
+            retention = RecordingRetention(events),
+        ).execute(fixture.prepared)
+
+        val immediate = assertIs<GPUFrameImmediateState.FailedBeforeSubmit>(handle.immediateState)
+        assertEquals("failed.frame-execution.encode", immediate.diagnostic.code.value)
+        assertEquals(GPUFrameStructuralOutcome.Failed, handle.completion.toCompletableFuture().get(2, TimeUnit.SECONDS).outcome)
+        assertFalse(events.any { it.startsWith("queue:submit") })
+        assertEquals(0, fixture.adapter.activePreparedNativeFramePayloadCount)
+        assertEquals(0, fixture.resources.pendingPhysicalReservationCount)
+        assertTrue(fixture.completion.abandonedTicketIds.isNotEmpty())
+    }
+
+    @Test
+    fun `sealed W4e completion failure quarantines after submit and nominal readback still completes`() {
+        val refused = w4eExecutionFixture(armRefused = true)
+        val refusedEvents = mutableListOf<String>()
+        val refusedRetention = RecordingRetention(refusedEvents)
+        val refusedHandle = GPUFrameExecutor(
+            sceneTarget = refused.sceneTarget,
+            backend = RecordingEncodingBackend(
+                refusedEvents,
+                requireNativeOperands = true,
+                expectedNativeOperands = refused.payload.scopeOperands,
+                canonicalResolveView = refused.canonicalResolveView,
+            ),
+            completion = refused.completion,
+            retention = refusedRetention,
+            readback = RecordingReadbackAccess(refusedEvents),
+        ).execute(refused.prepared)
+
+        val refusedResult = refusedHandle.completion.toCompletableFuture().get(2, TimeUnit.SECONDS)
+        assertIs<GPUFrameImmediateState.FailedAfterSubmit>(refusedHandle.immediateState)
+        assertEquals("failed.frame-execution.completion-arm", refusedResult.diagnostic?.code?.value)
+        assertEquals(1, refusedRetention.quarantinedRegistrations.size)
+        assertEquals(0, refused.adapter.activePreparedNativeFramePayloadCount)
+        assertEquals(1, refused.adapter.quarantinedPreparedNativeFramePayloadCount)
+
+        val nominal = w4eExecutionFixture()
+        val nominalEvents = mutableListOf<String>()
+        val readback = RecordingReadbackAccess(nominalEvents)
+        val nominalRetention = RecordingRetention(nominalEvents)
+        val nominalHandle = GPUFrameExecutor(
+            sceneTarget = nominal.sceneTarget,
+            backend = RecordingEncodingBackend(
+                nominalEvents,
+                requireNativeOperands = true,
+                expectedNativeOperands = nominal.payload.scopeOperands,
+                canonicalResolveView = nominal.canonicalResolveView,
+            ),
+            completion = nominal.completion,
+            retention = nominalRetention,
+            readback = readback,
+        ).execute(nominal.prepared)
+
+        assertIs<GPUFrameImmediateState.Submitted>(nominalHandle.immediateState)
+        nominal.completion.complete(GPUQueueCompletionOutcome.Success, nominal.prepared.completionTicket.ticketId)
+        val nominalResult = nominalHandle.completion.toCompletableFuture().get(2, TimeUnit.SECONDS)
+        assertEquals(GPUFrameStructuralOutcome.Succeeded, nominalResult.outcome)
+        assertEquals(16 * 16 * 4, requireNotNull(nominalResult.readback).bytes.size)
+        assertTrue(nominalRetention.completed.any { it.endsWith(":Success") })
+        assertEquals(0, nominal.adapter.activePreparedNativeFramePayloadCount)
+        assertEquals(0, nominal.adapter.outputOwnedPreparedNativeFramePayloadCount)
+    }
+
+    private data class W4eExecutionFixture(
+        val prepared: PreparedGPUFrame,
+        val payload: GPUPreparedNativeFramePayload,
+        val sceneTarget: GPUSceneTarget,
+        val canonicalResolveView: GPUTextureView,
+        val adapter: GPURuntimeResourceAdapter,
+        val resources: GPUConcreteResourceProvider,
+        val completion: W4eCompletion,
+    )
+
+    private fun w4eExecutionFixture(armRefused: Boolean = false): W4eExecutionFixture {
+        val framePlan = w4eFramePlan()
+        val capabilities = w4eCapabilities()
+        val adapter = GPURuntimeResourceAdapter()
+        val resources = GPUConcreteResourceProvider(leaseFactory = adapter)
+        val completion = W4eCompletion(armRefused = armRefused)
+        val prepared = assertIs<GPUFramePreflightResult.Prepared>(
+            GPUFramePreflighter(
+                context = GPUFramePreflightContext(
+                    targetId = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+                        .last().target.value,
+                    deviceGeneration = framePlan.capabilitySeal.deviceGeneration,
+                    targetGeneration = 1,
+                    resourceGenerations = framePlan.steps
+                        .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+                        .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+                        .associate { it.resource to 1L },
+                ),
+                capabilities = capabilities,
+                resourceProvider = resources,
+                completionProvider = completion,
+                surfaceProvider = W4eNoSurfaceProvider,
+            ).preflight(framePlan),
+        ).frame
+        val (payload, resolveView) = w4eNativePayload(prepared)
+        val ownership = assertIs<GPUPreparedNativeFrameRegistration.Registered>(
+            adapter.registerReadyPayload(payload),
+        ).ownership
+        check(prepared.rollback.adoptNativePayload(ownership))
+        return W4eExecutionFixture(
+            prepared = prepared,
+            payload = payload,
+            sceneTarget = GPUSceneTarget(
+                targetId = prepared.encoderPlan.contextIdentity,
+                resolvedTexture = GPUTextureResourceRef("prepared.w4e.scene"),
+                retainedMsaaAttachment = null,
+                width = 16,
+                height = 16,
+                format = GPUColorFormat.RGBA8UnormSrgb,
+                colorInterpretation = GPUColorInterpretation.LinearPremul,
+                usages = setOf(GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceUsage.CopySource),
+                sampleCount = 1,
+                deviceGeneration = prepared.generationSeal.deviceGeneration,
+                targetGeneration = prepared.generationSeal.targetGeneration,
+            ),
+            canonicalResolveView = resolveView,
+            adapter = adapter,
+            resources = resources,
+            completion = completion,
+        )
+    }
+
+    private fun w4eNativePayload(frame: PreparedGPUFrame): Pair<GPUPreparedNativeFramePayload, GPUTextureView> {
+        val sceneMsaaView = GPUFrameCoreTestFixture.fakeNativeHandle<GPUTextureView>("w4e.scene.msaa")
+        val canonicalResolveView = GPUFrameCoreTestFixture.fakeNativeHandle<GPUTextureView>("w4e.scene.resolve")
+        var seenSceneScope = false
+        val operands = frame.encoderPlan.scopes.map { scope ->
+            when (scope.operationKind) {
+                GPUEncoderOperationKind.Render -> {
+                    val render = frame.semanticPlan.steps[scope.sourceStepIndex] as GPUFrameStep.RenderPassStep
+                    val keys = scope.nativeOperandKeys
+                    val colorKey = keys.firstOrNull { key ->
+                        key.role in setOf(
+                            GPUPreparedNativeOperandRole.RenderColorTarget,
+                            GPUPreparedNativeOperandRole.RenderMsaaColorTarget,
+                        )
+                    } ?: error("W4e render scope has no sealed color attachment")
+                    val resolveKey = keys.firstOrNull { key ->
+                        key.role == GPUPreparedNativeOperandRole.RenderResolveTarget
+                    }
+                    val depthKey = keys.firstOrNull { key ->
+                        key.role == GPUPreparedNativeOperandRole.RenderDepthStencilTarget
+                    }
+                    val sceneScope = render.w4eSceneContinuation != null
+                    fun viewFor(key: GPUPreparedNativeOperandKey): GPUPreparedNativeTextureViewOperand =
+                        GPUPreparedNativeTextureViewOperand(
+                            when {
+                                sceneScope && key === colorKey -> sceneMsaaView
+                                sceneScope && key === resolveKey -> canonicalResolveView
+                                else -> GPUFrameCoreTestFixture.fakeNativeHandle("w4e.${scope.sourceStepIndex}.${key.role}")
+                            },
+                            frame.generationSeal.deviceGeneration,
+                            key.ownership,
+                        )
+                    val color = viewFor(colorKey)
+                    val resolve = resolveKey?.let(::viewFor)
+                    val depth = depthKey?.let(::viewFor)
+                    val attachmentCount = listOfNotNull(colorKey, resolveKey, depthKey).size
+                    val hasBindGroup = keys.any { key ->
+                        key.kind == GPUPreparedNativeOperandKind.BindGroup
+                    }
+                    val commands = keys.drop(attachmentCount).map { key ->
+                        when (key.kind) {
+                            GPUPreparedNativeOperandKind.RenderPipeline ->
+                                GPUPreparedNativeRenderCommand.SetPipeline(
+                                    if (hasBindGroup) {
+                                        GPUPreparedNativeRenderPipelineOperand(
+                                            GPUFrameCoreTestFixture.fakeNativeHandle<GPURenderPipeline>(
+                                                "w4e.${scope.sourceStepIndex}.pipeline",
+                                            ),
+                                            frame.generationSeal.deviceGeneration,
+                                            key.ownership,
+                                        )
+                                    } else {
+                                        GPUPreparedNativeRenderPipelineOperand.noBindings(
+                                            GPUFrameCoreTestFixture.fakeNativeHandle<GPURenderPipeline>(
+                                                "w4e.${scope.sourceStepIndex}.pipeline",
+                                            ),
+                                            frame.generationSeal.deviceGeneration,
+                                            key.ownership,
+                                        )
+                                    },
+                                )
+                            GPUPreparedNativeOperandKind.BindGroup ->
+                                GPUPreparedNativeRenderCommand.SetBindGroup(
+                                    0,
+                                    GPUPreparedNativeBindGroupOperand(
+                                        GPUFrameCoreTestFixture.fakeNativeHandle<GPUBindGroup>(
+                                            "w4e.${scope.sourceStepIndex}.bind",
+                                        ),
+                                        frame.generationSeal.deviceGeneration,
+                                        key.ownership,
+                                    ),
+                                )
+                            GPUPreparedNativeOperandKind.Buffer -> {
+                                val buffer = GPUPreparedNativeBufferOperand(
+                                    GPUFrameCoreTestFixture.fakeNativeHandle<GPUBuffer>(
+                                        "w4e.${scope.sourceStepIndex}.${key.role}",
+                                    ),
+                                    frame.generationSeal.deviceGeneration,
+                                    key.ownership,
+                                    byteCapacity = 4,
+                                )
+                                when (key.role) {
+                                    GPUPreparedNativeOperandRole.RenderVertexBuffer ->
+                                        GPUPreparedNativeRenderCommand.SetVertexBuffer(0, buffer, 0, 4, 4)
+                                    GPUPreparedNativeOperandRole.RenderIndexBuffer ->
+                                        GPUPreparedNativeRenderCommand.SetIndexBuffer(
+                                            buffer,
+                                            GPUPreparedNativeIndexFormat.Uint32,
+                                            0,
+                                            4,
+                                        )
+                                    else -> error("Unexpected W4e render buffer role ${key.role}")
+                                }
+                            }
+                            else -> error("Unexpected W4e render operand ${key.kind}")
+                        }
+                    } + GPUPreparedNativeRenderCommand.Draw(
+                        GPUPreparedNativeDrawCall.Draw(vertexCount = 3),
+                    )
+                    val load = if (sceneScope && !seenSceneScope) {
+                        GPUPreparedNativeLoadOperation.Clear
+                    } else {
+                        GPUPreparedNativeLoadOperation.Load
+                    }
+                    if (sceneScope) seenSceneScope = true
+                    GPUPreparedNativeScopeOperand.Render(
+                        scope.sourceStepIndex,
+                        GPUPreparedNativeRenderPassConfig(
+                            colorTarget = color,
+                            resolveTarget = resolve,
+                            depthStencilTarget = depth,
+                            loadOperation = load,
+                            storeOperation = GPUPreparedNativeStoreOperation.Store,
+                            clearColor = if (load == GPUPreparedNativeLoadOperation.Clear) {
+                                GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)
+                            } else {
+                                null
+                            },
+                        ),
+                        commands,
+                    )
+                }
+                GPUEncoderOperationKind.Readback -> {
+                    val output = frame.resources.outputOwnedReadbacks.single()
+                    val keys = scope.nativeOperandKeys
+                    require(keys.size == 2)
+                    GPUPreparedNativeScopeOperand.Readback(
+                        scope.sourceStepIndex,
+                        GPUPreparedNativeTextureOperand(
+                            GPUFrameCoreTestFixture.fakeNativeHandle<GPUTexture>("w4e.readback.source"),
+                            frame.generationSeal.deviceGeneration,
+                            keys[0].ownership,
+                        ),
+                        GPUPreparedNativeBufferOperand(
+                            GPUFrameCoreTestFixture.fakeNativeHandle<GPUBuffer>("w4e.readback.destination"),
+                            frame.generationSeal.deviceGeneration,
+                            keys[1].ownership,
+                            output.layout.totalBufferBytes,
+                        ),
+                        GPUPreparedNativeReadbackLayout(
+                            output.request.sourceBounds.left,
+                            output.request.sourceBounds.top,
+                            output.layout.width,
+                            output.layout.height,
+                            output.layout.paddedBytesPerRow,
+                            output.layout.rowsPerImage,
+                            output.layout.bufferOffset,
+                            output.layout.totalBufferBytes,
+                            GPUTextureFormat.RGBA8Unorm,
+                        ),
+                    )
+                }
+                else -> error("W4e execution fixture has unexpected ${scope.operationKind} scope")
+            }
+        }
+        return GPUPreparedNativeFramePayload(
+            identity = GPUPreparedNativeFrameIdentity(
+                frame.semanticPlan.frameId,
+                frame.encoderPlan.contextIdentity,
+                frame.encoderPlan.planId,
+                frame.generationSeal.deviceGeneration,
+                frame.generationSeal.targetGeneration,
+                frame.encoderPlan.scopes.map { scope ->
+                    GPUPreparedNativeScopeKey(
+                        scope.sourceStepIndex,
+                        scope.operationKind,
+                        scope.resourceGenerationLabels,
+                        scope.nativeOperandKeys,
+                    )
+                },
+            ),
+            scopeOperands = operands,
+            scopeOperandKeys = frame.encoderPlan.scopes.map { it.nativeOperandKeys },
+        ) to canonicalResolveView
+    }
+
+    private fun w4eFramePlan(): GPUFramePlan {
+        val capabilities = w4eCapabilities()
+        val color = ColorARGB.fromPackedUInt(0xC0FF0000u)
+        val scene = SceneSnapshot.of(
+            SceneExtent(16, 16),
+            ColorSpace.SRGB,
+            listOf(
+                SceneCommand.Draw(
+                    DrawNode(
+                        geometry = GeometryNode.Path(
+                            PathBuilder(FillRule.WINDING)
+                                .moveTo(2f, 2f).lineTo(12f, 2f).lineTo(2f, 12f).close().build(),
+                        ),
+                        material = MaterialNode.Solid(color),
+                        coverage = CoverageRequest.ANTIALIASED,
+                        clip = ClipStackNode.Operations.of(
+                            listOf(
+                                ClipEntry(
+                                    geometry = GeometryNode.Path(
+                                        PathBuilder(FillRule.WINDING)
+                                            .moveTo(3f, 3f).lineTo(13f, 3f).lineTo(3f, 13f).close().build(),
+                                    ),
+                                    operation = ClipOperation.INTERSECT,
+                                    antiAlias = true,
+                                    transform = ClipTransformSnapshot.Known.of(Matrix3x3F32.rotation(0.1f)),
+                                ),
+                            ),
+                        ),
+                        blend = BlendNode.SrcOver,
+                        effects = EffectStack.Empty,
+                        transform = Matrix3x3F32.rotation(0.25f),
+                        origin = DrawOrigin.PATH,
+                        paint = PaintNode(
+                            color,
+                            null,
+                            BlendMode.SRC_OVER,
+                            null,
+                            null,
+                            null,
+                            null,
+                            null,
+                            PaintStyleNode.FILL,
+                            0f,
+                            StrokeCapNode.BUTT,
+                            StrokeJoinNode.MITER,
+                            4f,
+                            true,
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val compiler = W4eClipPlanCompiler()
+        val candidate = assertIs<GpuPlanSelection.Candidate>(
+            compiler.select(scene, RenderTargetDescriptor(scene.extent, scene.colorSpace)),
+        ).candidate
+        val graph = assertIs<RenderPlanResult.Ready<RenderGraph>>(
+            compiler.plan(candidate, w4ePlanCapabilities(), PlanBudget(1L shl 20)),
+        ).plan
+        val taskList = assertIs<GpuPlanLoweringResult.Lowered>(
+            GpuPlanTaskListLowerer().lower(
+                GpuPlanLoweringRequest(
+                    graph = graph,
+                    capabilities = capabilities,
+                    deviceGeneration = GPUDeviceGenerationID(7),
+                    currentBudget = graph.budget,
+                    frameId = GPUFrameID(7_004),
+                    recordingId = GPURecordingID("w4e-executor"),
+                ),
+            ),
+        ).taskList
+        return GPUFramePlanner.plan(taskList).also { frame ->
+            check(!frame.atomicallyRefused) { frame.dumpLines().joinToString("\n") }
+        }
+    }
+
+    private fun w4eCapabilities(): GPUCapabilities = GPUCapabilities(
+        implementation = GPUImplementationIdentity("GPU", "w4e", "executor", "device"),
+        facts = emptyList(),
+        snapshotId = "w4e-executor",
+        limits = GPULimits(
+            maxTextureDimension2D = 2048,
+            copyBytesPerRowAlignment = 256,
+            minUniformBufferOffsetAlignment = 256,
+            maxBufferSize = 1L shl 20,
+            maxDynamicUniformBuffersPerPipelineLayout = 1,
+        ),
+        supportedTextureFormats = setOf(
+            GPUTextureFormat.RGBA8UnormSrgb,
+            GPUTextureFormat.RGBA8Unorm,
+            GPUTextureFormat.Depth24PlusStencil8,
+        ),
+        supportedTextureUsage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding or GPUTextureUsage.CopySrc,
+        textureFormatSampleSupport = GPUTextureFormatSampleSupport(
+            mapOf(
+                GPUTextureFormat.RGBA8UnormSrgb to GPUTextureSampleCountSupport(setOf(1, 4), setOf(4)),
+                GPUTextureFormat.RGBA8Unorm to GPUTextureSampleCountSupport(setOf(1, 4), setOf(4)),
+                GPUTextureFormat.Depth24PlusStencil8 to GPUTextureSampleCountSupport(setOf(1, 4)),
+            ),
+        ),
+        rendererFeatures = setOf(
+            GPURendererFeature.RenderPass,
+            GPURendererFeature.CopyUpload,
+            GPURendererFeature.UniformBuffer,
+            GPURendererFeature.Readback,
+        ),
+    )
+
+    private fun w4ePlanCapabilities(): PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(
+        deviceGeneration = 7,
+        maxTextureDimension2D = 2048,
+        maxBufferSizeBytes = 1L shl 20,
+        copyBytesPerRowAlignment = 256,
+        supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+        minUniformBufferOffsetAlignment = 256,
+        maxDynamicUniformBuffersPerPipelineLayout = 1,
+        supportedOperations = PlanOperationCapability.entries.toSet(),
+        bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384L, 4_096L, 4_096L),
+        supportedDepthStencilFormats = setOf(PlanDepthStencilFormat.Depth24PlusStencil8),
+        supportedTextureSampleSupports = setOf(
+            PlanTextureSampleSupport.of(
+                PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+                1,
+                setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource),
+            ),
+            PlanTextureSampleSupport.of(
+                PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+                4,
+                setOf(PlanResourceUsage.RenderAttachment),
+            ),
+            PlanTextureSampleSupport.of(
+                PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8),
+                1,
+                setOf(PlanResourceUsage.DepthStencilAttachment),
+            ),
+            PlanTextureSampleSupport.of(
+                PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8),
+                4,
+                setOf(PlanResourceUsage.DepthStencilAttachment),
+            ),
+            PlanTextureSampleSupport.of(
+                PlanTextureFormat.CoverageMask,
+                1,
+                setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled),
+            ),
+            PlanTextureSampleSupport.of(
+                PlanTextureFormat.CoverageMask,
+                4,
+                setOf(PlanResourceUsage.RenderAttachment),
+            ),
+        ),
+        supportedTextureResolveSupports = setOf(
+            PlanTextureResolveSupport.of(
+                PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+                4,
+                1,
+            ),
+            PlanTextureResolveSupport.of(PlanTextureFormat.CoverageMask, 4, 1),
+        ),
+    )
+
+    private class W4eCompletion(
+        private val armRefused: Boolean = false,
+    ) : GPUQueueCompletionAccess {
+        private var sink: GPUQueueCompletionSink? = null
+        val abandonedTicketIds = mutableListOf<GPUQueueCompletionTicketID>()
+
+        override fun reserveTicket(request: GPUQueueCompletionTicketRequest): GPUQueueCompletionTicketReservation =
+            GPUQueueCompletionTicketReservation.Reserved(
+                GPUQueueCompletionTicket(
+                    GPUQueueCompletionTicketID("ticket.w4e.${request.frameId.value}"),
+                    request.frameId,
+                    request.deviceGeneration,
+                ),
+            )
+
+        override fun abandonReservedTicket(ticket: GPUQueueCompletionTicket): GPUQueueCompletionTicketAbandonResult {
+            abandonedTicketIds += ticket.ticketId
+            return GPUQueueCompletionTicketAbandonResult.Abandoned(ticket.ticketId)
+        }
+
+        override fun armAfterSubmit(
+            ticket: GPUQueueCompletionTicket,
+            sink: GPUQueueCompletionSink,
+        ): GPUQueueCompletionArmResult {
+            this.sink = sink
+            return if (armRefused) {
+                GPUQueueCompletionArmResult.Refused(ticket.ticketId, GPUQueueCompletionFailureKind.CallbackFailure)
+            } else {
+                GPUQueueCompletionArmResult.Armed(ticket.ticketId)
+            }
+        }
+
+        override suspend fun awaitCompletion(ticket: GPUQueueCompletionTicket): GPUQueueCompletionDelivery =
+            error("W4e executor fixture delivers completion through the public sink")
+
+        override fun cancel(ticket: GPUQueueCompletionTicket): GPUQueueCompletionDelivery =
+            GPUQueueCompletionDelivery.Unarmed(ticket.ticketId)
+
+        fun complete(outcome: GPUQueueCompletionOutcome, ticketId: GPUQueueCompletionTicketID) {
+            checkNotNull(sink).accept(GPUQueueCompletionDelivery.Accepted(ticketId, outcome))
+        }
+    }
+
+    private object W4eNoSurfaceProvider : GPUSurfaceOutputProvider {
+        override fun acquire(request: GPUSurfaceAcquisitionRequest): GPUSurfaceAcquisitionResult =
+            GPUSurfaceAcquisitionResult.Unavailable(GPUSurfaceAcquisitionStatus.DependencyUnavailable)
+
+        override fun release(output: GPUAcquiredSurfaceOutput): GPUSurfaceReleaseResult =
+            GPUSurfaceReleaseResult.Released
     }
 
     private class RecordingEncodingBackend(
