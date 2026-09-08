@@ -98,14 +98,14 @@ public fun preparePathStrokeCenterlinesF64(
 }
 
 /** Internal stage overload used by later stroke preparation stages sharing one ledger. */
-internal fun preparePathStrokeCenterlinesF64(
+public fun preparePathStrokeCenterlinesF64(
     inputF64: PathFillInputF64,
     dashF64: PathStrokeDashF64?,
     policyF64: PathStrokePolicyF64,
     ledgerI64: PathStrokeWorkLedgerI64,
 ): PathStrokeCenterlineF64? = PathStrokeDashPreparerF64(inputF64, dashF64, policyF64, ledgerI64).prepare()
 
-internal class PathStrokeInvalidInputAbort : RuntimeException()
+public class PathStrokeInvalidInputAbort : RuntimeException()
 
 private data class SourceStrokeContourF64(
     val primitivesF64: List<PathStrokePrimitiveF64>,

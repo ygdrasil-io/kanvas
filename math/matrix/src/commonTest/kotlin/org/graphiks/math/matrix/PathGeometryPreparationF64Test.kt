@@ -76,6 +76,21 @@ class PathGeometryPreparationF64Test {
     }
 
     @Test
+    fun `transformed inverse hairline excludes a device pixel outline under affine and perspective`() {
+        val path = PathBuilder(FillRule.INVERSE_WINDING)
+            .moveTo(0f, 0f).lineTo(8f, 0f).lineTo(0f, 6f).close().build()
+        assertIs<InversePathPreparationResult.ResourceLimitExceeded>(Matrix3x3F64(kxF64 = 0.25)
+            .prepareTransformedInversePathGeometryF32(
+                path, hairlineStyleF64(), InversePathDrawMode.StrokeAndFill, RectI32(-4, -4, 16, 12), PathStrokePolicyF64(),
+            ))
+
+        assertIs<InversePathPreparationResult.ResourceLimitExceeded>(Matrix3x3F64(persp0F64 = 0.025)
+            .prepareTransformedInversePathGeometryF32(
+                path, hairlineStyleF64(), InversePathDrawMode.StrokeAndFill, RectI32(-4, -4, 16, 12), PathStrokePolicyF64(),
+            ))
+    }
+
+    @Test
     fun `finite strokes prepare through rotation skew and bounded perspective`() {
         val path = PathBuilder().moveTo(0f, 0f).lineTo(10f, 0f).build()
         val transforms = listOf(

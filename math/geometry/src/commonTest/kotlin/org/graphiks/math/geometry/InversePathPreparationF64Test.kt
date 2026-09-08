@@ -82,6 +82,56 @@ class InversePathPreparationF64Test {
         assertEquals(RectI32(0, 0, 8, 8), interiorF32.copyConservativeScissorI32())
     }
 
+    @Test
+    fun `nonempty path without finite interior and an empty domain still publishes zero coverage`() {
+        val domainI32 = RectI32(4, 8, 4, 12)
+        val result = assertIs<InversePathPreparationResult.Ready>(
+            prepareInversePathGeometryF32(
+                PathFillInputF64.of(
+                    FillRule.INVERSE_WINDING,
+                    listOf(
+                        PathFillSegmentF64.MoveTo(Point2F64(0.0, 0.0)),
+                        PathFillSegmentF64.LineTo(Point2F64(3.0, 0.0)),
+                    ),
+                ),
+                null, null, InversePathDrawMode.Fill, domainI32, PathStrokePolicyF64(),
+            ),
+        )
+        domainI32.left = -100
+
+        assertIs<InverseInteriorCoverageF32.Zero>(result.geometryF32.interiorCoverageF32)
+        assertEquals(RectI32(4, 8, 4, 12), result.geometryF32.copyDomainI32())
+    }
+
+    @Test
+    fun `inverse preparation rejects an already exhausted frame even when the path is empty`() {
+        val result = prepareInversePathGeometryF32(
+            PathFillInputF64.of(FillRule.INVERSE_WINDING, emptyList()),
+            null, null, InversePathDrawMode.Fill, RectI32(0, 0, 4, 4),
+            PathStrokePolicyF64(limitsI64 = PathStrokeLimitsI64(maxSnapshotByteCountPerFrameI64 = 8L)),
+            frameWorkUsageBeforeI64 = PathStrokeWorkUsageI64(snapshotByteCountI64 = 9L),
+        )
+
+        assertEquals(
+            PathStrokeResourceLimitReason.SnapshotByteLimit,
+            assertIs<InversePathPreparationResult.ResourceLimitExceeded>(result).reason,
+        )
+    }
+
+    @Test
+    fun `inverse boolean conversion rejects finite F64 values outside F32 instead of throwing`() {
+        val result = prepareInversePathGeometryF32(
+            rectangleInputF64(0.0, 0.0, Double.MAX_VALUE, 1.0),
+            rectangleInputF64(0.0, 0.0, 1.0, 1.0),
+            finiteStyleF64(1.0), InversePathDrawMode.StrokeAndFill, RectI32(0, 0, 4, 4), PathStrokePolicyF64(),
+        )
+
+        assertEquals(
+            PathStrokeInvalidSceneReason.NonFiniteInput,
+            assertIs<InversePathPreparationResult.InvalidScene>(result).reason,
+        )
+    }
+
     private fun triangleInputF64(fillRule: FillRule): PathFillInputF64 = PathFillInputF64.of(
         fillRule,
         listOf(

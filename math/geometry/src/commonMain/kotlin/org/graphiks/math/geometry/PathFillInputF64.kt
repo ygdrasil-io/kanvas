@@ -168,9 +168,19 @@ public class PathFillInputF64 private constructor(
     public companion object {
         /** Reconstructs every F32 payload as an exact F64 value. */
         public fun fromPathF32(path: PathF32): PathFillInputF64 {
+            return fromPathF32(path) { }
+        }
+
+        /** Reconstructs F32 commands only after the caller has admitted each retained snapshot. */
+        public fun fromPathF32(
+            path: PathF32,
+            beforeMaterializationI64: (PathStrokeWorkUsageI64) -> Unit,
+        ): PathFillInputF64 {
+            beforeMaterializationI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
             val values = mutableListOf<PathFillSegmentF64>()
             var hasCurrentContour = false
             path.forEach { segment ->
+                beforeMaterializationI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
                 when (segment) {
                     is PathSegmentF32.MoveTo -> {
                         values += PathFillSegmentF64.MoveTo(segment.point.toExactPoint2F64())
@@ -225,6 +235,7 @@ public class PathFillInputF64 private constructor(
                     PathSegmentF32.Close -> values += PathFillSegmentF64.Close
                 }
             }
+            beforeMaterializationI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
             return PathFillInputF64(path.fillRule, values)
         }
 
