@@ -148,6 +148,16 @@ private class W4dGeneralGraphDigestWriter {
                 text("$prefix.mask-fetch", draw.maskFetch.name)
                 i32("$prefix.broadcast-sample-count", draw.broadcastSampleCountI32)
             }
+            is ClippedBinaryMaskedPathDraw -> {
+                text("$prefix.kind", "clipped-binary-masked")
+                pathDraw("$prefix.source", draw.source)
+                when (val clip = draw.clip) {
+                    is ClipPlanStrategy.Mask -> text("$prefix.clip-mask", clip.resource.value)
+                    is ClipPlanStrategy.InverseMask -> text("$prefix.clip-mask", clip.resource.value)
+                    is ClipPlanStrategy.Stencil -> text("$prefix.clip-stencil", clip.depthStencil.value)
+                    is ClipPlanStrategy.Scissor -> text("$prefix.clip-scissor", clip.copyDomainI32().toString())
+                }
+            }
         }
     }
 

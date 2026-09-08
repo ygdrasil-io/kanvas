@@ -173,6 +173,28 @@ public class BinaryMaskedPathDraw private constructor(
     }
 }
 
+/** A typed AA4 hard-edge path consumer with both binary and ordered clip-mask coverage. */
+public class ClippedBinaryMaskedPathDraw private constructor(
+    public val source: BinaryMaskedPathDraw,
+    public val clip: ClipPlanStrategy,
+) : PathRenderDraw {
+    override public val commandIndex: Int get() = source.commandIndex
+    override public val color: ColorF32 get() = source.color
+    override public val strategy: PathFillStrategy get() = source.strategy
+    override public val coverage: CoveragePlan get() = source.coverage
+    override public val sample: SamplePlan get() = source.sample
+    override public val blend: BlendPlan get() = source.blend
+    public val binarySampleCountI32: Int get() = source.broadcastSampleCountI32
+
+    override fun copyPathGeometry(): PathDrawGeometry = source.copyPathGeometry()
+    override fun copyScissorI32(): RectI32 = source.copyScissorI32()
+
+    public companion object {
+        public fun of(source: BinaryMaskedPathDraw, clip: ClipPlanStrategy): ClippedBinaryMaskedPathDraw =
+            ClippedBinaryMaskedPathDraw(source, clip)
+    }
+}
+
 /** Common typed path draw contract owned by W4d.2 path render passes. */
 public sealed interface PathRenderDraw : PlanDraw {
     public val strategy: PathFillStrategy

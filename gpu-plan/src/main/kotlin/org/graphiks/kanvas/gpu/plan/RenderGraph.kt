@@ -120,7 +120,9 @@ public class RenderGraph private constructor(
             }
             if (usesClipMasks) {
                 validateClipMaskContracts(passes, dependencies, resources, resourcesById, capabilities, targetExtent)
-            } else if (usesExplicitAa4PathPasses) {
+            }
+            validateClipConsumers(passes, dependencies, resourcesById, targetExtent, usesClipMasks)
+            if (usesExplicitAa4PathPasses) {
                 validateExplicitAa4PathContracts(
                     passes,
                     dependencies,
@@ -212,7 +214,7 @@ public class RenderGraph private constructor(
                 add(pass.target)
                 pass.drawDataResources?.let { addAll(listOf(it.vertex, it.index, it.uniform)) }
                 pass.draws().filterIsInstance<ClippedPlanDraw>().forEach { draw ->
-                    draw.strategy.clipMaskResourceOrNull()?.let(::add)
+                    draw.strategy.resourceReferenceOrNull()?.let(::add)
                 }
             }
             is PlanPass.PathMaskClearPass -> listOf(pass.target)
@@ -223,7 +225,8 @@ public class RenderGraph private constructor(
                 add(pass.drawDataResources.uniform)
                 pass.depthStencil?.let(::add)
                 pass.resolveTarget?.let(::add)
-                (pass.draw as? BinaryMaskedPathDraw)?.let { add(it.mask) }
+                pass.draw.binaryMaskedSourceOrNull()?.let { add(it.mask) }
+                pass.draw.clipStrategyOrNull()?.resourceReferenceOrNull()?.let(::add)
             }
             is PlanPass.StencilProducer -> listOf(
                 pass.target,
@@ -439,26 +442,53 @@ public class RenderGraph private constructor(
                 }
             }
 
-            val writers = mutableMapOf<PlanResourceId, PlanPassId>(initializePass.output to initializePass.id)
-            passes.forEach { pass ->
-                when (pass) {
-                    is PlanPass.ClipMaskFold -> writers[pass.output] = pass.id
-                    else -> Unit
+            require(currentAccumulator != initializePass.output || passes.none { it is PlanPass.ClipMaskProducer } ||
+                passes.any { it is PlanPass.ClipMaskFold }) { "Clip producers require a folded final accumulator" }
+        }
+
+        private fun validateClipConsumers(
+            passes: List<PlanPass>,
+            dependencies: List<PlanPassDependency>,
+            resourcesById: Map<PlanResourceId, PlanResource>,
+            targetExtent: SizeI32,
+            usesClipMasks: Boolean,
+        ) {
+            val consumers = passes.flatMapIndexed { index, pass -> when (pass) {
+                is PlanPass.RenderPass -> pass.draws().mapNotNull { draw ->
+                    (draw as? ClippedPlanDraw)?.strategy?.clipMaskResourceOrNull()?.let { Triple(index, it, draw.strategy) }
                 }
+                is PlanPass.PathRenderPass -> pass.draw.clipStrategyOrNull()?.clipMaskResourceOrNull()?.let {
+                    listOf(Triple(index, it, pass.draw.clipStrategyOrNull()!!))
+                }.orEmpty()
+                else -> emptyList()
+            } }
+            if (!usesClipMasks) {
+                require(consumers.isEmpty()) { "Mask clip consumers require a clip-mask graph" }
+                return
             }
-            passes.forEach { pass ->
-                if (pass !is PlanPass.RenderPass) return@forEach
-                pass.draws().filterIsInstance<ClippedPlanDraw>().forEach { draw ->
-                    val mask = draw.strategy.clipMaskResourceOrNull() ?: return@forEach
-                    require(mask == currentAccumulator) { "Clip consumers must sample the final accumulator" }
-                    val writer = requireNotNull(writers[mask]) { "Clip consumer mask has no producer" }
-                    require(pathExists(writer, pass.id, dependencies)) {
-                        "Clip consumers require a dependency from their mask producer"
+            val initialize = passes.filterIsInstance<PlanPass.ClipMaskInitialize>().single()
+            val finalFold = passes.filterIsInstance<PlanPass.ClipMaskFold>().lastOrNull()
+            val finalMask = finalFold?.output ?: initialize.output
+            require(consumers.isNotEmpty()) { "Clip-mask producers require a consumer" }
+            val writers = mutableMapOf<PlanResourceId, PlanPassId>(initialize.output to initialize.id)
+            passes.filterIsInstance<PlanPass.ClipMaskFold>().forEach { writers[it.output] = it.id }
+            consumers.forEach { (index, mask, strategy) ->
+                require(mask == finalMask) { "Clip consumers must sample the final accumulator" }
+                val writer = requireNotNull(writers[mask]) { "Clip consumer mask has no producer" }
+                require(pathExists(writer, passes[index].id, dependencies)) {
+                    "Clip consumers require a dependency from their mask producer"
+                }
+                require(resourcesById[mask]?.role == PlanResourceRole.CoverageMaskAccumulator) {
+                    "Clip consumers must sample a coverage-mask accumulator"
+                }
+                if (strategy is ClipPlanStrategy.InverseMask) {
+                    require(strategy.geometryF32.copyDomainI32() == initialize.copyDomainI32()) {
+                        "Inverse clip domains must match their initialized mask domain"
                     }
-                    if (draw.strategy is ClipPlanStrategy.InverseMask &&
-                        draw.strategy.geometryF32.interiorCoverageF32 == org.graphiks.math.geometry.InverseInteriorCoverageF32.Zero
-                    ) require(passes.none { it is PlanPass.ClipMaskProducer }) {
-                        "Zero inverse interiors use the initialized domain without a producer"
+                    if (strategy.geometryF32.interiorCoverageF32 == org.graphiks.math.geometry.InverseInteriorCoverageF32.Zero) {
+                        require(passes.none { it is PlanPass.ClipMaskProducer }) {
+                            "Zero inverse interiors use the initialized domain without a producer"
+                        }
                     }
                 }
             }
@@ -527,6 +557,24 @@ public class RenderGraph private constructor(
             is ClipPlanStrategy.Mask -> resource
             is ClipPlanStrategy.InverseMask -> resource
             is ClipPlanStrategy.Scissor, is ClipPlanStrategy.Stencil -> null
+        }
+
+        private fun ClipPlanStrategy.resourceReferenceOrNull(): PlanResourceId? = when (this) {
+            is ClipPlanStrategy.Mask -> resource
+            is ClipPlanStrategy.InverseMask -> resource
+            is ClipPlanStrategy.Stencil -> depthStencil
+            is ClipPlanStrategy.Scissor -> null
+        }
+
+        private fun PathRenderDraw.binaryMaskedSourceOrNull(): BinaryMaskedPathDraw? = when (this) {
+            is BinaryMaskedPathDraw -> this
+            is ClippedBinaryMaskedPathDraw -> source
+            is GeneralPathDraw -> null
+        }
+
+        private fun PathRenderDraw.clipStrategyOrNull(): ClipPlanStrategy? = when (this) {
+            is ClippedBinaryMaskedPathDraw -> clip
+            is BinaryMaskedPathDraw, is GeneralPathDraw -> null
         }
 
         private fun pathExists(
@@ -686,6 +734,9 @@ public class RenderGraph private constructor(
             require(passes.all {
                 it is PlanPass.PathMaskClearPass ||
                     it is PlanPass.PathRenderPass ||
+                    it is PlanPass.ClipMaskInitialize ||
+                    it is PlanPass.ClipMaskProducer ||
+                    it is PlanPass.ClipMaskFold ||
                     it is PlanPass.ReadbackPass
             }) { "Explicit path graphs may contain only path, mask, and readback passes" }
             require(PlanOperationCapability.CopyUpload in capabilities.supportedOperations()) {
@@ -849,6 +900,10 @@ public class RenderGraph private constructor(
                 PlanResourceRole.MultisampleColorTarget,
                 PlanResourceRole.PathHardEdgeMask,
                 PlanResourceRole.PathHardEdgeDepthStencil,
+                PlanResourceRole.CoverageMaskAccumulator,
+                PlanResourceRole.CoverageMaskScratch,
+                PlanResourceRole.CoverageMaskMultisampleScratch,
+                PlanResourceRole.CoverageMaskDepthStencil,
                 PlanResourceRole.ReadbackStaging,
                 PlanResourceRole.VertexData,
                 PlanResourceRole.IndexData,
@@ -1012,7 +1067,7 @@ public class RenderGraph private constructor(
                                 PathRenderPhase.MultisampleStencilProducer,
                     ) { "AA4 stencil covers must immediately follow their producer" }
                     PathRenderPhase.HardEdgeBinaryColorCover -> {
-                        val binaryDraw = pass.draw as? BinaryMaskedPathDraw
+                        val binaryDraw = pass.draw.binaryMaskedSourceOrNull()
                             ?: throw IllegalArgumentException("AA4 hard color covers require binary masked draws")
                         require(pass.depthStencil == null && pass.depthStencilAccess == null &&
                             pass.depthStencilLoadStore == null) {

@@ -1574,6 +1574,20 @@ class RenderGraphContractTest {
         ))
     }
 
+    @Test
+    fun `AA4 hard clip consumer keeps binary one sample coverage across four samples`() {
+        val graph = aa4MixedPathGraph()
+        val binary = assertIs<BinaryMaskedPathDraw>(
+            assertIs<PlanPass.PathRenderPass>(graph.passes()[5]).draw,
+        )
+        val clipped = ClippedBinaryMaskedPathDraw.of(binary, ClipPlanStrategy.Mask(binary.mask))
+
+        assertEquals(CoveragePlan.BinaryMaskCover4, clipped.coverage)
+        assertEquals(SamplePlan.Multisample4, clipped.sample)
+        assertEquals(BinaryMaskFetchPlan.TextureLoadUnfiltered, clipped.source.maskFetch)
+        assertEquals(4, clipped.source.broadcastSampleCountI32)
+    }
+
     private val CLIP_GROUP: PlanAtomicGroupId = PlanAtomicGroupId("clip:0")
 
     private data class ClipMaskResources(
@@ -1591,7 +1605,7 @@ class RenderGraphContractTest {
             first, last,
         )
         val accumulatorA = coverage(PlanResourceRole.CoverageMaskAccumulator, 0, 0, 3)
-        val accumulatorB = coverage(PlanResourceRole.CoverageMaskAccumulator, 1, 2, 3)
+        val accumulatorB = coverage(PlanResourceRole.CoverageMaskAccumulator, 1, 2, 4)
         val scratch = coverage(PlanResourceRole.CoverageMaskScratch, 0, 1, 3)
         return ClipMaskResources(accumulatorA, accumulatorB, scratch, listOf(accumulatorA, accumulatorB, scratch))
     }
@@ -1608,7 +1622,17 @@ class RenderGraphContractTest {
             0, resources.accumulatorA.id, resources.scratch.id, resources.accumulatorB.id,
             ClipCombineOperation.Intersect, RectI32(0, 0, 4, 4), CLIP_GROUP,
         )
-        return clipGraph(resources.all, listOf(initialize, producer, fold))
+        val target = PlanResource.of(
+            PlanResourceRole.LogicalTarget, 0, PlanResourceKind.Texture2D,
+            PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), SizeI32(4, 4), 64,
+            setOf(PlanResourceUsage.RenderAttachment), PlanResourceLifetime.FrameLocal, 3, 4,
+        )
+        val draw = ClippedPlanDraw.of(
+            SolidRectDraw.of(0, ColorF32.of(1f, 0f, 0f, 1f), RectI32(0, 0, 4, 4), RectI32(0, 0, 4, 4)),
+            ClipPlanStrategy.Mask(resources.accumulatorB.id),
+        )
+        val render = PlanPass.RenderPass(0, target.id, listOf(draw), AttachmentLoadPlan.ClearTransparent, AttachmentStorePlan.Store)
+        return clipGraph(resources.all + target, listOf(initialize, producer, fold, render))
     }
 
     private fun aa4ClipMaskGraph(): RenderGraph {
@@ -1627,7 +1651,7 @@ class RenderGraphContractTest {
         val accumulatorA = texture(PlanResourceRole.CoverageMaskAccumulator, 0, format, 64,
             setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled), 0, 3, 1)
         val accumulatorB = texture(PlanResourceRole.CoverageMaskAccumulator, 1, format, 64,
-            setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled), 2, 3, 1)
+            setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled), 2, 4, 1)
         val multisample = texture(PlanResourceRole.CoverageMaskMultisampleScratch, 0, format, 256,
             setOf(PlanResourceUsage.RenderAttachment), 1, 2, 4)
         val scratch = texture(PlanResourceRole.CoverageMaskScratch, 0, format, 64,
@@ -1639,8 +1663,16 @@ class RenderGraphContractTest {
         val producer = PlanPass.ClipMaskProducer(0, multisample.id, scratch.id, depth.id, 4, clipRectGeometry(), CLIP_GROUP)
         val fold = PlanPass.ClipMaskFold(0, accumulatorA.id, scratch.id, accumulatorB.id,
             ClipCombineOperation.Difference, RectI32(0, 0, 4, 4), CLIP_GROUP)
-        val resources = listOf(accumulatorA, accumulatorB, multisample, scratch, depth)
-        val passes = listOf(initialize, producer, fold)
+        val target = texture(PlanResourceRole.LogicalTarget, 0,
+            PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), 64,
+            setOf(PlanResourceUsage.RenderAttachment), 3, 4, 1)
+        val draw = ClippedPlanDraw.of(
+            SolidRectDraw.of(0, ColorF32.of(1f, 0f, 0f, 1f), RectI32(0, 0, 4, 4), RectI32(0, 0, 4, 4)),
+            ClipPlanStrategy.Mask(accumulatorB.id),
+        )
+        val render = PlanPass.RenderPass(0, target.id, listOf(draw), AttachmentLoadPlan.ClearTransparent, AttachmentStorePlan.Store)
+        val resources = listOf(accumulatorA, accumulatorB, multisample, scratch, depth, target)
+        val passes = listOf(initialize, producer, fold, render)
         return RenderGraph.of(
             PlanId("aa4-clip-mask"), "clip-mask", SizeI32(4, 4),
             PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL, aa4ClipCapabilities(), PlanBudget(2_048), 0,
@@ -1693,6 +1725,8 @@ class RenderGraphContractTest {
         supportedOperations = setOf(PlanOperationCapability.RenderPass),
         bufferAllocationPolicy = PlanBufferAllocationPolicy.of(1_024, 1_024, 1_024),
         supportedTextureSampleSupports = setOf(
+            PlanTextureSampleSupport.of(PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), 1,
+                setOf(PlanResourceUsage.RenderAttachment)),
             PlanTextureSampleSupport.of(
                 PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), 1,
                 setOf(PlanResourceUsage.RenderAttachment),
@@ -1716,6 +1750,8 @@ class RenderGraphContractTest {
         bufferAllocationPolicy = PlanBufferAllocationPolicy.of(2_048, 2_048, 2_048),
         supportedDepthStencilFormats = setOf(PlanDepthStencilFormat.Depth24PlusStencil8),
         supportedTextureSampleSupports = setOf(
+            PlanTextureSampleSupport.of(PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), 1,
+                setOf(PlanResourceUsage.RenderAttachment)),
             PlanTextureSampleSupport.of(PlanTextureFormat.CoverageMask(PlanCoverageMaskFormat.RGBA8_UNORM_LINEAR), 1,
                 setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled)),
             PlanTextureSampleSupport.of(PlanTextureFormat.CoverageMask(PlanCoverageMaskFormat.RGBA8_UNORM_LINEAR), 4,
