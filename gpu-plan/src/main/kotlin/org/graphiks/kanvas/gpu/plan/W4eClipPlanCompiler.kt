@@ -83,6 +83,7 @@ public class W4eClipPlanCompiler(
         val normalized = mutableListOf<SceneCommand>()
         val preparedByKey = linkedMapOf<ClipStackReuseKey, PreparedStack>()
         val inverseByCommand = mutableMapOf<Int, InversePathGeometryF32>()
+        val actuallyEmptyInverseCommands = mutableSetOf<Int>()
         var frameUsage = ClipWorkUsageI64()
         var ownsComplexClip = false
 
@@ -114,6 +115,11 @@ public class W4eClipPlanCompiler(
                     if (inverse != null) {
                         prepared.forceMaskForInverse()
                         inverseByCommand[index] = inverse
+                        if (inverse.interiorCoverageF32 == InverseInteriorCoverageF32.Zero &&
+                            (command.node.geometry as? GeometryNode.Path)?.path?.segmentCount == 0
+                        ) {
+                            actuallyEmptyInverseCommands += index
+                        }
                     }
                     normalized += SceneCommand.Draw(command.node.normalizedForW4dConstructionSeam(domain, inverse))
                     // The candidate keeps the prepared stack map keyed by this exact canonical stack identity.
@@ -135,6 +141,7 @@ public class W4eClipPlanCompiler(
         }
         return GpuPlanSelection.Candidate(Candidate(
             this, scene.canonicalId, target, constructionSeam, base, preparedByKey.values.toList(), inverseByCommand,
+            actuallyEmptyInverseCommands,
         ))
     }
 
@@ -254,19 +261,18 @@ public class W4eClipPlanCompiler(
         }
 
         val clippedGeneralBySource = mutableMapOf<GeneralPathDraw, ClippedGeneralPathDraw>()
-        // Only the direct W4e domain route can discard W4d.2's construction proxy.  An
-        // `InverseMask` still consumes the normal color-path phases against its sampled mask;
-        // replacing that source would silently change its sealed execution topology.
-        val zeroInverseDomainCommands = strategyByCommand
-            .filter { (_, strategy) ->
-                (strategy as? ClipPlanStrategy.InverseDomain)
-                    ?.geometryF32?.interiorCoverageF32 == InverseInteriorCoverageF32.Zero
-            }
-            .keys
         val emptyDrawsByConstructionSource = mutableMapOf<GeneralPathDraw, GeneralPathDraw>()
+        val actuallyEmptyInverseDomainCommands = selected.actuallyEmptyInverseCommands.filterTo(mutableSetOf()) { commandIndex ->
+            strategyByCommand[commandIndex] is ClipPlanStrategy.InverseDomain
+        }
         val clippedPasses = base.passes().map { pass ->
-            pass.replaceW4eConstructionProxy(zeroInverseDomainCommands, emptyDrawsByConstructionSource)
-                .withClipStrategies(strategyByCommand, clippedGeneralBySource)
+            // `InverseDomain.Zero` describes the clip interior, not the source path.  Keep every
+            // non-empty sealed geometry.  Only a Path with no source segments becomes the finite
+            // domain cover, so it cannot retain the W4d admission proxy or its D24S8 attachment.
+            pass.sealW4eActuallyEmptyInverseDomain(
+                actuallyEmptyInverseDomainCommands,
+                emptyDrawsByConstructionSource,
+            ).withClipStrategies(strategyByCommand, clippedGeneralBySource)
         }
         // `InverseDomain.Geometry` is a W4e scene operation, not a W4d.2 path-phase
         // side effect.  A direct triangle therefore still needs a declared scene D24S8 to
@@ -313,9 +319,8 @@ public class W4eClipPlanCompiler(
             pass.withW4eInverseDomainSceneDepth(sceneDepthForSample)
         }
         val allPasses = prefix + transformedPasses
-        // A zero inverse has no interior stencil work.  The W4d.2 construction seam may still
-        // have provisioned its AA scene D24S8 for the admission proxy; do not carry that orphan
-        // resource over the W4e authority boundary or it becomes a hidden allocation.
+        // Retain exactly the scene D24S8 resources used by the source geometry.  A genuinely
+        // empty inverse source has no such pass and therefore no D24S8 allocation.
         val retainedSceneDepthIds = transformedPasses
             .filterIsInstance<PlanPass.PathRenderPass>()
             .mapNotNull(PlanPass.PathRenderPass::depthStencil)
@@ -624,10 +629,7 @@ public class W4eClipPlanCompiler(
         return ClipTransformInputF64.of(geometry, transform, operation.toMathOperation(), antiAlias)
     }
 
-    /**
-     * W4d.2 drops empty fills at selection time.  Its rectangle is an admission-only proxy that
-     * is replaced by [replaceW4eConstructionProxy] before the W4e graph is sealed or rendered.
-     */
+    /** W4d.2 needs a finite admission shape for an inverse source with no finite interior. */
     private fun DrawNode.normalizedForW4dConstructionSeam(
         domain: RectI32,
         inverse: InversePathGeometryF32?,
@@ -772,22 +774,22 @@ public class W4eClipPlanCompiler(
         else -> this
     }
 
-    /** Removes W4d.2's admission-only rectangle before the W4e graph becomes authoritative. */
-    private fun PlanPass.replaceW4eConstructionProxy(
-        zeroInverseCommands: Set<Int>,
+    /** Converts only an actually empty inverse source from W4d's admission proxy to a domain cover. */
+    private fun PlanPass.sealW4eActuallyEmptyInverseDomain(
+        actuallyEmptyInverseCommands: Set<Int>,
         emptyDrawsByConstructionSource: MutableMap<GeneralPathDraw, GeneralPathDraw>,
     ): PlanPass = when (this) {
         is PlanPass.PathRenderPass -> {
-            if (draw.commandIndex !in zeroInverseCommands) return this
-            val emptyDraw = when (val original = draw) {
-                is GeneralPathDraw -> emptyDrawsByConstructionSource.getOrPut(original) {
-                    GeneralPathDraw.w4eInverseDomainZeroOf(original)
+            if (draw.commandIndex !in actuallyEmptyInverseCommands) return this
+            val emptyDraw = when (val source = draw) {
+                is GeneralPathDraw -> emptyDrawsByConstructionSource.getOrPut(source) {
+                    GeneralPathDraw.w4eActuallyEmptyInverseDomainOf(source)
                 }
                 is BinaryMaskedPathDraw -> BinaryMaskedPathDraw.of(
-                    emptyDrawsByConstructionSource.getOrPut(original.producer) {
-                        GeneralPathDraw.w4eInverseDomainZeroOf(original.producer)
+                    emptyDrawsByConstructionSource.getOrPut(source.producer) {
+                        GeneralPathDraw.w4eActuallyEmptyInverseDomainOf(source.producer)
                     },
-                    original.mask,
+                    source.mask,
                 )
                 is ClippedGeneralPathDraw,
                 is ClippedBinaryMaskedPathDraw,
@@ -800,10 +802,6 @@ public class W4eClipPlanCompiler(
                 phase,
                 drawDataResources,
                 atomicGroup,
-                // The W4d.2 admission proxy may have selected a scene D24S8 attachment for
-                // its triangle.  The sealed W4e form is a direct finite-domain cover: its
-                // empty inverse source has no interior to rasterize, so retaining that
-                // attachment would allocate a hidden, semantically unused D24S8 resource.
                 null,
                 load,
                 store,
@@ -927,10 +925,12 @@ public class W4eClipPlanCompiler(
         val base: GpuPlanCandidate,
         stacks: List<PreparedStack>,
         inverseByCommand: Map<Int, InversePathGeometryF32>,
+        actuallyEmptyInverseCommands: Set<Int>,
     ) : GpuPlanCandidate {
         override val capabilityId: String = if (base.capabilityId == W4dGeneralPathPlanCompiler.AA_CAPABILITY_ID) AA_CAPABILITY_ID else HARD_CAPABILITY_ID
         val stacks: List<PreparedStack> = Collections.unmodifiableList(stacks)
         val inverseByCommand: Map<Int, InversePathGeometryF32> = Collections.unmodifiableMap(inverseByCommand.toMap())
+        val actuallyEmptyInverseCommands: Set<Int> = Collections.unmodifiableSet(actuallyEmptyInverseCommands.toSet())
         private val sceneFingerprint = sceneCanonicalId
         private val targetFingerprint = target.canonicalId
         fun matches(): Boolean = sceneCanonicalId == sceneFingerprint && target.canonicalId == targetFingerprint && (capabilityId == HARD_CAPABILITY_ID || capabilityId == AA_CAPABILITY_ID)

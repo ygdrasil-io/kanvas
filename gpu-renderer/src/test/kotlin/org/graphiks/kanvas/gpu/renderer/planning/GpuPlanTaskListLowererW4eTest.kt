@@ -42,6 +42,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage
@@ -262,10 +263,10 @@ class GpuPlanTaskListLowererW4eTest {
     }
 
     @Test
-    fun `inverse zero clip becomes a full-domain prepared consumer without a sampled mask`() {
+    fun `inverse zero preserves its nonempty sealed source without a sampled mask`() {
         val lowered = assertIs<GpuPlanLoweringResult.Lowered>(
             GpuPlanTaskListLowerer().lower(
-                request(aaMaskGraph(inverse = true, zeroClip = true, inverseEmpty = true)),
+                request(aaMaskGraph(inverse = true, zeroClip = true, inverseZeroSource = true)),
             ),
         )
 
@@ -280,11 +281,45 @@ class GpuPlanTaskListLowererW4eTest {
             assertEquals(16, consumer.domain.right)
             assertIs<GPUW4ePreparedInverseInteriorCoverage.Zero>(consumer.interiorCoverage)
             assertEquals(0, render.resourceUses.count { it.role == GPUFrameResourceRole.ClipMask })
-            assertEquals(0, render.resourceUses.count { it.role == GPUFrameResourceRole.PathDepthStencil })
             val path = requireNotNull(render.drawPackets.single().w4ePreparedPath)
-            assertIs<PathDrawGeometry.Empty>(path.copyGeometry())
-            assertEquals(null, path.depthStencilResourceId)
+            val geometry = assertIs<PathDrawGeometry.Fill>(path.copyGeometry()).valueF32
+            assertTrue(
+                geometry.copyDirectTriangleF32OrNull()?.copyVerticesF32()?.isNotEmpty() == true ||
+                    geometry.copyStencilEdgeFanF32OrNull()?.copyVerticesF32()?.isNotEmpty() == true,
+                "the source geometry must survive the inverse-domain zero seal",
+            )
+            val depthStencil = path.depthStencilResourceId
+            assertTrue(depthStencil != null)
+            assertTrue(
+                render.resourceUses.any { use ->
+                    use.resource.value.substringAfterLast('.') == depthStencil &&
+                        use.role == GPUFrameResourceRole.PathDepthStencil &&
+                        use.usage == GPUFrameResourceUsage.RenderAttachment
+                },
+                "a nonempty Zero interior keeps the path D24 authority needed to rasterize its source",
+            )
         }
+    }
+
+    @Test
+    fun `inverse zero with an actually empty source remains a D24-free domain cover`() {
+        val lowered = assertIs<GpuPlanLoweringResult.Lowered>(
+            GpuPlanTaskListLowerer().lower(
+                request(aaMaskGraph(inverse = true, zeroClip = true, inverseEmpty = true)),
+            ),
+        )
+
+        val render = lowered.taskList.tasks.filterIsInstance<GPUTask.Render>().single { task ->
+            task.drawPackets.single().w4ePreparedClipConsumer is GPUW4ePreparedClipConsumerAuthority.InverseDomain
+        }
+        val consumer = assertIs<GPUW4ePreparedClipConsumerAuthority.InverseDomain>(
+            render.drawPackets.single().w4ePreparedClipConsumer,
+        )
+        assertIs<GPUW4ePreparedInverseInteriorCoverage.Zero>(consumer.interiorCoverage)
+        val path = requireNotNull(render.drawPackets.single().w4ePreparedPath)
+        assertIs<PathDrawGeometry.Empty>(path.copyGeometry())
+        assertEquals(null, path.depthStencilResourceId)
+        assertTrue(render.resourceUses.none { it.role == GPUFrameResourceRole.PathDepthStencil })
     }
 
     @Test
@@ -496,6 +531,18 @@ class GpuPlanTaskListLowererW4eTest {
         assertEquals(1, colorTasks.mapNotNull(GPUTask.Render::w4eSceneContinuation).map {
             it.sceneTargetResourceId
         }.distinct().size)
+        colorTasks.forEach { task ->
+            val continuation = requireNotNull(task.w4eSceneContinuation)
+            assertTrue(task.resourceUses.any { use ->
+                use.role == GPUFrameResourceRole.SceneTarget && use.write &&
+                    use.resource.value.substringAfterLast('.') == continuation.sceneTargetResourceId
+            }, "each AA4 scene pass must retain its sealed multisample color attachment")
+        }
+        val sceneMsaa = lowered.taskList.tasks.filterIsInstance<GPUTask.PrepareResources>().single().requests.single { request ->
+            request.role == GPUFrameResourceRole.SceneTarget &&
+                (request.descriptor as? GPUFrameTextureDescriptor)?.sampleCount == 4
+        }
+        assertEquals(4, assertIs<GPUFrameTextureDescriptor>(sceneMsaa.descriptor).sampleCount)
 
         val frame = GPUFramePlanner.plan(lowered.taskList)
         assertFalse(frame.atomicallyRefused)
@@ -514,11 +561,12 @@ class GpuPlanTaskListLowererW4eTest {
         inverseEmpty: Boolean = false,
         coverage: CoverageRequest = CoverageRequest.ANTIALIASED,
         concave: Boolean = false,
+        inverseZeroSource: Boolean = false,
     ): RenderGraph {
         val scene = SceneSnapshot.of(
             SceneExtent(16, 16),
             ColorSpace.SRGB,
-            List(drawCount) { pathDraw(inverse, zeroClip, inverseEmpty, coverage, concave) },
+            List(drawCount) { pathDraw(inverse, zeroClip, inverseEmpty, coverage, concave, inverseZeroSource) },
         )
         val compiler = W4eClipPlanCompiler()
         val candidate = assertIs<GpuPlanSelection.Candidate>(
@@ -535,6 +583,7 @@ class GpuPlanTaskListLowererW4eTest {
         inverseEmpty: Boolean = false,
         coverage: CoverageRequest = CoverageRequest.ANTIALIASED,
         concave: Boolean = false,
+        inverseZeroSource: Boolean = false,
     ): SceneCommand.Draw {
         val color = ColorARGB.fromPackedUInt(0xC0FF0000u)
         val fillRule = if (inverse) FillRule.INVERSE_WINDING else FillRule.WINDING
@@ -546,7 +595,9 @@ class GpuPlanTaskListLowererW4eTest {
         return SceneCommand.Draw(
             DrawNode(
                 geometry = GeometryNode.Path(
-                    if (inverseEmpty) PathBuilder(fillRule).build() else if (concave) PathBuilder(fillRule)
+                    if (inverseEmpty) PathBuilder(fillRule).build() else if (inverseZeroSource) PathBuilder(fillRule)
+                        .moveTo(2f, 2f).lineTo(12f, 2f).close().build()
+                    else if (concave) PathBuilder(fillRule)
                         .moveTo(2f, 2f).lineTo(12f, 2f).lineTo(12f, 12f).lineTo(7f, 6f).lineTo(2f, 12f).close().build()
                     else PathBuilder(fillRule).moveTo(2f, 2f).lineTo(12f, 2f).lineTo(2f, 12f).close().build(),
                 ),

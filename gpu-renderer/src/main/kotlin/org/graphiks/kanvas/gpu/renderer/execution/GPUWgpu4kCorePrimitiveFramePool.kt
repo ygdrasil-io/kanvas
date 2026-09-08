@@ -52,6 +52,8 @@ public data class GPUW4eAttachmentRequest(
     public val hardMaskDepthStencilCountI32: Int = 0,
     /** Exact count of scene D24S8 attachments used by inverse-domain path groups. */
     public val sceneDepthStencilCountI32: Int = 0,
+    /** Exact count of compiler-sealed AA4 scene-color attachments. */
+    public val sceneColorCountI32: Int = 0,
 ) {
     init {
         require(accumulatorCountI32 >= 0) {
@@ -63,13 +65,13 @@ public data class GPUW4eAttachmentRequest(
         require(requiredPhysicalByteCountI64 >= 0L) {
             "W4e physical attachment byte count must not be negative"
         }
-        require(hardMaskDepthStencilCountI32 >= 0 && sceneDepthStencilCountI32 >= 0) {
-            "W4e D24S8 attachment counts must not be negative"
+        require(hardMaskDepthStencilCountI32 >= 0 && sceneDepthStencilCountI32 >= 0 && sceneColorCountI32 >= 0) {
+            "W4e attachment counts must not be negative"
         }
         require(requiredPhysicalByteCountI64 != 0L ||
             (accumulatorCountI32 == 0 && producerSampleCountI32 == 1 &&
                 !requiresProducerDepthStencil && hardMaskDepthStencilCountI32 == 0 &&
-                sceneDepthStencilCountI32 == 0)
+                sceneDepthStencilCountI32 == 0 && sceneColorCountI32 == 0)
         ) {
             "A zero-byte W4e inventory is reserved for the sealed direct InverseDomain.Zero lane"
         }
@@ -291,6 +293,9 @@ internal data class GPUW4eAttachmentPoolRequirements(
     /** Scene D24S8 inventory for inverse-domain geometry; its sample count follows the scene path. */
     val sceneDepthStencilResourceIds: List<String> = emptyList(),
     val sceneDepthStencilRequirements: List<GPUWgpu4kCorePrimitiveClipDepthStencilRequirement> = emptyList(),
+    /** AA4 scene colors are declared resources, not materializer-local temporary textures. */
+    val sceneColorResourceIds: List<String> = emptyList(),
+    val sceneColorRequirements: List<GPUWgpu4kCorePrimitiveMsaaColorRequirement> = emptyList(),
 ) {
     init {
         require(accumulatorResourceIds.size == request.accumulatorCountI32 &&
@@ -349,7 +354,7 @@ internal data class GPUW4eAttachmentPoolRequirements(
             additionalProducerDepthStencilRequirements.all { requirement ->
                 requirement.sampleCount == 4 && requirement.format == GPUTextureFormat.Depth24PlusStencil8
             }) {
-            "W4e additional producer D24S8 attachments must be distinct four-sample resources"
+            "W4e additional AA producer D24S8 attachments must be distinct four-sample resources"
         }
         require(additionalMaskResourceIds.size == additionalMaskRequirements.size &&
             additionalMaskResourceIds.distinct().size == additionalMaskResourceIds.size &&
@@ -371,7 +376,7 @@ internal data class GPUW4eAttachmentPoolRequirements(
             additionalDepthStencilRequirements.all { requirement ->
                 requirement.sampleCount == 1 && requirement.format == GPUTextureFormat.Depth24PlusStencil8
             }) {
-            "W4e hard-edge path D24S8 attachments must be distinct single-sample resources"
+            "W4e hard-edge path or producer D24S8 attachments must be distinct single-sample resources"
         }
         require(sceneDepthStencilResourceIds.size == request.sceneDepthStencilCountI32 &&
             sceneDepthStencilResourceIds.size == sceneDepthStencilRequirements.size &&
@@ -386,12 +391,27 @@ internal data class GPUW4eAttachmentPoolRequirements(
             }) {
             "W4e inverse-domain scene D24S8 attachments must be distinct declared scene resources"
         }
+        require(sceneColorResourceIds.size == request.sceneColorCountI32 &&
+            sceneColorResourceIds.size == sceneColorRequirements.size &&
+            sceneColorResourceIds.distinct().size == sceneColorResourceIds.size &&
+            sceneColorResourceIds.all(String::isNotBlank) &&
+            sceneColorResourceIds.none { id ->
+                id in accumulatorResourceIds || id == resolvedResourceId || id == producerScratchResourceId ||
+                    id in additionalProducerScratchResourceIds || id == producerDepthStencilResourceId ||
+                    id in additionalProducerDepthStencilResourceIds || id in additionalMaskResourceIds ||
+                    id in additionalDepthStencilResourceIds || id in sceneDepthStencilResourceIds
+            } && sceneColorRequirements.all { requirement ->
+                requirement.sampleCount == 4 && requirement.format == GPUTextureFormat.RGBA8UnormSrgb &&
+                    requirement.usage == GPUTextureUsage.RenderAttachment
+            }) {
+            "W4e scene MSAA colors must be distinct declared four-sample sRGB attachments"
+        }
         val physicalResourceIds = accumulatorResourceIds + listOfNotNull(
             resolvedResourceId,
             producerScratchResourceId,
             producerDepthStencilResourceId,
         ) + additionalProducerScratchResourceIds + additionalProducerDepthStencilResourceIds +
-            additionalMaskResourceIds + additionalDepthStencilResourceIds + sceneDepthStencilResourceIds
+            additionalMaskResourceIds + additionalDepthStencilResourceIds + sceneDepthStencilResourceIds + sceneColorResourceIds
         require(physicalResourceIds.distinct().size == physicalResourceIds.size) {
             "Every W4e pooled attachment must retain one sealed logical resource identity"
         }
@@ -415,6 +435,7 @@ internal data class GPUW4eAttachmentPoolRequirements(
             },
             additionalDepthStencilRequirements.sumOf(GPUWgpu4kCorePrimitiveClipDepthStencilRequirement::byteSize),
             sceneDepthStencilRequirements.sumOf(GPUWgpu4kCorePrimitiveClipDepthStencilRequirement::byteSize),
+            sceneColorRequirements.sumOf(GPUWgpu4kCorePrimitiveMsaaColorRequirement::byteSize),
         )).fold(0L, Math::addExact)
         require(actualPhysicalBytes == request.requiredPhysicalByteCountI64) {
             "W4e physical attachment bytes must equal the compiler-sealed inventory"
@@ -433,6 +454,7 @@ internal data class GPUWgpu4kW4eAttachmentHandles(
     val additionalMasks: List<GPUWgpu4kCorePrimitiveCoverageMaskHandles>,
     val additionalDepthStencils: List<GPUWgpu4kCorePrimitiveClipDepthStencilHandles>,
     val sceneDepthStencils: List<GPUWgpu4kCorePrimitiveClipDepthStencilHandles>,
+    val sceneColors: List<GPUWgpu4kCorePrimitiveMsaaColorHandles>,
 ) {
     init {
         require(accumulators.size == requirements.request.accumulatorCountI32 &&
@@ -440,7 +462,8 @@ internal data class GPUWgpu4kW4eAttachmentHandles(
             additionalProducerDepthStencils.size == requirements.additionalProducerDepthStencilResourceIds.size &&
             additionalMasks.size == requirements.additionalMaskResourceIds.size &&
             additionalDepthStencils.size == requirements.additionalDepthStencilResourceIds.size &&
-            sceneDepthStencils.size == requirements.sceneDepthStencilResourceIds.size)
+            sceneDepthStencils.size == requirements.sceneDepthStencilResourceIds.size &&
+            sceneColors.size == requirements.sceneColorResourceIds.size)
     }
 
     fun viewFor(resourceId: String): GPUTextureView? = when (resourceId) {
@@ -459,8 +482,15 @@ internal data class GPUWgpu4kW4eAttachmentHandles(
             additionalDepthStencils[requirements.additionalDepthStencilResourceIds.indexOf(resourceId)].view
         in requirements.sceneDepthStencilResourceIds ->
             sceneDepthStencils[requirements.sceneDepthStencilResourceIds.indexOf(resourceId)].view
+        in requirements.sceneColorResourceIds ->
+            sceneColors[requirements.sceneColorResourceIds.indexOf(resourceId)].view
         else -> null
     }
+
+    /** The scene MSAA attachment is pool-owned too, but it is never a coverage-mask target. */
+    fun isCoverageMaskResource(resourceId: String): Boolean = resourceId in requirements.accumulatorResourceIds ||
+        resourceId == requirements.resolvedResourceId || resourceId == requirements.producerScratchResourceId ||
+        resourceId in requirements.additionalProducerScratchResourceIds || resourceId in requirements.additionalMaskResourceIds
 }
 
 internal sealed interface GPUWgpu4kW4eAttachmentPoolCheckout {
@@ -607,6 +637,19 @@ internal class GPUWgpu4kW4eAttachmentPool(
             val view = texture.createView().also(allocated::add)
             return GPUWgpu4kCorePrimitiveClipDepthStencilHandles(requirement, texture, view)
         }
+        fun sceneColor(requirement: GPUWgpu4kCorePrimitiveMsaaColorRequirement): GPUWgpu4kCorePrimitiveMsaaColorHandles {
+            val texture = device.createTexture(
+                TextureDescriptor(
+                    size = Extent3D(requirement.width.toUInt(), requirement.height.toUInt()),
+                    format = requirement.format,
+                    usage = requirement.usage,
+                    sampleCount = requirement.sampleCount.toUInt(),
+                    label = "Kanvas.session.corePrimitive.w4e.sceneMsaa",
+                ),
+            ).also(allocated::add)
+            val view = texture.createView().also(allocated::add)
+            return GPUWgpu4kCorePrimitiveMsaaColorHandles(requirement, texture, view)
+        }
         return try {
             GPUWgpu4kW4eAttachmentHandles(
                 requirements,
@@ -619,6 +662,7 @@ internal class GPUWgpu4kW4eAttachmentPool(
                 requirements.additionalMaskRequirements.map(::mask),
                 requirements.additionalDepthStencilRequirements.map(::depth),
                 requirements.sceneDepthStencilRequirements.map(::depth),
+                requirements.sceneColorRequirements.map(::sceneColor),
             )
         } catch (failure: Throwable) {
             retireFailedAllocations(allocated).also { cleanupFailure ->
@@ -635,6 +679,7 @@ internal class GPUWgpu4kW4eAttachmentPool(
             handles.additionalProducerDepthStencils.asReversed().forEach { add(it.view); add(it.texture) }
             handles.additionalProducerScratches.asReversed().forEach { add(it.view); add(it.texture) }
             handles.sceneDepthStencils.asReversed().forEach { add(it.view); add(it.texture) }
+            handles.sceneColors.asReversed().forEach { add(it.view); add(it.texture) }
             handles.additionalDepthStencils.asReversed().forEach { add(it.view); add(it.texture) }
             handles.additionalMasks.asReversed().forEach { add(it.view); add(it.texture) }
             handles.resolved?.let { add(it.view); add(it.texture) }

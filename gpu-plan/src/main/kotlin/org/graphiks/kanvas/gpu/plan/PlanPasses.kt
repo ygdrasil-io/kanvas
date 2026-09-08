@@ -147,11 +147,8 @@ public class GeneralPathDraw private constructor(
             return GeneralPathDraw(commandIndex, color, geometry, strategy, scissorI32, coverage, sample)
         }
 
-        /**
-         * W4e replaces a construction-seam domain proxy with the exact empty inverse source before
-         * issuing its own sealed graph.  No W4d.2 caller can construct this form.
-         */
-        internal fun w4eInverseDomainZeroOf(source: GeneralPathDraw): GeneralPathDraw =
+        /** W4e uses this form only for a source path that contained no segments at all. */
+        internal fun w4eActuallyEmptyInverseDomainOf(source: GeneralPathDraw): GeneralPathDraw =
             GeneralPathDraw(
                 source.commandIndex,
                 source.color,

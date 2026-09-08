@@ -22,6 +22,60 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity
 
 class GPUWgpu4kCorePrimitiveFramePoolTest {
     @Test
+    fun `sealed W4e inventory permits independent hard 1x and AA4 D24S8 resources`() {
+        val extent = 16
+        val oneSampleBytes = 1_024L
+        val fourSampleBytes = 4_096L
+        val requirements = GPUW4eAttachmentPoolRequirements(
+            request = GPUW4eAttachmentRequest(
+                accumulatorCountI32 = 2,
+                producerSampleCountI32 = 4,
+                requiresProducerDepthStencil = true,
+                requiredPhysicalByteCountI64 =
+                    2 * oneSampleBytes + fourSampleBytes + fourSampleBytes + oneSampleBytes + fourSampleBytes,
+                hardMaskDepthStencilCountI32 = 1,
+                sceneColorCountI32 = 1,
+            ),
+            accumulatorResourceIds = listOf("w4e.accumulator.a", "w4e.accumulator.b"),
+            accumulatorRequirement = GPUWgpu4kCorePrimitiveCoverageMaskRequirement(
+                extent, extent, GPUTextureFormat.RGBA8Unorm, 1,
+                GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding,
+            ),
+            resolvedResourceId = null,
+            resolvedRequirement = null,
+            producerScratchResourceId = "w4e.producer.aa4",
+            producerScratchRequirement = GPUWgpu4kCorePrimitiveCoverageMaskRequirement(
+                extent, extent, GPUTextureFormat.RGBA8Unorm, 4, GPUTextureUsage.RenderAttachment,
+            ),
+            producerDepthStencilResourceId = "w4e.producer.aa4.depth",
+            producerDepthStencilRequirement = clipDepthStencil(
+                extent, extent, sampleCount = 4, depthStencilAttachment = "w4e.producer.aa4.depth",
+            ),
+            additionalDepthStencilResourceIds = listOf("w4e.producer.hard.depth"),
+            additionalDepthStencilRequirements = listOf(
+                clipDepthStencil(
+                    extent, extent, sampleCount = 1, depthStencilAttachment = "w4e.producer.hard.depth",
+                ),
+            ),
+            sceneColorResourceIds = listOf("w4e.scene.aa4"),
+            sceneColorRequirements = listOf(
+                msaaColor(
+                    extent,
+                    extent,
+                    colorAttachment = "w4e.scene.aa4.color",
+                    target = GPUFrameTargetRef("w4e.scene.aa4"),
+                    format = GPUTextureFormat.RGBA8UnormSrgb,
+                ),
+            ),
+        )
+
+        assertEquals(4, requireNotNull(requirements.producerDepthStencilRequirement).sampleCount)
+        assertEquals(1, requirements.additionalDepthStencilRequirements.single().sampleCount)
+        assertEquals("w4e.producer.hard.depth", requirements.additionalDepthStencilResourceIds.single())
+        assertEquals(GPUTextureFormat.RGBA8UnormSrgb, requirements.sceneColorRequirements.single().format)
+    }
+
+    @Test
     fun `W4d direct and stencil reservations retain their exact sealed pool requirements`() {
         fun scratch(frame: org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan) = requireNotNull(
             frame.steps.filterIsInstance<org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep>()

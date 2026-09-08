@@ -282,6 +282,10 @@ internal class W4eClipGraphLowerer {
             )
             is PlanPass.PathRenderPass -> buildList {
                 val path = requireNotNull(preparedPath)
+                // The W4e MSAA scene attachment is a real sealed render target.  It must be
+                // present in the exact use list (as well as the final 1x resolve) so preflight
+                // and native materialization cannot manufacture an unaccounted attachment.
+                add(use(path.targetResourceId, GPUFrameResourceRole.SceneTarget, GPUFrameResourceUsage.RenderAttachment, true))
                 add(use(path.vertexResourceId, GPUFrameResourceRole.VertexData, GPUFrameResourceUsage.Vertex, false))
                 add(use(path.indexResourceId, GPUFrameResourceRole.IndexData, GPUFrameResourceUsage.Index, false))
                 add(use(path.uniformResourceId, GPUFrameResourceRole.UniformData, GPUFrameResourceUsage.Uniform, false))
@@ -313,7 +317,7 @@ internal class W4eClipGraphLowerer {
     private fun preparation(resource: PlanResource, ref: GPUFrameResourceRef, bounds: GPUPixelBounds, alignment: Long): GPUResourcePreparationRequest {
         val role = when (resource.role) {
             PlanResourceRole.LogicalTarget -> GPUFrameResourceRole.SceneTarget
-            PlanResourceRole.MultisampleColorTarget -> GPUFrameResourceRole.LayerTarget
+            PlanResourceRole.MultisampleColorTarget -> GPUFrameResourceRole.SceneTarget
             PlanResourceRole.ReadbackStaging -> GPUFrameResourceRole.ReadbackStaging
             PlanResourceRole.CoverageMaskDepthStencil -> GPUFrameResourceRole.ClipDepthStencil
             PlanResourceRole.DepthStencil, PlanResourceRole.PathHardEdgeDepthStencil -> GPUFrameResourceRole.PathDepthStencil

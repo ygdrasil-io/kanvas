@@ -354,8 +354,11 @@ internal class GPUFramePreflighter(
                     ?: return@firstOrNull false
                 when (inverse.interiorCoverage) {
                     org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage.Zero ->
-                        path.depthStencilResourceId != null ||
-                            render.resourceUses.any { use -> use.role == GPUFrameResourceRole.PathDepthStencil }
+                        // Only an actually empty source is a domain cover.  A non-empty source
+                        // remains sealed and may require its normal path D24S8 path phase.
+                        path.copyGeometry() is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Empty &&
+                            (path.depthStencilResourceId != null ||
+                                render.resourceUses.any { use -> use.role == GPUFrameResourceRole.PathDepthStencil })
                     is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage.Geometry -> {
                         val depthId = path.depthStencilResourceId ?: return@firstOrNull true
                         val expectedSampleCount = if (path.sample == org.graphiks.kanvas.gpu.plan.SamplePlan.Multisample4) 4 else 1
