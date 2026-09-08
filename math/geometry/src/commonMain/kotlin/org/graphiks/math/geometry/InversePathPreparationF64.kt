@@ -166,42 +166,59 @@ private fun inverseTopologyLimitsI32(policyF64: PathStrokePolicyF64): PathOpsLim
 private fun PathFillInputF64.copyTwoClosedStrokeBoundariesF64(
     ledgerI64: PathStrokeWorkLedgerI64,
 ): Pair<PathFillInputF64, PathFillInputF64>? {
-    var contourCountI32 = 0
+    var completedContourCountI32 = 0
     var currentStartI32 = -1
     var firstStartI32 = -1
     var firstEndI32 = -1
     var secondStartI32 = -1
     var secondEndI32 = -1
-    var firstAreaF64 = 0.0
-    var secondAreaF64 = 0.0
-    var startPointF64: Point2F64? = null
-    var previousPointF64: Point2F64? = null
-    var areaF64 = 0.0
-    fun includeF64(pointF64: Point2F64) {
-        previousPointF64?.let { previousF64 -> areaF64 += previousF64.x * pointF64.y - pointF64.x * previousF64.y }
-        previousPointF64 = pointF64
-    }
-    fun finishF64(endI32: Int) {
-        val startF64 = startPointF64 ?: return
-        val previousF64 = previousPointF64 ?: return
-        areaF64 += previousF64.x * startF64.y - startF64.x * previousF64.y
-        when (contourCountI32) {
-            1 -> { firstStartI32 = currentStartI32; firstEndI32 = endI32; firstAreaF64 = areaF64 }
-            2 -> { secondStartI32 = currentStartI32; secondEndI32 = endI32; secondAreaF64 = areaF64 }
-        }
-    }
     for (indexI32 in 0 until segmentCountI32) when (val segmentF64 = segmentAtI32(indexI32)) {
         is PathFillSegmentF64.MoveTo -> {
-            contourCountI32 += 1; currentStartI32 = indexI32; startPointF64 = segmentF64.point
-            previousPointF64 = segmentF64.point; areaF64 = 0.0
+            ledgerI64.debitTopologyBeforeEmissionI64(1L)
+            if (currentStartI32 >= 0 || completedContourCountI32 >= 2) return null
+            currentStartI32 = indexI32
         }
-        is PathFillSegmentF64.LineTo -> includeF64(segmentF64.point)
-        PathFillSegmentF64.Close -> finishF64(indexI32 + 1)
+        is PathFillSegmentF64.LineTo -> {
+            ledgerI64.debitTopologyBeforeEmissionI64(1L)
+            if (currentStartI32 < 0) return null
+        }
+        PathFillSegmentF64.Close -> {
+            ledgerI64.debitTopologyBeforeEmissionI64(1L)
+            if (currentStartI32 < 0) return null
+            when (completedContourCountI32) {
+                0 -> {
+                    firstStartI32 = currentStartI32
+                    firstEndI32 = indexI32 + 1
+                }
+                1 -> {
+                    secondStartI32 = currentStartI32
+                    secondEndI32 = indexI32 + 1
+                }
+            }
+            completedContourCountI32 += 1
+            currentStartI32 = -1
+        }
         else -> return null
     }
-    if (contourCountI32 != 2 || firstStartI32 < 0 || secondStartI32 < 0) return null
-    val outerRangeI32 = if (kotlin.math.abs(firstAreaF64) >= kotlin.math.abs(secondAreaF64)) firstStartI32 until firstEndI32 else secondStartI32 until secondEndI32
-    val innerRangeI32 = if (outerRangeI32.first == firstStartI32) secondStartI32 until secondEndI32 else firstStartI32 until firstEndI32
+    if (completedContourCountI32 != 2 || currentStartI32 >= 0 || firstStartI32 < 0 || secondStartI32 < 0) return null
+
+    val firstPointsF64 = copyClosedContourPointsF64(firstStartI32, firstEndI32, ledgerI64) ?: return null
+    val secondPointsF64 = copyClosedContourPointsF64(secondStartI32, secondEndI32, ledgerI64) ?: return null
+    val firstOrientationI32 = firstPointsF64.signedClosedAreaSignF64(ledgerI64)
+    val secondOrientationI32 = secondPointsF64.signedClosedAreaSignF64(ledgerI64)
+    if (firstOrientationI32 == 0 || secondOrientationI32 == 0 || firstOrientationI32 == secondOrientationI32) return null
+    if (!firstPointsF64.isSimpleClosedContourF64(ledgerI64) || !secondPointsF64.isSimpleClosedContourF64(ledgerI64)) return null
+    if (firstPointsF64.touchesBoundaryF64(secondPointsF64, ledgerI64)) return null
+    val firstContainsSecond = firstPointsF64.strictlyContainsContourF64(secondPointsF64, ledgerI64)
+    val secondContainsFirst = secondPointsF64.strictlyContainsContourF64(firstPointsF64, ledgerI64)
+    val (outerRangeI32, innerRangeI32) = when {
+        firstContainsSecond && !secondContainsFirst ->
+            (firstStartI32 until firstEndI32) to (secondStartI32 until secondEndI32)
+        secondContainsFirst && !firstContainsSecond ->
+            (secondStartI32 until secondEndI32) to (firstStartI32 until firstEndI32)
+        else -> return null
+    }
+
     fun copyRangeF64(rangeI32: IntRange): PathFillInputF64 {
         ledgerI64.debitBeforeEmissionI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
         val segmentsF64 = mutableListOf<PathFillSegmentF64>()
@@ -215,6 +232,121 @@ private fun PathFillInputF64.copyTwoClosedStrokeBoundariesF64(
     ledgerI64.debitBeforeEmissionI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 32L))
     return copyRangeF64(outerRangeI32) to copyRangeF64(innerRangeI32)
 }
+
+private fun PathFillInputF64.copyClosedContourPointsF64(
+    startI32: Int,
+    endI32: Int,
+    ledgerI64: PathStrokeWorkLedgerI64,
+): List<Point2F64>? {
+    val vertexCountI32 = endI32 - startI32 - 1
+    if (vertexCountI32 < 3 || vertexCountI32 == Int.MAX_VALUE) return null
+    ledgerI64.debitBeforeEmissionI64(
+        PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L + (vertexCountI32.toLong() + 1L) * 16L),
+    )
+    val pointsF64 = ArrayList<Point2F64>(vertexCountI32 + 1)
+    for (indexI32 in startI32 until endI32 - 1) {
+        ledgerI64.debitTopologyBeforeEmissionI64(1L)
+        val pointF64 = when (val segmentF64 = segmentAtI32(indexI32)) {
+            is PathFillSegmentF64.MoveTo -> segmentF64.point
+            is PathFillSegmentF64.LineTo -> segmentF64.point
+            else -> return null
+        }
+        pointsF64 += pointF64
+    }
+    pointsF64 += pointsF64.first()
+    return pointsF64
+}
+
+private fun List<Point2F64>.signedClosedAreaSignF64(ledgerI64: PathStrokeWorkLedgerI64): Int {
+    for (edgeIndexI32 in 0 until size - 1) ledgerI64.debitTopologyBeforeEmissionI64(1L)
+    return signedAreaSignF64(this)
+}
+
+private fun List<Point2F64>.isSimpleClosedContourF64(ledgerI64: PathStrokeWorkLedgerI64): Boolean {
+    val edgeCountI32 = size - 1
+    for (firstEdgeI32 in 0 until edgeCountI32) {
+        if (sameInverseTopologicalPointF64(this[firstEdgeI32], this[firstEdgeI32 + 1])) return false
+        for (secondEdgeI32 in firstEdgeI32 + 1 until edgeCountI32) {
+            val areAdjacent = secondEdgeI32 == firstEdgeI32 + 1 ||
+                (firstEdgeI32 == 0 && secondEdgeI32 == edgeCountI32 - 1)
+            if (areAdjacent) continue
+            ledgerI64.debitTopologyBeforeEmissionI64(1L)
+            if (segmentsTouchF64(
+                    this[firstEdgeI32], this[firstEdgeI32 + 1], this[secondEdgeI32], this[secondEdgeI32 + 1],
+                )
+            ) return false
+        }
+    }
+    return true
+}
+
+private fun List<Point2F64>.touchesBoundaryF64(
+    otherF64: List<Point2F64>,
+    ledgerI64: PathStrokeWorkLedgerI64,
+): Boolean {
+    for (firstEdgeI32 in 0 until size - 1) {
+        for (secondEdgeI32 in 0 until otherF64.size - 1) {
+            ledgerI64.debitTopologyBeforeEmissionI64(1L)
+            if (segmentsTouchF64(
+                    this[firstEdgeI32], this[firstEdgeI32 + 1], otherF64[secondEdgeI32], otherF64[secondEdgeI32 + 1],
+                )
+            ) return true
+        }
+    }
+    return false
+}
+
+private fun List<Point2F64>.strictlyContainsContourF64(
+    innerF64: List<Point2F64>,
+    ledgerI64: PathStrokeWorkLedgerI64,
+): Boolean {
+    for (pointIndexI32 in 0 until innerF64.size - 1) {
+        if (!strictlyContainsPointF64(innerF64[pointIndexI32], ledgerI64)) return false
+    }
+    return true
+}
+
+private fun List<Point2F64>.strictlyContainsPointF64(
+    pointF64: Point2F64,
+    ledgerI64: PathStrokeWorkLedgerI64,
+): Boolean {
+    var windingI32 = 0
+    for (edgeIndexI32 in 0 until size - 1) {
+        val startF64 = this[edgeIndexI32]
+        val endF64 = this[edgeIndexI32 + 1]
+        ledgerI64.debitTopologyBeforeEmissionI64(1L)
+        if (PathPredicatesF64.onSegment(pointF64, startF64, endF64)) return false
+        val startAtOrBelow = startF64.y <= pointF64.y
+        val endAbove = endF64.y > pointF64.y
+        val endAtOrBelow = endF64.y <= pointF64.y
+        if (startAtOrBelow && endAbove && OrientationPredicateF64.sign(startF64, endF64, pointF64) > 0) {
+            windingI32 += 1
+        } else if (!startAtOrBelow && endAtOrBelow && OrientationPredicateF64.sign(startF64, endF64, pointF64) < 0) {
+            windingI32 -= 1
+        }
+    }
+    return windingI32 != 0
+}
+
+private fun segmentsTouchF64(
+    firstStartF64: Point2F64,
+    firstEndF64: Point2F64,
+    secondStartF64: Point2F64,
+    secondEndF64: Point2F64,
+): Boolean {
+    val firstStartSideI32 = OrientationPredicateF64.sign(firstStartF64, firstEndF64, secondStartF64)
+    val firstEndSideI32 = OrientationPredicateF64.sign(firstStartF64, firstEndF64, secondEndF64)
+    val secondStartSideI32 = OrientationPredicateF64.sign(secondStartF64, secondEndF64, firstStartF64)
+    val secondEndSideI32 = OrientationPredicateF64.sign(secondStartF64, secondEndF64, firstEndF64)
+    return (firstStartSideI32 == 0 && PathPredicatesF64.onSegment(secondStartF64, firstStartF64, firstEndF64)) ||
+        (firstEndSideI32 == 0 && PathPredicatesF64.onSegment(secondEndF64, firstStartF64, firstEndF64)) ||
+        (secondStartSideI32 == 0 && PathPredicatesF64.onSegment(firstStartF64, secondStartF64, secondEndF64)) ||
+        (secondEndSideI32 == 0 && PathPredicatesF64.onSegment(firstEndF64, secondStartF64, secondEndF64)) ||
+        (firstStartSideI32 != firstEndSideI32 && secondStartSideI32 != secondEndSideI32)
+}
+
+private fun sameInverseTopologicalPointF64(firstF64: Point2F64, secondF64: Point2F64): Boolean =
+    firstF64.x == secondF64.x && firstF64.y == secondF64.y
 
 private fun PathFillInputF64.toInverseTopologyPathF32(ledgerI64: PathStrokeWorkLedgerI64): PathF32 {
     ledgerI64.debitBeforeEmissionI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))

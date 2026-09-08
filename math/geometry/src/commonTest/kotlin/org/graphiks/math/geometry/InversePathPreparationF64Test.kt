@@ -2,6 +2,7 @@ package org.graphiks.math.geometry
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -142,6 +143,97 @@ class InversePathPreparationF64Test {
     }
 
     @Test
+    fun `hairline inverse uses the general difference for disjoint same orientation boundaries`() {
+        val result = assertIs<InversePathPreparationResult.Ready>(
+            prepareInversePathGeometryF32(
+                finiteFillF64 = rectangleInputF64(0.0, 0.0, 20.0, 10.0),
+                deviceStrokeOutlineF64 = twoRectangleOutlineF64(
+                    outerLeftF64 = 4.0,
+                    outerTopF64 = -2.0,
+                    outerRightF64 = 8.0,
+                    outerBottomF64 = 8.0,
+                    innerLeftF64 = 12.0,
+                    innerTopF64 = 2.0,
+                    innerRightF64 = 16.0,
+                    innerBottomF64 = 8.0,
+                    innerReversed = false,
+                ),
+                styleF64 = hairlineStyleF64(),
+                mode = InversePathDrawMode.StrokeAndFill,
+                domainI32 = RectI32(-4, -4, 28, 16),
+                policyF64 = PathStrokePolicyF64(),
+            ),
+        )
+
+        val interiorF32 = assertIs<InverseInteriorCoverageF32.Geometry>(result.geometryF32.interiorCoverageF32)
+            .copyGeometryF32()
+
+        assertTrue(PathAnalysisF32.contains(pathFromFillGeometryF32(interiorF32), Point2F32(2f, 5f)))
+        assertFalse(PathAnalysisF32.contains(pathFromFillGeometryF32(interiorF32), Point2F32(6f, 5f)))
+        assertFalse(PathAnalysisF32.contains(pathFromFillGeometryF32(interiorF32), Point2F32(14f, 5f)))
+    }
+
+    @Test
+    fun `hairline inverse returns a typed topology refusal for nested same orientation boundaries`() {
+        val result = prepareInversePathGeometryF32(
+            finiteFillF64 = rectangleInputF64(0.0, 0.0, 20.0, 10.0),
+            deviceStrokeOutlineF64 = twoRectangleOutlineF64(
+                outerLeftF64 = 4.0,
+                outerTopF64 = -2.0,
+                outerRightF64 = 24.0,
+                outerBottomF64 = 12.0,
+                innerLeftF64 = 8.0,
+                innerTopF64 = 2.0,
+                innerRightF64 = 16.0,
+                innerBottomF64 = 8.0,
+                innerReversed = false,
+            ),
+            styleF64 = hairlineStyleF64(),
+            mode = InversePathDrawMode.StrokeAndFill,
+            domainI32 = RectI32(-4, -4, 28, 16),
+            policyF64 = PathStrokePolicyF64(),
+        )
+
+        assertEquals(
+            PathStrokeResourceLimitReason.TopologyLimit,
+            assertIs<InversePathPreparationResult.ResourceLimitExceeded>(result).reason,
+        )
+    }
+
+    @Test
+    fun `hairline inverse retains fill outside outer and in inner while removing the stroke band`() {
+        val result = assertIs<InversePathPreparationResult.Ready>(
+            prepareInversePathGeometryF32(
+                finiteFillF64 = rectangleInputF64(0.0, 0.0, 10.0, 10.0),
+                deviceStrokeOutlineF64 = twoRectangleOutlineF64(
+                    outerLeftF64 = 4.0,
+                    outerTopF64 = -2.0,
+                    outerRightF64 = 12.0,
+                    outerBottomF64 = 12.0,
+                    innerLeftF64 = 5.0,
+                    innerTopF64 = 2.0,
+                    innerRightF64 = 8.0,
+                    innerBottomF64 = 8.0,
+                    innerReversed = true,
+                ),
+                styleF64 = hairlineStyleF64(),
+                mode = InversePathDrawMode.StrokeAndFill,
+                domainI32 = RectI32(-4, -4, 28, 16),
+                policyF64 = PathStrokePolicyF64(),
+            ),
+        )
+
+        val interiorPathF32 = pathFromFillGeometryF32(
+            assertIs<InverseInteriorCoverageF32.Geometry>(result.geometryF32.interiorCoverageF32).copyGeometryF32(),
+        )
+
+        assertTrue(PathAnalysisF32.contains(interiorPathF32, Point2F32(2f, 5f)))
+        assertTrue(PathAnalysisF32.contains(interiorPathF32, Point2F32(6f, 5f)))
+        assertFalse(PathAnalysisF32.contains(interiorPathF32, Point2F32(4.5f, 5f)))
+        assertFalse(PathAnalysisF32.contains(interiorPathF32, Point2F32(9f, 5f)))
+    }
+
+    @Test
     fun `hairline inverse refuses snapshot exhaustion before copying its exact outline operands`() {
         val result = prepareInversePathGeometryF32(
             finiteFillF64 = rectangleInputF64(0.0, 0.0, 10.0, 8.0),
@@ -196,6 +288,53 @@ class InversePathPreparationF64Test {
             ),
         )
 
+    private fun twoRectangleOutlineF64(
+        outerLeftF64: Double,
+        outerTopF64: Double,
+        outerRightF64: Double,
+        outerBottomF64: Double,
+        innerLeftF64: Double,
+        innerTopF64: Double,
+        innerRightF64: Double,
+        innerBottomF64: Double,
+        innerReversed: Boolean,
+    ): PathFillInputF64 = PathFillInputF64.of(
+        FillRule.WINDING,
+        rectangleSegmentsF64(outerLeftF64, outerTopF64, outerRightF64, outerBottomF64) +
+            rectangleSegmentsF64(innerLeftF64, innerTopF64, innerRightF64, innerBottomF64, reversed = innerReversed),
+    )
+
+    private fun rectangleSegmentsF64(
+        leftF64: Double,
+        topF64: Double,
+        rightF64: Double,
+        bottomF64: Double,
+        reversed: Boolean = false,
+    ): List<PathFillSegmentF64> {
+        val cornersF64 = if (reversed) {
+            listOf(
+                Point2F64(leftF64, topF64),
+                Point2F64(leftF64, bottomF64),
+                Point2F64(rightF64, bottomF64),
+                Point2F64(rightF64, topF64),
+            )
+        } else {
+            listOf(
+                Point2F64(leftF64, topF64),
+                Point2F64(rightF64, topF64),
+                Point2F64(rightF64, bottomF64),
+                Point2F64(leftF64, bottomF64),
+            )
+        }
+        return listOf(
+            PathFillSegmentF64.MoveTo(cornersF64[0]),
+            PathFillSegmentF64.LineTo(cornersF64[1]),
+            PathFillSegmentF64.LineTo(cornersF64[2]),
+            PathFillSegmentF64.LineTo(cornersF64[3]),
+            PathFillSegmentF64.Close,
+        )
+    }
+
     private fun finiteStyleF64(widthF64: Double): PathStrokeStyleF64 = PathStrokeStyleF64(
         widthF64 = PathStrokeWidthF64.Finite(widthF64),
         cap = PathStrokeCap.Butt,
@@ -209,6 +348,35 @@ class InversePathPreparationF64Test {
         join = PathStrokeJoin.Bevel,
         miterLimitF64 = 4.0,
     )
+}
+
+private fun pathFromFillGeometryF32(geometryF32: PathFillGeometryF32): PathF32 {
+    geometryF32.copyDirectTriangleF32OrNull()?.let { triangleF32 ->
+        val verticesF32 = triangleF32.copyVerticesF32()
+        return PathBuilder(geometryF32.fillRule)
+            .moveTo(verticesF32[0], verticesF32[1])
+            .lineTo(verticesF32[2], verticesF32[3])
+            .lineTo(verticesF32[4], verticesF32[5])
+            .close()
+            .build()
+    }
+    val fanF32 = checkNotNull(geometryF32.copyStencilEdgeFanF32OrNull())
+    val verticesF32 = fanF32.copyVerticesF32()
+    val contourStartsI32 = fanF32.copyContourStartsI32()
+    val builderF32 = PathBuilder(geometryF32.fillRule)
+    contourStartsI32.forEachIndexed { contourIndexI32, startI32 ->
+        val endI32 = contourStartsI32.getOrElse(contourIndexI32 + 1) { fanF32.edgeCountI32 }
+        for (edgeIndexI32 in startI32 until endI32) {
+            val offsetI32 = edgeIndexI32 * 6 + 2
+            if (edgeIndexI32 == startI32) {
+                builderF32.moveTo(verticesF32[offsetI32], verticesF32[offsetI32 + 1])
+            } else {
+                builderF32.lineTo(verticesF32[offsetI32], verticesF32[offsetI32 + 1])
+            }
+        }
+        builderF32.close()
+    }
+    return builderF32.build()
 }
 
 private fun FillRule.toFiniteFillRule(): FillRule = when (this) {
