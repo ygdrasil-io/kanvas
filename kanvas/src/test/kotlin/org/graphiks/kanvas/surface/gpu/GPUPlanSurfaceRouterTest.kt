@@ -54,6 +54,76 @@ import org.graphiks.math.matrix.Matrix3x3F32
 @OptIn(ExperimentalUnsignedTypes::class)
 class GPUPlanSurfaceRouterTest {
     @Test
+    fun `W4dGeneral AA capability gap is terminal without legacy publication`() {
+        val path = Path().apply {
+            moveTo(1f, 2f)
+            lineTo(4f, 2f)
+            lineTo(4f, 4f)
+            lineTo(1f, 4f)
+            close()
+        }
+        val context = GpuRenderContext.createProduction()
+        try {
+            val failure = assertFailsWith<GPUPlanSurfaceTerminalException> {
+                GPUPlanSurfaceRouter(planPort = capabilityChainPort(context)).render(
+                    operations = listOf(
+                        DisplayOp.DrawPath(
+                            path,
+                            Paint.fill(ColorARGB.Red).copy(antiAlias = true),
+                            Matrix3x3F32.skewing(0.25f, 0f),
+                            ClipStack.WideOpen,
+                        ),
+                    ),
+                    width = 8,
+                    height = 8,
+                    format = PixelFormat.RGBA8,
+                    config = RenderConfig.DEFAULT,
+                    legacy = { error("A W4d.2 capability terminal must not enter the legacy path") },
+                )
+            }
+
+            assertEquals("w4d.general.texture-sample-support-unavailable", failure.code)
+        } finally {
+            context.close()
+        }
+    }
+
+    @Test
+    fun `W4dGeneral horizon crossing is terminal before legacy transform refusal`() {
+        val path = Path().apply {
+            moveTo(1f, 2f)
+            lineTo(4f, 2f)
+            lineTo(4f, 4f)
+            lineTo(1f, 4f)
+            close()
+        }
+        val context = GpuRenderContext.createProduction()
+        try {
+            val failure = assertFailsWith<GPUPlanSurfaceTerminalException> {
+                GPUPlanSurfaceRouter(planPort = capabilityChainPort(context)).render(
+                    operations = listOf(
+                        DisplayOp.DrawPath(
+                            path,
+                            Paint.fill(ColorARGB.Red).copy(antiAlias = false),
+                            Matrix3x3F32(persp0 = -0.5f),
+                            ClipStack.WideOpen,
+                        ),
+                    ),
+                    width = 8,
+                    height = 8,
+                    format = PixelFormat.RGBA8,
+                    config = RenderConfig.DEFAULT,
+                    legacy = { error("A W4d.2 projection horizon must not enter the legacy path") },
+                )
+            }
+
+            assertEquals("w4d.general.projection-horizon-crossing", failure.code)
+        } finally {
+            context.close()
+        }
+    }
+
+    @Test
     fun `W4d public DrawPath uses the generic Scene route and completes native readback`() {
         val path = Path().apply {
             moveTo(1f, 2.125f)
@@ -302,7 +372,6 @@ class GPUPlanSurfaceRouterTest {
                     ClipStack.WideOpen,
                 ),
             ),
-            "antialias" to listOf(path.copy(paint = hardFill.copy(antiAlias = true))),
             "inverse" to listOf(
                 DisplayOp.DrawPath(inverse, hardFill, Matrix3x3F32.Identity, ClipStack.WideOpen),
             ),

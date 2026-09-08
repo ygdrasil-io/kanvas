@@ -79,6 +79,30 @@ private class W4dGraphDigestWriter {
             "capabilities.depth-stencil-formats",
             capabilities.supportedDepthStencilFormats().map { it.name },
         )
+        val textureSampleSupports = capabilities.supportedTextureSampleSupports().sortedBy { support ->
+            "${support.format}:${support.sampleCountI32}:${support.usages().sortedBy { it.name }}"
+        }
+        i32("capabilities.texture-sample-supports.count", textureSampleSupports.size)
+        textureSampleSupports.forEachIndexed { index, support ->
+            textureFormat("capabilities.texture-sample-supports[$index].format", support.format)
+            i32("capabilities.texture-sample-supports[$index].sample-count", support.sampleCountI32)
+            enumSet(
+                "capabilities.texture-sample-supports[$index].usages",
+                support.usages().map { it.name },
+            )
+        }
+        val textureResolveSupports = capabilities.supportedTextureResolveSupports().sortedBy { support ->
+            "${support.format}:${support.sourceSampleCountI32}:${support.destinationSampleCountI32}"
+        }
+        i32("capabilities.texture-resolve-supports.count", textureResolveSupports.size)
+        textureResolveSupports.forEachIndexed { index, support ->
+            textureFormat("capabilities.texture-resolve-supports[$index].format", support.format)
+            i32("capabilities.texture-resolve-supports[$index].source-sample-count", support.sourceSampleCountI32)
+            i32(
+                "capabilities.texture-resolve-supports[$index].destination-sample-count",
+                support.destinationSampleCountI32,
+            )
+        }
     }
 
     fun resource(prefix: String, resource: PlanResource) {
@@ -96,6 +120,7 @@ private class W4dGraphDigestWriter {
                 text("$prefix.format.kind", "depth-stencil")
                 text("$prefix.format.value", format.value.name)
             }
+            PlanTextureFormat.CoverageMask -> text("$prefix.format.kind", "coverage-mask")
         }
         val extent = resource.copyExtent()
         bool("$prefix.extent.present", extent != null)
@@ -104,6 +129,7 @@ private class W4dGraphDigestWriter {
             i32("$prefix.extent.height", extent.height)
         }
         i64("$prefix.byte-size", resource.byteSize)
+        i32("$prefix.sample-count", resource.sampleCountI32)
         enumSet("$prefix.usages", resource.usages().map { it.name })
         text("$prefix.lifetime", resource.lifetime.name)
         i32("$prefix.first-pass", resource.firstPassIndex)
@@ -290,6 +316,20 @@ private class W4dGraphDigestWriter {
         val sorted = values.sorted()
         i32("$prefix.count", sorted.size)
         sorted.forEachIndexed { index, value -> text("$prefix[$index]", value) }
+    }
+
+    private fun textureFormat(prefix: String, format: PlanTextureFormat) {
+        when (format) {
+            is PlanTextureFormat.Color -> {
+                text("$prefix.kind", "color")
+                text("$prefix.value", format.value.name)
+            }
+            is PlanTextureFormat.DepthStencil -> {
+                text("$prefix.kind", "depth-stencil")
+                text("$prefix.value", format.value.name)
+            }
+            PlanTextureFormat.CoverageMask -> text("$prefix.kind", "coverage-mask")
+        }
     }
 
     private fun token(value: String) {

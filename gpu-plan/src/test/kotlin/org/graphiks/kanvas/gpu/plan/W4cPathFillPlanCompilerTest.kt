@@ -4,6 +4,7 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.render.ir.BlendMode
@@ -378,11 +379,29 @@ class W4cPathFillPlanCompilerTest {
         }
     }
 
-    private fun ready(commands: Collection<SceneCommand>): RenderGraph {
+    @Test
+    fun `plan identity changes when only sample or resolve support changes`() {
+        val commands = listOf(triangle())
+        val baseCapabilities = capabilities()
+
+        assertNotEquals(
+            ready(commands, capabilities = baseCapabilities).id,
+            ready(commands, capabilities = withAdditionalFourSampleColorSupport(baseCapabilities)).id,
+        )
+        assertNotEquals(
+            ready(commands, capabilities = baseCapabilities).id,
+            ready(commands, capabilities = capabilities(textureResolveSupports = setOf(colorResolveSupport()))).id,
+        )
+    }
+
+    private fun ready(
+        commands: Collection<SceneCommand>,
+        capabilities: PlanCapabilitySnapshot = capabilities(),
+    ): RenderGraph {
         val scene = sceneOf(commands)
         val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target(scene))).candidate
         return assertIs<RenderPlanResult.Ready<RenderGraph>>(
-            compiler.plan(candidate, capabilities(), PlanBudget(1L shl 20)),
+            compiler.plan(candidate, capabilities, PlanBudget(1L shl 20)),
         ).plan
     }
 
@@ -509,6 +528,7 @@ class W4cPathFillPlanCompilerTest {
         operations: Set<PlanOperationCapability> = PlanOperationCapability.entries.toSet(),
         copyBytesPerRowAlignment: Int = 256,
         depthStencilFormats: Set<PlanDepthStencilFormat> = setOf(PlanDepthStencilFormat.Depth24PlusStencil8),
+        textureResolveSupports: Set<PlanTextureResolveSupport> = emptySet(),
     ): PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(
         deviceGeneration = 0,
         maxTextureDimension2D = 64,
@@ -520,7 +540,34 @@ class W4cPathFillPlanCompilerTest {
         supportedOperations = operations,
         bufferAllocationPolicy = policy,
         supportedDepthStencilFormats = depthStencilFormats,
+        supportedTextureResolveSupports = textureResolveSupports,
     )
+
+    private fun colorResolveSupport(): PlanTextureResolveSupport = PlanTextureResolveSupport.of(
+        PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+        4,
+        1,
+    )
+
+    private fun withAdditionalFourSampleColorSupport(base: PlanCapabilitySnapshot): PlanCapabilitySnapshot =
+        PlanCapabilitySnapshot.of(
+            deviceGeneration = base.deviceGeneration,
+            maxTextureDimension2D = base.maxTextureDimension2D,
+            maxBufferSizeBytes = base.maxBufferSizeBytes,
+            copyBytesPerRowAlignment = base.copyBytesPerRowAlignment,
+            supportedFormats = base.supportedFormats(),
+            minUniformBufferOffsetAlignment = base.minUniformBufferOffsetAlignment,
+            maxDynamicUniformBuffersPerPipelineLayout = base.maxDynamicUniformBuffersPerPipelineLayout,
+            supportedOperations = base.supportedOperations(),
+            bufferAllocationPolicy = base.bufferAllocationPolicy,
+            supportedDepthStencilFormats = base.supportedDepthStencilFormats(),
+            supportedTextureSampleSupports = base.supportedTextureSampleSupports() + PlanTextureSampleSupport.of(
+                PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+                4,
+                setOf(PlanResourceUsage.RenderAttachment),
+            ),
+            supportedTextureResolveSupports = base.supportedTextureResolveSupports(),
+        )
 
     private companion object {
         val COLOR: ColorARGB = ColorARGB.fromPackedUInt(0x80FF0000u)

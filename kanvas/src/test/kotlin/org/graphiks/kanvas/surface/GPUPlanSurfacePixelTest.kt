@@ -3,9 +3,11 @@ package org.graphiks.kanvas.surface
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
+import org.graphiks.kanvas.surface.gpu.GPUPlanSurfaceTerminalException
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.geometry.toPathF32
@@ -29,6 +31,218 @@ class GPUPlanSurfacePixelTest {
     @AfterEach
     fun disposeGpuRuntime() {
         GPUBackendRuntimeFactory.dispose()
+    }
+
+    @Test
+    fun `W4dGeneral rotated hard fill reaches Surface with exact fully-covered pixels`() {
+        val path = Path().apply {
+            moveTo(1f, 2f)
+            lineTo(4f, 2f)
+            lineTo(4f, 4f)
+            lineTo(1f, 4f)
+            close()
+        }
+        val paint = Paint.fill(ColorARGB.of(255, 201, 71, 43)).copy(antiAlias = false)
+        val transform = Matrix3x3F32.rotation(33f, pivotX = 4f, pivotY = 4f)
+        val surface = Surface(8, 8)
+        surface.canvas {
+            rotate(33f, px = 4f, py = 4f)
+            drawPath(path, paint)
+        }
+
+        val result = surface.render()
+
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(
+            W4dGeneralPathCpuOracle.render(
+                widthI32 = 8,
+                heightI32 = 8,
+                draws = listOf(
+                    W4dGeneralPathCpuOracle.Draw(
+                        path = path.toPathF32(),
+                        paint = paint,
+                        transform = transform,
+                        scissorI32 = RectI32(0, 0, 8, 8),
+                    ),
+                ),
+            ),
+            result.pixels,
+        )
+    }
+
+    @Test
+    fun `W4dGeneral hard fill stroke and hairline preserve skew reflection and bounded perspective pixels`() {
+        val fill = Path().apply {
+            moveTo(1.25f, 1.25f)
+            lineTo(3.75f, 1.25f)
+            lineTo(3.75f, 3.75f)
+            lineTo(1.25f, 3.75f)
+            close()
+        }
+        val finiteStroke = Path().apply {
+            moveTo(2.25f, 3.5f)
+            lineTo(5.75f, 3.5f)
+        }
+        val hairline = Path().apply {
+            moveTo(1.25f, 3.5f)
+            lineTo(5.75f, 3.5f)
+        }
+        val cases = listOf(
+            W4dGeneralPathCpuOracle.Draw(
+                path = fill.toPathF32(),
+                paint = Paint.fill(ColorARGB.of(255, 38, 161, 99)).copy(antiAlias = false),
+                transform = Matrix3x3F32.skewing(0.25f, 0f),
+                scissorI32 = RectI32(0, 0, 9, 9),
+            ) to fill,
+            W4dGeneralPathCpuOracle.Draw(
+                path = fill.toPathF32(),
+                paint = Paint.fill(ColorARGB.of(255, 224, 91, 37)).copy(antiAlias = false),
+                transform = Matrix3x3F32(sx = -1f, kx = 0.25f, tx = 8f),
+                scissorI32 = RectI32(0, 0, 9, 9),
+            ) to fill,
+            W4dGeneralPathCpuOracle.Draw(
+                path = fill.toPathF32(),
+                paint = Paint.fill(ColorARGB.of(255, 62, 103, 231)).copy(antiAlias = false),
+                transform = Matrix3x3F32(persp0 = 0.05f),
+                scissorI32 = RectI32(0, 0, 9, 9),
+            ) to fill,
+            W4dGeneralPathCpuOracle.Draw(
+                path = finiteStroke.toPathF32(),
+                paint = Paint.stroke(ColorARGB.of(255, 203, 41, 167), 1f).copy(
+                    strokeCap = StrokeCap.BUTT,
+                    antiAlias = false,
+                ),
+                transform = Matrix3x3F32.rotation(33f, pivotX = 4f, pivotY = 4f),
+                scissorI32 = RectI32(0, 0, 9, 9),
+            ) to finiteStroke,
+            W4dGeneralPathCpuOracle.Draw(
+                path = hairline.toPathF32(),
+                paint = Paint.stroke(ColorARGB.of(255, 147, 73, 220), 0f).copy(antiAlias = false),
+                transform = Matrix3x3F32.skewing(0.25f, 0f),
+                scissorI32 = RectI32(0, 0, 9, 9),
+            ) to hairline,
+        )
+
+        cases.forEach { (draw, path) ->
+            val surface = Surface(9, 9)
+            surface.canvas {
+                concat(draw.transform)
+                drawPath(path, draw.paint)
+            }
+
+            val result = surface.render()
+
+            assertPreparedRouteEvidence(result)
+            assertPixelsEqual(
+                W4dGeneralPathCpuOracle.render(9, 9, listOf(draw)),
+                result.pixels,
+            )
+        }
+    }
+
+    @Test
+    fun `W4dGeneral hard path SrcOver order and public channel order are exact`() {
+        val backPath = Path().apply {
+            moveTo(1.25f, 1.25f)
+            lineTo(5.75f, 1.25f)
+            lineTo(5.75f, 5.75f)
+            lineTo(1.25f, 5.75f)
+            close()
+        }
+        val frontPath = Path().apply {
+            moveTo(2.25f, 2.25f)
+            lineTo(6.75f, 2.25f)
+            lineTo(6.75f, 6.75f)
+            lineTo(2.25f, 6.75f)
+            close()
+        }
+        val backPaint = Paint.fill(ColorARGB.of(128, 218, 57, 41)).copy(antiAlias = false)
+        val frontPaint = Paint.fill(ColorARGB.of(128, 31, 122, 228)).copy(antiAlias = false)
+        val skew = Matrix3x3F32.skewing(0.25f, 0f)
+        val draws = listOf(
+            W4dGeneralPathCpuOracle.Draw(backPath.toPathF32(), backPaint, skew, RectI32(0, 0, 9, 9)),
+            W4dGeneralPathCpuOracle.Draw(frontPath.toPathF32(), frontPaint, skew, RectI32(0, 0, 9, 9)),
+        )
+
+        listOf(PixelFormat.RGBA8, PixelFormat.BGRA8).forEach { format ->
+            val surface = Surface(9, 9, format)
+            surface.canvas {
+                concat(skew)
+                drawPath(backPath, backPaint)
+                drawPath(frontPath, frontPaint)
+            }
+
+            val result = surface.render()
+
+            assertPreparedRouteEvidence(result)
+            assertPixelsEqual(W4dGeneralPathCpuOracle.render(9, 9, draws, format), result.pixels)
+        }
+    }
+
+    @Test
+    fun `W4dGeneral mixed hard and AA paths expose the four-sample capability terminal`() {
+        val aaPath = Path().apply {
+            // Inverse-skewed device rect [1, 1]..[5, 5]: every legal AA sample is
+            // either fully covered or fully uncovered, independently of its position.
+            moveTo(0.75f, 1f)
+            lineTo(4.75f, 1f)
+            lineTo(3.75f, 5f)
+            lineTo(-0.25f, 5f)
+            close()
+        }
+        val hardPath = Path().apply {
+            // Inverse-skewed device rect [3, 3]..[5, 5].
+            moveTo(2.25f, 3f)
+            lineTo(4.25f, 3f)
+            lineTo(3.75f, 5f)
+            lineTo(1.75f, 5f)
+            close()
+        }
+        val aaPaint = Paint.fill(ColorARGB.of(128, 245, 77, 48)).copy(antiAlias = true)
+        val hardPaint = Paint.fill(ColorARGB.of(255, 24, 119, 242)).copy(antiAlias = false)
+        val transform = Matrix3x3F32.skewing(0.25f, 0f)
+        val surface = Surface(9, 9)
+        surface.canvas {
+            concat(transform)
+            drawPath(aaPath, aaPaint)
+            drawPath(hardPath, hardPaint)
+        }
+
+        val failure = assertFailsWith<GPUPlanSurfaceTerminalException> { surface.render() }
+
+        assertEquals("w4d.general.texture-sample-support-unavailable", failure.code)
+    }
+
+    @Test
+    fun `W4dGeneral AA terminal leaves the next public W4d render usable`() {
+        val rejectedPath = Path().apply {
+            moveTo(1.25f, 1.25f)
+            lineTo(5.25f, 1.25f)
+            lineTo(5.25f, 5.25f)
+            lineTo(1.25f, 5.25f)
+            close()
+        }
+        val rejected = Surface(9, 9)
+        rejected.canvas {
+            concat(Matrix3x3F32.skewing(0.25f, 0f))
+            drawPath(rejectedPath, Paint.fill(ColorARGB.Red).copy(antiAlias = true))
+        }
+
+        val failure = assertFailsWith<GPUPlanSurfaceTerminalException> { rejected.render() }
+        assertEquals("w4d.general.texture-sample-support-unavailable", failure.code)
+
+        val path = Path().apply {
+            moveTo(2.25f, 3.25f)
+            lineTo(5.75f, 3.25f)
+        }
+        val paint = Paint.stroke(ColorARGB.of(255, 64, 165, 231), 1.5f).copy(antiAlias = false)
+        val accepted = Surface(8, 6)
+        accepted.canvas { drawPath(path, paint) }
+
+        val result = accepted.render()
+
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(w4dOracle(8, 6, path, paint), result.pixels)
     }
 
     @Test

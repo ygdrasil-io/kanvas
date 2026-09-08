@@ -5,26 +5,33 @@ import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticCode
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticSeverity
 import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotGroupKey
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPlanW4dGeneralPreparedAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatcher
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatcherRequest
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand
 import org.graphiks.kanvas.gpu.renderer.passes.GPUProvisionalRenderSegmentKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPURefusalScope
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleAttachmentAuthority
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationRequest
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleLoadTransition
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleResolveAction
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleStoreAction
+import org.graphiks.kanvas.gpu.renderer.passes.GPUW4dPathSampleContinuationTransition
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureRef
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
+import org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity
 
 /** Rewrites the recorder's semantic-only vertices packet into the exact prepared-vertices render authority. */
 private fun GPUDrawPacket.withPlannedPreparedVerticesRenderAuthority(): GPUDrawPacket = GPUDrawPacket(
@@ -182,6 +189,10 @@ object GPUFramePlanner {
         if (packetIds.distinct().size != packetIds.size) {
             return diagnostic("invalid.frame_plan.duplicate_draw_packet", "Draw packet IDs must be unique")
         }
+        val w4dGeneralBridges = renderTasks.associateWith { task ->
+            task.w4dGeneralContinuationBridgeOrNull(taskList.capabilitySeal.deviceGeneration)
+        }
+        validateW4dGeneralContinuationBridges(w4dGeneralBridges)?.let { return it }
         renderTasks.forEach { task ->
             if (task.drawPackets.map(GPUDrawPacket::passId).distinct().size != 1) {
                 return diagnostic(
@@ -203,7 +214,9 @@ object GPUFramePlanner {
             }
             when (val samplePlan = task.samplePlan) {
                 is GPUSamplePlan.MultisampleFrame -> {
-                    val key = task.sampleContinuationKey ?: return diagnostic(
+                    val key = task.sampleContinuationKey
+                        ?: w4dGeneralBridges.getValue(task)?.request?.key
+                        ?: return diagnostic(
                         "invalid.frame_plan.msaa_continuation_missing",
                         "Every MSAA render task requires one typed continuation key.",
                     )
@@ -237,7 +250,9 @@ object GPUFramePlanner {
             }
         }
         renderTasks.groupBy(GPUTask.Render::target).forEach { (_, renders) ->
-            val keys = renders.mapNotNull(GPUTask.Render::sampleContinuationKey).distinct()
+            val keys = renders.mapNotNull { render ->
+                render.sampleContinuationKey ?: w4dGeneralBridges.getValue(render)?.request?.key
+            }.distinct()
             if (keys.size > 1) {
                 return diagnostic(
                     "invalid.frame_plan.msaa_continuation_key_mismatch",
@@ -249,6 +264,73 @@ object GPUFramePlanner {
         return taskList.tasks.filterIsInstance<GPUTask.Refused>()
             .firstOrNull { it.scope == GPURefusalScope.AtomicFrameFailure }
             ?.diagnostic
+    }
+
+    /**
+     * This is the narrow Task 8 bridge from Task 7's sealed path authority into the public
+     * frame continuation ABI. It copies the sealed transition verbatim; in particular it does
+     * not infer coverage, sample count, store, or resolve behavior from packet roles.
+     */
+    private fun validateW4dGeneralContinuationBridges(
+        bridges: Map<GPUTask.Render, W4dGeneralContinuationBridge?>,
+    ): GPUDiagnostic? {
+        val authenticated = bridges.mapNotNull { (task, bridge) -> bridge?.let { task to it } }
+        authenticated.groupBy { (_, bridge) -> bridge.authority }.forEach { (authority, entries) ->
+            val continuation = authority.sampleContinuation ?: return diagnostic(
+                "invalid.frame_plan.w4d_general_continuation_authority",
+                "W4d.2 MSAA packets require their sealed continuation authority.",
+            )
+            if (entries.map { (_, bridge) -> bridge.transition } != continuation.transitions) {
+                return diagnostic(
+                    "invalid.frame_plan.w4d_general_continuation_order",
+                    "W4d.2 MSAA packets must preserve the sealed path-pass transition order.",
+                )
+            }
+            if (entries.map { (_, bridge) -> bridge.request.key }.distinct().size != 1) {
+                return diagnostic(
+                    "invalid.frame_plan.w4d_general_continuation_key",
+                    "W4d.2 MSAA packets must retain one exact payload-owned attachment key.",
+                )
+            }
+        }
+        return null
+    }
+
+    private fun GPUTask.Render.w4dGeneralContinuationBridgeOrNull(
+        deviceGeneration: org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID,
+    ): W4dGeneralContinuationBridge? {
+        val multisample = samplePlan as? GPUSamplePlan.MultisampleFrame ?: return null
+        if (multisample.sampleCount != 4 || sampleContinuationKey != null) return null
+        val packet = drawPackets.singleOrNull() ?: return null
+        val authority = packet.corePrimitivePreparedAuthority
+            ?.w4dGeneralPreparedAuthority
+            ?: return null
+        val transition = authority.sampleContinuation?.transitions?.singleOrNull { candidate ->
+            candidate.pathPassId == packet.passId && candidate.commandIdValue == packet.commandIdValue
+        } ?: return null
+        val key = GPUSampleContinuationKey(
+            target = GPUTargetIdentity(target.value),
+            targetGeneration = PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION,
+            deviceGeneration = deviceGeneration,
+            colorFormat = GPUColorFormat.RGBA8UnormSrgb,
+            colorInterpretation = GPUColorInterpretation.LinearPremul,
+            samplePlan = multisample,
+            attachmentAuthority = GPUSampleAttachmentAuthority.PreparedFramePayload,
+            colorAttachment = GPUTargetIdentity(
+                "msaa-color:${target.value}:$PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION",
+            ),
+            depthStencilAttachment = null,
+        )
+        return W4dGeneralContinuationBridge(
+            authority = authority,
+            transition = transition,
+            request = GPUSampleContinuationRequest(
+                key = key,
+                loadTransition = transition.loadTransition,
+                storeAction = transition.storeAction,
+                resolveAction = transition.resolveAction,
+            ),
+        )
     }
 
     private fun validateOutput(orderedTasks: List<GPUTask>): GPUDiagnostic? {
@@ -714,10 +796,14 @@ object GPUFramePlanner {
         val pendingRenderSlices = mutableListOf<RenderSlice>()
         fun flushPendingRenderSlices(): GPUDiagnostic? {
             if (pendingRenderSlices.isEmpty()) return null
-            val continuationKey = pendingRenderSlices.first().task.continuationKey()
+            val firstTask = pendingRenderSlices.first().task
+            val continuationKey = firstTask.continuationKey()
             val renderStep = batchRenderSegment(
                 slices = pendingRenderSlices,
                 continuesStoredTarget = continuationKey in openedRenderSegments,
+                w4dGeneralBridge = firstTask.w4dGeneralContinuationBridgeOrNull(
+                    taskList.capabilitySeal.deviceGeneration,
+                ),
             ) ?: return diagnostic("invalid.frame_plan.render_batch", "Batching lost a draw packet")
             steps += renderStep
             openedRenderSegments += continuationKey
@@ -962,6 +1048,7 @@ object GPUFramePlanner {
     private fun batchRenderSegment(
         slices: List<RenderSlice>,
         continuesStoredTarget: Boolean,
+        w4dGeneralBridge: W4dGeneralContinuationBridge?,
     ): GPUFrameStep.RenderPassStep? {
         val first = slices.first().task
         val packets = slices.flatMap(RenderSlice::drawPackets)
@@ -997,7 +1084,9 @@ object GPUFramePlanner {
         val preparedTextBindingsByPacketId = slices
             .flatMap { slice -> slice.task.preparedTextBindingsByPacketId.entries }
             .associate { entry -> entry.toPair() }
-        val loadStore = if (continuesStoredTarget) {
+        val loadStore = if (w4dGeneralBridge != null) {
+            first.loadStore
+        } else if (continuesStoredTarget) {
             first.loadStore.copy(loadOp = "load", clearColorLabel = null)
         } else {
             first.loadStore
@@ -1010,7 +1099,7 @@ object GPUFramePlanner {
             drawPackets = packets,
             sourceTaskIds = packets.map { packetOwner.getValue(it.packetId) }.distinct(),
             batches = frameBatches,
-            sampleContinuation = first.sampleContinuationKey
+            sampleContinuation = w4dGeneralBridge?.request ?: first.sampleContinuationKey
                 ?.takeIf { first.samplePlan is GPUSamplePlan.MultisampleFrame }
                 ?.let { key ->
                     GPUSampleContinuationRequest(
@@ -1055,12 +1144,22 @@ object GPUFramePlanner {
     }
 
     private fun GPUTask.Render.canShareProvisionalSegment(other: GPUTask.Render): Boolean =
-        target == other.target &&
+        w4dGeneralContinuationBridgeOrNullForBoundary() == null &&
+            other.w4dGeneralContinuationBridgeOrNullForBoundary() == null &&
+            target == other.target &&
             loadStore == other.loadStore &&
             depthStencilLoadStore == other.depthStencilLoadStore &&
             samplePlan == other.samplePlan &&
             provisionalSegmentKey == other.provisionalSegmentKey &&
             drawPackets.first().targetStateHash == other.drawPackets.first().targetStateHash
+
+    private fun GPUTask.Render.w4dGeneralContinuationBridgeOrNullForBoundary():
+        GPUPlanW4dGeneralPreparedAuthority? =
+        if (samplePlan is GPUSamplePlan.MultisampleFrame && sampleContinuationKey == null) {
+            drawPackets.singleOrNull()?.corePrimitivePreparedAuthority?.w4dGeneralPreparedAuthority
+        } else {
+            null
+        }
 
     private fun GPUTask.Render.continuationKey(): RenderContinuationKey = RenderContinuationKey(
         target = target,
@@ -1269,6 +1368,12 @@ object GPUFramePlanner {
         val target: GPUFrameTargetRef,
         val samplePlan: org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan,
         val provisionalSegmentKey: GPUProvisionalRenderSegmentKey,
+    )
+
+    private data class W4dGeneralContinuationBridge(
+        val authority: GPUPlanW4dGeneralPreparedAuthority,
+        val transition: GPUW4dPathSampleContinuationTransition,
+        val request: GPUSampleContinuationRequest,
     )
 
     private sealed interface Linearization {

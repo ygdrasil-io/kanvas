@@ -147,10 +147,14 @@ class GPUCommandEncoderScopePlan internal constructor(
         private set
     internal var allowsClipStencilPrefixDepthStencil: Boolean = false
         private set
+    /** Task 8 W4d.2 owns its sealed D24 bindings without reusing a historical route seal. */
+    internal var allowsW4dGeneralDepthStencil: Boolean = false
+        private set
 
     internal fun attachNativeOperandKeys(
         keys: List<GPUPreparedNativeOperandKey>,
         allowsClipStencilPrefixDepthStencil: Boolean = false,
+        allowsW4dGeneralDepthStencil: Boolean = false,
     ): GPUCommandEncoderScopePlan {
         check(nativeOperandKeys.isEmpty()) { "Native operand keys are already attached" }
         require(keys.isNotEmpty()) { "Native operand keys must not be empty" }
@@ -175,7 +179,9 @@ class GPUCommandEncoderScopePlan internal constructor(
             it.role == GPUPreparedNativeOperandRole.RenderDepthStencilTarget
         }
         require(
-            if (pathSealed || clipStencilSealed || allowsClipStencilPrefixDepthStencil) {
+            if (pathSealed || clipStencilSealed || allowsClipStencilPrefixDepthStencil ||
+                allowsW4dGeneralDepthStencil
+            ) {
                 depthStencilKeys.size == 1 &&
                     depthStencilKeys.single().kind == GPUPreparedNativeOperandKind.TextureView &&
                     depthStencilKeys.single().ownership == GPUPreparedNativeOperandOwnership.Borrowed
@@ -190,6 +196,13 @@ class GPUCommandEncoderScopePlan internal constructor(
         ) {
             "Only the direct prefix of a clip-stencil route may retain an unsealed D24S8 operand"
         }
+        require(!allowsW4dGeneralDepthStencil ||
+            !pathSealed && !clipStencilSealed && !coverageMaskSealed &&
+                !allowsClipStencilPrefixDepthStencil
+        ) {
+            "Only sealed W4d.2 materialization may retain an otherwise unsealed D24S8 operand"
+        }
+        this.allowsW4dGeneralDepthStencil = allowsW4dGeneralDepthStencil
         if (coverageMaskSealed && coverageMaskSeal.units().size > 1) {
             val units = coverageMaskSeal.units()
             val producers = units.filterIsInstance<GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer>()
@@ -1453,6 +1466,11 @@ internal class PreparedGPUFrame(
                     semanticPlan.hasSealedW4dSessionMarker()
                 val plannedPathPacket = step.drawPackets.singleOrNull()
                 val plannedPathAuthority = plannedPathPacket?.corePrimitivePreparedAuthority
+                // W4d.2-general has a separate, sealed Task 7 materialization table.  Its
+                // V/I/U/D24 operands are materialized by Task 8 rather than by the historical
+                // W4c/W4d scratch route seals, so it must not be reclassified as one of them.
+                val w4dGeneralScope = plannedPathAuthority
+                    ?.w4dGeneralFrameMaterializationAuthority != null
                 val hasPlannedPathAuthority = plannedPathAuthority?.w4cSessionScratch != null ||
                     plannedPathAuthority?.w4dSessionScratch != null
                 val expectedPlannedPathLoadStore = when (plannedPathPacket?.role) {
@@ -1497,7 +1515,7 @@ internal class PreparedGPUFrame(
                             "Prepared planned-path direct scopes must remain color-only shading packets"
                         }
                     }
-                } else if (
+                } else if (!w4dGeneralScope &&
                     unplannedWritablePathLoad?.loadOperation ==
                     org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Load
                 ) {
@@ -1508,7 +1526,7 @@ internal class PreparedGPUFrame(
                 val depthStencilKeys = scope.nativeOperandKeys.filter {
                     it.role == GPUPreparedNativeOperandRole.RenderDepthStencilTarget
                 }
-                require(
+                require(w4dGeneralScope || (
                     pathSealed == unifiedContainsPath &&
                         pathSealed == (pathUses.size == 1) &&
                         pathSealed == hasPathStencilLoadStore &&
@@ -1521,8 +1539,8 @@ internal class PreparedGPUFrame(
                                 GPUPreparedNativeOperandOwnership.Borrowed
                             )) &&
                         (pathSealed || clipStencilSealed ||
-                            scope.allowsClipStencilPrefixDepthStencil || depthStencilKeys.isEmpty()),
-                ) {
+                            scope.allowsClipStencilPrefixDepthStencil || depthStencilKeys.isEmpty())
+                    )) {
                     "Prepared path seal, unified pair, writable attachment use, load/store, and native operand must agree exactly"
                 }
                 require(listOf(pathSealed, clipStencilSealed, coverageMaskSealed).count { it } <= 1 &&

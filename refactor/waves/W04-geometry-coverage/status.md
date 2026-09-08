@@ -1,9 +1,103 @@
-# État W04 — geometry/coverage — W4d.1
+# État W04 — geometry/coverage — W4d.2
 
-Révision W4d.1 vérifiée : `ce8e1d44f65d6539235d084e75ac19246908a5ec`
-(`docs(refactor): publish W4d stroke evidence`), empilée sur W4c. Les
-vérifications W4d.1 publiées dans ce status ont été exécutées le 2026-09-07 et
-n'ont lancé ni GM, ni Skia.
+Révision W4d.2 vérifiée : `cdf854b` (`style: remove W4d trailing whitespace`),
+empilée sur `codex/w4d-strokes-hairlines` à
+`0537e222c08db756498d5b73d07b13fe25b41aeb`. Les vérifications publiées ici ont
+été exécutées le 2026-09-08 ; elles n'ont lancé ni GM, ni Skia.
+
+## W4d.2 — transforms généraux et architecture AA4
+
+W4d.2 étend la préparation path à `Matrix3x3F64`, sous les classes typées
+`Identity`, `AxisAlignedAffine`, `GeneralAffine` et `Perspective`. La
+classification est IEEE exacte (sans epsilon ni chaîne de caractères) ; le
+mapping affine conserve les arcs par covariance et la perspective certifie les
+intervalles homogènes avant division. Un horizon réel `w = 0` est terminal
+`PerspectiveHorizonCrossing`, non une approximation affine. Fills, finite
+strokes, dashes et hairlines partagent le ledger F64 : le finite stroke est
+construit en source-space avant projection, tandis que la hairline devient un
+pixel device après projection.
+
+Deux capabilities sont scellées :
+
+- `solid-path-geometry-hard-1x-general-transform-simple-scissor-src-over-srgb-v1`
+  pour une frame hard-edge générale entièrement 1× ;
+- `solid-path-geometry-mixed-aa4-general-transform-simple-scissor-src-over-srgb-v1`
+  pour une frame contenant au moins un path AA, lorsque les faits physiques AA4
+  sont réellement publiés par le runtime.
+
+La lane hard générale est fonctionnelle de bout en bout : fills, finite
+strokes, hairlines, `STROKE_AND_FILL`, rotations, skews, réflexions et
+perspectives bornées passent par `:math` → `:gpu-plan` → `:gpu-renderer` →
+`Surface`; les preuves publiques utilisent un oracle F64 indépendant et des
+pixels RGBA/BGRA byte-exact. Les scenes invalides ou divergentes restent
+terminales avant submit, sans fallback legacy après `Ready`.
+
+### Graphe, ressources et autorité AA4
+
+L'architecture AA est implémentée et scellée, sans recalcul dans le renderer :
+
+| Frame | Attachments exacts | Resolve / hard-edge |
+| --- | --- | --- |
+| hard seulement | couleur sRGB 1× ; D24S8 1× seulement si stencil | aucun MSAA, aucun resolve |
+| AA seulement | couleur sRGB 4×, D24S8 4×, target logique sRGB 1× | seuls le dernier pass couleur et son groupe atomique portent le resolve 4×→1× |
+| AA + hard | mêmes ressources AA, mask `RGBA8Unorm` linéaire 1× réutilisable, D24S8 1× si le hard path utilise stencil | le hard path produit un mask binaire 1× puis un cover 4× par `textureLoad` entier non filtré, identique pour les quatre samples |
+
+Le lowering dérive un witness canonique et une autorité W4d.2 versionnée. Elle
+scelle graph, allocations, slots/usages/durées de vie, passes, resolve final,
+payloads `Uniform32`/`Uniform64`, slabs uniformes et capacité du frame pool.
+Le preflight et le materializer ne reclassifient ni la couverture ni les
+ressources ; ils ne consomment que ces faits. Les leases sont détenus jusqu'à
+completion, les échecs pré-submit rollbackent ou mettent le slot en quarantaine,
+et l'autorité privée interdit de forger un consumer mask 4× par une simple
+structural key.
+
+### Gap AA4 de production — non résolu et volontairement non masqué
+
+Le runtime natif courant expose `RGBA8UnormSrgb` seulement à l'échantillonnage
+`{1}`. Il ne fournit ni support sRGB 4× ni probe/entrée de resolve sRGB 4×→1×.
+`RGBA8Unorm` possède bien les faits 1×/4× et resolve, et l'adaptateur D24S8
+consomme désormais sa table authentifiée `RenderAttachment` `{1,4}` sans
+l'ajouter artificiellement aux formats couleur larges. Cette correction D24 ne
+fabrique donc aucun support sRGB4.
+
+Conséquence : une scène W4d.2 AA à transform `GeneralAffine` ou `Perspective`
+est actuellement un terminal explicite
+`w4d.general.texture-sample-support-unavailable`, avant fallback. Il n'existe
+pas encore de preuve Surface positive AA ou mixte, ni de pixels exacts de
+coverage 0 / 0,5 / 1, tant qu'une requête/probe natif réel ne certifie pas
+sRGB4 **et** son resolve. Le test public prouve le terminal et l'absence de
+pollution de la frame hard suivante ; ce n'est ni une rebaseline ni une
+équivalence isopixel revendiquée.
+
+La correction `42efea430` préserve la compatibilité historique : le compiler
+W4d.2 ne capture plus un path AA identity/axis-aligned qui relève des lanes
+W4c/W4d existantes. `KanvasSmokeTest::canvas drawPath records command()`
+redevient vert et la baseline globale revient à ses 51 échecs historiques.
+
+### Vérifications fraîches W4d.2
+
+| Commande | Résultat observé |
+| --- | --- |
+| `rtk ./gradlew :math:geometry:jvmTest :math:geometry:jsNodeTest :math:matrix:jvmTest :math:matrix:jsNodeTest :render-ir:test :gpu-plan:test --rerun-tasks --max-workers=1 --console=plain` | 115 suites XML, 1 685 tests, 0 failure, 0 error. |
+| `rtk ./gradlew :gpu-renderer:test --tests '*GpuPlan*' --tests '*W4d*' --tests '*StencilAa*' --tests '*GPUFramePreflighterTest*' --tests '*GPUWgpu4kCorePrimitiveFramePoolTest*' --rerun-tasks --max-workers=1 --console=plain` | `BUILD SUCCESSFUL`; 53 tâches ; 13 suites, 309 tests, 0 failure, 0 error. |
+| `rtk ./gradlew :gpu-plan:test --rerun-tasks --max-workers=1 --console=plain` après `42efea430` | `BUILD SUCCESSFUL`; 32 tâches ; 15 suites, 184 tests, 0 failure, 0 error. |
+| Gate Surface filtrée W4d.2 | 2 080 tests, 45 failures historiques `DrawPoint`, 0 error ; aucune failure W4d.2. |
+| `rtk ./gradlew --no-daemon -Pkotlin.compiler.execution.strategy=in-process :kanvas:test --rerun-tasks --max-workers=1 --console=plain` après `42efea430` | `BUILD FAILED` uniquement sur le ledger : 55 tâches, 120 suites, 3 664 tests, 51 failures, 0 error. |
+
+Le dernier rerun isolé évite un classpath incrémental Kotlin intermittent vu
+avec plusieurs démons (classes locales présentes mais temporairement non
+chargées). Il conserve le même source HEAD et établit le ledger XML final ; ce
+n'est pas un écart fonctionnel W4d.2.
+
+Le ledger de 51 contient exactement les 45 `DrawPoint` (15 blends avancés ×
+`UNCLIPPED`/`SCISSOR`/`ALPHA_MASK`) et les six échecs W4d.1 déjà recensés :
+`ImageTest::ColorType enum values`, `GPUMaskBlurDispatchTest`, deux
+`GPUPreparedSurfaceFrameBuilderTest`, `GPUPreparedTextStrokeTest` et
+`GPURefusalGuardsTest`. Aucun `<error>` XML n'est présent.
+
+La gate renderer complète rapportée pendant la revue Task 9 reste à 3 752
+tests et 14 failures historiques, sans delta W4d.2 ; la gate ciblée ci-dessus
+est la preuve fraîche de la surface modifiée par W4d.2.
 
 ## Tranches W4a, W4b, W4c et W4d.1 atteintes
 
@@ -205,14 +299,20 @@ Pour les RRect non nuls, la SDF native n'est pas l'aire analytique Skia exacte. 
 
 ## Limites ouvertes
 
-W4 reste ouverte. W4d.1 laisse explicitement : la limite conservative
-`TopologyLimit` de l'union F64→F32 pour les auto-intersections, W4d.2
-(transforms généraux et AA commune fill/stroke), W4e (clips path complexes,
-inverse et booléens) et la baseline historique DrawPoint ci-dessus. W5
-(materials), W6 (layers/effets) et W7 (convergence GM, y compris la
-réévaluation de la dette SDF RRect W4b) ne font pas partie de W4d.1.
+W4 reste ouverte. W4d.2 laisse explicitement :
 
-W4d.1 n'a exécuté ni GM Skia, dashboard ou baseline, ni `jpg-color-cube`, ni
-test `font` ou `codec`; aucun de ces chemins, ni seuil/tolérance de similarité,
-n'est modifié par le diff `codex/w4c-path-fills...HEAD`. Ces exclusions restent
-des frontières de portée, non une rebaseline de la dette DrawPoint.
+- un probe/requête de capability native sRGB 4× avec resolve 4×→1×, puis les
+  preuves Surface AA/mixte exactes 0 / 0,5 / 1 ; aucune capacité ne doit être
+  inventée pour contourner ce gap ;
+- la limite conservative `TopologyLimit` de certaines unions PathOps F64→F32,
+  notamment `STROKE_AND_FILL` projectif non vide et le fixture closed-skew ;
+- W4e : clips path complexes, inverse paths et booléens.
+
+W5 (materials), W6 (layers/effets) et W7 (convergence GM, incluant la
+réévaluation de la dette SDF RRect W4b) ne font pas partie de W4d.2. Les gates
+ci-dessus n'ont exécuté ni `:integration-tests:skia`, ni GM/dashboard/baseline,
+ni `jpg-color-cube`, ni tests `font` ou `codec`. Des modules `font` peuvent
+être compilés transitivement par Gradle, sans qu'aucune suite de test `font` ne
+soit sélectionnée. Le diff W4d.2 ne modifie ni source `font`/`codec`, ni
+seuil/tolérance, dashboard, rendu de référence ou baseline : ces exclusions
+restent des frontières de portée, non une rebaseline du ledger DrawPoint.

@@ -501,6 +501,18 @@ class W4dPathStrokePlanCompilerTest {
             mutateCapabilities(capsBase, bufferAllocationPolicy = PlanBufferAllocationPolicy.of(32_768, capsBase.bufferAllocationPolicy.indexFloorBytes, capsBase.bufferAllocationPolicy.uniformFloorBytes)),
             mutateCapabilities(capsBase, bufferAllocationPolicy = PlanBufferAllocationPolicy.of(capsBase.bufferAllocationPolicy.vertexFloorBytes, 8_192, capsBase.bufferAllocationPolicy.uniformFloorBytes)),
             mutateCapabilities(capsBase, bufferAllocationPolicy = PlanBufferAllocationPolicy.of(capsBase.bufferAllocationPolicy.vertexFloorBytes, capsBase.bufferAllocationPolicy.indexFloorBytes, 8_192)),
+            mutateCapabilities(
+                capsBase,
+                textureSampleSupports = capsBase.supportedTextureSampleSupports() + PlanTextureSampleSupport.of(
+                    PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+                    4,
+                    setOf(PlanResourceUsage.RenderAttachment),
+                ),
+            ),
+            mutateCapabilities(
+                capsBase,
+                textureResolveSupports = setOf(colorResolveSupport()),
+            ),
         ).forEach { changed -> assertNotEquals(stable, id(changed)) }
         assertNotEquals(stable, id(budget = PlanBudget(2L shl 20)))
 
@@ -674,10 +686,33 @@ class W4dPathStrokePlanCompilerTest {
         operations: Set<PlanOperationCapability> = base.supportedOperations(),
         bufferAllocationPolicy: PlanBufferAllocationPolicy = base.bufferAllocationPolicy,
         depthStencilFormats: Set<PlanDepthStencilFormat> = base.supportedDepthStencilFormats(),
+        textureSampleSupports: Set<PlanTextureSampleSupport> = base.supportedTextureSampleSupports(),
+        textureResolveSupports: Set<PlanTextureResolveSupport> = base.supportedTextureResolveSupports(),
     ): PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(
-        deviceGeneration, maxTextureDimension2D, maxBufferSizeBytes, copyBytesPerRowAlignment, supportedFormats,
-        minUniformBufferOffsetAlignment, maxDynamicUniformBuffersPerPipelineLayout, operations,
-        bufferAllocationPolicy, depthStencilFormats,
+        deviceGeneration = deviceGeneration,
+        maxTextureDimension2D = maxTextureDimension2D,
+        maxBufferSizeBytes = maxBufferSizeBytes,
+        copyBytesPerRowAlignment = copyBytesPerRowAlignment,
+        supportedFormats = supportedFormats,
+        minUniformBufferOffsetAlignment = minUniformBufferOffsetAlignment,
+        maxDynamicUniformBuffersPerPipelineLayout = maxDynamicUniformBuffersPerPipelineLayout,
+        supportedOperations = operations,
+        bufferAllocationPolicy = bufferAllocationPolicy,
+        supportedDepthStencilFormats = depthStencilFormats,
+        supportedTextureSampleSupports = textureSampleSupports.filter { support ->
+            when (val format = support.format) {
+                is PlanTextureFormat.Color -> format.value in supportedFormats
+                is PlanTextureFormat.DepthStencil -> format.value in depthStencilFormats
+                PlanTextureFormat.CoverageMask -> true
+            }
+        }.toSet(),
+        supportedTextureResolveSupports = textureResolveSupports,
+    )
+
+    private fun colorResolveSupport(): PlanTextureResolveSupport = PlanTextureResolveSupport.of(
+        PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+        4,
+        1,
     )
 
     private fun pathDraw(style: PaintStyleNode, width: Float = 2f, cap: StrokeCapNode = StrokeCapNode.BUTT, join: StrokeJoinNode = StrokeJoinNode.MITER, miter: Float = 4f, effect: PathEffectNode? = null, path: PathF32 = trianglePath()): SceneCommand.Draw {

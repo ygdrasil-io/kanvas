@@ -318,7 +318,7 @@ public class W4bAnalyticRRectPlanCompiler : GpuPlanCompiler {
             capabilities.bufferAllocationPolicy.vertexFloorBytes.toString(), capabilities.bufferAllocationPolicy.indexFloorBytes.toString(),
             capabilities.bufferAllocationPolicy.uniformFloorBytes.toString(), capabilities.bufferAllocationPolicy.growth.name,
             budget.maxFrameLocalBytes.toString(),
-        )
+        ) + planCapabilityIdentityFacts(capabilities)
         val digest = MessageDigest.getInstance("SHA-256")
         fields.forEach { value ->
             val bytes = value.encodeToByteArray()

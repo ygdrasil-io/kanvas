@@ -27,6 +27,24 @@
 - `font`, `codec`, GM Skia, dashboard, baselines et `jpg-color-cube` restent hors scope; aucun seuil/tolérance ajouté.
 - Fresh Terra par tâche, Sol spec+quality read-only après chaque commit.
 
+## État d'exécution — 2026-09-08
+
+| Task | État vérifié | Révision de clôture / preuve |
+| --- | --- | --- |
+| 1 — matrice F64 | Terminé | `a37d90a8f`, revue Sol CLEAN |
+| 2 — affine général | Terminé | `11a31a66b`, revue Sol CLEAN |
+| 3 — perspective bornée | Terminé | `33d19fa12`, corrections de tangence et revue Sol CLEAN |
+| 4 — préparation commune | Terminé avec gap PathOps suivi | `deb3efe00`, revue Sol CLEAN ; `StrokeAndFill` projectif non vide peut retourner `TopologyLimit` |
+| 5 — contrats MSAA/resolve | Terminé | `067958ca0`, revue Sol CLEAN |
+| 6 — compiler/budgets | Terminé | `3c801385f`, revue Sol CLEAN |
+| 7 — lowering/autorité | Terminé | `92c219a0b`, revue Sol CLEAN |
+| 8 — matérialisation/pool | Implémenté ; preuves de gates présentes | `bafbd4019` puis correctifs d'autorité, préflight et générations de depth ; revue Sol globale CLEAN après corrections documentaires |
+| 9 — Surface/oracle | Terminé | `42efea430`, revue Sol CLEAN ; AA4 réel reste terminal sur le runtime courant |
+| 10 — vérification/documentation | Terminé | gates, ledger XML et suivi publiés dans `9849f12` ; revue Sol finale APPROVED/CLEAN ; PR stackée [#2392](https://github.com/ygdrasil-io/kanvas/pull/2392) ouverte et mergeable vers `codex/w4d-strokes-hairlines` |
+
+Les cases de conception ci-dessous décrivent le déroulé originel ; ce tableau
+est le ledger d'exécution autoritaire après les corrections et revues.
+
 ---
 
 ## Carte de fichiers
@@ -879,7 +897,7 @@ rtk git commit -m "feat(kanvas): route transformed AA paths"
 - Modify: `refactor/waves/W04-geometry-coverage/status.md`
 - Modify: ce plan
 
-- [ ] **Step 1: Exécuter les gates fraîches**
+- [x] **Step 1: Exécuter les gates fraîches**
 
 ```bash
 rtk ./gradlew :math:geometry:jvmTest :math:geometry:jsNodeTest :math:matrix:jvmTest :math:matrix:jsNodeTest :render-ir:test :gpu-plan:test --rerun-tasks
@@ -888,7 +906,7 @@ rtk ./gradlew :kanvas:test --tests '*GPUPlanSurface*' --tests '*SurfaceTest*' --
 rtk ./gradlew :kanvas:test --rerun-tasks
 ```
 
-- [ ] **Step 2: Contrôler XML/scope/diff**
+- [x] **Step 2: Contrôler XML/scope/diff**
 
 ```bash
 rtk rg -n '<failure|<error' kanvas/build/test-results/test/TEST-*.xml
@@ -896,7 +914,7 @@ rtk git diff --check codex/w4d-strokes-hairlines...HEAD
 rtk git diff --name-only codex/w4d-strokes-hairlines...HEAD
 ```
 
-- [ ] **Step 3: Mettre à jour le suivi et committer**
+- [x] **Step 3: Mettre à jour le suivi et committer**
 
 Publier capabilities, transform classes, MSAA resources, résultats frais,
 ledger et W4e encore ouverte.
@@ -906,17 +924,22 @@ rtk git add refactor
 rtk git commit -m "docs(refactor): publish W4d transform AA evidence"
 ```
 
-- [ ] **Step 4: Sol final review et corrections**
+- [x] **Step 4: Sol final review et corrections**
 
 Relire le diff complet depuis W4d.1, corriger tout Critical/Important via fresh
-Terra, refaire les gates affectées jusqu'à `Approved`.
+Terra, refaire les gates affectées jusqu'à `Approved`. Revue Sol finale
+`APPROVED/CLEAN` après les corrections documentaires.
 
-- [ ] **Step 5: Pousser et créer la PR stackée**
+- [x] **Step 5: Pousser et créer la PR stackée**
 
 ```bash
 rtk git push -u origin codex/w4d-general-transform-aa
 rtk gh pr create --base codex/w4d-strokes-hairlines --head codex/w4d-general-transform-aa --title "feat: add general path transforms and AA" --body-file /tmp/w4d-aa-pr-body.md
 ```
+
+PR stackée [#2392](https://github.com/ygdrasil-io/kanvas/pull/2392) ouverte et
+mergeable, de `codex/w4d-general-transform-aa` vers
+`codex/w4d-strokes-hairlines`; elle n'est pas encore mergée.
 
 Le body créé par `apply_patch` contient `## Summary`, `## Verification` et
 `## Scope and follow-ups`. Ne pas merger/rebaser ni lancer les tests exclus.

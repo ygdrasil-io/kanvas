@@ -324,7 +324,7 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
             capabilities.bufferAllocationPolicy.vertexFloorBytes.toString(), capabilities.bufferAllocationPolicy.indexFloorBytes.toString(),
             capabilities.bufferAllocationPolicy.uniformFloorBytes.toString(), capabilities.bufferAllocationPolicy.growth.name,
             budget.maxFrameLocalBytes.toString(),
-        )
+        ) + planCapabilityIdentityFacts(capabilities)
         val digest = MessageDigest.getInstance("SHA-256")
         fields.forEach { field ->
             val bytes = field.encodeToByteArray()

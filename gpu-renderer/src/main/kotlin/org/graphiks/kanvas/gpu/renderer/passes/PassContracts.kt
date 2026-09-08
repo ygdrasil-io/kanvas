@@ -6,8 +6,10 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskProducerPlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilProducerPlan
-import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingSlot
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadFingerprint
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadSlotID
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingSlot
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadSlot
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUComputePipelineKey
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
@@ -261,6 +263,96 @@ enum class GPUDrawPacketRole {
     Readback,
 }
 
+/** Pipeline specialization selected by the W4d.2 hard-mask color cover. */
+public enum class GPUW4dBinaryMaskPipelineIntent {
+    CoverageMaskConsumer,
+}
+
+/** Geometry supplied to the W4d.2 binary-mask consumer, independent of the producer path. */
+public enum class GPUW4dBinaryMaskCoverGeometry {
+    TargetScissorQuad,
+}
+
+/**
+ * Immutable packet ABI for the W4d.2 binary hard-mask consumer.
+ *
+ * It carries no backend handle: the resource id and binding slot are the exact planning facts
+ * later materialization must authenticate before it creates a texture view or bind group.
+ */
+public class GPUW4dBinaryMaskConsumerPlan private constructor(
+    public val maskResourceId: String,
+    public val resourceSlot: GPUResourceBindingSlot,
+    public val bindingLayoutHash: String,
+    public val renderPipelineKey: GPURenderPipelineKey,
+    public val pipelineIntent: GPUW4dBinaryMaskPipelineIntent,
+    public val fetch: GPUW4dBinaryMaskFetch,
+    public val coverGeometry: GPUW4dBinaryMaskCoverGeometry,
+    public val broadcastSampleCountI32: Int,
+    public val broadcastsSameBinaryColorAndAlpha: Boolean,
+) {
+    init {
+        require(maskResourceId.isNotBlank()) { "W4d.2 binary-mask resource id must not be blank" }
+        require(bindingLayoutHash.isNotBlank()) { "W4d.2 binary-mask binding layout must not be blank" }
+        require(broadcastSampleCountI32 == 4) {
+            "W4d.2 binary-mask consumer must broadcast exactly four samples"
+        }
+        require(broadcastsSameBinaryColorAndAlpha) {
+            "W4d.2 binary-mask consumer must broadcast one binary color and alpha"
+        }
+    }
+
+    override fun equals(other: Any?): Boolean = other is GPUW4dBinaryMaskConsumerPlan &&
+        maskResourceId == other.maskResourceId &&
+        resourceSlot == other.resourceSlot &&
+        bindingLayoutHash == other.bindingLayoutHash &&
+        renderPipelineKey == other.renderPipelineKey &&
+        pipelineIntent == other.pipelineIntent &&
+        fetch == other.fetch &&
+        coverGeometry == other.coverGeometry &&
+        broadcastSampleCountI32 == other.broadcastSampleCountI32 &&
+        broadcastsSameBinaryColorAndAlpha == other.broadcastsSameBinaryColorAndAlpha
+
+    override fun hashCode(): Int = listOf(
+        maskResourceId,
+        resourceSlot,
+        bindingLayoutHash,
+        renderPipelineKey,
+        pipelineIntent,
+        fetch,
+        coverGeometry,
+        broadcastSampleCountI32,
+        broadcastsSameBinaryColorAndAlpha,
+    ).hashCode()
+
+    internal companion object {
+        const val BINDING_LAYOUT_HASH: String =
+            "layout.core-primitive.w4d-binary-mask-consumer.uniform-texture2d-load-i32-v1"
+
+        fun exact(
+            maskResourceId: String,
+            commandIdValue: Int,
+            renderPipelineKey: GPURenderPipelineKey,
+        ): GPUW4dBinaryMaskConsumerPlan {
+            require(commandIdValue >= 0) { "W4d.2 binary-mask command id must be non-negative" }
+            return GPUW4dBinaryMaskConsumerPlan(
+                maskResourceId = maskResourceId,
+                resourceSlot = GPUResourceBindingSlot(
+                    GPUPayloadSlotID("slot.w4d-binary-mask.$commandIdValue.$maskResourceId"),
+                    GPUPayloadFingerprint("w4d-binary-mask.texture-load-i32.$maskResourceId"),
+                    bindingIndex = 1,
+                ),
+                bindingLayoutHash = BINDING_LAYOUT_HASH,
+                renderPipelineKey = renderPipelineKey,
+                pipelineIntent = GPUW4dBinaryMaskPipelineIntent.CoverageMaskConsumer,
+                fetch = GPUW4dBinaryMaskFetch.TextureLoadIntegerAtTargetTexelUnfiltered,
+                coverGeometry = GPUW4dBinaryMaskCoverGeometry.TargetScissorQuad,
+                broadcastSampleCountI32 = 4,
+                broadcastsSameBinaryColorAndAlpha = true,
+            )
+        }
+    }
+}
+
 /** Typed producer authority selected by the clip mapper and carried unchanged to encoding. */
 sealed interface GPUClipProducerAuthority {
     /** Stable selector paired with the packet's full [GPUClipExecutionPlan.canonicalIdentity]. */
@@ -312,6 +404,7 @@ class GPUDrawPacket(
     val clipExecutionPlan: GPUClipExecutionPlan? = null,
     diagnostics: List<GPUPassDiagnostic> = emptyList(),
     val clipProducerAuthority: GPUClipProducerAuthority? = null,
+    val w4dBinaryMaskConsumer: GPUW4dBinaryMaskConsumerPlan? = null,
 ) {
     /** Diagnostics copied from packet production so caller mutation cannot rewrite evidence. */
     val diagnostics: List<GPUPassDiagnostic> = immutableList(diagnostics)
@@ -425,6 +518,7 @@ class GPUDrawPacket(
         require(originalPaintOrder >= 0) { "GPUDrawPacket.originalPaintOrder must be non-negative" }
         require(resourceGeneration >= 0L) { "GPUDrawPacket.resourceGeneration must be non-negative" }
         requireRoleHasPipelineKey()
+        requireW4dBinaryMaskConsumer()
         requireClipProducerAuthority()
     }
 
@@ -443,6 +537,22 @@ class GPUDrawPacket(
             else -> require(renderPipelineKey != null) {
                 "$role GPUDrawPacket requires renderPipelineKey"
             }
+        }
+    }
+
+    private fun requireW4dBinaryMaskConsumer() {
+        val consumer = w4dBinaryMaskConsumer ?: return
+        require(role == GPUDrawPacketRole.Shading) {
+            "W4d.2 binary-mask consumer must be a shading packet"
+        }
+        require(resourceSlot == consumer.resourceSlot) {
+            "W4d.2 binary-mask consumer must bind its authenticated mask resource slot"
+        }
+        require(bindingLayoutHash == consumer.bindingLayoutHash) {
+            "W4d.2 binary-mask consumer must use its exact textureLoad binding layout"
+        }
+        require(renderPipelineKey == consumer.renderPipelineKey) {
+            "W4d.2 binary-mask consumer must use its typed coverage-mask pipeline"
         }
     }
 

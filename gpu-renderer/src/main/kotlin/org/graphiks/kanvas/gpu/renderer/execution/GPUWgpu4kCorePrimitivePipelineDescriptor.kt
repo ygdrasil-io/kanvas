@@ -292,6 +292,42 @@ internal fun mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(
     )
 }
 
+/**
+ * Closed W4d.2-only admission for a four-sample binary-mask cover.  The generic mapper keeps
+ * rejecting 4x coverage-mask consumers; Task 8 calls this only after the sealed W4d.2 frame
+ * authority has proven `BinaryMaskCover4` and its paired 1x mask binding.
+ */
+internal fun mapW4dGeneralStructuralKeyToWgpu4kPipelineIdentity(
+    structuralKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+): GPUWgpu4kCorePrimitivePipelineMapping {
+    val isW4dGeneralConsumer = structuralKey.role ==
+        GPUCorePrimitiveRenderPipelineStructuralKey.Role.CoverageMaskConsumer &&
+        structuralKey.shader == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.CoverageMaskConsumer &&
+        structuralKey.topology == GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList &&
+        structuralKey.clip == GPUCorePrimitiveRenderPipelineStructuralKey.Clip.CoverageMaskNearest &&
+        structuralKey.depthStencil == GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.None &&
+        structuralKey.sampleCount == 4 &&
+        structuralKey.isW4dGeneralCoverageMaskConsumer4x()
+    if (!isW4dGeneralConsumer) return mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(structuralKey)
+    val program = GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskConsumerNearest
+    val blendProgram = structuralKey.nativeBlendProgramOrNull(program)
+        ?: return GPUWgpu4kCorePrimitivePipelineMapping.Refused(
+            "W4d.2 four-sample coverage-mask consumer requires its exact SrcOver blend.",
+        )
+    return GPUWgpu4kCorePrimitivePipelineMapping.Mapped(
+        GPUWgpu4kCorePrimitiveRenderPipelineIdentity(
+            targetFormat = structuralKey.colorFormat.stableIdentity,
+            sampleCount = 4,
+            topology = "triangle-list",
+            frontFace = "ccw",
+            cullMode = "none",
+            program = program,
+            blendProgram = blendProgram,
+        ),
+        PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_COMPONENT_IDENTITY,
+    )
+}
+
 internal fun GPUWgpu4kCorePrimitiveComponentIdentity.gradientShaderVariantOrNull():
     GPUCorePrimitiveRenderPipelineStructuralKey.Shader? = when (this) {
     PRODUCTION_CORE_PRIMITIVE_DIRECT_LINEAR_GRADIENT_COMPONENT_IDENTITY ->
@@ -1108,6 +1144,7 @@ private fun GPUWgpu4kCorePrimitivePipelineProgram.supportsFourSamples(): Boolean
     GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRRectHardInverse,
     GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRRectAARegular,
     GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRRectAAInverse,
+    GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskConsumerNearest,
         -> true
     else -> false
 }

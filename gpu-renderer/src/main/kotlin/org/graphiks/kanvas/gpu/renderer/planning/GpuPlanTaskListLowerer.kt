@@ -21,6 +21,7 @@ import org.graphiks.kanvas.gpu.plan.W4aAnalyticRectPlanCompiler
 import org.graphiks.kanvas.gpu.plan.W4bAnalyticRRectPlanCompiler
 import org.graphiks.kanvas.gpu.plan.W4cPathFillPlanCompiler
 import org.graphiks.kanvas.gpu.plan.W4dPathStrokePlanCompiler
+import org.graphiks.kanvas.gpu.plan.W4dGeneralPathPlanCompiler
 import org.graphiks.kanvas.gpu.renderer.analysis.corePrimitiveRectGeometryAuthority
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
@@ -94,7 +95,7 @@ import org.graphiks.kanvas.render.ir.RenderDiagnosticCode
 import org.graphiks.kanvas.render.ir.RenderDiagnosticDomain
 import org.graphiks.kanvas.render.ir.RenderDiagnosticSeverity
 
-/** Converts closed W3, W4a, W4b, or W4c graphs into prepared frame tasks without invoking legacy planning. */
+/** Converts closed W3 through W4d.2 graphs into prepared frame tasks without invoking legacy planning. */
 public class GpuPlanTaskListLowerer {
     public fun lower(request: GpuPlanLoweringRequest): GpuPlanLoweringResult {
         val current = when (val adapted = request.capabilities.toPlanCapabilitySnapshot(request.deviceGeneration)) {
@@ -109,6 +110,9 @@ public class GpuPlanTaskListLowerer {
             W4bAnalyticRRectPlanCompiler.CAPABILITY_ID -> W4bAnalyticRRectGraphLowerer().lower(request)
             W4cPathFillPlanCompiler.CAPABILITY_ID -> W4cPathFillGraphLowerer().lower(request)
             W4dPathStrokePlanCompiler.CAPABILITY_ID -> W4dPathStrokeGraphLowerer().lower(request)
+            W4dGeneralPathPlanCompiler.HARD_CAPABILITY_ID,
+            W4dGeneralPathPlanCompiler.AA_CAPABILITY_ID,
+            -> W4dGeneralPathGraphLowerer().lower(request)
             else -> invalid("Unknown gpu-plan capability id.")
         }
     }

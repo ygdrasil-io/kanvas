@@ -236,20 +236,38 @@ internal data class GPUWgpu4kCorePrimitiveFramePoolRequirements(
         get() = msaaColor?.byteSize ?: 0L
 
     val depthStencilByteSize: Long
-        get() = (pathDepthStencil?.byteSize ?: clipDepthStencil?.byteSize) ?: 0L
+        get() = Math.addExact(
+            pathDepthStencil?.byteSize ?: 0L,
+            clipDepthStencil?.byteSize ?: 0L,
+        )
+
+    val coverageMaskByteSize: Long
+        get() = coverageMask?.let { mask -> attachmentByteSize(mask.width, mask.height, mask.sampleCount) } ?: 0L
 
     val totalAttachmentByteSize: Long
-        get() = Math.addExact(msaaColorByteSize, depthStencilByteSize)
+        get() = Math.addExact(
+            Math.addExact(msaaColorByteSize, depthStencilByteSize),
+            coverageMaskByteSize,
+        )
 
     init {
         require(sampleCount in setOf(1, 4)) {
             "CorePrimitive frame slots require one or four samples"
         }
-        require(pathDepthStencil == null || clipDepthStencil == null) {
-            "CorePrimitive path and clip D24S8 attachments cannot coexist in one frame slot"
+        val isW4dGeneralMixedAttachmentSet = sampleCount == 4 && msaaColor != null &&
+            pathDepthStencil?.sampleCount == 4 &&
+            (clipDepthStencil == null || clipDepthStencil.sampleCount == 1) &&
+            coverageMask?.sampleCount == 1 &&
+            componentIdentity == PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY &&
+            componentIdentities.all { identity ->
+                identity == PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY ||
+                    identity == PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_COMPONENT_IDENTITY
+            }
+        require(pathDepthStencil == null || clipDepthStencil == null || isW4dGeneralMixedAttachmentSet) {
+            "CorePrimitive path and clip D24S8 attachments coexist only in the sealed W4d.2 mixed lane"
         }
-        require(coverageMask == null || sampleCount == 1) {
-            "CorePrimitive coverage-mask frame slots remain single-sample"
+        require(coverageMask == null || sampleCount == 1 || isW4dGeneralMixedAttachmentSet) {
+            "CorePrimitive coverage-mask frame slots remain single-sample outside the sealed W4d.2 mixed lane"
         }
         require(!coverageMaskConsumerBindGroupRequired || coverageMask != null) {
             "Coverage-mask consumer bind groups require a pooled coverage-mask attachment"
@@ -265,37 +283,38 @@ internal data class GPUWgpu4kCorePrimitiveFramePoolRequirements(
         require(msaaColor == null || msaaColor.deviceGeneration == deviceGeneration) {
             "The pooled MSAA color attachment must match the frame device generation"
         }
-        val depthStencil: GPUWgpu4kCorePrimitiveDepthStencilRequirement? =
-            pathDepthStencil ?: clipDepthStencil
-        require(depthStencil == null || depthStencil.sampleCount == sampleCount) {
-            "The pooled D24S8 attachment must match the frame sample count"
-        }
-        require(depthStencil?.deviceGeneration == null || depthStencil.deviceGeneration == deviceGeneration) {
-            "The pooled D24S8 attachment must match the frame device generation"
-        }
-        if (msaaColor != null && depthStencil != null) {
-            require(
-                depthStencil.target == msaaColor.target &&
-                    depthStencil.deviceGeneration == msaaColor.deviceGeneration &&
-                    depthStencil.targetGeneration == msaaColor.targetGeneration &&
-                    depthStencil.width == msaaColor.width &&
-                    depthStencil.height == msaaColor.height,
+        listOfNotNull(pathDepthStencil, clipDepthStencil).forEach { depthStencil ->
+            require(depthStencil.sampleCount == sampleCount || isW4dGeneralMixedAttachmentSet) {
+                "The pooled D24S8 attachment must match the frame sample count outside sealed W4d.2 hard edges"
+            }
+            require(depthStencil.deviceGeneration == null || depthStencil.deviceGeneration == deviceGeneration) {
+                "The pooled D24S8 attachment must match the frame device generation"
+            }
+            if (msaaColor != null && !(isW4dGeneralMixedAttachmentSet &&
+                    depthStencil === clipDepthStencil
+                )
             ) {
-                "The pooled MSAA color and D24S8 attachments must share target provenance and extent"
+                require(
+                    depthStencil.target == msaaColor.target &&
+                        depthStencil.deviceGeneration == msaaColor.deviceGeneration &&
+                        depthStencil.targetGeneration == msaaColor.targetGeneration &&
+                        depthStencil.width == msaaColor.width &&
+                        depthStencil.height == msaaColor.height,
+                ) {
+                    "The pooled MSAA color and D24S8 attachments must share target provenance and extent"
+                }
+                require(depthStencil.depthStencilAttachment != msaaColor.colorAttachment) {
+                    "The pooled MSAA color and D24S8 attachments require distinct logical identities"
+                }
             }
-            require(depthStencil.depthStencilAttachment != msaaColor.colorAttachment) {
-                "The pooled MSAA color and D24S8 attachments require distinct logical identities"
-            }
         }
-        require(
-            coverageMask == null ||
-                componentIdentity == PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_COMPONENT_IDENTITY,
-        ) {
-            "Coverage-mask frame slots require the exact producer component identity"
-        }
-        require(coverageMask == null || (pathDepthStencil == null && clipDepthStencil == null)) {
-            "Coverage-mask frame slots are color-only and refuse depth-stencil attachments"
-        }
+        require(coverageMask == null ||
+            componentIdentity == PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_COMPONENT_IDENTITY ||
+            isW4dGeneralMixedAttachmentSet
+        ) { "Coverage-mask frame slots require the exact producer component identity outside W4d.2" }
+        require(coverageMask == null ||
+            (pathDepthStencil == null && clipDepthStencil == null) || isW4dGeneralMixedAttachmentSet
+        ) { "Coverage-mask frame slots are color-only outside the sealed W4d.2 mixed lane" }
         require(componentIdentities.any { identity -> identity.isCorePrimitiveDstRead() } == (dstRead != null)) {
             "Destination-read bindings require exactly the admitted dst-read component identities"
         }

@@ -5,6 +5,13 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionStage
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import org.graphiks.kanvas.gpu.plan.PlanDepthStencilAccess
+import org.graphiks.kanvas.gpu.plan.PlanDepthStencilFormat
+import org.graphiks.kanvas.gpu.plan.PlanDepthStencilLoadStore
+import org.graphiks.kanvas.gpu.plan.PlanResourceKind
+import org.graphiks.kanvas.gpu.plan.PlanResourceRole
+import org.graphiks.kanvas.gpu.plan.PlanResourceUsage
+import org.graphiks.kanvas.gpu.plan.PlanTextureFormat
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticCode
@@ -1405,7 +1412,14 @@ internal class GPUFrameExecutor(
         }
         val hasW4c = frame.semanticPlan.hasSealedW4cSessionMarker()
         val hasW4d = frame.semanticPlan.hasSealedW4dSessionMarker()
-        if (!hasW4c && !hasW4d) {
+        val w4dGeneralAuthority = renders.firstOrNull()?.third
+            ?.corePrimitivePreparedAuthority
+            ?.w4dGeneralFrameMaterializationAuthority
+        val hasW4dGeneral = w4dGeneralAuthority != null && renders.isNotEmpty() && renders.all { (_, _, packet) ->
+            packet?.corePrimitivePreparedAuthority?.w4dGeneralFrameMaterializationAuthority ===
+                w4dGeneralAuthority
+        }
+        if (!hasW4c && !hasW4d && !hasW4dGeneral) {
             return if (writableLoads.isEmpty()) {
                 null
             } else {
@@ -1413,6 +1427,154 @@ internal class GPUFrameExecutor(
                     "invalid.native-frame-payload.planned-path-writable-load",
                     "Writable stencil Load is reserved for a sealed planned-path cover scope.",
                 )
+            }
+        }
+        if (hasW4dGeneral) {
+            val exactPayload = payload ?: return executionDiagnostic(
+                "invalid.native-frame-payload.w4d-general-missing",
+                "W4d.2 requires its sealed native payload before encoding.",
+            )
+            fun exactD24Authority(): Boolean {
+                fun matchesExpectedViews(
+                    actual: Map<Int, *>,
+                    expected: Map<Int, Any>,
+                ): Boolean = actual.keys == expected.keys && expected.all { (stepIndex, view) ->
+                    actual[stepIndex] === view
+                }
+
+                val expectedPathViews = linkedMapOf<Int, Any>()
+                val expectedClipViews = linkedMapOf<Int, Any>()
+                val stencilPairs = linkedMapOf<Pair<String, String>, MutableList<Triple<Int, PlanDepthStencilLoadStore, Any>>>()
+                if (w4dGeneralAuthority.pathPassFacts.size != renders.size) return false
+                renders.forEachIndexed { index, (stepIndex, render, packet) ->
+                    val fact = w4dGeneralAuthority.pathPassFacts[index]
+                    val scopeIndex = frame.encoderPlan.scopes.indexOfFirst { scope ->
+                        scope.sourceStepIndex == stepIndex
+                    }
+                    val native = exactPayload.scopeOperands.getOrNull(scopeIndex) as?
+                        GPUPreparedNativeScopeOperand.Render ?: return false
+                    if (native.sourceStepIndex != stepIndex ||
+                        packet?.passId != fact.pathPassId ||
+                        packet.commandIdValue != fact.commandIdValue ||
+                        render.samplePlan.sampleCount != fact.sampleCountI32
+                    ) {
+                        return false
+                    }
+                    val depthResourceId = fact.depthStencilResourceId
+                    if (depthResourceId == null) {
+                        if (render.resourceUses.any { use ->
+                                use.role == GPUFrameResourceRole.PathDepthStencil
+                            } || native.pass.depthStencilTarget != null ||
+                            native.pass.stencilLoadOperation != null ||
+                            native.pass.stencilStoreOperation != null ||
+                            native.pass.stencilClearValue != null
+                        ) {
+                            return false
+                        }
+                        return@forEachIndexed
+                    }
+                    val resource = w4dGeneralAuthority.resource(depthResourceId) ?: return false
+                    val resourceFact = w4dGeneralAuthority.resourceFact(depthResourceId) ?: return false
+                    if (resourceFact.kind != PlanResourceKind.Texture2D ||
+                        resourceFact.format != PlanTextureFormat.DepthStencil(
+                            PlanDepthStencilFormat.Depth24PlusStencil8,
+                        ) ||
+                        resourceFact.width != w4dGeneralAuthority.targetBounds.width ||
+                        resourceFact.height != w4dGeneralAuthority.targetBounds.height ||
+                        resourceFact.sampleCountI32 != fact.sampleCountI32 ||
+                        PlanResourceUsage.DepthStencilAttachment !in resourceFact.usages
+                    ) {
+                        return false
+                    }
+                    val expectedState = when (fact.depthStencilLoadStore) {
+                        PlanDepthStencilLoadStore.ClearZeroStore -> Triple(
+                            PlanDepthStencilAccess.Write,
+                            GPUPreparedNativeLoadOperation.Clear,
+                            0u,
+                        )
+                        PlanDepthStencilLoadStore.LoadStoreTestReset -> Triple(
+                            PlanDepthStencilAccess.ReadWrite,
+                            GPUPreparedNativeLoadOperation.Load,
+                            null,
+                        )
+                        null -> return false
+                    }
+                    val expectedPacketRole = when (fact.depthStencilLoadStore) {
+                        PlanDepthStencilLoadStore.ClearZeroStore ->
+                            org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.PathStencilProducer
+                        PlanDepthStencilLoadStore.LoadStoreTestReset ->
+                            org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.PathStencilCover
+                    }
+                    val expectedLoadStore = org.graphiks.kanvas.gpu.renderer.recording
+                        .GPUDepthStencilLoadStorePlan.WritableStencil(
+                            if (expectedState.second == GPUPreparedNativeLoadOperation.Clear) {
+                                org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Clear
+                            } else {
+                                org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Load
+                            },
+                            org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan.Store,
+                            expectedState.third,
+                        )
+                    val pathUse = render.resourceUses.singleOrNull { use ->
+                        use.role == GPUFrameResourceRole.PathDepthStencil
+                    }
+                    val depthTarget = native.pass.depthStencilTarget ?: return false
+                    val sealedView = when (resourceFact.role) {
+                        PlanResourceRole.DepthStencil -> exactPayload.pathDepthStencilViewAuthority[stepIndex]
+                        PlanResourceRole.PathHardEdgeDepthStencil -> exactPayload.clipDepthStencilViewAuthority[stepIndex]
+                        else -> return false
+                    }
+                    if (packet.role != expectedPacketRole ||
+                        fact.depthStencilAccess != expectedState.first ||
+                        render.depthStencilLoadStore != expectedLoadStore ||
+                        pathUse?.resource != resource ||
+                        pathUse.usage != org.graphiks.kanvas.gpu.renderer.resources
+                            .GPUFrameResourceUsage.RenderAttachment ||
+                        !pathUse.write ||
+                        sealedView !== depthTarget.view ||
+                        depthTarget.deviceGeneration != frame.generationSeal.deviceGeneration ||
+                        depthTarget.ownership != GPUPreparedNativeOperandOwnership.Borrowed ||
+                        !native.pass.depthReadOnly || native.pass.stencilReadOnly ||
+                        native.pass.stencilLoadOperation != expectedState.second ||
+                        native.pass.stencilStoreOperation != GPUPreparedNativeStoreOperation.Store ||
+                        native.pass.stencilClearValue != expectedState.third
+                    ) {
+                        return false
+                    }
+                    when (resourceFact.role) {
+                        PlanResourceRole.DepthStencil -> expectedPathViews[stepIndex] = depthTarget.view
+                        PlanResourceRole.PathHardEdgeDepthStencil -> expectedClipViews[stepIndex] = depthTarget.view
+                    }
+                    val atomicGroup = fact.atomicGroupId ?: return false
+                    stencilPairs.getOrPut(depthResourceId to atomicGroup) { mutableListOf() } +=
+                        Triple(stepIndex, fact.depthStencilLoadStore, depthTarget.view)
+                }
+                val pairsAreContinuous = stencilPairs.values.all { pair ->
+                    val producer = pair.singleOrNull { entry ->
+                        entry.second == PlanDepthStencilLoadStore.ClearZeroStore
+                    }
+                    val cover = pair.singleOrNull { entry ->
+                        entry.second == PlanDepthStencilLoadStore.LoadStoreTestReset
+                    }
+                    pair.size == 2 && producer != null && cover != null &&
+                        producer.first < cover.first && producer.third === cover.third
+                }
+                val writableSteps = writableLoads.map { (stepIndex, _, _) -> stepIndex }.toSet()
+                val expectedWritableSteps = stencilPairs.values.flatMap { pair ->
+                    pair.filter { entry -> entry.second == PlanDepthStencilLoadStore.LoadStoreTestReset }
+                        .map(Triple<Int, PlanDepthStencilLoadStore, Any>::first)
+                }.toSet()
+                return pairsAreContinuous && writableSteps == expectedWritableSteps &&
+                    matchesExpectedViews(exactPayload.pathDepthStencilViewAuthority, expectedPathViews) &&
+                    matchesExpectedViews(exactPayload.clipDepthStencilViewAuthority, expectedClipViews)
+            }
+            return if (hasW4c || hasW4d || !exactD24Authority()) {
+                executionDiagnostic(
+                    "invalid.native-frame-payload.w4d-general-authority",
+                    "W4d.2 writable stencil scopes require exact sealed D24S8 payload authority.",
+                )
+            } else {
+                null
             }
         }
         if (hasW4c == hasW4d) {

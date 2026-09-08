@@ -328,12 +328,13 @@ class PathStrokeOutlinePreparationF64Test {
     }
 
     @Test
-    fun `non-finite horizon and unbounded certification refusals are atomic`() {
+    fun `certification refusals are atomic and retain horizon crossings`() {
         listOf(
-            PathStrokeProjectionIntervalResultF64.NonFinite,
-            PathStrokeProjectionIntervalResultF64.HorizonCrossing,
-            PathStrokeProjectionIntervalResultF64.Unbounded,
-        ).forEach { certificationResultF64 ->
+            PathStrokeProjectionIntervalResultF64.NonFinite to PathStrokeInvalidSceneReason.NonFiniteInput,
+            PathStrokeProjectionIntervalResultF64.HorizonCrossing to
+                PathStrokeInvalidSceneReason.ProjectionHorizonCrossing,
+            PathStrokeProjectionIntervalResultF64.Unbounded to PathStrokeInvalidSceneReason.NonFiniteInput,
+        ).forEach { (certificationResultF64, expectedReason) ->
             val result = prepareProjectedHairlineOutlineF64(
                 lineCenterline(),
                 hairlineStyle(),
@@ -348,7 +349,7 @@ class PathStrokeOutlinePreparationF64Test {
             )
 
             assertEquals(
-                PathStrokeInvalidSceneReason.NonFiniteInput,
+                expectedReason,
                 assertIs<PathStrokeOutlinePreparationResult.InvalidScene>(result).reason,
             )
         }

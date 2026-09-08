@@ -266,6 +266,47 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
     }
 
     @Test
+    fun `authenticated W4d mixed slot leases four x color and depth with one x mask and hard depth`() {
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, FakeFactory())
+        val request = requirements(
+            sampleCount = 4,
+            pathDepthStencil = pathDepthStencil(32, 24, sampleCount = 4),
+            clipDepthStencil = clipDepthStencil(32, 24, sampleCount = 1),
+            coverageMask = coverageMask(32, 24),
+            coverageMaskConsumerBindGroupRequired = true,
+            componentIdentity = PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY,
+        )
+
+        val first = pool.acquire(request).acquiredLease()
+        val color = requireNotNull(first.handles.msaaColor)
+        val aaDepth = requireNotNull(first.handles.pathDepthStencil)
+        val hardDepth = requireNotNull(first.handles.clipDepthStencil)
+        val mask = requireNotNull(first.handles.coverageMask)
+
+        assertEquals(4, color.requirement.sampleCount)
+        assertEquals(4, aaDepth.requirement.sampleCount)
+        assertEquals(1, hardDepth.requirement.sampleCount)
+        assertEquals(1, mask.requirement.sampleCount)
+        assertEquals(30_720L, request.totalAttachmentByteSize)
+        assertEquals(GPUWgpu4kCorePrimitiveFramePoolLeaseTransition.Applied, first.markSubmitted())
+        val concurrent = pool.acquire(request).acquiredLease()
+        assertNotSame(color.view, requireNotNull(concurrent.handles.msaaColor).view)
+        assertNotSame(aaDepth.view, requireNotNull(concurrent.handles.pathDepthStencil).view)
+        assertNotSame(hardDepth.view, requireNotNull(concurrent.handles.clipDepthStencil).view)
+        assertNotSame(mask.view, requireNotNull(concurrent.handles.coverageMask).view)
+        concurrent.rollbackBeforeSubmit()
+        assertEquals(GPUWgpu4kCorePrimitiveFramePoolLeaseTransition.Applied, first.completeSuccessfully())
+
+        val reused = pool.acquire(request).acquiredLease()
+        assertSame(color.view, requireNotNull(reused.handles.msaaColor).view)
+        assertSame(aaDepth.view, requireNotNull(reused.handles.pathDepthStencil).view)
+        assertSame(hardDepth.view, requireNotNull(reused.handles.clipDepthStencil).view)
+        assertSame(mask.view, requireNotNull(reused.handles.coverageMask).view)
+        reused.rollbackBeforeSubmit()
+        pool.close()
+    }
+
+    @Test
     fun `4x path color and D24S8 replace together for resize generation and attachment identity`() {
         val factory = FakeFactory()
         val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
@@ -2232,6 +2273,7 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
         analyticClipBindGroupRequired: Boolean = false,
         componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity =
             PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY,
+        additionalComponentIdentities: Set<GPUWgpu4kCorePrimitiveComponentIdentity> = emptySet(),
         sampleCount: Int = 1,
         msaaColorRequirement: GPUWgpu4kCorePrimitiveMsaaColorRequirement? =
             if (sampleCount == 4) msaaColor(32, 24) else null,
@@ -2249,6 +2291,7 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
         analyticClipBindGroupRequired = analyticClipBindGroupRequired,
         sampleCount = sampleCount,
         msaaColor = msaaColorRequirement,
+        additionalComponentIdentities = additionalComponentIdentities,
     )
 
     private fun msaaColor(
