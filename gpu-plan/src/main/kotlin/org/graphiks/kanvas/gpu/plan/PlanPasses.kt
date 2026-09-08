@@ -40,11 +40,11 @@ public enum class ClipCombineOperation { Intersect, Difference }
 
 /** The clip realization selected for one consumer draw. */
 public sealed interface ClipPlanStrategy {
-    public class Scissor(domainI32: RectI32) : ClipPlanStrategy {
+    public class Scissor(domainI32: RectI32, public val child: ClipPlanStrategy? = null) : ClipPlanStrategy {
         private val domainSnapshotI32: RectI32 = domainI32.copy()
         public fun copyDomainI32(): RectI32 = domainSnapshotI32.copy()
     }
-    public class Stencil(public val depthStencil: PlanResourceId) : ClipPlanStrategy
+    public class Stencil(public val depthStencil: PlanResourceId, public val child: ClipPlanStrategy? = null) : ClipPlanStrategy
     public class Mask(public val resource: PlanResourceId) : ClipPlanStrategy
     public class InverseMask(
         public val geometryF32: InversePathGeometryF32,
@@ -184,7 +184,8 @@ public class ClippedBinaryMaskedPathDraw private constructor(
     override public val coverage: CoveragePlan get() = source.coverage
     override public val sample: SamplePlan get() = source.sample
     override public val blend: BlendPlan get() = source.blend
-    public val binarySampleCountI32: Int get() = source.broadcastSampleCountI32
+    /** The binary source texture is one-sample; its value is broadcast to the four color samples. */
+    public val sourceMaskSampleCountI32: Int get() = 1
 
     override fun copyPathGeometry(): PathDrawGeometry = source.copyPathGeometry()
     override fun copyScissorI32(): RectI32 = source.copyScissorI32()

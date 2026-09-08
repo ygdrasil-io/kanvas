@@ -1586,6 +1586,26 @@ class RenderGraphContractTest {
         assertEquals(SamplePlan.Multisample4, clipped.sample)
         assertEquals(BinaryMaskFetchPlan.TextureLoadUnfiltered, clipped.source.maskFetch)
         assertEquals(4, clipped.source.broadcastSampleCountI32)
+        assertEquals(1, clipped.sourceMaskSampleCountI32)
+    }
+
+    @Test
+    fun `AA4 hard consumer composes a binary one-sample mask with a folded clip accumulator`() {
+        val graph = aa4MixedPathGraph(withClip = true)
+        val consumer = assertIs<ClippedBinaryMaskedPathDraw>(
+            assertIs<PlanPass.PathRenderPass>(graph.passes()[8]).draw,
+        )
+        val resources = graph.resources().associateBy { it.id }
+        val scissor = assertIs<ClipPlanStrategy.Scissor>(consumer.clip)
+        val stencil = assertIs<ClipPlanStrategy.Stencil>(requireNotNull(scissor.child))
+        val mask = assertIs<ClipPlanStrategy.Mask>(requireNotNull(stencil.child))
+
+        assertEquals(PlanResourceRole.PathHardEdgeMask, resources.getValue(consumer.source.mask).role)
+        assertEquals(PlanResourceRole.CoverageMaskAccumulator,
+            resources.getValue(mask.resource).role)
+        assertEquals(PlanResourceRole.DepthStencil, resources.getValue(stencil.depthStencil).role)
+        assertEquals(CoveragePlan.BinaryMaskCover4, consumer.coverage)
+        assertEquals(1, consumer.sourceMaskSampleCountI32)
     }
 
     private val CLIP_GROUP: PlanAtomicGroupId = PlanAtomicGroupId("clip:0")
@@ -1821,12 +1841,14 @@ class RenderGraphContractTest {
     private fun aa4MixedPathGraph(
         resolveOnFinalColor: Boolean = true,
         resolveOnMaskProducer: Boolean = false,
+        withClip: Boolean = false,
         resolvedColorUsages: Set<PlanResourceUsage> = setOf(
             PlanResourceUsage.RenderAttachment,
             PlanResourceUsage.CopySource,
         ),
     ): RenderGraph {
         val extent = SizeI32(1, 1)
+        val clipPassCount = if (withClip) 3 else 0
         fun texture(
             role: PlanResourceRole,
             ordinal: Int,
@@ -1858,8 +1880,8 @@ class RenderGraphContractTest {
             byteSize = 4,
             usages = setOf(usage, PlanResourceUsage.CopyDestination),
             lifetime = PlanResourceLifetime.FrameLocal,
-            firstPassIndex = 0,
-            lastPassIndexExclusive = 6,
+            firstPassIndex = clipPassCount,
+            lastPassIndexExclusive = 6 + clipPassCount,
         )
         val multisampleColor = texture(
             PlanResourceRole.MultisampleColorTarget,
@@ -1867,8 +1889,8 @@ class RenderGraphContractTest {
             PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
             16,
             setOf(PlanResourceUsage.RenderAttachment),
-            0,
-            6,
+            clipPassCount,
+            6 + clipPassCount,
             4,
         )
         val resolvedColor = texture(
@@ -1877,8 +1899,8 @@ class RenderGraphContractTest {
             PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
             4,
             resolvedColorUsages,
-            5,
-            7,
+            5 + clipPassCount,
+            7 + clipPassCount,
             1,
         )
         val multisampleDepth = texture(
@@ -1887,8 +1909,8 @@ class RenderGraphContractTest {
             PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8),
             16,
             setOf(PlanResourceUsage.DepthStencilAttachment),
-            0,
-            2,
+            clipPassCount,
+            if (withClip) 6 + clipPassCount else 2 + clipPassCount,
             4,
         )
         val mask = texture(
@@ -1897,8 +1919,8 @@ class RenderGraphContractTest {
             PlanTextureFormat.CoverageMask,
             4,
             setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled),
-            2,
-            6,
+            2 + clipPassCount,
+            6 + clipPassCount,
             1,
         )
         val hardDepth = texture(
@@ -1907,8 +1929,8 @@ class RenderGraphContractTest {
             PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8),
             4,
             setOf(PlanResourceUsage.DepthStencilAttachment),
-            3,
-            5,
+            3 + clipPassCount,
+            5 + clipPassCount,
             1,
         )
         val staging = PlanResource.of(
@@ -1920,8 +1942,8 @@ class RenderGraphContractTest {
             256,
             setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead),
             PlanResourceLifetime.FrameLocal,
-            6,
-            7,
+            6 + clipPassCount,
+            7 + clipPassCount,
         )
         val vertex = data(PlanResourceRole.VertexData, PlanResourceUsage.Vertex)
         val index = data(PlanResourceRole.IndexData, PlanResourceUsage.Index)
@@ -1948,7 +1970,38 @@ class RenderGraphContractTest {
         )
         val aaGroup = canonicalGeneralPathAtomicGroup(antiAliased)
         val group = canonicalGeneralPathAtomicGroup(hard)
-        val passes = listOf(
+        val clipAccumulatorA = texture(
+            PlanResourceRole.CoverageMaskAccumulator, 0,
+            PlanTextureFormat.CoverageMask(PlanCoverageMaskFormat.RGBA8_UNORM_LINEAR), 4,
+            setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled), 0, 3, 1,
+        )
+        val clipAccumulatorB = texture(
+            PlanResourceRole.CoverageMaskAccumulator, 1,
+            PlanTextureFormat.CoverageMask(PlanCoverageMaskFormat.RGBA8_UNORM_LINEAR), 4,
+            setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled), 2, 6 + clipPassCount, 1,
+        )
+        val clipScratch = texture(
+            PlanResourceRole.CoverageMaskScratch, 0,
+            PlanTextureFormat.CoverageMask(PlanCoverageMaskFormat.RGBA8_UNORM_LINEAR), 4,
+            setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled), 1, 3, 1,
+        )
+        val clipPrefix = if (withClip) listOf(
+            PlanPass.ClipMaskInitialize(0, clipAccumulatorA.id, RectI32(0, 0, 1, 1), 1f, CLIP_GROUP),
+            PlanPass.ClipMaskProducer(0, clipScratch.id, null, null, 1,
+                ClipGeometryF32.Rect(RectF32(0f, 0f, 1f, 1f)), CLIP_GROUP),
+            PlanPass.ClipMaskFold(0, clipAccumulatorA.id, clipScratch.id, clipAccumulatorB.id,
+                ClipCombineOperation.Intersect, RectI32(0, 0, 1, 1), CLIP_GROUP),
+        ) else emptyList()
+        val binaryCoverDraw: PathRenderDraw = BinaryMaskedPathDraw.of(hard, mask.id).let { binary ->
+            if (withClip) ClippedBinaryMaskedPathDraw.of(
+                binary,
+                ClipPlanStrategy.Scissor(
+                    RectI32(0, 0, 1, 1),
+                    ClipPlanStrategy.Stencil(multisampleDepth.id, ClipPlanStrategy.Mask(clipAccumulatorB.id)),
+                ),
+            ) else binary
+        }
+        val pathPasses = listOf(
             PlanPass.PathRenderPass(
                 ordinal = 0,
                 target = multisampleColor.id,
@@ -2009,7 +2062,7 @@ class RenderGraphContractTest {
             PlanPass.PathRenderPass(
                 ordinal = 4,
                 target = multisampleColor.id,
-                draw = BinaryMaskedPathDraw.of(hard, mask.id),
+                draw = binaryCoverDraw,
                 phase = PathRenderPhase.HardEdgeBinaryColorCover,
                 drawDataResources = drawData,
                 atomicGroup = group,
@@ -2022,6 +2075,7 @@ class RenderGraphContractTest {
             ),
             PlanPass.ReadbackPass(0, resolvedColor.id, staging.id, 256),
         )
+        val passes = clipPrefix + pathPasses
         val resources = listOf(
             multisampleColor,
             resolvedColor,
@@ -2029,7 +2083,7 @@ class RenderGraphContractTest {
             mask,
             hardDepth,
             staging,
-        ) + drawDataResources
+        ) + drawDataResources + if (withClip) listOf(clipAccumulatorA, clipAccumulatorB, clipScratch) else emptyList()
         return RenderGraph.of(
             id = PlanId("aa4-plan"),
             capabilityId = "w4d-general-path-aa",
@@ -2041,7 +2095,7 @@ class RenderGraphContractTest {
             resources = resources,
             passes = passes,
             dependencies = passes.zipWithNext().map { (before, after) -> PlanPassDependency(before.id, after.id) },
-            peakFrameLocalBytes = 260,
+            peakFrameLocalBytes = peak(resources, passes.size),
         )
     }
 

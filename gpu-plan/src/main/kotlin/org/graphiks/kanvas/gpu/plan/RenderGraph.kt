@@ -214,7 +214,7 @@ public class RenderGraph private constructor(
                 add(pass.target)
                 pass.drawDataResources?.let { addAll(listOf(it.vertex, it.index, it.uniform)) }
                 pass.draws().filterIsInstance<ClippedPlanDraw>().forEach { draw ->
-                    draw.strategy.resourceReferenceOrNull()?.let(::add)
+                    draw.strategy.resourceReferences().forEach(::add)
                 }
             }
             is PlanPass.PathMaskClearPass -> listOf(pass.target)
@@ -226,7 +226,7 @@ public class RenderGraph private constructor(
                 pass.depthStencil?.let(::add)
                 pass.resolveTarget?.let(::add)
                 pass.draw.binaryMaskedSourceOrNull()?.let { add(it.mask) }
-                pass.draw.clipStrategyOrNull()?.resourceReferenceOrNull()?.let(::add)
+                pass.draw.clipStrategyOrNull()?.resourceReferences()?.forEach(::add)
             }
             is PlanPass.StencilProducer -> listOf(
                 pass.target,
@@ -454,13 +454,33 @@ public class RenderGraph private constructor(
             usesClipMasks: Boolean,
         ) {
             val consumers = passes.flatMapIndexed { index, pass -> when (pass) {
-                is PlanPass.RenderPass -> pass.draws().mapNotNull { draw ->
-                    (draw as? ClippedPlanDraw)?.strategy?.clipMaskResourceOrNull()?.let { Triple(index, it, draw.strategy) }
+                is PlanPass.RenderPass -> pass.draws().flatMap { draw ->
+                    (draw as? ClippedPlanDraw)?.strategy?.maskStrategies().orEmpty().map { Triple(index, it.maskResource(), it) }
                 }
-                is PlanPass.PathRenderPass -> pass.draw.clipStrategyOrNull()?.clipMaskResourceOrNull()?.let {
-                    listOf(Triple(index, it, pass.draw.clipStrategyOrNull()!!))
-                }.orEmpty()
+                is PlanPass.PathRenderPass -> pass.draw.clipStrategyOrNull()?.maskStrategies().orEmpty().map {
+                    Triple(index, it.maskResource(), it)
+                }
                 else -> emptyList()
+            } }
+            passes.forEach { pass -> pass.clipStrategies().flatMap { it.allStrategies() }
+                .filterIsInstance<ClipPlanStrategy.Stencil>().forEach { stencil ->
+                val resource = requireNotNull(resourcesById[stencil.depthStencil]) { "Clip stencil resource is unknown" }
+                val expectedSampleCount = when (pass) {
+                    is PlanPass.RenderPass -> 1
+                    is PlanPass.PathRenderPass -> if (pass.draw.sample == SamplePlan.Multisample4) 4 else 1
+                    else -> error("Only draw passes may carry a clip strategy")
+                }
+                require(resource.role == PlanResourceRole.DepthStencil &&
+                    resource.format == PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8) &&
+                    resource.sampleCountI32 == expectedSampleCount &&
+                    PlanResourceUsage.DepthStencilAttachment in resource.usages()) {
+                    "Clip stencil requires a matching D24S8 depth-stencil resource"
+                }
+                when (pass) {
+                    is PlanPass.RenderPass -> require(pass.target != stencil.depthStencil) { "Clip stencil cannot alias color target" }
+                    is PlanPass.PathRenderPass -> require(pass.target != stencil.depthStencil) { "Clip stencil cannot alias color target" }
+                    else -> Unit
+                }
             } }
             if (!usesClipMasks) {
                 require(consumers.isEmpty()) { "Mask clip consumers require a clip-mask graph" }
@@ -553,17 +573,36 @@ public class RenderGraph private constructor(
 
         private fun PlanPass.ClipMaskProducer.resolveTargetOrTarget(): PlanResourceId = resolveTarget ?: target
 
-        private fun ClipPlanStrategy.clipMaskResourceOrNull(): PlanResourceId? = when (this) {
-            is ClipPlanStrategy.Mask -> resource
-            is ClipPlanStrategy.InverseMask -> resource
-            is ClipPlanStrategy.Scissor, is ClipPlanStrategy.Stencil -> null
+        private fun ClipPlanStrategy.maskStrategies(): List<ClipPlanStrategy> = when (this) {
+            is ClipPlanStrategy.Mask -> listOf(this)
+            is ClipPlanStrategy.InverseMask -> listOf(this)
+            is ClipPlanStrategy.Scissor -> child?.maskStrategies().orEmpty()
+            is ClipPlanStrategy.Stencil -> child?.maskStrategies().orEmpty()
         }
 
-        private fun ClipPlanStrategy.resourceReferenceOrNull(): PlanResourceId? = when (this) {
+        private fun ClipPlanStrategy.allStrategies(): List<ClipPlanStrategy> = when (this) {
+            is ClipPlanStrategy.Mask, is ClipPlanStrategy.InverseMask -> listOf(this)
+            is ClipPlanStrategy.Scissor -> listOf(this) + child?.allStrategies().orEmpty()
+            is ClipPlanStrategy.Stencil -> listOf(this) + child?.allStrategies().orEmpty()
+        }
+
+        private fun ClipPlanStrategy.maskResource(): PlanResourceId = when (this) {
             is ClipPlanStrategy.Mask -> resource
             is ClipPlanStrategy.InverseMask -> resource
-            is ClipPlanStrategy.Stencil -> depthStencil
-            is ClipPlanStrategy.Scissor -> null
+            is ClipPlanStrategy.Scissor, is ClipPlanStrategy.Stencil -> error("Only mask leaves have a resource")
+        }
+
+        private fun ClipPlanStrategy.resourceReferences(): List<PlanResourceId> = when (this) {
+            is ClipPlanStrategy.Mask -> listOf(resource)
+            is ClipPlanStrategy.InverseMask -> listOf(resource)
+            is ClipPlanStrategy.Scissor -> child?.resourceReferences().orEmpty()
+            is ClipPlanStrategy.Stencil -> listOf(depthStencil) + child?.resourceReferences().orEmpty()
+        }
+
+        private fun PlanPass.clipStrategies(): List<ClipPlanStrategy> = when (this) {
+            is PlanPass.RenderPass -> draws().mapNotNull { (it as? ClippedPlanDraw)?.strategy }
+            is PlanPass.PathRenderPass -> listOfNotNull(draw.clipStrategyOrNull())
+            else -> emptyList()
         }
 
         private fun PathRenderDraw.binaryMaskedSourceOrNull(): BinaryMaskedPathDraw? = when (this) {
@@ -1395,8 +1434,11 @@ public class RenderGraph private constructor(
                 it is PlanPass.RenderPass ||
                     it is PlanPass.StencilProducer ||
                     it is PlanPass.StencilCover ||
+                    it is PlanPass.ClipMaskInitialize ||
+                    it is PlanPass.ClipMaskProducer ||
+                    it is PlanPass.ClipMaskFold ||
                     it is PlanPass.ReadbackPass
-            }) { "Path graphs may contain only W4c passes" }
+            }) { "Path graphs may contain only W4c, clip-mask, and readback passes" }
             require(PlanOperationCapability.CopyUpload in capabilities.supportedOperations()) {
                 "Path draws require copy upload support"
             }
@@ -1422,6 +1464,14 @@ public class RenderGraph private constructor(
                 add(indexResource)
                 add(uniformResource)
                 depthStencilResources.singleOrNull()?.let(::add)
+                addAll(resources.filter {
+                    it.role in setOf(
+                        PlanResourceRole.CoverageMaskAccumulator,
+                        PlanResourceRole.CoverageMaskScratch,
+                        PlanResourceRole.CoverageMaskMultisampleScratch,
+                        PlanResourceRole.CoverageMaskDepthStencil,
+                    )
+                })
             }
             require(inventory.map { it.id }.distinct().size == inventory.size) {
                 "Path draw resources must have distinct identities"

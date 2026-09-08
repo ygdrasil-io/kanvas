@@ -151,12 +151,32 @@ private class W4dGeneralGraphDigestWriter {
             is ClippedBinaryMaskedPathDraw -> {
                 text("$prefix.kind", "clipped-binary-masked")
                 pathDraw("$prefix.source", draw.source)
-                when (val clip = draw.clip) {
-                    is ClipPlanStrategy.Mask -> text("$prefix.clip-mask", clip.resource.value)
-                    is ClipPlanStrategy.InverseMask -> text("$prefix.clip-mask", clip.resource.value)
-                    is ClipPlanStrategy.Stencil -> text("$prefix.clip-stencil", clip.depthStencil.value)
-                    is ClipPlanStrategy.Scissor -> text("$prefix.clip-scissor", clip.copyDomainI32().toString())
+                clipStrategy("$prefix.clip", draw.clip)
+            }
+        }
+    }
+
+    private fun clipStrategy(prefix: String, clip: ClipPlanStrategy) {
+        when (clip) {
+            is ClipPlanStrategy.Mask -> text("$prefix.mask", clip.resource.value)
+            is ClipPlanStrategy.InverseMask -> {
+                text("$prefix.inverse.mask", clip.resource.value)
+                rect("$prefix.inverse.domain", clip.geometryF32.copyDomainI32())
+                when (val interior = clip.geometryF32.interiorCoverageF32) {
+                    org.graphiks.math.geometry.InverseInteriorCoverageF32.Zero -> text("$prefix.inverse.interior", "zero")
+                    is org.graphiks.math.geometry.InverseInteriorCoverageF32.Geometry -> {
+                        text("$prefix.inverse.interior", "geometry")
+                        fillGeometry("$prefix.inverse.geometry", interior.copyGeometryF32())
+                    }
                 }
+            }
+            is ClipPlanStrategy.Stencil -> {
+                text("$prefix.stencil", clip.depthStencil.value)
+                clip.child?.let { clipStrategy("$prefix.child", it) }
+            }
+            is ClipPlanStrategy.Scissor -> {
+                rect("$prefix.scissor", clip.copyDomainI32())
+                clip.child?.let { clipStrategy("$prefix.child", it) }
             }
         }
     }
