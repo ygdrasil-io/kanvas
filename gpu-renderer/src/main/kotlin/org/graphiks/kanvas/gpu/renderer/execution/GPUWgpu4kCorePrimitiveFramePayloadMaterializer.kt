@@ -584,6 +584,55 @@ private fun createW4eUnmaskedCoverPipeline(
     return GPUW4eNativePipeline(pipeline, bindGroupLayout)
 }
 
+/** Direct geometry variant of the zero-interior route: it has no sampled mask or hidden D24S8. */
+private fun createW4eUnmaskedPathPipeline(
+    device: GPUDevice,
+    format: GPUTextureFormat,
+    sampleCount: Int,
+    owned: GPUW4eNativeOwnedHandles,
+): GPUW4eNativePipeline {
+    val bindGroupLayout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(
+        label = "Kanvas.frame.w4e.unmaskedDirectPathLayout",
+        entries = listOf(BindGroupLayoutEntry(
+            binding = 0u,
+            visibility = GPUShaderStage.Fragment,
+            buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
+        )),
+    )))
+    val shader = owned.own(device.createShaderModule(ShaderModuleDescriptor(
+        label = "Kanvas.frame.w4e.unmaskedDirectPathShader",
+        code = """
+            struct ColorBlock { color: vec4f };
+            @group(0) @binding(0) var<uniform> consumer: ColorBlock;
+            @vertex fn vs_main(@location(0) position: vec2f) -> @builtin(position) vec4f {
+                return vec4f(position, 0.0, 1.0);
+            }
+            @fragment fn fs_main() -> @location(0) vec4f { return consumer.color; }
+        """.trimIndent(),
+    )))
+    val pipelineLayout = owned.own(device.createPipelineLayout(PipelineLayoutDescriptor(
+        label = "Kanvas.frame.w4e.unmaskedDirectPathPipelineLayout", bindGroupLayouts = listOf(bindGroupLayout),
+    )))
+    val pipeline = owned.own(device.createRenderPipeline(RenderPipelineDescriptor(
+        label = "Kanvas.frame.w4e.unmaskedDirectPathPipeline",
+        layout = pipelineLayout,
+        vertex = VertexState(
+            module = shader,
+            entryPoint = "vs_main",
+            buffers = listOf(VertexBufferLayout(
+                arrayStride = 8uL,
+                attributes = listOf(VertexAttribute(shaderLocation = 0u, offset = 0uL, format = GPUVertexFormat.Float32x2)),
+            )),
+        ),
+        primitive = PrimitiveState(),
+        multisample = MultisampleState(count = sampleCount.toUInt()),
+        fragment = FragmentState(module = shader, entryPoint = "fs_main", targets = listOf(ColorTargetState(
+            format = format, blend = w4eSrcOverBlendState(),
+        ))),
+    )))
+    return GPUW4eNativePipeline(pipeline, bindGroupLayout)
+}
+
 private fun w4eStencilReplaceState(): DepthStencilState = DepthStencilState(
     format = GPUTextureFormat.Depth24PlusStencil8,
     depthWriteEnabled = false,
@@ -2521,35 +2570,72 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             passes.filterIsInstance<GPUW4ePreparedClipPassAuthority.Fold>().flatMap { listOf(it.previousResourceId, it.outputResourceId) }).distinct()
         val resolvedIds = producers.map { it.resolveTargetResourceId ?: it.targetResourceId }.distinct()
         val scratchIds = producers.filter { it.sampleCount == 4 }.map { it.targetResourceId }.distinct()
-        val depthIds = producers.mapNotNull { it.depthStencilResourceId }.distinct()
+        val producerDepthIds = producers.mapNotNull { it.depthStencilResourceId }.distinct()
         val preparedPaths = entries.mapNotNull { entry -> entry.packet.w4ePreparedPath }
+        fun requireRole(resourceId: String, role: GPUFrameResourceRole, context: String) {
+            val request = requests[resourceId]
+                ?: throw Refusal("invalid.native-core-primitive.w4e-resource", "Missing W4e $context resource $resourceId.")
+            if (request.role != role) {
+                throw Refusal(
+                    "invalid.native-core-primitive.w4e-resource-role",
+                    "W4e $context resource $resourceId has role ${request.role}, not $role.",
+                )
+            }
+        }
+        val hardPathPhases = setOf(
+            org.graphiks.kanvas.gpu.plan.PathRenderPhase.HardEdgeMaskProducer,
+            org.graphiks.kanvas.gpu.plan.PathRenderPhase.HardEdgeMaskStencilProducer,
+            org.graphiks.kanvas.gpu.plan.PathRenderPhase.HardEdgeMaskStencilCover,
+        )
+        val hardStencilPathPhases = setOf(
+            org.graphiks.kanvas.gpu.plan.PathRenderPhase.HardEdgeMaskStencilProducer,
+            org.graphiks.kanvas.gpu.plan.PathRenderPhase.HardEdgeMaskStencilCover,
+        )
         val hardPathMaskIds = preparedPaths.filter { path ->
-            path.phase in setOf(
-                org.graphiks.kanvas.gpu.plan.PathRenderPhase.HardEdgeMaskProducer,
-                org.graphiks.kanvas.gpu.plan.PathRenderPhase.HardEdgeMaskStencilProducer,
-                org.graphiks.kanvas.gpu.plan.PathRenderPhase.HardEdgeMaskStencilCover,
-            ) && requests[path.targetResourceId]?.resource !is GPUFrameTargetRef
+            path.phase in hardPathPhases
         }.map(org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipPassAuthority.Path::targetResourceId).distinct()
         val hardPathDepthIds = preparedPaths.filter { path ->
-            path.phase in setOf(
-                org.graphiks.kanvas.gpu.plan.PathRenderPhase.HardEdgeMaskStencilProducer,
-                org.graphiks.kanvas.gpu.plan.PathRenderPhase.HardEdgeMaskStencilCover,
-            ) && requests[path.targetResourceId]?.resource !is GPUFrameTargetRef
+            path.phase in hardStencilPathPhases
         }.mapNotNull(org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipPassAuthority.Path::depthStencilResourceId).distinct()
         val scenePathDepthIds = preparedPaths.filter { path ->
-            requests[path.targetResourceId]?.resource is GPUFrameTargetRef
+            requests[path.targetResourceId]?.role == GPUFrameResourceRole.SceneTarget
         }.mapNotNull(org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipPassAuthority.Path::depthStencilResourceId).distinct()
-        val directInverseDomain = passes.isEmpty() && accumulators.isEmpty() && resolvedIds.isEmpty() &&
-            scratchIds.isEmpty() && depthIds.isEmpty() && preparedPaths.isNotEmpty() && entries.all { entry ->
+        val consumerMaskIds = entries.mapNotNull { entry -> when (val consumer = entry.packet.w4ePreparedClipConsumer) {
+            is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.Mask -> consumer.maskResourceId
+            is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseMask -> consumer.maskResourceId
+            else -> null
+        } }.distinct()
+        val pathBinaryMaskIds = preparedPaths.mapNotNull(
+            org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipPassAuthority.Path::binarySourceMaskResourceId,
+        ).distinct()
+        val pathMaskClearIds = passes.filterIsInstance<GPUW4ePreparedClipPassAuthority.PathMaskClear>()
+            .map(GPUW4ePreparedClipPassAuthority.PathMaskClear::targetResourceId)
+        val maskIds = (accumulators + producers.flatMap { producer ->
+            listOfNotNull(producer.targetResourceId, producer.resolveTargetResourceId)
+        } + hardPathMaskIds + consumerMaskIds + pathBinaryMaskIds + pathMaskClearIds).distinct()
+        accumulators.forEach { id -> requireRole(id, GPUFrameResourceRole.ClipMask, "accumulator") }
+        maskIds.forEach { id -> requireRole(id, GPUFrameResourceRole.ClipMask, "mask") }
+        producerDepthIds.forEach { id -> requireRole(id, GPUFrameResourceRole.ClipDepthStencil, "producer depth") }
+        hardPathMaskIds.forEach { id -> requireRole(id, GPUFrameResourceRole.ClipMask, "hard path mask") }
+        hardPathDepthIds.forEach { id -> requireRole(id, GPUFrameResourceRole.PathDepthStencil, "hard path depth") }
+        preparedPaths.filter { path -> requests[path.targetResourceId]?.role == GPUFrameResourceRole.SceneTarget }.forEach { path ->
+            path.depthStencilResourceId?.let { id -> requireRole(id, GPUFrameResourceRole.PathDepthStencil, "scene path depth") }
+        }
+        preparedPaths.filter { path -> path.phase in hardPathPhases }.forEach { path ->
+            requireRole(path.targetResourceId, GPUFrameResourceRole.ClipMask, "hard path target")
+        }
+        val directInverseDomain = passes.isEmpty() && maskIds.isEmpty() && scratchIds.isEmpty() &&
+            producerDepthIds.isEmpty() && preparedPaths.isNotEmpty() && entries.all { entry ->
                 entry.packet.w4ePreparedClipConsumer is
                     org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseDomain
             }
         if (entries.size != renderSteps.size ||
             (!directInverseDomain &&
-                (accumulators.size != 2 || resolvedIds.size != 1 || scratchIds.size > 1 || depthIds.size > 1))) {
+                (accumulators.isEmpty() || accumulators.size % 2 != 0 ||
+                    resolvedIds.isEmpty() || scratchIds.any { id -> id !in maskIds }))) {
             return refused(
                 "invalid.native-core-primitive.w4e-resource",
-                "W4e must retain either one sealed ping-pong mask inventory or a sealed direct inverse-domain scene inventory.",
+                "W4e must retain a complete sealed mask inventory or a direct inverse-domain scene inventory.",
             )
         }
         if (entries.any { entry ->
@@ -2595,14 +2681,14 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         synchronized(this) { if (closed) return refused("unsupported.native-core-primitive.materializer-state", "W4e materializer is closed."); materializing = true }
         return try {
             val accumulatorTextures = accumulators.map(::texture)
-            val resolved = resolvedIds.singleOrNull()?.let(::texture)
-            val scratch = scratchIds.singleOrNull()?.let(::texture)
-            val depth = depthIds.singleOrNull()?.let(::texture)
-            val hardMasks = if (directInverseDomain) emptyList() else hardPathMaskIds.filterNot { id ->
-                id in accumulators || id == resolvedIds.singleOrNull() || id in scratchIds
-            }.map(::texture)
-            if (hardPathDepthIds.any { id -> id in depthIds } ||
-                scenePathDepthIds.any { id -> id in depthIds } ||
+            val scratchTextures = scratchIds.map(::texture)
+            val producerDepthTextures = producerDepthIds.map(::texture)
+            val singleSampleMaskIds = maskIds.filterNot { id -> id in scratchIds }
+            val resolvedResourceId = singleSampleMaskIds.firstOrNull { id -> id !in accumulators }
+            val resolved = resolvedResourceId?.let(::texture)
+            val additionalMasks = singleSampleMaskIds.filter { id -> id !in accumulators && id != resolvedResourceId }.map(::texture)
+            if (hardPathDepthIds.any { id -> id in producerDepthIds } ||
+                scenePathDepthIds.any { id -> id in producerDepthIds } ||
                 hardPathDepthIds.any { id -> id in scenePathDepthIds }
             ) {
                 throw Refusal(
@@ -2682,24 +2768,69 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                         "W4e $lane D24S8 $resourceId does not match its sealed path sample count.",
                     )
                 }
-                val target = requests[targetId]?.resource as? GPUFrameTargetRef
-                    ?: throw Refusal("invalid.native-core-primitive.w4e-resource", "W4e $lane D24S8 target is not typed.")
+                val expectedTargetRole = if (lane == "scene") {
+                    GPUFrameResourceRole.SceneTarget
+                } else {
+                    GPUFrameResourceRole.ClipMask
+                }
+                requireRole(targetId, expectedTargetRole, "$lane D24S8 target")
                 return GPUWgpu4kCorePrimitiveClipDepthStencilRequirement(
                     value.second.logicalBounds.width,
                     value.second.logicalBounds.height,
                     GPUTextureFormat.Depth24PlusStencil8,
                     sampleCount,
                     GPUTextureUsage.RenderAttachment,
-                    target = target,
+                    // The role is the sealed discriminator; the logical wrapper is only the
+                    // requirement's ABI carrier and is never used to classify a texture.
+                    target = GPUFrameTargetRef(targetId),
                     depthStencilAttachment = GPUTargetIdentity(value.first.resource.value),
                     deviceGeneration = generationSeal.deviceGeneration,
                     targetGeneration = generationSeal.targetGeneration,
                 )
             }
-            val request = GPUW4eAttachmentRequest(if (directInverseDomain) 0 else 2, if (scratch == null) 1 else 4, depth != null,
+            fun producerDepthRequirement(
+                value: Pair<GPUResourcePreparationRequest, GPUFrameTextureDescriptor>,
+            ): GPUWgpu4kCorePrimitiveClipDepthStencilRequirement {
+                val depthResourceId = value.first.diagnosticLabel
+                val depthOwners = producers.filter { producer -> producer.depthStencilResourceId == depthResourceId }
+                val producerTargetId = depthOwners.map { producer -> producer.targetResourceId }.distinct().singleOrNull()
+                    ?: throw Refusal(
+                        "invalid.native-core-primitive.w4e-depth-inventory",
+                        "W4e producer D24S8 $depthResourceId is not owned by one sealed mask target.",
+                    )
+                val sampleCount = depthOwners.map { producer -> producer.sampleCount }.distinct().singleOrNull()
+                    ?: throw Refusal(
+                        "invalid.native-core-primitive.w4e-depth-inventory",
+                        "W4e producer D24S8 $depthResourceId is shared across incompatible sample counts.",
+                    )
+                if (sampleCount != 4 || value.second.sampleCount != sampleCount ||
+                    value.second.format != GPUColorFormat("depth24plus-stencil8")
+                ) {
+                    throw Refusal(
+                        "invalid.native-core-primitive.w4e-depth-inventory",
+                        "W4e producer D24S8 $depthResourceId must be the sealed four-sample producer attachment.",
+                    )
+                }
+                requireRole(producerTargetId, GPUFrameResourceRole.ClipMask, "producer D24S8 target")
+                return GPUWgpu4kCorePrimitiveClipDepthStencilRequirement(
+                    value.second.logicalBounds.width,
+                    value.second.logicalBounds.height,
+                    GPUTextureFormat.Depth24PlusStencil8,
+                    sampleCount,
+                    GPUTextureUsage.RenderAttachment,
+                    target = GPUFrameTargetRef(producerTargetId),
+                    depthStencilAttachment = GPUTargetIdentity(value.first.resource.value),
+                    deviceGeneration = generationSeal.deviceGeneration,
+                    targetGeneration = generationSeal.targetGeneration,
+                )
+            }
+            val request = GPUW4eAttachmentRequest(
+                accumulatorTextures.size,
+                if (scratchTextures.isEmpty()) 1 else 4,
+                producerDepthTextures.isNotEmpty(),
                 accumulatorTextures.sumOf { it.first.byteSize } + (resolved?.first?.byteSize ?: 0L) +
-                    (scratch?.first?.byteSize ?: 0L) + (depth?.first?.byteSize ?: 0L) +
-                    hardMasks.sumOf { it.first.byteSize } + hardDepths.sumOf { it.first.byteSize } +
+                    scratchTextures.sumOf { it.first.byteSize } + producerDepthTextures.sumOf { it.first.byteSize } +
+                    additionalMasks.sumOf { it.first.byteSize } + hardDepths.sumOf { it.first.byteSize } +
                     sceneDepths.sumOf { it.first.byteSize },
                 hardMaskDepthStencilCountI32 = hardDepths.size,
                 sceneDepthStencilCountI32 = sceneDepths.size,
@@ -2708,36 +2839,18 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 request = request,
                 accumulatorResourceIds = accumulators,
                 accumulatorRequirement = accumulatorTextures.firstOrNull()?.let(::maskRequirement),
-                resolvedResourceId = resolvedIds.singleOrNull(),
+                resolvedResourceId = resolvedResourceId,
                 resolvedRequirement = resolved?.let(::maskRequirement),
-                producerScratchResourceId = scratchIds.singleOrNull(),
-                producerScratchRequirement = scratch?.let(::maskRequirement),
-                producerDepthStencilResourceId = depthIds.singleOrNull(),
-                producerDepthStencilRequirement = depth?.let { value ->
-                    val depthResourceId = value.first.diagnosticLabel
-                    val depthOwners = producers.filter { producer -> producer.depthStencilResourceId == depthResourceId }
-                    val producerTargetId = depthOwners.map { producer -> producer.targetResourceId }.distinct().singleOrNull()
-                        ?: throw Refusal(
-                            "invalid.native-core-primitive.w4e-depth-inventory",
-                            "W4e producer D24S8 $depthResourceId is not owned by one sealed mask target.",
-                        )
-                    if (depthOwners.map { producer -> producer.atomicGroupId }.distinct().size != 1 ||
-                        depthOwners.map { producer -> producer.sampleCount }.distinct().singleOrNull() != value.second.sampleCount
-                    ) {
-                        throw Refusal(
-                            "invalid.native-core-primitive.w4e-depth-inventory",
-                            "W4e producer D24S8 $depthResourceId is shared across incompatible sealed producer groups.",
-                        )
-                    }
-                    val producerTarget = requests[producerTargetId]?.resource as? GPUFrameTargetRef
-                        ?: throw Refusal("invalid.native-core-primitive.w4e-resource", "W4e D24S8 target is not typed.")
-                    GPUWgpu4kCorePrimitiveClipDepthStencilRequirement(value.second.logicalBounds.width, value.second.logicalBounds.height,
-                        GPUTextureFormat.Depth24PlusStencil8, value.second.sampleCount, GPUTextureUsage.RenderAttachment,
-                        target = producerTarget, depthStencilAttachment = GPUTargetIdentity(value.first.resource.value),
-                        deviceGeneration = generationSeal.deviceGeneration, targetGeneration = generationSeal.targetGeneration)
-                },
-                additionalMaskResourceIds = hardMasks.map { value -> value.first.diagnosticLabel },
-                additionalMaskRequirements = hardMasks.map(::maskRequirement),
+                producerScratchResourceId = scratchIds.firstOrNull(),
+                producerScratchRequirement = scratchTextures.firstOrNull()?.let(::maskRequirement),
+                producerDepthStencilResourceId = producerDepthIds.firstOrNull(),
+                producerDepthStencilRequirement = producerDepthTextures.firstOrNull()?.let(::producerDepthRequirement),
+                additionalProducerScratchResourceIds = scratchIds.drop(1),
+                additionalProducerScratchRequirements = scratchTextures.drop(1).map(::maskRequirement),
+                additionalProducerDepthStencilResourceIds = producerDepthIds.drop(1),
+                additionalProducerDepthStencilRequirements = producerDepthTextures.drop(1).map(::producerDepthRequirement),
+                additionalMaskResourceIds = additionalMasks.map { value -> value.first.diagnosticLabel },
+                additionalMaskRequirements = additionalMasks.map(::maskRequirement),
                 additionalDepthStencilResourceIds = hardDepths.map { value -> value.first.diagnosticLabel },
                 additionalDepthStencilRequirements = hardDepths.map { value ->
                     pathDepthRequirement(value, lane = "hard-mask", requiredSampleCount = 1)
@@ -3430,22 +3543,88 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                             if (consumer.interiorCoverage is org.graphiks.kanvas.gpu.renderer.passes
                                     .GPUW4ePreparedInverseInteriorCoverage.Zero
                             ) {
-                                // Zero interior means the complete finite domain is covered.  It is a direct
-                                // domain cover and must not materialize an undeclared D24S8 attachment.
-                                val cover = createW4eUnmaskedCoverPipeline(
-                                    device,
-                                    GPUTextureFormat.RGBA8UnormSrgb,
-                                    pathSampleCount,
-                                    owned = owned,
-                                )
+                                // No interior clip must not erase the sealed source draw.  A genuinely empty
+                                // source remains the one case where the finite domain itself is the draw;
+                                // otherwise rasterize the original geometry without manufacturing a D24S8.
                                 val colorUniform = uniform("Kanvas.frame.w4e.inverseDomainZeroColor", floatArrayOf(
                                     color.red, color.green, color.blue, color.alpha,
                                 ))
-                                val bindGroup = owned.own(device.createBindGroup(BindGroupDescriptor(
-                                    label = "Kanvas.frame.w4e.inverseDomainZeroBindGroup",
-                                    layout = cover.layout,
-                                    entries = listOf(BindGroupEntry(0u, BufferBinding(colorUniform, 0uL, 16uL))),
-                                )))
+                                val sourceDirect = when (val source = inversePath.copyGeometry()) {
+                                    is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Fill ->
+                                        source.valueF32.copyDirectTriangleF32OrNull()
+                                    is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Stroke ->
+                                        source.valueF32.copyFillGeometryF32().copyDirectTriangleF32OrNull()
+                                    org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Empty -> null
+                                }
+                                val (pipeline, bindGroup, commands) = if (sourceDirect == null && !hasSourceGeometry) {
+                                    val cover = createW4eUnmaskedCoverPipeline(
+                                        device,
+                                        GPUTextureFormat.RGBA8UnormSrgb,
+                                        pathSampleCount,
+                                        owned = owned,
+                                    )
+                                    val bindings = owned.own(device.createBindGroup(BindGroupDescriptor(
+                                        label = "Kanvas.frame.w4e.inverseDomainZeroBindGroup",
+                                        layout = cover.layout,
+                                        entries = listOf(BindGroupEntry(0u, BufferBinding(colorUniform, 0uL, 16uL))),
+                                    )))
+                                    Triple(
+                                        GPUPreparedNativeRenderPipelineOperand(cover.pipeline, generationSeal.deviceGeneration),
+                                        GPUPreparedNativeBindGroupOperand(bindings, generationSeal.deviceGeneration),
+                                        listOf(GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3))),
+                                    )
+                                } else {
+                                    val direct = requireNotNull(sourceDirect) {
+                                        "W4e zero-interior path geometry requires a direct D24-free triangulation."
+                                    }
+                                    val vertices = direct.copyVerticesF32().also { points ->
+                                        points.indices.step(2).forEach { index ->
+                                            points[index] = points[index] * 2f / width - 1f
+                                            points[index + 1] = 1f - points[index + 1] * 2f / height
+                                        }
+                                    }
+                                    val indices = direct.copyIndicesI32()
+                                    val vertex = owned.own(device.createBuffer(BufferDescriptor(
+                                        size = (vertices.size * Float.SIZE_BYTES).toULong(),
+                                        usage = GPUBufferUsage.Vertex or GPUBufferUsage.CopyDst,
+                                        mappedAtCreation = false,
+                                        label = "Kanvas.frame.w4e.inverseDomainZero.sourceVertices",
+                                    )))
+                                    val index = owned.own(device.createBuffer(BufferDescriptor(
+                                        size = (indices.size * Int.SIZE_BYTES).toULong(),
+                                        usage = GPUBufferUsage.Index or GPUBufferUsage.CopyDst,
+                                        mappedAtCreation = false,
+                                        label = "Kanvas.frame.w4e.inverseDomainZero.sourceIndices",
+                                    )))
+                                    queue.writeBuffer(vertex, 0uL, ArrayBuffer.of(vertices.w4eBytes()), 0uL, (vertices.size * Float.SIZE_BYTES).toULong())
+                                    queue.writeBuffer(index, 0uL, ArrayBuffer.of(indices.w4eBytes()), 0uL, (indices.size * Int.SIZE_BYTES).toULong())
+                                    val directPipeline = createW4eUnmaskedPathPipeline(
+                                        device,
+                                        GPUTextureFormat.RGBA8UnormSrgb,
+                                        pathSampleCount,
+                                        owned,
+                                    )
+                                    val bindings = owned.own(device.createBindGroup(BindGroupDescriptor(
+                                        label = "Kanvas.frame.w4e.inverseDomainZeroSourceBindGroup",
+                                        layout = directPipeline.layout,
+                                        entries = listOf(BindGroupEntry(0u, BufferBinding(colorUniform, 0uL, 16uL))),
+                                    )))
+                                    Triple(
+                                        GPUPreparedNativeRenderPipelineOperand(directPipeline.pipeline, generationSeal.deviceGeneration),
+                                        GPUPreparedNativeBindGroupOperand(bindings, generationSeal.deviceGeneration),
+                                        listOf(
+                                            GPUPreparedNativeRenderCommand.SetVertexBuffer(0, GPUPreparedNativeBufferOperand(vertex, generationSeal.deviceGeneration), 0L, vertices.size.toLong() * Float.SIZE_BYTES, 8L),
+                                            GPUPreparedNativeRenderCommand.SetIndexBuffer(GPUPreparedNativeBufferOperand(index, generationSeal.deviceGeneration), GPUPreparedNativeIndexFormat.Uint32, 0L, indices.size.toLong() * Int.SIZE_BYTES),
+                                            GPUPreparedNativeRenderCommand.DrawIndexed(GPUPreparedNativeDrawCall.DrawIndexed(
+                                                indexCount = indices.size,
+                                                firstIndex = 0,
+                                                baseVertex = 0,
+                                                vertexCount = vertices.size / 2,
+                                                maxLocalIndex = indices.maxOrNull() ?: 0,
+                                            )),
+                                        ),
+                                    )
+                                }
                                 GPUPreparedNativeScopeOperand.Render(entry.index,
                                     GPUPreparedNativeRenderPassConfig(
                                         colorTarget = colorTarget,
@@ -3453,12 +3632,12 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                                         loadOperation = if (clearsScene) GPUPreparedNativeLoadOperation.Clear else GPUPreparedNativeLoadOperation.Load,
                                         storeOperation = GPUPreparedNativeStoreOperation.Store,
                                         clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0).takeIf { clearsScene },
-                                    ), listOf(
-                                        GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(cover.pipeline, generationSeal.deviceGeneration)),
-                                        GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(bindGroup, generationSeal.deviceGeneration)),
-                                        GPUPreparedNativeRenderCommand.SetScissor(drawDomain.left, drawDomain.top, drawDomain.width, drawDomain.height),
-                                        GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3)),
-                                    ))
+                                    ), buildList {
+                                        add(GPUPreparedNativeRenderCommand.SetPipeline(pipeline))
+                                        add(GPUPreparedNativeRenderCommand.SetBindGroup(0, bindGroup))
+                                        add(GPUPreparedNativeRenderCommand.SetScissor(drawDomain.left, drawDomain.top, drawDomain.width, drawDomain.height))
+                                        addAll(commands)
+                                    })
                             } else {
                                 if (!hasSourceGeometry) {
                                     throw Refusal(

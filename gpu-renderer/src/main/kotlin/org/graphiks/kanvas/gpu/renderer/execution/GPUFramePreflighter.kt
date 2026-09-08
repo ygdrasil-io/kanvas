@@ -239,7 +239,7 @@ internal class GPUFramePreflighter(
     private fun GPUFrameResourceUse.referencesW4eLogicalResource(resourceId: String): Boolean =
         resource.value == resourceId || resource.value.endsWith(".$resourceId")
 
-    private fun GPUFrameTargetRef.referencesW4eLogicalResource(resourceId: String): Boolean =
+    private fun GPUFrameResourceRef.referencesW4eLogicalResource(resourceId: String): Boolean =
         value == resourceId || value.endsWith(".$resourceId")
 
     fun preflight(framePlan: GPUFramePlan): GPUFramePreflightResult {
@@ -317,13 +317,15 @@ internal class GPUFramePreflighter(
             w4eRenders.firstOrNull { render ->
                 val continuation = render.w4eSceneContinuation ?: return@firstOrNull false
                 val path = render.drawPackets.single().w4ePreparedPath ?: return@firstOrNull true
-                path.sample != org.graphiks.kanvas.gpu.plan.SamplePlan.Multisample4 ||
-                    path.targetResourceId != continuation.sceneTargetResourceId ||
-                    path.resolveTargetResourceId != continuation.resolveSceneResourceId ||
-                    render.sampleContinuation != null ||
-                    texturePreparations[render.target]?.let { descriptor ->
+                val sealedSceneTarget = render.resourceUses.singleOrNull { use ->
+                    use.referencesW4eLogicalResource(continuation.sceneTargetResourceId) &&
+                        use.role == GPUFrameResourceRole.SceneTarget &&
+                        use.usage == GPUFrameResourceUsage.RenderAttachment && use.write
+                }?.let { use -> texturePreparations[use.resource]?.let { descriptor ->
                         descriptor.format == GPUColorFormat.RGBA8UnormSrgb && descriptor.sampleCount == 4
-                    } != true || (continuation.resolveSceneResourceId != null &&
+                    } == true
+                } == true
+                val sealedResolve = continuation.resolveSceneResourceId == null ||
                     render.resourceUses.singleOrNull { use ->
                         use.referencesW4eLogicalResource(continuation.resolveSceneResourceId) &&
                             use.role == GPUFrameResourceRole.SceneTarget &&
@@ -332,7 +334,11 @@ internal class GPUFramePreflighter(
                         texturePreparations[use.resource]?.let { descriptor ->
                             descriptor.format == GPUColorFormat.RGBA8UnormSrgb && descriptor.sampleCount == 1
                         } == true
-                    } != true)
+                    } == true
+                path.sample != org.graphiks.kanvas.gpu.plan.SamplePlan.Multisample4 ||
+                    path.targetResourceId != continuation.sceneTargetResourceId ||
+                    path.resolveTargetResourceId != continuation.resolveSceneResourceId ||
+                    render.sampleContinuation != null || !sealedSceneTarget || !sealedResolve
             }?.let {
                 return GPUFramePreflightResult.Refused(
                     diagnostic(
@@ -349,7 +355,6 @@ internal class GPUFramePreflighter(
                 when (inverse.interiorCoverage) {
                     org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage.Zero ->
                         path.depthStencilResourceId != null ||
-                            path.copyGeometry() !is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Empty ||
                             render.resourceUses.any { use -> use.role == GPUFrameResourceRole.PathDepthStencil }
                     is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage.Geometry -> {
                         val depthId = path.depthStencilResourceId ?: return@firstOrNull true

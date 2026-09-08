@@ -45,10 +45,26 @@ import org.graphiks.kanvas.render.ir.StrokeJoinNode
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.FillRule
 import org.graphiks.math.geometry.PathBuilder
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.matrix.Matrix3x3F32
 
 /** Native public behavior proof for the sealed W4e materializer route. */
 class GPUWgpu4kCorePrimitiveW4eFrameTest {
+    @Test
+    fun `public W4e mask initialize producer and fold reach readback`() {
+        val terminal = renderNativeFrame(maskPipelineScene(), frameIdValue = 71_003L)
+
+        assertEquals(
+            GPUFrameStructuralOutcome.Succeeded,
+            terminal.outcome,
+            "${terminal.diagnostic?.code?.value}: ${terminal.diagnostic?.message}",
+        )
+        val bytes = assertIs<GPUSceneFrameOutput.ReadbackRgba>(terminal.output).bytes
+        assertTrue(alphaAt(bytes, 4, 4) > 0, "the intersected mask region must be rendered")
+        assertEquals(0, alphaAt(bytes, 7, 7), "the folded Difference region must remain transparent")
+        assertEquals(0, alphaAt(bytes, 15, 15), "pixels outside the sealed clip domain must remain transparent")
+    }
+
     @Test
     fun `public W4e inverse-domain path reaches completion and preserves its non-rectangular hole`() {
         val terminal = renderNativeFrame(inverseDomainScene())
@@ -195,6 +211,51 @@ class GPUWgpu4kCorePrimitiveW4eFrameTest {
                     ),
                 ),
             ),
+        )
+    }
+
+    private fun maskPipelineScene(): SceneSnapshot {
+        val color = ColorARGB.fromPackedUInt(0xFFFF0000u)
+        val path = PathBuilder(FillRule.WINDING)
+            .moveTo(1f, 1f)
+            .lineTo(15f, 1f)
+            .lineTo(1f, 15f)
+            .close()
+            .build()
+        fun clip(rect: RectF32, operation: ClipOperation) = ClipEntry(
+            geometry = GeometryNode.Path(
+                PathBuilder(FillRule.WINDING)
+                    .moveTo(rect.left, rect.top)
+                    .lineTo(rect.right, rect.top)
+                    .lineTo(rect.right, rect.bottom)
+                    .lineTo(rect.left, rect.bottom)
+                    .close()
+                    .build(),
+            ),
+            operation = operation,
+            antiAlias = true,
+            transform = ClipTransformSnapshot.Known.of(Matrix3x3F32.Identity),
+        )
+        return SceneSnapshot.of(
+            SceneExtent(16, 16),
+            ColorSpace.SRGB,
+            listOf(SceneCommand.Draw(DrawNode(
+                geometry = GeometryNode.Path(path),
+                material = MaterialNode.Solid(color),
+                coverage = CoverageRequest.HARD_EDGE,
+                clip = ClipStackNode.Operations.of(listOf(
+                    clip(RectF32(2f, 2f, 14f, 14f), ClipOperation.INTERSECT).copy(antiAlias = false),
+                    clip(RectF32(6f, 6f, 10f, 10f), ClipOperation.DIFFERENCE).copy(antiAlias = false),
+                )),
+                blend = BlendNode.SrcOver,
+                effects = EffectStack.Empty,
+                transform = Matrix3x3F32.Identity,
+                origin = DrawOrigin.PATH,
+                paint = PaintNode(
+                    color, null, BlendMode.SRC_OVER, null, null, null, null, null,
+                    PaintStyleNode.FILL, 0f, StrokeCapNode.BUTT, StrokeJoinNode.MITER, 4f, true,
+                ),
+            ))),
         )
     }
 
