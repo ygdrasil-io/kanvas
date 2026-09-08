@@ -78,29 +78,38 @@ public fun prepareTransformedClipStackGeometryF32(
 private fun transformClipGeometryF64(sourceF64: ClipTransformGeometryF64, matrixF64: Matrix3x3F64, entryI64: MatrixClipEntryLedgerI64, policyF64: ClipPreparationPolicyF64): ClipDeviceGeometryF64 {
     if (!matrixF64.isFinite()) throw MatrixClipInvalidAbort()
     return when (sourceF64) {
-        is ClipTransformGeometryF64.Rect -> transformRectF64(sourceF64.copyRectF64(), matrixF64, entryI64, policyF64)
-        is ClipTransformGeometryF64.RRect -> transformRRectF64(sourceF64.copyRRectF64(), matrixF64, entryI64, policyF64)
+        is ClipTransformGeometryF64.Rect -> transformRectF64(sourceF64, matrixF64, entryI64, policyF64)
+        is ClipTransformGeometryF64.RRect -> transformRRectF64(sourceF64, matrixF64, entryI64, policyF64)
         is ClipTransformGeometryF64.Path -> transformPathF64(sourceF64.pathF32, matrixF64, entryI64, policyF64)
     }
 }
 
-private fun transformRectF64(rectF64: RectF64, matrixF64: Matrix3x3F64, entryI64: MatrixClipEntryLedgerI64, policyF64: ClipPreparationPolicyF64): ClipDeviceGeometryF64 {
+private fun transformRectF64(sourceF64: ClipTransformGeometryF64.Rect, matrixF64: Matrix3x3F64, entryI64: MatrixClipEntryLedgerI64, policyF64: ClipPreparationPolicyF64): ClipDeviceGeometryF64 {
+    val transformClassF64 = matrixF64.classifyPathTransform()
+    entryI64.debitBeforeProjectionI64(ClipWorkUsageI64(snapshotByteCountI64 = rectSnapshotByteCountI64))
+    val rectF64 = sourceF64.copyRectF64()
     if (!rectF64.isFinite()) throw MatrixClipInvalidAbort()
-    if (matrixF64.classifyPathTransform() == PathTransformClass.Identity || matrixF64.classifyPathTransform() == PathTransformClass.AxisAlignedAffine) {
+    if (transformClassF64 == PathTransformClass.Identity || transformClassF64 == PathTransformClass.AxisAlignedAffine) {
         entryI64.debitBeforeProjectionI64(ClipWorkUsageI64(attemptedEdgeCountI64 = 1L, snapshotByteCountI64 = 16L))
         val first = matrixF64.mapAffineClipPointF64(Point2F64(rectF64.left, rectF64.top))
         val second = matrixF64.mapAffineClipPointF64(Point2F64(rectF64.right, rectF64.bottom))
         return ClipDeviceGeometryF64.Rect(RectF64(minOf(first.x, second.x), minOf(first.y, second.y), maxOf(first.x, second.x), maxOf(first.y, second.y)))
     }
-    entryI64.debitBeforeProjectionI64(ClipWorkUsageI64(snapshotByteCountI64 = 16L))
-    return transformPathInputF64(rectF64.toPathFillInputF64(), matrixF64, entryI64, policyF64)
+    return transformPathInputF64(
+        rectF64.toPathFillInputF64 { workI64 -> entryI64.debitBeforeProjectionI64(workI64.toClipUsageI64()) },
+        matrixF64, entryI64, policyF64,
+    )
 }
 
-private fun transformRRectF64(rrectF64: RRectF64, matrixF64: Matrix3x3F64, entryI64: MatrixClipEntryLedgerI64, policyF64: ClipPreparationPolicyF64): ClipDeviceGeometryF64 {
+private fun transformRRectF64(sourceF64: ClipTransformGeometryF64.RRect, matrixF64: Matrix3x3F64, entryI64: MatrixClipEntryLedgerI64, policyF64: ClipPreparationPolicyF64): ClipDeviceGeometryF64 {
+    val transformClassF64 = matrixF64.classifyPathTransform()
+    entryI64.debitBeforeProjectionI64(ClipWorkUsageI64(snapshotByteCountI64 = rrectSnapshotByteCountI64))
+    val rrectF64 = sourceF64.copyRRectF64()
     if (!rrectF64.isFinite()) throw MatrixClipInvalidAbort()
-    if (matrixF64.classifyPathTransform() == PathTransformClass.Identity || matrixF64.classifyPathTransform() == PathTransformClass.AxisAlignedAffine) {
-        entryI64.debitBeforeProjectionI64(ClipWorkUsageI64(attemptedEdgeCountI64 = 1L, snapshotByteCountI64 = 48L))
+    if (transformClassF64 == PathTransformClass.Identity || transformClassF64 == PathTransformClass.AxisAlignedAffine) {
+        entryI64.debitBeforeProjectionI64(ClipWorkUsageI64(snapshotByteCountI64 = rectSnapshotByteCountI64))
         val bounds = rrectF64.copyRectF64()
+        entryI64.debitBeforeProjectionI64(ClipWorkUsageI64(attemptedEdgeCountI64 = 1L, snapshotByteCountI64 = 48L))
         val first = matrixF64.mapAffineClipPointF64(Point2F64(bounds.left, bounds.top))
         val second = matrixF64.mapAffineClipPointF64(Point2F64(bounds.right, bounds.bottom))
         val sx = kotlin.math.abs(matrixF64.sxF64); val sy = kotlin.math.abs(matrixF64.syF64)
@@ -126,9 +135,14 @@ private fun transformRRectF64(rrectF64: RRectF64, matrixF64: Matrix3x3F64, entry
             mappedRadiiF64(deviceLeft = true, deviceTop = false),
         ))
     }
-    entryI64.debitBeforeProjectionI64(ClipWorkUsageI64(snapshotByteCountI64 = 16L))
-    return transformPathInputF64(rrectF64.toPathFillInputF64(), matrixF64, entryI64, policyF64)
+    return transformPathInputF64(
+        rrectF64.toPathFillInputF64 { workI64 -> entryI64.debitBeforeProjectionI64(workI64.toClipUsageI64()) },
+        matrixF64, entryI64, policyF64,
+    )
 }
+
+private const val rectSnapshotByteCountI64: Long = 16L
+private const val rrectSnapshotByteCountI64: Long = 48L
 
 private fun transformPathF64(pathF32: PathF32, matrixF64: Matrix3x3F64, entryI64: MatrixClipEntryLedgerI64, policyF64: ClipPreparationPolicyF64): ClipDeviceGeometryF64 {
     if (matrixF64.classifyPathTransform() != PathTransformClass.Perspective) {

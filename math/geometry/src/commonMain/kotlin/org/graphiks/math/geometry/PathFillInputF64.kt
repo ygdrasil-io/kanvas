@@ -32,55 +32,122 @@ public sealed interface PathFillSegmentF64 {
 }
 
 /** Builds the canonical closed F64 contour without narrowing source coordinates to F32. */
-public fun RectF64.toPathFillInputF64(): PathFillInputF64 = PathFillInputF64.of(
-    FillRule.WINDING,
-    listOf(
-        PathFillSegmentF64.MoveTo(Point2F64(left, top)),
-        PathFillSegmentF64.LineTo(Point2F64(right, top)),
-        PathFillSegmentF64.LineTo(Point2F64(right, bottom)),
-        PathFillSegmentF64.LineTo(Point2F64(left, bottom)),
-        PathFillSegmentF64.Close,
-    ),
-)
+public fun RectF64.toPathFillInputF64(): PathFillInputF64 = materializePathFillInputF64(beforeMaterializationI64 = null)
+
+/** Builds a canonical Rect path while admitting every collection and command before allocation. */
+public fun RectF64.toPathFillInputF64(
+    beforeMaterializationI64: (PathStrokeWorkUsageI64) -> Unit,
+): PathFillInputF64 = materializePathFillInputF64(beforeMaterializationI64)
+
+private fun RectF64.materializePathFillInputF64(
+    beforeMaterializationI64: ((PathStrokeWorkUsageI64) -> Unit)?,
+): PathFillInputF64 {
+    debitPathInputCollectionBeforeMaterializationI64(beforeMaterializationI64)
+    val segmentsF64 = ArrayList<PathFillSegmentF64>(5)
+    debitPathInputSegmentBeforeMaterializationI64(beforeMaterializationI64)
+    segmentsF64 += PathFillSegmentF64.MoveTo(Point2F64(left, top))
+    debitPathInputSegmentBeforeMaterializationI64(beforeMaterializationI64)
+    segmentsF64 += PathFillSegmentF64.LineTo(Point2F64(right, top))
+    debitPathInputSegmentBeforeMaterializationI64(beforeMaterializationI64)
+    segmentsF64 += PathFillSegmentF64.LineTo(Point2F64(right, bottom))
+    debitPathInputSegmentBeforeMaterializationI64(beforeMaterializationI64)
+    segmentsF64 += PathFillSegmentF64.LineTo(Point2F64(left, bottom))
+    debitPathInputSegmentBeforeMaterializationI64(beforeMaterializationI64)
+    segmentsF64 += PathFillSegmentF64.Close
+    debitPathInputCollectionBeforeMaterializationI64(beforeMaterializationI64)
+    return PathFillInputF64.of(FillRule.WINDING, segmentsF64)
+}
 
 /** Builds the canonical rounded-rectangle contour with F64 endpoints and arc radii. */
-public fun RRectF64.toPathFillInputF64(): PathFillInputF64 {
-    val rect = copyRectF64()
-    val radii = normalizedRadiiF64(this)
-    val tl = radii[0]; val tr = radii[1]; val br = radii[2]; val bl = radii[3]
-    return PathFillInputF64.of(
-        FillRule.WINDING,
-        listOf(
-            PathFillSegmentF64.MoveTo(Point2F64(rect.left + tl.xF64, rect.top)),
-            PathFillSegmentF64.LineTo(Point2F64(rect.right - tr.xF64, rect.top)),
-            PathFillSegmentF64.ArcTo(Vector2F64(tr.xF64, tr.yF64), 0.0, false, true, Point2F64(rect.right, rect.top + tr.yF64)),
-            PathFillSegmentF64.LineTo(Point2F64(rect.right, rect.bottom - br.yF64)),
-            PathFillSegmentF64.ArcTo(Vector2F64(br.xF64, br.yF64), 0.0, false, true, Point2F64(rect.right - br.xF64, rect.bottom)),
-            PathFillSegmentF64.LineTo(Point2F64(rect.left + bl.xF64, rect.bottom)),
-            PathFillSegmentF64.ArcTo(Vector2F64(bl.xF64, bl.yF64), 0.0, false, true, Point2F64(rect.left, rect.bottom - bl.yF64)),
-            PathFillSegmentF64.LineTo(Point2F64(rect.left, rect.top + tl.yF64)),
-            PathFillSegmentF64.ArcTo(Vector2F64(tl.xF64, tl.yF64), 0.0, false, true, Point2F64(rect.left + tl.xF64, rect.top)),
-            PathFillSegmentF64.Close,
+public fun RRectF64.toPathFillInputF64(): PathFillInputF64 = materializePathFillInputF64(beforeMaterializationI64 = null)
+
+/** Builds a canonical rounded-rectangle path while admitting every collection and command before allocation. */
+public fun RRectF64.toPathFillInputF64(
+    beforeMaterializationI64: (PathStrokeWorkUsageI64) -> Unit,
+): PathFillInputF64 = materializePathFillInputF64(beforeMaterializationI64)
+
+private fun RRectF64.materializePathFillInputF64(
+    beforeMaterializationI64: ((PathStrokeWorkUsageI64) -> Unit)?,
+): PathFillInputF64 {
+    debitPathInputCollectionBeforeMaterializationI64(beforeMaterializationI64)
+    val segmentsF64 = ArrayList<PathFillSegmentF64>(10)
+    debitPathInputSegmentBeforeMaterializationI64(beforeMaterializationI64)
+    val left = leftF64
+    val top = topF64
+    val right = rightF64
+    val bottom = bottomF64
+    val scale = normalizedRadiiScaleF64(this, left, top, right, bottom)
+    val topLeftX = topLeft.xF64.coerceAtLeast(0.0) * scale
+    val topLeftY = topLeft.yF64.coerceAtLeast(0.0) * scale
+    val topRightX = topRight.xF64.coerceAtLeast(0.0) * scale
+    val topRightY = topRight.yF64.coerceAtLeast(0.0) * scale
+    val bottomRightX = bottomRight.xF64.coerceAtLeast(0.0) * scale
+    val bottomRightY = bottomRight.yF64.coerceAtLeast(0.0) * scale
+    val bottomLeftX = bottomLeft.xF64.coerceAtLeast(0.0) * scale
+    val bottomLeftY = bottomLeft.yF64.coerceAtLeast(0.0) * scale
+    segmentsF64 += PathFillSegmentF64.MoveTo(Point2F64(left + topLeftX, top))
+    debitPathInputSegmentBeforeMaterializationI64(beforeMaterializationI64)
+    segmentsF64 += PathFillSegmentF64.LineTo(Point2F64(right - topRightX, top))
+    debitPathInputSegmentBeforeMaterializationI64(beforeMaterializationI64)
+    segmentsF64 += PathFillSegmentF64.ArcTo(Vector2F64(topRightX, topRightY), 0.0, false, true, Point2F64(right, top + topRightY))
+    debitPathInputSegmentBeforeMaterializationI64(beforeMaterializationI64)
+    segmentsF64 += PathFillSegmentF64.LineTo(Point2F64(right, bottom - bottomRightY))
+    debitPathInputSegmentBeforeMaterializationI64(beforeMaterializationI64)
+    segmentsF64 += PathFillSegmentF64.ArcTo(Vector2F64(bottomRightX, bottomRightY), 0.0, false, true, Point2F64(right - bottomRightX, bottom))
+    debitPathInputSegmentBeforeMaterializationI64(beforeMaterializationI64)
+    segmentsF64 += PathFillSegmentF64.LineTo(Point2F64(left + bottomLeftX, bottom))
+    debitPathInputSegmentBeforeMaterializationI64(beforeMaterializationI64)
+    segmentsF64 += PathFillSegmentF64.ArcTo(Vector2F64(bottomLeftX, bottomLeftY), 0.0, false, true, Point2F64(left, bottom - bottomLeftY))
+    debitPathInputSegmentBeforeMaterializationI64(beforeMaterializationI64)
+    segmentsF64 += PathFillSegmentF64.LineTo(Point2F64(left, top + topLeftY))
+    debitPathInputSegmentBeforeMaterializationI64(beforeMaterializationI64)
+    segmentsF64 += PathFillSegmentF64.ArcTo(Vector2F64(topLeftX, topLeftY), 0.0, false, true, Point2F64(left + topLeftX, top))
+    debitPathInputSegmentBeforeMaterializationI64(beforeMaterializationI64)
+    segmentsF64 += PathFillSegmentF64.Close
+    debitPathInputCollectionBeforeMaterializationI64(beforeMaterializationI64)
+    return PathFillInputF64.of(FillRule.WINDING, segmentsF64)
+}
+
+private const val pathInputCollectionSnapshotByteCountI64: Long = 16L
+private const val pathInputSegmentSnapshotByteCountI64: Long = 64L
+
+private fun debitPathInputCollectionBeforeMaterializationI64(
+    beforeMaterializationI64: ((PathStrokeWorkUsageI64) -> Unit)?,
+) {
+    beforeMaterializationI64?.invoke(
+        PathStrokeWorkUsageI64(snapshotByteCountI64 = pathInputCollectionSnapshotByteCountI64),
+    )
+}
+
+private fun debitPathInputSegmentBeforeMaterializationI64(
+    beforeMaterializationI64: ((PathStrokeWorkUsageI64) -> Unit)?,
+) {
+    beforeMaterializationI64?.invoke(
+        PathStrokeWorkUsageI64(
+            attemptedGeometryUnitCountI64 = 1L,
+            snapshotByteCountI64 = pathInputSegmentSnapshotByteCountI64,
         ),
     )
 }
 
-private fun normalizedRadiiF64(rrect: RRectF64): Array<CornerRadiiF64> {
-    val rect = rrect.copyRectF64()
-    val width = (rect.right - rect.left).coerceAtLeast(0.0)
-    val height = (rect.bottom - rect.top).coerceAtLeast(0.0)
-    val tl = CornerRadiiF64.of(rrect.topLeft.xF64.coerceAtLeast(0.0), rrect.topLeft.yF64.coerceAtLeast(0.0))
-    val tr = CornerRadiiF64.of(rrect.topRight.xF64.coerceAtLeast(0.0), rrect.topRight.yF64.coerceAtLeast(0.0))
-    val br = CornerRadiiF64.of(rrect.bottomRight.xF64.coerceAtLeast(0.0), rrect.bottomRight.yF64.coerceAtLeast(0.0))
-    val bl = CornerRadiiF64.of(rrect.bottomLeft.xF64.coerceAtLeast(0.0), rrect.bottomLeft.yF64.coerceAtLeast(0.0))
+private fun normalizedRadiiScaleF64(rrect: RRectF64, left: Double, top: Double, right: Double, bottom: Double): Double {
+    val width = (right - left).coerceAtLeast(0.0)
+    val height = (bottom - top).coerceAtLeast(0.0)
+    val topLeftX = rrect.topLeft.xF64.coerceAtLeast(0.0)
+    val topLeftY = rrect.topLeft.yF64.coerceAtLeast(0.0)
+    val topRightX = rrect.topRight.xF64.coerceAtLeast(0.0)
+    val topRightY = rrect.topRight.yF64.coerceAtLeast(0.0)
+    val bottomRightX = rrect.bottomRight.xF64.coerceAtLeast(0.0)
+    val bottomRightY = rrect.bottomRight.yF64.coerceAtLeast(0.0)
+    val bottomLeftX = rrect.bottomLeft.xF64.coerceAtLeast(0.0)
+    val bottomLeftY = rrect.bottomLeft.yF64.coerceAtLeast(0.0)
     val scale = min(1.0, min(
-        ratioOrOneF64(width, tl.xF64 + tr.xF64),
-        min(ratioOrOneF64(width, bl.xF64 + br.xF64), min(
-            ratioOrOneF64(height, tl.yF64 + bl.yF64), ratioOrOneF64(height, tr.yF64 + br.yF64),
+        ratioOrOneF64(width, topLeftX + topRightX),
+        min(ratioOrOneF64(width, bottomLeftX + bottomRightX), min(
+            ratioOrOneF64(height, topLeftY + bottomLeftY), ratioOrOneF64(height, topRightY + bottomRightY),
         )),
     ))
-    fun scaled(value: CornerRadiiF64): CornerRadiiF64 = CornerRadiiF64.of(value.xF64 * scale, value.yF64 * scale)
-    return arrayOf(scaled(tl), scaled(tr), scaled(br), scaled(bl))
+    return scale
 }
 
 private fun ratioOrOneF64(limit: Double, sum: Double): Double = if (sum > limit && sum > 0.0) limit / sum else 1.0

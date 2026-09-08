@@ -140,3 +140,29 @@ BUILD SUCCESSFUL in 27s.
 ```
 
 Round-3 self-review: direct `PathF32` widening happens after the source command debit, while final `PathFillInputF64` copying remains after its final debit.  Geometry remains matrix-free and only owns geometric command conversion; matrix owns transform orchestration.  No renderer code or disallowed test technique was added.  No known concern.
+
+## Fix round 4 — remaining important finding
+
+- Moved Rect/RRect defensive source copies behind their exact matrix snapshot debits (`16` and `48` bytes respectively).  Axis-aligned RRect bounds copying is likewise charged before the copy.
+- Added geometry-owned, callback-based canonical Rect/RRect path materialization.  The matrix supplies its private ledger callback; geometry stays matrix-free while charging the mutable command array, every one of the five/ten command snapshots, and the final immutable path collection before each allocation.
+- Removed the redundant RRect bounds copies used only while canonicalizing its path; normalization now reads the internal immutable scalar snapshot without changing geometry.
+- Added public behavior-only Rect and RRect regressions.  Tiny `15`/`47`-byte budgets now take priority over non-finite source inspection, while one-byte-under complete-work budgets reject each full canonical path.  These tests fail if the source copy or any canonical command/collection debit is removed or moved after the work.
+
+## TDD evidence
+
+1. Added the four public regressions before touching production code.
+2. Ran `rtk ./gradlew :math:matrix:jvmTest --tests '*ClipTransformsF64Test'`; all four new tests failed against the old flow (two `InvalidScene` results before debit and two unaccounted canonical paths admitted).
+3. Added the transactional debits and reran the focused tests successfully.
+
+```text
+rtk ./gradlew :math:geometry:jvmTest --tests '*ClipStackPreparationF64Test' :math:matrix:jvmTest --tests '*ClipTransformsF64Test'
+BUILD SUCCESSFUL in 1s.
+
+rtk ./gradlew :math:geometry:jvmTest :math:geometry:jsNodeTest :math:matrix:jvmTest :math:matrix:jsNodeTest
+BUILD SUCCESSFUL in 28s.
+
+rtk git diff --check
+No output; success.
+```
+
+Round-4 self-review: geometry remains free of `Matrix3x3F64` and renderer imports; matrix only owns ledger orchestration.  Failed callbacks abort before publishing a device input, so partially materialized canonical paths remain private and fail closed.  The tests use only public input/result behavior and no reflection, internal state, source inspection, test infrastructure, or call counts.  No known concern.

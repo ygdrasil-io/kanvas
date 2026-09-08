@@ -7,6 +7,7 @@ import kotlin.test.assertTrue
 import org.graphiks.math.geometry.ClipGeometryF32
 import org.graphiks.math.geometry.ClipOperation
 import org.graphiks.math.geometry.ClipPreparationLimitsI32
+import org.graphiks.math.geometry.ClipPreparationLimitsI64
 import org.graphiks.math.geometry.ClipPreparationPolicyF64
 import org.graphiks.math.geometry.ClipPreparationResourceLimitReason
 import org.graphiks.math.geometry.ClipStackPreparationResult
@@ -199,6 +200,96 @@ class ClipTransformsF64Test {
             ),
             RectI32(0, 0, 8, 8),
             ClipPreparationPolicyF64(limitsI64 = org.graphiks.math.geometry.ClipPreparationLimitsI64(maxSnapshotByteCountPerEntryI64 = 15L)),
+        )
+
+        assertEquals(
+            ClipPreparationResourceLimitReason.EntrySnapshotByteLimit,
+            assertIs<ClipStackPreparationResult.ResourceLimitExceeded>(result).reason,
+        )
+    }
+
+    @Test
+    fun `general affine rect debits its snapshot before inspecting it`() {
+        val result = prepareTransformedClipStackGeometryF32(
+            entriesF64 = listOf(
+                ClipTransformInputF64.of(
+                    ClipTransformGeometryF64.Rect(RectF64(Double.NaN, 0.0, 4.0, 4.0)),
+                    Matrix3x3F64(kxF64 = 1.0),
+                    ClipOperation.Intersect,
+                ),
+            ),
+            targetDomainI32 = RectI32(0, 0, 8, 8),
+            policyF64 = ClipPreparationPolicyF64(
+                limitsI64 = ClipPreparationLimitsI64(maxSnapshotByteCountPerEntryI64 = 15L),
+            ),
+        )
+
+        assertEquals(
+            ClipPreparationResourceLimitReason.EntrySnapshotByteLimit,
+            assertIs<ClipStackPreparationResult.ResourceLimitExceeded>(result).reason,
+        )
+    }
+
+    @Test
+    fun `general affine rounded rectangle debits its snapshot before inspecting it`() {
+        val result = prepareTransformedClipStackGeometryF32(
+            entriesF64 = listOf(
+                ClipTransformInputF64.of(
+                    ClipTransformGeometryF64.RRect(
+                        RRectF64.of(RectF64(Double.NaN, 0.0, 4.0, 4.0), 0.0),
+                    ),
+                    Matrix3x3F64(kxF64 = 1.0),
+                    ClipOperation.Intersect,
+                ),
+            ),
+            targetDomainI32 = RectI32(0, 0, 8, 8),
+            policyF64 = ClipPreparationPolicyF64(
+                limitsI64 = ClipPreparationLimitsI64(maxSnapshotByteCountPerEntryI64 = 47L),
+            ),
+        )
+
+        assertEquals(
+            ClipPreparationResourceLimitReason.EntrySnapshotByteLimit,
+            assertIs<ClipStackPreparationResult.ResourceLimitExceeded>(result).reason,
+        )
+    }
+
+    @Test
+    fun `general affine rect includes canonical path materialization in its snapshot budget`() {
+        val result = prepareTransformedClipStackGeometryF32(
+            entriesF64 = listOf(
+                ClipTransformInputF64.of(
+                    ClipTransformGeometryF64.Rect(RectF64(0.0, 0.0, 4.0, 4.0)),
+                    Matrix3x3F64(kxF64 = 1.0),
+                    ClipOperation.Intersect,
+                ),
+            ),
+            targetDomainI32 = RectI32(0, 0, 8, 8),
+            policyF64 = ClipPreparationPolicyF64(
+                limitsI64 = ClipPreparationLimitsI64(maxSnapshotByteCountPerEntryI64 = 883L),
+            ),
+        )
+
+        assertEquals(
+            ClipPreparationResourceLimitReason.EntrySnapshotByteLimit,
+            assertIs<ClipStackPreparationResult.ResourceLimitExceeded>(result).reason,
+        )
+    }
+
+    @Test
+    fun `general affine rounded rectangle includes canonical path materialization in its snapshot budget`() {
+        val result = prepareTransformedClipStackGeometryF32(
+            entriesF64 = listOf(
+                ClipTransformInputF64.of(
+                    ClipTransformGeometryF64.RRect(RRectF64.of(RectF64(0.0, 0.0, 4.0, 4.0), 0.0)),
+                    Matrix3x3F64(kxF64 = 1.0),
+                    ClipOperation.Intersect,
+                ),
+            ),
+            targetDomainI32 = RectI32(0, 0, 8, 8),
+            policyF64 = ClipPreparationPolicyF64(
+                limitsI64 = ClipPreparationLimitsI64(maxSnapshotByteCountPerEntryI64 = 1_555L),
+            ),
         )
 
         assertEquals(

@@ -9,6 +9,10 @@ public data class CornerRadiiF64(public val xF64: Double, public val yF64: Doubl
 /** Axis-aligned rounded rectangle snapshot with F64 bounds and radii. */
 public class RRectF64 private constructor(rectF64: RectF64, public val topLeft: CornerRadiiF64, public val topRight: CornerRadiiF64, public val bottomRight: CornerRadiiF64, public val bottomLeft: CornerRadiiF64) {
     private val rectSnapshotF64: RectF64 = rectF64.copyF64()
+    internal val leftF64: Double get() = rectSnapshotF64.left
+    internal val topF64: Double get() = rectSnapshotF64.top
+    internal val rightF64: Double get() = rectSnapshotF64.right
+    internal val bottomF64: Double get() = rectSnapshotF64.bottom
     public fun copyRectF64(): RectF64 = rectSnapshotF64.copyF64()
     public fun isFinite(): Boolean = rectSnapshotF64.isFinite() && topLeft.isFinite() && topRight.isFinite() && bottomRight.isFinite() && bottomLeft.isFinite()
     public fun copyF64(): RRectF64 = RRectF64(copyRectF64(), topLeft, topRight, bottomRight, bottomLeft)
