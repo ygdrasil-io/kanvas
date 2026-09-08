@@ -40,7 +40,7 @@
 | 7 — lowering/autorité | Terminé | `92c219a0b`, revue Sol CLEAN |
 | 8 — matérialisation/pool | Implémenté ; preuves de gates présentes | `bafbd4019` puis correctifs d'autorité, préflight et générations de depth ; revue Sol globale encore à faire |
 | 9 — Surface/oracle | Terminé | `42efea430`, revue Sol CLEAN ; AA4 réel reste terminal sur le runtime courant |
-| 10 — vérification/documentation | Gates et inventaires terminés ; suivi/documentation en cours | voir `refactor/waves/W04-geometry-coverage/status.md` |
+| 10 — vérification/documentation | Terminé | gates, ledger XML et suivi publiés dans `9849f12` ; revue Sol finale et PR restent des étapes de branche distinctes |
 
 Les cases de conception ci-dessous décrivent le déroulé originel ; ce tableau
 est le ledger d'exécution autoritaire après les corrections et revues.
@@ -914,7 +914,7 @@ rtk git diff --check codex/w4d-strokes-hairlines...HEAD
 rtk git diff --name-only codex/w4d-strokes-hairlines...HEAD
 ```
 
-- [ ] **Step 3: Mettre à jour le suivi et committer**
+- [x] **Step 3: Mettre à jour le suivi et committer**
 
 Publier capabilities, transform classes, MSAA resources, résultats frais,
 ledger et W4e encore ouverte.
