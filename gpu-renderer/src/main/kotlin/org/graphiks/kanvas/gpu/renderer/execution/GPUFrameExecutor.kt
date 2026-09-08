@@ -1412,6 +1412,27 @@ internal class GPUFrameExecutor(
         }
         val hasW4c = frame.semanticPlan.hasSealedW4cSessionMarker()
         val hasW4d = frame.semanticPlan.hasSealedW4dSessionMarker()
+        val hasW4e = renders.isNotEmpty() && renders.all { (_, _, packet) ->
+            packet?.role == org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.W4ePrepared
+        }
+        if (hasW4e) {
+            val exactPayload = payload ?: return executionDiagnostic(
+                "invalid.native-frame-payload.w4e-missing",
+                "A sealed W4e frame requires its native payload before encoding.",
+            )
+            val renderScopes = exactPayload.scopeOperands.filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+            return if (renderScopes.size != renders.size ||
+                renderScopes.map(GPUPreparedNativeScopeOperand.Render::sourceStepIndex) !=
+                    renders.map { (stepIndex, _, _) -> stepIndex }
+            ) {
+                executionDiagnostic(
+                    "invalid.native-frame-payload.w4e-scope",
+                    "A sealed W4e frame requires one ordered native render operand per prepared pass.",
+                )
+            } else {
+                null
+            }
+        }
         val w4dGeneralAuthority = renders.firstOrNull()?.third
             ?.corePrimitivePreparedAuthority
             ?.w4dGeneralFrameMaterializationAuthority

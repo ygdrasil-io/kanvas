@@ -617,6 +617,17 @@ internal class GPUPreparedNativeRenderPipelineOperand private constructor(
     )
 
     companion object {
+        internal fun noBindings(
+            pipeline: GPURenderPipeline,
+            deviceGeneration: GPUDeviceGenerationID,
+            ownership: GPUPreparedNativeOperandOwnership = GPUPreparedNativeOperandOwnership.Borrowed,
+        ) = GPUPreparedNativeRenderPipelineOperand(
+            pipeline,
+            deviceGeneration,
+            ownership,
+            GPUPreparedNativeRenderPipelineBindingAuthority.NoBindings,
+        )
+
         internal fun fromCorePrimitiveAcquisition(
             acquired: GPUWgpu4kCorePrimitiveSessionCacheAcquire.Acquired,
             deviceGeneration: GPUDeviceGenerationID,
@@ -662,6 +673,10 @@ private sealed interface GPUPreparedNativeRenderPipelineBindingAuthority {
 
     data object BindGroupRequired : GPUPreparedNativeRenderPipelineBindingAuthority {
         override val bindingPolicy = GPUPreparedNativeRenderPipelineBindingPolicy.BindGroupRequired
+    }
+
+    data object NoBindings : GPUPreparedNativeRenderPipelineBindingAuthority {
+        override val bindingPolicy = GPUPreparedNativeRenderPipelineBindingPolicy.NoBindings
     }
 
     class CorePrimitiveAcquired(

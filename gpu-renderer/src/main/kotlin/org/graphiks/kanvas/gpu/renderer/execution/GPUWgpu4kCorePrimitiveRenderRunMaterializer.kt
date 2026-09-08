@@ -19,6 +19,27 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
+import org.graphiks.kanvas.gpu.plan.ClipCombineOperation
+
+/**
+ * Exact CPU-side counterpart of the W4e RGBA8 fold shader.  Keeping the quantization here makes
+ * the contract explicit for validation and tests: every fold writes one UNORM8 coverage value,
+ * never an unbounded float product.
+ */
+internal fun foldCoverageUnorm8(
+    previousI32: Int,
+    sourceI32: Int,
+    operation: ClipCombineOperation,
+): Int {
+    require(previousI32 in 0..255 && sourceI32 in 0..255) {
+        "W4e coverage inputs must be UNORM8 values"
+    }
+    val numeratorI32 = when (operation) {
+        ClipCombineOperation.Intersect -> previousI32 * sourceI32
+        ClipCombineOperation.Difference -> previousI32 * (255 - sourceI32)
+    }
+    return (numeratorI32 + 127) / 255
+}
 
 internal sealed interface GPUCorePrimitiveRenderRunMaterialization {
     class Ready(
