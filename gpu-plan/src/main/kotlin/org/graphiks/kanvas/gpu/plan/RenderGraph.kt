@@ -18,6 +18,7 @@ public class RenderGraph private constructor(
     public val peakFrameLocalBytes: Long,
     private val w4dCompilerWitness: W4dCompilerWitness?,
     private val w4dGeneralCompilerWitness: W4dGeneralCompilerWitness?,
+    private val w4eCompilerWitness: W4eCompilerWitness?,
 ) {
     private val storedTargetExtent: SizeI32 = targetExtent.copy()
     public val targetExtent: SizeI32
@@ -37,6 +38,10 @@ public class RenderGraph private constructor(
     /** Verifies that this exact immutable graph snapshot was issued by the W4d.2 compiler. */
     public fun verifyW4dGeneralCompilerWitness(): Boolean =
         w4dGeneralCompilerWitness?.matches(this) == true
+
+    /** Verifies that this exact immutable graph snapshot was issued by the W4e compiler. */
+    public fun verifyW4eCompilerWitness(): Boolean =
+        w4eCompilerWitness?.matches(this) == true
 
     public companion object {
         public fun of(
@@ -155,7 +160,7 @@ public class RenderGraph private constructor(
             require(calculatedPeak == peakFrameLocalBytes) { "Peak memory does not match resource lifetimes" }
             require(calculatedPeak <= budget.maxFrameLocalBytes) { "Peak memory exceeds budget" }
             return RenderGraph(id, capabilityId, targetExtent, colorFormat, capabilities, budget, visualCommandCount,
-                resources, passes, dependencies, peakFrameLocalBytes, null, null)
+                resources, passes, dependencies, peakFrameLocalBytes, null, null, null)
         }
 
         /** Trust-boundary factory available only to the W4d compiler after public validation. */
@@ -178,6 +183,7 @@ public class RenderGraph private constructor(
                 graph.storedDependencies,
                 graph.peakFrameLocalBytes,
                 W4dCompilerWitness.issue(graph),
+                null,
                 null,
             )
         }
@@ -206,6 +212,34 @@ public class RenderGraph private constructor(
                 graph.peakFrameLocalBytes,
                 null,
                 W4dGeneralCompilerWitness.issue(graph),
+                null,
+            )
+        }
+
+        /** Trust-boundary factory available only to the W4e complex clip compiler. */
+        @JvmSynthetic
+        internal fun issueW4eCompilerWitness(graph: RenderGraph): RenderGraph {
+            require(graph.capabilityId in setOf(
+                W4eClipPlanCompiler.HARD_CAPABILITY_ID,
+                W4eClipPlanCompiler.AA_CAPABILITY_ID,
+            )) { "Only a W4e graph may receive a W4e compiler witness" }
+            require(graph.w4dCompilerWitness == null && graph.w4dGeneralCompilerWitness == null &&
+                graph.w4eCompilerWitness == null) { "A W4e graph must be sealed exactly once" }
+            return RenderGraph(
+                graph.id,
+                graph.capabilityId,
+                graph.storedTargetExtent,
+                graph.colorFormat,
+                graph.capabilities,
+                graph.budget,
+                graph.visualCommandCount,
+                graph.storedResources,
+                graph.storedPasses,
+                graph.storedDependencies,
+                graph.peakFrameLocalBytes,
+                null,
+                null,
+                W4eCompilerWitness.issue(graph),
             )
         }
 
@@ -380,14 +414,6 @@ public class RenderGraph private constructor(
                 it is PlanPass.ClipMaskInitialize || it is PlanPass.ClipMaskProducer || it is PlanPass.ClipMaskFold
             }
             require(clipPasses.isNotEmpty()) { "Clip-mask validation requires clip passes" }
-            val initialize = clipPasses.filterIsInstance<PlanPass.ClipMaskInitialize>()
-            require(initialize.size == 1) { "Clip-mask graphs require one initializer" }
-            val initializePass = initialize.single()
-            val initializeIndex = passes.indexOf(initializePass)
-            require(initializeIndex == 0 && initializePass.clearCoverageF32 == 1f) {
-                "Clip-mask graphs must begin by initializing coverage to one"
-            }
-            validateClipDomain(initializePass.copyDomainI32(), targetExtent)
             val accumulators = resources.filter { it.role == PlanResourceRole.CoverageMaskAccumulator }
             require(accumulators.size >= 1) { "Clip-mask graphs require an accumulator" }
             fun coverage(id: PlanResourceId, role: PlanResourceRole, samples: Int): PlanResource {
@@ -403,32 +429,45 @@ public class RenderGraph private constructor(
                 }
                 return resource
             }
-            coverage(initializePass.output, PlanResourceRole.CoverageMaskAccumulator, 1)
-
             val dependencySet = dependencies.toSet()
-            var currentAccumulator = initializePass.output
-            var index = initializeIndex + 1
-            while (index < passes.size && passes[index] is PlanPass.ClipMaskProducer) {
-                val producer = passes[index] as PlanPass.ClipMaskProducer
-                val fold = passes.getOrNull(index + 1) as? PlanPass.ClipMaskFold
-                    ?: throw IllegalArgumentException("Each clip-mask producer requires an adjacent fold")
-                require(PlanPassDependency(producer.id, fold.id) in dependencySet) {
-                    "Clip-mask producer and fold require a direct dependency"
+            var index = 0
+            var groups = 0
+            while (index < passes.size && passes[index] is PlanPass.ClipMaskInitialize) {
+                val initializePass = passes[index] as PlanPass.ClipMaskInitialize
+                require(initializePass.clearCoverageF32 == 1f) {
+                    "Clip-mask graphs must initialize coverage to one"
                 }
-                validateClipMaskProducer(producer, resourcesById, capabilities, targetExtent)
-                validateClipMaskFold(fold, targetExtent)
-                require(fold.previous == currentAccumulator && fold.source == producer.resolveTargetOrTarget()) {
-                    "Clip-mask folds must consume the current accumulator and preceding producer"
+                validateClipDomain(initializePass.copyDomainI32(), targetExtent)
+                coverage(initializePass.output, PlanResourceRole.CoverageMaskAccumulator, 1)
+                var currentAccumulator = initializePass.output
+                index += 1
+                while (index < passes.size && passes[index] is PlanPass.ClipMaskProducer) {
+                    val producer = passes[index] as PlanPass.ClipMaskProducer
+                    val fold = passes.getOrNull(index + 1) as? PlanPass.ClipMaskFold
+                        ?: throw IllegalArgumentException("Each clip-mask producer requires an adjacent fold")
+                    require(producer.atomicGroup == initializePass.atomicGroup && fold.atomicGroup == initializePass.atomicGroup) {
+                        "Clip-mask groups must not interleave"
+                    }
+                    require(PlanPassDependency(producer.id, fold.id) in dependencySet) {
+                        "Clip-mask producer and fold require a direct dependency"
+                    }
+                    validateClipMaskProducer(producer, resourcesById, capabilities, targetExtent)
+                    validateClipMaskFold(fold, targetExtent)
+                    require(fold.previous == currentAccumulator && fold.source == producer.resolveTargetOrTarget()) {
+                        "Clip-mask folds must consume the current accumulator and preceding producer"
+                    }
+                    coverage(fold.previous, PlanResourceRole.CoverageMaskAccumulator, 1)
+                    coverage(fold.source, PlanResourceRole.CoverageMaskScratch, 1)
+                    coverage(fold.output, PlanResourceRole.CoverageMaskAccumulator, 1)
+                    currentAccumulator = fold.output
+                    index += 2
                 }
-                coverage(fold.previous, PlanResourceRole.CoverageMaskAccumulator, 1)
-                coverage(fold.source, PlanResourceRole.CoverageMaskScratch, 1)
-                coverage(fold.output, PlanResourceRole.CoverageMaskAccumulator, 1)
-                currentAccumulator = fold.output
-                index += 2
+                groups += 1
             }
+            require(groups > 0) { "Clip-mask graphs must begin with an initializer" }
             require(passes.drop(index).none {
                 it is PlanPass.ClipMaskInitialize || it is PlanPass.ClipMaskProducer || it is PlanPass.ClipMaskFold
-            }) { "Clip-mask passes must form one ordered initialization/producer/fold prefix" }
+            }) { "Clip-mask passes must form ordered initialization/producer/fold prefixes" }
 
             resources.filter { it.role in setOf(
                 PlanResourceRole.CoverageMaskAccumulator,
@@ -441,9 +480,6 @@ public class RenderGraph private constructor(
                     "Clip-mask resource lifetimes must end at their final consumer"
                 }
             }
-
-            require(currentAccumulator != initializePass.output || passes.none { it is PlanPass.ClipMaskProducer } ||
-                passes.any { it is PlanPass.ClipMaskFold }) { "Clip producers require a folded final accumulator" }
         }
 
         private fun validateClipConsumers(
@@ -491,14 +527,29 @@ public class RenderGraph private constructor(
                 require(consumers.isEmpty()) { "Mask clip consumers require a clip-mask graph" }
                 return
             }
-            val initialize = passes.filterIsInstance<PlanPass.ClipMaskInitialize>().single()
-            val finalFold = passes.filterIsInstance<PlanPass.ClipMaskFold>().lastOrNull()
-            val finalMask = finalFold?.output ?: initialize.output
             require(consumers.isNotEmpty()) { "Clip-mask producers require a consumer" }
-            val writers = mutableMapOf<PlanResourceId, PlanPassId>(initialize.output to initialize.id)
-            passes.filterIsInstance<PlanPass.ClipMaskFold>().forEach { writers[it.output] = it.id }
+            val writers = mutableMapOf<PlanResourceId, PlanPassId>()
+            val finalMasks = mutableMapOf<PlanResourceId, PlanPass.ClipMaskInitialize>()
+            var index = 0
+            while (index < passes.size && passes[index] is PlanPass.ClipMaskInitialize) {
+                val initialize = passes[index] as PlanPass.ClipMaskInitialize
+                writers[initialize.output] = initialize.id
+                var finalMask = initialize.output
+                index += 1
+                while (index < passes.size && passes[index] is PlanPass.ClipMaskProducer) {
+                    val producer = passes[index] as PlanPass.ClipMaskProducer
+                    val fold = passes[index + 1] as PlanPass.ClipMaskFold
+                    require(producer.atomicGroup == initialize.atomicGroup && fold.atomicGroup == initialize.atomicGroup) {
+                        "Clip-mask consumers require non-interleaved groups"
+                    }
+                    finalMask = fold.output
+                    writers[fold.output] = fold.id
+                    index += 2
+                }
+                finalMasks[finalMask] = initialize
+            }
             consumers.forEach { (index, mask, strategy) ->
-                require(mask == finalMask) { "Clip consumers must sample the final accumulator" }
+                val initialize = requireNotNull(finalMasks[mask]) { "Clip consumers must sample their final accumulator" }
                 val writer = requireNotNull(writers[mask]) { "Clip consumer mask has no producer" }
                 require(pathExists(writer, passes[index].id, dependencies)) {
                     "Clip consumers require a dependency from their mask producer"
@@ -509,11 +560,6 @@ public class RenderGraph private constructor(
                 if (strategy is ClipPlanStrategy.InverseMask) {
                     require(strategy.geometryF32.copyDomainI32() == initialize.copyDomainI32()) {
                         "Inverse clip domains must match their initialized mask domain"
-                    }
-                    if (strategy.geometryF32.interiorCoverageF32 == org.graphiks.math.geometry.InverseInteriorCoverageF32.Zero) {
-                        require(passes.none { it is PlanPass.ClipMaskProducer }) {
-                            "Zero inverse interiors use the initialized domain without a producer"
-                        }
                     }
                 }
             }
@@ -624,12 +670,19 @@ public class RenderGraph private constructor(
         private fun PathRenderDraw.binaryMaskedSourceOrNull(): BinaryMaskedPathDraw? = when (this) {
             is BinaryMaskedPathDraw -> this
             is ClippedBinaryMaskedPathDraw -> source
-            is GeneralPathDraw -> null
+            is GeneralPathDraw, is ClippedGeneralPathDraw -> null
         }
 
         private fun PathRenderDraw.clipStrategyOrNull(): ClipPlanStrategy? = when (this) {
             is ClippedBinaryMaskedPathDraw -> clip
+            is ClippedGeneralPathDraw -> clip
             is BinaryMaskedPathDraw, is GeneralPathDraw -> null
+        }
+
+        private fun PathRenderDraw.generalSourceOrNull(): GeneralPathDraw? = when (this) {
+            is GeneralPathDraw -> this
+            is ClippedGeneralPathDraw -> source
+            is BinaryMaskedPathDraw, is ClippedBinaryMaskedPathDraw -> null
         }
 
         private fun pathExists(
@@ -844,6 +897,9 @@ public class RenderGraph private constructor(
                     PlanResourceRole.IndexData,
                     PlanResourceRole.UniformData,
                     PlanResourceRole.DepthStencil,
+                    PlanResourceRole.CoverageMaskAccumulator,
+                    PlanResourceRole.CoverageMaskScratch,
+                    PlanResourceRole.CoverageMaskDepthStencil,
                 )
             }) { "Single-sample explicit paths may declare only their direct resource inventory" }
             val referencedResourceIds = passes.flatMap(::referencedResources).toSet()
@@ -865,7 +921,7 @@ public class RenderGraph private constructor(
             pathPasses.forEach { (index, pass) ->
                 when (pass.phase) {
                     PathRenderPhase.SingleSampleDirectColor -> {
-                        require(pass.draw is GeneralPathDraw &&
+                        require((pass.draw is GeneralPathDraw || pass.draw is ClippedGeneralPathDraw) &&
                             pass.draw.coverage == CoveragePlan.FullOrScissor &&
                             pass.draw.strategy == PathFillStrategy.DirectTriangle &&
                             pass.target == target.id && pass.atomicGroup == null && pass.depthStencil == null &&
@@ -1091,7 +1147,7 @@ public class RenderGraph private constructor(
                         val depthStencil = pass.depthStencil?.let { resourceId ->
                             requireNotNull(resourcesById[resourceId])
                         }
-                        require(pass.draw is GeneralPathDraw &&
+                        require((pass.draw is GeneralPathDraw || pass.draw is ClippedGeneralPathDraw) &&
                             pass.draw.coverage == CoveragePlan.StencilAA4 &&
                             pass.draw.strategy == PathFillStrategy.DirectTriangle &&
                             pass.target == multisampleTarget.id && pass.atomicGroup == null &&
@@ -1324,7 +1380,7 @@ public class RenderGraph private constructor(
                 producer.depthStencil == cover.depthStencil && producer.atomicGroup == cover.atomicGroup) {
                 "Explicit stencil producer and cover must share draw, data, target, depth, and group"
             }
-            val draw = producer.draw as? GeneralPathDraw
+            val draw = producer.draw.generalSourceOrNull()
                 ?: throw IllegalArgumentException("Explicit stencil producers require general path draws")
             require(draw.coverage == coverage && draw.sample == sample &&
                 draw.strategy == PathFillStrategy.StencilCover) {
@@ -1724,6 +1780,24 @@ public class RenderGraph private constructor(
         companion object {
             fun issue(graph: RenderGraph): W4dGeneralCompilerWitness =
                 W4dGeneralCompilerWitness(canonicalW4dGeneralGraphDigest(graph))
+        }
+    }
+
+    /** Opaque proof for the W4e clip graph, including its pooled mask inventory. */
+    private class W4eCompilerWitness private constructor(digest: ByteArray) {
+        private val digestSnapshot: ByteArray = digest.copyOf()
+
+        fun matches(graph: RenderGraph): Boolean = try {
+            MessageDigest.isEqual(digestSnapshot, canonicalW4eGraphDigest(graph))
+        } catch (_: IllegalArgumentException) {
+            false
+        } catch (_: ArithmeticException) {
+            false
+        }
+
+        companion object {
+            fun issue(graph: RenderGraph): W4eCompilerWitness =
+                W4eCompilerWitness(canonicalW4eGraphDigest(graph))
         }
     }
 }

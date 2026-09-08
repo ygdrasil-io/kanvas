@@ -8,8 +8,18 @@ import org.graphiks.math.geometry.RectI32
 /** Canonical, raw-bit-stable snapshot used only by the opaque W4d.2 compiler witness. */
 @JvmSynthetic
 internal fun canonicalW4dGeneralGraphDigest(graph: RenderGraph): ByteArray {
+    return canonicalGraphDigest(graph, "w4d-general-render-graph-witness-v1")
+}
+
+/** Canonical W4e inventory seal.  It shares W4d.2's path/pass serialization seam. */
+@JvmSynthetic
+internal fun canonicalW4eGraphDigest(graph: RenderGraph): ByteArray {
+    return canonicalGraphDigest(graph, "w4e-complex-clip-render-graph-witness-v1")
+}
+
+private fun canonicalGraphDigest(graph: RenderGraph, schema: String): ByteArray {
     val writer = W4dGeneralGraphDigestWriter()
-    writer.text("schema", "w4d-general-render-graph-witness-v1")
+    writer.text("schema", schema)
     writer.text("plan.id", graph.id.value)
     writer.text("plan.capability-id", graph.capabilityId)
     writer.i32("target.width", graph.targetExtent.width)
@@ -125,7 +135,60 @@ private class W4dGeneralGraphDigestWriter {
                 text("$prefix.staging", pass.staging.value)
                 i64("$prefix.bytes-per-row", pass.bytesPerRow)
             }
-            else -> throw IllegalArgumentException("W4d.2 witness cannot seal pass ${pass.role}")
+            is PlanPass.ClipMaskInitialize -> {
+                text("$prefix.kind", "clip-mask-initialize")
+                text("$prefix.output", pass.output.value)
+                rect("$prefix.domain", pass.copyDomainI32())
+                f32("$prefix.clear-coverage", pass.clearCoverageF32)
+                text("$prefix.atomic-group", pass.atomicGroup.value)
+            }
+            is PlanPass.ClipMaskProducer -> {
+                text("$prefix.kind", "clip-mask-producer")
+                text("$prefix.target", pass.target.value)
+                nullableText("$prefix.resolve-target", pass.resolveTarget?.value)
+                nullableText("$prefix.depth-stencil", pass.depthStencil?.value)
+                i32("$prefix.sample-count", pass.sampleCountI32)
+                clipGeometry("$prefix.geometry", pass.copyGeometryF32())
+                text("$prefix.atomic-group", pass.atomicGroup.value)
+                bool("$prefix.inverse-coverage", pass.inverseCoverage)
+            }
+            is PlanPass.ClipMaskFold -> {
+                text("$prefix.kind", "clip-mask-fold")
+                text("$prefix.previous", pass.previous.value)
+                text("$prefix.source", pass.source.value)
+                text("$prefix.output", pass.output.value)
+                text("$prefix.operation", pass.operation.name)
+                rect("$prefix.domain", pass.copyDomainI32())
+                text("$prefix.atomic-group", pass.atomicGroup.value)
+            }
+            else -> throw IllegalArgumentException("Path compiler witness cannot seal pass ${pass.role}")
+        }
+    }
+
+    private fun clipGeometry(prefix: String, geometry: org.graphiks.math.geometry.ClipGeometryF32) {
+        when (geometry) {
+            is org.graphiks.math.geometry.ClipGeometryF32.Rect -> {
+                text("$prefix.kind", "rect")
+                val value = geometry.copyRectF32()
+                f32("$prefix.left", value.left); f32("$prefix.top", value.top)
+                f32("$prefix.right", value.right); f32("$prefix.bottom", value.bottom)
+            }
+            is org.graphiks.math.geometry.ClipGeometryF32.RRect -> {
+                text("$prefix.kind", "rrect")
+                val value = geometry.copyRRectF32()
+                val bounds = value.rect
+                f32("$prefix.left", bounds.left); f32("$prefix.top", bounds.top)
+                f32("$prefix.right", bounds.right); f32("$prefix.bottom", bounds.bottom)
+                f32("$prefix.top-left.x", value.topLeft.x); f32("$prefix.top-left.y", value.topLeft.y)
+                f32("$prefix.top-right.x", value.topRight.x); f32("$prefix.top-right.y", value.topRight.y)
+                f32("$prefix.bottom-right.x", value.bottomRight.x); f32("$prefix.bottom-right.y", value.bottomRight.y)
+                f32("$prefix.bottom-left.x", value.bottomLeft.x); f32("$prefix.bottom-left.y", value.bottomLeft.y)
+            }
+            is org.graphiks.math.geometry.ClipGeometryF32.Path -> {
+                text("$prefix.kind", "path")
+                fillGeometry(prefix, geometry.copyPathGeometryF32())
+            }
+            org.graphiks.math.geometry.ClipGeometryF32.Empty -> text("$prefix.kind", "empty")
         }
     }
 
@@ -140,6 +203,11 @@ private class W4dGeneralGraphDigestWriter {
             is GeneralPathDraw -> {
                 text("$prefix.kind", "general")
                 generalPathDraw(prefix, draw)
+            }
+            is ClippedGeneralPathDraw -> {
+                text("$prefix.kind", "clipped-general")
+                generalPathDraw("$prefix.source", draw.source)
+                clipStrategy("$prefix.clip", draw.clip)
             }
             is BinaryMaskedPathDraw -> {
                 text("$prefix.kind", "binary-masked")

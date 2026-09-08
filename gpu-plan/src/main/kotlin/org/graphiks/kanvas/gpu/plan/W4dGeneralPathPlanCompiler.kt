@@ -62,6 +62,7 @@ import org.graphiks.math.matrix.toMatrix3x3F64
  */
 public class W4dGeneralPathPlanCompiler internal constructor(
     private val strokePolicyF64: PathStrokePolicyF64,
+    private val acceptsNarrowTransforms: Boolean = false,
 ) : GpuPlanCompiler {
     public constructor() : this(PathStrokePolicyF64())
 
@@ -124,7 +125,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                 else -> outside = true
             }
         }
-        if (outside || !requiresGeneral) return Preflight.Outside
+        if (outside || (!requiresGeneral && !acceptsNarrowTransforms)) return Preflight.Outside
         return if (visualDrawCountI32 > MAX_DRAWS) Preflight.Limit("W4d.2 accepts at most 512 visual path draws") else Preflight.Member
     }
 

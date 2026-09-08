@@ -145,6 +145,27 @@ public class GeneralPathDraw private constructor(
     }
 }
 
+/** A W4d.2 direct path draw whose final coverage is constrained by a W4e clip plan. */
+public class ClippedGeneralPathDraw private constructor(
+    public val source: GeneralPathDraw,
+    public val clip: ClipPlanStrategy,
+) : PathRenderDraw {
+    override public val commandIndex: Int get() = source.commandIndex
+    override public val color: ColorF32 get() = source.color
+    override public val strategy: PathFillStrategy get() = source.strategy
+    override public val coverage: CoveragePlan get() = source.coverage
+    override public val sample: SamplePlan get() = source.sample
+    override public val blend: BlendPlan get() = source.blend
+
+    override fun copyPathGeometry(): PathDrawGeometry = source.copyPathGeometry()
+    override fun copyScissorI32(): RectI32 = source.copyScissorI32()
+
+    public companion object {
+        public fun of(source: GeneralPathDraw, clip: ClipPlanStrategy): ClippedGeneralPathDraw =
+            ClippedGeneralPathDraw(source, clip)
+    }
+}
+
 /** A four-sample color cover driven by one unfiltered binary texel from a single-sample mask. */
 public class BinaryMaskedPathDraw private constructor(
     public val producer: GeneralPathDraw,
@@ -489,6 +510,8 @@ public sealed interface PlanPass {
         public val sampleCountI32: Int,
         geometryF32: ClipGeometryF32,
         public val atomicGroup: PlanAtomicGroupId,
+        /** Applies finite producer coverage as the complement inside the initialized clip domain. */
+        public val inverseCoverage: Boolean = false,
     ) : PlanPass {
         override public val role: PlanPassRole = PlanPassRole.ClipMaskProducer
         override public val id: PlanPassId = checkedPassId(role, ordinal)
