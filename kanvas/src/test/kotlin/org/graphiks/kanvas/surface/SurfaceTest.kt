@@ -154,7 +154,9 @@ class SurfaceTest {
             clipRect(RectF32.ofLTRB(1f, 1f, 5f, 5f), antiAlias = false)
             save()
             resetMatrix()
-            translate(100f, 200f)
+            translate(12f, 12f)
+            // This temporary device clip must disappear at restore.
+            clipRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), antiAlias = false)
             restore()
             resetMatrix()
             drawRect(RectF32.ofLTRB(0f, 0f, 16f, 16f), Paint.fill(ColorARGB.Red).copy(antiAlias = false))
@@ -163,6 +165,10 @@ class SurfaceTest {
         assertArrayEquals(
             byteArrayOf(-1, 0, 0, -1),
             requireNotNull(surface.makeImageSnapshot(RectF32.ofLTRB(12f, 12f, 13f, 13f))).pixels,
+        )
+        assertArrayEquals(
+            byteArrayOf(-1, 0, 0, -1),
+            requireNotNull(surface.makeImageSnapshot(RectF32.ofLTRB(13f, 13f, 14f, 14f))).pixels,
         )
         assertArrayEquals(
             byteArrayOf(0, 0, 0, 0),
