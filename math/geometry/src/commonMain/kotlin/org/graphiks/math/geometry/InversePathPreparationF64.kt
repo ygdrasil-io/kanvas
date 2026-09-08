@@ -211,26 +211,38 @@ private fun PathFillInputF64.copyTwoClosedStrokeBoundariesF64(
     if (firstPointsF64.touchesBoundaryF64(secondPointsF64, ledgerI64)) return null
     val firstContainsSecond = firstPointsF64.strictlyContainsContourF64(secondPointsF64, ledgerI64)
     val secondContainsFirst = secondPointsF64.strictlyContainsContourF64(firstPointsF64, ledgerI64)
-    val (outerRangeI32, innerRangeI32) = when {
-        firstContainsSecond && !secondContainsFirst ->
-            (firstStartI32 until firstEndI32) to (secondStartI32 until secondEndI32)
-        secondContainsFirst && !firstContainsSecond ->
-            (secondStartI32 until secondEndI32) to (firstStartI32 until firstEndI32)
+    val outerStartI32: Int
+    val outerEndI32: Int
+    val innerStartI32: Int
+    val innerEndI32: Int
+    when {
+        firstContainsSecond && !secondContainsFirst -> {
+            outerStartI32 = firstStartI32
+            outerEndI32 = firstEndI32
+            innerStartI32 = secondStartI32
+            innerEndI32 = secondEndI32
+        }
+        secondContainsFirst && !firstContainsSecond -> {
+            outerStartI32 = secondStartI32
+            outerEndI32 = secondEndI32
+            innerStartI32 = firstStartI32
+            innerEndI32 = firstEndI32
+        }
         else -> return null
     }
 
-    fun copyRangeF64(rangeI32: IntRange): PathFillInputF64 {
+    ledgerI64.debitBeforeEmissionI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 32L))
+    fun copyRangeF64(startI32: Int, endI32: Int): PathFillInputF64 {
         ledgerI64.debitBeforeEmissionI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
         val segmentsF64 = mutableListOf<PathFillSegmentF64>()
-        rangeI32.forEach { indexI32 ->
+        for (indexI32 in startI32 until endI32) {
             ledgerI64.debitBeforeEmissionI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
             segmentsF64 += segmentAtI32(indexI32)
         }
         ledgerI64.debitBeforeEmissionI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
         return PathFillInputF64.of(FillRule.WINDING, segmentsF64)
     }
-    ledgerI64.debitBeforeEmissionI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 32L))
-    return copyRangeF64(outerRangeI32) to copyRangeF64(innerRangeI32)
+    return copyRangeF64(outerStartI32, outerEndI32) to copyRangeF64(innerStartI32, innerEndI32)
 }
 
 private fun PathFillInputF64.copyClosedContourPointsF64(
