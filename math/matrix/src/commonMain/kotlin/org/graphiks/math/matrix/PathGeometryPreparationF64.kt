@@ -279,15 +279,14 @@ private fun Matrix3x3F64.preparePerspectiveInversePathGeometryF32(
         )
     }
 
-    is PathProjectivePreparationResult.Empty -> prepareInversePathGeometryF32(
-        finiteFillF64 = PathFillInputF64.of(sourcePathF32.fillRule, emptyList()),
-        deviceStrokeOutlineF64 = null,
+    is PathProjectivePreparationResult.Empty -> prepareProjectedEmptyInversePathGeometryF32(
+        sourceFillRule = sourcePathF32.fillRule,
         styleF64 = styleF64,
         mode = mode,
         domainI32 = domainI32,
         policyF64 = policyF64,
-        frameWorkUsageBeforeI64 = projectedF64.frameWorkUsageAfterI64,
         pathWorkUsageBeforeI64 = projectedF64.pathWorkUsageAfterI64,
+        frameWorkUsageBeforeI64 = projectedF64.frameWorkUsageAfterI64,
     )
 
     is PathProjectivePreparationResult.InvalidScene -> InversePathPreparationResult.InvalidScene(
@@ -297,6 +296,36 @@ private fun Matrix3x3F64.preparePerspectiveInversePathGeometryF32(
     is PathProjectivePreparationResult.ResourceLimitExceeded -> InversePathPreparationResult.ResourceLimitExceeded(
         projectedF64.reason.toPathStrokeResourceLimitReason(),
     )
+}
+
+private fun prepareProjectedEmptyInversePathGeometryF32(
+    sourceFillRule: org.graphiks.math.geometry.FillRule,
+    styleF64: PathStrokeStyleF64?,
+    mode: InversePathDrawMode,
+    domainI32: RectI32,
+    policyF64: PathStrokePolicyF64,
+    pathWorkUsageBeforeI64: PathStrokeWorkUsageI64,
+    frameWorkUsageBeforeI64: PathStrokeWorkUsageI64,
+): InversePathPreparationResult = try {
+    val ledgerI64 = PathAffineTransformWorkLedgerF64(
+        frameWorkUsageBeforeI64,
+        policyF64,
+        pathWorkUsageBeforeI64,
+    )
+    ledgerI64.debitBeforeTransformWorkI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
+    val emptyFillF64 = PathFillInputF64.of(sourceFillRule, emptyList())
+    prepareInversePathGeometryF32(
+        finiteFillF64 = emptyFillF64,
+        deviceStrokeOutlineF64 = null,
+        styleF64 = styleF64,
+        mode = mode,
+        domainI32 = domainI32,
+        policyF64 = policyF64,
+        frameWorkUsageBeforeI64 = ledgerI64.frameSnapshotI64(),
+        pathWorkUsageBeforeI64 = ledgerI64.pathSnapshotI64(),
+    )
+} catch (abort: PathAffineTransformWorkAbort) {
+    InversePathPreparationResult.ResourceLimitExceeded(abort.reason)
 }
 
 private fun prepareInverseWithOptionalDeviceOutlineF32(
@@ -501,8 +530,9 @@ private class PathAffineTransformWorkAbort(
 private class PathAffineTransformWorkLedgerF64(
     frameWorkUsageBeforeI64: PathStrokeWorkUsageI64,
     private val policyF64: PathStrokePolicyF64,
+    pathWorkUsageBeforeI64: PathStrokeWorkUsageI64 = PathStrokeWorkUsageI64(),
 ) {
-    private var pathWorkUsageI64: PathStrokeWorkUsageI64 = PathStrokeWorkUsageI64()
+    private var pathWorkUsageI64: PathStrokeWorkUsageI64 = pathWorkUsageBeforeI64
     private var frameWorkUsageI64: PathStrokeWorkUsageI64 = frameWorkUsageBeforeI64
 
     init {

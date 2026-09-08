@@ -141,6 +141,39 @@ class InversePathPreparationF64Test {
         )
     }
 
+    @Test
+    fun `hairline inverse refuses snapshot exhaustion before copying its exact outline operands`() {
+        val result = prepareInversePathGeometryF32(
+            finiteFillF64 = rectangleInputF64(0.0, 0.0, 10.0, 8.0),
+            deviceStrokeOutlineF64 = PathFillInputF64.of(
+                FillRule.WINDING,
+                listOf(
+                    PathFillSegmentF64.MoveTo(Point2F64(0.0, 0.5)),
+                    PathFillSegmentF64.LineTo(Point2F64(10.0, 0.5)),
+                    PathFillSegmentF64.LineTo(Point2F64(9.5, 0.5)),
+                    PathFillSegmentF64.LineTo(Point2F64(9.5, 7.5)),
+                    PathFillSegmentF64.Close,
+                    PathFillSegmentF64.MoveTo(Point2F64(-0.5, -0.5)),
+                    PathFillSegmentF64.LineTo(Point2F64(10.5, -0.5)),
+                    PathFillSegmentF64.LineTo(Point2F64(10.5, 8.5)),
+                    PathFillSegmentF64.LineTo(Point2F64(-0.5, 8.5)),
+                    PathFillSegmentF64.Close,
+                ),
+            ),
+            styleF64 = hairlineStyleF64(),
+            mode = InversePathDrawMode.StrokeAndFill,
+            domainI32 = RectI32(-4, -4, 16, 12),
+            policyF64 = PathStrokePolicyF64(
+                limitsI64 = PathStrokeLimitsI64(maxSnapshotByteCountPerPathI64 = 300L),
+            ),
+        )
+
+        assertEquals(
+            PathStrokeResourceLimitReason.SnapshotByteLimit,
+            assertIs<InversePathPreparationResult.ResourceLimitExceeded>(result).reason,
+        )
+    }
+
     private fun triangleInputF64(fillRule: FillRule): PathFillInputF64 = PathFillInputF64.of(
         fillRule,
         listOf(
@@ -167,6 +200,13 @@ class InversePathPreparationF64Test {
         widthF64 = PathStrokeWidthF64.Finite(widthF64),
         cap = PathStrokeCap.Butt,
         join = PathStrokeJoin.Miter,
+        miterLimitF64 = 4.0,
+    )
+
+    private fun hairlineStyleF64(): PathStrokeStyleF64 = PathStrokeStyleF64(
+        widthF64 = PathStrokeWidthF64.Hairline,
+        cap = PathStrokeCap.Butt,
+        join = PathStrokeJoin.Bevel,
         miterLimitF64 = 4.0,
     )
 }
