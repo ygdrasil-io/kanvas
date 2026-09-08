@@ -39,6 +39,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUW4dBinaryMaskConsumerPlan
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveStructuralColorFormat
+import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveW4dGeneralCoverageMaskConsumer4xRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_RENDER_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
@@ -63,6 +64,8 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskPhase
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskUseToken
+import org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan
+import org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation
 import org.graphiks.kanvas.gpu.renderer.recording.PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION
 import org.graphiks.kanvas.gpu.renderer.recording.canonicalSolidRectSrcOverBlendPlan
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveScissorAuthority
@@ -72,6 +75,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
@@ -103,7 +107,31 @@ internal class W4dGeneralPathGraphLowerer {
         if (!preparedAuthority.preflightRevalidates(request.graph, graph.pathPasses)) {
             return invalid("The W4d.2 prepared authority did not revalidate the graph.")
         }
-        val packets = graph.pathPasses.mapIndexed { index, pass -> packet(pass, index, bounds) }
+        val packets = graph.pathPasses.mapIndexed { index, pass ->
+            packet(pass, index, bounds, targetColorFormat(pass, request.graph))
+        }
+        val limits = request.capabilities.limits
+            ?: return invalid("The W4d.2 native uniform slab requires observed device limits.")
+        val maxBufferSize = limits.maxBufferSize
+            ?: return invalid("The W4d.2 native uniform slab requires the observed maxBufferSize.")
+        val maxDynamicUniformBuffers = limits.maxDynamicUniformBuffersPerPipelineLayout
+            ?: return invalid("The W4d.2 native uniform slab requires the observed dynamic-uniform limit.")
+        val uniformPayloadsByPathPass = graph.pathPasses.zip(packets).associate { (pass, built) ->
+            pass.id.value to (preparedAuthority.nativeUniformPayloadFor(pass, built.packet)
+                ?: return invalid("The W4d.2 native uniform payload is absent from the authenticated packet."))
+        }
+        val materializationAuthority = preparedAuthority.bindNativeMaterializationFrame(
+            sessionIdentity = session,
+            capabilitySealHash = seal.sealHash,
+            deviceGeneration = request.deviceGeneration,
+            structuralKeysByPathPass = graph.pathPasses.zip(packets).associate { (pass, built) ->
+                pass.id.value to built.structuralPipelineKey
+            },
+            uniformPayloadsByPathPass = uniformPayloadsByPathPass,
+            uniformAlignmentBytes = limits.minUniformBufferOffsetAlignment,
+            maxBufferSize = maxBufferSize,
+            maxDynamicUniformBuffersPerPipelineLayout = maxDynamicUniformBuffers,
+        ) ?: return invalid("The W4d.2 native materialization authority could not bind the validated graph.")
         graph.pathPasses.zip(packets).forEach { (pass, built) ->
             val publicPipelineKey = built.packet.renderPipelineKey
                 ?: return invalid("The W4d.2 packet lacks a render pipeline key.")
@@ -114,6 +142,7 @@ internal class W4dGeneralPathGraphLowerer {
                     structuralPipelineKey = built.structuralPipelineKey,
                     renderPipelineKey = publicPipelineKey,
                     authority = preparedAuthority,
+                    materialization = materializationAuthority,
                 ),
             )
         }
@@ -129,6 +158,7 @@ internal class W4dGeneralPathGraphLowerer {
                 },
                 loadStore = GPULoadStorePlan(loadLabel(pass), GPUStorePlan.Store),
                 samplePlan = samplePlan(pass.draw.sample),
+                resourceUses = w4dGeneralResourceUses(pass, materializationAuthority),
                 drawPackets = listOf(built.packet),
                 batchEligibilityByPacketId = mapOf(
                     built.packet.packetId to GPUPassBatchEligibility(
@@ -136,6 +166,7 @@ internal class W4dGeneralPathGraphLowerer {
                         queueGuard = GPUPassBatchQueueGuard(emptyList(), emptyList()),
                     ),
                 ),
+                depthStencilLoadStore = w4dGeneralDepthStencilLoadStore(pass),
             )
         }
         val prepare = GPUTask.PrepareResources(
@@ -300,6 +331,7 @@ internal class W4dGeneralPathGraphLowerer {
         pass: PlanPass.PathRenderPass,
         paintOrder: Int,
         bounds: GPUPixelBounds,
+        targetColorFormat: GPUColorFormat,
     ): BuiltPacket {
         val draw = pass.draw
         val scissor = draw.copyScissorI32()
@@ -384,10 +416,15 @@ internal class W4dGeneralPathGraphLowerer {
             pass.phase.isStencilCover() -> GPUDrawPacketRole.PathStencilCover
             else -> GPUDrawPacketRole.Shading
         }
-        val structural = when (role) {
+        val structural = when {
+            binaryMaskConsumer != null -> corePrimitiveW4dGeneralCoverageMaskConsumer4xRenderPipelineStructuralKey(
+                blend,
+                targetColorFormat.corePrimitiveStructuralColorFormat(),
+            )
+            else -> when (role) {
             GPUDrawPacketRole.Shading -> corePrimitiveRenderPipelineStructuralKey(
                 semantic, clip.second, blend, sampleCount,
-                GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat(),
+                targetColorFormat.corePrimitiveStructuralColorFormat(),
             )
             GPUDrawPacketRole.PathStencilProducer ->
                 org.graphiks.kanvas.gpu.renderer.passes.corePrimitivePathStencilRenderPipelineStructuralKey(
@@ -396,7 +433,7 @@ internal class W4dGeneralPathGraphLowerer {
                     clip.second,
                     blend,
                     sampleCount,
-                    GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat(),
+                    targetColorFormat.corePrimitiveStructuralColorFormat(),
                 )
             GPUDrawPacketRole.PathStencilCover ->
                 org.graphiks.kanvas.gpu.renderer.passes.corePrimitivePathStencilRenderPipelineStructuralKey(
@@ -405,14 +442,16 @@ internal class W4dGeneralPathGraphLowerer {
                     clip.second,
                     blend,
                     sampleCount,
-                    GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat(),
-                )
+                    targetColorFormat.corePrimitiveStructuralColorFormat(),
+            )
             else -> error("W4d.2 emits only path shading and stencil roles")
+            }
         }
         val roleLabel = when (role) {
             GPUDrawPacketRole.Shading -> "color"
             GPUDrawPacketRole.PathStencilProducer -> "producer"
             GPUDrawPacketRole.PathStencilCover -> "cover"
+            else -> error("W4d.2 emits only path shading and stencil roles")
         }
         return BuiltPacket(GPUDrawPacket(
             packetId = GPUDrawPacketID("packet.w4d-general.${draw.commandIndex}.${pass.id.value}"),
@@ -437,13 +476,28 @@ internal class W4dGeneralPathGraphLowerer {
             semanticPayload = semantic,
             vertexSourceLabel = CORE_PRIMITIVE_VERTEX_SOURCE_LABEL,
             scissorBoundsHash = corePrimitiveScissorAuthority(scissorBounds),
-            targetStateHash = corePrimitiveTargetStateHash(sampleCount, GPUColorFormat.RGBA8UnormSrgb),
+            targetStateHash = corePrimitiveTargetStateHash(sampleCount, targetColorFormat),
             originalPaintOrder = paintOrder,
             resourceGeneration = PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION,
             frameProvenance = GPUFrameProvenance.None,
             clipCoveragePlan = clip.first,
             clipExecutionPlan = clip.second,
         ), structural)
+    }
+
+    /** The graph's validated resource fact is the one source of a native color target format. */
+    private fun targetColorFormat(
+        pass: PlanPass.PathRenderPass,
+        graph: RenderGraph,
+    ): GPUColorFormat = when (val format = graph.resources()
+        .singleOrNull { resource -> resource.id == pass.target }
+        ?.format) {
+        is PlanTextureFormat.Color -> when (format.value) {
+            org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL ->
+                GPUColorFormat.RGBA8UnormSrgb
+        }
+        PlanTextureFormat.CoverageMask -> GPUColorFormat.RGBA8Unorm
+        else -> error("W4d.2 path pass target must be one validated RGBA color resource")
     }
 
     private fun fillGeometry(geometry: PathDrawGeometry): PathFillGeometryF32 = when (geometry) {
@@ -474,6 +528,74 @@ internal class W4dGeneralPathGraphLowerer {
     private fun samplePlan(sample: SamplePlan): GPUSamplePlan = when (sample) {
         SamplePlan.SingleSample -> GPUSamplePlan.SingleSampleFrame
         SamplePlan.Multisample4 -> GPUSamplePlan.MultisampleFrame(4)
+    }
+
+    /** Copies only the typed resource slots issued by the sealed Task 7 frame authority. */
+    private fun w4dGeneralResourceUses(
+        pass: PlanPass.PathRenderPass,
+        authority: org.graphiks.kanvas.gpu.renderer.passes
+            .GPUW4dGeneralPreparedFrameMaterializationAuthority,
+    ): List<GPUFrameResourceUse> = buildList {
+        fun required(resourceId: String) = requireNotNull(authority.resource(resourceId)) {
+            "W4d.2 sealed native materialization table lost resource $resourceId"
+        }
+        add(GPUFrameResourceUse(
+            required(pass.drawDataResources.vertex.value),
+            GPUFrameResourceRole.VertexData,
+            GPUFrameResourceUsage.Vertex,
+            GPUFrameResourceLifetime.FrameLocal,
+            write = false,
+        ))
+        add(GPUFrameResourceUse(
+            required(pass.drawDataResources.index.value),
+            GPUFrameResourceRole.IndexData,
+            GPUFrameResourceUsage.Index,
+            GPUFrameResourceLifetime.FrameLocal,
+            write = false,
+        ))
+        add(GPUFrameResourceUse(
+            required(pass.drawDataResources.uniform.value),
+            GPUFrameResourceRole.UniformData,
+            GPUFrameResourceUsage.Uniform,
+            GPUFrameResourceLifetime.FrameLocal,
+            write = false,
+        ))
+        pass.depthStencil?.let { depthStencil ->
+            add(GPUFrameResourceUse(
+                required(depthStencil.value),
+                GPUFrameResourceRole.PathDepthStencil,
+                GPUFrameResourceUsage.RenderAttachment,
+                GPUFrameResourceLifetime.FrameLocal,
+                write = true,
+            ))
+        }
+        (pass.draw as? BinaryMaskedPathDraw)?.let { binary ->
+            add(GPUFrameResourceUse(
+                required(binary.mask.value),
+                GPUFrameResourceRole.ClipMask,
+                GPUFrameResourceUsage.TextureBinding,
+                GPUFrameResourceLifetime.FrameLocal,
+                write = false,
+            ))
+        }
+    }
+
+    private fun w4dGeneralDepthStencilLoadStore(
+        pass: PlanPass.PathRenderPass,
+    ): GPUDepthStencilLoadStorePlan? = when (pass.depthStencilLoadStore) {
+        null -> null
+        org.graphiks.kanvas.gpu.plan.PlanDepthStencilLoadStore.ClearZeroStore ->
+            GPUDepthStencilLoadStorePlan.WritableStencil(
+                GPUStencilLoadOperation.Clear,
+                GPUStorePlan.Store,
+                0u,
+            )
+        org.graphiks.kanvas.gpu.plan.PlanDepthStencilLoadStore.LoadStoreTestReset ->
+            GPUDepthStencilLoadStorePlan.WritableStencil(
+                GPUStencilLoadOperation.Load,
+                GPUStorePlan.Store,
+                null,
+            )
     }
 
     private fun matchesPassResources(
