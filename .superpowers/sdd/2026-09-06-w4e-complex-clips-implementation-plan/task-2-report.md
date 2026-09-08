@@ -117,3 +117,26 @@ No output; success.
 ```
 
 Round-2 self-review: no matrix import was added to geometry; the new geometry helpers only construct F64 geometry.  Matrix retains transform orchestration only, and no renderer dependency or forbidden test technique was introduced.  The final projective and path-fill callbacks debit before the work/allocation they authorize.  No known concern.
+
+## Fix round 3 — review findings 1–2
+
+- Replaced the transformed `PathF32` whole-path widening with affine and projective direct walkers.  They validate the matrix and debit the initial snapshot before their output list allocation; every source command is widened only after its incremental debit.
+- The public projective `PathF32` API now validates a non-finite matrix before source traversal or F64 conversion, then initializes its ledger before allocating/projecting output commands.
+- Kept F64 Rect/RRect source geometry in `:math:geometry`; non-axis F64 canonical path construction is now preceded by a matrix snapshot debit.
+- Added public behavior/mutation regressions: a 512-command immutable `PathF32` remains unaffected after its builder is mutated, a non-finite matrix rejects it, tiny projective snapshot work refuses it, and a transformed clip rejects a tiny entry snapshot budget.
+
+```text
+rtk ./gradlew :math:matrix:compileKotlinJvm
+BUILD SUCCESSFUL in 4s.
+
+rtk ./gradlew :math:geometry:jvmTest --tests '*ClipStackPreparationF64Test' :math:matrix:jvmTest --tests '*ClipTransformsF64Test'
+BUILD SUCCESSFUL in 1s.
+
+rtk ./gradlew :math:matrix:jvmTest --tests '*PathProjectivePreparationF64Test' --tests '*ClipTransformsF64Test' :math:geometry:jvmTest --tests '*ClipStackPreparationF64Test'
+BUILD SUCCESSFUL in 2s; new direct-walker regressions passed.
+
+rtk ./gradlew :math:geometry:jvmTest :math:geometry:jsNodeTest :math:matrix:jvmTest :math:matrix:jsNodeTest
+BUILD SUCCESSFUL in 27s.
+```
+
+Round-3 self-review: direct `PathF32` widening happens after the source command debit, while final `PathFillInputF64` copying remains after its final debit.  Geometry remains matrix-free and only owns geometric command conversion; matrix owns transform orchestration.  No renderer code or disallowed test technique was added.  No known concern.

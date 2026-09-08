@@ -92,6 +92,7 @@ private fun transformRectF64(rectF64: RectF64, matrixF64: Matrix3x3F64, entryI64
         val second = matrixF64.mapAffineClipPointF64(Point2F64(rectF64.right, rectF64.bottom))
         return ClipDeviceGeometryF64.Rect(RectF64(minOf(first.x, second.x), minOf(first.y, second.y), maxOf(first.x, second.x), maxOf(first.y, second.y)))
     }
+    entryI64.debitBeforeProjectionI64(ClipWorkUsageI64(snapshotByteCountI64 = 16L))
     return transformPathInputF64(rectF64.toPathFillInputF64(), matrixF64, entryI64, policyF64)
 }
 
@@ -125,14 +126,32 @@ private fun transformRRectF64(rrectF64: RRectF64, matrixF64: Matrix3x3F64, entry
             mappedRadiiF64(deviceLeft = true, deviceTop = false),
         ))
     }
+    entryI64.debitBeforeProjectionI64(ClipWorkUsageI64(snapshotByteCountI64 = 16L))
     return transformPathInputF64(rrectF64.toPathFillInputF64(), matrixF64, entryI64, policyF64)
 }
 
 private fun transformPathF64(pathF32: PathF32, matrixF64: Matrix3x3F64, entryI64: MatrixClipEntryLedgerI64, policyF64: ClipPreparationPolicyF64): ClipDeviceGeometryF64 {
     if (matrixF64.classifyPathTransform() != PathTransformClass.Perspective) {
-        return transformPathInputF64(PathFillInputF64.fromPathF32(pathF32), matrixF64, entryI64, policyF64)
+        return try {
+            ClipDeviceGeometryF64.Path(matrixF64.mapAffinePathF32ToFillInputF64(pathF32, PathTransformWorkDebitI64 {
+                entryI64.debitBeforeProjectionI64(it.toClipUsageI64())
+            }))
+        } catch (_: IllegalArgumentException) {
+            throw MatrixClipInvalidAbort()
+        }
     }
-    return transformPathInputF64(PathFillInputF64.fromPathF32(pathF32), matrixF64, entryI64, policyF64)
+    val entryBeforeI64 = entryI64.snapshotI64()
+    val frameBeforeI64 = entryI64.frameSnapshotI64()
+    return when (val projectedF64 = matrixF64.prepareProjectedPathFillInputF64(
+        pathF32, policyF64.pathPolicyF64, policyF64.toProjectiveWorkPolicyF64(),
+        entryBeforeI64.toPathStrokeUsageI64(), frameBeforeI64.toPathStrokeUsageI64(),
+        beforeWorkDebitI64 = { entryI64.debitBeforeProjectionI64(it.toClipUsageI64()) },
+    )) {
+        is PathProjectivePreparationResult.Ready -> ClipDeviceGeometryF64.Path(projectedF64.inputF64)
+        is PathProjectivePreparationResult.Empty -> ClipDeviceGeometryF64.Path(PathFillInputF64.of(pathF32.fillRule, emptyList()))
+        is PathProjectivePreparationResult.InvalidScene -> throw MatrixClipInvalidAbort()
+        is PathProjectivePreparationResult.ResourceLimitExceeded -> throw MatrixClipAbort(ClipPreparationResourceLimitReason.EntryAttemptedEdgeLimit)
+    }
 }
 
 private fun transformPathInputF64(inputF64: PathFillInputF64, matrixF64: Matrix3x3F64, entryI64: MatrixClipEntryLedgerI64, policyF64: ClipPreparationPolicyF64): ClipDeviceGeometryF64 {

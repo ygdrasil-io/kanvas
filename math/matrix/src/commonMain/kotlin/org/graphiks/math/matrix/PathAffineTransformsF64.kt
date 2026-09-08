@@ -9,6 +9,8 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 import org.graphiks.math.geometry.PathFillInputF64
 import org.graphiks.math.geometry.PathFillSegmentF64
+import org.graphiks.math.geometry.PathF32
+import org.graphiks.math.geometry.PathSegmentF32
 import org.graphiks.math.geometry.PathStrokeBoundsF64
 import org.graphiks.math.geometry.PathStrokeOutlineIntervalF64
 import org.graphiks.math.geometry.PathStrokeProjectionF64
@@ -16,6 +18,7 @@ import org.graphiks.math.geometry.PathStrokeProjectionIntervalResultF64
 import org.graphiks.math.geometry.PathStrokeProjectionPointResultF64
 import org.graphiks.math.geometry.PathStrokeWorkUsageI64
 import org.graphiks.math.geometry.Point2F64
+import org.graphiks.math.geometry.toPathFillSegmentF64
 import org.graphiks.math.vector.Vector2F64
 
 /** Charges transform work before its evaluation or snapshot allocation. */
@@ -44,6 +47,35 @@ internal fun Matrix3x3F64.mapAffinePathFillInputF64(
     }
     debitI64.debitBeforeTransformWorkI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
     return PathFillInputF64.of(inputF64.fillRule, mappedSegmentsF64)
+}
+
+/** Maps an F32 path lazily: each source command is admitted before it is widened or retained. */
+internal fun Matrix3x3F64.mapAffinePathF32ToFillInputF64(
+    pathF32: PathF32,
+    debitI64: PathTransformWorkDebitI64,
+): PathFillInputF64 {
+    require(isFinite() && classifyPathTransform() != PathTransformClass.Perspective) {
+        "mapAffinePathF32ToFillInputF64 requires finite affine Matrix3x3F64 coefficients"
+    }
+    debitI64.debitBeforeTransformWorkI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
+    val mappedSegmentsF64 = ArrayList<PathFillSegmentF64>()
+    var hasContour = false
+    fun debitAndAppend(segmentF32: PathSegmentF32) {
+        debitI64.debitBeforeTransformWorkI64(
+            PathStrokeWorkUsageI64(attemptedGeometryUnitCountI64 = 1L, snapshotByteCountI64 = 64L),
+        )
+        mappedSegmentsF64 += mapAffinePathFillSegmentF64(segmentF32.toPathFillSegmentF64())
+    }
+    pathF32.forEach { segmentF32 ->
+        if (segmentF32 !is PathSegmentF32.MoveTo && segmentF32 !is PathSegmentF32.Close && !hasContour) {
+            debitAndAppend(PathSegmentF32.MoveTo(org.graphiks.math.geometry.Point2F32.Origin))
+            hasContour = true
+        }
+        debitAndAppend(segmentF32)
+        if (segmentF32 is PathSegmentF32.MoveTo) hasContour = true
+    }
+    debitI64.debitBeforeTransformWorkI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
+    return PathFillInputF64.of(pathF32.fillRule, mappedSegmentsF64)
 }
 
 internal fun Matrix3x3F64.mapAffinePathFillSegmentF64(segmentF64: PathFillSegmentF64): PathFillSegmentF64 =

@@ -183,4 +183,27 @@ class ClipTransformsF64Test {
         assertTrue(result.frameWorkUsageAfterI64.attemptedEdgeCountI64 in 2L..100L)
         assertIs<ClipGeometryF32.Path>(result.entriesF32.single().geometryF32)
     }
+
+    @Test
+    fun `large transformed F32 path refuses a tiny snapshot budget before source copy`() {
+        val builder = PathBuilder().moveTo(0f, 0f)
+        repeat(512) { indexI32 -> builder.lineTo(indexI32.toFloat(), 1f) }
+        val path = builder.build()
+        builder.lineTo(-1f, -1f)
+
+        val result = prepareTransformedClipStackGeometryF32(
+            listOf(
+                ClipTransformInputF64.of(
+                    ClipTransformGeometryF64.Path(path), Matrix3x3F64(kxF64 = 1.0), ClipOperation.Intersect,
+                ),
+            ),
+            RectI32(0, 0, 8, 8),
+            ClipPreparationPolicyF64(limitsI64 = org.graphiks.math.geometry.ClipPreparationLimitsI64(maxSnapshotByteCountPerEntryI64 = 15L)),
+        )
+
+        assertEquals(
+            ClipPreparationResourceLimitReason.EntrySnapshotByteLimit,
+            assertIs<ClipStackPreparationResult.ResourceLimitExceeded>(result).reason,
+        )
+    }
 }

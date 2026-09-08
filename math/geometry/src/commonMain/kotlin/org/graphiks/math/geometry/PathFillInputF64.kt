@@ -173,6 +173,16 @@ private fun exactF64(valueF32: Float): Double = Float.fromBits(valueF32.toRawBit
 
 private fun Point2F32.toExactPoint2F64(): Point2F64 = Point2F64(exactF64(x), exactF64(y))
 
+/** Converts one immutable F32 command on demand, after the caller has admitted its work. */
+public fun PathSegmentF32.toPathFillSegmentF64(): PathFillSegmentF64 = when (this) {
+    is PathSegmentF32.MoveTo -> PathFillSegmentF64.MoveTo(point.toExactPoint2F64())
+    is PathSegmentF32.LineTo -> PathFillSegmentF64.LineTo(point.toExactPoint2F64())
+    is PathSegmentF32.QuadTo -> PathFillSegmentF64.QuadTo(control.toExactPoint2F64(), point.toExactPoint2F64())
+    is PathSegmentF32.CubicTo -> PathFillSegmentF64.CubicTo(control1.toExactPoint2F64(), control2.toExactPoint2F64(), point.toExactPoint2F64())
+    is PathSegmentF32.ArcTo -> PathFillSegmentF64.ArcTo(Vector2F64(exactF64(radius.x), exactF64(radius.y)), exactF64(xAxisRotation), largeArc, sweep, point.toExactPoint2F64())
+    PathSegmentF32.Close -> PathFillSegmentF64.Close
+}
+
 private class ReadOnlyPathFillIterator<T>(private val values: List<T>) : MutableIterator<T> {
     private var nextIndex: Int = 0
 

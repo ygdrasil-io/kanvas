@@ -18,6 +18,7 @@ import org.graphiks.math.geometry.PathStrokePolicyF64
 import org.graphiks.math.geometry.PathStrokeWorkUsageI64
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.Point2F64
+import org.graphiks.math.geometry.toPathFillSegmentF64
 import org.graphiks.math.vector.Vector2F64
 
 /** Stable invalid-scene facts produced before a projective fill snapshot is published. */
@@ -70,9 +71,32 @@ public fun Matrix3x3F64.prepareProjectedPathFillInputF64(
     frameWorkUsageBeforeI64: PathStrokeWorkUsageI64 = PathStrokeWorkUsageI64(),
 ): PathProjectivePreparationResult {
     return prepareProjectedPathFillInputF64(
-        PathFillInputF64.fromPathF32(path), policyF64, workPolicyF64,
-        pathWorkUsageBeforeI64, frameWorkUsageBeforeI64,
+        path, policyF64, workPolicyF64, pathWorkUsageBeforeI64, frameWorkUsageBeforeI64, {},
     )
+}
+
+internal fun Matrix3x3F64.prepareProjectedPathFillInputF64(
+    path: PathF32,
+    policyF64: PathFillFlatteningPolicyF64,
+    workPolicyF64: PathStrokePolicyF64,
+    pathWorkUsageBeforeI64: PathStrokeWorkUsageI64,
+    frameWorkUsageBeforeI64: PathStrokeWorkUsageI64,
+    beforeWorkDebitI64: (PathStrokeWorkUsageI64) -> Unit,
+): PathProjectivePreparationResult {
+    if (!isFinite()) return PathProjectivePreparationResult.InvalidScene(PathProjectiveInvalidSceneReason.NonFiniteMatrix)
+    return try {
+        PathProjectiveFillPreparerF64(
+            matrixF64 = this, pathF32 = path, inputF64 = null,
+            policyF64 = policyF64, workPolicyF64 = workPolicyF64,
+            pathWorkUsageBeforeI64 = pathWorkUsageBeforeI64,
+            frameWorkUsageBeforeI64 = frameWorkUsageBeforeI64,
+            beforeWorkDebitI64 = beforeWorkDebitI64,
+        ).prepare()
+    } catch (abort: PathProjectiveInvalidAbort) {
+        PathProjectivePreparationResult.InvalidScene(abort.reason)
+    } catch (abort: PathProjectiveResourceAbort) {
+        PathProjectivePreparationResult.ResourceLimitExceeded(abort.reason)
+    }
 }
 
 /** F64-source overload used by transformed F64 clips; no source coordinate is narrowed. */
@@ -88,6 +112,7 @@ internal fun Matrix3x3F64.prepareProjectedPathFillInputF64(
     return try {
         PathProjectiveFillPreparerF64(
             matrixF64 = this,
+            pathF32 = null,
             inputF64 = inputF64,
             policyF64 = policyF64,
             workPolicyF64 = workPolicyF64,
@@ -207,7 +232,8 @@ private fun checkedProjectiveAddI64(
 
 private class PathProjectiveFillPreparerF64(
     private val matrixF64: Matrix3x3F64,
-    private val inputF64: PathFillInputF64,
+    private val pathF32: PathF32?,
+    private val inputF64: PathFillInputF64?,
     private val policyF64: PathFillFlatteningPolicyF64,
     workPolicyF64: PathStrokePolicyF64,
     pathWorkUsageBeforeI64: PathStrokeWorkUsageI64,
@@ -229,8 +255,10 @@ private class PathProjectiveFillPreparerF64(
     fun prepare(): PathProjectivePreparationResult {
         ledgerI64.debitBeforeWorkI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
         outputF64 = mutableListOf()
-        inputF64.forEach { segmentF64 ->
+        fun debitSourceSegment() {
             ledgerI64.debitBeforeWorkI64(PathStrokeWorkUsageI64(attemptedGeometryUnitCountI64 = 1L))
+        }
+        fun process(segmentF64: PathFillSegmentF64) {
             when (segmentF64) {
                 is PathFillSegmentF64.MoveTo -> beginContour(segmentF64.point)
                 is PathFillSegmentF64.LineTo -> {
@@ -297,6 +325,11 @@ private class PathProjectiveFillPreparerF64(
                 PathFillSegmentF64.Close -> closeContour()
             }
         }
+        inputF64?.forEach { segmentF64 -> debitSourceSegment(); process(segmentF64) }
+        pathF32?.forEach { segmentF32 ->
+            debitSourceSegment()
+            process(segmentF32.toPathFillSegmentF64())
+        }
         if (!hasDrawableSegment) {
             return PathProjectivePreparationResult.Empty(ledgerI64.pathSnapshotI64(), ledgerI64.frameSnapshotI64())
         }
@@ -304,7 +337,7 @@ private class PathProjectiveFillPreparerF64(
             PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L + outputF64.size.toLong() * 8L),
         )
         return PathProjectivePreparationResult.Ready(
-            inputF64 = PathFillInputF64.of(inputF64.fillRule, outputF64),
+            inputF64 = PathFillInputF64.of(inputF64?.fillRule ?: requireNotNull(pathF32).fillRule, outputF64),
             transformClass = matrixF64.classifyPathTransform(),
             pathWorkUsageAfterI64 = ledgerI64.pathSnapshotI64(),
             frameWorkUsageAfterI64 = ledgerI64.frameSnapshotI64(),
