@@ -144,9 +144,28 @@ public class W4eClipPlanCompiler(
         val requiresAa = selected.capabilityId == AA_CAPABILITY_ID
         val maskStacks = selected.stacks.filter { it.realization == Realization.Mask }
         capabilityRefusal(capabilities, maskStacks)?.let { return it }
-        // Build the shared W4d inventory under an unbounded local budget, then reject the
-        // combined W4d+W4e peak atomically below.  No graph is published before that check.
-        val base = when (val result = selected.constructionSeam.plan(selected.base, capabilities, PlanBudget(Long.MAX_VALUE))) {
+        val basePreview = when (val result = selected.constructionSeam.preflightFrame(selected.base, capabilities, budget)) {
+            is RenderPlanResult.Ready -> result.plan
+            is RenderPlanResult.GapNotMigrated -> return RenderPlanResult.GapNotMigrated(listOf(
+                diag(W4ePlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "W4d.2 construction seam declined W4e draw facts"),
+            ))
+            is RenderPlanResult.InvalidScene -> return invalidCandidate()
+            is RenderPlanResult.GapOnPromotedScope -> return promoted("W4d.2 construction capability is unavailable")
+            is RenderPlanResult.ResourceLimitExceeded -> return resource(W4ePlanDiagnostics.BudgetFrameLocalExceeded, "W4d.2 frame resources are exceeded")
+        }
+        val framePreview = try {
+            preflightCombinedFrame(selected, basePreview)
+        } catch (_: ArithmeticException) {
+            return resource(W4ePlanDiagnostics.SizeOverflow, "W4e resource accounting overflowed")
+        } catch (error: IllegalArgumentException) {
+            return resource(W4ePlanDiagnostics.PlanIdentityInvalid, "W4e frame preflight failed: ${error.message}")
+        }
+        if (framePreview.peakFrameLocalBytes > budget.maxFrameLocalBytes) {
+            return resource(W4ePlanDiagnostics.BudgetFrameLocalExceeded, "W4e pooled clip resources exceed the frame budget")
+        }
+        // Both W4d and W4e inventories are admitted above; only then is the shared seam asked
+        // to issue its graph, under the caller's real budget rather than an unbounded surrogate.
+        val base = when (val result = selected.constructionSeam.plan(selected.base, capabilities, budget)) {
             is RenderPlanResult.Ready -> result.plan
             is RenderPlanResult.GapNotMigrated -> return RenderPlanResult.GapNotMigrated(listOf(
                 diag(W4ePlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "W4d.2 construction seam declined W4e draw facts"),
@@ -156,10 +175,8 @@ public class W4eClipPlanCompiler(
             is RenderPlanResult.ResourceLimitExceeded -> return resource(W4ePlanDiagnostics.BudgetFrameLocalExceeded, "W4d.2 frame resources are exceeded")
         }
         return try {
-            val graph = insertClips(base, selected, capabilities, budget, requiresAa)
+            val graph = insertClips(base, selected, capabilities, budget, requiresAa, framePreview)
             RenderPlanResult.Ready(graph)
-        } catch (_: ClipBudgetExceeded) {
-            resource(W4ePlanDiagnostics.BudgetFrameLocalExceeded, "W4e pooled clip resources exceed the frame budget")
         } catch (_: ArithmeticException) {
             resource(W4ePlanDiagnostics.SizeOverflow, "W4e resource accounting overflowed")
         } catch (error: IllegalArgumentException) {
@@ -173,22 +190,20 @@ public class W4eClipPlanCompiler(
         capabilities: PlanCapabilitySnapshot,
         budget: PlanBudget,
         frameAa: Boolean,
+        framePreview: W4eFramePreview,
     ): RenderGraph {
-        val maskStacks = selected.stacks.filter { it.realization == Realization.Mask }
         val prefix = mutableListOf<PlanPass>()
         val resources = mutableListOf<PlanResource>()
         val strategyByCommand = mutableMapOf<Int, ClipPlanStrategy>()
         val extent = base.targetExtent
         val domain = RectI32(0, 0, extent.width, extent.height)
-        val prefixCount = selected.stacks.sumOf { stack ->
-            if (stack.realization === Realization.Mask) 1 + stack.emittedEntries.size * 2 else 0
-        }
+        val prefixCount = framePreview.prefixPassCount
 
         selected.stacks.forEachIndexed { ordinal, stack ->
             val strategy = when (stack.realization) {
                 is Realization.Scissor -> ClipPlanStrategy.Scissor(requireNotNull(stack.scissor))
                 Realization.Mask -> {
-                    val ids = maskResources(resources, stack, ordinal, extent, prefix.size, prefixCount, base)
+                    val ids = maskResources(resources, framePreview.maskLayouts.getValue(ordinal), extent)
                     val group = PlanAtomicGroupId("w4e.clip:$ordinal")
                     var accumulator = ids.firstAccumulator
                     prefix += PlanPass.ClipMaskInitialize(ordinal, accumulator, domain, 1f, group)
@@ -246,8 +261,7 @@ public class W4eClipPlanCompiler(
         val allResources = resources + shiftedResources
         val allPasses = prefix + transformedPasses
         val dependencies = allPasses.zipWithNext().map { (before, after) -> PlanPassDependency(before.id, after.id) }
-        val peakFrameLocalBytes = peak(allResources, allPasses.size)
-        if (peakFrameLocalBytes > budget.maxFrameLocalBytes) throw ClipBudgetExceeded()
+        require(allPasses.size == framePreview.totalPassCount) { "W4e preflight pass count drifted" }
         return RenderGraph.issueW4eCompilerWitness(RenderGraph.of(
             id = PlanId(identity(selected, capabilities, budget, frameAa)),
             capabilityId = if (frameAa) AA_CAPABILITY_ID else HARD_CAPABILITY_ID,
@@ -259,56 +273,29 @@ public class W4eClipPlanCompiler(
             resources = allResources,
             passes = allPasses,
             dependencies = dependencies,
-            peakFrameLocalBytes = peakFrameLocalBytes,
+            peakFrameLocalBytes = framePreview.peakFrameLocalBytes,
         ))
     }
 
     private fun maskResources(
         resources: MutableList<PlanResource>,
-        stack: PreparedStack,
-        ordinal: Int,
+        layout: MaskResourceLayout,
         extent: SizeI32,
-        firstPass: Int,
-        prefixCount: Int,
-        base: RenderGraph,
     ): MaskResourceIds {
-        val hasAaProducer = stack.emittedEntries.any { it.antiAlias && it.geometryF32 !is ClipGeometryF32.Rect }
-        val hasHardPathProducer = stack.emittedEntries.any { !it.antiAlias && it.geometryF32 is ClipGeometryF32.Path }
-        val first = planResourceId(PlanResourceRole.CoverageMaskAccumulator, ordinal * 2)
-        val second = planResourceId(PlanResourceRole.CoverageMaskAccumulator, ordinal * 2 + 1)
-        val scratch = planResourceId(PlanResourceRole.CoverageMaskScratch, ordinal)
-        val multisample = hasAaProducer.thenId(PlanResourceRole.CoverageMaskMultisampleScratch, ordinal)
-        val aaDepth = hasAaProducer.thenId(PlanResourceRole.CoverageMaskDepthStencil, ordinal * 2)
-        val hardDepth = hasHardPathProducer.thenId(PlanResourceRole.CoverageMaskDepthStencil, ordinal * 2 + 1)
-        val lastUses = mutableMapOf<PlanResourceId, Int>()
-        fun use(id: PlanResourceId, index: Int) { lastUses[id] = maxOf(lastUses[id] ?: -1, index) }
-        var accumulator = first
-        use(first, firstPass)
-        var pass = firstPass + 1
-        stack.emittedEntries.forEach { entry ->
-            val usesAa = entry.antiAlias && entry.geometryF32 !is ClipGeometryF32.Rect
-            val target = if (usesAa) requireNotNull(multisample) else scratch
-            val resolved = if (usesAa) scratch else target
-            use(target, pass)
-            if (usesAa) use(requireNotNull(aaDepth), pass)
-            if (!usesAa && entry.geometryF32 is ClipGeometryF32.Path) use(requireNotNull(hardDepth), pass)
-            val output = if (accumulator == first) second else first
-            use(accumulator, pass + 1); use(resolved, pass + 1); use(output, pass + 1)
-            accumulator = output
-            pass += 2
-        }
-        val consumerIndices = base.passes().withIndex().filter { (_, value) ->
-            value is PlanPass.PathRenderPass && value.phase in setOf(
-                PathRenderPhase.SingleSampleDirectColor,
-                PathRenderPhase.SingleSampleStencilColorCover,
-                PathRenderPhase.MultisampleDirectColor,
-                PathRenderPhase.MultisampleStencilColorCover,
-                PathRenderPhase.HardEdgeBinaryColorCover,
-            ) && value.draw.commandIndex in stack.consumerIndexes
-        }.map { it.index + prefixCount }
-        consumerIndices.forEach { use(accumulator, it) }
-        fun texture(role: PlanResourceRole, resourceOrdinal: Int, format: PlanTextureFormat, samples: Int, id: PlanResourceId): PlanResource {
-            val bytes = ClipPlanBudget.checkedMaskTextureBytesI64(extent.width, extent.height, samples)
+        val first = planResourceId(PlanResourceRole.CoverageMaskAccumulator, layout.ordinal * 2)
+        val second = planResourceId(PlanResourceRole.CoverageMaskAccumulator, layout.ordinal * 2 + 1)
+        val scratch = planResourceId(PlanResourceRole.CoverageMaskScratch, layout.ordinal)
+        val multisample = layout.hasAaProducer.thenId(PlanResourceRole.CoverageMaskMultisampleScratch, layout.ordinal)
+        val aaDepth = layout.hasAaProducer.thenId(PlanResourceRole.CoverageMaskDepthStencil, layout.ordinal * 2)
+        val hardDepth = layout.hasHardPathProducer.thenId(PlanResourceRole.CoverageMaskDepthStencil, layout.ordinal * 2 + 1)
+        fun texture(
+            role: PlanResourceRole,
+            resourceOrdinal: Int,
+            format: PlanTextureFormat,
+            bytes: Long,
+            lastPassExclusive: Int,
+            samples: Int,
+        ): PlanResource {
             return PlanResource.of(
                 role, resourceOrdinal, PlanResourceKind.Texture2D, format, extent, bytes,
                 if (format == PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8)) {
@@ -318,16 +305,136 @@ public class W4eClipPlanCompiler(
                 } else {
                     setOf(PlanResourceUsage.RenderAttachment)
                 },
-                PlanResourceLifetime.FrameLocal, firstPass, requireNotNull(lastUses[id]) + 1, samples,
+                PlanResourceLifetime.FrameLocal, layout.firstPassIndex, lastPassExclusive, samples,
             )
         }
-        resources += texture(PlanResourceRole.CoverageMaskAccumulator, ordinal * 2, PlanTextureFormat.CoverageMask, 1, first)
-        resources += texture(PlanResourceRole.CoverageMaskAccumulator, ordinal * 2 + 1, PlanTextureFormat.CoverageMask, 1, second)
-        resources += texture(PlanResourceRole.CoverageMaskScratch, ordinal, PlanTextureFormat.CoverageMask, 1, scratch)
-        multisample?.let { resources += texture(PlanResourceRole.CoverageMaskMultisampleScratch, ordinal, PlanTextureFormat.CoverageMask, 4, it) }
-        aaDepth?.let { resources += texture(PlanResourceRole.CoverageMaskDepthStencil, ordinal * 2, PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8), 4, it) }
-        hardDepth?.let { resources += texture(PlanResourceRole.CoverageMaskDepthStencil, ordinal * 2 + 1, PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8), 1, it) }
+        resources += texture(PlanResourceRole.CoverageMaskAccumulator, layout.ordinal * 2, PlanTextureFormat.CoverageMask,
+            layout.oneSampleBytes, layout.firstAccumulatorLastPassExclusive, 1)
+        resources += texture(PlanResourceRole.CoverageMaskAccumulator, layout.ordinal * 2 + 1, PlanTextureFormat.CoverageMask,
+            layout.oneSampleBytes, layout.secondAccumulatorLastPassExclusive, 1)
+        resources += texture(PlanResourceRole.CoverageMaskScratch, layout.ordinal, PlanTextureFormat.CoverageMask,
+            layout.oneSampleBytes, layout.scratchLastPassExclusive, 1)
+        multisample?.let {
+            resources += texture(PlanResourceRole.CoverageMaskMultisampleScratch, layout.ordinal, PlanTextureFormat.CoverageMask,
+                layout.fourSampleBytes, requireNotNull(layout.multisampleLastPassExclusive), 4)
+        }
+        aaDepth?.let {
+            resources += texture(PlanResourceRole.CoverageMaskDepthStencil, layout.ordinal * 2,
+                PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8), layout.fourSampleBytes,
+                requireNotNull(layout.aaDepthLastPassExclusive), 4)
+        }
+        hardDepth?.let {
+            resources += texture(PlanResourceRole.CoverageMaskDepthStencil, layout.ordinal * 2 + 1,
+                PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8), layout.oneSampleBytes,
+                requireNotNull(layout.hardDepthLastPassExclusive), 1)
+        }
         return MaskResourceIds(first, second, scratch, multisample, aaDepth, hardDepth)
+    }
+
+    /**
+     * Merges primitive W4d and W4e lifetimes before either compiler constructs graph resources.
+     * Clip preparation and W4d selection are transactional CPU admission only; this is the first
+     * point at which the complete physical frame can be accepted or refused.
+     */
+    private fun preflightCombinedFrame(
+        selected: Candidate,
+        base: W4dGeneralFramePreview,
+    ): W4eFramePreview {
+        val prefixPassCount = selected.stacks.sumOf { stack ->
+            if (stack.realization === Realization.Mask) Math.addExact(1, Math.multiplyExact(stack.emittedEntries.size, 2)) else 0
+        }
+        val layouts = linkedMapOf<Int, MaskResourceLayout>()
+        var firstPassIndex = 0
+        selected.stacks.forEachIndexed { ordinal, stack ->
+            if (stack.realization !== Realization.Mask) return@forEachIndexed
+            val layout = preflightMaskResources(stack, ordinal, firstPassIndex, prefixPassCount, base)
+            layouts[ordinal] = layout
+            firstPassIndex = Math.addExact(firstPassIndex, 1 + stack.emittedEntries.size * 2)
+        }
+        require(firstPassIndex == prefixPassCount) { "W4e clip prefix accounting drifted" }
+        val totalPassCount = Math.addExact(prefixPassCount, base.passCount)
+        val spans = buildList {
+            layouts.values.forEach { addAll(it.resourceSpans()) }
+            base.resources.forEach { span ->
+                add(FrameResourceSpan(
+                    span.byteSize,
+                    Math.addExact(span.firstPassIndex, prefixPassCount),
+                    Math.addExact(span.lastPassIndexExclusive, prefixPassCount),
+                ))
+            }
+        }
+        return W4eFramePreview(
+            prefixPassCount = prefixPassCount,
+            totalPassCount = totalPassCount,
+            peakFrameLocalBytes = peakFrameLocalBytesI64(spans, totalPassCount),
+            maskLayouts = Collections.unmodifiableMap(layouts.toMap()),
+        )
+    }
+
+    private fun preflightMaskResources(
+        stack: PreparedStack,
+        ordinal: Int,
+        firstPassIndex: Int,
+        prefixPassCount: Int,
+        base: W4dGeneralFramePreview,
+    ): MaskResourceLayout {
+        val hasAaProducer = stack.emittedEntries.any { it.antiAlias && it.geometryF32 !is ClipGeometryF32.Rect }
+        val hasHardPathProducer = stack.emittedEntries.any { !it.antiAlias && it.geometryF32 is ClipGeometryF32.Path }
+        val lastUses = mutableMapOf<MaskResourceSlot, Int>()
+        fun use(slot: MaskResourceSlot, passIndex: Int) {
+            lastUses[slot] = maxOf(lastUses[slot] ?: -1, passIndex)
+        }
+        var accumulator = MaskResourceSlot.FirstAccumulator
+        use(accumulator, firstPassIndex)
+        var passIndex = Math.addExact(firstPassIndex, 1)
+        stack.emittedEntries.forEach { entry ->
+            val usesAa = entry.antiAlias && entry.geometryF32 !is ClipGeometryF32.Rect
+            val target = if (usesAa) MaskResourceSlot.MultisampleScratch else MaskResourceSlot.Scratch
+            val resolved = if (usesAa) MaskResourceSlot.Scratch else target
+            use(target, passIndex)
+            if (usesAa) use(MaskResourceSlot.AaDepthStencil, passIndex)
+            if (!usesAa && entry.geometryF32 is ClipGeometryF32.Path) use(MaskResourceSlot.HardDepthStencil, passIndex)
+            val output = if (accumulator == MaskResourceSlot.FirstAccumulator) {
+                MaskResourceSlot.SecondAccumulator
+            } else {
+                MaskResourceSlot.FirstAccumulator
+            }
+            val foldPass = Math.addExact(passIndex, 1)
+            use(accumulator, foldPass)
+            use(resolved, foldPass)
+            use(output, foldPass)
+            accumulator = output
+            passIndex = Math.addExact(passIndex, 2)
+        }
+        stack.consumerIndexes.forEach { commandIndex ->
+            val baseConsumerPass = requireNotNull(base.colorConsumerPassByCommand[commandIndex]) {
+                "W4d.2 preflight omitted a clipped consumer"
+            }
+            use(accumulator, Math.addExact(prefixPassCount, baseConsumerPass))
+        }
+        val oneSampleBytes = ClipPlanBudget.checkedMaskTextureBytesI64(
+            base.extent.width,
+            base.extent.height,
+            1,
+        )
+        val fourSampleBytes = ClipPlanBudget.checkedMaskTextureBytesI64(
+            base.extent.width, base.extent.height, 4,
+        )
+        fun last(slot: MaskResourceSlot): Int = Math.addExact(requireNotNull(lastUses[slot]) { "W4e mask slot was never consumed" }, 1)
+        return MaskResourceLayout(
+            ordinal = ordinal,
+            firstPassIndex = firstPassIndex,
+            oneSampleBytes = oneSampleBytes,
+            fourSampleBytes = fourSampleBytes,
+            firstAccumulatorLastPassExclusive = last(MaskResourceSlot.FirstAccumulator),
+            secondAccumulatorLastPassExclusive = last(MaskResourceSlot.SecondAccumulator),
+            scratchLastPassExclusive = last(MaskResourceSlot.Scratch),
+            multisampleLastPassExclusive = if (hasAaProducer) last(MaskResourceSlot.MultisampleScratch) else null,
+            aaDepthLastPassExclusive = if (hasAaProducer) last(MaskResourceSlot.AaDepthStencil) else null,
+            hardDepthLastPassExclusive = if (hasHardPathProducer) last(MaskResourceSlot.HardDepthStencil) else null,
+            hasAaProducer = hasAaProducer,
+            hasHardPathProducer = hasHardPathProducer,
+        )
     }
 
     private fun capabilityRefusal(
@@ -339,13 +446,13 @@ public class W4eClipPlanCompiler(
         if (!capabilities.supportsTexture(PlanTextureFormat.CoverageMask, 1, one)) {
             return promoted(W4ePlanDiagnostics.MaskFormatUnavailable, "W4e requires a sampled linear RGBA8 mask")
         }
-        val anyAa = stacks.any { stack -> stack.entries.any { it.antiAlias && it.geometryF32 !is ClipGeometryF32.Rect } }
+        val anyAa = stacks.any { stack -> stack.emittedEntries.any { it.antiAlias && it.geometryF32 !is ClipGeometryF32.Rect } }
         if (anyAa && (!capabilities.supportsTexture(PlanTextureFormat.CoverageMask, 4, setOf(PlanResourceUsage.RenderAttachment)) ||
                 !capabilities.supportsResolve(PlanTextureFormat.CoverageMask, 4, 1) ||
                 !capabilities.supportsTexture(PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8), 4, setOf(PlanResourceUsage.DepthStencilAttachment)))) {
             return promoted(W4ePlanDiagnostics.SampleCountUnavailable, "W4e AA clip producer support is unavailable")
         }
-        val hardPath = stacks.any { stack -> stack.entries.any { !it.antiAlias && it.geometryF32 is ClipGeometryF32.Path } }
+        val hardPath = stacks.any { stack -> stack.emittedEntries.any { !it.antiAlias && it.geometryF32 is ClipGeometryF32.Path } }
         return if (hardPath && !capabilities.supportsTexture(
                 PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8), 1,
                 setOf(PlanResourceUsage.DepthStencilAttachment),
@@ -544,11 +651,6 @@ public class W4eClipPlanCompiler(
         else -> this
     }
 
-    private fun peak(resources: List<PlanResource>, passCount: Int): Long = (0 until passCount).maxOf { index ->
-        resources.filter { it.firstPassIndex <= index && index < it.lastPassIndexExclusive }
-            .fold(0L) { sum, resource -> Math.addExact(sum, resource.byteSize) }
-    }
-
     private fun identity(selected: Candidate, capabilities: PlanCapabilitySnapshot, budget: PlanBudget, aa: Boolean): String {
         val digest = MessageDigest.getInstance("SHA-256")
         val fields = listOf(
@@ -615,6 +717,43 @@ public class W4eClipPlanCompiler(
             }
         }
     }
+    private enum class MaskResourceSlot {
+        FirstAccumulator,
+        SecondAccumulator,
+        Scratch,
+        MultisampleScratch,
+        AaDepthStencil,
+        HardDepthStencil,
+    }
+    private data class MaskResourceLayout(
+        val ordinal: Int,
+        val firstPassIndex: Int,
+        val oneSampleBytes: Long,
+        val fourSampleBytes: Long,
+        val firstAccumulatorLastPassExclusive: Int,
+        val secondAccumulatorLastPassExclusive: Int,
+        val scratchLastPassExclusive: Int,
+        val multisampleLastPassExclusive: Int?,
+        val aaDepthLastPassExclusive: Int?,
+        val hardDepthLastPassExclusive: Int?,
+        val hasAaProducer: Boolean,
+        val hasHardPathProducer: Boolean,
+    ) {
+        fun resourceSpans(): List<FrameResourceSpan> = buildList {
+            add(FrameResourceSpan(oneSampleBytes, firstPassIndex, firstAccumulatorLastPassExclusive))
+            add(FrameResourceSpan(oneSampleBytes, firstPassIndex, secondAccumulatorLastPassExclusive))
+            add(FrameResourceSpan(oneSampleBytes, firstPassIndex, scratchLastPassExclusive))
+            multisampleLastPassExclusive?.let { add(FrameResourceSpan(fourSampleBytes, firstPassIndex, it)) }
+            aaDepthLastPassExclusive?.let { add(FrameResourceSpan(fourSampleBytes, firstPassIndex, it)) }
+            hardDepthLastPassExclusive?.let { add(FrameResourceSpan(oneSampleBytes, firstPassIndex, it)) }
+        }
+    }
+    private data class W4eFramePreview(
+        val prefixPassCount: Int,
+        val totalPassCount: Int,
+        val peakFrameLocalBytes: Long,
+        val maskLayouts: Map<Int, MaskResourceLayout>,
+    )
     private data class MaskResourceIds(val firstAccumulator: PlanResourceId, val secondAccumulator: PlanResourceId, val scratch: PlanResourceId, val multisampleScratch: PlanResourceId?, val aaDepth: PlanResourceId?, val hardDepth: PlanResourceId?)
     private class Candidate(
         val owner: W4eClipPlanCompiler,
@@ -632,8 +771,6 @@ public class W4eClipPlanCompiler(
         private val targetFingerprint = target.canonicalId
         fun matches(): Boolean = sceneCanonicalId == sceneFingerprint && target.canonicalId == targetFingerprint && (capabilityId == HARD_CAPABILITY_ID || capabilityId == AA_CAPABILITY_ID)
     }
-
-    private class ClipBudgetExceeded : RuntimeException()
 
     private fun Boolean.thenId(role: PlanResourceRole, ordinal: Int): PlanResourceId? =
         if (this) planResourceId(role, ordinal) else null

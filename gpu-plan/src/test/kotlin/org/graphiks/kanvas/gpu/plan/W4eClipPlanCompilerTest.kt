@@ -248,6 +248,10 @@ class W4eClipPlanCompilerTest {
         val fullGraph = compile(scene)
         val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target(scene))).candidate
 
+        assertIs<RenderPlanResult.Ready<RenderGraph>>(
+            compiler.plan(candidate, capabilities(), PlanBudget(fullGraph.peakFrameLocalBytes)),
+        )
+
         val result: RenderPlanResult.ResourceLimitExceeded = assertIs(
             compiler.plan(candidate, capabilities(), PlanBudget(fullGraph.peakFrameLocalBytes - 1L)),
         )
@@ -344,6 +348,10 @@ class W4eClipPlanCompilerTest {
             PlanResourceRole.CoverageMaskMultisampleScratch,
             PlanResourceRole.CoverageMaskDepthStencil,
         ) })
+        val strategy = assertIs<ClippedGeneralPathDraw>(
+            graph.passes().filterIsInstance<PlanPass.PathRenderPass>().single().draw,
+        ).clip
+        assertTrue(assertIs<ClipPlanStrategy.Scissor>(strategy).copyDomainI32().isEmpty)
         assertTrue(graph.verifyW4eCompilerWitness())
     }
 
@@ -579,6 +587,33 @@ class W4eClipPlanCompilerTest {
     }
 
     @Test
+    fun `empty AA identities do not require four-sample clip support for a hard producer`() {
+        val clip = complexClip(
+            ClipEntry(
+                geometry = GeometryNode.Path(PathBuilder().build()),
+                operation = ClipOperation.DIFFERENCE,
+                antiAlias = true,
+                transform = ClipTransformSnapshot.Known.of(Matrix3x3F32.Identity),
+            ),
+            ClipEntry(
+                geometry = GeometryNode.Path(clipPath()),
+                operation = ClipOperation.INTERSECT,
+                antiAlias = false,
+                transform = ClipTransformSnapshot.Known.of(Matrix3x3F32.rotation(0.1f)),
+            ),
+        )
+        val scene = sceneOf(pathDraw(clip = clip))
+        val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target(scene))).candidate
+
+        val graph = assertIs<RenderPlanResult.Ready<RenderGraph>>(
+            compiler.plan(candidate, capabilities(includeAaMaskSamples = false), PlanBudget(1L shl 20)),
+        ).plan
+
+        assertEquals(W4eClipPlanCompiler.HARD_CAPABILITY_ID, graph.capabilityId)
+        assertEquals(1, graph.passes().filterIsInstance<PlanPass.ClipMaskProducer>().single().sampleCountI32)
+    }
+
+    @Test
     fun `clip plans do not reuse pools across different clip transforms`() {
         val first = complexClip(
             ClipEntry(GeometryNode.Path(clipPath()), ClipOperation.INTERSECT, true,
@@ -677,6 +712,33 @@ class W4eClipPlanCompilerTest {
     }
 
     @Test
+    fun `distinct clip stacks cumulatively enforce the frame vertex limit`() {
+        assertDistinctClipFrameLimit(FrameLimitAxis.Vertices)
+    }
+
+    @Test
+    fun `distinct clip stacks cumulatively enforce the frame index limit`() {
+        assertDistinctClipFrameLimit(FrameLimitAxis.Indices)
+    }
+
+    @Test
+    fun `distinct clip stacks cumulatively enforce the frame snapshot limit`() {
+        assertDistinctClipFrameLimit(FrameLimitAxis.SnapshotBytes)
+    }
+
+    @Test
+    fun `reused clip stack debits each strict frame ledger threshold once`() {
+        FrameLimitAxis.entries.forEach { axis ->
+            val clip = clipForLedger(Matrix3x3F32.Identity)
+            val scene = sceneOf(pathDraw(clip = clip), pathDraw(clip = clip))
+
+            assertIs<GpuPlanSelection.Candidate>(
+                compilerForFrameLimit(axis).select(scene, target(scene)),
+            )
+        }
+    }
+
+    @Test
     fun `draw-count limit wins before clip preparation can consume its frame ledger`() {
         val boundedCompiler = W4eClipPlanCompiler(ClipPreparationPolicyF64(
             limitsI32 = ClipPreparationLimitsI32(maxAttemptedEdgesPerFrameI32 = 1),
@@ -735,6 +797,40 @@ class W4eClipPlanCompilerTest {
 
         assertTrue(result.diagnostics().single().message.contains(reason))
     }
+
+    private fun assertDistinctClipFrameLimit(axis: FrameLimitAxis) {
+        val scene = sceneOf(
+            pathDraw(clip = clipForLedger(Matrix3x3F32.Identity)),
+            pathDraw(clip = clipForLedger(Matrix3x3F32.rotation(0.1f))),
+        )
+
+        val result = assertIs<GpuPlanSelection.ResourceLimitExceeded>(
+            compilerForFrameLimit(axis).select(scene, target(scene)),
+        )
+
+        assertTrue(result.diagnostics().single().message.contains(axis.reason))
+    }
+
+    private fun compilerForFrameLimit(axis: FrameLimitAxis): W4eClipPlanCompiler = W4eClipPlanCompiler(
+        ClipPreparationPolicyF64(
+            limitsI32 = ClipPreparationLimitsI32().copy(
+                maxEmittedVertexCountPerFrameI32 = if (axis == FrameLimitAxis.Vertices) axis.limit.toInt() else Int.MAX_VALUE,
+                maxEmittedIndexCountPerFrameI32 = if (axis == FrameLimitAxis.Indices) axis.limit.toInt() else Int.MAX_VALUE,
+            ),
+            limitsI64 = ClipPreparationLimitsI64().copy(
+                maxSnapshotByteCountPerFrameI64 = if (axis == FrameLimitAxis.SnapshotBytes) axis.limit else Long.MAX_VALUE,
+            ),
+        ),
+    )
+
+    private fun clipForLedger(transform: Matrix3x3F32): ClipStackNode = complexClip(
+        ClipEntry(
+            geometry = GeometryNode.Rect.of(RectF32(1f, 1f, 14f, 14f)),
+            operation = ClipOperation.INTERSECT,
+            antiAlias = false,
+            transform = ClipTransformSnapshot.Known.of(transform),
+        ),
+    )
 
     private fun pathDraw(
         coverage: CoverageRequest = CoverageRequest.HARD_EDGE,
@@ -799,4 +895,10 @@ class W4eClipPlanCompilerTest {
         ).let { supports -> if (includeMasks && includeAaMaskSamples) supports +
             PlanTextureResolveSupport.of(PlanTextureFormat.CoverageMask, 4, 1) else supports },
     )
+
+    private enum class FrameLimitAxis(val limit: Long, val reason: String) {
+        Vertices(4L, "FrameVertexLimit"),
+        Indices(6L, "FrameIndexLimit"),
+        SnapshotBytes(48L, "FrameSnapshotByteLimit"),
+    }
 }

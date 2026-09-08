@@ -31,6 +31,30 @@ public enum class PlanResourceUsage {
 }
 public enum class PlanResourceLifetime { FrameLocal }
 
+/**
+ * Primitive lifetime accounting used to preflight a frame before issuing any [PlanResource].
+ * The span deliberately carries no resource identity or GPU object.
+ */
+internal data class FrameResourceSpan(
+    val byteSize: Long,
+    val firstPassIndex: Int,
+    val lastPassIndexExclusive: Int,
+) {
+    init {
+        require(byteSize > 0L)
+        require(firstPassIndex >= 0 && lastPassIndexExclusive > firstPassIndex)
+    }
+}
+
+internal fun peakFrameLocalBytesI64(spans: List<FrameResourceSpan>, passCount: Int): Long {
+    require(passCount > 0)
+    return (0 until passCount).maxOf { passIndex ->
+        spans.asSequence()
+            .filter { it.firstPassIndex <= passIndex && passIndex < it.lastPassIndexExclusive }
+            .fold(0L) { total, span -> Math.addExact(total, span.byteSize) }
+    }
+}
+
 public sealed interface PlanTextureFormat {
     public data class Color(public val value: PlanLogicalColorFormat) : PlanTextureFormat
     public data class DepthStencil(public val value: PlanDepthStencilFormat) : PlanTextureFormat

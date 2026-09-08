@@ -577,6 +577,11 @@ public class RenderGraph private constructor(
             require(pass.copyGeometryF32() != ClipGeometryF32.Empty) {
                 "Zero inverse interiors must not allocate a clip-mask producer"
             }
+            if (pass.antiAlias && pass.copyGeometryF32() !is ClipGeometryF32.Rect) {
+                require(pass.sampleCountI32 == 4) {
+                    "Antialiased Path/RRect clip producers require AA4 scratch, resolve, and D24S8"
+                }
+            }
             if (pass.sampleCountI32 == 4) {
                 require(pass.antiAlias) {
                     "AA4 clip producers must preserve their antialiasing fact"

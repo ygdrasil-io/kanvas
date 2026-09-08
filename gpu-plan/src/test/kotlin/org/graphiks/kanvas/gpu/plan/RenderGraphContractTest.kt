@@ -1575,6 +1575,28 @@ class RenderGraphContractTest {
     }
 
     @Test
+    fun `ClipMask rejects an antialiased rounded-rectangle producer downgraded to one sample`() {
+        val resources = clipMaskResources()
+        val initialize = PlanPass.ClipMaskInitialize(0, resources.accumulatorA.id, RectI32(0, 0, 4, 4), 1f, CLIP_GROUP)
+        val downgraded = PlanPass.ClipMaskProducer(
+            0, resources.scratch.id, null, null, 1, clipRRectGeometry(), CLIP_GROUP, antiAlias = true,
+        )
+        val fold = PlanPass.ClipMaskFold(
+            0, resources.accumulatorA.id, resources.scratch.id, resources.accumulatorB.id,
+            ClipCombineOperation.Intersect, RectI32(0, 0, 4, 4), CLIP_GROUP,
+        )
+        val target = clipColorTarget(3, 4)
+        val consumer = clipRenderPass(
+            target,
+            listOf(ClippedPlanDraw.of(clipSolidDraw(), ClipPlanStrategy.Mask(resources.accumulatorB.id))),
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            clipGraph(resources.all + target, listOf(initialize, downgraded, fold, consumer))
+        }
+    }
+
+    @Test
     fun `AA4 hard clip consumer keeps binary one sample coverage across four samples`() {
         val graph = aa4MixedPathGraph()
         val binary = assertIs<BinaryMaskedPathDraw>(
@@ -1830,6 +1852,10 @@ class RenderGraphContractTest {
         )
 
     private fun clipRectGeometry(): ClipGeometryF32 = ClipGeometryF32.Rect(RectF32(0f, 0f, 4f, 4f))
+
+    private fun clipRRectGeometry(): ClipGeometryF32 = ClipGeometryF32.RRect(
+        org.graphiks.math.geometry.RRectF32.of(RectF32(0f, 0f, 4f, 4f), 1f),
+    )
 
     private fun clipMaskPasses(resources: ClipMaskResources): List<PlanPass> = listOf(
         PlanPass.ClipMaskInitialize(0, resources.accumulatorA.id, RectI32(0, 0, 4, 4), 1f, CLIP_GROUP),
