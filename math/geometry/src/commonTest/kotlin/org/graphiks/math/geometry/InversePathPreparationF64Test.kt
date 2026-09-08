@@ -3,6 +3,7 @@ package org.graphiks.math.geometry
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 
 class InversePathPreparationF64Test {
     @Test
@@ -42,6 +43,12 @@ class InversePathPreparationF64Test {
                 .copyGeometryF32()
             assertEquals(fillRule.toFiniteFillRule(), interiorF32.fillRule)
             assertEquals(RectI32(-20, -10, 40, 30), result.geometryF32.copyDomainI32())
+            val mutableScissorI32 = interiorF32.copyConservativeScissorI32()
+            mutableScissorI32.left = -99
+            assertTrue(
+                assertIs<InverseInteriorCoverageF32.Geometry>(result.geometryF32.interiorCoverageF32)
+                    .copyGeometryF32().copyConservativeScissorI32().left != -99,
+            )
         }
     }
 
@@ -98,6 +105,8 @@ class InversePathPreparationF64Test {
             ),
         )
         domainI32.left = -100
+        val returnedDomainI32 = result.geometryF32.copyDomainI32()
+        returnedDomainI32.top = -100
 
         assertIs<InverseInteriorCoverageF32.Zero>(result.geometryF32.interiorCoverageF32)
         assertEquals(RectI32(4, 8, 4, 12), result.geometryF32.copyDomainI32())

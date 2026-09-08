@@ -189,6 +189,7 @@ public class PathFillInputF64 private constructor(
 
                     is PathSegmentF32.LineTo -> {
                         if (!hasCurrentContour) {
+                            beforeMaterializationI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
                             values += PathFillSegmentF64.MoveTo(Point2F64.Origin)
                             hasCurrentContour = true
                         }
@@ -197,6 +198,7 @@ public class PathFillInputF64 private constructor(
 
                     is PathSegmentF32.QuadTo -> {
                         if (!hasCurrentContour) {
+                            beforeMaterializationI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
                             values += PathFillSegmentF64.MoveTo(Point2F64.Origin)
                             hasCurrentContour = true
                         }
@@ -208,6 +210,7 @@ public class PathFillInputF64 private constructor(
 
                     is PathSegmentF32.CubicTo -> {
                         if (!hasCurrentContour) {
+                            beforeMaterializationI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
                             values += PathFillSegmentF64.MoveTo(Point2F64.Origin)
                             hasCurrentContour = true
                         }
@@ -220,6 +223,7 @@ public class PathFillInputF64 private constructor(
 
                     is PathSegmentF32.ArcTo -> {
                         if (!hasCurrentContour) {
+                            beforeMaterializationI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
                             values += PathFillSegmentF64.MoveTo(Point2F64.Origin)
                             hasCurrentContour = true
                         }

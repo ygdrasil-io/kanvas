@@ -16,7 +16,7 @@ public data class PathStrokeWorkUsageI64(
 }
 
 /** Internal control flow used by stroke preparation to publish a stable resource-limit reason. */
-public class PathStrokeResourceLimitAbort(
+internal class PathStrokeResourceLimitAbort(
     val reason: PathStrokeResourceLimitReason,
 ) : RuntimeException()
 
@@ -26,7 +26,7 @@ public class PathStrokeResourceLimitAbort(
  * A debit either updates both path and frame totals or publishes no mutation.  Callers debit
  * immediately before the represented work or allocation and expose only the immutable snapshots.
  */
-public class PathStrokeWorkLedgerI64(
+internal class PathStrokeWorkLedgerI64(
     pathWorkUsageBeforeI64: PathStrokeWorkUsageI64,
     frameWorkUsageBeforeI64: PathStrokeWorkUsageI64,
     private val limitsI32: PathStrokeLimitsI32,

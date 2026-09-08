@@ -76,18 +76,63 @@ class PathGeometryPreparationF64Test {
     }
 
     @Test
-    fun `transformed inverse hairline excludes a device pixel outline under affine and perspective`() {
+    fun `transformed inverse hairline excludes its device outline under affine and perspective`() {
         val path = PathBuilder(FillRule.INVERSE_WINDING)
-            .moveTo(0f, 0f).lineTo(8f, 0f).lineTo(0f, 6f).close().build()
-        assertIs<InversePathPreparationResult.ResourceLimitExceeded>(Matrix3x3F64(kxF64 = 0.25)
-            .prepareTransformedInversePathGeometryF32(
-                path, hairlineStyleF64(), InversePathDrawMode.StrokeAndFill, RectI32(-4, -4, 16, 12), PathStrokePolicyF64(),
-            ))
+            .moveTo(0f, 0f).lineTo(10f, 0f).lineTo(10f, 8f).lineTo(0f, 8f).close().build()
+        listOf(
+            Matrix3x3F64(sxF64 = 2.0, syF64 = 3.0),
+            Matrix3x3F64(persp0F64 = 0.000001),
+        ).forEach { matrixF64 ->
+            val fill = assertIs<InversePathPreparationResult.Ready>(
+                matrixF64.prepareTransformedInversePathGeometryF32(
+                    path, null, InversePathDrawMode.Fill, RectI32(-4, -4, 24, 28), PathStrokePolicyF64(),
+                ),
+            )
+            val strokedResult = matrixF64.prepareTransformedInversePathGeometryF32(
+                    path, hairlineStyleF64().copy(join = PathStrokeJoin.Bevel), InversePathDrawMode.StrokeAndFill,
+                    RectI32(-4, -4, 24, 28), PathStrokePolicyF64(maximumSagittaErrorF64 = 1.0),
+            )
+            val stroked = assertIs<InversePathPreparationResult.Ready>(strokedResult)
 
-        assertIs<InversePathPreparationResult.ResourceLimitExceeded>(Matrix3x3F64(persp0F64 = 0.025)
-            .prepareTransformedInversePathGeometryF32(
-                path, hairlineStyleF64(), InversePathDrawMode.StrokeAndFill, RectI32(-4, -4, 16, 12), PathStrokePolicyF64(),
-            ))
+            val fillScissorI32 = assertIs<InverseInteriorCoverageF32.Geometry>(fill.geometryF32.interiorCoverageF32)
+                .copyGeometryF32().copyConservativeScissorI32()
+            val strokedGeometryF32 = assertIs<InverseInteriorCoverageF32.Geometry>(stroked.geometryF32.interiorCoverageF32)
+                .copyGeometryF32()
+            assertTrue(strokedGeometryF32.copyConservativeScissorI32().right <= fillScissorI32.right)
+            assertTrue(strokedGeometryF32.copyConservativeScissorI32().bottom <= fillScissorI32.bottom)
+            assertTrue(
+                !assertNotNull(assertIs<InverseInteriorCoverageF32.Geometry>(fill.geometryF32.interiorCoverageF32)
+                    .copyGeometryF32().copyStencilEdgeFanF32OrNull()).copyVerticesF32().contentEquals(
+                    assertNotNull(strokedGeometryF32.copyStencilEdgeFanF32OrNull()).copyVerticesF32(),
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun `transformed inverse finite stroke and fill retains F minus its projected outline`() {
+        val path = rectanglePathWithFillRule(FillRule.INVERSE_WINDING)
+        val frameWorkUsageBeforeI64 = PathStrokeWorkUsageI64(
+            attemptedGeometryUnitCountI64 = 3L,
+            emittedVertexCountI64 = 5L,
+            emittedIndexCountI64 = 7L,
+            snapshotByteCountI64 = 11L,
+        )
+        listOf(
+            Matrix3x3F64(sxF64 = 2.0, syF64 = 3.0),
+            Matrix3x3F64(persp0F64 = 0.001),
+        ).forEach { matrixF64 ->
+            val ready = assertIs<InversePathPreparationResult.Ready>(
+                matrixF64.prepareTransformedInversePathGeometryF32(
+                    path, finiteStyleF64(2.0).copy(join = PathStrokeJoin.Bevel), InversePathDrawMode.StrokeAndFill,
+                    RectI32(-4, -4, 24, 28), PathStrokePolicyF64(maximumSagittaErrorF64 = 1.0), frameWorkUsageBeforeI64,
+                ),
+            )
+            val interiorF32 = assertIs<InverseInteriorCoverageF32.Geometry>(ready.geometryF32.interiorCoverageF32)
+                .copyGeometryF32()
+            assertTrue(interiorF32.copyConservativeScissorI32().right <= 20)
+            assertUsageAddedToFrameI64(frameWorkUsageBeforeI64, ready.pathWorkUsageI64, ready.frameWorkUsageAfterI64)
+        }
     }
 
     @Test

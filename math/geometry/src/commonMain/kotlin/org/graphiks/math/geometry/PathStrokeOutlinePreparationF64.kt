@@ -152,7 +152,7 @@ public fun prepareProjectedHairlineOutlineF64(
  * This stage materializes certified device-space line primitives. No primitive reachable from a
  * ready outline retains the projection authority, which may be mutable or fallible.
  */
-public fun prepareProjectedHairlineOutlineF64(
+internal fun prepareProjectedHairlineOutlineF64(
     centerlineF64: PathStrokeCenterlineF64,
     styleF64: PathStrokeStyleF64,
     projectionF64: PathStrokeProjectionF64,
@@ -172,7 +172,7 @@ public fun prepareProjectedHairlineOutlineF64(
 }
 
 /** Internal stage overload used by later stroke preparation stages sharing one ledger. */
-public fun prepareFinitePathStrokeOutlineF64(
+internal fun prepareFinitePathStrokeOutlineF64(
     centerlineF64: PathStrokeCenterlineF64,
     styleF64: PathStrokeStyleF64,
     policyF64: PathStrokePolicyF64,
@@ -216,9 +216,9 @@ private inline fun prepareOutlineResultF64(
     PathStrokeOutlinePreparationResult.ResourceLimitExceeded(abort.reason)
 }
 
-public class PathStrokeOutlineInvalidAbort : RuntimeException()
+internal class PathStrokeOutlineInvalidAbort : RuntimeException()
 
-public class PathStrokeProjectionAbort(
+internal class PathStrokeProjectionAbort(
     val reason: PathStrokeInvalidSceneReason = PathStrokeInvalidSceneReason.NonFiniteInput,
 ) : RuntimeException()
 

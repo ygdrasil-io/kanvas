@@ -1,5 +1,6 @@
 package org.graphiks.math.geometry
 
+
 /** Outcome of bounded inverse path preparation. */
 public sealed interface InversePathPreparationResult {
     public data class Ready(
@@ -49,7 +50,12 @@ public fun prepareInversePathGeometryF32(
             (styleF64!!.widthF64 !is PathStrokeWidthF64.Finite ||
                 styleF64.widthF64.valueF64 != 0.0)
         val interiorInputF64 = if (shouldSubtractOutline) {
-            finiteInteriorF64.differenceDeviceOutlineF64(requireNotNull(deviceStrokeOutlineF64), policyF64, ledgerI64)
+            finiteInteriorF64.differenceDeviceOutlineF64(
+                requireNotNull(deviceStrokeOutlineF64),
+                styleF64,
+                policyF64,
+                ledgerI64,
+            )
         } else {
             finiteInteriorF64
         }
@@ -115,24 +121,81 @@ private fun PathFillInputF64.withFiniteFillRule(ledgerI64: PathStrokeWorkLedgerI
 
 private fun PathFillInputF64.differenceDeviceOutlineF64(
     deviceStrokeOutlineF64: PathFillInputF64,
+    styleF64: PathStrokeStyleF64,
     policyF64: PathStrokePolicyF64,
     ledgerI64: PathStrokeWorkLedgerI64,
 ): PathFillInputF64 {
-    val differenceF32 = PathOpsF32.op(
-        first = toInverseTopologyPathF32(ledgerI64),
-        second = deviceStrokeOutlineF64.withFiniteFillRule(ledgerI64).toInverseTopologyPathF32(ledgerI64),
-        op = PathBooleanOp.DIFFERENCE,
-        limits = PathOpsLimitsI32(
-            maxSubdivisionDepth = policyF64.limitsI32.maxSubdivisionDepthI32.coerceAtLeast(1),
-            maxFlattenedEdgesPerOperand = policyF64.limitsI32.maxAttemptedGeometryUnitsPerPathI32,
-            maxIntersections = policyF64.limitsI32.maxAttemptedGeometryUnitsPerPathI32,
-            maxVertices = policyF64.limitsI32.maxEmittedVertexCountPerPathI32,
-            maxHalfEdges = policyF64.limitsI32.maxEmittedIndexCountPerPathI32,
-            maxCandidateProbes = policyF64.limitsI32.maxAttemptedGeometryUnitsPerPathI32,
-        ),
-        topologyWorkDebitI64 = PathTopologyWorkDebitI64(ledgerI64::debitTopologyBeforeEmissionI64),
-    )
+    val normalizedOutlineF64 = deviceStrokeOutlineF64.withFiniteFillRule(ledgerI64)
+    val simpleClosedStrokeInteriorF64 = normalizedOutlineF64.copySmallestClosedContourF64(ledgerI64)
+    if (styleF64.widthF64 == PathStrokeWidthF64.Hairline && simpleClosedStrokeInteriorF64 != null) {
+        return simpleClosedStrokeInteriorF64
+    }
+    val differenceF32 = try {
+        PathOpsF32.op(
+            first = toInverseTopologyPathF32(ledgerI64),
+            second = normalizedOutlineF64.toInverseTopologyPathF32(ledgerI64),
+            op = PathBooleanOp.DIFFERENCE,
+            limits = PathOpsLimitsI32(
+                maxSubdivisionDepth = policyF64.limitsI32.maxSubdivisionDepthI32.coerceAtLeast(1),
+                maxFlattenedEdgesPerOperand = policyF64.limitsI32.maxAttemptedGeometryUnitsPerPathI32,
+                maxIntersections = policyF64.limitsI32.maxAttemptedGeometryUnitsPerPathI32,
+                maxVertices = policyF64.limitsI32.maxEmittedVertexCountPerPathI32,
+                maxHalfEdges = policyF64.limitsI32.maxEmittedIndexCountPerPathI32,
+                maxCandidateProbes = policyF64.limitsI32.maxAttemptedGeometryUnitsPerPathI32,
+            ),
+            topologyWorkDebitI64 = PathTopologyWorkDebitI64(ledgerI64::debitTopologyBeforeEmissionI64),
+        )
+    } catch (error: IllegalStateException) {
+        if (error.isInverseTopologyLimit() && simpleClosedStrokeInteriorF64 != null) {
+            return simpleClosedStrokeInteriorF64
+        }
+        throw error
+    }
     return PathFillInputF64.fromPathF32(differenceF32, ledgerI64::debitBeforeEmissionI64)
+}
+
+/** A simple closed stroke is an outer and an inner boundary; `F \ O` retains the smaller one. */
+private fun PathFillInputF64.copySmallestClosedContourF64(
+    ledgerI64: PathStrokeWorkLedgerI64,
+): PathFillInputF64? {
+    var contourCountI32 = 0
+    var closedContourCountI32 = 0
+    var currentStartI32 = -1
+    var firstStartI32 = -1
+    var firstEndExclusiveI32 = -1
+    fun finishContourF64(endExclusiveI32: Int, closed: Boolean) {
+        if (!closed || currentStartI32 < 0) return
+        closedContourCountI32 += 1
+        if (closedContourCountI32 == 1) {
+            firstStartI32 = currentStartI32
+            firstEndExclusiveI32 = endExclusiveI32
+        }
+    }
+
+    for (indexI32 in 0 until segmentCountI32) {
+        when (val segmentF64 = segmentAtI32(indexI32)) {
+            is PathFillSegmentF64.MoveTo -> {
+                finishContourF64(indexI32, closed = false)
+                contourCountI32 += 1
+                currentStartI32 = indexI32
+            }
+            is PathFillSegmentF64.LineTo,
+            is PathFillSegmentF64.QuadTo,
+            is PathFillSegmentF64.CubicTo,
+            is PathFillSegmentF64.ArcTo,
+            -> Unit
+            PathFillSegmentF64.Close -> finishContourF64(indexI32 + 1, closed = true)
+        }
+    }
+    if (contourCountI32 != 2 || closedContourCountI32 != 2 || firstStartI32 < 0) return null
+    ledgerI64.debitBeforeEmissionI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
+    val contourF64 = mutableListOf<PathFillSegmentF64>()
+    for (indexI32 in firstStartI32 until firstEndExclusiveI32) {
+        ledgerI64.debitBeforeEmissionI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
+        contourF64 += segmentAtI32(indexI32)
+    }
+    ledgerI64.debitBeforeEmissionI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
+    return PathFillInputF64.of(FillRule.WINDING, contourF64)
 }
 
 private fun PathFillInputF64.toInverseTopologyPathF32(ledgerI64: PathStrokeWorkLedgerI64): PathF32 {
@@ -140,6 +203,7 @@ private fun PathFillInputF64.toInverseTopologyPathF32(ledgerI64: PathStrokeWorkL
     val builderF32 = PathBuilder(fillRule)
     forEach { segmentF64 ->
         ledgerI64.debitTopologyBeforeEmissionI64(1L)
+        ledgerI64.debitBeforeEmissionI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
         when (segmentF64) {
             is PathFillSegmentF64.MoveTo -> builderF32.moveTo(segmentF64.point.x.toInverseF32(), segmentF64.point.y.toInverseF32())
             is PathFillSegmentF64.LineTo -> builderF32.lineTo(segmentF64.point.x.toInverseF32(), segmentF64.point.y.toInverseF32())

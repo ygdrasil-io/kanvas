@@ -306,20 +306,23 @@ private object IdentityPathStrokeProjectionF64 : PathStrokeProjectionF64 {
         ?: PathStrokeProjectionIntervalResultF64.NonFinite
 }
 
-public fun materializeProjectedStrokeOutlineInputF64(
+internal fun materializeProjectedStrokeOutlineInputF64(
     outlineF64: PathStrokeOutlineF64,
     projectionF64: PathStrokeProjectionF64,
     policyF64: PathStrokePolicyF64,
     ledgerI64: PathStrokeWorkLedgerI64,
 ): PathFillInputF64? {
+    ledgerI64.debitBeforeEmissionI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
     val segmentsF64 = mutableListOf<PathFillSegmentF64>()
     repeat(outlineF64.contourCountI32) { contourIndexI32 ->
+        ledgerI64.debitBeforeEmissionI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
         val intervalsF64 = outlineF64.copyContourIntervalsF64(contourIndexI32)
         val firstIntervalF64 = intervalsF64.firstOrNull() ?: return@repeat
         val firstPointF64 = projectStrokePointF64(
             projectionF64,
             firstIntervalF64.primitiveF64.pointAtF64(firstIntervalF64.startParameterF64),
         )
+        ledgerI64.debitBeforeEmissionI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
         segmentsF64 += PathFillSegmentF64.MoveTo(firstPointF64)
         intervalsF64.forEach { intervalF64 ->
             appendProjectedStrokeIntervalF64(
@@ -333,8 +336,10 @@ public fun materializeProjectedStrokeOutlineInputF64(
                 depthI32 = 0,
             )
         }
+        ledgerI64.debitBeforeEmissionI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
         segmentsF64 += PathFillSegmentF64.Close
     }
+    ledgerI64.debitBeforeEmissionI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
     return PathFillInputF64.of(FillRule.WINDING, segmentsF64).takeIf { it.segmentCountI32 > 0 }
 }
 
@@ -408,6 +413,7 @@ private fun appendProjectedStrokeIntervalF64(
                     projectionF64,
                     intervalF64.primitiveF64.pointAtF64(endParameterF64),
                 )
+                ledgerI64.debitBeforeEmissionI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
                 destinationF64 += PathFillSegmentF64.LineTo(endPointF64)
             }
         }
