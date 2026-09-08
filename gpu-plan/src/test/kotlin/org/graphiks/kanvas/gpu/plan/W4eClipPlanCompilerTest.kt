@@ -717,6 +717,11 @@ class W4eClipPlanCompilerTest {
     }
 
     @Test
+    fun `distinct clip stacks cumulatively enforce the frame attempted-edge limit`() {
+        assertDistinctClipFrameLimit(FrameLimitAxis.AttemptedEdges)
+    }
+
+    @Test
     fun `distinct clip stacks cumulatively enforce the frame index limit`() {
         assertDistinctClipFrameLimit(FrameLimitAxis.Indices)
     }
@@ -814,6 +819,7 @@ class W4eClipPlanCompilerTest {
     private fun compilerForFrameLimit(axis: FrameLimitAxis): W4eClipPlanCompiler = W4eClipPlanCompiler(
         ClipPreparationPolicyF64(
             limitsI32 = ClipPreparationLimitsI32().copy(
+                maxAttemptedEdgesPerFrameI32 = if (axis == FrameLimitAxis.AttemptedEdges) axis.limit.toInt() else Int.MAX_VALUE,
                 maxEmittedVertexCountPerFrameI32 = if (axis == FrameLimitAxis.Vertices) axis.limit.toInt() else Int.MAX_VALUE,
                 maxEmittedIndexCountPerFrameI32 = if (axis == FrameLimitAxis.Indices) axis.limit.toInt() else Int.MAX_VALUE,
             ),
@@ -897,6 +903,7 @@ class W4eClipPlanCompilerTest {
     )
 
     private enum class FrameLimitAxis(val limit: Long, val reason: String) {
+        AttemptedEdges(5L, "FrameAttemptedEdgeLimit"),
         Vertices(4L, "FrameVertexLimit"),
         Indices(6L, "FrameIndexLimit"),
         SnapshotBytes(48L, "FrameSnapshotByteLimit"),
