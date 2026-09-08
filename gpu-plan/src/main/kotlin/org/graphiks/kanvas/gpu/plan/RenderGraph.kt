@@ -213,8 +213,8 @@ public class RenderGraph private constructor(
             is PlanPass.RenderPass -> buildList {
                 add(pass.target)
                 pass.drawDataResources?.let { addAll(listOf(it.vertex, it.index, it.uniform)) }
-                pass.draws().filterIsInstance<ClippedPlanDraw>().forEach { draw ->
-                    draw.strategy.resourceReferences().forEach(::add)
+                pass.draws().flatMap { it.clipStrategies() }.forEach { strategy ->
+                    strategy.resourceReferences().forEach(::add)
                 }
             }
             is PlanPass.PathMaskClearPass -> listOf(pass.target)
@@ -267,10 +267,10 @@ public class RenderGraph private constructor(
                         require(pass.draws().all { it.sample == SamplePlan.SingleSample }) {
                             "Legacy render passes require single-sample draws"
                         }
-                        require(pass.draws().none { it is PathRenderDraw }) {
+                        require(pass.draws().none { it.unwrapClippedSource() is PathRenderDraw }) {
                             "General and binary masked path draws require explicit path render passes"
                         }
-                        pass.draws().filterIsInstance<PathDraw>().forEach { draw ->
+                        pass.draws().map { it.unwrapClippedSource() }.filterIsInstance<PathDraw>().forEach { draw ->
                             require(draw.strategy == PathFillStrategy.DirectTriangle) {
                                 "Stencil path draws require atomic stencil passes"
                             }
@@ -455,7 +455,7 @@ public class RenderGraph private constructor(
         ) {
             val consumers = passes.flatMapIndexed { index, pass -> when (pass) {
                 is PlanPass.RenderPass -> pass.draws().flatMap { draw ->
-                    (draw as? ClippedPlanDraw)?.strategy?.maskStrategies().orEmpty().map { Triple(index, it.maskResource(), it) }
+                    draw.clipStrategies().flatMap { it.maskStrategies() }.map { Triple(index, it.maskResource(), it) }
                 }
                 is PlanPass.PathRenderPass -> pass.draw.clipStrategyOrNull()?.maskStrategies().orEmpty().map {
                     Triple(index, it.maskResource(), it)
@@ -472,6 +472,7 @@ public class RenderGraph private constructor(
                 }
                 require(resource.role == PlanResourceRole.DepthStencil &&
                     resource.format == PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8) &&
+                    resource.copyExtent() == targetExtent &&
                     resource.sampleCountI32 == expectedSampleCount &&
                     PlanResourceUsage.DepthStencilAttachment in resource.usages()) {
                     "Clip stencil requires a matching D24S8 depth-stencil resource"
@@ -600,9 +601,20 @@ public class RenderGraph private constructor(
         }
 
         private fun PlanPass.clipStrategies(): List<ClipPlanStrategy> = when (this) {
-            is PlanPass.RenderPass -> draws().mapNotNull { (it as? ClippedPlanDraw)?.strategy }
+            is PlanPass.RenderPass -> draws().flatMap { it.clipStrategies() }
             is PlanPass.PathRenderPass -> listOfNotNull(draw.clipStrategyOrNull())
             else -> emptyList()
+        }
+
+        private fun PlanDraw.clipStrategies(): List<ClipPlanStrategy> = when (this) {
+            is ClippedPlanDraw -> listOf(strategy) + source.clipStrategies()
+            else -> emptyList()
+        }
+
+        private fun PlanDraw.unwrapClippedSource(): PlanDraw {
+            var source = this
+            while (source is ClippedPlanDraw) source = source.source
+            return source
         }
 
         private fun PathRenderDraw.binaryMaskedSourceOrNull(): BinaryMaskedPathDraw? = when (this) {
@@ -1428,7 +1440,7 @@ public class RenderGraph private constructor(
             visualCommandCount: Int,
         ) {
             val visualDraws = visualDraws(passes)
-            if (visualDraws.none { it is PathDraw }) return
+            if (visualDraws.none { it.unwrapClippedSource() is PathDraw }) return
 
             require(passes.all {
                 it is PlanPass.RenderPass ||
@@ -1520,7 +1532,7 @@ public class RenderGraph private constructor(
                         require(pass.draws().size == 1) {
                             "Path render passes require exactly one draw"
                         }
-                        val draw = pass.draws().single()
+                        val draw = pass.draws().single().unwrapClippedSource()
                         require(draw is PathDraw && draw.strategy == PathFillStrategy.DirectTriangle) {
                             "Path render passes require one direct-triangle draw"
                         }

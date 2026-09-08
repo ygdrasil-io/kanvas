@@ -1590,6 +1590,60 @@ class RenderGraphContractTest {
     }
 
     @Test
+    fun `nested clipped draw cannot hide an unproduced mask consumer`() {
+        val draw = ClippedPlanDraw.of(
+            ClippedPlanDraw.of(
+                SolidRectDraw.of(
+                    0, ColorF32.of(1f, 0f, 0f, 1f), RectI32(0, 0, 1, 1), RectI32(0, 0, 1, 1),
+                ),
+                ClipPlanStrategy.Mask(PlanResourceId("hidden-mask")),
+            ),
+            ClipPlanStrategy.Scissor(RectI32(0, 0, 1, 1)),
+        )
+
+        assertFailsWith<IllegalArgumentException> { directPathGraph(draws = listOf(draw)) }
+    }
+
+    @Test
+    fun `nested clipped draw cannot hide an unproduced inverse mask consumer`() {
+        val inverse = InversePathGeometryF32.of(InverseInteriorCoverageF32.Zero, RectI32(0, 0, 1, 1))
+        val draw = ClippedPlanDraw.of(
+            ClippedPlanDraw.of(
+                SolidRectDraw.of(
+                    0, ColorF32.of(1f, 0f, 0f, 1f), RectI32(0, 0, 1, 1), RectI32(0, 0, 1, 1),
+                ),
+                ClipPlanStrategy.InverseMask(inverse, PlanResourceId("hidden-inverse-mask")),
+            ),
+            ClipPlanStrategy.Scissor(RectI32(0, 0, 1, 1)),
+        )
+
+        assertFailsWith<IllegalArgumentException> { directPathGraph(draws = listOf(draw)) }
+    }
+
+    @Test
+    fun `nested clipped W4c draw retains its underlying path contract`() {
+        val draw = ClippedPlanDraw.of(
+            ClippedPlanDraw.of(stencilDraw(0), ClipPlanStrategy.Scissor(RectI32(0, 0, 1, 1))),
+            ClipPlanStrategy.Scissor(RectI32(0, 0, 1, 1)),
+        )
+
+        assertFailsWith<IllegalArgumentException> { directPathGraph(draws = listOf(draw)) }
+    }
+
+    @Test
+    fun `nested clipped W4c direct draw preserves its valid underlying path contract`() {
+        val draw = ClippedPlanDraw.of(
+            ClippedPlanDraw.of(directDraw(0), ClipPlanStrategy.Scissor(RectI32(0, 0, 1, 1))),
+            ClipPlanStrategy.Scissor(RectI32(0, 0, 1, 1)),
+        )
+
+        val graph = directPathGraph(draws = listOf(draw))
+
+        assertEquals(1, graph.visualCommandCount)
+        assertEquals(0, graph.passes().filterIsInstance<PlanPass.RenderPass>().single().draws().single().commandIndex)
+    }
+
+    @Test
     fun `AA4 hard consumer composes a binary one-sample mask with a folded clip accumulator`() {
         val graph = aa4MixedPathGraph(withClip = true)
         val consumer = assertIs<ClippedBinaryMaskedPathDraw>(
@@ -1606,6 +1660,51 @@ class RenderGraphContractTest {
         assertEquals(PlanResourceRole.DepthStencil, resources.getValue(stencil.depthStencil).role)
         assertEquals(CoveragePlan.BinaryMaskCover4, consumer.coverage)
         assertEquals(1, consumer.sourceMaskSampleCountI32)
+    }
+
+    @Test
+    fun `AA4 hard inverse clip broadcasts a one-sample binary source to every color sample`() {
+        val graph = aa4MixedPathGraph(withClip = true, inverseClip = true)
+        val consumer = assertIs<ClippedBinaryMaskedPathDraw>(
+            assertIs<PlanPass.PathRenderPass>(graph.passes()[8]).draw,
+        )
+        val scissor = assertIs<ClipPlanStrategy.Scissor>(consumer.clip)
+        val stencil = assertIs<ClipPlanStrategy.Stencil>(requireNotNull(scissor.child))
+        val inverse = assertIs<ClipPlanStrategy.InverseMask>(requireNotNull(stencil.child))
+
+        assertEquals(RectI32(0, 0, 1, 1), inverse.geometryF32.copyDomainI32())
+        assertEquals(CoveragePlan.BinaryMaskCover4, consumer.coverage)
+        assertEquals(SamplePlan.Multisample4, consumer.sample)
+        assertEquals(1, consumer.sourceMaskSampleCountI32)
+        assertEquals(4, consumer.source.broadcastSampleCountI32)
+    }
+
+    @Test
+    fun `AA4 nested clip stencil rejects role format sample extent alias lifetime and dependency mutations`() {
+        assertFailsWith<IllegalArgumentException> {
+            aa4MixedPathGraph(withClip = true, clipStencilRole = PlanResourceRole.CoverageMaskDepthStencil)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            aa4MixedPathGraph(withClip = true, clipStencilFormat = PlanTextureFormat.CoverageMask)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            aa4MixedPathGraph(withClip = true, clipStencilSampleCount = 1)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            aa4MixedPathGraph(withClip = true, clipStencilExtent = SizeI32(2, 1))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            aa4MixedPathGraph(withClip = true, clipStencilAliasesColor = true)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            aa4MixedPathGraph(withClip = true, clipAccumulatorLastPassExclusive = 8)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            aa4MixedPathGraph(withClip = true, omitClipWriterDependency = true)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            aa4MixedPathGraph(withClip = true, withClipConsumer = false)
+        }
     }
 
     private val CLIP_GROUP: PlanAtomicGroupId = PlanAtomicGroupId("clip:0")
@@ -1842,6 +1941,15 @@ class RenderGraphContractTest {
         resolveOnFinalColor: Boolean = true,
         resolveOnMaskProducer: Boolean = false,
         withClip: Boolean = false,
+        inverseClip: Boolean = false,
+        withClipConsumer: Boolean = true,
+        clipStencilRole: PlanResourceRole = PlanResourceRole.DepthStencil,
+        clipStencilFormat: PlanTextureFormat = PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8),
+        clipStencilSampleCount: Int = 4,
+        clipStencilExtent: SizeI32? = null,
+        clipStencilAliasesColor: Boolean = false,
+        clipAccumulatorLastPassExclusive: Int = if (withClip && withClipConsumer) 9 else 3,
+        omitClipWriterDependency: Boolean = false,
         resolvedColorUsages: Set<PlanResourceUsage> = setOf(
             PlanResourceUsage.RenderAttachment,
             PlanResourceUsage.CopySource,
@@ -1903,15 +2011,18 @@ class RenderGraphContractTest {
             7 + clipPassCount,
             1,
         )
-        val multisampleDepth = texture(
-            PlanResourceRole.DepthStencil,
+        val multisampleDepth = PlanResource.of(
+            clipStencilRole,
             0,
-            PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8),
+            PlanResourceKind.Texture2D,
+            clipStencilFormat,
+            clipStencilExtent ?: extent,
             16,
             setOf(PlanResourceUsage.DepthStencilAttachment),
+            PlanResourceLifetime.FrameLocal,
             clipPassCount,
             if (withClip) 6 + clipPassCount else 2 + clipPassCount,
-            4,
+            clipStencilSampleCount,
         )
         val mask = texture(
             PlanResourceRole.PathHardEdgeMask,
@@ -1978,7 +2089,7 @@ class RenderGraphContractTest {
         val clipAccumulatorB = texture(
             PlanResourceRole.CoverageMaskAccumulator, 1,
             PlanTextureFormat.CoverageMask(PlanCoverageMaskFormat.RGBA8_UNORM_LINEAR), 4,
-            setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled), 2, 6 + clipPassCount, 1,
+            setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled), 2, clipAccumulatorLastPassExclusive, 1,
         )
         val clipScratch = texture(
             PlanResourceRole.CoverageMaskScratch, 0,
@@ -1992,12 +2103,26 @@ class RenderGraphContractTest {
             PlanPass.ClipMaskFold(0, clipAccumulatorA.id, clipScratch.id, clipAccumulatorB.id,
                 ClipCombineOperation.Intersect, RectI32(0, 0, 1, 1), CLIP_GROUP),
         ) else emptyList()
+        val finalClip = if (inverseClip) {
+            ClipPlanStrategy.InverseMask(
+                InversePathGeometryF32.of(
+                    InverseInteriorCoverageF32.Geometry.of(directGeometry()),
+                    RectI32(0, 0, 1, 1),
+                ),
+                clipAccumulatorB.id,
+            )
+        } else {
+            ClipPlanStrategy.Mask(clipAccumulatorB.id)
+        }
         val binaryCoverDraw: PathRenderDraw = BinaryMaskedPathDraw.of(hard, mask.id).let { binary ->
-            if (withClip) ClippedBinaryMaskedPathDraw.of(
+            if (withClip && withClipConsumer) ClippedBinaryMaskedPathDraw.of(
                 binary,
                 ClipPlanStrategy.Scissor(
                     RectI32(0, 0, 1, 1),
-                    ClipPlanStrategy.Stencil(multisampleDepth.id, ClipPlanStrategy.Mask(clipAccumulatorB.id)),
+                    ClipPlanStrategy.Stencil(
+                        if (clipStencilAliasesColor) multisampleColor.id else multisampleDepth.id,
+                        finalClip,
+                    ),
                 ),
             ) else binary
         }
@@ -2094,7 +2219,8 @@ class RenderGraphContractTest {
             visualCommandCount = 2,
             resources = resources,
             passes = passes,
-            dependencies = passes.zipWithNext().map { (before, after) -> PlanPassDependency(before.id, after.id) },
+            dependencies = passes.zipWithNext().map { (before, after) -> PlanPassDependency(before.id, after.id) }
+                .filterNot { omitClipWriterDependency && it.before == clipPrefix.lastOrNull()?.id },
             peakFrameLocalBytes = peak(resources, passes.size),
         )
     }

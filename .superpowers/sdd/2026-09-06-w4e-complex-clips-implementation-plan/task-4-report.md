@@ -29,6 +29,24 @@ rtk git diff --check
 No output; clean.
 ```
 
+## Fix round 3/5
+
+- Recursively unwraps every `ClippedPlanDraw.source` and walks every nested clip strategy, so an inner `Mask` or `InverseMask` participates in resource discovery, writer/consumer dependencies, lifetimes, and stencil validation.
+- W4c path validation now applies to the unwrapped `PathDraw`: valid direct paths remain valid through wrapper chains, while hidden stencil/general path contracts cannot bypass the legacy path rules.
+- Requires clip stencil resources to match the graph extent as well as D24S8 role, format, usage, sample count, and non-aliasing color target.
+- Added behavior-only tests for nested wrapper escapes, valid W4c wrappers, hard AA4 Mask and InverseMask consumers, one-sample binary source/four-sample broadcast, and mutation rejections for stencil role/format/sample/extent/alias, resource lifetime, producer-without-consumer, and writer dependency.
+
+```text
+rtk ./gradlew :gpu-plan:test --tests '*RenderGraphContractTest*nested clipped*' --tests '*RenderGraphContractTest*AA4*clip*'
+BUILD SUCCESSFUL.
+
+rtk ./gradlew :gpu-plan:test
+BUILD SUCCESSFUL.
+
+rtk git diff --check
+No output; clean.
+```
+
 ## Fix round 2/5
 
 - Traversed nested `Scissor`/`Stencil` clip strategies for both resource discovery and mask-consumer validation. Clip stencil attachments now require the appropriate D24S8 role, usage, sample count, lifetime, and non-aliasing color target.
