@@ -184,7 +184,7 @@ class GpuPlanCapabilityAdapterTest {
     }
 
     @Test
-    fun `adapter withholds W4d AA and mask facts without every exact physical format and usage`() {
+    fun `adapter withholds W4d AA and mask facts without broad color formats and usages`() {
         val physical = w4dPhysicalCapabilities()
         val supported = assertIs<GpuPlanCapabilityAdapterResult.Supported>(
             physical.toPlanCapabilitySnapshot(GPUDeviceGenerationID(7)),
@@ -205,11 +205,8 @@ class GpuPlanCapabilityAdapterTest {
             supportedTextureFormats = physical.supportedTextureFormats - GPUTextureFormat.RGBA8Unorm,
         )
         val missingSampledUsage = physical.copy(supportedTextureUsage = GPUTextureUsage.RenderAttachment)
-        val missingDepthFormat = physical.copy(
-            supportedTextureFormats = physical.supportedTextureFormats - GPUTextureFormat.Depth24PlusStencil8,
-        )
 
-        listOf(missingLinearMaskFormat, missingSampledUsage, missingDepthFormat).forEach { incomplete ->
+        listOf(missingLinearMaskFormat, missingSampledUsage).forEach { incomplete ->
             val snapshot = assertIs<GpuPlanCapabilityAdapterResult.Supported>(
                 incomplete.toPlanCapabilitySnapshot(GPUDeviceGenerationID(7)),
             ).snapshot
@@ -224,6 +221,50 @@ class GpuPlanCapabilityAdapterTest {
                 ),
             )
         }
+    }
+
+    @Test
+    fun `adapter refuses generic incomplete facts`() {
+        val genericIncompleteFacts = w4dPhysicalCapabilities().copy(
+            textureFormatSampleSupport = GPUTextureFormatSampleSupport(),
+        )
+        assertIs<GpuPlanCapabilityAdapterResult.Unsupported>(
+            genericIncompleteFacts.toPlanCapabilitySnapshot(GPUDeviceGenerationID(7)),
+        )
+    }
+
+    @Test
+    fun `adapter publishes W4d AA from render-only D24S8 table evidence`() {
+        val productionShaped = w4dPhysicalCapabilities(
+            includeDepthStencilInBroadFormats = false,
+        )
+
+        val snapshot = assertIs<GpuPlanCapabilityAdapterResult.Supported>(
+            productionShaped.toPlanCapabilitySnapshot(GPUDeviceGenerationID(7)),
+        ).snapshot
+        val color = PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL)
+        val depth = PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8)
+
+        assertTrue(snapshot.supportsTexture(color, 4, setOf(PlanResourceUsage.RenderAttachment)))
+        assertTrue(snapshot.supportsResolve(color, 4, 1))
+        assertTrue(snapshot.supportsTexture(depth, 1, setOf(PlanResourceUsage.DepthStencilAttachment)))
+        assertTrue(snapshot.supportsTexture(depth, 4, setOf(PlanResourceUsage.DepthStencilAttachment)))
+    }
+
+    @Test
+    fun `adapter revokes W4d AA when render-only D24S8 lacks four sample evidence`() {
+        val incomplete = w4dPhysicalCapabilities(depthStencilSamples = setOf(1))
+
+        val snapshot = assertIs<GpuPlanCapabilityAdapterResult.Supported>(
+            incomplete.toPlanCapabilitySnapshot(GPUDeviceGenerationID(7)),
+        ).snapshot
+        val color = PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL)
+        val depth = PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8)
+
+        assertEquals(false, snapshot.supportsTexture(color, 4, setOf(PlanResourceUsage.RenderAttachment)))
+        assertEquals(false, snapshot.supportsResolve(color, 4, 1))
+        assertTrue(snapshot.supportsTexture(depth, 1, setOf(PlanResourceUsage.DepthStencilAttachment)))
+        assertEquals(false, snapshot.supportsTexture(depth, 4, setOf(PlanResourceUsage.DepthStencilAttachment)))
     }
 
     private fun requiredPlanFeatures(): Set<GPURendererFeature> = setOf(
@@ -270,15 +311,18 @@ class GpuPlanCapabilityAdapterTest {
         rendererFeatures = rendererFeatures,
     )
 
-    private fun w4dPhysicalCapabilities(): GPUCapabilities = capabilities(
-        depthStencilFormatSupported = true,
-        depthStencilSamples = setOf(1, 4),
+    private fun w4dPhysicalCapabilities(
+        depthStencilSamples: Set<Int> = setOf(1, 4),
+        includeDepthStencilInBroadFormats: Boolean = true,
+    ): GPUCapabilities = capabilities(
+        depthStencilFormatSupported = includeDepthStencilInBroadFormats,
+        depthStencilSamples = depthStencilSamples,
     ).copy(
-        supportedTextureFormats = setOf(
-            GPUTextureFormat.RGBA8UnormSrgb,
-            GPUTextureFormat.RGBA8Unorm,
-            GPUTextureFormat.Depth24PlusStencil8,
-        ),
+        supportedTextureFormats = buildSet {
+            add(GPUTextureFormat.RGBA8UnormSrgb)
+            add(GPUTextureFormat.RGBA8Unorm)
+            if (includeDepthStencilInBroadFormats) add(GPUTextureFormat.Depth24PlusStencil8)
+        },
         supportedTextureUsage = GPUTextureUsage.RenderAttachment or
             GPUTextureUsage.TextureBinding or GPUTextureUsage.CopySrc,
         textureFormatSampleSupport = GPUTextureFormatSampleSupport(
@@ -291,7 +335,7 @@ class GpuPlanCapabilityAdapterTest {
                     renderAttachmentSampleCounts = setOf(1),
                 ),
                 GPUTextureFormat.Depth24PlusStencil8 to GPUTextureSampleCountSupport(
-                    renderAttachmentSampleCounts = setOf(1, 4),
+                    renderAttachmentSampleCounts = depthStencilSamples,
                 ),
             ),
         ),

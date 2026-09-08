@@ -62,14 +62,20 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
     // W4c's historical single-sample depth/stencil contract predates the optional
     // physical-usage observation.  Its sample evidence remains authoritative; the
     // stricter W4d.2 physical topology is deliberately confined to 4x/resolve/mask.
-    val hasSingleSampleD24S8 = 1 in textureFormatSampleSupport[GPUTextureFormat.Depth24PlusStencil8]
-            ?.renderAttachmentSampleCounts.orEmpty()
-    val hasW4dPhysicalFormats = setOf(
+    val depthStencilSamples = textureFormatSampleSupport[GPUTextureFormat.Depth24PlusStencil8]
+        ?.renderAttachmentSampleCounts.orEmpty()
+    val hasSingleSampleD24S8 = 1 in depthStencilSamples
+    // D24S8 is intentionally table-only: CapabilityContracts accepts its sample
+    // evidence for the exact RenderAttachment request even when the broad-format
+    // observation omits it.  W4d needs both attachment sample counts, never a
+    // synthetic broad-format entry.
+    val hasW4dD24S8RenderAttachmentEvidence = 1 in depthStencilSamples && 4 in depthStencilSamples
+    val hasW4dBroadColorFormats = setOf(
         GPUTextureFormat.RGBA8UnormSrgb,
         GPUTextureFormat.RGBA8Unorm,
-        GPUTextureFormat.Depth24PlusStencil8,
     ).all { format -> format in supportedTextureFormats }
-    val hasW4dPhysicalTopology = hasW4dPhysicalFormats && hasW4dTextureUsages
+    val hasW4dPhysicalTopology = hasW4dBroadColorFormats &&
+        hasW4dTextureUsages && hasW4dD24S8RenderAttachmentEvidence
     val hasFourSampleSrgb = hasW4dPhysicalTopology && 4 in srgbSamples.orEmpty()
     val operations = rendererFeatures.mapNotNull { feature ->
         when (feature) {
@@ -102,8 +108,7 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
                 ),
             )
         }
-        textureFormatSampleSupport[GPUTextureFormat.Depth24PlusStencil8]
-            ?.renderAttachmentSampleCounts.orEmpty()
+        depthStencilSamples
             .filter { sampleCount -> hasSingleSampleD24S8 && sampleCount in setOf(1, 4) }
             .forEach { sampleCount ->
                 add(

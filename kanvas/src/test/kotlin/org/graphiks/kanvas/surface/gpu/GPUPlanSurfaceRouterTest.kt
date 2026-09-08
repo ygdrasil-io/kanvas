@@ -372,7 +372,6 @@ class GPUPlanSurfaceRouterTest {
                     ClipStack.WideOpen,
                 ),
             ),
-            "antialias" to listOf(path.copy(paint = hardFill.copy(antiAlias = true))),
             "inverse" to listOf(
                 DisplayOp.DrawPath(inverse, hardFill, Matrix3x3F32.Identity, ClipStack.WideOpen),
             ),
