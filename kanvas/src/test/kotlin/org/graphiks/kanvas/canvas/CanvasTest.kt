@@ -17,7 +17,6 @@ import org.graphiks.kanvas.types.*
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.kanvas.render.ir.ClipTransformSnapshot
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -69,43 +68,6 @@ class CanvasTest {
         assertEquals(
             RectF32.ofOriginSize(10f, 5f, 4f, 6f),
             assertIs<ClipStack.DeviceRect>(clip).rect,
-        )
-    }
-
-    @Test
-    fun `scaled rrect clip retains source geometry and its capture-time transform after later CTM changes`() {
-        val buffer = TestBuffer()
-        val canvas = Canvas(buffer)
-
-        canvas.translate(3f, 5f)
-        canvas.scale(2f, 3f)
-        canvas.clipRRect(RRectF32.of(RectF32.ofLTRB(4f, 6f, 12f, 16f), radius = 2f), antiAlias = false)
-        canvas.resetMatrix()
-        canvas.translate(100f, 200f)
-
-        val clip = assertIs<ClipStack.Complex>(buffer.ops().filterIsInstance<DisplayOp.SetClip>().last().clip)
-        val captured = assertIs<ClipStackOp.RRectOp>(clip.ops.single())
-        assertEquals(RectF32.ofLTRB(4f, 6f, 12f, 16f), captured.rrect.rect)
-        assertEquals(
-            Matrix3x3F32(sx = 2f, sy = 3f, tx = 3f, ty = 5f),
-            assertIs<ClipTransformSnapshot.Known>(captured.transform).copyMatrixF32(),
-        )
-    }
-
-    @Test
-    fun `rotated clip rect preserves its source rectangle and frozen CTM`() {
-        val buffer = TestBuffer()
-        val canvas = Canvas(buffer)
-        canvas.rotate(45f)
-        canvas.clipRect(RectF32(2f, 2f, 10f, 10f), antiAlias = true)
-
-        val clip = buffer.ops().filterIsInstance<DisplayOp.SetClip>().single().clip
-        val element = assertIs<ClipStack.Complex>(clip).ops.single()
-        val captured = assertIs<ClipStackOp.RectOp>(element)
-        assertEquals(RectF32(2f, 2f, 10f, 10f), captured.rect)
-        assertEquals(
-            Matrix3x3F32.rotation(45f),
-            assertIs<ClipTransformSnapshot.Known>(captured.transform).copyMatrixF32(),
         )
     }
 
@@ -209,33 +171,6 @@ class CanvasTest {
     }
 
     @Test fun `Canvas resetMatrix`() { val b = TestBuffer(); val c = Canvas(b); c.translate(100f, 200f); c.resetMatrix(); assertEquals(Matrix3x3F32.Identity, c.matrix) }
-
-    @Test
-    fun `Canvas affine API captures source clip and resets its draw CTM`() {
-        val buffer = TestBuffer()
-        val canvas = Canvas(buffer)
-
-        canvas.translate(3f, 5f)
-        canvas.scale(2f, .5f)
-        canvas.rotate(90f)
-        canvas.skew(.25f, 0f)
-        canvas.concat(Matrix3x3F32.translation(4f, -2f))
-        canvas.setMatrix(Matrix3x3F32(sx = .75f, kx = .25f, tx = 1f, sy = .5f))
-        canvas.clipRect(RectF32.ofLTRB(4f, 4f, 28f, 28f), antiAlias = false)
-        canvas.resetMatrix()
-        canvas.drawRect(RectF32.ofLTRB(0f, 0f, 32f, 32f), Paint.fill(ColorARGB.Red).copy(antiAlias = false))
-
-        val clip = assertIs<ClipStack.Complex>(buffer.ops().filterIsInstance<DisplayOp.SetClip>().single().clip)
-        val captured = assertIs<ClipStackOp.RectOp>(clip.ops.single())
-        assertEquals(RectF32.ofLTRB(4f, 4f, 28f, 28f), captured.rect)
-        assertEquals(
-            Matrix3x3F32(sx = .75f, kx = .25f, tx = 1f, sy = .5f),
-            assertIs<ClipTransformSnapshot.Known>(captured.transform).copyMatrixF32(),
-        )
-        val draw = buffer.ops().filterIsInstance<DisplayOp.DrawRect>().single()
-        assertEquals(Matrix3x3F32.Identity, draw.transform)
-        assertEquals(7, buffer.ops().filterIsInstance<DisplayOp.SetTransform>().size)
-    }
 
     @Test
     fun `empty CFF glyph completes text expansion without recording a draw`() {

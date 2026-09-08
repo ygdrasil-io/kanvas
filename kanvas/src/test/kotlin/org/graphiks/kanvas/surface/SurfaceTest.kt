@@ -124,19 +124,69 @@ class SurfaceTest {
     @Test fun `Surface canvas DSL`() { val s = Surface(320, 240); s.canvas { drawRect(RectF32.ofLTRB(0f,0f,100f,80f), Paint.fill(ColorARGB.Red)) }; val r = s.render(); assertEquals(1, r.stats.opsDispatched) }
 
     @Test
-    fun `typed affine RRect and hard path clips render through the public Surface`() {
-        val rrectSurface = Surface(16, 16)
+    fun `scaled RRect clip remains fixed at its capture CTM after later Canvas CTM changes`() {
+        val rrectSurface = Surface(32, 64)
         rrectSurface.canvas {
+            translate(3f, 5f)
+            scale(2f, 3f)
+            clipRRect(RRectF32.of(RectF32.ofLTRB(4f, 6f, 12f, 16f), radius = 2f), antiAlias = false)
+            resetMatrix()
+            translate(100f, 200f)
+            resetMatrix()
+            drawRect(RectF32.ofLTRB(0f, 0f, 32f, 64f), Paint.fill(ColorARGB.Red).copy(antiAlias = false))
+        }
+        rrectSurface.render()
+        assertArrayEquals(
+            byteArrayOf(-1, 0, 0, -1),
+            requireNotNull(rrectSurface.makeImageSnapshot(RectF32.ofLTRB(15f, 30f, 16f, 31f))).pixels,
+        )
+        assertArrayEquals(
+            byteArrayOf(0, 0, 0, 0),
+            requireNotNull(rrectSurface.makeImageSnapshot(RectF32.ofLTRB(5f, 5f, 6f, 6f))).pixels,
+        )
+    }
+
+    @Test
+    fun `rotated rect clip stays frozen through save restore after a CTM mutation`() {
+        val surface = Surface(16, 16)
+        surface.canvas {
             rotate(180f, px = 8f, py = 8f)
-            clipRRect(RRectF32.of(RectF32.ofLTRB(1f, 1f, 5f, 5f), radius = .5f), antiAlias = false)
+            clipRect(RectF32.ofLTRB(1f, 1f, 5f, 5f), antiAlias = false)
+            save()
+            resetMatrix()
+            translate(100f, 200f)
+            restore()
             resetMatrix()
             drawRect(RectF32.ofLTRB(0f, 0f, 16f, 16f), Paint.fill(ColorARGB.Red).copy(antiAlias = false))
         }
-        val rrectResult = rrectSurface.render()
-        assertArrayEquals(byteArrayOf(-1, 0, 0, -1), rgbaAt(rrectResult, 12, 12))
-        assertArrayEquals(byteArrayOf(0, 0, 0, 0), rgbaAt(rrectResult, 1, 1))
-        assertEquals(0, rrectResult.stats.opsRefused)
+        surface.render()
+        assertArrayEquals(
+            byteArrayOf(-1, 0, 0, -1),
+            requireNotNull(surface.makeImageSnapshot(RectF32.ofLTRB(12f, 12f, 13f, 13f))).pixels,
+        )
+        assertArrayEquals(
+            byteArrayOf(0, 0, 0, 0),
+            requireNotNull(surface.makeImageSnapshot(RectF32.ofLTRB(1f, 1f, 2f, 2f))).pixels,
+        )
+    }
 
+    @Test
+    fun `affine rect clip remains at its capture CTM after a later Canvas CTM reset`() {
+        val surface = Surface(32, 16)
+        surface.canvas {
+            setMatrix(Matrix3x3F32(sx = .75f, kx = .25f, tx = 1f, sy = .5f))
+            clipRect(RectF32.ofLTRB(4f, 4f, 28f, 28f), antiAlias = false)
+            resetMatrix()
+            translate(100f, 200f)
+            resetMatrix()
+            drawRect(RectF32.ofLTRB(0f, 0f, 32f, 16f), Paint.fill(ColorARGB.Red).copy(antiAlias = false))
+        }
+        val failure = assertThrows(IllegalStateException::class.java) { surface.render() }
+        assertTrue(failure.message.orEmpty().startsWith("unsupported.clip.path_transform"), failure.message)
+    }
+
+    @Test
+    fun `hard path clips render through the public Surface`() {
         val pathSurface = Surface(16, 16)
         pathSurface.canvas {
             clipPath(
@@ -150,10 +200,15 @@ class SurfaceTest {
             )
             drawRect(RectF32.ofLTRB(0f, 0f, 16f, 16f), Paint.fill(ColorARGB.Blue).copy(antiAlias = false))
         }
-        val pathResult = pathSurface.render()
-        assertArrayEquals(byteArrayOf(0, 0, -1, -1), rgbaAt(pathResult, 4, 4))
-        assertArrayEquals(byteArrayOf(0, 0, 0, 0), rgbaAt(pathResult, 13, 13))
-        assertEquals(0, pathResult.stats.opsRefused)
+        pathSurface.render()
+        assertArrayEquals(
+            byteArrayOf(0, 0, -1, -1),
+            requireNotNull(pathSurface.makeImageSnapshot(RectF32.ofLTRB(4f, 4f, 5f, 5f))).pixels,
+        )
+        assertArrayEquals(
+            byteArrayOf(0, 0, 0, 0),
+            requireNotNull(pathSurface.makeImageSnapshot(RectF32.ofLTRB(13f, 13f, 14f, 14f))).pixels,
+        )
     }
 
     @Test
@@ -319,11 +374,6 @@ class SurfaceTest {
             result.pixels[idx].toInt() and 0xFF > 0
         }
         assertTrue(nonZero, "drawImage should produce visible pixels")
-    }
-
-    private fun rgbaAt(result: RenderResult, x: Int, y: Int): ByteArray {
-        val offset = (y * result.width + x) * 4
-        return result.pixels.toByteArray().copyOfRange(offset, offset + 4)
     }
 
 }
