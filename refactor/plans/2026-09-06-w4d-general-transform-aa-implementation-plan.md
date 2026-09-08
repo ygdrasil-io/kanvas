@@ -38,7 +38,7 @@
 | 5 — contrats MSAA/resolve | Terminé | `067958ca0`, revue Sol CLEAN |
 | 6 — compiler/budgets | Terminé | `3c801385f`, revue Sol CLEAN |
 | 7 — lowering/autorité | Terminé | `92c219a0b`, revue Sol CLEAN |
-| 8 — matérialisation/pool | Implémenté ; preuves de gates présentes | `bafbd4019` puis correctifs d'autorité, préflight et générations de depth ; revue Sol globale encore à faire |
+| 8 — matérialisation/pool | Implémenté ; preuves de gates présentes | `bafbd4019` puis correctifs d'autorité, préflight et générations de depth ; revue Sol globale CLEAN après corrections documentaires |
 | 9 — Surface/oracle | Terminé | `42efea430`, revue Sol CLEAN ; AA4 réel reste terminal sur le runtime courant |
 | 10 — vérification/documentation | Terminé | gates, ledger XML et suivi publiés dans `9849f12` ; revue Sol finale et PR restent des étapes de branche distinctes |
 
