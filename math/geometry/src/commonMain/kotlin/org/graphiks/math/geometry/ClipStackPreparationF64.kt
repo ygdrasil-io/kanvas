@@ -72,11 +72,14 @@ private fun prepareRectClipF32(
     ledgerI64: ClipEntryWorkLedgerI64,
 ): ClipPreparedEntryF32 {
     if (!rectF64.isFinite()) throw ClipInvalidAbort()
-    val rectF32 = rectF64.toRectF32OrNull() ?: throw ClipInvalidAbort()
+    val leftF32 = rectF64.left.toFiniteF32OrNull() ?: throw ClipInvalidAbort()
+    val topF32 = rectF64.top.toFiniteF32OrNull() ?: throw ClipInvalidAbort()
+    val rightF32 = rectF64.right.toFiniteF32OrNull() ?: throw ClipInvalidAbort()
+    val bottomF32 = rectF64.bottom.toFiniteF32OrNull() ?: throw ClipInvalidAbort()
     val scissorI32 = rectF64.conservativeScissorI32(targetDomainI32)
     if (!rectF64.isEmpty) ledgerI64.debitBeforeEmissionI64(ClipWorkUsageI64(4L, 4L, 6L, 16L))
     return ClipPreparedEntryF32(
-        if (rectF64.isEmpty) ClipGeometryF32.Empty else ClipGeometryF32.Rect(rectF32),
+        if (rectF64.isEmpty) ClipGeometryF32.Empty else ClipGeometryF32.Rect(RectF32(leftF32, topF32, rightF32, bottomF32)),
         inputF64.operation, inputF64.antiAlias, inverseFill = false, scissorI32,
     )
 }
@@ -89,15 +92,25 @@ private fun prepareRRectClipF32(
 ): ClipPreparedEntryF32 {
     if (!rrectF64.isFinite()) throw ClipInvalidAbort()
     val boundsF64 = rrectF64.copyRectF64()
-    val boundsF32 = boundsF64.toRectF32OrNull() ?: throw ClipInvalidAbort()
-    val radiiF32 = listOf(rrectF64.topLeft, rrectF64.topRight, rrectF64.bottomRight, rrectF64.bottomLeft).map {
-        CornerRadiiF32(it.xF64.toFiniteF32OrNull() ?: throw ClipInvalidAbort(), it.yF64.toFiniteF32OrNull() ?: throw ClipInvalidAbort())
-    }
+    val leftF32 = boundsF64.left.toFiniteF32OrNull() ?: throw ClipInvalidAbort()
+    val topF32 = boundsF64.top.toFiniteF32OrNull() ?: throw ClipInvalidAbort()
+    val rightF32 = boundsF64.right.toFiniteF32OrNull() ?: throw ClipInvalidAbort()
+    val bottomF32 = boundsF64.bottom.toFiniteF32OrNull() ?: throw ClipInvalidAbort()
+    val topLeftX = rrectF64.topLeft.xF64.toFiniteF32OrNull() ?: throw ClipInvalidAbort()
+    val topLeftY = rrectF64.topLeft.yF64.toFiniteF32OrNull() ?: throw ClipInvalidAbort()
+    val topRightX = rrectF64.topRight.xF64.toFiniteF32OrNull() ?: throw ClipInvalidAbort()
+    val topRightY = rrectF64.topRight.yF64.toFiniteF32OrNull() ?: throw ClipInvalidAbort()
+    val bottomRightX = rrectF64.bottomRight.xF64.toFiniteF32OrNull() ?: throw ClipInvalidAbort()
+    val bottomRightY = rrectF64.bottomRight.yF64.toFiniteF32OrNull() ?: throw ClipInvalidAbort()
+    val bottomLeftX = rrectF64.bottomLeft.xF64.toFiniteF32OrNull() ?: throw ClipInvalidAbort()
+    val bottomLeftY = rrectF64.bottomLeft.yF64.toFiniteF32OrNull() ?: throw ClipInvalidAbort()
     val scissorI32 = boundsF64.conservativeScissorI32(targetDomainI32)
     if (!boundsF64.isEmpty) ledgerI64.debitBeforeEmissionI64(ClipWorkUsageI64(4L, 4L, 6L, 48L))
     val geometryF32 = if (boundsF64.isEmpty) ClipGeometryF32.Empty else ClipGeometryF32.RRect(
         RRectF32.of(
-            boundsF32, radiiF32[0], radiiF32[1], radiiF32[2], radiiF32[3],
+            RectF32(leftF32, topF32, rightF32, bottomF32),
+            CornerRadiiF32(topLeftX, topLeftY), CornerRadiiF32(topRightX, topRightY),
+            CornerRadiiF32(bottomRightX, bottomRightY), CornerRadiiF32(bottomLeftX, bottomLeftY),
         ),
     )
     return ClipPreparedEntryF32(geometryF32, inputF64.operation, inputF64.antiAlias, false, scissorI32)
@@ -110,21 +123,11 @@ private fun preparePathClipF32(
     policyF64: ClipPreparationPolicyF64,
     ledgerI64: ClipEntryWorkLedgerI64,
 ): ClipPreparedEntryF32 {
-    val minimumEdgesI64 = estimatedPathEdgesI64(pathF64)
-    ledgerI64.preflightBeforeEmissionI64(pathFinalGeometryUpperBoundI64(policyF64))
-    ledgerI64.debitBeforeEmissionI64(ClipWorkUsageI64(attemptedEdgeCountI64 = minimumEdgesI64))
-    val prepared = preparePathFillGeometryF32(pathF64, policyF64.pathPolicyF64)
+    val prepared = preparePathFillGeometryWithWorkDebitF32(pathF64, policyF64.pathPolicyF64) { deltaI64 ->
+        ledgerI64.debitBeforeEmissionI64(deltaI64.toClipWorkUsageI64())
+    }
     return when (prepared) {
         is PathFillPreparationResult.Ready -> {
-            val remainingEdgesI64 = prepared.attemptedEdgeCountI32.toLong() - minimumEdgesI64
-            ledgerI64.debitBeforeEmissionI64(
-                ClipWorkUsageI64(
-                    attemptedEdgeCountI64 = remainingEdgesI64.coerceAtLeast(0L),
-                    emittedVertexCountI64 = prepared.geometryF32.vertexCostI64,
-                    emittedIndexCountI64 = prepared.geometryF32.indexCostI64,
-                    snapshotByteCountI64 = prepared.geometryF32.snapshotByteCostI64,
-                ),
-            )
             ClipPreparedEntryF32(
                 ClipGeometryF32.Path(prepared.geometryF32), inputF64.operation, inputF64.antiAlias,
                 pathF64.fillRule.isInverseFill(), if (pathF64.fillRule.isInverseFill()) targetDomainI32.copyClipRectI32() else prepared.geometryF32.copyConservativeScissorI32().intersectClipDomainI32(targetDomainI32),
@@ -132,7 +135,6 @@ private fun preparePathClipF32(
         }
 
         is PathFillPreparationResult.Empty -> {
-            ledgerI64.debitBeforeEmissionI64(ClipWorkUsageI64(attemptedEdgeCountI64 = prepared.attemptedEdgeCountI32.toLong() - minimumEdgesI64))
             ClipPreparedEntryF32(ClipGeometryF32.Empty, inputF64.operation, inputF64.antiAlias, pathF64.fillRule.isInverseFill(), if (pathF64.fillRule.isInverseFill()) targetDomainI32.copyClipRectI32() else RectI32.Empty)
         }
 
@@ -164,10 +166,12 @@ private fun RectI32.intersectClipDomainI32(domainI32: RectI32): RectI32 {
 
 private fun FillRule.isInverseFill(): Boolean = this == FillRule.INVERSE_WINDING || this == FillRule.INVERSE_EVEN_ODD
 
-private fun pathFinalGeometryUpperBoundI64(policyF64: ClipPreparationPolicyF64): ClipWorkUsageI64 {
-    val edgeCountI64 = policyF64.pathPolicyF64.limitsI32.maxAttemptedEdgesPerPathI32.toLong()
-    return ClipWorkUsageI64(0L, edgeCountI64 * 3L + 4L, edgeCountI64 * 3L + 6L, edgeCountI64 * 40L + 16L)
-}
+private fun PathStrokeWorkUsageI64.toClipWorkUsageI64(): ClipWorkUsageI64 = ClipWorkUsageI64(
+    attemptedEdgeCountI64 = attemptedGeometryUnitCountI64,
+    emittedVertexCountI64 = emittedVertexCountI64,
+    emittedIndexCountI64 = emittedIndexCountI64,
+    snapshotByteCountI64 = snapshotByteCountI64,
+)
 
 private fun Double.toFiniteF32OrNull(): Float? = takeIf { it.isFinite() && kotlin.math.abs(it) <= Float.MAX_VALUE.toDouble() }?.toFloat()
 private fun RectF64.toRectF32OrNull(): RectF32? {
@@ -181,21 +185,4 @@ private class ReadOnlyClipPreparedEntriesF32(entriesF32: Collection<ClipPrepared
     private val valuesF32: Array<ClipPreparedEntryF32> = entriesF32.toTypedArray()
     override val size: Int get() = valuesF32.size
     override fun get(index: Int): ClipPreparedEntryF32 = valuesF32[index]
-}
-
-private fun estimatedPathEdgesI64(pathF64: PathFillInputF64): Long {
-    var resultI64 = 0L
-    var hasContour = false
-    pathF64.forEach { segmentF64 ->
-        when (segmentF64) {
-            is PathFillSegmentF64.MoveTo -> hasContour = true
-            is PathFillSegmentF64.LineTo,
-            is PathFillSegmentF64.QuadTo,
-            is PathFillSegmentF64.CubicTo,
-            is PathFillSegmentF64.ArcTo,
-            PathFillSegmentF64.Close,
-            -> if (hasContour) resultI64++
-        }
-    }
-    return resultI64
 }

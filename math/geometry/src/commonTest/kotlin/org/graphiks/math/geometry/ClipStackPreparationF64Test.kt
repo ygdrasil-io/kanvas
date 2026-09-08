@@ -163,6 +163,48 @@ class ClipStackPreparationF64Test {
     }
 
     @Test
+    fun `empty path is admitted from its real work instead of a subdivision upper bound`() {
+        val pathF64 = PathFillInputF64.of(
+            FillRule.WINDING,
+            listOf(PathFillSegmentF64.MoveTo(Point2F64(2.0, 2.0))),
+        )
+
+        val result = assertIs<ClipStackPreparationResult.Ready>(
+            prepareClipStackGeometryF32(
+                listOf(ClipDeviceInputF64.of(ClipDeviceGeometryF64.Path(pathF64), ClipOperation.Intersect)),
+                RectI32(0, 0, 8, 8),
+                ClipPreparationPolicyF64(limitsI32 = ClipPreparationLimitsI32(maxEmittedVertexCountPerEntryI32 = 1)),
+            ),
+        )
+
+        assertIs<ClipGeometryF32.Empty>(result.entriesF32.single().geometryF32)
+        assertEquals(0L, result.stackWorkUsageAfterI64.emittedVertexCountI64)
+    }
+
+    @Test
+    fun `repeated close charges only the observed edge work`() {
+        val pathF64 = PathFillInputF64.of(
+            FillRule.WINDING,
+            listOf(
+                PathFillSegmentF64.MoveTo(Point2F64(0.0, 0.0)),
+                PathFillSegmentF64.Close,
+                PathFillSegmentF64.Close,
+            ),
+        )
+
+        val result = assertIs<ClipStackPreparationResult.Ready>(
+            prepareClipStackGeometryF32(
+                listOf(ClipDeviceInputF64.of(ClipDeviceGeometryF64.Path(pathF64), ClipOperation.Intersect)),
+                RectI32(0, 0, 8, 8),
+                ClipPreparationPolicyF64(limitsI32 = ClipPreparationLimitsI32(maxAttemptedEdgesPerEntryI32 = 1)),
+            ),
+        )
+
+        assertEquals(1L, result.stackWorkUsageAfterI64.attemptedEdgeCountI64)
+        assertIs<ClipGeometryF32.Empty>(result.entriesF32.single().geometryF32)
+    }
+
+    @Test
     fun `published entry list cannot be mutated through a mutable list cast`() {
         val result = assertIs<ClipStackPreparationResult.Ready>(
             prepareClipStackGeometryF32(

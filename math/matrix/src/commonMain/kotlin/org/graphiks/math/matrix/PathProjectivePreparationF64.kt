@@ -69,15 +69,31 @@ public fun Matrix3x3F64.prepareProjectedPathFillInputF64(
     pathWorkUsageBeforeI64: PathStrokeWorkUsageI64 = PathStrokeWorkUsageI64(),
     frameWorkUsageBeforeI64: PathStrokeWorkUsageI64 = PathStrokeWorkUsageI64(),
 ): PathProjectivePreparationResult {
+    return prepareProjectedPathFillInputF64(
+        PathFillInputF64.fromPathF32(path), policyF64, workPolicyF64,
+        pathWorkUsageBeforeI64, frameWorkUsageBeforeI64,
+    )
+}
+
+/** F64-source overload used by transformed F64 clips; no source coordinate is narrowed. */
+internal fun Matrix3x3F64.prepareProjectedPathFillInputF64(
+    inputF64: PathFillInputF64,
+    policyF64: PathFillFlatteningPolicyF64 = PathFillFlatteningPolicyF64(),
+    workPolicyF64: PathStrokePolicyF64 = PathStrokePolicyF64(),
+    pathWorkUsageBeforeI64: PathStrokeWorkUsageI64 = PathStrokeWorkUsageI64(),
+    frameWorkUsageBeforeI64: PathStrokeWorkUsageI64 = PathStrokeWorkUsageI64(),
+    beforeWorkDebitI64: (PathStrokeWorkUsageI64) -> Unit = {},
+): PathProjectivePreparationResult {
     if (!isFinite()) return PathProjectivePreparationResult.InvalidScene(PathProjectiveInvalidSceneReason.NonFiniteMatrix)
     return try {
         PathProjectiveFillPreparerF64(
             matrixF64 = this,
-            pathF32 = path,
+            inputF64 = inputF64,
             policyF64 = policyF64,
             workPolicyF64 = workPolicyF64,
             pathWorkUsageBeforeI64 = pathWorkUsageBeforeI64,
             frameWorkUsageBeforeI64 = frameWorkUsageBeforeI64,
+            beforeWorkDebitI64 = beforeWorkDebitI64,
         ).prepare()
     } catch (abort: PathProjectiveInvalidAbort) {
         PathProjectivePreparationResult.InvalidScene(abort.reason)
@@ -99,6 +115,7 @@ private class PathProjectiveWorkLedgerF64(
     frameWorkUsageBeforeI64: PathStrokeWorkUsageI64,
     private val limitsI32: PathStrokeLimitsI32,
     private val limitsI64: PathStrokeLimitsI64,
+    private val beforeWorkDebitI64: (PathStrokeWorkUsageI64) -> Unit,
 ) {
     private var pathUsageI64: PathStrokeWorkUsageI64 = pathWorkUsageBeforeI64
     private var frameUsageI64: PathStrokeWorkUsageI64 = frameWorkUsageBeforeI64
@@ -121,6 +138,7 @@ private class PathProjectiveWorkLedgerF64(
         )
         requireWithinLimits(nextPathI64, isPath = true)
         requireWithinLimits(nextFrameI64, isPath = false)
+        beforeWorkDebitI64(deltaI64)
         pathUsageI64 = nextPathI64
         frameUsageI64 = nextFrameI64
     }
@@ -189,17 +207,19 @@ private fun checkedProjectiveAddI64(
 
 private class PathProjectiveFillPreparerF64(
     private val matrixF64: Matrix3x3F64,
-    private val pathF32: PathF32,
+    private val inputF64: PathFillInputF64,
     private val policyF64: PathFillFlatteningPolicyF64,
     workPolicyF64: PathStrokePolicyF64,
     pathWorkUsageBeforeI64: PathStrokeWorkUsageI64,
     frameWorkUsageBeforeI64: PathStrokeWorkUsageI64,
+    beforeWorkDebitI64: (PathStrokeWorkUsageI64) -> Unit,
 ) {
     private val ledgerI64 = PathProjectiveWorkLedgerF64(
         pathWorkUsageBeforeI64 = pathWorkUsageBeforeI64,
         frameWorkUsageBeforeI64 = frameWorkUsageBeforeI64,
         limitsI32 = workPolicyF64.limitsI32,
         limitsI64 = workPolicyF64.limitsI64,
+        beforeWorkDebitI64 = beforeWorkDebitI64,
     )
     private lateinit var outputF64: MutableList<PathFillSegmentF64>
     private var currentPointF64: Point2F64? = null
@@ -209,21 +229,21 @@ private class PathProjectiveFillPreparerF64(
     fun prepare(): PathProjectivePreparationResult {
         ledgerI64.debitBeforeWorkI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
         outputF64 = mutableListOf()
-        pathF32.forEach { segmentF32 ->
+        inputF64.forEach { segmentF64 ->
             ledgerI64.debitBeforeWorkI64(PathStrokeWorkUsageI64(attemptedGeometryUnitCountI64 = 1L))
-            when (segmentF32) {
-                is PathSegmentF32.MoveTo -> beginContour(exactProjectivePointF64(segmentF32.point))
-                is PathSegmentF32.LineTo -> {
+            when (segmentF64) {
+                is PathFillSegmentF64.MoveTo -> beginContour(segmentF64.point)
+                is PathFillSegmentF64.LineTo -> {
                     ensureContour()
-                    val endF64 = exactProjectivePointF64(segmentF32.point)
+                    val endF64 = segmentF64.point
                     appendPrimitiveF64(ProjectiveLinePrimitiveF64(requireNotNull(currentPointF64), endF64))
                     currentPointF64 = endF64
                 }
 
-                is PathSegmentF32.QuadTo -> {
+                is PathFillSegmentF64.QuadTo -> {
                     ensureContour()
-                    val controlF64 = exactProjectivePointF64(segmentF32.control)
-                    val endF64 = exactProjectivePointF64(segmentF32.point)
+                    val controlF64 = segmentF64.control
+                    val endF64 = segmentF64.point
                     appendPrimitiveF64(
                         ProjectiveBezierPrimitiveF64(
                             arrayOf(requireNotNull(currentPointF64), controlF64, endF64),
@@ -232,11 +252,11 @@ private class PathProjectiveFillPreparerF64(
                     currentPointF64 = endF64
                 }
 
-                is PathSegmentF32.CubicTo -> {
+                is PathFillSegmentF64.CubicTo -> {
                     ensureContour()
-                    val control1F64 = exactProjectivePointF64(segmentF32.control1)
-                    val control2F64 = exactProjectivePointF64(segmentF32.control2)
-                    val endF64 = exactProjectivePointF64(segmentF32.point)
+                    val control1F64 = segmentF64.control1
+                    val control2F64 = segmentF64.control2
+                    val endF64 = segmentF64.point
                     appendPrimitiveF64(
                         ProjectiveBezierPrimitiveF64(
                             arrayOf(
@@ -250,15 +270,12 @@ private class PathProjectiveFillPreparerF64(
                     currentPointF64 = endF64
                 }
 
-                is PathSegmentF32.ArcTo -> {
+                is PathFillSegmentF64.ArcTo -> {
                     ensureContour()
                     val startF64 = requireNotNull(currentPointF64)
-                    val endF64 = exactProjectivePointF64(segmentF32.point)
-                    val radiusF64 = Vector2F64(
-                        exactProjectiveF64(segmentF32.radius.x),
-                        exactProjectiveF64(segmentF32.radius.y),
-                    )
-                    val rotationF64 = exactProjectiveF64(segmentF32.xAxisRotation)
+                    val endF64 = segmentF64.point
+                    val radiusF64 = segmentF64.radius
+                    val rotationF64 = segmentF64.xAxisRotationDegreesF64
                     if (!radiusF64.x.isFinite() || !radiusF64.y.isFinite() || !rotationF64.isFinite()) {
                         abortInvalid(PathProjectiveInvalidSceneReason.NonFiniteProjection)
                     }
@@ -269,15 +286,15 @@ private class PathProjectiveFillPreparerF64(
                                 endF64 = endF64,
                                 radiusF64 = radiusF64,
                                 xAxisRotationDegreesF64 = rotationF64,
-                                largeArc = segmentF32.largeArc,
-                                sweep = segmentF32.sweep,
+                                largeArc = segmentF64.largeArc,
+                                sweep = segmentF64.sweep,
                             ),
                         )
                     }
                     currentPointF64 = endF64
                 }
 
-                PathSegmentF32.Close -> closeContour()
+                PathFillSegmentF64.Close -> closeContour()
             }
         }
         if (!hasDrawableSegment) {
@@ -287,7 +304,7 @@ private class PathProjectiveFillPreparerF64(
             PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L + outputF64.size.toLong() * 8L),
         )
         return PathProjectivePreparationResult.Ready(
-            inputF64 = PathFillInputF64.of(pathF32.fillRule, outputF64),
+            inputF64 = PathFillInputF64.of(inputF64.fillRule, outputF64),
             transformClass = matrixF64.classifyPathTransform(),
             pathWorkUsageAfterI64 = ledgerI64.pathSnapshotI64(),
             frameWorkUsageAfterI64 = ledgerI64.frameSnapshotI64(),

@@ -3,12 +3,14 @@ package org.graphiks.math.matrix
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 import org.graphiks.math.geometry.ClipGeometryF32
 import org.graphiks.math.geometry.ClipOperation
 import org.graphiks.math.geometry.ClipPreparationLimitsI32
 import org.graphiks.math.geometry.ClipPreparationPolicyF64
 import org.graphiks.math.geometry.ClipPreparationResourceLimitReason
 import org.graphiks.math.geometry.ClipStackPreparationResult
+import org.graphiks.math.geometry.ClipWorkUsageI64
 import org.graphiks.math.geometry.RectF64
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.RRectF64
@@ -121,5 +123,64 @@ class ClipTransformsF64Test {
         )
 
         assertIs<ClipStackPreparationResult.InvalidScene>(result)
+    }
+
+    @Test
+    fun `general affine keeps adjacent F64 source coordinates distinct until transform`() {
+        val result = assertIs<ClipStackPreparationResult.Ready>(
+            prepareTransformedClipStackGeometryF32(
+                listOf(
+                    ClipTransformInputF64.of(
+                        ClipTransformGeometryF64.Rect(RectF64(16_777_216.0, 0.0, 16_777_217.0, 1.0)),
+                        Matrix3x3F64(sxF64 = 1.0, syF64 = 1.0, kxF64 = 1.0e-20, txF64 = -16_777_216.0),
+                        ClipOperation.Intersect,
+                    ),
+                ),
+                RectI32(0, 0, 4, 4),
+            ),
+        )
+
+        assertIs<ClipGeometryF32.Path>(result.entriesF32.single().geometryF32)
+        assertEquals(RectI32(0, 0, 1, 1), result.entriesF32.single().copyConservativeScissorI32())
+    }
+
+    @Test
+    fun `general affine accepts F64 source outside F32 when device result is representable`() {
+        val result = assertIs<ClipStackPreparationResult.Ready>(
+            prepareTransformedClipStackGeometryF32(
+                listOf(
+                    ClipTransformInputF64.of(
+                        ClipTransformGeometryF64.Rect(RectF64(1.0e100, 0.0, 2.0e100, 1.0)),
+                        Matrix3x3F64(sxF64 = 1.0e-100, syF64 = 1.0, kxF64 = 1.0e-100),
+                        ClipOperation.Intersect,
+                    ),
+                ),
+                RectI32(0, 0, 4, 4),
+            ),
+        )
+
+        assertIs<ClipGeometryF32.Path>(result.entriesF32.single().geometryF32)
+        assertEquals(RectI32(1, 0, 2, 1), result.entriesF32.single().copyConservativeScissorI32())
+    }
+
+    @Test
+    fun `projective work is admitted from incremental frame cost`() {
+        val result = assertIs<ClipStackPreparationResult.Ready>(
+            prepareTransformedClipStackGeometryF32(
+                listOf(
+                    ClipTransformInputF64.of(
+                        ClipTransformGeometryF64.Rect(RectF64(1.0, 1.0, 2.0, 2.0)),
+                        Matrix3x3F64(persp0F64 = 0.01),
+                        ClipOperation.Intersect,
+                    ),
+                ),
+                RectI32(0, 0, 4, 4),
+                ClipPreparationPolicyF64(limitsI32 = ClipPreparationLimitsI32(maxAttemptedEdgesPerFrameI32 = 100)),
+                frameWorkUsageBeforeI64 = ClipWorkUsageI64(attemptedEdgeCountI64 = 1L),
+            ),
+        )
+
+        assertTrue(result.frameWorkUsageAfterI64.attemptedEdgeCountI64 in 2L..100L)
+        assertIs<ClipGeometryF32.Path>(result.entriesF32.single().geometryF32)
     }
 }
