@@ -134,7 +134,7 @@ class CapabilityCompilerChainTest {
     }
 
     @Test
-    fun `real W4 chain keeps terminal limits and routes AA or general-transform paths to W4d general`() {
+    fun `real W4 chain keeps terminal limits and routes general-transform paths to W4d general`() {
         val chain = CapabilityCompilerChain.of(
             listOf(
                 W3SolidRectPlanCompiler(),
@@ -148,7 +148,7 @@ class CapabilityCompilerChainTest {
         val fills = repeatedPathScene(513, PaintStyleNode.FILL)
         val base = assertIs<SceneCommand.Draw>(pathScene(PaintStyleNode.STROKE).commandAt(0)).node
         val general = listOf(
-            base.copy(coverage = CoverageRequest.ANTIALIASED),
+            base.copy(coverage = CoverageRequest.ANTIALIASED, transform = Matrix3x3F32.rotation(0.25f)),
             base.copy(transform = Matrix3x3F32.rotation(0.25f)),
         ).map { node ->
             SceneSnapshot.of(SceneExtent(4, 3), ColorSpace.SRGB, List(513) { SceneCommand.Draw(node) })

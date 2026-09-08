@@ -110,7 +110,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                 is SceneCommand.Draw -> {
                     visualDrawCountI32 = Math.addExact(visualDrawCountI32, 1)
                     when (val scope = classifyDrawScope(command.node)) {
-                        is DrawScope.Ready -> requiresGeneral = requiresGeneral || scope.requestsAntiAlias ||
+                        is DrawScope.Ready -> requiresGeneral = requiresGeneral ||
                             scope.transformClass == PathTransformClass.GeneralAffine ||
                             scope.transformClass == PathTransformClass.Perspective
                         is DrawScope.Gap -> outside = true

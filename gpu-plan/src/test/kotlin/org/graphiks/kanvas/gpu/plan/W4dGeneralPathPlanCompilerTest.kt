@@ -35,7 +35,7 @@ class W4dGeneralPathPlanCompilerTest {
     private val compiler = W4dGeneralPathPlanCompiler()
 
     @Test
-    fun `general lane owns only general transforms or AA while narrow paths keep their routes`() {
+    fun `general lane owns only general transforms while narrow paths keep their routes`() {
         val identityHard = sceneOf(pathDraw())
         val axisHard = sceneOf(pathDraw(transform = Matrix3x3F32.translation(1f, 2f)))
         val affineHard = sceneOf(pathDraw(transform = Matrix3x3F32.rotation(0.25f)))
@@ -46,12 +46,11 @@ class W4dGeneralPathPlanCompilerTest {
         assertIs<GpuPlanSelection.NotCandidate>(compiler.select(axisHard, target(axisHard)))
         assertIs<GpuPlanSelection.Candidate>(compiler.select(affineHard, target(affineHard)))
         assertIs<GpuPlanSelection.Candidate>(compiler.select(perspectiveHard, target(perspectiveHard)))
-        assertIs<GpuPlanSelection.Candidate>(compiler.select(antialiased, target(antialiased)))
+        assertIs<GpuPlanSelection.NotCandidate>(compiler.select(antialiased, target(antialiased)))
 
         val chain = CapabilityCompilerChain.of(listOf(W4cPathFillPlanCompiler(), W4dPathStrokePlanCompiler()))
         assertEquals(W4cPathFillPlanCompiler.CAPABILITY_ID, compile(chain, identityHard).capabilityId)
         assertEquals(W4dPathStrokePlanCompiler.CAPABILITY_ID, compile(chain, sceneOf(pathDraw(style = PaintStyleNode.STROKE))).capabilityId)
-        assertEquals(W4dGeneralPathPlanCompiler.AA_CAPABILITY_ID, compile(chain, antialiased).capabilityId)
     }
 
     @Test
@@ -110,7 +109,9 @@ class W4dGeneralPathPlanCompilerTest {
             transform = Matrix3x3F32(persp0 = 1f, persp2 = 0f),
             path = PathBuilder().moveTo(0f, 2f).lineTo(4f, 2f).lineTo(0f, 6f).close().build(),
         ))
-        val tooMany = sceneOf(*Array(513) { pathDraw(coverage = CoverageRequest.ANTIALIASED) })
+        val tooMany = sceneOf(*Array(513) {
+            pathDraw(coverage = CoverageRequest.ANTIALIASED, transform = Matrix3x3F32.rotation(0.25f))
+        })
 
         val invalid = assertIs<GpuPlanSelection.InvalidScene>(compiler.select(horizon, target(horizon)))
         assertEquals(W4dGeneralPlanDiagnostics.ProjectionHorizonCrossing, invalid.diagnostics().single().code)
@@ -122,8 +123,8 @@ class W4dGeneralPathPlanCompilerTest {
     }
 
     @Test
-    fun `AA device facts candidate ownership and capability identity fail closed`() {
-        val scene = sceneOf(pathDraw(coverage = CoverageRequest.ANTIALIASED))
+    fun `transformed AA device facts candidate ownership and capability identity fail closed`() {
+        val scene = sceneOf(pathDraw(coverage = CoverageRequest.ANTIALIASED, transform = Matrix3x3F32.rotation(0.25f)))
         val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target(scene))).candidate
         val base = aaCapabilities()
         val graph = assertIs<RenderPlanResult.Ready<RenderGraph>>(
@@ -157,8 +158,8 @@ class W4dGeneralPathPlanCompilerTest {
     }
 
     @Test
-    fun `AA sample support and resolve support have distinct stable terminal diagnostics`() {
-        val scene = sceneOf(pathDraw(coverage = CoverageRequest.ANTIALIASED))
+    fun `transformed AA sample support and resolve support have distinct stable terminal diagnostics`() {
+        val scene = sceneOf(pathDraw(coverage = CoverageRequest.ANTIALIASED, transform = Matrix3x3F32.rotation(0.25f)))
         val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target(scene))).candidate
         val sampleMissing = capabilities(
             sampleSupports = aaCapabilities().supportedTextureSampleSupports().filterNot { support ->
@@ -180,8 +181,8 @@ class W4dGeneralPathPlanCompilerTest {
     }
 
     @Test
-    fun `AA direct path accepts its unused depth attachment without stencil cover support`() {
-        val scene = sceneOf(pathDraw(coverage = CoverageRequest.ANTIALIASED))
+    fun `transformed AA direct path accepts its unused depth attachment without stencil cover support`() {
+        val scene = sceneOf(pathDraw(coverage = CoverageRequest.ANTIALIASED, transform = Matrix3x3F32.rotation(0.25f)))
         val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target(scene))).candidate
         val capabilities = aaCapabilities(
             operations = PlanOperationCapability.entries.toSet() - PlanOperationCapability.StencilCover,
@@ -198,8 +199,12 @@ class W4dGeneralPathPlanCompilerTest {
     }
 
     @Test
-    fun `AA stencil path still requires stencil cover support`() {
-        val scene = sceneOf(pathDraw(coverage = CoverageRequest.ANTIALIASED, path = concavePath()))
+    fun `transformed AA stencil path still requires stencil cover support`() {
+        val scene = sceneOf(pathDraw(
+            coverage = CoverageRequest.ANTIALIASED,
+            transform = Matrix3x3F32.rotation(0.25f),
+            path = concavePath(),
+        ))
         val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target(scene))).candidate
         val capabilities = aaCapabilities(
             operations = PlanOperationCapability.entries.toSet() - PlanOperationCapability.StencilCover,

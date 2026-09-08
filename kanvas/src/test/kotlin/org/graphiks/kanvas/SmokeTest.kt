@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 
+@OptIn(ExperimentalUnsignedTypes::class)
 class KanvasSmokeTest {
     @AfterEach
     fun disposeGpuRuntime() {
@@ -64,10 +65,15 @@ class KanvasSmokeTest {
                 lineTo(100f, 10f)
                 lineTo(55f, 80f)
                 close()
-            }, Paint.fill(ColorARGB.Blue))
+            }, Paint.fill(ColorARGB.Blue).copy(antiAlias = true))
         }
         val result = surface.render()
         assertTrue(result.stats.opsDispatched > 0)
+        val pixelOffset = (30 * result.width + 55) * 4
+        assertEquals(
+            listOf(0, 0, 255, 255),
+            (0 until 4).map { channel -> result.pixels[pixelOffset + channel].toInt() and 0xff },
+        )
     }
 
     @Test
