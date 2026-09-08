@@ -6,6 +6,7 @@ import io.ygdrasil.webgpu.GPUTextureFormat
 import kotlin.reflect.KClass
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 
@@ -292,6 +293,47 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
             return GPUPreparedNativeFramePayloadMaterialization.Refused(
                 "unsupported.native-frame-payload.dispatcher-state",
                 "The prepared frame payload dispatcher is one-shot and already consumed.",
+            )
+        }
+        val w4eRenderSteps = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        val hasW4e = w4eRenderSteps.any { step ->
+            step.drawPackets.any { packet -> packet.role == GPUDrawPacketRole.W4ePrepared }
+        }
+        if (hasW4e) {
+            if (w4eRenderSteps.isEmpty() || w4eRenderSteps.any { step ->
+                    step.drawPackets.size != 1 || step.drawPackets.single().role != GPUDrawPacketRole.W4ePrepared
+                }) {
+                return GPUPreparedNativeFramePayloadMaterialization.Refused(
+                    "invalid.native-frame-payload.w4e-semantic-shape",
+                    "A W4e frame requires one sealed W4e packet in every render scope.",
+                )
+            }
+            val surfaceRoute = when (val split = splitWgpu4kSurfaceRoute(framePlan, encoderPlan)) {
+                Wgpu4kSurfaceRouteSplit.NoSurface -> null
+                is Wgpu4kSurfaceRouteSplit.Routed -> split
+                is Wgpu4kSurfaceRouteSplit.Refused -> return GPUPreparedNativeFramePayloadMaterialization.Refused(
+                    split.code,
+                    split.message,
+                )
+            }
+            return dispatch(
+                GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
+                    device,
+                    queue,
+                    preparedSceneTarget,
+                    corePrimitiveCache,
+                    corePrimitiveLimits ?: return GPUPreparedNativeFramePayloadMaterialization.Refused(
+                        "unsupported.native-core-primitive.limits-unavailable",
+                        "The direct W4e route requires observed backend limits.",
+                    ),
+                    onDestinationSnapshotCreated = onDestinationSnapshotCreated,
+                ),
+                surfaceRoute?.reusableFramePlan ?: framePlan,
+                surfaceRoute?.reusableEncoderPlan ?: encoderPlan,
+                encoderPlan,
+                surfaceRoute,
+                resources,
+                generationSeal,
             )
         }
         val fullSemantics = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()

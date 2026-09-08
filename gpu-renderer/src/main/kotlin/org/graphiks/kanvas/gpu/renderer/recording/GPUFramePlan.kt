@@ -30,6 +30,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationRequest
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUW4eMaskContinuationRequest
+import org.graphiks.kanvas.gpu.renderer.passes.GPUW4eSceneContinuationRequest
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometry
@@ -273,6 +274,8 @@ sealed interface GPUFrameStep {
             Map<GPUDrawPacketID, GPUPreparedTextRenderBinding> = emptyMap(),
         /** Dedicated W4e mask continuation, intentionally separate from scene MSAA ownership. */
         val w4eMaskContinuation: GPUW4eMaskContinuationRequest? = null,
+        /** Dedicated W4e scene continuation, intentionally separate from generic and W4d.2 MSAA. */
+        val w4eSceneContinuation: GPUW4eSceneContinuationRequest? = null,
     ) : GPUFrameStep {
         val drawPackets: List<GPUDrawPacket> = immutableList(drawPackets)
         val resourceUses: List<GPUFrameResourceUse> = immutableList(resourceUses)
@@ -324,6 +327,15 @@ sealed interface GPUFrameStep {
                 samplePlan.sampleCount == 4 && target.matchesW4eLogicalResource(w4eMaskContinuation.maskTargetResourceId)
             ) {
                 "GPUFrameStep.RenderPassStep W4e continuation must own a dedicated four-sample mask target"
+            }
+            require(w4eSceneContinuation == null ||
+                sampleContinuation == null && samplePlan is GPUSamplePlan.MultisampleFrame &&
+                samplePlan.sampleCount == 4 && target.matchesW4eLogicalResource(w4eSceneContinuation.sceneTargetResourceId)
+            ) {
+                "GPUFrameStep.RenderPassStep W4e scene continuation must own a dedicated four-sample scene target"
+            }
+            require(w4eMaskContinuation == null || w4eSceneContinuation == null) {
+                "GPUFrameStep.RenderPassStep cannot own W4e mask and scene continuations together"
             }
             val preparedImagePacketIds = drawPackets
                 .filter { packet -> packet.semanticPayload is GPUDrawSemanticPayload.SampledImage }

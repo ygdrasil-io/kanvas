@@ -48,6 +48,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCove
 import org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipPassAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipGeometry
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleResolveAction
+import org.graphiks.kanvas.gpu.renderer.passes.GPUW4eSceneResolveAction
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlanner
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
 import org.graphiks.kanvas.render.ir.BlendMode
@@ -219,7 +220,7 @@ class GpuPlanTaskListLowererW4eTest {
         val consumers = lowered.taskList.tasks.filterIsInstance<GPUTask.Render>().mapNotNull { render ->
             render.drawPackets.single().w4ePreparedClipConsumer as? GPUW4ePreparedClipConsumerAuthority.InverseMask
         }
-        assertEquals(4, consumers.size)
+        assertEquals(2, consumers.size, "each visual draw must retain its sealed inverse-mask consumer")
         assertEquals(1, consumers.map { it.maskResourceId }.distinct().size)
         consumers.forEach { consumer ->
             assertEquals(0, consumer.domain.left)
@@ -271,7 +272,7 @@ class GpuPlanTaskListLowererW4eTest {
         val renders = lowered.taskList.tasks.filterIsInstance<GPUTask.Render>().filter { task ->
             task.drawPackets.single().w4ePreparedClipConsumer is GPUW4ePreparedClipConsumerAuthority.InverseDomain
         }
-        assertEquals(2, renders.size)
+        assertEquals(1, renders.size)
         renders.forEach { render ->
             val consumer = assertIs<GPUW4ePreparedClipConsumerAuthority.InverseDomain>(
                 render.drawPackets.single().w4ePreparedClipConsumer,
@@ -279,7 +280,10 @@ class GpuPlanTaskListLowererW4eTest {
             assertEquals(16, consumer.domain.right)
             assertIs<GPUW4ePreparedInverseInteriorCoverage.Zero>(consumer.interiorCoverage)
             assertEquals(0, render.resourceUses.count { it.role == GPUFrameResourceRole.ClipMask })
-            assertTrue(render.resourceUses.size >= 3)
+            assertEquals(0, render.resourceUses.count { it.role == GPUFrameResourceRole.PathDepthStencil })
+            val path = requireNotNull(render.drawPackets.single().w4ePreparedPath)
+            assertIs<PathDrawGeometry.Empty>(path.copyGeometry())
+            assertEquals(null, path.depthStencilResourceId)
         }
     }
 
@@ -343,7 +347,10 @@ class GpuPlanTaskListLowererW4eTest {
             assertEquals(source.draw.coverage, path.coverage)
             assertEquals(source.draw.blend, path.blend)
             assertEquals(source.draw.copyScissorI32().right, path.scissor.right)
-            if (path.sample == SamplePlan.Multisample4) assertTrue(render.sampleContinuationKey != null)
+            if (path.sample == SamplePlan.Multisample4) {
+                assertEquals(null, render.sampleContinuationKey)
+                assertTrue(render.w4eSceneContinuation != null)
+            }
         }
         assertFalse(GPUFramePlanner.plan(lowered.taskList).atomicallyRefused)
     }
@@ -361,7 +368,8 @@ class GpuPlanTaskListLowererW4eTest {
         val path = requireNotNull(hard.drawPackets.single().w4ePreparedPath)
         assertEquals(BinaryMaskFetchPlan.TextureLoadUnfiltered, path.binaryMaskFetch)
         assertEquals(4, path.binaryBroadcastSampleCount)
-        assertTrue(hard.sampleContinuationKey != null)
+        assertEquals(null, hard.sampleContinuationKey)
+        assertTrue(hard.w4eSceneContinuation != null)
         assertTrue(hard.resourceUses.any { use ->
             use.role == GPUFrameResourceRole.ClipMask &&
                 use.resource.value.substringAfterLast('.') == path.binarySourceMaskResourceId
@@ -458,7 +466,7 @@ class GpuPlanTaskListLowererW4eTest {
     }
 
     @Test
-    fun `mixed AA and hard W4e color passes share one continuation key and resolve only the sealed final pass`() {
+    fun `mixed AA and hard W4e color passes retain the sealed scene target until the final resolve`() {
         val scene = SceneSnapshot.of(
             SceneExtent(16, 16), ColorSpace.SRGB,
             listOf(
@@ -484,15 +492,18 @@ class GpuPlanTaskListLowererW4eTest {
             task.drawPackets.single().w4ePreparedPath?.phase == org.graphiks.kanvas.gpu.plan.PathRenderPhase.HardEdgeBinaryColorCover &&
                 task.drawPackets.single().w4ePreparedPath?.depthStencilResourceId == null
         })
-        assertEquals(1, colorTasks.mapNotNull(GPUTask.Render::sampleContinuationKey).distinct().size)
+        assertTrue(colorTasks.all { task -> task.sampleContinuationKey == null })
+        assertEquals(1, colorTasks.mapNotNull(GPUTask.Render::w4eSceneContinuation).map {
+            it.sceneTargetResourceId
+        }.distinct().size)
 
         val frame = GPUFramePlanner.plan(lowered.taskList)
         assertFalse(frame.atomicallyRefused)
         val colorSteps = frame.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().filter { step ->
             step.drawPackets.any { it.w4ePreparedPath?.sample == SamplePlan.Multisample4 }
         }
-        assertEquals(1, colorSteps.count { it.sampleContinuation?.resolveAction == GPUSampleResolveAction.ResolveCanonical })
-        assertTrue(colorSteps.dropLast(1).all { it.sampleContinuation?.resolveAction == GPUSampleResolveAction.Skip })
+        assertEquals(1, colorSteps.count { it.w4eSceneContinuation?.resolveAction == GPUW4eSceneResolveAction.ResolveCanonical })
+        assertTrue(colorSteps.dropLast(1).all { it.w4eSceneContinuation?.resolveAction == GPUW4eSceneResolveAction.Skip })
         assertTrue(colorSteps.last().drawPackets.any { it.w4ePreparedPath?.resolveTargetResourceId != null })
     }
 

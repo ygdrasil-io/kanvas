@@ -84,6 +84,39 @@ public data class GPUW4eMaskContinuationRequest(
     }
 }
 
+/** Resolve policy for W4e's sealed scene-color MSAA sequence. */
+public enum class GPUW4eSceneResolveAction {
+    ResolveCanonical,
+    Skip,
+}
+
+/**
+ * W4e owns this scene-color continuation independently from both generic MSAA and W4d.2.
+ * The frame seal carries one request per 4x color scope: intermediate scopes retain their
+ * shared scene MSAA view and only the final scope resolves the canonical scene target.
+ */
+public data class GPUW4eSceneContinuationRequest(
+    public val sceneTargetResourceId: String,
+    public val resolveSceneResourceId: String?,
+    public val resolveAction: GPUW4eSceneResolveAction,
+) {
+    init {
+        require(sceneTargetResourceId.isNotBlank()) {
+            "W4e scene continuation requires its multisample scene target"
+        }
+        require((resolveAction == GPUW4eSceneResolveAction.ResolveCanonical) ==
+            (resolveSceneResourceId != null)
+        ) {
+            "W4e scene resolve action must exactly match its sealed canonical target"
+        }
+        require(resolveSceneResourceId == null ||
+            (resolveSceneResourceId.isNotBlank() && resolveSceneResourceId != sceneTargetResourceId)
+        ) {
+            "W4e scene resolve target must be distinct from its multisample target"
+        }
+    }
+}
+
 /** Immutable request for one MSAA pass-segment transition. */
 data class GPUSampleContinuationRequest(
     val key: GPUSampleContinuationKey,

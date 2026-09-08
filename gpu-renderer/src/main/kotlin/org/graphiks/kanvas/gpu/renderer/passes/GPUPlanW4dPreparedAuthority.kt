@@ -50,6 +50,7 @@ internal class W4dSessionScratchDrawV1(
     private val geometrySnapshotF32: PathFillGeometryF32 = when (pathGeometrySnapshot) {
         is PathDrawGeometry.Fill -> pathGeometrySnapshot.valueF32
         is PathDrawGeometry.Stroke -> pathGeometrySnapshot.valueF32.copyFillGeometryF32()
+        PathDrawGeometry.Empty -> error("W4d path authority cannot consume W4e inverse-domain empty geometry")
     }
     val styleF64: PathStrokeStyleF64? = styleF64?.snapshot()
     private val scissorBoundsSnapshot: GPUPixelBounds = scissorBounds.copy()

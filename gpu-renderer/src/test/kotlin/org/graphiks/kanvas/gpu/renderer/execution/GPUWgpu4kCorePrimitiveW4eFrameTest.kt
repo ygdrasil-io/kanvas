@@ -1,60 +1,203 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
-import org.graphiks.kanvas.gpu.renderer.passes.GPUW4eMaskContinuationRequest
-import org.graphiks.kanvas.gpu.renderer.passes.GPUW4eMaskResolveAction
+import kotlin.test.assertIs
+import kotlin.test.assertTrue
+import org.junit.jupiter.api.Assumptions.assumeTrue
+import org.graphiks.kanvas.color.ColorSpace
+import org.graphiks.kanvas.gpu.plan.GpuPlanSelection
+import org.graphiks.kanvas.gpu.plan.PlanBudget
+import org.graphiks.kanvas.gpu.plan.W4eClipPlanCompiler
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
+import org.graphiks.kanvas.gpu.renderer.planning.GpuPlanCapabilityAdapterResult
+import org.graphiks.kanvas.gpu.renderer.planning.GpuPlanLoweringRequest
+import org.graphiks.kanvas.gpu.renderer.planning.GpuPlanLoweringResult
+import org.graphiks.kanvas.gpu.renderer.planning.GpuPlanTaskListLowerer
+import org.graphiks.kanvas.gpu.renderer.planning.toPlanCapabilitySnapshot
+import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
+import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
+import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
+import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralOutcome
+import org.graphiks.kanvas.render.ir.BlendMode
+import org.graphiks.kanvas.render.ir.BlendNode
+import org.graphiks.kanvas.render.ir.ClipEntry
+import org.graphiks.kanvas.render.ir.ClipOperation
+import org.graphiks.kanvas.render.ir.ClipStackNode
+import org.graphiks.kanvas.render.ir.ClipTransformSnapshot
+import org.graphiks.kanvas.render.ir.CoverageRequest
+import org.graphiks.kanvas.render.ir.DrawNode
+import org.graphiks.kanvas.render.ir.DrawOrigin
+import org.graphiks.kanvas.render.ir.EffectStack
+import org.graphiks.kanvas.render.ir.GeometryNode
+import org.graphiks.kanvas.render.ir.MaterialNode
+import org.graphiks.kanvas.render.ir.PaintNode
+import org.graphiks.kanvas.render.ir.PaintStyleNode
+import org.graphiks.kanvas.render.ir.RenderPlanResult
+import org.graphiks.kanvas.render.ir.RenderTargetDescriptor
+import org.graphiks.kanvas.render.ir.SceneCommand
+import org.graphiks.kanvas.render.ir.SceneExtent
+import org.graphiks.kanvas.render.ir.SceneSnapshot
+import org.graphiks.kanvas.render.ir.StrokeCapNode
+import org.graphiks.kanvas.render.ir.StrokeJoinNode
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.FillRule
+import org.graphiks.math.geometry.PathBuilder
+import org.graphiks.math.matrix.Matrix3x3F32
 
-/** Public W4e allocation contract: callers cannot silently degrade its ping-pong inventory. */
+/** Native public behavior proof for the sealed W4e materializer route. */
 class GPUWgpu4kCorePrimitiveW4eFrameTest {
     @Test
-    fun `public W4e mask continuation keeps its dedicated resolve policy`() {
-        val resolved = GPUW4eMaskContinuationRequest(
-            maskTargetResourceId = "mask-scratch-4x",
-            resolveMaskResourceId = "mask-resolved-1x",
-            resolveAction = GPUW4eMaskResolveAction.ResolveCanonical,
-        )
-        val intermediate = GPUW4eMaskContinuationRequest(
-            maskTargetResourceId = "mask-scratch-4x",
-            resolveMaskResourceId = null,
-            resolveAction = GPUW4eMaskResolveAction.Skip,
-        )
+    fun `public W4e inverse-domain path reaches completion and preserves its non-rectangular hole`() {
+        val terminal = renderNativeFrame(inverseDomainScene())
 
-        assertEquals("mask-resolved-1x", resolved.resolveMaskResourceId)
-        assertEquals(GPUW4eMaskResolveAction.Skip, intermediate.resolveAction)
-        assertFailsWith<IllegalArgumentException> {
-            GPUW4eMaskContinuationRequest(
-                maskTargetResourceId = "mask-scratch-4x",
-                resolveMaskResourceId = "mask-scratch-4x",
-                resolveAction = GPUW4eMaskResolveAction.ResolveCanonical,
-            )
-        }
+        assertEquals(
+            GPUFrameStructuralOutcome.Succeeded,
+            terminal.outcome,
+            "${terminal.diagnostic?.code?.value}: ${terminal.diagnostic?.message}",
+        )
+        val bytes = assertIs<GPUSceneFrameOutput.ReadbackRgba>(terminal.output).bytes
+        assertEquals(16 * 16 * 4, bytes.size)
+        assertEquals(255, alphaAt(bytes, 0, 0), "inverse-domain must cover the finite domain exterior")
+        assertEquals(0, alphaAt(bytes, 5, 5), "the original non-rectangular path must remain an interior hole")
+        assertTrue(
+            (0 until 16 * 16).any { pixel -> alphaAt(bytes, pixel % 16, pixel / 16) in 1..254 },
+            "AA4 must retain fractional coverage on the non-rectangular boundary",
+        )
     }
 
     @Test
-    fun `sealed W4e request preserves the exact AA mask inventory`() {
-        val request = GPUW4eAttachmentRequest(
-            accumulatorCountI32 = 2,
-            producerSampleCountI32 = 4,
-            requiresProducerDepthStencil = true,
-            requiredPhysicalByteCountI64 = 16_384L,
+    fun `public hard W4e inverse-domain interior completes with its declared D24S8`() {
+        val terminal = renderNativeFrame(
+            inverseDomainScene(CoverageRequest.HARD_EDGE, clipAntiAlias = false),
+            frameIdValue = 71_002L,
         )
 
-        assertEquals(2, request.accumulatorCountI32)
-        assertEquals(4, request.producerSampleCountI32)
-        assertEquals(16_384L, request.requiredPhysicalByteCountI64)
+        assertEquals(
+            GPUFrameStructuralOutcome.Succeeded,
+            terminal.outcome,
+            "${terminal.diagnostic?.code?.value}: ${terminal.diagnostic?.message}",
+        )
+        val bytes = assertIs<GPUSceneFrameOutput.ReadbackRgba>(terminal.output).bytes
+        assertEquals(255, alphaAt(bytes, 0, 0), "the finite inverse-domain exterior must render")
+        assertEquals(0, alphaAt(bytes, 5, 5), "the non-rectangular interior must remain a hole")
     }
 
-    @Test
-    fun `public W4e request rejects a mutable single-mask downgrade`() {
-        assertFailsWith<IllegalArgumentException> {
-            GPUW4eAttachmentRequest(
-                accumulatorCountI32 = 1,
-                producerSampleCountI32 = 4,
-                requiresProducerDepthStencil = true,
-                requiredPhysicalByteCountI64 = 8_192L,
+    private fun renderNativeFrame(
+        scene: SceneSnapshot,
+        frameIdValue: Long = 71_001L,
+    ): GPUPreparedSceneCompletedFrameResult {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null, "wgpu4k native adapter unavailable; skipping W4e public frame proof")
+        backend!!
+        try {
+            val capabilities = requireNotNull(backend.capabilities)
+            val generation = backend.deviceGeneration
+            val planCapabilities = (capabilities.toPlanCapabilitySnapshot(generation) as? GpuPlanCapabilityAdapterResult.Supported)
+                ?.snapshot
+            assumeTrue(planCapabilities != null, "native adapter lacks the W4e planning capability inventory")
+
+            val compiler = W4eClipPlanCompiler()
+            val candidate = compiler.select(scene, RenderTargetDescriptor(scene.extent, scene.colorSpace))
+                as? GpuPlanSelection.Candidate
+            assumeTrue(candidate != null, "native adapter cannot admit the W4e complex clip scene")
+            val planned = compiler.plan(candidate!!.candidate, planCapabilities!!, PlanBudget(1L shl 20))
+            val graph = (planned as? RenderPlanResult.Ready)
+                ?.plan
+            assumeTrue(graph != null, "native adapter cannot materialize the required W4e AA inventory: $planned")
+
+            val frameId = GPUFrameID(frameIdValue)
+            val lowered = GpuPlanTaskListLowerer().lower(
+                GpuPlanLoweringRequest(
+                    graph = graph!!,
+                    capabilities = capabilities,
+                    deviceGeneration = generation,
+                    currentBudget = graph.budget,
+                    frameId = frameId,
+                    recordingId = GPURecordingID("w4e.public.inverse-domain.$frameIdValue"),
+                ),
             )
+            val taskList = assertIs<GpuPlanLoweringResult.Lowered>(lowered).taskList
+            val readbackId = GPUReadbackRequestID("w4e.${graph.id.value}.readback")
+            val session = backend.prepareSceneFrameSession(
+                GPUOffscreenTargetRequest(
+                    width = 16,
+                    height = 16,
+                    colorFormat = GPUColorFormat.RGBA8UnormSrgb,
+                    colorInterpretation = GPUColorInterpretation.LinearPremul,
+                ),
+            )
+            try {
+                return session.renderFrame(
+                    taskList,
+                    GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
+                ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+            } finally {
+                session.close()
+            }
+        } finally {
+            GPUBackendRuntimeNativeFactory.dispose()
         }
     }
+
+    private fun inverseDomainScene(
+        coverage: CoverageRequest = CoverageRequest.ANTIALIASED,
+        clipAntiAlias: Boolean = true,
+    ): SceneSnapshot {
+        val color = ColorARGB.fromPackedUInt(0xFFFF0000u)
+        val path = PathBuilder(FillRule.INVERSE_WINDING)
+            .moveTo(3.25f, 3.25f)
+            .lineTo(12.75f, 3.25f)
+            .lineTo(4.25f, 12.75f)
+            .close()
+            .build()
+        return SceneSnapshot.of(
+            SceneExtent(16, 16),
+            ColorSpace.SRGB,
+            listOf(
+                SceneCommand.Draw(
+                    DrawNode(
+                        geometry = GeometryNode.Path(path),
+                        material = MaterialNode.Solid(color),
+                        coverage = coverage,
+                        clip = ClipStackNode.Operations.of(
+                            listOf(
+                                ClipEntry(
+                                    geometry = GeometryNode.Path(PathBuilder().build()),
+                                    operation = ClipOperation.DIFFERENCE,
+                                    antiAlias = clipAntiAlias,
+                                    transform = ClipTransformSnapshot.Known.of(Matrix3x3F32.Identity),
+                                ),
+                            ),
+                        ),
+                        blend = BlendNode.SrcOver,
+                        effects = EffectStack.Empty,
+                        transform = Matrix3x3F32.Identity,
+                        origin = DrawOrigin.PATH,
+                        paint = PaintNode(
+                            color,
+                            null,
+                            BlendMode.SRC_OVER,
+                            null,
+                            null,
+                            null,
+                            null,
+                            null,
+                            PaintStyleNode.FILL,
+                            0f,
+                            StrokeCapNode.BUTT,
+                            StrokeJoinNode.MITER,
+                            4f,
+                            true,
+                        ),
+                    ),
+                ),
+            ),
+        )
+    }
+
+    private fun alphaAt(bytes: ByteArray, x: Int, y: Int): Int =
+        bytes[(y * 16 + x) * 4 + 3].toInt() and 0xff
 }

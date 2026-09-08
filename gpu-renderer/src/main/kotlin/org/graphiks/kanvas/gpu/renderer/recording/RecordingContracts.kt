@@ -38,6 +38,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUW4eMaskContinuationRequest
+import org.graphiks.kanvas.gpu.renderer.passes.GPUW4eSceneContinuationRequest
 import org.graphiks.kanvas.gpu.renderer.passes.GPURefusalScope
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
@@ -864,6 +865,8 @@ sealed interface GPUTask {
             Map<GPUDrawPacketID, GPUPreparedTextRenderBinding> = emptyMap(),
         /** Dedicated W4e mask continuation; it must never use scene MSAA authority. */
         val w4eMaskContinuation: GPUW4eMaskContinuationRequest? = null,
+        /** Dedicated W4e scene MSAA continuation; it never uses generic or W4d.2 authority. */
+        val w4eSceneContinuation: GPUW4eSceneContinuationRequest? = null,
     ) : GPUTask {
         val drawPackets: List<GPUDrawPacket> = immutableList(drawPackets)
         val resourceUses: List<GPUFrameResourceUse> = immutableList(resourceUses)
@@ -894,6 +897,19 @@ sealed interface GPUTask {
             }
             require(w4eMaskContinuation == null || sampleContinuationKey == null) {
                 "W4e mask continuation must not use the generic scene MSAA continuation key"
+            }
+            require(w4eSceneContinuation == null ||
+                samplePlan is GPUSamplePlan.MultisampleFrame &&
+                samplePlan.sampleCount == 4 &&
+                target.matchesW4eLogicalResource(w4eSceneContinuation.sceneTargetResourceId)
+            ) {
+                "W4e scene continuation requires its own four-sample scene render target"
+            }
+            require(w4eSceneContinuation == null || sampleContinuationKey == null) {
+                "W4e scene continuation must not use the generic MSAA continuation key"
+            }
+            require(w4eMaskContinuation == null || w4eSceneContinuation == null) {
+                "One W4e render scope cannot own both mask and scene continuations"
             }
             require(drawPackets.isNotEmpty()) { "GPUTask.Render.drawPackets must not be empty" }
             require(batchEligibilityByPacketId.keys == drawPackets.map { it.packetId }.toSet()) {

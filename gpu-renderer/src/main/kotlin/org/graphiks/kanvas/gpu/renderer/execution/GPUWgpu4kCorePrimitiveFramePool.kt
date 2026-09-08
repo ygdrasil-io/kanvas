@@ -48,16 +48,23 @@ public data class GPUW4eAttachmentRequest(
     public val producerSampleCountI32: Int,
     public val requiresProducerDepthStencil: Boolean,
     public val requiredPhysicalByteCountI64: Long,
+    /** Exact count of 1x D24S8 attachments used by hard-mask path producer/cover groups. */
+    public val hardMaskDepthStencilCountI32: Int = 0,
+    /** Exact count of scene D24S8 attachments used by inverse-domain path groups. */
+    public val sceneDepthStencilCountI32: Int = 0,
 ) {
     init {
-        require(accumulatorCountI32 == 2) {
-            "W4e requires exactly two single-sample coverage accumulators"
+        require(accumulatorCountI32 in setOf(0, 2)) {
+            "W4e requires either no mask inventory or exactly two single-sample coverage accumulators"
         }
         require(producerSampleCountI32 in setOf(1, 4)) {
             "W4e producer sample count must be one or four"
         }
         require(requiredPhysicalByteCountI64 > 0L) {
             "W4e physical attachment byte count must be positive"
+        }
+        require(hardMaskDepthStencilCountI32 >= 0 && sceneDepthStencilCountI32 >= 0) {
+            "W4e D24S8 attachment counts must not be negative"
         }
     }
 }
@@ -254,9 +261,9 @@ internal data class GPUWgpu4kCorePrimitiveCoverageMaskRequirement(
 internal data class GPUW4eAttachmentPoolRequirements(
     val request: GPUW4eAttachmentRequest,
     val accumulatorResourceIds: List<String>,
-    val accumulatorRequirement: GPUWgpu4kCorePrimitiveCoverageMaskRequirement,
-    val resolvedResourceId: String,
-    val resolvedRequirement: GPUWgpu4kCorePrimitiveCoverageMaskRequirement,
+    val accumulatorRequirement: GPUWgpu4kCorePrimitiveCoverageMaskRequirement?,
+    val resolvedResourceId: String?,
+    val resolvedRequirement: GPUWgpu4kCorePrimitiveCoverageMaskRequirement?,
     val producerScratchResourceId: String?,
     val producerScratchRequirement: GPUWgpu4kCorePrimitiveCoverageMaskRequirement?,
     val producerDepthStencilResourceId: String?,
@@ -264,19 +271,32 @@ internal data class GPUW4eAttachmentPoolRequirements(
     /** Sealed hard-edge path masks are distinct from the prefix ping-pong inventory. */
     val additionalMaskResourceIds: List<String> = emptyList(),
     val additionalMaskRequirements: List<GPUWgpu4kCorePrimitiveCoverageMaskRequirement> = emptyList(),
+    /** 1x hard-mask D24S8 inventory. A producer and cover in one sealed atomic group share one ID. */
     val additionalDepthStencilResourceIds: List<String> = emptyList(),
     val additionalDepthStencilRequirements: List<GPUWgpu4kCorePrimitiveClipDepthStencilRequirement> = emptyList(),
+    /** Scene D24S8 inventory for inverse-domain geometry; its sample count follows the scene path. */
+    val sceneDepthStencilResourceIds: List<String> = emptyList(),
+    val sceneDepthStencilRequirements: List<GPUWgpu4kCorePrimitiveClipDepthStencilRequirement> = emptyList(),
 ) {
     init {
-        require(accumulatorResourceIds.size == request.accumulatorCountI32 &&
-            accumulatorResourceIds.distinct().size == accumulatorResourceIds.size &&
-            accumulatorResourceIds.all(String::isNotBlank) && resolvedResourceId.isNotBlank()) {
-            "W4e attachment request requires exactly two distinct accumulator resources"
-        }
-        require(accumulatorRequirement.sampleCount == 1 && resolvedRequirement.sampleCount == 1 &&
-            accumulatorRequirement.format == GPUTextureFormat.RGBA8Unorm &&
-            resolvedRequirement.format == GPUTextureFormat.RGBA8Unorm) {
-            "W4e accumulators and resolved producer target must be linear RGBA8 1x textures"
+        if (request.accumulatorCountI32 == 2) {
+            require(accumulatorResourceIds.size == 2 &&
+                accumulatorResourceIds.distinct().size == accumulatorResourceIds.size &&
+                accumulatorResourceIds.all(String::isNotBlank) &&
+                accumulatorRequirement != null && resolvedResourceId?.isNotBlank() == true &&
+                resolvedRequirement != null) {
+                "W4e mask inventory requires two distinct accumulators and one resolved producer target"
+            }
+            require(accumulatorRequirement.sampleCount == 1 && resolvedRequirement.sampleCount == 1 &&
+                accumulatorRequirement.format == GPUTextureFormat.RGBA8Unorm &&
+                resolvedRequirement.format == GPUTextureFormat.RGBA8Unorm) {
+                "W4e accumulators and resolved producer target must be linear RGBA8 1x textures"
+            }
+        } else {
+            require(accumulatorResourceIds.isEmpty() && accumulatorRequirement == null &&
+                resolvedResourceId == null && resolvedRequirement == null) {
+                "Direct inverse-domain W4e inventory must not allocate hidden mask attachments"
+            }
         }
         require((request.producerSampleCountI32 == 4) ==
             (producerScratchResourceId != null && producerScratchRequirement != null)) {
@@ -304,7 +324,8 @@ internal data class GPUW4eAttachmentPoolRequirements(
             }) {
             "W4e hard-edge path masks must be distinct linear RGBA8 1x attachments"
         }
-        require(additionalDepthStencilResourceIds.size == additionalDepthStencilRequirements.size &&
+        require(additionalDepthStencilResourceIds.size == request.hardMaskDepthStencilCountI32 &&
+            additionalDepthStencilResourceIds.size == additionalDepthStencilRequirements.size &&
             additionalDepthStencilResourceIds.distinct().size == additionalDepthStencilResourceIds.size &&
             additionalDepthStencilResourceIds.all(String::isNotBlank) &&
             additionalDepthStencilResourceIds.none { it == producerDepthStencilResourceId } &&
@@ -313,9 +334,21 @@ internal data class GPUW4eAttachmentPoolRequirements(
             }) {
             "W4e hard-edge path D24S8 attachments must be distinct single-sample resources"
         }
-        val actualPhysicalBytes = listOf(
+        require(sceneDepthStencilResourceIds.size == request.sceneDepthStencilCountI32 &&
+            sceneDepthStencilResourceIds.size == sceneDepthStencilRequirements.size &&
+            sceneDepthStencilResourceIds.distinct().size == sceneDepthStencilResourceIds.size &&
+            sceneDepthStencilResourceIds.all(String::isNotBlank) &&
+            sceneDepthStencilResourceIds.none { id ->
+                id == producerDepthStencilResourceId || id in additionalDepthStencilResourceIds
+            } &&
+            sceneDepthStencilRequirements.all { requirement ->
+                requirement.sampleCount in setOf(1, 4) && requirement.format == GPUTextureFormat.Depth24PlusStencil8
+            }) {
+            "W4e inverse-domain scene D24S8 attachments must be distinct declared scene resources"
+        }
+        val maskInventoryBytes = if (request.accumulatorCountI32 == 2) listOf(
             attachmentByteSize(
-                accumulatorRequirement.width,
+                requireNotNull(accumulatorRequirement).width,
                 accumulatorRequirement.height,
                 accumulatorRequirement.sampleCount,
             ),
@@ -325,10 +358,12 @@ internal data class GPUW4eAttachmentPoolRequirements(
                 accumulatorRequirement.sampleCount,
             ),
             attachmentByteSize(
-                resolvedRequirement.width,
+                requireNotNull(resolvedRequirement).width,
                 resolvedRequirement.height,
                 resolvedRequirement.sampleCount,
             ),
+        ) else emptyList()
+        val actualPhysicalBytes = (maskInventoryBytes + listOf(
             producerScratchRequirement?.let { requirement ->
                 attachmentByteSize(requirement.width, requirement.height, requirement.sampleCount)
             } ?: 0L,
@@ -337,7 +372,8 @@ internal data class GPUW4eAttachmentPoolRequirements(
                 attachmentByteSize(requirement.width, requirement.height, requirement.sampleCount)
             },
             additionalDepthStencilRequirements.sumOf(GPUWgpu4kCorePrimitiveClipDepthStencilRequirement::byteSize),
-        ).fold(0L, Math::addExact)
+            sceneDepthStencilRequirements.sumOf(GPUWgpu4kCorePrimitiveClipDepthStencilRequirement::byteSize),
+        )).fold(0L, Math::addExact)
         require(actualPhysicalBytes == request.requiredPhysicalByteCountI64) {
             "W4e physical attachment bytes must equal the compiler-sealed inventory"
         }
@@ -347,28 +383,32 @@ internal data class GPUW4eAttachmentPoolRequirements(
 internal data class GPUWgpu4kW4eAttachmentHandles(
     val requirements: GPUW4eAttachmentPoolRequirements,
     val accumulators: List<GPUWgpu4kCorePrimitiveCoverageMaskHandles>,
-    val resolved: GPUWgpu4kCorePrimitiveCoverageMaskHandles,
+    val resolved: GPUWgpu4kCorePrimitiveCoverageMaskHandles?,
     val producerScratch: GPUWgpu4kCorePrimitiveCoverageMaskHandles?,
     val producerDepthStencil: GPUWgpu4kCorePrimitiveClipDepthStencilHandles?,
     val additionalMasks: List<GPUWgpu4kCorePrimitiveCoverageMaskHandles>,
     val additionalDepthStencils: List<GPUWgpu4kCorePrimitiveClipDepthStencilHandles>,
+    val sceneDepthStencils: List<GPUWgpu4kCorePrimitiveClipDepthStencilHandles>,
 ) {
     init {
         require(accumulators.size == requirements.request.accumulatorCountI32 &&
             additionalMasks.size == requirements.additionalMaskResourceIds.size &&
-            additionalDepthStencils.size == requirements.additionalDepthStencilResourceIds.size)
+            additionalDepthStencils.size == requirements.additionalDepthStencilResourceIds.size &&
+            sceneDepthStencils.size == requirements.sceneDepthStencilResourceIds.size)
     }
 
     fun viewFor(resourceId: String): GPUTextureView? = when (resourceId) {
         in requirements.accumulatorResourceIds ->
             accumulators[requirements.accumulatorResourceIds.indexOf(resourceId)].view
-        requirements.resolvedResourceId -> resolved.view
+        requirements.resolvedResourceId -> resolved?.view
         requirements.producerScratchResourceId -> producerScratch?.view
         requirements.producerDepthStencilResourceId -> producerDepthStencil?.view
         in requirements.additionalMaskResourceIds ->
             additionalMasks[requirements.additionalMaskResourceIds.indexOf(resourceId)].view
         in requirements.additionalDepthStencilResourceIds ->
             additionalDepthStencils[requirements.additionalDepthStencilResourceIds.indexOf(resourceId)].view
+        in requirements.sceneDepthStencilResourceIds ->
+            sceneDepthStencils[requirements.sceneDepthStencilResourceIds.indexOf(resourceId)].view
         else -> null
     }
 }
@@ -406,7 +446,7 @@ internal class GPUWgpu4kW4eAttachmentPool(
         observedGeneration: GPUDeviceGenerationID,
         requirements: GPUW4eAttachmentPoolRequirements,
     ): GPUWgpu4kW4eAttachmentPoolCheckout {
-        retryPendingClose()
+        val pendingCloseFailure = retryPendingClose()
         if (closed) return GPUWgpu4kW4eAttachmentPoolCheckout.Refused(GPUWgpu4kCorePrimitiveFramePoolRefusal.Closed)
         if (closing) return GPUWgpu4kW4eAttachmentPoolCheckout.Refused(GPUWgpu4kCorePrimitiveFramePoolRefusal.Closing)
         if (observedGeneration != deviceGeneration) {
@@ -416,6 +456,15 @@ internal class GPUWgpu4kW4eAttachmentPool(
         }
         var slot = slots.firstOrNull { it.state == State.Available && it.handles.requirements == requirements }
         if (slot == null) {
+            if (pendingCloseFailure != null) {
+                return GPUWgpu4kW4eAttachmentPoolCheckout.Refused(
+                    GPUWgpu4kCorePrimitiveFramePoolRefusal.AllocationFailed(
+                        GPUWgpu4kCorePrimitiveFramePoolResource.W4eAccumulatorTexture,
+                        pendingCloseFailure::class.simpleName.orEmpty(),
+                        "W4e attachment cleanup is pending: ${pendingCloseFailure.message.orEmpty()}",
+                    ),
+                )
+            }
             if (slots.size == MAX_SLOTS) {
                 return GPUWgpu4kW4eAttachmentPoolCheckout.Refused(GPUWgpu4kCorePrimitiveFramePoolRefusal.Saturated(MAX_SLOTS))
             }
@@ -511,12 +560,13 @@ internal class GPUWgpu4kW4eAttachmentPool(
         return try {
             GPUWgpu4kW4eAttachmentHandles(
                 requirements,
-                List(requirements.request.accumulatorCountI32) { mask(requirements.accumulatorRequirement) },
-                mask(requirements.resolvedRequirement),
+                List(requirements.request.accumulatorCountI32) { mask(requireNotNull(requirements.accumulatorRequirement)) },
+                requirements.resolvedRequirement?.let(::mask),
                 requirements.producerScratchRequirement?.let(::mask),
                 requirements.producerDepthStencilRequirement?.let(::depth),
                 requirements.additionalMaskRequirements.map(::mask),
                 requirements.additionalDepthStencilRequirements.map(::depth),
+                requirements.sceneDepthStencilRequirements.map(::depth),
             )
         } catch (failure: Throwable) {
             retireFailedAllocations(allocated).also { cleanupFailure ->
@@ -530,9 +580,10 @@ internal class GPUWgpu4kW4eAttachmentPool(
         retireFailedHandlesInCloseOrder(buildList<AutoCloseable> {
             handles.producerDepthStencil?.let { add(it.view); add(it.texture) }
             handles.producerScratch?.let { add(it.view); add(it.texture) }
+            handles.sceneDepthStencils.asReversed().forEach { add(it.view); add(it.texture) }
             handles.additionalDepthStencils.asReversed().forEach { add(it.view); add(it.texture) }
             handles.additionalMasks.asReversed().forEach { add(it.view); add(it.texture) }
-            add(handles.resolved.view); add(handles.resolved.texture)
+            handles.resolved?.let { add(it.view); add(it.texture) }
             handles.accumulators.asReversed().forEach { add(it.view); add(it.texture) }
         })
 

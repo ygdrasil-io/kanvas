@@ -284,6 +284,7 @@ private class W4dGeneralGraphDigestWriter {
                 text("$prefix.kind", "stroke")
                 strokeGeometry(prefix, geometry.valueF32)
             }
+            PathDrawGeometry.Empty -> text("$prefix.kind", "w4e-inverse-domain-zero")
         }
     }
 

@@ -26,6 +26,8 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthori
 import org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipPassAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUW4eMaskContinuationRequest
 import org.graphiks.kanvas.gpu.renderer.passes.GPUW4eMaskResolveAction
+import org.graphiks.kanvas.gpu.renderer.passes.GPUW4eSceneContinuationRequest
+import org.graphiks.kanvas.gpu.renderer.passes.GPUW4eSceneResolveAction
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitivePreparedFrameResult
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitiveW4ePreparedFrameTaskListAssembler
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameCapabilitySeal
@@ -83,7 +85,7 @@ internal class W4eClipGraphLowerer {
             val consumer = path?.let { authority.consumerFor(it.id.value) }
             val preparedPath = path?.let { authority.pathFor(it.id.value) ?: return invalid() }
             val packet = preparedPath?.let { pathPacket(it, consumer, index) }
-                ?: markerPacket(pass, index, authority.clipPassFor(pass.id.value) ?: return invalid())
+                ?: preparedClipPacket(pass, index, authority.clipPassFor(pass.id.value) ?: return invalid())
             val targetId = when (pass) {
                 is PlanPass.PathMaskClearPass -> pass.target
                 is PlanPass.ClipMaskInitialize -> pass.output
@@ -122,9 +124,19 @@ internal class W4eClipGraphLowerer {
                             },
                         )
                     },
-                sampleContinuationKey = continuationKey(
-                    pass, refs.getValue(targetId.value) as GPUFrameTargetRef, preparedPath, request.deviceGeneration,
-                ),
+                w4eSceneContinuation = preparedPath
+                    ?.takeIf { path -> path.sample == SamplePlan.Multisample4 }
+                    ?.let { path ->
+                        GPUW4eSceneContinuationRequest(
+                            sceneTargetResourceId = path.targetResourceId,
+                            resolveSceneResourceId = path.resolveTargetResourceId,
+                            resolveAction = if (path.resolveTargetResourceId == null) {
+                                GPUW4eSceneResolveAction.Skip
+                            } else {
+                                GPUW4eSceneResolveAction.ResolveCanonical
+                            },
+                        )
+                    },
             )
         }
         val frameAuthority = authority.issueFrameAuthority(request.frameId.value, seal.sealHash, renders)
@@ -161,8 +173,8 @@ internal class W4eClipGraphLowerer {
         PlanResourceKind.Texture2D -> GPUFrameTargetRef("$session.${resource.id.value}")
     }
 
-    /** Marker packets are explicit Task 7 handoff contracts, never simulated clip execution. */
-    private fun markerPacket(
+    /** Prefix packets carry sealed native W4e clip authority; materialization executes each pass. */
+    private fun preparedClipPacket(
         pass: PlanPass,
         index: Int,
         preparedPass: GPUW4ePreparedClipPassAuthority,
@@ -296,31 +308,6 @@ internal class W4eClipGraphLowerer {
             }
             else -> emptyList()
         }
-    }
-
-    private fun continuationKey(
-        pass: PlanPass,
-        target: GPUFrameTargetRef,
-        path: GPUW4ePreparedClipPassAuthority.Path?,
-        deviceGeneration: org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID,
-    ): org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationKey? {
-        val sample = when (pass) {
-            is PlanPass.ClipMaskProducer -> return null
-            is PlanPass.PathRenderPass -> if (path?.sample == SamplePlan.Multisample4) 4 else 1
-            else -> null
-        } ?: return null
-        if (sample != 4) return null
-        return org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationKey(
-            org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity(target.value),
-            org.graphiks.kanvas.gpu.renderer.recording.PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION,
-            deviceGeneration,
-            if (pass is PlanPass.ClipMaskProducer) GPUColorFormat.RGBA8Unorm else GPUColorFormat.RGBA8UnormSrgb,
-            GPUColorInterpretation.LinearPremul,
-            GPUSamplePlan.MultisampleFrame(4),
-            org.graphiks.kanvas.gpu.renderer.passes.GPUSampleAttachmentAuthority.PreparedFramePayload,
-            org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity("w4e.msaa:${target.value}"),
-            null,
-        )
     }
 
     private fun preparation(resource: PlanResource, ref: GPUFrameResourceRef, bounds: GPUPixelBounds, alignment: Long): GPUResourcePreparationRequest {

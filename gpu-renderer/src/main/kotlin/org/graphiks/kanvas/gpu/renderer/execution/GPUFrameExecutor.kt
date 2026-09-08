@@ -1435,6 +1435,7 @@ internal class GPUFrameExecutor(
                 "invalid.native-frame-payload.w4e-missing",
                 "A sealed W4e frame requires its native payload before encoding.",
             )
+            w4eSceneContinuationPayloadDiagnostic(frame, exactPayload)?.let { return it }
             val renderScopes = exactPayload.scopeOperands.filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
             return if (renderScopes.size != renders.size ||
                 renderScopes.map(GPUPreparedNativeScopeOperand.Render::sourceStepIndex) !=
@@ -1743,6 +1744,52 @@ internal class GPUFrameExecutor(
                 "invalid.native-frame-payload.$lane-writable-load",
                 "Every planned $laneName cover, and no other scope, must retain writable stencil Load.",
             )
+        }
+        return null
+    }
+
+    /** Executes W4e's own scene MSAA ABI without widening generic or W4d.2 continuation rules. */
+    private fun w4eSceneContinuationPayloadDiagnostic(
+        frame: PreparedGPUFrame,
+        payload: GPUPreparedNativeFramePayload,
+    ): GPUDiagnostic? {
+        val scopes = frame.semanticPlan.steps.mapIndexedNotNull { stepIndex, step ->
+            val render = step as? GPUFrameStep.RenderPassStep ?: return@mapIndexedNotNull null
+            val continuation = render.w4eSceneContinuation ?: return@mapIndexedNotNull null
+            Triple(stepIndex, render, continuation)
+        }
+        if (scopes.isEmpty()) return null
+        val retainedViews = mutableMapOf<String, Any>()
+        scopes.forEachIndexed { order, (stepIndex, render, continuation) ->
+            val scope = payload.scopeOperands.singleOrNull { operand -> operand.sourceStepIndex == stepIndex } as?
+                GPUPreparedNativeScopeOperand.Render ?: return executionDiagnostic(
+                "invalid.native-frame-payload.w4e-scene-scope",
+                "W4e scene continuation requires one native render scope per sealed scene pass.",
+            )
+            val expectedLoad = if (order == 0) GPUPreparedNativeLoadOperation.Clear else GPUPreparedNativeLoadOperation.Load
+            val resolve = scope.pass.resolveTarget
+            val expectsResolve = continuation.resolveAction ==
+                org.graphiks.kanvas.gpu.renderer.passes.GPUW4eSceneResolveAction.ResolveCanonical
+            if (render.samplePlan != org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan.MultisampleFrame(4) ||
+                render.sampleContinuation != null ||
+                scope.pass.loadOperation != expectedLoad ||
+                scope.pass.storeOperation != GPUPreparedNativeStoreOperation.Store ||
+                (expectsResolve != (resolve != null)) ||
+                (expectsResolve && !backend.isCanonicalSceneTargetView(sceneTarget, requireNotNull(resolve)))
+            ) {
+                return executionDiagnostic(
+                    "invalid.native-frame-payload.w4e-scene-continuation",
+                    "W4e scene scope load/store/resolve behavior contradicts its sealed continuation.",
+                )
+            }
+            val retained = retainedViews[continuation.sceneTargetResourceId]
+            if (retained != null && retained !== scope.pass.colorTarget.view) {
+                return executionDiagnostic(
+                    "invalid.native-frame-payload.w4e-scene-continuity",
+                    "W4e scene continuation changed its retained four-sample color attachment.",
+                )
+            }
+            retainedViews[continuation.sceneTargetResourceId] = scope.pass.colorTarget.view
         }
         return null
     }

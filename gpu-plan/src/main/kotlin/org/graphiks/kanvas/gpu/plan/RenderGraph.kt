@@ -937,11 +937,30 @@ public class RenderGraph private constructor(
             pathPasses.forEach { (index, pass) ->
                 when (pass.phase) {
                     PathRenderPhase.SingleSampleDirectColor -> {
+                        val inverseDomainInterior = (pass.draw.clipStrategyOrNull() as? ClipPlanStrategy.InverseDomain)
+                            ?.geometryF32?.interiorCoverageF32 is
+                            org.graphiks.math.geometry.InverseInteriorCoverageF32.Geometry
+                        val declaredInverseDepth = pass.depthStencil?.let(resourcesById::get)
                         require((pass.draw is GeneralPathDraw || pass.draw is ClippedGeneralPathDraw) &&
                             pass.draw.coverage == CoveragePlan.FullOrScissor &&
                             pass.draw.strategy == PathFillStrategy.DirectTriangle &&
-                            pass.target == target.id && pass.atomicGroup == null && pass.depthStencil == null &&
-                            pass.depthStencilAccess == null && pass.depthStencilLoadStore == null) {
+                            pass.target == target.id && pass.atomicGroup == null &&
+                            pass.depthStencilAccess == null && pass.depthStencilLoadStore == null &&
+                            if (inverseDomainInterior) {
+                                declaredInverseDepth != null &&
+                                    declaredInverseDepth.role == PlanResourceRole.DepthStencil &&
+                                    declaredInverseDepth.kind == PlanResourceKind.Texture2D &&
+                                    declaredInverseDepth.format == PlanTextureFormat.DepthStencil(
+                                        PlanDepthStencilFormat.Depth24PlusStencil8,
+                                    ) &&
+                                    declaredInverseDepth.copyExtent() == targetExtent &&
+                                    declaredInverseDepth.sampleCountI32 == 1 &&
+                                    PlanResourceUsage.DepthStencilAttachment in declaredInverseDepth.usages() &&
+                                    declaredInverseDepth.firstPassIndex <= index &&
+                                    declaredInverseDepth.lastPassIndexExclusive > index
+                            } else {
+                                pass.depthStencil == null
+                            }) {
                             "Single-sample direct color passes require a direct hard draw and logical target"
                         }
                     }
@@ -964,14 +983,27 @@ public class RenderGraph private constructor(
             }
             val usesStencil = stencilPairs.isNotEmpty()
             val depthResources = resources.filter { it.role == PlanResourceRole.DepthStencil }
-            require(depthResources.size == if (usesStencil) 1 else 0) {
-                "Single-sample explicit paths require one D24S8 resource exactly when using stencil"
+            val declaredDepthUses = pathPasses.mapNotNull { (index, pass) ->
+                pass.depthStencil?.let { depth -> index to depth }
+            }.groupBy({ (_, depth) -> depth }, { (index, _) -> index })
+            require(depthResources.map(PlanResource::id).toSet() == declaredDepthUses.keys) {
+                "Single-sample D24S8 inventory must be declared by exactly one or more sealed path uses"
             }
             if (usesStencil) {
-                val depth = depthResources.single()
-                require(depth.firstPassIndex <= stencilPairs.first().first &&
-                    depth.lastPassIndexExclusive > stencilPairs.last().second) {
-                    "Single-sample D24S8 lifetime must cover its stencil pairs"
+                require(stencilPairs.flatMap { (producer, cover) ->
+                    listOf(
+                        requireNotNull((passes[producer] as PlanPass.PathRenderPass).depthStencil),
+                        requireNotNull((passes[cover] as PlanPass.PathRenderPass).depthStencil),
+                    )
+                }.distinct().size == 1) {
+                    "Single-sample stencil producer and cover must share one declared D24S8 resource"
+                }
+            }
+            declaredDepthUses.forEach { (depthId, indices) ->
+                val depth = requireNotNull(resourcesById[depthId])
+                require(depth.firstPassIndex <= indices.min() &&
+                    depth.lastPassIndexExclusive > indices.max()) {
+                    "Single-sample D24S8 lifetime must cover every sealed path use"
                 }
             }
             validateExplicitVisualDraws(

@@ -1035,6 +1035,7 @@ internal class W4dPathStrokeGraphLowerer {
 private fun PathDraw.copyFillGeometryF32(): PathFillGeometryF32 = when (val geometry = copyPathGeometry()) {
     is PathDrawGeometry.Fill -> geometry.valueF32
     is PathDrawGeometry.Stroke -> geometry.valueF32.copyFillGeometryF32()
+    PathDrawGeometry.Empty -> error("W4d path stroke lowering cannot consume W4e inverse-domain empty geometry")
 }
 
 private fun PathDraw.expectedAtomicGroupId(): String = when (this) {

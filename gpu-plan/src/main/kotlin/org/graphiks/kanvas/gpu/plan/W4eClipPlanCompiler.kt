@@ -115,7 +115,7 @@ public class W4eClipPlanCompiler(
                         prepared.forceMaskForInverse()
                         inverseByCommand[index] = inverse
                     }
-                    normalized += SceneCommand.Draw(command.node.normalizedForW4d(domain, inverse))
+                    normalized += SceneCommand.Draw(command.node.normalizedForW4dConstructionSeam(domain, inverse))
                     // The candidate keeps the prepared stack map keyed by this exact canonical stack identity.
                     prepared.consumerIndexes += index
                 }
@@ -254,14 +254,89 @@ public class W4eClipPlanCompiler(
         }
 
         val clippedGeneralBySource = mutableMapOf<GeneralPathDraw, ClippedGeneralPathDraw>()
-        val transformedPasses = base.passes().map { pass ->
-            pass.withClipStrategies(strategyByCommand, clippedGeneralBySource)
+        // Only the direct W4e domain route can discard W4d.2's construction proxy.  An
+        // `InverseMask` still consumes the normal color-path phases against its sampled mask;
+        // replacing that source would silently change its sealed execution topology.
+        val zeroInverseDomainCommands = strategyByCommand
+            .filter { (_, strategy) ->
+                (strategy as? ClipPlanStrategy.InverseDomain)
+                    ?.geometryF32?.interiorCoverageF32 == InverseInteriorCoverageF32.Zero
+            }
+            .keys
+        val emptyDrawsByConstructionSource = mutableMapOf<GeneralPathDraw, GeneralPathDraw>()
+        val clippedPasses = base.passes().map { pass ->
+            pass.replaceW4eConstructionProxy(zeroInverseDomainCommands, emptyDrawsByConstructionSource)
+                .withClipStrategies(strategyByCommand, clippedGeneralBySource)
         }
-        val shiftedResources = base.resources().map { resource -> resource.shifted(prefixCount) }
-        val allResources = resources + shiftedResources
+        // `InverseDomain.Geometry` is a W4e scene operation, not a W4d.2 path-phase
+        // side effect.  A direct triangle therefore still needs a declared scene D24S8 to
+        // rasterize its finite interior before the domain cover.  Reuse an exact W4d scene
+        // attachment when one exists; otherwise declare one here with its real lifetime.
+        val inverseInteriorPaths = clippedPasses.mapIndexedNotNull { index, pass ->
+            val path = pass as? PlanPass.PathRenderPass ?: return@mapIndexedNotNull null
+            val inverse = path.draw.clipStrategyOrNullForW4e() as? ClipPlanStrategy.InverseDomain
+                ?: return@mapIndexedNotNull null
+            if (inverse.geometryF32.interiorCoverageF32 !is InverseInteriorCoverageF32.Geometry) return@mapIndexedNotNull null
+            index to path
+        }
+        val existingSceneDepthBySamples = base.resources()
+            .filter { resource -> resource.role == PlanResourceRole.DepthStencil }
+            .associateBy(PlanResource::sampleCountI32)
+        val newSceneDepthBySamples = linkedMapOf<Int, PlanResourceId>()
+        inverseInteriorPaths.map { (_, path) -> path.draw.sample }.distinct().forEach { sample ->
+            val sampleCount = if (sample == SamplePlan.Multisample4) 4 else 1
+            if (existingSceneDepthBySamples[sampleCount] == null) {
+                val ordinal = base.resources().filter { it.role == PlanResourceRole.DepthStencil }.maxOfOrNull(PlanResource::ordinal)
+                    ?.let { value -> value + 1 + newSceneDepthBySamples.size } ?: newSceneDepthBySamples.size
+                val id = planResourceId(PlanResourceRole.DepthStencil, ordinal)
+                val uses = inverseInteriorPaths.filter { (_, path) ->
+                    (if (path.draw.sample == SamplePlan.Multisample4) 4 else 1) == sampleCount
+                }.map { (index, _) -> Math.addExact(prefixCount, index) }
+                resources += PlanResource.of(
+                    PlanResourceRole.DepthStencil,
+                    ordinal,
+                    PlanResourceKind.Texture2D,
+                    PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8),
+                    extent,
+                    checkedTextureBytesI64(4, extent.width, extent.height, sampleCount),
+                    setOf(PlanResourceUsage.DepthStencilAttachment),
+                    PlanResourceLifetime.FrameLocal,
+                    uses.min(),
+                    Math.addExact(uses.max(), 1),
+                    sampleCount,
+                )
+                newSceneDepthBySamples[sampleCount] = id
+            }
+        }
+        val sceneDepthForSample = existingSceneDepthBySamples.mapValues { (_, resource) -> resource.id } + newSceneDepthBySamples
+        val transformedPasses = clippedPasses.map { pass ->
+            pass.withW4eInverseDomainSceneDepth(sceneDepthForSample)
+        }
         val allPasses = prefix + transformedPasses
+        // A zero inverse has no interior stencil work.  The W4d.2 construction seam may still
+        // have provisioned its AA scene D24S8 for the admission proxy; do not carry that orphan
+        // resource over the W4e authority boundary or it becomes a hidden allocation.
+        val retainedSceneDepthIds = transformedPasses
+            .filterIsInstance<PlanPass.PathRenderPass>()
+            .mapNotNull(PlanPass.PathRenderPass::depthStencil)
+            .toSet()
+        val shiftedResources = base.resources()
+            .filterNot { resource ->
+                resource.role == PlanResourceRole.DepthStencil && resource.id !in retainedSceneDepthIds
+            }
+            .map { resource -> resource.shifted(prefixCount) }
+        val allResources = resources + shiftedResources
         val dependencies = allPasses.zipWithNext().map { (before, after) -> PlanPassDependency(before.id, after.id) }
         require(allPasses.size == framePreview.totalPassCount) { "W4e preflight pass count drifted" }
+        val actualPeakFrameLocalBytes = peakFrameLocalBytesI64(
+            allResources.map { resource ->
+                FrameResourceSpan(resource.byteSize, resource.firstPassIndex, resource.lastPassIndexExclusive)
+            },
+            allPasses.size,
+        )
+        require(actualPeakFrameLocalBytes <= budget.maxFrameLocalBytes) {
+            "W4e post-seal resource inventory exceeds the frame budget"
+        }
         return RenderGraph.issueW4eCompilerWitness(RenderGraph.of(
             id = PlanId(identity(selected, capabilities, budget, frameAa)),
             capabilityId = if (frameAa) AA_CAPABILITY_ID else HARD_CAPABILITY_ID,
@@ -273,7 +348,7 @@ public class W4eClipPlanCompiler(
             resources = allResources,
             passes = allPasses,
             dependencies = dependencies,
-            peakFrameLocalBytes = framePreview.peakFrameLocalBytes,
+            peakFrameLocalBytes = actualPeakFrameLocalBytes,
         ))
     }
 
@@ -549,10 +624,17 @@ public class W4eClipPlanCompiler(
         return ClipTransformInputF64.of(geometry, transform, operation.toMathOperation(), antiAlias)
     }
 
-    private fun DrawNode.normalizedForW4d(domain: RectI32, inverse: InversePathGeometryF32?): DrawNode {
+    /**
+     * W4d.2 drops empty fills at selection time.  Its rectangle is an admission-only proxy that
+     * is replaced by [replaceW4eConstructionProxy] before the W4e graph is sealed or rendered.
+     */
+    private fun DrawNode.normalizedForW4dConstructionSeam(
+        domain: RectI32,
+        inverse: InversePathGeometryF32?,
+    ): DrawNode {
         if (inverse?.interiorCoverageF32 == InverseInteriorCoverageF32.Zero) {
             return copy(
-                geometry = GeometryNode.Path(domainCoverPath(domain)),
+                geometry = GeometryNode.Path(constructionProxyPath(domain)),
                 transform = Matrix3x3F32.Identity,
                 clip = ClipStackNode.Empty,
             )
@@ -567,10 +649,9 @@ public class W4eClipPlanCompiler(
         return copy(geometry = normalizedGeometry, clip = ClipStackNode.Empty)
     }
 
-    private fun domainCoverPath(domain: RectI32) : org.graphiks.math.geometry.PathF32 = PathBuilder()
+    private fun constructionProxyPath(domain: RectI32) : org.graphiks.math.geometry.PathF32 = PathBuilder()
         .moveTo(domain.left.toFloat(), domain.top.toFloat())
         .lineTo(domain.right.toFloat(), domain.top.toFloat())
-        .lineTo(domain.right.toFloat(), domain.bottom.toFloat())
         .lineTo(domain.left.toFloat(), domain.bottom.toFloat())
         .close()
         .build()
@@ -647,6 +728,89 @@ public class W4eClipPlanCompiler(
                 is ClippedGeneralPathDraw, is ClippedBinaryMaskedPathDraw -> draw
             }
             PlanPass.PathRenderPass(ordinal, target, clipped, phase, drawDataResources, atomicGroup, depthStencil, load, store, depthStencilAccess, depthStencilLoadStore, resolveTarget)
+        }
+        else -> this
+    }
+
+    private fun PathRenderDraw.clipStrategyOrNullForW4e(): ClipPlanStrategy? = when (this) {
+        is ClippedGeneralPathDraw -> clip
+        is ClippedBinaryMaskedPathDraw -> clip
+        is GeneralPathDraw,
+        is BinaryMaskedPathDraw,
+        -> null
+    }
+
+    /** Binds only a declared inverse-domain interior to its exact scene D24S8 inventory. */
+    private fun PlanPass.withW4eInverseDomainSceneDepth(
+        sceneDepthForSample: Map<Int, PlanResourceId>,
+    ): PlanPass = when (this) {
+        is PlanPass.PathRenderPass -> {
+            val inverse = draw.clipStrategyOrNullForW4e() as? ClipPlanStrategy.InverseDomain
+                ?: return this
+            if (inverse.geometryF32.interiorCoverageF32 !is InverseInteriorCoverageF32.Geometry ||
+                depthStencil != null
+            ) return this
+            val sampleCount = if (draw.sample == SamplePlan.Multisample4) 4 else 1
+            val depth = requireNotNull(sceneDepthForSample[sampleCount]) {
+                "W4e inverse-domain interior is missing its declared scene D24S8 attachment"
+            }
+            PlanPass.PathRenderPass(
+                ordinal,
+                target,
+                draw,
+                phase,
+                drawDataResources,
+                atomicGroup,
+                depth,
+                load,
+                store,
+                depthStencilAccess,
+                depthStencilLoadStore,
+                resolveTarget,
+            )
+        }
+        else -> this
+    }
+
+    /** Removes W4d.2's admission-only rectangle before the W4e graph becomes authoritative. */
+    private fun PlanPass.replaceW4eConstructionProxy(
+        zeroInverseCommands: Set<Int>,
+        emptyDrawsByConstructionSource: MutableMap<GeneralPathDraw, GeneralPathDraw>,
+    ): PlanPass = when (this) {
+        is PlanPass.PathRenderPass -> {
+            if (draw.commandIndex !in zeroInverseCommands) return this
+            val emptyDraw = when (val original = draw) {
+                is GeneralPathDraw -> emptyDrawsByConstructionSource.getOrPut(original) {
+                    GeneralPathDraw.w4eInverseDomainZeroOf(original)
+                }
+                is BinaryMaskedPathDraw -> BinaryMaskedPathDraw.of(
+                    emptyDrawsByConstructionSource.getOrPut(original.producer) {
+                        GeneralPathDraw.w4eInverseDomainZeroOf(original.producer)
+                    },
+                    original.mask,
+                )
+                is ClippedGeneralPathDraw,
+                is ClippedBinaryMaskedPathDraw,
+                -> error("W4e construction seam must not return a pre-clipped draw.")
+            }
+            PlanPass.PathRenderPass(
+                ordinal,
+                target,
+                emptyDraw,
+                phase,
+                drawDataResources,
+                atomicGroup,
+                // The W4d.2 admission proxy may have selected a scene D24S8 attachment for
+                // its triangle.  The sealed W4e form is a direct finite-domain cover: its
+                // empty inverse source has no interior to rasterize, so retaining that
+                // attachment would allocate a hidden, semantically unused D24S8 resource.
+                null,
+                load,
+                store,
+                null,
+                null,
+                resolveTarget,
+            )
         }
         else -> this
     }

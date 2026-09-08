@@ -218,10 +218,10 @@ object GPUFramePlanner {
                 is GPUSamplePlan.MultisampleFrame -> {
                     val key = task.sampleContinuationKey
                         ?: w4dGeneralBridges.getValue(task)?.request?.key
-                    if (key == null && task.w4eMaskContinuation == null) {
+                    if (key == null && task.w4eMaskContinuation == null && task.w4eSceneContinuation == null) {
                         return diagnostic(
                         "invalid.frame_plan.msaa_continuation_missing",
-                        "Every MSAA render task requires a scene continuation or a dedicated W4e mask continuation.",
+                        "Every MSAA render task requires generic scene authority or a dedicated W4e mask/scene continuation.",
                         )
                     }
                     if (key != null && key.target.value != task.target.value) {
@@ -245,10 +245,12 @@ object GPUFramePlanner {
                 }
                 GPUSamplePlan.SingleSampleFrame,
                 is GPUSamplePlan.LocalResolveApproximation,
-                -> if (task.sampleContinuationKey != null) {
+                -> if (task.sampleContinuationKey != null || task.w4eMaskContinuation != null ||
+                    task.w4eSceneContinuation != null
+                ) {
                     return diagnostic(
                         "invalid.frame_plan.msaa_continuation_unexpected",
-                        "Only exact multisample render tasks may carry an MSAA continuation key.",
+                        "Only exact multisample render tasks may carry an MSAA continuation authority.",
                     )
                 }
             }
@@ -1125,7 +1127,6 @@ object GPUFramePlanner {
         } else {
             first.loadStore
         }
-        val w4eSceneResolveAction = packets.w4ePreparedSceneResolveActionOrNull()
         return GPUFrameStep.RenderPassStep(
             target = first.target,
             loadStore = loadStore,
@@ -1145,25 +1146,15 @@ object GPUFramePlanner {
                             GPUSampleLoadTransition.RetainedLoad
                         },
                         storeAction = GPUSampleStoreAction.Store,
-                        resolveAction = w4eSceneResolveAction ?: GPUSampleResolveAction.ResolveCanonical,
+                        resolveAction = GPUSampleResolveAction.ResolveCanonical,
                     )
                 },
             w4eMaskContinuation = first.w4eMaskContinuation,
+            w4eSceneContinuation = first.w4eSceneContinuation,
             depthStencilLoadStore = first.depthStencilLoadStore,
             preparedImageBindingsByPacketId = preparedImageBindingsByPacketId,
             preparedTextBindingsByPacketId = preparedTextBindingsByPacketId,
         )
-    }
-
-    /** Scene W4e paths retain their sealed resolve boundary; mask producers use a distinct ABI. */
-    private fun List<GPUDrawPacket>.w4ePreparedSceneResolveActionOrNull(): GPUSampleResolveAction? {
-        val preparedPath = filter { packet -> packet.role == GPUDrawPacketRole.W4ePrepared }
-            .lastOrNull()?.w4ePreparedPath ?: return null
-        return if (preparedPath.resolveTargetResourceId != null) {
-            GPUSampleResolveAction.ResolveCanonical
-        } else {
-            GPUSampleResolveAction.Skip
-        }
     }
 
     private fun ScheduledDestinationOperation.toStep(
@@ -1196,6 +1187,7 @@ object GPUFramePlanner {
             w4dGeneralContinuationBridgeOrNullForBoundary() == null &&
             other.w4dGeneralContinuationBridgeOrNullForBoundary() == null &&
             w4eMaskContinuation == other.w4eMaskContinuation &&
+            w4eSceneContinuation == other.w4eSceneContinuation &&
             target == other.target &&
             loadStore == other.loadStore &&
             depthStencilLoadStore == other.depthStencilLoadStore &&

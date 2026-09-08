@@ -72,6 +72,8 @@ public enum class BinaryMaskFetchPlan { TextureLoadUnfiltered }
 public sealed interface PathDrawGeometry {
     public data class Fill(public val valueF32: PathFillGeometryF32) : PathDrawGeometry
     public data class Stroke(public val valueF32: PathStrokeGeometryF32) : PathDrawGeometry
+    /** An inverse draw whose finite interior is empty; its W4e clip still owns the finite domain. */
+    public data object Empty : PathDrawGeometry
 }
 
 public sealed interface PlanDraw {
@@ -144,6 +146,21 @@ public class GeneralPathDraw private constructor(
             requirePathRenderGeometryForStrategy(geometry, strategy)
             return GeneralPathDraw(commandIndex, color, geometry, strategy, scissorI32, coverage, sample)
         }
+
+        /**
+         * W4e replaces a construction-seam domain proxy with the exact empty inverse source before
+         * issuing its own sealed graph.  No W4d.2 caller can construct this form.
+         */
+        internal fun w4eInverseDomainZeroOf(source: GeneralPathDraw): GeneralPathDraw =
+            GeneralPathDraw(
+                source.commandIndex,
+                source.color,
+                PathDrawGeometry.Empty,
+                source.strategy,
+                source.copyScissorI32(),
+                source.coverage,
+                source.sample,
+            )
     }
 }
 
@@ -446,6 +463,9 @@ private fun requirePathRenderGeometryForStrategy(
     val fillGeometry = when (geometry) {
         is PathDrawGeometry.Fill -> geometry.valueF32
         is PathDrawGeometry.Stroke -> geometry.valueF32.copyFillGeometryF32()
+        PathDrawGeometry.Empty -> throw IllegalArgumentException(
+            "Empty path geometry is reserved for a sealed W4e inverse-domain draw",
+        )
     }
     require(pathFillStrategy(fillGeometry) == strategy) {
         "Path geometry must select the declared fill strategy"

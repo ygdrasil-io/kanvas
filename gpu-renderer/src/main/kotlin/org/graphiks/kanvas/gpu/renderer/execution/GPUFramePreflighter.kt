@@ -239,6 +239,9 @@ internal class GPUFramePreflighter(
     private fun GPUFrameResourceUse.referencesW4eLogicalResource(resourceId: String): Boolean =
         resource.value == resourceId || resource.value.endsWith(".$resourceId")
 
+    private fun GPUFrameTargetRef.referencesW4eLogicalResource(resourceId: String): Boolean =
+        value == resourceId || value.endsWith(".$resourceId")
+
     fun preflight(framePlan: GPUFramePlan): GPUFramePreflightResult {
         framePlan.steps.filterIsInstance<GPUFrameStep.RefusedLeafDrawStep>()
             .firstOrNull { step ->
@@ -308,6 +311,66 @@ internal class GPUFramePreflighter(
                     diagnostic(
                         "invalid.preflight.w4e_mask_continuation",
                         "W4e mask continuation must retain its sealed linear RGBA8 scratch target and optional resolve mask.",
+                    ),
+                )
+            }
+            w4eRenders.firstOrNull { render ->
+                val continuation = render.w4eSceneContinuation ?: return@firstOrNull false
+                val path = render.drawPackets.single().w4ePreparedPath ?: return@firstOrNull true
+                path.sample != org.graphiks.kanvas.gpu.plan.SamplePlan.Multisample4 ||
+                    path.targetResourceId != continuation.sceneTargetResourceId ||
+                    path.resolveTargetResourceId != continuation.resolveSceneResourceId ||
+                    render.sampleContinuation != null ||
+                    texturePreparations[render.target]?.let { descriptor ->
+                        descriptor.format == GPUColorFormat.RGBA8UnormSrgb && descriptor.sampleCount == 4
+                    } != true || (continuation.resolveSceneResourceId != null &&
+                    render.resourceUses.singleOrNull { use ->
+                        use.referencesW4eLogicalResource(continuation.resolveSceneResourceId) &&
+                            use.role == GPUFrameResourceRole.SceneTarget &&
+                            use.usage == GPUFrameResourceUsage.RenderAttachment && use.write
+                    }?.let { use ->
+                        texturePreparations[use.resource]?.let { descriptor ->
+                            descriptor.format == GPUColorFormat.RGBA8UnormSrgb && descriptor.sampleCount == 1
+                        } == true
+                    } != true)
+            }?.let {
+                return GPUFramePreflightResult.Refused(
+                    diagnostic(
+                        "invalid.preflight.w4e_scene_continuation",
+                        "W4e scene MSAA scopes must retain their sealed 4x target and only the sealed final canonical resolve.",
+                    ),
+                )
+            }
+            w4eRenders.firstOrNull { render ->
+                val path = render.drawPackets.single().w4ePreparedPath ?: return@firstOrNull false
+                val inverse = render.drawPackets.single().w4ePreparedClipConsumer as?
+                    org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseDomain
+                    ?: return@firstOrNull false
+                when (inverse.interiorCoverage) {
+                    org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage.Zero ->
+                        path.depthStencilResourceId != null ||
+                            path.copyGeometry() !is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Empty ||
+                            render.resourceUses.any { use -> use.role == GPUFrameResourceRole.PathDepthStencil }
+                    is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage.Geometry -> {
+                        val depthId = path.depthStencilResourceId ?: return@firstOrNull true
+                        val expectedSampleCount = if (path.sample == org.graphiks.kanvas.gpu.plan.SamplePlan.Multisample4) 4 else 1
+                        render.resourceUses.singleOrNull { use ->
+                            use.referencesW4eLogicalResource(depthId) &&
+                                use.role == GPUFrameResourceRole.PathDepthStencil &&
+                                use.usage == GPUFrameResourceUsage.RenderAttachment && use.write
+                        }?.let { use ->
+                            texturePreparations[use.resource]?.let { descriptor ->
+                                descriptor.format == GPUColorFormat("depth24plus-stencil8") &&
+                                    descriptor.sampleCount == expectedSampleCount
+                            } == true
+                        } != true
+                    }
+                }
+            }?.let {
+                return GPUFramePreflightResult.Refused(
+                    diagnostic(
+                        "invalid.preflight.w4e_inverse_domain_depth",
+                        "W4e inverse-domain zero has no D24S8 attachment; finite interior geometry must declare its exact scene D24S8 attachment.",
                     ),
                 )
             }
@@ -2878,6 +2941,9 @@ internal class GPUFramePreflighter(
             return diagnostic("stale.preflight.capability_seal", "The current capability snapshot differs from the frame seal.")
         }
         framePlan.memoryBudget.diagnostic?.let { return it }
+        if (framePlan.w4eRenderSteps().isNotEmpty()) {
+            return validateW4eSceneMsaaContinuation(framePlan)
+        }
         if (framePlan.w4dGeneralRenderSteps().isNotEmpty()) {
             return validateW4dGeneralMsaaContinuation(framePlan)
         }
@@ -3427,8 +3493,51 @@ internal class GPUFramePreflighter(
         return null
     }
 
+    /** W4e's scene continuation is a closed Task 7 ABI, not a generic or W4d.2 exception. */
+    private fun validateW4eSceneMsaaContinuation(framePlan: GPUFramePlan): GPUDiagnostic? {
+        fun refused(message: String) = diagnostic("invalid.preflight.w4e_scene_msaa_authority", message)
+        val renders = framePlan.w4eRenderSteps()
+        if (renders.isEmpty() || framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().size != renders.size) {
+            return refused("W4e requires one closed prepared render sequence.")
+        }
+        if (renders.any { render ->
+                render.drawPackets.singleOrNull()?.w4ePreparedFrameAuthority == null
+            }
+        ) return refused("W4e render scopes require one sealed prepared frame authority.")
+
+        val msaa = renders.filter { render -> render.samplePlan == GPUSamplePlan.MultisampleFrame(4) }
+        if (renders.filter { render -> render.samplePlan == GPUSamplePlan.SingleSampleFrame }
+                .any { render -> render.w4eSceneContinuation != null || render.sampleContinuation != null }
+        ) return refused("W4e single-sample scopes cannot carry scene MSAA authority.")
+        if (msaa.isEmpty()) return null
+
+        val continuations = msaa.map { render ->
+            render.w4eSceneContinuation ?: return refused("Every W4e 4x scene scope requires typed scene continuation authority.")
+        }
+        val sceneTarget = continuations.first().sceneTargetResourceId
+        if (msaa.zip(continuations).any { (render, continuation) ->
+                render.sampleContinuation != null ||
+                    !render.target.referencesW4eLogicalResource(continuation.sceneTargetResourceId) ||
+                    continuation.sceneTargetResourceId != sceneTarget ||
+                    render.loadStore.storePlan != GPUStorePlan.Store
+            }
+        ) return refused("W4e scene continuation target, generic authority, or store state was substituted.")
+        if (msaa.withIndex().any { (index, render) ->
+                render.loadStore.loadOp != if (index == 0) "clear" else "load"
+            }
+        ) return refused("W4e scene continuation must clear once then load the retained 4x target.")
+        if (continuations.dropLast(1).any { continuation ->
+                continuation.resolveAction != org.graphiks.kanvas.gpu.renderer.passes.GPUW4eSceneResolveAction.Skip ||
+                    continuation.resolveSceneResourceId != null
+            } || continuations.last().resolveAction !=
+            org.graphiks.kanvas.gpu.renderer.passes.GPUW4eSceneResolveAction.ResolveCanonical ||
+            continuations.last().resolveSceneResourceId == null
+        ) return refused("Only the final sealed W4e scene scope may resolve the canonical target.")
+        return null
+    }
+
     /**
-     * Validates the only continuation sequence which is allowed to omit intermediate resolves.
+     * Validates the only W4d.2 continuation sequence which is allowed to omit intermediate resolves.
      * Its `Skip` values originate exclusively in the sealed Task 7 W4d.2 authority; generic
      * MSAA frames keep using [GPUSampleContinuationPlanner] and therefore still reject `Skip`.
      */
@@ -3667,6 +3776,11 @@ internal class GPUFramePreflighter(
         }
         return null
     }
+
+    private fun GPUFramePlan.w4eRenderSteps(): List<GPUFrameStep.RenderPassStep> =
+        steps.filterIsInstance<GPUFrameStep.RenderPassStep>().filter { render ->
+            render.drawPackets.any { packet -> packet.role == GPUDrawPacketRole.W4ePrepared }
+        }
 
     private fun GPUFramePlan.w4dGeneralRenderSteps(): List<GPUFrameStep.RenderPassStep> =
         steps.filterIsInstance<GPUFrameStep.RenderPassStep>().filter { render ->
@@ -8552,6 +8666,7 @@ internal class GPUFramePreflighter(
                                     geometry.valueF32.copyDirectTriangleF32OrNull() != null
                                 is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Stroke ->
                                     geometry.valueF32.copyFillGeometryF32().copyDirectTriangleF32OrNull() != null
+                                org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Empty -> false
                             }
                             val inverseDomainConsumer = w4ePacket.w4ePreparedClipConsumer as?
                                 org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseDomain

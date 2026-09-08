@@ -389,6 +389,7 @@ internal class GPUW4ePreparedFrameAuthority private constructor(
         val resourceUses: List<String>,
         val atomicGroupId: String?,
         val maskContinuation: GPUW4eMaskContinuationRequest?,
+        val sceneContinuation: GPUW4eSceneContinuationRequest?,
     )
 
     fun validatesRenders(
@@ -422,6 +423,7 @@ internal class GPUW4ePreparedFrameAuthority private constructor(
                 render.resourceUses.map(::resourceUseFact) == fact.resourceUses &&
                 atomicGroup(packet) == fact.atomicGroupId &&
                 render.w4eMaskContinuation == fact.maskContinuation &&
+                render.w4eSceneContinuation == fact.sceneContinuation &&
                 validatesNoAlias(packet, render.resourceUses)
         }
     }
@@ -437,6 +439,7 @@ internal class GPUW4ePreparedFrameAuthority private constructor(
             render.resourceUses.map(::resourceUseFact) == fact.resourceUses &&
             atomicGroup(packet) == fact.atomicGroupId &&
             render.w4eMaskContinuation == fact.maskContinuation &&
+            render.w4eSceneContinuation == fact.sceneContinuation &&
             validatesNoAlias(packet, render.resourceUses)
     }
 
@@ -487,6 +490,7 @@ internal class GPUW4ePreparedFrameAuthority private constructor(
                     render.resourceUses.map(::resourceUseFact),
                     atomicGroup(packet),
                     render.w4eMaskContinuation,
+                    render.w4eSceneContinuation,
                 )
             }
             return GPUW4ePreparedFrameAuthority(

@@ -226,6 +226,7 @@ class W4dGeneralPathPlanCompilerTest {
         val geometry = when (val value = draw.copyPathGeometry()) {
             is PathDrawGeometry.Fill -> value.valueF32
             is PathDrawGeometry.Stroke -> value.valueF32.copyFillGeometryF32()
+            PathDrawGeometry.Empty -> error("W4d.2 test helper received W4e inverse-domain geometry")
         }
         return requireNotNull(geometry.copyDirectTriangleF32OrNull()).copyVerticesF32()
     }
