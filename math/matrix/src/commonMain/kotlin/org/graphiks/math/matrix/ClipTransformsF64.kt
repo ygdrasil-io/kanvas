@@ -9,11 +9,17 @@ import org.graphiks.math.geometry.ClipPreparationResourceLimitReason
 import org.graphiks.math.geometry.ClipStackPreparationResult
 import org.graphiks.math.geometry.ClipWorkUsageI64
 import org.graphiks.math.geometry.PathF32
+import org.graphiks.math.geometry.PathBuilder
 import org.graphiks.math.geometry.PathFillInputF64
-import org.graphiks.math.geometry.PathFillSegmentF64
+import org.graphiks.math.geometry.PathStrokeLimitsI32
+import org.graphiks.math.geometry.PathStrokeLimitsI64
+import org.graphiks.math.geometry.PathStrokePolicyF64
+import org.graphiks.math.geometry.PathStrokeWorkUsageI64
 import org.graphiks.math.geometry.Point2F64
 import org.graphiks.math.geometry.RRectF64
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF64
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.prepareClipStackGeometryF32
 
@@ -74,13 +80,13 @@ public fun prepareTransformedClipStackGeometryF32(
 private fun transformClipGeometryF64(sourceF64: ClipTransformGeometryF64, matrixF64: Matrix3x3F64, entryI64: MatrixClipEntryLedgerI64, policyF64: ClipPreparationPolicyF64): ClipDeviceGeometryF64 {
     if (!matrixF64.isFinite()) throw MatrixClipInvalidAbort()
     return when (sourceF64) {
-        is ClipTransformGeometryF64.Rect -> transformRectF64(sourceF64.copyRectF64(), matrixF64, entryI64)
-        is ClipTransformGeometryF64.RRect -> transformRRectF64(sourceF64.copyRRectF64(), matrixF64, entryI64)
+        is ClipTransformGeometryF64.Rect -> transformRectF64(sourceF64.copyRectF64(), matrixF64, entryI64, policyF64)
+        is ClipTransformGeometryF64.RRect -> transformRRectF64(sourceF64.copyRRectF64(), matrixF64, entryI64, policyF64)
         is ClipTransformGeometryF64.Path -> transformPathF64(sourceF64.pathF32, matrixF64, entryI64, policyF64)
     }
 }
 
-private fun transformRectF64(rectF64: RectF64, matrixF64: Matrix3x3F64, entryI64: MatrixClipEntryLedgerI64): ClipDeviceGeometryF64 {
+private fun transformRectF64(rectF64: RectF64, matrixF64: Matrix3x3F64, entryI64: MatrixClipEntryLedgerI64, policyF64: ClipPreparationPolicyF64): ClipDeviceGeometryF64 {
     if (!rectF64.isFinite()) throw MatrixClipInvalidAbort()
     if (matrixF64.classifyPathTransform() == PathTransformClass.Identity || matrixF64.classifyPathTransform() == PathTransformClass.AxisAlignedAffine) {
         entryI64.debitBeforeProjectionI64(ClipWorkUsageI64(attemptedEdgeCountI64 = 1L, snapshotByteCountI64 = 16L))
@@ -88,10 +94,10 @@ private fun transformRectF64(rectF64: RectF64, matrixF64: Matrix3x3F64, entryI64
         val second = matrixF64.mapAffineClipPointF64(Point2F64(rectF64.right, rectF64.bottom))
         return ClipDeviceGeometryF64.Rect(RectF64(minOf(first.x, second.x), minOf(first.y, second.y), maxOf(first.x, second.x), maxOf(first.y, second.y)))
     }
-    return transformPathInputF64(rectF64.toPathInputF64(), matrixF64, entryI64)
+    return transformPathF64(rectF64.toPathF32(), matrixF64, entryI64, policyF64)
 }
 
-private fun transformRRectF64(rrectF64: RRectF64, matrixF64: Matrix3x3F64, entryI64: MatrixClipEntryLedgerI64): ClipDeviceGeometryF64 {
+private fun transformRRectF64(rrectF64: RRectF64, matrixF64: Matrix3x3F64, entryI64: MatrixClipEntryLedgerI64, policyF64: ClipPreparationPolicyF64): ClipDeviceGeometryF64 {
     if (!rrectF64.isFinite()) throw MatrixClipInvalidAbort()
     if (matrixF64.classifyPathTransform() == PathTransformClass.Identity || matrixF64.classifyPathTransform() == PathTransformClass.AxisAlignedAffine) {
         entryI64.debitBeforeProjectionI64(ClipWorkUsageI64(attemptedEdgeCountI64 = 1L, snapshotByteCountI64 = 48L))
@@ -121,17 +127,31 @@ private fun transformRRectF64(rrectF64: RRectF64, matrixF64: Matrix3x3F64, entry
             mappedRadiiF64(deviceLeft = true, deviceTop = false),
         ))
     }
-    return transformPathInputF64(rrectF64.copyRectF64().toPathInputF64(), matrixF64, entryI64)
+    return transformPathF64(rrectF64.toPathF32(), matrixF64, entryI64, policyF64)
 }
 
 private fun transformPathF64(pathF32: PathF32, matrixF64: Matrix3x3F64, entryI64: MatrixClipEntryLedgerI64, policyF64: ClipPreparationPolicyF64): ClipDeviceGeometryF64 {
     if (matrixF64.classifyPathTransform() != PathTransformClass.Perspective) {
         return transformPathInputF64(PathFillInputF64.fromPathF32(pathF32), matrixF64, entryI64)
     }
-    pathF32.forEach { entryI64.debitBeforeProjectionI64(ClipWorkUsageI64(attemptedEdgeCountI64 = 1L, snapshotByteCountI64 = 16L)) }
-    return when (val projectedF64 = matrixF64.prepareProjectedPathFillInputF64(pathF32, policyF64.pathPolicyF64)) {
-        is PathProjectivePreparationResult.Ready -> ClipDeviceGeometryF64.Path(projectedF64.inputF64)
-        is PathProjectivePreparationResult.Empty -> ClipDeviceGeometryF64.Path(PathFillInputF64.of(pathF32.fillRule, emptyList()))
+    entryI64.preflightBeforeProjectionI64(ClipWorkUsageI64(
+        attemptedEdgeCountI64 = policyF64.limitsI32.maxAttemptedEdgesPerEntryI32.toLong(),
+        snapshotByteCountI64 = policyF64.limitsI64.maxSnapshotByteCountPerEntryI64,
+    ))
+    val entryBeforeI64 = entryI64.snapshotI64()
+    val frameBeforeI64 = entryI64.frameSnapshotI64()
+    return when (val projectedF64 = matrixF64.prepareProjectedPathFillInputF64(
+        pathF32, policyF64.pathPolicyF64, policyF64.toProjectiveWorkPolicyF64(),
+        entryBeforeI64.toPathStrokeUsageI64(), frameBeforeI64.toPathStrokeUsageI64(),
+    )) {
+        is PathProjectivePreparationResult.Ready -> {
+            entryI64.debitBeforeProjectionI64(projectedF64.pathWorkUsageAfterI64.toClipUsageI64() - entryBeforeI64)
+            ClipDeviceGeometryF64.Path(projectedF64.inputF64)
+        }
+        is PathProjectivePreparationResult.Empty -> {
+            entryI64.debitBeforeProjectionI64(projectedF64.pathWorkUsageAfterI64.toClipUsageI64() - entryBeforeI64)
+            ClipDeviceGeometryF64.Path(PathFillInputF64.of(pathF32.fillRule, emptyList()))
+        }
         is PathProjectivePreparationResult.InvalidScene -> throw MatrixClipInvalidAbort()
         is PathProjectivePreparationResult.ResourceLimitExceeded -> throw MatrixClipAbort(ClipPreparationResourceLimitReason.EntryAttemptedEdgeLimit)
     }
@@ -139,32 +159,39 @@ private fun transformPathF64(pathF32: PathF32, matrixF64: Matrix3x3F64, entryI64
 
 private fun transformPathInputF64(inputF64: PathFillInputF64, matrixF64: Matrix3x3F64, entryI64: MatrixClipEntryLedgerI64): ClipDeviceGeometryF64 {
     inputF64.forEach { entryI64.debitBeforeProjectionI64(ClipWorkUsageI64(attemptedEdgeCountI64 = 1L, snapshotByteCountI64 = 16L)) }
-    val mappedF64 = inputF64.map { segmentF64 -> matrixF64.mapClipSegmentF64(segmentF64) }
-    return ClipDeviceGeometryF64.Path(PathFillInputF64.of(inputF64.fillRule, mappedF64))
-}
-
-private fun RectF64.toPathInputF64(): PathFillInputF64 = PathFillInputF64.of(org.graphiks.math.geometry.FillRule.WINDING, listOf(
-    PathFillSegmentF64.MoveTo(Point2F64(left, top)), PathFillSegmentF64.LineTo(Point2F64(right, top)),
-    PathFillSegmentF64.LineTo(Point2F64(right, bottom)), PathFillSegmentF64.LineTo(Point2F64(left, bottom)), PathFillSegmentF64.Close,
-))
-
-private fun Matrix3x3F64.mapClipSegmentF64(segmentF64: PathFillSegmentF64): PathFillSegmentF64 = when (segmentF64) {
-    is PathFillSegmentF64.MoveTo -> PathFillSegmentF64.MoveTo(mapClipPointF64(segmentF64.point))
-    is PathFillSegmentF64.LineTo -> PathFillSegmentF64.LineTo(mapClipPointF64(segmentF64.point))
-    is PathFillSegmentF64.QuadTo -> PathFillSegmentF64.QuadTo(mapClipPointF64(segmentF64.control), mapClipPointF64(segmentF64.point))
-    is PathFillSegmentF64.CubicTo -> PathFillSegmentF64.CubicTo(mapClipPointF64(segmentF64.control1), mapClipPointF64(segmentF64.control2), mapClipPointF64(segmentF64.point))
-    is PathFillSegmentF64.ArcTo -> PathFillSegmentF64.ArcTo(segmentF64.radius, segmentF64.xAxisRotationDegreesF64, segmentF64.largeArc, segmentF64.sweep, mapClipPointF64(segmentF64.point))
-    PathFillSegmentF64.Close -> PathFillSegmentF64.Close
+    return try {
+        ClipDeviceGeometryF64.Path(matrixF64.mapAffinePathFillInputF64(inputF64, PathTransformWorkDebitI64 { }))
+    } catch (_: IllegalArgumentException) {
+        throw MatrixClipInvalidAbort()
+    }
 }
 
 private fun Matrix3x3F64.mapAffineClipPointF64(pointF64: Point2F64): Point2F64 = Point2F64(sxF64 * pointF64.x + kxF64 * pointF64.y + txF64, kyF64 * pointF64.x + syF64 * pointF64.y + tyF64).also { if (!it.isFinite()) throw MatrixClipInvalidAbort() }
-private fun Matrix3x3F64.mapClipPointF64(pointF64: Point2F64): Point2F64 {
-    val numeratorX = sxF64 * pointF64.x + kxF64 * pointF64.y + txF64
-    val numeratorY = kyF64 * pointF64.x + syF64 * pointF64.y + tyF64
-    val denominator = persp0F64 * pointF64.x + persp1F64 * pointF64.y + persp2F64
-    if (!numeratorX.isFinite() || !numeratorY.isFinite() || !denominator.isFinite() || denominator == 0.0) throw MatrixClipInvalidAbort()
-    return Point2F64(numeratorX / denominator, numeratorY / denominator).also { if (!it.isFinite()) throw MatrixClipInvalidAbort() }
-}
+private fun RectF64.toPathF32(): PathF32 = PathBuilder().addRect(toRectF32OrThrow()).build()
+private fun RRectF64.toPathF32(): PathF32 = PathBuilder().addRRect(RRectF32.of(
+    copyRectF64().toRectF32OrThrow(),
+    org.graphiks.math.geometry.CornerRadiiF32(topLeft.xF64.toFiniteF32OrThrow(), topLeft.yF64.toFiniteF32OrThrow()),
+    org.graphiks.math.geometry.CornerRadiiF32(topRight.xF64.toFiniteF32OrThrow(), topRight.yF64.toFiniteF32OrThrow()),
+    org.graphiks.math.geometry.CornerRadiiF32(bottomRight.xF64.toFiniteF32OrThrow(), bottomRight.yF64.toFiniteF32OrThrow()),
+    org.graphiks.math.geometry.CornerRadiiF32(bottomLeft.xF64.toFiniteF32OrThrow(), bottomLeft.yF64.toFiniteF32OrThrow()),
+)).build()
+private fun RectF64.toRectF32OrThrow(): RectF32 = RectF32(left.toFiniteF32OrThrow(), top.toFiniteF32OrThrow(), right.toFiniteF32OrThrow(), bottom.toFiniteF32OrThrow())
+private fun Double.toFiniteF32OrThrow(): Float = takeIf { it.isFinite() && kotlin.math.abs(it) <= Float.MAX_VALUE.toDouble() }?.toFloat() ?: throw MatrixClipInvalidAbort()
+
+private fun ClipPreparationPolicyF64.toProjectiveWorkPolicyF64(): PathStrokePolicyF64 = PathStrokePolicyF64(
+    limitsI32 = PathStrokeLimitsI32(
+        maxAttemptedGeometryUnitsPerPathI32 = limitsI32.maxAttemptedEdgesPerEntryI32,
+        maxAttemptedGeometryUnitsPerFrameI32 = limitsI32.maxAttemptedEdgesPerFrameI32,
+        maxEmittedVertexCountPerPathI32 = limitsI32.maxEmittedVertexCountPerEntryI32,
+        maxEmittedVertexCountPerFrameI32 = limitsI32.maxEmittedVertexCountPerFrameI32,
+        maxEmittedIndexCountPerPathI32 = limitsI32.maxEmittedIndexCountPerEntryI32,
+        maxEmittedIndexCountPerFrameI32 = limitsI32.maxEmittedIndexCountPerFrameI32,
+    ),
+    limitsI64 = PathStrokeLimitsI64(limitsI64.maxSnapshotByteCountPerEntryI64, limitsI64.maxSnapshotByteCountPerFrameI64),
+)
+private fun ClipWorkUsageI64.toPathStrokeUsageI64(): PathStrokeWorkUsageI64 = PathStrokeWorkUsageI64(attemptedEdgeCountI64, emittedVertexCountI64, emittedIndexCountI64, snapshotByteCountI64)
+private fun PathStrokeWorkUsageI64.toClipUsageI64(): ClipWorkUsageI64 = ClipWorkUsageI64(attemptedGeometryUnitCountI64, emittedVertexCountI64, emittedIndexCountI64, snapshotByteCountI64)
+private operator fun ClipWorkUsageI64.minus(beforeI64: ClipWorkUsageI64): ClipWorkUsageI64 = ClipWorkUsageI64(attemptedEdgeCountI64 - beforeI64.attemptedEdgeCountI64, emittedVertexCountI64 - beforeI64.emittedVertexCountI64, emittedIndexCountI64 - beforeI64.emittedIndexCountI64, snapshotByteCountI64 - beforeI64.snapshotByteCountI64)
 
 private fun ClipTransformGeometryF64.snapshotF64(): ClipTransformGeometryF64 = when (this) {
     is ClipTransformGeometryF64.Rect -> ClipTransformGeometryF64.Rect(copyRectF64())
@@ -180,6 +207,7 @@ private class MatrixClipWorkLedgerI64(stackI64: ClipWorkUsageI64, frameI64: Clip
     init { checkUsageI64(stackI64, Scope.Stack); checkUsageI64(frameI64, Scope.Frame) }
     fun beginEntryI64(): MatrixClipEntryLedgerI64 = MatrixClipEntryLedgerI64(this)
     fun stackSnapshotI64(): ClipWorkUsageI64 = stackUsageI64; fun frameSnapshotI64(): ClipWorkUsageI64 = frameUsageI64
+    fun preflightI64(entryI64: MatrixClipEntryLedgerI64, deltaI64: ClipWorkUsageI64) { checkUsageI64(addI64(entryI64.usageI64, deltaI64), Scope.Entry); checkUsageI64(addI64(stackUsageI64, deltaI64), Scope.Stack); checkUsageI64(addI64(frameUsageI64, deltaI64), Scope.Frame) }
     fun debitI64(entryI64: MatrixClipEntryLedgerI64, deltaI64: ClipWorkUsageI64) {
         val nextEntry = addI64(entryI64.usageI64, deltaI64); val nextStack = addI64(stackUsageI64, deltaI64); val nextFrame = addI64(frameUsageI64, deltaI64)
         checkUsageI64(nextEntry, Scope.Entry); checkUsageI64(nextStack, Scope.Stack); checkUsageI64(nextFrame, Scope.Frame)
@@ -198,6 +226,6 @@ private class MatrixClipWorkLedgerI64(stackI64: ClipWorkUsageI64, frameI64: Clip
         if (usage.snapshotByteCountI64 > bytes) throw MatrixClipAbort(when (scope) { Scope.Entry -> ClipPreparationResourceLimitReason.EntrySnapshotByteLimit; Scope.Stack -> ClipPreparationResourceLimitReason.StackSnapshotByteLimit; Scope.Frame -> ClipPreparationResourceLimitReason.FrameSnapshotByteLimit })
     }
 }
-private class MatrixClipEntryLedgerI64(private val parentI64: MatrixClipWorkLedgerI64) { internal var usageI64 = ClipWorkUsageI64(); fun debitBeforeProjectionI64(deltaI64: ClipWorkUsageI64) = parentI64.debitI64(this, deltaI64); fun snapshotI64(): ClipWorkUsageI64 = usageI64 }
+private class MatrixClipEntryLedgerI64(private val parentI64: MatrixClipWorkLedgerI64) { internal var usageI64 = ClipWorkUsageI64(); fun debitBeforeProjectionI64(deltaI64: ClipWorkUsageI64) = parentI64.debitI64(this, deltaI64); fun preflightBeforeProjectionI64(deltaI64: ClipWorkUsageI64) = parentI64.preflightI64(this, deltaI64); fun snapshotI64(): ClipWorkUsageI64 = usageI64; fun frameSnapshotI64(): ClipWorkUsageI64 = parentI64.frameSnapshotI64() }
 private fun addI64(first: ClipWorkUsageI64, second: ClipWorkUsageI64): ClipWorkUsageI64 = try { ClipWorkUsageI64(addComponent(first.attemptedEdgeCountI64, second.attemptedEdgeCountI64), addComponent(first.emittedVertexCountI64, second.emittedVertexCountI64), addComponent(first.emittedIndexCountI64, second.emittedIndexCountI64), addComponent(first.snapshotByteCountI64, second.snapshotByteCountI64)) } catch (_: IllegalStateException) { throw MatrixClipAbort(ClipPreparationResourceLimitReason.HostSizeOverflow) }
 private fun addComponent(first: Long, second: Long): Long { if (first > Long.MAX_VALUE - second) throw IllegalStateException(); return first + second }

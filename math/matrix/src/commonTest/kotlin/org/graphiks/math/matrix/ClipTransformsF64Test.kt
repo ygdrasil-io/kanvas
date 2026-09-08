@@ -11,6 +11,9 @@ import org.graphiks.math.geometry.ClipPreparationResourceLimitReason
 import org.graphiks.math.geometry.ClipStackPreparationResult
 import org.graphiks.math.geometry.RectF64
 import org.graphiks.math.geometry.RectI32
+import org.graphiks.math.geometry.RRectF64
+import org.graphiks.math.geometry.CornerRadiiF64
+import org.graphiks.math.geometry.PathBuilder
 
 class ClipTransformsF64Test {
     @Test
@@ -63,5 +66,60 @@ class ClipTransformsF64Test {
             ClipPreparationResourceLimitReason.EntryAttemptedEdgeLimit,
             assertIs<ClipStackPreparationResult.ResourceLimitExceeded>(result).reason,
         )
+    }
+
+    @Test
+    fun `axis reflection preserves exact rounded rectangle radii and general affine preserves rounded path bounds`() {
+        val rrectF64 = RRectF64.of(
+            RectF64(1.0, 2.0, 5.0, 8.0),
+            CornerRadiiF64.of(1.0, 2.0), CornerRadiiF64.of(3.0, 4.0),
+            CornerRadiiF64.of(5.0, 6.0), CornerRadiiF64.of(7.0, 8.0),
+        )
+        val reflected = assertIs<ClipStackPreparationResult.Ready>(
+            prepareTransformedClipStackGeometryF32(
+                listOf(ClipTransformInputF64.of(ClipTransformGeometryF64.RRect(rrectF64), Matrix3x3F64(sxF64 = -2.0, syF64 = 3.0), ClipOperation.Intersect)),
+                RectI32(-16, -16, 16, 32),
+            ),
+        )
+        val reflectedRRectF32 = assertIs<ClipGeometryF32.RRect>(reflected.entriesF32.single().geometryF32).copyRRectF32()
+        assertEquals(6f, reflectedRRectF32.topLeft.x)
+        assertEquals(12f, reflectedRRectF32.topLeft.y)
+        assertEquals(2f, reflectedRRectF32.topRight.x)
+        assertEquals(6f, reflectedRRectF32.topRight.y)
+
+        val affine = assertIs<ClipStackPreparationResult.Ready>(
+            prepareTransformedClipStackGeometryF32(
+                listOf(ClipTransformInputF64.of(ClipTransformGeometryF64.RRect(rrectF64), Matrix3x3F64(kxF64 = 1.0), ClipOperation.Intersect)),
+                RectI32(-16, -16, 32, 32),
+            ),
+        )
+        assertIs<ClipGeometryF32.Path>(affine.entriesF32.single().geometryF32)
+        assertEquals(RectI32(3, 2, 12, 8), affine.entriesF32.single().copyConservativeScissorI32())
+    }
+
+    @Test
+    fun `perspective curve that crosses a horizon refuses before clip geometry publishes`() {
+        val pathF32 = PathBuilder().moveTo(1f, 0f).quadTo(-3f, 1f, 1f, 0f).close().build()
+        val result = prepareTransformedClipStackGeometryF32(
+            listOf(ClipTransformInputF64.of(ClipTransformGeometryF64.Path(pathF32), Matrix3x3F64(persp0F64 = 1.0, persp2F64 = 0.0), ClipOperation.Intersect)),
+            RectI32(-16, -16, 16, 16),
+        )
+
+        assertIs<ClipStackPreparationResult.InvalidScene>(result)
+    }
+
+    @Test
+    fun `perspective rounded rectangle horizon uses projective path preparation`() {
+        val result = prepareTransformedClipStackGeometryF32(
+            listOf(
+                ClipTransformInputF64.of(
+                    ClipTransformGeometryF64.RRect(RRectF64.of(RectF64(-1.0, 0.0, 1.0, 2.0), 0.25)),
+                    Matrix3x3F64(persp0F64 = 1.0, persp2F64 = 0.0), ClipOperation.Intersect,
+                ),
+            ),
+            RectI32(-16, -16, 16, 16),
+        )
+
+        assertIs<ClipStackPreparationResult.InvalidScene>(result)
     }
 }

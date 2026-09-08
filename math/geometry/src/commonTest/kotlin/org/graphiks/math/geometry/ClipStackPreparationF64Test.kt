@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlin.test.assertFails
 
 class ClipStackPreparationF64Test {
     @Test
@@ -46,7 +47,7 @@ class ClipStackPreparationF64Test {
         assertIs<ClipGeometryF32.Path>(result.entriesF32[2].geometryF32)
         assertEquals(RectI32(0, 0, 10, 10), result.entriesF32[0].copyConservativeScissorI32())
         assertEquals(RectI32(0, 1, 6, 10), result.entriesF32[1].copyConservativeScissorI32())
-        assertEquals(RectI32(2, 2, 8, 8), result.entriesF32[2].copyConservativeScissorI32())
+        assertEquals(RectI32(0, 0, 10, 10), result.entriesF32[2].copyConservativeScissorI32())
     }
 
     @Test
@@ -120,6 +121,91 @@ class ClipStackPreparationF64Test {
         assertIs<ClipGeometryF32.Empty>(result.entriesF32.single().geometryF32)
         assertEquals(ClipOperation.Difference, result.entriesF32.single().operation)
         assertEquals(ClipWorkUsageI64(), result.stackWorkUsageAfterI64)
+    }
+
+    @Test
+    fun `inverse fill scissors cover the complete target including empty geometry`() {
+        listOf(FillRule.INVERSE_WINDING, FillRule.INVERSE_EVEN_ODD).forEach { fillRule ->
+            val inputF64 = PathFillInputF64.of(fillRule, emptyList())
+            val result = assertIs<ClipStackPreparationResult.Ready>(
+                prepareClipStackGeometryF32(
+                    listOf(ClipDeviceInputF64.of(ClipDeviceGeometryF64.Path(inputF64), ClipOperation.Intersect)),
+                    RectI32(3, 4, 11, 12),
+                ),
+            )
+            assertIs<ClipGeometryF32.Empty>(result.entriesF32.single().geometryF32)
+            assertEquals(RectI32(3, 4, 11, 12), result.entriesF32.single().copyConservativeScissorI32())
+        }
+    }
+
+    @Test
+    fun `empty path attempts participate in the following frame budget`() {
+        val emptyPathF64 = PathFillInputF64.of(
+            FillRule.WINDING,
+            listOf(PathFillSegmentF64.MoveTo(Point2F64(0.0, 0.0)), PathFillSegmentF64.LineTo(Point2F64(1.0, 0.0))),
+        )
+        val policyF64 = ClipPreparationPolicyF64(
+            limitsI32 = ClipPreparationLimitsI32(maxAttemptedEdgesPerFrameI32 = 5),
+        )
+        val first = assertIs<ClipStackPreparationResult.Ready>(
+            prepareClipStackGeometryF32(
+                listOf(ClipDeviceInputF64.of(ClipDeviceGeometryF64.Path(emptyPathF64), ClipOperation.Intersect)),
+                RectI32(0, 0, 8, 8), policyF64,
+            ),
+        )
+        val second = prepareClipStackGeometryF32(
+            listOf(ClipDeviceInputF64.of(ClipDeviceGeometryF64.Rect(RectF64(0.0, 0.0, 2.0, 2.0)), ClipOperation.Intersect)),
+            RectI32(0, 0, 8, 8), policyF64, frameWorkUsageBeforeI64 = first.frameWorkUsageAfterI64,
+        )
+
+        assertEquals(2L, first.frameWorkUsageAfterI64.attemptedEdgeCountI64)
+        assertEquals(ClipPreparationResourceLimitReason.FrameAttemptedEdgeLimit, assertIs<ClipStackPreparationResult.ResourceLimitExceeded>(second).reason)
+    }
+
+    @Test
+    fun `published entry list cannot be mutated through a mutable list cast`() {
+        val result = assertIs<ClipStackPreparationResult.Ready>(
+            prepareClipStackGeometryF32(
+                listOf(ClipDeviceInputF64.of(ClipDeviceGeometryF64.Rect(RectF64(0.0, 0.0, 2.0, 2.0)), ClipOperation.Intersect)),
+                RectI32(0, 0, 8, 8),
+            ),
+        )
+
+        assertFails { (result.entriesF32 as MutableList<ClipPreparedEntryF32>).clear() }
+        assertEquals(1, result.entriesF32.size)
+    }
+
+    @Test
+    fun `finite F64 geometry outside F32 range fails closed`() {
+        val result = prepareClipStackGeometryF32(
+            listOf(ClipDeviceInputF64.of(ClipDeviceGeometryF64.Rect(RectF64(0.0, 0.0, Double.MAX_VALUE, 1.0)), ClipOperation.Intersect)),
+            RectI32(0, 0, 8, 8),
+        )
+
+        assertEquals(ClipPreparationInvalidSceneReason.NonFiniteGeometry, assertIs<ClipStackPreparationResult.InvalidScene>(result).reason)
+    }
+
+    @Test
+    fun `rrect and path inputs retain their construction snapshots after source mutation`() {
+        val rrectBoundsF64 = RectF64(1.0, 2.0, 7.0, 8.0)
+        val rrectF64 = RRectF64.of(rrectBoundsF64, 2.0)
+        val sourceSegmentsF64 = mutableListOf<PathFillSegmentF64>(
+            PathFillSegmentF64.MoveTo(Point2F64(0.0, 0.0)),
+            PathFillSegmentF64.LineTo(Point2F64(3.0, 0.0)),
+            PathFillSegmentF64.LineTo(Point2F64(0.0, 3.0)),
+            PathFillSegmentF64.Close,
+        )
+        val pathF64 = PathFillInputF64.of(FillRule.WINDING, sourceSegmentsF64)
+        val inputsF64 = listOf(
+            ClipDeviceInputF64.of(ClipDeviceGeometryF64.RRect(rrectF64), ClipOperation.Intersect),
+            ClipDeviceInputF64.of(ClipDeviceGeometryF64.Path(pathF64), ClipOperation.Intersect),
+        )
+        rrectBoundsF64.left = -99.0
+        sourceSegmentsF64.clear()
+
+        val result = assertIs<ClipStackPreparationResult.Ready>(prepareClipStackGeometryF32(inputsF64, RectI32(0, 0, 16, 16)))
+        assertEquals(1f, assertIs<ClipGeometryF32.RRect>(result.entriesF32[0].geometryF32).copyRRectF32().rect.left)
+        assertIs<ClipGeometryF32.Path>(result.entriesF32[1].geometryF32)
     }
 
     @Test

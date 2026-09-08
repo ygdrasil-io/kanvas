@@ -28,6 +28,11 @@ internal class ClipWorkLedgerI64(
     private var frameUsageI64 = frameWorkUsageBeforeI64
     init { requireStackI64(stackUsageI64); requireFrameI64(frameUsageI64) }
     fun beginEntryI64(entryWorkUsageBeforeI64: ClipWorkUsageI64): ClipEntryWorkLedgerI64 { requireEntryI64(entryWorkUsageBeforeI64); return ClipEntryWorkLedgerI64(this, entryWorkUsageBeforeI64) }
+    fun preflightBeforeEmissionI64(entryI64: ClipEntryWorkLedgerI64, deltaI64: ClipWorkUsageI64) {
+        requireEntryI64(addClipUsageI64(entryI64.usageI64, deltaI64))
+        requireStackI64(addClipUsageI64(stackUsageI64, deltaI64))
+        requireFrameI64(addClipUsageI64(frameUsageI64, deltaI64))
+    }
     fun snapshotStackUsageAfterI64(): ClipWorkUsageI64 = stackUsageI64
     fun snapshotFrameUsageAfterI64(): ClipWorkUsageI64 = frameUsageI64
     internal fun debitI64(entryI64: ClipEntryWorkLedgerI64, deltaI64: ClipWorkUsageI64) {
@@ -44,6 +49,7 @@ internal class ClipWorkLedgerI64(
 
 internal class ClipEntryWorkLedgerI64(private val parentI64: ClipWorkLedgerI64, internal var usageI64: ClipWorkUsageI64) {
     fun debitBeforeEmissionI64(deltaI64: ClipWorkUsageI64) { parentI64.debitI64(this, deltaI64) }
+    fun preflightBeforeEmissionI64(deltaI64: ClipWorkUsageI64) { parentI64.preflightBeforeEmissionI64(this, deltaI64) }
     fun snapshotUsageAfterI64(): ClipWorkUsageI64 = usageI64
 }
 
