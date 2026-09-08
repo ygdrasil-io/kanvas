@@ -24,6 +24,7 @@ import org.graphiks.kanvas.gpu.plan.PlanTextureFormat
 import org.graphiks.kanvas.gpu.plan.PlanTextureResolveSupport
 import org.graphiks.kanvas.gpu.plan.PlanTextureSampleSupport
 import org.graphiks.kanvas.gpu.plan.PlanPass
+import org.graphiks.kanvas.gpu.plan.PathDrawGeometry
 import org.graphiks.kanvas.gpu.plan.BinaryMaskFetchPlan
 import org.graphiks.kanvas.gpu.plan.SamplePlan
 import org.graphiks.kanvas.gpu.plan.RenderGraph
@@ -45,6 +46,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage
 import org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipPassAuthority
+import org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipGeometry
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleResolveAction
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlanner
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
@@ -282,6 +284,47 @@ class GpuPlanTaskListLowererW4eTest {
     }
 
     @Test
+    fun `prepared W4e geometry snapshots resist mutations through returned data`() {
+        val lowered = assertIs<GpuPlanLoweringResult.Lowered>(
+            GpuPlanTaskListLowerer().lower(request(aaMaskGraph(inverse = true))),
+        )
+        val renders = lowered.taskList.tasks.filterIsInstance<GPUTask.Render>()
+        val path = requireNotNull(renders.mapNotNull { it.drawPackets.single().w4ePreparedPath }.firstOrNull())
+        val producer = assertIs<GPUW4ePreparedClipPassAuthority.Producer>(
+            renders.mapNotNull { it.drawPackets.single().w4ePreparedClipPass }
+                .filterIsInstance<GPUW4ePreparedClipPassAuthority.Producer>()
+                .single(),
+        )
+        val inverse = renders.mapNotNull { render ->
+            render.drawPackets.single().w4ePreparedClipConsumer as? GPUW4ePreparedClipConsumerAuthority.InverseMask
+        }.first()
+
+        fun mutateAndReread(copy: () -> org.graphiks.math.geometry.PathFillGeometryF32) {
+            val first = copy()
+            val mutableVertices = first.copyDirectTriangleF32OrNull()?.copyVerticesF32()
+                ?: first.copyStencilEdgeFanF32OrNull()!!.copyVerticesF32()
+            val retainedFirstVertex = mutableVertices[0]
+            mutableVertices[0] = retainedFirstVertex + 100f
+            val reread = copy().copyDirectTriangleF32OrNull()?.copyVerticesF32()
+                ?: copy().copyStencilEdgeFanF32OrNull()!!.copyVerticesF32()
+            assertEquals(retainedFirstVertex, reread[0])
+        }
+
+        mutateAndReread {
+            assertIs<PathDrawGeometry.Fill>(path.copyGeometry()).valueF32
+        }
+        mutateAndReread {
+            assertIs<GPUW4ePreparedClipGeometry.Path>(producer.geometry).copyPathGeometryF32()
+        }
+        mutateAndReread {
+            assertIs<GPUW4ePreparedInverseInteriorCoverage.Geometry>(inverse.interiorCoverage).copyGeometryF32()
+        }
+        val changedDomain = inverse.domain.copy(right = inverse.domain.right - 1)
+        assertEquals(16, inverse.domain.right)
+        assertEquals(15, changedDomain.right)
+    }
+
+    @Test
     fun `prepared path carries the sealed command and W4e MSAA continuation into the frame planner`() {
         val graph = aaMaskGraph(drawCount = 2)
         val lowered = assertIs<GpuPlanLoweringResult.Lowered>(GpuPlanTaskListLowerer().lower(request(graph)))
@@ -353,28 +396,14 @@ class GpuPlanTaskListLowererW4eTest {
     }
 
     @Test
-    fun `insufficient prepared memory refuses W4e lowering without partial tasks`() {
+    fun `accepted W4e graph refuses an insufficient current memory budget without partial tasks`() {
         val graph = aaMaskGraph()
+
         val refused = GpuPlanTaskListLowerer().lower(
-            request(graph).copy(capabilities = rendererCapabilities(maxBufferSize = 1L)),
+            request(graph).copy(rendererAggregateMemoryBudgetBytes = 1L),
         )
 
-        assertTrue(refused !is GpuPlanLoweringResult.Lowered)
-    }
-
-    @Test
-    fun `sealed W4e budget refusal publishes no lowerable graph or partial tasks`() {
-        val scene = SceneSnapshot.of(
-            SceneExtent(16, 16), ColorSpace.SRGB, listOf(pathDraw()),
-        )
-        val compiler = W4eClipPlanCompiler()
-        val candidate = assertIs<GpuPlanSelection.Candidate>(
-            compiler.select(scene, RenderTargetDescriptor(scene.extent, scene.colorSpace)),
-        ).candidate
-
-        assertIs<RenderPlanResult.ResourceLimitExceeded>(
-            compiler.plan(candidate, planCapabilities(), PlanBudget(1L)),
-        )
+        assertIs<GpuPlanLoweringResult.InvalidPlan>(refused)
     }
 
     @Test

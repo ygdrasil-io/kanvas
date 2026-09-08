@@ -114,7 +114,12 @@ internal class W4eClipGraphLowerer {
         }
         val preparations = graph.resources().map { resource -> preparation(resource, refs.getValue(resource.id.value), bounds, graph.capabilities.copyBytesPerRowAlignment.toLong()) }
         val readback = GPUFrameReadbackRequest(GPUReadbackRequestID("w4e.${graph.id.value}.readback"), bounds, GPUReadbackPixelFormat.Rgba8Unorm, GPUColorInterpretation.EncodedPremulSrgb)
-        val memory = memory(graph, bounds, limits)
+        val memory = memory(
+            graph,
+            bounds,
+            limits,
+            request.rendererAggregateMemoryBudgetBytes ?: graph.budget.maxFrameLocalBytes,
+        )
         if (!GPUFrameMemoryBudgetPlanner.hasExactLimitIndependentFacts(memory) || memory.diagnostic != null ||
             memory.peakFrameTransientBytes + memory.targetResidentBytes != graph.peakFrameLocalBytes
         ) return invalid()
@@ -337,6 +342,7 @@ internal class W4eClipGraphLowerer {
         graph: org.graphiks.kanvas.gpu.plan.RenderGraph,
         bounds: GPUPixelBounds,
         limits: org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits,
+        aggregateBudgetBytes: Long,
     ): GPUFrameMemoryBudgetPlan = GPUFrameMemoryBudgetPlanner.plan(
         GPUFrameMemoryBudgetRequest(
             graph.resources().map { resource ->
@@ -368,7 +374,7 @@ internal class W4eClipGraphLowerer {
                     lastPassIndexExclusive = resource.lastPassIndexExclusive,
                 )
             },
-            graph.budget.maxFrameLocalBytes,
+            aggregateBudgetBytes,
             limits,
         ),
     )

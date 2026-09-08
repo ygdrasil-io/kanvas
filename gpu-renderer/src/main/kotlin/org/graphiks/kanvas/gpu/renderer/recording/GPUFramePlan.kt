@@ -967,6 +967,8 @@ private fun CanonicalHashSink.memoryAllocation(value: GPUFrameMemoryAllocation) 
     long("bytes", value.bytes)
     string("resourceKind", value.resourceKind.name)
     nullable("extent", value.extent) { bounds("value", it) }
+    long("firstPassIndex", value.firstPassIndex.toLong())
+    long("lastPassIndexExclusive", value.lastPassIndexExclusive.toLong())
 }
 
 private fun CanonicalHashSink.step(value: GPUFrameStep) {
@@ -2321,7 +2323,8 @@ private fun GPUFrameMemoryBudgetPlan.dumpLine(): String =
         }} allocations=${allocations.mapIndexed { index, allocation ->
             "$index:{label=${allocation.label},category=${allocation.category.name}," +
                 "bytes=${allocation.bytes},kind=${allocation.resourceKind.name}," +
-                "extent=${allocation.extent ?: "none"}}"
+                "extent=${allocation.extent ?: "none"},firstPass=${allocation.firstPassIndex}," +
+                "lastPassExclusive=${allocation.lastPassIndexExclusive}}"
         }.joinToString(";").ifEmpty { "none" }} " +
         "budgetDiagnostic=${diagnostic?.dumpLine("budget") ?: "none"}"
 

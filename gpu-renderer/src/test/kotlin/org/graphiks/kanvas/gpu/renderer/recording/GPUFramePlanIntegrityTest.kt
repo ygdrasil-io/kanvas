@@ -321,6 +321,51 @@ class GPUFramePlanIntegrityTest {
     }
 
     @Test
+    fun `allocation lifetime alone participates in frame hash and audit dump`() {
+        fun plan(firstPass: Int, lastPassExclusive: Int): GPUFramePlan {
+            val frameId = GPUFrameID(91)
+            val capabilitySeal = capabilitySeal(frameId)
+            return GPUFramePlan(
+                frameId = frameId,
+                capabilitySeal = capabilitySeal,
+                recordingSeals = listOf(seal("recording.a", 0, capabilitySeal.sealHash)),
+                steps = emptyList(),
+                memoryBudget = GPUFrameMemoryBudgetPlan(
+                    peakFrameTransientBytes = 64,
+                    targetResidentBytes = 0,
+                    categoryTotals = GPUFrameMemoryCategory.entries.associateWith { category ->
+                        if (category == GPUFrameMemoryCategory.ReusableScratch) 64L else 0L
+                    },
+                    deviceLimitFacts = emptyList(),
+                    configuredAggregateBudgetBytes = 128,
+                    diagnostic = null,
+                    allocations = listOf(
+                        GPUFrameMemoryAllocation(
+                            label = "allocation.lifetime",
+                            category = GPUFrameMemoryCategory.ReusableScratch,
+                            bytes = 64,
+                            resourceKind = GPUFrameMemoryResourceKind.Buffer,
+                            extent = null,
+                            firstPassIndex = firstPass,
+                            lastPassIndexExclusive = lastPassExclusive,
+                        ),
+                    ),
+                ),
+                diagnostics = emptyList(),
+            )
+        }
+
+        val early = plan(firstPass = 0, lastPassExclusive = 2)
+        val late = plan(firstPass = 3, lastPassExclusive = 5)
+
+        assertEquals(early.memoryBudget.peakFrameTransientBytes, late.memoryBudget.peakFrameTransientBytes)
+        assertNotEquals(early.stableHash(), late.stableHash())
+        assertNotEquals(early.dumpLines(), late.dumpLines())
+        assertTrue(early.dumpLines().joinToString("\n").contains("firstPass=0,lastPassExclusive=2"))
+        assertTrue(late.dumpLines().joinToString("\n").contains("firstPass=3,lastPassExclusive=5"))
+    }
+
+    @Test
     fun `atomically refused frame plan cannot retain encodable steps`() {
         val packet = packet(6, blendPlan = executableBlend())
         val frameId = GPUFrameID(92)
