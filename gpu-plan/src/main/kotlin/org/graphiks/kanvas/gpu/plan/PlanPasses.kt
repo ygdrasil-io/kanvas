@@ -50,6 +50,8 @@ public sealed interface ClipPlanStrategy {
         public val geometryF32: InversePathGeometryF32,
         public val resource: PlanResourceId,
     ) : ClipPlanStrategy
+    /** Bounded inverse coverage over the full target domain when no clip texture is needed. */
+    public class InverseDomain(public val geometryF32: InversePathGeometryF32) : ClipPlanStrategy
 }
 public enum class PathFillStrategy { DirectTriangle, StencilCover }
 public enum class PathRenderPhase {
@@ -512,6 +514,8 @@ public sealed interface PlanPass {
         public val atomicGroup: PlanAtomicGroupId,
         /** Applies finite producer coverage as the complement inside the initialized clip domain. */
         public val inverseCoverage: Boolean = false,
+        /** Preserves analytic AA for rect producers even when their attachment is single-sample. */
+        public val antiAlias: Boolean = sampleCountI32 == 4,
     ) : PlanPass {
         override public val role: PlanPassRole = PlanPassRole.ClipMaskProducer
         override public val id: PlanPassId = checkedPassId(role, ordinal)

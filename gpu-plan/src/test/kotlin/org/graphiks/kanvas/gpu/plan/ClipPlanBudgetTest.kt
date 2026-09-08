@@ -11,7 +11,12 @@ class ClipPlanBudgetTest {
     }
 
     @Test
-    fun `hard clip pool charges two accumulators and resolved scratch`() {
-        assertEquals(3_072L, ClipPlanBudget.hardClipBytes(SizeI32(16, 16)))
+    fun `hard path clip pool charges its one-sample depth-stencil attachment`() {
+        assertEquals(4_096L, ClipPlanBudget.hardClipBytes(SizeI32(16, 16)))
+    }
+
+    @Test
+    fun `hard analytic rect pool omits depth-stencil capacity`() {
+        assertEquals(3_072L, ClipPlanBudget.hardClipBytes(SizeI32(16, 16), requiresDepthStencil = false))
     }
 }

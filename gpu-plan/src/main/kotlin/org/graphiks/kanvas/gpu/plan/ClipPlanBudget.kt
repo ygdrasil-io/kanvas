@@ -8,11 +8,17 @@ public object ClipPlanBudget {
     public fun aaPathClipBytes(extentI32: SizeI32): Long =
         checkedAaPathClipBytesI64(extentI32.width, extentI32.height)
 
-    /** Two 1x accumulators and one resolved scratch. */
-    public fun hardClipBytes(extentI32: SizeI32): Long = Math.multiplyExact(
-        checkedMaskTextureBytesI64(extentI32.width, extentI32.height, 1),
-        3L,
-    )
+    /**
+     * Two 1x accumulators, one resolved scratch and, for a path producer, its 1x D24S8
+     * attachment.  Analytic rect-only pools pass [requiresDepthStencil] as false.
+     */
+    public fun hardClipBytes(
+        extentI32: SizeI32,
+        requiresDepthStencil: Boolean = true,
+    ): Long {
+        val oneSampleI64 = checkedMaskTextureBytesI64(extentI32.width, extentI32.height, 1)
+        return Math.multiplyExact(oneSampleI64, if (requiresDepthStencil) 4L else 3L)
+    }
 
     internal fun checkedMaskTextureBytesI64(widthI32: Int, heightI32: Int, sampleCountI32: Int): Long =
         Math.multiplyExact(

@@ -151,6 +151,7 @@ private class W4dGeneralGraphDigestWriter {
                 clipGeometry("$prefix.geometry", pass.copyGeometryF32())
                 text("$prefix.atomic-group", pass.atomicGroup.value)
                 bool("$prefix.inverse-coverage", pass.inverseCoverage)
+                bool("$prefix.anti-alias", pass.antiAlias)
             }
             is PlanPass.ClipMaskFold -> {
                 text("$prefix.kind", "clip-mask-fold")
@@ -229,6 +230,17 @@ private class W4dGeneralGraphDigestWriter {
             is ClipPlanStrategy.Mask -> text("$prefix.mask", clip.resource.value)
             is ClipPlanStrategy.InverseMask -> {
                 text("$prefix.inverse.mask", clip.resource.value)
+                rect("$prefix.inverse.domain", clip.geometryF32.copyDomainI32())
+                when (val interior = clip.geometryF32.interiorCoverageF32) {
+                    org.graphiks.math.geometry.InverseInteriorCoverageF32.Zero -> text("$prefix.inverse.interior", "zero")
+                    is org.graphiks.math.geometry.InverseInteriorCoverageF32.Geometry -> {
+                        text("$prefix.inverse.interior", "geometry")
+                        fillGeometry("$prefix.inverse.geometry", interior.copyGeometryF32())
+                    }
+                }
+            }
+            is ClipPlanStrategy.InverseDomain -> {
+                text("$prefix.inverse.domain-only", "1")
                 rect("$prefix.inverse.domain", clip.geometryF32.copyDomainI32())
                 when (val interior = clip.geometryF32.interiorCoverageF32) {
                     org.graphiks.math.geometry.InverseInteriorCoverageF32.Zero -> text("$prefix.inverse.interior", "zero")

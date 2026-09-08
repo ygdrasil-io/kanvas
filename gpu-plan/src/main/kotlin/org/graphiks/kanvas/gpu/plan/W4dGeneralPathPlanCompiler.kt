@@ -63,6 +63,8 @@ import org.graphiks.math.matrix.toMatrix3x3F64
 public class W4dGeneralPathPlanCompiler internal constructor(
     private val strokePolicyF64: PathStrokePolicyF64,
     private val acceptsNarrowTransforms: Boolean = false,
+    /** W4e may promote a mixed clip frame to its AA4 construction branch without rewriting draws. */
+    private val forceAaFrame: Boolean = false,
 ) : GpuPlanCompiler {
     public constructor() : this(PathStrokePolicyF64())
 
@@ -303,7 +305,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         if (selected.owner !== this || !selected.hasMatchingFingerprints()) return invalidCandidate()
         val extent = SizeI32(selected.target.extent.width, selected.target.extent.height)
         if (!coreCapabilities(capabilities, extent)) return promoted("Required W4d.2 device capability is unavailable")
-        val anyAa = selected.draws.any { it.requestsAntiAlias }
+        val anyAa = forceAaFrame || selected.draws.any { it.requestsAntiAlias }
         val anyHard = selected.draws.any { !it.requestsAntiAlias }
         val aaStencil = selected.draws.any { it.requestsAntiAlias && it.strategy == PathFillStrategy.StencilCover }
         val hardStencil = selected.draws.any { !it.requestsAntiAlias && it.strategy == PathFillStrategy.StencilCover }
@@ -918,7 +920,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
     private data class SealedDraw(val commandIndex: Int, val color: ColorF32, val geometry: PathDrawGeometry, val strategy: PathFillStrategy, val scissorI32: RectI32, val requestsAntiAlias: Boolean)
     private data class ResourceLife(val ordinal: Int, val first: Int, val last: Int)
     private class Candidate(val owner: W4dGeneralPathPlanCompiler, override val sceneCanonicalId: org.graphiks.kanvas.render.ir.CanonicalId, override val target: RenderTargetDescriptor, draws: List<SealedDraw>) : GpuPlanCandidate {
-        override val capabilityId: String = if (draws.any { it.requestsAntiAlias }) AA_CAPABILITY_ID else HARD_CAPABILITY_ID
+        override val capabilityId: String = if (owner.forceAaFrame || draws.any { it.requestsAntiAlias }) AA_CAPABILITY_ID else HARD_CAPABILITY_ID
         val draws: List<SealedDraw> = Collections.unmodifiableList(draws.map { it.copy(scissorI32 = it.scissorI32.copy()) })
         private val sceneFingerprint = sceneCanonicalId
         private val targetFingerprint = target.canonicalId

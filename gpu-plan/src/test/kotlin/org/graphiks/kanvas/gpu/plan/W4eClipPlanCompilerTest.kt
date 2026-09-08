@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.plan
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.render.ir.BlendMode
@@ -30,6 +31,11 @@ import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.PathBuilder
 import org.graphiks.math.geometry.PathF32
 import org.graphiks.math.geometry.FillRule
+import org.graphiks.math.geometry.ClipPreparationLimitsI32
+import org.graphiks.math.geometry.ClipPreparationLimitsI64
+import org.graphiks.math.geometry.ClipPreparationPolicyF64
+import org.graphiks.math.geometry.InverseInteriorCoverageF32
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.matrix.Matrix3x3F32
 
@@ -302,6 +308,237 @@ class W4eClipPlanCompilerTest {
     }
 
     @Test
+    fun `hard draw promotes its frame when an AA path clip needs four-sample coverage`() {
+        val clip = complexClip(
+            ClipEntry(
+                geometry = GeometryNode.Path(clipPath()),
+                operation = ClipOperation.INTERSECT,
+                antiAlias = true,
+                transform = ClipTransformSnapshot.Known.of(Matrix3x3F32.rotation(0.1f)),
+            ),
+        )
+
+        val graph = compile(sceneOf(pathDraw(coverage = CoverageRequest.HARD_EDGE, clip = clip)))
+
+        assertEquals(W4eClipPlanCompiler.AA_CAPABILITY_ID, graph.capabilityId)
+        assertTrue(graph.resources().any { it.role == PlanResourceRole.MultisampleColorTarget && it.sampleCountI32 == 4 })
+        assertTrue(graph.passes().filterIsInstance<PlanPass.PathRenderPass>().any { it.draw is ClippedBinaryMaskedPathDraw })
+    }
+
+    @Test
+    fun `intersecting an empty clip produces zero coverage without allocating an orphaned mask pool`() {
+        val clip = complexClip(
+            ClipEntry(
+                geometry = GeometryNode.Path(PathBuilder().build()),
+                operation = ClipOperation.INTERSECT,
+                antiAlias = false,
+                transform = ClipTransformSnapshot.Known.of(Matrix3x3F32.Identity),
+            ),
+        )
+
+        val graph = compile(sceneOf(pathDraw(clip = clip)))
+
+        assertTrue(graph.resources().none { it.role in setOf(
+            PlanResourceRole.CoverageMaskAccumulator,
+            PlanResourceRole.CoverageMaskScratch,
+            PlanResourceRole.CoverageMaskMultisampleScratch,
+            PlanResourceRole.CoverageMaskDepthStencil,
+        ) })
+        assertTrue(graph.verifyW4eCompilerWitness())
+    }
+
+    @Test
+    fun `difference with an inverse-empty clip produces zero coverage without a mask pool`() {
+        val clip = complexClip(
+            ClipEntry(
+                geometry = GeometryNode.Path(PathBuilder(FillRule.INVERSE_WINDING).build()),
+                operation = ClipOperation.DIFFERENCE,
+                antiAlias = false,
+                transform = ClipTransformSnapshot.Known.of(Matrix3x3F32.Identity),
+            ),
+        )
+
+        val graph = compile(sceneOf(pathDraw(clip = clip)))
+
+        assertTrue(graph.resources().none { it.role in clipMaskRoles() })
+        val strategy = assertIs<ClippedGeneralPathDraw>(
+            graph.passes().filterIsInstance<PlanPass.PathRenderPass>().single().draw,
+        ).clip
+        assertTrue(assertIs<ClipPlanStrategy.Scissor>(strategy).copyDomainI32().isEmpty)
+    }
+
+    @Test
+    fun `empty and identity-only clip stacks publish no unused mask resources`() {
+        val empty = ClipStackNode.Operations.of(emptyList())
+        val identityOnly = complexClip(
+            ClipEntry(
+                geometry = GeometryNode.Path(PathBuilder().build()),
+                operation = ClipOperation.DIFFERENCE,
+                antiAlias = false,
+                transform = ClipTransformSnapshot.Known.of(Matrix3x3F32.Identity),
+            ),
+        )
+
+        listOf(empty, identityOnly).forEach { clip ->
+            val graph = compile(sceneOf(pathDraw(clip = clip)))
+            assertTrue(graph.resources().none { it.role in clipMaskRoles() })
+            assertTrue(graph.verifyW4eCompilerWitness())
+        }
+    }
+
+    @Test
+    fun `ordered mask folds keep non-identity operations after empty identities`() {
+        val clip = complexClip(
+            ClipEntry(
+                geometry = GeometryNode.Path(PathBuilder().build()),
+                operation = ClipOperation.DIFFERENCE,
+                antiAlias = false,
+                transform = ClipTransformSnapshot.Known.of(Matrix3x3F32.Identity),
+            ),
+            ClipEntry(
+                geometry = GeometryNode.Path(clipPath()),
+                operation = ClipOperation.INTERSECT,
+                antiAlias = false,
+                transform = ClipTransformSnapshot.Known.of(Matrix3x3F32.rotation(0.1f)),
+            ),
+            ClipEntry(
+                geometry = GeometryNode.RRect.of(RRectF32.of(RectF32(2f, 2f, 14f, 14f), 2f)),
+                operation = ClipOperation.DIFFERENCE,
+                antiAlias = false,
+                transform = ClipTransformSnapshot.Known.of(Matrix3x3F32.Identity),
+            ),
+        )
+
+        val graph = compile(sceneOf(pathDraw(clip = clip)))
+
+        assertEquals(
+            listOf(ClipCombineOperation.Intersect, ClipCombineOperation.Difference),
+            graph.passes().filterIsInstance<PlanPass.ClipMaskFold>().map { it.operation },
+        )
+    }
+
+    @Test
+    fun `AA rounded-rectangle clips use a four-sample producer and promote hard consumers`() {
+        val clip = complexClip(
+            ClipEntry(
+                geometry = GeometryNode.RRect.of(RRectF32.of(RectF32(2f, 2f, 14f, 14f), 2f)),
+                operation = ClipOperation.INTERSECT,
+                antiAlias = true,
+                transform = ClipTransformSnapshot.Known.of(Matrix3x3F32.Identity),
+            ),
+        )
+
+        val graph = compile(sceneOf(pathDraw(coverage = CoverageRequest.HARD_EDGE, clip = clip)))
+
+        val producer = graph.passes().filterIsInstance<PlanPass.ClipMaskProducer>().single()
+        assertTrue(producer.antiAlias)
+        assertEquals(4, producer.sampleCountI32)
+        assertEquals(W4eClipPlanCompiler.AA_CAPABILITY_ID, graph.capabilityId)
+    }
+
+    @Test
+    fun `AA rectangle clip keeps analytic AA in its one-sample producer`() {
+        val clip = complexClip(
+            ClipEntry(
+                geometry = GeometryNode.Rect.of(RectF32(2.25f, 2.25f, 13.75f, 13.75f)),
+                operation = ClipOperation.INTERSECT,
+                antiAlias = true,
+                transform = ClipTransformSnapshot.Known.of(Matrix3x3F32.Identity),
+            ),
+        )
+
+        val graph = compile(sceneOf(pathDraw(coverage = CoverageRequest.HARD_EDGE, clip = clip)))
+
+        val producer = graph.passes().filterIsInstance<PlanPass.ClipMaskProducer>().single()
+        assertTrue(producer.antiAlias)
+        assertEquals(1, producer.sampleCountI32)
+        assertEquals(W4eClipPlanCompiler.HARD_CAPABILITY_ID, graph.capabilityId)
+    }
+
+    @Test
+    fun `empty inverse draw stays explicit as a hard binary cover in an AA4 clip frame`() {
+        val clip = complexClip(
+            ClipEntry(
+                geometry = GeometryNode.Path(clipPath()),
+                operation = ClipOperation.INTERSECT,
+                antiAlias = true,
+                transform = ClipTransformSnapshot.Known.of(Matrix3x3F32.rotation(0.1f)),
+            ),
+        )
+        val graph = compile(sceneOf(
+            pathDraw(coverage = CoverageRequest.HARD_EDGE, clip = clip, path = PathBuilder(FillRule.INVERSE_WINDING).build()),
+            pathDraw(coverage = CoverageRequest.HARD_EDGE, clip = clip),
+        ))
+
+        assertEquals(W4eClipPlanCompiler.AA_CAPABILITY_ID, graph.capabilityId)
+        val inverse = assertIs<ClippedBinaryMaskedPathDraw>(
+            graph.passes().filterIsInstance<PlanPass.PathRenderPass>().first {
+                it.phase == PathRenderPhase.HardEdgeBinaryColorCover
+            }.draw,
+        ).clip
+        assertEquals(
+            InverseInteriorCoverageF32.Zero,
+            assertIs<ClipPlanStrategy.InverseMask>(inverse).geometryF32.interiorCoverageF32,
+        )
+    }
+
+    @Test
+    fun `empty inverse draw alone remains an explicit full-domain clipped draw`() {
+        val clip = complexClip(
+            ClipEntry(
+                geometry = GeometryNode.Path(clipPath()),
+                operation = ClipOperation.INTERSECT,
+                antiAlias = false,
+                transform = ClipTransformSnapshot.Known.of(Matrix3x3F32.rotation(0.1f)),
+            ),
+        )
+
+        val graph = compile(sceneOf(pathDraw(
+            coverage = CoverageRequest.HARD_EDGE,
+            clip = clip,
+            path = PathBuilder(FillRule.INVERSE_WINDING).build(),
+        )))
+
+        assertEquals(1, graph.visualCommandCount)
+        val inverse = assertIs<ClippedGeneralPathDraw>(
+            graph.passes().filterIsInstance<PlanPass.PathRenderPass>().last().draw,
+        ).clip
+        assertEquals(
+            InverseInteriorCoverageF32.Zero,
+            assertIs<ClipPlanStrategy.InverseMask>(inverse).geometryF32.interiorCoverageF32,
+        )
+    }
+
+    @Test
+    fun `identity-only clip stack keeps an inverse zero draw domain-bound without allocating a mask`() {
+        val graph = compile(sceneOf(pathDraw(
+            coverage = CoverageRequest.HARD_EDGE,
+            clip = ClipStackNode.Operations.of(emptyList()),
+            path = PathBuilder(FillRule.INVERSE_WINDING).build(),
+        )))
+
+        assertTrue(graph.resources().none { it.role in clipMaskRoles() })
+        val inverse = assertIs<ClippedGeneralPathDraw>(
+            graph.passes().filterIsInstance<PlanPass.PathRenderPass>().last().draw,
+        ).clip
+        assertIs<ClipPlanStrategy.InverseDomain>(inverse)
+    }
+
+    @Test
+    fun `512 clip entries compile successfully`() {
+        val entry = ClipEntry(
+            geometry = GeometryNode.Rect.of(RectF32(1f, 1f, 14f, 14f)),
+            operation = ClipOperation.INTERSECT,
+            antiAlias = false,
+            transform = ClipTransformSnapshot.Known.of(Matrix3x3F32.Identity),
+        )
+
+        val graph = compile(sceneOf(pathDraw(clip = ClipStackNode.Operations.of(List(512) { entry }))))
+
+        assertTrue(graph.verifyW4eCompilerWitness())
+    }
+
+    @Test
     fun `missing sampled linear mask support remains a promoted W4e capability gap`() {
         val clip = complexClip(
             ClipEntry(
@@ -321,10 +558,144 @@ class W4eClipPlanCompilerTest {
         assertEquals(W4ePlanDiagnostics.MaskFormatUnavailable, result.diagnostics.single().code)
     }
 
-    private fun compile(scene: SceneSnapshot): RenderGraph {
+    @Test
+    fun `missing four-sample mask support remains a promoted W4e capability gap`() {
+        val clip = complexClip(
+            ClipEntry(
+                geometry = GeometryNode.Path(clipPath()),
+                operation = ClipOperation.INTERSECT,
+                antiAlias = true,
+                transform = ClipTransformSnapshot.Known.of(Matrix3x3F32.rotation(0.1f)),
+            ),
+        )
+        val scene = sceneOf(pathDraw(clip = clip))
         val candidate = assertIs<GpuPlanSelection.Candidate>(compiler.select(scene, target(scene))).candidate
+
+        val result = assertIs<RenderPlanResult.GapOnPromotedScope>(
+            compiler.plan(candidate, capabilities(includeAaMaskSamples = false), PlanBudget(1L shl 20)),
+        )
+
+        assertEquals(W4ePlanDiagnostics.SampleCountUnavailable, result.diagnostics.single().code)
+    }
+
+    @Test
+    fun `clip plans do not reuse pools across different clip transforms`() {
+        val first = complexClip(
+            ClipEntry(GeometryNode.Path(clipPath()), ClipOperation.INTERSECT, true,
+                ClipTransformSnapshot.Known.of(Matrix3x3F32.rotation(0.1f))),
+        )
+        val second = complexClip(
+            ClipEntry(GeometryNode.Path(clipPath()), ClipOperation.INTERSECT, true,
+                ClipTransformSnapshot.Known.of(Matrix3x3F32.rotation(0.2f))),
+        )
+
+        val graph = compile(sceneOf(pathDraw(clip = first), pathDraw(clip = second)))
+
+        assertEquals(4, graph.resources().count { it.role == PlanResourceRole.CoverageMaskAccumulator })
+    }
+
+    @Test
+    fun `clip plans do not reuse pools across sample plans`() {
+        val clip = complexClip(
+            ClipEntry(GeometryNode.Path(clipPath()), ClipOperation.INTERSECT, true,
+                ClipTransformSnapshot.Known.of(Matrix3x3F32.rotation(0.1f))),
+        )
+
+        val graph = compile(sceneOf(
+            pathDraw(coverage = CoverageRequest.HARD_EDGE, clip = clip),
+            pathDraw(coverage = CoverageRequest.ANTIALIASED, clip = clip),
+        ))
+
+        assertEquals(4, graph.resources().count { it.role == PlanResourceRole.CoverageMaskAccumulator })
+    }
+
+    @Test
+    fun `clip plan identities and resources remain extent-specific`() {
+        val clip = complexClip(
+            ClipEntry(GeometryNode.Path(clipPath()), ClipOperation.INTERSECT, true,
+                ClipTransformSnapshot.Known.of(Matrix3x3F32.rotation(0.1f))),
+        )
+        val first = compile(sceneOf(pathDraw(clip = clip)))
+        val secondScene = sceneOf(SceneExtent(32, 32), pathDraw(clip = clip))
+        val second = compile(secondScene)
+
+        assertNotEquals(first.id, second.id)
+        assertEquals(32, second.targetExtent.width)
+        assertEquals(32, second.targetExtent.height)
+        assertTrue(second.resources().filter { it.role == PlanResourceRole.CoverageMaskAccumulator }
+            .all { it.copyExtent()?.width == 32 && it.copyExtent()?.height == 32 })
+    }
+
+    @Test
+    fun `entry attempted-edge limit refuses a clip before graph publication`() {
+        assertClipLimitReason(
+            W4eClipPlanCompiler(ClipPreparationPolicyF64(
+                limitsI32 = ClipPreparationLimitsI32(maxAttemptedEdgesPerEntryI32 = 1),
+            )),
+            "EntryAttemptedEdgeLimit",
+        )
+    }
+
+    @Test
+    fun `frame attempted-edge limit refuses a clip before graph publication`() {
+        assertClipLimitReason(
+            W4eClipPlanCompiler(ClipPreparationPolicyF64(
+                limitsI32 = ClipPreparationLimitsI32(maxAttemptedEdgesPerFrameI32 = 1),
+            )),
+            "FrameAttemptedEdgeLimit",
+        )
+    }
+
+    @Test
+    fun `entry vertex limit refuses a clip before graph publication`() {
+        assertClipLimitReason(
+            W4eClipPlanCompiler(ClipPreparationPolicyF64(
+                limitsI32 = ClipPreparationLimitsI32(maxEmittedVertexCountPerEntryI32 = 1),
+            )),
+            "EntryVertexLimit",
+        )
+    }
+
+    @Test
+    fun `entry index limit refuses a clip before graph publication`() {
+        assertClipLimitReason(
+            W4eClipPlanCompiler(ClipPreparationPolicyF64(
+                limitsI32 = ClipPreparationLimitsI32(maxEmittedIndexCountPerEntryI32 = 1),
+            )),
+            "EntryIndexLimit",
+        )
+    }
+
+    @Test
+    fun `entry snapshot limit refuses a clip before graph publication`() {
+        assertClipLimitReason(
+            W4eClipPlanCompiler(ClipPreparationPolicyF64(
+                limitsI64 = ClipPreparationLimitsI64(maxSnapshotByteCountPerEntryI64 = 1L),
+            )),
+            "EntrySnapshotByteLimit",
+        )
+    }
+
+    @Test
+    fun `draw-count limit wins before clip preparation can consume its frame ledger`() {
+        val boundedCompiler = W4eClipPlanCompiler(ClipPreparationPolicyF64(
+            limitsI32 = ClipPreparationLimitsI32(maxAttemptedEdgesPerFrameI32 = 1),
+        ))
+        val clip = complexClip(
+            ClipEntry(GeometryNode.Rect.of(RectF32(1f, 1f, 14f, 14f)), ClipOperation.INTERSECT, false,
+                ClipTransformSnapshot.Known.of(Matrix3x3F32.Identity)),
+        )
+        val scene = sceneOf(*List(513) { pathDraw(clip = clip) }.toTypedArray())
+
+        val result = assertIs<GpuPlanSelection.ResourceLimitExceeded>(boundedCompiler.select(scene, target(scene)))
+
+        assertTrue(result.diagnostics().single().message.contains("at most 512 visual path draws"))
+    }
+
+    private fun compile(scene: SceneSnapshot, planner: W4eClipPlanCompiler = compiler): RenderGraph {
+        val candidate = assertIs<GpuPlanSelection.Candidate>(planner.select(scene, target(scene))).candidate
         return assertIs<RenderPlanResult.Ready<RenderGraph>>(
-            compiler.plan(candidate, capabilities(), PlanBudget(1L shl 20)),
+            planner.plan(candidate, capabilities(), PlanBudget(1L shl 20)),
         ).plan
     }
 
@@ -332,10 +703,38 @@ class W4eClipPlanCompilerTest {
         SceneExtent(16, 16), ColorSpace.SRGB, draws.toList(),
     )
 
+    private fun sceneOf(extent: SceneExtent, vararg draws: SceneCommand.Draw): SceneSnapshot = SceneSnapshot.of(
+        extent, ColorSpace.SRGB, draws.toList(),
+    )
+
     private fun target(scene: SceneSnapshot): RenderTargetDescriptor =
         RenderTargetDescriptor(scene.extent, scene.colorSpace)
 
     private fun complexClip(vararg entries: ClipEntry): ClipStackNode = ClipStackNode.Operations.of(entries.toList())
+
+    private fun clipMaskRoles(): Set<PlanResourceRole> = setOf(
+        PlanResourceRole.CoverageMaskAccumulator,
+        PlanResourceRole.CoverageMaskScratch,
+        PlanResourceRole.CoverageMaskMultisampleScratch,
+        PlanResourceRole.CoverageMaskDepthStencil,
+    )
+
+    private fun assertClipLimitReason(planner: W4eClipPlanCompiler, reason: String) {
+        val clip = complexClip(
+            ClipEntry(
+                geometry = GeometryNode.Rect.of(RectF32(1f, 1f, 14f, 14f)),
+                operation = ClipOperation.INTERSECT,
+                antiAlias = false,
+                transform = ClipTransformSnapshot.Known.of(Matrix3x3F32.Identity),
+            ),
+        )
+
+        val result = assertIs<GpuPlanSelection.ResourceLimitExceeded>(
+            planner.select(sceneOf(pathDraw(clip = clip)), RenderTargetDescriptor(SceneExtent(16, 16), ColorSpace.SRGB)),
+        )
+
+        assertTrue(result.diagnostics().single().message.contains(reason))
+    }
 
     private fun pathDraw(
         coverage: CoverageRequest = CoverageRequest.HARD_EDGE,
@@ -372,7 +771,10 @@ class W4eClipPlanCompilerTest {
     private fun inverseClipPath(): PathF32 = PathBuilder(FillRule.INVERSE_WINDING)
         .moveTo(3f, 3f).lineTo(13f, 3f).lineTo(3f, 13f).close().build()
 
-    private fun capabilities(includeMasks: Boolean = true): PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(
+    private fun capabilities(
+        includeMasks: Boolean = true,
+        includeAaMaskSamples: Boolean = true,
+    ): PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(
         deviceGeneration = 0,
         maxTextureDimension2D = 64,
         maxBufferSizeBytes = 1L shl 20,
@@ -388,12 +790,13 @@ class W4eClipPlanCompilerTest {
             PlanTextureSampleSupport.of(PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), 4, setOf(PlanResourceUsage.RenderAttachment)),
             PlanTextureSampleSupport.of(PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8), 1, setOf(PlanResourceUsage.DepthStencilAttachment)),
             PlanTextureSampleSupport.of(PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8), 4, setOf(PlanResourceUsage.DepthStencilAttachment)),
-        ).let { supports -> if (includeMasks) supports + setOf(
-            PlanTextureSampleSupport.of(PlanTextureFormat.CoverageMask, 1, setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled)),
-            PlanTextureSampleSupport.of(PlanTextureFormat.CoverageMask, 4, setOf(PlanResourceUsage.RenderAttachment)),
-        ) else supports },
+        ).let { supports -> if (includeMasks) supports + buildSet {
+            add(PlanTextureSampleSupport.of(PlanTextureFormat.CoverageMask, 1, setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled)))
+            if (includeAaMaskSamples) add(PlanTextureSampleSupport.of(PlanTextureFormat.CoverageMask, 4, setOf(PlanResourceUsage.RenderAttachment)))
+        } else supports },
         supportedTextureResolveSupports = setOf(
             PlanTextureResolveSupport.of(PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), 4, 1),
-        ).let { supports -> if (includeMasks) supports + PlanTextureResolveSupport.of(PlanTextureFormat.CoverageMask, 4, 1) else supports },
+        ).let { supports -> if (includeMasks && includeAaMaskSamples) supports +
+            PlanTextureResolveSupport.of(PlanTextureFormat.CoverageMask, 4, 1) else supports },
     )
 }

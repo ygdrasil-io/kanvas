@@ -577,6 +577,11 @@ public class RenderGraph private constructor(
             require(pass.copyGeometryF32() != ClipGeometryF32.Empty) {
                 "Zero inverse interiors must not allocate a clip-mask producer"
             }
+            if (pass.sampleCountI32 == 4) {
+                require(pass.antiAlias) {
+                    "AA4 clip producers must preserve their antialiasing fact"
+                }
+            }
             val target = requireNotNull(resourcesById[pass.target])
             if (pass.sampleCountI32 == 1) {
                 require(pass.resolveTarget == null && target.role == PlanResourceRole.CoverageMaskScratch &&
@@ -627,12 +632,14 @@ public class RenderGraph private constructor(
         private fun ClipPlanStrategy.maskStrategies(): List<ClipPlanStrategy> = when (this) {
             is ClipPlanStrategy.Mask -> listOf(this)
             is ClipPlanStrategy.InverseMask -> listOf(this)
+            is ClipPlanStrategy.InverseDomain -> emptyList()
             is ClipPlanStrategy.Scissor -> child?.maskStrategies().orEmpty()
             is ClipPlanStrategy.Stencil -> child?.maskStrategies().orEmpty()
         }
 
         private fun ClipPlanStrategy.allStrategies(): List<ClipPlanStrategy> = when (this) {
             is ClipPlanStrategy.Mask, is ClipPlanStrategy.InverseMask -> listOf(this)
+            is ClipPlanStrategy.InverseDomain -> listOf(this)
             is ClipPlanStrategy.Scissor -> listOf(this) + child?.allStrategies().orEmpty()
             is ClipPlanStrategy.Stencil -> listOf(this) + child?.allStrategies().orEmpty()
         }
@@ -640,12 +647,16 @@ public class RenderGraph private constructor(
         private fun ClipPlanStrategy.maskResource(): PlanResourceId = when (this) {
             is ClipPlanStrategy.Mask -> resource
             is ClipPlanStrategy.InverseMask -> resource
-            is ClipPlanStrategy.Scissor, is ClipPlanStrategy.Stencil -> error("Only mask leaves have a resource")
+            is ClipPlanStrategy.InverseDomain,
+            is ClipPlanStrategy.Scissor,
+            is ClipPlanStrategy.Stencil,
+            -> error("Only mask leaves have a resource")
         }
 
         private fun ClipPlanStrategy.resourceReferences(): List<PlanResourceId> = when (this) {
             is ClipPlanStrategy.Mask -> listOf(resource)
             is ClipPlanStrategy.InverseMask -> listOf(resource)
+            is ClipPlanStrategy.InverseDomain -> emptyList()
             is ClipPlanStrategy.Scissor -> child?.resourceReferences().orEmpty()
             is ClipPlanStrategy.Stencil -> listOf(depthStencil) + child?.resourceReferences().orEmpty()
         }
@@ -1025,7 +1036,15 @@ public class RenderGraph private constructor(
                 "AA4 graphs may declare only explicit path graph resources"
             }
             val referencedResourceIds = passes.flatMap(::referencedResources).toSet()
-            require(resources.all { it.id in referencedResourceIds }) {
+            val hasAaColorPath = pathPasses.any { (_, pass) ->
+                pass.phase == PathRenderPhase.MultisampleDirectColor ||
+                    pass.phase == PathRenderPhase.MultisampleStencilProducer ||
+                    pass.phase == PathRenderPhase.MultisampleStencilColorCover
+            }
+            require(resources.all { resource ->
+                resource.id in referencedResourceIds ||
+                    (!hasAaColorPath && resource.role == PlanResourceRole.DepthStencil && resource.sampleCountI32 == 4)
+            }) {
                 "AA4 graph resources must be consumed by an explicit pass"
             }
 

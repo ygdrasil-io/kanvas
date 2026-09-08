@@ -27,6 +27,7 @@ import org.graphiks.math.geometry.CornerRadiiF64
 import org.graphiks.math.geometry.FillRule
 import org.graphiks.math.geometry.InversePathDrawMode
 import org.graphiks.math.geometry.InversePathGeometryF32
+import org.graphiks.math.geometry.InverseInteriorCoverageF32
 import org.graphiks.math.geometry.InversePathPreparationResult
 import org.graphiks.math.geometry.PathBuilder
 import org.graphiks.math.geometry.PathStrokePolicyF64
@@ -46,27 +47,43 @@ import org.graphiks.math.matrix.toMatrix3x3F64
  * constructor; this compiler owns only clip preparation, pooled mask resources, and typed
  * consumer insertion.
  */
-public class W4eClipPlanCompiler internal constructor(
+public class W4eClipPlanCompiler(
     private val clipPolicyF64: ClipPreparationPolicyF64,
 ) : GpuPlanCompiler {
     public constructor() : this(ClipPreparationPolicyF64())
 
-    private val w4dSeam = W4dGeneralPathPlanCompiler(
+    private val w4dHardSeam = W4dGeneralPathPlanCompiler(
         strokePolicyF64 = org.graphiks.math.geometry.PathStrokePolicyF64(),
         acceptsNarrowTransforms = true,
+    )
+    private val w4dAaSeam = W4dGeneralPathPlanCompiler(
+        strokePolicyF64 = org.graphiks.math.geometry.PathStrokePolicyF64(),
+        acceptsNarrowTransforms = true,
+        forceAaFrame = true,
     )
 
     override fun select(scene: SceneSnapshot, target: RenderTargetDescriptor): GpuPlanSelection {
         if (scene.extent != target.extent || scene.colorSpace != target.colorSpace) return invalid("Scene and target differ")
         if (SceneSemanticValidator.validate(scene) is SceneSemanticValidationResult.Invalid) return invalid("Scene validation failed")
         if (scene.colorSpace != ColorSpace.SRGB) return gap("W4e supports only sRGB")
+        val operationDraws = scene.filterIsInstance<SceneCommand.Draw>()
+            .filter { it.node.clip is ClipStackNode.Operations }
+        if (operationDraws.isEmpty()) return gap("W4e requires an explicitly captured complex clip")
+        operationDraws.forEach { command ->
+            if (!command.node.isW4eFillScope()) return gap("Complex clip draw is outside W4e fill scope")
+            val operations = command.node.clip as ClipStackNode.Operations
+            if (operations.entryCount > MAX_CLIP_ENTRIES) {
+                return limit("W4e accepts at most $MAX_CLIP_ENTRIES clip entries per stack")
+            }
+        }
+        val totalVisualDrawCount = scene.count { it is SceneCommand.Draw }
+        if (totalVisualDrawCount > MAX_DRAWS) return limit("W4e accepts at most 512 visual path draws")
 
         val domain = RectI32(0, 0, scene.extent.width, scene.extent.height)
         val normalized = mutableListOf<SceneCommand>()
         val preparedByKey = linkedMapOf<ClipStackReuseKey, PreparedStack>()
         val inverseByCommand = mutableMapOf<Int, InversePathGeometryF32>()
         var frameUsage = ClipWorkUsageI64()
-        var visualDrawCount = 0
         var ownsComplexClip = false
 
         scene.withIndex().forEach { (index, command) ->
@@ -77,9 +94,6 @@ public class W4eClipPlanCompiler internal constructor(
                         normalized += command
                         return@forEach
                     }
-                    if (!command.node.isW4eFillScope()) return gap("Complex clip draw is outside W4e fill scope")
-                    visualDrawCount = Math.addExact(visualDrawCount, 1)
-                    if (visualDrawCount > MAX_DRAWS) return limit("W4e accepts at most 512 visual path draws")
                     ownsComplexClip = true
                     val inverse = when (val preparedInverse = command.node.prepareInversePathOrNull(domain)) {
                         is InverseResult.None -> null
@@ -98,10 +112,10 @@ public class W4eClipPlanCompiler internal constructor(
                         is PreparedResult.Limit -> return limit(value.message)
                     }
                     if (inverse != null) {
-                        prepared.forceMask()
+                        prepared.forceMaskForInverse()
                         inverseByCommand[index] = inverse
                     }
-                    normalized += SceneCommand.Draw(command.node.normalizedForW4d())
+                    normalized += SceneCommand.Draw(command.node.normalizedForW4d(domain, inverse))
                     // The candidate keeps the prepared stack map keyed by this exact canonical stack identity.
                     prepared.consumerIndexes += index
                 }
@@ -111,24 +125,28 @@ public class W4eClipPlanCompiler internal constructor(
         if (!ownsComplexClip) return gap("W4e requires an explicitly captured complex clip")
 
         val normalizedScene = SceneSnapshot.of(scene.extent, scene.colorSpace, normalized)
-        val base = when (val selected = w4dSeam.select(normalizedScene, target)) {
+        val forceAaFrame = preparedByKey.values.any { it.requiresAaFrame }
+        val constructionSeam = if (forceAaFrame) w4dAaSeam else w4dHardSeam
+        val base = when (val selected = constructionSeam.select(normalizedScene, target)) {
             is GpuPlanSelection.Candidate -> selected.candidate
             is GpuPlanSelection.NotCandidate -> return gap("W4e draw scope is outside the W4d.2 construction seam")
             is GpuPlanSelection.InvalidScene -> return invalid("W4d.2 rejected normalized W4e draw facts")
             is GpuPlanSelection.ResourceLimitExceeded -> return limit("W4d.2 rejected normalized W4e draw resources")
         }
         return GpuPlanSelection.Candidate(Candidate(
-            this, scene.canonicalId, target, base, preparedByKey.values.toList(), inverseByCommand,
+            this, scene.canonicalId, target, constructionSeam, base, preparedByKey.values.toList(), inverseByCommand,
         ))
     }
 
     override fun plan(candidate: GpuPlanCandidate, capabilities: PlanCapabilitySnapshot, budget: PlanBudget): RenderPlanResult<RenderGraph> {
         val selected = candidate as? Candidate ?: return invalidCandidate()
         if (selected.owner !== this || !selected.matches()) return invalidCandidate()
-        val requiresAa = selected.base.capabilityId == W4dGeneralPathPlanCompiler.AA_CAPABILITY_ID
+        val requiresAa = selected.capabilityId == AA_CAPABILITY_ID
         val maskStacks = selected.stacks.filter { it.realization == Realization.Mask }
         capabilityRefusal(capabilities, maskStacks)?.let { return it }
-        val base = when (val result = w4dSeam.plan(selected.base, capabilities, budget)) {
+        // Build the shared W4d inventory under an unbounded local budget, then reject the
+        // combined W4d+W4e peak atomically below.  No graph is published before that check.
+        val base = when (val result = selected.constructionSeam.plan(selected.base, capabilities, PlanBudget(Long.MAX_VALUE))) {
             is RenderPlanResult.Ready -> result.plan
             is RenderPlanResult.GapNotMigrated -> return RenderPlanResult.GapNotMigrated(listOf(
                 diag(W4ePlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "W4d.2 construction seam declined W4e draw facts"),
@@ -163,19 +181,18 @@ public class W4eClipPlanCompiler internal constructor(
         val extent = base.targetExtent
         val domain = RectI32(0, 0, extent.width, extent.height)
         val prefixCount = selected.stacks.sumOf { stack ->
-            if (stack.realization == Realization.Mask) 1 + stack.entries.count { it.geometryF32 != ClipGeometryF32.Empty } * 2 else 0
+            if (stack.realization === Realization.Mask) 1 + stack.emittedEntries.size * 2 else 0
         }
 
         selected.stacks.forEachIndexed { ordinal, stack ->
             val strategy = when (stack.realization) {
-                Realization.Scissor -> ClipPlanStrategy.Scissor(requireNotNull(stack.scissor))
+                is Realization.Scissor -> ClipPlanStrategy.Scissor(requireNotNull(stack.scissor))
                 Realization.Mask -> {
                     val ids = maskResources(resources, stack, ordinal, extent, prefix.size, prefixCount, base)
                     val group = PlanAtomicGroupId("w4e.clip:$ordinal")
                     var accumulator = ids.firstAccumulator
                     prefix += PlanPass.ClipMaskInitialize(ordinal, accumulator, domain, 1f, group)
-                    stack.entries.forEachIndexed { entryIndex, entry ->
-                        if (entry.geometryF32 == ClipGeometryF32.Empty) return@forEachIndexed
+                    stack.emittedEntries.forEachIndexed { entryIndex, entry ->
                         val useAa = entry.antiAlias && entry.geometryF32 !is ClipGeometryF32.Rect
                         val target = if (useAa) requireNotNull(ids.multisampleScratch) else ids.scratch
                         val resolve = if (useAa) ids.scratch else null
@@ -193,6 +210,7 @@ public class W4eClipPlanCompiler internal constructor(
                             entry.geometryF32,
                             group,
                             inverseCoverage = entry.inverseFill,
+                            antiAlias = entry.antiAlias,
                         )
                         val output = if (accumulator == ids.firstAccumulator) ids.secondAccumulator else ids.firstAccumulator
                         prefix += PlanPass.ClipMaskFold(
@@ -211,9 +229,11 @@ public class W4eClipPlanCompiler internal constructor(
             }
             stack.consumerIndexes.forEach { commandIndex ->
                 strategyByCommand[commandIndex] = selected.inverseByCommand[commandIndex]?.let { inverse ->
-                    val resource = (strategy as? ClipPlanStrategy.Mask)?.resource
-                        ?: error("Inverse path draws require a finite mask realization")
-                    ClipPlanStrategy.InverseMask(inverse, resource)
+                    when {
+                        stack.isZeroCoverage -> strategy
+                        strategy is ClipPlanStrategy.Mask -> ClipPlanStrategy.InverseMask(inverse, strategy.resource)
+                        else -> ClipPlanStrategy.InverseDomain(inverse)
+                    }
                 } ?: strategy
             }
         }
@@ -252,8 +272,8 @@ public class W4eClipPlanCompiler internal constructor(
         prefixCount: Int,
         base: RenderGraph,
     ): MaskResourceIds {
-        val hasAaProducer = stack.entries.any { it.antiAlias && it.geometryF32 !is ClipGeometryF32.Rect }
-        val hasHardPathProducer = stack.entries.any { !it.antiAlias && it.geometryF32 is ClipGeometryF32.Path }
+        val hasAaProducer = stack.emittedEntries.any { it.antiAlias && it.geometryF32 !is ClipGeometryF32.Rect }
+        val hasHardPathProducer = stack.emittedEntries.any { !it.antiAlias && it.geometryF32 is ClipGeometryF32.Path }
         val first = planResourceId(PlanResourceRole.CoverageMaskAccumulator, ordinal * 2)
         val second = planResourceId(PlanResourceRole.CoverageMaskAccumulator, ordinal * 2 + 1)
         val scratch = planResourceId(PlanResourceRole.CoverageMaskScratch, ordinal)
@@ -265,8 +285,7 @@ public class W4eClipPlanCompiler internal constructor(
         var accumulator = first
         use(first, firstPass)
         var pass = firstPass + 1
-        stack.entries.forEach { entry ->
-            if (entry.geometryF32 == ClipGeometryF32.Empty) return@forEach
+        stack.emittedEntries.forEach { entry ->
             val usesAa = entry.antiAlias && entry.geometryF32 !is ClipGeometryF32.Rect
             val target = if (usesAa) requireNotNull(multisample) else scratch
             val resolved = if (usesAa) scratch else target
@@ -349,23 +368,56 @@ public class W4eClipPlanCompiler internal constructor(
             }
         }
         return when (val result = prepareTransformedClipStackGeometryF32(inputs, domain, clipPolicyF64, frameWorkUsageBeforeI64 = frameBefore)) {
-            is ClipStackPreparationResult.Ready -> PreparedResult.Ready(
-                PreparedStack(
-                    result.entriesF32,
-                    result.frameWorkUsageAfterI64,
-                    if (forceMask) Realization.Mask else selectRealization(result.entriesF32),
-                ),
-            )
+            is ClipStackPreparationResult.Ready -> {
+                val selection = selectRealization(result.entriesF32, domain)
+                PreparedResult.Ready(
+                    PreparedStack(
+                        entries = result.entriesF32,
+                        emittedEntries = selection.emittedEntries,
+                        frameUsageAfterI64 = result.frameWorkUsageAfterI64,
+                        realization = if (forceMask && selection.realization is Realization.Scissor &&
+                            selection.emittedEntries.isNotEmpty()
+                        ) Realization.Mask else selection.realization,
+                    ),
+                )
+            }
             is ClipStackPreparationResult.InvalidScene -> PreparedResult.Invalid("Clip math rejected non-finite geometry")
             is ClipStackPreparationResult.ResourceLimitExceeded -> PreparedResult.Limit("Clip math limit: ${result.reason}")
         }
     }
 
-    private fun selectRealization(entries: List<ClipPreparedEntryF32>): Realization =
-        if (entries.size == 1 && entries.single().operation == MathClipOperation.Intersect &&
-            !entries.single().antiAlias && !entries.single().inverseFill && entries.single().geometryF32 is ClipGeometryF32.Rect &&
-            !entries.single().copyConservativeScissorI32().isEmpty
-        ) Realization.Scissor else Realization.Mask
+    /**
+     * Removes only algebraic identity entries.  A finite empty intersects to zero while an
+     * inverse empty subtracts the complete domain; both are terminal zero coverage states.
+     */
+    private fun selectRealization(
+        entries: List<ClipPreparedEntryF32>,
+        domain: RectI32,
+    ): RealizationSelection {
+        val emitted = mutableListOf<ClipPreparedEntryF32>()
+        entries.forEach { entry ->
+            if (entry.geometryF32 != ClipGeometryF32.Empty) {
+                emitted += entry
+            } else {
+                val emptyCoverageIsFull = entry.inverseFill
+                val zeroesAccumulator =
+                    (entry.operation == MathClipOperation.Intersect && !emptyCoverageIsFull) ||
+                        (entry.operation == MathClipOperation.Difference && emptyCoverageIsFull)
+                if (zeroesAccumulator) return RealizationSelection(emptyList(), Realization.Scissor(RectI32.Empty))
+            }
+        }
+        if (emitted.isEmpty()) return RealizationSelection(emptyList(), Realization.Scissor(domain))
+        val single = emitted.singleOrNull()
+        val scissor = single?.takeIf {
+            it.operation == MathClipOperation.Intersect && !it.antiAlias && !it.inverseFill &&
+                it.geometryF32 is ClipGeometryF32.Rect && !it.copyConservativeScissorI32().isEmpty
+        }?.copyConservativeScissorI32()
+        return if (scissor != null) {
+            RealizationSelection(emitted, Realization.Scissor(scissor))
+        } else {
+            RealizationSelection(emitted, Realization.Mask)
+        }
+    }
 
     private fun reuseKey(operations: ClipStackNode.Operations, target: RenderTargetDescriptor, coverage: org.graphiks.kanvas.render.ir.CoverageRequest): ClipStackReuseKey? {
         val transforms = operations.map { entry -> entry.transform.canonicalId.value }
@@ -390,7 +442,14 @@ public class W4eClipPlanCompiler internal constructor(
         return ClipTransformInputF64.of(geometry, transform, operation.toMathOperation(), antiAlias)
     }
 
-    private fun DrawNode.normalizedForW4d(): DrawNode {
+    private fun DrawNode.normalizedForW4d(domain: RectI32, inverse: InversePathGeometryF32?): DrawNode {
+        if (inverse?.interiorCoverageF32 == InverseInteriorCoverageF32.Zero) {
+            return copy(
+                geometry = GeometryNode.Path(domainCoverPath(domain)),
+                transform = Matrix3x3F32.Identity,
+                clip = ClipStackNode.Empty,
+            )
+        }
         val path = geometry as? GeometryNode.Path ?: return copy(clip = ClipStackNode.Empty)
         val rule = when (path.path.fillRule) {
             FillRule.INVERSE_WINDING -> FillRule.WINDING
@@ -400,6 +459,14 @@ public class W4eClipPlanCompiler internal constructor(
         val normalizedGeometry = if (rule == path.path.fillRule) geometry else GeometryNode.Path(PathBuilder(rule).addPath(path.path).build())
         return copy(geometry = normalizedGeometry, clip = ClipStackNode.Empty)
     }
+
+    private fun domainCoverPath(domain: RectI32) : org.graphiks.math.geometry.PathF32 = PathBuilder()
+        .moveTo(domain.left.toFloat(), domain.top.toFloat())
+        .lineTo(domain.right.toFloat(), domain.top.toFloat())
+        .lineTo(domain.right.toFloat(), domain.bottom.toFloat())
+        .lineTo(domain.left.toFloat(), domain.bottom.toFloat())
+        .close()
+        .build()
 
     private fun DrawNode.isW4eFillScope(): Boolean =
         geometry is GeometryNode.Path &&
@@ -516,21 +583,44 @@ public class W4eClipPlanCompiler internal constructor(
         data class Invalid(val message: String) : InverseResult
         data class Limit(val message: String) : InverseResult
     }
-    private enum class Realization { Scissor, Mask }
+    private sealed interface Realization {
+        class Scissor(domain: RectI32) : Realization {
+            private val domainSnapshot: RectI32 = domain.copy()
+            fun copyDomain(): RectI32 = domainSnapshot.copy()
+        }
+        data object Mask : Realization
+    }
+    private data class RealizationSelection(
+        val emittedEntries: List<ClipPreparedEntryF32>,
+        val realization: Realization,
+    )
     private data class ClipStackReuseKey(val canonicalStackId: String, val extentI32: SizeI32, val format: PlanLogicalColorFormat, val samplePlan: SamplePlan, val transformIds: List<String>)
-    private class PreparedStack(val entries: List<ClipPreparedEntryF32>, val frameUsageAfterI64: ClipWorkUsageI64, realization: Realization) {
+    private class PreparedStack(
+        val entries: List<ClipPreparedEntryF32>,
+        val emittedEntries: List<ClipPreparedEntryF32>,
+        val frameUsageAfterI64: ClipWorkUsageI64,
+        realization: Realization,
+    ) {
         var realization: Realization = realization
             private set
         val consumerIndexes: MutableList<Int> = mutableListOf()
-        val scissor: RectI32? get() = if (realization == Realization.Scissor) entries.single().copyConservativeScissorI32() else null
+        val scissor: RectI32? get() = (realization as? Realization.Scissor)?.copyDomain()
+        val isZeroCoverage: Boolean get() = scissor?.isEmpty == true
+        val requiresAaFrame: Boolean get() = realization === Realization.Mask &&
+            emittedEntries.any { it.antiAlias && it.geometryF32 !is ClipGeometryF32.Rect }
         val identity: String = entries.joinToString("/") { "${it.operation}:${it.antiAlias}:${it.inverseFill}:${it.copyConservativeScissorI32()}" }
-        fun forceMask() { realization = Realization.Mask }
+        fun forceMaskForInverse() {
+            if (realization is Realization.Scissor && !isZeroCoverage && emittedEntries.isNotEmpty()) {
+                realization = Realization.Mask
+            }
+        }
     }
     private data class MaskResourceIds(val firstAccumulator: PlanResourceId, val secondAccumulator: PlanResourceId, val scratch: PlanResourceId, val multisampleScratch: PlanResourceId?, val aaDepth: PlanResourceId?, val hardDepth: PlanResourceId?)
     private class Candidate(
         val owner: W4eClipPlanCompiler,
         override val sceneCanonicalId: org.graphiks.kanvas.render.ir.CanonicalId,
         override val target: RenderTargetDescriptor,
+        val constructionSeam: W4dGeneralPathPlanCompiler,
         val base: GpuPlanCandidate,
         stacks: List<PreparedStack>,
         inverseByCommand: Map<Int, InversePathGeometryF32>,
