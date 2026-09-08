@@ -39,7 +39,7 @@ internal fun planCapabilityIdentityFacts(capabilities: PlanCapabilitySnapshot): 
     add("texture-sample-supports-v1")
     capabilities.supportedTextureSampleSupports()
         .map { support ->
-            "${textureFormatIdentity(support.format)}:${support.sampleCountI32}:${support.usages().map { it.name }.sorted().joinToString(",")}" 
+            "${textureFormatIdentity(support.format)}:${support.sampleCountI32}:${support.usages().map { it.name }.sorted().joinToString(",")}"
         }
         .sorted()
         .forEach(::add)

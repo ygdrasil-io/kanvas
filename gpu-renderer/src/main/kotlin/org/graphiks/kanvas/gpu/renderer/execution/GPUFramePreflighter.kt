@@ -8281,7 +8281,7 @@ internal class GPUFramePreflighter(
                     allowsW4dGeneralDepthStencil = step.drawPackets.singleOrNull()
                         ?.corePrimitivePreparedAuthority
                         ?.w4dGeneralFrameMaterializationAuthority
-                        ?.pathPass(step.drawPackets.single().passId) 
+                        ?.pathPass(step.drawPackets.single().passId)
                         ?.depthStencilResourceId != null,
                 )
             }
