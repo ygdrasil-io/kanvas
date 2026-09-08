@@ -62,6 +62,7 @@ import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.StrokeJoin
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.pipeline.ClipOp
+import org.graphiks.kanvas.render.ir.ClipTransformSnapshot
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.KanvasGlyphRun
@@ -1347,7 +1348,7 @@ class GPUFramePathApiInventoryTest {
         val paint = Paint.fill(ColorARGB.Blue).copy(antiAlias = false)
         fun hardClip(
             fillType: FillType = FillType.WINDING,
-            transformClass: String = "identity",
+            transform: ClipTransformSnapshot = ClipTransformSnapshot.Known.of(Matrix3x3F32.Identity),
         ): ClipStack = ClipStack.Complex(
             listOf(
                 ClipStackOp.PathOp(
@@ -1355,7 +1356,7 @@ class GPUFramePathApiInventoryTest {
                         .apply { this.fillType = fillType },
                     ClipOp.INTERSECT,
                     antiAlias = false,
-                    transformClass = transformClass,
+                    transform = transform,
                 ),
             ),
         )
@@ -1379,7 +1380,10 @@ class GPUFramePathApiInventoryTest {
             "non-finite translation" to operation(Matrix3x3F32.translation(Float.NaN, 5f), hardClip()),
             "scale" to operation(Matrix3x3F32.scaling(2f, 2f), hardClip()),
             "affine" to operation(Matrix3x3F32.of(1f, 0.25f, 0f, 0f, 1f, 0f, 0f, 0f, 1f), hardClip()),
-            "transformed clip" to operation(Matrix3x3F32.translation(4f, 5f), hardClip(transformClass = "translate")),
+            "transformed clip" to operation(
+                Matrix3x3F32.translation(4f, 5f),
+                hardClip(transform = ClipTransformSnapshot.Known.of(Matrix3x3F32.translation(4f, 5f))),
+            ),
             "inverse translated" to operation(
                 Matrix3x3F32.translation(4f, 5f),
                 hardClip(fillType = FillType.INVERSE_WINDING),
@@ -2652,7 +2656,9 @@ class GPUFramePathApiInventoryTest {
                                 clipPath,
                                 ClipOp.INTERSECT,
                                 antiAlias = false,
-                                transformClass = "right-angle-rotation",
+                                transform = ClipTransformSnapshot.Known.of(
+                                    Matrix3x3F32.rotation(90f, pivotX = 16f, pivotY = 16f),
+                                ),
                             ),
                         ),
                     ),
@@ -2710,7 +2716,9 @@ class GPUFramePathApiInventoryTest {
                                 clipPath,
                                 ClipOp.INTERSECT,
                                 antiAlias = false,
-                                transformClass = "right-angle-rotation",
+                                transform = ClipTransformSnapshot.Known.of(
+                                    Matrix3x3F32.rotation(90f, pivotX = 16f, pivotY = 16f),
+                                ),
                             ),
                         ),
                     ),
@@ -2758,7 +2766,7 @@ class GPUFramePathApiInventoryTest {
                         },
                         ClipOp.INTERSECT,
                         antiAlias = false,
-                        transformClass = "non-right-angle-rotation",
+                        transform = ClipTransformSnapshot.Known.of(Matrix3x3F32.rotation(15f)),
                     ))),
                 ),
             ),

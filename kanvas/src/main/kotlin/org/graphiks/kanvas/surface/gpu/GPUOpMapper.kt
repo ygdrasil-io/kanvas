@@ -173,6 +173,23 @@ internal object GPUOpMapper {
             if (operationIndex in elidedOperationIndices) {
                 return@forEachIndexed
             }
+            operation.clipTransformRefusalOrNull(target)?.let { refusal ->
+                return GPUOpMapping(
+                    visualCommands = emptyList(),
+                    stateEvents = stateEvents.toList(),
+                    preparedRefusal = GPUPreparedOperationRefusal(
+                        commandId = nextCommandId(),
+                        operationIndex = operationIndex,
+                        code = refusal,
+                        facts = mapOf(
+                            "authority" to "typed-clip-transform-boundary",
+                            "boundary" to "before-legacy-clip-planner",
+                        ),
+                    ),
+                    culledTextOperationIndices = culledTextOperationIndices.toSet(),
+                    culledCoreOperationIndices = culledCoreOperationIndices.toSet(),
+                )
+            }
             if (operation is DisplayOp.DrawRect && !operation.paint.isStroke()) {
                 val commandId = nextCommandId()
                 when (
@@ -790,7 +807,9 @@ internal object GPUOpMapper {
         // refuse an empty *clip* scissor, but must never turn an off-target draw
         // into a terminal frame failure.
         if (geometryRefusal == null && operation.isFullyOutsideTarget(rawNormalized)) return null
-        val clipPlan = rawNormalized.clip.coverageRequest?.let { request ->
+        val clipPlan = rawNormalized.clip.clipTransformRefusal?.let { refusal ->
+            GPUClipCoveragePlan.Refused(refusal)
+        } ?: rawNormalized.clip.coverageRequest?.let { request ->
             GPUClipCoveragePlanner.planForFrameRoute(
                 request,
                 context.config,
@@ -2181,7 +2200,7 @@ private fun ClipStack.isHardWindingPathClipForAnalyticDRRect(transform: Matrix3x
     if (!identity && !exactTranslation) return false
     return (this as? ClipStack.Complex)?.ops?.singleOrNull().let { it as? ClipStackOp.PathOp }?.let { path ->
         path.op == org.graphiks.kanvas.pipeline.ClipOp.INTERSECT && !path.antiAlias &&
-            !path.perspectiveCaptureRefusal && path.transformClass == "identity" &&
+            (path.transform as? ClipTransformSnapshot.Known)?.copyMatrixF32() == Matrix3x3F32.Identity &&
             path.path.fillType in setOf(
                 org.graphiks.kanvas.geometry.FillType.WINDING,
                 org.graphiks.kanvas.geometry.FillType.INVERSE_WINDING,
@@ -2923,7 +2942,20 @@ private fun ClipStack.Complex.collapsedIntersectingRectOrNull(): ClipStack.Devic
 }
 
 private fun ClipStack.DeviceRect.rectForPictureReplay(matrix: Matrix3x3F32, antiAlias: Boolean): ClipStack = when {
-    matrix.isScaleTranslate() -> ClipStack.DeviceRect(matrix.mapAxisAlignedRect(rect), antiAlias)
+    matrix.isLosslessAxisAlignedClipReplayMatrix() && matrix.isScaleTranslate() -> {
+        val mapped = matrix.mapAxisAlignedRect(rect)
+        if (mapped.isFiniteClipReplayRect()) ClipStack.DeviceRect(mapped, antiAlias)
+        else ClipStack.Complex(
+            listOf(
+                ClipStackOp.RectOp(
+                    rect,
+                    org.graphiks.kanvas.pipeline.ClipOp.INTERSECT,
+                    antiAlias,
+                    ClipTransformSnapshot.Known.of(matrix),
+                ),
+            ),
+        )
+    }
     else -> ClipStack.Complex(
         listOf(
             ClipStackOp.RectOp(
@@ -2985,4 +3017,14 @@ private fun ClipStackOp.transformForPictureReplay(matrix: Matrix3x3F32): ClipSta
 }
 
 private fun ClipStackOp.RectOp.isLosslessDeviceRectForPictureReplay(): Boolean =
-    (transform as? ClipTransformSnapshot.Known)?.copyMatrixF32() == Matrix3x3F32.Identity
+    (transform as? ClipTransformSnapshot.Known)?.copyMatrixF32() == Matrix3x3F32.Identity &&
+        rect.isFiniteClipReplayRect()
+
+private fun Matrix3x3F32.isLosslessAxisAlignedClipReplayMatrix(): Boolean {
+    if (!listOf(sx, kx, tx, ky, sy, ty, persp0, persp1, persp2).all(Float::isFinite)) return false
+    val determinant = sx.toDouble() * sy.toDouble() - kx.toDouble() * ky.toDouble()
+    return determinant.isFinite() && determinant != 0.0
+}
+
+private fun RectF32.isFiniteClipReplayRect(): Boolean =
+    listOf(left, top, right, bottom).all(Float::isFinite)

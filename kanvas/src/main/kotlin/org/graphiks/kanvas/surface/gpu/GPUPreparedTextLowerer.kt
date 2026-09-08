@@ -705,7 +705,12 @@ private fun validateAndSnapshotPreparedTextClip(
             contentKey = "prepared-text-clip:wide-open",
         )
     }
-    val request = runCatching { clip.toGPUClipFacts(target).coverageRequest }.getOrNull()
+    val clipFacts = runCatching { clip.toGPUClipFacts(target) }.getOrNull()
+        ?: return PreparedTextClipResult.Refused("Prepared text clip mapping failed")
+    clipFacts.clipTransformRefusal?.let { refusal ->
+        return PreparedTextClipResult.Refused("Prepared text clip refused: $refusal")
+    }
+    val request = clipFacts.coverageRequest
         ?: return PreparedTextClipResult.Refused("Prepared text clip has no common coverage request")
     val maxTextureDimension = capabilities.limits?.maxTextureDimension2D
         ?.coerceAtMost(Int.MAX_VALUE.toLong())

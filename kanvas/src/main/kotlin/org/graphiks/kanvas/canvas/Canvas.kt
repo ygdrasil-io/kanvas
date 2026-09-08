@@ -438,12 +438,13 @@ class Canvas internal constructor(buffer: DisplayListBuffer) {
     }
 
     private fun captureClipRect(rect: RectF32, op: ClipOp, antiAlias: Boolean): ClipStackOp {
-        return if (currentTransform.isScaleTranslate()) {
-            ClipStackOp.RectOp(
-                rect = currentTransform.mapAxisAlignedRect(rect),
-                op = op,
-                antiAlias = antiAlias,
-            )
+        val mapped = if (currentTransform.isLosslessAxisAlignedClipCaptureMatrix() && currentTransform.isScaleTranslate()) {
+            currentTransform.mapAxisAlignedRect(rect)
+        } else {
+            null
+        }
+        return if (mapped?.isFiniteClipCaptureRect() == true) {
+            ClipStackOp.RectOp(mapped, op, antiAlias)
         } else {
             ClipStackOp.RectOp(rect, op, antiAlias, ClipTransformSnapshot.Known.of(currentTransform))
         }
@@ -486,4 +487,14 @@ class Canvas internal constructor(buffer: DisplayListBuffer) {
 }
 
 private fun ClipStackOp.RectOp.isLosslessDeviceRect(): Boolean =
-    (transform as? ClipTransformSnapshot.Known)?.copyMatrixF32() == Matrix3x3F32.Identity
+    (transform as? ClipTransformSnapshot.Known)?.copyMatrixF32() == Matrix3x3F32.Identity &&
+        rect.isFiniteClipCaptureRect()
+
+private fun Matrix3x3F32.isLosslessAxisAlignedClipCaptureMatrix(): Boolean {
+    if (!listOf(sx, kx, tx, ky, sy, ty, persp0, persp1, persp2).all(Float::isFinite)) return false
+    val determinant = sx.toDouble() * sy.toDouble() - kx.toDouble() * ky.toDouble()
+    return determinant.isFinite() && determinant != 0.0
+}
+
+private fun RectF32.isFiniteClipCaptureRect(): Boolean =
+    listOf(left, top, right, bottom).all(Float::isFinite)

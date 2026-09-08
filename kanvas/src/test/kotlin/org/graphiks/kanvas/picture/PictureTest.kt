@@ -9,7 +9,6 @@ import org.graphiks.kanvas.canvas.DrawPathSourceOperation
 import org.graphiks.kanvas.canvas.SaveLayerRec
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.geometry.Path
-import org.graphiks.kanvas.geometry.toPathF32
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.PathVerb
 import org.graphiks.kanvas.image.ColorType
@@ -43,7 +42,7 @@ import org.graphiks.kanvas.pipeline.VertexLayout
 import org.graphiks.kanvas.pipeline.VertexStepMode
 import org.graphiks.kanvas.render.ir.SceneArchiveCodec
 import org.graphiks.kanvas.render.ir.SceneArchiveDecodeResult
-import org.graphiks.kanvas.render.ir.ClipTransformSnapshot
+import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.KanvasTypeface
 import org.graphiks.kanvas.text.TextBlob
@@ -604,7 +603,7 @@ class PictureTest {
     }
 
     @Test
-    fun `version 8 picture roundtrip preserves typed path clip geometry and transform`() {
+    fun `version 8 picture roundtrip keeps a typed perspective clip from replay authority`() {
         val perspective = Matrix3x3F32(
             sx = 1.25f,
             kx = .2f,
@@ -616,34 +615,23 @@ class PictureTest {
             persp1 = -.02f,
             persp2 = 1f,
         )
-        val source = Path().addRect(RectF32.ofLTRB(1f, 1f, 7f, 7f))
-        val clip = ClipStack.Complex(
-            listOf(
-                ClipStackOp.PathOp(
-                    path = source,
-                    op = ClipOp.INTERSECT,
-                    antiAlias = false,
-                    transform = ClipTransformSnapshot.Known.of(perspective),
-                ),
-            ),
-        )
-        val original = Picture(
-            RectF32.ofLTRB(0f, 0f, 8f, 8f),
-            listOf(
-                DisplayOp.DrawRect(
-                    rect = RectF32.ofLTRB(0f, 0f, 8f, 8f),
-                    paint = Paint.fill(ColorARGB.Red),
-                    transform = Matrix3x3F32.Identity,
-                    clip = clip,
-                ),
-            ),
-        )
+        val recorder = PictureRecorder()
+        recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 8f, 8f)).apply {
+            setMatrix(perspective)
+            clipPath(Path().addRect(RectF32.ofLTRB(1f, 1f, 7f, 7f)), antiAlias = false)
+            resetMatrix()
+            drawRect(RectF32.ofLTRB(0f, 0f, 8f, 8f), Paint.fill(ColorARGB.Red).copy(antiAlias = false))
+        }
 
-        val restored = requireNotNull(Picture.fromByteArray(original.toByteArray()))
-        val restoredClip = assertIs<DisplayOp.DrawRect>(restored.ops.single()).clip
-        val restoredOp = assertIs<ClipStackOp.PathOp>(assertIs<ClipStack.Complex>(restoredClip).ops.single())
-        assertEquals(source.toPathF32(), restoredOp.path.toPathF32())
-        assertEquals(perspective, assertIs<ClipTransformSnapshot.Known>(restoredOp.transform).copyMatrixF32())
+        val restored = requireNotNull(Picture.fromByteArray(recorder.finishRecordingAsPicture().toByteArray()))
+        val surface = Surface(8, 8)
+        surface.canvas {
+            concat(Matrix3x3F32.translation(1f, 0f))
+            drawPicture(restored)
+        }
+
+        val failure = assertFailsWith<IllegalStateException> { surface.render() }
+        assertTrue(failure.message.orEmpty().startsWith("unsupported_transform:Perspective"), failure.message)
     }
 
     @Test

@@ -17,11 +17,19 @@ private const val PERSPECTIVE_CAPTURE_REFUSAL = "unsupported_transform:Perspecti
 
 /** Returns the stable refusal for any command whose clip was captured under perspective. */
 internal fun GPUClipFacts.perspectiveCaptureRefusalReasonOrNull(): String? =
-    perspectiveCaptureRefusal.takeIf { it }?.let { PERSPECTIVE_CAPTURE_REFUSAL }
+    clipTransformRefusal ?: perspectiveCaptureRefusal.takeIf { it }?.let { PERSPECTIVE_CAPTURE_REFUSAL }
 
 /** Returns the same stable refusal before a [DisplayOp] reaches any GPU encoding route. */
 internal fun DisplayOp.perspectiveCaptureRefusalReasonOrNull(): String? =
-    clipOrNull()?.perspectiveCaptureRefusal?.takeIf { it }?.let { PERSPECTIVE_CAPTURE_REFUSAL }
+    typedClipTransformRefusalOrNull()
+
+/** Returns a typed clip-transform refusal without entering a legacy planner. */
+internal fun DisplayOp.typedClipTransformRefusalOrNull(): String? =
+    clipOrNull()?.typedClipTransformRefusalOrNull()
+
+/** Consumes a typed clip snapshot before a legacy coverage planner can classify it. */
+internal fun DisplayOp.clipTransformRefusalOrNull(target: org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts): String? =
+    clipOrNull()?.toGPUClipFacts(target)?.clipTransformRefusal
 
 private fun DisplayOp.clipOrNull(): ClipStack? = when (this) {
     is DisplayOp.DrawRect -> clip

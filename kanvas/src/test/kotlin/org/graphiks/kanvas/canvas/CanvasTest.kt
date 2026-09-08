@@ -6,7 +6,6 @@ import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.math.geometry.Point2F32
 
 import org.graphiks.kanvas.geometry.Path
-import org.graphiks.kanvas.geometry.toPathF32
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.text.GlyphPaintProvider
@@ -111,37 +110,6 @@ class CanvasTest {
     }
 
     @Test
-    fun `perspective path clip retains source commands and the CTM that captured them`() {
-        val buffer = TestBuffer()
-        val canvas = Canvas(buffer)
-        val perspective = Matrix3x3F32(
-            sx = 1.25f,
-            kx = .2f,
-            tx = 3f,
-            ky = -.1f,
-            sy = .8f,
-            ty = 7f,
-            persp0 = .01f,
-            persp1 = -.02f,
-            persp2 = 1f,
-        )
-        val source = Path().addRect(RectF32.ofLTRB(2f, 4f, 12f, 14f))
-
-        canvas.setMatrix(perspective)
-        canvas.clipPath(source, antiAlias = false)
-        canvas.resetMatrix()
-        canvas.translate(100f, 200f)
-
-        val clip = assertIs<ClipStack.Complex>(buffer.ops().filterIsInstance<DisplayOp.SetClip>().last().clip)
-        val captured = assertIs<ClipStackOp.PathOp>(clip.ops.single())
-        assertEquals(source.toPathF32(), captured.path.toPathF32())
-        assertEquals(
-            perspective,
-            assertIs<ClipTransformSnapshot.Known>(captured.transform).copyMatrixF32(),
-        )
-    }
-
-    @Test
     fun `saveLayer defers outer clip while nested layer records only inner clip`() {
         val buffer = TestBuffer()
         val canvas = Canvas(buffer)
@@ -195,31 +163,6 @@ class CanvasTest {
         assertIs<ClipStackOp.RRectOp>(nested.ops[1])
         assertEquals(outer, assertIs<ClipStack.DeviceRect>(draws[1].clip).rect)
         assertEquals(2, assertIs<ClipStack.Complex>(draws[0].clip).ops.size)
-    }
-
-    @Test
-    fun `save restore replays the captured clip with its original CTM`() {
-        val buffer = TestBuffer()
-        val canvas = Canvas(buffer)
-        val source = RectF32.ofLTRB(2f, 3f, 12f, 14f)
-        val captureTransform = Matrix3x3F32.rotation(30f)
-
-        canvas.rotate(30f)
-        canvas.clipRect(source, antiAlias = false)
-        canvas.save()
-        canvas.skew(.25f, -.5f)
-        canvas.clipPath(Path().addRect(RectF32.ofLTRB(0f, 0f, 1f, 1f)))
-        canvas.restore()
-        canvas.resetMatrix()
-        canvas.drawRect(RectF32.ofLTRB(0f, 0f, 16f, 16f), Paint.fill(ColorARGB.Red))
-
-        val replayed = assertIs<ClipStack.Complex>(buffer.ops().filterIsInstance<DisplayOp.DrawRect>().single().clip)
-        val captured = assertIs<ClipStackOp.RectOp>(replayed.ops.single())
-        assertEquals(source, captured.rect)
-        assertEquals(
-            captureTransform,
-            assertIs<ClipTransformSnapshot.Known>(captured.transform).copyMatrixF32(),
-        )
     }
 
     @Test

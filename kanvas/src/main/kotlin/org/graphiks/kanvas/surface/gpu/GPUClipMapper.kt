@@ -13,6 +13,7 @@ import org.graphiks.kanvas.canvas.ClipStackOp
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.geometry.PathCommand
+import org.graphiks.kanvas.render.ir.ClipTransformSnapshot
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageElement
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageElementKind
@@ -27,12 +28,32 @@ import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellator
 import org.graphiks.kanvas.gpu.renderer.geometry.PathVerb as GpuPathVerb
 import org.graphiks.kanvas.gpu.renderer.geometry.Point
 import org.graphiks.kanvas.pipeline.ClipOp
+import org.graphiks.math.matrix.Matrix3x3F32
+import org.graphiks.math.matrix.mapAxisAligned
+import org.graphiks.math.matrix.mapAxisAlignedRect
 
-/** Maps captured device-space clip state into the immutable GPU coverage transport. */
+/**
+ * Maps captured clips into the legacy coverage transport.
+ *
+ * Typed transform snapshots are consumed here, before that transport can see
+ * them. Only finite non-singular affine snapshots are materialized into device
+ * geometry. Legacy snapshots never become authority for a new route.
+ */
 internal fun ClipStack.toGPUClipFacts(target: GPUTargetFacts): GPUClipFacts = when (this) {
     ClipStack.WideOpen -> GPUClipFacts.wideOpen(target.bounds())
     is ClipStack.DeviceRect -> {
-        val element = rect.toClipElement(ClipOp.INTERSECT, antiAlias)
+        // DeviceRect has no captured transform. Preserve malformed historical input for
+        // its owning lowerer to diagnose rather than misclassifying it as a typed
+        // transform-projection refusal.
+        val element = GPUClipCoverageElement(
+            operation = GPUClipCoverageOperation.Intersect,
+            kind = GPUClipCoverageElementKind.Rect,
+            values = listOf(rect.left, rect.top, rect.right, rect.bottom),
+            vertexCount = 0,
+            antiAlias = antiAlias,
+            fillRule = GPUClipFillRule.Winding,
+            inverseFill = false,
+        )
         GPUClipFacts(
             kind = GPUClipKind.DeviceRect,
             bounds = GPUBounds(rect.left, rect.top, rect.right, rect.bottom),
@@ -45,77 +66,201 @@ internal fun ClipStack.toGPUClipFacts(target: GPUTargetFacts): GPUClipFacts = wh
             perspectiveCaptureRefusal = perspectiveCaptureRefusal,
         )
     }
-    is ClipStack.Complex -> GPUClipFacts(
-        kind = GPUClipKind.ComplexStack,
-        bounds = target.bounds(),
-        coverageRequest = GPUClipCoverageRequest(
-            targetWidth = target.width,
-            targetHeight = target.height,
-            elements = ops.map(ClipStackOp::toClipElement),
-        ),
-        perspectiveCaptureRefusal = perspectiveCaptureRefusal,
-    )
+    is ClipStack.Complex -> when (val transition = transitionalElements()) {
+        is TransitionalClipElements.Ready -> GPUClipFacts(
+            kind = GPUClipKind.ComplexStack,
+            bounds = target.bounds(),
+            coverageRequest = GPUClipCoverageRequest(
+                targetWidth = target.width,
+                targetHeight = target.height,
+                elements = transition.elements,
+            ),
+        )
+        is TransitionalClipElements.Refused -> GPUClipFacts(
+            kind = GPUClipKind.ComplexStack,
+            bounds = target.bounds(),
+            perspectiveCaptureRefusal = transition.reason == TRANSITIONAL_CLIP_PERSPECTIVE,
+            clipTransformRefusal = transition.reason,
+        )
+    }
 }
 
 private fun GPUTargetFacts.bounds(): GPUBounds =
     GPUBounds(0f, 0f, width.toFloat(), height.toFloat())
 
+private sealed interface TransitionalClipElements {
+    data class Ready(val elements: List<GPUClipCoverageElement>) : TransitionalClipElements
+    data class Refused(val reason: String) : TransitionalClipElements
+}
+
+private fun ClipStack.Complex.transitionalElements(): TransitionalClipElements {
+    val elements = ArrayList<GPUClipCoverageElement>(ops.size)
+    for (op in ops) {
+        when (val element = op.transitionalElement()) {
+            is TransitionalClipElement.Ready -> elements += element.element
+            is TransitionalClipElement.Refused -> return TransitionalClipElements.Refused(element.reason)
+        }
+    }
+    return TransitionalClipElements.Ready(elements)
+}
+
+/** Stable refusal used by every typed consumer before legacy coverage planning. */
+internal fun ClipStack.typedClipTransformRefusalOrNull(): String? = when (this) {
+    ClipStack.WideOpen,
+    is ClipStack.DeviceRect,
+    -> null
+    is ClipStack.Complex -> (transitionalElements() as? TransitionalClipElements.Refused)?.reason
+}
+
+private sealed interface TransitionalClipElement {
+    data class Ready(val element: GPUClipCoverageElement) : TransitionalClipElement
+    data class Refused(val reason: String) : TransitionalClipElement
+}
+
+private fun ClipStackOp.transitionalElement(): TransitionalClipElement {
+    val known = transform as? ClipTransformSnapshot.Known
+        ?: return TransitionalClipElement.Refused(
+            transform.transitionalClipRefusalOrNull() ?: TRANSITIONAL_CLIP_LEGACY_UNAVAILABLE,
+        )
+    val matrix = known.copyMatrixF32()
+    matrix.transitionalClipRefusalOrNull()?.let { return TransitionalClipElement.Refused(it) }
+    val transformClass = matrix.legacyBoundaryTransformClass()
+    return try {
+        when (this) {
+            is ClipStackOp.RectOp -> if (matrix.isScaleTranslate()) {
+                rect.toClipElement(op, antiAlias, matrix.mapAxisAlignedRect(rect))
+            } else {
+                Path().addRect(rect).transform(matrix).toPathClipElement(op, antiAlias, transformClass)
+            }
+            is ClipStackOp.RRectOp -> if (matrix.isScaleTranslate()) {
+                rrect.toRRectClipElement(op, antiAlias, transformClass, rrect.mapAxisAligned(matrix))
+            } else {
+                Path().addRRect(rrect).transform(matrix).toPathClipElement(op, antiAlias, transformClass)
+            }
+            is ClipStackOp.PathOp -> path.transform(matrix).toPathClipElement(op, antiAlias, transformClass)
+        }.let { element ->
+            element?.let(TransitionalClipElement::Ready)
+                ?: TransitionalClipElement.Refused(TRANSITIONAL_CLIP_NONFINITE_PROJECTION)
+        }
+    } catch (_: IllegalArgumentException) {
+        TransitionalClipElement.Refused(TRANSITIONAL_CLIP_NONFINITE_PROJECTION)
+    }
+}
+
 private fun org.graphiks.math.geometry.RectF32.toClipElement(
     op: ClipOp,
     antiAlias: Boolean,
-): GPUClipCoverageElement = GPUClipCoverageElement(
-    operation = op.toCoverageOperation(),
-    kind = GPUClipCoverageElementKind.Rect,
-    values = listOf(left, top, right, bottom),
-    vertexCount = 0,
-    antiAlias = antiAlias,
-    fillRule = GPUClipFillRule.Winding,
-    inverseFill = false,
-)
+    mapped: org.graphiks.math.geometry.RectF32 = this,
+): GPUClipCoverageElement? {
+    val values = listOf(mapped.left, mapped.top, mapped.right, mapped.bottom)
+    if (values.any { !it.isFinite() }) return null
+    return GPUClipCoverageElement(
+        operation = op.toCoverageOperation(),
+        kind = GPUClipCoverageElementKind.Rect,
+        values = values,
+        vertexCount = 0,
+        antiAlias = antiAlias,
+        fillRule = GPUClipFillRule.Winding,
+        inverseFill = false,
+    )
+}
 
-private fun ClipStackOp.toClipElement(): GPUClipCoverageElement = when (this) {
-    is ClipStackOp.RectOp -> rect.toClipElement(op, antiAlias)
-    is ClipStackOp.RRectOp -> GPUClipCoverageElement(
+private fun org.graphiks.math.geometry.RRectF32.toRRectClipElement(
+    op: ClipOp,
+    antiAlias: Boolean,
+    transformClass: String,
+    mapped: org.graphiks.math.geometry.RRectF32 = this,
+): GPUClipCoverageElement? {
+    val values = listOf(
+        mapped.rect.left, mapped.rect.top, mapped.rect.right, mapped.rect.bottom,
+        mapped.topLeft.x, mapped.topLeft.y,
+        mapped.topRight.x, mapped.topRight.y,
+        mapped.bottomRight.x, mapped.bottomRight.y,
+        mapped.bottomLeft.x, mapped.bottomLeft.y,
+    )
+    if (values.any { !it.isFinite() }) return null
+    return GPUClipCoverageElement(
         operation = op.toCoverageOperation(),
         kind = GPUClipCoverageElementKind.RRect,
-        values = listOf(
-            rrect.rect.left, rrect.rect.top, rrect.rect.right, rrect.rect.bottom,
-            rrect.topLeft.x, rrect.topLeft.y,
-            rrect.topRight.x, rrect.topRight.y,
-            rrect.bottomRight.x, rrect.bottomRight.y,
-            rrect.bottomLeft.x, rrect.bottomLeft.y,
-        ),
+        values = values,
         vertexCount = 0,
         antiAlias = antiAlias,
         fillRule = GPUClipFillRule.Winding,
         inverseFill = false,
         transformClass = transformClass,
     )
-    is ClipStackOp.PathOp -> {
-        val flattened = PathTessellator(
-            tolerance = 0.25f,
-            maxVertices = Int.MAX_VALUE,
-        ).flattenWithContours(path.toPathTessellatorData())
-        val fill = path.fillType.toClipFill()
-        GPUClipCoverageElement(
-            operation = op.toCoverageOperation(),
-            kind = GPUClipCoverageElementKind.Path,
-            values = buildList {
-                add(flattened.contourStarts.size.toFloat())
-                flattened.contourStarts.forEach { add(it.toFloat()) }
-                flattened.points.forEach { point ->
-                    add(point.x)
-                    add(point.y)
-                }
-            },
-            vertexCount = flattened.points.size,
-            antiAlias = antiAlias,
-            fillRule = fill.rule,
-            inverseFill = fill.inverse,
-            transformClass = transformClass,
-            hasCubicSegments = path.commands().any { command -> command is PathCommand.Cubic },
-        )
+}
+
+private fun Path.toPathClipElement(
+    op: ClipOp,
+    antiAlias: Boolean,
+    transformClass: String,
+): GPUClipCoverageElement? {
+    val flattened = PathTessellator(
+        tolerance = 0.25f,
+        maxVertices = Int.MAX_VALUE,
+    ).flattenWithContours(toPathTessellatorData())
+    if (flattened.points.any { point -> !point.x.isFinite() || !point.y.isFinite() }) return null
+    val fill = fillType.toClipFill()
+    return GPUClipCoverageElement(
+        operation = op.toCoverageOperation(),
+        kind = GPUClipCoverageElementKind.Path,
+        values = buildList {
+            add(flattened.contourStarts.size.toFloat())
+            flattened.contourStarts.forEach { add(it.toFloat()) }
+            flattened.points.forEach { point ->
+                add(point.x)
+                add(point.y)
+            }
+        },
+        vertexCount = flattened.points.size,
+        antiAlias = antiAlias,
+        fillRule = fill.rule,
+        inverseFill = fill.inverse,
+        transformClass = transformClass,
+        hasCubicSegments = commands().any { command -> command is PathCommand.Cubic },
+    )
+}
+
+private const val TRANSITIONAL_CLIP_NONFINITE = "unsupported_clip_transform:NonFinite"
+private const val TRANSITIONAL_CLIP_PERSPECTIVE = "unsupported_transform:Perspective"
+private const val TRANSITIONAL_CLIP_SINGULAR = "unsupported_clip_transform:Singular"
+private const val TRANSITIONAL_CLIP_NONFINITE_PROJECTION = "unsupported_clip_transform:NonFiniteProjection"
+private const val TRANSITIONAL_CLIP_LEGACY_UNAVAILABLE = "unsupported_clip_transform:LegacyUnavailable"
+
+/** Stable refusal used by every typed consumer before legacy coverage planning. */
+internal fun ClipTransformSnapshot.transitionalClipRefusalOrNull(): String? = when (this) {
+    is ClipTransformSnapshot.Known -> copyMatrixF32().transitionalClipRefusalOrNull()
+    is ClipTransformSnapshot.LegacyUnavailable -> if (perspectiveCaptureRefusal) {
+        TRANSITIONAL_CLIP_PERSPECTIVE
+    } else {
+        TRANSITIONAL_CLIP_LEGACY_UNAVAILABLE
     }
+}
+
+private fun Matrix3x3F32.transitionalClipRefusalOrNull(): String? {
+    if (!listOf(sx, kx, tx, ky, sy, ty, persp0, persp1, persp2).all(Float::isFinite)) {
+        return TRANSITIONAL_CLIP_NONFINITE
+    }
+    if (hasPerspective()) return TRANSITIONAL_CLIP_PERSPECTIVE
+    val determinant = sx.toDouble() * sy.toDouble() - kx.toDouble() * ky.toDouble()
+    return when {
+        !determinant.isFinite() -> TRANSITIONAL_CLIP_NONFINITE
+        determinant == 0.0 -> TRANSITIONAL_CLIP_SINGULAR
+        else -> null
+    }
+}
+
+/** Provenance is derived from [Matrix3x3F32], never from a legacy string snapshot. */
+private fun Matrix3x3F32.legacyBoundaryTransformClass(): String = when {
+    this == Matrix3x3F32.Identity -> "identity"
+    (sx == 0f && sy == 0f && kx == -1f && ky == 1f) ||
+        (sx == -1f && sy == -1f && kx == 0f && ky == 0f) -> "right-angle-rotation"
+    kx == 0f && ky == 0f && sx == 1f && sy == 1f -> "translate"
+    kx == 0f && ky == 0f && sx == sy && sx > 0f -> "uniform-positive-scale-translate"
+    kx == 0f && ky == 0f && tx == 0f && ty == 0f -> "scale"
+    kx == 0f && ky == 0f -> "scale-translate"
+    else -> "affine"
 }
 
 private fun ClipOp.toCoverageOperation(): GPUClipCoverageOperation = when (this) {
