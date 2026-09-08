@@ -37,6 +37,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUProvisionalRenderSegmentKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUW4eMaskContinuationRequest
 import org.graphiks.kanvas.gpu.renderer.passes.GPURefusalScope
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
@@ -861,6 +862,8 @@ sealed interface GPUTask {
             Map<GPUDrawPacketID, GPUImageBindingRequest> = emptyMap(),
         preparedTextBindingsByPacketId:
             Map<GPUDrawPacketID, GPUPreparedTextRenderBinding> = emptyMap(),
+        /** Dedicated W4e mask continuation; it must never use scene MSAA authority. */
+        val w4eMaskContinuation: GPUW4eMaskContinuationRequest? = null,
     ) : GPUTask {
         val drawPackets: List<GPUDrawPacket> = immutableList(drawPackets)
         val resourceUses: List<GPUFrameResourceUse> = immutableList(resourceUses)
@@ -882,6 +885,16 @@ sealed interface GPUTask {
 
         init {
             require(phase == GPUTaskPhase.Render) { "GPUTask.Render requires Render phase" }
+            require(w4eMaskContinuation == null ||
+                samplePlan is GPUSamplePlan.MultisampleFrame &&
+                samplePlan.sampleCount == 4 &&
+                target.matchesW4eLogicalResource(w4eMaskContinuation.maskTargetResourceId)
+            ) {
+                "W4e mask continuation requires its own four-sample scratch render target"
+            }
+            require(w4eMaskContinuation == null || sampleContinuationKey == null) {
+                "W4e mask continuation must not use the generic scene MSAA continuation key"
+            }
             require(drawPackets.isNotEmpty()) { "GPUTask.Render.drawPackets must not be empty" }
             require(batchEligibilityByPacketId.keys == drawPackets.map { it.packetId }.toSet()) {
                 "GPUTask.Render batching eligibility must cover every packet exactly"
@@ -1072,6 +1085,10 @@ sealed interface GPUTask {
         }
     }
 }
+
+/** Session-qualified W4e refs retain their compiler-sealed logical resource suffix. */
+private fun GPUFrameTargetRef.matchesW4eLogicalResource(resourceId: String): Boolean =
+    value == resourceId || value.endsWith(".$resourceId")
 
 /**
  * Ordered task list with dependency evidence.

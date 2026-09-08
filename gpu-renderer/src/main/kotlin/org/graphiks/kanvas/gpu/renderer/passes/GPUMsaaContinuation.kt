@@ -52,6 +52,38 @@ enum class GPUSampleResolveAction {
     Skip,
 }
 
+/**
+ * W4e owns a mask attachment independently of the scene MSAA continuation contract.
+ * A sealed scope either resolves its 4x linear RGBA8 scratch mask to a distinct 1x mask or
+ * retains it for a later scope.  It never represents scene-target continuation.
+ */
+public enum class GPUW4eMaskResolveAction {
+    ResolveCanonical,
+    Skip,
+}
+
+public data class GPUW4eMaskContinuationRequest(
+    public val maskTargetResourceId: String,
+    public val resolveMaskResourceId: String?,
+    public val resolveAction: GPUW4eMaskResolveAction,
+) {
+    init {
+        require(maskTargetResourceId.isNotBlank()) {
+            "W4e mask continuation requires its scratch mask target"
+        }
+        require((resolveAction == GPUW4eMaskResolveAction.ResolveCanonical) ==
+            (resolveMaskResourceId != null)
+        ) {
+            "W4e mask resolve action must exactly match its sealed resolve target"
+        }
+        require(resolveMaskResourceId == null ||
+            (resolveMaskResourceId.isNotBlank() && resolveMaskResourceId != maskTargetResourceId)
+        ) {
+            "W4e mask resolve target must be distinct from its scratch target"
+        }
+    }
+}
+
 /** Immutable request for one MSAA pass-segment transition. */
 data class GPUSampleContinuationRequest(
     val key: GPUSampleContinuationKey,

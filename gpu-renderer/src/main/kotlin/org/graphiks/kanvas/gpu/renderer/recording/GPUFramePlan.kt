@@ -29,6 +29,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationRequest
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUW4eMaskContinuationRequest
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometry
@@ -270,6 +271,8 @@ sealed interface GPUFrameStep {
             Map<GPUDrawPacketID, GPUImageBindingRequest> = emptyMap(),
         preparedTextBindingsByPacketId:
             Map<GPUDrawPacketID, GPUPreparedTextRenderBinding> = emptyMap(),
+        /** Dedicated W4e mask continuation, intentionally separate from scene MSAA ownership. */
+        val w4eMaskContinuation: GPUW4eMaskContinuationRequest? = null,
     ) : GPUFrameStep {
         val drawPackets: List<GPUDrawPacket> = immutableList(drawPackets)
         val resourceUses: List<GPUFrameResourceUse> = immutableList(resourceUses)
@@ -315,6 +318,12 @@ sealed interface GPUFrameStep {
             }
             require(sampleContinuation == null || sampleContinuation.key.samplePlan == samplePlan) {
                 "GPUFrameStep.RenderPassStep sample continuation must match the render sample plan"
+            }
+            require(w4eMaskContinuation == null ||
+                sampleContinuation == null && samplePlan is GPUSamplePlan.MultisampleFrame &&
+                samplePlan.sampleCount == 4 && target.matchesW4eLogicalResource(w4eMaskContinuation.maskTargetResourceId)
+            ) {
+                "GPUFrameStep.RenderPassStep W4e continuation must own a dedicated four-sample mask target"
             }
             val preparedImagePacketIds = drawPackets
                 .filter { packet -> packet.semanticPayload is GPUDrawSemanticPayload.SampledImage }
@@ -602,6 +611,10 @@ sealed interface GPUFrameStep {
         }
     }
 }
+
+/** Session-qualified W4e refs retain their compiler-sealed logical resource suffix. */
+private fun GPUFrameTargetRef.matchesW4eLogicalResource(resourceId: String): Boolean =
+    value == resourceId || value.endsWith(".$resourceId")
 
 /** One adjacent batch retained inside a single render-pass step. */
 class GPUFrameRenderBatch(

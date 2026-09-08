@@ -424,6 +424,26 @@ class GPUDrawPacket(
     internal var corePrimitivePreparedAuthority: GPUCorePrimitivePreparedPacketAuthority? = null
         private set
 
+    /** One lowering-local frame seal; every W4e packet must carry the same immutable authority. */
+    internal var w4ePreparedFrameAuthority: GPUW4ePreparedFrameAuthority? = null
+        private set
+
+    internal fun attachW4ePreparedFrameAuthority(
+        authority: GPUW4ePreparedFrameAuthority,
+    ): GPUDrawPacket {
+        check(w4ePreparedFrameAuthority == null) {
+            "W4e prepared frame authority is already attached"
+        }
+        require(role == GPUDrawPacketRole.W4ePrepared) {
+            "Only W4e prepared packets may retain a W4e frame authority"
+        }
+        require((w4ePreparedClipPass == null) != (w4ePreparedPath == null)) {
+            "W4e prepared frame authority requires exactly one sealed pass kind"
+        }
+        w4ePreparedFrameAuthority = authority
+        return this
+    }
+
     internal var coverageMaskProducerUniformSlabSeal:
         GPUCoverageMaskProducerUniformSlabSeal? = null
         private set

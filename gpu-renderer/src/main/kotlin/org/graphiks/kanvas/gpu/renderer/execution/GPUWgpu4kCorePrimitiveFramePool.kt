@@ -395,6 +395,8 @@ internal class GPUWgpu4kW4eAttachmentPool(
     )
 
     private val slots = mutableListOf<Slot>()
+    /** Handles whose close failed remain owned until a later retry succeeds. */
+    private val pendingClose = mutableListOf<AutoCloseable>()
     private var nextLeaseId = 1L
     private var closing = false
     private var closed = false
@@ -404,6 +406,7 @@ internal class GPUWgpu4kW4eAttachmentPool(
         observedGeneration: GPUDeviceGenerationID,
         requirements: GPUW4eAttachmentPoolRequirements,
     ): GPUWgpu4kW4eAttachmentPoolCheckout {
+        retryPendingClose()
         if (closed) return GPUWgpu4kW4eAttachmentPoolCheckout.Refused(GPUWgpu4kCorePrimitiveFramePoolRefusal.Closed)
         if (closing) return GPUWgpu4kW4eAttachmentPoolCheckout.Refused(GPUWgpu4kCorePrimitiveFramePoolRefusal.Closing)
         if (observedGeneration != deviceGeneration) {
@@ -456,13 +459,25 @@ internal class GPUWgpu4kW4eAttachmentPool(
 
     @Synchronized
     override fun close() {
-        if (closed) return
+        if (closed) {
+            retryPendingClose()?.let { throw it }
+            return
+        }
         closing = true
         val live = slots.mapNotNull { slot -> slot.leaseId.takeIf { slot.state in setOf(State.CheckedOut, State.Submitted) } }
         if (live.isNotEmpty()) throw GPUWgpu4kCorePrimitiveFramePoolCloseRefused(live)
-        slots.asReversed().forEach { slot -> closeHandles(slot.handles) }
+        var firstFailure: Throwable? = null
+        slots.asReversed().forEach { slot ->
+            closeHandles(slot.handles)?.let { failure ->
+                if (firstFailure == null) firstFailure = failure else firstFailure?.addSuppressed(failure)
+            }
+        }
         slots.clear()
         closed = true
+        retryPendingClose()?.let { failure ->
+            if (firstFailure == null) firstFailure = failure else firstFailure?.addSuppressed(failure)
+        }
+        firstFailure?.let { throw GPUWgpu4kCorePrimitiveFramePoolCloseFailure(pendingClose.size).also { it.addSuppressed(firstFailure) } }
     }
 
     private fun createHandles(requirements: GPUW4eAttachmentPoolRequirements): GPUWgpu4kW4eAttachmentHandles {
@@ -504,20 +519,56 @@ internal class GPUWgpu4kW4eAttachmentPool(
                 requirements.additionalDepthStencilRequirements.map(::depth),
             )
         } catch (failure: Throwable) {
-            allocated.asReversed().forEach { handle -> runCatching(handle::close) }
+            retireFailedAllocations(allocated).also { cleanupFailure ->
+                cleanupFailure?.let(failure::addSuppressed)
+            }
             throw failure
         }
     }
 
-    private fun closeHandles(handles: GPUWgpu4kW4eAttachmentHandles) {
-        buildList<AutoCloseable> {
+    private fun closeHandles(handles: GPUWgpu4kW4eAttachmentHandles): Throwable? =
+        retireFailedHandlesInCloseOrder(buildList<AutoCloseable> {
             handles.producerDepthStencil?.let { add(it.view); add(it.texture) }
             handles.producerScratch?.let { add(it.view); add(it.texture) }
             handles.additionalDepthStencils.asReversed().forEach { add(it.view); add(it.texture) }
             handles.additionalMasks.asReversed().forEach { add(it.view); add(it.texture) }
             add(handles.resolved.view); add(handles.resolved.texture)
             handles.accumulators.asReversed().forEach { add(it.view); add(it.texture) }
-        }.forEach { handle -> handle.close() }
+        })
+
+    /** Closes every supplied handle, retaining only failures for a later completion-safe retry. */
+    private fun retireFailedAllocations(handles: List<AutoCloseable>): Throwable? {
+        // Allocation records texture then view, so rollback must run in the inverse (view then texture) order.
+        return retireFailedHandlesInCloseOrder(handles.asReversed())
+    }
+
+    /** Retains each failed handle without skipping later cleanup dependencies. */
+    private fun retireFailedHandlesInCloseOrder(handles: List<AutoCloseable>): Throwable? {
+        var firstFailure: Throwable? = null
+        handles.forEach { handle ->
+            try {
+                handle.close()
+            } catch (failure: Throwable) {
+                pendingClose += handle
+                if (firstFailure == null) firstFailure = failure else firstFailure?.addSuppressed(failure)
+            }
+        }
+        return firstFailure
+    }
+
+    private fun retryPendingClose(): Throwable? {
+        var firstFailure: Throwable? = null
+        val iterator = pendingClose.listIterator()
+        while (iterator.hasNext()) {
+            val handle = iterator.next()
+            try {
+                handle.close()
+                iterator.remove()
+            } catch (failure: Throwable) {
+                if (firstFailure == null) firstFailure = failure else firstFailure?.addSuppressed(failure)
+            }
+        }
+        return firstFailure
     }
 
     private companion object { const val MAX_SLOTS = 3 }

@@ -1416,6 +1416,21 @@ internal class GPUFrameExecutor(
             packet?.role == org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.W4ePrepared
         }
         if (hasW4e) {
+            val renderSteps = frame.semanticPlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+            val w4ePackets = renderSteps.flatMap(GPUFrameStep.RenderPassStep::drawPackets)
+                .filter { packet -> packet.role == org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.W4ePrepared }
+            val authority = w4ePackets.firstOrNull()?.w4ePreparedFrameAuthority
+            if (w4ePackets.size != renderSteps.size || authority == null || !authority.validatesRenderSteps(
+                    frame.semanticPlan.frameId.value,
+                    frame.semanticPlan.capabilitySeal.sealHash,
+                    renderSteps,
+                )
+            ) {
+                return executionDiagnostic(
+                    "invalid.native-frame-payload.w4e-frame-authority",
+                    "A W4e execution requires the same sealed graph, frame, resource-use, order, and atomic-group authority.",
+                )
+            }
             val exactPayload = payload ?: return executionDiagnostic(
                 "invalid.native-frame-payload.w4e-missing",
                 "A sealed W4e frame requires its native payload before encoding.",

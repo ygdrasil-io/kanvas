@@ -20,6 +20,9 @@ import org.graphiks.kanvas.gpu.plan.RenderGraph
 import org.graphiks.kanvas.gpu.plan.SamplePlan
 import org.graphiks.kanvas.gpu.plan.W4eClipPlanCompiler
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
+import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse
 import org.graphiks.math.geometry.InverseInteriorCoverageF32
 import org.graphiks.math.geometry.InversePathGeometryF32
 import org.graphiks.math.geometry.PathFillGeometryF32
@@ -200,6 +203,23 @@ internal class GPUPlanW4ePreparedAuthority private constructor(
 
     fun pathFor(passId: String): GPUW4ePreparedClipPassAuthority.Path? = pathsById[passId]
 
+    /**
+     * Closes task lowering as one frame.  This seal joins the compiler-authenticated graph to the
+     * exact packet order, target, resource uses, and atomic group; packet-local facts alone are
+     * deliberately insufficient because they could otherwise be recombined across lowerings.
+     */
+    fun issueFrameAuthority(
+        frameId: Long,
+        capabilitySealHash: String,
+        renders: List<GPUTask.Render>,
+    ): GPUW4ePreparedFrameAuthority = GPUW4ePreparedFrameAuthority.issue(
+        planId,
+        capabilityId,
+        frameId,
+        capabilitySealHash,
+        renders,
+    )
+
     fun revalidates(graph: RenderGraph): Boolean =
         graph.verifyW4eCompilerWitness() &&
             graph.id.value == planId &&
@@ -350,5 +370,144 @@ internal class GPUPlanW4ePreparedAuthority private constructor(
             is InverseInteriorCoverageF32.Geometry ->
                 GPUW4ePreparedInverseInteriorCoverage.Geometry(interior.copyGeometryF32())
         }
+    }
+}
+
+/** Complete W4e frame authority, retained by every packet and revalidated at all native boundaries. */
+internal class GPUW4ePreparedFrameAuthority private constructor(
+    private val graphId: String,
+    private val graphCapabilityId: String,
+    private val frameId: Long,
+    private val capabilitySealHash: String,
+    private val facts: List<Fact>,
+) {
+    private data class Fact(
+        val taskId: String,
+        val passId: String,
+        val commandIdValue: Int,
+        val targetResourceId: String,
+        val resourceUses: List<String>,
+        val atomicGroupId: String?,
+        val maskContinuation: GPUW4eMaskContinuationRequest?,
+    )
+
+    fun validatesRenders(
+        candidateFrameId: Long,
+        candidateSealHash: String,
+        renders: List<GPUTask.Render>,
+    ): Boolean {
+        if (candidateFrameId != frameId || candidateSealHash != capabilitySealHash ||
+            renders.size != facts.size || graphId.isBlank() || graphCapabilityId.isBlank()
+        ) return false
+        return renders.indices.all { index -> validates(index, renders[index]) }
+    }
+
+    fun validatesRenderSteps(
+        candidateFrameId: Long,
+        candidateSealHash: String,
+        renders: List<GPUFrameStep.RenderPassStep>,
+    ): Boolean {
+        if (candidateFrameId != frameId || candidateSealHash != capabilitySealHash ||
+            renders.size != facts.size || graphId.isBlank() || graphCapabilityId.isBlank()
+        ) return false
+        return renders.indices.all { index ->
+            val fact = facts[index]
+            val render = renders[index]
+            val packet = render.drawPackets.singleOrNull() ?: return@all false
+            packet.w4ePreparedFrameAuthority === this &&
+                render.sourceTaskIds.singleOrNull()?.value == fact.taskId &&
+                packet.passId == fact.passId &&
+                packet.commandIdValue == fact.commandIdValue &&
+                render.target.value == fact.targetResourceId &&
+                render.resourceUses.map(::resourceUseFact) == fact.resourceUses &&
+                atomicGroup(packet) == fact.atomicGroupId &&
+                render.w4eMaskContinuation == fact.maskContinuation &&
+                validatesNoAlias(packet, render.resourceUses)
+        }
+    }
+
+    private fun validates(index: Int, render: GPUTask.Render): Boolean {
+        val fact = facts[index]
+        val packet = render.drawPackets.singleOrNull() ?: return false
+        return packet.w4ePreparedFrameAuthority === this &&
+            render.taskId.value == fact.taskId &&
+            packet.passId == fact.passId &&
+            packet.commandIdValue == fact.commandIdValue &&
+            render.target.value == fact.targetResourceId &&
+            render.resourceUses.map(::resourceUseFact) == fact.resourceUses &&
+            atomicGroup(packet) == fact.atomicGroupId &&
+            render.w4eMaskContinuation == fact.maskContinuation &&
+            validatesNoAlias(packet, render.resourceUses)
+    }
+
+    private fun validatesNoAlias(packet: GPUDrawPacket, uses: List<GPUFrameResourceUse>): Boolean {
+        if (uses.groupBy { it.resource }.values.any { resourceUses ->
+                resourceUses.any { it.usage == org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.RenderAttachment } &&
+                    resourceUses.any { it.usage == org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding }
+            }
+        ) return false
+        val fold = packet.w4ePreparedClipPass as? GPUW4ePreparedClipPassAuthority.Fold ?: return true
+        if (setOf(fold.previousResourceId, fold.sourceResourceId, fold.outputResourceId).size != 3) return false
+        return uses.filter { use ->
+            use.referencesW4eLogicalResource(fold.previousResourceId) ||
+                use.referencesW4eLogicalResource(fold.sourceResourceId)
+        }.all { use ->
+            use.usage == org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding && !use.write
+        } && uses.singleOrNull { use ->
+            use.referencesW4eLogicalResource(fold.outputResourceId)
+        }?.let { output ->
+            output.usage == org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.RenderAttachment && output.write
+        } == true
+    }
+
+    private fun GPUFrameResourceUse.referencesW4eLogicalResource(resourceId: String): Boolean =
+        resource.value == resourceId || resource.value.endsWith(".$resourceId")
+
+    internal companion object {
+        internal fun issue(
+            graphId: String,
+            graphCapabilityId: String,
+            frameId: Long,
+            capabilitySealHash: String,
+            renders: List<GPUTask.Render>,
+        ): GPUW4ePreparedFrameAuthority {
+            require(graphId.isNotBlank() && graphCapabilityId.isNotBlank() && capabilitySealHash.isNotBlank())
+            require(renders.isNotEmpty()) { "W4e prepared frame requires ordered render scopes" }
+            val facts = renders.map { render ->
+                val packet = render.drawPackets.singleOrNull()
+                    ?: throw IllegalArgumentException("W4e prepared frame requires one packet per render scope")
+                require(packet.role == GPUDrawPacketRole.W4ePrepared &&
+                    (packet.w4ePreparedClipPass == null) != (packet.w4ePreparedPath == null)
+                ) { "W4e prepared frame requires one sealed pass authority per packet" }
+                Fact(
+                    render.taskId.value,
+                    packet.passId,
+                    packet.commandIdValue,
+                    render.target.value,
+                    render.resourceUses.map(::resourceUseFact),
+                    atomicGroup(packet),
+                    render.w4eMaskContinuation,
+                )
+            }
+            return GPUW4ePreparedFrameAuthority(
+                graphId,
+                graphCapabilityId,
+                frameId,
+                capabilitySealHash,
+                facts,
+            )
+        }
+
+        fun atomicGroup(packet: GPUDrawPacket): String? =
+            packet.w4ePreparedClipPass?.atomicGroupId ?: packet.w4ePreparedPath?.atomicGroupId
+
+        fun resourceUseFact(use: GPUFrameResourceUse): String = listOf(
+            use.resource::class.qualifiedName.orEmpty(),
+            use.resource.value,
+            use.role.name,
+            use.usage.name,
+            use.lifetime.name,
+            use.write.toString(),
+        ).joinToString("|")
     }
 }
