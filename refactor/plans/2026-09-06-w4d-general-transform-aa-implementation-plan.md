@@ -27,6 +27,24 @@
 - `font`, `codec`, GM Skia, dashboard, baselines et `jpg-color-cube` restent hors scope; aucun seuil/tolérance ajouté.
 - Fresh Terra par tâche, Sol spec+quality read-only après chaque commit.
 
+## État d'exécution — 2026-09-08
+
+| Task | État vérifié | Révision de clôture / preuve |
+| --- | --- | --- |
+| 1 — matrice F64 | Terminé | `a37d90a8f`, revue Sol CLEAN |
+| 2 — affine général | Terminé | `11a31a66b`, revue Sol CLEAN |
+| 3 — perspective bornée | Terminé | `33d19fa12`, corrections de tangence et revue Sol CLEAN |
+| 4 — préparation commune | Terminé avec gap PathOps suivi | `deb3efe00`, revue Sol CLEAN ; `StrokeAndFill` projectif non vide peut retourner `TopologyLimit` |
+| 5 — contrats MSAA/resolve | Terminé | `067958ca0`, revue Sol CLEAN |
+| 6 — compiler/budgets | Terminé | `3c801385f`, revue Sol CLEAN |
+| 7 — lowering/autorité | Terminé | `92c219a0b`, revue Sol CLEAN |
+| 8 — matérialisation/pool | Implémenté ; preuves de gates présentes | `bafbd4019` puis correctifs d'autorité, préflight et générations de depth ; revue Sol globale encore à faire |
+| 9 — Surface/oracle | Terminé | `42efea430`, revue Sol CLEAN ; AA4 réel reste terminal sur le runtime courant |
+| 10 — vérification/documentation | Gates et inventaires terminés ; suivi/documentation en cours | voir `refactor/waves/W04-geometry-coverage/status.md` |
+
+Les cases de conception ci-dessous décrivent le déroulé originel ; ce tableau
+est le ledger d'exécution autoritaire après les corrections et revues.
+
 ---
 
 ## Carte de fichiers
@@ -879,7 +897,7 @@ rtk git commit -m "feat(kanvas): route transformed AA paths"
 - Modify: `refactor/waves/W04-geometry-coverage/status.md`
 - Modify: ce plan
 
-- [ ] **Step 1: Exécuter les gates fraîches**
+- [x] **Step 1: Exécuter les gates fraîches**
 
 ```bash
 rtk ./gradlew :math:geometry:jvmTest :math:geometry:jsNodeTest :math:matrix:jvmTest :math:matrix:jsNodeTest :render-ir:test :gpu-plan:test --rerun-tasks
@@ -888,7 +906,7 @@ rtk ./gradlew :kanvas:test --tests '*GPUPlanSurface*' --tests '*SurfaceTest*' --
 rtk ./gradlew :kanvas:test --rerun-tasks
 ```
 
-- [ ] **Step 2: Contrôler XML/scope/diff**
+- [x] **Step 2: Contrôler XML/scope/diff**
 
 ```bash
 rtk rg -n '<failure|<error' kanvas/build/test-results/test/TEST-*.xml
