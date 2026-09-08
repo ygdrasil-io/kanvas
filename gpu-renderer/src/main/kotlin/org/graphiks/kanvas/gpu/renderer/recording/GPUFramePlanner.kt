@@ -1091,6 +1091,7 @@ object GPUFramePlanner {
         } else {
             first.loadStore
         }
+        val w4eResolveAction = packets.w4ePreparedResolveActionOrNull()
         return GPUFrameStep.RenderPassStep(
             target = first.target,
             loadStore = loadStore,
@@ -1110,13 +1111,24 @@ object GPUFramePlanner {
                             GPUSampleLoadTransition.RetainedLoad
                         },
                         storeAction = GPUSampleStoreAction.Store,
-                        resolveAction = GPUSampleResolveAction.ResolveCanonical,
+                        resolveAction = w4eResolveAction ?: GPUSampleResolveAction.ResolveCanonical,
                     )
                 },
             depthStencilLoadStore = first.depthStencilLoadStore,
             preparedImageBindingsByPacketId = preparedImageBindingsByPacketId,
             preparedTextBindingsByPacketId = preparedTextBindingsByPacketId,
         )
+    }
+
+    /** W4e resolve ownership is sealed per pass; a later encoder must not infer it per segment. */
+    private fun List<GPUDrawPacket>.w4ePreparedResolveActionOrNull(): GPUSampleResolveAction? {
+        val prepared = filter { it.role == GPUDrawPacketRole.W4ePrepared }
+        if (prepared.isEmpty()) return null
+        val last = prepared.last()
+        val resolves = last.w4ePreparedPath?.resolveTargetResourceId != null ||
+            (last.w4ePreparedClipPass as? org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipPassAuthority.Producer)
+                ?.resolveTargetResourceId != null
+        return if (resolves) GPUSampleResolveAction.ResolveCanonical else GPUSampleResolveAction.Skip
     }
 
     private fun ScheduledDestinationOperation.toStep(

@@ -92,7 +92,7 @@ internal class W4eClipGraphLowerer {
             }
             val samples = when (pass) {
                 is PlanPass.ClipMaskProducer -> pass.sampleCountI32
-                is PlanPass.PathRenderPass -> if (pass.draw.sample == SamplePlan.Multisample4) 4 else 1
+                is PlanPass.PathRenderPass -> if (preparedPath?.sample == SamplePlan.Multisample4) 4 else 1
                 else -> 1
             }
             GPUTask.Render(
@@ -115,7 +115,9 @@ internal class W4eClipGraphLowerer {
         val preparations = graph.resources().map { resource -> preparation(resource, refs.getValue(resource.id.value), bounds, graph.capabilities.copyBytesPerRowAlignment.toLong()) }
         val readback = GPUFrameReadbackRequest(GPUReadbackRequestID("w4e.${graph.id.value}.readback"), bounds, GPUReadbackPixelFormat.Rgba8Unorm, GPUColorInterpretation.EncodedPremulSrgb)
         val memory = memory(graph, bounds, limits)
-        if (!GPUFrameMemoryBudgetPlanner.hasExactLimitIndependentFacts(memory) || memory.diagnostic != null) return invalid()
+        if (!GPUFrameMemoryBudgetPlanner.hasExactLimitIndependentFacts(memory) || memory.diagnostic != null ||
+            memory.peakFrameTransientBytes + memory.targetResidentBytes != graph.peakFrameLocalBytes
+        ) return invalid()
         val base = GPUTaskList(request.frameId, seal, listOf(GPURecordingSeal(request.recordingId, 0L, replay, replay, seal.sealHash)), replay, emptyList(), emptyList(), GPUTaskPhase.entries, memory)
         val atomicGroups = renders.associate { render ->
             val packet = render.drawPackets.single()
@@ -279,15 +281,10 @@ internal class W4eClipGraphLowerer {
     ): org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationKey? {
         val sample = when (pass) {
             is PlanPass.ClipMaskProducer -> pass.sampleCountI32
-            is PlanPass.PathRenderPass -> path?.sampleCount
+            is PlanPass.PathRenderPass -> if (path?.sample == SamplePlan.Multisample4) 4 else 1
             else -> null
         } ?: return null
         if (sample != 4) return null
-        val depth = when (pass) {
-            is PlanPass.ClipMaskProducer -> pass.depthStencil?.value
-            is PlanPass.PathRenderPass -> path?.depthStencilResourceId
-            else -> null
-        }
         return org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationKey(
             org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity(target.value),
             org.graphiks.kanvas.gpu.renderer.recording.PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION,
@@ -297,7 +294,7 @@ internal class W4eClipGraphLowerer {
             GPUSamplePlan.MultisampleFrame(4),
             org.graphiks.kanvas.gpu.renderer.passes.GPUSampleAttachmentAuthority.PreparedFramePayload,
             org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity("w4e.msaa:${target.value}"),
-            depth?.let { id -> org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity(id) },
+            null,
         )
     }
 
@@ -367,6 +364,8 @@ internal class W4eClipGraphLowerer {
                         PlanResourceKind.Buffer -> GPUFrameMemoryResourceKind.Buffer
                     },
                     extent = if (resource.kind == PlanResourceKind.Texture2D) bounds else null,
+                    firstPassIndex = resource.firstPassIndex,
+                    lastPassIndexExclusive = resource.lastPassIndexExclusive,
                 )
             },
             graph.budget.maxFrameLocalBytes,

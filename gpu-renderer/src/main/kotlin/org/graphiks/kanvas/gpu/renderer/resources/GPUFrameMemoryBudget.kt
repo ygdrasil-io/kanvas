@@ -36,10 +36,16 @@ data class GPUFrameMemoryAllocation(
     val bytes: Long,
     val resourceKind: GPUFrameMemoryResourceKind,
     val extent: GPUPixelBounds?,
+    /** Half-open sealed pass lifetime; default preserves the one-segment legacy allocation ABI. */
+    val firstPassIndex: Int = 0,
+    val lastPassIndexExclusive: Int = 1,
 ) {
     init {
         require(label.isNotBlank()) { "GPUFrameMemoryAllocation.label must not be blank" }
         require(bytes >= 0L) { "GPUFrameMemoryAllocation.bytes must be non-negative" }
+        require(firstPassIndex >= 0 && lastPassIndexExclusive > firstPassIndex) {
+            "GPUFrameMemoryAllocation lifetime must be a non-empty non-negative range"
+        }
         when (resourceKind) {
             GPUFrameMemoryResourceKind.Texture2D -> requireNotNull(extent) {
                 "GPUFrameMemoryAllocation.extent is required for Texture2D allocations"
@@ -174,16 +180,23 @@ private fun aggregateFacts(
                 total + allocation.bytes.toBigInteger()
             }
     }
+    val transient = allocations.filter { !it.category.targetResident }
+    val transientPeak = if (transient.isEmpty()) {
+        BigInteger.ZERO
+    } else {
+        (0 until transient.maxOf(GPUFrameMemoryAllocation::lastPassIndexExclusive)).maxOf { passIndex ->
+            transient.asSequence()
+                .filter { allocation -> allocation.firstPassIndex <= passIndex && passIndex < allocation.lastPassIndexExclusive }
+                .fold(BigInteger.ZERO) { total, allocation -> total + allocation.bytes.toBigInteger() }
+        }
+    }
     return GPUFrameMemoryAggregateFacts(
         categoryTotals = categoryTotals,
         targetResident = categoryTotals
             .filterKeys(GPUFrameMemoryCategory::targetResident)
             .values
             .fold(BigInteger.ZERO, BigInteger::add),
-        peakTransient = categoryTotals
-            .filterKeys { category -> !category.targetResident }
-            .values
-            .fold(BigInteger.ZERO, BigInteger::add),
+        peakTransient = transientPeak,
     )
 }
 

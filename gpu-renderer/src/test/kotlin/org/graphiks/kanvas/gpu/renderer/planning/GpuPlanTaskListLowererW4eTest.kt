@@ -5,6 +5,7 @@ import io.ygdrasil.webgpu.GPUTextureUsage
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.color.ColorSpace
@@ -17,10 +18,14 @@ import org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat
 import org.graphiks.kanvas.gpu.plan.PlanId
 import org.graphiks.kanvas.gpu.plan.PlanOperationCapability
 import org.graphiks.kanvas.gpu.plan.PlanResourceUsage
+import org.graphiks.kanvas.gpu.plan.PlanResource
+import org.graphiks.kanvas.gpu.plan.PlanResourceRole
 import org.graphiks.kanvas.gpu.plan.PlanTextureFormat
 import org.graphiks.kanvas.gpu.plan.PlanTextureResolveSupport
 import org.graphiks.kanvas.gpu.plan.PlanTextureSampleSupport
 import org.graphiks.kanvas.gpu.plan.PlanPass
+import org.graphiks.kanvas.gpu.plan.BinaryMaskFetchPlan
+import org.graphiks.kanvas.gpu.plan.SamplePlan
 import org.graphiks.kanvas.gpu.plan.RenderGraph
 import org.graphiks.kanvas.gpu.plan.W4eClipPlanCompiler
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
@@ -32,6 +37,7 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureFormatSampleSuppo
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureSampleCountSupport
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlanner
+import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
@@ -39,7 +45,9 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage
 import org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipPassAuthority
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleResolveAction
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlanner
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
 import org.graphiks.kanvas.render.ir.BlendMode
 import org.graphiks.kanvas.render.ir.BlendNode
 import org.graphiks.kanvas.render.ir.ClipEntry
@@ -89,8 +97,9 @@ class GpuPlanTaskListLowererW4eTest {
 
     @Test
     fun `prepared prefix retains exact producer fold attachments and ping pong`() {
+        val graph = aaMaskGraph()
         val lowered = assertIs<GpuPlanLoweringResult.Lowered>(
-            GpuPlanTaskListLowerer().lower(request(aaMaskGraph())),
+            GpuPlanTaskListLowerer().lower(request(graph)),
         )
         val renders = lowered.taskList.tasks.filterIsInstance<GPUTask.Render>()
         val producer = renders.mapNotNull { task ->
@@ -118,6 +127,17 @@ class GpuPlanTaskListLowererW4eTest {
         )
         assertTrue(GPUFrameMemoryBudgetPlanner.hasExactLimitIndependentFacts(lowered.taskList.memoryBudget))
         assertTrue(lowered.taskList.memoryBudget.allocations.isNotEmpty())
+        graph.resources().forEach { resource ->
+            val allocation = lowered.taskList.memoryBudget.allocations.single { allocation ->
+                allocation.label == "w4e.${resource.id.value}"
+            }
+            assertEquals(resource.firstPassIndex, allocation.firstPassIndex)
+            assertEquals(resource.lastPassIndexExclusive, allocation.lastPassIndexExclusive)
+        }
+        assertEquals(
+            graph.peakFrameLocalBytes,
+            lowered.taskList.memoryBudget.peakFrameTransientBytes + lowered.taskList.memoryBudget.targetResidentBytes,
+        )
     }
 
     @Test
@@ -276,26 +296,27 @@ class GpuPlanTaskListLowererW4eTest {
             assertEquals(source.draw.commandIndex, path.commandIdValue)
             assertEquals(source.phase, path.phase)
             assertEquals(source.draw.color, path.color)
-            assertEquals(source.draw.strategy.name, path.fillStrategyLabel)
-            assertEquals(source.draw.coverage.name, path.coverageLabel)
-            assertEquals(source.draw.blend.name, path.blendLabel)
+            assertEquals(source.draw.strategy, path.fillStrategy)
+            assertEquals(source.draw.coverage, path.coverage)
+            assertEquals(source.draw.blend, path.blend)
             assertEquals(source.draw.copyScissorI32().right, path.scissor.right)
-            if (path.sampleCount == 4) assertTrue(render.sampleContinuationKey != null)
+            if (path.sample == SamplePlan.Multisample4) assertTrue(render.sampleContinuationKey != null)
         }
         assertFalse(GPUFramePlanner.plan(lowered.taskList).atomicallyRefused)
     }
 
     @Test
     fun `hard binary cover retains its one-to-four mask contract and exact depth allocation role`() {
+        val hardGraph = aaMaskGraph(coverage = CoverageRequest.HARD_EDGE, concave = true)
         val hardResult = GpuPlanTaskListLowerer().lower(
-            request(aaMaskGraph(coverage = CoverageRequest.HARD_EDGE, concave = true)),
+            request(hardGraph),
         )
         val lowered = assertIs<GpuPlanLoweringResult.Lowered>(hardResult)
         val hard = lowered.taskList.tasks.filterIsInstance<GPUTask.Render>().single { render ->
             render.drawPackets.single().w4ePreparedPath?.binarySourceMaskResourceId != null
         }
         val path = requireNotNull(hard.drawPackets.single().w4ePreparedPath)
-        assertEquals("TextureLoadUnfiltered", path.binaryMaskFetchLabel)
+        assertEquals(BinaryMaskFetchPlan.TextureLoadUnfiltered, path.binaryMaskFetch)
         assertEquals(4, path.binaryBroadcastSampleCount)
         assertTrue(hard.sampleContinuationKey != null)
         assertTrue(hard.resourceUses.any { use ->
@@ -317,6 +338,17 @@ class GpuPlanTaskListLowererW4eTest {
                 }.descriptor,
         )
         assertEquals(1, depth.sampleCount)
+        val allocations = lowered.taskList.memoryBudget.allocations.associateBy { it.label.removePrefix("w4e.") }
+        hardGraph.resources().filter { resource -> resource.format is PlanTextureFormat.DepthStencil }.forEach { resource ->
+            assertEquals(
+                if (resource.sampleCountI32 == 4) {
+                    GPUFrameMemoryCategory.FrameLocalMsaaDepthStencil
+                } else {
+                    GPUFrameMemoryCategory.ReusableScratch
+                },
+                allocations.getValue(resource.id.value).category,
+            )
+        }
         assertTrue(lowered.taskList.dependencies.any { it.atomicGroupId != null })
     }
 
@@ -328,6 +360,111 @@ class GpuPlanTaskListLowererW4eTest {
         )
 
         assertTrue(refused !is GpuPlanLoweringResult.Lowered)
+    }
+
+    @Test
+    fun `sealed W4e budget refusal publishes no lowerable graph or partial tasks`() {
+        val scene = SceneSnapshot.of(
+            SceneExtent(16, 16), ColorSpace.SRGB, listOf(pathDraw()),
+        )
+        val compiler = W4eClipPlanCompiler()
+        val candidate = assertIs<GpuPlanSelection.Candidate>(
+            compiler.select(scene, RenderTargetDescriptor(scene.extent, scene.colorSpace)),
+        ).candidate
+
+        assertIs<RenderPlanResult.ResourceLimitExceeded>(
+            compiler.plan(candidate, planCapabilities(), PlanBudget(1L)),
+        )
+    }
+
+    @Test
+    fun `sealed W4e resource contracts reject format usage sample and lifetime substitutions`() {
+        val graph = aaMaskGraph()
+        val mask = graph.resources().first { it.role == PlanResourceRole.CoverageMaskAccumulator }
+        val aaScratch = graph.resources().first { it.role == PlanResourceRole.CoverageMaskMultisampleScratch }
+
+        fun forgeGraph(resource: PlanResource): RenderGraph = RenderGraph.of(
+            id = PlanId("forged-w4e-resource-contract"),
+            capabilityId = graph.capabilityId,
+            targetExtent = graph.targetExtent,
+            colorFormat = graph.colorFormat,
+            capabilities = graph.capabilities,
+            budget = graph.budget,
+            visualCommandCount = graph.visualCommandCount,
+            resources = graph.resources().map { current -> if (current.id == resource.id) resource else current },
+            passes = graph.passes(),
+            dependencies = graph.dependencies(),
+            peakFrameLocalBytes = graph.peakFrameLocalBytes,
+        )
+
+        val wrongFormat = PlanResource.of(
+            mask.role, mask.ordinal, mask.kind, PlanTextureFormat.Color(graph.colorFormat),
+            mask.copyExtent(), mask.byteSize, mask.usages(), mask.lifetime,
+            mask.firstPassIndex, mask.lastPassIndexExclusive, mask.sampleCountI32,
+        )
+        assertFailsWith<IllegalArgumentException> { forgeGraph(wrongFormat) }
+
+        listOf(
+            {
+                PlanResource.of(
+                    mask.role, mask.ordinal, mask.kind, mask.format, mask.copyExtent(), mask.byteSize,
+                    setOf(PlanResourceUsage.RenderAttachment), mask.lifetime,
+                    mask.firstPassIndex, mask.lastPassIndexExclusive, mask.sampleCountI32,
+                )
+            },
+            {
+                PlanResource.of(
+                    aaScratch.role, aaScratch.ordinal, aaScratch.kind, aaScratch.format, aaScratch.copyExtent(),
+                    aaScratch.byteSize / 4L, aaScratch.usages(), aaScratch.lifetime,
+                    aaScratch.firstPassIndex, aaScratch.lastPassIndexExclusive, 1,
+                )
+            },
+            {
+                PlanResource.of(
+                    mask.role, mask.ordinal, mask.kind, mask.format, mask.copyExtent(), mask.byteSize,
+                    mask.usages(), mask.lifetime, mask.firstPassIndex, mask.firstPassIndex, mask.sampleCountI32,
+                )
+            },
+        ).forEach { forge -> assertFailsWith<IllegalArgumentException> { forge() } }
+    }
+
+    @Test
+    fun `mixed AA and hard W4e color passes share one continuation key and resolve only the sealed final pass`() {
+        val scene = SceneSnapshot.of(
+            SceneExtent(16, 16), ColorSpace.SRGB,
+            listOf(
+                pathDraw(coverage = CoverageRequest.ANTIALIASED),
+                pathDraw(coverage = CoverageRequest.HARD_EDGE, concave = true),
+            ),
+        )
+        val compiler = W4eClipPlanCompiler()
+        val candidate = assertIs<GpuPlanSelection.Candidate>(
+            compiler.select(scene, RenderTargetDescriptor(scene.extent, scene.colorSpace)),
+        ).candidate
+        val graph = assertIs<RenderPlanResult.Ready<RenderGraph>>(
+            compiler.plan(candidate, planCapabilities(), PlanBudget(1L shl 20)),
+        ).plan
+        val lowered = assertIs<GpuPlanLoweringResult.Lowered>(GpuPlanTaskListLowerer().lower(request(graph)))
+        val colorTasks = lowered.taskList.tasks.filterIsInstance<GPUTask.Render>().filter { render ->
+            render.drawPackets.single().w4ePreparedPath?.sample == SamplePlan.Multisample4
+        }
+        assertTrue(colorTasks.any { task ->
+            task.drawPackets.single().w4ePreparedPath?.depthStencilResourceId != null
+        })
+        assertTrue(colorTasks.any { task ->
+            task.drawPackets.single().w4ePreparedPath?.phase == org.graphiks.kanvas.gpu.plan.PathRenderPhase.HardEdgeBinaryColorCover &&
+                task.drawPackets.single().w4ePreparedPath?.depthStencilResourceId == null
+        })
+        assertEquals(1, colorTasks.mapNotNull(GPUTask.Render::sampleContinuationKey).distinct().size)
+
+        val frame = GPUFramePlanner.plan(lowered.taskList)
+        assertFalse(frame.atomicallyRefused)
+        val colorSteps = frame.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().filter { step ->
+            step.drawPackets.any { it.w4ePreparedPath?.sample == SamplePlan.Multisample4 }
+        }
+        assertEquals(1, colorSteps.count { it.sampleContinuation?.resolveAction == GPUSampleResolveAction.ResolveCanonical })
+        assertTrue(colorSteps.dropLast(1).all { it.sampleContinuation?.resolveAction == GPUSampleResolveAction.Skip })
+        assertTrue(colorSteps.last().drawPackets.any { it.w4ePreparedPath?.resolveTargetResourceId != null })
     }
 
     private fun aaMaskGraph(

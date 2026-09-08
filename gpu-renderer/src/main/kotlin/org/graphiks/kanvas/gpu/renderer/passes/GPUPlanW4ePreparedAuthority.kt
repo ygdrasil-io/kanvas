@@ -5,10 +5,19 @@ import org.graphiks.kanvas.gpu.plan.ClipCombineOperation
 import org.graphiks.kanvas.gpu.plan.ClipPlanStrategy
 import org.graphiks.kanvas.gpu.plan.ClippedBinaryMaskedPathDraw
 import org.graphiks.kanvas.gpu.plan.ClippedGeneralPathDraw
+import org.graphiks.kanvas.gpu.plan.AttachmentLoadPlan
+import org.graphiks.kanvas.gpu.plan.AttachmentStorePlan
+import org.graphiks.kanvas.gpu.plan.BinaryMaskFetchPlan
+import org.graphiks.kanvas.gpu.plan.BlendPlan
+import org.graphiks.kanvas.gpu.plan.CoveragePlan
+import org.graphiks.kanvas.gpu.plan.PathFillStrategy
+import org.graphiks.kanvas.gpu.plan.PlanDepthStencilAccess
+import org.graphiks.kanvas.gpu.plan.PlanDepthStencilLoadStore
 import org.graphiks.kanvas.gpu.plan.PlanResource
 import org.graphiks.kanvas.gpu.plan.PathDrawGeometry
 import org.graphiks.kanvas.gpu.plan.PathRenderPhase
 import org.graphiks.kanvas.gpu.plan.RenderGraph
+import org.graphiks.kanvas.gpu.plan.SamplePlan
 import org.graphiks.kanvas.gpu.plan.W4eClipPlanCompiler
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.math.geometry.InverseInteriorCoverageF32
@@ -116,8 +125,8 @@ public sealed interface GPUW4ePreparedClipPassAuthority {
     public class PathMaskClear internal constructor(
         override val passId: String,
         public val targetResourceId: String,
-        public val loadLabel: String,
-        public val storeLabel: String,
+        public val load: AttachmentLoadPlan,
+        public val store: AttachmentStorePlan,
         override val atomicGroupId: String,
     ) : GPUW4ePreparedClipPassAuthority {
         override val kind: Kind = Kind.PathMaskClear
@@ -130,12 +139,12 @@ public sealed interface GPUW4ePreparedClipPassAuthority {
         public val commandIdValue: Int,
         public val phase: PathRenderPhase,
         public val color: org.graphiks.math.color.ColorF32,
-        public val fillStrategyLabel: String,
-        public val coverageLabel: String,
-        public val blendLabel: String,
+        public val fillStrategy: PathFillStrategy,
+        public val coverage: CoveragePlan,
+        public val blend: BlendPlan,
         public val scissor: GPUPixelBounds,
         public val binarySourceMaskResourceId: String?,
-        public val binaryMaskFetchLabel: String?,
+        public val binaryMaskFetch: BinaryMaskFetchPlan?,
         public val binaryBroadcastSampleCount: Int?,
         public val targetResourceId: String,
         public val resolveTargetResourceId: String?,
@@ -143,11 +152,11 @@ public sealed interface GPUW4ePreparedClipPassAuthority {
         public val vertexResourceId: String,
         public val indexResourceId: String,
         public val uniformResourceId: String,
-        public val sampleCount: Int,
-        public val loadLabel: String,
-        public val storeLabel: String,
-        public val depthStencilAccessLabel: String?,
-        public val depthStencilLoadStoreLabel: String?,
+        public val sample: SamplePlan,
+        public val load: AttachmentLoadPlan,
+        public val store: AttachmentStorePlan,
+        public val depthStencilAccess: PlanDepthStencilAccess?,
+        public val depthStencilLoadStore: PlanDepthStencilLoadStore?,
         public val atomicGroupId: String?,
         geometry: PathDrawGeometry,
     ) {
@@ -221,9 +230,9 @@ internal class GPUPlanW4ePreparedAuthority private constructor(
                         pass.draw.commandIndex,
                         pass.phase,
                         pass.draw.color,
-                        pass.draw.strategy.name,
-                        pass.draw.coverage.name,
-                        pass.draw.blend.name,
+                        pass.draw.strategy,
+                        pass.draw.coverage,
+                        pass.draw.blend,
                         domainFor(pass.draw.copyScissorI32()),
                         binarySourceMaskId(pass),
                         binaryMaskFetch(pass),
@@ -234,11 +243,11 @@ internal class GPUPlanW4ePreparedAuthority private constructor(
                         pass.drawDataResources.vertex.value,
                         pass.drawDataResources.index.value,
                         pass.drawDataResources.uniform.value,
-                        if (pass.draw.sample.name == "Multisample4") 4 else 1,
-                        pass.load.name,
-                        pass.store.name,
-                        pass.depthStencilAccess?.name,
-                        pass.depthStencilLoadStore?.name,
+                        pass.draw.sample,
+                        pass.load,
+                        pass.store,
+                        pass.depthStencilAccess,
+                        pass.depthStencilLoadStore,
                         pass.atomicGroup?.value,
                         pass.draw.copyPathGeometry(),
                     )
@@ -287,7 +296,7 @@ internal class GPUPlanW4ePreparedAuthority private constructor(
 
         private fun clipPassFact(pass: PlanPass): GPUW4ePreparedClipPassAuthority? = when (pass) {
             is PlanPass.PathMaskClearPass -> GPUW4ePreparedClipPassAuthority.PathMaskClear(
-                pass.id.value, pass.target.value, pass.load.name, pass.store.name, pass.atomicGroup.value,
+                pass.id.value, pass.target.value, pass.load, pass.store, pass.atomicGroup.value,
             )
             is PlanPass.ClipMaskInitialize -> GPUW4ePreparedClipPassAuthority.Initialize(
                 pass.id.value, pass.output.value, domainFor(pass.copyDomainI32()), pass.clearCoverageF32,
@@ -325,8 +334,8 @@ internal class GPUPlanW4ePreparedAuthority private constructor(
             is ClippedBinaryMaskedPathDraw -> draw.source.mask.value
             else -> null
         }
-        private fun binaryMaskFetch(pass: PlanPass.PathRenderPass): String? = when (val draw = pass.draw) {
-            is ClippedBinaryMaskedPathDraw -> draw.source.maskFetch.name
+        private fun binaryMaskFetch(pass: PlanPass.PathRenderPass): BinaryMaskFetchPlan? = when (val draw = pass.draw) {
+            is ClippedBinaryMaskedPathDraw -> draw.source.maskFetch
             else -> null
         }
         private fun binaryBroadcastSamples(pass: PlanPass.PathRenderPass): Int? = when (val draw = pass.draw) {
