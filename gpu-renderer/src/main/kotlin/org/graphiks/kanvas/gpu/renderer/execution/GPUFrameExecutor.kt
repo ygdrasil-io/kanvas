@@ -1405,7 +1405,14 @@ internal class GPUFrameExecutor(
         }
         val hasW4c = frame.semanticPlan.hasSealedW4cSessionMarker()
         val hasW4d = frame.semanticPlan.hasSealedW4dSessionMarker()
-        if (!hasW4c && !hasW4d) {
+        val w4dGeneralAuthority = renders.firstOrNull()?.third
+            ?.corePrimitivePreparedAuthority
+            ?.w4dGeneralFrameMaterializationAuthority
+        val hasW4dGeneral = w4dGeneralAuthority != null && renders.isNotEmpty() && renders.all { (_, _, packet) ->
+            packet?.corePrimitivePreparedAuthority?.w4dGeneralFrameMaterializationAuthority ===
+                w4dGeneralAuthority
+        }
+        if (!hasW4c && !hasW4d && !hasW4dGeneral) {
             return if (writableLoads.isEmpty()) {
                 null
             } else {
@@ -1413,6 +1420,27 @@ internal class GPUFrameExecutor(
                     "invalid.native-frame-payload.planned-path-writable-load",
                     "Writable stencil Load is reserved for a sealed planned-path cover scope.",
                 )
+            }
+        }
+        if (hasW4dGeneral) {
+            val exactPayload = payload ?: return executionDiagnostic(
+                "invalid.native-frame-payload.w4d-general-missing",
+                "W4d.2 requires its sealed native payload before encoding.",
+            )
+            val depthStencilSteps = renders.mapNotNull { (stepIndex, render, _) ->
+                stepIndex.takeIf { render.resourceUses.any { use ->
+                    use.role == GPUFrameResourceRole.PathDepthStencil
+                } }
+            }.toSet()
+            return if (hasW4c || hasW4d ||
+                exactPayload.pathDepthStencilViewAuthority.keys != depthStencilSteps
+            ) {
+                executionDiagnostic(
+                    "invalid.native-frame-payload.w4d-general-authority",
+                    "W4d.2 writable stencil scopes require their one sealed native payload authority.",
+                )
+            } else {
+                null
             }
         }
         if (hasW4c == hasW4d) {

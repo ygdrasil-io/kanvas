@@ -2069,8 +2069,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 usage = GPUTextureUsage.RenderAttachment,
                 target = authority.resource(targetId) as? org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef,
                 depthStencilAttachment = authority.attachmentIdentity(binding.fact.resourceId),
-                deviceGeneration = generationSeal.deviceGeneration.takeIf { binding.fact.sampleCountI32 == 4 },
-                targetGeneration = generationSeal.targetGeneration.takeIf { binding.fact.sampleCountI32 == 4 },
+                deviceGeneration = generationSeal.deviceGeneration,
+                targetGeneration = generationSeal.targetGeneration,
             )
         }
         val hardRequirement = hardDepth?.let { binding ->

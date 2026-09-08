@@ -334,6 +334,16 @@ class GPUWgpu4kCorePrimitiveW4dGeneralFrameTest {
     }
 
     @Test
+    fun `hard W4d general stencil cover without prepared authority refuses before materialization`() {
+        val taskList = loweredConcaveHardGraph().taskList
+        val frame = GPUFramePlanner.plan(taskList.withoutPreparedAuthorities())
+
+        val refused = assertIs<GPUFramePreflightResult.Refused>(preflight(frame, sceneTarget(taskList)))
+
+        assertEquals("invalid.preflight.core_primitive_packet_authority", refused.diagnostic.code.value)
+    }
+
+    @Test
     fun `sealed W4d general native resource table refuses a substituted hard target before materialization`() {
         val taskList = loweredConcaveHardGraph().taskList
         val forged = GPUFramePlanner.plan(taskList).replaceFirstW4dTarget(GPUFrameTargetRef("forged.target"))
