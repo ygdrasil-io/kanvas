@@ -40,6 +40,49 @@ import org.junit.jupiter.api.Test
 
 class DisplayOpSceneAdapterTest {
     @Test
+    fun `scene adapters preserve source clip geometry and its typed perspective snapshot`() {
+        val source = RectF32.ofLTRB(2f, 3f, 12f, 14f)
+        val perspective = Matrix3x3F32(
+            sx = 1.25f,
+            kx = .2f,
+            tx = 3f,
+            ky = -.1f,
+            sy = .8f,
+            ty = 7f,
+            persp0 = .01f,
+            persp1 = -.02f,
+            persp2 = 1f,
+        )
+        val operation = DisplayOp.DrawRect(
+            RectF32.ofLTRB(0f, 0f, 16f, 16f),
+            Paint.fill(ColorARGB.Red),
+            Matrix3x3F32.Identity,
+            ClipStack.Complex(
+                listOf(
+                    ClipStackOp.RectOp(
+                        source,
+                        org.graphiks.kanvas.pipeline.ClipOp.DIFFERENCE,
+                        antiAlias = false,
+                        transform = ClipTransformSnapshot.Known.of(perspective),
+                    ),
+                ),
+            ),
+        )
+
+        val scene = assertInstanceOf(
+            SceneCaptureResult.Captured::class.java,
+            DisplayOpSceneAdapter.capture(listOf(operation), SceneExtent(32, 32), ColorSpace.SRGB),
+        ).scene
+        val entry = assertInstanceOf(ClipStackNode.Operations::class.java, assertInstanceOf(SceneCommand.Draw::class.java, scene.commandAt(0)).node.clip)
+            .entryAt(0)
+        val restored = assertInstanceOf(DisplayOp.DrawRect::class.java, SceneDisplayOpAdapter.toDisplayOps(scene).single())
+
+        assertEquals(source, assertInstanceOf(GeometryNode.Rect::class.java, entry.geometry).copyBounds())
+        assertEquals(perspective, assertInstanceOf(ClipTransformSnapshot.Known::class.java, entry.transform).copyMatrixF32())
+        assertEquals(operation.clip, restored.clip)
+    }
+
+    @Test
     fun `W4d public adapter preserves every stroke style and dash fact`() {
         val path = Path().apply {
             moveTo(1f, 2f)

@@ -9,6 +9,7 @@ import org.graphiks.kanvas.canvas.DrawPathSourceOperation
 import org.graphiks.kanvas.canvas.SaveLayerRec
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.geometry.Path
+import org.graphiks.kanvas.geometry.toPathF32
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.PathVerb
 import org.graphiks.kanvas.image.ColorType
@@ -42,6 +43,7 @@ import org.graphiks.kanvas.pipeline.VertexLayout
 import org.graphiks.kanvas.pipeline.VertexStepMode
 import org.graphiks.kanvas.render.ir.SceneArchiveCodec
 import org.graphiks.kanvas.render.ir.SceneArchiveDecodeResult
+import org.graphiks.kanvas.render.ir.ClipTransformSnapshot
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.KanvasTypeface
 import org.graphiks.kanvas.text.TextBlob
@@ -602,14 +604,26 @@ class PictureTest {
     }
 
     @Test
-    fun `roundtrip preserves transformed path clip provenance`() {
+    fun `version 8 picture roundtrip preserves typed path clip geometry and transform`() {
+        val perspective = Matrix3x3F32(
+            sx = 1.25f,
+            kx = .2f,
+            tx = 3f,
+            ky = -.1f,
+            sy = .8f,
+            ty = 7f,
+            persp0 = .01f,
+            persp1 = -.02f,
+            persp2 = 1f,
+        )
+        val source = Path().addRect(RectF32.ofLTRB(1f, 1f, 7f, 7f))
         val clip = ClipStack.Complex(
             listOf(
                 ClipStackOp.PathOp(
-                    path = Path().addRect(RectF32.ofLTRB(1f, 1f, 7f, 7f)),
+                    path = source,
                     op = ClipOp.INTERSECT,
                     antiAlias = false,
-                    transformClass = "affine",
+                    transform = ClipTransformSnapshot.Known.of(perspective),
                 ),
             ),
         )
@@ -627,11 +641,9 @@ class PictureTest {
 
         val restored = requireNotNull(Picture.fromByteArray(original.toByteArray()))
         val restoredClip = assertIs<DisplayOp.DrawRect>(restored.ops.single()).clip
-        assertEquals(
-            "affine",
-            assertIs<ClipStackOp.PathOp>(assertIs<ClipStack.Complex>(restoredClip).ops.single())
-                .transformClass,
-        )
+        val restoredOp = assertIs<ClipStackOp.PathOp>(assertIs<ClipStack.Complex>(restoredClip).ops.single())
+        assertEquals(source.toPathF32(), restoredOp.path.toPathF32())
+        assertEquals(perspective, assertIs<ClipTransformSnapshot.Known>(restoredOp.transform).copyMatrixF32())
     }
 
     @Test

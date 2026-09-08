@@ -39,7 +39,7 @@ public object SceneArchiveCodec {
     private val magic: ByteArray = byteArrayOf(0x4b, 0x50, 0x49, 0x43)
     private const val pictureVersion: Int = 8
     private const val irMarker: Int = -1_391_019_346
-    private const val schemaVersion: Int = 1
+    private const val schemaVersion: Int = 2
 
     /** Encodes a deeply immutable Scene IR as the sole v8 Picture writer. */
     public fun encodePicture(scene: SceneSnapshot, cullRect: RectF32): ByteArray {
@@ -69,7 +69,11 @@ public object SceneArchiveCodec {
                     SceneArchiveDecodeResult.Invalid("invalid-marker", "Picture archive marker is not recognized")
                 }
             }
-            if (reader.i32() != schemaVersion) return SceneArchiveDecodeResult.Invalid("unknown-schema", "Scene archive schema is not supported")
+            val decodedSchemaVersion = reader.i32()
+            if (decodedSchemaVersion !in 1..schemaVersion) {
+                return SceneArchiveDecodeResult.Invalid("unknown-schema", "Scene archive schema is not supported")
+            }
+            reader.sceneArchiveSchemaVersion = decodedSchemaVersion
             val scene = reader.scene()
             reader.requireEnd()
             when (val validation = SceneSemanticValidator.validate(scene)) {
@@ -329,7 +333,39 @@ private class ArchiveWriter {
 
     fun blend(value: BlendNode): Unit = nested { when (value) { BlendNode.SrcOver -> i32(1); is BlendNode.Mode -> { i32(2); enum(value.mode) }; is BlendNode.Custom -> { i32(3); blender(value.blender) }; is BlendNode.Paint -> { i32(4); enum(value.mode); optional(value.blender, ::blender) } } }
     fun blender(value: BlenderNode): Unit = when (value) { is BlenderNode.Mode -> { i32(1); enum(value.mode) }; is BlenderNode.Arithmetic -> { i32(2); f32(value.k1); f32(value.k2); f32(value.k3); f32(value.k4) } }
-    fun clip(value: ClipStackNode): Unit = nested { when (value) { ClipStackNode.Empty -> i32(1); is ClipStackNode.DeviceRect -> { i32(2); rect(value.copyBounds()); bool(value.antiAlias) }; is ClipStackNode.Operations -> { i32(3); list(value.toList()) { geometry(it.geometry); enum(it.operation); bool(it.antiAlias); bool(it.perspectiveCaptureRefusal); text(it.transformClass) } } } }
+    fun clip(value: ClipStackNode): Unit = nested {
+        when (value) {
+            ClipStackNode.Empty -> i32(1)
+            is ClipStackNode.DeviceRect -> {
+                i32(2)
+                rect(value.copyBounds())
+                bool(value.antiAlias)
+            }
+            is ClipStackNode.Operations -> {
+                i32(3)
+                list(value.toList()) {
+                    geometry(it.geometry)
+                    enum(it.operation)
+                    bool(it.antiAlias)
+                    clipTransformV2(it.transform)
+                }
+            }
+        }
+    }
+
+    private fun clipTransformV2(value: ClipTransformSnapshot) {
+        when (value) {
+            is ClipTransformSnapshot.Known -> {
+                i32(1)
+                matrix(value.copyMatrixF32())
+            }
+            is ClipTransformSnapshot.LegacyUnavailable -> {
+                i32(2)
+                bool(value.perspectiveCaptureRefusal)
+                text(value.transformClass)
+            }
+        }
+    }
     fun effects(value: EffectStack): Unit = when (value) { EffectStack.Empty -> i32(1); is EffectStack.Entries -> { i32(2); list(value.toList()) { effect(it) } } }
     fun effect(value: EffectNode): Unit = when (value) { is ColorFilterNode -> { i32(1); colorFilter(value) }; is MaskFilterNode -> { i32(2); maskFilter(value) }; is PathEffectNode -> { i32(3); pathEffect(value) }; is ImageFilterNode -> { i32(4); imageFilter(value) } }
     fun colorFilter(value: ColorFilterNode): Unit = nested { when (value) {
@@ -369,6 +405,7 @@ private class ArchiveWriter {
 private class ArchiveReader(private val data: ByteArray) {
     private var offset: Int = 0
     private var depth = 0
+    var sceneArchiveSchemaVersion: Int = 1
 
     fun bytesEqual(expected: ByteArray): Boolean {
         if (data.size - offset < expected.size) throw ArchiveFailure("truncated", "Archive ended before its magic")
@@ -500,7 +537,36 @@ private class ArchiveReader(private val data: ByteArray) {
     fun meshProgram(): MeshProgramNode = nested { MeshProgramNode.of(descriptor(), uniforms(), list { val name = text(); when (i32()) { 1 -> MeshProgramChild.Shader(name, material()); 2 -> MeshProgramChild.ColorFilter(name, colorFilter()); 3 -> MeshProgramChild.Blender(name, blender()); else -> failTag("mesh child") } }) }
     fun blend(): BlendNode = nested { when (i32()) { 1 -> BlendNode.SrcOver; 2 -> BlendNode.Mode(enum()); 3 -> BlendNode.Custom(blender()); 4 -> BlendNode.Paint(enum(), optional(::blender)); else -> failTag("blend") } }
     fun blender(): BlenderNode = when (i32()) { 1 -> BlenderNode.Mode(enum()); 2 -> BlenderNode.Arithmetic(f32(), f32(), f32(), f32()); else -> failTag("blender") }
-    fun clip(): ClipStackNode = nested { when (i32()) { 1 -> ClipStackNode.Empty; 2 -> ClipStackNode.DeviceRect.of(rect(), bool()); 3 -> ClipStackNode.Operations.of(list { ClipEntry(geometry(), enum(), bool(), bool(), text()) }); else -> failTag("clip") } }
+    fun clip(): ClipStackNode = nested {
+        when (i32()) {
+            1 -> ClipStackNode.Empty
+            2 -> ClipStackNode.DeviceRect.of(rect(), bool())
+            3 -> ClipStackNode.Operations.of(list {
+                val geometry = geometry()
+                val operation = enum<ClipOperation>()
+                val antiAlias = bool()
+                val transform = when (sceneArchiveSchemaVersion) {
+                    1 -> ClipTransformSnapshot.LegacyUnavailable(
+                        perspectiveCaptureRefusal = bool(),
+                        transformClass = text(),
+                    )
+                    2 -> clipTransformV2()
+                    else -> throw ArchiveFailure("unknown-schema", "Scene archive schema is not supported")
+                }
+                ClipEntry(geometry, operation, antiAlias, transform)
+            })
+            else -> failTag("clip")
+        }
+    }
+
+    private fun clipTransformV2(): ClipTransformSnapshot = when (i32()) {
+        1 -> ClipTransformSnapshot.Known.of(matrix())
+        2 -> ClipTransformSnapshot.LegacyUnavailable(
+            perspectiveCaptureRefusal = bool(),
+            transformClass = text(),
+        )
+        else -> throw ArchiveFailure("unknown-clip-transform", "Archive contains an unknown clip transform tag")
+    }
     fun effects(): EffectStack = when (i32()) { 1 -> EffectStack.Empty; 2 -> EffectStack.of(list(::effect)); else -> failTag("effect stack") }
     fun effect(): EffectNode = when (i32()) { 1 -> colorFilter(); 2 -> maskFilter(); 3 -> pathEffect(); 4 -> imageFilter(); else -> failTag("effect") }
     fun colorFilter(): ColorFilterNode = nested { when (i32()) {

@@ -284,18 +284,57 @@ public sealed interface BlendNode : CanonicalValue {
 /** Backend-neutral clip operation kind. */
 public enum class ClipOperation { INTERSECT, DIFFERENCE }
 
+/**
+ * Capture-time transform authority for a complex clip.
+ *
+ * New clips retain an exact matrix snapshot.  Older archives did not carry a
+ * matrix; [LegacyUnavailable] preserves their observable refusal facts without
+ * inventing an identity transform.
+ */
+public sealed interface ClipTransformSnapshot : CanonicalValue {
+    public class Known private constructor(matrixF32: Matrix3x3F32) : ClipTransformSnapshot {
+        private val storedMatrixF32: Matrix3x3F32 = matrixF32.copy()
+
+        /** Returns a fresh immutable value so callers never share the capture storage. */
+        public fun copyMatrixF32(): Matrix3x3F32 = storedMatrixF32.copy()
+
+        override val canonicalId: CanonicalId = matrixCanonicalId("clip-transform-known-v1", storedMatrixF32)
+
+        override fun equals(other: Any?): Boolean = other is Known && canonicalId == other.canonicalId
+
+        override fun hashCode(): Int = canonicalId.hashCode()
+
+        public companion object {
+            public fun of(matrixF32: Matrix3x3F32): Known = Known(matrixF32)
+        }
+    }
+
+    /** Facts retained from schema v1 when its original capture matrix is unavailable. */
+    public data class LegacyUnavailable(
+        public val transformClass: String,
+        public val perspectiveCaptureRefusal: Boolean,
+    ) : ClipTransformSnapshot {
+        init {
+            require(transformClass.isNotBlank()) { "Legacy clip transformClass must not be blank" }
+        }
+
+        override val canonicalId: CanonicalId = canonicalId(
+            "clip-transform-legacy-unavailable-v1",
+            transformClass,
+            perspectiveCaptureRefusal.toString(),
+        )
+    }
+}
+
 /** Immutable clip entry preserving captured geometry and canvas semantics. */
 public data class ClipEntry(
     public val geometry: GeometryNode,
     public val operation: ClipOperation,
     public val antiAlias: Boolean = true,
-    public val perspectiveCaptureRefusal: Boolean = false,
-    public val transformClass: String = "identity",
+    public val transform: ClipTransformSnapshot = ClipTransformSnapshot.Known.of(Matrix3x3F32.Identity),
 ) : CanonicalValue {
-    init { require(transformClass.isNotBlank()) { "ClipEntry.transformClass must not be blank" } }
     override val canonicalId: CanonicalId = canonicalId(
-        "clip-entry-v1", geometry.canonicalId.value, operation.name, antiAlias.toString(),
-        perspectiveCaptureRefusal.toString(), transformClass,
+        "clip-entry-v2", geometry.canonicalId.value, operation.name, antiAlias.toString(), transform.canonicalId.value,
     )
 }
 

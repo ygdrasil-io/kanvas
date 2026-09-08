@@ -6,6 +6,7 @@ import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.math.geometry.Point2F32
 
 import org.graphiks.kanvas.geometry.Path
+import org.graphiks.kanvas.geometry.toPathF32
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.text.GlyphPaintProvider
@@ -17,6 +18,7 @@ import org.graphiks.kanvas.types.*
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.matrix.Matrix3x3F32
+import org.graphiks.kanvas.render.ir.ClipTransformSnapshot
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -72,7 +74,7 @@ class CanvasTest {
     }
 
     @Test
-    fun `scaled rrect clip retains its capture-time transform class after later CTM changes`() {
+    fun `scaled rrect clip retains source geometry and its capture-time transform after later CTM changes`() {
         val buffer = TestBuffer()
         val canvas = Canvas(buffer)
 
@@ -84,12 +86,15 @@ class CanvasTest {
 
         val clip = assertIs<ClipStack.Complex>(buffer.ops().filterIsInstance<DisplayOp.SetClip>().last().clip)
         val captured = assertIs<ClipStackOp.RRectOp>(clip.ops.single())
-        assertEquals("scale-translate", captured.transformClass)
-        assertEquals(RectF32.ofLTRB(11f, 23f, 27f, 53f), captured.rrect.rect)
+        assertEquals(RectF32.ofLTRB(4f, 6f, 12f, 16f), captured.rrect.rect)
+        assertEquals(
+            Matrix3x3F32(sx = 2f, sy = 3f, tx = 3f, ty = 5f),
+            assertIs<ClipTransformSnapshot.Known>(captured.transform).copyMatrixF32(),
+        )
     }
 
     @Test
-    fun `rotated clip rect is captured as a device path`() {
+    fun `rotated clip rect preserves its source rectangle and frozen CTM`() {
         val buffer = TestBuffer()
         val canvas = Canvas(buffer)
         canvas.rotate(45f)
@@ -97,7 +102,43 @@ class CanvasTest {
 
         val clip = buffer.ops().filterIsInstance<DisplayOp.SetClip>().single().clip
         val element = assertIs<ClipStack.Complex>(clip).ops.single()
-        assertIs<ClipStackOp.PathOp>(element)
+        val captured = assertIs<ClipStackOp.RectOp>(element)
+        assertEquals(RectF32(2f, 2f, 10f, 10f), captured.rect)
+        assertEquals(
+            Matrix3x3F32.rotation(45f),
+            assertIs<ClipTransformSnapshot.Known>(captured.transform).copyMatrixF32(),
+        )
+    }
+
+    @Test
+    fun `perspective path clip retains source commands and the CTM that captured them`() {
+        val buffer = TestBuffer()
+        val canvas = Canvas(buffer)
+        val perspective = Matrix3x3F32(
+            sx = 1.25f,
+            kx = .2f,
+            tx = 3f,
+            ky = -.1f,
+            sy = .8f,
+            ty = 7f,
+            persp0 = .01f,
+            persp1 = -.02f,
+            persp2 = 1f,
+        )
+        val source = Path().addRect(RectF32.ofLTRB(2f, 4f, 12f, 14f))
+
+        canvas.setMatrix(perspective)
+        canvas.clipPath(source, antiAlias = false)
+        canvas.resetMatrix()
+        canvas.translate(100f, 200f)
+
+        val clip = assertIs<ClipStack.Complex>(buffer.ops().filterIsInstance<DisplayOp.SetClip>().last().clip)
+        val captured = assertIs<ClipStackOp.PathOp>(clip.ops.single())
+        assertEquals(source.toPathF32(), captured.path.toPathF32())
+        assertEquals(
+            perspective,
+            assertIs<ClipTransformSnapshot.Known>(captured.transform).copyMatrixF32(),
+        )
     }
 
     @Test
@@ -157,6 +198,31 @@ class CanvasTest {
     }
 
     @Test
+    fun `save restore replays the captured clip with its original CTM`() {
+        val buffer = TestBuffer()
+        val canvas = Canvas(buffer)
+        val source = RectF32.ofLTRB(2f, 3f, 12f, 14f)
+        val captureTransform = Matrix3x3F32.rotation(30f)
+
+        canvas.rotate(30f)
+        canvas.clipRect(source, antiAlias = false)
+        canvas.save()
+        canvas.skew(.25f, -.5f)
+        canvas.clipPath(Path().addRect(RectF32.ofLTRB(0f, 0f, 1f, 1f)))
+        canvas.restore()
+        canvas.resetMatrix()
+        canvas.drawRect(RectF32.ofLTRB(0f, 0f, 16f, 16f), Paint.fill(ColorARGB.Red))
+
+        val replayed = assertIs<ClipStack.Complex>(buffer.ops().filterIsInstance<DisplayOp.DrawRect>().single().clip)
+        val captured = assertIs<ClipStackOp.RectOp>(replayed.ops.single())
+        assertEquals(source, captured.rect)
+        assertEquals(
+            captureTransform,
+            assertIs<ClipTransformSnapshot.Known>(captured.transform).copyMatrixF32(),
+        )
+    }
+
+    @Test
     fun `restore to count restores parent clip for the post restore sentinel`() {
         val buffer = TestBuffer()
         val canvas = Canvas(buffer)
@@ -202,7 +268,7 @@ class CanvasTest {
     @Test fun `Canvas resetMatrix`() { val b = TestBuffer(); val c = Canvas(b); c.translate(100f, 200f); c.resetMatrix(); assertEquals(Matrix3x3F32.Identity, c.matrix) }
 
     @Test
-    fun `Canvas affine API captures a bounded clip and resets its draw CTM`() {
+    fun `Canvas affine API captures source clip and resets its draw CTM`() {
         val buffer = TestBuffer()
         val canvas = Canvas(buffer)
 
@@ -217,7 +283,12 @@ class CanvasTest {
         canvas.drawRect(RectF32.ofLTRB(0f, 0f, 32f, 32f), Paint.fill(ColorARGB.Red).copy(antiAlias = false))
 
         val clip = assertIs<ClipStack.Complex>(buffer.ops().filterIsInstance<DisplayOp.SetClip>().single().clip)
-        assertEquals("affine", assertIs<ClipStackOp.PathOp>(clip.ops.single()).transformClass)
+        val captured = assertIs<ClipStackOp.RectOp>(clip.ops.single())
+        assertEquals(RectF32.ofLTRB(4f, 4f, 28f, 28f), captured.rect)
+        assertEquals(
+            Matrix3x3F32(sx = .75f, kx = .25f, tx = 1f, sy = .5f),
+            assertIs<ClipTransformSnapshot.Known>(captured.transform).copyMatrixF32(),
+        )
         val draw = buffer.ops().filterIsInstance<DisplayOp.DrawRect>().single()
         assertEquals(Matrix3x3F32.Identity, draw.transform)
         assertEquals(7, buffer.ops().filterIsInstance<DisplayOp.SetTransform>().size)

@@ -268,9 +268,9 @@ public object DisplayOpSceneAdapter {
         is ClipStack.DeviceRect -> ClipStackNode.DeviceRect.of(clip.rect.checked("clip.device-rect"), clip.antiAlias)
         is ClipStack.Complex -> ClipStackNode.Operations.of(clip.ops.map { entry ->
             when (entry) {
-                is org.graphiks.kanvas.canvas.ClipStackOp.RectOp -> ClipEntry(GeometryNode.Rect.of(entry.rect.checked("clip.rect")), ClipOperation.valueOf(entry.op.name), entry.antiAlias, entry.perspectiveCaptureRefusal, "identity")
-                is org.graphiks.kanvas.canvas.ClipStackOp.RRectOp -> ClipEntry(GeometryNode.RRect.of(entry.rrect.checked("clip.rrect")), ClipOperation.valueOf(entry.op.name), entry.antiAlias, entry.perspectiveCaptureRefusal, entry.transformClass)
-                is org.graphiks.kanvas.canvas.ClipStackOp.PathOp -> ClipEntry(GeometryNode.Path(entry.path.toPathF32().checked("clip.path")), ClipOperation.valueOf(entry.op.name), entry.antiAlias, entry.perspectiveCaptureRefusal, entry.transformClass)
+                is org.graphiks.kanvas.canvas.ClipStackOp.RectOp -> ClipEntry(GeometryNode.Rect.of(entry.rect.checked("clip.rect")), ClipOperation.valueOf(entry.op.name), entry.antiAlias, entry.transform)
+                is org.graphiks.kanvas.canvas.ClipStackOp.RRectOp -> ClipEntry(GeometryNode.RRect.of(entry.rrect.checked("clip.rrect")), ClipOperation.valueOf(entry.op.name), entry.antiAlias, entry.transform)
+                is org.graphiks.kanvas.canvas.ClipStackOp.PathOp -> ClipEntry(GeometryNode.Path(entry.path.toPathF32().checked("clip.path")), ClipOperation.valueOf(entry.op.name), entry.antiAlias, entry.transform)
             }
         })
     }

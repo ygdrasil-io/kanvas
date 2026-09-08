@@ -20,6 +20,7 @@ import org.graphiks.kanvas.canvas.ClipStackOp
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.canvas.SaveLayerRec
 import org.graphiks.kanvas.canvas.intersectWith
+import org.graphiks.kanvas.render.ir.ClipTransformSnapshot
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipKind
@@ -2904,6 +2905,7 @@ private fun ClipStack?.transformForPictureReplay(matrix: Matrix3x3F32): ClipStac
 private fun ClipStack.Complex.collapsedIntersectingRectOrNull(): ClipStack.DeviceRect? {
     val rectOps = ops.map { it as? ClipStackOp.RectOp ?: return null }
     if (rectOps.any { it.op != org.graphiks.kanvas.pipeline.ClipOp.INTERSECT }) return null
+    if (rectOps.any { !it.isLosslessDeviceRectForPictureReplay() }) return null
     val antiAlias = rectOps.firstOrNull()?.antiAlias ?: return null
     if (rectOps.any { it.antiAlias != antiAlias }) return null
     val intersection = rectOps.fold<ClipStackOp.RectOp, RectF32?>(null) { current, op ->
@@ -2922,45 +2924,43 @@ private fun ClipStack.Complex.collapsedIntersectingRectOrNull(): ClipStack.Devic
 
 private fun ClipStack.DeviceRect.rectForPictureReplay(matrix: Matrix3x3F32, antiAlias: Boolean): ClipStack = when {
     matrix.isScaleTranslate() -> ClipStack.DeviceRect(matrix.mapAxisAlignedRect(rect), antiAlias)
-    !matrix.hasPerspective() -> ClipStack.Complex(
-        listOf(
-            ClipStackOp.PathOp(
-                Path().addRect(rect).transform(matrix),
-                org.graphiks.kanvas.pipeline.ClipOp.INTERSECT,
-                antiAlias,
-                transformClass = "affine",
-            ),
-        ),
-    )
     else -> ClipStack.Complex(
         listOf(
-            ClipStackOp.PathOp(
-                Path().addRect(rect),
+            ClipStackOp.RectOp(
+                rect,
                 org.graphiks.kanvas.pipeline.ClipOp.INTERSECT,
                 antiAlias,
-                perspectiveCaptureRefusal = true,
-                transformClass = "perspective",
+                ClipTransformSnapshot.Known.of(matrix),
             ),
         ),
     )
 }
 
-private fun ClipStackOp.transformForPictureReplay(matrix: Matrix3x3F32): ClipStackOp = when (this) {
+private fun ClipStackOp.transformForPictureReplay(matrix: Matrix3x3F32): ClipStackOp {
+    val known = transform as? ClipTransformSnapshot.Known
+    if (known != null) {
+        val replayTransform = ClipTransformSnapshot.Known.of(matrix * known.copyMatrixF32())
+        return when (this) {
+            is ClipStackOp.RectOp -> copy(transform = replayTransform)
+            is ClipStackOp.RRectOp -> copy(transform = replayTransform)
+            is ClipStackOp.PathOp -> copy(transform = replayTransform)
+        }
+    }
+
+    return when (this) {
     is ClipStackOp.RectOp -> when {
         matrix.isScaleTranslate() -> copy(rect = matrix.mapAxisAlignedRect(rect))
         !matrix.hasPerspective() -> ClipStackOp.PathOp(
             Path().addRect(rect).transform(matrix),
             op,
             antiAlias,
-            perspectiveCaptureRefusal,
-            transformClass = "affine",
+            transform,
         )
         else -> ClipStackOp.PathOp(
             Path().addRect(rect),
             op,
             antiAlias,
-            perspectiveCaptureRefusal = true,
-            transformClass = "perspective",
+            transform,
         )
     }
     is ClipStackOp.RRectOp -> when {
@@ -2969,24 +2969,20 @@ private fun ClipStackOp.transformForPictureReplay(matrix: Matrix3x3F32): ClipSta
             Path().addRRect(rrect).transform(matrix),
             op,
             antiAlias,
-            perspectiveCaptureRefusal,
-            transformClass = "affine",
+            transform,
         )
         else -> ClipStackOp.PathOp(
             Path().addRRect(rrect),
             op,
             antiAlias,
-            perspectiveCaptureRefusal = true,
-            transformClass = "perspective",
+            transform,
         )
     }
     is ClipStackOp.PathOp -> copy(
         path = if (!matrix.hasPerspective()) path.transform(matrix) else path,
-        perspectiveCaptureRefusal = perspectiveCaptureRefusal || matrix.hasPerspective(),
-        transformClass = if (matrix == Matrix3x3F32.Identity) {
-            transformClass
-        } else {
-            "affine"
-        },
     )
 }
+}
+
+private fun ClipStackOp.RectOp.isLosslessDeviceRectForPictureReplay(): Boolean =
+    (transform as? ClipTransformSnapshot.Known)?.copyMatrixF32() == Matrix3x3F32.Identity
