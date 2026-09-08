@@ -40,7 +40,7 @@
 | 7 — lowering/autorité | Terminé | `92c219a0b`, revue Sol CLEAN |
 | 8 — matérialisation/pool | Implémenté ; preuves de gates présentes | `bafbd4019` puis correctifs d'autorité, préflight et générations de depth ; revue Sol globale CLEAN après corrections documentaires |
 | 9 — Surface/oracle | Terminé | `42efea430`, revue Sol CLEAN ; AA4 réel reste terminal sur le runtime courant |
-| 10 — vérification/documentation | Terminé | gates, ledger XML et suivi publiés dans `9849f12` ; revue Sol finale et PR restent des étapes de branche distinctes |
+| 10 — vérification/documentation | Terminé | gates, ledger XML et suivi publiés dans `9849f12` ; revue Sol finale APPROVED/CLEAN ; PR stackée [#2392](https://github.com/ygdrasil-io/kanvas/pull/2392) ouverte et mergeable vers `codex/w4d-strokes-hairlines` |
 
 Les cases de conception ci-dessous décrivent le déroulé originel ; ce tableau
 est le ledger d'exécution autoritaire après les corrections et revues.
@@ -924,17 +924,22 @@ rtk git add refactor
 rtk git commit -m "docs(refactor): publish W4d transform AA evidence"
 ```
 
-- [ ] **Step 4: Sol final review et corrections**
+- [x] **Step 4: Sol final review et corrections**
 
 Relire le diff complet depuis W4d.1, corriger tout Critical/Important via fresh
-Terra, refaire les gates affectées jusqu'à `Approved`.
+Terra, refaire les gates affectées jusqu'à `Approved`. Revue Sol finale
+`APPROVED/CLEAN` après les corrections documentaires.
 
-- [ ] **Step 5: Pousser et créer la PR stackée**
+- [x] **Step 5: Pousser et créer la PR stackée**
 
 ```bash
 rtk git push -u origin codex/w4d-general-transform-aa
 rtk gh pr create --base codex/w4d-strokes-hairlines --head codex/w4d-general-transform-aa --title "feat: add general path transforms and AA" --body-file /tmp/w4d-aa-pr-body.md
 ```
+
+PR stackée [#2392](https://github.com/ygdrasil-io/kanvas/pull/2392) ouverte et
+mergeable, de `codex/w4d-general-transform-aa` vers
+`codex/w4d-strokes-hairlines`; elle n'est pas encore mergée.
 
 Le body créé par `apply_patch` contient `## Summary`, `## Verification` et
 `## Scope and follow-ups`. Ne pas merger/rebaser ni lancer les tests exclus.
