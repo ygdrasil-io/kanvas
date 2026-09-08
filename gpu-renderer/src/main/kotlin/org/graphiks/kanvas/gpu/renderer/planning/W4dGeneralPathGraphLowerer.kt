@@ -36,6 +36,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchQueueGuard
 import org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUW4dBinaryMaskConsumerPlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveStructuralColorFormat
@@ -99,7 +100,14 @@ internal class W4dGeneralPathGraphLowerer {
         paintOrder: Int,
         bounds: GPUPixelBounds,
         graph: RenderGraph,
-    ): GPUDrawPacket = packet(pass, paintOrder, bounds, targetColorFormat(pass, graph)).packet
+        consumer: GPUW4ePreparedClipConsumerAuthority?,
+    ): GPUDrawPacket = packet(
+        pass,
+        paintOrder,
+        bounds,
+        targetColorFormat(pass, graph),
+        consumer,
+    ).packet
 
     fun lower(request: GpuPlanLoweringRequest): GpuPlanLoweringResult = try {
         val graph = preflight(request.graph) ?: return invalid("The graph is not the exact W4d.2 topology.")
@@ -340,6 +348,7 @@ internal class W4dGeneralPathGraphLowerer {
         paintOrder: Int,
         bounds: GPUPixelBounds,
         targetColorFormat: GPUColorFormat,
+        w4ePreparedClipConsumer: GPUW4ePreparedClipConsumerAuthority? = null,
     ): BuiltPacket {
         val draw = pass.draw
         val scissor = draw.copyScissorI32()
@@ -362,7 +371,11 @@ internal class W4dGeneralPathGraphLowerer {
             )) to GPUClipExecutionPlan.ScissorOnly(scissorBounds)
         }
         val producer = pass.phase.isStencilProducer()
-        val clip = if (producer) GPUClipCoveragePlan.NoClip to GPUClipExecutionPlan.NoClip else scissorClip
+        // The W4e consumer contract is already sealed.  In particular, do not route it through
+        // W4d's scissor mapper, which has no representation for Mask/InverseMask/InverseDomain.
+        val clip = if (producer || w4ePreparedClipConsumer != null) {
+            GPUClipCoveragePlan.NoClip to GPUClipExecutionPlan.NoClip
+        } else scissorClip
         val geometryInput = if (binaryMaskConsumer != null) {
             binaryMaskCoverGeometryInput(scissorBounds)
         } else {
@@ -490,6 +503,7 @@ internal class W4dGeneralPathGraphLowerer {
             frameProvenance = GPUFrameProvenance.None,
             clipCoveragePlan = clip.first,
             clipExecutionPlan = clip.second,
+            w4ePreparedClipConsumer = w4ePreparedClipConsumer,
         ), structural)
     }
 

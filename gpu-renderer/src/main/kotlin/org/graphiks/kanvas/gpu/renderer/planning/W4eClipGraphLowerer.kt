@@ -22,6 +22,8 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchQueueGuard
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPlanW4ePreparedAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority
+import org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipPassAuthority
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_RENDER_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitivePreparedFrameResult
@@ -74,8 +76,10 @@ internal class W4eClipGraphLowerer {
         val packetFactory = W4dGeneralPathGraphLowerer()
         val renders = passes.dropLast(1).mapIndexed { index, pass ->
             val path = pass as? PlanPass.PathRenderPass
-            val packet = path?.let { packetFactory.packetForSealedW4e(it, index, bounds, graph) }
-                ?: markerPacket(pass, index)
+            val consumer = path?.let { authority.consumerFor(it.id.value) }
+            val packet = path?.let {
+                packetFactory.packetForSealedW4e(it, index, bounds, graph, consumer)
+            } ?: markerPacket(pass, index, authority.clipPassFor(pass.id.value) ?: return invalid())
             val targetId = when (pass) {
                 is PlanPass.ClipMaskInitialize -> pass.output
                 is PlanPass.ClipMaskProducer -> pass.target
@@ -93,7 +97,7 @@ internal class W4eClipGraphLowerer {
                 refs.getValue(targetId.value) as? GPUFrameTargetRef ?: return invalid(),
                 org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan(loadLabel(pass), org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan.Store),
                 if (samples == 4) GPUSamplePlan.MultisampleFrame(4) else GPUSamplePlan.SingleSampleFrame,
-                resourceUses = resourceUses(pass, refs),
+                resourceUses = resourceUses(pass, refs, consumer),
                 drawPackets = listOf(packet),
                 batchEligibilityByPacketId = mapOf(packet.packetId to GPUPassBatchEligibility(
                     kind = GPUPassBatchKind.SolidFill,
@@ -115,8 +119,12 @@ internal class W4eClipGraphLowerer {
         PlanResourceKind.Texture2D -> GPUFrameTargetRef("$session.${resource.id.value}")
     }
 
-    /** Marker packets carry only the already-selected pass identity; no clip mapper is consulted. */
-    private fun markerPacket(pass: PlanPass, index: Int): GPUDrawPacket = GPUDrawPacket(
+    /** Marker packets are explicit Task 7 handoff contracts, never simulated clip execution. */
+    private fun markerPacket(
+        pass: PlanPass,
+        index: Int,
+        preparedPass: GPUW4ePreparedClipPassAuthority,
+    ): GPUDrawPacket = GPUDrawPacket(
         packetId = GPUDrawPacketID("packet.w4e.${pass.id.value}"),
         commandIdValue = index,
         analysisRecordId = "w4e.sealed.${pass.id.value}",
@@ -136,6 +144,7 @@ internal class W4eClipGraphLowerer {
         targetStateHash = "w4e.sealed-target",
         originalPaintOrder = index,
         resourceGeneration = org.graphiks.kanvas.gpu.renderer.recording.PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION,
+        w4ePreparedClipPass = preparedPass,
     )
 
     private fun loadLabel(pass: PlanPass): String = when (pass) {
@@ -149,6 +158,7 @@ internal class W4eClipGraphLowerer {
     private fun resourceUses(
         pass: PlanPass,
         refs: Map<String, GPUFrameResourceRef>,
+        consumer: GPUW4ePreparedClipConsumerAuthority?,
     ): List<GPUFrameResourceUse> {
         fun use(id: String, role: GPUFrameResourceRole, usage: GPUFrameResourceUsage, write: Boolean) =
             GPUFrameResourceUse(refs.getValue(id), role, usage, GPUFrameResourceLifetime.FrameLocal, write)
@@ -164,6 +174,17 @@ internal class W4eClipGraphLowerer {
                 use(pass.source.value, GPUFrameResourceRole.ClipMask, GPUFrameResourceUsage.TextureBinding, false),
                 use(pass.output.value, GPUFrameResourceRole.ClipMask, GPUFrameResourceUsage.RenderAttachment, true),
             )
+            is PlanPass.PathRenderPass -> when (consumer) {
+                is GPUW4ePreparedClipConsumerAuthority.Mask -> listOf(
+                    use(consumer.maskResourceId, GPUFrameResourceRole.ClipMask, GPUFrameResourceUsage.TextureBinding, false),
+                )
+                is GPUW4ePreparedClipConsumerAuthority.InverseMask -> listOf(
+                    use(consumer.maskResourceId, GPUFrameResourceRole.ClipMask, GPUFrameResourceUsage.TextureBinding, false),
+                )
+                is GPUW4ePreparedClipConsumerAuthority.InverseDomain,
+                null,
+                -> emptyList()
+            }
             else -> emptyList()
         }
     }

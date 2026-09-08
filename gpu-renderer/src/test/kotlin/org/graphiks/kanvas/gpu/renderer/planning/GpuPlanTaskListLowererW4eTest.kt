@@ -5,6 +5,7 @@ import io.ygdrasil.webgpu.GPUTextureUsage
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.gpu.plan.GpuPlanSelection
 import org.graphiks.kanvas.gpu.plan.PlanBudget
@@ -33,6 +34,8 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
+import org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority
+import org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage
 import org.graphiks.kanvas.render.ir.BlendMode
 import org.graphiks.kanvas.render.ir.BlendNode
 import org.graphiks.kanvas.render.ir.ClipEntry
@@ -56,6 +59,7 @@ import org.graphiks.kanvas.render.ir.StrokeCapNode
 import org.graphiks.kanvas.render.ir.StrokeJoinNode
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.PathBuilder
+import org.graphiks.math.geometry.FillRule
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.matrix.Matrix3x3F32
 
@@ -124,11 +128,105 @@ class GpuPlanTaskListLowererW4eTest {
         assertEquals(graph.passes().size - 1, lowered.taskList.tasks.filterIsInstance<GPUTask.Render>().size)
     }
 
-    private fun aaMaskGraph(drawCount: Int = 1): RenderGraph {
+    @Test
+    fun `two consumers retain one sealed mask strategy and its sampled resource`() {
+        val lowered = assertIs<GpuPlanLoweringResult.Lowered>(
+            GpuPlanTaskListLowerer().lower(request(aaMaskGraph(drawCount = 2))),
+        )
+
+        val consumers = lowered.taskList.tasks.filterIsInstance<GPUTask.Render>().mapNotNull { render ->
+            render.drawPackets.single().w4ePreparedClipConsumer as? GPUW4ePreparedClipConsumerAuthority.Mask
+        }
+        assertEquals(2, consumers.size)
+        assertEquals(1, consumers.map { it.maskResourceId }.distinct().size)
+        lowered.taskList.tasks.filterIsInstance<GPUTask.Render>().filter { render ->
+            render.drawPackets.single().w4ePreparedClipConsumer is GPUW4ePreparedClipConsumerAuthority.Mask
+        }.forEach { render ->
+            assertEquals(consumers.first().maskResourceId, render.resourceUses.single().resource.value.substringAfterLast('.'))
+        }
+    }
+
+    @Test
+    fun `inverse mask retains its full domain and zero interior for each reused consumer`() {
+        val lowered = assertIs<GpuPlanLoweringResult.Lowered>(
+            GpuPlanTaskListLowerer().lower(
+                request(aaMaskGraph(drawCount = 2, inverse = true, inverseEmpty = true)),
+            ),
+        )
+
+        val consumers = lowered.taskList.tasks.filterIsInstance<GPUTask.Render>().mapNotNull { render ->
+            render.drawPackets.single().w4ePreparedClipConsumer as? GPUW4ePreparedClipConsumerAuthority.InverseMask
+        }
+        assertEquals(4, consumers.size)
+        assertEquals(1, consumers.map { it.maskResourceId }.distinct().size)
+        consumers.forEach { consumer ->
+            assertEquals(0, consumer.domain.left)
+            assertEquals(0, consumer.domain.top)
+            assertEquals(16, consumer.domain.right)
+            assertEquals(16, consumer.domain.bottom)
+            assertIs<GPUW4ePreparedInverseInteriorCoverage.Zero>(consumer.interiorCoverage)
+        }
+    }
+
+    @Test
+    fun `inverting a sealed mask changes the prepared consumer while retaining finite interior`() {
+        val mask = assertIs<GpuPlanLoweringResult.Lowered>(
+            GpuPlanTaskListLowerer().lower(request(aaMaskGraph())),
+        ).taskList.tasks.filterIsInstance<GPUTask.Render>().first { render ->
+            render.drawPackets.single().w4ePreparedClipConsumer is GPUW4ePreparedClipConsumerAuthority.Mask
+        }
+        val inverse = assertIs<GpuPlanLoweringResult.Lowered>(
+            GpuPlanTaskListLowerer().lower(request(aaMaskGraph(inverse = true))),
+        ).taskList.tasks.filterIsInstance<GPUTask.Render>().first { render ->
+            render.drawPackets.single().w4ePreparedClipConsumer is GPUW4ePreparedClipConsumerAuthority.InverseMask
+        }
+
+        assertIs<GPUW4ePreparedClipConsumerAuthority.Mask>(
+            mask.drawPackets.single().w4ePreparedClipConsumer,
+        )
+        val inverseConsumer = assertIs<GPUW4ePreparedClipConsumerAuthority.InverseMask>(
+            inverse.drawPackets.single().w4ePreparedClipConsumer,
+        )
+        val interior = assertIs<GPUW4ePreparedInverseInteriorCoverage.Geometry>(
+            inverseConsumer.interiorCoverage,
+        )
+        assertEquals(16, inverseConsumer.domain.right)
+        assertEquals(1, inverse.resourceUses.size)
+        assertTrue(interior.copyGeometryF32().emittedNonZeroClosedEdgeCountI32 > 0)
+    }
+
+    @Test
+    fun `inverse zero clip becomes a full-domain prepared consumer without a sampled mask`() {
+        val lowered = assertIs<GpuPlanLoweringResult.Lowered>(
+            GpuPlanTaskListLowerer().lower(
+                request(aaMaskGraph(inverse = true, zeroClip = true, inverseEmpty = true)),
+            ),
+        )
+
+        val renders = lowered.taskList.tasks.filterIsInstance<GPUTask.Render>().filter { task ->
+            task.drawPackets.single().w4ePreparedClipConsumer is GPUW4ePreparedClipConsumerAuthority.InverseDomain
+        }
+        assertEquals(2, renders.size)
+        renders.forEach { render ->
+            val consumer = assertIs<GPUW4ePreparedClipConsumerAuthority.InverseDomain>(
+                render.drawPackets.single().w4ePreparedClipConsumer,
+            )
+            assertEquals(16, consumer.domain.right)
+            assertIs<GPUW4ePreparedInverseInteriorCoverage.Zero>(consumer.interiorCoverage)
+            assertEquals(0, render.resourceUses.size)
+        }
+    }
+
+    private fun aaMaskGraph(
+        drawCount: Int = 1,
+        inverse: Boolean = false,
+        zeroClip: Boolean = false,
+        inverseEmpty: Boolean = false,
+    ): RenderGraph {
         val scene = SceneSnapshot.of(
             SceneExtent(16, 16),
             ColorSpace.SRGB,
-            List(drawCount) { pathDraw() },
+            List(drawCount) { pathDraw(inverse, zeroClip, inverseEmpty) },
         )
         val compiler = W4eClipPlanCompiler()
         val candidate = assertIs<GpuPlanSelection.Candidate>(
@@ -139,21 +237,32 @@ class GpuPlanTaskListLowererW4eTest {
         ).plan
     }
 
-    private fun pathDraw(): SceneCommand.Draw {
+    private fun pathDraw(
+        inverse: Boolean = false,
+        zeroClip: Boolean = false,
+        inverseEmpty: Boolean = false,
+    ): SceneCommand.Draw {
         val color = ColorARGB.fromPackedUInt(0xC0FF0000u)
+        val fillRule = if (inverse) FillRule.INVERSE_WINDING else FillRule.WINDING
+        val clipPath = if (zeroClip) {
+            PathBuilder().build()
+        } else {
+            PathBuilder().moveTo(3f, 3f).lineTo(13f, 3f).lineTo(3f, 13f).close().build()
+        }
         return SceneCommand.Draw(
             DrawNode(
                 geometry = GeometryNode.Path(
-                    PathBuilder().moveTo(2f, 2f).lineTo(12f, 2f).lineTo(2f, 12f).close().build(),
+                    if (inverseEmpty) PathBuilder(fillRule).build() else PathBuilder(fillRule)
+                        .moveTo(2f, 2f).lineTo(12f, 2f).lineTo(2f, 12f).close().build(),
                 ),
                 material = MaterialNode.Solid(color),
                 coverage = CoverageRequest.ANTIALIASED,
                 clip = ClipStackNode.Operations.of(listOf(
                     ClipEntry(
                         geometry = GeometryNode.Path(
-                            PathBuilder().moveTo(3f, 3f).lineTo(13f, 3f).lineTo(3f, 13f).close().build(),
+                            clipPath,
                         ),
-                        operation = ClipOperation.INTERSECT,
+                        operation = if (zeroClip) ClipOperation.DIFFERENCE else ClipOperation.INTERSECT,
                         antiAlias = true,
                         transform = ClipTransformSnapshot.Known.of(Matrix3x3F32.rotation(0.1f)),
                     ),

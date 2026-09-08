@@ -405,6 +405,10 @@ class GPUDrawPacket(
     diagnostics: List<GPUPassDiagnostic> = emptyList(),
     val clipProducerAuthority: GPUClipProducerAuthority? = null,
     val w4dBinaryMaskConsumer: GPUW4dBinaryMaskConsumerPlan? = null,
+    /** W4e's sealed consumer strategy, copied before lowerer packet translation. */
+    val w4ePreparedClipConsumer: GPUW4ePreparedClipConsumerAuthority? = null,
+    /** Explicit prepared marker contract for a W4e mask pass awaiting Task 7 encoding. */
+    val w4ePreparedClipPass: GPUW4ePreparedClipPassAuthority? = null,
 ) {
     /** Diagnostics copied from packet production so caller mutation cannot rewrite evidence. */
     val diagnostics: List<GPUPassDiagnostic> = immutableList(diagnostics)
@@ -520,6 +524,7 @@ class GPUDrawPacket(
         requireRoleHasPipelineKey()
         requireW4dBinaryMaskConsumer()
         requireClipProducerAuthority()
+        requireW4ePreparedAuthority()
     }
 
     private fun requireRoleHasPipelineKey() {
@@ -578,6 +583,25 @@ class GPUDrawPacket(
             }
             else -> require(clipProducerAuthority == null) {
                 "$role GPUDrawPacket must not carry clip producer authority"
+            }
+        }
+    }
+
+    private fun requireW4ePreparedAuthority() {
+        w4ePreparedClipConsumer?.let { consumer ->
+            require(consumer.consumerPassId == passId) {
+                "W4e prepared clip consumer must name its exact packet pass"
+            }
+            require(role !in setOf(GPUDrawPacketRole.ClipProducer, GPUDrawPacketRole.Clear)) {
+                "W4e prepared clip consumer must be carried by a color or cover packet"
+            }
+        }
+        w4ePreparedClipPass?.let { preparedPass ->
+            require(preparedPass.passId == passId) {
+                "W4e prepared pass contract must name its exact marker packet pass"
+            }
+            require(w4ePreparedClipConsumer == null) {
+                "A W4e marker packet cannot also claim a clip consumer strategy"
             }
         }
     }
