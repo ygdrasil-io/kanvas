@@ -7,6 +7,7 @@ import org.graphiks.kanvas.gpu.plan.ClippedBinaryMaskedPathDraw
 import org.graphiks.kanvas.gpu.plan.ClippedGeneralPathDraw
 import org.graphiks.kanvas.gpu.plan.PlanResource
 import org.graphiks.kanvas.gpu.plan.PathDrawGeometry
+import org.graphiks.kanvas.gpu.plan.PathRenderPhase
 import org.graphiks.kanvas.gpu.plan.RenderGraph
 import org.graphiks.kanvas.gpu.plan.W4eClipPlanCompiler
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
@@ -66,7 +67,7 @@ public sealed interface GPUW4ePreparedClipPassAuthority {
     public val atomicGroupId: String
     public val resourceIds: List<String>
 
-    public enum class Kind { Initialize, Producer, Fold }
+    public enum class Kind { Initialize, Producer, Fold, PathMaskClear }
 
     public class Initialize internal constructor(
         override val passId: String,
@@ -111,9 +112,31 @@ public sealed interface GPUW4ePreparedClipPassAuthority {
         )
     }
 
+    /** Exact single-sample clear that starts an atomic hard-edge mask sequence. */
+    public class PathMaskClear internal constructor(
+        override val passId: String,
+        public val targetResourceId: String,
+        public val loadLabel: String,
+        public val storeLabel: String,
+        override val atomicGroupId: String,
+    ) : GPUW4ePreparedClipPassAuthority {
+        override val kind: Kind = Kind.PathMaskClear
+        override val resourceIds: List<String> = listOf(targetResourceId)
+    }
+
     /** Resource references and attachment state for one exact W4e path render pass. */
     public class Path internal constructor(
         public val passId: String,
+        public val commandIdValue: Int,
+        public val phase: PathRenderPhase,
+        public val color: org.graphiks.math.color.ColorF32,
+        public val fillStrategyLabel: String,
+        public val coverageLabel: String,
+        public val blendLabel: String,
+        public val scissor: GPUPixelBounds,
+        public val binarySourceMaskResourceId: String?,
+        public val binaryMaskFetchLabel: String?,
+        public val binaryBroadcastSampleCount: Int?,
         public val targetResourceId: String,
         public val resolveTargetResourceId: String?,
         public val depthStencilResourceId: String?,
@@ -195,6 +218,16 @@ internal class GPUPlanW4ePreparedAuthority private constructor(
                 graph.passes().filterIsInstance<PlanPass.PathRenderPass>().associate { pass ->
                     pass.id.value to GPUW4ePreparedClipPassAuthority.Path(
                         pass.id.value,
+                        pass.draw.commandIndex,
+                        pass.phase,
+                        pass.draw.color,
+                        pass.draw.strategy.name,
+                        pass.draw.coverage.name,
+                        pass.draw.blend.name,
+                        domainFor(pass.draw.copyScissorI32()),
+                        binarySourceMaskId(pass),
+                        binaryMaskFetch(pass),
+                        binaryBroadcastSamples(pass),
                         pass.target.value,
                         pass.resolveTarget?.value,
                         pass.depthStencil?.value,
@@ -253,6 +286,9 @@ internal class GPUPlanW4ePreparedAuthority private constructor(
         }
 
         private fun clipPassFact(pass: PlanPass): GPUW4ePreparedClipPassAuthority? = when (pass) {
+            is PlanPass.PathMaskClearPass -> GPUW4ePreparedClipPassAuthority.PathMaskClear(
+                pass.id.value, pass.target.value, pass.load.name, pass.store.name, pass.atomicGroup.value,
+            )
             is PlanPass.ClipMaskInitialize -> GPUW4ePreparedClipPassAuthority.Initialize(
                 pass.id.value, pass.output.value, domainFor(pass.copyDomainI32()), pass.clearCoverageF32,
                 pass.atomicGroup.value,
@@ -283,6 +319,19 @@ internal class GPUPlanW4ePreparedAuthority private constructor(
             is ClipGeometryF32.RRect -> GPUW4ePreparedClipGeometry.RRect(geometry.copyRRectF32())
             is ClipGeometryF32.Path -> GPUW4ePreparedClipGeometry.Path(geometry.copyPathGeometryF32())
             ClipGeometryF32.Empty -> GPUW4ePreparedClipGeometry.Empty
+        }
+
+        private fun binarySourceMaskId(pass: PlanPass.PathRenderPass): String? = when (val draw = pass.draw) {
+            is ClippedBinaryMaskedPathDraw -> draw.source.mask.value
+            else -> null
+        }
+        private fun binaryMaskFetch(pass: PlanPass.PathRenderPass): String? = when (val draw = pass.draw) {
+            is ClippedBinaryMaskedPathDraw -> draw.source.maskFetch.name
+            else -> null
+        }
+        private fun binaryBroadcastSamples(pass: PlanPass.PathRenderPass): Int? = when (val draw = pass.draw) {
+            is ClippedBinaryMaskedPathDraw -> draw.source.broadcastSampleCountI32
+            else -> null
         }
 
         private fun inverseInteriorFor(

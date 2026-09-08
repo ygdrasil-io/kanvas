@@ -15,6 +15,7 @@ internal class GPUCorePrimitiveW4ePreparedFrameTaskListAssembler {
         staging: GPUFrameBufferRef,
         readback: GPUFrameReadbackRequest,
         memory: GPUFrameMemoryBudgetPlan,
+        atomicGroupByRenderTaskId: Map<GPUTaskID, String?>,
     ): GPUCorePrimitivePreparedFrameResult {
         if (renders.isEmpty() || requests.isEmpty()) return refused("W4e prepared frame has no authenticated work.")
         val prefix = "task.w4e.${base.expectedReplayKeyHash}"
@@ -23,7 +24,13 @@ internal class GPUCorePrimitiveW4ePreparedFrameTaskListAssembler {
         val tasks = listOf(prepare) + renders + readbackTask
         val ids = tasks.map(GPUTask::taskId)
         val dependencies = ids.zipWithNext().mapIndexed { index, (before, after) ->
-            GPUTaskDependency(before, after, if (index == 0) "resource-prepare" else "plan-pass-dependency", GPUTaskUseToken("$prefix.$index"), "w4e-sealed-order")
+            val atomicGroup = atomicGroupByRenderTaskId[before]
+                ?.takeIf { it == atomicGroupByRenderTaskId[after] }
+                ?.let(::GPUTaskAtomicGroupID)
+            GPUTaskDependency(
+                before, after, if (index == 0) "resource-prepare" else "plan-pass-dependency",
+                GPUTaskUseToken("$prefix.$index"), "w4e-sealed-order", atomicGroup,
+            )
         }
         return GPUCorePrimitivePreparedFrameResult.Recorded(
             GPUTaskList(base.frameId, base.capabilitySeal, base.recordingSeals, base.expectedReplayKeyHash, tasks, dependencies, base.phaseOrder, memory, base.diagnostics),

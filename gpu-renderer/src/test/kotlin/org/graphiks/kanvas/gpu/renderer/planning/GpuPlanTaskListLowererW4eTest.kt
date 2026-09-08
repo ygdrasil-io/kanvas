@@ -4,6 +4,7 @@ import io.ygdrasil.webgpu.GPUTextureFormat
 import io.ygdrasil.webgpu.GPUTextureUsage
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.color.ColorSpace
@@ -30,6 +31,7 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureFormatSampleSupport
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureSampleCountSupport
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
+import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlanner
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
@@ -102,6 +104,9 @@ class GpuPlanTaskListLowererW4eTest {
             listOf(GPUFrameResourceRole.ClipMask, GPUFrameResourceRole.ClipMask, GPUFrameResourceRole.ClipDepthStencil),
             producerTask.resourceUses.map { it.role },
         )
+        assertTrue(producerTask.resourceUses.single { use ->
+            use.resource.value.substringAfterLast('.') == producer.resolveTargetResourceId
+        }.write)
         val fold = renders.mapNotNull { task ->
             task.drawPackets.single().w4ePreparedClipPass as? GPUW4ePreparedClipPassAuthority.Fold
         }.single()
@@ -256,16 +261,87 @@ class GpuPlanTaskListLowererW4eTest {
         }
     }
 
+    @Test
+    fun `prepared path carries the sealed command and W4e MSAA continuation into the frame planner`() {
+        val graph = aaMaskGraph(drawCount = 2)
+        val lowered = assertIs<GpuPlanLoweringResult.Lowered>(GpuPlanTaskListLowerer().lower(request(graph)))
+        val sealedByPass = graph.passes().filterIsInstance<PlanPass.PathRenderPass>().associateBy { it.id.value }
+        val prepared = lowered.taskList.tasks.filterIsInstance<GPUTask.Render>().mapNotNull { render ->
+            render.drawPackets.single().w4ePreparedPath?.let { path -> render to path }
+        }
+
+        assertEquals(sealedByPass.size, prepared.size)
+        prepared.forEach { (render, path) ->
+            val source = sealedByPass.getValue(path.passId)
+            assertEquals(source.draw.commandIndex, path.commandIdValue)
+            assertEquals(source.phase, path.phase)
+            assertEquals(source.draw.color, path.color)
+            assertEquals(source.draw.strategy.name, path.fillStrategyLabel)
+            assertEquals(source.draw.coverage.name, path.coverageLabel)
+            assertEquals(source.draw.blend.name, path.blendLabel)
+            assertEquals(source.draw.copyScissorI32().right, path.scissor.right)
+            if (path.sampleCount == 4) assertTrue(render.sampleContinuationKey != null)
+        }
+        assertFalse(GPUFramePlanner.plan(lowered.taskList).atomicallyRefused)
+    }
+
+    @Test
+    fun `hard binary cover retains its one-to-four mask contract and exact depth allocation role`() {
+        val hardResult = GpuPlanTaskListLowerer().lower(
+            request(aaMaskGraph(coverage = CoverageRequest.HARD_EDGE, concave = true)),
+        )
+        val lowered = assertIs<GpuPlanLoweringResult.Lowered>(hardResult)
+        val hard = lowered.taskList.tasks.filterIsInstance<GPUTask.Render>().single { render ->
+            render.drawPackets.single().w4ePreparedPath?.binarySourceMaskResourceId != null
+        }
+        val path = requireNotNull(hard.drawPackets.single().w4ePreparedPath)
+        assertEquals("TextureLoadUnfiltered", path.binaryMaskFetchLabel)
+        assertEquals(4, path.binaryBroadcastSampleCount)
+        assertTrue(hard.sampleContinuationKey != null)
+        assertTrue(hard.resourceUses.any { use ->
+            use.role == GPUFrameResourceRole.ClipMask &&
+                use.resource.value.substringAfterLast('.') == path.binarySourceMaskResourceId
+        })
+        val hardProducer = lowered.taskList.tasks.filterIsInstance<GPUTask.Render>().first { render ->
+            render.drawPackets.single().w4ePreparedPath?.depthStencilResourceId != null
+        }
+        assertTrue(hardProducer.resourceUses.any { it.role == GPUFrameResourceRole.PathDepthStencil })
+        assertTrue(hardProducer.resourceUses.any { it.role == GPUFrameResourceRole.VertexData })
+        assertTrue(hardProducer.resourceUses.any { it.role == GPUFrameResourceRole.IndexData })
+        assertTrue(hardProducer.resourceUses.any { it.role == GPUFrameResourceRole.UniformData })
+        val depth = assertIs<GPUFrameTextureDescriptor>(
+            lowered.taskList.tasks.filterIsInstance<GPUTask.PrepareResources>().single().requests
+                .single { request ->
+                    request.role == GPUFrameResourceRole.PathDepthStencil &&
+                        (request.descriptor as GPUFrameTextureDescriptor).sampleCount == 1
+                }.descriptor,
+        )
+        assertEquals(1, depth.sampleCount)
+        assertTrue(lowered.taskList.dependencies.any { it.atomicGroupId != null })
+    }
+
+    @Test
+    fun `insufficient prepared memory refuses W4e lowering without partial tasks`() {
+        val graph = aaMaskGraph()
+        val refused = GpuPlanTaskListLowerer().lower(
+            request(graph).copy(capabilities = rendererCapabilities(maxBufferSize = 1L)),
+        )
+
+        assertTrue(refused !is GpuPlanLoweringResult.Lowered)
+    }
+
     private fun aaMaskGraph(
         drawCount: Int = 1,
         inverse: Boolean = false,
         zeroClip: Boolean = false,
         inverseEmpty: Boolean = false,
+        coverage: CoverageRequest = CoverageRequest.ANTIALIASED,
+        concave: Boolean = false,
     ): RenderGraph {
         val scene = SceneSnapshot.of(
             SceneExtent(16, 16),
             ColorSpace.SRGB,
-            List(drawCount) { pathDraw(inverse, zeroClip, inverseEmpty) },
+            List(drawCount) { pathDraw(inverse, zeroClip, inverseEmpty, coverage, concave) },
         )
         val compiler = W4eClipPlanCompiler()
         val candidate = assertIs<GpuPlanSelection.Candidate>(
@@ -280,6 +356,8 @@ class GpuPlanTaskListLowererW4eTest {
         inverse: Boolean = false,
         zeroClip: Boolean = false,
         inverseEmpty: Boolean = false,
+        coverage: CoverageRequest = CoverageRequest.ANTIALIASED,
+        concave: Boolean = false,
     ): SceneCommand.Draw {
         val color = ColorARGB.fromPackedUInt(0xC0FF0000u)
         val fillRule = if (inverse) FillRule.INVERSE_WINDING else FillRule.WINDING
@@ -291,11 +369,12 @@ class GpuPlanTaskListLowererW4eTest {
         return SceneCommand.Draw(
             DrawNode(
                 geometry = GeometryNode.Path(
-                    if (inverseEmpty) PathBuilder(fillRule).build() else PathBuilder(fillRule)
-                        .moveTo(2f, 2f).lineTo(12f, 2f).lineTo(2f, 12f).close().build(),
+                    if (inverseEmpty) PathBuilder(fillRule).build() else if (concave) PathBuilder(fillRule)
+                        .moveTo(2f, 2f).lineTo(12f, 2f).lineTo(12f, 12f).lineTo(7f, 6f).lineTo(2f, 12f).close().build()
+                    else PathBuilder(fillRule).moveTo(2f, 2f).lineTo(12f, 2f).lineTo(2f, 12f).close().build(),
                 ),
                 material = MaterialNode.Solid(color),
-                coverage = CoverageRequest.ANTIALIASED,
+                coverage = coverage,
                 clip = ClipStackNode.Operations.of(listOf(
                     ClipEntry(
                         geometry = GeometryNode.Path(
@@ -352,7 +431,7 @@ class GpuPlanTaskListLowererW4eTest {
         ),
     )
 
-    private fun rendererCapabilities(): GPUCapabilities = GPUCapabilities(
+    private fun rendererCapabilities(maxBufferSize: Long = 1L shl 20): GPUCapabilities = GPUCapabilities(
         implementation = GPUImplementationIdentity("GPU", "test", "w4e", "device"),
         facts = emptyList(),
         snapshotId = "w4e-test",
@@ -360,7 +439,7 @@ class GpuPlanTaskListLowererW4eTest {
             maxTextureDimension2D = 2048,
             copyBytesPerRowAlignment = 256,
             minUniformBufferOffsetAlignment = 256,
-            maxBufferSize = 1L shl 20,
+            maxBufferSize = maxBufferSize,
             maxDynamicUniformBuffersPerPipelineLayout = 1,
         ),
         supportedTextureFormats = setOf(
