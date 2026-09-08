@@ -18,6 +18,7 @@ import org.graphiks.kanvas.gpu.plan.PlanResourceUsage
 import org.graphiks.kanvas.gpu.plan.PlanTextureFormat
 import org.graphiks.kanvas.gpu.plan.PlanTextureResolveSupport
 import org.graphiks.kanvas.gpu.plan.PlanTextureSampleSupport
+import org.graphiks.kanvas.gpu.plan.PlanPass
 import org.graphiks.kanvas.gpu.plan.RenderGraph
 import org.graphiks.kanvas.gpu.plan.W4eClipPlanCompiler
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
@@ -98,11 +99,36 @@ class GpuPlanTaskListLowererW4eTest {
         assertIs<GpuPlanLoweringResult.InvalidPlan>(GpuPlanTaskListLowerer().lower(request(forged)))
     }
 
-    private fun aaMaskGraph(): RenderGraph {
+    @Test
+    fun `lowering materializes the sealed mask chain before its color consumer`() {
+        val graph = aaMaskGraph()
+        val lowered = assertIs<GpuPlanLoweringResult.Lowered>(GpuPlanTaskListLowerer().lower(request(graph)))
+
+        val renders = lowered.taskList.tasks.filterIsInstance<GPUTask.Render>()
+        assertEquals(graph.passes().size - 1, renders.size)
+        assertEquals(
+            graph.passes().dropLast(1).map { pass -> pass.id.value },
+            renders.map { render -> render.taskId.value.substringAfterLast('.') },
+        )
+        assertEquals(lowered.taskList.tasks.size - 1, lowered.taskList.dependencies.size)
+    }
+
+    @Test
+    fun `reused sealed clip emits one preparation chain before both consumers`() {
+        val graph = aaMaskGraph(drawCount = 2)
+        val lowered = assertIs<GpuPlanLoweringResult.Lowered>(GpuPlanTaskListLowerer().lower(request(graph)))
+
+        assertEquals(1, graph.passes().filterIsInstance<PlanPass.ClipMaskInitialize>().size)
+        assertEquals(1, graph.passes().filterIsInstance<PlanPass.ClipMaskProducer>().size)
+        assertEquals(1, graph.passes().filterIsInstance<PlanPass.ClipMaskFold>().size)
+        assertEquals(graph.passes().size - 1, lowered.taskList.tasks.filterIsInstance<GPUTask.Render>().size)
+    }
+
+    private fun aaMaskGraph(drawCount: Int = 1): RenderGraph {
         val scene = SceneSnapshot.of(
             SceneExtent(16, 16),
             ColorSpace.SRGB,
-            listOf(pathDraw()),
+            List(drawCount) { pathDraw() },
         )
         val compiler = W4eClipPlanCompiler()
         val candidate = assertIs<GpuPlanSelection.Candidate>(

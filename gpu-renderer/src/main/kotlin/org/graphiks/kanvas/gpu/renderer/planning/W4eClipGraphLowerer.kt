@@ -15,11 +15,15 @@ import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchEligibility
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchQueueGuard
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPlanW4ePreparedAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
+import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_RENDER_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitivePreparedFrameResult
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitiveW4ePreparedFrameTaskListAssembler
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameCapabilitySeal
@@ -38,6 +42,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
@@ -65,16 +70,30 @@ internal class W4eClipGraphLowerer {
         val stagingRef = refs.getValue(staging.id.value) as? GPUFrameBufferRef ?: return invalid()
         val seal = GPUFrameCapabilitySeal.capture(request.frameId, request.deviceGeneration, request.capabilities)
         val replay = "w4e:${graph.id.value}"
-        val colorPasses = passes.filterIsInstance<PlanPass.PathRenderPass>()
-        if (colorPasses.isEmpty()) return invalid()
+        if (passes.none { it is PlanPass.PathRenderPass }) return invalid()
         val packetFactory = W4dGeneralPathGraphLowerer()
-        val renders = colorPasses.mapIndexed { index, pass ->
-            val packet = packetFactory.packetForSealedW4e(pass, index, bounds, graph)
+        val renders = passes.dropLast(1).mapIndexed { index, pass ->
+            val path = pass as? PlanPass.PathRenderPass
+            val packet = path?.let { packetFactory.packetForSealedW4e(it, index, bounds, graph) }
+                ?: markerPacket(pass, index)
+            val targetId = when (pass) {
+                is PlanPass.ClipMaskInitialize -> pass.output
+                is PlanPass.ClipMaskProducer -> pass.target
+                is PlanPass.ClipMaskFold -> pass.output
+                is PlanPass.PathRenderPass -> pass.target
+                else -> return invalid()
+            }
+            val samples = when (pass) {
+                is PlanPass.ClipMaskProducer -> pass.sampleCountI32
+                is PlanPass.PathRenderPass -> if (pass.draw.sample == SamplePlan.Multisample4) 4 else 1
+                else -> 1
+            }
             GPUTask.Render(
                 GPUTaskID("task.w4e.${graph.id.value}.${pass.id.value}"), request.recordingId, GPUTaskPhase.Render,
-                refs.getValue(pass.target.value) as? GPUFrameTargetRef ?: return invalid(),
-                org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan(if (pass.load == AttachmentLoadPlan.ClearTransparent) "clear" else "load", org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan.Store),
-                if (pass.draw.sample == SamplePlan.Multisample4) GPUSamplePlan.MultisampleFrame(4) else GPUSamplePlan.SingleSampleFrame,
+                refs.getValue(targetId.value) as? GPUFrameTargetRef ?: return invalid(),
+                org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan(loadLabel(pass), org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan.Store),
+                if (samples == 4) GPUSamplePlan.MultisampleFrame(4) else GPUSamplePlan.SingleSampleFrame,
+                resourceUses = resourceUses(pass, refs),
                 drawPackets = listOf(packet),
                 batchEligibilityByPacketId = mapOf(packet.packetId to GPUPassBatchEligibility(
                     kind = GPUPassBatchKind.SolidFill,
@@ -94,6 +113,59 @@ internal class W4eClipGraphLowerer {
     private fun ref(session: String, resource: PlanResource): GPUFrameResourceRef = when (resource.kind) {
         PlanResourceKind.Buffer -> GPUFrameBufferRef("$session.${resource.id.value}")
         PlanResourceKind.Texture2D -> GPUFrameTargetRef("$session.${resource.id.value}")
+    }
+
+    /** Marker packets carry only the already-selected pass identity; no clip mapper is consulted. */
+    private fun markerPacket(pass: PlanPass, index: Int): GPUDrawPacket = GPUDrawPacket(
+        packetId = GPUDrawPacketID("packet.w4e.${pass.id.value}"),
+        commandIdValue = index,
+        analysisRecordId = "w4e.sealed.${pass.id.value}",
+        passId = pass.id.value,
+        layerId = "root",
+        bindingListId = "binding.w4e.${pass.id.value}",
+        insertionReasonCode = "w4e-sealed-pass",
+        sortKey = index.toLong(),
+        sortKeyPreimage = "w4e-pass:$index",
+        renderStepId = org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepID(CORE_PRIMITIVE_RENDER_STEP_IDENTITY),
+        renderStepVersion = 1,
+        role = GPUDrawPacketRole.Shading,
+        blendPlan = org.graphiks.kanvas.gpu.renderer.recording.canonicalSolidRectSrcOverBlendPlan(),
+        renderPipelineKey = GPURenderPipelineKey("core-primitive.w4e.sealed-pass-v1"),
+        bindingLayoutHash = org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_BINDING_LAYOUT_HASH,
+        vertexSourceLabel = org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_VERTEX_SOURCE_LABEL,
+        targetStateHash = "w4e.sealed-target",
+        originalPaintOrder = index,
+        resourceGeneration = org.graphiks.kanvas.gpu.renderer.recording.PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION,
+    )
+
+    private fun loadLabel(pass: PlanPass): String = when (pass) {
+        is PlanPass.ClipMaskInitialize -> "clear"
+        is PlanPass.ClipMaskProducer -> "clear"
+        is PlanPass.ClipMaskFold -> "clear"
+        is PlanPass.PathRenderPass -> if (pass.load == AttachmentLoadPlan.ClearTransparent) "clear" else "load"
+        else -> "load"
+    }
+
+    private fun resourceUses(
+        pass: PlanPass,
+        refs: Map<String, GPUFrameResourceRef>,
+    ): List<GPUFrameResourceUse> {
+        fun use(id: String, role: GPUFrameResourceRole, usage: GPUFrameResourceUsage, write: Boolean) =
+            GPUFrameResourceUse(refs.getValue(id), role, usage, GPUFrameResourceLifetime.FrameLocal, write)
+        return when (pass) {
+            is PlanPass.ClipMaskInitialize -> listOf(use(pass.output.value, GPUFrameResourceRole.ClipMask, GPUFrameResourceUsage.RenderAttachment, true))
+            is PlanPass.ClipMaskProducer -> buildList {
+                add(use(pass.target.value, GPUFrameResourceRole.ClipMask, GPUFrameResourceUsage.RenderAttachment, true))
+                pass.resolveTarget?.let { add(use(it.value, GPUFrameResourceRole.ClipMask, GPUFrameResourceUsage.RenderAttachment, true)) }
+                pass.depthStencil?.let { add(use(it.value, GPUFrameResourceRole.ClipDepthStencil, GPUFrameResourceUsage.RenderAttachment, true)) }
+            }
+            is PlanPass.ClipMaskFold -> listOf(
+                use(pass.previous.value, GPUFrameResourceRole.ClipMask, GPUFrameResourceUsage.TextureBinding, false),
+                use(pass.source.value, GPUFrameResourceRole.ClipMask, GPUFrameResourceUsage.TextureBinding, false),
+                use(pass.output.value, GPUFrameResourceRole.ClipMask, GPUFrameResourceUsage.RenderAttachment, true),
+            )
+            else -> emptyList()
+        }
     }
 
     private fun preparation(resource: PlanResource, ref: GPUFrameResourceRef, bounds: GPUPixelBounds, alignment: Long): GPUResourcePreparationRequest {
