@@ -36,6 +36,8 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage
+import org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipPassAuthority
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlanner
 import org.graphiks.kanvas.render.ir.BlendMode
 import org.graphiks.kanvas.render.ir.BlendNode
 import org.graphiks.kanvas.render.ir.ClipEntry
@@ -81,6 +83,36 @@ class GpuPlanTaskListLowererW4eTest {
         )
         assertEquals(4, clipTextures.count { it.role == GPUFrameResourceRole.ClipMask })
         assertEquals(1, clipTextures.count { it.role == GPUFrameResourceRole.ClipDepthStencil })
+    }
+
+    @Test
+    fun `prepared prefix retains exact producer fold attachments and ping pong`() {
+        val lowered = assertIs<GpuPlanLoweringResult.Lowered>(
+            GpuPlanTaskListLowerer().lower(request(aaMaskGraph())),
+        )
+        val renders = lowered.taskList.tasks.filterIsInstance<GPUTask.Render>()
+        val producer = renders.mapNotNull { task ->
+            task.drawPackets.single().w4ePreparedClipPass as? GPUW4ePreparedClipPassAuthority.Producer
+        }.single()
+        assertEquals(4, producer.sampleCount)
+        assertTrue(producer.resolveTargetResourceId != null)
+        assertTrue(producer.depthStencilResourceId != null)
+        val producerTask = renders.single { it.drawPackets.single().w4ePreparedClipPass === producer }
+        assertEquals(
+            listOf(GPUFrameResourceRole.ClipMask, GPUFrameResourceRole.ClipMask, GPUFrameResourceRole.ClipDepthStencil),
+            producerTask.resourceUses.map { it.role },
+        )
+        val fold = renders.mapNotNull { task ->
+            task.drawPackets.single().w4ePreparedClipPass as? GPUW4ePreparedClipPassAuthority.Fold
+        }.single()
+        assertTrue(fold.previousResourceId != fold.outputResourceId)
+        assertEquals(
+            listOf(fold.previousResourceId, fold.sourceResourceId, fold.outputResourceId),
+            renders.single { it.drawPackets.single().w4ePreparedClipPass === fold }.resourceUses
+                .map { it.resource.value.substringAfterLast('.') },
+        )
+        assertTrue(GPUFrameMemoryBudgetPlanner.hasExactLimitIndependentFacts(lowered.taskList.memoryBudget))
+        assertTrue(lowered.taskList.memoryBudget.allocations.isNotEmpty())
     }
 
     @Test
@@ -142,7 +174,10 @@ class GpuPlanTaskListLowererW4eTest {
         lowered.taskList.tasks.filterIsInstance<GPUTask.Render>().filter { render ->
             render.drawPackets.single().w4ePreparedClipConsumer is GPUW4ePreparedClipConsumerAuthority.Mask
         }.forEach { render ->
-            assertEquals(consumers.first().maskResourceId, render.resourceUses.single().resource.value.substringAfterLast('.'))
+            assertTrue(render.resourceUses.any { use ->
+                use.role == GPUFrameResourceRole.ClipMask &&
+                    use.resource.value.substringAfterLast('.') == consumers.first().maskResourceId
+            })
         }
     }
 
@@ -191,7 +226,10 @@ class GpuPlanTaskListLowererW4eTest {
             inverseConsumer.interiorCoverage,
         )
         assertEquals(16, inverseConsumer.domain.right)
-        assertEquals(1, inverse.resourceUses.size)
+        assertEquals(1, inverse.resourceUses.count { it.role == GPUFrameResourceRole.ClipMask })
+        assertTrue(inverse.resourceUses.any { it.role == GPUFrameResourceRole.VertexData })
+        assertTrue(inverse.resourceUses.any { it.role == GPUFrameResourceRole.IndexData })
+        assertTrue(inverse.resourceUses.any { it.role == GPUFrameResourceRole.UniformData })
         assertTrue(interior.copyGeometryF32().emittedNonZeroClosedEdgeCountI32 > 0)
     }
 
@@ -213,7 +251,8 @@ class GpuPlanTaskListLowererW4eTest {
             )
             assertEquals(16, consumer.domain.right)
             assertIs<GPUW4ePreparedInverseInteriorCoverage.Zero>(consumer.interiorCoverage)
-            assertEquals(0, render.resourceUses.size)
+            assertEquals(0, render.resourceUses.count { it.role == GPUFrameResourceRole.ClipMask })
+            assertTrue(render.resourceUses.size >= 3)
         }
     }
 

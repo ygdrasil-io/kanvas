@@ -1238,6 +1238,7 @@ object GPUFramePlanner {
         GPUDrawPacketRole.ClipProducer,
         GPUDrawPacketRole.Clear,
         GPUDrawPacketRole.Composite,
+        GPUDrawPacketRole.W4ePrepared,
         -> true
         GPUDrawPacketRole.Discard,
         GPUDrawPacketRole.Copy,

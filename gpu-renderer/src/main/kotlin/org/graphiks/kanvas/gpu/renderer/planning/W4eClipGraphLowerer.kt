@@ -24,8 +24,6 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUPlanW4ePreparedAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipPassAuthority
-import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
-import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_RENDER_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitivePreparedFrameResult
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitiveW4ePreparedFrameTaskListAssembler
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameCapabilitySeal
@@ -41,6 +39,10 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryAllocation
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlanner
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetRequest
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryResourceKind
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
@@ -70,16 +72,16 @@ internal class W4eClipGraphLowerer {
         val staging = graph.resources().singleOrNull { it.role == PlanResourceRole.ReadbackStaging } ?: return invalid()
         val target = refs.getValue(logical.id.value) as? GPUFrameTargetRef ?: return invalid()
         val stagingRef = refs.getValue(staging.id.value) as? GPUFrameBufferRef ?: return invalid()
+        val limits = request.capabilities.limits ?: return invalid()
         val seal = GPUFrameCapabilitySeal.capture(request.frameId, request.deviceGeneration, request.capabilities)
         val replay = "w4e:${graph.id.value}"
         if (passes.none { it is PlanPass.PathRenderPass }) return invalid()
-        val packetFactory = W4dGeneralPathGraphLowerer()
         val renders = passes.dropLast(1).mapIndexed { index, pass ->
             val path = pass as? PlanPass.PathRenderPass
             val consumer = path?.let { authority.consumerFor(it.id.value) }
-            val packet = path?.let {
-                packetFactory.packetForSealedW4e(it, index, bounds, graph, consumer)
-            } ?: markerPacket(pass, index, authority.clipPassFor(pass.id.value) ?: return invalid())
+            val preparedPath = path?.let { authority.pathFor(it.id.value) ?: return invalid() }
+            val packet = preparedPath?.let { pathPacket(it, consumer, index) }
+                ?: markerPacket(pass, index, authority.clipPassFor(pass.id.value) ?: return invalid())
             val targetId = when (pass) {
                 is PlanPass.ClipMaskInitialize -> pass.output
                 is PlanPass.ClipMaskProducer -> pass.target
@@ -97,18 +99,21 @@ internal class W4eClipGraphLowerer {
                 refs.getValue(targetId.value) as? GPUFrameTargetRef ?: return invalid(),
                 org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan(loadLabel(pass), org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan.Store),
                 if (samples == 4) GPUSamplePlan.MultisampleFrame(4) else GPUSamplePlan.SingleSampleFrame,
-                resourceUses = resourceUses(pass, refs, consumer),
+                resourceUses = resourceUses(pass, refs, consumer, preparedPath),
                 drawPackets = listOf(packet),
                 batchEligibilityByPacketId = mapOf(packet.packetId to GPUPassBatchEligibility(
                     kind = GPUPassBatchKind.SolidFill,
                     queueGuard = GPUPassBatchQueueGuard(emptyList(), emptyList()),
                 )),
+                depthStencilLoadStore = path?.let(::depthStencilLoadStore),
             )
         }
         val preparations = graph.resources().map { resource -> preparation(resource, refs.getValue(resource.id.value), bounds, graph.capabilities.copyBytesPerRowAlignment.toLong()) }
         val readback = GPUFrameReadbackRequest(GPUReadbackRequestID("w4e.${graph.id.value}.readback"), bounds, GPUReadbackPixelFormat.Rgba8Unorm, GPUColorInterpretation.EncodedPremulSrgb)
-        val base = GPUTaskList(request.frameId, seal, listOf(GPURecordingSeal(request.recordingId, 0L, replay, replay, seal.sealHash)), replay, emptyList(), emptyList(), GPUTaskPhase.entries, memory(graph, logical.byteSize))
-        when (val assembled = GPUCorePrimitiveW4ePreparedFrameTaskListAssembler().build(base, preparations, renders, target, stagingRef, readback, memory(graph, logical.byteSize))) {
+        val memory = memory(graph, bounds, limits)
+        if (!GPUFrameMemoryBudgetPlanner.hasExactLimitIndependentFacts(memory) || memory.diagnostic != null) return invalid()
+        val base = GPUTaskList(request.frameId, seal, listOf(GPURecordingSeal(request.recordingId, 0L, replay, replay, seal.sealHash)), replay, emptyList(), emptyList(), GPUTaskPhase.entries, memory)
+        when (val assembled = GPUCorePrimitiveW4ePreparedFrameTaskListAssembler().build(base, preparations, renders, target, stagingRef, readback, memory)) {
             is GPUCorePrimitivePreparedFrameResult.Recorded -> GpuPlanLoweringResult.Lowered(assembled.taskList, readback.requestId.value)
             is GPUCorePrimitivePreparedFrameResult.Refused -> invalid()
         }
@@ -134,17 +139,44 @@ internal class W4eClipGraphLowerer {
         insertionReasonCode = "w4e-sealed-pass",
         sortKey = index.toLong(),
         sortKeyPreimage = "w4e-pass:$index",
-        renderStepId = org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepID(CORE_PRIMITIVE_RENDER_STEP_IDENTITY),
+        renderStepId = org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepID("w4e.prepared-handoff"),
         renderStepVersion = 1,
-        role = GPUDrawPacketRole.Shading,
+        role = GPUDrawPacketRole.W4ePrepared,
         blendPlan = org.graphiks.kanvas.gpu.renderer.recording.canonicalSolidRectSrcOverBlendPlan(),
-        renderPipelineKey = GPURenderPipelineKey("core-primitive.w4e.sealed-pass-v1"),
-        bindingLayoutHash = org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_BINDING_LAYOUT_HASH,
-        vertexSourceLabel = org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_VERTEX_SOURCE_LABEL,
+        bindingLayoutHash = "w4e.prepared-handoff.no-bindings",
+        vertexSourceLabel = "w4e.prepared-handoff.no-vertices",
         targetStateHash = "w4e.sealed-target",
         originalPaintOrder = index,
         resourceGeneration = org.graphiks.kanvas.gpu.renderer.recording.PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION,
         w4ePreparedClipPass = preparedPass,
+    )
+
+    /** Complete path handoff with no W4d clip mapper, execution plan, or structural-key fallback. */
+    private fun pathPacket(
+        preparedPath: GPUW4ePreparedClipPassAuthority.Path,
+        consumer: GPUW4ePreparedClipConsumerAuthority?,
+        index: Int,
+    ): GPUDrawPacket = GPUDrawPacket(
+        packetId = GPUDrawPacketID("packet.w4e.${preparedPath.passId}"),
+        commandIdValue = index,
+        analysisRecordId = "w4e.sealed.${preparedPath.passId}",
+        passId = preparedPath.passId,
+        layerId = "root",
+        bindingListId = "binding.w4e.${preparedPath.passId}",
+        insertionReasonCode = "w4e-sealed-path",
+        sortKey = index.toLong(),
+        sortKeyPreimage = "w4e-path:$index",
+        renderStepId = org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepID("w4e.prepared-path"),
+        renderStepVersion = 1,
+        role = GPUDrawPacketRole.W4ePrepared,
+        blendPlan = org.graphiks.kanvas.gpu.renderer.recording.canonicalSolidRectSrcOverBlendPlan(),
+        bindingLayoutHash = "w4e.prepared-path.sealed-bindings",
+        vertexSourceLabel = "w4e.prepared-path.sealed-geometry",
+        targetStateHash = "w4e.prepared-path.attachments",
+        originalPaintOrder = index,
+        resourceGeneration = org.graphiks.kanvas.gpu.renderer.recording.PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION,
+        w4ePreparedClipConsumer = consumer,
+        w4ePreparedPath = preparedPath,
     )
 
     private fun loadLabel(pass: PlanPass): String = when (pass) {
@@ -155,10 +187,31 @@ internal class W4eClipGraphLowerer {
         else -> "load"
     }
 
+    private fun depthStencilLoadStore(
+        pass: PlanPass.PathRenderPass,
+    ): org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan? = when (
+        pass.depthStencilLoadStore
+    ) {
+        null -> null
+        org.graphiks.kanvas.gpu.plan.PlanDepthStencilLoadStore.ClearZeroStore ->
+            org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan.WritableStencil(
+                org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Clear,
+                org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan.Store,
+                0u,
+            )
+        org.graphiks.kanvas.gpu.plan.PlanDepthStencilLoadStore.LoadStoreTestReset ->
+            org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan.WritableStencil(
+                org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Load,
+                org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan.Store,
+                null,
+            )
+    }
+
     private fun resourceUses(
         pass: PlanPass,
         refs: Map<String, GPUFrameResourceRef>,
         consumer: GPUW4ePreparedClipConsumerAuthority?,
+        preparedPath: GPUW4ePreparedClipPassAuthority.Path?,
     ): List<GPUFrameResourceUse> {
         fun use(id: String, role: GPUFrameResourceRole, usage: GPUFrameResourceUsage, write: Boolean) =
             GPUFrameResourceUse(refs.getValue(id), role, usage, GPUFrameResourceLifetime.FrameLocal, write)
@@ -174,16 +227,25 @@ internal class W4eClipGraphLowerer {
                 use(pass.source.value, GPUFrameResourceRole.ClipMask, GPUFrameResourceUsage.TextureBinding, false),
                 use(pass.output.value, GPUFrameResourceRole.ClipMask, GPUFrameResourceUsage.RenderAttachment, true),
             )
-            is PlanPass.PathRenderPass -> when (consumer) {
-                is GPUW4ePreparedClipConsumerAuthority.Mask -> listOf(
-                    use(consumer.maskResourceId, GPUFrameResourceRole.ClipMask, GPUFrameResourceUsage.TextureBinding, false),
-                )
-                is GPUW4ePreparedClipConsumerAuthority.InverseMask -> listOf(
-                    use(consumer.maskResourceId, GPUFrameResourceRole.ClipMask, GPUFrameResourceUsage.TextureBinding, false),
-                )
-                is GPUW4ePreparedClipConsumerAuthority.InverseDomain,
-                null,
-                -> emptyList()
+            is PlanPass.PathRenderPass -> buildList {
+                val path = requireNotNull(preparedPath)
+                add(use(path.vertexResourceId, GPUFrameResourceRole.VertexData, GPUFrameResourceUsage.Vertex, false))
+                add(use(path.indexResourceId, GPUFrameResourceRole.IndexData, GPUFrameResourceUsage.Index, false))
+                add(use(path.uniformResourceId, GPUFrameResourceRole.UniformData, GPUFrameResourceUsage.Uniform, false))
+                path.depthStencilResourceId?.let { depth ->
+                    add(use(depth, GPUFrameResourceRole.PathDepthStencil, GPUFrameResourceUsage.RenderAttachment, true))
+                }
+                when (consumer) {
+                    is GPUW4ePreparedClipConsumerAuthority.Mask -> add(
+                        use(consumer.maskResourceId, GPUFrameResourceRole.ClipMask, GPUFrameResourceUsage.TextureBinding, false),
+                    )
+                    is GPUW4ePreparedClipConsumerAuthority.InverseMask -> add(
+                        use(consumer.maskResourceId, GPUFrameResourceRole.ClipMask, GPUFrameResourceUsage.TextureBinding, false),
+                    )
+                    is GPUW4ePreparedClipConsumerAuthority.InverseDomain,
+                    null,
+                    -> Unit
+                }
             }
             else -> emptyList()
         }
@@ -224,6 +286,36 @@ internal class W4eClipGraphLowerer {
         return GPUResourcePreparationRequest(ref, descriptor, role, usages, lifetime, resource.byteSize, resource.id.value)
     }
 
-    private fun memory(graph: org.graphiks.kanvas.gpu.plan.RenderGraph, targetBytes: Long) = GPUFrameMemoryBudgetPlan(graph.peakFrameLocalBytes - targetBytes, targetBytes, GPUFrameMemoryCategory.entries.associateWith { if (it == GPUFrameMemoryCategory.CanonicalTarget) targetBytes else 0L }, emptyList(), graph.budget.maxFrameLocalBytes, null)
+    private fun memory(
+        graph: org.graphiks.kanvas.gpu.plan.RenderGraph,
+        bounds: GPUPixelBounds,
+        limits: org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits,
+    ): GPUFrameMemoryBudgetPlan = GPUFrameMemoryBudgetPlanner.plan(
+        GPUFrameMemoryBudgetRequest(
+            graph.resources().map { resource ->
+                GPUFrameMemoryAllocation(
+                    label = "w4e.${resource.id.value}",
+                    category = when (resource.role) {
+                        PlanResourceRole.LogicalTarget -> GPUFrameMemoryCategory.CanonicalTarget
+                        PlanResourceRole.ReadbackStaging -> GPUFrameMemoryCategory.ReadbackStaging
+                        PlanResourceRole.MultisampleColorTarget -> GPUFrameMemoryCategory.FrameLocalMsaaColor
+                        PlanResourceRole.CoverageMaskDepthStencil -> GPUFrameMemoryCategory.FrameLocalMsaaDepthStencil
+                        PlanResourceRole.PathHardEdgeDepthStencil,
+                        PlanResourceRole.DepthStencil,
+                        -> GPUFrameMemoryCategory.ReusableScratch
+                        else -> GPUFrameMemoryCategory.ReusableScratch
+                    },
+                    bytes = resource.byteSize,
+                    resourceKind = when (resource.kind) {
+                        PlanResourceKind.Texture2D -> GPUFrameMemoryResourceKind.Texture2D
+                        PlanResourceKind.Buffer -> GPUFrameMemoryResourceKind.Buffer
+                    },
+                    extent = if (resource.kind == PlanResourceKind.Texture2D) bounds else null,
+                )
+            },
+            graph.budget.maxFrameLocalBytes,
+            limits,
+        ),
+    )
     private fun invalid() = GpuPlanLoweringResult.InvalidPlan(RenderDiagnostic(RenderDiagnosticCode("w4e.lowering.incompatible_plan"), RenderDiagnosticDomain.RESOURCE, RenderDiagnosticSeverity.ERROR, "The sealed W4e graph cannot be lowered."))
 }
