@@ -119,10 +119,9 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
                     ),
                 )
             }
-        if (hasW4dPhysicalTopology && hasFourSampleSrgb &&
-            1 in textureFormatSampleSupport[GPUTextureFormat.RGBA8Unorm]
-                ?.renderAttachmentSampleCounts.orEmpty()
-        ) {
+        val maskSamples = textureFormatSampleSupport[GPUTextureFormat.RGBA8Unorm]
+            ?.renderAttachmentSampleCounts.orEmpty()
+        if (hasW4dPhysicalTopology && hasFourSampleSrgb && 1 in maskSamples) {
             add(
                 PlanTextureSampleSupport.of(
                     PlanTextureFormat.CoverageMask,
@@ -130,6 +129,13 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
                     setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled),
                 ),
             )
+        }
+        if (hasW4dPhysicalTopology && hasFourSampleSrgb && 4 in maskSamples) {
+            add(PlanTextureSampleSupport.of(
+                PlanTextureFormat.CoverageMask,
+                4,
+                setOf(PlanResourceUsage.RenderAttachment),
+            ))
         }
     }
     val resolveSupports = buildSet {
@@ -143,6 +149,12 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
                     1,
                 ),
             )
+        }
+        if (hasW4dPhysicalTopology && hasFourSampleSrgb &&
+            4 in textureFormatSampleSupport[GPUTextureFormat.RGBA8Unorm]
+                ?.resolveSourceSampleCounts.orEmpty()
+        ) {
+            add(PlanTextureResolveSupport.of(PlanTextureFormat.CoverageMask, 4, 1))
         }
     }
     return try {

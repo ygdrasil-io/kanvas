@@ -22,6 +22,7 @@ import org.graphiks.kanvas.gpu.plan.W4bAnalyticRRectPlanCompiler
 import org.graphiks.kanvas.gpu.plan.W4cPathFillPlanCompiler
 import org.graphiks.kanvas.gpu.plan.W4dPathStrokePlanCompiler
 import org.graphiks.kanvas.gpu.plan.W4dGeneralPathPlanCompiler
+import org.graphiks.kanvas.gpu.plan.W4eClipPlanCompiler
 import org.graphiks.kanvas.gpu.renderer.analysis.corePrimitiveRectGeometryAuthority
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
@@ -113,6 +114,9 @@ public class GpuPlanTaskListLowerer {
             W4dGeneralPathPlanCompiler.HARD_CAPABILITY_ID,
             W4dGeneralPathPlanCompiler.AA_CAPABILITY_ID,
             -> W4dGeneralPathGraphLowerer().lower(request)
+            W4eClipPlanCompiler.HARD_CAPABILITY_ID,
+            W4eClipPlanCompiler.AA_CAPABILITY_ID,
+            -> W4eClipGraphLowerer().lower(request)
             else -> invalid("Unknown gpu-plan capability id.")
         }
     }

@@ -93,6 +93,14 @@ import org.graphiks.math.geometry.PathFillGeometryF32
 
 /** Lowers one fully validated W4d.2 path graph into handle-free prepared task facts. */
 internal class W4dGeneralPathGraphLowerer {
+    /** Shared mechanical packet translation for already-sealed W4e color passes. */
+    internal fun packetForSealedW4e(
+        pass: PlanPass.PathRenderPass,
+        paintOrder: Int,
+        bounds: GPUPixelBounds,
+        graph: RenderGraph,
+    ): GPUDrawPacket = packet(pass, paintOrder, bounds, targetColorFormat(pass, graph)).packet
+
     fun lower(request: GpuPlanLoweringRequest): GpuPlanLoweringResult = try {
         val graph = preflight(request.graph) ?: return invalid("The graph is not the exact W4d.2 topology.")
         val bounds = GPUPixelBounds(0, 0, request.graph.targetExtent.width, request.graph.targetExtent.height)
