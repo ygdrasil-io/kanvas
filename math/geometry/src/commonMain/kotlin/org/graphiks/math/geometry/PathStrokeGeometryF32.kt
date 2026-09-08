@@ -306,7 +306,7 @@ private object IdentityPathStrokeProjectionF64 : PathStrokeProjectionF64 {
         ?: PathStrokeProjectionIntervalResultF64.NonFinite
 }
 
-private fun materializeProjectedStrokeOutlineInputF64(
+internal fun materializeProjectedStrokeOutlineInputF64(
     outlineF64: PathStrokeOutlineF64,
     projectionF64: PathStrokeProjectionF64,
     policyF64: PathStrokePolicyF64,

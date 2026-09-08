@@ -7,8 +7,12 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import org.graphiks.math.geometry.PathBuilder
+import org.graphiks.math.geometry.FillRule
 import org.graphiks.math.geometry.PathFillFlatteningPolicyF64
 import org.graphiks.math.geometry.PathFillWithStrokeWorkPreparationResult
+import org.graphiks.math.geometry.InverseInteriorCoverageF32
+import org.graphiks.math.geometry.InversePathDrawMode
+import org.graphiks.math.geometry.InversePathPreparationResult
 import org.graphiks.math.geometry.PathStrokeCap
 import org.graphiks.math.geometry.PathStrokeDashF64
 import org.graphiks.math.geometry.PathStrokeDrawMode
@@ -24,6 +28,53 @@ import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.preparePathFillGeometryWithStrokeWorkF32
 
 class PathGeometryPreparationF64Test {
+    @Test
+    fun `transformed inverse fill retains its finite interior and requested scissor domain`() {
+        val path = PathBuilder(FillRule.INVERSE_EVEN_ODD)
+            .moveTo(0f, 0f)
+            .lineTo(2f, 0f)
+            .lineTo(0f, 2f)
+            .close()
+            .build()
+
+        listOf(
+            Matrix3x3F64(txF64 = 4.0, tyF64 = 3.0),
+            Matrix3x3F64(persp0F64 = 0.25),
+        ).forEach { matrixF64 ->
+            val ready = assertIs<InversePathPreparationResult.Ready>(
+                matrixF64.prepareTransformedInversePathGeometryF32(
+                    sourcePathF32 = path,
+                    styleF64 = null,
+                    mode = InversePathDrawMode.Fill,
+                    domainI32 = RectI32(-10, -8, 20, 18),
+                    policyF64 = PathStrokePolicyF64(),
+                ),
+            )
+
+            val interiorF32 = assertIs<InverseInteriorCoverageF32.Geometry>(ready.geometryF32.interiorCoverageF32)
+                .copyGeometryF32()
+            assertEquals(FillRule.EVEN_ODD, interiorF32.fillRule)
+            assertEquals(RectI32(-10, -8, 20, 18), ready.geometryF32.copyDomainI32())
+        }
+    }
+
+    @Test
+    fun `transformed inverse stroke and fill excludes its projected finite outline`() {
+        val ready = assertIs<InversePathPreparationResult.Ready>(
+            Matrix3x3F64().prepareTransformedInversePathGeometryF32(
+                sourcePathF32 = rectanglePathWithFillRule(FillRule.INVERSE_WINDING),
+                styleF64 = finiteStyleF64(2.0),
+                mode = InversePathDrawMode.StrokeAndFill,
+                domainI32 = RectI32(-4, -4, 16, 12),
+                policyF64 = PathStrokePolicyF64(),
+            ),
+        )
+
+        val interiorF32 = assertIs<InverseInteriorCoverageF32.Geometry>(ready.geometryF32.interiorCoverageF32)
+            .copyGeometryF32()
+        assertEquals(RectI32(1, 1, 9, 7), interiorF32.copyConservativeScissorI32())
+    }
+
     @Test
     fun `finite strokes prepare through rotation skew and bounded perspective`() {
         val path = PathBuilder().moveTo(0f, 0f).lineTo(10f, 0f).build()
@@ -319,6 +370,14 @@ class PathGeometryPreparationF64Test {
     )
 
     private fun rectanglePath() = PathBuilder()
+        .moveTo(0f, 0f)
+        .lineTo(10f, 0f)
+        .lineTo(10f, 8f)
+        .lineTo(0f, 8f)
+        .close()
+        .build()
+
+    private fun rectanglePathWithFillRule(fillRule: FillRule) = PathBuilder(fillRule)
         .moveTo(0f, 0f)
         .lineTo(10f, 0f)
         .lineTo(10f, 8f)
