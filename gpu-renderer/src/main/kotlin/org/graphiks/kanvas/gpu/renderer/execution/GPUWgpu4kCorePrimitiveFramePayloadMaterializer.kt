@@ -1844,13 +1844,6 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             val semantic: GPUDrawSemanticPayload.CorePrimitive,
             val fact: org.graphiks.kanvas.gpu.renderer.passes.W4dGeneralNativePathPassFact,
         )
-        data class Slice(
-            val firstIndex: Int,
-            val indexCount: Int,
-            val baseVertex: Int,
-            val vertexCount: Int,
-            val maxLocalIndex: Int,
-        )
         class PostCheckoutRefusal(
             val code: String,
             val refusalMessage: String,
@@ -1933,61 +1926,23 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             )
         }
 
-        val vertices = ArrayList<Float>()
-        val indices = ArrayList<Int>()
-        val slices = linkedMapOf<Int, Slice>()
-        entries.forEach { entry ->
-            val geometry = entry.semantic.geometry as? GPUCorePrimitiveGeometry.TriangulatedPath
-                ?: return refused(
-                    "invalid.native-core-primitive.w4d-general-geometry",
-                    "W4d.2 native materialization requires triangulated path geometry.",
-                )
-            val (entryVertices, entryIndices) = if (
-                entry.packet.role == GPUDrawPacketRole.PathStencilCover &&
-                geometry.geometryMode == org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode.StencilEdgeFan
-            ) {
-                val bounds = entry.semantic.scissorBounds
-                listOf(
-                    bounds.left.toFloat(), bounds.top.toFloat(),
-                    bounds.right.toFloat(), bounds.top.toFloat(),
-                    bounds.right.toFloat(), bounds.bottom.toFloat(),
-                    bounds.left.toFloat(), bounds.bottom.toFloat(),
-                ) to listOf(0, 2, 1, 0, 3, 2)
-            } else {
-                geometry.vertices to geometry.indices
-            }
-            if (entryVertices.size !in 2..Int.MAX_VALUE || entryVertices.size % 2 != 0 ||
-                entryIndices.isEmpty() || entryIndices.any { index -> index !in 0 until entryVertices.size / 2 }
-            ) {
-                return refused(
-                    "invalid.native-core-primitive.w4d-general-geometry",
-                    "W4d.2 sealed geometry has an invalid indexed vertex range.",
-                )
-            }
-            val baseVertex = vertices.size / 2
-            val firstIndex = indices.size
-            vertices += entryVertices
-            indices += entryIndices
-            slices[entry.sourceStepIndex] = Slice(
-                firstIndex = firstIndex,
-                indexCount = entryIndices.size,
-                baseVertex = baseVertex,
-                vertexCount = entryVertices.size / 2,
-                maxLocalIndex = requireNotNull(entryIndices.maxOrNull()),
+        val frameResources = authority.frameResources
+        if (frameResources.pathPassIds != entries.map { entry -> entry.fact.pathPassId } ||
+            frameResources.peakFrameLocalBytes != authority.peakFrameLocalBytes ||
+            frameResources.slices.size != entries.size
+        ) {
+            return refused(
+                "invalid.native-core-primitive.w4d-general-resource",
+                "W4d.2 native frame resources do not match the sealed pass order and peak.",
             )
         }
-        val vertexData = vertices.toFloatArray()
-        val indexData = indices.toIntArray()
-        val vertexBytes = try {
-            Math.multiplyExact(vertexData.size.toLong(), Float.SIZE_BYTES.toLong())
-        } catch (_: ArithmeticException) {
-            return refused("invalid.native-core-primitive.w4d-general-geometry", "W4d.2 vertex bytes overflow.")
+        val slices = entries.zip(frameResources.slices).associate { (entry, slice) ->
+            entry.sourceStepIndex to slice
         }
-        val indexBytes = try {
-            Math.multiplyExact(indexData.size.toLong(), Int.SIZE_BYTES.toLong())
-        } catch (_: ArithmeticException) {
-            return refused("invalid.native-core-primitive.w4d-general-geometry", "W4d.2 index bytes overflow.")
-        }
+        val vertexData = frameResources.copyVertexData()
+        val indexData = frameResources.copyIndexData()
+        val vertexBytes = frameResources.vertexUsefulBytes
+        val indexBytes = frameResources.indexUsefulBytes
 
         val uniformSlab = authority.uniformSlab
         val uniformPlan = uniformSlab.plan
@@ -1999,10 +1954,14 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             uniformPlan.uploadBudgetBytes != maxBufferSize ||
             uniformPlan.totalBytes !in 1L..Int.MAX_VALUE.toLong() ||
             uniformPlan.totalBytes > maxBufferSize ||
+            uniformPlan.totalBytes != frameResources.uniformReservedBytes ||
+            frameResources.uniformUsefulBytes != entries.fold(0L) { total, entry ->
+                Math.addExact(total, entry.fact.uniformPayloadBytes.size.toLong())
+            } ||
             uniformPlan.slots.size != entries.size ||
             uniformPlan.slots.zip(entries).any { (slot, entry) ->
                 slot.slotLabel != "w4d-general-${entry.fact.pathPassId}" ||
-                    slot.payloadBytes != (if (entry.fact.coverageMaskConsumerUniform64 == null) 32L else 64L) ||
+                    slot.payloadBytes != entry.fact.uniformPayloadBytes.size.toLong() ||
                     slot.alignedOffset > UInt.MAX_VALUE.toLong()
             }
         ) {
@@ -2036,15 +1995,50 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             }
         }
 
-        fun fact(role: PlanResourceRole) = authority.allBindings().singleOrNull { binding ->
+        fun uniqueFact(role: PlanResourceRole) = authority.allBindings().singleOrNull { binding ->
             binding.fact.role == role
+        }
+        fun aliasedTransientFact(
+            role: PlanResourceRole,
+        ): org.graphiks.kanvas.gpu.renderer.passes.W4dGeneralNativeResourceBinding? {
+            val bindings = authority.allBindings().filter { binding -> binding.fact.role == role }
+            if (bindings.isEmpty()) return null
+            val first = bindings.first()
+            val samePhysicalShape = bindings.all { binding ->
+                val fact = binding.fact
+                fact.kind == first.fact.kind &&
+                    fact.format == first.fact.format &&
+                    fact.width == first.fact.width &&
+                    fact.height == first.fact.height &&
+                    fact.byteSize == first.fact.byteSize &&
+                    fact.usages == first.fact.usages &&
+                    fact.lifetime == first.fact.lifetime &&
+                    fact.sampleCountI32 == first.fact.sampleCountI32
+            }
+            val nonOverlapping = bindings.sortedBy { binding -> binding.fact.firstPassIndex }
+                .zipWithNext()
+                .all { (before, after) ->
+                    before.fact.lastPassIndexExclusive <= after.fact.firstPassIndex
+                }
+            return first.takeIf { samePhysicalShape && nonOverlapping }
         }
         fun dimensions(binding: org.graphiks.kanvas.gpu.renderer.passes.W4dGeneralNativeResourceBinding): Pair<Int, Int> =
             requireNotNull(binding.fact.width) to requireNotNull(binding.fact.height)
-        val msaa = fact(PlanResourceRole.MultisampleColorTarget)
-        val pathDepth = fact(PlanResourceRole.DepthStencil)
-        val hardDepth = fact(PlanResourceRole.PathHardEdgeDepthStencil)
-        val mask = fact(PlanResourceRole.PathHardEdgeMask)
+        val msaa = uniqueFact(PlanResourceRole.MultisampleColorTarget)
+        val pathDepth = uniqueFact(PlanResourceRole.DepthStencil)
+        val hardDepth = aliasedTransientFact(PlanResourceRole.PathHardEdgeDepthStencil)
+        val mask = aliasedTransientFact(PlanResourceRole.PathHardEdgeMask)
+        if (authority.allBindings().any { binding ->
+                binding.fact.role == PlanResourceRole.PathHardEdgeDepthStencil
+            } && hardDepth == null || authority.allBindings().any { binding ->
+                binding.fact.role == PlanResourceRole.PathHardEdgeMask
+            } && mask == null
+        ) {
+            return refused(
+                "invalid.native-core-primitive.w4d-general-resource",
+                "W4d.2 hard-edge resources must have one compatible non-overlapping physical alias shape.",
+            )
+        }
         val msaaRequirement = msaa?.let { binding ->
             val (width, height) = dimensions(binding)
             GPUWgpu4kCorePrimitiveMsaaColorRequirement(
@@ -2117,12 +2111,18 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         var lease: GPUWgpu4kCorePrimitiveFramePoolLease? = null
         var transferred = false
         return try {
+            val expectedCapacities = GPUWgpu4kCorePrimitiveFramePoolCapacities(
+                frameResources.vertexCapacityBytes,
+                frameResources.indexCapacityBytes,
+                frameResources.uniformCapacityBytes,
+            )
             lease = when (val checkout = sessionCache.acquireFrame(
                 GPUWgpu4kCorePrimitiveFramePoolRequirements(
                     deviceGeneration = generationSeal.deviceGeneration,
                     vertexBytes = vertexBytes,
                     indexBytes = indexBytes,
                     uniformBytes = uniformPlan.totalBytes,
+                    expectedCapacities = expectedCapacities,
                     pathDepthStencil = pathRequirement,
                     componentIdentity = PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY,
                     clipDepthStencil = hardRequirement,
@@ -2142,6 +2142,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             }
             val pooled = requireNotNull(lease)
             if (pooled.handles.sampleCount != sampleCount ||
+                pooled.capacities != expectedCapacities ||
                 pooled.handles.msaaColor?.requirement != msaaRequirement ||
                 pooled.handles.pathDepthStencil?.requirement != pathRequirement ||
                 pooled.handles.clipDepthStencil?.requirement != hardRequirement ||

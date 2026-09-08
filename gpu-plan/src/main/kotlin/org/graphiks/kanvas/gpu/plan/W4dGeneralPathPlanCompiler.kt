@@ -331,12 +331,20 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         geometries: List<org.graphiks.math.geometry.PathFillGeometryF32>,
         usesStencil: Boolean,
     ): RenderPlanResult<RenderGraph> {
-        val memory = when (val value = PathStrokePlanBudget.calculate(
+        val provisionalMemory = when (val value = PathStrokePlanBudget.calculate(
             SizeI32(selected.target.extent.width, selected.target.extent.height), geometries, capabilities, budget,
         )) {
             is PathStrokePlanBudgetResult.WithinBudget -> value.footprint
             is PathStrokePlanBudgetResult.Exceeded -> return resource(W4dGeneralPlanDiagnostics.BudgetFrameLocalExceeded, "Frame-local budget is exceeded")
             is PathStrokePlanBudgetResult.Invalid -> return resource(W4dGeneralPlanDiagnostics.SizeOverflow, "W4d.2 size is unrepresentable: ${value.code}")
+        }
+        val memory = w4dGeneralExactFrameMemory(
+            provisionalMemory,
+            w4dGeneralNativePayloadBudget(selected.draws, materializesHardMasks = false),
+            capabilities,
+        ) ?: return resource(W4dGeneralPlanDiagnostics.SizeOverflow, "W4d.2 native frame resources overflow")
+        if (memory.peakBytes > budget.maxFrameLocalBytes) {
+            return resource(W4dGeneralPlanDiagnostics.BudgetFrameLocalExceeded, "Frame-local budget is exceeded")
         }
         if (!buffersFit(memory, capabilities)) return promoted("W4d.2 buffer capability is unavailable")
         return RenderPlanResult.Ready(
@@ -354,7 +362,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         anyHard: Boolean,
         hardStencil: Boolean,
     ): RenderPlanResult<RenderGraph> {
-        val memory = when (val value = PathAaPlanBudget.calculate(
+        val provisionalMemory = when (val value = PathAaPlanBudget.calculate(
             targetExtent = SizeI32(selected.target.extent.width, selected.target.extent.height),
             geometriesF32 = geometries,
             requiresAa4DepthStencil = true,
@@ -366,6 +374,35 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             is PathAaPlanBudgetResult.WithinBudget -> value.footprint
             is PathAaPlanBudgetResult.Exceeded -> return resource(W4dGeneralPlanDiagnostics.BudgetFrameLocalExceeded, "Frame-local budget is exceeded")
             is PathAaPlanBudgetResult.Invalid -> return resource(W4dGeneralPlanDiagnostics.SizeOverflow, "W4d.2 size is unrepresentable: ${value.code}")
+        }
+        val base = w4dGeneralExactFrameMemory(
+            provisionalMemory.base,
+            w4dGeneralNativePayloadBudget(selected.draws, materializesHardMasks = true),
+            capabilities,
+        ) ?: return resource(W4dGeneralPlanDiagnostics.SizeOverflow, "W4d.2 native frame resources overflow")
+        val terminalPeakBytes = try {
+            Math.subtractExact(base.peakBytes, base.depthStencilBytes)
+        } catch (_: ArithmeticException) {
+            return resource(W4dGeneralPlanDiagnostics.SizeOverflow, "W4d.2 native frame resources overflow")
+        }
+        val colorPeakBytes = try {
+            listOf(
+                terminalPeakBytes,
+                -base.readbackBytes,
+                provisionalMemory.multisampleColorBytes,
+                provisionalMemory.multisampleDepthStencilBytes,
+                provisionalMemory.hardEdgeMaskCapacityBytes,
+                provisionalMemory.hardEdgeDepthStencilCapacityBytes,
+            ).fold(0L, Math::addExact)
+        } catch (_: ArithmeticException) {
+            return resource(W4dGeneralPlanDiagnostics.SizeOverflow, "W4d.2 native frame resources overflow")
+        }
+        val memory = provisionalMemory.copy(
+            base = base,
+            peakBytes = maxOf(terminalPeakBytes, colorPeakBytes),
+        )
+        if (memory.peakBytes > budget.maxFrameLocalBytes) {
+            return resource(W4dGeneralPlanDiagnostics.BudgetFrameLocalExceeded, "Frame-local budget is exceeded")
         }
         if (!buffersFit(memory.base, capabilities)) return promoted("W4d.2 buffer capability is unavailable")
         return RenderPlanResult.Ready(
@@ -619,6 +656,108 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         return if (!hardStencil || caps.supportsTexture(PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8), 1,
                 setOf(PlanResourceUsage.DepthStencilAttachment))) null
         else promoted(W4dGeneralPlanDiagnostics.TextureSampleSupportUnavailable, "W4d.2 hard depth-stencil support is unavailable")
+    }
+
+    /**
+     * Exact native payload totals for the W4d.2 pass sequence.  The ordinary geometry budget is
+     * deliberately insufficient here: hard AA bridges add binary cover quads and Uniform64
+     * consumer slots which do not exist in the original draw geometry.
+     */
+    private data class W4dGeneralNativePayloadBudget(
+        val vertexFloatCount: Long,
+        val indexCount: Long,
+        val uniformPayloadBytes: List<Long>,
+    )
+
+    private fun w4dGeneralNativePayloadBudget(
+        draws: List<SealedDraw>,
+        materializesHardMasks: Boolean,
+    ): W4dGeneralNativePayloadBudget {
+        var vertexFloatCount = 0L
+        var indexCount = 0L
+        val uniforms = mutableListOf<Long>()
+        fun addQuad() {
+            vertexFloatCount = Math.addExact(vertexFloatCount, 8L)
+            indexCount = Math.addExact(indexCount, 6L)
+        }
+        draws.forEach { draw ->
+            val geometry = draw.fillGeometry()
+            when (draw.strategy) {
+                PathFillStrategy.DirectTriangle -> {
+                    val direct = requireNotNull(geometry.copyDirectTriangleF32OrNull())
+                    vertexFloatCount = Math.addExact(vertexFloatCount, direct.copyVerticesF32().size.toLong())
+                    indexCount = Math.addExact(indexCount, direct.copyIndicesI32().size.toLong())
+                    uniforms += 32L
+                    if (materializesHardMasks && !draw.requestsAntiAlias) {
+                        addQuad()
+                        uniforms += 64L
+                    }
+                }
+                PathFillStrategy.StencilCover -> {
+                    val fan = requireNotNull(geometry.copyStencilEdgeFanF32OrNull())
+                    vertexFloatCount = Math.addExact(vertexFloatCount, fan.copyVerticesF32().size.toLong())
+                    indexCount = Math.addExact(indexCount, fan.copyIndicesI32().size.toLong())
+                    addQuad()
+                    uniforms += 32L
+                    uniforms += 32L
+                    if (materializesHardMasks && !draw.requestsAntiAlias) {
+                        addQuad()
+                        uniforms += 64L
+                    }
+                }
+            }
+        }
+        return W4dGeneralNativePayloadBudget(vertexFloatCount, indexCount, uniforms.toList())
+    }
+
+    private fun w4dGeneralExactFrameMemory(
+        provisional: PathFillMemoryFootprint,
+        payload: W4dGeneralNativePayloadBudget,
+        capabilities: PlanCapabilitySnapshot,
+    ): PathFillMemoryFootprint? = try {
+        val vertexUsefulBytes = Math.multiplyExact(payload.vertexFloatCount, Float.SIZE_BYTES.toLong())
+        val indexUsefulBytes = Math.multiplyExact(payload.indexCount, Int.SIZE_BYTES.toLong())
+        val alignment = capabilities.minUniformBufferOffsetAlignment.toLong()
+        val uniformUsefulBytes = payload.uniformPayloadBytes.fold(0L, Math::addExact)
+        val uniformReservedBytes = payload.uniformPayloadBytes.fold(0L) { total, bytes ->
+            Math.addExact(total, w4dGeneralAlignUp(bytes, alignment))
+        }
+        val policy = capabilities.bufferAllocationPolicy
+        val vertexCapacityBytes = policy.reserve(PlanScratchBufferKind.Vertex, vertexUsefulBytes) ?: return null
+        val indexCapacityBytes = policy.reserve(PlanScratchBufferKind.Index, indexUsefulBytes) ?: return null
+        val uniformCapacityBytes = policy.reserve(PlanScratchBufferKind.Uniform, uniformReservedBytes) ?: return null
+        if (listOf(vertexCapacityBytes, indexCapacityBytes, uniformCapacityBytes).any { value ->
+                value > Int.MAX_VALUE.toLong()
+            }
+        ) return null
+        val peakBytes = listOf(
+            provisional.targetBytes,
+            provisional.readbackBytes,
+            vertexCapacityBytes,
+            indexCapacityBytes,
+            uniformCapacityBytes,
+            provisional.depthStencilBytes,
+        ).fold(0L, Math::addExact)
+        provisional.copy(
+            vertexUsefulBytes = vertexUsefulBytes,
+            indexUsefulBytes = indexUsefulBytes,
+            uniformStrideBytes = alignment,
+            uniformUsefulBytes = uniformUsefulBytes,
+            vertexCapacityBytes = vertexCapacityBytes,
+            indexCapacityBytes = indexCapacityBytes,
+            uniformCapacityBytes = uniformCapacityBytes,
+            peakBytes = peakBytes,
+        )
+    } catch (_: ArithmeticException) {
+        null
+    } catch (_: IllegalArgumentException) {
+        null
+    }
+
+    private fun w4dGeneralAlignUp(value: Long, alignment: Long): Long {
+        require(value > 0L && alignment > 0L)
+        val remainder = value % alignment
+        return if (remainder == 0L) value else Math.addExact(value, alignment - remainder)
     }
 
     private fun buffersFit(memory: PathFillMemoryFootprint, capabilities: PlanCapabilitySnapshot): Boolean = listOf(

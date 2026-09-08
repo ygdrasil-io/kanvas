@@ -116,9 +116,9 @@ internal class W4dGeneralPathGraphLowerer {
             ?: return invalid("The W4d.2 native uniform slab requires the observed maxBufferSize.")
         val maxDynamicUniformBuffers = limits.maxDynamicUniformBuffersPerPipelineLayout
             ?: return invalid("The W4d.2 native uniform slab requires the observed dynamic-uniform limit.")
-        val uniformPayloadsByPathPass = graph.pathPasses.zip(packets).associate { (pass, built) ->
-            pass.id.value to (preparedAuthority.nativeUniformPayloadFor(pass, built.packet)
-                ?: return invalid("The W4d.2 native uniform payload is absent from the authenticated packet."))
+        val uniformPayloadsByPathPass = graph.pathPasses.associate { pass ->
+            pass.id.value to (preparedAuthority.nativeUniformPayloadFor(pass)
+                ?: return invalid("The W4d.2 native uniform payload is absent from the sealed graph facts."))
         }
         val materializationAuthority = preparedAuthority.bindNativeMaterializationFrame(
             sessionIdentity = session,

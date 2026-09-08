@@ -344,6 +344,260 @@ class GPUWgpu4kCorePrimitiveW4dGeneralFrameTest {
         assertEquals("invalid.preflight.w4d_general_native_authority", refused.diagnostic.code.value)
     }
 
+    @Test
+    fun `hard mask passes write opaque white while binary cover retains each premultiplied color`() {
+        listOf(
+            Triple("green", ColorARGB.fromPackedUInt(0xff00ff00u), listOf(0f, 1f, 0f, 1f)),
+            Triple("black", ColorARGB.fromPackedUInt(0xff000000u), listOf(0f, 0f, 0f, 1f)),
+            Triple(
+                "translucent red",
+                ColorARGB.fromPackedUInt(0x80ff0000u),
+                listOf(128f / 255f, 0f, 0f, 128f / 255f),
+            ),
+        ).forEach { (label, paint, premultiplied) ->
+            val taskList = loweredMixedAaGraph(color = paint).taskList
+            withMaterialized(taskList) { frame, draft, native ->
+                val uniformUpload = native.writeBufferCalls.single { call ->
+                    call.bufferLabel == "Kanvas.session.corePrimitive.framePool.uniforms"
+                }.snapshot
+                val nativeRenders = draft.payload.scopeOperands
+                    .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+                val hardMaskRenders = frame.steps.mapIndexedNotNull { index, step ->
+                    val render = step as? GPUFrameStep.RenderPassStep ?: return@mapIndexedNotNull null
+                    index.takeIf {
+                        render.samplePlan.sampleCount == 1 && render.target != sceneTarget(taskList)
+                    }
+                }
+                assertTrue(hardMaskRenders.isNotEmpty(), "$label must materialize hard-mask producer passes")
+                hardMaskRenders.forEach { sourceStepIndex ->
+                    val nativeRender = nativeRenders.single { it.sourceStepIndex == sourceStepIndex }
+                    val offset = nativeRender.commands
+                        .filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
+                        .single().dynamicOffsets.single().toInt()
+                    assertEquals(
+                        opaqueWhiteUniform32(),
+                        uniformUpload.copyOfRange(offset, offset + 32).toList(),
+                        "$label hard-mask pass must paint binary coverage with opaque white",
+                    )
+                }
+                val consumer = nativeRenders.flatMap { render -> render.commands }
+                    .filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
+                    .single { command ->
+                        command.bindGroup.bindGroup.toString() ==
+                            "Kanvas.session.corePrimitive.framePool.coverageMask.consumerBindGroup"
+                    }
+                val consumerOffset = consumer.dynamicOffsets.single().toInt()
+                assertEquals(
+                    binaryCoverUniform64(premultiplied),
+                    uniformUpload.copyOfRange(consumerOffset, consumerOffset + 64).toList(),
+                    "$label binary color cover must retain the graph premultiplied color",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `AA plus direct hard path materializes its one sample mask without a hard D24 attachment`() {
+        val taskList = loweredMixedAaGraph(hardDirect = true).taskList
+
+        withMaterialized(taskList) { _, _, native ->
+            assertTrue(native.textureDescriptors.any { descriptor ->
+                descriptor.format == GPUTextureFormat.RGBA8UnormSrgb && descriptor.sampleCount == 4u
+            })
+            assertTrue(native.textureDescriptors.any { descriptor ->
+                descriptor.format == GPUTextureFormat.RGBA8Unorm && descriptor.sampleCount == 1u
+            })
+            assertTrue(native.textureDescriptors.none { descriptor ->
+                descriptor.format == GPUTextureFormat.Depth24PlusStencil8 && descriptor.sampleCount == 1u
+            })
+        }
+    }
+
+    @Test
+    fun `disjoint hard mask and D24 bindings materialize through one physical one sample attachment set`() {
+        val taskList = loweredMixedAaGraph(hardDrawCount = 2).taskList
+
+        withMaterialized(taskList) { frame, draft, _ ->
+            val hardMaskSourceSteps = frame.steps.mapIndexedNotNull { index, step ->
+                val render = step as? GPUFrameStep.RenderPassStep ?: return@mapIndexedNotNull null
+                index.takeIf {
+                    render.samplePlan.sampleCount == 1 && render.target != sceneTarget(taskList)
+                }
+            }
+            val nativeByStep = draft.payload.scopeOperands
+                .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+                .associateBy(GPUPreparedNativeScopeOperand.Render::sourceStepIndex)
+            val maskViews = hardMaskSourceSteps.map { index ->
+                requireNotNull(nativeByStep[index]).pass.colorTarget.view
+            }
+            assertTrue(maskViews.size >= 4)
+            assertTrue(maskViews.drop(1).all { view -> view === maskViews.first() })
+            val hardDepthViews = hardMaskSourceSteps.mapNotNull { index ->
+                nativeByStep.getValue(index).pass.depthStencilTarget?.view
+            }
+            assertTrue(hardDepthViews.size >= 4)
+            assertTrue(hardDepthViews.drop(1).all { view -> view === hardDepthViews.first() })
+        }
+    }
+
+    @Test
+    fun `native W4d materialization reserves the graph sealed vertex index and uniform capacities`() {
+        val graph = graph(antiAlias = true, mixedHard = true)
+        val taskList = lower(graph, frameId = 84, recordingId = "w4d-general-capacity-frame").taskList
+
+        withMaterialized(taskList) { _, _, native ->
+            val expectedByRole = graph.resources().associate { resource -> resource.role to resource.byteSize.toULong() }
+            assertEquals(
+                expectedByRole.getValue(org.graphiks.kanvas.gpu.plan.PlanResourceRole.VertexData),
+                native.bufferDescriptors.single { descriptor ->
+                    descriptor.label == "Kanvas.session.corePrimitive.framePool.vertices"
+                }.size,
+            )
+            assertEquals(
+                expectedByRole.getValue(org.graphiks.kanvas.gpu.plan.PlanResourceRole.IndexData),
+                native.bufferDescriptors.single { descriptor ->
+                    descriptor.label == "Kanvas.session.corePrimitive.framePool.indices"
+                }.size,
+            )
+            assertEquals(
+                expectedByRole.getValue(org.graphiks.kanvas.gpu.plan.PlanResourceRole.UniformData),
+                native.bufferDescriptors.single { descriptor ->
+                    descriptor.label == "Kanvas.session.corePrimitive.framePool.uniforms"
+                }.size,
+            )
+        }
+    }
+
+    @Test
+    fun `native W4d materialization reserves cover quad and Uniform64 capacity from the sealed frame graph`() {
+        val graph = graph(
+            antiAlias = true,
+            mixedHard = true,
+            hardDrawCount = 17,
+            hardOffsetStep = 0f,
+        )
+        val taskList = lower(graph, frameId = 85, recordingId = "w4d-general-cover-capacity-frame").taskList
+
+        withMaterialized(taskList) { _, _, native ->
+            val expected = graph.resources().single { resource ->
+                resource.role == org.graphiks.kanvas.gpu.plan.PlanResourceRole.UniformData
+            }.byteSize.toULong()
+            assertTrue(expected > 4_096uL, "cover Uniform64 slots must grow beyond the default pool floor")
+            assertEquals(
+                expected,
+                native.bufferDescriptors.single { descriptor ->
+                    descriptor.label == "Kanvas.session.corePrimitive.framePool.uniforms"
+                }.size,
+            )
+        }
+    }
+
+    private inline fun <T> withMaterialized(
+        taskList: org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList,
+        block: (
+            org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan,
+            GPUPreparedNativeFrameDraft,
+            GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest.NativeProxy,
+        ) -> T,
+    ): T {
+        val frame = GPUFramePlanner.plan(taskList)
+        val prepared = assertIs<GPUFramePreflightResult.Prepared>(
+            preflight(frame, sceneTarget(taskList)),
+        ).frame
+        val native = GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest.NativeProxy()
+        val setup = GPUPreparedSceneSetupTransaction()
+        val target = GPUWgpu4kPreparedSceneTarget.create(
+            native.device,
+            16,
+            16,
+            GPUTextureFormat.RGBA8UnormSrgb,
+            generation,
+            1L,
+            GPUWgpu4kPreparedSceneTargetLifecycle(),
+            setup,
+        )
+        setup.commit()
+        val cache = GPUWgpu4kCorePrimitiveSessionCache(native.device, generation)
+        val materializer = GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
+            native.device,
+            native.queue,
+            target,
+            cache,
+            requireNotNull(capabilities().limits),
+        )
+        var draft: GPUPreparedNativeFrameDraft? = null
+        try {
+            val materialization = materializer.materializeReusable(
+                frame,
+                prepared.encoderPlan,
+                prepared.resources,
+                prepared.generationSeal,
+            )
+            draft = assertIs<GPUPreparedNativeFramePayloadMaterialization.Materialized>(
+                materialization,
+                (materialization as? GPUPreparedNativeFramePayloadMaterialization.Refused)
+                    ?.let { "${it.code}: ${it.message}" }
+                    .orEmpty(),
+            ).draft
+            return block(frame, draft, native)
+        } finally {
+            draft?.let { assertTrue(it.disposeBeforeRegistration()) }
+            materializer.close()
+            cache.close()
+            target.close()
+            if (prepared.claimForRollback()) assertTrue(prepared.rollback.execute().successful)
+        }
+    }
+
+    private fun opaqueWhiteUniform32(): List<Byte> = ByteBuffer.allocate(32)
+        .order(ByteOrder.LITTLE_ENDIAN)
+        .apply {
+            putFloat(16f)
+            putFloat(16f)
+            putFloat(0f)
+            putFloat(0f)
+            putFloat(1f)
+            putFloat(1f)
+            putFloat(1f)
+            putFloat(1f)
+        }
+        .array()
+        .toList()
+
+    private fun binaryCoverUniform64(premultipliedRgba: List<Float>): List<Byte> = ByteBuffer.allocate(64)
+        .order(ByteOrder.LITTLE_ENDIAN)
+        .apply {
+            putFloat(16f)
+            putFloat(16f)
+            putInt(0)
+            putInt(0)
+            putInt(16)
+            putInt(16)
+            putLong(0L)
+            premultipliedRgba.forEach(::putFloat)
+            putInt(0)
+            repeat(12) { put(0) }
+        }
+        .array()
+        .toList()
+
+    private fun lower(
+        graph: RenderGraph,
+        frameId: Long,
+        recordingId: String,
+    ): GpuPlanLoweringResult.Lowered = assertIs(
+        GpuPlanTaskListLowerer().lower(
+            GpuPlanLoweringRequest(
+                graph = graph,
+                capabilities = capabilities(),
+                deviceGeneration = generation,
+                currentBudget = graph.budget,
+                frameId = GPUFrameID(frameId),
+                recordingId = GPURecordingID(recordingId),
+            ),
+        ),
+    )
+
     private fun sceneTarget(
         taskList: org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList,
     ): GPUFrameTargetRef = requireNotNull(
@@ -528,27 +782,30 @@ class GPUWgpu4kCorePrimitiveW4dGeneralFrameTest {
         )
     }
 
-    private fun loweredMixedAaGraph(): GpuPlanLoweringResult.Lowered {
-        val graph = graph(antiAlias = true, mixedHard = true)
-        val lowered =
-            GpuPlanTaskListLowerer().lower(
-                GpuPlanLoweringRequest(
-                    graph = graph,
-                    capabilities = capabilities(),
-                    deviceGeneration = generation,
-                    currentBudget = graph.budget,
-                    frameId = GPUFrameID(83),
-                    recordingId = GPURecordingID("w4d-general-mixed-frame"),
-                ),
-            )
-        return assertIs(
-            lowered,
-            (lowered as? GpuPlanLoweringResult.InvalidPlan)?.diagnostic?.message.orEmpty(),
-        )
-    }
+    private fun loweredMixedAaGraph(
+        color: ColorARGB = ColorARGB.fromPackedUInt(0xc0ff0000u),
+        hardDirect: Boolean = false,
+        hardDrawCount: Int = 1,
+    ): GpuPlanLoweringResult.Lowered = lower(
+        graph(
+            antiAlias = true,
+            mixedHard = true,
+            color = color,
+            hardDirect = hardDirect,
+            hardDrawCount = hardDrawCount,
+        ),
+        frameId = 83,
+        recordingId = "w4d-general-mixed-frame",
+    )
 
-    private fun graph(antiAlias: Boolean, mixedHard: Boolean = false): RenderGraph {
-        val color = ColorARGB.fromPackedUInt(0xc0ff0000u)
+    private fun graph(
+        antiAlias: Boolean,
+        mixedHard: Boolean = false,
+        color: ColorARGB = ColorARGB.fromPackedUInt(0xc0ff0000u),
+        hardDirect: Boolean = false,
+        hardDrawCount: Int = 1,
+        hardOffsetStep: Float = 1f,
+    ): RenderGraph {
         val scene = SceneSnapshot.of(
             SceneExtent(16, 16),
             ColorSpace.SRGB,
@@ -584,12 +841,18 @@ class GPUWgpu4kCorePrimitiveW4dGeneralFrameTest {
                         ),
                     ),
                 ),
-            ) + if (mixedHard) listOf(
+            ) + if (mixedHard) List(hardDrawCount) { hardIndex ->
+                val offset = hardIndex.toFloat() * hardOffsetStep
                 SceneCommand.Draw(
                     DrawNode(
                         geometry = GeometryNode.Path(
-                            PathBuilder().moveTo(3f, 3f).lineTo(12f, 3f).lineTo(12f, 12f)
-                                .lineTo(8f, 7f).lineTo(3f, 12f).close().build(),
+                            if (hardDirect) {
+                                PathBuilder().moveTo(3f + offset, 3f).lineTo(12f, 3f)
+                                    .lineTo(3f + offset, 12f).close().build()
+                            } else {
+                                PathBuilder().moveTo(3f + offset, 3f).lineTo(12f, 3f).lineTo(12f, 12f)
+                                    .lineTo(8f + offset, 7f).lineTo(3f + offset, 12f).close().build()
+                            },
                         ),
                         material = MaterialNode.Solid(color),
                         coverage = CoverageRequest.HARD_EDGE,
@@ -615,8 +878,8 @@ class GPUWgpu4kCorePrimitiveW4dGeneralFrameTest {
                             antiAlias = false,
                         ),
                     ),
-                ),
-            ) else emptyList(),
+                )
+            } else emptyList(),
         )
         val compiler = W4dGeneralPathPlanCompiler()
         val candidate = assertIs<GpuPlanSelection.Candidate>(

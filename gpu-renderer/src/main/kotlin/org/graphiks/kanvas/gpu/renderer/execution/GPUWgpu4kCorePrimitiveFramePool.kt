@@ -255,7 +255,8 @@ internal data class GPUWgpu4kCorePrimitiveFramePoolRequirements(
             "CorePrimitive frame slots require one or four samples"
         }
         val isW4dGeneralMixedAttachmentSet = sampleCount == 4 && msaaColor != null &&
-            pathDepthStencil?.sampleCount == 4 && clipDepthStencil?.sampleCount == 1 &&
+            pathDepthStencil?.sampleCount == 4 &&
+            (clipDepthStencil == null || clipDepthStencil.sampleCount == 1) &&
             coverageMask?.sampleCount == 1 &&
             componentIdentity == PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY &&
             componentIdentities.all { identity ->
