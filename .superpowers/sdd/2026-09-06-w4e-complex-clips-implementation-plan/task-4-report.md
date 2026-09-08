@@ -83,3 +83,18 @@ BUILD SUCCESSFUL.
 rtk git diff --check
 No output; clean.
 ```
+
+## Fix round 4/5
+
+- Replaced the aggregated AA4 mutation test with nine named public contracts: nested mask consumer without a producer graph, producer without a consumer, exact final-consumer lifetime, stencil semantic role, D24S8 format, sample count, extent, color-output aliasing, and writer-to-consumer dependency.
+- The fixtures use the smallest single-sample clip-mask or stencil inputs needed for each rejection. They do not inspect source shape, private state, reflection, or call counts, and no generic AA4 phase is used to establish the mask, producer, lifetime, or dependency failures.
+- The wrong-format state is rejected at `PlanResource.of`, the public factory that makes a non-D24S8 depth-stencil attachment unrepresentable. The alias guard was moved before role/format resolution; accepted graphs are unchanged, while the public graph rejection is now reached before typed-resource validation masks it.
+- Temporary single-guard mutations made the dedicated tests fail as intended for nested traversal, producer consumerhood, exact lifetime, semantic role, format, and writer dependency. Sample count, extent, and alias inputs reach their dedicated guard first; if that guard is removed, the existing `validateStencilAtomicContracts` later rejects the standalone legacy depth resource. We deliberately did not broaden legacy clip-stencil graph admission or add a new public failure-reason API merely to bypass that existing contract.
+
+```text
+rtk ./gradlew :gpu-plan:test --tests '*RenderGraphContractTest*nested mask consumer*' --tests '*RenderGraphContractTest*clip mask producer requires a consumer*' --tests '*RenderGraphContractTest*clip accumulator lifetime*' --tests '*RenderGraphContractTest*clip stencil requires the depth stencil semantic role*' --tests '*RenderGraphContractTest*depth stencil attachments require*' --tests '*RenderGraphContractTest*clip stencil sample count*' --tests '*RenderGraphContractTest*clip stencil extent*' --tests '*RenderGraphContractTest*clip stencil cannot alias*' --tests '*RenderGraphContractTest*clip mask writer requires*'
+BUILD SUCCESSFUL — 9 focused contracts passed.
+
+rtk ./gradlew :gpu-plan:test --rerun-tasks
+BUILD SUCCESSFUL.
+```

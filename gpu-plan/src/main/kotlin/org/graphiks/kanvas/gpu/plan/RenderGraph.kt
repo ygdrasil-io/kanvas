@@ -464,6 +464,15 @@ public class RenderGraph private constructor(
             } }
             passes.forEach { pass -> pass.clipStrategies().flatMap { it.allStrategies() }
                 .filterIsInstance<ClipPlanStrategy.Stencil>().forEach { stencil ->
+                when (pass) {
+                    is PlanPass.RenderPass -> require(pass.target != stencil.depthStencil) {
+                        "Clip stencil cannot alias color target"
+                    }
+                    is PlanPass.PathRenderPass -> require(pass.target != stencil.depthStencil) {
+                        "Clip stencil cannot alias color target"
+                    }
+                    else -> Unit
+                }
                 val resource = requireNotNull(resourcesById[stencil.depthStencil]) { "Clip stencil resource is unknown" }
                 val expectedSampleCount = when (pass) {
                     is PlanPass.RenderPass -> 1
@@ -476,11 +485,6 @@ public class RenderGraph private constructor(
                     resource.sampleCountI32 == expectedSampleCount &&
                     PlanResourceUsage.DepthStencilAttachment in resource.usages()) {
                     "Clip stencil requires a matching D24S8 depth-stencil resource"
-                }
-                when (pass) {
-                    is PlanPass.RenderPass -> require(pass.target != stencil.depthStencil) { "Clip stencil cannot alias color target" }
-                    is PlanPass.PathRenderPass -> require(pass.target != stencil.depthStencil) { "Clip stencil cannot alias color target" }
-                    else -> Unit
                 }
             } }
             if (!usesClipMasks) {
