@@ -29,3 +29,7 @@ GREEN:
 The public Picture proof restores the bytes then replays the restored Picture onto the target Canvas.  This preserves a top-level Rect so the W5a Rect capability, rather than unsupported DrawPicture composition, owns the render.
 
 No font, codec, GM, Skia integration, dashboard, baseline or JPEG work was included.  The W5a slice is deliberately only Solid/Opacity integral Rect + SrcOver; broader shader graphs remain outside this capability.
+
+## Commit
+
+`0fd7f753372e7098aac3fc9d89805b2f69434bd6` — `feat: add W5a solid opacity material plan`.
