@@ -525,6 +525,7 @@ internal class W4dGeneralPathGraphLowerer {
     private fun fillGeometry(geometry: PathDrawGeometry): PathFillGeometryF32 = when (geometry) {
         is PathDrawGeometry.Fill -> geometry.valueF32
         is PathDrawGeometry.Stroke -> geometry.valueF32.copyFillGeometryF32()
+        is PathDrawGeometry.InverseDomainSource -> error("W4d.2 cannot lower W4e inverse-domain source geometry")
         PathDrawGeometry.Empty -> error("W4d.2 cannot lower W4e inverse-domain empty geometry")
     }
 

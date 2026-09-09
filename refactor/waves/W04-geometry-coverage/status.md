@@ -297,6 +297,39 @@ W4c ne contient aucun chemin `font`, `codec`, GM, dashboard, render/baseline ou
 
 Pour les RRect non nuls, la SDF native n'est pas l'aire analytique Skia exacte. Cette dette est explicitement réservée à W7 : un nouveau shader ne pourra être envisagé qu'après une divergence matérielle constatée par l'intégration Skia. Il est interdit de la masquer par une tolérance, un seuil plus bas ou une rebaseline.
 
+## Correctif W4e Task 7 — 2026-09-09
+
+Le scellement W4e distingue désormais le `SceneTarget` canonique 1× du
+`LayerTarget` couleur MSAA 4× ; les masks hard et les scratchs clip conservent
+`ClipMask`, et les familles D24S8 restent séparées. Le preflight,
+matérialiseur et executor refusent toute continuation AA ou resolve dont les
+rôles scellés sont contradictoires.
+
+`InverseDomain.Zero` remplace le proxy W4d.2 par un snapshot exact du chemin
+source non vide (segments et transform, inclus dans le digest canonique) ; seul
+un chemin source réellement vide devient `Empty`, et les deux variantes sont
+D24-free. Les tests couvrent ces faits au lowering public.
+
+La matrice d'échecs W4e utilise désormais `GPUW4eFrameFailureBehavior` à
+travers la session publique compiler → lowerer → preflight/materializer →
+executor → completion/readback. Allocation, pipeline, bind group, encoder et
+close refusent sans output/encoder scopes partiels, puis une exécution propre
+retrouve le readback. Les anciens tests W4e à faux matérialiseur et rollback de
+pool isolé ont été retirés.
+
+Validation fraîche : `rtk ./gradlew :gpu-plan:test --rerun-tasks --console=plain`
+a terminé avec `BUILD SUCCESSFUL` le 2026-09-09 (32 tâches exécutées). Les
+gates renderer ciblées ont aussi passé ; les scénarios WGPU dépendants de
+l'adaptateur natif restent explicitement `SKIPPED` lorsque cet adaptateur n'est
+pas disponible.
+
+La gate complète `rtk ./gradlew :gpu-renderer:test --rerun-tasks --console=plain`
+a ensuite exécuté 3 775 tests. Elle reste rouge sur 15 échecs préexistants,
+hors W4e (smoke runtime natif, inventaires de pipelines, matériaux, règles de
+package et contrats image) ; les suites W4e ciblées demeurent vertes. Aucun de
+ces échecs ne concerne les rôles W4e, la restauration `InverseDomain.Zero` ou
+la matrice d'échecs publique.
+
 ## Limites ouvertes
 
 W4 reste ouverte. W4d.2 laisse explicitement :

@@ -104,7 +104,7 @@ internal class W4eClipGraphLowerer {
                 refs.getValue(targetId.value) as? GPUFrameTargetRef ?: return invalid(),
                 org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan(loadLabel(pass), org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan.Store),
                 if (samples == 4) GPUSamplePlan.MultisampleFrame(4) else GPUSamplePlan.SingleSampleFrame,
-                resourceUses = resourceUses(pass, refs, consumer, preparedPath),
+                resourceUses = resourceUses(pass, refs, graph.resources().associateBy { it.id.value }, consumer, preparedPath),
                 drawPackets = listOf(packet),
                 batchEligibilityByPacketId = mapOf(packet.packetId to GPUPassBatchEligibility(
                     kind = GPUPassBatchKind.SolidFill,
@@ -260,6 +260,7 @@ internal class W4eClipGraphLowerer {
     private fun resourceUses(
         pass: PlanPass,
         refs: Map<String, GPUFrameResourceRef>,
+        resourcesById: Map<String, PlanResource>,
         consumer: GPUW4ePreparedClipConsumerAuthority?,
         preparedPath: GPUW4ePreparedClipPassAuthority.Path?,
     ): List<GPUFrameResourceUse> {
@@ -285,7 +286,10 @@ internal class W4eClipGraphLowerer {
                 // The W4e MSAA scene attachment is a real sealed render target.  It must be
                 // present in the exact use list (as well as the final 1x resolve) so preflight
                 // and native materialization cannot manufacture an unaccounted attachment.
-                add(use(path.targetResourceId, GPUFrameResourceRole.SceneTarget, GPUFrameResourceUsage.RenderAttachment, true))
+                val targetRole = sealedRoleFor(requireNotNull(resourcesById[path.targetResourceId]) {
+                    "W4e path target must reference a declared resource"
+                })
+                add(use(path.targetResourceId, targetRole, GPUFrameResourceUsage.RenderAttachment, true))
                 add(use(path.vertexResourceId, GPUFrameResourceRole.VertexData, GPUFrameResourceUsage.Vertex, false))
                 add(use(path.indexResourceId, GPUFrameResourceRole.IndexData, GPUFrameResourceUsage.Index, false))
                 add(use(path.uniformResourceId, GPUFrameResourceRole.UniformData, GPUFrameResourceUsage.Uniform, false))
@@ -314,10 +318,9 @@ internal class W4eClipGraphLowerer {
         }
     }
 
-    private fun preparation(resource: PlanResource, ref: GPUFrameResourceRef, bounds: GPUPixelBounds, alignment: Long): GPUResourcePreparationRequest {
-        val role = when (resource.role) {
+    private fun sealedRoleFor(resource: PlanResource): GPUFrameResourceRole = when (resource.role) {
             PlanResourceRole.LogicalTarget -> GPUFrameResourceRole.SceneTarget
-            PlanResourceRole.MultisampleColorTarget -> GPUFrameResourceRole.SceneTarget
+            PlanResourceRole.MultisampleColorTarget -> GPUFrameResourceRole.LayerTarget
             PlanResourceRole.ReadbackStaging -> GPUFrameResourceRole.ReadbackStaging
             PlanResourceRole.CoverageMaskDepthStencil -> GPUFrameResourceRole.ClipDepthStencil
             PlanResourceRole.DepthStencil, PlanResourceRole.PathHardEdgeDepthStencil -> GPUFrameResourceRole.PathDepthStencil
@@ -326,6 +329,9 @@ internal class W4eClipGraphLowerer {
             PlanResourceRole.UniformData -> GPUFrameResourceRole.UniformData
             else -> GPUFrameResourceRole.ClipMask
         }
+
+    private fun preparation(resource: PlanResource, ref: GPUFrameResourceRef, bounds: GPUPixelBounds, alignment: Long): GPUResourcePreparationRequest {
+        val role = sealedRoleFor(resource)
         val usages = resource.usages().map { usage -> when (usage) {
             PlanResourceUsage.RenderAttachment, PlanResourceUsage.DepthStencilAttachment -> GPUFrameResourceUsage.RenderAttachment
             PlanResourceUsage.Sampled -> GPUFrameResourceUsage.TextureBinding

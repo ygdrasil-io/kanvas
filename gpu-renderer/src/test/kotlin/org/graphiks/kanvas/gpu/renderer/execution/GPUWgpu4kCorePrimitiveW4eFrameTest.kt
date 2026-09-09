@@ -3,7 +3,9 @@ package org.graphiks.kanvas.gpu.renderer.execution
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.graphiks.kanvas.color.ColorSpace
@@ -50,6 +52,70 @@ import org.graphiks.math.matrix.Matrix3x3F32
 
 /** Native public behavior proof for the sealed W4e materializer route. */
 class GPUWgpu4kCorePrimitiveW4eFrameTest {
+    @Test
+    fun `public W4e failure behavior rolls back each phase and recovers readback`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null, "wgpu4k native adapter unavailable; skipping W4e public failure matrix")
+        backend!!
+        try {
+            val capabilities = requireNotNull(backend.capabilities)
+            val scene = maskPipelineScene()
+            val planCapabilities = (capabilities.toPlanCapabilitySnapshot(backend.deviceGeneration) as? GpuPlanCapabilityAdapterResult.Supported)
+                ?.snapshot
+            assumeTrue(planCapabilities != null, "native adapter lacks the W4e planning capability inventory")
+            val compiler = W4eClipPlanCompiler()
+            val candidate = compiler.select(scene, RenderTargetDescriptor(scene.extent, scene.colorSpace)) as? GpuPlanSelection.Candidate
+            assumeTrue(candidate != null, "native adapter cannot admit the W4e failure-matrix scene")
+            val graph = (compiler.plan(candidate!!.candidate, planCapabilities!!, PlanBudget(1L shl 20)) as? RenderPlanResult.Ready)
+                ?.plan
+            assumeTrue(graph != null, "native adapter cannot materialize the W4e failure-matrix inventory")
+            val taskList = assertIs<GpuPlanLoweringResult.Lowered>(GpuPlanTaskListLowerer().lower(
+                GpuPlanLoweringRequest(
+                    graph = graph!!,
+                    capabilities = capabilities,
+                    deviceGeneration = backend.deviceGeneration,
+                    currentBudget = graph!!.budget,
+                    frameId = GPUFrameID(71_100L),
+                    recordingId = GPURecordingID("w4e.public.failure-matrix"),
+                ),
+            )).taskList
+            val readbackId = GPUReadbackRequestID("w4e.${graph!!.id.value}.readback")
+            val target = GPUOffscreenTargetRequest(16, 16, GPUColorFormat.RGBA8UnormSrgb, GPUColorInterpretation.LinearPremul)
+
+            listOf(
+                GPUW4eFrameFailurePoint.Allocation,
+                GPUW4eFrameFailurePoint.Pipeline,
+                GPUW4eFrameFailurePoint.BindGroup,
+                GPUW4eFrameFailurePoint.Encoder,
+            ).forEach { point ->
+                val session = backend.prepareSceneFrameSession(target, OneShotW4eFailure(point))
+                try {
+                    val failed = await(session, taskList, readbackId)
+                    assertTrue(failed.outcome != GPUFrameStructuralOutcome.Succeeded, point.name)
+                    assertNull(failed.output, "$point must not publish a partial readback")
+                    assertTrue(failed.encodedScopeKinds.isEmpty(), "$point must not publish partial encoder scopes")
+                    val recovered = await(session, taskList, readbackId)
+                    assertEquals(GPUFrameStructuralOutcome.Succeeded, recovered.outcome, "$point must leave the pool and lease reusable")
+                    assertIs<GPUSceneFrameOutput.ReadbackRgba>(recovered.output)
+                } finally {
+                    session.close()
+                }
+            }
+
+            val closeSession = backend.prepareSceneFrameSession(target, OneShotW4eFailure(GPUW4eFrameFailurePoint.Close))
+            assertEquals(GPUFrameStructuralOutcome.Succeeded, await(closeSession, taskList, readbackId).outcome)
+            assertFailsWith<IllegalStateException> { closeSession.close() }
+            closeSession.close()
+            val recoveredSession = backend.prepareSceneFrameSession(target)
+            try {
+                assertEquals(GPUFrameStructuralOutcome.Succeeded, await(recoveredSession, taskList, readbackId).outcome)
+            } finally {
+                recoveredSession.close()
+            }
+        } finally {
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
     @Test
     fun `public W4e mask initialize producer and fold reach readback`() {
         val terminal = renderNativeFrame(maskPipelineScene(), frameIdValue = 71_003L)
@@ -261,4 +327,22 @@ class GPUWgpu4kCorePrimitiveW4eFrameTest {
 
     private fun alphaAt(bytes: ByteArray, x: Int, y: Int): Int =
         bytes[(y * 16 + x) * 4 + 3].toInt() and 0xff
+
+    private fun await(
+        session: GPUPreparedSceneFrameSession,
+        taskList: org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList,
+        readbackId: GPUReadbackRequestID,
+    ): GPUPreparedSceneCompletedFrameResult = session.renderFrame(
+        taskList,
+        GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
+    ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+
+    private class OneShotW4eFailure(
+        private val point: GPUW4eFrameFailurePoint,
+    ) : GPUW4eFrameFailureBehavior {
+        private var pending: Boolean = true
+
+        override fun shouldFail(point: GPUW4eFrameFailurePoint): Boolean =
+            pending && point == this.point && run { pending = false; true }
+    }
 }

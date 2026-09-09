@@ -865,6 +865,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
     private val limits: GPULimits,
     private val coverageMaskProducerMaterializer: GPUWgpu4kCoverageMaskProducerMaterializerPort =
         GPUWgpu4kCoverageMaskProducerMaterializer(queue, sessionCache, limits),
+    private val w4eFailureBehavior: GPUW4eFrameFailureBehavior = GPUW4eFrameFailureBehavior.None,
     private val onDestinationSnapshotCreated: () -> Unit = {},
 ) : GPUPreparedNativeFramePayloadMaterializer, AutoCloseable {
     private val preRegistrationHandles = GPUPreRegistrationNativeHandleLedger()
@@ -2545,6 +2546,14 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         renderSteps: List<GPUFrameStep.RenderPassStep>,
     ): GPUPreparedNativeFramePayloadMaterialization {
         class Refusal(val code: String, val detail: String) : RuntimeException(detail)
+        fun inject(point: GPUW4eFrameFailurePoint) {
+            if (w4eFailureBehavior.shouldFail(point)) {
+                throw Refusal(
+                    "failed.native-core-primitive.w4e-injected-${point.name.lowercase()}",
+                    "Injected public W4e ${point.name.lowercase()} failure.",
+                )
+            }
+        }
         data class Entry(val index: Int, val render: GPUFrameStep.RenderPassStep, val scope: GPUCommandEncoderScopePlan, val packet: GPUDrawPacket)
         val entries = framePlan.steps.mapIndexedNotNull { index, step ->
             val render = step as? GPUFrameStep.RenderPassStep ?: return@mapIndexedNotNull null
@@ -2607,7 +2616,10 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             path.phase in hardStencilPathPhases
         }.mapNotNull(org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipPassAuthority.Path::depthStencilResourceId).distinct()
         val scenePathDepthIds = preparedPaths.filter { path ->
-            requests[path.targetResourceId]?.role == GPUFrameResourceRole.SceneTarget
+            requests[path.targetResourceId]?.role in setOf(
+                GPUFrameResourceRole.SceneTarget,
+                GPUFrameResourceRole.LayerTarget,
+            )
         }.mapNotNull(org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipPassAuthority.Path::depthStencilResourceId).distinct()
         val consumerMaskIds = entries.mapNotNull { entry -> when (val consumer = entry.packet.w4ePreparedClipConsumer) {
             is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.Mask -> consumer.maskResourceId
@@ -2629,10 +2641,13 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         }
         hardPathMaskIds.forEach { id -> requireRole(id, GPUFrameResourceRole.ClipMask, "hard path mask") }
         hardPathDepthIds.forEach { id -> requireRole(id, GPUFrameResourceRole.PathDepthStencil, "hard path depth") }
-        preparedPaths.filter { path -> requests[path.targetResourceId]?.role == GPUFrameResourceRole.SceneTarget }.forEach { path ->
+        preparedPaths.filter { path -> requests[path.targetResourceId]?.role in setOf(
+            GPUFrameResourceRole.SceneTarget,
+            GPUFrameResourceRole.LayerTarget,
+        ) }.forEach { path ->
             path.depthStencilResourceId?.let { id -> requireRole(id, GPUFrameResourceRole.PathDepthStencil, "scene path depth") }
         }
-        sceneMsaaIds.forEach { id -> requireRole(id, GPUFrameResourceRole.SceneTarget, "scene MSAA color") }
+        sceneMsaaIds.forEach { id -> requireRole(id, GPUFrameResourceRole.LayerTarget, "scene MSAA color") }
         preparedPaths.filter { path -> path.phase in hardPathPhases }.forEach { path ->
             requireRole(path.targetResourceId, GPUFrameResourceRole.ClipMask, "hard path target")
         }
@@ -2782,12 +2797,19 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                         "W4e $lane D24S8 $resourceId does not match its sealed path sample count.",
                     )
                 }
-                val expectedTargetRole = if (lane == "scene") {
-                    GPUFrameResourceRole.SceneTarget
+                if (lane == "scene") {
+                    val targetRole = requireNotNull(requests[targetId]) {
+                        "W4e scene D24S8 target must be prepared"
+                    }.role
+                    if (targetRole !in setOf(GPUFrameResourceRole.SceneTarget, GPUFrameResourceRole.LayerTarget)) {
+                        throw Refusal(
+                            "invalid.native-core-primitive.w4e-resource-role",
+                            "W4e scene D24S8 target $targetId has role $targetRole, not SceneTarget or LayerTarget.",
+                        )
+                    }
                 } else {
-                    GPUFrameResourceRole.ClipMask
+                    requireRole(targetId, GPUFrameResourceRole.ClipMask, "$lane D24S8 target")
                 }
-                requireRole(targetId, expectedTargetRole, "$lane D24S8 target")
                 return GPUWgpu4kCorePrimitiveClipDepthStencilRequirement(
                     value.second.logicalBounds.width,
                     value.second.logicalBounds.height,
@@ -2907,6 +2929,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 sceneColorResourceIds = sceneMsaaTextures.map { value -> value.first.diagnosticLabel },
                 sceneColorRequirements = sceneMsaaTextures.map(::sceneMsaaRequirement),
             )
+            inject(GPUW4eFrameFailurePoint.Allocation)
             lease = when (val checkout = sessionCache.acquireW4eAttachments(generationSeal.deviceGeneration, requirements)) {
                 is GPUWgpu4kW4eAttachmentPoolCheckout.Acquired -> checkout.lease
                 is GPUWgpu4kW4eAttachmentPoolCheckout.Refused -> throw Refusal("failed.native-core-primitive.w4e-attachment-allocation", "W4e attachment pool refused $checkout.")
@@ -2914,6 +2937,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             val attachments = requireNotNull(lease).handles
             val owned = GPUW4eNativeOwnedHandles()
             nativeOwned = owned
+            inject(GPUW4eFrameFailurePoint.Pipeline)
             val clearPipelines = mutableMapOf<Float, GPURenderPipeline>()
             val producerPipelines = mutableMapOf<Int, GPUW4eNativePipeline>()
             val foldPipelines = mutableMapOf<org.graphiks.kanvas.gpu.plan.ClipCombineOperation, GPUW4eNativePipeline>()
@@ -3172,7 +3196,10 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                             .GPUW4ePreparedClipConsumerAuthority.InverseDomain &&
                             consumer.interiorCoverage is org.graphiks.kanvas.gpu.renderer.passes
                                 .GPUW4ePreparedInverseInteriorCoverage.Zero &&
-                            sealedPath.copyGeometry() !is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Empty
+                            sealedPath.copyGeometry().let { geometry ->
+                                geometry is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Fill ||
+                                    geometry is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Stroke
+                            }
                         if (consumer !is org.graphiks.kanvas.gpu.renderer.passes
                                 .GPUW4ePreparedClipConsumerAuthority.InverseDomain &&
                             phase == org.graphiks.kanvas.gpu.plan.PathRenderPhase.HardEdgeMaskProducer
@@ -3180,6 +3207,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                             val fillGeometry = when (val geometry = sealedPath.copyGeometry()) {
                                 is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Fill -> geometry.valueF32
                                 is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Stroke -> geometry.valueF32.copyFillGeometryF32()
+                                is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.InverseDomainSource,
                                 org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Empty -> throw Refusal(
                                     "invalid.native-core-primitive.w4e-path",
                                     "Only an inverse-domain consumer may carry empty W4e path geometry.",
@@ -3234,6 +3262,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                             val fillGeometry = when (val geometry = sealedPath.copyGeometry()) {
                                 is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Fill -> geometry.valueF32
                                 is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Stroke -> geometry.valueF32.copyFillGeometryF32()
+                                is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.InverseDomainSource,
                                 org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Empty -> throw Refusal(
                                     "invalid.native-core-primitive.w4e-path",
                                     "Only an inverse-domain consumer may carry empty W4e path geometry.",
@@ -3470,7 +3499,10 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                                 "W4e inverse-domain consumer requires its sealed path authority."
                             }
                             val color = inversePath.color
-                            val hasSourceGeometry = inversePath.copyGeometry() !is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Empty
+                            val hasSourceGeometry = inversePath.copyGeometry().let { geometry ->
+                                geometry is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Fill ||
+                                    geometry is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Stroke
+                            }
                             val pathSampleCount = if (inversePath.sample == org.graphiks.kanvas.gpu.plan.SamplePlan.Multisample4) 4 else 1
                             val width = preparedSceneTarget.width.toFloat()
                             val height = preparedSceneTarget.height.toFloat()
@@ -3605,6 +3637,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                                         source.valueF32.copyDirectTriangleF32OrNull()
                                     is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Stroke ->
                                         source.valueF32.copyFillGeometryF32().copyDirectTriangleF32OrNull()
+                                    is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.InverseDomainSource,
                                     org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Empty -> null
                                 }
                                 val (pipeline, bindGroup, commands) = if (sourceDirect == null && !hasSourceGeometry) {
@@ -3778,11 +3811,9 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                         val directGeometry = when (val geometry = path.copyGeometry()) {
                             is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Fill -> geometry.valueF32
                             is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Stroke -> geometry.valueF32.copyFillGeometryF32()
-                            org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Empty -> throw Refusal(
-                                "invalid.native-core-primitive.w4e-path",
-                                "Only an inverse-domain consumer may carry empty W4e path geometry.",
-                            )
-                        }.copyDirectTriangleF32OrNull()
+                            is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.InverseDomainSource,
+                            org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Empty -> null
+                        }?.copyDirectTriangleF32OrNull()
                         val pathSampleCount = if (path.sample == org.graphiks.kanvas.gpu.plan.SamplePlan.Multisample4) 4 else 1
                         val hardBinaryCover = path.phase == org.graphiks.kanvas.gpu.plan.PathRenderPhase.HardEdgeBinaryColorCover
                         val directPath = directGeometry != null && !hardBinaryCover
@@ -3873,6 +3904,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             } catch (failure: IllegalArgumentException) {
                 throw IllegalArgumentException("W4e scope ${entry.packet.passId} is not a closed native draw group: ${failure.message}", failure)
             } }
+            inject(GPUW4eFrameFailurePoint.BindGroup)
             val staging = device.createBuffer(BufferDescriptor(output.stagingLease.backingBufferBytes.toULong(), GPUBufferUsage.MapRead or GPUBufferUsage.CopyDst, false, "Kanvas.frame.w4e.readback")).tracked()
             val readbackOperand = GPUPreparedNativeScopeOperand.Readback(readbackScope.sourceStepIndex,
                 GPUPreparedNativeTextureOperand(sceneTexture, generationSeal.deviceGeneration),

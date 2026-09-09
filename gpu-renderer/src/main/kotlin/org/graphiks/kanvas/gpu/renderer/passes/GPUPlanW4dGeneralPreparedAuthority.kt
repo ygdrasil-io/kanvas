@@ -865,6 +865,7 @@ internal class W4dGeneralNativeFrameResourceSeal private constructor(
             val geometry = when (val value = pass.draw.copyPathGeometry()) {
                 is PathDrawGeometry.Fill -> value.valueF32
                 is PathDrawGeometry.Stroke -> value.valueF32.copyFillGeometryF32()
+                is PathDrawGeometry.InverseDomainSource -> error("W4d.2 prepared authority cannot consume W4e inverse-domain source geometry")
                 PathDrawGeometry.Empty -> error("W4d.2 prepared authority cannot consume W4e inverse-domain geometry")
             }
             return when (pass.phase) {

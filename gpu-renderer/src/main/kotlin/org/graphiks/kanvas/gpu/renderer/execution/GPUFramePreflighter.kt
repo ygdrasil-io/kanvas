@@ -319,7 +319,7 @@ internal class GPUFramePreflighter(
                 val path = render.drawPackets.single().w4ePreparedPath ?: return@firstOrNull true
                 val sealedSceneTarget = render.resourceUses.singleOrNull { use ->
                     use.referencesW4eLogicalResource(continuation.sceneTargetResourceId) &&
-                        use.role == GPUFrameResourceRole.SceneTarget &&
+                        use.role == GPUFrameResourceRole.LayerTarget &&
                         use.usage == GPUFrameResourceUsage.RenderAttachment && use.write
                 }?.let { use -> texturePreparations[use.resource]?.let { descriptor ->
                         descriptor.format == GPUColorFormat.RGBA8UnormSrgb && descriptor.sampleCount == 4
@@ -353,12 +353,14 @@ internal class GPUFramePreflighter(
                     org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseDomain
                     ?: return@firstOrNull false
                 when (inverse.interiorCoverage) {
-                    org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage.Zero ->
-                        // Only an actually empty source is a domain cover.  A non-empty source
-                        // remains sealed and may require its normal path D24S8 path phase.
-                        path.copyGeometry() is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Empty &&
-                            (path.depthStencilResourceId != null ||
-                                render.resourceUses.any { use -> use.role == GPUFrameResourceRole.PathDepthStencil })
+                    org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage.Zero -> {
+                        // A zero finite interior is always D24-free.  The two legal sealed forms
+                        // distinguish an actual empty source from its exact non-empty source fact.
+                        path.copyGeometry() !is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Empty &&
+                            path.copyGeometry() !is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.InverseDomainSource ||
+                            path.depthStencilResourceId != null ||
+                            render.resourceUses.any { use -> use.role == GPUFrameResourceRole.PathDepthStencil }
+                    }
                     is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage.Geometry -> {
                         val depthId = path.depthStencilResourceId ?: return@firstOrNull true
                         val expectedSampleCount = if (path.sample == org.graphiks.kanvas.gpu.plan.SamplePlan.Multisample4) 4 else 1
@@ -378,7 +380,7 @@ internal class GPUFramePreflighter(
                 return GPUFramePreflightResult.Refused(
                     diagnostic(
                         "invalid.preflight.w4e_inverse_domain_depth",
-                        "W4e inverse-domain zero has no D24S8 attachment; finite interior geometry must declare its exact scene D24S8 attachment.",
+                        "W4e inverse-domain zero must retain its sealed source form without a D24S8 attachment; finite interior geometry must declare its exact scene D24S8 attachment.",
                     ),
                 )
             }
@@ -3534,6 +3536,11 @@ internal class GPUFramePreflighter(
                 render.sampleContinuation != null ||
                     !render.target.referencesW4eLogicalResource(continuation.sceneTargetResourceId) ||
                     continuation.sceneTargetResourceId != sceneTarget ||
+                    render.resourceUses.singleOrNull { use ->
+                        use.referencesW4eLogicalResource(continuation.sceneTargetResourceId) &&
+                            use.role == GPUFrameResourceRole.LayerTarget &&
+                            use.usage == GPUFrameResourceUsage.RenderAttachment && use.write
+                    } == null ||
                     render.loadStore.storePlan != GPUStorePlan.Store
             }
         ) return refused("W4e scene continuation target, generic authority, or store state was substituted.")
@@ -3548,6 +3555,18 @@ internal class GPUFramePreflighter(
             org.graphiks.kanvas.gpu.renderer.passes.GPUW4eSceneResolveAction.ResolveCanonical ||
             continuations.last().resolveSceneResourceId == null
         ) return refused("Only the final sealed W4e scene scope may resolve the canonical target.")
+        val final = msaa.last()
+        val finalResolve = requireNotNull(continuations.last().resolveSceneResourceId)
+        if (final.resourceUses.singleOrNull { use ->
+                use.referencesW4eLogicalResource(finalResolve) &&
+                    use.role == GPUFrameResourceRole.SceneTarget &&
+                    use.usage == GPUFrameResourceUsage.RenderAttachment && use.write
+            } == null ||
+            msaa.dropLast(1).any { render -> render.resourceUses.any { use ->
+                use.role == GPUFrameResourceRole.SceneTarget && use.write &&
+                    use.usage == GPUFrameResourceUsage.RenderAttachment
+            } }
+        ) return refused("W4e scene continuation must retain one LayerTarget and resolve only its final scope to SceneTarget.")
         return null
     }
 
@@ -8681,6 +8700,7 @@ internal class GPUFramePreflighter(
                                     geometry.valueF32.copyDirectTriangleF32OrNull() != null
                                 is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Stroke ->
                                     geometry.valueF32.copyFillGeometryF32().copyDirectTriangleF32OrNull() != null
+                                is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.InverseDomainSource -> false
                                 org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Empty -> false
                             }
                             val inverseDomainConsumer = w4ePacket.w4ePreparedClipConsumer as?

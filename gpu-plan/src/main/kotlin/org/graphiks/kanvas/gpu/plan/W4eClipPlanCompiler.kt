@@ -83,6 +83,7 @@ public class W4eClipPlanCompiler(
         val normalized = mutableListOf<SceneCommand>()
         val preparedByKey = linkedMapOf<ClipStackReuseKey, PreparedStack>()
         val inverseByCommand = mutableMapOf<Int, InversePathGeometryF32>()
+        val inverseDomainSourcesByCommand = mutableMapOf<Int, PathDrawGeometry.InverseDomainSource>()
         val actuallyEmptyInverseCommands = mutableSetOf<Int>()
         var frameUsage = ClipWorkUsageI64()
         var ownsComplexClip = false
@@ -115,10 +116,18 @@ public class W4eClipPlanCompiler(
                     if (inverse != null) {
                         prepared.forceMaskForInverse()
                         inverseByCommand[index] = inverse
-                        if (inverse.interiorCoverageF32 == InverseInteriorCoverageF32.Zero &&
-                            (command.node.geometry as? GeometryNode.Path)?.path?.segmentCount == 0
-                        ) {
-                            actuallyEmptyInverseCommands += index
+                        if (inverse.interiorCoverageF32 == InverseInteriorCoverageF32.Zero) {
+                            val sourcePath = requireNotNull(command.node.geometry as? GeometryNode.Path) {
+                                "W4e inverse planning requires a path source"
+                            }.path
+                            if (sourcePath.segmentCount == 0) {
+                                actuallyEmptyInverseCommands += index
+                            } else {
+                                inverseDomainSourcesByCommand[index] = PathDrawGeometry.InverseDomainSource.of(
+                                    sourcePath,
+                                    command.node.transform,
+                                )
+                            }
                         }
                     }
                     normalized += SceneCommand.Draw(command.node.normalizedForW4dConstructionSeam(domain, inverse))
@@ -141,7 +150,7 @@ public class W4eClipPlanCompiler(
         }
         return GpuPlanSelection.Candidate(Candidate(
             this, scene.canonicalId, target, constructionSeam, base, preparedByKey.values.toList(), inverseByCommand,
-            actuallyEmptyInverseCommands,
+            inverseDomainSourcesByCommand, actuallyEmptyInverseCommands,
         ))
     }
 
@@ -261,17 +270,14 @@ public class W4eClipPlanCompiler(
         }
 
         val clippedGeneralBySource = mutableMapOf<GeneralPathDraw, ClippedGeneralPathDraw>()
-        val emptyDrawsByConstructionSource = mutableMapOf<GeneralPathDraw, GeneralPathDraw>()
-        val actuallyEmptyInverseDomainCommands = selected.actuallyEmptyInverseCommands.filterTo(mutableSetOf()) { commandIndex ->
-            strategyByCommand[commandIndex] is ClipPlanStrategy.InverseDomain
-        }
+        val sealedInverseDrawsByConstructionSource = mutableMapOf<GeneralPathDraw, GeneralPathDraw>()
         val clippedPasses = base.passes().map { pass ->
-            // `InverseDomain.Zero` describes the clip interior, not the source path.  Keep every
-            // non-empty sealed geometry.  Only a Path with no source segments becomes the finite
-            // domain cover, so it cannot retain the W4d admission proxy or its D24S8 attachment.
-            pass.sealW4eActuallyEmptyInverseDomain(
-                actuallyEmptyInverseDomainCommands,
-                emptyDrawsByConstructionSource,
+            // W4d.2's finite proxy is an admission-only construction detail.  Every W4e zero
+            // interior restores either the exact original non-empty source or the one true Empty.
+            pass.sealW4eInverseDomainZero(
+                selected.inverseDomainSourcesByCommand,
+                selected.actuallyEmptyInverseCommands,
+                sealedInverseDrawsByConstructionSource,
             ).withClipStrategies(strategyByCommand, clippedGeneralBySource)
         }
         // `InverseDomain.Geometry` is a W4e scene operation, not a W4d.2 path-phase
@@ -774,20 +780,31 @@ public class W4eClipPlanCompiler(
         else -> this
     }
 
-    /** Converts only an actually empty inverse source from W4d's admission proxy to a domain cover. */
-    private fun PlanPass.sealW4eActuallyEmptyInverseDomain(
+    /** Replaces W4d.2's admission proxy with the exact sealed W4e inverse-domain source. */
+    private fun PlanPass.sealW4eInverseDomainZero(
+        inverseDomainSourcesByCommand: Map<Int, PathDrawGeometry.InverseDomainSource>,
         actuallyEmptyInverseCommands: Set<Int>,
-        emptyDrawsByConstructionSource: MutableMap<GeneralPathDraw, GeneralPathDraw>,
+        sealedDrawsByConstructionSource: MutableMap<GeneralPathDraw, GeneralPathDraw>,
     ): PlanPass = when (this) {
         is PlanPass.PathRenderPass -> {
-            if (draw.commandIndex !in actuallyEmptyInverseCommands) return this
-            val emptyDraw = when (val source = draw) {
-                is GeneralPathDraw -> emptyDrawsByConstructionSource.getOrPut(source) {
-                    GeneralPathDraw.w4eActuallyEmptyInverseDomainOf(source)
+            val sourceGeometry = inverseDomainSourcesByCommand[draw.commandIndex]
+            val actuallyEmpty = draw.commandIndex in actuallyEmptyInverseCommands
+            if (sourceGeometry == null && !actuallyEmpty) return this
+            val sealedDraw = when (val source = draw) {
+                is GeneralPathDraw -> sealedDrawsByConstructionSource.getOrPut(source) {
+                    if (sourceGeometry == null) {
+                        GeneralPathDraw.w4eActuallyEmptyInverseDomainOf(source)
+                    } else {
+                        GeneralPathDraw.w4eInverseDomainSourceOf(source, sourceGeometry)
+                    }
                 }
                 is BinaryMaskedPathDraw -> BinaryMaskedPathDraw.of(
-                    emptyDrawsByConstructionSource.getOrPut(source.producer) {
-                        GeneralPathDraw.w4eActuallyEmptyInverseDomainOf(source.producer)
+                    sealedDrawsByConstructionSource.getOrPut(source.producer) {
+                        if (sourceGeometry == null) {
+                            GeneralPathDraw.w4eActuallyEmptyInverseDomainOf(source.producer)
+                        } else {
+                            GeneralPathDraw.w4eInverseDomainSourceOf(source.producer, sourceGeometry)
+                        }
                     },
                     source.mask,
                 )
@@ -798,7 +815,7 @@ public class W4eClipPlanCompiler(
             PlanPass.PathRenderPass(
                 ordinal,
                 target,
-                emptyDraw,
+                sealedDraw,
                 phase,
                 drawDataResources,
                 atomicGroup,
@@ -925,11 +942,14 @@ public class W4eClipPlanCompiler(
         val base: GpuPlanCandidate,
         stacks: List<PreparedStack>,
         inverseByCommand: Map<Int, InversePathGeometryF32>,
+        inverseDomainSourcesByCommand: Map<Int, PathDrawGeometry.InverseDomainSource>,
         actuallyEmptyInverseCommands: Set<Int>,
     ) : GpuPlanCandidate {
         override val capabilityId: String = if (base.capabilityId == W4dGeneralPathPlanCompiler.AA_CAPABILITY_ID) AA_CAPABILITY_ID else HARD_CAPABILITY_ID
         val stacks: List<PreparedStack> = Collections.unmodifiableList(stacks)
         val inverseByCommand: Map<Int, InversePathGeometryF32> = Collections.unmodifiableMap(inverseByCommand.toMap())
+        val inverseDomainSourcesByCommand: Map<Int, PathDrawGeometry.InverseDomainSource> =
+            Collections.unmodifiableMap(inverseDomainSourcesByCommand.toMap())
         val actuallyEmptyInverseCommands: Set<Int> = Collections.unmodifiableSet(actuallyEmptyInverseCommands.toSet())
         private val sceneFingerprint = sceneCanonicalId
         private val targetFingerprint = target.canonicalId

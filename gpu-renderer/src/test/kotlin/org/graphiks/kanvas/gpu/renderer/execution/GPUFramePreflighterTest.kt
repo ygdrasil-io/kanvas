@@ -304,71 +304,6 @@ class GPUFramePreflighterTest {
     }
 
     @Test
-    fun `sealed W4e allocation pipeline and bind refusals roll back without publishing a partial frame`() {
-        val fixture = w4eFixture()
-        val firstAllocation = fixture.framePlan.steps
-            .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
-            .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
-            .first().diagnosticLabel
-        data class Failure(
-            val name: String,
-            val resourceLabel: String? = null,
-            val commandFailure: String? = null,
-            val expectedCode: String,
-        )
-
-        listOf(
-            Failure("allocation", resourceLabel = firstAllocation, expectedCode = "unsupported.preflight.resource_refused"),
-        ).forEach { failure ->
-            val events = mutableListOf<String>()
-            val resources = RecordingResourceProvider(
-                events = events,
-                commandFailure = failure.commandFailure,
-                resourceFailureLabel = failure.resourceLabel,
-            )
-            val result = preflighter(
-                resources = resources,
-                completion = RecordingCompletionProvider(events),
-                surface = RecordingSurfaceProvider(events),
-                context = w4ePreflightContext(fixture.framePlan),
-                capabilities = fixture.capabilities,
-            ).preflight(fixture.framePlan)
-
-            val refusal = assertIs<GPUFramePreflightResult.Refused>(result, failure.name).diagnostic
-            assertEquals(
-                failure.expectedCode,
-                refusal.code.value,
-                "${failure.name}: ${refusal.message}",
-            )
-            assertTrue("resources:rollback" in events, failure.name)
-            assertFalse(events.any { it.startsWith("ticket:") || it.startsWith("surface:") }, failure.name)
-        }
-
-        listOf("pipeline", "bind-group").forEach { failure ->
-            val events = mutableListOf<String>()
-            val adapter = GPURuntimeResourceAdapter()
-            val resources = GPUConcreteResourceProvider(leaseFactory = adapter)
-            val result = preflighter(
-                resources = resources,
-                completion = RecordingCompletionProvider(events),
-                surface = RecordingSurfaceProvider(events),
-                context = w4ePreflightContext(fixture.framePlan),
-                capabilities = fixture.capabilities,
-                nativeBoundary = adapter.bindNativeFrameBoundary(
-                    resources,
-                    W4eRefusingPayloadMaterializer(events, failure),
-                ),
-            ).preflight(fixture.framePlan)
-
-            val refusal = assertIs<GPUFramePreflightResult.Refused>(result, failure).diagnostic
-            assertEquals("unsupported.test.w4e.$failure", refusal.code.value, failure)
-            assertEquals(0, adapter.activePreparedNativeFramePayloadCount, failure)
-            assertTrue("native:$failure" in events, failure)
-            assertFalse(events.any { it.startsWith("surface:") }, failure)
-        }
-    }
-
-    @Test
     fun `sealed W4b aggregate budget uses its checked resident transient sum`() {
         val fixture = w4bFixture()
         val baseline = fixture.framePlan.memoryBudget
@@ -9110,33 +9045,6 @@ class GPUFramePreflighterTest {
             acquiredSurface: GPUAcquiredSurfaceOutput?,
         ): GPUPreparedNativeFrameLateSurfaceBinding =
             GPUPreparedNativeFrameLateSurfaceBinding.NotRequired
-    }
-
-    /** A typed native-boundary refusal used to prove W4e preflight unwinds after resource preparation. */
-    private class W4eRefusingPayloadMaterializer(
-        private val events: MutableList<String>,
-        private val failedCapability: String,
-    ) : GPUPreparedNativeFramePayloadMaterializer {
-        override fun materializeReusable(
-            framePlan: GPUFramePlan,
-            encoderPlan: GPUCommandEncoderPlan,
-            resources: GPUPreparedResourceSet,
-            generationSeal: GPUPreparedGenerationSeal,
-        ): GPUPreparedNativeFramePayloadMaterialization {
-            check(framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().all { render ->
-                render.drawPackets.single().role == GPUDrawPacketRole.W4ePrepared
-            })
-            events += "native:$failedCapability"
-            return GPUPreparedNativeFramePayloadMaterialization.Refused(
-                "unsupported.test.w4e.$failedCapability",
-                "Injected $failedCapability creation refusal.",
-            )
-        }
-
-        override fun bindLateSurface(
-            draft: GPUPreparedNativeFrameDraft,
-            acquiredSurface: GPUAcquiredSurfaceOutput?,
-        ): GPUPreparedNativeFrameLateSurfaceBinding = GPUPreparedNativeFrameLateSurfaceBinding.NotRequired
     }
 
     private fun ownedDraft(frame: Long, handle: AutoCloseable) = GPUPreparedNativeFrameDraft(

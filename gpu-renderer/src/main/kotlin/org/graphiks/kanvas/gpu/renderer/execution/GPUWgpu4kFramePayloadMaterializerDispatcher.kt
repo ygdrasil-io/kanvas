@@ -265,6 +265,7 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
         GPUAcquiredSurfaceNativeTargetResolver.Unavailable,
     private val corePrimitiveLimits: GPULimits? = null,
     private val preparedSurfaceMixedMaterializer: GPUPreparedNativeFramePayloadMaterializer? = null,
+    private val w4eFailureBehavior: GPUW4eFrameFailureBehavior = GPUW4eFrameFailureBehavior.None,
     private val onDestinationSnapshotCreated: () -> Unit = {},
 ) : GPUPreparedNativeFramePayloadMaterializer, AutoCloseable {
     private val preparedSurfaceMixedAvailable =
@@ -326,6 +327,7 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
                         "unsupported.native-core-primitive.limits-unavailable",
                         "The direct W4e route requires observed backend limits.",
                     ),
+                    w4eFailureBehavior = w4eFailureBehavior,
                     onDestinationSnapshotCreated = onDestinationSnapshotCreated,
                 ),
                 surfaceRoute?.reusableFramePlan ?: framePlan,

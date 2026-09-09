@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.math.color.ColorF32
 import org.graphiks.math.geometry.PathFillGeometryF32
+import org.graphiks.math.geometry.PathBuilder
 import org.graphiks.math.geometry.PathStrokeGeometryF32
 import org.graphiks.math.geometry.PathStrokeDrawMode
 import org.graphiks.math.geometry.PathStrokeStyleF64
@@ -14,6 +15,8 @@ import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.ClipGeometryF32
 import org.graphiks.math.geometry.InversePathGeometryF32
+import org.graphiks.math.geometry.PathF32
+import org.graphiks.math.matrix.Matrix3x3F32
 
 public enum class CoveragePlan { FullOrScissor, AnalyticScalarAA, StencilAA4, BinaryMaskCover4 }
 public enum class SamplePlan { SingleSample, Multisample4 }
@@ -72,6 +75,33 @@ public enum class BinaryMaskFetchPlan { TextureLoadUnfiltered }
 public sealed interface PathDrawGeometry {
     public data class Fill(public val valueF32: PathFillGeometryF32) : PathDrawGeometry
     public data class Stroke(public val valueF32: PathStrokeGeometryF32) : PathDrawGeometry
+    /**
+     * The exact non-empty source of an inverse path whose finite interior is empty.
+     *
+     * W4d.2 receives a finite proxy solely to admit the construction seam.  W4e replaces that
+     * proxy with this immutable source fact before it publishes its compiler-authenticated graph.
+     * It is deliberately not drawable: a zero interior is rendered as the bounded inverse domain.
+     */
+    public class InverseDomainSource private constructor(
+        path: PathF32,
+        transform: Matrix3x3F32,
+    ) : PathDrawGeometry {
+        private val pathSnapshot: PathF32 = PathBuilder(path.fillRule).addPath(path).build()
+        private val transformSnapshot: Matrix3x3F32 = transform.copy()
+
+        public fun copySourcePath(): PathF32 = PathBuilder(pathSnapshot.fillRule).addPath(pathSnapshot).build()
+
+        public fun copySourceTransform(): Matrix3x3F32 = transformSnapshot.copy()
+
+        internal companion object {
+            internal fun of(path: PathF32, transform: Matrix3x3F32): InverseDomainSource {
+                require(path.segmentCount > 0) {
+                    "Only a non-empty source path can be retained as a W4e inverse-domain source"
+                }
+                return InverseDomainSource(path, transform)
+            }
+        }
+    }
     /** An inverse draw whose finite interior is empty; its W4e clip still owns the finite domain. */
     public data object Empty : PathDrawGeometry
 }
@@ -158,6 +188,20 @@ public class GeneralPathDraw private constructor(
                 source.coverage,
                 source.sample,
             )
+
+        /** Restores the original source after W4d.2 used its finite construction proxy. */
+        internal fun w4eInverseDomainSourceOf(
+            source: GeneralPathDraw,
+            geometry: PathDrawGeometry.InverseDomainSource,
+        ): GeneralPathDraw = GeneralPathDraw(
+            source.commandIndex,
+            source.color,
+            geometry,
+            source.strategy,
+            source.copyScissorI32(),
+            source.coverage,
+            source.sample,
+        )
     }
 }
 
@@ -460,6 +504,9 @@ private fun requirePathRenderGeometryForStrategy(
     val fillGeometry = when (geometry) {
         is PathDrawGeometry.Fill -> geometry.valueF32
         is PathDrawGeometry.Stroke -> geometry.valueF32.copyFillGeometryF32()
+        is PathDrawGeometry.InverseDomainSource -> throw IllegalArgumentException(
+            "Inverse-domain source geometry is reserved for a sealed W4e inverse-domain draw",
+        )
         PathDrawGeometry.Empty -> throw IllegalArgumentException(
             "Empty path geometry is reserved for a sealed W4e inverse-domain draw",
         )

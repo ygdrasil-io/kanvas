@@ -263,12 +263,12 @@ class GpuPlanTaskListLowererW4eTest {
     }
 
     @Test
-    fun `inverse zero preserves its nonempty sealed source without a sampled mask`() {
-        val lowered = assertIs<GpuPlanLoweringResult.Lowered>(
-            GpuPlanTaskListLowerer().lower(
-                request(aaMaskGraph(inverse = true, zeroClip = true, inverseZeroSource = true)),
-            ),
-        )
+    fun `inverse zero restores the exact nonempty source without a sampled mask or D24`() {
+        val graph = aaMaskGraph(inverse = true, zeroClip = true, inverseZeroSource = true)
+        val lowered = assertIs<GpuPlanLoweringResult.Lowered>(GpuPlanTaskListLowerer().lower(request(graph)))
+        val expectedPath = PathBuilder(FillRule.INVERSE_WINDING)
+            .moveTo(2f, 2f).lineTo(12f, 2f).close().build()
+        val expectedTransform = Matrix3x3F32.rotation(0.25f)
 
         val renders = lowered.taskList.tasks.filterIsInstance<GPUTask.Render>().filter { task ->
             task.drawPackets.single().w4ePreparedClipConsumer is GPUW4ePreparedClipConsumerAuthority.InverseDomain
@@ -282,23 +282,19 @@ class GpuPlanTaskListLowererW4eTest {
             assertIs<GPUW4ePreparedInverseInteriorCoverage.Zero>(consumer.interiorCoverage)
             assertEquals(0, render.resourceUses.count { it.role == GPUFrameResourceRole.ClipMask })
             val path = requireNotNull(render.drawPackets.single().w4ePreparedPath)
-            val geometry = assertIs<PathDrawGeometry.Fill>(path.copyGeometry()).valueF32
-            assertTrue(
-                geometry.copyDirectTriangleF32OrNull()?.copyVerticesF32()?.isNotEmpty() == true ||
-                    geometry.copyStencilEdgeFanF32OrNull()?.copyVerticesF32()?.isNotEmpty() == true,
-                "the source geometry must survive the inverse-domain zero seal",
-            )
-            val depthStencil = path.depthStencilResourceId
-            assertTrue(depthStencil != null)
-            assertTrue(
-                render.resourceUses.any { use ->
-                    use.resource.value.substringAfterLast('.') == depthStencil &&
-                        use.role == GPUFrameResourceRole.PathDepthStencil &&
-                        use.usage == GPUFrameResourceUsage.RenderAttachment
-                },
-                "a nonempty Zero interior keeps the path D24 authority needed to rasterize its source",
-            )
+            val source = assertIs<PathDrawGeometry.InverseDomainSource>(path.copyGeometry())
+            assertEquals(expectedPath, source.copySourcePath(), "the original path segments are sealed, not the W4d proxy")
+            assertEquals(expectedPath.toList(), source.copySourcePath().toList(), "source vertices remain bit-for-bit path facts")
+            assertEquals(expectedTransform, source.copySourceTransform(), "the original transform remains sealed")
+            assertEquals(listOf(2f, 2f, 12f, 2f), source.copySourcePath().flatMap { segment -> when (segment) {
+                is org.graphiks.math.geometry.PathSegmentF32.MoveTo -> listOf(segment.point.x, segment.point.y)
+                is org.graphiks.math.geometry.PathSegmentF32.LineTo -> listOf(segment.point.x, segment.point.y)
+                else -> emptyList()
+            } }, "the source bounds are derived from its original vertices")
+            assertEquals(null, path.depthStencilResourceId)
+            assertTrue(render.resourceUses.none { it.role == GPUFrameResourceRole.PathDepthStencil })
         }
+        assertTrue(graph.verifyW4eCompilerWitness(), "the exact source facts participate in the canonical W4e seal")
     }
 
     @Test
@@ -534,15 +530,31 @@ class GpuPlanTaskListLowererW4eTest {
         colorTasks.forEach { task ->
             val continuation = requireNotNull(task.w4eSceneContinuation)
             assertTrue(task.resourceUses.any { use ->
-                use.role == GPUFrameResourceRole.SceneTarget && use.write &&
+                use.role == GPUFrameResourceRole.LayerTarget && use.write &&
                     use.resource.value.substringAfterLast('.') == continuation.sceneTargetResourceId
             }, "each AA4 scene pass must retain its sealed multisample color attachment")
         }
         val sceneMsaa = lowered.taskList.tasks.filterIsInstance<GPUTask.PrepareResources>().single().requests.single { request ->
-            request.role == GPUFrameResourceRole.SceneTarget &&
+            request.role == GPUFrameResourceRole.LayerTarget &&
                 (request.descriptor as? GPUFrameTextureDescriptor)?.sampleCount == 4
         }
         assertEquals(4, assertIs<GPUFrameTextureDescriptor>(sceneMsaa.descriptor).sampleCount)
+        assertEquals(
+            1,
+            lowered.taskList.tasks.filterIsInstance<GPUTask.PrepareResources>().single().requests.count {
+                it.role == GPUFrameResourceRole.SceneTarget
+            },
+            "only the logical canonical target is a SceneTarget",
+        )
+        lowered.taskList.tasks.filterIsInstance<GPUTask.Render>().filter { task ->
+            task.drawPackets.single().w4ePreparedPath?.phase?.name?.startsWith("HardEdgeMask") == true
+        }.forEach { task ->
+            val path = requireNotNull(task.drawPackets.single().w4ePreparedPath)
+            assertTrue(task.resourceUses.any { use ->
+                use.resource.value.substringAfterLast('.') == path.targetResourceId &&
+                    use.role == GPUFrameResourceRole.ClipMask && use.write
+            }, "hard-edge mask targets retain their ClipMask role")
+        }
 
         val frame = GPUFramePlanner.plan(lowered.taskList)
         assertFalse(frame.atomicallyRefused)

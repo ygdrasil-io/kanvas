@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.plan
 
 import java.security.MessageDigest
 import org.graphiks.math.geometry.PathFillGeometryF32
+import org.graphiks.math.geometry.PathSegmentF32
 import org.graphiks.math.geometry.PathStrokeGeometryF32
 import org.graphiks.math.geometry.RectI32
 
@@ -284,7 +285,62 @@ private class W4dGeneralGraphDigestWriter {
                 text("$prefix.kind", "stroke")
                 strokeGeometry(prefix, geometry.valueF32)
             }
+            is PathDrawGeometry.InverseDomainSource -> {
+                text("$prefix.kind", "w4e-inverse-domain-source")
+                val path = geometry.copySourcePath()
+                text("$prefix.source.fill-rule", path.fillRule.name)
+                i32("$prefix.source.segment-count", path.segmentCount)
+                path.forEachIndexed { index, segment -> pathSegment("$prefix.source.segments[$index]", segment) }
+                val transform = geometry.copySourceTransform()
+                f32("$prefix.source.transform.sx", transform.sx)
+                f32("$prefix.source.transform.kx", transform.kx)
+                f32("$prefix.source.transform.tx", transform.tx)
+                f32("$prefix.source.transform.ky", transform.ky)
+                f32("$prefix.source.transform.sy", transform.sy)
+                f32("$prefix.source.transform.ty", transform.ty)
+                f32("$prefix.source.transform.persp0", transform.persp0)
+                f32("$prefix.source.transform.persp1", transform.persp1)
+                f32("$prefix.source.transform.persp2", transform.persp2)
+            }
             PathDrawGeometry.Empty -> text("$prefix.kind", "w4e-inverse-domain-zero")
+        }
+    }
+
+    private fun pathSegment(prefix: String, segment: PathSegmentF32) {
+        fun point(label: String, point: org.graphiks.math.geometry.Point2F32) {
+            f32("$label.x", point.x)
+            f32("$label.y", point.y)
+        }
+        when (segment) {
+            is PathSegmentF32.MoveTo -> {
+                text("$prefix.kind", "move")
+                point("$prefix.point", segment.point)
+            }
+            is PathSegmentF32.LineTo -> {
+                text("$prefix.kind", "line")
+                point("$prefix.point", segment.point)
+            }
+            is PathSegmentF32.QuadTo -> {
+                text("$prefix.kind", "quad")
+                point("$prefix.control", segment.control)
+                point("$prefix.point", segment.point)
+            }
+            is PathSegmentF32.CubicTo -> {
+                text("$prefix.kind", "cubic")
+                point("$prefix.control1", segment.control1)
+                point("$prefix.control2", segment.control2)
+                point("$prefix.point", segment.point)
+            }
+            is PathSegmentF32.ArcTo -> {
+                text("$prefix.kind", "arc")
+                f32("$prefix.radius.x", segment.radius.x)
+                f32("$prefix.radius.y", segment.radius.y)
+                f32("$prefix.rotation", segment.xAxisRotation)
+                bool("$prefix.large-arc", segment.largeArc)
+                bool("$prefix.sweep", segment.sweep)
+                point("$prefix.point", segment.point)
+            }
+            PathSegmentF32.Close -> text("$prefix.kind", "close")
         }
     }
 

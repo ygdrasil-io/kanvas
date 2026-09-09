@@ -30,6 +30,27 @@ data class GPUOffscreenTargetRequest(
     )
 }
 
+/** Public behavior-level fault seam for verifying a complete W4e frame transaction. */
+public enum class GPUW4eFrameFailurePoint {
+    Allocation,
+    Pipeline,
+    BindGroup,
+    Encoder,
+    Close,
+}
+
+/**
+ * Optional backend behavior used by integration tests and adapters.  It is consulted only by
+ * the sealed W4e route; normal callers receive [None] and incur no altered behavior.
+ */
+public fun interface GPUW4eFrameFailureBehavior {
+    public fun shouldFail(point: GPUW4eFrameFailurePoint): Boolean
+
+    public companion object {
+        public val None: GPUW4eFrameFailureBehavior = GPUW4eFrameFailureBehavior { false }
+    }
+}
+
 /** Enumerates native surface platforms supported by the backend runtime bridge. */
 enum class GPUNativePlatform {
     /** AppKit surface backed by a Metal layer. */
@@ -208,6 +229,15 @@ interface GPUBackendSession : AutoCloseable {
 
     /** Prepares one reusable canonical offscreen target for serialized scene frames. */
     fun prepareSceneFrameSession(request: GPUOffscreenTargetRequest): GPUPreparedSceneFrameSession
+
+    /**
+     * Prepares the same public scene route with an optional behavior-level W4e failure adapter.
+     * Backends that do not expose the native W4e route retain their ordinary implementation.
+     */
+    fun prepareSceneFrameSession(
+        request: GPUOffscreenTargetRequest,
+        w4eFailureBehavior: GPUW4eFrameFailureBehavior,
+    ): GPUPreparedSceneFrameSession = prepareSceneFrameSession(request)
 
     /** Prepares an opaque window output on this session's canonical device. */
     fun prepareWindowOutput(binding: GPUNativeSurfaceBinding): GPUPreparedWindowOutput =

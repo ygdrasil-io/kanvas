@@ -23,6 +23,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleResolveAction
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleStoreAction
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedConcreteResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
 import org.graphiks.kanvas.gpu.renderer.resources.GPUSceneTarget
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
@@ -1770,8 +1771,19 @@ internal class GPUFrameExecutor(
             val resolve = scope.pass.resolveTarget
             val expectsResolve = continuation.resolveAction ==
                 org.graphiks.kanvas.gpu.renderer.passes.GPUW4eSceneResolveAction.ResolveCanonical
+            val sealedLayerTarget = render.resourceUses.singleOrNull { use ->
+                use.resource.value.substringAfterLast('.') == continuation.sceneTargetResourceId &&
+                    use.role == GPUFrameResourceRole.LayerTarget &&
+                    use.usage == GPUFrameResourceUsage.RenderAttachment && use.write
+            } != null
+            val sealedCanonicalResolve = !expectsResolve || render.resourceUses.singleOrNull { use ->
+                use.resource.value.substringAfterLast('.') == requireNotNull(continuation.resolveSceneResourceId) &&
+                    use.role == GPUFrameResourceRole.SceneTarget &&
+                    use.usage == GPUFrameResourceUsage.RenderAttachment && use.write
+            } != null
             if (render.samplePlan != org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan.MultisampleFrame(4) ||
                 render.sampleContinuation != null ||
+                !sealedLayerTarget || !sealedCanonicalResolve ||
                 scope.pass.loadOperation != expectedLoad ||
                 scope.pass.storeOperation != GPUPreparedNativeStoreOperation.Store ||
                 (expectsResolve != (resolve != null)) ||
