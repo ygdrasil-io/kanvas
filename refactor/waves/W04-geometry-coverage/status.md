@@ -428,19 +428,21 @@ inventer une capability AA4.
    `x <= 0 || y <= 0`, donc aussi `-0.0`, en `CornerRadiiF64.Zero` avant le
    facteur uniforme global. L'oracle CPU suit cette source Skia unique et les
    équivalences Identity/axis/general/perspective sont exécutées.
-3. `W4eNativePayloadPlan` est construit avant la publication puis transporté
-   par identité dans le graphe, son witness et l'autorité préparée. Le lowering
-   le consomme seulement; il ne retesselle ni ne réalloue après `Ready`.
-   La preuve mutation-sensitive modifie une copie publique retournée, puis
-   confirme l'identité de l'autorité; réintroduire temporairement `.from(...)`
-   après `Ready` la fait échouer sans reflection, compteur d'appels ni accès
-   privé.
+3. La revue statique établit que `W4eNativePayloadPlan.from(...)` est exécuté
+   avant `RenderGraph.of(...)`, puis que le graphe est scellé avec ce payload.
+   Le lowering le consomme seulement; il ne retesselle ni ne réalloue après
+   `Ready`. La précédente assertion lisait néanmoins `nativePayload` et
+   construisait une fixture AA4 synthétique : elle est retirée par `final-fix3`.
+   Aucune preuve black-box ne prétend désormais établir une identité d'objet ou
+   l'ordre interne de `.from(...)`.
 4. Le pool compare désormais la capacité physique et les usages V/I/U, et non
    les spans utiles inclus dans l'égalité de data class. Il réutilise un slot
    capable ou remplace transactionnellement un slot `Available` incompatible
-   avant `Saturated`. Une preuve `Surface` publique rend quatre géométries W4e
-   distinctes puis la première de nouveau; l'ancienne saturation refuse le
-   quatrième frame (RED), la politique finale récupère (GREEN).
+   avant `Saturated`. La précédente preuve empruntait toutefois le routeur et
+   le port internes : `final-fix3` la remplace par cinq frames W4e distinctes
+   rendues avec le même `Surface`, avec pixels cumulés après chaque frame. Elle
+   prouve une récupération observable, sans inspecter réutilisation, éviction,
+   capacité ni compte d'allocations.
 
 | Gate finale `final-fix2` | État Gradle | Résultat frais |
 | --- | --- | --- |
@@ -457,6 +459,45 @@ trouve uniquement `ImageTest`, `GPUAllApiBlendSurfaceTest`,
 deux skips AA4 restent des frontières de capability honnêtes. Cette boucle ne
 modifie ni `font`, ni `codec`, GM, dashboard, baseline,
 `:integration-tests:skia` ou `jpg-color-cube`.
+
+### Correctif final post-revue Sol — `final-fix3`
+
+La dernière passe ne modifie aucune production. Elle retire quatre preuves
+inadmissibles, puis les remplace par quatre comportements observables à travers
+`Surface`, `surface.canvas { ... }`, `surface.render()` et les pixels publics :
+
+1. une frame W4e conserve un sibling `DeviceRect` W4d scissoré;
+2. un inverse sous CTM de translation non identité conserve ce `DeviceRect` en
+   device-space, avec un oracle volontairement différent si le scissor suivait
+   la CTM;
+3. cinq géométries W4e distinctes se succèdent sur le même `Surface`, avec une
+   vérification pixels après chaque rendu, y compris la cinquième récupération;
+4. la mutation d'un `Path` appelant après la capture hard 1× ne change pas les
+   pixels; un oracle de fuite produit volontairement une image différente.
+
+Le fait architectural que `W4eNativePayloadPlan.from(...)` précède `Ready` est
+vérifié par revue statique dans le compilateur W4e, avant `RenderGraph.of(...)`.
+Il ne fait pas partie de la preuve pixels; cette dernière n'affirme ni identité
+d'objet, ni appel interne, ni détail de réutilisation/éviction du pool. Aucune
+fixture AA4 synthétique, reflection, seam interne, compteur d'appels ou
+inspection de cache ne sert à ces quatre preuves.
+
+| Gate finale `final-fix3` | État Gradle | Résultat frais |
+| --- | --- | --- |
+| G1 geometry/matrix/render-ir/gpu-plan | non lancée | hors périmètre : aucune production, math ou `gpu-plan` modifié. |
+| G2 renderer W4d/W4e ciblé | `BUILD SUCCESSFUL` (exit 0) | 53 tâches, 0 failure, 0 error. |
+| G3 Surface/Picture filtrée | `BUILD FAILED` (exit 1 attendu) | 2 149 tests, 45 failures historiques, 0 error, 2 skips. |
+| G4 `:kanvas:test` complet | `BUILD FAILED` (exit 1 attendu) | 3 692 tests, 51 failures historiques, 0 error, 2 skips. |
+
+La commande G3 exacte est `rtk ./gradlew :kanvas:test --tests '*GPUPlanSurface*'
+--tests '*SurfaceTest*' --tests '*DisplayOpSceneAdapterTest*' --tests '*PictureTest*'
+--rerun-tasks --max-workers=1 --console=plain`; un premier filtre trop large
+sur `*Surface*` avait aussi sélectionné les deux failures historiques de
+`GPUPreparedSurfaceFrameBuilderTest`, sans lien avec W4e. Le G4 retrouve les
+six fichiers XML du ledger historique et aucun `<error>`. Les suites `font`,
+`codec`, GM, dashboard, baseline, `:integration-tests:skia` et `jpg-color-cube`
+ne sont pas sélectionnées (la compilation transitive de `font` ne lance pas sa
+suite).
 
 ### Dette et rulings conservés
 

@@ -63,9 +63,15 @@ Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :
   final post-revue étend l'admission aux consumers Rect/RRect/Path et à
   l'inverse `STROKE_AND_FILL`, rétablit les budgets d'entrées/copies et scelle
   les buffers V/I/U W4e dans le graphe. `final-fix2` conserve aussi le scissor
-  `DeviceRect` W4d, canonise les paires RRect non positives, transporte le
-  payload V/I/U par identité et réutilise/évince transactionnellement les slots
-  physiques; les deux skips AA4 restent explicites.
+  `DeviceRect` W4d, canonise les paires RRect non positives et réutilise/évince
+  transactionnellement les slots physiques. `final-fix3` remplace les preuves
+  internes écartées par quatre scénarios publics hard 1× : sibling `DeviceRect`,
+  inverse sous CTM non identité avec scissor device-space fixe, cinq frames W4e
+  distinctes sur le même `Surface`, et mutation du `Path` appelant après capture.
+  La revue statique, et non les pixels black-box, établit que `.from` précède la
+  publication du graphe; les pixels établissent seulement le comportement et
+  l'isolation observable, sans conclure à une identité d'objet, à une réutilisation
+  précise du pool ou à un nombre d'allocations. Les deux skips AA4 restent explicites.
 - [État consolidé de la topologie hybride](progress/2026-08-31-hybrid-f64-f32-path-topology/progress.md)
 - [Rapport d'implémentation de l'admission conservative](progress/2026-09-01-conservative-hybrid-topology-admission/implementation-report.md)
 - [Revue de spécification de l'admission conservative](progress/2026-09-01-conservative-hybrid-topology-admission/spec-review.md)
@@ -79,7 +85,7 @@ Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :
 | W1 | Géométrie immuable dans `:math` | Périmètre fonctionnel implémenté et prouvé ciblé pour les frontières d'enregistrement/Picture : snapshots profonds immuables d'images/effets, copie itérative résistante aux cycles avec limites reportées à `SceneCaptureLimits`, writer `Picture` v8 stable et enregistrement détaché/transactionnel des `RuntimeEffect`. Gate stricte **NON ATTEINTE / bloquée** par la validation globale fraîche de 51 échecs sur 3 585 tests, qui confirme la baseline globale ; topologie source, topologie hybride F64/F32 et admission conservative restent documentées séparément |
 | W2 | `Scene IR` et frontières de modules | Capture backend-neutral et frontières de modules implémentées ; gate stricte **NON ATTEINTE** (431/443 captures, 12 dettes), rendu public encore legacy |
 | W3 | `gpu-plan` et premier `RenderGraph` | Capability rectangles solides/clip simple/`SrcOver` branchée et prouvée par pixels exacts ; baseline globale conservée (51 échecs connus, 0 erreur) |
-| W4 | Geometry/coverage | W4a ScalarAA Rect, W4b RRect analytique, W4c fills hard-edge et W4d.1 strokes/hairlines hard-edge sont atteints. W4d.2 ajoute les transforms F64 `Identity`/`AxisAlignedAffine`/`GeneralAffine`/`Perspective`, le graph AA4/resolve scellé et la lane hard générale prouvée byte-exact à travers `Surface`. W4e fournit hard mask 1×, inverse/D24S8 et oracle/matrice `Surface`; Task 9-fix1 clôt les 18 deltas frais, Task 9-fix2 élimine le fallback d'usages couleur implicite, et le correctif final post-revue couvre les consumers Rect/RRect/Path, les entrées/copies bornées et les buffers V/I/U scellés. `final-fix2` conserve le scissor DeviceRect, uniformise la canonisation RRect, transporte le payload exact et rend le pool V/I/U physiquement réutilisable. Le baseline global reste exactement 51 failures, 0 error et 2 skips. Restent ouverts : le probe/capacité AA4, `TopologyLimit` conservative F64→F32 et la baseline DrawPoint. Les tests font exception de `font`/`codec`, GM/dashboard/baseline et `jpg-color-cube` ([status](waves/W04-geometry-coverage/status.md)) |
+| W4 | Geometry/coverage | W4a ScalarAA Rect, W4b RRect analytique, W4c fills hard-edge et W4d.1 strokes/hairlines hard-edge sont atteints. W4d.2 ajoute les transforms F64 `Identity`/`AxisAlignedAffine`/`GeneralAffine`/`Perspective`, le graph AA4/resolve scellé et la lane hard générale prouvée byte-exact à travers `Surface`. W4e fournit hard mask 1×, inverse/D24S8 et oracle/matrice `Surface`; Task 9-fix1 clôt les 18 deltas frais, Task 9-fix2 élimine le fallback d'usages couleur implicite, et le correctif final post-revue couvre les consumers Rect/RRect/Path, les entrées/copies bornées et les buffers V/I/U scellés. `final-fix3` remplace les anciennes assertions internes par des pixels `Surface` publics : sibling `DeviceRect`, inverse à CTM non identité, cinq frames W4e distinctes et mutation après capture. La pré-publication `.from` reste un constat de revue statique, pas une conclusion des tests pixels; ceux-ci ne mesurent ni identité d'objet ni détail du pool. Le baseline global reste exactement 51 failures, 0 error et 2 skips. Restent ouverts : le probe/capacité AA4, `TopologyLimit` conservative F64→F32 et la baseline DrawPoint. Les tests font exception de `font`/`codec`, GM/dashboard/baseline et `jpg-color-cube` ([status](waves/W04-geometry-coverage/status.md)) |
 | W5 | Material graph | Non démarrée |
 | W6 | Layers et effets | Non démarrée |
 | W7 | Convergence GM | Non démarrée |
