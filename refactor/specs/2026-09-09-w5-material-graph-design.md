@@ -91,8 +91,8 @@ retirés qu'après preuve du remplacement. C'est l'approche retenue.
 - compatibilité `Picture`/`SceneArchive` seulement lorsqu'un changement de
   schéma sémantique est réellement nécessaire. W5e est précisément un de ces
   cas : le sampling d'un draw image devient une donnée explicite de l'opération
-  et de `GeometryNode.ImagePatch`, au lieu d'être transporté indirectement par
-  `Paint.shader` puis perdu par la capture.
+  et du nœud IR `GeometryNode.ImagePatch` ou `GeometryNode.ImageNine`, au lieu
+  d'être transporté indirectement par `Paint.shader` puis perdu par la capture.
 
 Il ne contient ni WGSL, ni layout WebGPU, ni pipeline key native.
 
@@ -409,11 +409,15 @@ stops déterministes.
 
 ### 7.2 Paramètre géométrique et dégénérescences
 
-Les quatre familles calculent d'abord un paramètre brut `t` en F64 depuis le
-point local `P`, puis appliquent le tile mode de 7.1. Le CPU oracle et le WGSL
-utilisent les mêmes équations, le même seuil `epsilon = 2^-15` et les mêmes
-masques. Les valeurs d'entrée non finies et les rayons négatifs sont refusés à
-la capture.
+Les quatre familles calculent le paramètre brut `t` en F32 depuis le point
+local `P`, puis appliquent le tile mode de 7.1. WGSL ne possède pas de F64 : le
+CPU oracle exécute donc chaque opération en F32, avec le même arbre
+d'expressions et sans contraction implicite ; un `fma` n'est permis que s'il
+est explicite dans les deux implémentations. Les deux utilisent le même seuil
+F32 `epsilon = 2^-15` et les mêmes masques. Le preflight peut employer F64 pour
+valider les paramètres et préparer des constantes, mais il projette celles-ci
+en F32 avant le plan. Les valeurs d'entrée non finies et les rayons négatifs
+sont refusés à la capture.
 
 - Linear : avec `d = end - start`,
   `t = dot(P - start, d) / dot(d, d)`. Si `length(d) <= epsilon`, la règle
@@ -426,7 +430,8 @@ la capture.
   `t = (360*a - startAngle) / (endAngle - startAngle)`. `startAngle >
   endAngle` est refusé. Si l'écart est au plus `epsilon`, la règle commune
   s'applique, sauf en `CLAMP` avec `endAngle > epsilon` : la première couleur
-  remplit `[0,endAngle]`, puis un hard stop passe à la dernière couleur. Si
+  remplit `[0,endAngle)`, et l'angle exact du hard stop ainsi que la suite
+  reçoivent la dernière couleur. Si
   `startAngle <= 0 && endAngle >= 360`, le tile effectif est `CLAMP`.
 - Conical : poser `d = end-start`, `q = P-start`, `dr = endRadius-startRadius`
   et résoudre `A*t^2 + B*t + C = 0`, avec
@@ -446,13 +451,17 @@ La règle dégénérée commune est : `DECAL` transparent ; `CLAMP` dernière
 couleur ; `REPEAT` et `MIRROR` couleur moyenne exacte du gradient. Cette moyenne
 est l'intégrale de ses segments linéaires normalisés : pour chaque intervalle,
 `0.5 * (c[i] + c[i+1]) * (p[i+1]-p[i])`, plus les intervalles implicites de
-couleur constante avant le premier stop et après le dernier. Elle est calculée
-dans le domaine d'interpolation sélectionné, puis reconvertie selon 7.3. Les
-cas Sweep/Conical `CLAMP` décrits ci-dessus prennent priorité sur cette règle.
+couleur constante avant le premier stop et après le dernier. Conformément à
+l'autorité Skia épinglée, `c[i]` est ici la couleur straight dans son espace
+source déclaré — sRGB pour les `ColorARGB` actuels — avant application de
+`ColorInterpolation`. Le solid moyen est ensuite converti une seule fois vers
+linear-premul. Les cas Sweep/Conical `CLAMP` décrits ci-dessus prennent
+priorité sur cette règle.
 
-Les comparaisons de dégénérescence, le discriminant et la sélection de racine
-sont évalués en F64 ; seule la valeur finale `t` est projetée en F32. Une
-projection non finie rend le fragment transparent. Ces règles font partie du
+Les comparaisons de dégénérescence des paramètres sont préparées en F64 au
+preflight puis figées dans le plan. Le discriminant, la sélection de racine et
+`t` par fragment sont évalués en F32 avec l'ordre commun défini ci-dessus ; un
+résultat non fini rend le fragment transparent. Ces règles font partie du
 contrat sémantique et ne peuvent pas varier selon la lane géométrique.
 
 ### 7.3 Interpolation couleur
@@ -604,9 +613,15 @@ Le sampling de l'opération est une autorité distincte du paint. W5e fait donc
 - `GeometryNode.ImagePatch` ajoute `sampling: ImageSampling`, son identité
   devient `geometry-image-patch-v2`, et `DisplayOpSceneAdapter` construit
   `MaterialNode.ImageSample` avec cette valeur exacte ;
-- `ImageNine` reste `Nearest`, `ImageLattice` conserve son sampling déjà
-  explicite et `Atlas` reste `Nearest` tant que son API n'expose pas ce
-  paramètre ;
+- `GeometryNode.ImageNine` devient un nœud IR distinct de `ImagePatch`, avec
+  `image`, `center: RectF32`, `destination: RectF32` et
+  `sampling=Nearest`; `DisplayOpSceneAdapter` l'émet uniquement pour
+  `DrawOrigin.IMAGE_NINE` et la lane préparée conserve sa décomposition
+  existante en neuf couples source/destination. Aucun nouveau type rectangle
+  n'est créé dans `:render-ir` : les objets géométriques restent ceux de
+  `:math:geometry` avec la nomenclature F32 ;
+- `ImageLattice` conserve son sampling déjà explicite et `Atlas` reste
+  `Nearest` tant que son API n'expose pas ce paramètre ;
 - `SceneDisplayOpAdapter`, le codec `Picture`, `SceneArchiveCodec` et les
   witnesses W4/W5 sont versionnés ensemble. Les anciens payloads décodent
   `Nearest` ; un round-trip nouveau doit conserver `Nearest`, `Linear` et les
@@ -616,13 +631,17 @@ Le shader éventuel du paint n'est plus utilisé comme transport de sampling. Il
 reste snapshoté séparément pour la sémantique couleur A8 de 5.3 ; le supprimer
 ou l'écraser lors d'un draw image est un échec de gate W5e.
 
-Pour `ImagePatch(src,dst)`, le point local est d'abord ramené dans le rectangle
-destination : `u=(P.x-dst.left)/dst.width`,
+Pour `ImagePatch(src,dst)` issu de `DrawOrigin.IMAGE`, le point local est
+d'abord ramené dans le rectangle destination : `u=(P.x-dst.left)/dst.width`,
 `v=(P.y-dst.top)/dst.height`, puis la coordonnée image vaut
 `s=(src.left+u*src.width, src.top+v*src.height)`. Une largeur ou hauteur source
 ou destination nulle/non finie est refusée ; un axe négatif conserve le flip
 explicite. Le domaine de tile est l'image entière, après cette projection du
-source rect.
+source rect. Cette projection générique est interdite à `ImageNine` : chaque
+cellule de sa décomposition porte son propre couple source/destination avant
+la création du `MaterialNode.ImageSample`. Le planner refuse toute combinaison
+`ImagePatch/IMAGE_NINE` ou `ImageNine/IMAGE`, ce qui empêche d'étirer le centre
+sur toute la destination.
 
 Les coordonnées image utilisent des centres de pixels `i + 0.5`. Pour une
 coordonnée `s`, poser `u = s - 0.5` : nearest choisit `floor(s)`, linear les
@@ -709,8 +728,16 @@ pose `l=Lum(c), n=min(c), x=max(c)` puis, si `n<0`,
 `c=l+(c-l)*(1-l)/(x-l)`.
 
 Toutes les divisions traitent leur branche de dénominateur nul avant calcul.
-Les calculs CPU sont F64 puis projetés F32 ; le WGSL F32 suit les mêmes branches
-et l'encodage RGBA8 final constitue le seul arrondi de comparaison publique.
+Le CPU oracle arrondit en F32 après chaque opération primitive, suit le même
+arbre d'expressions et les mêmes branches que le WGSL, sans contraction
+implicite ; un `fma` n'est permis que s'il est explicite des deux côtés.
+L'encodage RGBA8 final constitue l'arrondi de comparaison publique. Les modes
+sans transcendantale sont byte-exacts ; `SOFT_LIGHT`, qui utilise `sqrt`,
+autorise au plus un code RGBA8 uniquement lorsque l'analyse d'intervalle F32
+autour du résultat CPU prouve que l'écart backend peut franchir la frontière
+de quantification correspondante. Cette tolérance analytique est enregistrée
+par canal et par pixel ; elle n'est ni un score de similarité ni une tolérance
+globale.
 
 ### 10.2 Versions destination-read
 
@@ -896,8 +923,8 @@ abiHash)` :
 
 Une entrée sémantique contient le kind shader/color-filter/blender, l'ordre des
 uniforms avec type scalaire, count, byte size, offset, alignment et stride, les
-child slots avec nom/type/nullability, les ressources autorisées avec
-group/binding/type, les limites de graphe et de bindings, ainsi que
+child slots avec nom/type/nullability, les ressources logiques autorisées avec
+slot/type, les limites de graphe et de bindings, ainsi que
 l'identité/version obligatoire de l'évaluateur CPU. Elle ne contient ni WGSL,
 ni handle WebGPU. Son snapshot et sa version de dictionnaire sont figés avant
 la compilation de la frame.
@@ -911,10 +938,10 @@ les identités des nœuds runtime et dans une nouvelle version de
 `SceneArchiveCodec`/`Picture`; les archives antérieures décodent version zéro
 et restent donc explicitement non exécutables par W5.
 
-L'uniform block `RuntimeUniformBlockV1` utilise un seul
-`@group(1) @binding(0) var<uniform>`. Les champs suivent l'ordre du descriptor,
-sans tri par nom, avec `offset=alignUp(cursor,alignment)` et une taille finale
-alignée à 16 bytes :
+`RuntimeUniformBlockV1` décrit l'ABI logique locale d'un effet, sans group ni
+binding physique. Les champs suivent l'ordre du descriptor, sans tri par nom,
+avec `offset=alignUp(cursor,alignment)` relatif au début du block et une taille
+finale alignée à 16 bytes :
 
 | Type public | alignement | taille | représentation |
 | --- | ---: | ---: | --- |
@@ -930,41 +957,71 @@ alignée à 16 bytes :
 `arrayCountI32=1` et `arrayStrideBytesI32=0` pour les types scalaires ci-dessus;
 toute déclaration d'array est refusée jusqu'à la définition d'une ABI V2.
 Le champ historique `binding` par uniform est supprimé à cette frontière :
-tous les champs appartiennent au binding 0 et leur offset est l'autorité.
+leur offset local est l'autorité.
 
-Chaque ressource est décrite par un `RuntimeResourceSlotV1` comprenant au
-minimum `groupI32`, `bindingI32`, `kind`, `addressSpace`, `access`,
+Chaque ressource logique est décrite par un `RuntimeLogicalResourceSlotV1`
+comprenant au minimum `logicalSlotI32`, `kind`, `addressSpace`, `access`,
 `minBindingSizeBytesI64`, `textureViewDimension`, `textureSampleType`,
-`multisampled` et `samplerType`. Le material bind group est toujours 1 :
-binding 0 est le block uniforme ; les autres ressources sont affectées à partir
-de 1 par parcours préfixe du DAG et ordre déclaré des children. Un stop buffer
-est `STORAGE/read`. Une image W5 est toujours
+`multisampled` et `samplerType`, mais aucun group/binding physique. Un stop
+buffer est `STORAGE/read`. Une image W5 est toujours
 `TEXTURE/2D/float-filterable`; nearest, linear et cubic exécutent les taps
 explicites de 9.2 par `textureLoad`, donc le slot porte `samplerType=NONE` et
 aucun sampler caché ne peut modifier l'arrondi. Un effet futur déclarant un
 sampler devra exposer un slot séparé `SAMPLER/filtering`, `non-filtering` ou
 `comparison`, mais W5 refuse `comparison`. Un
 child runtime n'est pas un handle : son sous-graphe est inline et ses slots de
-ressource apparaissent dans cette même liste aplatie. Les textures storage,
+ressource restent locaux à son entrée sémantique. Les textures storage,
 dimensions autres que 2D, samplers comparison, arrays de bindings et address
 spaces autres que `uniform`/`storage-read` sont refusés en W5.
 
 `abiHash` est le SHA-256 de la sérialisation UTF-8 canonique de : kind,
 semantic version, ordre/type/nullability des children, chaque champ uniforme
 avec type/offset/size/alignment/count/stride, taille du block, chaque ressource
-avec tous les champs ci-dessus, entrypoint logique et contrats d'entrée/sortie
-couleur. Les valeurs d'uniform, pixels, stops et IDs de ressources en sont
-exclues. Le planner recalcule ce hash depuis l'entrée sémantique ; le renderer
-le recalcule depuis la reflection du module assemblé. Ils doivent tous deux
-être byte-exactement égaux au hash du descriptor.
+avec tous ses champs logiques ci-dessus, entrypoint logique et contrats
+d'entrée/sortie couleur. Le group/binding physique et les offsets de composition
+n'en font pas partie ; les valeurs d'uniform, pixels, stops et IDs de ressources
+en sont également exclues. Le planner le recalcule depuis l'entrée sémantique
+et le renderer depuis le manifest logique du module enregistré. Ils doivent
+tous deux être byte-exactement égaux au hash du descriptor.
 
-Le manifest renderer contient le même ABI hash, le WGSL enregistré, les slots
-de reflection attendus et les capabilities physiques. Parser, reflection,
-offsets/strides, group/binding, address spaces, texture sample/dimension,
-sampler type et égalité byte-exacte du manifest avec le plan sont validés avant
-toute création de pipeline. Une clé absente d'une des trois couches, une
-version différente, un child incompatible ou un budget dépassé produit un
-refus terminal avant ownership natif.
+La composition physique appartient à
+`MaterialBindingPlan.ComposedBindingLayoutV1`, jamais au descriptor runtime.
+Pour le DAG material complet, le parcours préfixe et l'ordre déclaré des
+children définissent une liste stable. Le bind group material est toujours 1 :
+
+- `@group(1) @binding(0)` contient l'unique block uniforme composé ; pour
+  chaque nœud material ayant un block logique,
+  `baseOffsetBytesI32=alignUp(cursor,16)` et l'offset physique d'un champ vaut
+  `baseOffsetBytesI32 + offsetBytesI32` local. Le block logique est
+  `RuntimeUniformBlockV1` pour un effet runtime et le schéma versionné du
+  `MaterialProgramPlan` pour un nœud built-in ;
+- les stops, images et autres ressources sont affectés à partir de binding 1
+  dans l'ordre du parcours ; chaque entrée physique conserve
+  `ownerNodeIndexI32`, `logicalSlotI32`, `groupI32`, `bindingI32` et tous les
+  faits de type du slot logique. Les slots des effets runtime viennent du
+  descriptor ; les nœuds built-in utilisent le schéma versionné de leur plan ;
+- `ownerNodeIndexI32` est attribué à la première visite préfixe ; une référence
+  ultérieure au même nœud partagé réutilise cet index et la même plage de
+  bindings. Toute divergence entre partage déclaré et parcours est un refus de
+  planification.
+
+`composedBindingLayoutHash` est le SHA-256 de la sérialisation canonique de la
+taille totale du block, de chaque mapping
+`ownerNodeIndexI32/localOffsetBytesI32 -> physicalOffsetBytesI32` et de chaque
+mapping
+`ownerNodeIndexI32/logicalSlotI32 -> groupI32/bindingI32/faits physiques`. Il
+entre dans la clé du programme assemblé, pas dans `abiHash`.
+
+Le manifest renderer contient le même `abiHash`, le fragment WGSL enregistré,
+ses slots logiques attendus et les capabilities physiques. Le fragment
+enregistré n'a aucune annotation `@group/@binding`; l'assembleur déclare les
+ressources physiques du module final depuis `ComposedBindingLayoutV1`. Avant
+toute création de pipeline, le renderer valide d'abord le manifest logique
+contre `abiHash`, puis la reflection du WGSL assemblé — offsets/strides,
+group/binding, address spaces, texture sample/dimension et sampler type —
+contre `composedBindingLayoutHash`. Une clé absente d'une des trois couches,
+une version différente, un child incompatible, un hash différent ou un budget
+dépassé produit un refus terminal avant ownership natif.
 
 L'API actuelle `RuntimeEffect.compile(wgsl)` peut continuer à construire un
 snapshot/descripteur version zéro pour compatibilité, mais son
@@ -1153,6 +1210,9 @@ commit upstream `70977ebbdbc111776199920c8c25243ba5dc71db` :
 - [`SkImageShader.cpp`](https://skia.googlesource.com/skia/+/70977ebbdbc111776199920c8c25243ba5dc71db/src/shaders/SkImageShader.cpp), pour les contraintes de sampling image.
 - [`SkMatrixColorFilter.cpp`](https://skia.googlesource.com/skia/+/70977ebbdbc111776199920c8c25243ba5dc71db/src/effects/colorfilters/SkMatrixColorFilter.cpp) et [`SkHighContrastFilter.cpp`](https://skia.googlesource.com/skia/+/70977ebbdbc111776199920c8c25243ba5dc71db/src/effects/SkHighContrastFilter.cpp), pour les domaines straight/premul et la formule high-contrast ;
 - [`SkPerlinNoiseShaderImpl.cpp`](https://skia.googlesource.com/skia/+/70977ebbdbc111776199920c8c25243ba5dc71db/src/shaders/SkPerlinNoiseShaderImpl.cpp) et [`SkPerlinNoiseShaderImpl.h`](https://skia.googlesource.com/skia/+/70977ebbdbc111776199920c8c25243ba5dc71db/src/shaders/SkPerlinNoiseShaderImpl.h), pour le PRNG, les gradients et le stitching NoiseV1.
+- [`WebGPU Shading Language`](https://www.w3.org/TR/WGSL/), pour les types
+  scalaires disponibles, les contraintes de layout et les bindings physiques
+  du module assemblé.
 
 Ces références fixent la sémantique attendue ; elles n'introduisent aucun test
 GM, baseline ou dépendance au code Skia dans les gates W5.
