@@ -136,10 +136,48 @@ class GPUPlanSurfacePixelTest {
             drawPath(foreground, Paint.fill(ColorARGB.of(255, 38, 161, 99)).copy(antiAlias = false))
         }
 
-        val result = surface.render()
+        assertTrue(expected.any { it != 0.toUByte() }, "oracle fixture must observe covered pixels")
+        val failure = assertFailsWith<GPUPlanSurfaceTerminalException> { surface.render() }
+        assertEquals("w4e.clip.mask-format-unavailable", failure.code)
+    }
 
-        assertPreparedRouteEvidence(result)
-        assertPixelsEqual(expected, result.pixels)
+    @Test
+    fun `W4e public hard inverse empty and non-empty draws match the independent 1x oracle`() {
+        val triangle = Path {
+            moveTo(3f, 3f)
+            lineTo(13f, 3f)
+            lineTo(4f, 13f)
+            close()
+        }.apply { fillType = FillType.INVERSE_WINDING }
+        val empty = Path().apply { fillType = FillType.INVERSE_WINDING }
+        val clip = Path()
+        val cases = listOf(
+            triangle to W4eClipCpuOracle.Shape.Inverse(
+                W4eClipCpuOracle.Shape.Polygon(listOf(
+                    W4eClipCpuOracle.Point(3.0, 3.0),
+                    W4eClipCpuOracle.Point(13.0, 3.0),
+                    W4eClipCpuOracle.Point(4.0, 13.0),
+                )),
+            ),
+            empty to W4eClipCpuOracle.Shape.Inverse(W4eClipCpuOracle.Shape.Rect(0.0, 0.0, 0.0, 0.0)),
+        )
+        cases.forEach { (path, shape) ->
+            val expected = W4eClipCpuOracle.render(
+                16,
+                16,
+                listOf(W4eClipCpuOracle.Draw(shape, W4eClipCpuOracle.Rgba8(255, 0, 0, 255), false,
+                    listOf(W4eClipCpuOracle.Clip(W4eClipCpuOracle.Shape.Rect(0.0, 0.0, 0.0, 0.0), W4eClipCpuOracle.ClipOperation.Difference, false)),
+                )),
+            )
+            val surface = Surface(16, 16)
+            surface.canvas {
+                clipPath(clip, ClipOp.DIFFERENCE, antiAlias = false)
+                drawPath(path, Paint.fill(ColorARGB.Red).copy(antiAlias = false))
+            }
+            val result = surface.render()
+            assertPreparedRouteEvidence(result)
+            assertPixelsEqual(expected, result.pixels)
+        }
     }
 
     @Test

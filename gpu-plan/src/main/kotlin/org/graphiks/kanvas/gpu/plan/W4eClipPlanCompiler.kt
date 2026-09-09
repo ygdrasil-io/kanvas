@@ -667,8 +667,16 @@ public class W4eClipPlanCompiler(
     private fun DrawNode.isW4eFillScope(): Boolean =
         geometry is GeometryNode.Path &&
             material is org.graphiks.kanvas.render.ir.MaterialNode.Solid &&
-            blend == org.graphiks.kanvas.render.ir.BlendNode.SrcOver &&
+            blend.isSrcOverWithoutCustomBlender() &&
             paint?.style == org.graphiks.kanvas.render.ir.PaintStyleNode.FILL
+
+    /** Public Paint capture preserves its explicit SRC_OVER provenance as [BlendNode.Paint]. */
+    private fun org.graphiks.kanvas.render.ir.BlendNode.isSrcOverWithoutCustomBlender(): Boolean = when (this) {
+        org.graphiks.kanvas.render.ir.BlendNode.SrcOver -> true
+        is org.graphiks.kanvas.render.ir.BlendNode.Mode -> mode == org.graphiks.kanvas.render.ir.BlendMode.SRC_OVER
+        is org.graphiks.kanvas.render.ir.BlendNode.Paint -> mode == org.graphiks.kanvas.render.ir.BlendMode.SRC_OVER && blender == null
+        is org.graphiks.kanvas.render.ir.BlendNode.Custom -> false
+    }
 
     private fun DrawNode.prepareInversePathOrNull(domain: RectI32): InverseResult {
         val path = (geometry as? GeometryNode.Path)?.path ?: return InverseResult.None

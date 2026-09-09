@@ -54,7 +54,7 @@ import org.graphiks.math.matrix.Matrix3x3F32
 @OptIn(ExperimentalUnsignedTypes::class)
 class GPUPlanSurfaceRouterTest {
     @Test
-    fun `W4e hard ordered rect clips reach the public router plan chain`() {
+    fun `W4e hard ordered mask clips stop at the public native capability boundary rather than legacy`() {
         val context = GpuRenderContext.createProduction()
         try {
             val clip = ClipStack.Complex(
@@ -63,25 +63,62 @@ class GPUPlanSurfaceRouterTest {
                     ClipStackOp.RectOp(RectF32.ofLTRB(3f, 3f, 5f, 5f), ClipOp.DIFFERENCE, antiAlias = false),
                 ),
             )
-            val result = GPUPlanSurfaceRouter(planPort = capabilityChainPort(context)).render(
-                operations = listOf(
+            val operations = listOf(
                     DisplayOp.DrawPath(
                         Path().apply { addRect(RectF32.ofLTRB(0f, 0f, 8f, 8f)) },
                         Paint.fill(ColorARGB.Red).copy(antiAlias = false),
                         Matrix3x3F32.Identity,
                         clip,
                     ),
-                ),
-                width = 8,
-                height = 8,
-                format = PixelFormat.RGBA8,
-                config = RenderConfig.DEFAULT,
-                legacy = { error("W4e complex clips must not fall back after candidate admission") },
-            )
+                )
+            val failure = assertFailsWith<GPUPlanSurfaceTerminalException> {
+                GPUPlanSurfaceRouter(planPort = capabilityChainPort(context)).render(
+                    operations = operations,
+                    width = 8,
+                    height = 8,
+                    format = PixelFormat.RGBA8,
+                    config = RenderConfig.DEFAULT,
+                    legacy = { error("W4e complex clips must not fall back after candidate admission") },
+                )
+            }
 
-            assertContentEquals(ubyteArrayOf(255u, 0u, 0u, 255u), pixelAt(result, 2, 2))
-            assertContentEquals(ubyteArrayOf(0u, 0u, 0u, 0u), pixelAt(result, 4, 4))
-            assertContentEquals(ubyteArrayOf(0u, 0u, 0u, 0u), pixelAt(result, 0, 0))
+            assertEquals("w4e.clip.mask-format-unavailable", failure.code)
+        } finally {
+            context.close()
+        }
+    }
+
+    @Test
+    fun `W4e hard inverse draw reaches public 1x D24 completion and recovers for a second frame`() {
+        val inverse = Path {
+            moveTo(3f, 3f)
+            lineTo(13f, 3f)
+            lineTo(4f, 13f)
+            close()
+        }.apply { fillType = FillType.INVERSE_WINDING }
+        val operations = listOf(
+            DisplayOp.DrawPath(
+                inverse,
+                Paint.fill(ColorARGB.Red).copy(antiAlias = false),
+                Matrix3x3F32.Identity,
+                ClipStack.Complex(listOf(ClipStackOp.PathOp(Path(), ClipOp.DIFFERENCE, antiAlias = false))),
+            ),
+        )
+        val context = GpuRenderContext.createProduction()
+        try {
+            repeat(2) {
+                val result = GPUPlanSurfaceRouter(planPort = capabilityChainPort(context)).render(
+                    operations = operations,
+                    width = 16,
+                    height = 16,
+                    format = PixelFormat.RGBA8,
+                    config = RenderConfig.DEFAULT,
+                    legacy = { error("W4e inverse path must not fall back after candidate admission") },
+                )
+
+                assertContentEquals(ubyteArrayOf(255u, 0u, 0u, 255u), pixelAt(result, 0, 0))
+                assertContentEquals(ubyteArrayOf(0u, 0u, 0u, 0u), pixelAt(result, 5, 5))
+            }
         } finally {
             context.close()
         }

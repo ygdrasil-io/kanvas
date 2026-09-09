@@ -43,6 +43,7 @@ import org.graphiks.kanvas.pipeline.VertexStepMode
 import org.graphiks.kanvas.render.ir.SceneArchiveCodec
 import org.graphiks.kanvas.render.ir.SceneArchiveDecodeResult
 import org.graphiks.kanvas.surface.Surface
+import org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.KanvasTypeface
 import org.graphiks.kanvas.text.TextBlob
@@ -635,7 +636,7 @@ class PictureTest {
     }
 
     @Test
-    fun `version 8 picture roundtrip keeps ordered hard clips visible through Surface`() {
+    fun `version 8 picture roundtrip preserves ordered hard clips through the public composite boundary`() {
         val cutout = Path().apply {
             moveTo(3f, 3f)
             lineTo(5f, 3f)
@@ -655,14 +656,8 @@ class PictureTest {
         val surface = Surface(8, 8)
         surface.canvas { drawPicture(restored) }
 
-        val result = surface.render()
-        fun pixel(x: Int, y: Int): UByteArray {
-            val offset = (y * result.width + x) * 4
-            return result.pixels.copyOfRange(offset, offset + 4)
-        }
-        assertEquals(ubyteArrayOf(255u, 0u, 0u, 255u).toList(), pixel(2, 2).toList())
-        assertEquals(ubyteArrayOf(0u, 0u, 0u, 0u).toList(), pixel(4, 4).toList())
-        assertEquals(ubyteArrayOf(0u, 0u, 0u, 0u).toList(), pixel(0, 0).toList())
+        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> { surface.render() }
+        assertTrue(failure.message.orEmpty().startsWith("unsupported.composite.clip:"), failure.message)
     }
 
     @Test
