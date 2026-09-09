@@ -18,6 +18,7 @@ dependencies {
     api(libs.wgslCoreJvm)
     api(libs.wgslParserJvm)
     testImplementation(kotlin("test"))
+    testImplementation(project(":gpu-plan"))
     testImplementation("org.junit.jupiter:junit-jupiter-params:5.10.2")
     testImplementation(libs.wgslCoreJvm)
     testImplementation(libs.wgslParserJvm)
