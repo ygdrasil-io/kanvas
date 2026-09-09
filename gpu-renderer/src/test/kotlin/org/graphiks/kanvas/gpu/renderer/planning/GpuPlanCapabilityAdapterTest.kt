@@ -184,44 +184,58 @@ class GpuPlanCapabilityAdapterTest {
     }
 
     @Test
-    fun `adapter does not invent color usages when AA4 is absent`() {
-        val snapshot = assertIs<GpuPlanCapabilityAdapterResult.Supported>(
-            capabilities(textureUsage = GPUTextureUsage.RenderAttachment)
-                .toPlanCapabilitySnapshot(GPUDeviceGenerationID(7)),
-        ).snapshot
+    fun `adapter projects each isolated color usage bit exactly without AA4`() {
         val color = PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL)
-
-        assertTrue(snapshot.supportsTexture(color, 1, setOf(PlanResourceUsage.RenderAttachment)))
-        assertEquals(false, snapshot.supportsTexture(color, 1, setOf(PlanResourceUsage.CopySource)))
-        assertEquals(
-            false,
-            snapshot.supportsTexture(
-                color,
-                1,
-                setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource),
-            ),
+        val planUsages = listOf(
+            PlanResourceUsage.RenderAttachment,
+            PlanResourceUsage.CopySource,
+            PlanResourceUsage.CopyDestination,
+            PlanResourceUsage.Sampled,
         )
-        assertEquals(false, snapshot.supportsTexture(color, 1, setOf(PlanResourceUsage.CopyDestination)))
-        assertEquals(false, snapshot.supportsTexture(color, 1, setOf(PlanResourceUsage.Sampled)))
-        assertEquals(false, snapshot.supportsTexture(color, 4, setOf(PlanResourceUsage.RenderAttachment)))
+        val cases = listOf(
+            GPUTextureUsage.RenderAttachment to PlanResourceUsage.RenderAttachment,
+            GPUTextureUsage.CopySrc to PlanResourceUsage.CopySource,
+            GPUTextureUsage.CopyDst to PlanResourceUsage.CopyDestination,
+            GPUTextureUsage.TextureBinding to PlanResourceUsage.Sampled,
+        )
+
+        cases.forEach { (observedUsage, expectedUsage) ->
+            val snapshot = assertIs<GpuPlanCapabilityAdapterResult.Supported>(
+                capabilities(textureUsage = observedUsage).toPlanCapabilitySnapshot(GPUDeviceGenerationID(7)),
+            ).snapshot
+
+            planUsages.forEach { usage ->
+                assertEquals(
+                    usage == expectedUsage,
+                    snapshot.supportsTexture(color, 1, setOf(usage)),
+                    "$observedUsage must project only to $expectedUsage",
+                )
+            }
+            assertEquals(false, snapshot.supportsTexture(color, 4, setOf(PlanResourceUsage.RenderAttachment)))
+        }
     }
 
     @Test
-    fun `adapter preserves observed color usages when AA4 is present`() {
-        val observedUsage = GPUTextureUsage.RenderAttachment or
-            GPUTextureUsage.CopySrc or
-            GPUTextureUsage.CopyDst or
-            GPUTextureUsage.TextureBinding
-        val snapshot = assertIs<GpuPlanCapabilityAdapterResult.Supported>(
-            w4dPhysicalCapabilities(textureUsage = observedUsage)
-                .toPlanCapabilitySnapshot(GPUDeviceGenerationID(7)),
-        ).snapshot
+    fun `adapter keeps one sample color usage projection exact when AA4 topology is active`() {
         val color = PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL)
-
-        assertTrue(
-            snapshot.supportsTexture(
-                color,
-                1,
+        val planUsages = listOf(
+            PlanResourceUsage.RenderAttachment,
+            PlanResourceUsage.CopySource,
+            PlanResourceUsage.CopyDestination,
+            PlanResourceUsage.Sampled,
+        )
+        val cases = listOf(
+            Pair(
+                GPUTextureUsage.RenderAttachment or GPUTextureUsage.CopySrc or GPUTextureUsage.TextureBinding,
+                setOf(
+                    PlanResourceUsage.RenderAttachment,
+                    PlanResourceUsage.CopySource,
+                    PlanResourceUsage.Sampled,
+                ),
+            ),
+            Pair(
+                GPUTextureUsage.RenderAttachment or GPUTextureUsage.CopySrc or
+                    GPUTextureUsage.CopyDst or GPUTextureUsage.TextureBinding,
                 setOf(
                     PlanResourceUsage.RenderAttachment,
                     PlanResourceUsage.CopySource,
@@ -230,7 +244,23 @@ class GpuPlanCapabilityAdapterTest {
                 ),
             ),
         )
-        assertTrue(snapshot.supportsTexture(color, 4, setOf(PlanResourceUsage.RenderAttachment)))
+
+        cases.forEach { (observedUsage, expectedUsages) ->
+            val snapshot = assertIs<GpuPlanCapabilityAdapterResult.Supported>(
+                w4dPhysicalCapabilities(textureUsage = observedUsage)
+                    .toPlanCapabilitySnapshot(GPUDeviceGenerationID(7)),
+            ).snapshot
+
+            planUsages.forEach { usage ->
+                assertEquals(
+                    usage in expectedUsages,
+                    snapshot.supportsTexture(color, 1, setOf(usage)),
+                    "$observedUsage must preserve $usage exactly while AA4 is available",
+                )
+            }
+            assertTrue(snapshot.supportsTexture(color, 1, expectedUsages))
+            assertTrue(snapshot.supportsTexture(color, 4, setOf(PlanResourceUsage.RenderAttachment)))
+        }
     }
 
     @Test
@@ -254,7 +284,12 @@ class GpuPlanCapabilityAdapterTest {
         val missingLinearMaskFormat = physical.copy(
             supportedTextureFormats = physical.supportedTextureFormats - GPUTextureFormat.RGBA8Unorm,
         )
-        val missingSampledUsage = physical.copy(supportedTextureUsage = GPUTextureUsage.RenderAttachment)
+        val missingTextureBinding = physical.copy(
+            supportedTextureUsage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.CopySrc,
+        )
+        val missingCopySource = physical.copy(
+            supportedTextureUsage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding,
+        )
         val missingOneSample = physical.copy(
             textureFormatSampleSupport = GPUTextureFormatSampleSupport(
                 physical.textureFormatSampleSupport + (
@@ -265,7 +300,7 @@ class GpuPlanCapabilityAdapterTest {
             ),
         )
 
-        listOf(missingLinearMaskFormat, missingSampledUsage).forEach { incomplete ->
+        listOf(missingLinearMaskFormat, missingTextureBinding).forEach { incomplete ->
             val snapshot = assertIs<GpuPlanCapabilityAdapterResult.Supported>(
                 incomplete.toPlanCapabilitySnapshot(GPUDeviceGenerationID(7)),
             ).snapshot
@@ -280,6 +315,17 @@ class GpuPlanCapabilityAdapterTest {
                 ),
             )
         }
+
+        val sampleableWithoutCopySource = assertIs<GpuPlanCapabilityAdapterResult.Supported>(
+            missingCopySource.toPlanCapabilitySnapshot(GPUDeviceGenerationID(7)),
+        ).snapshot
+        assertTrue(
+            sampleableWithoutCopySource.supportsTexture(
+                PlanTextureFormat.CoverageMask,
+                1,
+                setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled),
+            ),
+        )
 
         val missingSampleSnapshot = assertIs<GpuPlanCapabilityAdapterResult.Supported>(
             missingOneSample.toPlanCapabilitySnapshot(GPUDeviceGenerationID(7)),

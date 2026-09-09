@@ -187,6 +187,20 @@ class GpuPlanTaskListLowererTest {
     }
 
     @Test
+    fun `W3 lowerer rejects a sampleable color target without CopySrc`() {
+        val result = lowerer.lower(
+            validRequest(
+                rendererCapabilities = capabilities().copy(
+                    supportedTextureUsage =
+                        GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding,
+                ),
+            ),
+        )
+
+        assertIs<GpuPlanLoweringResult.UnsupportedCapability>(result)
+    }
+
+    @Test
     fun `W3 scratch refuses pooled buffer floors and rounded capacities before materialization`() {
         listOf(4L * 1024L, 16L * 1024L - 1L).forEach { maxBufferSize ->
             val refusal = assertIs<GpuPlanLoweringResult.UnsupportedCapability>(
