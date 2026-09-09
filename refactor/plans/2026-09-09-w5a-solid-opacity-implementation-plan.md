@@ -1,0 +1,261 @@
+# W5a Common Solid and Opacity Material Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Each implementation task follows RED → GREEN → refactor and is followed by a read-only Sol spec/quality review.
+
+**Goal:** Introduire l'autorité material plan-first commune de W5 et fermer Solid + Opacity sur toutes les familles déjà admises par les routes préparées, sans changer la géométrie W4 ni conserver un fallback material silencieux sur les lanes promues.
+
+**Architecture:** `:gpu-plan` construit une seule fois un `EffectiveMaterialPlan`, un `MaterialProgramPlan` et un `MaterialBindingPlan` immuables à partir des faits sémantiques du draw. Les draws W5 référencent une table material scellée du `RenderGraph`; les witnesses W3/W4 historiques passent uniquement par un adaptateur legacy explicite. `:gpu-renderer` matérialise le plan scellé et les routes Rect/RRect/Path/Points/Text/Vertices consomment la même autorité Solid/Opacity, sans reconstruire leur propre descripteur.
+
+**Tech Stack:** Kotlin/JVM/JS, `:render-ir`, `:gpu-plan`, `:gpu-renderer`, `:kanvas`, WebGPU/WGPU4K, Gradle, `rtk`.
+
+**Spec:** `refactor/specs/2026-09-09-w5-material-graph-design.md`
+
+## Global Constraints
+
+- Branche locale : `codex/w5a-solid-opacity`, empilée sur `codex/w5-material-graph`; la future PR cible la branche de design W5.
+- Exécution continue : les tâches 1–8 sont enchaînées sans checkpoint utilisateur; arrêt uniquement sur contradiction du contrat, mutation externe irréversible ou capability physique réellement absente.
+- W5a couvre uniquement `Transparent`, `Solid` et `Opacity`; blends hors `SRC_OVER`, gradients, images, matrices locales, filters, noise et runtime effects restent aux tranches suivantes.
+- W5a ajoute le wrapper public `Shader.Opacity(shader, alphaF32)`, snapshoté et sérialisé vers `MaterialNode.Opacity`; l'alpha fini `[0,1]` est validé avant copie du child.
+- Le contrat interne est RGBA linéaire prémultiplié. Pour un shader Solid, l'alpha du `Paint.color` module exactement une fois les quatre composantes; son RGB est ignoré.
+- `Opacity(child, 1)` se neutralise; deux opacités finies adjacentes se multiplient dans l'ordre F32 normatif; zéro devient transparent seulement lorsque la distinction reste inobservable sous `SRC_OVER` sans effet.
+- Un draw W5 possède exactement une `MaterialPlanRef` et une autorité de blend. Il ne possède pas simultanément une couleur legacy et une référence material.
+- Les witnesses W3/W4 historiques et leurs résultats publics restent valides. Leur `ColorF32` n'est accessible qu'au travers d'un adaptateur legacy versionné et ne peut pas être produit par un compiler W5.
+- Structure et valeurs sont séparées : couleurs/alpha changent les bindings, jamais l'identité structurelle du programme.
+- Toute table, liste et payload publié est défensivement snapshoté avant `Ready`; aucun handle, WGSL ou type WebGPU n'entre dans `:gpu-plan`.
+- Les objets géométriques restent exclusivement dans `:math:geometry`; l'orchestration des transforms reste dans `:math:matrix`; toute nouvelle valeur numérique publique suit I32/I64/F32/F64.
+- Aucun fallback material silencieux après sélection W5. Un refus est typé avant `Ready`, ou terminal après ownership de la frame; une frame refusée n'alloue rien.
+- Tests comportementaux publics uniquement : `Surface`, `Canvas`, `Picture`, `render()`, pixels et diagnostics publics. Aucun test de structure, source shape, private/internal, reflection, call count, cache identity, scope/counter ou infrastructure du code.
+- Les tests doivent être mutation-sensitive : une suppression de l'opacity, une double application de l'alpha, une confusion sRGB/linear, une autorité couleur concurrente ou une reconstruction après capture doit les faire échouer.
+- Aucun test ou changement `font`, codec, GM Skia, dashboard, baseline, `:integration-tests:skia` ou `jpg-color-cube`.
+- Un fresh implementation agent adapté par tâche; Sol uniquement pour les reviews spec/quality read-only après chaque commit. Le controller ne corrige pas lui-même un finding d'agent : il redonne la tâche à l'implementer jusqu'à `READY`.
+
+## Gate W5a
+
+La tranche n'est fermée que lorsque les cellules publiques suivantes passent avec alpha non trivial, mutation post-capture et `SRC_OVER` :
+
+| Famille | Preuve W5a |
+| --- | --- |
+| Rect | intégral hard-edge et fractionnaire analytic AA |
+| RRect | analytic AA avec coins non triviaux |
+| Path fill | direct triangle et stencil cover |
+| Path stroke | stroke et hairline sur les capabilities W4 déjà admises |
+| Point(s) | point et séquence multi-point préparés |
+| Text | glyph/run déjà résolu; aucune génération de font |
+| Vertices/Mesh | triangle préparé avec et sans couleurs vertex |
+
+Une frame publique mixte doit également combiner au minimum Rect, RRect et Path avec deux valeurs d'alpha différentes, puis produire les mêmes pixels après mutation des objets publics sources.
+
+## Shared Interfaces
+
+`gpu-plan` :
+
+```kotlin
+public value class MaterialPlanRef(public val indexI32: Int)
+
+public sealed interface MaterialProgramPlan {
+    public val versionI32: Int
+    public val structuralId: MaterialProgramPlanId
+
+    /** Graphe d'opérations F32 fini utilisé à la fois par le générateur et l'oracle. */
+    public fun copyNumericOperationGraphV1(): NumericOperationGraphV1
+
+    public data object TransparentV1 : MaterialProgramPlan
+    public data object SolidLinearPremulV1 : MaterialProgramPlan
+    public class OpacityV1(public val child: MaterialPlanRef) : MaterialProgramPlan
+}
+
+public sealed interface MaterialBindingPlan {
+    public val versionI32: Int
+
+    public class EmptyV1 : MaterialBindingPlan
+    public class SolidRgbaF32V1 private constructor(rgbaF32: ColorF32) : MaterialBindingPlan {
+        public fun copyRgbaF32(): ColorF32
+    }
+    public class OpacityF32V1 private constructor(public val alphaF32: Float) : MaterialBindingPlan
+}
+
+public data class MaterialPlanEntry(
+    public val program: MaterialProgramPlan,
+    public val bindings: MaterialBindingPlan,
+)
+
+public class MaterialPlanTable private constructor(entries: List<MaterialPlanEntry>) {
+    public val sizeI32: Int
+    public fun entry(ref: MaterialPlanRef): MaterialPlanEntry
+    public fun entries(): List<MaterialPlanEntry>
+}
+
+public sealed interface PlanDrawMaterialAuthority {
+    public data class MaterialV1(public val ref: MaterialPlanRef) : PlanDrawMaterialAuthority
+    public class LegacyColorV1 private constructor(colorF32: ColorF32) : PlanDrawMaterialAuthority
+}
+```
+
+Le nom final peut être ajusté lors de l'implémentation, mais les invariants sont obligatoires : référence indexée I32, version explicite, programme sans valeur dynamique, bindings sans WGSL/handle, snapshot défensif, union exclusive legacy/material, et `NumericOperationGraphV1` scellé couvrant conversion sRGB, prémultiplication, opacity, coverage, `SRC_OVER`, clamp et quantification.
+
+## File Map
+
+| Responsabilité | Créations principales | Modifications principales |
+| --- | --- | --- |
+| Plans material | `gpu-plan/.../MaterialPlan.kt`, `EffectiveMaterialPlanner.kt`, `W5aPlanDiagnostics.kt` | `PlanPasses.kt`, `RenderGraph.kt`, identities/seals |
+| Contrat numérique | `gpu-plan/.../NumericOperationGraphV1.kt`, `kanvas/.../surface/WgslFloatEnvelopeV1Oracle.kt` | générateur material commun |
+| API opacity | — | `Shader.kt`, `DisplayOpSnapshot.kt`, `PaintSceneAdapter.kt`, codec `Picture` |
+| Géométries W4 | — | compilers W3/W4a/W4b/W4c/W4d/W4e et witnesses associés |
+| Materializer commun | `gpu-renderer/.../planning/W5aMaterialPlanLowerer.kt` | `GPUPreparedMaterialProgramCompiler`, lowerers W3/W4 |
+| Points | — | route core primitive préparée et capture/admission si nécessaire |
+| Text | — | `GPUPreparedTextLowerer`, payload/composer material |
+| Vertices | — | `GPUPreparedVerticesLowerer`, payload/composer material |
+| Preuves publiques | `kanvas/.../surface/W5aSolidOpacityCpuOracle.kt`, `W5aMaterialSurfacePixelTest.kt` | tests publics existants si une fixture y appartient déjà |
+| Suivi | ce plan, `refactor/waves/W05-material-graph/status.md` | `refactor/README.md` |
+
+---
+
+### Task 1: Autorité EffectiveMaterial Solid/Opacity et premier Rect public
+
+**Files:**
+- Create: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/MaterialPlan.kt`
+- Create: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/EffectiveMaterialPlanner.kt`
+- Create: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/W5aPlanDiagnostics.kt`
+- Create: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/NumericOperationGraphV1.kt`
+- Create: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5aSolidOpacityCpuOracle.kt`
+- Create: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/WgslFloatEnvelopeV1Oracle.kt`
+- Create: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5aMaterialSurfacePixelTest.kt`
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/paint/Shader.kt`
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/canvas/DisplayOpSnapshot.kt`
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/render/ir/PaintSceneAdapter.kt`
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/picture/Picture.kt`
+- Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/PlanPasses.kt`
+- Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/RenderGraph.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/materials/GPUPreparedMaterialProgram.kt`
+- Modify: Rect planner/lowerer files reached by the failing public fixture
+
+- [ ] Add public RED tests rendering an integral Rect with `Shader.Opacity(Shader.SolidColor(...), alpha)` nested at least twice, non-trivial shader alpha and non-trivial `Paint.color.alpha`; cover opacity zero, one and a non-trivial product.
+- [ ] Add a `Picture` round-trip fixture proving that the public Opacity wrapper and its F32 alpha survive serialization before rendering.
+- [ ] Compare every channel to the independent `WgslFloatEnvelopeV1` oracle: only a singleton or two adjacent RGBA8 codes may pass. Reject a fixture whose envelope is wider or non-adjacent; do not assert a host-language exact float as the portable contract.
+- [ ] Add a RED capture-mutation case: mutate/rebind the caller-owned paint/shader inputs after recording and require the captured result to remain unchanged.
+- [ ] Run only the new public test and record the semantic failure, not an implementation detail.
+- [ ] Add the public `Shader.Opacity`, bounded snapshot traversal, IR mapping and versioned Picture encoding before implementing its planner path.
+- [ ] Implement iterative bounded normalization of `DrawNode` into `EffectiveMaterialPlan` for Solid/Opacity/Transparent; reject all other nodes with stable W5a diagnostics. Preserve public wrapper order until plan canonicalization, then neutralize one, combine adjacent finite opacities, and reduce zero only under the exact W5a `SRC_OVER`/no-effect condition.
+- [ ] Seal `NumericOperationGraphV1` in every W5a program and use that same graph to generate the backend expression and to drive the independent arbitrary-precision/outward-rounded test oracle. Model F32 rounding, FTZ, allowed reassociation/fusion, clamp and UNORM8 quantization.
+- [ ] Implement immutable program/binding entries and a sealed table. Deduplicate structure independently from values; do not deduplicate distinct binding payloads by structure alone.
+- [ ] Replace the first promoted Rect draw's color authority by `MaterialPlanRef`; retain the historical W3/W4 path only through `LegacyColorV1`.
+- [ ] Add the renderer adapter which consumes the plan and reuses the existing proven solid WGSL materializer without accepting a reconstructed semantic descriptor.
+- [ ] Run the new public test, then relevant existing W3/W4 Rect public pixel tests.
+- [ ] Refactor only after GREEN; run `rtk git diff --check` and commit `feat(gpu-plan): establish W5a solid material authority`.
+
+### Task 2: Rect fractionnaire et RRect sur la même autorité
+
+**Files:**
+- Modify: `gpu-plan/.../W4aAnalyticRectPlanCompiler.kt`
+- Modify: `gpu-plan/.../W4bAnalyticRRectPlanCompiler.kt`
+- Modify: `gpu-renderer/.../planning/W4aAnalyticRectGraphLowerer.kt`
+- Modify: `gpu-renderer/.../planning/W4bAnalyticRRectGraphLowerer.kt`
+- Modify: `kanvas/.../surface/W5aMaterialSurfacePixelTest.kt`
+
+- [ ] Add RED public pixel fixtures for a fractional Rect and non-trivial RRect, each with shader alpha × paint alpha and partial coverage.
+- [ ] Make the independent oracle apply coverage after SRC_OVER: `dst + coverage * (blend(src,dst)-dst)`.
+- [ ] Migrate both draw families to `MaterialPlanRef` while preserving geometry, scissor, sample and coverage facts byte-for-byte.
+- [ ] Version the promoted witness/capability; never authenticate a W5 draw with a historical W4 witness.
+- [ ] Verify mutation after Picture/recording cannot change bindings.
+- [ ] Run new tests plus public W4a/W4b pixel suites; commit `feat(gpu-plan): share W5a material across rect families`.
+
+### Task 3: Path fill, stroke et hairline
+
+**Files:**
+- Modify: W4c/W4d/W4e compiler and witness files under `gpu-plan/.../plan/`
+- Modify: W4c/W4d/W4e lowerers and authorities under `gpu-renderer/.../planning/` and `.../passes/`
+- Modify: `kanvas/.../surface/W5aMaterialSurfacePixelTest.kt`
+
+- [ ] Add RED public fixtures for direct-triangle fill, stencil-cover fill, stroke and hairline using Solid shader + paint opacity.
+- [ ] Cover both hard-edge and already-authentic AA4 cells; do not add or inject a new AA4 capability.
+- [ ] Preserve the `MaterialPlanRef` on the logical draw identity through path wrappers without copying `ColorF32` back into the draw.
+- [ ] Bind and evaluate the material only in color-writing phases (direct color, color cover and binary color cover). Stencil and mask producers consume geometry/coverage only and must neither bind nor evaluate material resources.
+- [ ] Run new tests plus public W4c/W4d/W4e path suites; commit `feat(gpu-plan): apply W5a material to prepared paths`.
+
+### Task 4: Point et Points préparés
+
+**Files:**
+- Modify: point capture/admission/planning files selected by repository search
+- Modify: `gpu-renderer/.../recording/GPUCorePrimitivePreparedFrameTaskListBuilder.kt`
+- Modify: point materialization/payload files selected by the prepared route
+- Modify: `kanvas/.../surface/W5aMaterialSurfacePixelTest.kt`
+
+- [ ] Add RED public `drawPoint` and multi-`drawPoints` fixtures with non-trivial alpha, including three successive commands so ordering cannot be hidden.
+- [ ] Feed the common `EffectiveMaterialPlanner` from the immutable draw snapshot; remove any point-local solid descriptor creation for the promoted cases.
+- [ ] Keep point topology and coverage unchanged. Any unsupported blend still belongs to W5b and must refuse/fall through before W5 ownership according to the existing route contract.
+- [ ] Compare public pixels only; do not assert prepared-route counters or scopes.
+- [ ] Run the point subset of `GPUAllApiBlendSurfaceTest` only where it remains SRC_OVER plus the new W5a fixtures; commit `feat(gpu-renderer): use W5a material for prepared points`.
+
+### Task 5: Text pré-résolu, sans travail font
+
+**Files:**
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedTextLowerer.kt`
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedTextContracts.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/wgsl/GPUPreparedTextShaderComposer.kt`
+- Modify: text payload/material files reached by compiler errors
+- Modify: `kanvas/.../surface/W5aMaterialSurfacePixelTest.kt`
+
+- [ ] Add a RED public fixture built only from an already-resolved glyph/run fixture already present in the test suite; do not create, load or validate a font.
+- [ ] Require shader alpha × paint alpha exactly once and mutation stability after recording.
+- [ ] Change the text lowerer to receive the common plan pair/ref and make the renderer compose the existing A8 coverage with the planned Solid/Opacity result.
+- [ ] Remove the promoted Solid path's direct call that lets text reconstruct its own `GPUMaterialDescriptor`.
+- [ ] Run the bounded prepared-text public pixel subset; commit `feat(gpu-renderer): consume W5a material in prepared text`.
+
+### Task 6: Vertices/Mesh préparés
+
+**Files:**
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedVerticesLowerer.kt`
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/PreparedVerticesFrameInventory.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/payloads/GPUPreparedVerticesPayload.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/wgsl/PreparedVerticesShader.kt`
+- Modify: `kanvas/.../surface/W5aMaterialSurfacePixelTest.kt`
+
+- [ ] Add RED public fixtures for a triangle without vertex colors and a triangle with vertex colors; shader/paint alpha must be applied at the source stage exactly once.
+- [ ] Compile the draw material through the common planner and pass only the scellé plan to vertices payload/composition.
+- [ ] Preserve the operation/mesh color-composition order already specified by the IR; do not treat vertex color as a replacement material authority.
+- [ ] Remove the promoted Solid path's route-local semantic reconstruction and preserve typed refusals for W5b+ material kinds.
+- [ ] Run bounded public vertices pixel tests; commit `feat(gpu-renderer): consume W5a material in prepared vertices`.
+
+### Task 7: Frame mixte, refus/récupération et suppression des fallbacks concernés
+
+**Files:**
+- Modify: `kanvas/.../surface/W5aMaterialSurfacePixelTest.kt`
+- Modify: `gpu-renderer` material mapper/compiler files located by `rtk rg 'fallback|child|transparent|Unsupported'`
+- Create: `refactor/waves/W05-material-graph/status.md`
+- Modify: `refactor/README.md`
+
+- [ ] Add a RED public mixed-frame test combining Rect, RRect and Path with distinct planned bindings and draw order.
+- [ ] Add a public refusal reachable without test injection (for example a W5b-only material on an otherwise W5a-promoted frame), then render a valid W5a frame on the same Surface/runtime and require exact recovery.
+- [ ] Remove only fallbacks now owned by W5a: Solid/Opacity must never become a child, arbitrary transparent, or legacy route after W5 selection. Leave later W5 kinds as explicit typed gaps, not semantic substitutions.
+- [ ] Search all production call sites for alternate Solid/Opacity compilation. Migrate or document every remaining call site; review is the architectural proof, not a source-shape test.
+- [ ] Update W05 status with gate evidence, exact deferred gaps and no intermediate status files elsewhere.
+- [ ] Update `refactor/README.md` to mark W5a complete and W5b next only if every W5a cell is proven.
+- [ ] Run bounded public regression suites and commit `refactor(material): remove W5a silent fallbacks`.
+
+### Task 8: Vérification finale, review indépendante et préparation de la stack
+
+**Files:**
+- Modify only files required by verified review findings
+
+- [ ] Run `rtk git diff --check`.
+- [ ] Run compile gates for touched modules on JVM and JS where configured.
+- [ ] Run the complete `W5aMaterialSurfacePixelTest` and bounded public W3/W4 regression suites covering touched families.
+- [ ] Do not run font, codec, GM, dashboard, baseline, Skia integration or `jpg-color-cube` suites.
+- [ ] Ask a fresh Sol agent for a spec review against this plan and the W5 design; fix every Critical/Important finding through the responsible implementation agent.
+- [ ] Ask a different fresh Sol agent for the final quality review; repeat until `READY`.
+- [ ] Confirm `rtk git status --short`, the commit range from `codex/w5-material-graph`, and that no temporary agent report is tracked.
+- [ ] Keep push/PR publication separate from implementation verification; when publication is authorized, create the W5a PR stacked on the W5 design branch and include exact test evidence plus deferred W5b–W5h scope.
+
+## Verification Commands
+
+Commands are refined from the actual test class names created by each task; keep them bounded:
+
+```bash
+rtk ./gradlew :gpu-plan:compileKotlin :gpu-renderer:compileKotlin :kanvas:compileKotlin
+rtk ./gradlew :kanvas:test --tests '*W5aMaterialSurfacePixelTest*'
+rtk ./gradlew :kanvas:test --tests '*GPUPlanSurfacePixelTest*'
+rtk ./gradlew :kanvas:jsNodeTest --tests '*W5aMaterialSurfacePixelTest*'
+rtk git diff --check
+```
+
+If a Gradle target is not configured for a module, record that fact in W05 status and use the nearest existing JVM/JS target. Do not replace a missing target with an infrastructure test.
