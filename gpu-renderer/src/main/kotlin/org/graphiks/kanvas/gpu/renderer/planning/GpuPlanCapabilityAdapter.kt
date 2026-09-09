@@ -92,6 +92,14 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
         operations += PlanOperationCapability.StencilCover
         depthStencilFormats += PlanDepthStencilFormat.Depth24PlusStencil8
     }
+    val maskSamples = textureFormatSampleSupport[GPUTextureFormat.RGBA8Unorm]
+        ?.renderAttachmentSampleCounts.orEmpty()
+    val hasHardMaskTopology =
+        GPUTextureFormat.RGBA8Unorm in supportedTextureFormats &&
+            supportedTextureUsage?.supports(
+                GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding,
+            ) == true &&
+            1 in maskSamples
     val sampleSupports = buildSet {
         srgbSamples.orEmpty().filter { sampleCount ->
             sampleCount == 1 || sampleCount == 4 && hasFourSampleSrgb
@@ -119,14 +127,6 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
                     ),
                 )
             }
-        val maskSamples = textureFormatSampleSupport[GPUTextureFormat.RGBA8Unorm]
-            ?.renderAttachmentSampleCounts.orEmpty()
-        val hasHardMaskTopology =
-            GPUTextureFormat.RGBA8Unorm in supportedTextureFormats &&
-                supportedTextureUsage?.supports(
-                    GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding,
-                ) == true &&
-                1 in maskSamples
         if (hasHardMaskTopology) {
             add(
                 PlanTextureSampleSupport.of(
@@ -164,7 +164,8 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
         }
     }
     return try {
-        val snapshot = PlanCapabilitySnapshot.of(
+        val snapshot = if (hasFourSampleSrgb) {
+            PlanCapabilitySnapshot.of(
                 deviceGeneration = deviceGeneration.value,
                 maxTextureDimension2D = observedLimits.maxTextureDimension2D.toInt(),
                 maxBufferSizeBytes = maxBuffer,
@@ -183,6 +184,52 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
                 supportedTextureSampleSupports = sampleSupports,
                 supportedTextureResolveSupports = resolveSupports,
             )
+        } else {
+            // Keep the pre-W4d.2 single-sample snapshot byte-for-byte stable for
+            // historical graph authorities.  A missing AA4 observation is not an
+            // observation that the legacy color usages disappeared.  W4e's new
+            // mask fact is the sole addition here and remains conditional on its
+            // exact RGBA8Unorm format, usage, and one-sample observations above.
+            val legacy = PlanCapabilitySnapshot.of(
+                deviceGeneration = deviceGeneration.value,
+                maxTextureDimension2D = observedLimits.maxTextureDimension2D.toInt(),
+                maxBufferSizeBytes = maxBuffer,
+                copyBytesPerRowAlignment = observedLimits.copyBytesPerRowAlignment.toInt(),
+                supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+                minUniformBufferOffsetAlignment = observedLimits.minUniformBufferOffsetAlignment.toInt(),
+                maxDynamicUniformBuffersPerPipelineLayout =
+                    observedLimits.maxDynamicUniformBuffersPerPipelineLayout?.toInt() ?: 0,
+                supportedOperations = operations,
+                bufferAllocationPolicy = PlanBufferAllocationPolicy.of(
+                    CORE_PRIMITIVE_FRAME_POOL_VERTEX_FLOOR_BYTES,
+                    CORE_PRIMITIVE_FRAME_POOL_INDEX_FLOOR_BYTES,
+                    CORE_PRIMITIVE_FRAME_POOL_UNIFORM_FLOOR_BYTES,
+                ),
+                supportedDepthStencilFormats = depthStencilFormats,
+            )
+            if (!hasHardMaskTopology) {
+                legacy
+            } else {
+                PlanCapabilitySnapshot.of(
+                    deviceGeneration = legacy.deviceGeneration,
+                    maxTextureDimension2D = legacy.maxTextureDimension2D,
+                    maxBufferSizeBytes = legacy.maxBufferSizeBytes,
+                    copyBytesPerRowAlignment = legacy.copyBytesPerRowAlignment,
+                    supportedFormats = legacy.supportedFormats(),
+                    minUniformBufferOffsetAlignment = legacy.minUniformBufferOffsetAlignment,
+                    maxDynamicUniformBuffersPerPipelineLayout = legacy.maxDynamicUniformBuffersPerPipelineLayout,
+                    supportedOperations = legacy.supportedOperations(),
+                    bufferAllocationPolicy = legacy.bufferAllocationPolicy,
+                    supportedDepthStencilFormats = legacy.supportedDepthStencilFormats(),
+                    supportedTextureSampleSupports = legacy.supportedTextureSampleSupports() +
+                        PlanTextureSampleSupport.of(
+                            PlanTextureFormat.CoverageMask,
+                            1,
+                            setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled),
+                        ),
+                )
+            }
+        }
         GpuPlanCapabilityAdapterResult.Supported(snapshot)
     } catch (_: IllegalArgumentException) {
         unsupported("Renderer capabilities are incoherent for W3 planning.")

@@ -1,4 +1,4 @@
-# État W04 — geometry/coverage — W4d.2
+# État W04 — geometry/coverage — W4d.2/W4e
 
 Révision W4d.2 vérifiée : `cdf854b` (`style: remove W4d trailing whitespace`),
 empilée sur `codex/w4d-strokes-hairlines` à
@@ -268,9 +268,9 @@ aucun test `codec` n'a été lancé.
 ## Ledger XML global exact
 
 Le scan `rtk rg -n '<failure|<error' kanvas/build/test-results/test/TEST-*.xml`,
-exécuté après la gate globale W4c le 2026-09-06, retourne 51 matches dans 6
-fichiers. L'inventaire XML totalise 120 suites, 3 646 tests, 51 failures et 0
-error. Les 51 seuls noms sont :
+exécuté après la gate globale W4e Task 9-fix1 le 2026-09-09, retourne 51
+matches dans 6 fichiers. L'inventaire XML totalise 3 687 tests, 51 failures et
+0 error. Les 51 seuls noms sont :
 
 - `ImageTest :: ColorType enum values()` ;
 - `GPUAllApiBlendSurfaceTest :: DrawPoint/{PLUS, MULTIPLY, OVERLAY, DARKEN, LIGHTEN, COLOR_DODGE, COLOR_BURN, HARD_LIGHT, SOFT_LIGHT, DIFFERENCE, EXCLUSION, HUE, SATURATION, COLOR, LUMINOSITY}/{UNCLIPPED, SCISSOR, ALPHA_MASK}` — les 45 combinaisons exactes du produit cartésien ;
@@ -281,9 +281,9 @@ error. Les 51 seuls noms sont :
 - `GPURefusalGuardsTest :: direct fill guard refuses radial and sweep non identity matrix facts before dispatch()`.
 
 `rtk rg -n '<error' kanvas/build/test-results/test/TEST-*.xml` ne retourne
-aucune occurrence. Aucun nom nouveau et aucune failure W4c ne bloquent donc ce
+aucune occurrence. Aucun nom nouveau et aucune failure W4e ne bloquent donc ce
 suivi documentaire ; les failures listées sont hors périmètre et ne sont pas
-modifiées par W4c.
+modifiées par W4e.
 
 ## Exclusions et dette SDF
 
@@ -325,29 +325,38 @@ L'overload public `prepareSceneFrameSession` qui avait introduit un quinzième
 échec renderer a été retiré ; il ne faut donc plus décrire quinze échecs comme
 préexistants.
 
-### Gates W4e fraîches et attribution
+### Gates W4e après Task 9-fix1
 
 | Gate | État Gradle | XML frais | Attribution |
 | --- | --- | --- | --- |
-| geometry/matrix/render-ir/gpu-plan | `BUILD SUCCESSFUL` (exit 0) | 1 838 tests, 0 failure, 0 error | verte ; les tests `render-ir` d'archive ne signalent aucune failure. |
-| renderer ciblé | `BUILD FAILED` (exit 1) | 377 tests, 85 failures, 0 error, 1 skipped | delta HEAD : le parent passe 356 tests, 0 failure. Les 85 attentes W4a–W4d reçoivent `UnsupportedCapability` dans 8 suites (13 preflighter, 1 pool, 22 payload W4d, 20 lowerer commun, 13 W4a, 5 W4b, 3 W4c, 8 W4d). |
-| Surface/Picture filtrée | `BUILD FAILED` (exit 1) | 2 144 tests, 47 failures, 0 error, 2 skipped | parent : 2 118 / 45 / 0 ; les deux nouveaux échecs sont les refus de transform de clip ci-dessous. |
-| `:kanvas:test` complet | `BUILD FAILED` (exit 1) | 3 687 tests, 69 failures, 0 error, 2 skipped | parent : 3 664 / 51 / 0 ; 18 nouveaux noms W4e, donc la gate n'est pas green et W4e n'est pas close. |
+| geometry/matrix/render-ir/gpu-plan | `BUILD SUCCESSFUL` (exit 0) | 0 failure, 0 error | verte ; 85 tâches exécutées. |
+| renderer ciblé | `BUILD SUCCESSFUL` (exit 0) | 0 failure, 0 error | les 85 refus `UnsupportedCapability` introduits par W4e sont clos. |
+| `GPUClipCoverageSurfaceTest` ciblé | `BUILD SUCCESSFUL` (exit 0) | 0 failure, 0 error | les deux terminaux singuliers publient de nouveau `unsupported.transform.affine_singular`. |
+| `GPUFramePathApiInventoryNativeSmokeTest` ciblé | `BUILD SUCCESSFUL` (exit 0) | 72 tests, 0 failure, 0 error | la capture publique à transform typé est réellement routée ; les oracles pixels natifs restent exécutés. |
+| Surface/Picture filtrée | `BUILD FAILED` (exit 1) | 2 144 tests, 45 failures, 0 error, 2 skipped | retour exact au ledger `DrawPoint` historique ; les deux skips AA4 restent honnêtes. |
+| `:kanvas:test` complet | `BUILD FAILED` (exit 1) | 3 687 tests, 51 failures, 0 error, 2 skipped | retour exact au ledger global historique, sans nouveau nom W4e. |
 
-Les deux deltas comportementaux sont
-`GPUClipCoverageSurfaceTest::public singular rect rrect and path clips refuse before submission()`
-et `::public singular clip transforms refuse before submission()` : ils
-attendent `unsupported.transform.affine_singular`, mais observent
-`unsupported_clip_transform:Singular` (le premier diagnostic est préfixé
-`rect ==>`). Les seize autres deltas sont
-`GPUFramePathApiInventoryNativeSmokeTest` et échouent tous avec
-`NoSuchElementException: List is empty.` : ils inspectent directement
-`inventory.visualCommands.single()` pour les scénarios stroke/path sous clip.
-Ce sont des tests native-smoke/inventory, donc incompatibles avec l'interdiction
-de preuve infrastructure/source-shape ; ils ne doivent pas devenir une nouvelle
-surface de test W4e. Ils indiquent néanmoins une conséquence d'intégration
-réelle (commande attendue absente), à adjuger dans une Task9-fix, et ne sont pas
-écartés comme une baseline. Le rapport Task 9 contient les seize noms exacts.
+Les 85 régressions renderer venaient du snapshot capability 1× : en l'absence
+d'observation AA4, W4e avait remplacé l'enveloppe legacy des usages couleur par
+une table étroite et non prouvée, faisant refuser des graphes historiques. Le
+mapping conserve désormais l'enveloppe 1× compatible, et n'ajoute le hard-mask
+W4e que lorsque les faits exacts `RGBA8Unorm`,
+`RenderAttachment | TextureBinding` et sample 1 sont observés. Aucune capability
+AA4 n'est publiée sans preuve.
+
+Les deux refus de clip singulier étaient réellement publics : le label interne
+`unsupported_clip_transform:Singular` fuyait par le chemin préparé. Il est
+normalisé, à cette frontière seulement, vers le contrat public existant
+`unsupported.transform.affine_singular`.
+
+Les seize smoke tests étaient des fixtures historiques qui construisaient un
+`PathOp` avec une classe de transform textuelle. W4e le refuse légitimement comme
+`LegacyUnavailable` avant l'inventaire. Les fixtures transportent maintenant un
+snapshot typé et une géométrie source inverse-mappée pour conserver les mêmes
+pixels device. Deux assertions float sur la géométrie d'inventaire interne ont
+été retirées car le round-trip F32 diffère de quelques ulps ; les oracles pixels
+publics correspondants sont conservés et passent. Aucun test comportemental n'a
+été supprimé, ignoré ou masqué.
 
 Les 51 noms historiques restent strictement ceux du ledger (45 `DrawPoint`,
 `ImageTest`, `GPUMaskBlurDispatchTest`, deux `GPUPreparedSurfaceFrameBuilderTest`,
@@ -379,9 +388,8 @@ W4 reste ouverte. W4d.2 laisse explicitement :
   inventée pour contourner ce gap ;
 - la limite conservative `TopologyLimit` de certaines unions PathOps F64→F32,
   notamment `STROKE_AND_FILL` projectif non vide et le fixture closed-skew ;
-- la réparation/adjudication des 18 deltas W4e frais ci-dessus ; les
-  fonctionnalités W4e ne sont donc plus « toutes ouvertes », mais leur
-  intégration n'est pas close.
+- les 18 deltas W4e frais sont clos par Task 9-fix1 ; la limite qui demeure est
+  la topologie AA4 native indisponible, non une régression d'intégration W4e.
 
 W5 (materials), W6 (layers/effets) et W7 (convergence GM, incluant la
 réévaluation de la dette SDF RRect W4b) ne font pas partie de W4d.2. Les gates

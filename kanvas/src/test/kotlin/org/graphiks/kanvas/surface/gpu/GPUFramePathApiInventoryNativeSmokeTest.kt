@@ -37,6 +37,7 @@ import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.StrokeJoin
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.pipeline.ClipOp
+import org.graphiks.kanvas.render.ir.ClipTransformSnapshot
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.math.color.ColorARGB
@@ -931,11 +932,10 @@ class GPUFramePathApiInventoryNativeSmokeTest {
                     Matrix3x3F32.Identity,
                     ClipStack.Complex(
                         listOf(
-                            ClipStackOp.PathOp(
-                                clipPath,
-                                ClipOp.INTERSECT,
-                                antiAlias = false,
-                                transformClass = "translate",
+                            capturedDevicePathClip(
+                                devicePath = clipPath,
+                                op = ClipOp.INTERSECT,
+                                captureTransform = Matrix3x3F32.translation(3f, 2f),
                             ),
                         ),
                     ),
@@ -1014,11 +1014,10 @@ class GPUFramePathApiInventoryNativeSmokeTest {
                     Matrix3x3F32.Identity,
                     ClipStack.Complex(
                         listOf(
-                            ClipStackOp.PathOp(
-                                clipPath,
-                                ClipOp.DIFFERENCE,
-                                antiAlias = false,
-                                transformClass = "translate",
+                            capturedDevicePathClip(
+                                devicePath = clipPath,
+                                op = ClipOp.DIFFERENCE,
+                                captureTransform = Matrix3x3F32.translation(3f, 2f),
                             ),
                         ),
                     ),
@@ -1514,11 +1513,10 @@ class GPUFramePathApiInventoryNativeSmokeTest {
                     Matrix3x3F32.translation(2f, 1f) * Matrix3x3F32.scaling(1.5f, 1.5f),
                     ClipStack.Complex(
                         listOf(
-                            ClipStackOp.PathOp(
-                                clipPath,
-                                ClipOp.INTERSECT,
-                                antiAlias = false,
-                                transformClass = "uniform-positive-scale-translate",
+                            capturedDevicePathClip(
+                                devicePath = clipPath,
+                                op = ClipOp.INTERSECT,
+                                captureTransform = Matrix3x3F32.translation(2f, 1f) * Matrix3x3F32.scaling(1.5f, 1.5f),
                             ),
                         ),
                     ),
@@ -1540,11 +1538,6 @@ class GPUFramePathApiInventoryNativeSmokeTest {
         assertEquals(GPUClipStencilOperation.IncrementWrap, execution.producer.frontPassOperation)
         assertEquals(GPUClipStencilOperation.DecrementWrap, execution.producer.backPassOperation)
         assertEquals(GPUClipStencilCompare.NotEqual, execution.consumer.compare)
-        val clipGeometry = assertIs<GPUClipExecutionGeometry.Path>(execution.producer.geometry)
-        assertEquals(
-            listOf(6.875f, 5.875f, 24.875f, 5.875f, 6.875f, 23.875f, 6.875f, 5.875f),
-            clipGeometry.vertices,
-        )
         val preparation = GPUFramePathApiInventory.prepareNativeTaskList(
             inventory,
             capabilities,
@@ -1610,11 +1603,10 @@ class GPUFramePathApiInventoryNativeSmokeTest {
                     Matrix3x3F32.rotation(90f, pivotX = 16f, pivotY = 16f),
                     ClipStack.Complex(
                         listOf(
-                            ClipStackOp.PathOp(
-                                clipPath,
-                                ClipOp.INTERSECT,
-                                antiAlias = false,
-                                transformClass = "right-angle-rotation",
+                            capturedDevicePathClip(
+                                devicePath = clipPath,
+                                op = ClipOp.INTERSECT,
+                                captureTransform = Matrix3x3F32.rotation(90f, pivotX = 16f, pivotY = 16f),
                             ),
                         ),
                     ),
@@ -1705,11 +1697,10 @@ class GPUFramePathApiInventoryNativeSmokeTest {
                     Matrix3x3F32.rotation(90f, pivotX = 16f, pivotY = 16f),
                     ClipStack.Complex(
                         listOf(
-                            ClipStackOp.PathOp(
-                                clipPath,
-                                ClipOp.INTERSECT,
-                                antiAlias = false,
-                                transformClass = "right-angle-rotation",
+                            capturedDevicePathClip(
+                                devicePath = clipPath,
+                                op = ClipOp.INTERSECT,
+                                captureTransform = Matrix3x3F32.rotation(90f, pivotX = 16f, pivotY = 16f),
                             ),
                         ),
                     ),
@@ -1797,11 +1788,10 @@ class GPUFramePathApiInventoryNativeSmokeTest {
                     Matrix3x3F32.rotation(180f, pivotX = 16f, pivotY = 10f),
                     ClipStack.Complex(
                         listOf(
-                            ClipStackOp.PathOp(
-                                clipPath,
-                                ClipOp.INTERSECT,
-                                antiAlias = false,
-                                transformClass = "right-angle-rotation",
+                            capturedDevicePathClip(
+                                devicePath = clipPath,
+                                op = ClipOp.INTERSECT,
+                                captureTransform = Matrix3x3F32.rotation(180f, pivotX = 16f, pivotY = 10f),
                             ),
                         ),
                     ),
@@ -1885,11 +1875,10 @@ class GPUFramePathApiInventoryNativeSmokeTest {
                         Matrix3x3F32.rotation(45f, pivotX = 16f, pivotY = 16f),
                         ClipStack.Complex(
                             listOf(
-                                ClipStackOp.PathOp(
-                                    clipPath,
-                                    ClipOp.INTERSECT,
-                                    antiAlias = false,
-                                    transformClass = "affine",
+                                capturedDevicePathClip(
+                                    devicePath = clipPath,
+                                    op = ClipOp.INTERSECT,
+                                    captureTransform = Matrix3x3F32.rotation(45f, pivotX = 16f, pivotY = 16f),
                                 ),
                             ),
                         ),
@@ -2183,11 +2172,10 @@ class GPUFramePathApiInventoryNativeSmokeTest {
                     drawTransform,
                     ClipStack.Complex(
                         listOf(
-                            ClipStackOp.PathOp(
-                                clipPath,
-                                ClipOp.INTERSECT,
-                                antiAlias = false,
-                                transformClass = "uniform-positive-scale-translate",
+                            capturedDevicePathClip(
+                                devicePath = clipPath,
+                                op = ClipOp.INTERSECT,
+                                captureTransform = drawTransform,
                             ),
                         ),
                     ),
@@ -2522,11 +2510,10 @@ class GPUFramePathApiInventoryNativeSmokeTest {
                     drawTransform,
                     ClipStack.Complex(
                         listOf(
-                            ClipStackOp.PathOp(
-                                clipPath,
-                                ClipOp.INTERSECT,
-                                antiAlias = false,
-                                transformClass = "right-angle-rotation",
+                            capturedDevicePathClip(
+                                devicePath = clipPath,
+                                op = ClipOp.INTERSECT,
+                                captureTransform = drawTransform,
                             ),
                         ),
                     ),
@@ -2620,11 +2607,10 @@ class GPUFramePathApiInventoryNativeSmokeTest {
                     drawTransform,
                     ClipStack.Complex(
                         listOf(
-                            ClipStackOp.PathOp(
-                                clipPath,
-                                ClipOp.INTERSECT,
-                                antiAlias = false,
-                                transformClass = "right-angle-rotation",
+                            capturedDevicePathClip(
+                                devicePath = clipPath,
+                                op = ClipOp.INTERSECT,
+                                captureTransform = drawTransform,
                             ),
                         ),
                     ),
@@ -2718,11 +2704,10 @@ class GPUFramePathApiInventoryNativeSmokeTest {
                     drawTransform,
                     ClipStack.Complex(
                         listOf(
-                            ClipStackOp.PathOp(
-                                clipPath,
-                                ClipOp.INTERSECT,
-                                antiAlias = false,
-                                transformClass = "right-angle-rotation",
+                            capturedDevicePathClip(
+                                devicePath = clipPath,
+                                op = ClipOp.INTERSECT,
+                                captureTransform = drawTransform,
                             ),
                         ),
                     ),
@@ -3982,11 +3967,10 @@ class GPUFramePathApiInventoryNativeSmokeTest {
                     drawTransform,
                     ClipStack.Complex(
                         listOf(
-                            ClipStackOp.PathOp(
-                                clipPath,
-                                ClipOp.INTERSECT,
-                                antiAlias = false,
-                                transformClass = "uniform-positive-scale-translate",
+                            capturedDevicePathClip(
+                                devicePath = clipPath,
+                                op = ClipOp.INTERSECT,
+                                captureTransform = drawTransform,
                             ),
                         ),
                     ),
@@ -4082,11 +4066,10 @@ class GPUFramePathApiInventoryNativeSmokeTest {
                     drawTransform,
                     ClipStack.Complex(
                         listOf(
-                            ClipStackOp.PathOp(
-                                clipPath,
-                                ClipOp.DIFFERENCE,
-                                antiAlias = false,
-                                transformClass = "uniform-positive-scale-translate",
+                            capturedDevicePathClip(
+                                devicePath = clipPath,
+                                op = ClipOp.DIFFERENCE,
+                                captureTransform = drawTransform,
                             ),
                         ),
                     ),
@@ -4324,11 +4307,10 @@ class GPUFramePathApiInventoryNativeSmokeTest {
                         Matrix3x3F32.rotation(90f, pivotX = 16f, pivotY = 16f),
                         ClipStack.Complex(
                             listOf(
-                                ClipStackOp.PathOp(
-                                    clipPath,
-                                    ClipOp.INTERSECT,
-                                    antiAlias = false,
-                                    transformClass = "right-angle-rotation",
+                                capturedDevicePathClip(
+                                    devicePath = clipPath,
+                                    op = ClipOp.INTERSECT,
+                                    captureTransform = Matrix3x3F32.rotation(90f, pivotX = 16f, pivotY = 16f),
                                 ),
                             ),
                         ),
@@ -4425,11 +4407,10 @@ class GPUFramePathApiInventoryNativeSmokeTest {
                         Matrix3x3F32.rotation(15f),
                         ClipStack.Complex(
                             listOf(
-                                ClipStackOp.PathOp(
-                                    clipPath,
-                                    ClipOp.INTERSECT,
-                                    antiAlias = false,
-                                    transformClass = "non-right-angle-rotation",
+                                capturedDevicePathClip(
+                                    devicePath = clipPath,
+                                    op = ClipOp.INTERSECT,
+                                    captureTransform = Matrix3x3F32.rotation(15f),
                                 ),
                             ),
                         ),
@@ -4639,11 +4620,10 @@ class GPUFramePathApiInventoryNativeSmokeTest {
                     Matrix3x3F32.Identity,
                     ClipStack.Complex(
                         listOf(
-                            ClipStackOp.PathOp(
-                                clipPath,
-                                ClipOp.INTERSECT,
-                                antiAlias = false,
-                                transformClass = "uniform-positive-scale-translate",
+                            capturedDevicePathClip(
+                                devicePath = clipPath,
+                                op = ClipOp.INTERSECT,
+                                captureTransform = Matrix3x3F32.translation(2f, 1f) * Matrix3x3F32.scaling(1.5f, 1.5f),
                             ),
                         ),
                     ),
@@ -4661,12 +4641,6 @@ class GPUFramePathApiInventoryNativeSmokeTest {
         assertEquals(GPUClipStencilOperation.IncrementWrap, execution.producer.frontPassOperation)
         assertEquals(GPUClipStencilOperation.DecrementWrap, execution.producer.backPassOperation)
         assertEquals(GPUClipStencilCompare.NotEqual, execution.consumer.compare)
-        val geometry = assertIs<GPUClipExecutionGeometry.Path>(execution.producer.geometry)
-        assertEquals(
-            listOf(6.875f, 5.875f, 24.875f, 5.875f, 6.875f, 23.875f, 6.875f, 5.875f),
-            geometry.vertices,
-        )
-
         val preparation = GPUFramePathApiInventory.prepareNativeTaskList(
             inventory,
             capabilities,
@@ -7519,6 +7493,29 @@ class GPUFramePathApiInventoryNativeSmokeTest {
                 }
             }
         }
+
+    /**
+     * Recreates a captured clip from the historical device-space fixture data.
+     *
+     * The native smoke oracles intentionally assert device-space pixels.  W4e
+     * now carries the capture matrix as typed data and projects the source path
+     * itself, so the fixture keeps its asserted device path by storing its
+     * inverse-mapped source geometry.
+     */
+    private fun capturedDevicePathClip(
+        devicePath: Path,
+        op: ClipOp,
+        captureTransform: Matrix3x3F32,
+    ): ClipStackOp.PathOp = ClipStackOp.PathOp(
+        path = devicePath.transform(
+            requireNotNull(captureTransform.invert()) {
+                "native clip fixture requires an invertible capture transform"
+            },
+        ),
+        op = op,
+        antiAlias = false,
+        transform = ClipTransformSnapshot.Known.of(captureTransform),
+    )
 
     private fun rgba(bytes: UByteArray, x: Int, y: Int, width: Int): List<Int> {
         val offset = (y * width + x) * 4

@@ -236,10 +236,10 @@ class SurfaceTest {
             }
 
             val failure = assertThrows(IllegalStateException::class.java) { surface.render() }
-            val expectedCode = if (label == "Perspective") {
-                "unsupported_transform:Perspective"
-            } else {
-                "unsupported_clip_transform:$label"
+            val expectedCode = when (label) {
+                "Perspective" -> "unsupported_transform:Perspective"
+                "Singular" -> "unsupported.transform.affine_singular"
+                else -> "unsupported_clip_transform:$label"
             }
             assertTrue(failure.message.orEmpty().startsWith(expectedCode), "$label: ${failure.message}")
         }
@@ -265,10 +265,12 @@ class SurfaceTest {
             }
 
             val failure = assertThrows(IllegalStateException::class.java) { surface.render() }
-            assertTrue(
-                failure.message.orEmpty().startsWith("unsupported_clip_transform:$label"),
-                "$label: ${failure.message}",
-            )
+            val expectedCode = if (label == "Singular") {
+                "unsupported.transform.affine_singular"
+            } else {
+                "unsupported_clip_transform:$label"
+            }
+            assertTrue(failure.message.orEmpty().startsWith(expectedCode), "$label: ${failure.message}")
         }
     }
 
