@@ -511,9 +511,11 @@ récupération.
 
 Cette correction ne touche que le test public et la documentation : aucune
 fixture interne, AA4 synthétique, reflection, compteur d'appels ou assertion
-de source n'est introduit. Le ciblé des quatre scénarios est vert; G3 reste
-`BUILD FAILED` attendu à 2 149 tests, 45 failures historiques, 0 error et
-2 skips. Aucun G4 supplémentaire n'est revendiqué pour ce complément test-only.
+de source n'est introduit. La validation de publication fraîche confirme G1
+verte avec 85 tâches exécutées, G2 verte avec 53 tâches exécutées, G3 à
+2 149 tests, 45 failures historiques, 0 error et 2 skips, puis G4 à 3 692
+tests, 51 failures historiques, 0 error et 2 skips. Le scan XML G4 reste limité
+aux six suites du ledger, sans nouveau nom W4e.
 
 ### Dette et rulings conservés
 
