@@ -58,8 +58,8 @@ public object EffectiveMaterialPlanner {
         val entries = mutableListOf(base)
         if (combinedAlpha != 1f) {
             entries += MaterialPlanEntry(
-                MaterialProgramPlan.OpacityV1(MaterialPlanRef(0)),
-                MaterialBindingPlan.OpacityF32V1.of(combinedAlpha),
+                MaterialProgramPlan.OpacityV1,
+                MaterialBindingPlan.OpacityF32V1.of(combinedAlpha, MaterialPlanRef(0)),
             )
         }
         return Result.Ready(MaterialPlanTable.of(entries), MaterialPlanRef(entries.lastIndex))

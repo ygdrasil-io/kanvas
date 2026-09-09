@@ -37,7 +37,7 @@ public sealed interface MaterialProgramPlan {
         }
     }
 
-    public class OpacityV1(public val child: MaterialPlanRef) : MaterialProgramPlan {
+    public data object OpacityV1 : MaterialProgramPlan {
         override val versionI32: Int = 1
         override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId("w5a-opacity-v1")
         override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 {
@@ -66,11 +66,11 @@ public sealed interface MaterialBindingPlan {
         }
     }
 
-    public class OpacityF32V1 private constructor(public val alphaF32: Float) : MaterialBindingPlan {
+    public class OpacityF32V1 private constructor(public val alphaF32: Float, public val child: MaterialPlanRef) : MaterialBindingPlan {
         override val versionI32: Int = 1
         init { require(alphaF32.isFinite() && alphaF32 in 0f..1f) }
         public companion object {
-            public fun of(alphaF32: Float): OpacityF32V1 = OpacityF32V1(alphaF32)
+            public fun of(alphaF32: Float, child: MaterialPlanRef): OpacityF32V1 = OpacityF32V1(alphaF32, child)
         }
     }
 }
@@ -78,14 +78,32 @@ public sealed interface MaterialBindingPlan {
 public data class MaterialPlanEntry(public val program: MaterialProgramPlan, public val bindings: MaterialBindingPlan)
 
 public class MaterialPlanTable private constructor(entries: List<MaterialPlanEntry>) {
-    private val storedEntries: List<MaterialPlanEntry> = immutableList(entries)
+    private data class StoredEntry(val programIndex: Int, val bindings: MaterialBindingPlan)
+    private val storedPrograms: List<MaterialProgramPlan>
+    private val storedEntries: List<StoredEntry>
+
+    init {
+        val programIndexById = linkedMapOf<MaterialProgramPlanId, Int>()
+        val programs = mutableListOf<MaterialProgramPlan>()
+        storedEntries = immutableList(entries.map { entry ->
+            val index = programIndexById.getOrPut(entry.program.structuralId) {
+                programs += entry.program
+                programs.lastIndex
+            }
+            require(programs[index]::class == entry.program::class) { "Structural program IDs must not alias different programs" }
+            StoredEntry(index, entry.bindings)
+        })
+        storedPrograms = immutableList(programs)
+    }
     public val sizeI32: Int get() = storedEntries.size
+    /** Number of interned code-shaped programs, deliberately independent from bindings. */
+    public val programCountI32: Int get() = storedPrograms.size
 
     public fun entry(ref: MaterialPlanRef): MaterialPlanEntry = storedEntries.getOrElse(ref.indexI32) {
         throw IllegalArgumentException("Material plan reference is outside the sealed table")
-    }
+    }.let { MaterialPlanEntry(storedPrograms[it.programIndex], it.bindings) }
 
-    public fun entries(): List<MaterialPlanEntry> = storedEntries
+    public fun entries(): List<MaterialPlanEntry> = storedEntries.indices.map { entry(MaterialPlanRef(it)) }
 
     public companion object {
         public fun of(entries: List<MaterialPlanEntry>): MaterialPlanTable {
@@ -98,11 +116,11 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
                     MaterialProgramPlan.SolidLinearPremulV1 -> require(entry.bindings is MaterialBindingPlan.SolidRgbaF32V1) {
                         "Solid programs require RGBA bindings"
                     }
-                    is MaterialProgramPlan.OpacityV1 -> {
+                    MaterialProgramPlan.OpacityV1 -> {
                         require(entry.bindings is MaterialBindingPlan.OpacityF32V1) {
                             "Opacity programs require opacity bindings"
                         }
-                        require(program.child.indexI32 < index) { "Opacity children must precede their parent" }
+                        require((entry.bindings as MaterialBindingPlan.OpacityF32V1).child.indexI32 < index) { "Opacity children must precede their parent" }
                     }
                 }
             }

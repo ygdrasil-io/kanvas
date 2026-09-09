@@ -432,8 +432,9 @@ public class GpuPlanTaskListLowerer {
             MaterialProgramPlan.SolidLinearPremulV1 -> evaluateNumericGraph(
                 program.copyNumericOperationGraphV1(), entry.bindings, null,
             )
-            is MaterialProgramPlan.OpacityV1 -> {
-                val child = resolveMaterialColor(table, program.child) ?: return null
+            MaterialProgramPlan.OpacityV1 -> {
+                val opacityBindings = entry.bindings as? MaterialBindingPlan.OpacityF32V1 ?: return null
+                val child = resolveMaterialColor(table, opacityBindings.child) ?: return null
                 evaluateNumericGraph(program.copyNumericOperationGraphV1(), entry.bindings, child)
             }
         }
