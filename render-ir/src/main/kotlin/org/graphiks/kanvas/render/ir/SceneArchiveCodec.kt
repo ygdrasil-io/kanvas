@@ -59,7 +59,10 @@ public object SceneArchiveCodec {
         val reader = ArchiveReader(data)
         return try {
             if (!reader.bytesEqual(magic)) return SceneArchiveDecodeResult.Invalid("invalid-magic", "Picture magic is not KPIC")
-            if (reader.i32() != pictureVersion) return SceneArchiveDecodeResult.Invalid("unknown-version", "Picture version is not 9")
+            val encodedPictureVersion = reader.i32()
+            if (encodedPictureVersion !in setOf(8, pictureVersion)) {
+                return SceneArchiveDecodeResult.Invalid("unknown-version", "Picture version is not supported")
+            }
             val cull = reader.rect()
             val markerOrLegacyOpCount = reader.i32()
             if (markerOrLegacyOpCount != irMarker) {
@@ -70,7 +73,8 @@ public object SceneArchiveCodec {
                 }
             }
             val decodedSchemaVersion = reader.i32()
-            if (decodedSchemaVersion !in 1..schemaVersion) {
+            val maxSchema = if (encodedPictureVersion == 8) 2 else schemaVersion
+            if (decodedSchemaVersion !in 1..maxSchema) {
                 return SceneArchiveDecodeResult.Invalid("unknown-schema", "Scene archive schema is not supported")
             }
             reader.sceneArchiveSchemaVersion = decodedSchemaVersion

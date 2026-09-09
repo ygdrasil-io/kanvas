@@ -171,7 +171,9 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
         }
         return if (draws.isEmpty()) Recognition.Gap(
             diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "W3 requires at least one visible draw"),
-        ) else Recognition.Accepted(
+        ) else if (materialEntries.isNotEmpty() && draws.any { it.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1 }) {
+            Recognition.Gap(diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "W5a graphs cannot mix legacy colours and material references"))
+        } else Recognition.Accepted(
             draws,
             materialEntries.takeIf { it.isNotEmpty() }?.let(MaterialPlanTable::of),
             if (materialEntries.isNotEmpty()) W5A_CAPABILITY_ID else CAPABILITY_ID,
@@ -187,8 +189,8 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
         val geometryNode = node.geometry as? GeometryNode.Rect
             ?: return semanticGap("Draw geometry or material is outside W3")
         val material = node.material
-        val isW5aMaterial = material is MaterialNode.Opacity || material == MaterialNode.Transparent
-        if (material !is MaterialNode.Solid && !isW5aMaterial) return semanticGap("Draw geometry or material is outside W3")
+        val isW5aMaterial = material is MaterialNode.Solid || material is MaterialNode.Opacity || material == MaterialNode.Transparent
+        if (!isW5aMaterial) return semanticGap("Draw geometry or material is outside W3")
         if (node.origin != DrawOrigin.RECT) {
             return semanticGap("Draw geometry or material is outside W3")
         }
@@ -210,8 +212,7 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
         val visible = intersect(target, geometry) ?: return semanticGap("Draw is outside the target")
         val clipped = if (clip == null) visible else intersect(visible, clip)
             ?: return semanticGap("Draw is fully clipped out")
-        return if (isW5aMaterial) {
-            when (val planned = EffectiveMaterialPlanner.plan(node)) {
+        return when (val planned = EffectiveMaterialPlanner.plan(node)) {
                 is EffectiveMaterialPlanner.Result.Refused -> semanticGap("W5a material is outside the Solid/Opacity subset")
                 is EffectiveMaterialPlanner.Result.Ready -> {
                     val root = appendMaterialPlan(materialEntries, planned.table, planned.root)
@@ -224,9 +225,6 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
                         ),
                     )
                 }
-            }
-        } else {
-            DrawRecognition.Accepted(SolidRectDraw.of(index, linearPremultiplied((material as MaterialNode.Solid).color), clipped, clipped))
         }
     }
 

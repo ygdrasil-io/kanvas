@@ -455,7 +455,32 @@ public class GpuPlanTaskListLowerer {
             val source = child ?: return null
             ColorF32.of(source.red * alpha, source.green * alpha, source.blue * alpha, source.alpha * alpha)
         }
-        is NumericOperationGraphV1.Node -> null
+        is NumericOperationGraphV1.Node -> evaluateNode(graph, bindings, child)
+    }
+
+    private fun evaluateNode(
+        node: NumericOperationGraphV1.Node,
+        bindings: MaterialBindingPlan,
+        child: ColorF32?,
+    ): ColorF32? {
+        val transparent = ColorF32.of(0f, 0f, 0f, 0f)
+        fun source(): ColorF32? = (bindings as? MaterialBindingPlan.SolidRgbaF32V1)?.copyRgbaF32() ?: child
+        return when (node.operation) {
+            NumericOperationGraphV1.Operation.INPUT_SRGB_RGBA -> source()
+            NumericOperationGraphV1.Operation.CONSTANT_TRANSPARENT -> transparent
+            NumericOperationGraphV1.Operation.SRGB_TO_LINEAR,
+            NumericOperationGraphV1.Operation.PREMULTIPLY,
+            NumericOperationGraphV1.Operation.COVERAGE_F32,
+            NumericOperationGraphV1.Operation.CLAMP_01,
+            NumericOperationGraphV1.Operation.QUANTIZE_UNORM8,
+            -> evaluateNode(node.inputs.single(), bindings, child)
+            NumericOperationGraphV1.Operation.OPACITY_F32 -> {
+                val value = evaluateNode(node.inputs.single(), bindings, child) ?: return null
+                val alpha = (bindings as? MaterialBindingPlan.OpacityF32V1)?.alphaF32 ?: return null
+                ColorF32.of(value.red * alpha, value.green * alpha, value.blue * alpha, value.alpha * alpha)
+            }
+            NumericOperationGraphV1.Operation.SRC_OVER -> evaluateNode(node.inputs.first(), bindings, child)
+        }
     }
 
     private sealed interface W3BaseTaskListResult {

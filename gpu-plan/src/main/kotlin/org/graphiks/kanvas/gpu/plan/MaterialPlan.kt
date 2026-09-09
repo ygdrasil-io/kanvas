@@ -27,15 +27,26 @@ public sealed interface MaterialProgramPlan {
     public data object SolidLinearPremulV1 : MaterialProgramPlan {
         override val versionI32: Int = 1
         override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId("w5a-solid-linear-premul-v1")
-        override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 = NumericOperationGraphV1.SolidSrgbToLinearPremul
+        override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 {
+            val input = NumericOperationGraphV1.Node(NumericOperationGraphV1.Operation.INPUT_SRGB_RGBA)
+            val decoded = NumericOperationGraphV1.Node(NumericOperationGraphV1.Operation.SRGB_TO_LINEAR, listOf(input))
+            val premul = NumericOperationGraphV1.Node(NumericOperationGraphV1.Operation.PREMULTIPLY, listOf(decoded))
+            val coverage = NumericOperationGraphV1.Node(NumericOperationGraphV1.Operation.COVERAGE_F32, listOf(premul))
+            val clamped = NumericOperationGraphV1.Node(NumericOperationGraphV1.Operation.CLAMP_01, listOf(coverage))
+            return NumericOperationGraphV1.Node(NumericOperationGraphV1.Operation.QUANTIZE_UNORM8, listOf(clamped))
+        }
     }
 
     public class OpacityV1(public val child: MaterialPlanRef) : MaterialProgramPlan {
         override val versionI32: Int = 1
         override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId("w5a-opacity-v1")
-        override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 = NumericOperationGraphV1.Opacity(
-            NumericOperationGraphV1.SolidSrgbToLinearPremul,
-        )
+        override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 {
+            val input = NumericOperationGraphV1.Node(NumericOperationGraphV1.Operation.INPUT_SRGB_RGBA)
+            val opacity = NumericOperationGraphV1.Node(NumericOperationGraphV1.Operation.OPACITY_F32, listOf(input))
+            val coverage = NumericOperationGraphV1.Node(NumericOperationGraphV1.Operation.COVERAGE_F32, listOf(opacity))
+            val clamped = NumericOperationGraphV1.Node(NumericOperationGraphV1.Operation.CLAMP_01, listOf(coverage))
+            return NumericOperationGraphV1.Node(NumericOperationGraphV1.Operation.QUANTIZE_UNORM8, listOf(clamped))
+        }
     }
 }
 

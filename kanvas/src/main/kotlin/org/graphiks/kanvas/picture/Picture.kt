@@ -945,7 +945,14 @@ private fun decodePicture(data: ByteArray, decodedRuntimeEffects: MutableList<Ru
     val version = r.int()
     if (!r.valid) return null
     return when (version) {
-        in 1..8 -> decodeLegacyPicture(data, version, decodedRuntimeEffects)
+        in 1..7 -> decodeLegacyPicture(data, version, decodedRuntimeEffects)
+        8 -> when (val decoded = SceneArchiveCodec.decodePicture(data)) {
+            is SceneArchiveDecodeResult.Decoded -> try {
+                Picture(decoded.copyCullRect(), SceneDisplayOpAdapter.toDisplayOps(decoded.scene))
+            } catch (_: IllegalArgumentException) { null }
+            SceneArchiveDecodeResult.LegacyV8 -> decodeHistoricalPictureV8(data, decodedRuntimeEffects)
+            is SceneArchiveDecodeResult.Invalid -> null
+        }
         STABLE_WIRE_VERSION -> when (val decoded = SceneArchiveCodec.decodePicture(data)) {
             is SceneArchiveDecodeResult.Decoded -> try {
                 Picture(decoded.copyCullRect(), SceneDisplayOpAdapter.toDisplayOps(decoded.scene))
