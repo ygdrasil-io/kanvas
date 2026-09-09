@@ -35,6 +35,11 @@ internal class PathStrokeWorkLedgerI64(
     private var pathWorkUsageI64: PathStrokeWorkUsageI64 = pathWorkUsageBeforeI64
     private var frameWorkUsageI64: PathStrokeWorkUsageI64 = frameWorkUsageBeforeI64
 
+    init {
+        requireWithinPathLimits(pathWorkUsageI64)
+        requireWithinFrameLimits(frameWorkUsageI64)
+    }
+
     public fun debitBeforeEmissionI64(deltaI64: PathStrokeWorkUsageI64) {
         val nextPathUsageI64 = addUsageI64(pathWorkUsageI64, deltaI64)
         val nextFrameUsageI64 = addUsageI64(frameWorkUsageI64, deltaI64)

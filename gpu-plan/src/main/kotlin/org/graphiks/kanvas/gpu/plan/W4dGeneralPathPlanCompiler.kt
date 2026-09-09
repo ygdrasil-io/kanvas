@@ -54,6 +54,19 @@ import org.graphiks.math.matrix.preparePathFillGeometryF32
 import org.graphiks.math.matrix.preparePathStrokeGeometryF32
 import org.graphiks.math.matrix.toMatrix3x3F64
 
+/** Exact W4d.2 resource lifetimes, represented without graph or GPU resource objects. */
+internal class W4dGeneralFramePreview(
+    extent: SizeI32,
+    val passCount: Int,
+    resources: List<FrameResourceSpan>,
+    colorConsumerPassByCommand: Map<Int, Int>,
+) {
+    private val extentSnapshot: SizeI32 = extent.copy()
+    val extent: SizeI32 get() = extentSnapshot.copy()
+    val resources: List<FrameResourceSpan> = Collections.unmodifiableList(resources.toList())
+    val colorConsumerPassByCommand: Map<Int, Int> = Collections.unmodifiableMap(colorConsumerPassByCommand.toMap())
+}
+
 /**
  * W4d.2 planning authority for bounded transformed and four-sample path frames.
  *
@@ -62,8 +75,46 @@ import org.graphiks.math.matrix.toMatrix3x3F64
  */
 public class W4dGeneralPathPlanCompiler internal constructor(
     private val strokePolicyF64: PathStrokePolicyF64,
+    private val acceptsNarrowTransforms: Boolean = false,
+    /** W4e may promote a mixed clip frame to its AA4 construction branch without rewriting draws. */
+    private val forceAaFrame: Boolean = false,
 ) : GpuPlanCompiler {
     public constructor() : this(PathStrokePolicyF64())
+
+    /**
+     * Computes the complete W4d.2 physical lifetime inventory without issuing a RenderGraph or
+     * PlanResource.  W4e composes this with its clip prefix before asking the seam to emit.
+     */
+    internal fun preflightFrame(
+        candidate: GpuPlanCandidate,
+        capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget,
+    ): RenderPlanResult<W4dGeneralFramePreview> {
+        val selected = candidate as? Candidate ?: return invalidCandidate()
+        if (selected.owner !== this || !selected.hasMatchingFingerprints()) return invalidCandidate()
+        val extent = SizeI32(selected.target.extent.width, selected.target.extent.height)
+        if (!coreCapabilities(capabilities, extent)) return promoted("Required W4d.2 device capability is unavailable")
+        val anyAa = forceAaFrame || selected.draws.any { it.requestsAntiAlias }
+        val anyHard = selected.draws.any { !it.requestsAntiAlias }
+        val aaStencil = selected.draws.any { it.requestsAntiAlias && it.strategy == PathFillStrategy.StencilCover }
+        val hardStencil = selected.draws.any { !it.requestsAntiAlias && it.strategy == PathFillStrategy.StencilCover }
+        textureRefusal(capabilities, anyAa, anyHard, hardStencil)?.let { return it }
+        if ((anyAa || hardStencil) && PlanOperationCapability.DepthStencilAttachment !in capabilities.supportedOperations()) {
+            return promoted("W4d.2 depth-stencil capability is unavailable")
+        }
+        if ((aaStencil || hardStencil) && PlanOperationCapability.StencilCover !in capabilities.supportedOperations()) {
+            return promoted("W4d.2 stencil cover capability is unavailable")
+        }
+        val geometry = selected.draws.map { it.fillGeometry() }
+        return try {
+            if (anyAa) preflightAa(selected, capabilities, budget, geometry, anyHard, hardStencil)
+            else preflightHard(selected, capabilities, budget, geometry, hardStencil)
+        } catch (_: ArithmeticException) {
+            resource(W4dGeneralPlanDiagnostics.SizeOverflow, "W4d.2 arithmetic overflowed")
+        } catch (_: IllegalArgumentException) {
+            resource(W4dGeneralPlanDiagnostics.PlanIdentityInvalid, "W4d.2 frame preflight failed")
+        }
+    }
 
     override fun select(scene: SceneSnapshot, target: RenderTargetDescriptor): GpuPlanSelection {
         if (scene.extent != target.extent || scene.colorSpace != target.colorSpace) return invalid("Scene and target differ")
@@ -124,7 +175,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                 else -> outside = true
             }
         }
-        if (outside || !requiresGeneral) return Preflight.Outside
+        if (outside || (!requiresGeneral && !acceptsNarrowTransforms)) return Preflight.Outside
         return if (visualDrawCountI32 > MAX_DRAWS) Preflight.Limit("W4d.2 accepts at most 512 visual path draws") else Preflight.Member
     }
 
@@ -276,7 +327,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             PathStrokeDrawMode.Stroke
         } else null
         val style = if (mode != null) try {
-            style(paint, mode)
+            w4PathStrokeStyleF64(paint, mode)
         } catch (_: IllegalArgumentException) {
             return DrawScope.Invalid("Stroke style is invalid")
         } else null
@@ -302,7 +353,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         if (selected.owner !== this || !selected.hasMatchingFingerprints()) return invalidCandidate()
         val extent = SizeI32(selected.target.extent.width, selected.target.extent.height)
         if (!coreCapabilities(capabilities, extent)) return promoted("Required W4d.2 device capability is unavailable")
-        val anyAa = selected.draws.any { it.requestsAntiAlias }
+        val anyAa = forceAaFrame || selected.draws.any { it.requestsAntiAlias }
         val anyHard = selected.draws.any { !it.requestsAntiAlias }
         val aaStencil = selected.draws.any { it.requestsAntiAlias && it.strategy == PathFillStrategy.StencilCover }
         val hardStencil = selected.draws.any { !it.requestsAntiAlias && it.strategy == PathFillStrategy.StencilCover }
@@ -322,6 +373,86 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         } catch (_: IllegalArgumentException) {
             resource(W4dGeneralPlanDiagnostics.PlanIdentityInvalid, "W4d.2 graph invariants failed")
         }
+    }
+
+    private fun preflightHard(
+        selected: Candidate,
+        capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget,
+        geometries: List<org.graphiks.math.geometry.PathFillGeometryF32>,
+        usesStencil: Boolean,
+    ): RenderPlanResult<W4dGeneralFramePreview> {
+        val provisionalMemory = when (val value = PathStrokePlanBudget.calculate(
+            SizeI32(selected.target.extent.width, selected.target.extent.height), geometries, capabilities, budget,
+        )) {
+            is PathStrokePlanBudgetResult.WithinBudget -> value.footprint
+            is PathStrokePlanBudgetResult.Exceeded -> return resource(W4dGeneralPlanDiagnostics.BudgetFrameLocalExceeded, "Frame-local budget is exceeded")
+            is PathStrokePlanBudgetResult.Invalid -> return resource(W4dGeneralPlanDiagnostics.SizeOverflow, "W4d.2 size is unrepresentable: ${value.code}")
+        }
+        val memory = w4dGeneralExactFrameMemory(
+            provisionalMemory,
+            w4dGeneralNativePayloadBudget(selected.draws, materializesHardMasks = false),
+            capabilities,
+        ) ?: return resource(W4dGeneralPlanDiagnostics.SizeOverflow, "W4d.2 native frame resources overflow")
+        if (memory.peakBytes > budget.maxFrameLocalBytes) {
+            return resource(W4dGeneralPlanDiagnostics.BudgetFrameLocalExceeded, "Frame-local budget is exceeded")
+        }
+        if (!buffersFit(memory, capabilities)) return promoted("W4d.2 buffer capability is unavailable")
+        return RenderPlanResult.Ready(hardFramePreview(selected, memory, usesStencil))
+    }
+
+    private fun preflightAa(
+        selected: Candidate,
+        capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget,
+        geometries: List<org.graphiks.math.geometry.PathFillGeometryF32>,
+        anyHard: Boolean,
+        hardStencil: Boolean,
+    ): RenderPlanResult<W4dGeneralFramePreview> {
+        val provisionalMemory = when (val value = PathAaPlanBudget.calculate(
+            targetExtent = SizeI32(selected.target.extent.width, selected.target.extent.height),
+            geometriesF32 = geometries,
+            requiresAa4DepthStencil = true,
+            requiresHardMask = anyHard,
+            requiresHardEdgeDepthStencil = hardStencil,
+            capabilities = capabilities,
+            budget = budget,
+        )) {
+            is PathAaPlanBudgetResult.WithinBudget -> value.footprint
+            is PathAaPlanBudgetResult.Exceeded -> return resource(W4dGeneralPlanDiagnostics.BudgetFrameLocalExceeded, "Frame-local budget is exceeded")
+            is PathAaPlanBudgetResult.Invalid -> return resource(W4dGeneralPlanDiagnostics.SizeOverflow, "W4d.2 size is unrepresentable: ${value.code}")
+        }
+        val base = w4dGeneralExactFrameMemory(
+            provisionalMemory.base,
+            w4dGeneralNativePayloadBudget(selected.draws, materializesHardMasks = true),
+            capabilities,
+        ) ?: return resource(W4dGeneralPlanDiagnostics.SizeOverflow, "W4d.2 native frame resources overflow")
+        val terminalPeakBytes = try {
+            Math.subtractExact(base.peakBytes, base.depthStencilBytes)
+        } catch (_: ArithmeticException) {
+            return resource(W4dGeneralPlanDiagnostics.SizeOverflow, "W4d.2 native frame resources overflow")
+        }
+        val colorPeakBytes = try {
+            listOf(
+                terminalPeakBytes,
+                -base.readbackBytes,
+                provisionalMemory.multisampleColorBytes,
+                provisionalMemory.multisampleDepthStencilBytes,
+                provisionalMemory.hardEdgeMaskCapacityBytes,
+                provisionalMemory.hardEdgeDepthStencilCapacityBytes,
+            ).fold(0L, Math::addExact)
+        } catch (_: ArithmeticException) {
+            return resource(W4dGeneralPlanDiagnostics.SizeOverflow, "W4d.2 native frame resources overflow")
+        }
+        val memory = provisionalMemory.copy(
+            base = base,
+            peakBytes = maxOf(terminalPeakBytes, colorPeakBytes),
+        )
+        if (memory.peakBytes > budget.maxFrameLocalBytes) {
+            return resource(W4dGeneralPlanDiagnostics.BudgetFrameLocalExceeded, "Frame-local budget is exceeded")
+        }
+        if (!buffersFit(memory.base, capabilities)) return promoted("W4d.2 buffer capability is unavailable")
+        return RenderPlanResult.Ready(aaFramePreview(selected, memory))
     }
 
     private fun planHard(
@@ -409,6 +540,100 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             RenderGraph.issueW4dGeneralCompilerWitness(
                 aaGraph(selected, capabilities, budget, memory, hardStencil),
             ),
+        )
+    }
+
+    private fun hardFramePreview(
+        selected: Candidate,
+        memory: PathFillMemoryFootprint,
+        usesStencil: Boolean,
+    ): W4dGeneralFramePreview {
+        val pathPassCount = selected.draws.sumOf { if (it.strategy == PathFillStrategy.DirectTriangle) 1 else 2 }
+        val readbackIndex = pathPassCount
+        val passCount = Math.addExact(pathPassCount, 1)
+        val consumers = linkedMapOf<Int, Int>()
+        var passIndex = 0
+        selected.draws.forEach { draw ->
+            consumers[draw.commandIndex] = if (draw.strategy == PathFillStrategy.DirectTriangle) passIndex else passIndex + 1
+            passIndex = Math.addExact(passIndex, if (draw.strategy == PathFillStrategy.DirectTriangle) 1 else 2)
+        }
+        return W4dGeneralFramePreview(
+            extent = SizeI32(selected.target.extent.width, selected.target.extent.height),
+            passCount = passCount,
+            resources = buildList {
+                add(FrameResourceSpan(memory.targetBytes, 0, passCount))
+                add(FrameResourceSpan(memory.readbackBytes, readbackIndex, passCount))
+                add(FrameResourceSpan(memory.vertexCapacityBytes, 0, passCount))
+                add(FrameResourceSpan(memory.indexCapacityBytes, 0, passCount))
+                add(FrameResourceSpan(memory.uniformCapacityBytes, 0, passCount))
+                if (usesStencil) add(FrameResourceSpan(memory.depthStencilBytes, 0, passCount))
+            },
+            colorConsumerPassByCommand = consumers,
+        )
+    }
+
+    private fun aaFramePreview(
+        selected: Candidate,
+        memory: PathAaMemoryFootprint,
+    ): W4dGeneralFramePreview {
+        val topology = aaTopology(selected)
+        return W4dGeneralFramePreview(
+            extent = SizeI32(selected.target.extent.width, selected.target.extent.height),
+            passCount = topology.passCount,
+            resources = buildList {
+                add(FrameResourceSpan(memory.multisampleColorBytes, 0, topology.readbackIndex))
+                add(FrameResourceSpan(memory.base.targetBytes, 0, topology.passCount))
+                add(FrameResourceSpan(memory.multisampleDepthStencilBytes, 0, topology.readbackIndex))
+                topology.hardMaskLives.forEach { life ->
+                    add(FrameResourceSpan(memory.hardEdgeMaskCapacityBytes, life.first, life.last))
+                }
+                topology.hardDepthLives.forEach { life ->
+                    add(FrameResourceSpan(memory.hardEdgeDepthStencilCapacityBytes, life.first, life.last))
+                }
+                add(FrameResourceSpan(memory.base.readbackBytes, topology.readbackIndex, topology.passCount))
+                add(FrameResourceSpan(memory.base.vertexCapacityBytes, 0, topology.passCount))
+                add(FrameResourceSpan(memory.base.indexCapacityBytes, 0, topology.passCount))
+                add(FrameResourceSpan(memory.base.uniformCapacityBytes, 0, topology.passCount))
+            },
+            colorConsumerPassByCommand = topology.colorConsumerPassByCommand,
+        )
+    }
+
+    private fun aaTopology(selected: Candidate): W4dGeneralAaTopology {
+        val colorConsumers = linkedMapOf<Int, Int>()
+        val hardMasks = mutableListOf<ResourceLife>()
+        val hardDepths = mutableListOf<ResourceLife>()
+        var passIndex = 0
+        var maskOrdinal = 0
+        var hardDepthOrdinal = 0
+        selected.draws.forEach { draw ->
+            if (draw.requestsAntiAlias) {
+                colorConsumers[draw.commandIndex] = if (draw.strategy == PathFillStrategy.DirectTriangle) {
+                    passIndex
+                } else {
+                    passIndex + 1
+                }
+                passIndex = Math.addExact(passIndex, if (draw.strategy == PathFillStrategy.DirectTriangle) 1 else 2)
+            } else {
+                val clearIndex = passIndex++
+                if (draw.strategy == PathFillStrategy.DirectTriangle) {
+                    passIndex++
+                } else {
+                    val producerIndex = passIndex++
+                    passIndex++
+                    hardDepths += ResourceLife(hardDepthOrdinal++, producerIndex, passIndex)
+                }
+                colorConsumers[draw.commandIndex] = passIndex++
+                hardMasks += ResourceLife(maskOrdinal++, clearIndex, passIndex)
+            }
+        }
+        val readbackIndex = passIndex
+        return W4dGeneralAaTopology(
+            passCount = Math.addExact(readbackIndex, 1),
+            readbackIndex = readbackIndex,
+            hardMaskLives = hardMasks,
+            hardDepthLives = hardDepths,
+            colorConsumerPassByCommand = colorConsumers,
         )
     }
 
@@ -775,6 +1000,8 @@ public class W4dGeneralPathPlanCompiler internal constructor(
     private fun SealedDraw.fillGeometry(): org.graphiks.math.geometry.PathFillGeometryF32 = when (geometry) {
         is PathDrawGeometry.Fill -> geometry.valueF32
         is PathDrawGeometry.Stroke -> geometry.valueF32.copyFillGeometryF32()
+        is PathDrawGeometry.InverseDomainSource -> error("W4d.2 cannot retain W4e inverse-domain source geometry")
+        PathDrawGeometry.Empty -> error("W4d.2 cannot retain W4e inverse-domain empty geometry")
     }
 
     private fun PathTransformedFillInvalidSceneReason.isHorizon(): Boolean =
@@ -802,17 +1029,6 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         val b = second.intervals.copyToFloatArray()
         return a.size == b.size && a.indices.all { a[it].toRawBits() == b[it].toRawBits() }
     }
-
-    private fun style(paint: PaintNode, mode: PathStrokeDrawMode): PathStrokeStyleF64 = PathStrokeStyleF64(
-        if (paint.strokeWidth == 0f && mode == PathStrokeDrawMode.Stroke) PathStrokeWidthF64.Hairline
-        else PathStrokeWidthF64.Finite(paint.strokeWidth.toDouble()),
-        when (paint.strokeCap) { StrokeCapNode.BUTT -> PathStrokeCap.Butt; StrokeCapNode.ROUND -> PathStrokeCap.Round; StrokeCapNode.SQUARE -> PathStrokeCap.Square },
-        when (paint.strokeJoin) { StrokeJoinNode.MITER -> PathStrokeJoin.Miter; StrokeJoinNode.ROUND -> PathStrokeJoin.Round; StrokeJoinNode.BEVEL -> PathStrokeJoin.Bevel },
-        paint.strokeMiter.toDouble(),
-        (paint.pathEffect as? PathEffectNode.Dash)?.let { dash ->
-            PathStrokeDashF64.of(dash.intervals.copyToFloatArray().map(Float::toDouble).toDoubleArray(), dash.phase.toDouble())
-        },
-    )
 
     private fun integral(bounds: RectF32): RectI32? = if (!finite(bounds)) null else listOf(bounds.left, bounds.top, bounds.right, bounds.bottom)
         .map { value -> value.toLong().takeIf { it in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong() && it.toFloat() == value } }
@@ -916,8 +1132,15 @@ public class W4dGeneralPathPlanCompiler internal constructor(
     private sealed interface Prepared { data class Ready(val geometry: org.graphiks.math.geometry.PathFillGeometryF32, val pathGeometry: PathDrawGeometry, val frameWorkUsageI64: PathStrokeWorkUsageI64) : Prepared; data class Empty(val frameWorkUsageI64: PathStrokeWorkUsageI64) : Prepared; data class Invalid(val message: String) : Prepared; data class Horizon(val message: String) : Prepared; data class Limit(val message: String) : Prepared }
     private data class SealedDraw(val commandIndex: Int, val color: ColorF32, val geometry: PathDrawGeometry, val strategy: PathFillStrategy, val scissorI32: RectI32, val requestsAntiAlias: Boolean)
     private data class ResourceLife(val ordinal: Int, val first: Int, val last: Int)
+    private data class W4dGeneralAaTopology(
+        val passCount: Int,
+        val readbackIndex: Int,
+        val hardMaskLives: List<ResourceLife>,
+        val hardDepthLives: List<ResourceLife>,
+        val colorConsumerPassByCommand: Map<Int, Int>,
+    )
     private class Candidate(val owner: W4dGeneralPathPlanCompiler, override val sceneCanonicalId: org.graphiks.kanvas.render.ir.CanonicalId, override val target: RenderTargetDescriptor, draws: List<SealedDraw>) : GpuPlanCandidate {
-        override val capabilityId: String = if (draws.any { it.requestsAntiAlias }) AA_CAPABILITY_ID else HARD_CAPABILITY_ID
+        override val capabilityId: String = if (owner.forceAaFrame || draws.any { it.requestsAntiAlias }) AA_CAPABILITY_ID else HARD_CAPABILITY_ID
         val draws: List<SealedDraw> = Collections.unmodifiableList(draws.map { it.copy(scissorI32 = it.scissorI32.copy()) })
         private val sceneFingerprint = sceneCanonicalId
         private val targetFingerprint = target.canonicalId
@@ -932,3 +1155,29 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         private const val MAX_DRAWS = 512
     }
 }
+
+/** Shared W4 stroke-style translation used by both finite W4d draws and W4e inverse interiors. */
+internal fun w4PathStrokeStyleF64(
+    paint: PaintNode,
+    mode: PathStrokeDrawMode,
+): PathStrokeStyleF64 = PathStrokeStyleF64(
+    if (paint.strokeWidth == 0f && mode == PathStrokeDrawMode.Stroke) PathStrokeWidthF64.Hairline
+    else PathStrokeWidthF64.Finite(paint.strokeWidth.toDouble()),
+    when (paint.strokeCap) {
+        StrokeCapNode.BUTT -> PathStrokeCap.Butt
+        StrokeCapNode.ROUND -> PathStrokeCap.Round
+        StrokeCapNode.SQUARE -> PathStrokeCap.Square
+    },
+    when (paint.strokeJoin) {
+        StrokeJoinNode.MITER -> PathStrokeJoin.Miter
+        StrokeJoinNode.ROUND -> PathStrokeJoin.Round
+        StrokeJoinNode.BEVEL -> PathStrokeJoin.Bevel
+    },
+    paint.strokeMiter.toDouble(),
+    (paint.pathEffect as? PathEffectNode.Dash)?.let { dash ->
+        PathStrokeDashF64.of(
+            dash.intervals.copyToFloatArray().map(Float::toDouble).toDoubleArray(),
+            dash.phase.toDouble(),
+        )
+    },
+)

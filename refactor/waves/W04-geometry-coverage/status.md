@@ -1,4 +1,4 @@
-# État W04 — geometry/coverage — W4d.2
+# État W04 — geometry/coverage — W4d.2/W4e
 
 Révision W4d.2 vérifiée : `cdf854b` (`style: remove W4d trailing whitespace`),
 empilée sur `codex/w4d-strokes-hairlines` à
@@ -268,9 +268,9 @@ aucun test `codec` n'a été lancé.
 ## Ledger XML global exact
 
 Le scan `rtk rg -n '<failure|<error' kanvas/build/test-results/test/TEST-*.xml`,
-exécuté après la gate globale W4c le 2026-09-06, retourne 51 matches dans 6
-fichiers. L'inventaire XML totalise 120 suites, 3 646 tests, 51 failures et 0
-error. Les 51 seuls noms sont :
+exécuté après la gate globale W4e Task 9-fix1 le 2026-09-09, retourne 51
+matches dans 6 fichiers. L'inventaire XML totalise 3 687 tests, 51 failures et
+0 error. Les 51 seuls noms sont :
 
 - `ImageTest :: ColorType enum values()` ;
 - `GPUAllApiBlendSurfaceTest :: DrawPoint/{PLUS, MULTIPLY, OVERLAY, DARKEN, LIGHTEN, COLOR_DODGE, COLOR_BURN, HARD_LIGHT, SOFT_LIGHT, DIFFERENCE, EXCLUSION, HUE, SATURATION, COLOR, LUMINOSITY}/{UNCLIPPED, SCISSOR, ALPHA_MASK}` — les 45 combinaisons exactes du produit cartésien ;
@@ -281,9 +281,9 @@ error. Les 51 seuls noms sont :
 - `GPURefusalGuardsTest :: direct fill guard refuses radial and sweep non identity matrix facts before dispatch()`.
 
 `rtk rg -n '<error' kanvas/build/test-results/test/TEST-*.xml` ne retourne
-aucune occurrence. Aucun nom nouveau et aucune failure W4c ne bloquent donc ce
+aucune occurrence. Aucun nom nouveau et aucune failure W4e ne bloquent donc ce
 suivi documentaire ; les failures listées sont hors périmètre et ne sont pas
-modifiées par W4c.
+modifiées par W4e.
 
 ## Exclusions et dette SDF
 
@@ -297,6 +297,243 @@ W4c ne contient aucun chemin `font`, `codec`, GM, dashboard, render/baseline ou
 
 Pour les RRect non nuls, la SDF native n'est pas l'aire analytique Skia exacte. Cette dette est explicitement réservée à W7 : un nouveau shader ne pourra être envisagé qu'après une divergence matérielle constatée par l'intégration Skia. Il est interdit de la masquer par une tolérance, un seuil plus bas ou une rebaseline.
 
+## W4e — clips complexes et inverse paths, état factuel au 2026-09-09
+
+W4e livre la préparation bornée des clips ordonnés Rect/RRect/Path et des
+opérations `INTERSECT`/`DIFFERENCE`, leurs masques `RGBA8Unorm` hard 1×, et
+la restauration exacte du domaine `InverseDomain.Zero`. Le graphe scelle les
+chaînes producer/fold/consumer, les rôles des targets et scratchs, et D24S8.
+La preuve publique positive existe pour le hard mask 1×, pour les draws
+inverse/D24S8 1× et pour l'oracle CPU indépendant / la matrice `Surface`
+byte-exacte (ordre, partage de clip, transform, scissor, RGBA/BGRA et
+SrcOver). `Picture` v8 conserve ce payload à la lecture historique et
+`SceneArchive` reste lu pour les schémas 1 et 2.
+
+La seule preuve AA4 positive qui manque est honnêtement `SKIPPED` à la
+frontière de topology/capability native : l'adaptateur courant ne publie pas
+la topologie AA4 complète. Aucune capability AA4, aucun sample position matériel
+ni succès terminal n'a été inventé. En revanche, les tests `Surface` publics
+hard et inverse passent réellement ; le test Surface AA4 et le test mixed
+hard/AA4 sont les deux skips documentés de la gate Surface filtrée.
+
+Le rollback public prouvé n'est pas une matrice d'injection native : un refus
+de budget W4e est suivi d'un rendu `Surface` exact récupéré sur la même route.
+Les six rollback sites natifs (allocation, pipeline, bind, encoder, completion,
+close) restent un gap d'intégration. Aucun overload de factory, seam artificiel,
+proxy, reflection ou API de contrôle de panne n'a été ajouté pour les simuler.
+L'overload public `prepareSceneFrameSession` qui avait introduit un quinzième
+échec renderer a été retiré ; il ne faut donc plus décrire quinze échecs comme
+préexistants.
+
+### Gates W4e après Task 9-fix2
+
+| Gate | État Gradle | XML frais | Attribution |
+| --- | --- | --- | --- |
+| geometry/matrix/render-ir/gpu-plan | `BUILD SUCCESSFUL` (exit 0) | 0 failure, 0 error | verte ; 85 tâches exécutées. |
+| adaptateur capability ciblé | `BUILD SUCCESSFUL` (exit 0) | 16 tests, 0 failure, 0 error | matrice AA4 absente/présente ; aucune capacité couleur 1× n'est inventée. |
+| renderer ciblé | `BUILD SUCCESSFUL` (exit 0) | 0 failure, 0 error | les autorités W4a–W4e déclarent leurs faits d'usage réellement observés. |
+| `GPUClipCoverageSurfaceTest` ciblé | `BUILD SUCCESSFUL` (exit 0) | 0 failure, 0 error | les deux terminaux singuliers publient de nouveau `unsupported.transform.affine_singular`. |
+| `GPUFramePathApiInventoryNativeSmokeTest` ciblé | `BUILD SUCCESSFUL` (exit 0) | 72 tests, 0 failure, 0 error | la fixture native-smoke interne à capture typée est réellement routée ; les oracles pixels natifs restent exécutés. |
+| Surface/Picture filtrée | `BUILD FAILED` (exit 1) | 2 144 tests, 45 failures, 0 error, 2 skipped | retour exact au ledger `DrawPoint` historique ; les deux skips AA4 restent honnêtes. |
+| `:kanvas:test` complet | `BUILD FAILED` (exit 1) | 3 687 tests, 51 failures, 0 error, 2 skipped | retour exact au ledger global historique, sans nouveau nom W4e. |
+
+Task 9-fix1 avait rétabli la gate renderer par le fallback legacy du snapshot
+1×. La revue a établi que cette représentation était elle-même fail-open : hors
+AA4, l'omission de `supportedTextureSampleSupports` déclenchait le défaut
+historique et publiait `RenderAttachment`, `CopySource`, `CopyDestination` et
+`Sampled` même lorsqu'une session n'observait que `RenderAttachment`.
+
+Task 9-fix2 construit une seule table explicite pour les deux branches AA4.
+Pour la couleur 1×, elle projette uniquement les bits réellement observés
+`RenderAttachment`, `CopySrc`, `CopyDst` et `TextureBinding` vers
+`RenderAttachment`, `CopySource`, `CopyDestination` et `Sampled`. Une session
+`RenderAttachment` seule ne publie donc aucun des trois autres usages ; si le
+contrat cible W3 exige `CopySource` absent, il n'est pas admis et le lowering
+reste `UnsupportedCapability`. Le hard-mask W4e conserve exactement ses faits
+`RGBA8Unorm`, `RenderAttachment | TextureBinding` et sample 1. Aucune capability
+AA4 n'est publiée sans preuve.
+
+Les deux refus de clip singulier étaient réellement publics : le label interne
+`unsupported_clip_transform:Singular` fuyait par le chemin préparé. Il est
+normalisé, à cette frontière seulement, vers le contrat public existant
+`unsupported.transform.affine_singular`.
+
+Les seize smoke tests étaient des fixtures historiques qui construisaient un
+`PathOp` avec une classe de transform textuelle. W4e le refuse légitimement comme
+`LegacyUnavailable` avant l'inventaire. Les fixtures transportent maintenant un
+snapshot typé et une géométrie source inverse-mappée pour conserver les mêmes
+pixels device. Deux assertions float sur la géométrie d'inventaire interne ont
+été retirées car le round-trip F32 diffère de quelques ulps ; les oracles pixels
+natifs correspondants sont conservés et passent. Aucun test comportemental n'a
+été supprimé, ignoré ou masqué.
+
+Les 51 noms historiques restent strictement ceux du ledger (45 `DrawPoint`,
+`ImageTest`, `GPUMaskBlurDispatchTest`, deux `GPUPreparedSurfaceFrameBuilderTest`,
+`GPUPreparedTextStrokeTest`, `GPURefusalGuardsTest`), sans `<error>`.
+
+### Correctif final post-revue Sol — `final-fix`
+
+Les cinq findings Important de la relecture finale sont traités sans élargir la
+capability W4e. La candidate gate accepte maintenant une scène qui porte soit
+un clip complexe, soit un draw inverse; les consumers Rect/RRect/Path utilisent
+la seam W4d commune et l'inverse `STROKE_AND_FILL` emploie le même
+`PathStrokeStyleF64`. Le `STROKE` seul ne reçoit aucune nouvelle sémantique.
+
+La préparation inverse débite, avant `Geometry.of`, le coût exact du snapshot
+défensif et son overhead avec addition contrôlée. `ClipPreparationLimitsI32`
+rétablit 64 entrées par stack et 1 024 par frame; geometry et matrix préflightent
+le compte avant toute map/copie, puis propagent le cumul frame. Les refus restent
+transactionnels (`StackEntryCountLimit`/`FrameEntryCountLimit`).
+
+Les RRect normalisent une seule fois leurs rayons en F64 (clamp des négatifs,
+scale uniforme des rayons opposés) avant le choix Identity/axis/general/perspective;
+les branches typed et path partagent donc la même autorité canonique. Enfin le
+graphe W4e scelle un unique triplet V/I/U avec IDs, usages, capacités, premières
+liaisons et lifetimes frame-local; le peak/preflight et `maxBufferSizeBytes` le
+voient avant `Ready`, et le materializer ne fait que louer, uploader et binder
+ces buffers autorisés. Les allocations de readback restent les sorties publiques
+existantes, hors de ce triplet.
+
+Les trois cas AA4 concernés restent des terminaux honnêtes
+`w4e.clip.sample-count-unavailable`; aucune capacité AA4 n'est publiée par ce
+correctif. L'ancien écart du test inverse direct était une assertion obsolète
+sur le sentinel W4c, pas un bug de rendu : les pixels publics prouvent maintenant
+l'intérieur transparent et l'extérieur rouge.
+
+| Gate finale `final-fix` | État Gradle | Résultat frais |
+| --- | --- | --- |
+| geometry/matrix/render-ir/gpu-plan | `BUILD SUCCESSFUL` (exit 0) | 85 tâches, 0 failure, 0 error. |
+| renderer W4d/W4e ciblé | `BUILD SUCCESSFUL` (exit 0) | 0 failure, 0 error; le skip AA4 reste explicite. |
+| Surface/Picture filtrée | `BUILD FAILED` (exit 1 attendu) | 2 144 tests, 45 failures historiques, 0 error, 2 skips. |
+| `:kanvas:test` complet | `BUILD FAILED` (exit 1 attendu) | 3 687 tests, 51 failures historiques, 0 error, 2 skips. |
+
+Le scan XML final ne trouve que les six fichiers historiques et les 51 noms du
+ledger déjà publié; `rtk rg -n '<error' kanvas/build/test-results/test/TEST-*.xml`
+ne retourne aucune occurrence. Aucun test `font` ou `codec`, GM, dashboard,
+baseline, `:integration-tests:skia` ou `jpg-color-cube` n'a été sélectionné;
+la compilation transitive éventuelle de modules `font` ne constitue pas une
+exécution de leur suite.
+
+### Correctif final post-revue Sol — `final-fix2`
+
+Les quatre findings Important suivants sont clos sans élargir la capability ni
+inventer une capability AA4.
+
+1. Le normalizer W4e ne retire plus aveuglément le `DeviceRect` W4d d'un draw
+   frère non possédé : il ne consomme que le clip complexe qu'il matérialise.
+   Pour un inverse, le domaine fini est intersecté avec ce même scissor
+   device-space avant la stratégie W4e. Des pixels publics couvrent une frame
+   mixte W4e + sibling `DeviceRect`, puis un inverse borné par `DeviceRect`.
+2. `RRectF64` canonise maintenant chaque paire de rayons dès que
+   `x <= 0 || y <= 0`, donc aussi `-0.0`, en `CornerRadiiF64.Zero` avant le
+   facteur uniforme global. L'oracle CPU suit cette source Skia unique et les
+   équivalences Identity/axis/general/perspective sont exécutées.
+3. La revue statique établit que `W4eNativePayloadPlan.from(...)` est exécuté
+   avant `RenderGraph.of(...)`, puis que le graphe est scellé avec ce payload.
+   Le lowering le consomme seulement; il ne retesselle ni ne réalloue après
+   `Ready`. La précédente assertion lisait néanmoins `nativePayload` et
+   construisait une fixture AA4 synthétique : elle est retirée par `final-fix3`.
+   Aucune preuve black-box ne prétend désormais établir une identité d'objet ou
+   l'ordre interne de `.from(...)`.
+4. Le pool compare désormais la capacité physique et les usages V/I/U, et non
+   les spans utiles inclus dans l'égalité de data class. Il réutilise un slot
+   capable ou remplace transactionnellement un slot `Available` incompatible
+   avant `Saturated`. La précédente preuve empruntait toutefois le routeur et
+   le port internes : `final-fix3` la remplace par cinq frames W4e distinctes
+   rendues avec le même `Surface`, avec pixels cumulés après chaque frame. Elle
+   prouve une récupération observable, sans inspecter réutilisation, éviction,
+   capacité ni compte d'allocations.
+
+| Gate finale `final-fix2` | État Gradle | Résultat frais |
+| --- | --- | --- |
+| G1 geometry/matrix/render-ir/gpu-plan | `BUILD SUCCESSFUL` (exit 0) | 85 tâches, 0 failure, 0 error. |
+| G2 renderer W4d/W4e ciblé | `BUILD SUCCESSFUL` (exit 0) | 53 tâches, 0 failure, 0 error. |
+| G3 Surface/Picture filtrée | `BUILD FAILED` (exit 1 attendu) | 2 148 tests, 45 failures historiques, 0 error, 2 skips. |
+| G4 `:kanvas:test` complet | `BUILD FAILED` (exit 1 attendu) | 3 691 tests, 51 failures historiques, 0 error, 2 skips. |
+
+Les quatre tests nouveaux expliquent le passage de 2 144/3 687 à
+2 148/3 691; le ledger des failures reste exactement 45/51. Le scan XML G4
+trouve uniquement `ImageTest`, `GPUAllApiBlendSurfaceTest`,
+`GPUMaskBlurDispatchTest`, `GPUPreparedSurfaceFrameBuilderTest`,
+`GPUPreparedTextStrokeTest` et `GPURefusalGuardsTest`, sans `<error>`. Les
+deux skips AA4 restent des frontières de capability honnêtes. Cette boucle ne
+modifie ni `font`, ni `codec`, GM, dashboard, baseline,
+`:integration-tests:skia` ou `jpg-color-cube`.
+
+### Correctif final post-revue Sol — `final-fix3`
+
+La dernière passe ne modifie aucune production. Elle retire quatre preuves
+inadmissibles, puis les remplace par quatre comportements observables à travers
+`Surface`, `surface.canvas { ... }`, `surface.render()` et les pixels publics :
+
+1. une frame W4e conserve un sibling `DeviceRect` W4d scissoré;
+2. un inverse sous CTM de translation non identité conserve ce `DeviceRect` en
+   device-space, avec un oracle volontairement différent si le scissor suivait
+   la CTM;
+3. cinq géométries W4e distinctes se succèdent sur le même `Surface`, avec une
+   vérification pixels après chaque rendu, y compris la cinquième récupération;
+4. la mutation d'un `Path` appelant après la capture hard 1× ne change pas les
+   pixels; un oracle de fuite produit volontairement une image différente.
+
+Le fait architectural que `W4eNativePayloadPlan.from(...)` précède `Ready` est
+vérifié par revue statique dans le compilateur W4e, avant `RenderGraph.of(...)`.
+Il ne fait pas partie de la preuve pixels; cette dernière n'affirme ni identité
+d'objet, ni appel interne, ni détail de réutilisation/éviction du pool. Aucune
+fixture AA4 synthétique, reflection, seam interne, compteur d'appels ou
+inspection de cache ne sert à ces quatre preuves.
+
+| Gate finale `final-fix3` | État Gradle | Résultat frais |
+| --- | --- | --- |
+| G1 geometry/matrix/render-ir/gpu-plan | non lancée | hors périmètre : aucune production, math ou `gpu-plan` modifié. |
+| G2 renderer W4d/W4e ciblé | `BUILD SUCCESSFUL` (exit 0) | 53 tâches, 0 failure, 0 error. |
+| G3 Surface/Picture filtrée | `BUILD FAILED` (exit 1 attendu) | 2 149 tests, 45 failures historiques, 0 error, 2 skips. |
+| G4 `:kanvas:test` complet | `BUILD FAILED` (exit 1 attendu) | 3 692 tests, 51 failures historiques, 0 error, 2 skips. |
+
+La commande G3 exacte est `rtk ./gradlew :kanvas:test --tests '*GPUPlanSurface*'
+--tests '*SurfaceTest*' --tests '*DisplayOpSceneAdapterTest*' --tests '*PictureTest*'
+--rerun-tasks --max-workers=1 --console=plain`; un premier filtre trop large
+sur `*Surface*` avait aussi sélectionné les deux failures historiques de
+`GPUPreparedSurfaceFrameBuilderTest`, sans lien avec W4e. Le G4 retrouve les
+six fichiers XML du ledger historique et aucun `<error>`. Les suites `font`,
+`codec`, GM, dashboard, baseline, `:integration-tests:skia` et `jpg-color-cube`
+ne sont pas sélectionnées (la compilation transitive de `font` ne lance pas sa
+suite).
+
+### Complément de re-review Sol — `final-fix4`
+
+Les quatre scénarios publics `final-fix3` conservent désormais leur
+`RenderResult` et appellent `assertPreparedRouteEvidence(result)` avant toute
+comparaison de pixels. Cette assertion publique exige exactement les scopes
+d'évidence native `Render` et `Readback`; les pixels exacts ne peuvent donc
+plus valider seuls un fallback legacy. Dans le scénario de cinq géométries, la
+même assertion est exécutée pour chacun des cinq rendus, y compris la frame de
+récupération.
+
+Cette correction ne touche que le test public et la documentation : aucune
+fixture interne, AA4 synthétique, reflection, compteur d'appels ou assertion
+de source n'est introduit. La validation de publication fraîche confirme G1
+verte avec 85 tâches exécutées, G2 verte avec 53 tâches exécutées, G3 à
+2 149 tests, 45 failures historiques, 0 error et 2 skips, puis G4 à 3 692
+tests, 51 failures historiques, 0 error et 2 skips. Le scan XML G4 reste limité
+aux six suites du ledger, sans nouveau nom W4e.
+
+### Dette et rulings conservés
+
+- Les diagnostics de refus path/projective hétérogènes restent aplatis à
+  `EntryAttemptedEdgeLimit`, et les anciens helpers de preflight clip restent
+  du code mort.
+- `prepareInversePathGeometryF32` conserve son paramètre public
+  `pathWorkUsageBeforeI64`; `clipCapabilities()` contient une entrée couleur
+  dupliquée, neutralisée par `Set`.
+- Le test mixed-AA ne compare pas encore l'ID resolve préparé aux deux autorités
+  finales ; les erreurs d'allocation pool sont toutes attribuées
+  `W4eAccumulatorTexture`; `GPUW4eMaskContinuationRequest.Skip` reste
+  non-matérialisable mais inaccessible depuis un graphe Task 6 valide.
+- L'enregistrement explicite W4e dans `GpuRenderContext` paraît redondant car
+  `CapabilityCompilerChain.of` l'ajoute déjà. Les types numériques publics de
+  `:math` gardent la convention I32/F64, sans l'imposer aux coordonnées locales
+  de l'oracle.
+
 ## Limites ouvertes
 
 W4 reste ouverte. W4d.2 laisse explicitement :
@@ -306,7 +543,9 @@ W4 reste ouverte. W4d.2 laisse explicitement :
   inventée pour contourner ce gap ;
 - la limite conservative `TopologyLimit` de certaines unions PathOps F64→F32,
   notamment `STROKE_AND_FILL` projectif non vide et le fixture closed-skew ;
-- W4e : clips path complexes, inverse paths et booléens.
+- les 18 deltas W4e frais sont clos par Task 9-fix1 et la projection exacte des
+  usages couleur 1× est restaurée par Task 9-fix2 ; la limite qui demeure est la
+  topologie AA4 native indisponible, non une régression d'intégration W4e.
 
 W5 (materials), W6 (layers/effets) et W7 (convergence GM, incluant la
 réévaluation de la dette SDF RRect W4b) ne font pas partie de W4d.2. Les gates

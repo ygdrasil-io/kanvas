@@ -55,5 +55,5 @@ internal fun planCapabilityIdentityFacts(capabilities: PlanCapabilitySnapshot): 
 private fun textureFormatIdentity(format: PlanTextureFormat): String = when (format) {
     is PlanTextureFormat.Color -> "color:${format.value.name}"
     is PlanTextureFormat.DepthStencil -> "depth-stencil:${format.value.name}"
-    PlanTextureFormat.CoverageMask -> "coverage-mask"
+    PlanTextureFormat.CoverageMask -> "coverage-mask:${PlanTextureFormat.CoverageMask.value.name}"
 }

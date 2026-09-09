@@ -52,6 +52,71 @@ enum class GPUSampleResolveAction {
     Skip,
 }
 
+/**
+ * W4e owns a mask attachment independently of the scene MSAA continuation contract.
+ * A sealed scope either resolves its 4x linear RGBA8 scratch mask to a distinct 1x mask or
+ * retains it for a later scope.  It never represents scene-target continuation.
+ */
+public enum class GPUW4eMaskResolveAction {
+    ResolveCanonical,
+    Skip,
+}
+
+public data class GPUW4eMaskContinuationRequest(
+    public val maskTargetResourceId: String,
+    public val resolveMaskResourceId: String?,
+    public val resolveAction: GPUW4eMaskResolveAction,
+) {
+    init {
+        require(maskTargetResourceId.isNotBlank()) {
+            "W4e mask continuation requires its scratch mask target"
+        }
+        require((resolveAction == GPUW4eMaskResolveAction.ResolveCanonical) ==
+            (resolveMaskResourceId != null)
+        ) {
+            "W4e mask resolve action must exactly match its sealed resolve target"
+        }
+        require(resolveMaskResourceId == null ||
+            (resolveMaskResourceId.isNotBlank() && resolveMaskResourceId != maskTargetResourceId)
+        ) {
+            "W4e mask resolve target must be distinct from its scratch target"
+        }
+    }
+}
+
+/** Resolve policy for W4e's sealed scene-color MSAA sequence. */
+public enum class GPUW4eSceneResolveAction {
+    ResolveCanonical,
+    Skip,
+}
+
+/**
+ * W4e owns this scene-color continuation independently from both generic MSAA and W4d.2.
+ * The frame seal carries one request per 4x color scope: intermediate scopes retain their
+ * shared scene MSAA view and only the final scope resolves the canonical scene target.
+ */
+public data class GPUW4eSceneContinuationRequest(
+    public val sceneTargetResourceId: String,
+    public val resolveSceneResourceId: String?,
+    public val resolveAction: GPUW4eSceneResolveAction,
+) {
+    init {
+        require(sceneTargetResourceId.isNotBlank()) {
+            "W4e scene continuation requires its multisample scene target"
+        }
+        require((resolveAction == GPUW4eSceneResolveAction.ResolveCanonical) ==
+            (resolveSceneResourceId != null)
+        ) {
+            "W4e scene resolve action must exactly match its sealed canonical target"
+        }
+        require(resolveSceneResourceId == null ||
+            (resolveSceneResourceId.isNotBlank() && resolveSceneResourceId != sceneTargetResourceId)
+        ) {
+            "W4e scene resolve target must be distinct from its multisample target"
+        }
+    }
+}
+
 /** Immutable request for one MSAA pass-segment transition. */
 data class GPUSampleContinuationRequest(
     val key: GPUSampleContinuationKey,

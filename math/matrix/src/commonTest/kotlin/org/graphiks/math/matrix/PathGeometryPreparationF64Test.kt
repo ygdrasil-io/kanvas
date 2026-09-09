@@ -7,13 +7,18 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import org.graphiks.math.geometry.PathBuilder
+import org.graphiks.math.geometry.FillRule
 import org.graphiks.math.geometry.PathFillFlatteningPolicyF64
 import org.graphiks.math.geometry.PathFillWithStrokeWorkPreparationResult
+import org.graphiks.math.geometry.InverseInteriorCoverageF32
+import org.graphiks.math.geometry.InversePathDrawMode
+import org.graphiks.math.geometry.InversePathPreparationResult
 import org.graphiks.math.geometry.PathStrokeCap
 import org.graphiks.math.geometry.PathStrokeDashF64
 import org.graphiks.math.geometry.PathStrokeDrawMode
 import org.graphiks.math.geometry.PathStrokeInvalidSceneReason
 import org.graphiks.math.geometry.PathStrokeJoin
+import org.graphiks.math.geometry.PathStrokeLimitsI32
 import org.graphiks.math.geometry.PathStrokePolicyF64
 import org.graphiks.math.geometry.PathStrokePreparationResult
 import org.graphiks.math.geometry.PathStrokeResourceLimitReason
@@ -24,6 +29,123 @@ import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.preparePathFillGeometryWithStrokeWorkF32
 
 class PathGeometryPreparationF64Test {
+    @Test
+    fun `transformed inverse fill retains its finite interior and requested scissor domain`() {
+        val path = PathBuilder(FillRule.INVERSE_EVEN_ODD)
+            .moveTo(0f, 0f)
+            .lineTo(2f, 0f)
+            .lineTo(0f, 2f)
+            .close()
+            .build()
+
+        listOf(
+            Matrix3x3F64(txF64 = 4.0, tyF64 = 3.0),
+            Matrix3x3F64(persp0F64 = 0.25),
+        ).forEach { matrixF64 ->
+            val ready = assertIs<InversePathPreparationResult.Ready>(
+                matrixF64.prepareTransformedInversePathGeometryF32(
+                    sourcePathF32 = path,
+                    styleF64 = null,
+                    mode = InversePathDrawMode.Fill,
+                    domainI32 = RectI32(-10, -8, 20, 18),
+                    policyF64 = PathStrokePolicyF64(),
+                ),
+            )
+
+            val interiorF32 = assertIs<InverseInteriorCoverageF32.Geometry>(ready.geometryF32.interiorCoverageF32)
+                .copyGeometryF32()
+            assertEquals(FillRule.EVEN_ODD, interiorF32.fillRule)
+            assertEquals(RectI32(-10, -8, 20, 18), ready.geometryF32.copyDomainI32())
+        }
+    }
+
+    @Test
+    fun `transformed inverse stroke and fill excludes its projected finite outline`() {
+        val ready = assertIs<InversePathPreparationResult.Ready>(
+            Matrix3x3F64().prepareTransformedInversePathGeometryF32(
+                sourcePathF32 = rectanglePathWithFillRule(FillRule.INVERSE_WINDING),
+                styleF64 = finiteStyleF64(2.0),
+                mode = InversePathDrawMode.StrokeAndFill,
+                domainI32 = RectI32(-4, -4, 16, 12),
+                policyF64 = PathStrokePolicyF64(),
+            ),
+        )
+
+        val interiorF32 = assertIs<InverseInteriorCoverageF32.Geometry>(ready.geometryF32.interiorCoverageF32)
+            .copyGeometryF32()
+        assertEquals(RectI32(1, 1, 9, 7), interiorF32.copyConservativeScissorI32())
+    }
+
+    @Test
+    fun `transformed inverse hairline excludes its device outline under affine and perspective`() {
+        val path = PathBuilder(FillRule.INVERSE_WINDING)
+            .moveTo(0f, 0f).lineTo(10f, 0f).lineTo(10f, 8f).lineTo(0f, 8f).close().build()
+        val affineF64 = Matrix3x3F64(sxF64 = 2.0, syF64 = 3.0)
+        val fill = assertIs<InversePathPreparationResult.Ready>(
+            affineF64.prepareTransformedInversePathGeometryF32(
+                path, null, InversePathDrawMode.Fill, RectI32(-4, -4, 24, 28), PathStrokePolicyF64(),
+            ),
+        )
+        val stroked = assertIs<InversePathPreparationResult.Ready>(
+            affineF64.prepareTransformedInversePathGeometryF32(
+                path, hairlineStyleF64().copy(join = PathStrokeJoin.Bevel), InversePathDrawMode.StrokeAndFill,
+                RectI32(-4, -4, 24, 28), preciseInverseStrokePolicyF64(),
+            ),
+        )
+
+        val fillScissorI32 = assertIs<InverseInteriorCoverageF32.Geometry>(fill.geometryF32.interiorCoverageF32)
+            .copyGeometryF32().copyConservativeScissorI32()
+        val strokedGeometryF32 = assertIs<InverseInteriorCoverageF32.Geometry>(stroked.geometryF32.interiorCoverageF32)
+            .copyGeometryF32()
+        assertTrue(strokedGeometryF32.copyConservativeScissorI32().right <= fillScissorI32.right)
+        assertTrue(strokedGeometryF32.copyConservativeScissorI32().bottom <= fillScissorI32.bottom)
+        assertTrue(
+            !assertNotNull(assertIs<InverseInteriorCoverageF32.Geometry>(fill.geometryF32.interiorCoverageF32)
+                .copyGeometryF32().copyStencilEdgeFanF32OrNull()).copyVerticesF32().contentEquals(
+                assertNotNull(strokedGeometryF32.copyStencilEdgeFanF32OrNull()).copyVerticesF32(),
+            ),
+        )
+        assertEquals(
+            PathStrokeResourceLimitReason.TopologyLimit,
+            assertIs<InversePathPreparationResult.ResourceLimitExceeded>(
+                Matrix3x3F64(persp0F64 = 0.000001).prepareTransformedInversePathGeometryF32(
+                    path, hairlineStyleF64(), InversePathDrawMode.StrokeAndFill,
+                    RectI32(-4, -4, 24, 28), preciseInverseStrokePolicyF64(),
+                ),
+            ).reason,
+        )
+    }
+
+    @Test
+    fun `transformed inverse finite stroke and fill retains F minus its projected outline`() {
+        val path = rectanglePathWithFillRule(FillRule.INVERSE_WINDING)
+        val frameWorkUsageBeforeI64 = PathStrokeWorkUsageI64(
+            attemptedGeometryUnitCountI64 = 3L,
+            emittedVertexCountI64 = 5L,
+            emittedIndexCountI64 = 7L,
+            snapshotByteCountI64 = 11L,
+        )
+        val ready = assertIs<InversePathPreparationResult.Ready>(
+            Matrix3x3F64(sxF64 = 2.0, syF64 = 3.0).prepareTransformedInversePathGeometryF32(
+                path, finiteStyleF64(2.0).copy(join = PathStrokeJoin.Bevel), InversePathDrawMode.StrokeAndFill,
+                RectI32(-4, -4, 24, 28), preciseInverseStrokePolicyF64(), frameWorkUsageBeforeI64,
+            ),
+        )
+        val interiorF32 = assertIs<InverseInteriorCoverageF32.Geometry>(ready.geometryF32.interiorCoverageF32)
+            .copyGeometryF32()
+        assertTrue(interiorF32.copyConservativeScissorI32().right <= 20)
+        assertUsageAddedToFrameI64(frameWorkUsageBeforeI64, ready.pathWorkUsageI64, ready.frameWorkUsageAfterI64)
+        assertEquals(
+            PathStrokeResourceLimitReason.TopologyLimit,
+            assertIs<InversePathPreparationResult.ResourceLimitExceeded>(
+                Matrix3x3F64(persp0F64 = 0.001).prepareTransformedInversePathGeometryF32(
+                    path, finiteStyleF64(2.0).copy(join = PathStrokeJoin.Bevel), InversePathDrawMode.StrokeAndFill,
+                    RectI32(-4, -4, 24, 28), preciseInverseStrokePolicyF64(), frameWorkUsageBeforeI64,
+                ),
+            ).reason,
+        )
+    }
+
     @Test
     fun `finite strokes prepare through rotation skew and bounded perspective`() {
         val path = PathBuilder().moveTo(0f, 0f).lineTo(10f, 0f).build()
@@ -318,7 +440,27 @@ class PathGeometryPreparationF64Test {
         miterLimitF64 = 4.0,
     )
 
+    private fun preciseInverseStrokePolicyF64(): PathStrokePolicyF64 = PathStrokePolicyF64(
+        maximumSagittaErrorF64 = 1.0,
+        limitsI32 = PathStrokeLimitsI32(
+            maxAttemptedGeometryUnitsPerPathI32 = 1_000_000,
+            maxAttemptedGeometryUnitsPerFrameI32 = 2_000_000,
+            maxEmittedVertexCountPerPathI32 = 1_000_000,
+            maxEmittedVertexCountPerFrameI32 = 2_000_000,
+            maxEmittedIndexCountPerPathI32 = 3_000_000,
+            maxEmittedIndexCountPerFrameI32 = 6_000_000,
+        ),
+    )
+
     private fun rectanglePath() = PathBuilder()
+        .moveTo(0f, 0f)
+        .lineTo(10f, 0f)
+        .lineTo(10f, 8f)
+        .lineTo(0f, 8f)
+        .close()
+        .build()
+
+    private fun rectanglePathWithFillRule(fillRule: FillRule) = PathBuilder(fillRule)
         .moveTo(0f, 0f)
         .lineTo(10f, 0f)
         .lineTo(10f, 8f)

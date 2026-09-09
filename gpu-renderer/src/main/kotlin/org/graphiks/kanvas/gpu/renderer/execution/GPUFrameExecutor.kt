@@ -23,6 +23,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleResolveAction
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleStoreAction
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedConcreteResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
 import org.graphiks.kanvas.gpu.renderer.resources.GPUSceneTarget
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
@@ -1412,6 +1413,43 @@ internal class GPUFrameExecutor(
         }
         val hasW4c = frame.semanticPlan.hasSealedW4cSessionMarker()
         val hasW4d = frame.semanticPlan.hasSealedW4dSessionMarker()
+        val hasW4e = renders.isNotEmpty() && renders.all { (_, _, packet) ->
+            packet?.role == org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.W4ePrepared
+        }
+        if (hasW4e) {
+            val renderSteps = frame.semanticPlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+            val w4ePackets = renderSteps.flatMap(GPUFrameStep.RenderPassStep::drawPackets)
+                .filter { packet -> packet.role == org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.W4ePrepared }
+            val authority = w4ePackets.firstOrNull()?.w4ePreparedFrameAuthority
+            if (w4ePackets.size != renderSteps.size || authority == null || !authority.validatesRenderSteps(
+                    frame.semanticPlan.frameId.value,
+                    frame.semanticPlan.capabilitySeal.sealHash,
+                    renderSteps,
+                )
+            ) {
+                return executionDiagnostic(
+                    "invalid.native-frame-payload.w4e-frame-authority",
+                    "A W4e execution requires the same sealed graph, frame, resource-use, order, and atomic-group authority.",
+                )
+            }
+            val exactPayload = payload ?: return executionDiagnostic(
+                "invalid.native-frame-payload.w4e-missing",
+                "A sealed W4e frame requires its native payload before encoding.",
+            )
+            w4eSceneContinuationPayloadDiagnostic(frame, exactPayload)?.let { return it }
+            val renderScopes = exactPayload.scopeOperands.filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+            return if (renderScopes.size != renders.size ||
+                renderScopes.map(GPUPreparedNativeScopeOperand.Render::sourceStepIndex) !=
+                    renders.map { (stepIndex, _, _) -> stepIndex }
+            ) {
+                executionDiagnostic(
+                    "invalid.native-frame-payload.w4e-scope",
+                    "A sealed W4e frame requires one ordered native render operand per prepared pass.",
+                )
+            } else {
+                null
+            }
+        }
         val w4dGeneralAuthority = renders.firstOrNull()?.third
             ?.corePrimitivePreparedAuthority
             ?.w4dGeneralFrameMaterializationAuthority
@@ -1707,6 +1745,63 @@ internal class GPUFrameExecutor(
                 "invalid.native-frame-payload.$lane-writable-load",
                 "Every planned $laneName cover, and no other scope, must retain writable stencil Load.",
             )
+        }
+        return null
+    }
+
+    /** Executes W4e's own scene MSAA ABI without widening generic or W4d.2 continuation rules. */
+    private fun w4eSceneContinuationPayloadDiagnostic(
+        frame: PreparedGPUFrame,
+        payload: GPUPreparedNativeFramePayload,
+    ): GPUDiagnostic? {
+        val scopes = frame.semanticPlan.steps.mapIndexedNotNull { stepIndex, step ->
+            val render = step as? GPUFrameStep.RenderPassStep ?: return@mapIndexedNotNull null
+            val continuation = render.w4eSceneContinuation ?: return@mapIndexedNotNull null
+            Triple(stepIndex, render, continuation)
+        }
+        if (scopes.isEmpty()) return null
+        val retainedViews = mutableMapOf<String, Any>()
+        scopes.forEachIndexed { order, (stepIndex, render, continuation) ->
+            val scope = payload.scopeOperands.singleOrNull { operand -> operand.sourceStepIndex == stepIndex } as?
+                GPUPreparedNativeScopeOperand.Render ?: return executionDiagnostic(
+                "invalid.native-frame-payload.w4e-scene-scope",
+                "W4e scene continuation requires one native render scope per sealed scene pass.",
+            )
+            val expectedLoad = if (order == 0) GPUPreparedNativeLoadOperation.Clear else GPUPreparedNativeLoadOperation.Load
+            val resolve = scope.pass.resolveTarget
+            val expectsResolve = continuation.resolveAction ==
+                org.graphiks.kanvas.gpu.renderer.passes.GPUW4eSceneResolveAction.ResolveCanonical
+            val sealedLayerTarget = render.resourceUses.singleOrNull { use ->
+                use.resource.value.substringAfterLast('.') == continuation.sceneTargetResourceId &&
+                    use.role == GPUFrameResourceRole.LayerTarget &&
+                    use.usage == GPUFrameResourceUsage.RenderAttachment && use.write
+            } != null
+            val sealedCanonicalResolve = !expectsResolve || render.resourceUses.singleOrNull { use ->
+                use.resource.value.substringAfterLast('.') == requireNotNull(continuation.resolveSceneResourceId) &&
+                    use.role == GPUFrameResourceRole.SceneTarget &&
+                    use.usage == GPUFrameResourceUsage.RenderAttachment && use.write
+            } != null
+            if (render.samplePlan != org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan.MultisampleFrame(4) ||
+                render.sampleContinuation != null ||
+                !sealedLayerTarget || !sealedCanonicalResolve ||
+                scope.pass.loadOperation != expectedLoad ||
+                scope.pass.storeOperation != GPUPreparedNativeStoreOperation.Store ||
+                (expectsResolve != (resolve != null)) ||
+                (expectsResolve && !backend.isCanonicalSceneTargetView(sceneTarget, requireNotNull(resolve)))
+            ) {
+                return executionDiagnostic(
+                    "invalid.native-frame-payload.w4e-scene-continuation",
+                    "W4e scene scope load/store/resolve behavior contradicts its sealed continuation.",
+                )
+            }
+            val retained = retainedViews[continuation.sceneTargetResourceId]
+            if (retained != null && retained !== scope.pass.colorTarget.view) {
+                return executionDiagnostic(
+                    "invalid.native-frame-payload.w4e-scene-continuity",
+                    "W4e scene continuation changed its retained four-sample color attachment.",
+                )
+            }
+            retainedViews[continuation.sceneTargetResourceId] = scope.pass.colorTarget.view
         }
         return null
     }

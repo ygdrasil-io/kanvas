@@ -210,6 +210,31 @@ internal fun preparePathFillGeometryWithStrokeWorkF32(
     }
 }
 
+/**
+ * Internal transactional hook used by the clip stack.  The hook is called for the actual
+ * flattened attempts and, separately, immediately before the final output arrays are created.
+ * It deliberately sees no planner upper bound.
+ */
+internal fun preparePathFillGeometryWithWorkDebitF32(
+    inputF64: PathFillInputF64,
+    policyF64: PathFillFlatteningPolicyF64,
+    beforeDebitI64: (PathStrokeWorkUsageI64) -> Unit,
+): PathFillPreparationResult {
+    if (!inputF64.all(::isFinitePathFillInputSegmentF64)) {
+        return PathFillPreparationResult.InvalidScene(PathFillInvalidSceneReason.NonFiniteInput)
+    }
+    return try {
+        PathFillPreparerF64(
+            inputF64 = inputF64,
+            policyF64 = policyF64,
+            frameAttemptedEdgesBeforeI32 = 0,
+            beforeDebitI64 = beforeDebitI64,
+        ).prepare()
+    } catch (abort: PathFillPreparationAbort) {
+        abort.result
+    }
+}
+
 private class PathFillPreparationAbort(
     val result: PathFillPreparationResult,
 ) : RuntimeException()
@@ -223,6 +248,7 @@ private class PathFillPreparerF64(
     private val policyF64: PathFillFlatteningPolicyF64,
     private val frameAttemptedEdgesBeforeI32: Int,
     private val strokeWorkLedgerI64: PathStrokeWorkLedgerI64? = null,
+    private val beforeDebitI64: ((PathStrokeWorkUsageI64) -> Unit)? = null,
 ) {
     private val retainedContoursF32 = mutableListOf<PreparedPathFillContourF32>()
     private var contourVerticesF32 = mutableListOf<Point2F32>()
@@ -344,6 +370,7 @@ private class PathFillPreparerF64(
     }
 
     private fun debitAttempt() {
+        beforeDebitI64?.invoke(PathStrokeWorkUsageI64(attemptedGeometryUnitCountI64 = 1L))
         strokeWorkLedgerI64?.debitBeforeEmissionI64(
             PathStrokeWorkUsageI64(attemptedGeometryUnitCountI64 = 1L),
         )
@@ -590,6 +617,13 @@ private class PathFillPreparerF64(
         indexCountI64: Long,
         snapshotByteCountI64: Long,
     ) {
+        beforeDebitI64?.invoke(
+            PathStrokeWorkUsageI64(
+                emittedVertexCountI64 = vertexCountI64,
+                emittedIndexCountI64 = indexCountI64,
+                snapshotByteCountI64 = snapshotByteCountI64,
+            ),
+        )
         strokeWorkLedgerI64?.debitBeforeEmissionI64(
             PathStrokeWorkUsageI64(
                 emittedVertexCountI64 = vertexCountI64,

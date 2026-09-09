@@ -236,6 +236,12 @@ internal class GPUFramePreflighter(
 ) {
     private val capabilities: GPUCapabilities = capabilities.preflightSnapshot()
 
+    private fun GPUFrameResourceUse.referencesW4eLogicalResource(resourceId: String): Boolean =
+        resource.value == resourceId || resource.value.endsWith(".$resourceId")
+
+    private fun GPUFrameResourceRef.referencesW4eLogicalResource(resourceId: String): Boolean =
+        value == resourceId || value.endsWith(".$resourceId")
+
     fun preflight(framePlan: GPUFramePlan): GPUFramePreflightResult {
         framePlan.steps.filterIsInstance<GPUFrameStep.RefusedLeafDrawStep>()
             .firstOrNull { step ->
@@ -250,6 +256,134 @@ internal class GPUFramePreflighter(
                     "Native payload boundary does not own the exact resource provider used by preflight.",
                 ),
             )
+        }
+        val w4eRenders = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        val w4ePackets = w4eRenders.flatMap(GPUFrameStep.RenderPassStep::drawPackets)
+            .filter { packet -> packet.role == GPUDrawPacketRole.W4ePrepared }
+        if (w4ePackets.isNotEmpty()) {
+            val authority = w4ePackets.first().w4ePreparedFrameAuthority
+            val texturePreparations = framePlan.steps
+                .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+                .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+                .associate { request -> request.resource to (request.descriptor as? GPUFrameTextureDescriptor) }
+            if (w4ePackets.size != w4eRenders.size || authority == null ||
+                !authority.validatesRenderSteps(
+                    framePlan.frameId.value,
+                    framePlan.capabilitySeal.sealHash,
+                    w4eRenders,
+                )
+            ) {
+                return GPUFramePreflightResult.Refused(
+                    diagnostic(
+                        "invalid.preflight.w4e_frame_authority",
+                        "W4e preflight requires one sealed graph, frame, target, resource-use, order, and atomic-group authority.",
+                    ),
+                )
+            }
+            w4eRenders.firstOrNull { render ->
+                val continuation = render.w4eMaskContinuation ?: return@firstOrNull false
+                val producer = render.drawPackets.single().w4ePreparedClipPass as?
+                    org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipPassAuthority.Producer
+                    ?: return@firstOrNull true
+                producer.sampleCount != 4 ||
+                    producer.targetResourceId != continuation.maskTargetResourceId ||
+                    producer.resolveTargetResourceId != continuation.resolveMaskResourceId ||
+                    render.resourceUses.singleOrNull { use ->
+                        use.referencesW4eLogicalResource(continuation.maskTargetResourceId) &&
+                            use.role == GPUFrameResourceRole.ClipMask &&
+                            use.usage == GPUFrameResourceUsage.RenderAttachment && use.write
+                    }?.let { use ->
+                        texturePreparations[use.resource]?.let { descriptor ->
+                            descriptor.format == GPUColorFormat.RGBA8Unorm && descriptor.sampleCount == 4
+                        } == true
+                    } != true || (continuation.resolveMaskResourceId != null &&
+                    render.resourceUses.singleOrNull { use ->
+                        use.referencesW4eLogicalResource(continuation.resolveMaskResourceId) &&
+                            use.role == GPUFrameResourceRole.ClipMask &&
+                            use.usage == GPUFrameResourceUsage.RenderAttachment && use.write
+                    }?.let { use ->
+                        texturePreparations[use.resource]?.let { descriptor ->
+                            descriptor.format == GPUColorFormat.RGBA8Unorm && descriptor.sampleCount == 1
+                        } == true
+                    } != true)
+            }?.let {
+                return GPUFramePreflightResult.Refused(
+                    diagnostic(
+                        "invalid.preflight.w4e_mask_continuation",
+                        "W4e mask continuation must retain its sealed linear RGBA8 scratch target and optional resolve mask.",
+                    ),
+                )
+            }
+            w4eRenders.firstOrNull { render ->
+                val continuation = render.w4eSceneContinuation ?: return@firstOrNull false
+                val path = render.drawPackets.single().w4ePreparedPath ?: return@firstOrNull true
+                val sealedSceneTarget = render.resourceUses.singleOrNull { use ->
+                    use.referencesW4eLogicalResource(continuation.sceneTargetResourceId) &&
+                        use.role == GPUFrameResourceRole.LayerTarget &&
+                        use.usage == GPUFrameResourceUsage.RenderAttachment && use.write
+                }?.let { use -> texturePreparations[use.resource]?.let { descriptor ->
+                        descriptor.format == GPUColorFormat.RGBA8UnormSrgb && descriptor.sampleCount == 4
+                    } == true
+                } == true
+                val sealedResolve = continuation.resolveSceneResourceId == null ||
+                    render.resourceUses.singleOrNull { use ->
+                        use.referencesW4eLogicalResource(continuation.resolveSceneResourceId) &&
+                            use.role == GPUFrameResourceRole.SceneTarget &&
+                            use.usage == GPUFrameResourceUsage.RenderAttachment && use.write
+                    }?.let { use ->
+                        texturePreparations[use.resource]?.let { descriptor ->
+                            descriptor.format == GPUColorFormat.RGBA8UnormSrgb && descriptor.sampleCount == 1
+                        } == true
+                    } == true
+                path.sample != org.graphiks.kanvas.gpu.plan.SamplePlan.Multisample4 ||
+                    path.targetResourceId != continuation.sceneTargetResourceId ||
+                    path.resolveTargetResourceId != continuation.resolveSceneResourceId ||
+                    render.sampleContinuation != null || !sealedSceneTarget || !sealedResolve
+            }?.let {
+                return GPUFramePreflightResult.Refused(
+                    diagnostic(
+                        "invalid.preflight.w4e_scene_continuation",
+                        "W4e scene MSAA scopes must retain their sealed 4x target and only the sealed final canonical resolve.",
+                    ),
+                )
+            }
+            w4eRenders.firstOrNull { render ->
+                val path = render.drawPackets.single().w4ePreparedPath ?: return@firstOrNull false
+                val inverse = render.drawPackets.single().w4ePreparedClipConsumer as?
+                    org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseDomain
+                    ?: return@firstOrNull false
+                when (inverse.interiorCoverage) {
+                    org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage.Zero -> {
+                        // A zero finite interior is always D24-free.  The two legal sealed forms
+                        // distinguish an actual empty source from its exact non-empty source fact.
+                        path.copyGeometry() !is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Empty &&
+                            path.copyGeometry() !is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.InverseDomainSource ||
+                            path.depthStencilResourceId != null ||
+                            render.resourceUses.any { use -> use.role == GPUFrameResourceRole.PathDepthStencil }
+                    }
+                    is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage.Geometry -> {
+                        val depthId = path.depthStencilResourceId ?: return@firstOrNull true
+                        val expectedSampleCount = if (path.sample == org.graphiks.kanvas.gpu.plan.SamplePlan.Multisample4) 4 else 1
+                        render.resourceUses.singleOrNull { use ->
+                            use.referencesW4eLogicalResource(depthId) &&
+                                use.role == GPUFrameResourceRole.PathDepthStencil &&
+                                use.usage == GPUFrameResourceUsage.RenderAttachment && use.write
+                        }?.let { use ->
+                            texturePreparations[use.resource]?.let { descriptor ->
+                                descriptor.format == GPUColorFormat("depth24plus-stencil8") &&
+                                    descriptor.sampleCount == expectedSampleCount
+                            } == true
+                        } != true
+                    }
+                }
+            }?.let {
+                return GPUFramePreflightResult.Refused(
+                    diagnostic(
+                        "invalid.preflight.w4e_inverse_domain_depth",
+                        "W4e inverse-domain zero must retain its sealed source form without a D24S8 attachment; finite interior geometry must declare its exact scene D24S8 attachment.",
+                    ),
+                )
+            }
         }
         preparedTextNativeBlendDomainRefusal(
             framePlan.steps
@@ -2817,6 +2951,9 @@ internal class GPUFramePreflighter(
             return diagnostic("stale.preflight.capability_seal", "The current capability snapshot differs from the frame seal.")
         }
         framePlan.memoryBudget.diagnostic?.let { return it }
+        if (framePlan.w4eRenderSteps().isNotEmpty()) {
+            return validateW4eSceneMsaaContinuation(framePlan)
+        }
         if (framePlan.w4dGeneralRenderSteps().isNotEmpty()) {
             return validateW4dGeneralMsaaContinuation(framePlan)
         }
@@ -2943,7 +3080,9 @@ internal class GPUFramePreflighter(
                                             packet.renderPipelineKey?.value?.startsWith("pending.pipeline.") == true
                                     )
                             val acceptedGeneration = when {
-                                (preparedLateBound || packet.packetId in clipProducerValidation.sealedProducerPacketIds) &&
+                                (preparedLateBound ||
+                                    packet.role == GPUDrawPacketRole.W4ePrepared ||
+                                    packet.packetId in clipProducerValidation.sealedProducerPacketIds) &&
                                     packet.resourceGeneration == PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION ->
                                     PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION
                                 else -> expected
@@ -2970,7 +3109,10 @@ internal class GPUFramePreflighter(
                             ),
                         )
                     }
-                    if (step.drawPackets.any { it.renderPipelineKey == null }) {
+                    if (step.drawPackets.any {
+                            it.renderPipelineKey == null && it.role != GPUDrawPacketRole.W4ePrepared
+                        }
+                    ) {
                         return diagnostic("invalid.preflight.render_pipeline_key_missing", "Render packets require a pipeline key before materialization.")
                     }
                     step.drawPackets.forEach { packet ->
@@ -3361,8 +3503,75 @@ internal class GPUFramePreflighter(
         return null
     }
 
+    /** W4e's scene continuation is a closed Task 7 ABI, not a generic or W4d.2 exception. */
+    private fun validateW4eSceneMsaaContinuation(framePlan: GPUFramePlan): GPUDiagnostic? {
+        fun refused(message: String) = diagnostic("invalid.preflight.w4e_scene_msaa_authority", message)
+        val renders = framePlan.w4eRenderSteps()
+        if (renders.isEmpty() || framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().size != renders.size) {
+            return refused("W4e requires one closed prepared render sequence.")
+        }
+        if (renders.any { render ->
+                render.drawPackets.singleOrNull()?.w4ePreparedFrameAuthority == null
+            }
+        ) return refused("W4e render scopes require one sealed prepared frame authority.")
+
+        // W4e has two independent AA4 attachment families: clip-mask producers and scene paths.
+        // Only a sealed scene path owns the typed scene continuation; requiring it on an AA4
+        // mask producer rejects an otherwise exact producer/fold/scene sequence before it can
+        // allocate its declared attachments.
+        val msaa = renders.filter { render ->
+            render.samplePlan == GPUSamplePlan.MultisampleFrame(4) &&
+                render.drawPackets.singleOrNull()?.w4ePreparedPath != null
+        }
+        if (renders.filter { render -> render.samplePlan == GPUSamplePlan.SingleSampleFrame }
+                .any { render -> render.w4eSceneContinuation != null || render.sampleContinuation != null }
+        ) return refused("W4e single-sample scopes cannot carry scene MSAA authority.")
+        if (msaa.isEmpty()) return null
+
+        val continuations = msaa.map { render ->
+            render.w4eSceneContinuation ?: return refused("Every W4e 4x scene scope requires typed scene continuation authority.")
+        }
+        val sceneTarget = continuations.first().sceneTargetResourceId
+        if (msaa.zip(continuations).any { (render, continuation) ->
+                render.sampleContinuation != null ||
+                    !render.target.referencesW4eLogicalResource(continuation.sceneTargetResourceId) ||
+                    continuation.sceneTargetResourceId != sceneTarget ||
+                    render.resourceUses.singleOrNull { use ->
+                        use.referencesW4eLogicalResource(continuation.sceneTargetResourceId) &&
+                            use.role == GPUFrameResourceRole.LayerTarget &&
+                            use.usage == GPUFrameResourceUsage.RenderAttachment && use.write
+                    } == null ||
+                    render.loadStore.storePlan != GPUStorePlan.Store
+            }
+        ) return refused("W4e scene continuation target, generic authority, or store state was substituted.")
+        if (msaa.withIndex().any { (index, render) ->
+                render.loadStore.loadOp != if (index == 0) "clear" else "load"
+            }
+        ) return refused("W4e scene continuation must clear once then load the retained 4x target.")
+        if (continuations.dropLast(1).any { continuation ->
+                continuation.resolveAction != org.graphiks.kanvas.gpu.renderer.passes.GPUW4eSceneResolveAction.Skip ||
+                    continuation.resolveSceneResourceId != null
+            } || continuations.last().resolveAction !=
+            org.graphiks.kanvas.gpu.renderer.passes.GPUW4eSceneResolveAction.ResolveCanonical ||
+            continuations.last().resolveSceneResourceId == null
+        ) return refused("Only the final sealed W4e scene scope may resolve the canonical target.")
+        val final = msaa.last()
+        val finalResolve = requireNotNull(continuations.last().resolveSceneResourceId)
+        if (final.resourceUses.singleOrNull { use ->
+                use.referencesW4eLogicalResource(finalResolve) &&
+                    use.role == GPUFrameResourceRole.SceneTarget &&
+                    use.usage == GPUFrameResourceUsage.RenderAttachment && use.write
+            } == null ||
+            msaa.dropLast(1).any { render -> render.resourceUses.any { use ->
+                use.role == GPUFrameResourceRole.SceneTarget && use.write &&
+                    use.usage == GPUFrameResourceUsage.RenderAttachment
+            } }
+        ) return refused("W4e scene continuation must retain one LayerTarget and resolve only its final scope to SceneTarget.")
+        return null
+    }
+
     /**
-     * Validates the only continuation sequence which is allowed to omit intermediate resolves.
+     * Validates the only W4d.2 continuation sequence which is allowed to omit intermediate resolves.
      * Its `Skip` values originate exclusively in the sealed Task 7 W4d.2 authority; generic
      * MSAA frames keep using [GPUSampleContinuationPlanner] and therefore still reject `Skip`.
      */
@@ -3601,6 +3810,11 @@ internal class GPUFramePreflighter(
         }
         return null
     }
+
+    private fun GPUFramePlan.w4eRenderSteps(): List<GPUFrameStep.RenderPassStep> =
+        steps.filterIsInstance<GPUFrameStep.RenderPassStep>().filter { render ->
+            render.drawPackets.any { packet -> packet.role == GPUDrawPacketRole.W4ePrepared }
+        }
 
     private fun GPUFramePlan.w4dGeneralRenderSteps(): List<GPUFrameStep.RenderPassStep> =
         steps.filterIsInstance<GPUFrameStep.RenderPassStep>().filter { render ->
@@ -7649,7 +7863,9 @@ internal class GPUFramePreflighter(
             }
         }
         val packets = renderScopes.flatMap { (sourceStepIndex, render, preparedScopeRoutes) ->
-            render.drawPackets.map { packet -> Triple(sourceStepIndex, packet, preparedScopeRoutes) }
+            render.drawPackets
+                .filterNot { packet -> packet.role == GPUDrawPacketRole.W4ePrepared }
+                .map { packet -> Triple(sourceStepIndex, packet, preparedScopeRoutes) }
         }
         if (packets.isEmpty()) {
             return GPUResourceMaterializationDecision.Materialized(resources = emptyList(), targetId = context.targetId)
@@ -7860,11 +8076,14 @@ internal class GPUFramePreflighter(
             }
         }
         val packets = renderScopes.flatMap { (sourceStepIndex, render, preparedScopeRoutes) ->
-            render.drawPackets.map { packet -> Triple(sourceStepIndex, packet, preparedScopeRoutes) }
+            render.drawPackets
+                .filterNot { packet -> packet.role == GPUDrawPacketRole.W4ePrepared }
+                .map { packet -> Triple(sourceStepIndex, packet, preparedScopeRoutes) }
         }
         val bridge = materialized.operandBridge
-        val expectedTasks = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
-            .flatMap { it.sourceTaskIds }.map { it.value }.distinct()
+        val expectedTasks = renderScopes
+            .filter { (_, render) -> render.drawPackets.any { it.role != GPUDrawPacketRole.W4ePrepared } }
+            .flatMap { (_, render) -> render.sourceTaskIds }.map { it.value }.distinct()
         val expectedPlansByPacket = packets.map { (sourceStepIndex, packet, preparedScopeRoutes) ->
             plannedRenderOperands(
                 sourceStepIndex,
@@ -8024,7 +8243,9 @@ internal class GPUFramePreflighter(
                     corePrimitiveClipStencilPreparedRoutes,
                     corePrimitiveCoverageMaskPreparedRoutes,
                 )
-                val operandCount = render.drawPackets.sumOf { packet ->
+                val operandCount = render.drawPackets
+                    .filterNot { packet -> packet.role == GPUDrawPacketRole.W4ePrepared }
+                    .sumOf { packet ->
                     val clipStencilScope =
                         preparedScopeRoutes.clipStencilByPacketId[packet.packetId]
                             ?: GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Empty
@@ -8175,12 +8396,37 @@ internal class GPUFramePreflighter(
                     operandBridge = stepBridge,
                     resourceLeases = materialized.resourceLeases,
                 )
-                val stream = GPUPassCommandStream.fromBatchPlan(
-                    streamId = "frame.${framePlan.frameId.value}.commands.$index",
-                    batchPlan = passPlan,
-                    loadStoreLabel = step.loadStore.dumpLabel(),
-                    materialization = stepMaterialized,
-                )
+                val stream = if (step.drawPackets.all { packet ->
+                        packet.role == GPUDrawPacketRole.W4ePrepared
+                    }
+                ) {
+                    GPUPassCommandStream(
+                        streamId = "frame.${framePlan.frameId.value}.commands.$index",
+                        packetStreamId = "w4e.sealed.$index",
+                        passId = passPlan.passId,
+                        commands = listOf(
+                            org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand.BeginRenderPass(
+                                step.drawPackets.first().targetStateHash,
+                                step.loadStore.dumpLabel(),
+                            ),
+                            org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand.Draw(
+                                step.drawPackets.single().vertexSourceLabel,
+                                step.drawPackets.single().packetId,
+                            ),
+                            org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand.EndRenderPass(
+                                passPlan.passId,
+                            ),
+                        ),
+                        sourcePassIds = step.drawPackets.map(GPUDrawPacket::passId),
+                    )
+                } else {
+                    GPUPassCommandStream.fromBatchPlan(
+                        streamId = "frame.${framePlan.frameId.value}.commands.$index",
+                        batchPlan = passPlan,
+                        loadStoreLabel = step.loadStore.dumpLabel(),
+                        materialization = stepMaterialized,
+                    )
+                }
                 val sealedCoverageMaskPreparedRoutes = when (
                     stepCorePrimitiveCoverageMaskPreparedRoutes
                 ) {
@@ -8283,6 +8529,16 @@ internal class GPUFramePreflighter(
                         ?.w4dGeneralFrameMaterializationAuthority
                         ?.pathPass(step.drawPackets.single().passId)
                         ?.depthStencilResourceId != null,
+                    allowsW4ePreparedDepthStencil = step.drawPackets.singleOrNull()
+                        ?.let { packet ->
+                            packet.role == GPUDrawPacketRole.W4ePrepared &&
+                                (
+                                    (packet.w4ePreparedClipPass as? org.graphiks.kanvas.gpu.renderer.passes
+                                        .GPUW4ePreparedClipPassAuthority.Producer)
+                                        ?.depthStencilResourceId != null
+                                    || packet.w4ePreparedPath?.depthStencilResourceId != null
+                                )
+                        } == true,
                 )
             }
             is GPUFrameStep.ComputePassStep -> scope(index, GPUEncoderOperationKind.Compute, step.sourceTaskIds, listOf("beginComputePass") + List(step.dispatches.size) { "dispatchWorkgroups" } + "endComputePass", labels, nativeOperandKeys(step, labels))
@@ -8358,6 +8614,187 @@ internal class GPUFramePreflighter(
         return when (step) {
             is GPUFrameStep.RenderPassStep -> {
                 val targetResourceLabel = resources.first()
+                val w4ePacket = step.drawPackets.singleOrNull()?.takeIf { packet ->
+                    packet.role == GPUDrawPacketRole.W4ePrepared
+                }
+                if (w4ePacket != null && step.drawPackets.all { packet ->
+                        packet.role == GPUDrawPacketRole.W4ePrepared
+                    }
+                ) {
+                    val preparedPass = w4ePacket.w4ePreparedClipPass
+                    val preparedPath = w4ePacket.w4ePreparedPath
+                    return when {
+                        preparedPass is org.graphiks.kanvas.gpu.renderer.passes
+                            .GPUW4ePreparedClipPassAuthority.Initialize ||
+                            preparedPass is org.graphiks.kanvas.gpu.renderer.passes
+                            .GPUW4ePreparedClipPassAuthority.PathMaskClear ->
+                            listOf(
+                                key(GPUPreparedNativeOperandRole.RenderColorTarget,
+                                    GPUPreparedNativeOperandKind.TextureView, "w4e:${w4ePacket.passId}:target"),
+                                key(GPUPreparedNativeOperandRole.RenderPipeline,
+                                    GPUPreparedNativeOperandKind.RenderPipeline, "w4e:${w4ePacket.passId}:clear"),
+                            )
+                        preparedPass is org.graphiks.kanvas.gpu.renderer.passes
+                            .GPUW4ePreparedClipPassAuthority.Producer -> buildList {
+                            if (preparedPass.sampleCount == 4) {
+                                add(key(GPUPreparedNativeOperandRole.RenderMsaaColorTarget,
+                                    GPUPreparedNativeOperandKind.TextureView, "w4e:${w4ePacket.passId}:target"))
+                                add(key(GPUPreparedNativeOperandRole.RenderResolveTarget,
+                                    GPUPreparedNativeOperandKind.TextureView, "w4e:${w4ePacket.passId}:resolve"))
+                            } else {
+                                add(key(GPUPreparedNativeOperandRole.RenderColorTarget,
+                                    GPUPreparedNativeOperandKind.TextureView, "w4e:${w4ePacket.passId}:target"))
+                            }
+                            preparedPass.depthStencilResourceId?.let {
+                                add(key(GPUPreparedNativeOperandRole.RenderDepthStencilTarget,
+                                    GPUPreparedNativeOperandKind.TextureView, "w4e:${w4ePacket.passId}:depth"))
+                            }
+                            if (preparedPass.geometry is org.graphiks.kanvas.gpu.renderer.passes
+                                    .GPUW4ePreparedClipGeometry.Path
+                            ) {
+                                val pathGeometry = preparedPass.geometry.copyPathGeometryF32()
+                                add(key(GPUPreparedNativeOperandRole.RenderPipeline,
+                                    GPUPreparedNativeOperandKind.RenderPipeline, "w4e:${w4ePacket.passId}:path-producer"))
+                                add(key(GPUPreparedNativeOperandRole.RenderVertexBuffer,
+                                    GPUPreparedNativeOperandKind.Buffer, "w4e:${w4ePacket.passId}:path-vertices"))
+                                add(key(GPUPreparedNativeOperandRole.RenderIndexBuffer,
+                                    GPUPreparedNativeOperandKind.Buffer, "w4e:${w4ePacket.passId}:path-indices"))
+                                if (pathGeometry.copyDirectTriangleF32OrNull() == null) {
+                                    add(key(GPUPreparedNativeOperandRole.RenderPipeline,
+                                        GPUPreparedNativeOperandKind.RenderPipeline, "w4e:${w4ePacket.passId}:path-cover"))
+                                }
+                            } else {
+                                add(key(GPUPreparedNativeOperandRole.RenderPipeline,
+                                    GPUPreparedNativeOperandKind.RenderPipeline, "w4e:${w4ePacket.passId}:pipeline"))
+                                add(key(GPUPreparedNativeOperandRole.RenderBindGroup,
+                                    GPUPreparedNativeOperandKind.BindGroup, "w4e:${w4ePacket.passId}:producer"))
+                            }
+                        }
+                        preparedPass is org.graphiks.kanvas.gpu.renderer.passes
+                            .GPUW4ePreparedClipPassAuthority.Fold -> listOf(
+                            key(GPUPreparedNativeOperandRole.RenderColorTarget,
+                                GPUPreparedNativeOperandKind.TextureView, "w4e:${w4ePacket.passId}:target"),
+                            key(GPUPreparedNativeOperandRole.RenderPipeline,
+                                GPUPreparedNativeOperandKind.RenderPipeline, "w4e:${w4ePacket.passId}:pipeline"),
+                            key(GPUPreparedNativeOperandRole.RenderBindGroup,
+                                GPUPreparedNativeOperandKind.BindGroup, "w4e:${w4ePacket.passId}:fold"),
+                        )
+                        preparedPath != null -> buildList {
+                            if (preparedPath.sample == org.graphiks.kanvas.gpu.plan.SamplePlan.Multisample4) {
+                                add(key(GPUPreparedNativeOperandRole.RenderMsaaColorTarget,
+                                    GPUPreparedNativeOperandKind.TextureView, "w4e:${w4ePacket.passId}:target"))
+                                preparedPath.resolveTargetResourceId?.let {
+                                    add(key(GPUPreparedNativeOperandRole.RenderResolveTarget,
+                                        GPUPreparedNativeOperandKind.TextureView, "w4e:${w4ePacket.passId}:resolve"))
+                                }
+                            } else {
+                                add(key(GPUPreparedNativeOperandRole.RenderColorTarget,
+                                    GPUPreparedNativeOperandKind.TextureView, "w4e:${w4ePacket.passId}:target"))
+                            }
+                            if (preparedPath.depthStencilResourceId != null) {
+                                add(key(GPUPreparedNativeOperandRole.RenderDepthStencilTarget,
+                                    GPUPreparedNativeOperandKind.TextureView, "w4e:${w4ePacket.passId}:depth"))
+                            }
+                            val directPath = when (val geometry = preparedPath.copyGeometry()) {
+                                is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Fill ->
+                                    geometry.valueF32.copyDirectTriangleF32OrNull() != null
+                                is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Stroke ->
+                                    geometry.valueF32.copyFillGeometryF32().copyDirectTriangleF32OrNull() != null
+                                is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.InverseDomainSource -> false
+                                org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Empty -> false
+                            }
+                            val inverseDomainConsumer = w4ePacket.w4ePreparedClipConsumer as?
+                                org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseDomain
+                            val stencilProducer = preparedPath.phase in setOf(
+                                org.graphiks.kanvas.gpu.plan.PathRenderPhase.SingleSampleStencilProducer,
+                                org.graphiks.kanvas.gpu.plan.PathRenderPhase.MultisampleStencilProducer,
+                                org.graphiks.kanvas.gpu.plan.PathRenderPhase.HardEdgeMaskStencilProducer,
+                            )
+                            val hardMaskStencilCover = preparedPath.phase ==
+                                org.graphiks.kanvas.gpu.plan.PathRenderPhase.HardEdgeMaskStencilCover
+                            val hardMaskProducer = preparedPath.phase ==
+                                org.graphiks.kanvas.gpu.plan.PathRenderPhase.HardEdgeMaskProducer
+                            val stencilCover = preparedPath.phase in setOf(
+                                org.graphiks.kanvas.gpu.plan.PathRenderPhase.SingleSampleStencilColorCover,
+                                org.graphiks.kanvas.gpu.plan.PathRenderPhase.MultisampleStencilColorCover,
+                                org.graphiks.kanvas.gpu.plan.PathRenderPhase.HardEdgeMaskStencilCover,
+                            )
+                            if (hardMaskProducer) {
+                                add(key(GPUPreparedNativeOperandRole.RenderPipeline,
+                                    GPUPreparedNativeOperandKind.RenderPipeline, "w4e:${w4ePacket.passId}:hard-mask-producer"))
+                                add(key(GPUPreparedNativeOperandRole.RenderVertexBuffer,
+                                    GPUPreparedNativeOperandKind.Buffer, "w4e:${w4ePacket.passId}:hard-mask-vertices"))
+                                add(key(GPUPreparedNativeOperandRole.RenderIndexBuffer,
+                                    GPUPreparedNativeOperandKind.Buffer, "w4e:${w4ePacket.passId}:hard-mask-indices"))
+                            } else if (stencilProducer) {
+                                add(key(GPUPreparedNativeOperandRole.RenderPipeline,
+                                    GPUPreparedNativeOperandKind.RenderPipeline, "w4e:${w4ePacket.passId}:stencil-producer"))
+                                add(key(GPUPreparedNativeOperandRole.RenderVertexBuffer,
+                                    GPUPreparedNativeOperandKind.Buffer, "w4e:${w4ePacket.passId}:stencil-vertices"))
+                                add(key(GPUPreparedNativeOperandRole.RenderIndexBuffer,
+                                    GPUPreparedNativeOperandKind.Buffer, "w4e:${w4ePacket.passId}:stencil-indices"))
+                            } else if (hardMaskStencilCover) {
+                                add(key(GPUPreparedNativeOperandRole.RenderPipeline,
+                                    GPUPreparedNativeOperandKind.RenderPipeline, "w4e:${w4ePacket.passId}:stencil-cover"))
+                            } else if (inverseDomainConsumer?.interiorCoverage is org.graphiks.kanvas.gpu.renderer.passes
+                                    .GPUW4ePreparedInverseInteriorCoverage.Geometry && stencilCover
+                            ) {
+                                add(key(GPUPreparedNativeOperandRole.RenderPipeline,
+                                    GPUPreparedNativeOperandKind.RenderPipeline, "w4e:${w4ePacket.passId}:inverse-domain-interior"))
+                                add(key(GPUPreparedNativeOperandRole.RenderVertexBuffer,
+                                    GPUPreparedNativeOperandKind.Buffer, "w4e:${w4ePacket.passId}:inverse-domain-interior-vertices"))
+                                add(key(GPUPreparedNativeOperandRole.RenderIndexBuffer,
+                                    GPUPreparedNativeOperandKind.Buffer, "w4e:${w4ePacket.passId}:inverse-domain-interior-indices"))
+                                add(key(GPUPreparedNativeOperandRole.RenderPipeline,
+                                    GPUPreparedNativeOperandKind.RenderPipeline, "w4e:${w4ePacket.passId}:inverse-domain-cover"))
+                                add(key(GPUPreparedNativeOperandRole.RenderBindGroup,
+                                    GPUPreparedNativeOperandKind.BindGroup, "w4e:${w4ePacket.passId}:inverse-domain-color"))
+                            } else if (inverseDomainConsumer != null && inverseDomainConsumer.interiorCoverage is
+                                org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedInverseInteriorCoverage.Zero
+                            ) {
+                                add(key(GPUPreparedNativeOperandRole.RenderPipeline,
+                                    GPUPreparedNativeOperandKind.RenderPipeline, "w4e:${w4ePacket.passId}:inverse-domain-cover"))
+                                add(key(GPUPreparedNativeOperandRole.RenderBindGroup,
+                                    GPUPreparedNativeOperandKind.BindGroup, "w4e:${w4ePacket.passId}:inverse-domain-color"))
+                            } else if (inverseDomainConsumer != null) {
+                                add(key(GPUPreparedNativeOperandRole.RenderPipeline,
+                                    GPUPreparedNativeOperandKind.RenderPipeline, "w4e:${w4ePacket.passId}:inverse-domain-main"))
+                                add(key(GPUPreparedNativeOperandRole.RenderVertexBuffer,
+                                    GPUPreparedNativeOperandKind.Buffer, "w4e:${w4ePacket.passId}:inverse-domain-main-vertices"))
+                                add(key(GPUPreparedNativeOperandRole.RenderIndexBuffer,
+                                    GPUPreparedNativeOperandKind.Buffer, "w4e:${w4ePacket.passId}:inverse-domain-main-indices"))
+                                if (inverseDomainConsumer.interiorCoverage is org.graphiks.kanvas.gpu.renderer.passes
+                                        .GPUW4ePreparedInverseInteriorCoverage.Geometry
+                                ) {
+                                    add(key(GPUPreparedNativeOperandRole.RenderPipeline,
+                                        GPUPreparedNativeOperandKind.RenderPipeline, "w4e:${w4ePacket.passId}:inverse-domain-interior"))
+                                    add(key(GPUPreparedNativeOperandRole.RenderVertexBuffer,
+                                        GPUPreparedNativeOperandKind.Buffer, "w4e:${w4ePacket.passId}:inverse-domain-interior-vertices"))
+                                    add(key(GPUPreparedNativeOperandRole.RenderIndexBuffer,
+                                        GPUPreparedNativeOperandKind.Buffer, "w4e:${w4ePacket.passId}:inverse-domain-interior-indices"))
+                                }
+                                add(key(GPUPreparedNativeOperandRole.RenderPipeline,
+                                    GPUPreparedNativeOperandKind.RenderPipeline, "w4e:${w4ePacket.passId}:inverse-domain-cover"))
+                                add(key(GPUPreparedNativeOperandRole.RenderBindGroup,
+                                    GPUPreparedNativeOperandKind.BindGroup, "w4e:${w4ePacket.passId}:inverse-domain-color"))
+                            } else {
+                                add(key(GPUPreparedNativeOperandRole.RenderPipeline,
+                                    GPUPreparedNativeOperandKind.RenderPipeline, "w4e:${w4ePacket.passId}:pipeline"))
+                                add(key(GPUPreparedNativeOperandRole.RenderBindGroup,
+                                    GPUPreparedNativeOperandKind.BindGroup, "w4e:${w4ePacket.passId}:consumer"))
+                                if (directPath && !stencilCover && preparedPath.phase !=
+                                    org.graphiks.kanvas.gpu.plan.PathRenderPhase.HardEdgeBinaryColorCover
+                                ) {
+                                    add(key(GPUPreparedNativeOperandRole.RenderVertexBuffer,
+                                        GPUPreparedNativeOperandKind.Buffer, "w4e:${w4ePacket.passId}:consumer-vertices"))
+                                    add(key(GPUPreparedNativeOperandRole.RenderIndexBuffer,
+                                        GPUPreparedNativeOperandKind.Buffer, "w4e:${w4ePacket.passId}:consumer-indices"))
+                                }
+                            }
+                        }
+                        else -> error("W4e packet has no sealed pass authority")
+                    }
+                }
                 val firstPlannedPathAuthority = step.drawPackets.firstOrNull()
                     ?.corePrimitivePreparedAuthority
                 val w4dGeneralAuthority = firstPlannedPathAuthority

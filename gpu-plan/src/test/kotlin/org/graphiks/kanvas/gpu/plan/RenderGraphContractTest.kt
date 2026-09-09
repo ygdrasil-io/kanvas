@@ -21,6 +21,9 @@ import org.graphiks.math.geometry.Point2F64
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.SizeI32
+import org.graphiks.math.geometry.ClipGeometryF32
+import org.graphiks.math.geometry.InverseInteriorCoverageF32
+import org.graphiks.math.geometry.InversePathGeometryF32
 import org.graphiks.math.geometry.preparePathFillGeometryF32
 import org.graphiks.math.geometry.prepareProjectedPathStrokeGeometryF32
 import org.junit.jupiter.api.Test
@@ -1507,6 +1510,549 @@ class RenderGraphContractTest {
         assertEquals(6_156, graph.peakFrameLocalBytes)
     }
 
+    @Test
+    fun `ClipMask graph preserves linear coverage resources and ordered ping pong folds`() {
+        val graph = clipMaskGraph()
+        val passes = graph.passes()
+        val initialize = assertIs<PlanPass.ClipMaskInitialize>(passes[0])
+        val producer = assertIs<PlanPass.ClipMaskProducer>(passes[1])
+        val fold = assertIs<PlanPass.ClipMaskFold>(passes[2])
+
+        assertEquals(1f, initialize.clearCoverageF32)
+        assertEquals(PlanTextureFormat.CoverageMask(PlanCoverageMaskFormat.RGBA8_UNORM_LINEAR),
+            graph.resources().single { it.id == initialize.output }.format)
+        assertEquals(1, producer.sampleCountI32)
+        assertEquals(null, producer.resolveTarget)
+        assertEquals(initialize.output, fold.previous)
+        assertEquals(producer.target, fold.source)
+        assertEquals(ClipCombineOperation.Intersect, fold.operation)
+        assertTrue(graph.dependencies().contains(PlanPassDependency(producer.id, fold.id)))
+    }
+
+    @Test
+    fun `ClipMask graph rejects fold aliases that sample a render attachment`() {
+        val resources = clipMaskResources()
+        val initialize = PlanPass.ClipMaskInitialize(0, resources.accumulatorA.id, RectI32(0, 0, 4, 4), 1f, CLIP_GROUP)
+        val producer = PlanPass.ClipMaskProducer(
+            0, resources.scratch.id, null, null, 1, clipRectGeometry(), CLIP_GROUP,
+        )
+        val aliased = PlanPass.ClipMaskFold(
+            0, resources.accumulatorA.id, resources.scratch.id, resources.accumulatorA.id,
+            ClipCombineOperation.Intersect, RectI32(0, 0, 4, 4), CLIP_GROUP,
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            clipGraph(resources.all, listOf(initialize, producer, aliased))
+        }
+    }
+
+    @Test
+    fun `Inverse zero clip covers its finite domain without allocating a producer`() {
+        val graph = inverseZeroClipGraph()
+        val inverse = assertIs<ClipPlanStrategy.InverseMask>(
+            assertIs<ClippedPlanDraw>(assertIs<PlanPass.RenderPass>(graph.passes()[1]).draws().single()).strategy,
+        )
+
+        assertEquals(InverseInteriorCoverageF32.Zero, inverse.geometryF32.interiorCoverageF32)
+        assertEquals(RectI32(0, 0, 4, 4), inverse.geometryF32.copyDomainI32())
+        assertEquals(1, graph.passes().filterIsInstance<PlanPass.ClipMaskInitialize>().size)
+        assertTrue(graph.passes().none { it is PlanPass.ClipMaskProducer })
+    }
+
+    @Test
+    fun `ClipMask AA4 producer uses separate multisample scratch resolve and D24S8`() {
+        val graph = aa4ClipMaskGraph()
+        val producer = graph.passes().filterIsInstance<PlanPass.ClipMaskProducer>().single()
+        val resources = graph.resources().associateBy { it.id }
+
+        assertEquals(4, producer.sampleCountI32)
+        assertEquals(PlanResourceRole.CoverageMaskMultisampleScratch, resources.getValue(producer.target).role)
+        assertEquals(PlanResourceRole.CoverageMaskScratch, resources.getValue(requireNotNull(producer.resolveTarget)).role)
+        assertEquals(PlanResourceRole.CoverageMaskDepthStencil, resources.getValue(requireNotNull(producer.depthStencil)).role)
+        assertTrue(graph.capabilities.supportsResolve(
+            PlanTextureFormat.CoverageMask(PlanCoverageMaskFormat.RGBA8_UNORM_LINEAR), 4, 1,
+        ))
+    }
+
+    @Test
+    fun `ClipMask rejects an antialiased rounded-rectangle producer downgraded to one sample`() {
+        val resources = clipMaskResources()
+        val initialize = PlanPass.ClipMaskInitialize(0, resources.accumulatorA.id, RectI32(0, 0, 4, 4), 1f, CLIP_GROUP)
+        val downgraded = PlanPass.ClipMaskProducer(
+            0, resources.scratch.id, null, null, 1, clipRRectGeometry(), CLIP_GROUP, antiAlias = true,
+        )
+        val fold = PlanPass.ClipMaskFold(
+            0, resources.accumulatorA.id, resources.scratch.id, resources.accumulatorB.id,
+            ClipCombineOperation.Intersect, RectI32(0, 0, 4, 4), CLIP_GROUP,
+        )
+        val target = clipColorTarget(3, 4)
+        val consumer = clipRenderPass(
+            target,
+            listOf(ClippedPlanDraw.of(clipSolidDraw(), ClipPlanStrategy.Mask(resources.accumulatorB.id))),
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            clipGraph(resources.all + target, listOf(initialize, downgraded, fold, consumer))
+        }
+    }
+
+    @Test
+    fun `AA4 hard clip consumer keeps binary one sample coverage across four samples`() {
+        val graph = aa4MixedPathGraph()
+        val binary = assertIs<BinaryMaskedPathDraw>(
+            assertIs<PlanPass.PathRenderPass>(graph.passes()[5]).draw,
+        )
+        val clipped = ClippedBinaryMaskedPathDraw.of(binary, ClipPlanStrategy.Mask(binary.mask))
+
+        assertEquals(CoveragePlan.BinaryMaskCover4, clipped.coverage)
+        assertEquals(SamplePlan.Multisample4, clipped.sample)
+        assertEquals(BinaryMaskFetchPlan.TextureLoadUnfiltered, clipped.source.maskFetch)
+        assertEquals(4, clipped.source.broadcastSampleCountI32)
+        assertEquals(1, clipped.sourceMaskSampleCountI32)
+    }
+
+    @Test
+    fun `nested clipped draw cannot hide an unproduced mask consumer`() {
+        val draw = ClippedPlanDraw.of(
+            ClippedPlanDraw.of(
+                SolidRectDraw.of(
+                    0, ColorF32.of(1f, 0f, 0f, 1f), RectI32(0, 0, 1, 1), RectI32(0, 0, 1, 1),
+                ),
+                ClipPlanStrategy.Mask(PlanResourceId("hidden-mask")),
+            ),
+            ClipPlanStrategy.Scissor(RectI32(0, 0, 1, 1)),
+        )
+
+        assertFailsWith<IllegalArgumentException> { directPathGraph(draws = listOf(draw)) }
+    }
+
+    @Test
+    fun `nested clipped draw cannot hide an unproduced inverse mask consumer`() {
+        val inverse = InversePathGeometryF32.of(InverseInteriorCoverageF32.Zero, RectI32(0, 0, 1, 1))
+        val draw = ClippedPlanDraw.of(
+            ClippedPlanDraw.of(
+                SolidRectDraw.of(
+                    0, ColorF32.of(1f, 0f, 0f, 1f), RectI32(0, 0, 1, 1), RectI32(0, 0, 1, 1),
+                ),
+                ClipPlanStrategy.InverseMask(inverse, PlanResourceId("hidden-inverse-mask")),
+            ),
+            ClipPlanStrategy.Scissor(RectI32(0, 0, 1, 1)),
+        )
+
+        assertFailsWith<IllegalArgumentException> { directPathGraph(draws = listOf(draw)) }
+    }
+
+    @Test
+    fun `nested clipped W4c draw retains its underlying path contract`() {
+        val draw = ClippedPlanDraw.of(
+            ClippedPlanDraw.of(stencilDraw(0), ClipPlanStrategy.Scissor(RectI32(0, 0, 1, 1))),
+            ClipPlanStrategy.Scissor(RectI32(0, 0, 1, 1)),
+        )
+
+        assertFailsWith<IllegalArgumentException> { directPathGraph(draws = listOf(draw)) }
+    }
+
+    @Test
+    fun `nested clipped W4c direct draw preserves its valid underlying path contract`() {
+        val draw = ClippedPlanDraw.of(
+            ClippedPlanDraw.of(directDraw(0), ClipPlanStrategy.Scissor(RectI32(0, 0, 1, 1))),
+            ClipPlanStrategy.Scissor(RectI32(0, 0, 1, 1)),
+        )
+
+        val graph = directPathGraph(draws = listOf(draw))
+
+        assertEquals(1, graph.visualCommandCount)
+        assertEquals(0, graph.passes().filterIsInstance<PlanPass.RenderPass>().single().draws().single().commandIndex)
+    }
+
+    @Test
+    fun `AA4 hard consumer composes a binary one-sample mask with a folded clip accumulator`() {
+        val graph = aa4MixedPathGraph(withClip = true)
+        val consumer = assertIs<ClippedBinaryMaskedPathDraw>(
+            assertIs<PlanPass.PathRenderPass>(graph.passes()[8]).draw,
+        )
+        val resources = graph.resources().associateBy { it.id }
+        val scissor = assertIs<ClipPlanStrategy.Scissor>(consumer.clip)
+        val stencil = assertIs<ClipPlanStrategy.Stencil>(requireNotNull(scissor.child))
+        val mask = assertIs<ClipPlanStrategy.Mask>(requireNotNull(stencil.child))
+
+        assertEquals(PlanResourceRole.PathHardEdgeMask, resources.getValue(consumer.source.mask).role)
+        assertEquals(PlanResourceRole.CoverageMaskAccumulator,
+            resources.getValue(mask.resource).role)
+        assertEquals(PlanResourceRole.DepthStencil, resources.getValue(stencil.depthStencil).role)
+        assertEquals(CoveragePlan.BinaryMaskCover4, consumer.coverage)
+        assertEquals(1, consumer.sourceMaskSampleCountI32)
+    }
+
+    @Test
+    fun `AA4 hard inverse clip broadcasts a one-sample binary source to every color sample`() {
+        val graph = aa4MixedPathGraph(withClip = true, inverseClip = true)
+        val consumer = assertIs<ClippedBinaryMaskedPathDraw>(
+            assertIs<PlanPass.PathRenderPass>(graph.passes()[8]).draw,
+        )
+        val scissor = assertIs<ClipPlanStrategy.Scissor>(consumer.clip)
+        val stencil = assertIs<ClipPlanStrategy.Stencil>(requireNotNull(scissor.child))
+        val inverse = assertIs<ClipPlanStrategy.InverseMask>(requireNotNull(stencil.child))
+
+        assertEquals(RectI32(0, 0, 1, 1), inverse.geometryF32.copyDomainI32())
+        assertEquals(CoveragePlan.BinaryMaskCover4, consumer.coverage)
+        assertEquals(SamplePlan.Multisample4, consumer.sample)
+        assertEquals(1, consumer.sourceMaskSampleCountI32)
+        assertEquals(4, consumer.source.broadcastSampleCountI32)
+    }
+
+    @Test
+    fun `nested mask consumer requires a producer graph`() {
+        val mask = clipCoverageResource(PlanResourceRole.CoverageMaskAccumulator, 0, 0, 1)
+        val target = clipColorTarget(0, 1)
+        val draw = ClippedPlanDraw.of(
+            ClippedPlanDraw.of(clipSolidDraw(), ClipPlanStrategy.Mask(mask.id)),
+            ClipPlanStrategy.Scissor(RectI32(0, 0, 4, 4)),
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            clipGraph(
+                resources = listOf(mask, target),
+                passes = listOf(clipRenderPass(target, listOf(draw))),
+            )
+        }
+    }
+
+    @Test
+    fun `clip mask producer requires a consumer`() {
+        val masks = clipMaskResources(finalAccumulatorLastPassExclusive = 3)
+        val target = clipColorTarget(3, 4)
+
+        assertFailsWith<IllegalArgumentException> {
+            clipGraph(
+                resources = masks.all + target,
+                passes = clipMaskPasses(masks) + clipRenderPass(target, emptyList()),
+            )
+        }
+    }
+
+    @Test
+    fun `clip accumulator lifetime ends exactly at its final consumer`() {
+        val masks = clipMaskResources(finalAccumulatorLastPassExclusive = 5)
+        val target = clipColorTarget(3, 5)
+        val draw = ClippedPlanDraw.of(clipSolidDraw(), ClipPlanStrategy.Mask(masks.accumulatorB.id))
+
+        assertFailsWith<IllegalArgumentException> {
+            clipGraph(
+                resources = masks.all + target,
+                passes = clipMaskPasses(masks) + listOf(
+                    clipRenderPass(target, listOf(draw)),
+                    PlanPass.RenderPass(
+                        1, target.id, emptyList(), AttachmentLoadPlan.Load, AttachmentStorePlan.Store,
+                    ),
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun `clip stencil requires the depth stencil semantic role`() {
+        assertFailsWith<IllegalArgumentException> {
+            clipStencilGraph(
+                clipStencilResource(role = PlanResourceRole.CoverageMaskDepthStencil),
+            )
+        }
+    }
+
+    @Test
+    fun `depth stencil attachments require the D24S8 format`() {
+        assertFailsWith<IllegalArgumentException> {
+            PlanResource.of(
+                role = PlanResourceRole.PathHardEdgeDepthStencil,
+                ordinal = 0,
+                kind = PlanResourceKind.Texture2D,
+                format = PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+                extent = SizeI32(4, 4),
+                byteSize = 64,
+                usages = setOf(PlanResourceUsage.DepthStencilAttachment),
+                lifetime = PlanResourceLifetime.FrameLocal,
+                firstPassIndex = 0,
+                lastPassIndexExclusive = 1,
+            )
+        }
+    }
+
+    @Test
+    fun `clip stencil sample count matches its render pass`() {
+        assertFailsWith<IllegalArgumentException> {
+            clipStencilGraph(clipStencilResource(sampleCountI32 = 4))
+        }
+    }
+
+    @Test
+    fun `clip stencil extent matches its graph target`() {
+        assertFailsWith<IllegalArgumentException> {
+            clipStencilGraph(clipStencilResource(extent = SizeI32(2, 2)))
+        }
+    }
+
+    @Test
+    fun `clip stencil cannot alias its color output`() {
+        assertFailsWith<IllegalArgumentException> {
+            clipStencilGraph(
+                stencil = clipStencilResource(),
+                aliasesColorTarget = true,
+            )
+        }
+    }
+
+    @Test
+    fun `clip mask writer requires a dependency to its consumer`() {
+        val masks = clipMaskResources()
+        val target = clipColorTarget(3, 4)
+        val draw = ClippedPlanDraw.of(clipSolidDraw(), ClipPlanStrategy.Mask(masks.accumulatorB.id))
+        val passes = clipMaskPasses(masks) + clipRenderPass(target, listOf(draw))
+
+        assertFailsWith<IllegalArgumentException> {
+            clipGraph(
+                resources = masks.all + target,
+                passes = passes,
+                dependencies = listOf(
+                    PlanPassDependency(passes[0].id, passes[1].id),
+                    PlanPassDependency(passes[1].id, passes[2].id),
+                ),
+            )
+        }
+    }
+
+    private val CLIP_GROUP: PlanAtomicGroupId = PlanAtomicGroupId("clip:0")
+
+    private data class ClipMaskResources(
+        val accumulatorA: PlanResource,
+        val accumulatorB: PlanResource,
+        val scratch: PlanResource,
+        val all: List<PlanResource>,
+    )
+
+    private fun clipMaskResources(finalAccumulatorLastPassExclusive: Int = 4): ClipMaskResources {
+        fun coverage(role: PlanResourceRole, ordinal: Int, first: Int, last: Int) = clipCoverageResource(
+            role, ordinal, first, last,
+        )
+        val accumulatorA = coverage(PlanResourceRole.CoverageMaskAccumulator, 0, 0, 3)
+        val accumulatorB = coverage(PlanResourceRole.CoverageMaskAccumulator, 1, 2, finalAccumulatorLastPassExclusive)
+        val scratch = coverage(PlanResourceRole.CoverageMaskScratch, 0, 1, 3)
+        return ClipMaskResources(accumulatorA, accumulatorB, scratch, listOf(accumulatorA, accumulatorB, scratch))
+    }
+
+    private fun clipCoverageResource(
+        role: PlanResourceRole,
+        ordinal: Int,
+        firstPassIndex: Int,
+        lastPassIndexExclusive: Int,
+    ): PlanResource = PlanResource.of(
+            role, ordinal, PlanResourceKind.Texture2D,
+            PlanTextureFormat.CoverageMask(PlanCoverageMaskFormat.RGBA8_UNORM_LINEAR), SizeI32(4, 4), 64,
+            setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled), PlanResourceLifetime.FrameLocal,
+            firstPassIndex, lastPassIndexExclusive,
+        )
+
+    private fun clipRectGeometry(): ClipGeometryF32 = ClipGeometryF32.Rect(RectF32(0f, 0f, 4f, 4f))
+
+    private fun clipRRectGeometry(): ClipGeometryF32 = ClipGeometryF32.RRect(
+        org.graphiks.math.geometry.RRectF32.of(RectF32(0f, 0f, 4f, 4f), 1f),
+    )
+
+    private fun clipMaskPasses(resources: ClipMaskResources): List<PlanPass> = listOf(
+        PlanPass.ClipMaskInitialize(0, resources.accumulatorA.id, RectI32(0, 0, 4, 4), 1f, CLIP_GROUP),
+        PlanPass.ClipMaskProducer(0, resources.scratch.id, null, null, 1, clipRectGeometry(), CLIP_GROUP),
+        PlanPass.ClipMaskFold(
+            0, resources.accumulatorA.id, resources.scratch.id, resources.accumulatorB.id,
+            ClipCombineOperation.Intersect, RectI32(0, 0, 4, 4), CLIP_GROUP,
+        ),
+    )
+
+    private fun clipColorTarget(firstPassIndex: Int, lastPassIndexExclusive: Int): PlanResource = PlanResource.of(
+        PlanResourceRole.LogicalTarget, 0, PlanResourceKind.Texture2D,
+        PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), SizeI32(4, 4), 64,
+        setOf(PlanResourceUsage.RenderAttachment), PlanResourceLifetime.FrameLocal,
+        firstPassIndex, lastPassIndexExclusive,
+    )
+
+    private fun clipSolidDraw(): SolidRectDraw = SolidRectDraw.of(
+        0, ColorF32.of(1f, 0f, 0f, 1f), RectI32(0, 0, 4, 4), RectI32(0, 0, 4, 4),
+    )
+
+    private fun clipRenderPass(target: PlanResource, draws: List<PlanDraw>): PlanPass.RenderPass = PlanPass.RenderPass(
+        0, target.id, draws, AttachmentLoadPlan.ClearTransparent, AttachmentStorePlan.Store,
+    )
+
+    private fun clipStencilResource(
+        role: PlanResourceRole = PlanResourceRole.DepthStencil,
+        extent: SizeI32 = SizeI32(4, 4),
+        sampleCountI32: Int = 1,
+    ): PlanResource = PlanResource.of(
+        role, 0, PlanResourceKind.Texture2D,
+        PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8), extent,
+        4L * extent.width * extent.height * sampleCountI32,
+        setOf(PlanResourceUsage.DepthStencilAttachment), PlanResourceLifetime.FrameLocal,
+        0, 1, sampleCountI32,
+    )
+
+    private fun clipStencilGraph(
+        stencil: PlanResource,
+        aliasesColorTarget: Boolean = false,
+    ): RenderGraph {
+        val target = clipColorTarget(0, 1)
+        val stencilReference = if (aliasesColorTarget) target.id else stencil.id
+        val draw = ClippedPlanDraw.of(clipSolidDraw(), ClipPlanStrategy.Stencil(stencilReference))
+        return clipGraph(
+            resources = listOf(target, stencil),
+            passes = listOf(clipRenderPass(target, listOf(draw))),
+            capabilities = aa4Capabilities(),
+        )
+    }
+
+    private fun clipMaskGraph(): RenderGraph {
+        val resources = clipMaskResources()
+        val target = clipColorTarget(3, 4)
+        val draw = ClippedPlanDraw.of(
+            clipSolidDraw(),
+            ClipPlanStrategy.Mask(resources.accumulatorB.id),
+        )
+        return clipGraph(resources.all + target, clipMaskPasses(resources) + clipRenderPass(target, listOf(draw)))
+    }
+
+    private fun aa4ClipMaskGraph(): RenderGraph {
+        fun texture(
+            role: PlanResourceRole,
+            ordinal: Int,
+            format: PlanTextureFormat,
+            bytes: Long,
+            usages: Set<PlanResourceUsage>,
+            first: Int,
+            last: Int,
+            samples: Int,
+        ) = PlanResource.of(role, ordinal, PlanResourceKind.Texture2D, format, SizeI32(4, 4), bytes, usages,
+            PlanResourceLifetime.FrameLocal, first, last, samples)
+        val format = PlanTextureFormat.CoverageMask(PlanCoverageMaskFormat.RGBA8_UNORM_LINEAR)
+        val accumulatorA = texture(PlanResourceRole.CoverageMaskAccumulator, 0, format, 64,
+            setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled), 0, 3, 1)
+        val accumulatorB = texture(PlanResourceRole.CoverageMaskAccumulator, 1, format, 64,
+            setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled), 2, 4, 1)
+        val multisample = texture(PlanResourceRole.CoverageMaskMultisampleScratch, 0, format, 256,
+            setOf(PlanResourceUsage.RenderAttachment), 1, 2, 4)
+        val scratch = texture(PlanResourceRole.CoverageMaskScratch, 0, format, 64,
+            setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled), 1, 3, 1)
+        val depth = texture(PlanResourceRole.CoverageMaskDepthStencil, 0,
+            PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8), 256,
+            setOf(PlanResourceUsage.DepthStencilAttachment), 1, 2, 4)
+        val initialize = PlanPass.ClipMaskInitialize(0, accumulatorA.id, RectI32(0, 0, 4, 4), 1f, CLIP_GROUP)
+        val producer = PlanPass.ClipMaskProducer(0, multisample.id, scratch.id, depth.id, 4, clipRectGeometry(), CLIP_GROUP)
+        val fold = PlanPass.ClipMaskFold(0, accumulatorA.id, scratch.id, accumulatorB.id,
+            ClipCombineOperation.Difference, RectI32(0, 0, 4, 4), CLIP_GROUP)
+        val target = texture(PlanResourceRole.LogicalTarget, 0,
+            PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), 64,
+            setOf(PlanResourceUsage.RenderAttachment), 3, 4, 1)
+        val draw = ClippedPlanDraw.of(
+            SolidRectDraw.of(0, ColorF32.of(1f, 0f, 0f, 1f), RectI32(0, 0, 4, 4), RectI32(0, 0, 4, 4)),
+            ClipPlanStrategy.Mask(accumulatorB.id),
+        )
+        val render = PlanPass.RenderPass(0, target.id, listOf(draw), AttachmentLoadPlan.ClearTransparent, AttachmentStorePlan.Store)
+        val resources = listOf(accumulatorA, accumulatorB, multisample, scratch, depth, target)
+        val passes = listOf(initialize, producer, fold, render)
+        return RenderGraph.of(
+            PlanId("aa4-clip-mask"), "clip-mask", SizeI32(4, 4),
+            PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL, aa4ClipCapabilities(), PlanBudget(2_048), 0,
+            resources, passes, passes.zipWithNext().map { (before, after) -> PlanPassDependency(before.id, after.id) },
+            peak(resources, passes.size),
+        )
+    }
+
+    private fun inverseZeroClipGraph(): RenderGraph {
+        val accumulator = PlanResource.of(
+            PlanResourceRole.CoverageMaskAccumulator, 0, PlanResourceKind.Texture2D,
+            PlanTextureFormat.CoverageMask(PlanCoverageMaskFormat.RGBA8_UNORM_LINEAR), SizeI32(4, 4), 64,
+            setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled), PlanResourceLifetime.FrameLocal, 0, 2,
+        )
+        val target = PlanResource.of(
+            PlanResourceRole.LogicalTarget, 0, PlanResourceKind.Texture2D,
+            PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), SizeI32(4, 4), 64,
+            setOf(PlanResourceUsage.RenderAttachment), PlanResourceLifetime.FrameLocal, 1, 2,
+        )
+        val initialize = PlanPass.ClipMaskInitialize(0, accumulator.id, RectI32(0, 0, 4, 4), 1f, CLIP_GROUP)
+        val inverse = InversePathGeometryF32.of(InverseInteriorCoverageF32.Zero, RectI32(0, 0, 4, 4))
+        val draw = ClippedPlanDraw.of(
+            SolidRectDraw.of(0, ColorF32.of(1f, 0f, 0f, 1f), RectI32(0, 0, 4, 4), RectI32(0, 0, 4, 4)),
+            ClipPlanStrategy.InverseMask(inverse, accumulator.id),
+        )
+        val render = PlanPass.RenderPass(0, target.id, listOf(draw), AttachmentLoadPlan.ClearTransparent, AttachmentStorePlan.Store)
+        return RenderGraph.of(
+            PlanId("inverse-zero-clip"), "clip-mask", SizeI32(4, 4),
+            PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL, clipCapabilities(), PlanBudget(1_024), 1,
+            listOf(accumulator, target), listOf(initialize, render), listOf(PlanPassDependency(initialize.id, render.id)),
+            peak(listOf(accumulator, target), 2),
+        )
+    }
+
+    private fun clipGraph(
+        resources: List<PlanResource>,
+        passes: List<PlanPass>,
+        dependencies: List<PlanPassDependency> = passes.zipWithNext().map { (before, after) ->
+            PlanPassDependency(before.id, after.id)
+        },
+        capabilities: PlanCapabilitySnapshot = clipCapabilities(),
+    ): RenderGraph = RenderGraph.of(
+        PlanId("clip-mask"), "clip-mask", SizeI32(4, 4),
+        PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL, capabilities, PlanBudget(1_024), 0,
+        resources, passes, dependencies,
+        peak(resources, passes.size),
+    )
+
+    private fun clipCapabilities(): PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(
+        deviceGeneration = 0,
+        maxTextureDimension2D = 1024,
+        maxBufferSizeBytes = 4096,
+        copyBytesPerRowAlignment = 256,
+        supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+        minUniformBufferOffsetAlignment = 256,
+        maxDynamicUniformBuffersPerPipelineLayout = 1,
+        supportedOperations = setOf(PlanOperationCapability.RenderPass),
+        bufferAllocationPolicy = PlanBufferAllocationPolicy.of(1_024, 1_024, 1_024),
+        supportedTextureSampleSupports = setOf(
+            PlanTextureSampleSupport.of(PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), 1,
+                setOf(PlanResourceUsage.RenderAttachment)),
+            PlanTextureSampleSupport.of(
+                PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), 1,
+                setOf(PlanResourceUsage.RenderAttachment),
+            ),
+            PlanTextureSampleSupport.of(
+                PlanTextureFormat.CoverageMask(PlanCoverageMaskFormat.RGBA8_UNORM_LINEAR), 1,
+                setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled),
+            ),
+        ),
+    )
+
+    private fun aa4ClipCapabilities(): PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(
+        deviceGeneration = 0,
+        maxTextureDimension2D = 1024,
+        maxBufferSizeBytes = 4096,
+        copyBytesPerRowAlignment = 256,
+        supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+        minUniformBufferOffsetAlignment = 256,
+        maxDynamicUniformBuffersPerPipelineLayout = 1,
+        supportedOperations = setOf(PlanOperationCapability.RenderPass, PlanOperationCapability.DepthStencilAttachment),
+        bufferAllocationPolicy = PlanBufferAllocationPolicy.of(2_048, 2_048, 2_048),
+        supportedDepthStencilFormats = setOf(PlanDepthStencilFormat.Depth24PlusStencil8),
+        supportedTextureSampleSupports = setOf(
+            PlanTextureSampleSupport.of(PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), 1,
+                setOf(PlanResourceUsage.RenderAttachment)),
+            PlanTextureSampleSupport.of(PlanTextureFormat.CoverageMask(PlanCoverageMaskFormat.RGBA8_UNORM_LINEAR), 1,
+                setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled)),
+            PlanTextureSampleSupport.of(PlanTextureFormat.CoverageMask(PlanCoverageMaskFormat.RGBA8_UNORM_LINEAR), 4,
+                setOf(PlanResourceUsage.RenderAttachment)),
+            PlanTextureSampleSupport.of(PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8), 4,
+                setOf(PlanResourceUsage.DepthStencilAttachment)),
+        ),
+        supportedTextureResolveSupports = setOf(
+            PlanTextureResolveSupport.of(PlanTextureFormat.CoverageMask(PlanCoverageMaskFormat.RGBA8_UNORM_LINEAR), 4, 1),
+        ),
+    )
+
     private fun aa4Capabilities(): PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(
         deviceGeneration = 0,
         maxTextureDimension2D = 1024,
@@ -1564,12 +2110,15 @@ class RenderGraphContractTest {
     private fun aa4MixedPathGraph(
         resolveOnFinalColor: Boolean = true,
         resolveOnMaskProducer: Boolean = false,
+        withClip: Boolean = false,
+        inverseClip: Boolean = false,
         resolvedColorUsages: Set<PlanResourceUsage> = setOf(
             PlanResourceUsage.RenderAttachment,
             PlanResourceUsage.CopySource,
         ),
     ): RenderGraph {
         val extent = SizeI32(1, 1)
+        val clipPassCount = if (withClip) 3 else 0
         fun texture(
             role: PlanResourceRole,
             ordinal: Int,
@@ -1601,8 +2150,8 @@ class RenderGraphContractTest {
             byteSize = 4,
             usages = setOf(usage, PlanResourceUsage.CopyDestination),
             lifetime = PlanResourceLifetime.FrameLocal,
-            firstPassIndex = 0,
-            lastPassIndexExclusive = 6,
+            firstPassIndex = clipPassCount,
+            lastPassIndexExclusive = 6 + clipPassCount,
         )
         val multisampleColor = texture(
             PlanResourceRole.MultisampleColorTarget,
@@ -1610,8 +2159,8 @@ class RenderGraphContractTest {
             PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
             16,
             setOf(PlanResourceUsage.RenderAttachment),
-            0,
-            6,
+            clipPassCount,
+            6 + clipPassCount,
             4,
         )
         val resolvedColor = texture(
@@ -1620,18 +2169,21 @@ class RenderGraphContractTest {
             PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
             4,
             resolvedColorUsages,
-            5,
-            7,
+            5 + clipPassCount,
+            7 + clipPassCount,
             1,
         )
-        val multisampleDepth = texture(
+        val multisampleDepth = PlanResource.of(
             PlanResourceRole.DepthStencil,
             0,
+            PlanResourceKind.Texture2D,
             PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8),
+            extent,
             16,
             setOf(PlanResourceUsage.DepthStencilAttachment),
-            0,
-            2,
+            PlanResourceLifetime.FrameLocal,
+            clipPassCount,
+            if (withClip) 6 + clipPassCount else 2 + clipPassCount,
             4,
         )
         val mask = texture(
@@ -1640,8 +2192,8 @@ class RenderGraphContractTest {
             PlanTextureFormat.CoverageMask,
             4,
             setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled),
-            2,
-            6,
+            2 + clipPassCount,
+            6 + clipPassCount,
             1,
         )
         val hardDepth = texture(
@@ -1650,8 +2202,8 @@ class RenderGraphContractTest {
             PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8),
             4,
             setOf(PlanResourceUsage.DepthStencilAttachment),
-            3,
-            5,
+            3 + clipPassCount,
+            5 + clipPassCount,
             1,
         )
         val staging = PlanResource.of(
@@ -1663,8 +2215,8 @@ class RenderGraphContractTest {
             256,
             setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead),
             PlanResourceLifetime.FrameLocal,
-            6,
-            7,
+            6 + clipPassCount,
+            7 + clipPassCount,
         )
         val vertex = data(PlanResourceRole.VertexData, PlanResourceUsage.Vertex)
         val index = data(PlanResourceRole.IndexData, PlanResourceUsage.Index)
@@ -1691,7 +2243,52 @@ class RenderGraphContractTest {
         )
         val aaGroup = canonicalGeneralPathAtomicGroup(antiAliased)
         val group = canonicalGeneralPathAtomicGroup(hard)
-        val passes = listOf(
+        val clipAccumulatorA = texture(
+            PlanResourceRole.CoverageMaskAccumulator, 0,
+            PlanTextureFormat.CoverageMask(PlanCoverageMaskFormat.RGBA8_UNORM_LINEAR), 4,
+            setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled), 0, 3, 1,
+        )
+        val clipAccumulatorB = texture(
+            PlanResourceRole.CoverageMaskAccumulator, 1,
+            PlanTextureFormat.CoverageMask(PlanCoverageMaskFormat.RGBA8_UNORM_LINEAR), 4,
+            setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled), 2, if (withClip) 9 else 3, 1,
+        )
+        val clipScratch = texture(
+            PlanResourceRole.CoverageMaskScratch, 0,
+            PlanTextureFormat.CoverageMask(PlanCoverageMaskFormat.RGBA8_UNORM_LINEAR), 4,
+            setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled), 1, 3, 1,
+        )
+        val clipPrefix = if (withClip) listOf(
+            PlanPass.ClipMaskInitialize(0, clipAccumulatorA.id, RectI32(0, 0, 1, 1), 1f, CLIP_GROUP),
+            PlanPass.ClipMaskProducer(0, clipScratch.id, null, null, 1,
+                ClipGeometryF32.Rect(RectF32(0f, 0f, 1f, 1f)), CLIP_GROUP),
+            PlanPass.ClipMaskFold(0, clipAccumulatorA.id, clipScratch.id, clipAccumulatorB.id,
+                ClipCombineOperation.Intersect, RectI32(0, 0, 1, 1), CLIP_GROUP),
+        ) else emptyList()
+        val finalClip = if (inverseClip) {
+            ClipPlanStrategy.InverseMask(
+                InversePathGeometryF32.of(
+                    InverseInteriorCoverageF32.Geometry.of(directGeometry()),
+                    RectI32(0, 0, 1, 1),
+                ),
+                clipAccumulatorB.id,
+            )
+        } else {
+            ClipPlanStrategy.Mask(clipAccumulatorB.id)
+        }
+        val binaryCoverDraw: PathRenderDraw = BinaryMaskedPathDraw.of(hard, mask.id).let { binary ->
+            if (withClip) ClippedBinaryMaskedPathDraw.of(
+                binary,
+                ClipPlanStrategy.Scissor(
+                    RectI32(0, 0, 1, 1),
+                    ClipPlanStrategy.Stencil(
+                        multisampleDepth.id,
+                        finalClip,
+                    ),
+                ),
+            ) else binary
+        }
+        val pathPasses = listOf(
             PlanPass.PathRenderPass(
                 ordinal = 0,
                 target = multisampleColor.id,
@@ -1752,7 +2349,7 @@ class RenderGraphContractTest {
             PlanPass.PathRenderPass(
                 ordinal = 4,
                 target = multisampleColor.id,
-                draw = BinaryMaskedPathDraw.of(hard, mask.id),
+                draw = binaryCoverDraw,
                 phase = PathRenderPhase.HardEdgeBinaryColorCover,
                 drawDataResources = drawData,
                 atomicGroup = group,
@@ -1765,6 +2362,7 @@ class RenderGraphContractTest {
             ),
             PlanPass.ReadbackPass(0, resolvedColor.id, staging.id, 256),
         )
+        val passes = clipPrefix + pathPasses
         val resources = listOf(
             multisampleColor,
             resolvedColor,
@@ -1772,7 +2370,7 @@ class RenderGraphContractTest {
             mask,
             hardDepth,
             staging,
-        ) + drawDataResources
+        ) + drawDataResources + if (withClip) listOf(clipAccumulatorA, clipAccumulatorB, clipScratch) else emptyList()
         return RenderGraph.of(
             id = PlanId("aa4-plan"),
             capabilityId = "w4d-general-path-aa",
@@ -1784,7 +2382,7 @@ class RenderGraphContractTest {
             resources = resources,
             passes = passes,
             dependencies = passes.zipWithNext().map { (before, after) -> PlanPassDependency(before.id, after.id) },
-            peakFrameLocalBytes = 260,
+            peakFrameLocalBytes = peak(resources, passes.size),
         )
     }
 

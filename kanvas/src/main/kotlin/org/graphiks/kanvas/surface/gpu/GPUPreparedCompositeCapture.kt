@@ -401,6 +401,17 @@ internal object GPUPreparedCompositeCapturer {
             operationIndex: Int,
             parentScope: MutableCaptureScope,
         ) {
+            operation.typedClipTransformRefusalOrNull()?.let { refusal ->
+                refuseTypedClipTransform(refusal, operationIndex)
+            }
+            operation.picture.ops.firstNotNullOfOrNull { child ->
+                child.withPictureReplayState(
+                    outerTransform = operation.transform,
+                    enclosingClip = operation.clip,
+                ).typedClipTransformRefusalOrNull()
+            }?.let { refusal ->
+                refuseTypedClipTransform(refusal, operationIndex)
+            }
             val pictureId = operation.picture.uniqueID
             if (pictureId in activePictureIds) {
                 refuse(
@@ -764,12 +775,26 @@ internal object GPUPreparedCompositeCapturer {
                     rect = rect.toSnapshot(GPUPreparedCompositeRefusalCodes.CLIP, operationIndex),
                     antiAlias = antiAlias,
                 )
-                is ClipStack.Complex -> refuse(
+                is ClipStack.Complex -> typedClipTransformRefusalOrNull()?.let { refusal ->
+                    refuseTypedClipTransform(refusal, operationIndex)
+                } ?: refuse(
                     GPUPreparedCompositeRefusalCodes.CLIP,
                     operationIndex,
                     mapOf("reason" to "complex clip is outside the bounded scaffold"),
                 )
             }
+
+        private fun refuseTypedClipTransform(
+            refusal: String,
+            operationIndex: Int,
+        ): Nothing = refuse(
+            refusal,
+            operationIndex,
+            mapOf(
+                "authority" to "typed-clip-transform-boundary",
+                "boundary" to "before-composite-clip-planner",
+            ),
+        )
 
         private fun Paint.toSnapshot(operationIndex: Int): GPUPreparedPaintSnapshot {
             if (shader != null || colorFilter != null ||

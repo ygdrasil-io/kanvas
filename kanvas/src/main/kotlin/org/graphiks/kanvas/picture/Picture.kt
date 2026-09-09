@@ -19,6 +19,7 @@ import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.color.Gamut
 import org.graphiks.kanvas.color.TransferFunction
 import org.graphiks.kanvas.render.ir.DisplayOpSceneAdapter
+import org.graphiks.kanvas.render.ir.ClipTransformSnapshot
 import org.graphiks.kanvas.render.ir.SceneArchiveCodec
 import org.graphiks.kanvas.render.ir.SceneArchiveDecodeResult
 import org.graphiks.kanvas.render.ir.SceneCaptureResult
@@ -774,13 +775,26 @@ private class Reader(
     private fun clipStackOp(): ClipStackOp {
         val aa = bool()
         return when (byte().toInt()) {
-            0 -> ClipStackOp.RectOp(rect(), clipOp(), aa)
-            1 -> ClipStackOp.RRectOp(rrect(), clipOp(), aa)
+            0 -> ClipStackOp.RectOp(
+                rect(),
+                clipOp(),
+                aa,
+                ClipTransformSnapshot.LegacyUnavailable("identity", perspectiveCaptureRefusal = false),
+            )
+            1 -> ClipStackOp.RRectOp(
+                rrect(),
+                clipOp(),
+                aa,
+                ClipTransformSnapshot.LegacyUnavailable("identity", perspectiveCaptureRefusal = false),
+            )
             2 -> ClipStackOp.PathOp(
                 path(),
                 clipOp(),
                 aa,
-                transformClass = if (formatVersion >= 7) string() else "identity",
+                ClipTransformSnapshot.LegacyUnavailable(
+                    transformClass = if (formatVersion >= 7) string() else "identity",
+                    perspectiveCaptureRefusal = false,
+                ),
             )
             else -> { valid = false; ClipStackOp.RectOp(RectF32.Empty, ClipOp.INTERSECT, aa) }
         }

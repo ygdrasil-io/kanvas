@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.math.color.ColorF32
 import org.graphiks.math.geometry.PathFillGeometryF32
+import org.graphiks.math.geometry.PathBuilder
 import org.graphiks.math.geometry.PathStrokeGeometryF32
 import org.graphiks.math.geometry.PathStrokeDrawMode
 import org.graphiks.math.geometry.PathStrokeStyleF64
@@ -12,6 +13,10 @@ import org.graphiks.kanvas.render.ir.DrawOrigin
 import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.RectI32
+import org.graphiks.math.geometry.ClipGeometryF32
+import org.graphiks.math.geometry.InversePathGeometryF32
+import org.graphiks.math.geometry.PathF32
+import org.graphiks.math.matrix.Matrix3x3F32
 
 public enum class CoveragePlan { FullOrScissor, AnalyticScalarAA, StencilAA4, BinaryMaskCover4 }
 public enum class SamplePlan { SingleSample, Multisample4 }
@@ -30,6 +35,26 @@ public enum class PlanPassRole {
     Filter,
     Resolve,
     Readback,
+    ClipMaskInitialize,
+    ClipMaskProducer,
+    ClipMaskFold,
+}
+public enum class ClipCombineOperation { Intersect, Difference }
+
+/** The clip realization selected for one consumer draw. */
+public sealed interface ClipPlanStrategy {
+    public class Scissor(domainI32: RectI32, public val child: ClipPlanStrategy? = null) : ClipPlanStrategy {
+        private val domainSnapshotI32: RectI32 = domainI32.copy()
+        public fun copyDomainI32(): RectI32 = domainSnapshotI32.copy()
+    }
+    public class Stencil(public val depthStencil: PlanResourceId, public val child: ClipPlanStrategy? = null) : ClipPlanStrategy
+    public class Mask(public val resource: PlanResourceId) : ClipPlanStrategy
+    public class InverseMask(
+        public val geometryF32: InversePathGeometryF32,
+        public val resource: PlanResourceId,
+    ) : ClipPlanStrategy
+    /** Bounded inverse coverage over the full target domain when no clip texture is needed. */
+    public class InverseDomain(public val geometryF32: InversePathGeometryF32) : ClipPlanStrategy
 }
 public enum class PathFillStrategy { DirectTriangle, StencilCover }
 public enum class PathRenderPhase {
@@ -50,6 +75,35 @@ public enum class BinaryMaskFetchPlan { TextureLoadUnfiltered }
 public sealed interface PathDrawGeometry {
     public data class Fill(public val valueF32: PathFillGeometryF32) : PathDrawGeometry
     public data class Stroke(public val valueF32: PathStrokeGeometryF32) : PathDrawGeometry
+    /**
+     * The exact non-empty source of an inverse path whose finite interior is empty.
+     *
+     * W4d.2 receives a finite proxy solely to admit the construction seam.  W4e replaces that
+     * proxy with this immutable source fact before it publishes its compiler-authenticated graph.
+     * It is deliberately not drawable: a zero interior is rendered as the bounded inverse domain.
+     */
+    public class InverseDomainSource private constructor(
+        path: PathF32,
+        transform: Matrix3x3F32,
+    ) : PathDrawGeometry {
+        private val pathSnapshot: PathF32 = PathBuilder(path.fillRule).addPath(path).build()
+        private val transformSnapshot: Matrix3x3F32 = transform.copy()
+
+        public fun copySourcePath(): PathF32 = PathBuilder(pathSnapshot.fillRule).addPath(pathSnapshot).build()
+
+        public fun copySourceTransform(): Matrix3x3F32 = transformSnapshot.copy()
+
+        internal companion object {
+            internal fun of(path: PathF32, transform: Matrix3x3F32): InverseDomainSource {
+                require(path.segmentCount > 0) {
+                    "Only a non-empty source path can be retained as a W4e inverse-domain source"
+                }
+                return InverseDomainSource(path, transform)
+            }
+        }
+    }
+    /** An inverse draw whose finite interior is empty; its W4e clip still owns the finite domain. */
+    public data object Empty : PathDrawGeometry
 }
 
 public sealed interface PlanDraw {
@@ -58,6 +112,23 @@ public sealed interface PlanDraw {
     public val coverage: CoveragePlan
     public val sample: SamplePlan
     public val blend: BlendPlan
+}
+
+/** A visual draw whose coverage is constrained by a separately planned clip strategy. */
+public class ClippedPlanDraw private constructor(
+    public val source: PlanDraw,
+    public val strategy: ClipPlanStrategy,
+) : PlanDraw {
+    override public val commandIndex: Int get() = source.commandIndex
+    override public val color: ColorF32 get() = source.color
+    override public val coverage: CoveragePlan get() = source.coverage
+    override public val sample: SamplePlan get() = source.sample
+    override public val blend: BlendPlan get() = source.blend
+
+    public companion object {
+        public fun of(source: PlanDraw, strategy: ClipPlanStrategy): ClippedPlanDraw =
+            ClippedPlanDraw(source, strategy)
+    }
 }
 
 /** Common sealed contract for W4c fills and W4d stroke snapshots. */
@@ -105,6 +176,53 @@ public class GeneralPathDraw private constructor(
             requirePathRenderGeometryForStrategy(geometry, strategy)
             return GeneralPathDraw(commandIndex, color, geometry, strategy, scissorI32, coverage, sample)
         }
+
+        /** W4e uses this form only for a source path that contained no segments at all. */
+        internal fun w4eActuallyEmptyInverseDomainOf(source: GeneralPathDraw): GeneralPathDraw =
+            GeneralPathDraw(
+                source.commandIndex,
+                source.color,
+                PathDrawGeometry.Empty,
+                source.strategy,
+                source.copyScissorI32(),
+                source.coverage,
+                source.sample,
+            )
+
+        /** Restores the original source after W4d.2 used its finite construction proxy. */
+        internal fun w4eInverseDomainSourceOf(
+            source: GeneralPathDraw,
+            geometry: PathDrawGeometry.InverseDomainSource,
+        ): GeneralPathDraw = GeneralPathDraw(
+            source.commandIndex,
+            source.color,
+            geometry,
+            source.strategy,
+            source.copyScissorI32(),
+            source.coverage,
+            source.sample,
+        )
+    }
+}
+
+/** A W4d.2 direct path draw whose final coverage is constrained by a W4e clip plan. */
+public class ClippedGeneralPathDraw private constructor(
+    public val source: GeneralPathDraw,
+    public val clip: ClipPlanStrategy,
+) : PathRenderDraw {
+    override public val commandIndex: Int get() = source.commandIndex
+    override public val color: ColorF32 get() = source.color
+    override public val strategy: PathFillStrategy get() = source.strategy
+    override public val coverage: CoveragePlan get() = source.coverage
+    override public val sample: SamplePlan get() = source.sample
+    override public val blend: BlendPlan get() = source.blend
+
+    override fun copyPathGeometry(): PathDrawGeometry = source.copyPathGeometry()
+    override fun copyScissorI32(): RectI32 = source.copyScissorI32()
+
+    public companion object {
+        public fun of(source: GeneralPathDraw, clip: ClipPlanStrategy): ClippedGeneralPathDraw =
+            ClippedGeneralPathDraw(source, clip)
     }
 }
 
@@ -133,6 +251,29 @@ public class BinaryMaskedPathDraw private constructor(
             }
             return BinaryMaskedPathDraw(source, mask)
         }
+    }
+}
+
+/** A typed AA4 hard-edge path consumer with both binary and ordered clip-mask coverage. */
+public class ClippedBinaryMaskedPathDraw private constructor(
+    public val source: BinaryMaskedPathDraw,
+    public val clip: ClipPlanStrategy,
+) : PathRenderDraw {
+    override public val commandIndex: Int get() = source.commandIndex
+    override public val color: ColorF32 get() = source.color
+    override public val strategy: PathFillStrategy get() = source.strategy
+    override public val coverage: CoveragePlan get() = source.coverage
+    override public val sample: SamplePlan get() = source.sample
+    override public val blend: BlendPlan get() = source.blend
+    /** The binary source texture is one-sample; its value is broadcast to the four color samples. */
+    public val sourceMaskSampleCountI32: Int get() = 1
+
+    override fun copyPathGeometry(): PathDrawGeometry = source.copyPathGeometry()
+    override fun copyScissorI32(): RectI32 = source.copyScissorI32()
+
+    public companion object {
+        public fun of(source: BinaryMaskedPathDraw, clip: ClipPlanStrategy): ClippedBinaryMaskedPathDraw =
+            ClippedBinaryMaskedPathDraw(source, clip)
     }
 }
 
@@ -363,6 +504,12 @@ private fun requirePathRenderGeometryForStrategy(
     val fillGeometry = when (geometry) {
         is PathDrawGeometry.Fill -> geometry.valueF32
         is PathDrawGeometry.Stroke -> geometry.valueF32.copyFillGeometryF32()
+        is PathDrawGeometry.InverseDomainSource -> throw IllegalArgumentException(
+            "Inverse-domain source geometry is reserved for a sealed W4e inverse-domain draw",
+        )
+        PathDrawGeometry.Empty -> throw IllegalArgumentException(
+            "Empty path geometry is reserved for a sealed W4e inverse-domain draw",
+        )
     }
     require(pathFillStrategy(fillGeometry) == strategy) {
         "Path geometry must select the declared fill strategy"
@@ -404,6 +551,56 @@ public sealed interface PlanPass {
         override val id: PlanPassId = checkedPassId(role, ordinal)
         public val load: AttachmentLoadPlan = AttachmentLoadPlan.ClearTransparent
         public val store: AttachmentStorePlan = AttachmentStorePlan.Store
+    }
+
+    /** Initializes the finite coverage domain to opaque coverage before ordered clip folds. */
+    public class ClipMaskInitialize(
+        override public val ordinal: Int,
+        public val output: PlanResourceId,
+        domainI32: RectI32,
+        public val clearCoverageF32: Float = 1f,
+        public val atomicGroup: PlanAtomicGroupId,
+    ) : PlanPass {
+        override public val role: PlanPassRole = PlanPassRole.ClipMaskInitialize
+        override public val id: PlanPassId = checkedPassId(role, ordinal)
+        private val domainSnapshotI32: RectI32 = domainI32.copy()
+        public fun copyDomainI32(): RectI32 = domainSnapshotI32.copy()
+    }
+
+    /** Rasterizes one finite clip element into its own scratch attachment. */
+    public class ClipMaskProducer(
+        override public val ordinal: Int,
+        public val target: PlanResourceId,
+        public val resolveTarget: PlanResourceId?,
+        public val depthStencil: PlanResourceId?,
+        public val sampleCountI32: Int,
+        geometryF32: ClipGeometryF32,
+        public val atomicGroup: PlanAtomicGroupId,
+        /** Applies finite producer coverage as the complement inside the initialized clip domain. */
+        public val inverseCoverage: Boolean = false,
+        /** Preserves analytic AA for rect producers even when their attachment is single-sample. */
+        public val antiAlias: Boolean = sampleCountI32 == 4,
+    ) : PlanPass {
+        override public val role: PlanPassRole = PlanPassRole.ClipMaskProducer
+        override public val id: PlanPassId = checkedPassId(role, ordinal)
+        private val geometrySnapshotF32: ClipGeometryF32 = geometryF32.copyClipMaskGeometryF32()
+        public fun copyGeometryF32(): ClipGeometryF32 = geometrySnapshotF32.copyClipMaskGeometryF32()
+    }
+
+    /** Combines the previous accumulator and one scratch producer in insertion order. */
+    public class ClipMaskFold(
+        override public val ordinal: Int,
+        public val previous: PlanResourceId,
+        public val source: PlanResourceId,
+        public val output: PlanResourceId,
+        public val operation: ClipCombineOperation,
+        domainI32: RectI32,
+        public val atomicGroup: PlanAtomicGroupId,
+    ) : PlanPass {
+        override public val role: PlanPassRole = PlanPassRole.ClipMaskFold
+        override public val id: PlanPassId = checkedPassId(role, ordinal)
+        private val domainSnapshotI32: RectI32 = domainI32.copy()
+        public fun copyDomainI32(): RectI32 = domainSnapshotI32.copy()
     }
 
     /** Typed W4d.2 path pass for multisample AA and hard-edge mask production/color cover. */
@@ -503,6 +700,13 @@ public data class PlanPassDependency(public val before: PlanPassId, public val a
 private fun checkedPassId(role: PlanPassRole, ordinal: Int): PlanPassId {
     require(ordinal >= 0) { "Pass ordinal must be non-negative" }
     return planPassId(role, ordinal)
+}
+
+private fun ClipGeometryF32.copyClipMaskGeometryF32(): ClipGeometryF32 = when (this) {
+    is ClipGeometryF32.Rect -> ClipGeometryF32.Rect(copyRectF32())
+    is ClipGeometryF32.RRect -> ClipGeometryF32.RRect(copyRRectF32())
+    is ClipGeometryF32.Path -> ClipGeometryF32.Path(copyPathGeometryF32())
+    ClipGeometryF32.Empty -> ClipGeometryF32.Empty
 }
 
 internal fun <T> immutableList(values: List<T>): List<T> = java.util.Collections.unmodifiableList(values.toList())

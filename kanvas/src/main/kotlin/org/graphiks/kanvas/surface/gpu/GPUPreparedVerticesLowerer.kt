@@ -632,6 +632,13 @@ private fun prepareClip(
             GPUPreparedVerticesRefusalCodes.ClipCoverage, "clip_mapping_exception", emptyMap(),
         )
     }
+    facts.clipTransformRefusal?.let { refusal ->
+        return PreparedVerticesClipResult.Refused(
+            GPUPreparedVerticesRefusalCodes.ClipCoverage,
+            refusal,
+            emptyMap(),
+        )
+    }
     val request = facts.coverageRequest
     if (request == null) {
         return PreparedVerticesClipResult.Ready(

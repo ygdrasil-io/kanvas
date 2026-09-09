@@ -30,6 +30,39 @@ import org.graphiks.math.geometry.preparePathFillGeometryWithStrokeWorkF32
 
 class PathProjectivePreparationF64Test {
     @Test
+    fun `large F32 path is rejected for a non finite matrix before source conversion`() {
+        val builder = PathBuilder().moveTo(0f, 0f)
+        repeat(512) { indexI32 -> builder.lineTo(indexI32.toFloat(), 1f) }
+        val path = builder.build()
+        builder.lineTo(-1f, -1f)
+
+        val result = Matrix3x3F64(sxF64 = Double.NaN).prepareProjectedPathFillInputF64(path)
+
+        assertEquals(
+            PathProjectiveInvalidSceneReason.NonFiniteMatrix,
+            assertIs<PathProjectivePreparationResult.InvalidScene>(result).reason,
+        )
+    }
+
+    @Test
+    fun `tiny projective snapshot limit rejects before traversing a large F32 path`() {
+        val builder = PathBuilder().moveTo(0f, 0f)
+        repeat(512) { indexI32 -> builder.lineTo(indexI32.toFloat(), 1f) }
+        val path = builder.build()
+        builder.lineTo(-1f, -1f)
+
+        val result = Matrix3x3F64(persp0F64 = 0.01).prepareProjectedPathFillInputF64(
+            path,
+            workPolicyF64 = PathStrokePolicyF64(limitsI64 = PathStrokeLimitsI64(maxSnapshotByteCountPerPathI64 = 15L)),
+        )
+
+        assertEquals(
+            PathProjectiveResourceLimitReason.SnapshotByteLimit,
+            assertIs<PathProjectivePreparationResult.ResourceLimitExceeded>(result).reason,
+        )
+    }
+
+    @Test
     fun `whole interval certificate subdivides the cubic whose unsampled bulge exceeds a quarter pixel`() {
         listOf(-0.011, -0.01, -0.009).forEach { perspectiveXF64 ->
             val result = assertIs<PathProjectivePreparationResult.Ready>(

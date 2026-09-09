@@ -20,9 +20,9 @@ import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.render.ir.ClipTransformSnapshot
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.matrix.Matrix3x3F32
-import org.graphiks.math.matrix.mapAxisAligned
 import org.graphiks.math.matrix.mapAxisAlignedRect
 
 /**
@@ -438,77 +438,28 @@ class Canvas internal constructor(buffer: DisplayListBuffer) {
     }
 
     private fun captureClipRect(rect: RectF32, op: ClipOp, antiAlias: Boolean): ClipStackOp {
-        val transformClass = currentTransform.captureTransformClass()
-        return when {
-        transformClass.isTerminalClipTransformClass() ->
-            ClipStackOp.PathOp(
-                Path().addRect(rect), op, antiAlias,
-                perspectiveCaptureRefusal = transformClass == "perspective",
-                transformClass = transformClass,
-            )
-        currentTransform.isScaleTranslate() ->
-            ClipStackOp.RectOp(currentTransform.mapAxisAlignedRect(rect), op, antiAlias)
-        !currentTransform.hasPerspective() ->
-            ClipStackOp.PathOp(
-                Path().addRect(rect).transform(currentTransform),
-                op,
-                antiAlias,
-                transformClass = currentTransform.captureTransformClass(),
-            )
-        else ->
-            ClipStackOp.PathOp(
-                Path().addRect(rect),
-                op,
-                antiAlias,
-                perspectiveCaptureRefusal = true,
-                transformClass = "perspective",
-            )
+        val mapped = if (currentTransform.isLosslessAxisAlignedClipCaptureMatrix() && currentTransform.isScaleTranslate()) {
+            currentTransform.mapAxisAlignedRect(rect)
+        } else {
+            null
+        }
+        return if (mapped?.isFiniteClipCaptureRect() == true) {
+            ClipStackOp.RectOp(mapped, op, antiAlias)
+        } else {
+            ClipStackOp.RectOp(rect, op, antiAlias, ClipTransformSnapshot.Known.of(currentTransform))
         }
     }
 
     private fun captureClipRRect(rrect: RRectF32, op: ClipOp, antiAlias: Boolean): ClipStackOp {
-        val transformClass = currentTransform.captureTransformClass()
-        return when {
-        transformClass.isTerminalClipTransformClass() ->
-            ClipStackOp.PathOp(
-                Path().addRRect(rrect), op, antiAlias,
-                perspectiveCaptureRefusal = transformClass == "perspective",
-                transformClass = transformClass,
-            )
-        currentTransform.isScaleTranslate() ->
-            ClipStackOp.RRectOp(
-                rrect = rrect.mapAxisAligned(currentTransform),
-                op = op,
-                antiAlias = antiAlias,
-                transformClass = transformClass,
-            )
-        !currentTransform.hasPerspective() ->
-            ClipStackOp.PathOp(
-                Path().addRRect(rrect).transform(currentTransform),
-                op,
-                antiAlias,
-                transformClass = currentTransform.captureTransformClass(),
-            )
-        else ->
-            ClipStackOp.PathOp(
-                Path().addRRect(rrect),
-                op,
-                antiAlias,
-                perspectiveCaptureRefusal = true,
-                transformClass = "perspective",
-            )
-        }
+        return ClipStackOp.RRectOp(rrect, op, antiAlias, ClipTransformSnapshot.Known.of(currentTransform))
     }
 
     private fun captureClipPath(path: Path, op: ClipOp, antiAlias: Boolean): ClipStackOp {
-        val transformClass = currentTransform.captureTransformClass()
-        val terminalCapture = transformClass.isTerminalClipTransformClass()
         return ClipStackOp.PathOp(
-            if (terminalCapture) path.toPathF32().toCompatibilityPath() else path.transform(currentTransform),
+            path.toPathF32().toCompatibilityPath(),
             op,
             antiAlias,
-            perspectiveCaptureRefusal = transformClass == "perspective",
-            transformClass = transformClass,
+            ClipTransformSnapshot.Known.of(currentTransform),
         )
     }
 
@@ -517,7 +468,7 @@ class Canvas internal constructor(buffer: DisplayListBuffer) {
         newOp: ClipStackOp,
         allowDeviceRect: Boolean,
     ): ClipStack = when (previous) {
-        ClipStack.WideOpen -> if (allowDeviceRect && newOp is ClipStackOp.RectOp && newOp.op == ClipOp.INTERSECT) {
+        ClipStack.WideOpen -> if (allowDeviceRect && newOp is ClipStackOp.RectOp && newOp.op == ClipOp.INTERSECT && newOp.isLosslessDeviceRect()) {
             ClipStack.DeviceRect(newOp.rect, newOp.antiAlias)
         } else {
             ClipStack.Complex(listOf(newOp))
@@ -535,19 +486,15 @@ class Canvas internal constructor(buffer: DisplayListBuffer) {
     )
 }
 
-private fun Matrix3x3F32.captureTransformClass(): String = when {
-    !floatValues().all(Float::isFinite) -> "non-finite"
-    hasPerspective() -> "perspective"
-    sx * sy - kx * ky == 0f -> "singular-affine"
-    this == Matrix3x3F32.Identity -> "identity"
-    kx == 0f && ky == 0f && sx == 1f && sy == 1f -> "translate"
-    kx == 0f && ky == 0f && sx == sy && sx > 0f -> "uniform-positive-scale-translate"
-    kx == 0f && ky == 0f && tx == 0f && ty == 0f -> "scale"
-    kx == 0f && ky == 0f -> "scale-translate"
-    else -> "affine"
+private fun ClipStackOp.RectOp.isLosslessDeviceRect(): Boolean =
+    (transform as? ClipTransformSnapshot.Known)?.copyMatrixF32() == Matrix3x3F32.Identity &&
+        rect.isFiniteClipCaptureRect()
+
+private fun Matrix3x3F32.isLosslessAxisAlignedClipCaptureMatrix(): Boolean {
+    if (!listOf(sx, kx, tx, ky, sy, ty, persp0, persp1, persp2).all(Float::isFinite)) return false
+    val determinant = sx.toDouble() * sy.toDouble() - kx.toDouble() * ky.toDouble()
+    return determinant.isFinite() && determinant != 0.0
 }
 
-private fun Matrix3x3F32.floatValues(): FloatArray = floatArrayOf(sx, kx, tx, ky, sy, ty, persp0, persp1, persp2)
-
-private fun String.isTerminalClipTransformClass(): Boolean =
-    this == "non-finite" || this == "singular-affine" || this == "perspective"
+private fun RectF32.isFiniteClipCaptureRect(): Boolean =
+    listOf(left, top, right, bottom).all(Float::isFinite)

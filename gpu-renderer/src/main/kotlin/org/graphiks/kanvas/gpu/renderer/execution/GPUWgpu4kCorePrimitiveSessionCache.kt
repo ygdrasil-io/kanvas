@@ -670,6 +670,7 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
                 texture.createView()
         },
     )
+    private val w4eAttachmentPool = GPUWgpu4kW4eAttachmentPool(device, deviceGeneration)
 
     @Synchronized
     fun acquire(
@@ -736,6 +737,20 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
     ): GPUWgpu4kCorePrimitiveFramePoolCheckout = framePool.acquire(requirements)
 
     @Synchronized
+    fun acquireW4eAttachments(
+        generation: GPUDeviceGenerationID,
+        requirements: GPUW4eAttachmentPoolRequirements,
+    ): GPUWgpu4kW4eAttachmentPoolCheckout = when (state) {
+        State.Open -> w4eAttachmentPool.acquire(generation, requirements)
+        State.Closing -> GPUWgpu4kW4eAttachmentPoolCheckout.Refused(
+            GPUWgpu4kCorePrimitiveFramePoolRefusal.Closing,
+        )
+        State.Closed -> GPUWgpu4kW4eAttachmentPoolCheckout.Refused(
+            GPUWgpu4kCorePrimitiveFramePoolRefusal.Closed,
+        )
+    }
+
+    @Synchronized
     fun counters(): GPUCorePrimitiveNativeCacheCounters {
         val pool = framePool.counters()
         return GPUCorePrimitiveNativeCacheCounters(
@@ -757,6 +772,7 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
     override fun close() {
         if (state == State.Closed) return
         state = State.Closing
+        w4eAttachmentPool.close()
         framePool.close()
 
         live.keys.toList().asReversed().forEach { key ->

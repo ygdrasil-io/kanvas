@@ -30,6 +30,105 @@ public sealed interface PathFillSegmentF64 {
     public data object Close : PathFillSegmentF64
 }
 
+/** Builds the canonical closed F64 contour without narrowing source coordinates to F32. */
+public fun RectF64.toPathFillInputF64(): PathFillInputF64 = materializePathFillInputF64(beforeMaterializationI64 = null)
+
+/** Builds a canonical Rect path while admitting every collection and command before allocation. */
+public fun RectF64.toPathFillInputF64(
+    beforeMaterializationI64: (PathStrokeWorkUsageI64) -> Unit,
+): PathFillInputF64 = materializePathFillInputF64(beforeMaterializationI64)
+
+private fun RectF64.materializePathFillInputF64(
+    beforeMaterializationI64: ((PathStrokeWorkUsageI64) -> Unit)?,
+): PathFillInputF64 {
+    debitPathInputCollectionBeforeMaterializationI64(beforeMaterializationI64)
+    val segmentsF64 = ArrayList<PathFillSegmentF64>(5)
+    debitPathInputSegmentBeforeMaterializationI64(beforeMaterializationI64)
+    segmentsF64 += PathFillSegmentF64.MoveTo(Point2F64(left, top))
+    debitPathInputSegmentBeforeMaterializationI64(beforeMaterializationI64)
+    segmentsF64 += PathFillSegmentF64.LineTo(Point2F64(right, top))
+    debitPathInputSegmentBeforeMaterializationI64(beforeMaterializationI64)
+    segmentsF64 += PathFillSegmentF64.LineTo(Point2F64(right, bottom))
+    debitPathInputSegmentBeforeMaterializationI64(beforeMaterializationI64)
+    segmentsF64 += PathFillSegmentF64.LineTo(Point2F64(left, bottom))
+    debitPathInputSegmentBeforeMaterializationI64(beforeMaterializationI64)
+    segmentsF64 += PathFillSegmentF64.Close
+    debitPathInputCollectionBeforeMaterializationI64(beforeMaterializationI64)
+    return PathFillInputF64.of(FillRule.WINDING, segmentsF64)
+}
+
+/** Builds the canonical rounded-rectangle contour with F64 endpoints and arc radii. */
+public fun RRectF64.toPathFillInputF64(): PathFillInputF64 = materializePathFillInputF64(beforeMaterializationI64 = null)
+
+/** Builds a canonical rounded-rectangle path while admitting every collection and command before allocation. */
+public fun RRectF64.toPathFillInputF64(
+    beforeMaterializationI64: (PathStrokeWorkUsageI64) -> Unit,
+): PathFillInputF64 = materializePathFillInputF64(beforeMaterializationI64)
+
+private fun RRectF64.materializePathFillInputF64(
+    beforeMaterializationI64: ((PathStrokeWorkUsageI64) -> Unit)?,
+): PathFillInputF64 {
+    debitPathInputCollectionBeforeMaterializationI64(beforeMaterializationI64)
+    val segmentsF64 = ArrayList<PathFillSegmentF64>(10)
+    debitPathInputSegmentBeforeMaterializationI64(beforeMaterializationI64)
+    val normalizedRRectF64 = normalizedForSkiaF64()
+    val left = normalizedRRectF64.leftF64
+    val top = normalizedRRectF64.topF64
+    val right = normalizedRRectF64.rightF64
+    val bottom = normalizedRRectF64.bottomF64
+    val topLeftX = normalizedRRectF64.topLeft.xF64
+    val topLeftY = normalizedRRectF64.topLeft.yF64
+    val topRightX = normalizedRRectF64.topRight.xF64
+    val topRightY = normalizedRRectF64.topRight.yF64
+    val bottomRightX = normalizedRRectF64.bottomRight.xF64
+    val bottomRightY = normalizedRRectF64.bottomRight.yF64
+    val bottomLeftX = normalizedRRectF64.bottomLeft.xF64
+    val bottomLeftY = normalizedRRectF64.bottomLeft.yF64
+    segmentsF64 += PathFillSegmentF64.MoveTo(Point2F64(left + topLeftX, top))
+    debitPathInputSegmentBeforeMaterializationI64(beforeMaterializationI64)
+    segmentsF64 += PathFillSegmentF64.LineTo(Point2F64(right - topRightX, top))
+    debitPathInputSegmentBeforeMaterializationI64(beforeMaterializationI64)
+    segmentsF64 += PathFillSegmentF64.ArcTo(Vector2F64(topRightX, topRightY), 0.0, false, true, Point2F64(right, top + topRightY))
+    debitPathInputSegmentBeforeMaterializationI64(beforeMaterializationI64)
+    segmentsF64 += PathFillSegmentF64.LineTo(Point2F64(right, bottom - bottomRightY))
+    debitPathInputSegmentBeforeMaterializationI64(beforeMaterializationI64)
+    segmentsF64 += PathFillSegmentF64.ArcTo(Vector2F64(bottomRightX, bottomRightY), 0.0, false, true, Point2F64(right - bottomRightX, bottom))
+    debitPathInputSegmentBeforeMaterializationI64(beforeMaterializationI64)
+    segmentsF64 += PathFillSegmentF64.LineTo(Point2F64(left + bottomLeftX, bottom))
+    debitPathInputSegmentBeforeMaterializationI64(beforeMaterializationI64)
+    segmentsF64 += PathFillSegmentF64.ArcTo(Vector2F64(bottomLeftX, bottomLeftY), 0.0, false, true, Point2F64(left, bottom - bottomLeftY))
+    debitPathInputSegmentBeforeMaterializationI64(beforeMaterializationI64)
+    segmentsF64 += PathFillSegmentF64.LineTo(Point2F64(left, top + topLeftY))
+    debitPathInputSegmentBeforeMaterializationI64(beforeMaterializationI64)
+    segmentsF64 += PathFillSegmentF64.ArcTo(Vector2F64(topLeftX, topLeftY), 0.0, false, true, Point2F64(left + topLeftX, top))
+    debitPathInputSegmentBeforeMaterializationI64(beforeMaterializationI64)
+    segmentsF64 += PathFillSegmentF64.Close
+    debitPathInputCollectionBeforeMaterializationI64(beforeMaterializationI64)
+    return PathFillInputF64.of(FillRule.WINDING, segmentsF64)
+}
+
+private const val pathInputCollectionSnapshotByteCountI64: Long = 16L
+private const val pathInputSegmentSnapshotByteCountI64: Long = 64L
+
+private fun debitPathInputCollectionBeforeMaterializationI64(
+    beforeMaterializationI64: ((PathStrokeWorkUsageI64) -> Unit)?,
+) {
+    beforeMaterializationI64?.invoke(
+        PathStrokeWorkUsageI64(snapshotByteCountI64 = pathInputCollectionSnapshotByteCountI64),
+    )
+}
+
+private fun debitPathInputSegmentBeforeMaterializationI64(
+    beforeMaterializationI64: ((PathStrokeWorkUsageI64) -> Unit)?,
+) {
+    beforeMaterializationI64?.invoke(
+        PathStrokeWorkUsageI64(
+            attemptedGeometryUnitCountI64 = 1L,
+            snapshotByteCountI64 = pathInputSegmentSnapshotByteCountI64,
+        ),
+    )
+}
+
 /** An immutable snapshot of the commands used to prepare a path fill. */
 public class PathFillInputF64 private constructor(
     public val fillRule: FillRule,
@@ -46,9 +145,19 @@ public class PathFillInputF64 private constructor(
     public companion object {
         /** Reconstructs every F32 payload as an exact F64 value. */
         public fun fromPathF32(path: PathF32): PathFillInputF64 {
+            return fromPathF32(path) { }
+        }
+
+        /** Reconstructs F32 commands only after the caller has admitted each retained snapshot. */
+        public fun fromPathF32(
+            path: PathF32,
+            beforeMaterializationI64: (PathStrokeWorkUsageI64) -> Unit,
+        ): PathFillInputF64 {
+            beforeMaterializationI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
             val values = mutableListOf<PathFillSegmentF64>()
             var hasCurrentContour = false
             path.forEach { segment ->
+                beforeMaterializationI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
                 when (segment) {
                     is PathSegmentF32.MoveTo -> {
                         values += PathFillSegmentF64.MoveTo(segment.point.toExactPoint2F64())
@@ -57,6 +166,7 @@ public class PathFillInputF64 private constructor(
 
                     is PathSegmentF32.LineTo -> {
                         if (!hasCurrentContour) {
+                            beforeMaterializationI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
                             values += PathFillSegmentF64.MoveTo(Point2F64.Origin)
                             hasCurrentContour = true
                         }
@@ -65,6 +175,7 @@ public class PathFillInputF64 private constructor(
 
                     is PathSegmentF32.QuadTo -> {
                         if (!hasCurrentContour) {
+                            beforeMaterializationI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
                             values += PathFillSegmentF64.MoveTo(Point2F64.Origin)
                             hasCurrentContour = true
                         }
@@ -76,6 +187,7 @@ public class PathFillInputF64 private constructor(
 
                     is PathSegmentF32.CubicTo -> {
                         if (!hasCurrentContour) {
+                            beforeMaterializationI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
                             values += PathFillSegmentF64.MoveTo(Point2F64.Origin)
                             hasCurrentContour = true
                         }
@@ -88,6 +200,7 @@ public class PathFillInputF64 private constructor(
 
                     is PathSegmentF32.ArcTo -> {
                         if (!hasCurrentContour) {
+                            beforeMaterializationI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
                             values += PathFillSegmentF64.MoveTo(Point2F64.Origin)
                             hasCurrentContour = true
                         }
@@ -103,6 +216,7 @@ public class PathFillInputF64 private constructor(
                     PathSegmentF32.Close -> values += PathFillSegmentF64.Close
                 }
             }
+            beforeMaterializationI64(PathStrokeWorkUsageI64(snapshotByteCountI64 = 16L))
             return PathFillInputF64(path.fillRule, values)
         }
 
@@ -117,6 +231,16 @@ public class PathFillInputF64 private constructor(
 private fun exactF64(valueF32: Float): Double = Float.fromBits(valueF32.toRawBits()).toDouble()
 
 private fun Point2F32.toExactPoint2F64(): Point2F64 = Point2F64(exactF64(x), exactF64(y))
+
+/** Converts one immutable F32 command on demand, after the caller has admitted its work. */
+public fun PathSegmentF32.toPathFillSegmentF64(): PathFillSegmentF64 = when (this) {
+    is PathSegmentF32.MoveTo -> PathFillSegmentF64.MoveTo(point.toExactPoint2F64())
+    is PathSegmentF32.LineTo -> PathFillSegmentF64.LineTo(point.toExactPoint2F64())
+    is PathSegmentF32.QuadTo -> PathFillSegmentF64.QuadTo(control.toExactPoint2F64(), point.toExactPoint2F64())
+    is PathSegmentF32.CubicTo -> PathFillSegmentF64.CubicTo(control1.toExactPoint2F64(), control2.toExactPoint2F64(), point.toExactPoint2F64())
+    is PathSegmentF32.ArcTo -> PathFillSegmentF64.ArcTo(Vector2F64(exactF64(radius.x), exactF64(radius.y)), exactF64(xAxisRotation), largeArc, sweep, point.toExactPoint2F64())
+    PathSegmentF32.Close -> PathFillSegmentF64.Close
+}
 
 private class ReadOnlyPathFillIterator<T>(private val values: List<T>) : MutableIterator<T> {
     private var nextIndex: Int = 0

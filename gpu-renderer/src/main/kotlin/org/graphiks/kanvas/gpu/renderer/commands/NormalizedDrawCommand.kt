@@ -525,6 +525,8 @@ data class GPUClipFacts(
     val executionPlan: GPUClipExecutionPlan? = null,
     /** A Canvas clip captured under perspective, which the affine GPU route must refuse. */
     val perspectiveCaptureRefusal: Boolean = false,
+    /** Typed clip-transform refusal that must stop before the legacy coverage planner. */
+    val clipTransformRefusal: String? = null,
 ) {
     /** Constructors for common clip fact records. */
     companion object {

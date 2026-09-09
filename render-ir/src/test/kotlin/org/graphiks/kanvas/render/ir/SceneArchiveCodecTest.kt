@@ -3,6 +3,7 @@
 package org.graphiks.kanvas.render.ir
 
 import java.io.ByteArrayOutputStream
+import java.io.DataOutputStream
 import java.nio.ByteBuffer
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -19,6 +20,51 @@ import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.vector.Vector2F32
 
 class SceneArchiveCodecTest {
+    @Test
+    fun `schema v2 round trips each clip matrix and schema v1 never invents an identity transform`() {
+        val perspective = Matrix3x3F32(
+            sx = 1.25f,
+            kx = .2f,
+            tx = 3f,
+            ky = -.1f,
+            sy = .8f,
+            ty = 7f,
+            persp0 = .01f,
+            persp1 = -.02f,
+            persp2 = 1f,
+        )
+        val scene = SceneSnapshot.of(
+            SceneExtent(16, 16),
+            ColorSpace.SRGB,
+            listOf(
+                SceneCommand.SetClip(
+                    ClipStackNode.Operations.of(
+                        listOf(
+                            ClipEntry(
+                                GeometryNode.Rect.of(RectF32.ofLTRB(2f, 3f, 12f, 14f)),
+                                ClipOperation.DIFFERENCE,
+                                antiAlias = false,
+                                transform = ClipTransformSnapshot.Known.of(perspective),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        val v2 = assertIs<SceneArchiveDecodeResult.Decoded>(
+            SceneArchiveCodec.decodePicture(SceneArchiveCodec.encodePicture(scene, RectF32.ofLTRB(0f, 0f, 16f, 16f))),
+        )
+        val v1 = assertIs<SceneArchiveDecodeResult.Decoded>(SceneArchiveCodec.decodePicture(schemaV1PerspectiveClipFixture()))
+        val v2Entry = assertIs<ClipStackNode.Operations>(assertIs<SceneCommand.SetClip>(v2.scene.commandAt(0)).clip).entryAt(0)
+        val v1Entry = assertIs<ClipStackNode.Operations>(assertIs<SceneCommand.SetClip>(v1.scene.commandAt(0)).clip).entryAt(0)
+
+        assertEquals(perspective, assertIs<ClipTransformSnapshot.Known>(v2Entry.transform).copyMatrixF32())
+        val legacy = assertIs<ClipTransformSnapshot.LegacyUnavailable>(v1Entry.transform)
+        assertEquals("perspective", legacy.transformClass)
+        assertTrue(legacy.perspectiveCaptureRefusal)
+    }
+
     @Test
     fun `picture archive round trips an ordered scene and cull bounds`() {
         val scene = SceneSnapshot.of(
@@ -797,7 +843,20 @@ class SceneArchiveCodecTest {
                 add(SceneCommand.Clear(org.graphiks.math.color.ColorF32.of(0.1f, 0.2f, 0.3f, 0.4f)))
                 add(SceneCommand.DrawColor(ColorARGB.Cyan, BlendMode.MULTIPLY, Matrix3x3F32.Identity, ClipStackNode.DeviceRect.of(bounds, false)))
                 add(SceneCommand.SetTransform(Matrix3x3F32.Identity))
-                add(SceneCommand.SetClip(ClipStackNode.Operations.of(listOf(ClipEntry(GeometryNode.Path(path), ClipOperation.DIFFERENCE, false, true, "perspective")))))
+                add(
+                    SceneCommand.SetClip(
+                        ClipStackNode.Operations.of(
+                            listOf(
+                                ClipEntry(
+                                    GeometryNode.Path(path),
+                                    ClipOperation.DIFFERENCE,
+                                    false,
+                                    ClipTransformSnapshot.LegacyUnavailable("perspective", perspectiveCaptureRefusal = true),
+                                ),
+                            ),
+                        ),
+                    ),
+                )
                 add(
                     SceneCommand.BeginLayer(
                         LayerDescriptor.of(
@@ -894,6 +953,44 @@ class SceneArchiveCodecTest {
             vertexLayout = RuntimeVertexLayout.of(4, listOf(RuntimeVertexAttribute(RuntimeVertexFormat.FLOAT32, 0, 0))),
             module = ShaderModuleDescriptor.of("void main() {}", "main", listOf(RuntimeUniformSlot("m", 1, RuntimeUniformType.FLOAT, 0))),
         )
+
+    /** Fixed schema-v1 bytes written before clip matrices existed. */
+    private fun schemaV1PerspectiveClipFixture(): ByteArray = ByteArrayOutputStream().also { output ->
+        DataOutputStream(output).use { writer ->
+            fun text(value: String) {
+                val bytes = value.encodeToByteArray()
+                writer.writeInt(bytes.size)
+                writer.write(bytes)
+            }
+
+            writer.write("KPIC".encodeToByteArray())
+            writer.writeInt(8)
+            writer.writeFloat(0f)
+            writer.writeFloat(0f)
+            writer.writeFloat(16f)
+            writer.writeFloat(16f)
+            writer.writeInt(-1_391_019_346)
+            writer.writeInt(1)
+            writer.writeInt(16)
+            writer.writeInt(16)
+            text("sRGB")
+            text("SRGB")
+            text("SRGB")
+            writer.writeInt(1)
+            writer.writeInt(5)
+            writer.writeInt(3)
+            writer.writeInt(1)
+            writer.writeInt(1)
+            writer.writeFloat(2f)
+            writer.writeFloat(3f)
+            writer.writeFloat(12f)
+            writer.writeFloat(14f)
+            text("INTERSECT")
+            writer.writeBoolean(false)
+            writer.writeBoolean(true)
+            text("perspective")
+        }
+    }.toByteArray()
 
     private fun RuntimeUniformValue.runtimeUniformType(): RuntimeUniformType = when (this) {
         is RuntimeUniformValue.F1 -> RuntimeUniformType.FLOAT

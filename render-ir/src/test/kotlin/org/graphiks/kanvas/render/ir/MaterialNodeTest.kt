@@ -11,11 +11,40 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertNotSame
 import kotlin.test.assertNotEquals
 
 class MaterialNodeTest {
     private val redStop = GradientStop(0f, ColorARGB.Red)
     private val blueStop = GradientStop(1f, ColorARGB.Blue)
+
+    @Test
+    fun `typed clip transforms retain matrix values without sharing the captured matrix`() {
+        val captured = Matrix3x3F32(
+            sx = 1.25f,
+            kx = 0.5f,
+            tx = 3f,
+            ky = -0.25f,
+            sy = 0.75f,
+            ty = 7f,
+            persp0 = 0.01f,
+            persp1 = -0.02f,
+            persp2 = 1f,
+        )
+
+        val known = ClipTransformSnapshot.Known.of(captured)
+        val firstCopy = known.copyMatrixF32()
+        val secondCopy = known.copyMatrixF32()
+
+        assertEquals(captured, firstCopy)
+        assertEquals(captured, secondCopy)
+        assertNotSame(firstCopy, secondCopy)
+        assertEquals(known.canonicalId, ClipTransformSnapshot.Known.of(captured).canonicalId)
+        assertNotEquals(
+            known.canonicalId,
+            ClipTransformSnapshot.LegacyUnavailable("perspective", perspectiveCaptureRefusal = true).canonicalId,
+        )
+    }
 
     @Test
     fun `materials snapshot stops pixels uniforms children and mutable outputs`() {

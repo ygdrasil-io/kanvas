@@ -5,6 +5,8 @@ import java.nio.ByteOrder
 import java.util.Collections
 import org.graphiks.kanvas.gpu.plan.BinaryMaskFetchPlan
 import org.graphiks.kanvas.gpu.plan.BinaryMaskedPathDraw
+import org.graphiks.kanvas.gpu.plan.ClippedBinaryMaskedPathDraw
+import org.graphiks.kanvas.gpu.plan.ClippedGeneralPathDraw
 import org.graphiks.kanvas.gpu.plan.CoveragePlan
 import org.graphiks.kanvas.gpu.plan.GeneralPathDraw
 import org.graphiks.kanvas.gpu.plan.PathRenderPhase
@@ -276,6 +278,9 @@ public class GPUPlanW4dGeneralPreparedAuthority private constructor(
                     maskResourceId = draw.mask.value,
                     sourceCommandIdValue = draw.producer.commandIndex,
                 )
+                is ClippedGeneralPathDraw,
+                is ClippedBinaryMaskedPathDraw,
+                -> error("W4d.2 prepared authority does not accept W4e clip wrappers")
             }
             return W4dGeneralPreparedPassFact(
                 pathPassId = pass.id.value,
@@ -860,6 +865,8 @@ internal class W4dGeneralNativeFrameResourceSeal private constructor(
             val geometry = when (val value = pass.draw.copyPathGeometry()) {
                 is PathDrawGeometry.Fill -> value.valueF32
                 is PathDrawGeometry.Stroke -> value.valueF32.copyFillGeometryF32()
+                is PathDrawGeometry.InverseDomainSource -> error("W4d.2 prepared authority cannot consume W4e inverse-domain source geometry")
+                PathDrawGeometry.Empty -> error("W4d.2 prepared authority cannot consume W4e inverse-domain geometry")
             }
             return when (pass.phase) {
                 PathRenderPhase.SingleSampleDirectColor,

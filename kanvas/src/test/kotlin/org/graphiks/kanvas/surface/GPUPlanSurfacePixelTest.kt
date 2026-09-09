@@ -6,6 +6,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import org.graphiks.kanvas.canvas.Canvas
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.surface.gpu.GPUPlanSurfaceTerminalException
 import org.graphiks.kanvas.geometry.FillType
@@ -17,6 +18,7 @@ import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.StrokeJoin
+import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.math.geometry.RRectF32
@@ -24,6 +26,7 @@ import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
 
 @OptIn(ExperimentalUnsignedTypes::class)
@@ -68,6 +71,1269 @@ class GPUPlanSurfacePixelTest {
             ),
             result.pixels,
         )
+    }
+
+    @Test
+    fun `W4e hard ordered rect RRect and path clips match the independent public Surface oracle`() {
+        val outer = RectF32.ofLTRB(1f, 1f, 9f, 9f)
+        val rounded = RRectF32.of(RectF32.ofLTRB(2f, 2f, 8f, 8f), radius = 2f)
+        val notch = Path().apply {
+            moveTo(4f, 2f)
+            lineTo(8f, 2f)
+            lineTo(8f, 6f)
+            close()
+        }
+        val foreground = Path().apply {
+            moveTo(1f, 8f)
+            lineTo(8f, 3f)
+            lineTo(8f, 8f)
+            close()
+        }
+        val background = Path().apply { addRect(RectF32.ofLTRB(0f, 0f, 10f, 10f)) }
+        val clips = listOf(
+            W4eClipCpuOracle.Clip(
+                W4eClipCpuOracle.Shape.Rect(1.0, 1.0, 9.0, 9.0),
+                W4eClipCpuOracle.ClipOperation.Intersect,
+                antiAlias = W4eClipCpuOracle.AA.Hard,
+            ),
+            W4eClipCpuOracle.Clip(
+                W4eClipCpuOracle.Shape.RRect(W4eClipCpuOracle.Shape.Rect(2.0, 2.0, 8.0, 8.0), 2.0, 2.0),
+                W4eClipCpuOracle.ClipOperation.Intersect,
+                antiAlias = W4eClipCpuOracle.AA.Hard,
+            ),
+            W4eClipCpuOracle.Clip(
+                W4eClipCpuOracle.Shape.Polygon(
+                    listOf(W4eClipCpuOracle.Point(4.0, 2.0), W4eClipCpuOracle.Point(8.0, 2.0), W4eClipCpuOracle.Point(8.0, 6.0)),
+                ),
+                W4eClipCpuOracle.ClipOperation.Difference,
+                antiAlias = W4eClipCpuOracle.AA.Hard,
+            ),
+        )
+        val expected = W4eClipCpuOracle.render(
+            width = 10,
+            height = 10,
+            draws = listOf(
+                W4eClipCpuOracle.Draw(
+                    W4eClipCpuOracle.Shape.Rect(0.0, 0.0, 10.0, 10.0),
+                    W4eClipCpuOracle.Rgba8(255, 43, 71, 255),
+                    antiAlias = W4eClipCpuOracle.AA.Hard,
+                    clips = clips,
+                ),
+                W4eClipCpuOracle.Draw(
+                    W4eClipCpuOracle.Shape.Polygon(
+                        listOf(W4eClipCpuOracle.Point(1.0, 8.0), W4eClipCpuOracle.Point(8.0, 3.0), W4eClipCpuOracle.Point(8.0, 8.0)),
+                    ),
+                    W4eClipCpuOracle.Rgba8(38, 161, 99, 255),
+                    antiAlias = W4eClipCpuOracle.AA.Hard,
+                    clips = clips,
+                ),
+            ),
+        )
+        val surface = Surface(10, 10)
+        surface.canvas {
+            clipRect(outer, antiAlias = false)
+            clipRRect(rounded, antiAlias = false)
+            clipPath(notch, ClipOp.DIFFERENCE, antiAlias = false)
+            drawPath(background, Paint.fill(ColorARGB.of(255, 255, 43, 71)).copy(antiAlias = false))
+            drawPath(foreground, Paint.fill(ColorARGB.of(255, 38, 161, 99)).copy(antiAlias = false))
+        }
+
+        val result = surface.render()
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(expected, result.pixels)
+    }
+
+    @Test
+    fun `W4e independent oracle zeroes an entire nonpositive RRect radius pair`() {
+        val malformed = W4eClipCpuOracle.Shape.RRect(
+            W4eClipCpuOracle.Shape.Rect(1.0, 1.0, 7.0, 5.0),
+            radiusX = -2.0,
+            radiusY = 2.0,
+        )
+        val canonical = W4eClipCpuOracle.Shape.RRect(
+            W4eClipCpuOracle.Shape.Rect(1.0, 1.0, 7.0, 5.0),
+            radiusX = 0.0,
+            radiusY = 0.0,
+        )
+        fun render(shape: W4eClipCpuOracle.Shape): UByteArray = W4eClipCpuOracle.render(
+            width = 8,
+            height = 6,
+            draws = listOf(
+                W4eClipCpuOracle.Draw(
+                    shape = shape,
+                    color = W4eClipCpuOracle.Rgba8(255, 43, 71, 255),
+                    antiAlias = W4eClipCpuOracle.AA.Hard,
+                    clips = emptyList(),
+                ),
+            ),
+        )
+
+        assertContentEquals(render(canonical), render(malformed))
+    }
+
+    @Test
+    fun `W4e public hard inverse empty and non-empty draws match the independent 1x oracle`() {
+        val triangle = Path {
+            moveTo(3f, 3f)
+            lineTo(13f, 3f)
+            lineTo(4f, 13f)
+            close()
+        }.apply { fillType = FillType.INVERSE_WINDING }
+        val empty = Path().apply { fillType = FillType.INVERSE_WINDING }
+        val clip = Path()
+        val cases = listOf(
+            triangle to W4eClipCpuOracle.Shape.Inverse(
+                W4eClipCpuOracle.Shape.Polygon(listOf(
+                    W4eClipCpuOracle.Point(3.0, 3.0),
+                    W4eClipCpuOracle.Point(13.0, 3.0),
+                    W4eClipCpuOracle.Point(4.0, 13.0),
+                )),
+            ),
+            empty to W4eClipCpuOracle.Shape.Inverse(W4eClipCpuOracle.Shape.Rect(0.0, 0.0, 0.0, 0.0)),
+        )
+        val expectedByCase = cases.map { (_, shape) ->
+            W4eClipCpuOracle.render(
+                16,
+                16,
+                listOf(
+                    W4eClipCpuOracle.Draw(
+                        shape = shape,
+                        color = W4eClipCpuOracle.Rgba8(255, 0, 0, 255),
+                        antiAlias = W4eClipCpuOracle.AA.Hard,
+                        clips = listOf(
+                            W4eClipCpuOracle.Clip(
+                                shape = W4eClipCpuOracle.Shape.Rect(0.0, 0.0, 0.0, 0.0),
+                                operation = W4eClipCpuOracle.ClipOperation.Difference,
+                                antiAlias = W4eClipCpuOracle.AA.Hard,
+                            ),
+                        ),
+                    ),
+                ),
+            )
+        }
+        assertFalse(
+            expectedByCase[0].contentEquals(expectedByCase[1]),
+            "The inverse non-empty and inverse empty draw fixtures must exercise distinct coverage.",
+        )
+        cases.zip(expectedByCase).forEach { (case, expected) ->
+            val (path, _) = case
+            val surface = Surface(16, 16)
+            surface.canvas {
+                clipPath(clip, ClipOp.DIFFERENCE, antiAlias = false)
+                drawPath(path, Paint.fill(ColorARGB.Red).copy(antiAlias = false))
+            }
+            val result = surface.render()
+            GPUBackendRuntimeFactory.dispose()
+            assertPreparedRouteEvidence(result)
+            assertPixelsEqual(expected, result.pixels)
+        }
+    }
+
+    @Test
+    fun `W4e public Surface keeps a DeviceRect sibling scissored`() {
+        val width = 10
+        val height = 10
+        val full = Path().apply { addRect(RectF32.ofLTRB(0f, 0f, width.toFloat(), height.toFloat())) }
+        val red = ColorARGB.Red
+        val blue = ColorARGB.Blue
+        val expected = W4eClipCpuOracle.render(
+            width,
+            height,
+            listOf(
+                W4eClipCpuOracle.Draw(
+                    shape = W4eClipCpuOracle.Shape.Rect(0.0, 0.0, width.toDouble(), height.toDouble()),
+                    color = W4eClipCpuOracle.Rgba8(255, 0, 0, 255),
+                    antiAlias = W4eClipCpuOracle.AA.Hard,
+                    clips = listOf(
+                        W4eClipCpuOracle.Clip(
+                            W4eClipCpuOracle.Shape.Rect(4.0, 4.0, 8.0, 8.0),
+                            W4eClipCpuOracle.ClipOperation.Intersect,
+                            W4eClipCpuOracle.AA.Hard,
+                        ),
+                        W4eClipCpuOracle.Clip(
+                            W4eClipCpuOracle.Shape.Rect(6.0, 6.0, 7.0, 7.0),
+                            W4eClipCpuOracle.ClipOperation.Difference,
+                            W4eClipCpuOracle.AA.Hard,
+                        ),
+                    ),
+                ),
+                W4eClipCpuOracle.Draw(
+                    shape = W4eClipCpuOracle.Shape.Rect(0.0, 0.0, width.toDouble(), height.toDouble()),
+                    color = W4eClipCpuOracle.Rgba8(0, 0, 255, 255),
+                    antiAlias = W4eClipCpuOracle.AA.Hard,
+                    clips = emptyList(),
+                    scissorI32 = W4eClipCpuOracle.ScissorI32(1, 1, 3, 3),
+                ),
+            ),
+        )
+        val surface = Surface(width, height)
+        surface.canvas {
+            save()
+            clipRect(RectF32.ofLTRB(4f, 4f, 8f, 8f), ClipOp.INTERSECT, antiAlias = false)
+            clipRect(RectF32.ofLTRB(6f, 6f, 7f, 7f), ClipOp.DIFFERENCE, antiAlias = false)
+            drawPath(full, Paint.fill(red).copy(antiAlias = false))
+            restore()
+            save()
+            clipRect(RectF32.ofLTRB(1f, 1f, 3f, 3f), ClipOp.INTERSECT, antiAlias = false)
+            drawPath(full, Paint.fill(blue).copy(antiAlias = false))
+            restore()
+        }
+
+        val result = surface.render()
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(expected, result.pixels)
+    }
+
+    @Test
+    fun `W4e public inverse keeps DeviceRect fixed in device space under a nonidentity CTM`() {
+        val width = 12
+        val height = 12
+        val deviceRect = RectF32.ofLTRB(2f, 2f, 10f, 10f)
+        val inverse = Path {
+            moveTo(2f, 3f)
+            lineTo(6f, 3f)
+            lineTo(2f, 7f)
+            close()
+        }.apply { fillType = FillType.INVERSE_WINDING }
+        val localTriangle = W4eClipCpuOracle.Shape.Polygon(
+            listOf(
+                W4eClipCpuOracle.Point(2.0, 3.0),
+                W4eClipCpuOracle.Point(6.0, 3.0),
+                W4eClipCpuOracle.Point(2.0, 7.0),
+            ),
+        )
+        val draw = W4eClipCpuOracle.Draw(
+            shape = W4eClipCpuOracle.Shape.Inverse(localTriangle),
+            color = W4eClipCpuOracle.Rgba8(255, 0, 0, 255),
+            antiAlias = W4eClipCpuOracle.AA.Hard,
+            clips = emptyList(),
+            transformF64 = W4eClipCpuOracle.HomographyF64.translation(3.0, 1.0),
+            scissorI32 = W4eClipCpuOracle.ScissorI32(2, 2, 10, 10),
+        )
+        val expected = W4eClipCpuOracle.render(width, height, listOf(draw))
+        val transformedScissor = W4eClipCpuOracle.render(
+            width,
+            height,
+            listOf(draw.copy(scissorI32 = W4eClipCpuOracle.ScissorI32(5, 3, 13, 11))),
+        )
+        val surface = Surface(width, height)
+        surface.canvas {
+            clipRect(deviceRect, ClipOp.INTERSECT, antiAlias = false)
+            translate(3f, 1f)
+            drawPath(inverse, Paint.fill(ColorARGB.Red).copy(antiAlias = false))
+        }
+
+        assertFalse(expected.contentEquals(transformedScissor), "The fixed device scissor must not follow the draw CTM.")
+        val result = surface.render()
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(expected, result.pixels)
+    }
+
+    @Test
+    fun `W4e public Surface completes five distinct clip geometries through a fifth recovery frame`() {
+        data class Frame(
+            val path: Path,
+            val shape: W4eClipCpuOracle.Shape,
+            val color: ColorARGB,
+            val rgba: W4eClipCpuOracle.Rgba8,
+        )
+
+        val width = 32
+        val height = 9
+        val full = Path().apply { addRect(RectF32.ofLTRB(0f, 0f, width.toFloat(), height.toFloat())) }
+        val first = Frame(
+            Path { moveTo(1f, 1f); lineTo(5f, 1f); lineTo(3f, 7f); close() },
+            W4eClipCpuOracle.Shape.Polygon(
+                listOf(W4eClipCpuOracle.Point(1.0, 1.0), W4eClipCpuOracle.Point(5.0, 1.0), W4eClipCpuOracle.Point(3.0, 7.0)),
+            ),
+            ColorARGB.of(255, 229, 64, 50),
+            W4eClipCpuOracle.Rgba8(229, 64, 50, 255),
+        )
+        val frames = listOf(
+            first,
+            Frame(
+                Path().apply { addRect(RectF32.ofLTRB(7f, 1f, 11f, 7f)) },
+                W4eClipCpuOracle.Shape.Rect(7.0, 1.0, 11.0, 7.0),
+                ColorARGB.of(255, 36, 149, 218),
+                W4eClipCpuOracle.Rgba8(36, 149, 218, 255),
+            ),
+            Frame(
+                Path { moveTo(15f, 1f); lineTo(17f, 3f); lineTo(16f, 7f); lineTo(14f, 7f); lineTo(13f, 3f); close() },
+                W4eClipCpuOracle.Shape.Polygon(
+                    listOf(
+                        W4eClipCpuOracle.Point(15.0, 1.0), W4eClipCpuOracle.Point(17.0, 3.0),
+                        W4eClipCpuOracle.Point(16.0, 7.0), W4eClipCpuOracle.Point(14.0, 7.0),
+                        W4eClipCpuOracle.Point(13.0, 3.0),
+                    ),
+                ),
+                ColorARGB.of(255, 62, 178, 104),
+                W4eClipCpuOracle.Rgba8(62, 178, 104, 255),
+            ),
+            Frame(
+                Path { moveTo(21f, 1f); lineTo(23f, 2f); lineTo(23f, 5f); lineTo(21f, 7f); lineTo(19f, 5f); lineTo(19f, 2f); close() },
+                W4eClipCpuOracle.Shape.Polygon(
+                    listOf(
+                        W4eClipCpuOracle.Point(21.0, 1.0), W4eClipCpuOracle.Point(23.0, 2.0),
+                        W4eClipCpuOracle.Point(23.0, 5.0), W4eClipCpuOracle.Point(21.0, 7.0),
+                        W4eClipCpuOracle.Point(19.0, 5.0), W4eClipCpuOracle.Point(19.0, 2.0),
+                    ),
+                ),
+                ColorARGB.of(255, 151, 77, 206),
+                W4eClipCpuOracle.Rgba8(151, 77, 206, 255),
+            ),
+            Frame(
+                Path {
+                    moveTo(28f, 1f)
+                    lineTo(30f, 2f)
+                    lineTo(31f, 4f)
+                    lineTo(30f, 7f)
+                    lineTo(28f, 8f)
+                    lineTo(25f, 6f)
+                    lineTo(25f, 3f)
+                    close()
+                },
+                W4eClipCpuOracle.Shape.Polygon(
+                    listOf(
+                        W4eClipCpuOracle.Point(28.0, 1.0), W4eClipCpuOracle.Point(30.0, 2.0),
+                        W4eClipCpuOracle.Point(31.0, 4.0), W4eClipCpuOracle.Point(30.0, 7.0),
+                        W4eClipCpuOracle.Point(28.0, 8.0), W4eClipCpuOracle.Point(25.0, 6.0),
+                        W4eClipCpuOracle.Point(25.0, 3.0),
+                    ),
+                ),
+                ColorARGB.of(255, 239, 179, 56),
+                W4eClipCpuOracle.Rgba8(239, 179, 56, 255),
+            ),
+        )
+        val expectedDraws = mutableListOf<W4eClipCpuOracle.Draw>()
+        val surface = Surface(width, height)
+
+        frames.forEach { frame ->
+            surface.canvas {
+                save()
+                clipPath(frame.path, ClipOp.INTERSECT, antiAlias = false)
+                drawPath(full, Paint.fill(frame.color).copy(antiAlias = false))
+                restore()
+            }
+            expectedDraws += W4eClipCpuOracle.Draw(
+                shape = W4eClipCpuOracle.Shape.Rect(0.0, 0.0, width.toDouble(), height.toDouble()),
+                color = frame.rgba,
+                antiAlias = W4eClipCpuOracle.AA.Hard,
+                clips = listOf(
+                    W4eClipCpuOracle.Clip(
+                        frame.shape,
+                        W4eClipCpuOracle.ClipOperation.Intersect,
+                        W4eClipCpuOracle.AA.Hard,
+                    ),
+                ),
+            )
+
+            val result = surface.render()
+            assertPreparedRouteEvidence(result)
+            assertPixelsEqual(W4eClipCpuOracle.render(width, height, expectedDraws), result.pixels)
+        }
+    }
+
+    @Test
+    fun `W4e public hard capture isolates a caller path mutation before render`() {
+        val width = 12
+        val height = 8
+        val clip = Path().apply { addRect(RectF32.ofLTRB(1f, 1f, 11f, 7f)) }
+        val source = Path().apply { addRect(RectF32.ofLTRB(2f, 2f, 5f, 6f)) }
+        val original = W4eClipCpuOracle.Draw(
+            shape = W4eClipCpuOracle.Shape.Rect(2.0, 2.0, 5.0, 6.0),
+            color = W4eClipCpuOracle.Rgba8(217, 93, 47, 255),
+            antiAlias = W4eClipCpuOracle.AA.Hard,
+            clips = listOf(
+                W4eClipCpuOracle.Clip(
+                    W4eClipCpuOracle.Shape.Rect(1.0, 1.0, 11.0, 7.0),
+                    W4eClipCpuOracle.ClipOperation.Intersect,
+                    W4eClipCpuOracle.AA.Hard,
+                ),
+            ),
+        )
+        val escapedMutation = original.copy(shape = W4eClipCpuOracle.Shape.Rect(7.0, 2.0, 10.0, 6.0))
+        val expected = W4eClipCpuOracle.render(width, height, listOf(original))
+        val leaked = W4eClipCpuOracle.render(width, height, listOf(original, escapedMutation))
+        val surface = Surface(width, height)
+        surface.canvas {
+            clipPath(clip, ClipOp.INTERSECT, antiAlias = false)
+            drawPath(source, Paint.fill(ColorARGB.of(255, 217, 93, 47)).copy(antiAlias = false))
+        }
+        source.addRect(RectF32.ofLTRB(7f, 2f, 10f, 6f))
+
+        assertFalse(expected.contentEquals(leaked), "The mutation must change observable pixels if it escapes capture.")
+        val result = surface.render()
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(expected, result.pixels)
+    }
+
+    @Test
+    fun `W4e public hard inverse path consumers keep distinct D24S8 domains in one frame`() {
+        val width = 16
+        val height = 12
+        val firstDomainPath = Path().apply { addRect(RectF32.ofLTRB(1f, 1f, 7f, 11f)) }
+        val secondDomainPath = Path().apply { addRect(RectF32.ofLTRB(9f, 1f, 15f, 11f)) }
+        val firstInversePath = Path().apply {
+            moveTo(2f, 3f)
+            lineTo(6f, 3f)
+            lineTo(5f, 8f)
+            lineTo(3f, 9f)
+            close()
+            fillType = FillType.INVERSE_WINDING
+        }
+        val secondInversePath = Path().apply {
+            moveTo(10f, 3f)
+            lineTo(14f, 3f)
+            lineTo(13f, 8f)
+            lineTo(11f, 9f)
+            close()
+            fillType = FillType.INVERSE_WINDING
+        }
+        val firstDomain = W4eClipCpuOracle.Shape.Rect(1.0, 1.0, 7.0, 11.0)
+        val secondDomain = W4eClipCpuOracle.Shape.Rect(9.0, 1.0, 15.0, 11.0)
+        val firstClip = W4eClipCpuOracle.Clip(
+            firstDomain,
+            W4eClipCpuOracle.ClipOperation.Intersect,
+            W4eClipCpuOracle.AA.Hard,
+        )
+        val secondClip = W4eClipCpuOracle.Clip(
+            secondDomain,
+            W4eClipCpuOracle.ClipOperation.Intersect,
+            W4eClipCpuOracle.AA.Hard,
+        )
+        val first = W4eClipCpuOracle.Draw(
+            shape = W4eClipCpuOracle.Shape.Inverse(
+                W4eClipCpuOracle.Shape.Polygon(
+                    listOf(
+                        W4eClipCpuOracle.Point(2.0, 3.0),
+                        W4eClipCpuOracle.Point(6.0, 3.0),
+                        W4eClipCpuOracle.Point(5.0, 8.0),
+                        W4eClipCpuOracle.Point(3.0, 9.0),
+                    ),
+                ),
+            ),
+            color = W4eClipCpuOracle.Rgba8(213, 57, 41, 255),
+            antiAlias = W4eClipCpuOracle.AA.Hard,
+            clips = listOf(firstClip),
+        )
+        val second = W4eClipCpuOracle.Draw(
+            shape = W4eClipCpuOracle.Shape.Inverse(
+                W4eClipCpuOracle.Shape.Polygon(
+                    listOf(
+                        W4eClipCpuOracle.Point(10.0, 3.0),
+                        W4eClipCpuOracle.Point(14.0, 3.0),
+                        W4eClipCpuOracle.Point(13.0, 8.0),
+                        W4eClipCpuOracle.Point(11.0, 9.0),
+                    ),
+                ),
+            ),
+            color = W4eClipCpuOracle.Rgba8(38, 122, 221, 255),
+            antiAlias = W4eClipCpuOracle.AA.Hard,
+            clips = listOf(secondClip),
+        )
+        val expected = W4eClipCpuOracle.render(width, height, listOf(first, second))
+        val withoutFirst = W4eClipCpuOracle.render(width, height, listOf(second))
+        val withoutSecond = W4eClipCpuOracle.render(width, height, listOf(first))
+        val firstDomainForBoth = W4eClipCpuOracle.render(
+            width,
+            height,
+            listOf(first, second.copy(clips = listOf(firstClip))),
+        )
+        val secondDomainForBoth = W4eClipCpuOracle.render(
+            width,
+            height,
+            listOf(first.copy(clips = listOf(secondClip)), second),
+        )
+        val singleConsumer = Surface(width, height)
+        singleConsumer.canvas {
+            clipPath(firstDomainPath, ClipOp.INTERSECT, antiAlias = false)
+            drawPath(firstInversePath, Paint.fill(ColorARGB.of(255, 213, 57, 41)).copy(antiAlias = false))
+        }
+        val singleResult = singleConsumer.render()
+        val surface = Surface(width, height)
+        surface.canvas {
+            save()
+            clipPath(firstDomainPath, ClipOp.INTERSECT, antiAlias = false)
+            drawPath(firstInversePath, Paint.fill(ColorARGB.of(255, 213, 57, 41)).copy(antiAlias = false))
+            restore()
+            save()
+            clipPath(secondDomainPath, ClipOp.INTERSECT, antiAlias = false)
+            drawPath(secondInversePath, Paint.fill(ColorARGB.of(255, 38, 122, 221)).copy(antiAlias = false))
+            restore()
+        }
+
+        val result = surface.render()
+
+        assertFalse(expected.contentEquals(withoutFirst), "the first inverse consumer must contribute")
+        assertFalse(expected.contentEquals(withoutSecond), "the second inverse consumer must contribute")
+        assertFalse(expected.contentEquals(firstDomainForBoth), "the consumers must not share the first D24S8 domain")
+        assertFalse(expected.contentEquals(secondDomainForBoth), "the consumers must not share the second D24S8 domain")
+        assertPixelsEqual(withoutSecond, singleResult.pixels)
+        assertPixelsEqual(expected, result.pixels)
+    }
+
+    @Test
+    fun `W4e public mixed hard and Path AA4 inverse consumers keep distinct D24S8 domains`() {
+        val width = 16
+        val height = 12
+        // Integer-aligned path and domain boundaries only observe fully covered or fully empty pixels;
+        // no assertion depends on uncontracted native MSAA sample locations.
+        val firstDomainPath = Path().apply { addRect(RectF32.ofLTRB(1f, 1f, 7f, 11f)) }
+        val secondDomainPath = Path().apply { addRect(RectF32.ofLTRB(9f, 1f, 15f, 11f)) }
+        val firstInversePath = Path().apply {
+            addRect(RectF32.ofLTRB(2f, 3f, 6f, 9f))
+            fillType = FillType.INVERSE_WINDING
+        }
+        val secondInversePath = Path().apply {
+            addRect(RectF32.ofLTRB(10f, 3f, 14f, 9f))
+            fillType = FillType.INVERSE_WINDING
+        }
+        val firstDomain = W4eClipCpuOracle.Shape.Rect(1.0, 1.0, 7.0, 11.0)
+        val secondDomain = W4eClipCpuOracle.Shape.Rect(9.0, 1.0, 15.0, 11.0)
+        val firstClip = W4eClipCpuOracle.Clip(
+            firstDomain,
+            W4eClipCpuOracle.ClipOperation.Intersect,
+            W4eClipCpuOracle.AA.Hard,
+        )
+        val secondClip = W4eClipCpuOracle.Clip(
+            secondDomain,
+            W4eClipCpuOracle.ClipOperation.Intersect,
+            W4eClipCpuOracle.AA.PathMsaa4,
+        )
+        val first = W4eClipCpuOracle.Draw(
+            shape = W4eClipCpuOracle.Shape.Inverse(W4eClipCpuOracle.Shape.Rect(2.0, 3.0, 6.0, 9.0)),
+            color = W4eClipCpuOracle.Rgba8(213, 57, 41, 255),
+            antiAlias = W4eClipCpuOracle.AA.PathMsaa4,
+            clips = listOf(firstClip),
+        )
+        val second = W4eClipCpuOracle.Draw(
+            shape = W4eClipCpuOracle.Shape.Inverse(W4eClipCpuOracle.Shape.Rect(10.0, 3.0, 14.0, 9.0)),
+            color = W4eClipCpuOracle.Rgba8(38, 122, 221, 255),
+            antiAlias = W4eClipCpuOracle.AA.PathMsaa4,
+            clips = listOf(secondClip),
+        )
+        val expected = W4eClipCpuOracle.render(width, height, listOf(first, second))
+        val withoutFirst = W4eClipCpuOracle.render(width, height, listOf(second))
+        val withoutSecond = W4eClipCpuOracle.render(width, height, listOf(first))
+        val firstDomainForBoth = W4eClipCpuOracle.render(
+            width,
+            height,
+            listOf(first, second.copy(clips = listOf(firstClip))),
+        )
+        val secondDomainForBoth = W4eClipCpuOracle.render(
+            width,
+            height,
+            listOf(first.copy(clips = listOf(secondClip)), second),
+        )
+        val surface = Surface(width, height)
+        surface.canvas {
+            save()
+            clipPath(firstDomainPath, ClipOp.INTERSECT, antiAlias = false)
+            drawPath(firstInversePath, Paint.fill(ColorARGB.of(255, 213, 57, 41)).copy(antiAlias = true))
+            restore()
+            save()
+            clipPath(secondDomainPath, ClipOp.INTERSECT, antiAlias = true)
+            drawPath(secondInversePath, Paint.fill(ColorARGB.of(255, 38, 122, 221)).copy(antiAlias = true))
+            restore()
+        }
+
+        val result = surface.renderPathAa4OrSkip()
+
+        assertFalse(expected.contentEquals(withoutFirst), "the hard-domain inverse consumer must contribute")
+        assertFalse(expected.contentEquals(withoutSecond), "the Path AA4-domain inverse consumer must contribute")
+        assertFalse(expected.contentEquals(firstDomainForBoth), "the mixed consumers must not share the hard D24S8 domain")
+        assertFalse(expected.contentEquals(secondDomainForBoth), "the mixed consumers must not share the Path AA4 D24S8 domain")
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(expected, result.pixels)
+    }
+
+    @Test
+    fun `W4e public hard restrictive scissor preserves translucent SrcOver in RGBA and BGRA`() {
+        val width = 7
+        val height = 5
+        val scissor = RectI32(2, 1, 6, 4)
+        val first = ColorARGB.of(128, 14, 157, 83)
+        val second = ColorARGB.of(128, 227, 62, 174)
+        val firstPath = Path().apply { addRect(RectF32.ofLTRB(0f, 0f, 7f, 5f)) }
+        val secondPath = Path().apply {
+            moveTo(1f, 1f)
+            lineTo(7f, 1f)
+            lineTo(7f, 5f)
+            lineTo(1f, 5f)
+            close()
+        }
+        val draws = listOf(
+            W4eClipCpuOracle.Draw(
+                shape = W4eClipCpuOracle.Shape.Rect(0.0, 0.0, 7.0, 5.0),
+                color = W4eClipCpuOracle.Rgba8(14, 157, 83, 128),
+                antiAlias = W4eClipCpuOracle.AA.Hard,
+                clips = emptyList(),
+                scissorI32 = W4eClipCpuOracle.ScissorI32(2, 1, 6, 4),
+            ),
+            W4eClipCpuOracle.Draw(
+                shape = W4eClipCpuOracle.Shape.Polygon(
+                    listOf(
+                        W4eClipCpuOracle.Point(1.0, 1.0),
+                        W4eClipCpuOracle.Point(7.0, 1.0),
+                        W4eClipCpuOracle.Point(7.0, 5.0),
+                        W4eClipCpuOracle.Point(1.0, 5.0),
+                    ),
+                ),
+                color = W4eClipCpuOracle.Rgba8(227, 62, 174, 128),
+                antiAlias = W4eClipCpuOracle.AA.Hard,
+                clips = emptyList(),
+                scissorI32 = W4eClipCpuOracle.ScissorI32(2, 1, 6, 4),
+            ),
+        )
+
+        listOf(PixelFormat.RGBA8, PixelFormat.BGRA8).forEach { format ->
+            val surface = Surface(width, height, format)
+            surface.canvas {
+                clipRect(
+                    RectF32.ofLTRB(
+                        scissor.left.toFloat(),
+                        scissor.top.toFloat(),
+                        scissor.right.toFloat(),
+                        scissor.bottom.toFloat(),
+                    ),
+                    antiAlias = false,
+                )
+                drawPath(firstPath, Paint.fill(first).copy(antiAlias = false, blendMode = BlendMode.SRC_OVER))
+                drawPath(secondPath, Paint.fill(second).copy(antiAlias = false, blendMode = BlendMode.SRC_OVER))
+            }
+
+            val result = surface.render()
+            val channelOrder = when (format) {
+                PixelFormat.RGBA8 -> W4eClipCpuOracle.ChannelOrder.RGBA
+                PixelFormat.BGRA8 -> W4eClipCpuOracle.ChannelOrder.BGRA
+            }
+            val expected = W4eClipCpuOracle.render(width, height, draws, channelOrder)
+            val unscissored = W4eClipCpuOracle.render(
+                width,
+                height,
+                draws.map { draw -> draw.copy(scissorI32 = W4eClipCpuOracle.ScissorI32.Unbounded) },
+                channelOrder,
+            )
+
+            assertEquals(192u, expected[((1 * width + 2) * 4 + 3)].toUInt(), "SrcOver alpha must round to nearest UNORM")
+            assertFalse(expected.contentEquals(unscissored), format.toString())
+            assertPreparedRouteEvidence(result)
+            assertPixelsEqual(expected, result.pixels)
+            assertTransparentOutside(result.pixels, width, height, scissor)
+        }
+    }
+
+    @Test
+    fun `W4e public hard clip geometry operation matrix and reversed command order change pixels`() {
+        val width = 12
+        val height = 12
+        val fill = Path().apply { addRect(RectF32.ofLTRB(0f, 0f, 12f, 12f)) }
+        val color = ColorARGB.of(255, 43, 71, 211)
+        val paint = Paint.fill(color).copy(antiAlias = false)
+        val fullDraw = W4eClipCpuOracle.Draw(
+            shape = W4eClipCpuOracle.Shape.Rect(0.0, 0.0, 12.0, 12.0),
+            color = W4eClipCpuOracle.Rgba8(43, 71, 211, 255),
+            antiAlias = W4eClipCpuOracle.AA.Hard,
+            clips = emptyList(),
+        )
+        val rect = RectF32.ofLTRB(1f, 1f, 11f, 11f)
+        val insetRect = RectF32.ofLTRB(4f, 4f, 8f, 8f)
+        val rounded = RRectF32.of(RectF32.ofLTRB(1f, 1f, 11f, 11f), radius = 2f)
+        val insetRounded = RRectF32.of(RectF32.ofLTRB(4f, 4f, 8f, 8f), radius = 1f)
+        val path = Path().apply {
+            moveTo(1f, 1f)
+            lineTo(11f, 1f)
+            lineTo(11f, 11f)
+            lineTo(1f, 11f)
+            close()
+        }
+        val notch = Path().apply {
+            moveTo(4f, 3f)
+            lineTo(9f, 6f)
+            lineTo(4f, 9f)
+            close()
+        }
+        data class ClipCase(
+            val label: String,
+            val clip: W4eClipCpuOracle.Clip,
+            val record: Canvas.() -> Unit,
+        )
+        val cases = listOf(
+            ClipCase(
+                "Rect intersect",
+                W4eClipCpuOracle.Clip(
+                    W4eClipCpuOracle.Shape.Rect(1.0, 1.0, 11.0, 11.0),
+                    W4eClipCpuOracle.ClipOperation.Intersect,
+                    W4eClipCpuOracle.AA.Hard,
+                ),
+            ) { clipRect(rect, ClipOp.INTERSECT, antiAlias = false) },
+            ClipCase(
+                "Rect difference",
+                W4eClipCpuOracle.Clip(
+                    W4eClipCpuOracle.Shape.Rect(4.0, 4.0, 8.0, 8.0),
+                    W4eClipCpuOracle.ClipOperation.Difference,
+                    W4eClipCpuOracle.AA.Hard,
+                ),
+            ) { clipRect(insetRect, ClipOp.DIFFERENCE, antiAlias = false) },
+            ClipCase(
+                "RRect intersect",
+                W4eClipCpuOracle.Clip(
+                    W4eClipCpuOracle.Shape.RRect(W4eClipCpuOracle.Shape.Rect(1.0, 1.0, 11.0, 11.0), 2.0, 2.0),
+                    W4eClipCpuOracle.ClipOperation.Intersect,
+                    W4eClipCpuOracle.AA.Hard,
+                ),
+            ) { clipRRect(rounded, ClipOp.INTERSECT, antiAlias = false) },
+            ClipCase(
+                "RRect difference",
+                W4eClipCpuOracle.Clip(
+                    W4eClipCpuOracle.Shape.RRect(W4eClipCpuOracle.Shape.Rect(4.0, 4.0, 8.0, 8.0), 1.0, 1.0),
+                    W4eClipCpuOracle.ClipOperation.Difference,
+                    W4eClipCpuOracle.AA.Hard,
+                ),
+            ) { clipRRect(insetRounded, ClipOp.DIFFERENCE, antiAlias = false) },
+            ClipCase(
+                "Path intersect",
+                W4eClipCpuOracle.Clip(
+                    W4eClipCpuOracle.Shape.Polygon(
+                        listOf(
+                            W4eClipCpuOracle.Point(1.0, 1.0),
+                            W4eClipCpuOracle.Point(11.0, 1.0),
+                            W4eClipCpuOracle.Point(11.0, 11.0),
+                            W4eClipCpuOracle.Point(1.0, 11.0),
+                        ),
+                    ),
+                    W4eClipCpuOracle.ClipOperation.Intersect,
+                    W4eClipCpuOracle.AA.Hard,
+                ),
+            ) { clipPath(path, ClipOp.INTERSECT, antiAlias = false) },
+            ClipCase(
+                "Path difference",
+                W4eClipCpuOracle.Clip(
+                    W4eClipCpuOracle.Shape.Polygon(
+                        listOf(
+                            W4eClipCpuOracle.Point(4.0, 3.0),
+                            W4eClipCpuOracle.Point(9.0, 6.0),
+                            W4eClipCpuOracle.Point(4.0, 9.0),
+                        ),
+                    ),
+                    W4eClipCpuOracle.ClipOperation.Difference,
+                    W4eClipCpuOracle.AA.Hard,
+                ),
+            ) { clipPath(notch, ClipOp.DIFFERENCE, antiAlias = false) },
+        )
+
+        cases.forEach { case ->
+            val expected = W4eClipCpuOracle.render(width, height, listOf(fullDraw.copy(clips = listOf(case.clip))))
+            val unclippped = W4eClipCpuOracle.render(width, height, listOf(fullDraw))
+            val surface = Surface(width, height)
+            surface.canvas {
+                case.record(this)
+                drawPath(fill, paint)
+            }
+
+            val result = surface.render()
+            GPUBackendRuntimeFactory.dispose()
+
+            assertFalse(expected.contentEquals(unclippped), case.label)
+            assertTrue(expected.indices.step(4).any { expected[it + 3] != 0.toUByte() }, case.label)
+            assertPreparedRouteEvidence(result)
+            assertPixelsEqual(expected, result.pixels)
+        }
+
+        val left = RectF32.ofLTRB(1f, 1f, 9f, 11f)
+        val right = RRectF32.of(RectF32.ofLTRB(3f, 2f, 11f, 10f), radius = 2f)
+        val leftShape = W4eClipCpuOracle.Shape.Rect(1.0, 1.0, 9.0, 11.0)
+        val rightShape = W4eClipCpuOracle.Shape.RRect(W4eClipCpuOracle.Shape.Rect(3.0, 2.0, 11.0, 10.0), 2.0, 2.0)
+        val forwardClips = listOf(
+            W4eClipCpuOracle.Clip(leftShape, W4eClipCpuOracle.ClipOperation.Intersect, W4eClipCpuOracle.AA.Hard),
+            W4eClipCpuOracle.Clip(rightShape, W4eClipCpuOracle.ClipOperation.Difference, W4eClipCpuOracle.AA.Hard),
+        )
+        val reversedClips = listOf(
+            W4eClipCpuOracle.Clip(rightShape, W4eClipCpuOracle.ClipOperation.Intersect, W4eClipCpuOracle.AA.Hard),
+            W4eClipCpuOracle.Clip(leftShape, W4eClipCpuOracle.ClipOperation.Difference, W4eClipCpuOracle.AA.Hard),
+        )
+        val expectedForward = W4eClipCpuOracle.render(width, height, listOf(fullDraw.copy(clips = forwardClips)))
+        val expectedReversed = W4eClipCpuOracle.render(width, height, listOf(fullDraw.copy(clips = reversedClips)))
+        val forward = Surface(width, height).also { surface ->
+            surface.canvas {
+                clipRect(left, ClipOp.INTERSECT, antiAlias = false)
+                clipRRect(right, ClipOp.DIFFERENCE, antiAlias = false)
+                drawPath(fill, paint)
+            }
+        }.render()
+        GPUBackendRuntimeFactory.dispose()
+        val reversed = Surface(width, height).also { surface ->
+            surface.canvas {
+                clipRRect(right, ClipOp.INTERSECT, antiAlias = false)
+                clipRect(left, ClipOp.DIFFERENCE, antiAlias = false)
+                drawPath(fill, paint)
+            }
+        }.render()
+
+        assertFalse(expectedForward.contentEquals(expectedReversed))
+        assertPreparedRouteEvidence(forward)
+        assertPreparedRouteEvidence(reversed)
+        assertPixelsEqual(expectedForward, forward.pixels)
+        assertPixelsEqual(expectedReversed, reversed.pixels)
+    }
+
+    @Test
+    fun `W4e public hard inverse path clip has nontrivial exact coverage`() {
+        val width = 12
+        val height = 12
+        val inverseTriangle = Path().apply {
+            moveTo(3f, 2f)
+            lineTo(10f, 4f)
+            lineTo(4f, 10f)
+            close()
+            fillType = FillType.INVERSE_WINDING
+        }
+        val full = Path().apply { addRect(RectF32.ofLTRB(0f, 0f, width.toFloat(), height.toFloat())) }
+        val triangle = W4eClipCpuOracle.Shape.Polygon(
+            listOf(
+                W4eClipCpuOracle.Point(3.0, 2.0),
+                W4eClipCpuOracle.Point(10.0, 4.0),
+                W4eClipCpuOracle.Point(4.0, 10.0),
+            ),
+        )
+        val inverseClip = W4eClipCpuOracle.Clip(
+            shape = W4eClipCpuOracle.Shape.Inverse(triangle),
+            operation = W4eClipCpuOracle.ClipOperation.Intersect,
+            antiAlias = W4eClipCpuOracle.AA.Hard,
+        )
+        val ordinaryClip = inverseClip.copy(shape = triangle)
+        val draw = W4eClipCpuOracle.Draw(
+            shape = W4eClipCpuOracle.Shape.Rect(0.0, 0.0, width.toDouble(), height.toDouble()),
+            color = W4eClipCpuOracle.Rgba8(196, 73, 31, 255),
+            antiAlias = W4eClipCpuOracle.AA.Hard,
+            clips = listOf(inverseClip),
+        )
+        val expected = W4eClipCpuOracle.render(width, height, listOf(draw))
+        val ordinaryExpected = W4eClipCpuOracle.render(width, height, listOf(draw.copy(clips = listOf(ordinaryClip))))
+        val surface = Surface(width, height)
+        surface.canvas {
+            clipPath(inverseTriangle, ClipOp.INTERSECT, antiAlias = false)
+            drawPath(full, Paint.fill(ColorARGB.of(255, 196, 73, 31)).copy(antiAlias = false))
+        }
+
+        val result = surface.render()
+
+        assertFalse(expected.contentEquals(ordinaryExpected), "inverse clip must not collapse to its interior")
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(expected, result.pixels)
+    }
+
+    @Test
+    fun `W4e public hard affine clip and perspective draw are inverse-mapped exactly`() {
+        val width = 12
+        val height = 10
+        val localClip = RectF32.ofLTRB(0f, 1f, 7f, 8f)
+        val localDraw = Path().apply {
+            moveTo(1f, 1f)
+            lineTo(9f, 2f)
+            lineTo(3f, 8f)
+            close()
+        }
+        val affineClipTransform = Matrix3x3F32(kx = 0.25f, tx = 1f)
+        val perspectiveDrawTransform = Matrix3x3F32(persp0 = 0.0625f)
+        val affineClip = W4eClipCpuOracle.Clip(
+            shape = W4eClipCpuOracle.Shape.Rect(0.0, 1.0, 7.0, 8.0),
+            operation = W4eClipCpuOracle.ClipOperation.Intersect,
+            antiAlias = W4eClipCpuOracle.AA.Hard,
+            transformF64 = W4eClipCpuOracle.HomographyF64(
+                m00F64 = 1.0, m01F64 = 0.25, m02F64 = 1.0,
+                m10F64 = 0.0, m11F64 = 1.0, m12F64 = 0.0,
+                m20F64 = 0.0, m21F64 = 0.0, m22F64 = 1.0,
+            ),
+        )
+        val draw = W4eClipCpuOracle.Draw(
+            shape = W4eClipCpuOracle.Shape.Polygon(
+                listOf(
+                    W4eClipCpuOracle.Point(1.0, 1.0),
+                    W4eClipCpuOracle.Point(9.0, 2.0),
+                    W4eClipCpuOracle.Point(3.0, 8.0),
+                ),
+            ),
+            color = W4eClipCpuOracle.Rgba8(47, 132, 219, 255),
+            antiAlias = W4eClipCpuOracle.AA.Hard,
+            clips = listOf(affineClip),
+            transformF64 = W4eClipCpuOracle.HomographyF64(
+                m00F64 = 1.0, m01F64 = 0.0, m02F64 = 0.0,
+                m10F64 = 0.0, m11F64 = 1.0, m12F64 = 0.0,
+                m20F64 = 0.0625, m21F64 = 0.0, m22F64 = 1.0,
+            ),
+        )
+        val expected = W4eClipCpuOracle.render(width, height, listOf(draw))
+        val withoutAffineClip = W4eClipCpuOracle.render(
+            width,
+            height,
+            listOf(draw.copy(clips = listOf(affineClip.copy(transformF64 = W4eClipCpuOracle.HomographyF64.Identity)))),
+        )
+        val withoutPerspectiveDraw = W4eClipCpuOracle.render(
+            width,
+            height,
+            listOf(draw.copy(transformF64 = W4eClipCpuOracle.HomographyF64.Identity)),
+        )
+        val surface = Surface(width, height)
+        surface.canvas {
+            concat(affineClipTransform)
+            clipRect(localClip, ClipOp.INTERSECT, antiAlias = false)
+            resetMatrix()
+            concat(perspectiveDrawTransform)
+            drawPath(localDraw, Paint.fill(ColorARGB.of(255, 47, 132, 219)).copy(antiAlias = false))
+        }
+
+        val result = surface.render()
+
+        assertFalse(expected.contentEquals(withoutAffineClip), "affine clip transform must change pixels")
+        assertFalse(expected.contentEquals(withoutPerspectiveDraw), "perspective draw transform must change pixels")
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(expected, result.pixels)
+    }
+
+    @Test
+    fun `W4e public hard shared clip is exact across draws`() {
+        val width = 12
+        val height = 12
+        val rounded = RRectF32.of(RectF32.ofLTRB(1f, 1f, 11f, 11f), radius = 2f)
+        val firstPath = Path().apply {
+            moveTo(0f, 2f)
+            lineTo(10f, 3f)
+            lineTo(3f, 11f)
+            close()
+        }
+        val secondPath = Path().apply {
+            moveTo(2f, 11f)
+            lineTo(11f, 4f)
+            lineTo(11f, 11f)
+            close()
+        }
+        val clip = W4eClipCpuOracle.Clip(
+            shape = W4eClipCpuOracle.Shape.RRect(W4eClipCpuOracle.Shape.Rect(1.0, 1.0, 11.0, 11.0), 2.0, 2.0),
+            operation = W4eClipCpuOracle.ClipOperation.Intersect,
+            antiAlias = W4eClipCpuOracle.AA.Hard,
+        )
+        val first = W4eClipCpuOracle.Draw(
+            shape = W4eClipCpuOracle.Shape.Polygon(
+                listOf(
+                    W4eClipCpuOracle.Point(0.0, 2.0),
+                    W4eClipCpuOracle.Point(10.0, 3.0),
+                    W4eClipCpuOracle.Point(3.0, 11.0),
+                ),
+            ),
+            color = W4eClipCpuOracle.Rgba8(210, 63, 44, 255),
+            antiAlias = W4eClipCpuOracle.AA.Hard,
+            clips = listOf(clip),
+        )
+        val second = W4eClipCpuOracle.Draw(
+            shape = W4eClipCpuOracle.Shape.Polygon(
+                listOf(
+                    W4eClipCpuOracle.Point(2.0, 11.0),
+                    W4eClipCpuOracle.Point(11.0, 4.0),
+                    W4eClipCpuOracle.Point(11.0, 11.0),
+                ),
+            ),
+            color = W4eClipCpuOracle.Rgba8(39, 154, 107, 255),
+            antiAlias = W4eClipCpuOracle.AA.Hard,
+            clips = listOf(clip),
+        )
+        val expected = W4eClipCpuOracle.render(width, height, listOf(first, second))
+        val firstOnly = W4eClipCpuOracle.render(width, height, listOf(first))
+        val unclipped = W4eClipCpuOracle.render(
+            width,
+            height,
+            listOf(first.copy(clips = emptyList()), second.copy(clips = emptyList())),
+        )
+        val surface = Surface(width, height)
+        surface.canvas {
+            clipRRect(rounded, ClipOp.INTERSECT, antiAlias = false)
+            drawPath(firstPath, Paint.fill(ColorARGB.of(255, 210, 63, 44)).copy(antiAlias = false))
+            drawPath(secondPath, Paint.fill(ColorARGB.of(255, 39, 154, 107)).copy(antiAlias = false))
+        }
+
+        val result = surface.render()
+
+        assertFalse(expected.contentEquals(firstOnly), "both public draws must contribute")
+        assertFalse(expected.contentEquals(unclipped), "the shared clip must restrict both draws")
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(expected, result.pixels)
+    }
+
+    @Test
+    fun `W4e public hard and analytic Rect clips keep the exact 2x2 coverage distinction`() {
+        val width = 4
+        val height = 4
+        val fractionalClip = RectF32.ofLTRB(0.2f, 0f, 0.7f, height.toFloat())
+        val full = Path().apply { addRect(RectF32.ofLTRB(0f, 0f, width.toFloat(), height.toFloat())) }
+        val paint = Paint.fill(ColorARGB.Red).copy(antiAlias = false)
+        val fullClip = W4eClipCpuOracle.Clip(
+            W4eClipCpuOracle.Shape.Rect(0.0, 0.0, width.toDouble(), height.toDouble()),
+            W4eClipCpuOracle.ClipOperation.Intersect,
+            W4eClipCpuOracle.AA.Hard,
+        )
+        val fractionalOracleClip = W4eClipCpuOracle.Clip(
+            W4eClipCpuOracle.Shape.Rect(0.2, 0.0, 0.7, height.toDouble()),
+            W4eClipCpuOracle.ClipOperation.Intersect,
+            W4eClipCpuOracle.AA.Hard,
+        )
+        val hardDraw = W4eClipCpuOracle.Draw(
+            shape = W4eClipCpuOracle.Shape.Rect(0.0, 0.0, width.toDouble(), height.toDouble()),
+            color = W4eClipCpuOracle.Rgba8(255, 0, 0, 255),
+            antiAlias = W4eClipCpuOracle.AA.Hard,
+            clips = listOf(fullClip, fractionalOracleClip),
+        )
+        val analyticDraw = hardDraw.copy(
+            clips = listOf(fullClip, fractionalOracleClip.copy(antiAlias = W4eClipCpuOracle.AA.Analytic2x2)),
+        )
+        val expectedHard = W4eClipCpuOracle.render(width, height, listOf(hardDraw))
+        val expectedAnalytic = W4eClipCpuOracle.render(width, height, listOf(analyticDraw))
+        val hard = Surface(width, height).also { surface ->
+            surface.canvas {
+                clipRect(RectF32.ofLTRB(0f, 0f, width.toFloat(), height.toFloat()), ClipOp.INTERSECT, antiAlias = false)
+                clipRect(fractionalClip, ClipOp.INTERSECT, antiAlias = false)
+                drawPath(full, paint)
+            }
+        }.render()
+        GPUBackendRuntimeFactory.dispose()
+        val analytic = Surface(width, height).also { surface ->
+            surface.canvas {
+                clipRect(RectF32.ofLTRB(0f, 0f, width.toFloat(), height.toFloat()), ClipOp.INTERSECT, antiAlias = false)
+                clipRect(fractionalClip, ClipOp.INTERSECT, antiAlias = true)
+                drawPath(full, paint)
+            }
+        }.render()
+
+        assertFalse(expectedHard.contentEquals(expectedAnalytic), "hard and analytic clip coverage must differ")
+        assertPreparedRouteEvidence(hard)
+        assertPreparedRouteEvidence(analytic)
+        assertPixelsEqual(expectedHard, hard.pixels)
+        assertPixelsEqual(expectedAnalytic, analytic.pixels)
+    }
+
+    @Test
+    fun `W4e public Path AA4 uses only binary fixtures after its exact native capability boundary`() {
+        val width = 6
+        val height = 6
+        // Integer-aligned boundaries make every tested pixel fully covered or fully empty;
+        // this asserts no uncontracted hardware MSAA sample location.
+        val clipPath = Path().apply { addRect(RectF32.ofLTRB(1f, 1f, 5f, 5f)) }
+        val full = Path().apply { addRect(RectF32.ofLTRB(0f, 0f, width.toFloat(), height.toFloat())) }
+        val clip = W4eClipCpuOracle.Clip(
+            shape = W4eClipCpuOracle.Shape.Rect(1.0, 1.0, 5.0, 5.0),
+            operation = W4eClipCpuOracle.ClipOperation.Intersect,
+            antiAlias = W4eClipCpuOracle.AA.PathMsaa4,
+        )
+        val draw = W4eClipCpuOracle.Draw(
+            shape = W4eClipCpuOracle.Shape.Rect(0.0, 0.0, width.toDouble(), height.toDouble()),
+            color = W4eClipCpuOracle.Rgba8(122, 49, 216, 255),
+            antiAlias = W4eClipCpuOracle.AA.Hard,
+            clips = listOf(clip),
+        )
+        val expected = W4eClipCpuOracle.render(width, height, listOf(draw))
+        val unclipped = W4eClipCpuOracle.render(width, height, listOf(draw.copy(clips = emptyList())))
+        val surface = Surface(width, height)
+        surface.canvas {
+            clipPath(clipPath, ClipOp.INTERSECT, antiAlias = true)
+            drawPath(full, Paint.fill(ColorARGB.of(255, 122, 49, 216)).copy(antiAlias = false))
+        }
+
+        val result = surface.renderPathAa4OrSkip()
+
+        assertFalse(expected.contentEquals(unclipped), "the AA Path clip must remain observable on binary pixels")
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(expected, result.pixels)
+    }
+
+    @Test
+    fun `W4e public budget error leaves the public Surface route usable for a later frame`() {
+        val width = 8
+        val height = 8
+        val rounded = RRectF32.of(RectF32.ofLTRB(1f, 1f, 7f, 7f), radius = 2f)
+        val full = Path().apply { addRect(RectF32.ofLTRB(0f, 0f, width.toFloat(), height.toFloat())) }
+        val paint = Paint.fill(ColorARGB.of(255, 82, 141, 219)).copy(antiAlias = false)
+        val expected = W4eClipCpuOracle.render(
+            width,
+            height,
+            listOf(
+                W4eClipCpuOracle.Draw(
+                    shape = W4eClipCpuOracle.Shape.Rect(0.0, 0.0, width.toDouble(), height.toDouble()),
+                    color = W4eClipCpuOracle.Rgba8(82, 141, 219, 255),
+                    antiAlias = W4eClipCpuOracle.AA.Hard,
+                    clips = listOf(
+                        W4eClipCpuOracle.Clip(
+                            shape = W4eClipCpuOracle.Shape.RRect(
+                                W4eClipCpuOracle.Shape.Rect(1.0, 1.0, 7.0, 7.0),
+                                2.0,
+                                2.0,
+                            ),
+                            operation = W4eClipCpuOracle.ClipOperation.Intersect,
+                            antiAlias = W4eClipCpuOracle.AA.Hard,
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val rejected = Surface(
+            width,
+            height,
+            config = RenderConfig(frameLocalBudgetBytes = 1L),
+        )
+        rejected.canvas {
+            clipRRect(rounded, ClipOp.INTERSECT, antiAlias = false)
+            drawPath(full, paint)
+        }
+
+        val error = assertFailsWith<IllegalStateException> { rejected.render() }
+
+        assertTrue(
+            error.message.orEmpty().contains("w4e.clip.budget.frame-local-exceeded"),
+            "Expected the public W4e budget error, got ${error.message}",
+        )
+
+        val recovered = Surface(width, height)
+        recovered.canvas {
+            clipRRect(rounded, ClipOp.INTERSECT, antiAlias = false)
+            drawPath(full, paint)
+        }
+
+        val result = recovered.render()
+
+        assertPixelsEqual(expected, result.pixels)
+    }
+
+    @Test
+    fun `W4e oracle inverse-maps affine clip geometry before ordered folds`() {
+        val pixels = W4eClipCpuOracle.render(
+            width = 2,
+            height = 1,
+            draws = listOf(
+                W4eClipCpuOracle.Draw(
+                    shape = W4eClipCpuOracle.Shape.Rect(0.0, 0.0, 2.0, 1.0),
+                    color = W4eClipCpuOracle.Rgba8(255, 0, 0, 255),
+                    antiAlias = W4eClipCpuOracle.AA.Hard,
+                    clips = listOf(
+                        W4eClipCpuOracle.Clip(
+                            shape = W4eClipCpuOracle.Shape.Rect(0.0, 0.0, 1.0, 1.0),
+                            operation = W4eClipCpuOracle.ClipOperation.Intersect,
+                            antiAlias = W4eClipCpuOracle.AA.Hard,
+                            transformF64 = W4eClipCpuOracle.HomographyF64.translation(1.0, 0.0),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        assertPixelsEqual(
+            ubyteArrayOf(
+                0u, 0u, 0u, 0u,
+                255u, 0u, 0u, 255u,
+            ),
+            pixels,
+        )
+    }
+
+    @Test
+    fun `W4e oracle inverse-maps projective draw geometry instead of dropping perspective`() {
+        val pixels = W4eClipCpuOracle.render(
+            width = 2,
+            height = 1,
+            draws = listOf(
+                W4eClipCpuOracle.Draw(
+                    shape = W4eClipCpuOracle.Shape.Rect(0.0, 0.0, 1.0, 1.0),
+                    color = W4eClipCpuOracle.Rgba8(255, 0, 0, 255),
+                    antiAlias = W4eClipCpuOracle.AA.Hard,
+                    transformF64 = W4eClipCpuOracle.HomographyF64(
+                        m00F64 = 1.0, m01F64 = 0.0, m02F64 = 0.0,
+                        m10F64 = 0.0, m11F64 = 1.0, m12F64 = 0.0,
+                        m20F64 = -0.5, m21F64 = 0.0, m22F64 = 1.0,
+                    ),
+                    clips = emptyList(),
+                ),
+            ),
+        )
+
+        assertPixelsEqual(
+            ubyteArrayOf(
+                255u, 0u, 0u, 255u,
+                255u, 0u, 0u, 255u,
+            ),
+            pixels,
+        )
+    }
+
+    @Test
+    fun `W4e oracle restricts coverage to its local half-open I32 scissor`() {
+        val pixels = W4eClipCpuOracle.render(
+            width = 3,
+            height = 2,
+            draws = listOf(
+                W4eClipCpuOracle.Draw(
+                    shape = W4eClipCpuOracle.Shape.Rect(-1.0, -1.0, 4.0, 3.0),
+                    color = W4eClipCpuOracle.Rgba8(255, 0, 0, 255),
+                    antiAlias = W4eClipCpuOracle.AA.Hard,
+                    clips = emptyList(),
+                    scissorI32 = W4eClipCpuOracle.ScissorI32(1, 0, 2, 2),
+                ),
+            ),
+        )
+
+        assertPixelsEqual(
+            ubyteArrayOf(
+                0u, 0u, 0u, 0u,
+                255u, 0u, 0u, 255u,
+                0u, 0u, 0u, 0u,
+                0u, 0u, 0u, 0u,
+                255u, 0u, 0u, 255u,
+                0u, 0u, 0u, 0u,
+            ),
+            pixels,
+        )
+    }
+
+    @Test
+    fun `W4e oracle analytic 2x2 coverage uses producer positions without inventing PathMsaa4 positions`() {
+        val fractionalEdge = W4eClipCpuOracle.Shape.Rect(0.2, 0.0, 0.3, 1.0)
+        val hard = W4eClipCpuOracle.render(
+            width = 1,
+            height = 1,
+            draws = listOf(
+                W4eClipCpuOracle.Draw(
+                    shape = fractionalEdge,
+                    color = W4eClipCpuOracle.Rgba8(255, 0, 0, 255),
+                    antiAlias = W4eClipCpuOracle.AA.Hard,
+                    clips = emptyList(),
+                ),
+            ),
+        )
+        val analytic = W4eClipCpuOracle.render(
+            width = 1,
+            height = 1,
+            draws = listOf(
+                W4eClipCpuOracle.Draw(
+                    shape = fractionalEdge,
+                    color = W4eClipCpuOracle.Rgba8(255, 0, 0, 255),
+                    antiAlias = W4eClipCpuOracle.AA.Analytic2x2,
+                    clips = emptyList(),
+                ),
+            ),
+        )
+        val pathMsaa4Binary = W4eClipCpuOracle.render(
+            width = 1,
+            height = 1,
+            draws = listOf(
+                W4eClipCpuOracle.Draw(
+                    shape = W4eClipCpuOracle.Shape.Rect(-1.0, -1.0, 2.0, 2.0),
+                    color = W4eClipCpuOracle.Rgba8(255, 0, 0, 255),
+                    antiAlias = W4eClipCpuOracle.AA.PathMsaa4,
+                    clips = emptyList(),
+                ),
+            ),
+        )
+
+        assertPixelsEqual(ubyteArrayOf(0u, 0u, 0u, 0u), hard)
+        assertPixelsEqual(ubyteArrayOf(188u, 0u, 0u, 128u), analytic)
+        assertPixelsEqual(ubyteArrayOf(255u, 0u, 0u, 255u), pathMsaa4Binary)
+        assertFalse(hard.contentEquals(analytic))
     }
 
     @Test
@@ -1476,6 +2742,15 @@ class GPUPlanSurfacePixelTest {
         return surface.render()
     }
 
+    private fun Surface.renderPathAa4OrSkip(): RenderResult = try {
+        render()
+    } catch (error: IllegalStateException) {
+        if (error.message == W4E_AA4_UNAVAILABLE_DIAGNOSTIC) {
+            assumeTrue(false, error.message)
+        }
+        throw error
+    }
+
     private fun w4cDraw(
         path: Path,
         color: ColorARGB,
@@ -1555,6 +2830,8 @@ class GPUPlanSurfacePixelTest {
     }
 
     private companion object {
+        const val W4E_AA4_UNAVAILABLE_DIAGNOSTIC =
+            "w4e.clip.sample-count-unavailable: W4e AA clip producer support is unavailable"
         const val W4A_512_FRAME_BUDGET_BYTES = 164_100L
         const val W4B_512_FRAME_BUDGET_BYTES = 164_100L
     }

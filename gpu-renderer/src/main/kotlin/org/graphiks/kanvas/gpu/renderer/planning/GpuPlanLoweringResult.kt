@@ -16,7 +16,15 @@ public data class GpuPlanLoweringRequest(
     public val currentBudget: PlanBudget,
     public val frameId: GPUFrameID,
     public val recordingId: GPURecordingID,
-)
+    /** Current physical aggregate limit, independently enforced during transactional lowering. */
+    public val rendererAggregateMemoryBudgetBytes: Long? = null,
+) {
+    init {
+        require(rendererAggregateMemoryBudgetBytes == null || rendererAggregateMemoryBudgetBytes > 0L) {
+            "rendererAggregateMemoryBudgetBytes must be positive when supplied"
+        }
+    }
+}
 
 public sealed interface GpuPlanLoweringResult {
     public data class Lowered(

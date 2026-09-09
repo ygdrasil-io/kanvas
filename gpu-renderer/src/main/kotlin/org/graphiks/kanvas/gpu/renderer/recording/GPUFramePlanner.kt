@@ -134,6 +134,8 @@ object GPUFramePlanner {
             )
         }
 
+        validateW4ePreparedFrameAuthority(taskList)?.let { return it }
+
         val sealsByRecording = taskList.recordingSeals.groupBy(GPURecordingSeal::recordingId)
         if (sealsByRecording.any { (_, seals) -> seals.size != 1 }) {
             return diagnostic("invalid.frame_plan.duplicate_recording_seal", "Each recording needs one seal")
@@ -216,23 +218,25 @@ object GPUFramePlanner {
                 is GPUSamplePlan.MultisampleFrame -> {
                     val key = task.sampleContinuationKey
                         ?: w4dGeneralBridges.getValue(task)?.request?.key
-                        ?: return diagnostic(
+                    if (key == null && task.w4eMaskContinuation == null && task.w4eSceneContinuation == null) {
+                        return diagnostic(
                         "invalid.frame_plan.msaa_continuation_missing",
-                        "Every MSAA render task requires one typed continuation key.",
-                    )
-                    if (key.target.value != task.target.value) {
+                        "Every MSAA render task requires generic scene authority or a dedicated W4e mask/scene continuation.",
+                        )
+                    }
+                    if (key != null && key.target.value != task.target.value) {
                         return diagnostic(
                             "invalid.frame_plan.msaa_continuation_target",
                             "The MSAA continuation key must identify the exact render target.",
                         )
                     }
-                    if (key.samplePlan != samplePlan) {
+                    if (key != null && key.samplePlan != samplePlan) {
                         return diagnostic(
                             "invalid.frame_plan.msaa_continuation_sample_plan",
                             "The MSAA continuation key must match the render task sample plan.",
                         )
                     }
-                    if (key.deviceGeneration != taskList.capabilitySeal.deviceGeneration) {
+                    if (key != null && key.deviceGeneration != taskList.capabilitySeal.deviceGeneration) {
                         return diagnostic(
                             "invalid.frame_plan.msaa_continuation_device_generation",
                             "The MSAA continuation key must match the frame capability generation.",
@@ -241,10 +245,12 @@ object GPUFramePlanner {
                 }
                 GPUSamplePlan.SingleSampleFrame,
                 is GPUSamplePlan.LocalResolveApproximation,
-                -> if (task.sampleContinuationKey != null) {
+                -> if (task.sampleContinuationKey != null || task.w4eMaskContinuation != null ||
+                    task.w4eSceneContinuation != null
+                ) {
                     return diagnostic(
                         "invalid.frame_plan.msaa_continuation_unexpected",
-                        "Only exact multisample render tasks may carry an MSAA continuation key.",
+                        "Only exact multisample render tasks may carry an MSAA continuation authority.",
                     )
                 }
             }
@@ -294,6 +300,36 @@ object GPUFramePlanner {
             }
         }
         return null
+    }
+
+    private fun validateW4ePreparedFrameAuthority(taskList: GPUTaskList): GPUDiagnostic? {
+        val renders = taskList.tasks.filterIsInstance<GPUTask.Render>()
+        val w4eRenders = renders.filter { render ->
+            render.drawPackets.any { packet -> packet.role == GPUDrawPacketRole.W4ePrepared }
+        }
+        if (w4eRenders.isEmpty()) return null
+        if (w4eRenders.size != renders.size || w4eRenders.any { render ->
+                render.drawPackets.singleOrNull()?.role != GPUDrawPacketRole.W4ePrepared
+            }
+        ) {
+            return diagnostic(
+                "invalid.frame_plan.w4e_frame_authority",
+                "A sealed W4e frame must contain one prepared W4e packet in every render scope.",
+            )
+        }
+        val authority = w4eRenders.first().drawPackets.single().w4ePreparedFrameAuthority
+            ?: return diagnostic(
+                "invalid.frame_plan.w4e_frame_authority",
+                "A sealed W4e packet is missing its common frame authority.",
+            )
+        return if (authority.validatesRenders(taskList.frameId.value, taskList.capabilitySeal.sealHash, w4eRenders)) {
+            null
+        } else {
+            diagnostic(
+                "invalid.frame_plan.w4e_frame_authority",
+                "W4e packets must retain one sealed graph, frame, resource-use, order, and atomic-group authority.",
+            )
+        }
     }
 
     private fun GPUTask.Render.w4dGeneralContinuationBridgeOrNull(
@@ -1113,6 +1149,8 @@ object GPUFramePlanner {
                         resolveAction = GPUSampleResolveAction.ResolveCanonical,
                     )
                 },
+            w4eMaskContinuation = first.w4eMaskContinuation,
+            w4eSceneContinuation = first.w4eSceneContinuation,
             depthStencilLoadStore = first.depthStencilLoadStore,
             preparedImageBindingsByPacketId = preparedImageBindingsByPacketId,
             preparedTextBindingsByPacketId = preparedTextBindingsByPacketId,
@@ -1144,8 +1182,12 @@ object GPUFramePlanner {
     }
 
     private fun GPUTask.Render.canShareProvisionalSegment(other: GPUTask.Render): Boolean =
-        w4dGeneralContinuationBridgeOrNullForBoundary() == null &&
+        drawPackets.none { packet -> packet.role == GPUDrawPacketRole.W4ePrepared } &&
+            other.drawPackets.none { packet -> packet.role == GPUDrawPacketRole.W4ePrepared } &&
+            w4dGeneralContinuationBridgeOrNullForBoundary() == null &&
             other.w4dGeneralContinuationBridgeOrNullForBoundary() == null &&
+            w4eMaskContinuation == other.w4eMaskContinuation &&
+            w4eSceneContinuation == other.w4eSceneContinuation &&
             target == other.target &&
             loadStore == other.loadStore &&
             depthStencilLoadStore == other.depthStencilLoadStore &&
@@ -1238,6 +1280,7 @@ object GPUFramePlanner {
         GPUDrawPacketRole.ClipProducer,
         GPUDrawPacketRole.Clear,
         GPUDrawPacketRole.Composite,
+        GPUDrawPacketRole.W4ePrepared,
         -> true
         GPUDrawPacketRole.Discard,
         GPUDrawPacketRole.Copy,

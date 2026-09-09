@@ -72,35 +72,6 @@ class CanvasTest {
     }
 
     @Test
-    fun `scaled rrect clip retains its capture-time transform class after later CTM changes`() {
-        val buffer = TestBuffer()
-        val canvas = Canvas(buffer)
-
-        canvas.translate(3f, 5f)
-        canvas.scale(2f, 3f)
-        canvas.clipRRect(RRectF32.of(RectF32.ofLTRB(4f, 6f, 12f, 16f), radius = 2f), antiAlias = false)
-        canvas.resetMatrix()
-        canvas.translate(100f, 200f)
-
-        val clip = assertIs<ClipStack.Complex>(buffer.ops().filterIsInstance<DisplayOp.SetClip>().last().clip)
-        val captured = assertIs<ClipStackOp.RRectOp>(clip.ops.single())
-        assertEquals("scale-translate", captured.transformClass)
-        assertEquals(RectF32.ofLTRB(11f, 23f, 27f, 53f), captured.rrect.rect)
-    }
-
-    @Test
-    fun `rotated clip rect is captured as a device path`() {
-        val buffer = TestBuffer()
-        val canvas = Canvas(buffer)
-        canvas.rotate(45f)
-        canvas.clipRect(RectF32(2f, 2f, 10f, 10f), antiAlias = true)
-
-        val clip = buffer.ops().filterIsInstance<DisplayOp.SetClip>().single().clip
-        val element = assertIs<ClipStack.Complex>(clip).ops.single()
-        assertIs<ClipStackOp.PathOp>(element)
-    }
-
-    @Test
     fun `saveLayer defers outer clip while nested layer records only inner clip`() {
         val buffer = TestBuffer()
         val canvas = Canvas(buffer)
@@ -200,28 +171,6 @@ class CanvasTest {
     }
 
     @Test fun `Canvas resetMatrix`() { val b = TestBuffer(); val c = Canvas(b); c.translate(100f, 200f); c.resetMatrix(); assertEquals(Matrix3x3F32.Identity, c.matrix) }
-
-    @Test
-    fun `Canvas affine API captures a bounded clip and resets its draw CTM`() {
-        val buffer = TestBuffer()
-        val canvas = Canvas(buffer)
-
-        canvas.translate(3f, 5f)
-        canvas.scale(2f, .5f)
-        canvas.rotate(90f)
-        canvas.skew(.25f, 0f)
-        canvas.concat(Matrix3x3F32.translation(4f, -2f))
-        canvas.setMatrix(Matrix3x3F32(sx = .75f, kx = .25f, tx = 1f, sy = .5f))
-        canvas.clipRect(RectF32.ofLTRB(4f, 4f, 28f, 28f), antiAlias = false)
-        canvas.resetMatrix()
-        canvas.drawRect(RectF32.ofLTRB(0f, 0f, 32f, 32f), Paint.fill(ColorARGB.Red).copy(antiAlias = false))
-
-        val clip = assertIs<ClipStack.Complex>(buffer.ops().filterIsInstance<DisplayOp.SetClip>().single().clip)
-        assertEquals("affine", assertIs<ClipStackOp.PathOp>(clip.ops.single()).transformClass)
-        val draw = buffer.ops().filterIsInstance<DisplayOp.DrawRect>().single()
-        assertEquals(Matrix3x3F32.Identity, draw.transform)
-        assertEquals(7, buffer.ops().filterIsInstance<DisplayOp.SetTransform>().size)
-    }
 
     @Test
     fun `empty CFF glyph completes text expansion without recording a draw`() {

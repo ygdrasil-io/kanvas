@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.planning
 
 import io.ygdrasil.webgpu.GPUTextureFormat
+import io.ygdrasil.webgpu.GPUTextureUsage
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -183,6 +184,20 @@ class GpuPlanTaskListLowererTest {
             ),
         )
         assertEquals("w3.capability.buffer_size", buffer.diagnostic.code.value)
+    }
+
+    @Test
+    fun `W3 lowerer rejects a sampleable color target without CopySrc`() {
+        val result = lowerer.lower(
+            validRequest(
+                rendererCapabilities = capabilities().copy(
+                    supportedTextureUsage =
+                        GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding,
+                ),
+            ),
+        )
+
+        assertIs<GpuPlanLoweringResult.UnsupportedCapability>(result)
     }
 
     @Test
@@ -1167,6 +1182,10 @@ class GpuPlanTaskListLowererTest {
             maxDynamicUniformBuffersPerPipelineLayout = 1,
         ),
         supportedTextureFormats = setOf(GPUTextureFormat.RGBA8Unorm, GPUTextureFormat.RGBA8UnormSrgb),
+        supportedTextureUsage = GPUTextureUsage.RenderAttachment or
+            GPUTextureUsage.CopySrc or
+            GPUTextureUsage.CopyDst or
+            GPUTextureUsage.TextureBinding,
         textureFormatSampleSupport = GPUTextureFormatSampleSupport(
             mapOf(
                 GPUTextureFormat.RGBA8UnormSrgb to GPUTextureSampleCountSupport(

@@ -4,10 +4,16 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.Image
+import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.picture.Picture
+import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.matrix.Matrix3x3F32
+import java.util.Base64
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
@@ -118,6 +124,186 @@ class SurfaceTest {
     @Test fun `Surface canvas DSL`() { val s = Surface(320, 240); s.canvas { drawRect(RectF32.ofLTRB(0f,0f,100f,80f), Paint.fill(ColorARGB.Red)) }; val r = s.render(); assertEquals(1, r.stats.opsDispatched) }
 
     @Test
+    fun `scaled RRect clip remains fixed at its capture CTM after later Canvas CTM changes`() {
+        val rrectSurface = Surface(32, 64)
+        rrectSurface.canvas {
+            translate(3f, 5f)
+            scale(2f, 3f)
+            clipRRect(RRectF32.of(RectF32.ofLTRB(4f, 6f, 12f, 16f), radius = 2f), antiAlias = false)
+            resetMatrix()
+            translate(100f, 200f)
+            resetMatrix()
+            drawRect(RectF32.ofLTRB(0f, 0f, 32f, 64f), Paint.fill(ColorARGB.Red).copy(antiAlias = false))
+        }
+        rrectSurface.render()
+        assertArrayEquals(
+            byteArrayOf(-1, 0, 0, -1),
+            requireNotNull(rrectSurface.makeImageSnapshot(RectF32.ofLTRB(15f, 30f, 16f, 31f))).pixels,
+        )
+        assertArrayEquals(
+            byteArrayOf(0, 0, 0, 0),
+            requireNotNull(rrectSurface.makeImageSnapshot(RectF32.ofLTRB(5f, 5f, 6f, 6f))).pixels,
+        )
+    }
+
+    @Test
+    fun `rotated rect clip stays frozen through save restore after a CTM mutation`() {
+        val surface = Surface(16, 16)
+        surface.canvas {
+            rotate(180f, px = 8f, py = 8f)
+            clipRect(RectF32.ofLTRB(1f, 1f, 5f, 5f), antiAlias = false)
+            save()
+            resetMatrix()
+            translate(12f, 12f)
+            // This temporary device clip must disappear at restore.
+            clipRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), antiAlias = false)
+            restore()
+            resetMatrix()
+            drawRect(RectF32.ofLTRB(0f, 0f, 16f, 16f), Paint.fill(ColorARGB.Red).copy(antiAlias = false))
+        }
+        surface.render()
+        assertArrayEquals(
+            byteArrayOf(-1, 0, 0, -1),
+            requireNotNull(surface.makeImageSnapshot(RectF32.ofLTRB(12f, 12f, 13f, 13f))).pixels,
+        )
+        assertArrayEquals(
+            byteArrayOf(-1, 0, 0, -1),
+            requireNotNull(surface.makeImageSnapshot(RectF32.ofLTRB(13f, 13f, 14f, 14f))).pixels,
+        )
+        assertArrayEquals(
+            byteArrayOf(0, 0, 0, 0),
+            requireNotNull(surface.makeImageSnapshot(RectF32.ofLTRB(1f, 1f, 2f, 2f))).pixels,
+        )
+    }
+
+    @Test
+    fun `affine rect clip remains at its capture CTM after a later Canvas CTM reset`() {
+        val surface = Surface(32, 16)
+        surface.canvas {
+            setMatrix(Matrix3x3F32(sx = .75f, kx = .25f, tx = 1f, sy = .5f))
+            clipRect(RectF32.ofLTRB(4f, 4f, 28f, 28f), antiAlias = false)
+            resetMatrix()
+            translate(100f, 200f)
+            resetMatrix()
+            drawRect(RectF32.ofLTRB(0f, 0f, 32f, 16f), Paint.fill(ColorARGB.Red).copy(antiAlias = false))
+        }
+        surface.render()
+        assertArrayEquals(
+            byteArrayOf(-1, 0, 0, -1),
+            requireNotNull(surface.makeImageSnapshot(RectF32.ofLTRB(16f, 8f, 17f, 9f))).pixels,
+        )
+        assertArrayEquals(
+            byteArrayOf(0, 0, 0, 0),
+            requireNotNull(surface.makeImageSnapshot(RectF32.ofLTRB(4f, 8f, 5f, 9f))).pixels,
+        )
+    }
+
+    @Test
+    fun `hard path clips render through the public Surface`() {
+        val pathSurface = Surface(16, 16)
+        pathSurface.canvas {
+            clipPath(
+                Path().apply {
+                    moveTo(2f, 2f)
+                    lineTo(14f, 2f)
+                    lineTo(2f, 14f)
+                    close()
+                },
+                antiAlias = false,
+            )
+            drawRect(RectF32.ofLTRB(0f, 0f, 16f, 16f), Paint.fill(ColorARGB.Blue).copy(antiAlias = false))
+        }
+        pathSurface.render()
+        assertArrayEquals(
+            byteArrayOf(0, 0, -1, -1),
+            requireNotNull(pathSurface.makeImageSnapshot(RectF32.ofLTRB(4f, 4f, 5f, 5f))).pixels,
+        )
+        assertArrayEquals(
+            byteArrayOf(0, 0, 0, 0),
+            requireNotNull(pathSurface.makeImageSnapshot(RectF32.ofLTRB(13f, 13f, 14f, 14f))).pixels,
+        )
+    }
+
+    @Test
+    fun `typed perspective nonfinite and overflow clip captures fail closed after reset`() {
+        val cases = listOf(
+            "Perspective" to Matrix3x3F32(persp0 = .1f),
+            "NonFinite" to Matrix3x3F32(sx = Float.NaN),
+            "Singular" to Matrix3x3F32(sx = 0f),
+            "NonFiniteProjection" to Matrix3x3F32(sx = Float.MAX_VALUE),
+        )
+        cases.forEach { (label, matrix) ->
+            val surface = Surface(16, 16)
+            surface.canvas {
+                clear(ColorARGB.Transparent)
+                setMatrix(matrix)
+                clipRect(RectF32.ofLTRB(1f, 1f, 2f, 2f), antiAlias = false)
+                resetMatrix()
+                drawRect(RectF32.ofLTRB(0f, 0f, 16f, 16f), Paint.fill(ColorARGB.Red).copy(antiAlias = false))
+            }
+
+            val failure = assertThrows(IllegalStateException::class.java) { surface.render() }
+            val expectedCode = when (label) {
+                "Perspective" -> "unsupported_transform:Perspective"
+                "Singular" -> "unsupported.transform.affine_singular"
+                else -> "unsupported_clip_transform:$label"
+            }
+            assertTrue(failure.message.orEmpty().startsWith(expectedCode), "$label: ${failure.message}")
+        }
+    }
+
+    @Test
+    fun `picture replay retains singular and overflow rect clips for a typed terminal refusal`() {
+        val recorder = PictureRecorder()
+        recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 8f, 8f)).apply {
+            clipRect(RectF32.ofLTRB(1f, 1f, 7f, 7f), antiAlias = false)
+            drawRect(RectF32.ofLTRB(0f, 0f, 8f, 8f), Paint.fill(ColorARGB.Red).copy(antiAlias = false))
+        }
+        val picture = requireNotNull(Picture.fromByteArray(recorder.finishRecordingAsPicture().toByteArray()))
+
+        listOf(
+            "Singular" to Matrix3x3F32(sx = 0f),
+            "NonFiniteProjection" to Matrix3x3F32(sx = Float.MAX_VALUE),
+        ).forEach { (label, matrix) ->
+            val surface = Surface(8, 8)
+            surface.canvas {
+                setMatrix(matrix)
+                drawPicture(picture)
+            }
+
+            val failure = assertThrows(IllegalStateException::class.java) { surface.render() }
+            val expectedCode = if (label == "Singular") {
+                "unsupported.transform.affine_singular"
+            } else {
+                "unsupported_clip_transform:$label"
+            }
+            assertTrue(failure.message.orEmpty().startsWith(expectedCode), "$label: ${failure.message}")
+        }
+    }
+
+    @Test
+    fun `historical schema v1 perspective clip cannot become replay authority under an outer transform`() {
+        // Fixed KPIC v8 / SceneArchive schema-v1 fixture: one hard-edge red rect with a
+        // perspective legacy clip. It was laid out with the pre-v2 boolean-plus-string
+        // transform record and is consumed only through Picture's public decoder.
+        val picture = requireNotNull(
+            Picture.fromByteArray(
+                Base64.getDecoder().decode(
+                    "S1BJQwAAAAgAAAAAAAAAAEEAAABBAAAArRa6rgAAAAEAAAAIAAAACAAAAARzUkdCAAAABFNSR0IAAAAEU1JHQgAAAAEAAAABAAAAAQAAAAAAAAAAQQAAAEEAAAAAAAAC//8AAAAAAAlIQVJEX0VER0UAAAADAAAAAQAAAAE/gAAAP4AAAEDgAABA4AAAAAAACUlOVEVSU0VDVAABAAAAC3BlcnNwZWN0aXZlAAAAAQAAAAE/gAAAAAAAAAAAAAAAAAAAP4AAAAAAAAAAAAAAAAAAAD+AAAAAAAAEUkVDVAH//wAAAAAAAAhTUkNfT1ZFUgAAAAAAAAAABEZJTEw/gAAAAAAABEJVVFQAAAAFTUlURVJAgAAAAAAA",
+                ),
+            ),
+        )
+        val surface = Surface(8, 8)
+        surface.canvas {
+            concat(Matrix3x3F32.translation(1f, 0f))
+            drawPicture(picture)
+        }
+
+        val failure = assertThrows(IllegalStateException::class.java) { surface.render() }
+        assertTrue(failure.message.orEmpty().startsWith("unsupported_transform:Perspective"), failure.message)
+    }
+
+    @Test
     fun `W3 renders multiple solid rectangles in draw order`() {
         val surface = Surface(2, 1)
         surface.canvas {
@@ -204,4 +390,5 @@ class SurfaceTest {
         }
         assertTrue(nonZero, "drawImage should produce visible pixels")
     }
+
 }

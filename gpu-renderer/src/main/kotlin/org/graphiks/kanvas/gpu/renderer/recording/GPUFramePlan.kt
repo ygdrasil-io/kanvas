@@ -29,6 +29,8 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationRequest
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUW4eMaskContinuationRequest
+import org.graphiks.kanvas.gpu.renderer.passes.GPUW4eSceneContinuationRequest
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometry
@@ -270,6 +272,10 @@ sealed interface GPUFrameStep {
             Map<GPUDrawPacketID, GPUImageBindingRequest> = emptyMap(),
         preparedTextBindingsByPacketId:
             Map<GPUDrawPacketID, GPUPreparedTextRenderBinding> = emptyMap(),
+        /** Dedicated W4e mask continuation, intentionally separate from scene MSAA ownership. */
+        val w4eMaskContinuation: GPUW4eMaskContinuationRequest? = null,
+        /** Dedicated W4e scene continuation, intentionally separate from generic and W4d.2 MSAA. */
+        val w4eSceneContinuation: GPUW4eSceneContinuationRequest? = null,
     ) : GPUFrameStep {
         val drawPackets: List<GPUDrawPacket> = immutableList(drawPackets)
         val resourceUses: List<GPUFrameResourceUse> = immutableList(resourceUses)
@@ -315,6 +321,21 @@ sealed interface GPUFrameStep {
             }
             require(sampleContinuation == null || sampleContinuation.key.samplePlan == samplePlan) {
                 "GPUFrameStep.RenderPassStep sample continuation must match the render sample plan"
+            }
+            require(w4eMaskContinuation == null ||
+                sampleContinuation == null && samplePlan is GPUSamplePlan.MultisampleFrame &&
+                samplePlan.sampleCount == 4 && target.matchesW4eLogicalResource(w4eMaskContinuation.maskTargetResourceId)
+            ) {
+                "GPUFrameStep.RenderPassStep W4e continuation must own a dedicated four-sample mask target"
+            }
+            require(w4eSceneContinuation == null ||
+                sampleContinuation == null && samplePlan is GPUSamplePlan.MultisampleFrame &&
+                samplePlan.sampleCount == 4 && target.matchesW4eLogicalResource(w4eSceneContinuation.sceneTargetResourceId)
+            ) {
+                "GPUFrameStep.RenderPassStep W4e scene continuation must own a dedicated four-sample scene target"
+            }
+            require(w4eMaskContinuation == null || w4eSceneContinuation == null) {
+                "GPUFrameStep.RenderPassStep cannot own W4e mask and scene continuations together"
             }
             val preparedImagePacketIds = drawPackets
                 .filter { packet -> packet.semanticPayload is GPUDrawSemanticPayload.SampledImage }
@@ -602,6 +623,10 @@ sealed interface GPUFrameStep {
         }
     }
 }
+
+/** Session-qualified W4e refs retain their compiler-sealed logical resource suffix. */
+private fun GPUFrameTargetRef.matchesW4eLogicalResource(resourceId: String): Boolean =
+    value == resourceId || value.endsWith(".$resourceId")
 
 /** One adjacent batch retained inside a single render-pass step. */
 class GPUFrameRenderBatch(
@@ -967,6 +992,8 @@ private fun CanonicalHashSink.memoryAllocation(value: GPUFrameMemoryAllocation) 
     long("bytes", value.bytes)
     string("resourceKind", value.resourceKind.name)
     nullable("extent", value.extent) { bounds("value", it) }
+    long("firstPassIndex", value.firstPassIndex.toLong())
+    long("lastPassIndexExclusive", value.lastPassIndexExclusive.toLong())
 }
 
 private fun CanonicalHashSink.step(value: GPUFrameStep) {
@@ -2321,7 +2348,8 @@ private fun GPUFrameMemoryBudgetPlan.dumpLine(): String =
         }} allocations=${allocations.mapIndexed { index, allocation ->
             "$index:{label=${allocation.label},category=${allocation.category.name}," +
                 "bytes=${allocation.bytes},kind=${allocation.resourceKind.name}," +
-                "extent=${allocation.extent ?: "none"}}"
+                "extent=${allocation.extent ?: "none"},firstPass=${allocation.firstPassIndex}," +
+                "lastPassExclusive=${allocation.lastPassIndexExclusive}}"
         }.joinToString(";").ifEmpty { "none" }} " +
         "budgetDiagnostic=${diagnostic?.dumpLine("budget") ?: "none"}"
 

@@ -42,6 +42,7 @@ import org.graphiks.kanvas.pipeline.VertexLayout
 import org.graphiks.kanvas.pipeline.VertexStepMode
 import org.graphiks.kanvas.render.ir.SceneArchiveCodec
 import org.graphiks.kanvas.render.ir.SceneArchiveDecodeResult
+import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.KanvasTypeface
 import org.graphiks.kanvas.text.TextBlob
@@ -55,6 +56,7 @@ import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -602,36 +604,84 @@ class PictureTest {
     }
 
     @Test
-    fun `roundtrip preserves transformed path clip provenance`() {
-        val clip = ClipStack.Complex(
-            listOf(
-                ClipStackOp.PathOp(
-                    path = Path().addRect(RectF32.ofLTRB(1f, 1f, 7f, 7f)),
-                    op = ClipOp.INTERSECT,
-                    antiAlias = false,
-                    transformClass = "affine",
-                ),
-            ),
+    fun `version 8 picture roundtrip keeps a typed perspective clip from replay authority`() {
+        val perspective = Matrix3x3F32(
+            sx = 1.25f,
+            kx = .2f,
+            tx = 3f,
+            ky = -.1f,
+            sy = .8f,
+            ty = 7f,
+            persp0 = .01f,
+            persp1 = -.02f,
+            persp2 = 1f,
         )
-        val original = Picture(
-            RectF32.ofLTRB(0f, 0f, 8f, 8f),
-            listOf(
-                DisplayOp.DrawRect(
-                    rect = RectF32.ofLTRB(0f, 0f, 8f, 8f),
-                    paint = Paint.fill(ColorARGB.Red),
-                    transform = Matrix3x3F32.Identity,
-                    clip = clip,
-                ),
-            ),
-        )
+        val recorder = PictureRecorder()
+        recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 8f, 8f)).apply {
+            setMatrix(perspective)
+            clipPath(Path().addRect(RectF32.ofLTRB(1f, 1f, 7f, 7f)), antiAlias = false)
+            resetMatrix()
+            drawRect(RectF32.ofLTRB(0f, 0f, 8f, 8f), Paint.fill(ColorARGB.Red).copy(antiAlias = false))
+        }
 
-        val restored = requireNotNull(Picture.fromByteArray(original.toByteArray()))
-        val restoredClip = assertIs<DisplayOp.DrawRect>(restored.ops.single()).clip
-        assertEquals(
-            "affine",
-            assertIs<ClipStackOp.PathOp>(assertIs<ClipStack.Complex>(restoredClip).ops.single())
-                .transformClass,
-        )
+        val restored = requireNotNull(Picture.fromByteArray(recorder.finishRecordingAsPicture().toByteArray()))
+        val surface = Surface(8, 8)
+        surface.canvas {
+            concat(Matrix3x3F32.translation(1f, 0f))
+            drawPicture(restored)
+        }
+
+        val failure = assertFailsWith<IllegalStateException> { surface.render() }
+        assertTrue(failure.message.orEmpty().startsWith("unsupported_transform:Perspective"), failure.message)
+    }
+
+    @Test
+    fun `version 8 picture roundtrip preserves ordered hard clip payload through public serialization`() {
+        val cutout = Path().apply {
+            moveTo(3f, 3f)
+            lineTo(5f, 3f)
+            lineTo(5f, 5f)
+            lineTo(3f, 5f)
+            close()
+        }
+        val fill = Path().addRect(RectF32.ofLTRB(0f, 0f, 8f, 8f))
+        val recorder = PictureRecorder()
+        recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 8f, 8f)).apply {
+            clipRect(RectF32.ofLTRB(1f, 1f, 7f, 7f), antiAlias = false)
+            clipPath(cutout, ClipOp.DIFFERENCE, antiAlias = false)
+            drawPath(fill, Paint.fill(ColorARGB.Red).copy(antiAlias = false))
+        }
+
+        fun assertOrderedClipPayload(picture: Picture) {
+            val draws = mutableListOf<DisplayOp.DrawPath>()
+            picture.forEachOp { operation -> if (operation is DisplayOp.DrawPath) draws += operation }
+            val clip = assertIs<ClipStack.Complex>(draws.single().clip)
+            assertEquals(3, clip.ops.size)
+
+            val recordingBounds = assertIs<ClipStackOp.RectOp>(clip.ops[0])
+            assertEquals(RectF32.ofLTRB(0f, 0f, 8f, 8f), recordingBounds.rect)
+            assertEquals(ClipOp.INTERSECT, recordingBounds.op)
+            assertTrue(recordingBounds.antiAlias)
+
+            val outer = assertIs<ClipStackOp.RectOp>(clip.ops[1])
+            assertEquals(RectF32.ofLTRB(1f, 1f, 7f, 7f), outer.rect)
+            assertEquals(ClipOp.INTERSECT, outer.op)
+            assertFalse(outer.antiAlias)
+
+            val inner = assertIs<ClipStackOp.PathOp>(clip.ops[2])
+            assertEquals(ClipOp.DIFFERENCE, inner.op)
+            assertFalse(inner.antiAlias)
+            assertEquals(cutout.fillType, inner.path.fillType)
+            assertEquals(cutout.commands(), inner.path.commands())
+        }
+
+        val original = recorder.finishRecordingAsPicture()
+        val encoded = original.toByteArray()
+        val restored = requireNotNull(Picture.fromByteArray(encoded))
+
+        assertOrderedClipPayload(original)
+        assertOrderedClipPayload(restored)
+        assertContentEquals(encoded, restored.toByteArray())
     }
 
     @Test

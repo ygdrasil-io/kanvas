@@ -261,6 +261,8 @@ enum class GPUDrawPacketRole {
     Compute,
     Composite,
     Readback,
+    /** Explicit W4e Task 7 handoff; not a legacy shading packet. */
+    W4ePrepared,
 }
 
 /** Pipeline specialization selected by the W4d.2 hard-mask color cover. */
@@ -405,6 +407,12 @@ class GPUDrawPacket(
     diagnostics: List<GPUPassDiagnostic> = emptyList(),
     val clipProducerAuthority: GPUClipProducerAuthority? = null,
     val w4dBinaryMaskConsumer: GPUW4dBinaryMaskConsumerPlan? = null,
+    /** W4e's sealed consumer strategy, copied before lowerer packet translation. */
+    val w4ePreparedClipConsumer: GPUW4ePreparedClipConsumerAuthority? = null,
+    /** Explicit prepared marker contract for a W4e mask pass awaiting Task 7 encoding. */
+    val w4ePreparedClipPass: GPUW4ePreparedClipPassAuthority? = null,
+    /** Complete sealed W4e path attachment and geometry contract for Task 7. */
+    val w4ePreparedPath: GPUW4ePreparedClipPassAuthority.Path? = null,
 ) {
     /** Diagnostics copied from packet production so caller mutation cannot rewrite evidence. */
     val diagnostics: List<GPUPassDiagnostic> = immutableList(diagnostics)
@@ -415,6 +423,26 @@ class GPUDrawPacket(
 
     internal var corePrimitivePreparedAuthority: GPUCorePrimitivePreparedPacketAuthority? = null
         private set
+
+    /** One lowering-local frame seal; every W4e packet must carry the same immutable authority. */
+    internal var w4ePreparedFrameAuthority: GPUW4ePreparedFrameAuthority? = null
+        private set
+
+    internal fun attachW4ePreparedFrameAuthority(
+        authority: GPUW4ePreparedFrameAuthority,
+    ): GPUDrawPacket {
+        check(w4ePreparedFrameAuthority == null) {
+            "W4e prepared frame authority is already attached"
+        }
+        require(role == GPUDrawPacketRole.W4ePrepared) {
+            "Only W4e prepared packets may retain a W4e frame authority"
+        }
+        require((w4ePreparedClipPass == null) != (w4ePreparedPath == null)) {
+            "W4e prepared frame authority requires exactly one sealed pass kind"
+        }
+        w4ePreparedFrameAuthority = authority
+        return this
+    }
 
     internal var coverageMaskProducerUniformSlabSeal:
         GPUCoverageMaskProducerUniformSlabSeal? = null
@@ -520,6 +548,7 @@ class GPUDrawPacket(
         requireRoleHasPipelineKey()
         requireW4dBinaryMaskConsumer()
         requireClipProducerAuthority()
+        requireW4ePreparedAuthority()
     }
 
     private fun requireRoleHasPipelineKey() {
@@ -532,6 +561,7 @@ class GPUDrawPacket(
             GPUDrawPacketRole.Upload,
             GPUDrawPacketRole.Readback,
             GPUDrawPacketRole.Discard,
+            GPUDrawPacketRole.W4ePrepared,
             -> Unit
 
             else -> require(renderPipelineKey != null) {
@@ -578,6 +608,42 @@ class GPUDrawPacket(
             }
             else -> require(clipProducerAuthority == null) {
                 "$role GPUDrawPacket must not carry clip producer authority"
+            }
+        }
+    }
+
+    private fun requireW4ePreparedAuthority() {
+        w4ePreparedClipConsumer?.let { consumer ->
+            require(consumer.consumerPassId == passId) {
+                "W4e prepared clip consumer must name its exact packet pass"
+            }
+            require(role !in setOf(GPUDrawPacketRole.ClipProducer, GPUDrawPacketRole.Clear)) {
+                "W4e prepared clip consumer must be carried by a color or cover packet"
+            }
+        }
+        w4ePreparedClipPass?.let { preparedPass ->
+            require(preparedPass.passId == passId) {
+                "W4e prepared pass contract must name its exact marker packet pass"
+            }
+            require(w4ePreparedClipConsumer == null) {
+                "A W4e marker packet cannot also claim a clip consumer strategy"
+            }
+        }
+        w4ePreparedPath?.let { preparedPath ->
+            require(preparedPath.passId == passId) {
+                "W4e prepared path contract must name its exact packet pass"
+            }
+        }
+        if (role == GPUDrawPacketRole.W4ePrepared) {
+            require((w4ePreparedClipPass != null) xor (w4ePreparedPath != null)) {
+                "W4e prepared packet requires exactly one complete Task 7 handoff contract"
+            }
+            require(w4ePreparedClipConsumer == null || w4ePreparedPath != null) {
+                "Only a W4e prepared path may carry a W4e clip consumer"
+            }
+        } else {
+            require(w4ePreparedClipPass == null && w4ePreparedPath == null) {
+                "W4e handoff contracts must not masquerade as legacy rendering packets"
             }
         }
     }

@@ -203,9 +203,9 @@ public object SceneDisplayOpAdapter {
         is ClipStackNode.Operations -> ClipStack.Complex(map { entry ->
             val op = ClipOp.valueOf(entry.operation.name)
             when (val geometry = entry.geometry) {
-                is GeometryNode.Rect -> ClipStackOp.RectOp(geometry.copyBounds(), op, entry.antiAlias, entry.perspectiveCaptureRefusal)
-                is GeometryNode.RRect -> ClipStackOp.RRectOp(geometry.copyShape(), op, entry.antiAlias, entry.perspectiveCaptureRefusal, entry.transformClass)
-                is GeometryNode.Path -> ClipStackOp.PathOp(geometry.path.toCompatibilityPath(), op, entry.antiAlias, entry.perspectiveCaptureRefusal, entry.transformClass)
+                is GeometryNode.Rect -> ClipStackOp.RectOp(geometry.copyBounds(), op, entry.antiAlias, entry.transform)
+                is GeometryNode.RRect -> ClipStackOp.RRectOp(geometry.copyShape(), op, entry.antiAlias, entry.transform)
+                is GeometryNode.Path -> ClipStackOp.PathOp(geometry.path.toCompatibilityPath(), op, entry.antiAlias, entry.transform)
                 else -> throw IllegalArgumentException("Clip geometry is not a public clip shape")
             }
         })

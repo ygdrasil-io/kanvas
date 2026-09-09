@@ -150,11 +150,15 @@ class GPUCommandEncoderScopePlan internal constructor(
     /** Task 8 W4d.2 owns its sealed D24 bindings without reusing a historical route seal. */
     internal var allowsW4dGeneralDepthStencil: Boolean = false
         private set
+    /** W4e owns a sealed clip-producer D24S8 attachment independently of legacy stencil lanes. */
+    internal var allowsW4ePreparedDepthStencil: Boolean = false
+        private set
 
     internal fun attachNativeOperandKeys(
         keys: List<GPUPreparedNativeOperandKey>,
         allowsClipStencilPrefixDepthStencil: Boolean = false,
         allowsW4dGeneralDepthStencil: Boolean = false,
+        allowsW4ePreparedDepthStencil: Boolean = false,
     ): GPUCommandEncoderScopePlan {
         check(nativeOperandKeys.isEmpty()) { "Native operand keys are already attached" }
         require(keys.isNotEmpty()) { "Native operand keys must not be empty" }
@@ -180,7 +184,7 @@ class GPUCommandEncoderScopePlan internal constructor(
         }
         require(
             if (pathSealed || clipStencilSealed || allowsClipStencilPrefixDepthStencil ||
-                allowsW4dGeneralDepthStencil
+                allowsW4dGeneralDepthStencil || allowsW4ePreparedDepthStencil
             ) {
                 depthStencilKeys.size == 1 &&
                     depthStencilKeys.single().kind == GPUPreparedNativeOperandKind.TextureView &&
@@ -202,7 +206,14 @@ class GPUCommandEncoderScopePlan internal constructor(
         ) {
             "Only sealed W4d.2 materialization may retain an otherwise unsealed D24S8 operand"
         }
+        require(!allowsW4ePreparedDepthStencil ||
+            !pathSealed && !clipStencilSealed && !coverageMaskSealed &&
+                !allowsClipStencilPrefixDepthStencil && !allowsW4dGeneralDepthStencil
+        ) {
+            "Only sealed W4e materialization may retain an otherwise unsealed clip-producer D24S8 operand"
+        }
         this.allowsW4dGeneralDepthStencil = allowsW4dGeneralDepthStencil
+        this.allowsW4ePreparedDepthStencil = allowsW4ePreparedDepthStencil
         if (coverageMaskSealed && coverageMaskSeal.units().size > 1) {
             val units = coverageMaskSeal.units()
             val producers = units.filterIsInstance<GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer>()
@@ -1403,6 +1414,9 @@ internal class PreparedGPUFrame(
                 "PreparedGPUFrame encoder resource generations must exactly match the semantic step"
             }
             if (step is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep) {
+                val sealedW4e = step.drawPackets.all { packet ->
+                    packet.role == org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.W4ePrepared
+                }
                 require(scope.corePrimitiveDirectNativeRouteSeal !== GPUCorePrimitiveDirectNativeRouteSeal.Missing) {
                     "PreparedGPUFrame render scopes require a pure-preflight CorePrimitive route seal"
                 }
@@ -1469,7 +1483,7 @@ internal class PreparedGPUFrame(
                 // W4d.2-general has a separate, sealed Task 7 materialization table.  Its
                 // V/I/U/D24 operands are materialized by Task 8 rather than by the historical
                 // W4c/W4d scratch route seals, so it must not be reclassified as one of them.
-                val w4dGeneralScope = plannedPathAuthority
+                val w4dGeneralScope = sealedW4e || plannedPathAuthority
                     ?.w4dGeneralFrameMaterializationAuthority != null
                 val hasPlannedPathAuthority = plannedPathAuthority?.w4cSessionScratch != null ||
                     plannedPathAuthority?.w4dSessionScratch != null
@@ -1588,7 +1602,7 @@ internal class PreparedGPUFrame(
                 require(scope.sourcePacketIds == expectedPackets) {
                     "PreparedGPUFrame render packet identities must exactly match the semantic step"
                 }
-                require(stream.sourcePacketIds == step.expectedRenderCommandPacketIds(scope)) {
+                require(sealedW4e || stream.sourcePacketIds == step.expectedRenderCommandPacketIds(scope)) {
                     "PreparedGPUFrame render command stream must have exact per-packet command structure"
                 }
                 require(stream.sourcePassIds == step.drawPackets.map { it.passId }.distinct()) {
@@ -1597,7 +1611,7 @@ internal class PreparedGPUFrame(
                 require(stream.commandLabels == scope.facadeOperationClasses) {
                     "PreparedGPUFrame render facade operations must exactly match its command stream"
                 }
-                require(stream.operandBridge.size >= expectedPackets.size * 2) {
+                require(sealedW4e || stream.operandBridge.size >= expectedPackets.size * 2) {
                     "PreparedGPUFrame render command stream must bridge at least pipeline and bind group operands per packet"
                 }
             } else {
@@ -2019,6 +2033,14 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedFac
     when (this) {
         is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep -> buildList {
             add("beginRenderPass")
+            if (drawPackets.all { packet ->
+                    packet.role == org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.W4ePrepared
+                }
+            ) {
+                add("draw")
+                add("endRenderPass")
+                return@buildList
+            }
             drawPackets.forEach { packet ->
                 add("setRenderPipeline")
                 val clipStencilProducer =

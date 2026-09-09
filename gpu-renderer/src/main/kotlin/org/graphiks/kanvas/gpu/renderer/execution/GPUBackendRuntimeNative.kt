@@ -1670,7 +1670,9 @@ private class WgpuBackendSession(
                     ),
                 )
             },
-            closeAction = childTeardown::close,
+            closeAction = {
+                childTeardown.close()
+            },
             renderCountersFactory = {
                 val encoding = encodingBackend.counters()
                 val corePrimitive = corePrimitiveCache.counters()

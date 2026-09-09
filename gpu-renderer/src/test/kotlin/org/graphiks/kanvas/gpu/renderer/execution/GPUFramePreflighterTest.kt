@@ -5,6 +5,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveDirectNativeRoute
 import io.ygdrasil.webgpu.GPUBindGroup
 import io.ygdrasil.webgpu.GPURenderPipeline
 import io.ygdrasil.webgpu.GPUTextureFormat
+import io.ygdrasil.webgpu.GPUTextureUsage
 import io.ygdrasil.webgpu.GPUTextureView
 import java.io.File
 import java.lang.reflect.Proxy
@@ -16,13 +17,19 @@ import org.graphiks.kanvas.gpu.plan.PlanBudget
 import org.graphiks.kanvas.gpu.plan.GpuPlanSelection
 import org.graphiks.kanvas.gpu.plan.PlanBufferAllocationPolicy
 import org.graphiks.kanvas.gpu.plan.PlanCapabilitySnapshot
+import org.graphiks.kanvas.gpu.plan.PlanDepthStencilFormat
 import org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat
 import org.graphiks.kanvas.gpu.plan.PlanResourceId
 import org.graphiks.kanvas.gpu.plan.PlanOperationCapability
+import org.graphiks.kanvas.gpu.plan.PlanResourceUsage
 import org.graphiks.kanvas.gpu.plan.RenderGraph
+import org.graphiks.kanvas.gpu.plan.PlanTextureFormat
+import org.graphiks.kanvas.gpu.plan.PlanTextureResolveSupport
+import org.graphiks.kanvas.gpu.plan.PlanTextureSampleSupport
 import org.graphiks.kanvas.gpu.plan.W3SolidRectPlanCompiler
 import org.graphiks.kanvas.gpu.plan.W4aAnalyticRectPlanCompiler
 import org.graphiks.kanvas.gpu.plan.W4bAnalyticRRectPlanCompiler
+import org.graphiks.kanvas.gpu.plan.W4eClipPlanCompiler
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
@@ -236,20 +243,30 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.render.ir.BlendNode
+import org.graphiks.kanvas.render.ir.ClipEntry
+import org.graphiks.kanvas.render.ir.ClipOperation
 import org.graphiks.kanvas.render.ir.ClipStackNode
+import org.graphiks.kanvas.render.ir.ClipTransformSnapshot
 import org.graphiks.kanvas.render.ir.CoverageRequest
 import org.graphiks.kanvas.render.ir.DrawNode
 import org.graphiks.kanvas.render.ir.DrawOrigin
 import org.graphiks.kanvas.render.ir.EffectStack
 import org.graphiks.kanvas.render.ir.GeometryNode
 import org.graphiks.kanvas.render.ir.MaterialNode
+import org.graphiks.kanvas.render.ir.PaintNode
+import org.graphiks.kanvas.render.ir.PaintStyleNode
 import org.graphiks.kanvas.render.ir.RenderPlanResult
 import org.graphiks.kanvas.render.ir.RenderTargetDescriptor
 import org.graphiks.kanvas.render.ir.SceneCommand
 import org.graphiks.kanvas.render.ir.SceneExtent
 import org.graphiks.kanvas.render.ir.SceneSnapshot
+import org.graphiks.kanvas.render.ir.StrokeCapNode
+import org.graphiks.kanvas.render.ir.StrokeJoinNode
+import org.graphiks.kanvas.render.ir.BlendMode
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.CornerRadiiF32
+import org.graphiks.math.geometry.FillRule
+import org.graphiks.math.geometry.PathBuilder
 import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.matrix.Matrix3x3F32
@@ -8126,6 +8143,173 @@ class GPUFramePreflighterTest {
         val capabilities: GPUCapabilities,
     )
 
+    private data class W4eFixture(
+        val framePlan: GPUFramePlan,
+        val capabilities: GPUCapabilities,
+    )
+
+    private fun w4eFixture(): W4eFixture {
+        val capabilities = GPUCapabilities(
+            implementation = GPUImplementationIdentity("GPU", "w4e", "preflight", "device"),
+            facts = emptyList(),
+            snapshotId = "w4e-preflight",
+            limits = GPULimits(
+                maxTextureDimension2D = 2048,
+                copyBytesPerRowAlignment = 256,
+                minUniformBufferOffsetAlignment = 256,
+                maxBufferSize = 1L shl 20,
+                maxDynamicUniformBuffersPerPipelineLayout = 1,
+            ),
+            supportedTextureFormats = setOf(
+                GPUTextureFormat.RGBA8UnormSrgb,
+                GPUTextureFormat.RGBA8Unorm,
+                GPUTextureFormat.Depth24PlusStencil8,
+            ),
+            supportedTextureUsage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding or GPUTextureUsage.CopySrc,
+            textureFormatSampleSupport = GPUTextureFormatSampleSupport(
+                mapOf(
+                    GPUTextureFormat.RGBA8UnormSrgb to GPUTextureSampleCountSupport(setOf(1, 4), setOf(4)),
+                    GPUTextureFormat.RGBA8Unorm to GPUTextureSampleCountSupport(setOf(1, 4), setOf(4)),
+                    GPUTextureFormat.Depth24PlusStencil8 to GPUTextureSampleCountSupport(setOf(1, 4)),
+                ),
+            ),
+            rendererFeatures = setOf(
+                GPURendererFeature.RenderPass,
+                GPURendererFeature.CopyUpload,
+                GPURendererFeature.UniformBuffer,
+                GPURendererFeature.Readback,
+            ),
+        )
+        val color = ColorARGB.fromPackedUInt(0xC0FF0000u)
+        val scene = SceneSnapshot.of(
+            SceneExtent(16, 16),
+            ColorSpace.SRGB,
+            listOf(
+                SceneCommand.Draw(
+                    DrawNode(
+                        geometry = GeometryNode.Path(
+                            PathBuilder(FillRule.WINDING)
+                                .moveTo(2f, 2f).lineTo(12f, 2f).lineTo(2f, 12f).close().build(),
+                        ),
+                        material = MaterialNode.Solid(color),
+                        coverage = CoverageRequest.ANTIALIASED,
+                        clip = ClipStackNode.Operations.of(
+                            listOf(
+                                ClipEntry(
+                                    geometry = GeometryNode.Path(
+                                        PathBuilder(FillRule.WINDING)
+                                            .moveTo(3f, 3f).lineTo(13f, 3f).lineTo(3f, 13f).close().build(),
+                                    ),
+                                    operation = ClipOperation.INTERSECT,
+                                    antiAlias = true,
+                                    transform = ClipTransformSnapshot.Known.of(Matrix3x3F32.rotation(0.1f)),
+                                ),
+                            ),
+                        ),
+                        blend = BlendNode.SrcOver,
+                        effects = EffectStack.Empty,
+                        transform = Matrix3x3F32.rotation(0.25f),
+                        origin = DrawOrigin.PATH,
+                        paint = PaintNode(
+                            color,
+                            null,
+                            BlendMode.SRC_OVER,
+                            null,
+                            null,
+                            null,
+                            null,
+                            null,
+                            PaintStyleNode.FILL,
+                            0f,
+                            StrokeCapNode.BUTT,
+                            StrokeJoinNode.MITER,
+                            4f,
+                            true,
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val planCapabilities = PlanCapabilitySnapshot.of(
+            deviceGeneration = 7,
+            maxTextureDimension2D = 2048,
+            maxBufferSizeBytes = 1L shl 20,
+            copyBytesPerRowAlignment = 256,
+            supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+            minUniformBufferOffsetAlignment = 256,
+            maxDynamicUniformBuffersPerPipelineLayout = 1,
+            supportedOperations = PlanOperationCapability.entries.toSet(),
+            bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384L, 4_096L, 4_096L),
+            supportedDepthStencilFormats = setOf(PlanDepthStencilFormat.Depth24PlusStencil8),
+            supportedTextureSampleSupports = setOf(
+                PlanTextureSampleSupport.of(
+                    PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+                    1,
+                    setOf(
+                        PlanResourceUsage.RenderAttachment,
+                        PlanResourceUsage.CopySource,
+                        PlanResourceUsage.Sampled,
+                    ),
+                ),
+                PlanTextureSampleSupport.of(
+                    PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+                    4,
+                    setOf(PlanResourceUsage.RenderAttachment),
+                ),
+                PlanTextureSampleSupport.of(
+                    PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8),
+                    1,
+                    setOf(PlanResourceUsage.DepthStencilAttachment),
+                ),
+                PlanTextureSampleSupport.of(
+                    PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8),
+                    4,
+                    setOf(PlanResourceUsage.DepthStencilAttachment),
+                ),
+                PlanTextureSampleSupport.of(
+                    PlanTextureFormat.CoverageMask,
+                    1,
+                    setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled),
+                ),
+                PlanTextureSampleSupport.of(
+                    PlanTextureFormat.CoverageMask,
+                    4,
+                    setOf(PlanResourceUsage.RenderAttachment),
+                ),
+            ),
+            supportedTextureResolveSupports = setOf(
+                PlanTextureResolveSupport.of(
+                    PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+                    4,
+                    1,
+                ),
+                PlanTextureResolveSupport.of(PlanTextureFormat.CoverageMask, 4, 1),
+            ),
+        )
+        val compiler = W4eClipPlanCompiler()
+        val candidate = assertIs<GpuPlanSelection.Candidate>(
+            compiler.select(scene, RenderTargetDescriptor(scene.extent, scene.colorSpace)),
+        ).candidate
+        val graph = assertIs<RenderPlanResult.Ready<RenderGraph>>(
+            compiler.plan(candidate, planCapabilities, PlanBudget(1L shl 20)),
+        ).plan
+        val taskList = assertIs<GpuPlanLoweringResult.Lowered>(
+            GpuPlanTaskListLowerer().lower(
+                GpuPlanLoweringRequest(
+                    graph = graph,
+                    capabilities = capabilities,
+                    deviceGeneration = GPUDeviceGenerationID(7),
+                    currentBudget = graph.budget,
+                    frameId = GPUFrameID(7_004),
+                    recordingId = GPURecordingID("w4e-preflight"),
+                ),
+            ),
+        ).taskList
+        val framePlan = GPUFramePlanner.plan(taskList)
+        check(!framePlan.atomicallyRefused) { framePlan.dumpLines().joinToString("\n") }
+        return W4eFixture(framePlan, capabilities)
+    }
+
     private fun w4bFixture(): W4bFixture {
         val capabilities = GPUCapabilities(
             implementation = GPUImplementationIdentity("GPU", "w4b", "adapter", "device"),
@@ -8139,6 +8323,10 @@ class GPUFramePreflighterTest {
                 maxDynamicUniformBuffersPerPipelineLayout = 1,
             ),
             supportedTextureFormats = setOf(GPUTextureFormat.RGBA8UnormSrgb),
+            supportedTextureUsage = GPUTextureUsage.RenderAttachment or
+                GPUTextureUsage.CopySrc or
+                GPUTextureUsage.CopyDst or
+                GPUTextureUsage.TextureBinding,
             textureFormatSampleSupport = GPUTextureFormatSampleSupport(
                 mapOf(GPUTextureFormat.RGBA8UnormSrgb to GPUTextureSampleCountSupport(setOf(1))),
             ),
@@ -8239,6 +8427,10 @@ class GPUFramePreflighterTest {
                 maxDynamicUniformBuffersPerPipelineLayout = 1,
             ),
             supportedTextureFormats = setOf(GPUTextureFormat.RGBA8UnormSrgb),
+            supportedTextureUsage = GPUTextureUsage.RenderAttachment or
+                GPUTextureUsage.CopySrc or
+                GPUTextureUsage.CopyDst or
+                GPUTextureUsage.TextureBinding,
             textureFormatSampleSupport = GPUTextureFormatSampleSupport(
                 mapOf(
                     GPUTextureFormat.RGBA8UnormSrgb to GPUTextureSampleCountSupport(
@@ -8334,6 +8526,10 @@ class GPUFramePreflighterTest {
                 maxDynamicUniformBuffersPerPipelineLayout = 1,
             ),
             supportedTextureFormats = setOf(GPUTextureFormat.RGBA8Unorm, GPUTextureFormat.RGBA8UnormSrgb),
+            supportedTextureUsage = GPUTextureUsage.RenderAttachment or
+                GPUTextureUsage.CopySrc or
+                GPUTextureUsage.CopyDst or
+                GPUTextureUsage.TextureBinding,
             textureFormatSampleSupport = GPUTextureFormatSampleSupport(
                 mapOf(
                     GPUTextureFormat.RGBA8UnormSrgb to GPUTextureSampleCountSupport(
@@ -11576,6 +11772,16 @@ class GPUFramePreflighterTest {
     private fun clipPreflightContext(plan: GPUFramePlan): GPUFramePreflightContext =
         GPUFramePreflightContext(
             targetId = "target.scene",
+            deviceGeneration = plan.capabilitySeal.deviceGeneration,
+            targetGeneration = 1,
+            resourceGenerations = plan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+                .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+                .associate { it.resource to 1L },
+        )
+
+    private fun w4ePreflightContext(plan: GPUFramePlan): GPUFramePreflightContext =
+        GPUFramePreflightContext(
+            targetId = plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().last().target.value,
             deviceGeneration = plan.capabilitySeal.deviceGeneration,
             targetGeneration = 1,
             resourceGenerations = plan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()

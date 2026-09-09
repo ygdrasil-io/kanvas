@@ -78,6 +78,10 @@ public class CapabilityCompilerChain private constructor(
             if (lastNarrowPathIndex >= 0 && ordered.none { it is W4dGeneralPathPlanCompiler }) {
                 ordered.add(lastNarrowPathIndex + 1, W4dGeneralPathPlanCompiler())
             }
+            val w4dGeneralIndex = ordered.indexOfLast { it is W4dGeneralPathPlanCompiler }
+            if (w4dGeneralIndex >= 0 && ordered.none { it is W4eClipPlanCompiler }) {
+                ordered.add(w4dGeneralIndex + 1, W4eClipPlanCompiler())
+            }
             return CapabilityCompilerChain(ordered)
         }
     }

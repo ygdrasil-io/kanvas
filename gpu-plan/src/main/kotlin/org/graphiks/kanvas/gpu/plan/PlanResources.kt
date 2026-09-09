@@ -8,6 +8,10 @@ public enum class PlanResourceRole {
     MultisampleColorTarget,
     PathHardEdgeMask,
     PathHardEdgeDepthStencil,
+    CoverageMaskAccumulator,
+    CoverageMaskScratch,
+    CoverageMaskMultisampleScratch,
+    CoverageMaskDepthStencil,
     ReadbackStaging,
     VertexData,
     IndexData,
@@ -27,11 +31,44 @@ public enum class PlanResourceUsage {
 }
 public enum class PlanResourceLifetime { FrameLocal }
 
+/**
+ * Primitive lifetime accounting used to preflight a frame before issuing any [PlanResource].
+ * The span deliberately carries no resource identity or GPU object.
+ */
+internal data class FrameResourceSpan(
+    val byteSize: Long,
+    val firstPassIndex: Int,
+    val lastPassIndexExclusive: Int,
+) {
+    init {
+        require(byteSize > 0L)
+        require(firstPassIndex >= 0 && lastPassIndexExclusive > firstPassIndex)
+    }
+}
+
+internal fun peakFrameLocalBytesI64(spans: List<FrameResourceSpan>, passCount: Int): Long {
+    require(passCount > 0)
+    return (0 until passCount).maxOf { passIndex ->
+        spans.asSequence()
+            .filter { it.firstPassIndex <= passIndex && passIndex < it.lastPassIndexExclusive }
+            .fold(0L) { total, span -> Math.addExact(total, span.byteSize) }
+    }
+}
+
 public sealed interface PlanTextureFormat {
     public data class Color(public val value: PlanLogicalColorFormat) : PlanTextureFormat
     public data class DepthStencil(public val value: PlanDepthStencilFormat) : PlanTextureFormat
-    public object CoverageMask : PlanTextureFormat
+    public object CoverageMask : PlanTextureFormat {
+        public val value: PlanCoverageMaskFormat = PlanCoverageMaskFormat.RGBA8_UNORM_LINEAR
+        public operator fun invoke(value: PlanCoverageMaskFormat): CoverageMask {
+            require(value == PlanCoverageMaskFormat.RGBA8_UNORM_LINEAR) { "Unsupported coverage-mask format" }
+            return this
+        }
+    }
 }
+
+/** Linear, un-premultiplied coverage storage used only by clip-mask passes. */
+public enum class PlanCoverageMaskFormat { RGBA8_UNORM_LINEAR }
 
 public class PlanResource private constructor(
     public val id: PlanResourceId,
@@ -86,7 +123,8 @@ public class PlanResource private constructor(
                         is PlanTextureFormat.DepthStencil -> {
                             require(
                                 role == PlanResourceRole.DepthStencil ||
-                                    role == PlanResourceRole.PathHardEdgeDepthStencil,
+                                    role == PlanResourceRole.PathHardEdgeDepthStencil ||
+                                    role == PlanResourceRole.CoverageMaskDepthStencil,
                             ) {
                                 "Depth-stencil textures require the depth-stencil role"
                             }
@@ -95,12 +133,22 @@ public class PlanResource private constructor(
                             }
                         }
                         PlanTextureFormat.CoverageMask -> {
-                            require(role == PlanResourceRole.PathHardEdgeMask) {
-                                "Coverage masks require the hard-edge mask role"
+                            require(PlanTextureFormat.CoverageMask.value == PlanCoverageMaskFormat.RGBA8_UNORM_LINEAR) {
+                                "Coverage masks require linear RGBA8 storage"
                             }
-                            require(sampleCountI32 == 1) { "Coverage masks must be single-sample" }
-                            require(usages == setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled)) {
-                                "Coverage masks require render-attachment and sampled usage"
+                            require(role in setOf(
+                                PlanResourceRole.PathHardEdgeMask,
+                                PlanResourceRole.CoverageMaskAccumulator,
+                                PlanResourceRole.CoverageMaskScratch,
+                                PlanResourceRole.CoverageMaskMultisampleScratch,
+                            )) { "Coverage masks require a typed mask role" }
+                            val expectedSamples = if (role == PlanResourceRole.CoverageMaskMultisampleScratch) 4 else 1
+                            require(sampleCountI32 == expectedSamples) { "Coverage-mask sample count does not match its role" }
+                            require(PlanResourceUsage.RenderAttachment in usages) {
+                                "Coverage masks require render-attachment usage"
+                            }
+                            if (sampleCountI32 == 1) require(PlanResourceUsage.Sampled in usages) {
+                                "Single-sample coverage masks require sampled usage"
                             }
                         }
                     }
@@ -121,7 +169,8 @@ public class PlanResource private constructor(
                 }
             }
             val isD24S8DepthStencilTexture = kind == PlanResourceKind.Texture2D &&
-                (role == PlanResourceRole.DepthStencil || role == PlanResourceRole.PathHardEdgeDepthStencil) &&
+                (role == PlanResourceRole.DepthStencil || role == PlanResourceRole.PathHardEdgeDepthStencil ||
+                    role == PlanResourceRole.CoverageMaskDepthStencil) &&
                 format == PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8)
             require(PlanResourceUsage.DepthStencilAttachment !in usages || isD24S8DepthStencilTexture) {
                 "Depth-stencil attachment usage requires a D24S8 depth-stencil texture"

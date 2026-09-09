@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.canvas
 
 import org.graphiks.kanvas.pipeline.ClipOp
+import org.graphiks.kanvas.render.ir.ClipTransformSnapshot
+import org.graphiks.math.matrix.Matrix3x3F32
 
 /**
  * Represents the current clipping state of a [Canvas].
@@ -26,7 +28,7 @@ sealed interface ClipStack {
 
     val isRect: Boolean get() = this is DeviceRect
 
-    /** True when a clip was captured under perspective and must refuse the affine GPU route. */
+    /** True only for a historical clip whose unavailable transform recorded perspective refusal. */
     val perspectiveCaptureRefusal: Boolean get() = when (this) {
         WideOpen,
         is DeviceRect -> false
@@ -42,36 +44,116 @@ sealed interface ClipStack {
  */
 sealed interface ClipStackOp {
     val antiAlias: Boolean
-    /** Preserves the capture-time perspective refusal after later CTM changes. */
+    /** Capture-time transform authority, retained with source geometry. */
+    val transform: ClipTransformSnapshot
+
+    /** Compatibility fact retained solely for historical v8 payloads. */
     val perspectiveCaptureRefusal: Boolean
+        get() = (transform as? ClipTransformSnapshot.LegacyUnavailable)?.perspectiveCaptureRefusal == true
+
+    /** Compatibility metadata for historical consumers; typed transforms never classify by string. */
+    val transformClass: String
+        get() = (transform as? ClipTransformSnapshot.LegacyUnavailable)?.transformClass ?: "typed-snapshot"
+
     /** Axis-aligned rectangle clip operation. */
     data class RectOp(
         val rect: org.graphiks.math.geometry.RectF32,
         val op: ClipOp,
         override val antiAlias: Boolean = true,
-        override val perspectiveCaptureRefusal: Boolean = false,
-    ) : ClipStackOp
+        override val transform: ClipTransformSnapshot = ClipTransformSnapshot.Known.of(Matrix3x3F32.Identity),
+    ) : ClipStackOp {
+        /** Historical constructor; new captures must provide [transform] instead. */
+        constructor(
+            rect: org.graphiks.math.geometry.RectF32,
+            op: ClipOp,
+            antiAlias: Boolean = true,
+            transformClass: String,
+        ) : this(rect, op, antiAlias, legacyClipTransform(transformClass, false))
+
+        /** Historical constructor; new captures must provide [transform] instead. */
+        constructor(
+            rect: org.graphiks.math.geometry.RectF32,
+            op: ClipOp,
+            antiAlias: Boolean = true,
+            perspectiveCaptureRefusal: Boolean,
+        ) : this(rect, op, antiAlias, legacyClipTransform(if (perspectiveCaptureRefusal) "perspective" else "identity", perspectiveCaptureRefusal))
+
+        /** Historical constructor; new captures must provide [transform] instead. */
+        constructor(
+            rect: org.graphiks.math.geometry.RectF32,
+            op: ClipOp,
+            antiAlias: Boolean,
+            perspectiveCaptureRefusal: Boolean,
+            transformClass: String,
+        ) : this(rect, op, antiAlias, legacyClipTransform(transformClass, perspectiveCaptureRefusal))
+    }
 
     /** Rounded-rectangle clip operation. */
     data class RRectOp(
         val rrect: org.graphiks.math.geometry.RRectF32,
         val op: ClipOp,
         override val antiAlias: Boolean = true,
-        override val perspectiveCaptureRefusal: Boolean = false,
-        /** Capture-time CTM class retained after the RRect is mapped to device space. */
-        val transformClass: String = "identity",
-    ) : ClipStackOp
+        override val transform: ClipTransformSnapshot = ClipTransformSnapshot.Known.of(Matrix3x3F32.Identity),
+    ) : ClipStackOp {
+        /** Historical constructor; new captures must provide [transform] instead. */
+        constructor(
+            rrect: org.graphiks.math.geometry.RRectF32,
+            op: ClipOp,
+            antiAlias: Boolean = true,
+            transformClass: String,
+        ) : this(rrect, op, antiAlias, legacyClipTransform(transformClass, false))
+
+        /** Historical constructor; new captures must provide [transform] instead. */
+        constructor(
+            rrect: org.graphiks.math.geometry.RRectF32,
+            op: ClipOp,
+            antiAlias: Boolean,
+            perspectiveCaptureRefusal: Boolean,
+            transformClass: String,
+        ) : this(rrect, op, antiAlias, legacyClipTransform(transformClass, perspectiveCaptureRefusal))
+    }
 
     /** Arbitrary path clip operation. */
     data class PathOp(
         val path: org.graphiks.kanvas.geometry.Path,
         val op: ClipOp,
         override val antiAlias: Boolean = true,
-        override val perspectiveCaptureRefusal: Boolean = false,
-        /** Capture-time CTM class retained after path coordinates are flattened. */
-        val transformClass: String = "identity",
-    ) : ClipStackOp
+        override val transform: ClipTransformSnapshot = ClipTransformSnapshot.Known.of(Matrix3x3F32.Identity),
+    ) : ClipStackOp {
+        /** Historical constructor; new captures must provide [transform] instead. */
+        constructor(
+            path: org.graphiks.kanvas.geometry.Path,
+            op: ClipOp,
+            antiAlias: Boolean = true,
+            transformClass: String,
+        ) : this(path, op, antiAlias, legacyClipTransform(transformClass, false))
+
+        /** Historical constructor; new captures must provide [transform] instead. */
+        constructor(
+            path: org.graphiks.kanvas.geometry.Path,
+            op: ClipOp,
+            antiAlias: Boolean = true,
+            perspectiveCaptureRefusal: Boolean,
+        ) : this(path, op, antiAlias, legacyClipTransform(if (perspectiveCaptureRefusal) "perspective" else "identity", perspectiveCaptureRefusal))
+
+        /** Historical constructor; new captures must provide [transform] instead. */
+        constructor(
+            path: org.graphiks.kanvas.geometry.Path,
+            op: ClipOp,
+            antiAlias: Boolean,
+            perspectiveCaptureRefusal: Boolean,
+            transformClass: String,
+        ) : this(path, op, antiAlias, legacyClipTransform(transformClass, perspectiveCaptureRefusal))
+    }
 }
+
+private fun legacyClipTransform(
+    transformClass: String,
+    perspectiveCaptureRefusal: Boolean,
+): ClipTransformSnapshot.LegacyUnavailable = ClipTransformSnapshot.LegacyUnavailable(
+    transformClass = transformClass,
+    perspectiveCaptureRefusal = perspectiveCaptureRefusal,
+)
 
 /**
  * Returns the exact intersection of this stack followed by [other].
