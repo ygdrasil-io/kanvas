@@ -55,12 +55,10 @@ Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :
   — W4a ScalarAA Rect, W4b RRect analytique, W4c fills de paths hard-edge et
   W4d.1 strokes/hairlines hard-edge sont atteints. W4d.2 ajoute les transforms
   généraux et l'architecture path AA4/resolve, avec rendu public exact pour la
-  lane hard générale. Sur le runtime natif courant, AA4 reste correctement
-  terminal faute de capacité sRGB 4×/resolve certifiée ; W4e
-  (clips complexes/inverses/booléens) reste ouverte. La gate Surface filtrée
-  W4d.2 reproduit exactement la baseline historique de 45 échecs
-  `GPUAllApiBlendSurfaceTest::DrawPoint` sur 2 080 tests, sans échec W4d.2 ni
-  erreur XML.
+  lane hard générale. W4e apporte des preuves positives hard-mask 1×,
+  inverse/D24S8 et oracle/matrice `Surface`; AA4 positif reste honnêtement
+  skipped faute de topologie native complète. W4e reste ouverte à cause de 18
+  nouveaux deltas d'intégration, documentés sans les confondre avec la baseline.
 - [État consolidé de la topologie hybride](progress/2026-08-31-hybrid-f64-f32-path-topology/progress.md)
 - [Rapport d'implémentation de l'admission conservative](progress/2026-09-01-conservative-hybrid-topology-admission/implementation-report.md)
 - [Revue de spécification de l'admission conservative](progress/2026-09-01-conservative-hybrid-topology-admission/spec-review.md)
@@ -74,7 +72,7 @@ Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :
 | W1 | Géométrie immuable dans `:math` | Périmètre fonctionnel implémenté et prouvé ciblé pour les frontières d'enregistrement/Picture : snapshots profonds immuables d'images/effets, copie itérative résistante aux cycles avec limites reportées à `SceneCaptureLimits`, writer `Picture` v8 stable et enregistrement détaché/transactionnel des `RuntimeEffect`. Gate stricte **NON ATTEINTE / bloquée** par la validation globale fraîche de 51 échecs sur 3 585 tests, qui confirme la baseline globale ; topologie source, topologie hybride F64/F32 et admission conservative restent documentées séparément |
 | W2 | `Scene IR` et frontières de modules | Capture backend-neutral et frontières de modules implémentées ; gate stricte **NON ATTEINTE** (431/443 captures, 12 dettes), rendu public encore legacy |
 | W3 | `gpu-plan` et premier `RenderGraph` | Capability rectangles solides/clip simple/`SrcOver` branchée et prouvée par pixels exacts ; baseline globale conservée (51 échecs connus, 0 erreur) |
-| W4 | Geometry/coverage | W4a ScalarAA Rect, W4b RRect analytique, W4c fills hard-edge et W4d.1 strokes/hairlines hard-edge sont atteints. W4d.2 ajoute les transforms F64 `Identity`/`AxisAlignedAffine`/`GeneralAffine`/`Perspective`, le graph AA4/resolve scellé et la lane hard générale prouvée byte-exact à travers `Surface`. L'architecture AA4 est implémentée mais sa promotion reste terminale sur le runtime de production : sRGB est seulement échantillonnable en `{1}` et aucun probe de resolve sRGB4 n'existe ; il n'y a donc pas de preuve positive Surface AA/mixte aux couvertures exactes 0/0,5/1. Restent ouverts : ce probe/capacité AA4, `TopologyLimit` conservative F64→F32 pour certaines unions, W4e clips complexes/inverses/booléens et la baseline historique DrawPoint (45/2 080 dans la gate filtrée). Les tests font exception de `font`/`codec`, GM/dashboard/baseline et `jpg-color-cube` ([status](waves/W04-geometry-coverage/status.md)) |
+| W4 | Geometry/coverage | W4a ScalarAA Rect, W4b RRect analytique, W4c fills hard-edge et W4d.1 strokes/hairlines hard-edge sont atteints. W4d.2 ajoute les transforms F64 `Identity`/`AxisAlignedAffine`/`GeneralAffine`/`Perspective`, le graph AA4/resolve scellé et la lane hard générale prouvée byte-exact à travers `Surface`. W4e fournit hard mask 1×, inverse/D24S8 et oracle/matrice `Surface`; AA4 positif est skipped faute de topologie native complète. Restent ouverts : le probe/capacité AA4, `TopologyLimit` conservative F64→F32, les 18 deltas d'intégration W4e frais et la baseline DrawPoint. Les tests font exception de `font`/`codec`, GM/dashboard/baseline et `jpg-color-cube` ([status](waves/W04-geometry-coverage/status.md)) |
 | W5 | Material graph | Non démarrée |
 | W6 | Layers et effets | Non démarrée |
 | W7 | Convergence GM | Non démarrée |

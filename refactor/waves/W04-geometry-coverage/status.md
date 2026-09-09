@@ -297,38 +297,78 @@ W4c ne contient aucun chemin `font`, `codec`, GM, dashboard, render/baseline ou
 
 Pour les RRect non nuls, la SDF native n'est pas l'aire analytique Skia exacte. Cette dette est explicitement réservée à W7 : un nouveau shader ne pourra être envisagé qu'après une divergence matérielle constatée par l'intégration Skia. Il est interdit de la masquer par une tolérance, un seuil plus bas ou une rebaseline.
 
-## Correctif W4e Task 7 — 2026-09-09
+## W4e — clips complexes et inverse paths, état factuel au 2026-09-09
 
-Le scellement W4e distingue désormais le `SceneTarget` canonique 1× du
-`LayerTarget` couleur MSAA 4× ; les masks hard et les scratchs clip conservent
-`ClipMask`, et les familles D24S8 restent séparées. Le preflight,
-matérialiseur et executor refusent toute continuation AA ou resolve dont les
-rôles scellés sont contradictoires.
+W4e livre la préparation bornée des clips ordonnés Rect/RRect/Path et des
+opérations `INTERSECT`/`DIFFERENCE`, leurs masques `RGBA8Unorm` hard 1×, et
+la restauration exacte du domaine `InverseDomain.Zero`. Le graphe scelle les
+chaînes producer/fold/consumer, les rôles des targets et scratchs, et D24S8.
+La preuve publique positive existe pour le hard mask 1×, pour les draws
+inverse/D24S8 1× et pour l'oracle CPU indépendant / la matrice `Surface`
+byte-exacte (ordre, partage de clip, transform, scissor, RGBA/BGRA et
+SrcOver). `Picture` v8 conserve ce payload à la lecture historique et
+`SceneArchive` reste lu pour les schémas 1 et 2.
 
-`InverseDomain.Zero` remplace le proxy W4d.2 par un snapshot exact du chemin
-source non vide (segments et transform, inclus dans le digest canonique) ; seul
-un chemin source réellement vide devient `Empty`, et les deux variantes sont
-D24-free. Les tests couvrent ces faits au lowering public.
+La seule preuve AA4 positive qui manque est honnêtement `SKIPPED` à la
+frontière de topology/capability native : l'adaptateur courant ne publie pas
+la topologie AA4 complète. Aucune capability AA4, aucun sample position matériel
+ni succès terminal n'a été inventé. En revanche, les tests publics hard et
+inverse passent réellement ; le test Surface AA4 et le test mixed hard/AA4 sont
+les deux skips documentés de la gate Surface filtrée.
 
-La matrice d'échecs W4e utilise désormais `GPUW4eFrameFailureBehavior` à
-travers la session publique compiler → lowerer → preflight/materializer →
-executor → completion/readback. Allocation, pipeline, bind group, encoder et
-close refusent sans output/encoder scopes partiels, puis une exécution propre
-retrouve le readback. Les anciens tests W4e à faux matérialiseur et rollback de
-pool isolé ont été retirés.
+Le rollback public prouvé n'est pas une matrice d'injection native : un refus
+de budget W4e est suivi d'un rendu `Surface` exact récupéré sur la même route.
+Les six rollback sites natifs (allocation, pipeline, bind, encoder, completion,
+close) restent un gap d'intégration. Aucun overload de factory, seam artificiel,
+proxy, reflection ou API de contrôle de panne n'a été ajouté pour les simuler.
+L'overload public `prepareSceneFrameSession` qui avait introduit un quinzième
+échec renderer a été retiré ; il ne faut donc plus décrire quinze échecs comme
+préexistants.
 
-Validation fraîche : `rtk ./gradlew :gpu-plan:test --rerun-tasks --console=plain`
-a terminé avec `BUILD SUCCESSFUL` le 2026-09-09 (32 tâches exécutées). Les
-gates renderer ciblées ont aussi passé ; les scénarios WGPU dépendants de
-l'adaptateur natif restent explicitement `SKIPPED` lorsque cet adaptateur n'est
-pas disponible.
+### Gates W4e fraîches et attribution
 
-La gate complète `rtk ./gradlew :gpu-renderer:test --rerun-tasks --console=plain`
-a ensuite exécuté 3 775 tests. Elle reste rouge sur 15 échecs préexistants,
-hors W4e (smoke runtime natif, inventaires de pipelines, matériaux, règles de
-package et contrats image) ; les suites W4e ciblées demeurent vertes. Aucun de
-ces échecs ne concerne les rôles W4e, la restauration `InverseDomain.Zero` ou
-la matrice d'échecs publique.
+| Gate | État Gradle | XML frais | Attribution |
+| --- | --- | --- | --- |
+| geometry/matrix/render-ir/gpu-plan | `BUILD SUCCESSFUL` (exit 0) | 1 838 tests, 0 failure, 0 error | verte ; les tests `render-ir` d'archive ne signalent aucune failure. |
+| renderer ciblé | `BUILD FAILED` (exit 1) | 377 tests, 85 failures, 0 error, 1 skipped | delta HEAD : le parent passe 356 tests, 0 failure. Les 85 attentes W4a–W4d reçoivent `UnsupportedCapability` dans 8 suites (13 preflighter, 1 pool, 22 payload W4d, 20 lowerer commun, 13 W4a, 5 W4b, 3 W4c, 8 W4d). |
+| Surface/Picture filtrée | `BUILD FAILED` (exit 1) | 2 144 tests, 47 failures, 0 error, 2 skipped | parent : 2 118 / 45 / 0 ; les deux nouveaux échecs sont les refus de transform de clip ci-dessous. |
+| `:kanvas:test` complet | `BUILD FAILED` (exit 1) | 3 687 tests, 69 failures, 0 error, 2 skipped | parent : 3 664 / 51 / 0 ; 18 nouveaux noms W4e, donc la gate n'est pas green et W4e n'est pas close. |
+
+Les deux deltas comportementaux sont
+`GPUClipCoverageSurfaceTest::public singular rect rrect and path clips refuse before submission()`
+et `::public singular clip transforms refuse before submission()` : ils
+attendent `unsupported.transform.affine_singular`, mais observent
+`unsupported_clip_transform:Singular` (le premier diagnostic est préfixé
+`rect ==>`). Les seize autres deltas sont
+`GPUFramePathApiInventoryNativeSmokeTest` et échouent tous avec
+`NoSuchElementException: List is empty.` : ils inspectent directement
+`inventory.visualCommands.single()` pour les scénarios stroke/path sous clip.
+Ce sont des tests native-smoke/inventory, donc incompatibles avec l'interdiction
+de preuve infrastructure/source-shape ; ils ne doivent pas devenir une nouvelle
+surface de test W4e. Ils indiquent néanmoins une conséquence d'intégration
+réelle (commande attendue absente), à adjuger dans une Task9-fix, et ne sont pas
+écartés comme une baseline. Le rapport Task 9 contient les seize noms exacts.
+
+Les 51 noms historiques restent strictement ceux du ledger (45 `DrawPoint`,
+`ImageTest`, `GPUMaskBlurDispatchTest`, deux `GPUPreparedSurfaceFrameBuilderTest`,
+`GPUPreparedTextStrokeTest`, `GPURefusalGuardsTest`), sans `<error>`.
+
+### Dette et rulings conservés
+
+- Les diagnostics de refus path/projective hétérogènes restent aplatis à
+  `EntryAttemptedEdgeLimit`, et les anciens helpers de preflight clip restent
+  du code mort.
+- `prepareInversePathGeometryF32` conserve son paramètre public
+  `pathWorkUsageBeforeI64`; `clipCapabilities()` contient une entrée couleur
+  dupliquée, neutralisée par `Set`.
+- Le test mixed-AA ne compare pas encore l'ID resolve préparé aux deux autorités
+  finales ; les erreurs d'allocation pool sont toutes attribuées
+  `W4eAccumulatorTexture`; `GPUW4eMaskContinuationRequest.Skip` reste
+  non-matérialisable mais inaccessible depuis un graphe Task 6 valide.
+- L'enregistrement explicite W4e dans `GpuRenderContext` paraît redondant car
+  `CapabilityCompilerChain.of` l'ajoute déjà. Les types numériques publics de
+  `:math` gardent la convention I32/F64, sans l'imposer aux coordonnées locales
+  de l'oracle.
 
 ## Limites ouvertes
 
@@ -339,7 +379,9 @@ W4 reste ouverte. W4d.2 laisse explicitement :
   inventée pour contourner ce gap ;
 - la limite conservative `TopologyLimit` de certaines unions PathOps F64→F32,
   notamment `STROKE_AND_FILL` projectif non vide et le fixture closed-skew ;
-- W4e : clips path complexes, inverse paths et booléens.
+- la réparation/adjudication des 18 deltas W4e frais ci-dessus ; les
+  fonctionnalités W4e ne sont donc plus « toutes ouvertes », mais leur
+  intégration n'est pas close.
 
 W5 (materials), W6 (layers/effets) et W7 (convergence GM, incluant la
 réévaluation de la dette SDF RRect W4b) ne font pas partie de W4d.2. Les gates
