@@ -1169,3 +1169,21 @@ rtk gh pr create --base codex/w4d-general-transform-aa --head codex/w4e-complex-
 Le body créé par `apply_patch` contient `## Summary`, `## Verification` et
 `## Scope and follow-ups`. Ne pas merger/rebaser, lancer GM/Skia ou supprimer
 le worktree.
+
+### Addendum `final-fix` — 2026-09-09
+
+- [x] La revue finale a étendu la candidate gate W4e aux clips complexes et
+  aux draws inverse, puis aux consumers Rect/RRect/Path `FILL`/`STROKE`/
+  `STROKE_AND_FILL` par la seam W4 partagée; seul l'inverse `STROKE_AND_FILL`
+  reçoit la translation `PathStrokeStyleF64` définie par le contrat.
+- [x] La publication inverse débite le snapshot défensif réel avant sa copie;
+  les entrées stack/frame, leurs reasons et leur propagation Matrix sont de
+  nouveau bornées et préflightées avant toute matérialisation.
+- [x] La normalisation Skia des rayons RRect est une autorité F64 unique pour
+  les quatre classes de transform, avec preuves d'équivalence typed/path.
+- [x] Le triplet native V/I/U est désormais une ressource W4e scellée du graph
+  (ID, usage, capacité, lifetime, peak et limite device); le renderer ne crée
+  plus de buffer Path/RRect/inverse ad hoc après `Ready`.
+- [x] RED puis GREEN ciblés pour chaque finding; gates fraîches : G1/G2 vertes,
+  G3 à 2 144/45/0/2 et G4 à 3 687/51/0/2, soit les baselines exactes. AA4 reste
+  explicitement indisponible sans capability inventée.

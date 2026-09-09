@@ -371,6 +371,49 @@ Les 51 noms historiques restent strictement ceux du ledger (45 `DrawPoint`,
 `ImageTest`, `GPUMaskBlurDispatchTest`, deux `GPUPreparedSurfaceFrameBuilderTest`,
 `GPUPreparedTextStrokeTest`, `GPURefusalGuardsTest`), sans `<error>`.
 
+### Correctif final post-revue Sol — `final-fix`
+
+Les cinq findings Important de la relecture finale sont traités sans élargir la
+capability W4e. La candidate gate accepte maintenant une scène qui porte soit
+un clip complexe, soit un draw inverse; les consumers Rect/RRect/Path utilisent
+la seam W4d commune et l'inverse `STROKE_AND_FILL` emploie le même
+`PathStrokeStyleF64`. Le `STROKE` seul ne reçoit aucune nouvelle sémantique.
+
+La préparation inverse débite, avant `Geometry.of`, le coût exact du snapshot
+défensif et son overhead avec addition contrôlée. `ClipPreparationLimitsI32`
+rétablit 64 entrées par stack et 1 024 par frame; geometry et matrix préflightent
+le compte avant toute map/copie, puis propagent le cumul frame. Les refus restent
+transactionnels (`StackEntryCountLimit`/`FrameEntryCountLimit`).
+
+Les RRect normalisent une seule fois leurs rayons en F64 (clamp des négatifs,
+scale uniforme des rayons opposés) avant le choix Identity/axis/general/perspective;
+les branches typed et path partagent donc la même autorité canonique. Enfin le
+graphe W4e scelle un unique triplet V/I/U avec IDs, usages, capacités, premières
+liaisons et lifetimes frame-local; le peak/preflight et `maxBufferSizeBytes` le
+voient avant `Ready`, et le materializer ne fait que louer, uploader et binder
+ces buffers autorisés. Les allocations de readback restent les sorties publiques
+existantes, hors de ce triplet.
+
+Les trois cas AA4 concernés restent des terminaux honnêtes
+`w4e.clip.sample-count-unavailable`; aucune capacité AA4 n'est publiée par ce
+correctif. L'ancien écart du test inverse direct était une assertion obsolète
+sur le sentinel W4c, pas un bug de rendu : les pixels publics prouvent maintenant
+l'intérieur transparent et l'extérieur rouge.
+
+| Gate finale `final-fix` | État Gradle | Résultat frais |
+| --- | --- | --- |
+| geometry/matrix/render-ir/gpu-plan | `BUILD SUCCESSFUL` (exit 0) | 85 tâches, 0 failure, 0 error. |
+| renderer W4d/W4e ciblé | `BUILD SUCCESSFUL` (exit 0) | 0 failure, 0 error; le skip AA4 reste explicite. |
+| Surface/Picture filtrée | `BUILD FAILED` (exit 1 attendu) | 2 144 tests, 45 failures historiques, 0 error, 2 skips. |
+| `:kanvas:test` complet | `BUILD FAILED` (exit 1 attendu) | 3 687 tests, 51 failures historiques, 0 error, 2 skips. |
+
+Le scan XML final ne trouve que les six fichiers historiques et les 51 noms du
+ledger déjà publié; `rtk rg -n '<error' kanvas/build/test-results/test/TEST-*.xml`
+ne retourne aucune occurrence. Aucun test `font` ou `codec`, GM, dashboard,
+baseline, `:integration-tests:skia` ou `jpg-color-cube` n'a été sélectionné;
+la compilation transitive éventuelle de modules `font` ne constitue pas une
+exécution de leur suite.
+
 ### Dette et rulings conservés
 
 - Les diagnostics de refus path/projective hétérogènes restent aplatis à
