@@ -499,6 +499,22 @@ six fichiers XML du ledger historique et aucun `<error>`. Les suites `font`,
 ne sont pas sélectionnées (la compilation transitive de `font` ne lance pas sa
 suite).
 
+### Complément de re-review Sol — `final-fix4`
+
+Les quatre scénarios publics `final-fix3` conservent désormais leur
+`RenderResult` et appellent `assertPreparedRouteEvidence(result)` avant toute
+comparaison de pixels. Cette assertion publique exige exactement les scopes
+d'évidence native `Render` et `Readback`; les pixels exacts ne peuvent donc
+plus valider seuls un fallback legacy. Dans le scénario de cinq géométries, la
+même assertion est exécutée pour chacun des cinq rendus, y compris la frame de
+récupération.
+
+Cette correction ne touche que le test public et la documentation : aucune
+fixture interne, AA4 synthétique, reflection, compteur d'appels ou assertion
+de source n'est introduit. Le ciblé des quatre scénarios est vert; G3 reste
+`BUILD FAILED` attendu à 2 149 tests, 45 failures historiques, 0 error et
+2 skips. Aucun G4 supplémentaire n'est revendiqué pour ce complément test-only.
+
 ### Dette et rulings conservés
 
 - Les diagnostics de refus path/projective hétérogènes restent aplatis à

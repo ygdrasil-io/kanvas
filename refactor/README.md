@@ -71,7 +71,10 @@ Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :
   La revue statique, et non les pixels black-box, établit que `.from` précède la
   publication du graphe; les pixels établissent seulement le comportement et
   l'isolation observable, sans conclure à une identité d'objet, à une réutilisation
-  précise du pool ou à un nombre d'allocations. Les deux skips AA4 restent explicites.
+  précise du pool ou à un nombre d'allocations. `final-fix4` exige en outre,
+  avant chaque oracle pixel de ces quatre scénarios, les scopes publics
+  `Render`/`Readback` du `RenderResult`, pour empêcher qu'un fallback legacy
+  satisfasse seulement les pixels. Les deux skips AA4 restent explicites.
 - [État consolidé de la topologie hybride](progress/2026-08-31-hybrid-f64-f32-path-topology/progress.md)
 - [Rapport d'implémentation de l'admission conservative](progress/2026-09-01-conservative-hybrid-topology-admission/implementation-report.md)
 - [Revue de spécification de l'admission conservative](progress/2026-09-01-conservative-hybrid-topology-admission/spec-review.md)

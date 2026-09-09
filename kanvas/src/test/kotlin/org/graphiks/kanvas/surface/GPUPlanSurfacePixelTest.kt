@@ -279,7 +279,9 @@ class GPUPlanSurfacePixelTest {
             restore()
         }
 
-        assertPixelsEqual(expected, surface.render().pixels)
+        val result = surface.render()
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(expected, result.pixels)
     }
 
     @Test
@@ -322,7 +324,9 @@ class GPUPlanSurfacePixelTest {
         }
 
         assertFalse(expected.contentEquals(transformedScissor), "The fixed device scissor must not follow the draw CTM.")
-        assertPixelsEqual(expected, surface.render().pixels)
+        val result = surface.render()
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(expected, result.pixels)
     }
 
     @Test
@@ -423,7 +427,9 @@ class GPUPlanSurfacePixelTest {
                 ),
             )
 
-            assertPixelsEqual(W4eClipCpuOracle.render(width, height, expectedDraws), surface.render().pixels)
+            val result = surface.render()
+            assertPreparedRouteEvidence(result)
+            assertPixelsEqual(W4eClipCpuOracle.render(width, height, expectedDraws), result.pixels)
         }
     }
 
@@ -456,7 +462,9 @@ class GPUPlanSurfacePixelTest {
         source.addRect(RectF32.ofLTRB(7f, 2f, 10f, 6f))
 
         assertFalse(expected.contentEquals(leaked), "The mutation must change observable pixels if it escapes capture.")
-        assertPixelsEqual(expected, surface.render().pixels)
+        val result = surface.render()
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(expected, result.pixels)
     }
 
     @Test
