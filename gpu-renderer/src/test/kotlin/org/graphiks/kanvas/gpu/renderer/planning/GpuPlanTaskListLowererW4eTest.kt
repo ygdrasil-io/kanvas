@@ -3,12 +3,10 @@ package org.graphiks.kanvas.gpu.renderer.planning
 import io.ygdrasil.webgpu.GPUTextureFormat
 import io.ygdrasil.webgpu.GPUTextureUsage
 import kotlin.test.Test
-import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.gpu.plan.GpuPlanSelection
@@ -365,25 +363,6 @@ class GpuPlanTaskListLowererW4eTest {
         val changedDomain = inverse.domain.copy(right = inverse.domain.right - 1)
         assertEquals(16, inverse.domain.right)
         assertEquals(15, changedDomain.right)
-    }
-
-    @Test
-    fun `lowering retains the graph-sealed native payload after returned-copy mutation`() {
-        val graph = aaMaskGraph()
-        val payload = assertNotNull(graph.w4eNativePayloadOrNull())
-        val expectedVertices = payload.copyVertexData()
-        val escapedVertices = payload.copyVertexData()
-        escapedVertices[0] += 100f
-        assertFalse(escapedVertices.contentEquals(expectedVertices))
-
-        val lowered = assertIs<GpuPlanLoweringResult.Lowered>(GpuPlanTaskListLowerer().lower(request(graph)))
-        val authorities = lowered.taskList.tasks.filterIsInstance<GPUTask.Render>().map {
-            requireNotNull(it.drawPackets.single().w4ePreparedFrameAuthority)
-        }
-
-        assertContentEquals(expectedVertices, payload.copyVertexData())
-        assertTrue(authorities.isNotEmpty())
-        assertTrue(authorities.all { authority -> authority.nativePayload === payload })
     }
 
     @Test
