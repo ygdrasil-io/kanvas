@@ -399,7 +399,7 @@ private fun createW4eConsumerPipeline(
     val shader = owned.own(device.createShaderModule(ShaderModuleDescriptor(
         label = "Kanvas.frame.w4e.consumerShader",
         code = w4eFullscreenVertexShader() + """
-            struct ConsumerBlock { color: vec4f, inverse: f32, _padding: vec3f };
+            struct ConsumerBlock { color: vec4f, inverse: f32, padding0: f32, padding1: f32, padding2: f32 };
             @group(0) @binding(0) var clipMask: texture_2d<f32>;
             @group(0) @binding(1) var<uniform> consumer: ConsumerBlock;
             @fragment fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
@@ -452,7 +452,7 @@ private fun createW4eBinaryConsumerPipeline(
     val shader = owned.own(device.createShaderModule(ShaderModuleDescriptor(
         label = "Kanvas.frame.w4e.binaryConsumerShader",
         code = w4eFullscreenVertexShader() + """
-            struct ConsumerBlock { color: vec4f, inverse: f32, _padding: vec3f };
+            struct ConsumerBlock { color: vec4f, inverse: f32, padding0: f32, padding1: f32, padding2: f32 };
             @group(0) @binding(0) var pathMask: texture_2d<f32>;
             @group(0) @binding(1) var clipMask: texture_2d<f32>;
             @group(0) @binding(2) var<uniform> consumer: ConsumerBlock;
@@ -506,7 +506,7 @@ private fun createW4eMaskedPathPipeline(
     val shader = owned.own(device.createShaderModule(ShaderModuleDescriptor(
         label = "Kanvas.frame.w4e.maskedPathShader",
         code = """
-            struct ConsumerBlock { color: vec4f, inverse: f32, _padding: vec3f };
+            struct ConsumerBlock { color: vec4f, inverse: f32, padding0: f32, padding1: f32, padding2: f32 };
             @group(0) @binding(0) var clipMask: texture_2d<f32>;
             @group(0) @binding(1) var<uniform> consumer: ConsumerBlock;
             @vertex fn vs_main(@location(0) position: vec2f) -> @builtin(position) vec4f {
@@ -690,6 +690,17 @@ private fun w4eStencilNonZeroReadState(): DepthStencilState = DepthStencilState(
         passOp = GPUStencilOperation.Keep,
     ),
     stencilReadMask = 0xffu,
+    stencilWriteMask = 0u,
+)
+
+/** Declares the sealed D24S8 attachment for a direct producer without reading or writing stencil. */
+private fun w4eStencilNoopState(): DepthStencilState = DepthStencilState(
+    format = GPUTextureFormat.Depth24PlusStencil8,
+    depthWriteEnabled = false,
+    depthCompare = GPUCompareFunction.Always,
+    stencilFront = StencilFaceState(GPUCompareFunction.Always, GPUStencilOperation.Keep, GPUStencilOperation.Keep, GPUStencilOperation.Keep),
+    stencilBack = StencilFaceState(GPUCompareFunction.Always, GPUStencilOperation.Keep, GPUStencilOperation.Keep, GPUStencilOperation.Keep),
+    stencilReadMask = 0u,
     stencilWriteMask = 0u,
 )
 
@@ -3082,7 +3093,9 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                                     val index = geometryBuffer("Kanvas.frame.w4e.pathDirectIndices", GPUBufferUsage.Index, indices.w4eBytes())
                                     val pipeline = createW4ePathGeometryPipeline(
                                         device, GPUTextureFormat.RGBA8Unorm, pass.sampleCount,
-                                        if (pass.inverseCoverage) 0f else 1f, label = "Kanvas.frame.w4e.pathDirect.pipeline", owned = owned,
+                                        if (pass.inverseCoverage) 0f else 1f,
+                                        stencil = if (depthTarget != null) w4eStencilNoopState() else null,
+                                        label = "Kanvas.frame.w4e.pathDirect.pipeline", owned = owned,
                                     )
                                     listOf(
                                         GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand.noBindings(pipeline, generationSeal.deviceGeneration)),

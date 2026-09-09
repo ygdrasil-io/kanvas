@@ -136,9 +136,9 @@ class GPUPlanSurfacePixelTest {
             drawPath(foreground, Paint.fill(ColorARGB.of(255, 38, 161, 99)).copy(antiAlias = false))
         }
 
-        assertTrue(expected.any { it != 0.toUByte() }, "oracle fixture must observe covered pixels")
-        val failure = assertFailsWith<GPUPlanSurfaceTerminalException> { surface.render() }
-        assertEquals("w4e.clip.mask-format-unavailable", failure.code)
+        val result = surface.render()
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(expected, result.pixels)
     }
 
     @Test

@@ -54,7 +54,7 @@ import org.graphiks.math.matrix.Matrix3x3F32
 @OptIn(ExperimentalUnsignedTypes::class)
 class GPUPlanSurfaceRouterTest {
     @Test
-    fun `W4e hard ordered mask clips stop at the public native capability boundary rather than legacy`() {
+    fun `W4e hard ordered mask clips reach public 1x completion rather than legacy`() {
         val context = GpuRenderContext.createProduction()
         try {
             val clip = ClipStack.Complex(
@@ -71,18 +71,18 @@ class GPUPlanSurfaceRouterTest {
                         clip,
                     ),
                 )
-            val failure = assertFailsWith<GPUPlanSurfaceTerminalException> {
-                GPUPlanSurfaceRouter(planPort = capabilityChainPort(context)).render(
-                    operations = operations,
-                    width = 8,
-                    height = 8,
-                    format = PixelFormat.RGBA8,
-                    config = RenderConfig.DEFAULT,
-                    legacy = { error("W4e complex clips must not fall back after candidate admission") },
-                )
-            }
+            val result = GPUPlanSurfaceRouter(planPort = capabilityChainPort(context)).render(
+                operations = operations,
+                width = 8,
+                height = 8,
+                format = PixelFormat.RGBA8,
+                config = RenderConfig.DEFAULT,
+                legacy = { error("W4e complex clips must not fall back after candidate admission") },
+            )
 
-            assertEquals("w4e.clip.mask-format-unavailable", failure.code)
+            assertContentEquals(ubyteArrayOf(255u, 0u, 0u, 255u), pixelAt(result, 2, 2))
+            assertContentEquals(ubyteArrayOf(0u, 0u, 0u, 0u), pixelAt(result, 4, 4))
+            assertContentEquals(ubyteArrayOf(0u, 0u, 0u, 0u), pixelAt(result, 0, 0))
         } finally {
             context.close()
         }

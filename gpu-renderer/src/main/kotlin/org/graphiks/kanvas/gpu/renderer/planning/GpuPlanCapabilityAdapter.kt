@@ -121,7 +121,7 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
             }
         val maskSamples = textureFormatSampleSupport[GPUTextureFormat.RGBA8Unorm]
             ?.renderAttachmentSampleCounts.orEmpty()
-        if (hasW4dPhysicalTopology && hasFourSampleSrgb && 1 in maskSamples) {
+        if (1 in maskSamples) {
             add(
                 PlanTextureSampleSupport.of(
                     PlanTextureFormat.CoverageMask,
@@ -158,8 +158,7 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
         }
     }
     return try {
-        val snapshot = if (hasFourSampleSrgb) {
-            PlanCapabilitySnapshot.of(
+        val snapshot = PlanCapabilitySnapshot.of(
                 deviceGeneration = deviceGeneration.value,
                 maxTextureDimension2D = observedLimits.maxTextureDimension2D.toInt(),
                 maxBufferSizeBytes = maxBuffer,
@@ -178,25 +177,6 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
                 supportedTextureSampleSupports = sampleSupports,
                 supportedTextureResolveSupports = resolveSupports,
             )
-        } else {
-            PlanCapabilitySnapshot.of(
-                deviceGeneration = deviceGeneration.value,
-                maxTextureDimension2D = observedLimits.maxTextureDimension2D.toInt(),
-                maxBufferSizeBytes = maxBuffer,
-                copyBytesPerRowAlignment = observedLimits.copyBytesPerRowAlignment.toInt(),
-                supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
-                minUniformBufferOffsetAlignment = observedLimits.minUniformBufferOffsetAlignment.toInt(),
-                maxDynamicUniformBuffersPerPipelineLayout =
-                    observedLimits.maxDynamicUniformBuffersPerPipelineLayout?.toInt() ?: 0,
-                supportedOperations = operations,
-                bufferAllocationPolicy = PlanBufferAllocationPolicy.of(
-                    CORE_PRIMITIVE_FRAME_POOL_VERTEX_FLOOR_BYTES,
-                    CORE_PRIMITIVE_FRAME_POOL_INDEX_FLOOR_BYTES,
-                    CORE_PRIMITIVE_FRAME_POOL_UNIFORM_FLOOR_BYTES,
-                ),
-                supportedDepthStencilFormats = depthStencilFormats,
-            )
-        }
         GpuPlanCapabilityAdapterResult.Supported(snapshot)
     } catch (_: IllegalArgumentException) {
         unsupported("Renderer capabilities are incoherent for W3 planning.")
