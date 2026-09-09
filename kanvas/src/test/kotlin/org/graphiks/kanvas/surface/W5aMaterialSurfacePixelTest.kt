@@ -80,4 +80,39 @@ class W5aMaterialSurfacePixelTest {
             result.pixels.copyOfRange(0, 4),
         )
     }
+
+    @Test
+    fun `overlapping planned Rect materials source over the attachment through the numeric envelope`() {
+        val back = ColorARGB.of(181, 25, 153, 229)
+        val front = ColorARGB.of(203, 231, 83, 31)
+        val backPaintAlpha = 137f / 255f
+        val frontPaintAlpha = 193f / 255f
+        val surface = Surface(4, 4)
+        surface.canvas {
+            drawRect(
+                RectF32.ofLTRB(0f, 0f, 4f, 4f),
+                Paint(
+                    color = ColorARGB.of(137, 1, 2, 3),
+                    shader = Shader.Opacity(Shader.SolidColor(back), 0.625f),
+                    antiAlias = false,
+                ),
+            )
+            drawRect(
+                RectF32.ofLTRB(0f, 0f, 4f, 4f),
+                Paint(
+                    color = ColorARGB.of(193, 4, 5, 6),
+                    shader = Shader.Opacity(Shader.SolidColor(front), 0.4f),
+                    antiAlias = false,
+                ),
+            )
+        }
+
+        val result = surface.render()
+        val first = W5aSolidOpacityCpuOracle.srcOver(floatArrayOf(0f, 0f, 0f, 0f), back, 0.625f, backPaintAlpha)
+        val expected = W5aSolidOpacityCpuOracle.encode(
+            W5aSolidOpacityCpuOracle.srcOver(first, front, 0.4f, frontPaintAlpha),
+        )
+
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange(0, 4))
+    }
 }

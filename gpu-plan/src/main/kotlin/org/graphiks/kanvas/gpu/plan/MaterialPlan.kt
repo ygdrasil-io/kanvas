@@ -21,32 +21,19 @@ public sealed interface MaterialProgramPlan {
     public data object TransparentV1 : MaterialProgramPlan {
         override val versionI32: Int = 1
         override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId("w5a-transparent-v1")
-        override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 = NumericOperationGraphV1.Transparent
+        override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 = NumericOperationGraphV1.transparent()
     }
 
     public data object SolidLinearPremulV1 : MaterialProgramPlan {
         override val versionI32: Int = 1
         override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId("w5a-solid-linear-premul-v1")
-        override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 {
-            val input = NumericOperationGraphV1.Node(NumericOperationGraphV1.Operation.INPUT_SRGB_RGBA)
-            val decoded = NumericOperationGraphV1.Node(NumericOperationGraphV1.Operation.SRGB_TO_LINEAR, listOf(input))
-            val premul = NumericOperationGraphV1.Node(NumericOperationGraphV1.Operation.PREMULTIPLY, listOf(decoded))
-            val coverage = NumericOperationGraphV1.Node(NumericOperationGraphV1.Operation.COVERAGE_F32, listOf(premul))
-            val clamped = NumericOperationGraphV1.Node(NumericOperationGraphV1.Operation.CLAMP_01, listOf(coverage))
-            return NumericOperationGraphV1.Node(NumericOperationGraphV1.Operation.QUANTIZE_UNORM8, listOf(clamped))
-        }
+        override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 = NumericOperationGraphV1.solid()
     }
 
     public data object OpacityV1 : MaterialProgramPlan {
         override val versionI32: Int = 1
         override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId("w5a-opacity-v1")
-        override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 {
-            val input = NumericOperationGraphV1.Node(NumericOperationGraphV1.Operation.INPUT_SRGB_RGBA)
-            val opacity = NumericOperationGraphV1.Node(NumericOperationGraphV1.Operation.OPACITY_F32, listOf(input))
-            val coverage = NumericOperationGraphV1.Node(NumericOperationGraphV1.Operation.COVERAGE_F32, listOf(opacity))
-            val clamped = NumericOperationGraphV1.Node(NumericOperationGraphV1.Operation.CLAMP_01, listOf(coverage))
-            return NumericOperationGraphV1.Node(NumericOperationGraphV1.Operation.QUANTIZE_UNORM8, listOf(clamped))
-        }
+        override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 = NumericOperationGraphV1.opacity()
     }
 }
 
@@ -56,6 +43,7 @@ public sealed interface MaterialBindingPlan {
 
     public data object EmptyV1 : MaterialBindingPlan { override val versionI32: Int = 1 }
 
+    /** Exact public Solid input, in straight sRGB; the program performs conversion and premultiplication. */
     public class SolidRgbaF32V1 private constructor(private val rgbaF32: ColorF32) : MaterialBindingPlan {
         override val versionI32: Int = 1
         public fun copyRgbaF32(): ColorF32 = ColorF32.of(rgbaF32.red, rgbaF32.green, rgbaF32.blue, rgbaF32.alpha)

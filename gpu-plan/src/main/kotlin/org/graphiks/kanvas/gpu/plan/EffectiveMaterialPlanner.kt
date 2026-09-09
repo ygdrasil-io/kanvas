@@ -5,7 +5,6 @@ import org.graphiks.kanvas.render.ir.DrawNode
 import org.graphiks.kanvas.render.ir.EffectStack
 import org.graphiks.kanvas.render.ir.MaterialNode
 import org.graphiks.math.color.ColorF32
-import org.graphiks.math.color.ColorTransferFunction
 
 /** Normalizes the W5a Solid/Opacity subset once, before a graph is published Ready. */
 public object EffectiveMaterialPlanner {
@@ -41,7 +40,12 @@ public object EffectiveMaterialPlanner {
             )
             is MaterialNode.Solid -> MaterialPlanEntry(
                 MaterialProgramPlan.SolidLinearPremulV1,
-                MaterialBindingPlan.SolidRgbaF32V1.of(toLinearPremul(material.color.redNormalized, material.color.greenNormalized, material.color.blueNormalized, material.color.alphaNormalized)),
+                MaterialBindingPlan.SolidRgbaF32V1.of(ColorF32.of(
+                    material.color.redNormalized,
+                    material.color.greenNormalized,
+                    material.color.blueNormalized,
+                    material.color.alphaNormalized,
+                )),
             )
             else -> return Result.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
         }
@@ -64,11 +68,4 @@ public object EffectiveMaterialPlanner {
         }
         return Result.Ready(MaterialPlanTable.of(entries), MaterialPlanRef(entries.lastIndex))
     }
-
-    private fun toLinearPremul(r: Float, g: Float, b: Float, a: Float): ColorF32 = ColorF32.of(
-        ColorTransferFunction.sRgb.toLinear(r) * a,
-        ColorTransferFunction.sRgb.toLinear(g) * a,
-        ColorTransferFunction.sRgb.toLinear(b) * a,
-        a,
-    )
 }
