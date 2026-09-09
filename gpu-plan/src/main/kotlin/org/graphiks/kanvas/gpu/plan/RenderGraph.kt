@@ -18,6 +18,7 @@ public class RenderGraph private constructor(
     public val peakFrameLocalBytes: Long,
     private val w4dCompilerWitness: W4dCompilerWitness?,
     private val w4dGeneralCompilerWitness: W4dGeneralCompilerWitness?,
+    private val w4eNativePayloadPlan: W4eNativePayloadPlan?,
     private val w4eCompilerWitness: W4eCompilerWitness?,
 ) {
     private val storedTargetExtent: SizeI32 = targetExtent.copy()
@@ -42,6 +43,12 @@ public class RenderGraph private constructor(
     /** Verifies that this exact immutable graph snapshot was issued by the W4e compiler. */
     public fun verifyW4eCompilerWitness(): Boolean =
         w4eCompilerWitness?.matches(this) == true
+
+    /**
+     * Returns the immutable W4e V/I/U payload issued with this graph, when the graph is W4e.
+     * The payload owns defensive snapshots, so callers cannot mutate bytes later consumed by lowering.
+     */
+    public fun w4eNativePayloadOrNull(): W4eNativePayloadPlan? = w4eNativePayloadPlan
 
     public companion object {
         public fun of(
@@ -160,7 +167,7 @@ public class RenderGraph private constructor(
             require(calculatedPeak == peakFrameLocalBytes) { "Peak memory does not match resource lifetimes" }
             require(calculatedPeak <= budget.maxFrameLocalBytes) { "Peak memory exceeds budget" }
             return RenderGraph(id, capabilityId, targetExtent, colorFormat, capabilities, budget, visualCommandCount,
-                resources, passes, dependencies, peakFrameLocalBytes, null, null, null)
+                resources, passes, dependencies, peakFrameLocalBytes, null, null, null, null)
         }
 
         /** Trust-boundary factory available only to the W4d compiler after public validation. */
@@ -183,6 +190,7 @@ public class RenderGraph private constructor(
                 graph.storedDependencies,
                 graph.peakFrameLocalBytes,
                 W4dCompilerWitness.issue(graph),
+                null,
                 null,
                 null,
             )
@@ -213,19 +221,28 @@ public class RenderGraph private constructor(
                 null,
                 W4dGeneralCompilerWitness.issue(graph),
                 null,
+                null,
             )
         }
 
         /** Trust-boundary factory available only to the W4e complex clip compiler. */
         @JvmSynthetic
-        internal fun issueW4eCompilerWitness(graph: RenderGraph): RenderGraph {
+        internal fun issueW4eCompilerWitness(
+            graph: RenderGraph,
+            nativePayload: W4eNativePayloadPlan,
+        ): RenderGraph {
             require(graph.capabilityId in setOf(
                 W4eClipPlanCompiler.HARD_CAPABILITY_ID,
                 W4eClipPlanCompiler.AA_CAPABILITY_ID,
             )) { "Only a W4e graph may receive a W4e compiler witness" }
             require(graph.w4dCompilerWitness == null && graph.w4dGeneralCompilerWitness == null &&
-                graph.w4eCompilerWitness == null) { "A W4e graph must be sealed exactly once" }
-            return RenderGraph(
+                graph.w4eNativePayloadPlan == null && graph.w4eCompilerWitness == null) {
+                "A W4e graph must be sealed exactly once"
+            }
+            require(nativePayload.matchesDeclaredResources(graph.storedResources)) {
+                "W4e graph V/I/U resources differ from the compiler-native payload"
+            }
+            val payloadGraph = RenderGraph(
                 graph.id,
                 graph.capabilityId,
                 graph.storedTargetExtent,
@@ -239,7 +256,25 @@ public class RenderGraph private constructor(
                 graph.peakFrameLocalBytes,
                 null,
                 null,
-                W4eCompilerWitness.issue(graph),
+                nativePayload,
+                null,
+            )
+            return RenderGraph(
+                payloadGraph.id,
+                payloadGraph.capabilityId,
+                payloadGraph.storedTargetExtent,
+                payloadGraph.colorFormat,
+                payloadGraph.capabilities,
+                payloadGraph.budget,
+                payloadGraph.visualCommandCount,
+                payloadGraph.storedResources,
+                payloadGraph.storedPasses,
+                payloadGraph.storedDependencies,
+                payloadGraph.peakFrameLocalBytes,
+                null,
+                null,
+                nativePayload,
+                W4eCompilerWitness.issue(payloadGraph),
             )
         }
 
@@ -1840,11 +1875,16 @@ public class RenderGraph private constructor(
     }
 
     /** Opaque proof for the W4e clip graph, including its pooled mask inventory. */
-    private class W4eCompilerWitness private constructor(digest: ByteArray) {
+    private class W4eCompilerWitness private constructor(
+        private val nativePayload: W4eNativePayloadPlan,
+        digest: ByteArray,
+    ) {
         private val digestSnapshot: ByteArray = digest.copyOf()
 
         fun matches(graph: RenderGraph): Boolean = try {
-            MessageDigest.isEqual(digestSnapshot, canonicalW4eGraphDigest(graph))
+            graph.w4eNativePayloadPlan === nativePayload &&
+                nativePayload.matchesDeclaredResources(graph.storedResources) &&
+                MessageDigest.isEqual(digestSnapshot, canonicalW4eGraphDigest(graph))
         } catch (_: IllegalArgumentException) {
             false
         } catch (_: ArithmeticException) {
@@ -1852,8 +1892,12 @@ public class RenderGraph private constructor(
         }
 
         companion object {
-            fun issue(graph: RenderGraph): W4eCompilerWitness =
-                W4eCompilerWitness(canonicalW4eGraphDigest(graph))
+            fun issue(graph: RenderGraph): W4eCompilerWitness {
+                val nativePayload = requireNotNull(graph.w4eNativePayloadPlan) {
+                    "W4e compiler witness requires the graph-native V/I/U payload"
+                }
+                return W4eCompilerWitness(nativePayload, canonicalW4eGraphDigest(graph))
+            }
         }
     }
 }

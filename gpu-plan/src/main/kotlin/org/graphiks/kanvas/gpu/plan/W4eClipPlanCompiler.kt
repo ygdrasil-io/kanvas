@@ -98,7 +98,11 @@ public class W4eClipPlanCompiler(
             when (command) {
                 is SceneCommand.Draw -> {
                     val operations = command.node.clip as? ClipStackNode.Operations
-                    val inverse = when (val preparedInverse = command.node.prepareInversePathOrNull(domain)) {
+                    // A W4d DeviceRect remains the construction seam's scissor authority.  An
+                    // inverse domain is bounded by that same device-space rectangle before the
+                    // W4e strategy is sealed, rather than relying on a later packet scissor.
+                    val inverseDomain = command.node.w4dDeviceRectDomainOrNull(domain) ?: domain
+                    val inverse = when (val preparedInverse = command.node.prepareInversePathOrNull(inverseDomain)) {
                         is InverseResult.None -> null
                         is InverseResult.Ready -> preparedInverse.geometry
                         is InverseResult.Invalid -> return invalid(preparedInverse.message)
@@ -387,7 +391,7 @@ public class W4eClipPlanCompiler(
         if (actualPeakFrameLocalBytes > budget.maxFrameLocalBytes) {
             throw W4eNativePayloadLimit()
         }
-        return RenderGraph.issueW4eCompilerWitness(RenderGraph.of(
+        val graph = RenderGraph.of(
             id = PlanId(identity(selected, capabilities, budget, frameAa)),
             capabilityId = if (frameAa) AA_CAPABILITY_ID else HARD_CAPABILITY_ID,
             targetExtent = extent,
@@ -399,7 +403,8 @@ public class W4eClipPlanCompiler(
             passes = allPasses,
             dependencies = dependencies,
             peakFrameLocalBytes = actualPeakFrameLocalBytes,
-        ))
+        )
+        return RenderGraph.issueW4eCompilerWitness(graph, nativePayload)
     }
 
     private fun maskResources(
@@ -683,14 +688,14 @@ public class W4eClipPlanCompiler(
             return copy(
                 geometry = GeometryNode.Path(constructionProxyPath(domain)),
                 transform = Matrix3x3F32.Identity,
-                clip = ClipStackNode.Empty,
+                clip = w4dConstructionClip(),
             )
         }
         val sourcePath = when (val source = geometry) {
             is GeometryNode.Rect -> PathBuilder().addRect(source.copyBounds()).build()
             is GeometryNode.RRect -> PathBuilder().addRRect(source.copyShape()).build()
             is GeometryNode.Path -> source.path
-            else -> return copy(clip = ClipStackNode.Empty)
+            else -> return copy(clip = w4dConstructionClip())
         }
         val rule = when (sourcePath.fillRule) {
             FillRule.INVERSE_WINDING -> FillRule.WINDING
@@ -701,8 +706,31 @@ public class W4eClipPlanCompiler(
         return copy(
             geometry = GeometryNode.Path(normalizedPath),
             origin = DrawOrigin.PATH,
-            clip = ClipStackNode.Empty,
+            clip = w4dConstructionClip(),
         )
+    }
+
+    /** Keeps only the W4d construction seam's native scissor clip on non-W4e-owned draws. */
+    private fun DrawNode.w4dConstructionClip(): ClipStackNode =
+        (clip as? ClipStackNode.DeviceRect) ?: ClipStackNode.Empty
+
+    /** Returns the finite target-domain intersection used by both W4d scissoring and W4e inverse coverage. */
+    private fun DrawNode.w4dDeviceRectDomainOrNull(domain: RectI32): RectI32? {
+        val deviceRect = clip as? ClipStackNode.DeviceRect ?: return null
+        val bounds = deviceRect.copyBounds()
+        val integral = listOf(bounds.left, bounds.top, bounds.right, bounds.bottom)
+            .map { value ->
+                value.toLong().takeIf { long ->
+                    long in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong() && long.toFloat() == value
+                }
+            }
+            .takeIf { values -> values.none { it == null } }
+            ?.let { values ->
+                RectI32(values[0]!!.toInt(), values[1]!!.toInt(), values[2]!!.toInt(), values[3]!!.toInt())
+                    .takeUnless(RectI32::isEmpty64)
+            }
+            ?: return null
+        return integral.copy().takeIf { it.intersect(domain) }
     }
 
     private fun constructionProxyPath(domain: RectI32) : org.graphiks.math.geometry.PathF32 = PathBuilder()

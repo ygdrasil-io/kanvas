@@ -144,6 +144,34 @@ class GPUPlanSurfacePixelTest {
     }
 
     @Test
+    fun `W4e independent oracle zeroes an entire nonpositive RRect radius pair`() {
+        val malformed = W4eClipCpuOracle.Shape.RRect(
+            W4eClipCpuOracle.Shape.Rect(1.0, 1.0, 7.0, 5.0),
+            radiusX = -2.0,
+            radiusY = 2.0,
+        )
+        val canonical = W4eClipCpuOracle.Shape.RRect(
+            W4eClipCpuOracle.Shape.Rect(1.0, 1.0, 7.0, 5.0),
+            radiusX = 0.0,
+            radiusY = 0.0,
+        )
+        fun render(shape: W4eClipCpuOracle.Shape): UByteArray = W4eClipCpuOracle.render(
+            width = 8,
+            height = 6,
+            draws = listOf(
+                W4eClipCpuOracle.Draw(
+                    shape = shape,
+                    color = W4eClipCpuOracle.Rgba8(255, 43, 71, 255),
+                    antiAlias = W4eClipCpuOracle.AA.Hard,
+                    clips = emptyList(),
+                ),
+            ),
+        )
+
+        assertContentEquals(render(canonical), render(malformed))
+    }
+
+    @Test
     fun `W4e public hard inverse empty and non-empty draws match the independent 1x oracle`() {
         val triangle = Path {
             moveTo(3f, 3f)

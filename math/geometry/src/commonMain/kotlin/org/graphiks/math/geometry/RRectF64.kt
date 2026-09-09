@@ -29,7 +29,7 @@ public class RRectF64 private constructor(
     )
 
     /**
-     * Applies the current Skia RRect contract once in F64: clamp negative radii, then uniformly
+     * Applies the current Skia RRect contract once in F64: zero any invalid radius pair, then uniformly
      * scale every corner so opposing radii fit the bounds.  The result is immutable and marked so
      * subsequent path materialization consumes this exact canonical authority unchanged.
      */
@@ -71,9 +71,9 @@ public class RRectF64 private constructor(
     }
 }
 
-private fun CornerRadiiF64.nonNegativeF64(): CornerRadiiF64 = CornerRadiiF64.of(
-    xF64.coerceAtLeast(0.0), yF64.coerceAtLeast(0.0),
-)
+/** Skia treats an invalid elliptical corner as a rectangular corner, including negative zero. */
+private fun CornerRadiiF64.nonNegativeF64(): CornerRadiiF64 =
+    if (xF64 <= 0.0 || yF64 <= 0.0) CornerRadiiF64.Zero else this
 
 private fun CornerRadiiF64.scaledF64(scaleF64: Double): CornerRadiiF64 = CornerRadiiF64.of(
     xF64 * scaleF64, yF64 * scaleF64,

@@ -194,9 +194,9 @@ internal object W4eClipCpuOracle {
     private fun containsRRect(shape: Shape.RRect, x: Double, y: Double): Boolean {
         val rect = shape.rect
         if (x < rect.left || x >= rect.right || y < rect.top || y >= rect.bottom) return false
+        if (shape.radiusX <= 0.0 || shape.radiusY <= 0.0) return true
         val radiusX = shape.radiusX.coerceAtMost((rect.right - rect.left) / 2.0)
         val radiusY = shape.radiusY.coerceAtMost((rect.bottom - rect.top) / 2.0)
-        if (radiusX == 0.0 || radiusY == 0.0) return true
         val centerX = x.coerceIn(rect.left + radiusX, rect.right - radiusX)
         val centerY = y.coerceIn(rect.top + radiusY, rect.bottom - radiusY)
         val dx = (x - centerX) / radiusX

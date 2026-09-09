@@ -160,16 +160,16 @@ class ClipTransformsF64Test {
     fun `rounded rectangle radii have one Skia canonical source across transform classes`() {
         val malformedF64 = RRectF64.of(
             RectF64(0.0, 0.0, 10.0, 6.0),
-            CornerRadiiF64.of(-2.0, 6.0), CornerRadiiF64.of(20.0, 3.0),
+            CornerRadiiF64.of(-0.0, 6.0), CornerRadiiF64.of(20.0, 3.0),
             CornerRadiiF64.of(4.0, 20.0), CornerRadiiF64.of(6.0, -5.0),
         )
         val scaleF64 = 6.0 / 23.0
         val canonicalF64 = RRectF64.of(
             RectF64(0.0, 0.0, 10.0, 6.0),
-            CornerRadiiF64.of(0.0, 6.0 * scaleF64),
+            CornerRadiiF64.Zero,
             CornerRadiiF64.of(20.0 * scaleF64, 3.0 * scaleF64),
             CornerRadiiF64.of(4.0 * scaleF64, 20.0 * scaleF64),
-            CornerRadiiF64.of(6.0 * scaleF64, 0.0),
+            CornerRadiiF64.Zero,
         )
 
         listOf(

@@ -281,6 +281,10 @@ internal data class GPUW4eNativeBufferRequirements(
     val vertexCapacityBytes: Long,
     val indexCapacityBytes: Long,
     val uniformCapacityBytes: Long,
+    /** Actual WebGPU usage recorded for the physical V/I/U allocation. */
+    val vertexUsage: GPUBufferUsage = GPUBufferUsage.Vertex or GPUBufferUsage.CopyDst,
+    val indexUsage: GPUBufferUsage = GPUBufferUsage.Index or GPUBufferUsage.CopyDst,
+    val uniformUsage: GPUBufferUsage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
 ) {
     init {
         require(listOf(vertexResourceId, indexResourceId, uniformResourceId).all(String::isNotBlank) &&
@@ -294,7 +298,25 @@ internal data class GPUW4eNativeBufferRequirements(
         require(vertexCapacityBytes % 4L == 0L && indexCapacityBytes % 4L == 0L &&
             uniformCapacityBytes % 4L == 0L
         ) { "W4e native buffer capacities must remain WebGPU-aligned" }
+        require(vertexUsage == (GPUBufferUsage.Vertex or GPUBufferUsage.CopyDst) &&
+            indexUsage == (GPUBufferUsage.Index or GPUBufferUsage.CopyDst) &&
+            uniformUsage == (GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst)
+        ) { "W4e native buffer usages must remain the sealed V/I/U upload capabilities" }
     }
+
+    /**
+     * A native V/I/U allocation is reusable when its actual physical capacities and WebGPU
+     * capabilities can serve a later sealed payload.  Logical resource names and useful upload
+     * spans deliberately do not describe an allocation capability: the pooled native triple is
+     * addressed directly and uploads only the later payload's useful span.
+     */
+    fun physicallySupports(requested: GPUW4eNativeBufferRequirements): Boolean =
+        vertexUsage == requested.vertexUsage &&
+            indexUsage == requested.indexUsage &&
+            uniformUsage == requested.uniformUsage &&
+            vertexCapacityBytes >= requested.vertexCapacityBytes &&
+            indexCapacityBytes >= requested.indexCapacityBytes &&
+            uniformCapacityBytes >= requested.uniformCapacityBytes
 }
 
 internal data class GPUW4eNativeBufferHandles(
@@ -485,6 +507,19 @@ internal data class GPUW4eAttachmentPoolRequirements(
             "W4e physical attachment bytes must equal the compiler-sealed inventory"
         }
     }
+
+    /**
+     * Texture/depth inventories retain their exact sealed topology and logical names.  The native
+     * V/I/U triple is different: it is a direct physical capability, so a larger compatible
+     * allocation may serve a later payload without treating its useful upload sizes as identity.
+     */
+    fun physicallySupports(requested: GPUW4eAttachmentPoolRequirements): Boolean =
+        copy(nativeBuffers = null) == requested.copy(nativeBuffers = null) &&
+            when {
+                nativeBuffers == null -> requested.nativeBuffers == null
+                requested.nativeBuffers == null -> false
+                else -> nativeBuffers.physicallySupports(requested.nativeBuffers)
+            }
 }
 
 internal data class GPUWgpu4kW4eAttachmentHandles(
@@ -555,7 +590,7 @@ internal class GPUWgpu4kW4eAttachmentPool(
     internal enum class State { Available, CheckedOut, Submitted, Quarantined }
     private data class Slot(
         val id: Int,
-        val handles: GPUWgpu4kW4eAttachmentHandles,
+        var handles: GPUWgpu4kW4eAttachmentHandles,
         var state: State = State.Available,
         var leaseId: Long? = null,
     )
@@ -580,7 +615,9 @@ internal class GPUWgpu4kW4eAttachmentPool(
                 GPUWgpu4kCorePrimitiveFramePoolRefusal.DeviceGenerationMismatch(deviceGeneration, observedGeneration),
             )
         }
-        var slot = slots.firstOrNull { it.state == State.Available && it.handles.requirements == requirements }
+        var slot = slots.firstOrNull {
+            it.state == State.Available && it.handles.requirements.physicallySupports(requirements)
+        }
         if (slot == null) {
             if (pendingCloseFailure != null) {
                 return GPUWgpu4kW4eAttachmentPoolCheckout.Refused(
@@ -591,8 +628,13 @@ internal class GPUWgpu4kW4eAttachmentPool(
                     ),
                 )
             }
-            if (slots.size == MAX_SLOTS) {
-                return GPUWgpu4kW4eAttachmentPoolCheckout.Refused(GPUWgpu4kCorePrimitiveFramePoolRefusal.Saturated(MAX_SLOTS))
+            val evictable = if (slots.size >= MAX_SLOTS) {
+                slots.firstOrNull { it.state == State.Available }
+                    ?: return GPUWgpu4kW4eAttachmentPoolCheckout.Refused(
+                        GPUWgpu4kCorePrimitiveFramePoolRefusal.Saturated(MAX_SLOTS),
+                    )
+            } else {
+                null
             }
             val created = try {
                 createHandles(requirements)
@@ -605,8 +647,29 @@ internal class GPUWgpu4kW4eAttachmentPool(
                     ),
                 )
             }
-            slot = Slot(slots.size, created)
-            slots += slot
+            if (slots.size < MAX_SLOTS) {
+                slot = Slot(slots.size, created)
+                slots += slot
+            } else {
+                val evicted = requireNotNull(evictable)
+                // Allocate first, then close and replace the Available incompatible slot.  The
+                // replacement is never published until the old inventory has been retired.
+                val closeFailure = closeHandles(evicted.handles)
+                if (closeFailure != null) {
+                    evicted.state = State.Quarantined
+                    evicted.leaseId = null
+                    closeHandles(created)?.let(closeFailure::addSuppressed)
+                    return GPUWgpu4kW4eAttachmentPoolCheckout.Refused(
+                        GPUWgpu4kCorePrimitiveFramePoolRefusal.AllocationFailed(
+                            GPUWgpu4kCorePrimitiveFramePoolResource.W4eAccumulatorTexture,
+                            closeFailure::class.simpleName.orEmpty(),
+                            "W4e attachment replacement cleanup failed: ${closeFailure.message.orEmpty()}",
+                        ),
+                    )
+                }
+                evicted.handles = created
+                slot = evicted
+            }
         }
         val leaseId = nextLeaseId++
         slot.state = State.CheckedOut
@@ -700,16 +763,16 @@ internal class GPUWgpu4kW4eAttachmentPool(
             fun buffer(label: String, size: Long, usage: GPUBufferUsage): GPUBuffer = device.createBuffer(
                 BufferDescriptor(
                     size = size.toULong(),
-                    usage = usage or GPUBufferUsage.CopyDst,
+                    usage = usage,
                     mappedAtCreation = false,
                     label = label,
                 ),
             ).also(allocated::add)
             return GPUW4eNativeBufferHandles(
                 requirement,
-                buffer("Kanvas.session.corePrimitive.w4e.vertex", requirement.vertexCapacityBytes, GPUBufferUsage.Vertex),
-                buffer("Kanvas.session.corePrimitive.w4e.index", requirement.indexCapacityBytes, GPUBufferUsage.Index),
-                buffer("Kanvas.session.corePrimitive.w4e.uniform", requirement.uniformCapacityBytes, GPUBufferUsage.Uniform),
+                buffer("Kanvas.session.corePrimitive.w4e.vertex", requirement.vertexCapacityBytes, requirement.vertexUsage),
+                buffer("Kanvas.session.corePrimitive.w4e.index", requirement.indexCapacityBytes, requirement.indexUsage),
+                buffer("Kanvas.session.corePrimitive.w4e.uniform", requirement.uniformCapacityBytes, requirement.uniformUsage),
             )
         }
         return try {

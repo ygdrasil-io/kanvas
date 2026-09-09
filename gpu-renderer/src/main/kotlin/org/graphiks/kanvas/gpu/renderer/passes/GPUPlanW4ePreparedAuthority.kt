@@ -225,6 +225,8 @@ internal class GPUPlanW4ePreparedAuthority private constructor(
 
     fun revalidates(graph: RenderGraph): Boolean =
         graph.verifyW4eCompilerWitness() &&
+            graph.w4eNativePayloadOrNull() === nativePayload &&
+            nativePayload.matchesDeclaredResources(graph.resources()) &&
             graph.id.value == planId &&
             graph.capabilityId == capabilityId &&
             graph.resources().map(::resourceFact) == resourceFacts &&
@@ -238,12 +240,7 @@ internal class GPUPlanW4ePreparedAuthority private constructor(
             ) && graph.verifyW4eCompilerWitness()) {
                 "W4e prepared authority requires the compiler-authenticated graph"
             }
-            val nativePayload = requireNotNull(W4eNativePayloadPlan.from(
-                passes = graph.passes(),
-                resources = graph.resources(),
-                targetExtent = graph.targetExtent,
-                capabilities = graph.capabilities,
-            )) {
+            val nativePayload = requireNotNull(graph.w4eNativePayloadOrNull()) {
                 "W4e prepared authority requires a graph-sealed native V/I/U payload"
             }
             require(nativePayload.matchesDeclaredResources(graph.resources())) {

@@ -3030,10 +3030,10 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             val nativeBuffers = requireNotNull(attachments.nativeBuffers) {
                 "W4e attachment lease lacks its compiler-sealed native V/I/U buffers."
             }
-            if (nativeBuffers.requirements != requirements.nativeBuffers) {
+            if (!nativeBuffers.requirements.physicallySupports(requireNotNull(requirements.nativeBuffers))) {
                 throw Refusal(
                     "invalid.native-core-primitive.w4e-native-buffer",
-                    "W4e attachment lease native V/I/U inventory differs from the sealed graph request.",
+                    "W4e attachment lease native V/I/U capabilities cannot serve the sealed graph request.",
                 )
             }
             fun upload(buffer: GPUBuffer, bytes: ByteArray, usefulBytes: Long) {
