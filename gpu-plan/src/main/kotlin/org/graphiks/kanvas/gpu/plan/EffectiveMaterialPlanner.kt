@@ -49,21 +49,30 @@ public object EffectiveMaterialPlanner {
             )
             else -> return Result.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
         }
-        val alphaValues = opacityInnerToOuter.asReversed().toMutableList()
-        draw.paint?.takeIf { it.shader != null }?.let { alphaValues += it.color.alphaNormalized }
-        if (alphaValues.any { !it.isFinite() || it !in 0f..1f }) return Result.Refused(W5aPlanDiagnostics.InvalidOpacity)
-        if (alphaValues.any { it == 0f }) {
+        val shaderAlpha = opacityInnerToOuter.asReversed().fold(1f) { accumulated, alpha -> accumulated * alpha }
+        val paintAlpha = draw.paint?.takeIf { it.shader != null }?.color?.alphaNormalized ?: 1f
+        if (!shaderAlpha.isFinite() || shaderAlpha !in 0f..1f || !paintAlpha.isFinite() || paintAlpha !in 0f..1f) {
+            return Result.Refused(W5aPlanDiagnostics.InvalidOpacity)
+        }
+        if (shaderAlpha == 0f || paintAlpha == 0f) {
             return Result.Ready(
                 MaterialPlanTable.of(listOf(MaterialPlanEntry(MaterialProgramPlan.TransparentV1, MaterialBindingPlan.EmptyV1))),
                 MaterialPlanRef(0),
             )
         }
         val entries = mutableListOf(base)
-        alphaValues.filter { it != 1f }.forEach { alpha ->
+        if (shaderAlpha != 1f) {
             val child = entries.last().program
             entries += MaterialPlanEntry(
                 MaterialProgramPlan.OpacityV1(child),
-                MaterialBindingPlan.OpacityF32V1.of(alpha),
+                MaterialBindingPlan.OpacityF32V1.of(shaderAlpha),
+            )
+        }
+        if (paintAlpha != 1f) {
+            val child = entries.last().program
+            entries += MaterialPlanEntry(
+                MaterialProgramPlan.OpacityV1(child),
+                MaterialBindingPlan.OpacityF32V1.of(paintAlpha),
             )
         }
         return Result.Ready(MaterialPlanTable.of(entries), MaterialPlanRef(entries.lastIndex))

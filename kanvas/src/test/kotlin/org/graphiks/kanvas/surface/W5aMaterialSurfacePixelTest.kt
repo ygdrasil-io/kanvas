@@ -32,7 +32,7 @@ class W5aMaterialSurfacePixelTest {
         val result = surface.render()
 
         WgslFloatEnvelopeV1Oracle.assertAdmits(
-            W5aSolidOpacityCpuOracle.source(color, 0f, 1f, 1f),
+            W5aSolidOpacityCpuOracle.draw(color, 0f, 1f, 1f),
             result.pixels.copyOfRange(0, 4),
         )
     }
@@ -51,7 +51,7 @@ class W5aMaterialSurfacePixelTest {
         val result = surface.render()
 
         WgslFloatEnvelopeV1Oracle.assertAdmits(
-            W5aSolidOpacityCpuOracle.source(color, 1f, 1f, 1f),
+            W5aSolidOpacityCpuOracle.draw(color, 1f, 1f, 1f),
             result.pixels.copyOfRange(0, 4),
         )
     }
@@ -70,7 +70,7 @@ class W5aMaterialSurfacePixelTest {
         val result = surface.render()
 
         WgslFloatEnvelopeV1Oracle.assertAdmits(
-            W5aSolidOpacityCpuOracle.source(color, 0.8f, 0.5f, 153f / 255f),
+            W5aSolidOpacityCpuOracle.draw(color, 0.8f, 0.5f, 153f / 255f),
             result.pixels.copyOfRange(0, 4),
         )
     }
@@ -95,7 +95,7 @@ class W5aMaterialSurfacePixelTest {
         val result = surface.render()
 
         WgslFloatEnvelopeV1Oracle.assertAdmits(
-            W5aSolidOpacityCpuOracle.source(color, 0.4f, 0.625f, 179f / 255f),
+            W5aSolidOpacityCpuOracle.draw(color, 0.4f, 0.625f, 179f / 255f),
             result.pixels.copyOfRange(0, 4),
         )
     }
@@ -114,7 +114,7 @@ class W5aMaterialSurfacePixelTest {
         val result = surface.render()
 
         WgslFloatEnvelopeV1Oracle.assertAdmits(
-            W5aSolidOpacityCpuOracle.source(color, 0.5f, 0.75f, 191f / 255f),
+            W5aSolidOpacityCpuOracle.draw(color, 0.5f, 0.75f, 191f / 255f),
             result.pixels.copyOfRange(0, 4),
         )
     }
@@ -146,9 +146,12 @@ class W5aMaterialSurfacePixelTest {
         }
 
         val result = surface.render()
-        val first = W5aSolidOpacityCpuOracle.srcOver(floatArrayOf(0f, 0f, 0f, 0f), back, 0.625f, backPaintAlpha)
-        val expected = W5aSolidOpacityCpuOracle.encode(
-            W5aSolidOpacityCpuOracle.srcOver(first, front, 0.4f, frontPaintAlpha),
+        val first = W5aSolidOpacityCpuOracle.draw(back, 0.625f, paintAlphaF32 = backPaintAlpha)
+        val expected = W5aSolidOpacityCpuOracle.draw(
+            front,
+            0.4f,
+            paintAlphaF32 = frontPaintAlpha,
+            destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(first)),
         )
 
         WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange(0, 4))
