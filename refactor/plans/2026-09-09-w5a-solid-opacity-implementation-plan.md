@@ -1,5 +1,9 @@
 # W5a Common Solid and Opacity Material Implementation Plan
 
+## Task 1 implementation note
+
+The in-scope public `Shader.SolidColor`, `Shader.Opacity`, `Paint`, and `Picture` inputs are immutable value objects.  The only directly mutable public upstream pixel carrier found during Task 1 is `Bitmap.pixels`, which is consumed by `Shader.Image` and is explicitly outside the W5a Solid/Opacity subset.  A post-capture mutation test for Solid/Opacity would therefore require introducing mutability or Image sampling outside this task.  The retained strongest public proof records a non-trivial nested-opacity Picture, serializes/restores it, replays it, and verifies pixels against the independent envelope.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Each implementation task follows RED → GREEN → refactor and is followed by a read-only Sol spec/quality review.
 
 **Goal:** Introduire l'autorité material plan-first commune de W5 et fermer Solid + Opacity sur toutes les familles déjà admises par les routes préparées, sans changer la géométrie W4 ni conserver un fallback material silencieux sur les lanes promues.
