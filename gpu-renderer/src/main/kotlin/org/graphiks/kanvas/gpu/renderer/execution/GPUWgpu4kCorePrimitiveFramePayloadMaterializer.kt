@@ -693,6 +693,27 @@ private fun w4eStencilNonZeroReadState(): DepthStencilState = DepthStencilState(
     stencilWriteMask = 0u,
 )
 
+/** Reads the complement of a finite path interior after its producer has marked stencil one. */
+private fun w4eStencilZeroReadState(): DepthStencilState = DepthStencilState(
+    format = GPUTextureFormat.Depth24PlusStencil8,
+    depthWriteEnabled = false,
+    depthCompare = GPUCompareFunction.Always,
+    stencilFront = StencilFaceState(
+        compare = GPUCompareFunction.Equal,
+        failOp = GPUStencilOperation.Keep,
+        depthFailOp = GPUStencilOperation.Keep,
+        passOp = GPUStencilOperation.Keep,
+    ),
+    stencilBack = StencilFaceState(
+        compare = GPUCompareFunction.Equal,
+        failOp = GPUStencilOperation.Keep,
+        depthFailOp = GPUStencilOperation.Keep,
+        passOp = GPUStencilOperation.Keep,
+    ),
+    stencilReadMask = 0xffu,
+    stencilWriteMask = 0u,
+)
+
 /** Declares the sealed D24S8 attachment for a direct producer without reading or writing stencil. */
 private fun w4eStencilNoopState(): DepthStencilState = DepthStencilState(
     format = GPUTextureFormat.Depth24PlusStencil8,
@@ -2943,6 +2964,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             val foldPipelines = mutableMapOf<org.graphiks.kanvas.gpu.plan.ClipCombineOperation, GPUW4eNativePipeline>()
             val consumerPipelines = mutableMapOf<Pair<GPUTextureFormat, Int>, GPUW4eNativePipeline>()
             val stencilConsumerPipelines = mutableMapOf<Pair<GPUTextureFormat, Int>, GPUW4eNativePipeline>()
+            val inverseMaskStencilConsumerPipelines = mutableMapOf<Pair<GPUTextureFormat, Int>, GPUW4eNativePipeline>()
             val binaryConsumerPipelines = mutableMapOf<Pair<GPUTextureFormat, Int>, GPUW4eNativePipeline>()
             val maskedPathPipelines = mutableMapOf<Pair<GPUTextureFormat, Int>, GPUW4eNativePipeline>()
             val inverseDomainPipelines = mutableMapOf<Pair<GPUTextureFormat, Int>, GPUW4eNativePipeline>()
@@ -2964,6 +2986,16 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                         format,
                         sampleCount,
                         stencil = w4eStencilNonZeroReadState(),
+                        owned = owned,
+                    )
+                }
+            fun inverseMaskStencilConsumerPipeline(format: GPUTextureFormat, sampleCount: Int) =
+                inverseMaskStencilConsumerPipelines.getOrPut(format to sampleCount) {
+                    createW4eConsumerPipeline(
+                        device,
+                        format,
+                        sampleCount,
+                        stencil = w4eStencilZeroReadState(),
                         owned = owned,
                     )
                 }
@@ -3366,12 +3398,22 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                                 ?: throw Refusal("invalid.native-core-primitive.w4e-path-depth", "W4e stencil cover lacks its sealed D24S8 attachment.")
                             val inverseDomain = consumer as? org.graphiks.kanvas.gpu.renderer.passes
                                 .GPUW4ePreparedClipConsumerAuthority.InverseDomain
-                            val coverScissor = inverseDomain?.let { domain -> GPUPixelBounds(
-                                maxOf(sealedPath.scissor.left, domain.domain.left),
-                                maxOf(sealedPath.scissor.top, domain.domain.top),
-                                minOf(sealedPath.scissor.right, domain.domain.right),
-                                minOf(sealedPath.scissor.bottom, domain.domain.bottom),
-                            ) } ?: sealedPath.scissor
+                            val coverScissor = when {
+                                inverseDomain != null -> GPUPixelBounds(
+                                    maxOf(sealedPath.scissor.left, inverseDomain.domain.left),
+                                    maxOf(sealedPath.scissor.top, inverseDomain.domain.top),
+                                    minOf(sealedPath.scissor.right, inverseDomain.domain.right),
+                                    minOf(sealedPath.scissor.bottom, inverseDomain.domain.bottom),
+                                )
+                                consumer is org.graphiks.kanvas.gpu.renderer.passes
+                                    .GPUW4ePreparedClipConsumerAuthority.InverseMask -> GPUPixelBounds(
+                                    0,
+                                    0,
+                                    preparedSceneTarget.width,
+                                    preparedSceneTarget.height,
+                                )
+                                else -> sealedPath.scissor
+                            }
                             if (coverScissor.width <= 0 || coverScissor.height <= 0) {
                                 throw Refusal("invalid.native-core-primitive.w4e-inverse-domain", "W4e inverse-domain has an empty sealed consumer domain.")
                             }
@@ -3447,12 +3489,16 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                                     is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.Mask,
                                     is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseMask,
                                     -> {
-                                        val inverse = consumer is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseMask
-                                        val mask = if (inverse) (consumer as org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseMask).maskResourceId
+                                        val inverseMask = consumer as? org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseMask
+                                        val mask = if (inverseMask != null) inverseMask.maskResourceId
                                         else (consumer as org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.Mask).maskResourceId
-                                        val cover = stencilConsumerPipeline(format, sampleCount)
+                                        val cover = if (inverseMask == null) {
+                                            stencilConsumerPipeline(format, sampleCount)
+                                        } else {
+                                            inverseMaskStencilConsumerPipeline(format, sampleCount)
+                                        }
                                         val data = uniform("Kanvas.frame.w4e.pathPhase.consumer", floatArrayOf(
-                                            color.red, color.green, color.blue, color.alpha, if (inverse) 1f else 0f, 0f, 0f, 0f,
+                                            color.red, color.green, color.blue, color.alpha, 0f, 0f, 0f, 0f,
                                         ))
                                         val bindings = owned.own(device.createBindGroup(BindGroupDescriptor(
                                             label = "Kanvas.frame.w4e.pathPhase.consumerBindGroup", layout = cover.layout,

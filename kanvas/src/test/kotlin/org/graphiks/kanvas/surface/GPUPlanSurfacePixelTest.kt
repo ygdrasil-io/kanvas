@@ -208,6 +208,213 @@ class GPUPlanSurfacePixelTest {
     }
 
     @Test
+    fun `W4e public hard inverse path consumers keep distinct D24S8 domains in one frame`() {
+        val width = 16
+        val height = 12
+        val firstDomainPath = Path().apply { addRect(RectF32.ofLTRB(1f, 1f, 7f, 11f)) }
+        val secondDomainPath = Path().apply { addRect(RectF32.ofLTRB(9f, 1f, 15f, 11f)) }
+        val firstInversePath = Path().apply {
+            moveTo(2f, 3f)
+            lineTo(6f, 3f)
+            lineTo(5f, 8f)
+            lineTo(3f, 9f)
+            close()
+            fillType = FillType.INVERSE_WINDING
+        }
+        val secondInversePath = Path().apply {
+            moveTo(10f, 3f)
+            lineTo(14f, 3f)
+            lineTo(13f, 8f)
+            lineTo(11f, 9f)
+            close()
+            fillType = FillType.INVERSE_WINDING
+        }
+        val firstDomain = W4eClipCpuOracle.Shape.Rect(1.0, 1.0, 7.0, 11.0)
+        val secondDomain = W4eClipCpuOracle.Shape.Rect(9.0, 1.0, 15.0, 11.0)
+        val firstClip = W4eClipCpuOracle.Clip(
+            firstDomain,
+            W4eClipCpuOracle.ClipOperation.Intersect,
+            W4eClipCpuOracle.AA.Hard,
+        )
+        val secondClip = W4eClipCpuOracle.Clip(
+            secondDomain,
+            W4eClipCpuOracle.ClipOperation.Intersect,
+            W4eClipCpuOracle.AA.Hard,
+        )
+        val first = W4eClipCpuOracle.Draw(
+            shape = W4eClipCpuOracle.Shape.Inverse(
+                W4eClipCpuOracle.Shape.Polygon(
+                    listOf(
+                        W4eClipCpuOracle.Point(2.0, 3.0),
+                        W4eClipCpuOracle.Point(6.0, 3.0),
+                        W4eClipCpuOracle.Point(5.0, 8.0),
+                        W4eClipCpuOracle.Point(3.0, 9.0),
+                    ),
+                ),
+            ),
+            color = W4eClipCpuOracle.Rgba8(213, 57, 41, 255),
+            antiAlias = W4eClipCpuOracle.AA.Hard,
+            clips = listOf(firstClip),
+        )
+        val second = W4eClipCpuOracle.Draw(
+            shape = W4eClipCpuOracle.Shape.Inverse(
+                W4eClipCpuOracle.Shape.Polygon(
+                    listOf(
+                        W4eClipCpuOracle.Point(10.0, 3.0),
+                        W4eClipCpuOracle.Point(14.0, 3.0),
+                        W4eClipCpuOracle.Point(13.0, 8.0),
+                        W4eClipCpuOracle.Point(11.0, 9.0),
+                    ),
+                ),
+            ),
+            color = W4eClipCpuOracle.Rgba8(38, 122, 221, 255),
+            antiAlias = W4eClipCpuOracle.AA.Hard,
+            clips = listOf(secondClip),
+        )
+        val expected = W4eClipCpuOracle.render(width, height, listOf(first, second))
+        val withoutFirst = W4eClipCpuOracle.render(width, height, listOf(second))
+        val withoutSecond = W4eClipCpuOracle.render(width, height, listOf(first))
+        val firstDomainForBoth = W4eClipCpuOracle.render(
+            width,
+            height,
+            listOf(first, second.copy(clips = listOf(firstClip))),
+        )
+        val secondDomainForBoth = W4eClipCpuOracle.render(
+            width,
+            height,
+            listOf(first.copy(clips = listOf(secondClip)), second),
+        )
+        val singleConsumer = Surface(width, height)
+        singleConsumer.canvas {
+            clipPath(firstDomainPath, ClipOp.INTERSECT, antiAlias = false)
+            drawPath(firstInversePath, Paint.fill(ColorARGB.of(255, 213, 57, 41)).copy(antiAlias = false))
+        }
+        val singleResult = singleConsumer.render()
+        val surface = Surface(width, height)
+        surface.canvas {
+            save()
+            clipPath(firstDomainPath, ClipOp.INTERSECT, antiAlias = false)
+            drawPath(firstInversePath, Paint.fill(ColorARGB.of(255, 213, 57, 41)).copy(antiAlias = false))
+            restore()
+            save()
+            clipPath(secondDomainPath, ClipOp.INTERSECT, antiAlias = false)
+            drawPath(secondInversePath, Paint.fill(ColorARGB.of(255, 38, 122, 221)).copy(antiAlias = false))
+            restore()
+        }
+
+        val result = surface.render()
+
+        assertFalse(expected.contentEquals(withoutFirst), "the first inverse consumer must contribute")
+        assertFalse(expected.contentEquals(withoutSecond), "the second inverse consumer must contribute")
+        assertFalse(expected.contentEquals(firstDomainForBoth), "the consumers must not share the first D24S8 domain")
+        assertFalse(expected.contentEquals(secondDomainForBoth), "the consumers must not share the second D24S8 domain")
+        assertPixelsEqual(withoutSecond, singleResult.pixels)
+        assertPixelsEqual(expected, result.pixels)
+    }
+
+    @Test
+    fun `W4e public mixed hard and Path AA4 inverse consumers keep distinct D24S8 domains`() {
+        val pathMsaa4Available = GPUBackendRuntimeFactory.createOrNull()?.let { runtime ->
+            (runtime.capabilities?.toPlanCapabilitySnapshot(runtime.deviceGeneration) as? GpuPlanCapabilityAdapterResult.Supported)
+                ?.snapshot
+                ?.let { capabilities ->
+                    val color = PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL)
+                    val depth = PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8)
+                    capabilities.supportsTexture(color, 4, setOf(PlanResourceUsage.RenderAttachment)) &&
+                        capabilities.supportsResolve(color, 4, 1) &&
+                        capabilities.supportsTexture(
+                            PlanTextureFormat.CoverageMask,
+                            1,
+                            setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled),
+                        ) &&
+                        capabilities.supportsTexture(
+                            PlanTextureFormat.CoverageMask,
+                            4,
+                            setOf(PlanResourceUsage.RenderAttachment),
+                        ) &&
+                        capabilities.supportsResolve(PlanTextureFormat.CoverageMask, 4, 1) &&
+                        capabilities.supportsTexture(depth, 4, setOf(PlanResourceUsage.DepthStencilAttachment))
+                }
+        } == true
+        assumeTrue(
+            pathMsaa4Available,
+            "Mixed inverse Path AA4 requires the observed native 4x color/resolve, 1x+4x mask/resolve, and D24S8 topology.",
+        )
+
+        val width = 16
+        val height = 12
+        // Integer-aligned path and domain boundaries only observe fully covered or fully empty pixels;
+        // no assertion depends on uncontracted native MSAA sample locations.
+        val firstDomainPath = Path().apply { addRect(RectF32.ofLTRB(1f, 1f, 7f, 11f)) }
+        val secondDomainPath = Path().apply { addRect(RectF32.ofLTRB(9f, 1f, 15f, 11f)) }
+        val firstInversePath = Path().apply {
+            addRect(RectF32.ofLTRB(2f, 3f, 6f, 9f))
+            fillType = FillType.INVERSE_WINDING
+        }
+        val secondInversePath = Path().apply {
+            addRect(RectF32.ofLTRB(10f, 3f, 14f, 9f))
+            fillType = FillType.INVERSE_WINDING
+        }
+        val firstDomain = W4eClipCpuOracle.Shape.Rect(1.0, 1.0, 7.0, 11.0)
+        val secondDomain = W4eClipCpuOracle.Shape.Rect(9.0, 1.0, 15.0, 11.0)
+        val firstClip = W4eClipCpuOracle.Clip(
+            firstDomain,
+            W4eClipCpuOracle.ClipOperation.Intersect,
+            W4eClipCpuOracle.AA.Hard,
+        )
+        val secondClip = W4eClipCpuOracle.Clip(
+            secondDomain,
+            W4eClipCpuOracle.ClipOperation.Intersect,
+            W4eClipCpuOracle.AA.PathMsaa4,
+        )
+        val first = W4eClipCpuOracle.Draw(
+            shape = W4eClipCpuOracle.Shape.Inverse(W4eClipCpuOracle.Shape.Rect(2.0, 3.0, 6.0, 9.0)),
+            color = W4eClipCpuOracle.Rgba8(213, 57, 41, 255),
+            antiAlias = W4eClipCpuOracle.AA.PathMsaa4,
+            clips = listOf(firstClip),
+        )
+        val second = W4eClipCpuOracle.Draw(
+            shape = W4eClipCpuOracle.Shape.Inverse(W4eClipCpuOracle.Shape.Rect(10.0, 3.0, 14.0, 9.0)),
+            color = W4eClipCpuOracle.Rgba8(38, 122, 221, 255),
+            antiAlias = W4eClipCpuOracle.AA.PathMsaa4,
+            clips = listOf(secondClip),
+        )
+        val expected = W4eClipCpuOracle.render(width, height, listOf(first, second))
+        val withoutFirst = W4eClipCpuOracle.render(width, height, listOf(second))
+        val withoutSecond = W4eClipCpuOracle.render(width, height, listOf(first))
+        val firstDomainForBoth = W4eClipCpuOracle.render(
+            width,
+            height,
+            listOf(first, second.copy(clips = listOf(firstClip))),
+        )
+        val secondDomainForBoth = W4eClipCpuOracle.render(
+            width,
+            height,
+            listOf(first.copy(clips = listOf(secondClip)), second),
+        )
+        val surface = Surface(width, height)
+        surface.canvas {
+            save()
+            clipPath(firstDomainPath, ClipOp.INTERSECT, antiAlias = false)
+            drawPath(firstInversePath, Paint.fill(ColorARGB.of(255, 213, 57, 41)).copy(antiAlias = true))
+            restore()
+            save()
+            clipPath(secondDomainPath, ClipOp.INTERSECT, antiAlias = true)
+            drawPath(secondInversePath, Paint.fill(ColorARGB.of(255, 38, 122, 221)).copy(antiAlias = true))
+            restore()
+        }
+
+        val result = surface.render()
+
+        assertFalse(expected.contentEquals(withoutFirst), "the hard-domain inverse consumer must contribute")
+        assertFalse(expected.contentEquals(withoutSecond), "the Path AA4-domain inverse consumer must contribute")
+        assertFalse(expected.contentEquals(firstDomainForBoth), "the mixed consumers must not share the hard D24S8 domain")
+        assertFalse(expected.contentEquals(secondDomainForBoth), "the mixed consumers must not share the Path AA4 D24S8 domain")
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(expected, result.pixels)
+    }
+
+    @Test
     fun `W4e public hard restrictive scissor preserves translucent SrcOver in RGBA and BGRA`() {
         val width = 7
         val height = 5
