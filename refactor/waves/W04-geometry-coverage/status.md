@@ -414,6 +414,50 @@ baseline, `:integration-tests:skia` ou `jpg-color-cube` n'a été sélectionné;
 la compilation transitive éventuelle de modules `font` ne constitue pas une
 exécution de leur suite.
 
+### Correctif final post-revue Sol — `final-fix2`
+
+Les quatre findings Important suivants sont clos sans élargir la capability ni
+inventer une capability AA4.
+
+1. Le normalizer W4e ne retire plus aveuglément le `DeviceRect` W4d d'un draw
+   frère non possédé : il ne consomme que le clip complexe qu'il matérialise.
+   Pour un inverse, le domaine fini est intersecté avec ce même scissor
+   device-space avant la stratégie W4e. Des pixels publics couvrent une frame
+   mixte W4e + sibling `DeviceRect`, puis un inverse borné par `DeviceRect`.
+2. `RRectF64` canonise maintenant chaque paire de rayons dès que
+   `x <= 0 || y <= 0`, donc aussi `-0.0`, en `CornerRadiiF64.Zero` avant le
+   facteur uniforme global. L'oracle CPU suit cette source Skia unique et les
+   équivalences Identity/axis/general/perspective sont exécutées.
+3. `W4eNativePayloadPlan` est construit avant la publication puis transporté
+   par identité dans le graphe, son witness et l'autorité préparée. Le lowering
+   le consomme seulement; il ne retesselle ni ne réalloue après `Ready`.
+   La preuve mutation-sensitive modifie une copie publique retournée, puis
+   confirme l'identité de l'autorité; réintroduire temporairement `.from(...)`
+   après `Ready` la fait échouer sans reflection, compteur d'appels ni accès
+   privé.
+4. Le pool compare désormais la capacité physique et les usages V/I/U, et non
+   les spans utiles inclus dans l'égalité de data class. Il réutilise un slot
+   capable ou remplace transactionnellement un slot `Available` incompatible
+   avant `Saturated`. Une preuve `Surface` publique rend quatre géométries W4e
+   distinctes puis la première de nouveau; l'ancienne saturation refuse le
+   quatrième frame (RED), la politique finale récupère (GREEN).
+
+| Gate finale `final-fix2` | État Gradle | Résultat frais |
+| --- | --- | --- |
+| G1 geometry/matrix/render-ir/gpu-plan | `BUILD SUCCESSFUL` (exit 0) | 85 tâches, 0 failure, 0 error. |
+| G2 renderer W4d/W4e ciblé | `BUILD SUCCESSFUL` (exit 0) | 53 tâches, 0 failure, 0 error. |
+| G3 Surface/Picture filtrée | `BUILD FAILED` (exit 1 attendu) | 2 148 tests, 45 failures historiques, 0 error, 2 skips. |
+| G4 `:kanvas:test` complet | `BUILD FAILED` (exit 1 attendu) | 3 691 tests, 51 failures historiques, 0 error, 2 skips. |
+
+Les quatre tests nouveaux expliquent le passage de 2 144/3 687 à
+2 148/3 691; le ledger des failures reste exactement 45/51. Le scan XML G4
+trouve uniquement `ImageTest`, `GPUAllApiBlendSurfaceTest`,
+`GPUMaskBlurDispatchTest`, `GPUPreparedSurfaceFrameBuilderTest`,
+`GPUPreparedTextStrokeTest` et `GPURefusalGuardsTest`, sans `<error>`. Les
+deux skips AA4 restent des frontières de capability honnêtes. Cette boucle ne
+modifie ni `font`, ni `codec`, GM, dashboard, baseline,
+`:integration-tests:skia` ou `jpg-color-cube`.
+
 ### Dette et rulings conservés
 
 - Les diagnostics de refus path/projective hétérogènes restent aplatis à
