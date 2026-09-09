@@ -8245,7 +8245,11 @@ class GPUFramePreflighterTest {
                 PlanTextureSampleSupport.of(
                     PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
                     1,
-                    setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource),
+                    setOf(
+                        PlanResourceUsage.RenderAttachment,
+                        PlanResourceUsage.CopySource,
+                        PlanResourceUsage.Sampled,
+                    ),
                 ),
                 PlanTextureSampleSupport.of(
                     PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
@@ -8319,6 +8323,10 @@ class GPUFramePreflighterTest {
                 maxDynamicUniformBuffersPerPipelineLayout = 1,
             ),
             supportedTextureFormats = setOf(GPUTextureFormat.RGBA8UnormSrgb),
+            supportedTextureUsage = GPUTextureUsage.RenderAttachment or
+                GPUTextureUsage.CopySrc or
+                GPUTextureUsage.CopyDst or
+                GPUTextureUsage.TextureBinding,
             textureFormatSampleSupport = GPUTextureFormatSampleSupport(
                 mapOf(GPUTextureFormat.RGBA8UnormSrgb to GPUTextureSampleCountSupport(setOf(1))),
             ),
@@ -8419,6 +8427,10 @@ class GPUFramePreflighterTest {
                 maxDynamicUniformBuffersPerPipelineLayout = 1,
             ),
             supportedTextureFormats = setOf(GPUTextureFormat.RGBA8UnormSrgb),
+            supportedTextureUsage = GPUTextureUsage.RenderAttachment or
+                GPUTextureUsage.CopySrc or
+                GPUTextureUsage.CopyDst or
+                GPUTextureUsage.TextureBinding,
             textureFormatSampleSupport = GPUTextureFormatSampleSupport(
                 mapOf(
                     GPUTextureFormat.RGBA8UnormSrgb to GPUTextureSampleCountSupport(
@@ -8514,6 +8526,10 @@ class GPUFramePreflighterTest {
                 maxDynamicUniformBuffersPerPipelineLayout = 1,
             ),
             supportedTextureFormats = setOf(GPUTextureFormat.RGBA8Unorm, GPUTextureFormat.RGBA8UnormSrgb),
+            supportedTextureUsage = GPUTextureUsage.RenderAttachment or
+                GPUTextureUsage.CopySrc or
+                GPUTextureUsage.CopyDst or
+                GPUTextureUsage.TextureBinding,
             textureFormatSampleSupport = GPUTextureFormatSampleSupport(
                 mapOf(
                     GPUTextureFormat.RGBA8UnormSrgb to GPUTextureSampleCountSupport(

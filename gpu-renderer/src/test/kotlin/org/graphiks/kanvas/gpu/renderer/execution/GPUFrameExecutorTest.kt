@@ -2068,7 +2068,11 @@ class GPUFrameExecutorTest {
             PlanTextureSampleSupport.of(
                 PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
                 1,
-                setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource),
+                setOf(
+                    PlanResourceUsage.RenderAttachment,
+                    PlanResourceUsage.CopySource,
+                    PlanResourceUsage.Sampled,
+                ),
             ),
             PlanTextureSampleSupport.of(
                 PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),

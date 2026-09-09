@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.planning
 
 import io.ygdrasil.webgpu.GPUTextureFormat
+import io.ygdrasil.webgpu.GPUTextureUsage
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -1167,6 +1168,10 @@ class GpuPlanTaskListLowererTest {
             maxDynamicUniformBuffersPerPipelineLayout = 1,
         ),
         supportedTextureFormats = setOf(GPUTextureFormat.RGBA8Unorm, GPUTextureFormat.RGBA8UnormSrgb),
+        supportedTextureUsage = GPUTextureUsage.RenderAttachment or
+            GPUTextureUsage.CopySrc or
+            GPUTextureUsage.CopyDst or
+            GPUTextureUsage.TextureBinding,
         textureFormatSampleSupport = GPUTextureFormatSampleSupport(
             mapOf(
                 GPUTextureFormat.RGBA8UnormSrgb to GPUTextureSampleCountSupport(

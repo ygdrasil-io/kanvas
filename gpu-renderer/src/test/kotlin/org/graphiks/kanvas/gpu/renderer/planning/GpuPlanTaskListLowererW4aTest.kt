@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.planning
 
 import io.ygdrasil.webgpu.GPUTextureFormat
+import io.ygdrasil.webgpu.GPUTextureUsage
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
@@ -430,6 +431,10 @@ class GpuPlanTaskListLowererW4aTest {
             add(GPUTextureFormat.RGBA8UnormSrgb)
             if (depthStencilSupported) add(GPUTextureFormat.Depth24PlusStencil8)
         },
+        supportedTextureUsage = GPUTextureUsage.RenderAttachment or
+            GPUTextureUsage.CopySrc or
+            GPUTextureUsage.CopyDst or
+            GPUTextureUsage.TextureBinding,
         textureFormatSampleSupport = GPUTextureFormatSampleSupport(
             buildMap {
                 put(

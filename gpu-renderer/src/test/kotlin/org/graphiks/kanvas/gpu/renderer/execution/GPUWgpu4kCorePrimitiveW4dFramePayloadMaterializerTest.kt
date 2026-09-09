@@ -2365,6 +2365,10 @@ internal object W4dExecutionFixture {
             GPUTextureFormat.RGBA8UnormSrgb,
             GPUTextureFormat.Depth24PlusStencil8,
         ),
+        supportedTextureUsage = GPUTextureUsage.RenderAttachment or
+            GPUTextureUsage.CopySrc or
+            GPUTextureUsage.CopyDst or
+            GPUTextureUsage.TextureBinding,
         textureFormatSampleSupport = GPUTextureFormatSampleSupport(
             mapOf(
                 GPUTextureFormat.RGBA8UnormSrgb to GPUTextureSampleCountSupport(setOf(1)),

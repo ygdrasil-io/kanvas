@@ -312,9 +312,9 @@ SrcOver). `Picture` v8 conserve ce payload à la lecture historique et
 La seule preuve AA4 positive qui manque est honnêtement `SKIPPED` à la
 frontière de topology/capability native : l'adaptateur courant ne publie pas
 la topologie AA4 complète. Aucune capability AA4, aucun sample position matériel
-ni succès terminal n'a été inventé. En revanche, les tests publics hard et
-inverse passent réellement ; le test Surface AA4 et le test mixed hard/AA4 sont
-les deux skips documentés de la gate Surface filtrée.
+ni succès terminal n'a été inventé. En revanche, les tests `Surface` publics
+hard et inverse passent réellement ; le test Surface AA4 et le test mixed
+hard/AA4 sont les deux skips documentés de la gate Surface filtrée.
 
 Le rollback public prouvé n'est pas une matrice d'injection native : un refus
 de budget W4e est suivi d'un rendu `Surface` exact récupéré sur la même route.
@@ -325,23 +325,32 @@ L'overload public `prepareSceneFrameSession` qui avait introduit un quinzième
 échec renderer a été retiré ; il ne faut donc plus décrire quinze échecs comme
 préexistants.
 
-### Gates W4e après Task 9-fix1
+### Gates W4e après Task 9-fix2
 
 | Gate | État Gradle | XML frais | Attribution |
 | --- | --- | --- | --- |
 | geometry/matrix/render-ir/gpu-plan | `BUILD SUCCESSFUL` (exit 0) | 0 failure, 0 error | verte ; 85 tâches exécutées. |
-| renderer ciblé | `BUILD SUCCESSFUL` (exit 0) | 0 failure, 0 error | les 85 refus `UnsupportedCapability` introduits par W4e sont clos. |
+| adaptateur capability ciblé | `BUILD SUCCESSFUL` (exit 0) | 16 tests, 0 failure, 0 error | matrice AA4 absente/présente ; aucune capacité couleur 1× n'est inventée. |
+| renderer ciblé | `BUILD SUCCESSFUL` (exit 0) | 0 failure, 0 error | les autorités W4a–W4e déclarent leurs faits d'usage réellement observés. |
 | `GPUClipCoverageSurfaceTest` ciblé | `BUILD SUCCESSFUL` (exit 0) | 0 failure, 0 error | les deux terminaux singuliers publient de nouveau `unsupported.transform.affine_singular`. |
-| `GPUFramePathApiInventoryNativeSmokeTest` ciblé | `BUILD SUCCESSFUL` (exit 0) | 72 tests, 0 failure, 0 error | la capture publique à transform typé est réellement routée ; les oracles pixels natifs restent exécutés. |
+| `GPUFramePathApiInventoryNativeSmokeTest` ciblé | `BUILD SUCCESSFUL` (exit 0) | 72 tests, 0 failure, 0 error | la fixture native-smoke interne à capture typée est réellement routée ; les oracles pixels natifs restent exécutés. |
 | Surface/Picture filtrée | `BUILD FAILED` (exit 1) | 2 144 tests, 45 failures, 0 error, 2 skipped | retour exact au ledger `DrawPoint` historique ; les deux skips AA4 restent honnêtes. |
 | `:kanvas:test` complet | `BUILD FAILED` (exit 1) | 3 687 tests, 51 failures, 0 error, 2 skipped | retour exact au ledger global historique, sans nouveau nom W4e. |
 
-Les 85 régressions renderer venaient du snapshot capability 1× : en l'absence
-d'observation AA4, W4e avait remplacé l'enveloppe legacy des usages couleur par
-une table étroite et non prouvée, faisant refuser des graphes historiques. Le
-mapping conserve désormais l'enveloppe 1× compatible, et n'ajoute le hard-mask
-W4e que lorsque les faits exacts `RGBA8Unorm`,
-`RenderAttachment | TextureBinding` et sample 1 sont observés. Aucune capability
+Task 9-fix1 avait rétabli la gate renderer par le fallback legacy du snapshot
+1×. La revue a établi que cette représentation était elle-même fail-open : hors
+AA4, l'omission de `supportedTextureSampleSupports` déclenchait le défaut
+historique et publiait `RenderAttachment`, `CopySource`, `CopyDestination` et
+`Sampled` même lorsqu'une session n'observait que `RenderAttachment`.
+
+Task 9-fix2 construit une seule table explicite pour les deux branches AA4.
+Pour la couleur 1×, elle projette uniquement les bits réellement observés
+`RenderAttachment`, `CopySrc`, `CopyDst` et `TextureBinding` vers
+`RenderAttachment`, `CopySource`, `CopyDestination` et `Sampled`. Une session
+`RenderAttachment` seule ne publie donc aucun des trois autres usages ; si le
+contrat cible W3 exige `CopySource` absent, il n'est pas admis et le lowering
+reste `UnsupportedCapability`. Le hard-mask W4e conserve exactement ses faits
+`RGBA8Unorm`, `RenderAttachment | TextureBinding` et sample 1. Aucune capability
 AA4 n'est publiée sans preuve.
 
 Les deux refus de clip singulier étaient réellement publics : le label interne
@@ -355,7 +364,7 @@ Les seize smoke tests étaient des fixtures historiques qui construisaient un
 snapshot typé et une géométrie source inverse-mappée pour conserver les mêmes
 pixels device. Deux assertions float sur la géométrie d'inventaire interne ont
 été retirées car le round-trip F32 diffère de quelques ulps ; les oracles pixels
-publics correspondants sont conservés et passent. Aucun test comportemental n'a
+natifs correspondants sont conservés et passent. Aucun test comportemental n'a
 été supprimé, ignoré ou masqué.
 
 Les 51 noms historiques restent strictement ceux du ledger (45 `DrawPoint`,
@@ -388,8 +397,9 @@ W4 reste ouverte. W4d.2 laisse explicitement :
   inventée pour contourner ce gap ;
 - la limite conservative `TopologyLimit` de certaines unions PathOps F64→F32,
   notamment `STROKE_AND_FILL` projectif non vide et le fixture closed-skew ;
-- les 18 deltas W4e frais sont clos par Task 9-fix1 ; la limite qui demeure est
-  la topologie AA4 native indisponible, non une régression d'intégration W4e.
+- les 18 deltas W4e frais sont clos par Task 9-fix1 et la projection exacte des
+  usages couleur 1× est restaurée par Task 9-fix2 ; la limite qui demeure est la
+  topologie AA4 native indisponible, non une régression d'intégration W4e.
 
 W5 (materials), W6 (layers/effets) et W7 (convergence GM, incluant la
 réévaluation de la dette SDF RRect W4b) ne font pas partie de W4d.2. Les gates

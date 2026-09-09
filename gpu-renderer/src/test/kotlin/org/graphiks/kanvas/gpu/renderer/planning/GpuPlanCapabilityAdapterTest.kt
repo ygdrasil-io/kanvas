@@ -184,6 +184,56 @@ class GpuPlanCapabilityAdapterTest {
     }
 
     @Test
+    fun `adapter does not invent color usages when AA4 is absent`() {
+        val snapshot = assertIs<GpuPlanCapabilityAdapterResult.Supported>(
+            capabilities(textureUsage = GPUTextureUsage.RenderAttachment)
+                .toPlanCapabilitySnapshot(GPUDeviceGenerationID(7)),
+        ).snapshot
+        val color = PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL)
+
+        assertTrue(snapshot.supportsTexture(color, 1, setOf(PlanResourceUsage.RenderAttachment)))
+        assertEquals(false, snapshot.supportsTexture(color, 1, setOf(PlanResourceUsage.CopySource)))
+        assertEquals(
+            false,
+            snapshot.supportsTexture(
+                color,
+                1,
+                setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource),
+            ),
+        )
+        assertEquals(false, snapshot.supportsTexture(color, 1, setOf(PlanResourceUsage.CopyDestination)))
+        assertEquals(false, snapshot.supportsTexture(color, 1, setOf(PlanResourceUsage.Sampled)))
+        assertEquals(false, snapshot.supportsTexture(color, 4, setOf(PlanResourceUsage.RenderAttachment)))
+    }
+
+    @Test
+    fun `adapter preserves observed color usages when AA4 is present`() {
+        val observedUsage = GPUTextureUsage.RenderAttachment or
+            GPUTextureUsage.CopySrc or
+            GPUTextureUsage.CopyDst or
+            GPUTextureUsage.TextureBinding
+        val snapshot = assertIs<GpuPlanCapabilityAdapterResult.Supported>(
+            w4dPhysicalCapabilities(textureUsage = observedUsage)
+                .toPlanCapabilitySnapshot(GPUDeviceGenerationID(7)),
+        ).snapshot
+        val color = PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL)
+
+        assertTrue(
+            snapshot.supportsTexture(
+                color,
+                1,
+                setOf(
+                    PlanResourceUsage.RenderAttachment,
+                    PlanResourceUsage.CopySource,
+                    PlanResourceUsage.CopyDestination,
+                    PlanResourceUsage.Sampled,
+                ),
+            ),
+        )
+        assertTrue(snapshot.supportsTexture(color, 4, setOf(PlanResourceUsage.RenderAttachment)))
+    }
+
+    @Test
     fun `adapter withholds hard-mask facts when a required physical observation is absent`() {
         val physical = w4dPhysicalCapabilities()
         val supported = assertIs<GpuPlanCapabilityAdapterResult.Supported>(
@@ -299,6 +349,10 @@ class GpuPlanCapabilityAdapterTest {
         rendererFeatures: Set<GPURendererFeature> = requiredPlanFeatures(),
         depthStencilFormatSupported: Boolean = false,
         depthStencilSamples: Set<Int> = emptySet(),
+        textureUsage: GPUTextureUsage = GPUTextureUsage.RenderAttachment or
+            GPUTextureUsage.CopySrc or
+            GPUTextureUsage.CopyDst or
+            GPUTextureUsage.TextureBinding,
     ) = GPUCapabilities(
         implementation = GPUImplementationIdentity("GPU", "test", "adapter", "device"),
         facts = emptyList(),
@@ -314,7 +368,7 @@ class GpuPlanCapabilityAdapterTest {
             add(GPUTextureFormat.RGBA8UnormSrgb)
             if (depthStencilFormatSupported) add(GPUTextureFormat.Depth24PlusStencil8)
         },
-        supportedTextureUsage = GPUTextureUsage.RenderAttachment,
+        supportedTextureUsage = textureUsage,
         textureFormatSampleSupport = GPUTextureFormatSampleSupport(
             buildMap {
                 put(
@@ -335,17 +389,20 @@ class GpuPlanCapabilityAdapterTest {
     private fun w4dPhysicalCapabilities(
         depthStencilSamples: Set<Int> = setOf(1, 4),
         includeDepthStencilInBroadFormats: Boolean = true,
+        textureUsage: GPUTextureUsage = GPUTextureUsage.RenderAttachment or
+            GPUTextureUsage.CopySrc or
+            GPUTextureUsage.CopyDst or
+            GPUTextureUsage.TextureBinding,
     ): GPUCapabilities = capabilities(
         depthStencilFormatSupported = includeDepthStencilInBroadFormats,
         depthStencilSamples = depthStencilSamples,
+        textureUsage = textureUsage,
     ).copy(
         supportedTextureFormats = buildSet {
             add(GPUTextureFormat.RGBA8UnormSrgb)
             add(GPUTextureFormat.RGBA8Unorm)
             if (includeDepthStencilInBroadFormats) add(GPUTextureFormat.Depth24PlusStencil8)
         },
-        supportedTextureUsage = GPUTextureUsage.RenderAttachment or
-            GPUTextureUsage.TextureBinding or GPUTextureUsage.CopySrc,
         textureFormatSampleSupport = GPUTextureFormatSampleSupport(
             mapOf(
                 GPUTextureFormat.RGBA8UnormSrgb to GPUTextureSampleCountSupport(
