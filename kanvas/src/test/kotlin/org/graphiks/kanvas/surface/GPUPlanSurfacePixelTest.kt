@@ -732,6 +732,63 @@ class GPUPlanSurfacePixelTest {
     }
 
     @Test
+    fun `W4e public budget error leaves the public Surface route usable for a later frame`() {
+        val width = 8
+        val height = 8
+        val rounded = RRectF32.of(RectF32.ofLTRB(1f, 1f, 7f, 7f), radius = 2f)
+        val full = Path().apply { addRect(RectF32.ofLTRB(0f, 0f, width.toFloat(), height.toFloat())) }
+        val paint = Paint.fill(ColorARGB.of(255, 82, 141, 219)).copy(antiAlias = false)
+        val expected = W4eClipCpuOracle.render(
+            width,
+            height,
+            listOf(
+                W4eClipCpuOracle.Draw(
+                    shape = W4eClipCpuOracle.Shape.Rect(0.0, 0.0, width.toDouble(), height.toDouble()),
+                    color = W4eClipCpuOracle.Rgba8(82, 141, 219, 255),
+                    antiAlias = W4eClipCpuOracle.AA.Hard,
+                    clips = listOf(
+                        W4eClipCpuOracle.Clip(
+                            shape = W4eClipCpuOracle.Shape.RRect(
+                                W4eClipCpuOracle.Shape.Rect(1.0, 1.0, 7.0, 7.0),
+                                2.0,
+                                2.0,
+                            ),
+                            operation = W4eClipCpuOracle.ClipOperation.Intersect,
+                            antiAlias = W4eClipCpuOracle.AA.Hard,
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val rejected = Surface(
+            width,
+            height,
+            config = RenderConfig(frameLocalBudgetBytes = 1L),
+        )
+        rejected.canvas {
+            clipRRect(rounded, ClipOp.INTERSECT, antiAlias = false)
+            drawPath(full, paint)
+        }
+
+        val error = assertFailsWith<IllegalStateException> { rejected.render() }
+
+        assertTrue(
+            error.message.orEmpty().contains("w4e.clip.budget.frame-local-exceeded"),
+            "Expected the public W4e budget error, got ${error.message}",
+        )
+
+        val recovered = Surface(width, height)
+        recovered.canvas {
+            clipRRect(rounded, ClipOp.INTERSECT, antiAlias = false)
+            drawPath(full, paint)
+        }
+
+        val result = recovered.render()
+
+        assertPixelsEqual(expected, result.pixels)
+    }
+
+    @Test
     fun `W4e oracle inverse-maps affine clip geometry before ordered folds`() {
         val pixels = W4eClipCpuOracle.render(
             width = 2,
