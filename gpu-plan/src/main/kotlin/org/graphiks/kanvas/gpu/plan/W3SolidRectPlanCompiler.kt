@@ -321,13 +321,7 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
     ): MaterialPlanRef {
         val offset = entries.size
         incoming.entries().forEach { entry ->
-            val bindings = when (val value = entry.bindings) {
-                is MaterialBindingPlan.OpacityF32V1 -> MaterialBindingPlan.OpacityF32V1.of(
-                    value.alphaF32, MaterialPlanRef(offset + value.child.indexI32),
-                )
-                else -> value
-            }
-            entries += MaterialPlanEntry(entry.program, bindings)
+            entries += MaterialPlanEntry(entry.program, entry.bindings)
         }
         return MaterialPlanRef(offset + root.indexI32)
     }

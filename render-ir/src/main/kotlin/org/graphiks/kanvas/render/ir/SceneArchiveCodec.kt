@@ -29,7 +29,7 @@ import org.graphiks.math.vector.Vector2F32
 /**
  * The owner of the version-9 Picture payload.
  *
- * A v8 archive starts with the public `KPIC` magic, its v8 integer and the
+ * A v8/v9 archive starts with the public `KPIC` magic, its version integer and the
  * cull rectangle.  The following negative marker occupies the old v8
  * `opCount` slot: it can therefore never be mistaken for a valid historical
  * v8 op count.  Historical Task 8 v8 streams deliberately return [LegacyV8]
@@ -41,7 +41,7 @@ public object SceneArchiveCodec {
     private const val irMarker: Int = -1_391_019_346
     private const val schemaVersion: Int = 3
 
-    /** Encodes a deeply immutable Scene IR as the sole v8 Picture writer. */
+    /** Encodes a deeply immutable Scene IR as the sole v9 Picture writer. */
     public fun encodePicture(scene: SceneSnapshot, cullRect: RectF32): ByteArray {
         requireSemanticValidity(scene)
         val writer = ArchiveWriter()
@@ -66,7 +66,7 @@ public object SceneArchiveCodec {
             val cull = reader.rect()
             val markerOrLegacyOpCount = reader.i32()
             if (markerOrLegacyOpCount != irMarker) {
-                return if (markerOrLegacyOpCount >= 0) {
+                return if (encodedPictureVersion == 8 && markerOrLegacyOpCount >= 0) {
                     SceneArchiveDecodeResult.LegacyV8
                 } else {
                     SceneArchiveDecodeResult.Invalid("invalid-marker", "Picture archive marker is not recognized")
@@ -554,7 +554,7 @@ private class ArchiveReader(private val data: ByteArray) {
                         perspectiveCaptureRefusal = bool(),
                         transformClass = text(),
                     )
-                    2 -> clipTransformV2()
+                    2, 3 -> clipTransformV2()
                     else -> throw ArchiveFailure("unknown-schema", "Scene archive schema is not supported")
                 }
                 ClipEntry(geometry, operation, antiAlias, transform)

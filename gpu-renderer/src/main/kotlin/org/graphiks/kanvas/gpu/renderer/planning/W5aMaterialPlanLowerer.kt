@@ -26,7 +26,9 @@ internal class W5aMaterialPlanLowerer {
         }
         val graph = entry.program.copyNumericOperationGraphV1()
         val source = sourceForCorePrimitive(graph) ?: return null
-        return evaluateSource(source, entry.bindings) { child -> lower(table, child, depth + 1) }
+        return evaluateSource(source, entry.bindings) {
+            if (ref.indexI32 == 0) null else lower(table, MaterialPlanRef(ref.indexI32 - 1), depth + 1)
+        }
     }
 
     /**
@@ -64,12 +66,12 @@ internal class W5aMaterialPlanLowerer {
     private fun evaluateSource(
         node: NumericOperationGraphV1.Node,
         bindings: MaterialBindingPlan,
-        childSource: (MaterialPlanRef) -> ColorF32?,
+        childSource: () -> ColorF32?,
     ): ColorF32? = when (node.operation) {
         NumericOperationGraphV1.Operation.INPUT_SOLID_SRGBA_STRAIGHT ->
             (bindings as? MaterialBindingPlan.SolidRgbaF32V1)?.copyRgbaF32()
         NumericOperationGraphV1.Operation.INPUT_MATERIAL_LINEAR_PREMUL ->
-            (bindings as? MaterialBindingPlan.OpacityF32V1)?.let { childSource(it.child) }
+            (bindings as? MaterialBindingPlan.OpacityF32V1)?.let { childSource() }
         NumericOperationGraphV1.Operation.CONSTANT_TRANSPARENT -> ColorF32.of(0f, 0f, 0f, 0f)
         NumericOperationGraphV1.Operation.SRGB_TO_LINEAR -> evaluateSource(node.inputs.single(), bindings, childSource)?.let { value ->
             ColorF32.of(

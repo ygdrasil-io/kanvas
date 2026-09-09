@@ -51,19 +51,19 @@ public object EffectiveMaterialPlanner {
         }
         val alphaValues = opacityInnerToOuter.asReversed().toMutableList()
         draw.paint?.takeIf { it.shader != null }?.let { alphaValues += it.color.alphaNormalized }
-        val combinedAlpha = alphaValues.fold(1f) { accumulated, alpha -> accumulated * alpha }
-        if (!combinedAlpha.isFinite()) return Result.Refused(W5aPlanDiagnostics.InvalidOpacity)
-        if (combinedAlpha == 0f) {
+        if (alphaValues.any { !it.isFinite() || it !in 0f..1f }) return Result.Refused(W5aPlanDiagnostics.InvalidOpacity)
+        if (alphaValues.any { it == 0f }) {
             return Result.Ready(
                 MaterialPlanTable.of(listOf(MaterialPlanEntry(MaterialProgramPlan.TransparentV1, MaterialBindingPlan.EmptyV1))),
                 MaterialPlanRef(0),
             )
         }
         val entries = mutableListOf(base)
-        if (combinedAlpha != 1f) {
+        alphaValues.filter { it != 1f }.forEach { alpha ->
+            val child = entries.last().program
             entries += MaterialPlanEntry(
-                MaterialProgramPlan.OpacityV1,
-                MaterialBindingPlan.OpacityF32V1.of(combinedAlpha, MaterialPlanRef(0)),
+                MaterialProgramPlan.OpacityV1(child),
+                MaterialBindingPlan.OpacityF32V1.of(alpha),
             )
         }
         return Result.Ready(MaterialPlanTable.of(entries), MaterialPlanRef(entries.lastIndex))

@@ -95,7 +95,7 @@ class PictureTest {
     }
 
     @Test
-    fun `writer emits version 8 pictures`() {
+    fun `writer emits version 9 schema 3 pictures`() {
         val picture = Picture(
             RectF32.ofLTRB(0f, 0f, 8f, 8f),
             listOf(
@@ -110,7 +110,8 @@ class PictureTest {
 
         val bytes = picture.toByteArray()
 
-        assertEquals(8, bytes.readBigEndianInt(offset = 4))
+        assertEquals(9, bytes.readBigEndianInt(offset = 4))
+        assertEquals(3, bytes.readBigEndianInt(offset = 28))
         assertIs<SceneArchiveDecodeResult.Decoded>(SceneArchiveCodec.decodePicture(bytes))
         assertEquals(picture.ops, requireNotNull(Picture.fromByteArray(bytes)).ops)
     }
@@ -179,7 +180,7 @@ class PictureTest {
     }
 
     @Test
-    fun `version 8 round trips every public serialized enum value`() {
+    fun `version 9 round trips every public serialized enum value`() {
         val identity = Matrix3x3F32.Identity
         val bounds = RectF32.ofLTRB(0f, 0f, 8f, 8f)
         val source = RectF32.ofLTRB(0f, 0f, 1f, 1f)
@@ -365,7 +366,7 @@ class PictureTest {
     }
 
     @Test
-    fun `version 8 refuses runtime effects with incomplete bindings`() {
+    fun `version 9 refuses runtime effects with incomplete bindings`() {
         val bounds = RectF32.ofLTRB(0f, 0f, 8f, 8f)
         val effect = RuntimeEffect(
             "incomplete-runtime",
@@ -385,7 +386,7 @@ class PictureTest {
     }
 
     @Test
-    fun `version 8 round trips runtime vertex layouts through the public Picture API`() {
+    fun `version 9 round trips runtime vertex layouts through the public Picture API`() {
         val bounds = RectF32.ofLTRB(0f, 0f, 8f, 8f)
         val expectedAttributes = VertexFormat.entries.mapIndexed { index, format ->
             VertexAttribute(format, offset = index * 16, shaderLocation = index + 3)
@@ -425,7 +426,7 @@ class PictureTest {
     }
 
     @Test
-    fun `format 8 preserves expanded text and clip provenance through round trip and playback`() {
+    fun `version 9 preserves expanded text and clip provenance through round trip and playback`() {
         val path = DisplayOp.DrawPath.withSourceOperation(
             path = Path().addRect(RectF32.ofLTRB(1f, 2f, 3f, 4f)),
             paint = Paint.fill(ColorARGB.Red),
@@ -436,7 +437,7 @@ class PictureTest {
         val original = Picture(RectF32.ofLTRB(0f, 0f, 8f, 8f), listOf(path))
 
         val encoded = original.toByteArray()
-        assertEquals(8, encoded.readBigEndianInt(offset = 4))
+        assertEquals(9, encoded.readBigEndianInt(offset = 4))
         val restored = requireNotNull(Picture.fromByteArray(encoded))
         assertEquals("text-expanded", assertIs<DisplayOp.DrawPath>(restored.ops.single()).sourceOperation)
 
@@ -604,7 +605,7 @@ class PictureTest {
     }
 
     @Test
-    fun `version 8 picture roundtrip keeps a typed perspective clip from replay authority`() {
+    fun `version 9 picture roundtrip keeps a typed perspective clip from replay authority`() {
         val perspective = Matrix3x3F32(
             sx = 1.25f,
             kx = .2f,
@@ -636,7 +637,7 @@ class PictureTest {
     }
 
     @Test
-    fun `version 8 picture roundtrip preserves ordered hard clip payload through public serialization`() {
+    fun `version 9 picture roundtrip preserves ordered hard clip payload through public serialization`() {
         val cutout = Path().apply {
             moveTo(3f, 3f)
             lineTo(5f, 3f)
@@ -778,7 +779,7 @@ class PictureTest {
         val encoded = Picture(
             RectF32.ofLTRB(0f, 0f, 1f, 1f),
             listOf(DisplayOp.Clear(ColorARGB.Transparent)),
-        ).toByteArray().also { it.writeBigEndianInt(offset = 4, value = 9) }
+        ).toByteArray().also { it.writeBigEndianInt(offset = 4, value = 10) }
 
         assertNull(Picture.fromByteArray(encoded))
     }

@@ -311,6 +311,7 @@ class Picture internal constructor(
 private val MAGIC = byteArrayOf(0x4B, 0x50, 0x49, 0x43)
 private const val FORMAT_VERSION = 9
 private const val STABLE_WIRE_VERSION = 9
+private const val HISTORICAL_WIRE_VERSION_V8 = 8
 
 // type discriminators
 private const val OP_DRAW_RECT: Byte = 0
@@ -963,7 +964,8 @@ private fun decodePicture(data: ByteArray, decodedRuntimeEffects: MutableList<Ru
             } catch (_: ClassCastException) {
                 null
             }
-            SceneArchiveDecodeResult.LegacyV8 -> decodeHistoricalPictureV8(data, decodedRuntimeEffects)
+            // A v9 header cannot select the v8 legacy discriminator.
+            SceneArchiveDecodeResult.LegacyV8 -> null
             is SceneArchiveDecodeResult.Invalid -> null
         }
         else -> null
@@ -978,12 +980,12 @@ private fun decodeLegacyPicture(
 
 /**
  * Compatibility reader for v8 data written before SceneArchiveCodec owned the
- * writer.  It is intentionally read-only; all new v8 output is IR-tagged.
+ * writer. It is intentionally read-only; all new output is v9 IR-tagged.
  */
 private fun decodeHistoricalPictureV8(
     data: ByteArray,
     decodedRuntimeEffects: MutableList<RuntimeEffect>,
-): Picture? = decodePictureWithVersion(data, STABLE_WIRE_VERSION, requireEnd = true, decodedRuntimeEffects)
+): Picture? = decodePictureWithVersion(data, HISTORICAL_WIRE_VERSION_V8, requireEnd = true, decodedRuntimeEffects)
 
 private fun decodePictureWithVersion(
     data: ByteArray,

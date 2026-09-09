@@ -20,7 +20,7 @@ internal object W5aSolidOpacityCpuOracle {
             solidGraph,
             WgslFloatEnvelopeV1Oracle.Inputs(solidSrgbaStraight = source, destinationLinearPremul = clear, coverageF32 = 1f),
         )
-        val opacityGraph = MaterialProgramPlan.OpacityV1.copyNumericOperationGraphV1()
+        val opacityGraph = MaterialProgramPlan.OpacityV1(MaterialProgramPlan.SolidLinearPremulV1).copyNumericOperationGraphV1()
         return WgslFloatEnvelopeV1Oracle.evaluateAttachmentOutput(
             opacityGraph,
             WgslFloatEnvelopeV1Oracle.Inputs(
@@ -47,7 +47,7 @@ internal object W5aSolidOpacityCpuOracle {
                 coverageF32 = 1f,
             ),
         )
-        val graph = MaterialProgramPlan.OpacityV1.copyNumericOperationGraphV1()
+        val graph = MaterialProgramPlan.OpacityV1(MaterialProgramPlan.SolidLinearPremulV1).copyNumericOperationGraphV1()
         return WgslFloatEnvelopeV1Oracle.evaluateLinearOutput(
             graph,
             WgslFloatEnvelopeV1Oracle.Inputs(

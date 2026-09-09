@@ -19,6 +19,44 @@ class W5aMaterialSurfacePixelTest {
     }
 
     @Test
+    fun `public Opacity zero canonicalizes to transparent Rect pixels`() {
+        val color = ColorARGB.of(211, 173, 71, 29)
+        val surface = Surface(4, 4)
+        surface.canvas {
+            drawRect(
+                RectF32.ofLTRB(0f, 0f, 4f, 4f),
+                Paint(shader = Shader.Opacity(Shader.SolidColor(color), 0f), antiAlias = false),
+            )
+        }
+
+        val result = surface.render()
+
+        WgslFloatEnvelopeV1Oracle.assertAdmits(
+            W5aSolidOpacityCpuOracle.source(color, 0f, 1f, 1f),
+            result.pixels.copyOfRange(0, 4),
+        )
+    }
+
+    @Test
+    fun `public Opacity one preserves Solid Rect pixels`() {
+        val color = ColorARGB.of(211, 173, 71, 29)
+        val surface = Surface(4, 4)
+        surface.canvas {
+            drawRect(
+                RectF32.ofLTRB(0f, 0f, 4f, 4f),
+                Paint(shader = Shader.Opacity(Shader.SolidColor(color), 1f), antiAlias = false),
+            )
+        }
+
+        val result = surface.render()
+
+        WgslFloatEnvelopeV1Oracle.assertAdmits(
+            W5aSolidOpacityCpuOracle.source(color, 1f, 1f, 1f),
+            result.pixels.copyOfRange(0, 4),
+        )
+    }
+
+    @Test
     fun `nested public opacity and Paint alpha render an integral Rect within the W5a numeric envelope`() {
         val color = ColorARGB.of(153, 203, 101, 47)
         val paint = Paint(

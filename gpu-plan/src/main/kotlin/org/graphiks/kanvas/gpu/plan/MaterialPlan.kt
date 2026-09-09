@@ -30,9 +30,10 @@ public sealed interface MaterialProgramPlan {
         override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 = NumericOperationGraphV1.solid()
     }
 
-    public data object OpacityV1 : MaterialProgramPlan {
+    /** Child topology is code shape, while alpha remains a dynamic binding value. */
+    public class OpacityV1(public val child: MaterialProgramPlan) : MaterialProgramPlan {
         override val versionI32: Int = 1
-        override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId("w5a-opacity-v1")
+        override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId("w5a-opacity-v1(${child.structuralId.value})")
         override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 = NumericOperationGraphV1.opacity()
     }
 }
@@ -54,12 +55,10 @@ public sealed interface MaterialBindingPlan {
         }
     }
 
-    public class OpacityF32V1 private constructor(public val alphaF32: Float, public val child: MaterialPlanRef) : MaterialBindingPlan {
+    public class OpacityF32V1 private constructor(public val alphaF32: Float) : MaterialBindingPlan {
         override val versionI32: Int = 1
         init { require(alphaF32.isFinite() && alphaF32 in 0f..1f) }
-        public companion object {
-            public fun of(alphaF32: Float, child: MaterialPlanRef): OpacityF32V1 = OpacityF32V1(alphaF32, child)
-        }
+        public companion object { public fun of(alphaF32: Float): OpacityF32V1 = OpacityF32V1(alphaF32) }
     }
 }
 
@@ -104,11 +103,11 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
                     MaterialProgramPlan.SolidLinearPremulV1 -> require(entry.bindings is MaterialBindingPlan.SolidRgbaF32V1) {
                         "Solid programs require RGBA bindings"
                     }
-                    MaterialProgramPlan.OpacityV1 -> {
+                    is MaterialProgramPlan.OpacityV1 -> {
                         require(entry.bindings is MaterialBindingPlan.OpacityF32V1) {
                             "Opacity programs require opacity bindings"
                         }
-                        require((entry.bindings as MaterialBindingPlan.OpacityF32V1).child.indexI32 < index) { "Opacity children must precede their parent" }
+                        require(index > 0 && entries[index - 1].program.structuralId == program.child.structuralId) { "Opacity child topology must precede its parent" }
                     }
                 }
             }

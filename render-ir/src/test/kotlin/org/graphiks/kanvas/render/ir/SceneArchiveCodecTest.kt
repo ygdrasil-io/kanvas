@@ -21,7 +21,7 @@ import org.graphiks.math.vector.Vector2F32
 
 class SceneArchiveCodecTest {
     @Test
-    fun `schema v2 round trips each clip matrix and schema v1 never invents an identity transform`() {
+    fun `v9 schema 3 round trips each clip matrix while the v8 schema 1 fixture never invents identity`() {
         val perspective = Matrix3x3F32(
             sx = 1.25f,
             kx = .2f,
@@ -91,14 +91,15 @@ class SceneArchiveCodecTest {
         val decoded = assertIs<SceneArchiveDecodeResult.Decoded>(SceneArchiveCodec.decodePicture(bytes))
 
         assertEquals("KPIC", bytes.copyOfRange(0, 4).decodeToString())
-        assertEquals(8, java.nio.ByteBuffer.wrap(bytes, 4, 4).int)
+        assertEquals(9, java.nio.ByteBuffer.wrap(bytes, 4, 4).int)
+        assertEquals(3, java.nio.ByteBuffer.wrap(bytes, 28, 4).int)
         assertEquals(scene.canonicalId, decoded.scene.canonicalId)
         assertEquals(RectF32(1f, 2f, 33f, 18f), decoded.copyCullRect())
     }
 
     @Test
     fun `picture archive rejects an unknown version without allocating a scene`() {
-        val bytes = byteArrayOf(0x4b, 0x50, 0x49, 0x43, 0, 0, 0, 9)
+        val bytes = byteArrayOf(0x4b, 0x50, 0x49, 0x43, 0, 0, 0, 10)
 
         val result = SceneArchiveCodec.decodePicture(bytes)
 
@@ -373,7 +374,7 @@ class SceneArchiveCodecTest {
     }
 
     @Test
-    fun `picture archive rejects opacity only in public shader positions`() {
+    fun `picture archive round trips opacity in every public shader position`() {
         val opacity = MaterialNode.Opacity(MaterialNode.Solid(ColorARGB.Red), 0.5f)
         val neutralDraw = validArchiveScene().let { scene ->
             SceneSnapshot.of(
@@ -410,19 +411,17 @@ class SceneArchiveCodecTest {
             ),
         )
 
-        listOf(neutralDraw, neutralLayer).forEach { scene ->
-            assertIs<SceneArchiveDecodeResult.Decoded>(SceneArchiveCodec.decodePicture(SceneArchiveCodec.encodePicture(scene, RectF32(0f, 0f, 1f, 1f))))
-        }
-        listOf(paintShader, layerPaintShader, maskShader, meshShader, blendShader, runtimeShader).forEach { scene ->
-            val failure = assertFailsWith<IllegalArgumentException> {
-                SceneArchiveCodec.encodePicture(scene, RectF32(0f, 0f, 1f, 1f))
-            }
-            assertEquals("Scene archive semantic validation failed: invalid-shader-material", failure.message)
+        listOf(
+            neutralDraw, neutralLayer, paintShader, layerPaintShader, maskShader, meshShader, blendShader, runtimeShader,
+        ).forEach { scene ->
+            assertIs<SceneArchiveDecodeResult.Decoded>(
+                SceneArchiveCodec.decodePicture(SceneArchiveCodec.encodePicture(scene, RectF32(0f, 0f, 1f, 1f))),
+            )
         }
     }
 
     @Test
-    fun `picture archive rejects a mutated opacity material in a public shader`() {
+    fun `picture archive decodes a serialized opacity material in a public shader`() {
         val marker = ColorARGB.fromPackedInt(0x13579BDF)
         val valid = validArchiveScene(
             drawNode(
@@ -438,9 +437,7 @@ class SceneArchiveCodecTest {
             ByteBuffer.allocate(16).putInt(12).putInt(2).putInt(marker.value.toInt()).putFloat(0.5f).array(),
         )
 
-        val invalid = assertIs<SceneArchiveDecodeResult.Invalid>(SceneArchiveCodec.decodePicture(invalidWire))
-
-        assertEquals("invalid-shader-material", invalid.code)
+        assertIs<SceneArchiveDecodeResult.Decoded>(SceneArchiveCodec.decodePicture(invalidWire))
     }
 
     @Test
