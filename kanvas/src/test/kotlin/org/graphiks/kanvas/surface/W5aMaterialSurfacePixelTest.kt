@@ -2,7 +2,6 @@
 
 package org.graphiks.kanvas.surface
 
-import kotlin.test.assertContentEquals
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.picture.Picture
@@ -39,11 +38,11 @@ class W5aMaterialSurfacePixelTest {
     }
 
     @Test
-    fun `opacity zero one and Picture round trip preserve the public material result`() {
+    fun `nontrivial opacity and Picture round trip preserve the public material result`() {
         val color = ColorARGB.of(221, 101, 203, 47)
         val recordedPaint = Paint(
             color = ColorARGB.of(179, 9, 8, 7),
-            shader = Shader.Opacity(Shader.Opacity(Shader.SolidColor(color), 1f), 0f),
+            shader = Shader.Opacity(Shader.Opacity(Shader.SolidColor(color), 0.625f), 0.4f),
             antiAlias = false,
         )
         val recorder = PictureRecorder()
@@ -57,7 +56,10 @@ class W5aMaterialSurfacePixelTest {
 
         val result = surface.render()
 
-        assertContentEquals(ubyteArrayOf(0u, 0u, 0u, 0u), result.pixels.copyOfRange(0, 4))
+        WgslFloatEnvelopeV1Oracle.assertAdmits(
+            W5aSolidOpacityCpuOracle.source(color, 0.4f, 0.625f, 179f / 255f),
+            result.pixels.copyOfRange(0, 4),
+        )
     }
 
     @Test
