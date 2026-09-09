@@ -23,6 +23,7 @@ import org.graphiks.kanvas.gpu.plan.W4bAnalyticRRectPlanCompiler
 import org.graphiks.kanvas.gpu.plan.W4cPathFillPlanCompiler
 import org.graphiks.kanvas.gpu.plan.W4dGeneralPathPlanCompiler
 import org.graphiks.kanvas.gpu.plan.W4dPathStrokePlanCompiler
+import org.graphiks.kanvas.gpu.plan.W4eClipPlanCompiler
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
@@ -414,6 +415,7 @@ public class GpuPlanSurfaceExecutor internal constructor(
                     W4cPathFillPlanCompiler(),
                     W4dPathStrokePlanCompiler(),
                     W4dGeneralPathPlanCompiler(),
+                    W4eClipPlanCompiler(),
                 ),
             ),
             context = context,

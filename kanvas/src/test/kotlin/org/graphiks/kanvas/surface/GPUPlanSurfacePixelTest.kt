@@ -17,6 +17,7 @@ import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.StrokeJoin
+import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.math.geometry.RRectF32
@@ -68,6 +69,77 @@ class GPUPlanSurfacePixelTest {
             ),
             result.pixels,
         )
+    }
+
+    @Test
+    fun `W4e hard ordered rect RRect and path clips match the independent public Surface oracle`() {
+        val outer = RectF32.ofLTRB(1f, 1f, 9f, 9f)
+        val rounded = RRectF32.of(RectF32.ofLTRB(2f, 2f, 8f, 8f), radius = 2f)
+        val notch = Path().apply {
+            moveTo(4f, 2f)
+            lineTo(8f, 2f)
+            lineTo(8f, 6f)
+            close()
+        }
+        val foreground = Path().apply {
+            moveTo(1f, 8f)
+            lineTo(8f, 3f)
+            lineTo(8f, 8f)
+            close()
+        }
+        val background = Path().apply { addRect(RectF32.ofLTRB(0f, 0f, 10f, 10f)) }
+        val clips = listOf(
+            W4eClipCpuOracle.Clip(
+                W4eClipCpuOracle.Shape.Rect(1.0, 1.0, 9.0, 9.0),
+                W4eClipCpuOracle.ClipOperation.Intersect,
+                antiAlias = false,
+            ),
+            W4eClipCpuOracle.Clip(
+                W4eClipCpuOracle.Shape.RRect(W4eClipCpuOracle.Shape.Rect(2.0, 2.0, 8.0, 8.0), 2.0, 2.0),
+                W4eClipCpuOracle.ClipOperation.Intersect,
+                antiAlias = false,
+            ),
+            W4eClipCpuOracle.Clip(
+                W4eClipCpuOracle.Shape.Polygon(
+                    listOf(W4eClipCpuOracle.Point(4.0, 2.0), W4eClipCpuOracle.Point(8.0, 2.0), W4eClipCpuOracle.Point(8.0, 6.0)),
+                ),
+                W4eClipCpuOracle.ClipOperation.Difference,
+                antiAlias = false,
+            ),
+        )
+        val expected = W4eClipCpuOracle.render(
+            width = 10,
+            height = 10,
+            draws = listOf(
+                W4eClipCpuOracle.Draw(
+                    W4eClipCpuOracle.Shape.Rect(0.0, 0.0, 10.0, 10.0),
+                    W4eClipCpuOracle.Rgba8(255, 43, 71, 255),
+                    antiAlias = false,
+                    clips = clips,
+                ),
+                W4eClipCpuOracle.Draw(
+                    W4eClipCpuOracle.Shape.Polygon(
+                        listOf(W4eClipCpuOracle.Point(1.0, 8.0), W4eClipCpuOracle.Point(8.0, 3.0), W4eClipCpuOracle.Point(8.0, 8.0)),
+                    ),
+                    W4eClipCpuOracle.Rgba8(38, 161, 99, 255),
+                    antiAlias = false,
+                    clips = clips,
+                ),
+            ),
+        )
+        val surface = Surface(10, 10)
+        surface.canvas {
+            clipRect(outer, antiAlias = false)
+            clipRRect(rounded, antiAlias = false)
+            clipPath(notch, ClipOp.DIFFERENCE, antiAlias = false)
+            drawPath(background, Paint.fill(ColorARGB.of(255, 255, 43, 71)).copy(antiAlias = false))
+            drawPath(foreground, Paint.fill(ColorARGB.of(255, 38, 161, 99)).copy(antiAlias = false))
+        }
+
+        val result = surface.render()
+
+        assertPreparedRouteEvidence(result)
+        assertPixelsEqual(expected, result.pixels)
     }
 
     @Test

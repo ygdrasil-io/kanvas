@@ -865,7 +865,6 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
     private val limits: GPULimits,
     private val coverageMaskProducerMaterializer: GPUWgpu4kCoverageMaskProducerMaterializerPort =
         GPUWgpu4kCoverageMaskProducerMaterializer(queue, sessionCache, limits),
-    private val w4eFailureBehavior: GPUW4eFrameFailureBehavior = GPUW4eFrameFailureBehavior.None,
     private val onDestinationSnapshotCreated: () -> Unit = {},
 ) : GPUPreparedNativeFramePayloadMaterializer, AutoCloseable {
     private val preRegistrationHandles = GPUPreRegistrationNativeHandleLedger()
@@ -2546,14 +2545,6 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         renderSteps: List<GPUFrameStep.RenderPassStep>,
     ): GPUPreparedNativeFramePayloadMaterialization {
         class Refusal(val code: String, val detail: String) : RuntimeException(detail)
-        fun inject(point: GPUW4eFrameFailurePoint) {
-            if (w4eFailureBehavior.shouldFail(point)) {
-                throw Refusal(
-                    "failed.native-core-primitive.w4e-injected-${point.name.lowercase()}",
-                    "Injected public W4e ${point.name.lowercase()} failure.",
-                )
-            }
-        }
         data class Entry(val index: Int, val render: GPUFrameStep.RenderPassStep, val scope: GPUCommandEncoderScopePlan, val packet: GPUDrawPacket)
         val entries = framePlan.steps.mapIndexedNotNull { index, step ->
             val render = step as? GPUFrameStep.RenderPassStep ?: return@mapIndexedNotNull null
@@ -2929,7 +2920,6 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 sceneColorResourceIds = sceneMsaaTextures.map { value -> value.first.diagnosticLabel },
                 sceneColorRequirements = sceneMsaaTextures.map(::sceneMsaaRequirement),
             )
-            inject(GPUW4eFrameFailurePoint.Allocation)
             lease = when (val checkout = sessionCache.acquireW4eAttachments(generationSeal.deviceGeneration, requirements)) {
                 is GPUWgpu4kW4eAttachmentPoolCheckout.Acquired -> checkout.lease
                 is GPUWgpu4kW4eAttachmentPoolCheckout.Refused -> throw Refusal("failed.native-core-primitive.w4e-attachment-allocation", "W4e attachment pool refused $checkout.")
@@ -2937,7 +2927,6 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             val attachments = requireNotNull(lease).handles
             val owned = GPUW4eNativeOwnedHandles()
             nativeOwned = owned
-            inject(GPUW4eFrameFailurePoint.Pipeline)
             val clearPipelines = mutableMapOf<Float, GPURenderPipeline>()
             val producerPipelines = mutableMapOf<Int, GPUW4eNativePipeline>()
             val foldPipelines = mutableMapOf<org.graphiks.kanvas.gpu.plan.ClipCombineOperation, GPUW4eNativePipeline>()
@@ -3904,7 +3893,6 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             } catch (failure: IllegalArgumentException) {
                 throw IllegalArgumentException("W4e scope ${entry.packet.passId} is not a closed native draw group: ${failure.message}", failure)
             } }
-            inject(GPUW4eFrameFailurePoint.BindGroup)
             val staging = device.createBuffer(BufferDescriptor(output.stagingLease.backingBufferBytes.toULong(), GPUBufferUsage.MapRead or GPUBufferUsage.CopyDst, false, "Kanvas.frame.w4e.readback")).tracked()
             val readbackOperand = GPUPreparedNativeScopeOperand.Readback(readbackScope.sourceStepIndex,
                 GPUPreparedNativeTextureOperand(sceneTexture, generationSeal.deviceGeneration),

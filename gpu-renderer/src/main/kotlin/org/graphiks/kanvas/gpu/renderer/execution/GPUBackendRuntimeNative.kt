@@ -1071,11 +1071,6 @@ object GPUBackendRuntimeNativeFactory {
             request: GPUOffscreenTargetRequest,
         ): GPUPreparedSceneFrameSession = inner.prepareSceneFrameSession(request)
 
-        override fun prepareSceneFrameSession(
-            request: GPUOffscreenTargetRequest,
-            w4eFailureBehavior: GPUW4eFrameFailureBehavior,
-        ): GPUPreparedSceneFrameSession = inner.prepareSceneFrameSession(request, w4eFailureBehavior)
-
         override fun close() { /* no-op: lifetime managed by GPUBackendRuntimeNativeFactory */ }
     }
 }
@@ -1362,11 +1357,6 @@ private class WgpuBackendSession(
 
     override fun prepareSceneFrameSession(
         request: GPUOffscreenTargetRequest,
-    ): GPUPreparedSceneFrameSession = prepareSceneFrameSession(request, GPUW4eFrameFailureBehavior.None)
-
-    override fun prepareSceneFrameSession(
-        request: GPUOffscreenTargetRequest,
-        w4eFailureBehavior: GPUW4eFrameFailureBehavior,
     ): GPUPreparedSceneFrameSession = withValidatedPreparedSceneTargetRequest(
         request = request,
         capabilities = capabilities,
@@ -1433,7 +1423,6 @@ private class WgpuBackendSession(
             deviceGeneration = deviceGeneration,
             device = glfw.wgpuContext.device,
             queue = glfw.wgpuContext.device.queue,
-            w4eFailureBehavior = w4eFailureBehavior,
             canonicalSceneTargetView = preparedTarget.view,
             onDestinationCopyEncoded = telemetryRecorder::recordDestinationCopy,
             onSubmission = telemetryRecorder::recordSubmission,
@@ -1638,7 +1627,6 @@ private class WgpuBackendSession(
                     surfaceTargetResolver = surfaceTargetResolver,
                     corePrimitiveLimits = backendLimits,
                     preparedSurfaceMixedMaterializer = preparedSurfaceMixedMaterializer,
-                    w4eFailureBehavior = w4eFailureBehavior,
                     onDestinationSnapshotCreated =
                         preparedSurfaceDestinationSnapshots::recordCreation,
                 )
@@ -1684,9 +1672,6 @@ private class WgpuBackendSession(
             },
             closeAction = {
                 childTeardown.close()
-                check(!w4eFailureBehavior.shouldFail(GPUW4eFrameFailurePoint.Close)) {
-                    "Injected W4e close failure."
-                }
             },
             renderCountersFactory = {
                 val encoding = encodingBackend.counters()

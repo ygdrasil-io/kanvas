@@ -213,7 +213,6 @@ internal class GPUWgpu4kFrameEncodingBackend(
     private val onSubmission: () -> Unit = {},
     private val onPreparedImageTextureWriteTexture: () -> Unit = {},
     private val onPreparedImageTextureUploadScopeEncoded: () -> Unit = {},
-    private val w4eFailureBehavior: GPUW4eFrameFailureBehavior = GPUW4eFrameFailureBehavior.None,
 ) : GPUFrameEncodingBackend, AutoCloseable {
     override val encodingMode: GPUFrameEncodingMode = GPUFrameEncodingMode.NativeOperandsRequired
 
@@ -246,9 +245,6 @@ internal class GPUWgpu4kFrameEncodingBackend(
 
     override fun createCommandEncoder(label: String): GPUFrameCommandEncoder {
         require(label.isNotBlank())
-        check(!w4eFailureBehavior.shouldFail(GPUW4eFrameFailurePoint.Encoder)) {
-            "Injected W4e encoder failure."
-        }
         val id: Long
         val encoder: GPUCommandEncoder
         synchronized(this) {

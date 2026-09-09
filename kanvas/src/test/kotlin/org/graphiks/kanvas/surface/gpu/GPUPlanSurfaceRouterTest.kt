@@ -54,6 +54,40 @@ import org.graphiks.math.matrix.Matrix3x3F32
 @OptIn(ExperimentalUnsignedTypes::class)
 class GPUPlanSurfaceRouterTest {
     @Test
+    fun `W4e hard ordered rect clips reach the public router plan chain`() {
+        val context = GpuRenderContext.createProduction()
+        try {
+            val clip = ClipStack.Complex(
+                listOf(
+                    ClipStackOp.RectOp(RectF32.ofLTRB(1f, 1f, 7f, 7f), ClipOp.INTERSECT, antiAlias = false),
+                    ClipStackOp.RectOp(RectF32.ofLTRB(3f, 3f, 5f, 5f), ClipOp.DIFFERENCE, antiAlias = false),
+                ),
+            )
+            val result = GPUPlanSurfaceRouter(planPort = capabilityChainPort(context)).render(
+                operations = listOf(
+                    DisplayOp.DrawPath(
+                        Path().apply { addRect(RectF32.ofLTRB(0f, 0f, 8f, 8f)) },
+                        Paint.fill(ColorARGB.Red).copy(antiAlias = false),
+                        Matrix3x3F32.Identity,
+                        clip,
+                    ),
+                ),
+                width = 8,
+                height = 8,
+                format = PixelFormat.RGBA8,
+                config = RenderConfig.DEFAULT,
+                legacy = { error("W4e complex clips must not fall back after candidate admission") },
+            )
+
+            assertContentEquals(ubyteArrayOf(255u, 0u, 0u, 255u), pixelAt(result, 2, 2))
+            assertContentEquals(ubyteArrayOf(0u, 0u, 0u, 0u), pixelAt(result, 4, 4))
+            assertContentEquals(ubyteArrayOf(0u, 0u, 0u, 0u), pixelAt(result, 0, 0))
+        } finally {
+            context.close()
+        }
+    }
+
+    @Test
     fun `W4dGeneral AA capability gap is terminal without legacy publication`() {
         val path = Path().apply {
             moveTo(1f, 2f)
@@ -683,6 +717,11 @@ class GPUPlanSurfaceRouterTest {
 
         override fun submit(token: GpuPlanSurfaceReadyToken): GpuPlanSurfaceSubmitResult =
             executor.submit(token)
+    }
+
+    private fun pixelAt(result: RenderResult, x: Int, y: Int): UByteArray {
+        val offset = (y * result.width + x) * 4
+        return result.pixels.copyOfRange(offset, offset + 4)
     }
 
     private fun legacyResult() = RenderResult(

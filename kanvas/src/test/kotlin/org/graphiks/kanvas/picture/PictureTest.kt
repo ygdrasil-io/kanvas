@@ -635,6 +635,37 @@ class PictureTest {
     }
 
     @Test
+    fun `version 8 picture roundtrip keeps ordered hard clips visible through Surface`() {
+        val cutout = Path().apply {
+            moveTo(3f, 3f)
+            lineTo(5f, 3f)
+            lineTo(5f, 5f)
+            lineTo(3f, 5f)
+            close()
+        }
+        val fill = Path().addRect(RectF32.ofLTRB(0f, 0f, 8f, 8f))
+        val recorder = PictureRecorder()
+        recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 8f, 8f)).apply {
+            clipRect(RectF32.ofLTRB(1f, 1f, 7f, 7f), antiAlias = false)
+            clipPath(cutout, ClipOp.DIFFERENCE, antiAlias = false)
+            drawPath(fill, Paint.fill(ColorARGB.Red).copy(antiAlias = false))
+        }
+
+        val restored = requireNotNull(Picture.fromByteArray(recorder.finishRecordingAsPicture().toByteArray()))
+        val surface = Surface(8, 8)
+        surface.canvas { drawPicture(restored) }
+
+        val result = surface.render()
+        fun pixel(x: Int, y: Int): UByteArray {
+            val offset = (y * result.width + x) * 4
+            return result.pixels.copyOfRange(offset, offset + 4)
+        }
+        assertEquals(ubyteArrayOf(255u, 0u, 0u, 255u).toList(), pixel(2, 2).toList())
+        assertEquals(ubyteArrayOf(0u, 0u, 0u, 0u).toList(), pixel(4, 4).toList())
+        assertEquals(ubyteArrayOf(0u, 0u, 0u, 0u).toList(), pixel(0, 0).toList())
+    }
+
+    @Test
     fun `roundtrip preserves a backdrop save layer record`() {
         val crop = RectF32.ofLTRB(0f, 10f, 100f, 90f)
         val rec = SaveLayerRec(
