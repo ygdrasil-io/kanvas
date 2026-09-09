@@ -184,7 +184,7 @@ class GpuPlanCapabilityAdapterTest {
     }
 
     @Test
-    fun `adapter withholds W4d AA and mask facts without broad color formats and usages`() {
+    fun `adapter withholds hard-mask facts when a required physical observation is absent`() {
         val physical = w4dPhysicalCapabilities()
         val supported = assertIs<GpuPlanCapabilityAdapterResult.Supported>(
             physical.toPlanCapabilitySnapshot(GPUDeviceGenerationID(7)),
@@ -205,6 +205,15 @@ class GpuPlanCapabilityAdapterTest {
             supportedTextureFormats = physical.supportedTextureFormats - GPUTextureFormat.RGBA8Unorm,
         )
         val missingSampledUsage = physical.copy(supportedTextureUsage = GPUTextureUsage.RenderAttachment)
+        val missingOneSample = physical.copy(
+            textureFormatSampleSupport = GPUTextureFormatSampleSupport(
+                physical.textureFormatSampleSupport + (
+                    GPUTextureFormat.RGBA8Unorm to GPUTextureSampleCountSupport(
+                        renderAttachmentSampleCounts = setOf(4),
+                    )
+                ),
+            ),
+        )
 
         listOf(missingLinearMaskFormat, missingSampledUsage).forEach { incomplete ->
             val snapshot = assertIs<GpuPlanCapabilityAdapterResult.Supported>(
@@ -221,6 +230,18 @@ class GpuPlanCapabilityAdapterTest {
                 ),
             )
         }
+
+        val missingSampleSnapshot = assertIs<GpuPlanCapabilityAdapterResult.Supported>(
+            missingOneSample.toPlanCapabilitySnapshot(GPUDeviceGenerationID(7)),
+        ).snapshot
+        assertEquals(
+            false,
+            missingSampleSnapshot.supportsTexture(
+                PlanTextureFormat.CoverageMask,
+                1,
+                setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled),
+            ),
+        )
     }
 
     @Test

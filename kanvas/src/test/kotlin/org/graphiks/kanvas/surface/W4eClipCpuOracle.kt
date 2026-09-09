@@ -225,7 +225,7 @@ internal object W4eClipCpuOracle {
         pixels[offset] = encodeLinear(source(color.red) + destination(0) * inverseAlpha)
         pixels[offset + 1] = encodeLinear(source(color.green) + destination(1) * inverseAlpha)
         pixels[offset + 2] = encodeLinear(source(color.blue) + destination(2) * inverseAlpha)
-        pixels[offset + 3] = ((sourceAlpha + destinationAlpha * inverseAlpha) * 255.0).toInt().coerceIn(0, 255)
+        pixels[offset + 3] = ((sourceAlpha + destinationAlpha * inverseAlpha) * 255.0 + 0.5).toInt().coerceIn(0, 255)
     }
 
     private fun srgbToLinear(value: Double): Double =

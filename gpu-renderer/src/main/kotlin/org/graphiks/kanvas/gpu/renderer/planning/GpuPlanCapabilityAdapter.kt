@@ -121,7 +121,13 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
             }
         val maskSamples = textureFormatSampleSupport[GPUTextureFormat.RGBA8Unorm]
             ?.renderAttachmentSampleCounts.orEmpty()
-        if (1 in maskSamples) {
+        val hasHardMaskTopology =
+            GPUTextureFormat.RGBA8Unorm in supportedTextureFormats &&
+                supportedTextureUsage?.supports(
+                    GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding,
+                ) == true &&
+                1 in maskSamples
+        if (hasHardMaskTopology) {
             add(
                 PlanTextureSampleSupport.of(
                     PlanTextureFormat.CoverageMask,
