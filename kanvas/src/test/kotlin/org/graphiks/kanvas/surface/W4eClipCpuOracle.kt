@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.surface
 
+import kotlin.math.pow
+
 /**
  * Deliberately small CPU reference for the public W4e pixel fixtures.
  *
@@ -68,10 +70,10 @@ internal object W4eClipCpuOracle {
     private fun coverage8(x: Int, y: Int, shape: Shape, antiAlias: Boolean): Int {
         if (!antiAlias) return if (contains(shape, x + 0.5, y + 0.5)) 255 else 0
         var covered = 0
-        for (sampleY in 0 until 8) for (sampleX in 0 until 8) {
-            if (contains(shape, x + (sampleX + 0.5) / 8.0, y + (sampleY + 0.5) / 8.0)) covered += 1
+        for (sampleY in listOf(0.25, 0.75)) for (sampleX in listOf(0.25, 0.75)) {
+            if (contains(shape, x + sampleX, y + sampleY)) covered += 1
         }
-        return ((covered * 255) + 32) / 64
+        return (covered * 255 + 2) / 4
     }
 
     private fun contains(shape: Shape, x: Double, y: Double): Boolean = when (shape) {
@@ -107,14 +109,22 @@ internal object W4eClipCpuOracle {
     private fun multiply8(a: Int, b: Int): Int = ((a * b) + 127) / 255
 
     private fun srcOver(pixels: IntArray, offset: Int, color: Rgba8, coverage: Int) {
-        val sourceAlpha = multiply8(color.alpha, coverage)
-        val sourceRed = multiply8(color.red, sourceAlpha)
-        val sourceGreen = multiply8(color.green, sourceAlpha)
-        val sourceBlue = multiply8(color.blue, sourceAlpha)
-        val inverseAlpha = 255 - sourceAlpha
-        pixels[offset] = (sourceRed + multiply8(pixels[offset], inverseAlpha)).coerceAtMost(255)
-        pixels[offset + 1] = (sourceGreen + multiply8(pixels[offset + 1], inverseAlpha)).coerceAtMost(255)
-        pixels[offset + 2] = (sourceBlue + multiply8(pixels[offset + 2], inverseAlpha)).coerceAtMost(255)
-        pixels[offset + 3] = (sourceAlpha + multiply8(pixels[offset + 3], inverseAlpha)).coerceAtMost(255)
+        val sourceAlpha = color.alpha / 255.0 * coverage / 255.0
+        val inverseAlpha = 1.0 - sourceAlpha
+        val destinationAlpha = pixels[offset + 3] / 255.0
+        fun source(channel: Int): Double = srgbToLinear(channel / 255.0) * sourceAlpha
+        fun destination(channel: Int): Double = srgbToLinear(pixels[offset + channel] / 255.0)
+        pixels[offset] = encodeLinear(source(color.red) + destination(0) * inverseAlpha)
+        pixels[offset + 1] = encodeLinear(source(color.green) + destination(1) * inverseAlpha)
+        pixels[offset + 2] = encodeLinear(source(color.blue) + destination(2) * inverseAlpha)
+        pixels[offset + 3] = ((sourceAlpha + destinationAlpha * inverseAlpha) * 255.0).toInt().coerceIn(0, 255)
+    }
+
+    private fun srgbToLinear(value: Double): Double =
+        if (value <= 0.04045) value / 12.92 else ((value + 0.055) / 1.055).pow(2.4)
+
+    private fun encodeLinear(value: Double): Int {
+        val encoded = if (value <= 0.0031308) value * 12.92 else 1.055 * value.pow(1.0 / 2.4) - 0.055
+        return (encoded.coerceIn(0.0, 1.0) * 255.0 + 0.5).toInt()
     }
 }
