@@ -120,7 +120,54 @@ class ClipStackPreparationF64Test {
         assertEquals(1, result.entriesF32.size)
         assertIs<ClipGeometryF32.Empty>(result.entriesF32.single().geometryF32)
         assertEquals(ClipOperation.Difference, result.entriesF32.single().operation)
-        assertEquals(ClipWorkUsageI64(), result.stackWorkUsageAfterI64)
+        assertEquals(ClipWorkUsageI64(clipEntryCountI64 = 1L), result.stackWorkUsageAfterI64)
+    }
+
+    @Test
+    fun `stack entry count refuses a large empty list before entry preparation`() {
+        val emptyEntryF64 = ClipDeviceInputF64.of(
+            ClipDeviceGeometryF64.Rect(RectF64(2.0, 2.0, 2.0, 4.0)),
+            ClipOperation.Intersect,
+        )
+
+        val result = prepareClipStackGeometryF32(
+            entriesF64 = List(65) { emptyEntryF64 },
+            targetDomainI32 = RectI32(0, 0, 8, 8),
+            policyF64 = ClipPreparationPolicyF64(
+                limitsI32 = ClipPreparationLimitsI32(maxClipEntryCountPerStackI32 = 64),
+            ),
+        )
+
+        assertEquals(
+            ClipPreparationResourceLimitReason.StackEntryCountLimit,
+            assertIs<ClipStackPreparationResult.ResourceLimitExceeded>(result).reason,
+        )
+    }
+
+    @Test
+    fun `frame entry count is carried into the following stack`() {
+        val policyF64 = ClipPreparationPolicyF64(
+            limitsI32 = ClipPreparationLimitsI32(maxClipEntryCountPerFrameI32 = 1),
+        )
+        val entryF64 = ClipDeviceInputF64.of(
+            ClipDeviceGeometryF64.Rect(RectF64(2.0, 2.0, 2.0, 4.0)),
+            ClipOperation.Intersect,
+        )
+        val first = assertIs<ClipStackPreparationResult.Ready>(
+            prepareClipStackGeometryF32(listOf(entryF64), RectI32(0, 0, 8, 8), policyF64),
+        )
+        val second = prepareClipStackGeometryF32(
+            entriesF64 = listOf(entryF64),
+            targetDomainI32 = RectI32(0, 0, 8, 8),
+            policyF64 = policyF64,
+            frameWorkUsageBeforeI64 = first.frameWorkUsageAfterI64,
+        )
+
+        assertEquals(1L, first.frameWorkUsageAfterI64.clipEntryCountI64)
+        assertEquals(
+            ClipPreparationResourceLimitReason.FrameEntryCountLimit,
+            assertIs<ClipStackPreparationResult.ResourceLimitExceeded>(second).reason,
+        )
     }
 
     @Test

@@ -1,6 +1,7 @@
 package org.graphiks.math.matrix
 
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
@@ -72,6 +73,59 @@ class ClipTransformsF64Test {
     }
 
     @Test
+    fun `transformed stack count wins before mapping any source geometry`() {
+        val invalidEntryF64 = ClipTransformInputF64.of(
+            ClipTransformGeometryF64.Rect(RectF64(Double.NaN, 0.0, 4.0, 4.0)),
+            Matrix3x3F64(),
+            ClipOperation.Intersect,
+        )
+
+        val result = prepareTransformedClipStackGeometryF32(
+            entriesF64 = listOf(invalidEntryF64, invalidEntryF64),
+            targetDomainI32 = RectI32(0, 0, 8, 8),
+            policyF64 = ClipPreparationPolicyF64(
+                limitsI32 = ClipPreparationLimitsI32(maxClipEntryCountPerStackI32 = 1),
+            ),
+        )
+
+        assertEquals(
+            ClipPreparationResourceLimitReason.StackEntryCountLimit,
+            assertIs<ClipStackPreparationResult.ResourceLimitExceeded>(result).reason,
+        )
+    }
+
+    @Test
+    fun `transformed frame entry count is carried into the following stack`() {
+        val policyF64 = ClipPreparationPolicyF64(
+            limitsI32 = ClipPreparationLimitsI32(maxClipEntryCountPerFrameI32 = 1),
+        )
+        val entryF64 = ClipTransformInputF64.of(
+            ClipTransformGeometryF64.Rect(RectF64(2.0, 2.0, 2.0, 4.0)),
+            Matrix3x3F64(),
+            ClipOperation.Intersect,
+        )
+        val first = assertIs<ClipStackPreparationResult.Ready>(
+            prepareTransformedClipStackGeometryF32(
+                entriesF64 = listOf(entryF64),
+                targetDomainI32 = RectI32(0, 0, 8, 8),
+                policyF64 = policyF64,
+            ),
+        )
+        val second = prepareTransformedClipStackGeometryF32(
+            entriesF64 = listOf(entryF64),
+            targetDomainI32 = RectI32(0, 0, 8, 8),
+            policyF64 = policyF64,
+            frameWorkUsageBeforeI64 = first.frameWorkUsageAfterI64,
+        )
+
+        assertEquals(1L, first.frameWorkUsageAfterI64.clipEntryCountI64)
+        assertEquals(
+            ClipPreparationResourceLimitReason.FrameEntryCountLimit,
+            assertIs<ClipStackPreparationResult.ResourceLimitExceeded>(second).reason,
+        )
+    }
+
+    @Test
     fun `axis reflection preserves exact rounded rectangle radii and general affine preserves rounded path bounds`() {
         val rrectF64 = RRectF64.of(
             RectF64(1.0, 2.0, 5.0, 8.0),
@@ -85,10 +139,12 @@ class ClipTransformsF64Test {
             ),
         )
         val reflectedRRectF32 = assertIs<ClipGeometryF32.RRect>(reflected.entriesF32.single().geometryF32).copyRRectF32()
-        assertEquals(6f, reflectedRRectF32.topLeft.x)
-        assertEquals(12f, reflectedRRectF32.topLeft.y)
-        assertEquals(2f, reflectedRRectF32.topRight.x)
-        assertEquals(6f, reflectedRRectF32.topRight.y)
+        // The common F64 Skia normalizer scales the oversized asymmetric source by 1/3 before
+        // reflection remaps its corners into device order.
+        assertEquals(2f, reflectedRRectF32.topLeft.x)
+        assertEquals(4f, reflectedRRectF32.topLeft.y)
+        assertEquals(2f / 3f, reflectedRRectF32.topRight.x)
+        assertEquals(2f, reflectedRRectF32.topRight.y)
 
         val affine = assertIs<ClipStackPreparationResult.Ready>(
             prepareTransformedClipStackGeometryF32(
@@ -98,6 +154,46 @@ class ClipTransformsF64Test {
         )
         assertIs<ClipGeometryF32.Path>(affine.entriesF32.single().geometryF32)
         assertEquals(RectI32(3, 2, 12, 8), affine.entriesF32.single().copyConservativeScissorI32())
+    }
+
+    @Test
+    fun `rounded rectangle radii have one Skia canonical source across transform classes`() {
+        val malformedF64 = RRectF64.of(
+            RectF64(0.0, 0.0, 10.0, 6.0),
+            CornerRadiiF64.of(-2.0, 6.0), CornerRadiiF64.of(20.0, 3.0),
+            CornerRadiiF64.of(4.0, 20.0), CornerRadiiF64.of(6.0, -5.0),
+        )
+        val scaleF64 = 6.0 / 23.0
+        val canonicalF64 = RRectF64.of(
+            RectF64(0.0, 0.0, 10.0, 6.0),
+            CornerRadiiF64.of(0.0, 6.0 * scaleF64),
+            CornerRadiiF64.of(20.0 * scaleF64, 3.0 * scaleF64),
+            CornerRadiiF64.of(4.0 * scaleF64, 20.0 * scaleF64),
+            CornerRadiiF64.of(6.0 * scaleF64, 0.0),
+        )
+
+        listOf(
+            Matrix3x3F64(),
+            Matrix3x3F64(sxF64 = -2.0, syF64 = 3.0),
+            Matrix3x3F64(kxF64 = 0.5),
+            Matrix3x3F64(persp0F64 = 0.01),
+        ).forEach { matrixF64 ->
+            val malformed = assertIs<ClipStackPreparationResult.Ready>(
+                prepareTransformedClipStackGeometryF32(
+                    listOf(ClipTransformInputF64.of(ClipTransformGeometryF64.RRect(malformedF64), matrixF64, ClipOperation.Intersect)),
+                    RectI32(-64, -64, 64, 64),
+                ),
+            ).entriesF32.single()
+            val canonical = assertIs<ClipStackPreparationResult.Ready>(
+                prepareTransformedClipStackGeometryF32(
+                    listOf(ClipTransformInputF64.of(ClipTransformGeometryF64.RRect(canonicalF64), matrixF64, ClipOperation.Intersect)),
+                    RectI32(-64, -64, 64, 64),
+                ),
+            ).entriesF32.single()
+
+            assertEquivalentClipGeometry(malformed.geometryF32, canonical.geometryF32)
+            assertEquals(malformed.copyConservativeScissorI32(), canonical.copyConservativeScissorI32())
+        }
     }
 
     @Test
@@ -296,5 +392,39 @@ class ClipTransformsF64Test {
             ClipPreparationResourceLimitReason.EntrySnapshotByteLimit,
             assertIs<ClipStackPreparationResult.ResourceLimitExceeded>(result).reason,
         )
+    }
+
+    private fun assertEquivalentClipGeometry(actual: ClipGeometryF32, expected: ClipGeometryF32) {
+        when {
+            actual is ClipGeometryF32.RRect && expected is ClipGeometryF32.RRect -> {
+                val actualRRect = actual.copyRRectF32()
+                val expectedRRect = expected.copyRRectF32()
+                assertEquals(expectedRRect.rect, actualRRect.rect)
+                assertEquals(expectedRRect.topLeft, actualRRect.topLeft)
+                assertEquals(expectedRRect.topRight, actualRRect.topRight)
+                assertEquals(expectedRRect.bottomRight, actualRRect.bottomRight)
+                assertEquals(expectedRRect.bottomLeft, actualRRect.bottomLeft)
+            }
+            actual is ClipGeometryF32.Path && expected is ClipGeometryF32.Path -> {
+                val actualPath = actual.copyPathGeometryF32()
+                val expectedPath = expected.copyPathGeometryF32()
+                assertEquals(expectedPath.fillRule, actualPath.fillRule)
+                assertEquals(expectedPath.copyConservativeScissorI32(), actualPath.copyConservativeScissorI32())
+                val actualDirect = actualPath.copyDirectTriangleF32OrNull()
+                val expectedDirect = expectedPath.copyDirectTriangleF32OrNull()
+                if (actualDirect != null && expectedDirect != null) {
+                    assertContentEquals(expectedDirect.copyVerticesF32(), actualDirect.copyVerticesF32())
+                    assertContentEquals(expectedDirect.copyIndicesI32(), actualDirect.copyIndicesI32())
+                } else {
+                    assertEquals(expectedDirect, actualDirect)
+                    val actualStencil = assertIs<org.graphiks.math.geometry.PathStencilEdgeFanF32>(actualPath.copyStencilEdgeFanF32OrNull())
+                    val expectedStencil = assertIs<org.graphiks.math.geometry.PathStencilEdgeFanF32>(expectedPath.copyStencilEdgeFanF32OrNull())
+                    assertContentEquals(expectedStencil.copyVerticesF32(), actualStencil.copyVerticesF32())
+                    assertContentEquals(expectedStencil.copyIndicesI32(), actualStencil.copyIndicesI32())
+                    assertContentEquals(expectedStencil.copyContourStartsI32(), actualStencil.copyContourStartsI32())
+                }
+            }
+            else -> throw AssertionError("clip geometry kinds differ: $actual versus $expected")
+        }
     }
 }

@@ -327,7 +327,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             PathStrokeDrawMode.Stroke
         } else null
         val style = if (mode != null) try {
-            style(paint, mode)
+            w4PathStrokeStyleF64(paint, mode)
         } catch (_: IllegalArgumentException) {
             return DrawScope.Invalid("Stroke style is invalid")
         } else null
@@ -1030,17 +1030,6 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         return a.size == b.size && a.indices.all { a[it].toRawBits() == b[it].toRawBits() }
     }
 
-    private fun style(paint: PaintNode, mode: PathStrokeDrawMode): PathStrokeStyleF64 = PathStrokeStyleF64(
-        if (paint.strokeWidth == 0f && mode == PathStrokeDrawMode.Stroke) PathStrokeWidthF64.Hairline
-        else PathStrokeWidthF64.Finite(paint.strokeWidth.toDouble()),
-        when (paint.strokeCap) { StrokeCapNode.BUTT -> PathStrokeCap.Butt; StrokeCapNode.ROUND -> PathStrokeCap.Round; StrokeCapNode.SQUARE -> PathStrokeCap.Square },
-        when (paint.strokeJoin) { StrokeJoinNode.MITER -> PathStrokeJoin.Miter; StrokeJoinNode.ROUND -> PathStrokeJoin.Round; StrokeJoinNode.BEVEL -> PathStrokeJoin.Bevel },
-        paint.strokeMiter.toDouble(),
-        (paint.pathEffect as? PathEffectNode.Dash)?.let { dash ->
-            PathStrokeDashF64.of(dash.intervals.copyToFloatArray().map(Float::toDouble).toDoubleArray(), dash.phase.toDouble())
-        },
-    )
-
     private fun integral(bounds: RectF32): RectI32? = if (!finite(bounds)) null else listOf(bounds.left, bounds.top, bounds.right, bounds.bottom)
         .map { value -> value.toLong().takeIf { it in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong() && it.toFloat() == value } }
         .takeIf { it.none { value -> value == null } }
@@ -1166,3 +1155,29 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         private const val MAX_DRAWS = 512
     }
 }
+
+/** Shared W4 stroke-style translation used by both finite W4d draws and W4e inverse interiors. */
+internal fun w4PathStrokeStyleF64(
+    paint: PaintNode,
+    mode: PathStrokeDrawMode,
+): PathStrokeStyleF64 = PathStrokeStyleF64(
+    if (paint.strokeWidth == 0f && mode == PathStrokeDrawMode.Stroke) PathStrokeWidthF64.Hairline
+    else PathStrokeWidthF64.Finite(paint.strokeWidth.toDouble()),
+    when (paint.strokeCap) {
+        StrokeCapNode.BUTT -> PathStrokeCap.Butt
+        StrokeCapNode.ROUND -> PathStrokeCap.Round
+        StrokeCapNode.SQUARE -> PathStrokeCap.Square
+    },
+    when (paint.strokeJoin) {
+        StrokeJoinNode.MITER -> PathStrokeJoin.Miter
+        StrokeJoinNode.ROUND -> PathStrokeJoin.Round
+        StrokeJoinNode.BEVEL -> PathStrokeJoin.Bevel
+    },
+    paint.strokeMiter.toDouble(),
+    (paint.pathEffect as? PathEffectNode.Dash)?.let { dash ->
+        PathStrokeDashF64.of(
+            dash.intervals.copyToFloatArray().map(Float::toDouble).toDoubleArray(),
+            dash.phase.toDouble(),
+        )
+    },
+)

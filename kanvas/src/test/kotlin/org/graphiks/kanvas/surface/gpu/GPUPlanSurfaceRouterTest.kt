@@ -417,7 +417,7 @@ class GPUPlanSurfaceRouterTest {
     }
 
     @Test
-    fun `W4c semantic exclusions retain the legacy sentinel before promotion`() {
+    fun `W4c mixed frame retains the legacy sentinel while inverse path promotes to W4e`() {
         val triangle = Path().apply {
             moveTo(0f, 0f)
             lineTo(4f, 0f)
@@ -433,36 +433,38 @@ class GPUPlanSurfaceRouterTest {
             close()
             fillType = FillType.INVERSE_WINDING
         }
-        val cases = listOf(
-            "mixed-frame" to listOf(
-                path,
-                DisplayOp.DrawRect(
-                    RectF32.ofLTRB(0f, 0f, 1f, 1f),
-                    hardFill,
-                    Matrix3x3F32.Identity,
-                    ClipStack.WideOpen,
-                ),
-            ),
-            "inverse" to listOf(
-                DisplayOp.DrawPath(inverse, hardFill, Matrix3x3F32.Identity, ClipStack.WideOpen),
-            ),
-        )
-
         val context = GpuRenderContext.createProduction()
         try {
-            cases.forEach { (label, operations) ->
-                val legacy = legacyResult()
-                val result = GPUPlanSurfaceRouter(planPort = capabilityChainPort(context)).render(
-                    operations = operations,
-                    width = 4,
-                    height = 4,
-                    format = PixelFormat.RGBA8,
-                    config = RenderConfig.DEFAULT,
-                    legacy = { legacy },
-                )
+            val legacy = legacyResult()
+            val mixed = GPUPlanSurfaceRouter(planPort = capabilityChainPort(context)).render(
+                operations = listOf(
+                    path,
+                    DisplayOp.DrawRect(
+                        RectF32.ofLTRB(0f, 0f, 1f, 1f),
+                        hardFill,
+                        Matrix3x3F32.Identity,
+                        ClipStack.WideOpen,
+                    ),
+                ),
+                width = 4,
+                height = 4,
+                format = PixelFormat.RGBA8,
+                config = RenderConfig.DEFAULT,
+                legacy = { legacy },
+            )
+            assertContentEquals(legacy.pixels, mixed.pixels, "mixed-frame")
 
-                assertContentEquals(legacy.pixels, result.pixels, label)
-            }
+            val promotedInverse = GPUPlanSurfaceRouter(planPort = capabilityChainPort(context)).render(
+                operations = listOf(DisplayOp.DrawPath(inverse, hardFill, Matrix3x3F32.Identity, ClipStack.WideOpen)),
+                width = 4,
+                height = 4,
+                format = PixelFormat.RGBA8,
+                config = RenderConfig.DEFAULT,
+                legacy = ::legacyResult,
+            )
+            assertEquals(4, promotedInverse.width)
+            assertContentEquals(ubyteArrayOf(0u, 0u, 0u, 0u), pixelAt(promotedInverse, 0, 0))
+            assertContentEquals(ubyteArrayOf(255u, 0u, 0u, 255u), pixelAt(promotedInverse, 3, 3))
         } finally {
             context.close()
         }

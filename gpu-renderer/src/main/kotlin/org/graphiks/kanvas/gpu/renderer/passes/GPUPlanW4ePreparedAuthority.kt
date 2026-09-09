@@ -19,6 +19,7 @@ import org.graphiks.kanvas.gpu.plan.PathRenderPhase
 import org.graphiks.kanvas.gpu.plan.RenderGraph
 import org.graphiks.kanvas.gpu.plan.SamplePlan
 import org.graphiks.kanvas.gpu.plan.W4eClipPlanCompiler
+import org.graphiks.kanvas.gpu.plan.W4eNativePayloadPlan
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
@@ -194,6 +195,7 @@ internal class GPUPlanW4ePreparedAuthority private constructor(
     private val consumersByPassId: Map<String, GPUW4ePreparedClipConsumerAuthority>,
     private val passesById: Map<String, GPUW4ePreparedClipPassAuthority>,
     private val pathsById: Map<String, GPUW4ePreparedClipPassAuthority.Path>,
+    private val nativePayload: W4eNativePayloadPlan,
 ) {
     /** Returns only an already-copied W4e fact; it never maps or reclassifies a clip. */
     fun consumerFor(passId: String): GPUW4ePreparedClipConsumerAuthority? = consumersByPassId[passId]
@@ -218,6 +220,7 @@ internal class GPUPlanW4ePreparedAuthority private constructor(
         frameId,
         capabilitySealHash,
         renders,
+        nativePayload,
     )
 
     fun revalidates(graph: RenderGraph): Boolean =
@@ -234,6 +237,17 @@ internal class GPUPlanW4ePreparedAuthority private constructor(
                 W4eClipPlanCompiler.AA_CAPABILITY_ID,
             ) && graph.verifyW4eCompilerWitness()) {
                 "W4e prepared authority requires the compiler-authenticated graph"
+            }
+            val nativePayload = requireNotNull(W4eNativePayloadPlan.from(
+                passes = graph.passes(),
+                resources = graph.resources(),
+                targetExtent = graph.targetExtent,
+                capabilities = graph.capabilities,
+            )) {
+                "W4e prepared authority requires a graph-sealed native V/I/U payload"
+            }
+            require(nativePayload.matchesDeclaredResources(graph.resources())) {
+                "W4e graph V/I/U resources differ from their compiler-sealed native payload"
             }
             return GPUPlanW4ePreparedAuthority(
                 graph.id.value,
@@ -272,6 +286,7 @@ internal class GPUPlanW4ePreparedAuthority private constructor(
                         pass.draw.copyPathGeometry(),
                     )
                 },
+                nativePayload,
             )
         }
 
@@ -380,6 +395,8 @@ internal class GPUW4ePreparedFrameAuthority private constructor(
     private val frameId: Long,
     private val capabilitySealHash: String,
     private val facts: List<Fact>,
+    /** Shared V/I/U byte authority issued from the compiler-authenticated W4e graph. */
+    internal val nativePayload: W4eNativePayloadPlan,
 ) {
     private data class Fact(
         val taskId: String,
@@ -473,6 +490,7 @@ internal class GPUW4ePreparedFrameAuthority private constructor(
             frameId: Long,
             capabilitySealHash: String,
             renders: List<GPUTask.Render>,
+            nativePayload: W4eNativePayloadPlan,
         ): GPUW4ePreparedFrameAuthority {
             require(graphId.isNotBlank() && graphCapabilityId.isNotBlank() && capabilitySealHash.isNotBlank())
             require(renders.isNotEmpty()) { "W4e prepared frame requires ordered render scopes" }
@@ -499,6 +517,7 @@ internal class GPUW4ePreparedFrameAuthority private constructor(
                 frameId,
                 capabilitySealHash,
                 facts,
+                nativePayload,
             )
         }
 

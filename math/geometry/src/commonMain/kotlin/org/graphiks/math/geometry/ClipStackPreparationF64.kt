@@ -39,6 +39,7 @@ public fun prepareClipStackGeometryF32(
     frameWorkUsageBeforeI64: ClipWorkUsageI64 = ClipWorkUsageI64(),
 ): ClipStackPreparationResult = try {
     val ledgerI64 = ClipWorkLedgerI64(stackWorkUsageBeforeI64, frameWorkUsageBeforeI64, policyF64)
+    ledgerI64.debitEntryCountBeforePreparationI64(entriesF64.size.toLong())
     val preparedF32 = entriesF64.map { inputF64 ->
         val entryLedgerI64 = ledgerI64.beginEntryI64(inputF64.entryWorkUsageBeforeGeometryI64)
         prepareSingleClipGeometryF32(inputF64, targetDomainI32, policyF64, entryLedgerI64)

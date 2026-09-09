@@ -1,7 +1,6 @@
 package org.graphiks.math.geometry
 
 import org.graphiks.math.vector.Vector2F64
-import kotlin.math.min
 
 /** An immutable device-space path command represented with F64 coordinates. */
 public sealed interface PathFillSegmentF64 {
@@ -72,19 +71,19 @@ private fun RRectF64.materializePathFillInputF64(
     debitPathInputCollectionBeforeMaterializationI64(beforeMaterializationI64)
     val segmentsF64 = ArrayList<PathFillSegmentF64>(10)
     debitPathInputSegmentBeforeMaterializationI64(beforeMaterializationI64)
-    val left = leftF64
-    val top = topF64
-    val right = rightF64
-    val bottom = bottomF64
-    val scale = normalizedRadiiScaleF64(this, left, top, right, bottom)
-    val topLeftX = topLeft.xF64.coerceAtLeast(0.0) * scale
-    val topLeftY = topLeft.yF64.coerceAtLeast(0.0) * scale
-    val topRightX = topRight.xF64.coerceAtLeast(0.0) * scale
-    val topRightY = topRight.yF64.coerceAtLeast(0.0) * scale
-    val bottomRightX = bottomRight.xF64.coerceAtLeast(0.0) * scale
-    val bottomRightY = bottomRight.yF64.coerceAtLeast(0.0) * scale
-    val bottomLeftX = bottomLeft.xF64.coerceAtLeast(0.0) * scale
-    val bottomLeftY = bottomLeft.yF64.coerceAtLeast(0.0) * scale
+    val normalizedRRectF64 = normalizedForSkiaF64()
+    val left = normalizedRRectF64.leftF64
+    val top = normalizedRRectF64.topF64
+    val right = normalizedRRectF64.rightF64
+    val bottom = normalizedRRectF64.bottomF64
+    val topLeftX = normalizedRRectF64.topLeft.xF64
+    val topLeftY = normalizedRRectF64.topLeft.yF64
+    val topRightX = normalizedRRectF64.topRight.xF64
+    val topRightY = normalizedRRectF64.topRight.yF64
+    val bottomRightX = normalizedRRectF64.bottomRight.xF64
+    val bottomRightY = normalizedRRectF64.bottomRight.yF64
+    val bottomLeftX = normalizedRRectF64.bottomLeft.xF64
+    val bottomLeftY = normalizedRRectF64.bottomLeft.yF64
     segmentsF64 += PathFillSegmentF64.MoveTo(Point2F64(left + topLeftX, top))
     debitPathInputSegmentBeforeMaterializationI64(beforeMaterializationI64)
     segmentsF64 += PathFillSegmentF64.LineTo(Point2F64(right - topRightX, top))
@@ -129,28 +128,6 @@ private fun debitPathInputSegmentBeforeMaterializationI64(
         ),
     )
 }
-
-private fun normalizedRadiiScaleF64(rrect: RRectF64, left: Double, top: Double, right: Double, bottom: Double): Double {
-    val width = (right - left).coerceAtLeast(0.0)
-    val height = (bottom - top).coerceAtLeast(0.0)
-    val topLeftX = rrect.topLeft.xF64.coerceAtLeast(0.0)
-    val topLeftY = rrect.topLeft.yF64.coerceAtLeast(0.0)
-    val topRightX = rrect.topRight.xF64.coerceAtLeast(0.0)
-    val topRightY = rrect.topRight.yF64.coerceAtLeast(0.0)
-    val bottomRightX = rrect.bottomRight.xF64.coerceAtLeast(0.0)
-    val bottomRightY = rrect.bottomRight.yF64.coerceAtLeast(0.0)
-    val bottomLeftX = rrect.bottomLeft.xF64.coerceAtLeast(0.0)
-    val bottomLeftY = rrect.bottomLeft.yF64.coerceAtLeast(0.0)
-    val scale = min(1.0, min(
-        ratioOrOneF64(width, topLeftX + topRightX),
-        min(ratioOrOneF64(width, bottomLeftX + bottomRightX), min(
-            ratioOrOneF64(height, topLeftY + bottomLeftY), ratioOrOneF64(height, topRightY + bottomRightY),
-        )),
-    ))
-    return scale
-}
-
-private fun ratioOrOneF64(limit: Double, sum: Double): Double = if (sum > limit && sum > 0.0) limit / sum else 1.0
 
 /** An immutable snapshot of the commands used to prepare a path fill. */
 public class PathFillInputF64 private constructor(

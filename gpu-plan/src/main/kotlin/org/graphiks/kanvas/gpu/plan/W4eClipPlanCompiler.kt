@@ -8,7 +8,9 @@ import org.graphiks.kanvas.render.ir.ClipOperation
 import org.graphiks.kanvas.render.ir.ClipStackNode
 import org.graphiks.kanvas.render.ir.ClipTransformSnapshot
 import org.graphiks.kanvas.render.ir.DrawNode
+import org.graphiks.kanvas.render.ir.DrawOrigin
 import org.graphiks.kanvas.render.ir.GeometryNode
+import org.graphiks.kanvas.render.ir.PaintStyleNode
 import org.graphiks.kanvas.render.ir.RenderDiagnostic
 import org.graphiks.kanvas.render.ir.RenderDiagnosticDomain
 import org.graphiks.kanvas.render.ir.RenderPlanResult
@@ -30,6 +32,7 @@ import org.graphiks.math.geometry.InversePathGeometryF32
 import org.graphiks.math.geometry.InverseInteriorCoverageF32
 import org.graphiks.math.geometry.InversePathPreparationResult
 import org.graphiks.math.geometry.PathBuilder
+import org.graphiks.math.geometry.PathStrokeDrawMode
 import org.graphiks.math.geometry.PathStrokePolicyF64
 import org.graphiks.math.geometry.RRectF64
 import org.graphiks.math.geometry.RectF64
@@ -66,14 +69,17 @@ public class W4eClipPlanCompiler(
         if (scene.extent != target.extent || scene.colorSpace != target.colorSpace) return invalid("Scene and target differ")
         if (SceneSemanticValidator.validate(scene) is SceneSemanticValidationResult.Invalid) return invalid("Scene validation failed")
         if (scene.colorSpace != ColorSpace.SRGB) return gap("W4e supports only sRGB")
-        val operationDraws = scene.filterIsInstance<SceneCommand.Draw>()
+        val drawCommands = scene.filterIsInstance<SceneCommand.Draw>()
+        val operationDraws = drawCommands
             .filter { it.node.clip is ClipStackNode.Operations }
-        if (operationDraws.isEmpty()) return gap("W4e requires an explicitly captured complex clip")
+        val inverseDraws = drawCommands.filter { it.node.hasInversePathFillRule() }
+        if (operationDraws.isEmpty() && inverseDraws.isEmpty()) {
+            return gap("W4e requires an explicitly captured complex clip or inverse path draw")
+        }
         operationDraws.forEach { command ->
-            if (!command.node.isW4eFillScope()) return gap("Complex clip draw is outside W4e fill scope")
             val operations = command.node.clip as ClipStackNode.Operations
-            if (operations.entryCount > MAX_CLIP_ENTRIES) {
-                return limit("W4e accepts at most $MAX_CLIP_ENTRIES clip entries per stack")
+            if (operations.entryCount > maxClipEntriesPerStackI32()) {
+                return limit("W4e accepts at most ${maxClipEntriesPerStackI32()} clip entries per stack")
             }
         }
         val totalVisualDrawCount = scene.count { it is SceneCommand.Draw }
@@ -86,35 +92,34 @@ public class W4eClipPlanCompiler(
         val inverseDomainSourcesByCommand = mutableMapOf<Int, PathDrawGeometry.InverseDomainSource>()
         val actuallyEmptyInverseCommands = mutableSetOf<Int>()
         var frameUsage = ClipWorkUsageI64()
-        var ownsComplexClip = false
+        var ownsW4eFeature = false
 
         scene.withIndex().forEach { (index, command) ->
             when (command) {
                 is SceneCommand.Draw -> {
                     val operations = command.node.clip as? ClipStackNode.Operations
-                    if (operations == null) {
-                        normalized += command
-                        return@forEach
-                    }
-                    ownsComplexClip = true
                     val inverse = when (val preparedInverse = command.node.prepareInversePathOrNull(domain)) {
                         is InverseResult.None -> null
                         is InverseResult.Ready -> preparedInverse.geometry
                         is InverseResult.Invalid -> return invalid(preparedInverse.message)
                         is InverseResult.Limit -> return limit(preparedInverse.message)
                     }
-                    val key = reuseKey(operations, target, command.node.coverage)
-                        ?: return legacy("LegacyUnavailable clip transforms cannot be promoted")
-                    val prepared = preparedByKey[key] ?: when (val value = prepare(operations, domain, frameUsage, inverse != null)) {
-                        is PreparedResult.Ready -> {
-                            frameUsage = value.stack.frameUsageAfterI64
-                            value.stack.also { preparedByKey[key] = it }
+                    val prepared = operations?.let { stack ->
+                        ownsW4eFeature = true
+                        val key = reuseKey(stack, target, command.node.coverage)
+                            ?: return legacy("LegacyUnavailable clip transforms cannot be promoted")
+                        preparedByKey[key] ?: when (val value = prepare(stack, domain, frameUsage, inverse != null)) {
+                            is PreparedResult.Ready -> {
+                                frameUsage = value.stack.frameUsageAfterI64
+                                value.stack.also { preparedByKey[key] = it }
+                            }
+                            is PreparedResult.Invalid -> return invalid(value.message)
+                            is PreparedResult.Limit -> return limit(value.message)
                         }
-                        is PreparedResult.Invalid -> return invalid(value.message)
-                        is PreparedResult.Limit -> return limit(value.message)
                     }
                     if (inverse != null) {
-                        prepared.forceMaskForInverse()
+                        ownsW4eFeature = true
+                        prepared?.forceMaskForInverse()
                         inverseByCommand[index] = inverse
                         if (inverse.interiorCoverageF32 == InverseInteriorCoverageF32.Zero) {
                             val sourcePath = requireNotNull(command.node.geometry as? GeometryNode.Path) {
@@ -132,12 +137,12 @@ public class W4eClipPlanCompiler(
                     }
                     normalized += SceneCommand.Draw(command.node.normalizedForW4dConstructionSeam(domain, inverse))
                     // The candidate keeps the prepared stack map keyed by this exact canonical stack identity.
-                    prepared.consumerIndexes += index
+                    prepared?.consumerIndexes?.add(index)
                 }
                 else -> normalized += command
             }
         }
-        if (!ownsComplexClip) return gap("W4e requires an explicitly captured complex clip")
+        if (!ownsW4eFeature) return gap("W4e requires an explicitly captured complex clip or inverse path draw")
 
         val normalizedScene = SceneSnapshot.of(scene.extent, scene.colorSpace, normalized)
         val forceAaFrame = preparedByKey.values.any { it.requiresAaFrame }
@@ -193,6 +198,11 @@ public class W4eClipPlanCompiler(
         return try {
             val graph = insertClips(base, selected, capabilities, budget, requiresAa, framePreview)
             RenderPlanResult.Ready(graph)
+        } catch (_: W4eNativePayloadLimit) {
+            resource(
+                W4ePlanDiagnostics.BudgetFrameLocalExceeded,
+                "W4e native vertex, index, or uniform buffers exceed the sealed device limit",
+            )
         } catch (_: ArithmeticException) {
             resource(W4ePlanDiagnostics.SizeOverflow, "W4e resource accounting overflowed")
         } catch (error: IllegalArgumentException) {
@@ -268,6 +278,11 @@ public class W4eClipPlanCompiler(
                 } ?: strategy
             }
         }
+        // An inverse draw without an operation stack is still a W4e-owned bounded-domain
+        // consumer.  Its strategy is sealed before W4d packets are materialized.
+        selected.inverseByCommand.forEach { (commandIndex, inverse) ->
+            strategyByCommand.putIfAbsent(commandIndex, ClipPlanStrategy.InverseDomain(inverse))
+        }
 
         val clippedGeneralBySource = mutableMapOf<GeneralPathDraw, ClippedGeneralPathDraw>()
         val sealedInverseDrawsByConstructionSource = mutableMapOf<GeneralPathDraw, GeneralPathDraw>()
@@ -336,7 +351,31 @@ public class W4eClipPlanCompiler(
                 resource.role == PlanResourceRole.DepthStencil && resource.id !in retainedSceneDepthIds
             }
             .map { resource -> resource.shifted(prefixCount) }
-        val allResources = resources + shiftedResources
+        val unsealedResources = resources + shiftedResources
+        val nativePayload = W4eNativePayloadPlan.from(
+            passes = allPasses,
+            resources = unsealedResources,
+            targetExtent = extent,
+            capabilities = capabilities,
+        ) ?: throw W4eNativePayloadLimit()
+        val nativePrefixFirstUseById = linkedMapOf<PlanResourceId, Int>()
+        fun retainNativePrefixFirstUse(resourceId: PlanResourceId, passIndex: Int) {
+            nativePrefixFirstUseById.putIfAbsent(resourceId, passIndex)
+        }
+        allPasses.forEachIndexed { passIndex, pass ->
+            if (pass !is PlanPass.ClipMaskProducer) return@forEachIndexed
+            when (pass.copyGeometryF32()) {
+                is ClipGeometryF32.Path -> {
+                    retainNativePrefixFirstUse(nativePayload.vertexResourceId, passIndex)
+                    retainNativePrefixFirstUse(nativePayload.indexResourceId, passIndex)
+                }
+                else -> retainNativePrefixFirstUse(nativePayload.uniformResourceId, passIndex)
+            }
+        }
+        val allResources = unsealedResources.map { resource ->
+            resource.withW4eNativeCapacity(nativePayload, nativePrefixFirstUseById[resource.id])
+                .withW4eFrameResidentLifetime()
+        }
         val dependencies = allPasses.zipWithNext().map { (before, after) -> PlanPassDependency(before.id, after.id) }
         require(allPasses.size == framePreview.totalPassCount) { "W4e preflight pass count drifted" }
         val actualPeakFrameLocalBytes = peakFrameLocalBytesI64(
@@ -345,8 +384,8 @@ public class W4eClipPlanCompiler(
             },
             allPasses.size,
         )
-        require(actualPeakFrameLocalBytes <= budget.maxFrameLocalBytes) {
-            "W4e post-seal resource inventory exceeds the frame budget"
+        if (actualPeakFrameLocalBytes > budget.maxFrameLocalBytes) {
+            throw W4eNativePayloadLimit()
         }
         return RenderGraph.issueW4eCompilerWitness(RenderGraph.of(
             id = PlanId(identity(selected, capabilities, budget, frameAa)),
@@ -551,8 +590,8 @@ public class W4eClipPlanCompiler(
         frameBefore: ClipWorkUsageI64,
         forceMask: Boolean,
     ): PreparedResult {
-        if (operations.entryCount > MAX_CLIP_ENTRIES) {
-            return PreparedResult.Limit("W4e accepts at most $MAX_CLIP_ENTRIES clip entries per stack")
+        if (operations.entryCount > maxClipEntriesPerStackI32()) {
+            return PreparedResult.Limit("W4e accepts at most ${maxClipEntriesPerStackI32()} clip entries per stack")
         }
         val inputs = buildList {
             operations.forEach { entry ->
@@ -647,14 +686,23 @@ public class W4eClipPlanCompiler(
                 clip = ClipStackNode.Empty,
             )
         }
-        val path = geometry as? GeometryNode.Path ?: return copy(clip = ClipStackNode.Empty)
-        val rule = when (path.path.fillRule) {
+        val sourcePath = when (val source = geometry) {
+            is GeometryNode.Rect -> PathBuilder().addRect(source.copyBounds()).build()
+            is GeometryNode.RRect -> PathBuilder().addRRect(source.copyShape()).build()
+            is GeometryNode.Path -> source.path
+            else -> return copy(clip = ClipStackNode.Empty)
+        }
+        val rule = when (sourcePath.fillRule) {
             FillRule.INVERSE_WINDING -> FillRule.WINDING
             FillRule.INVERSE_EVEN_ODD -> FillRule.EVEN_ODD
-            else -> path.path.fillRule
+            else -> sourcePath.fillRule
         }
-        val normalizedGeometry = if (rule == path.path.fillRule) geometry else GeometryNode.Path(PathBuilder(rule).addPath(path.path).build())
-        return copy(geometry = normalizedGeometry, clip = ClipStackNode.Empty)
+        val normalizedPath = if (rule == sourcePath.fillRule) sourcePath else PathBuilder(rule).addPath(sourcePath).build()
+        return copy(
+            geometry = GeometryNode.Path(normalizedPath),
+            origin = DrawOrigin.PATH,
+            clip = ClipStackNode.Empty,
+        )
     }
 
     private fun constructionProxyPath(domain: RectI32) : org.graphiks.math.geometry.PathF32 = PathBuilder()
@@ -664,11 +712,8 @@ public class W4eClipPlanCompiler(
         .close()
         .build()
 
-    private fun DrawNode.isW4eFillScope(): Boolean =
-        geometry is GeometryNode.Path &&
-            material is org.graphiks.kanvas.render.ir.MaterialNode.Solid &&
-            blend.isSrcOverWithoutCustomBlender() &&
-            paint?.style == org.graphiks.kanvas.render.ir.PaintStyleNode.FILL
+    private fun DrawNode.hasInversePathFillRule(): Boolean =
+        (geometry as? GeometryNode.Path)?.path?.fillRule in setOf(FillRule.INVERSE_WINDING, FillRule.INVERSE_EVEN_ODD)
 
     /** Public Paint capture preserves its explicit SRC_OVER provenance as [BlendNode.Paint]. */
     private fun org.graphiks.kanvas.render.ir.BlendNode.isSrcOverWithoutCustomBlender(): Boolean = when (this) {
@@ -681,13 +726,20 @@ public class W4eClipPlanCompiler(
     private fun DrawNode.prepareInversePathOrNull(domain: RectI32): InverseResult {
         val path = (geometry as? GeometryNode.Path)?.path ?: return InverseResult.None
         if (path.fillRule !in setOf(FillRule.INVERSE_WINDING, FillRule.INVERSE_EVEN_ODD)) return InverseResult.None
-        if (paint?.style != org.graphiks.kanvas.render.ir.PaintStyleNode.FILL) {
-            return InverseResult.Invalid("W4e currently supports inverse fills only")
+        val paint = paint ?: return InverseResult.Invalid("W4e inverse path requires paint")
+        val (styleF64, mode) = when (paint.style) {
+            PaintStyleNode.FILL -> null to InversePathDrawMode.Fill
+            PaintStyleNode.STROKE_AND_FILL -> try {
+                w4PathStrokeStyleF64(paint, PathStrokeDrawMode.StrokeAndFill) to InversePathDrawMode.StrokeAndFill
+            } catch (_: IllegalArgumentException) {
+                return InverseResult.Invalid("Inverse stroke style is invalid")
+            }
+            PaintStyleNode.STROKE -> return InverseResult.Invalid("W4e does not define inverse stroke-only coverage")
         }
         return when (val prepared = transform.toMatrix3x3F64().prepareTransformedInversePathGeometryF32(
             path,
-            styleF64 = null,
-            mode = InversePathDrawMode.Fill,
+            styleF64 = styleF64,
+            mode = mode,
             domainI32 = domain,
             policyF64 = PathStrokePolicyF64(),
         )) {
@@ -707,6 +759,11 @@ public class W4eClipPlanCompiler(
         MathClipOperation.Difference -> ClipCombineOperation.Difference
     }
 
+    private fun maxClipEntriesPerStackI32(): Int = minOf(
+        MAX_CLIP_ENTRIES,
+        clipPolicyF64.limitsI32.maxClipEntryCountPerStackI32,
+    )
+
     private fun org.graphiks.math.geometry.RectF32.toRectF64(): RectF64 = RectF64(left.toDouble(), top.toDouble(), right.toDouble(), bottom.toDouble())
     private fun org.graphiks.math.geometry.RRectF32.toRRectF64(): RRectF64 = RRectF64.of(
         rect.toRectF64(),
@@ -720,6 +777,55 @@ public class W4eClipPlanCompiler(
         role, ordinal, kind, format, copyExtent(), byteSize, usages(), lifetime,
         Math.addExact(firstPassIndex, offset), Math.addExact(lastPassIndexExclusive, offset), sampleCountI32,
     )
+
+    /**
+     * W4e takes ownership of the W4d construction seam's one shared V/I/U resource triple.
+     * The IDs and lifetimes remain graph-visible.  Prefix clip producers are native consumers
+     * too, so their first binding extends the W4d lifetime before the checked capacity is
+     * replaced by the complete W4e payload (clip producers, inverse interiors, and color paths).
+     */
+    private fun PlanResource.withW4eNativeCapacity(
+        payload: W4eNativePayloadPlan,
+        prefixFirstUse: Int?,
+    ): PlanResource {
+        val capacity = when (id) {
+            payload.vertexResourceId -> payload.vertexCapacityBytes
+            payload.indexResourceId -> payload.indexCapacityBytes
+            payload.uniformResourceId -> payload.uniformCapacityBytes
+            else -> return this
+        }
+        return PlanResource.of(
+            role,
+            ordinal,
+            kind,
+            format,
+            copyExtent(),
+            capacity,
+            usages(),
+            lifetime,
+            minOf(firstPassIndex, prefixFirstUse ?: firstPassIndex),
+            lastPassIndexExclusive,
+            sampleCountI32,
+        )
+    }
+
+    /** The canonical target is frame-resident while W4e emits its clip prefix. */
+    private fun PlanResource.withW4eFrameResidentLifetime(): PlanResource {
+        if (role != PlanResourceRole.LogicalTarget || firstPassIndex == 0) return this
+        return PlanResource.of(
+            role,
+            ordinal,
+            kind,
+            format,
+            copyExtent(),
+            byteSize,
+            usages(),
+            lifetime,
+            0,
+            lastPassIndexExclusive,
+            sampleCountI32,
+        )
+    }
 
     private fun PlanPass.withClipStrategies(
         strategies: Map<Int, ClipPlanStrategy>,
@@ -866,6 +972,8 @@ public class W4eClipPlanCompiler(
         data class Invalid(val message: String) : PreparedResult
         data class Limit(val message: String) : PreparedResult
     }
+
+    private class W4eNativePayloadLimit : IllegalArgumentException()
     private sealed interface InverseResult {
         data object None : InverseResult
         data class Ready(val geometry: InversePathGeometryF32) : InverseResult

@@ -153,12 +153,12 @@ class CapabilityCompilerChainTest {
         ).map { node ->
             SceneSnapshot.of(SceneExtent(4, 3), ColorSpace.SRGB, List(513) { SceneCommand.Draw(node) })
         }
-        val unsupported = listOf(
-            base.copy(
-                clip = ClipStackNode.Operations.of(
-                    listOf(org.graphiks.kanvas.render.ir.ClipEntry(base.geometry, org.graphiks.kanvas.render.ir.ClipOperation.INTERSECT)),
-                ),
+        val complexClip = base.copy(
+            clip = ClipStackNode.Operations.of(
+                listOf(org.graphiks.kanvas.render.ir.ClipEntry(base.geometry, org.graphiks.kanvas.render.ir.ClipOperation.INTERSECT)),
             ),
+        )
+        val unsupported = listOf(
             base.copy(blend = BlendNode.Mode(BlendMode.SRC)),
             base.copy(material = MaterialNode.Transparent),
         ).map { node ->
@@ -172,6 +172,15 @@ class CapabilityCompilerChainTest {
             val generalLimit = assertIs<GpuPlanSelection.ResourceLimitExceeded>(chain.select(scene, targetFor(scene)))
             assertEquals(W4dGeneralPlanDiagnostics.PathResourceLimit, generalLimit.diagnostics().single().code)
         }
+        val complexClipScene = SceneSnapshot.of(
+            SceneExtent(4, 3),
+            ColorSpace.SRGB,
+            List(513) { SceneCommand.Draw(complexClip) },
+        )
+        val complexClipLimit = assertIs<GpuPlanSelection.ResourceLimitExceeded>(
+            chain.select(complexClipScene, targetFor(complexClipScene)),
+        )
+        assertEquals(W4ePlanDiagnostics.GeometryLimit, complexClipLimit.diagnostics().single().code)
         unsupported.forEach { scene ->
             assertIs<GpuPlanSelection.NotCandidate>(chain.select(scene, targetFor(scene)))
         }

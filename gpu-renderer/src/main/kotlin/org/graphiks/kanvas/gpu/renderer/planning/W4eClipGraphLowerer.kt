@@ -11,6 +11,7 @@ import org.graphiks.kanvas.gpu.plan.PlanResourceUsage
 import org.graphiks.kanvas.gpu.plan.PlanTextureFormat
 import org.graphiks.kanvas.gpu.plan.SamplePlan
 import org.graphiks.kanvas.gpu.plan.W4eClipPlanCompiler
+import org.graphiks.math.geometry.ClipGeometryF32
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
@@ -266,6 +267,15 @@ internal class W4eClipGraphLowerer {
     ): List<GPUFrameResourceUse> {
         fun use(id: String, role: GPUFrameResourceRole, usage: GPUFrameResourceUsage, write: Boolean) =
             GPUFrameResourceUse(refs.getValue(id), role, usage, GPUFrameResourceLifetime.FrameLocal, write)
+        fun nativeData(resourceRole: PlanResourceRole, frameRole: GPUFrameResourceRole, usage: GPUFrameResourceUsage) =
+            use(
+                requireNotNull(resourcesById.values.singleOrNull { it.role == resourceRole }) {
+                    "W4e native $resourceRole resource must be unique"
+                }.id.value,
+                frameRole,
+                usage,
+                false,
+            )
         return when (pass) {
             is PlanPass.PathMaskClearPass -> listOf(
                 use(pass.target.value, GPUFrameResourceRole.ClipMask, GPUFrameResourceUsage.RenderAttachment, true),
@@ -275,6 +285,15 @@ internal class W4eClipGraphLowerer {
                 add(use(pass.target.value, GPUFrameResourceRole.ClipMask, GPUFrameResourceUsage.RenderAttachment, true))
                 pass.resolveTarget?.let { add(use(it.value, GPUFrameResourceRole.ClipMask, GPUFrameResourceUsage.RenderAttachment, true)) }
                 pass.depthStencil?.let { add(use(it.value, GPUFrameResourceRole.ClipDepthStencil, GPUFrameResourceUsage.RenderAttachment, true)) }
+                // The W4e native payload is graph-sealed rather than materializer-local.  Make
+                // the producer's exact V/I or U binding visible to preflight and the frame seal.
+                when (pass.copyGeometryF32()) {
+                    is ClipGeometryF32.Path -> {
+                        add(nativeData(PlanResourceRole.VertexData, GPUFrameResourceRole.VertexData, GPUFrameResourceUsage.Vertex))
+                        add(nativeData(PlanResourceRole.IndexData, GPUFrameResourceRole.IndexData, GPUFrameResourceUsage.Index))
+                    }
+                    else -> add(nativeData(PlanResourceRole.UniformData, GPUFrameResourceRole.UniformData, GPUFrameResourceUsage.Uniform))
+                }
             }
             is PlanPass.ClipMaskFold -> listOf(
                 use(pass.previous.value, GPUFrameResourceRole.ClipMask, GPUFrameResourceUsage.TextureBinding, false),

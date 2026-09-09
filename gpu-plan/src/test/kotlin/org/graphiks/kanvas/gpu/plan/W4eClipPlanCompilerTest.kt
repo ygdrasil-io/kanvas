@@ -31,6 +31,7 @@ import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.PathBuilder
 import org.graphiks.math.geometry.PathF32
 import org.graphiks.math.geometry.FillRule
+import org.graphiks.math.geometry.ClipGeometryF32
 import org.graphiks.math.geometry.ClipPreparationLimitsI32
 import org.graphiks.math.geometry.ClipPreparationLimitsI64
 import org.graphiks.math.geometry.ClipPreparationPolicyF64
@@ -83,6 +84,133 @@ class W4eClipPlanCompilerTest {
         val draw = graph.passes().filterIsInstance<PlanPass.PathRenderPass>().single().draw
         assertIs<ClippedGeneralPathDraw>(draw)
         assertIs<ClipPlanStrategy.Scissor>(draw.clip)
+    }
+
+    @Test
+    fun `complex clips admit rect rrect and path consumers across W4 paint styles`() {
+        val clip = complexClip(
+            ClipEntry(
+                geometry = GeometryNode.Rect.of(RectF32(1f, 1f, 14f, 14f)),
+                operation = ClipOperation.INTERSECT,
+                antiAlias = false,
+                transform = ClipTransformSnapshot.Known.of(Matrix3x3F32.Identity),
+            ),
+        )
+        val consumers = PaintStyleNode.entries.flatMap { style -> listOf(
+            "$style rect" to w4eConsumerDraw(
+                GeometryNode.Rect.of(RectF32(2f, 2f, 6f, 6f)), DrawOrigin.RECT, style, clip,
+                strokeWidth = if (style == PaintStyleNode.STROKE_AND_FILL) 0f else 2f,
+            ),
+            "$style rrect" to w4eConsumerDraw(
+                GeometryNode.RRect.of(RRectF32.of(RectF32(3f, 3f, 9f, 9f), 2f)), DrawOrigin.RRECT, style, clip,
+                strokeWidth = if (style == PaintStyleNode.STROKE_AND_FILL) 0f else 2f,
+            ),
+            "$style path" to w4eConsumerDraw(
+                GeometryNode.Path(path()), DrawOrigin.PATH, style, clip,
+                strokeWidth = if (style == PaintStyleNode.STROKE_AND_FILL) 0f else 2f,
+            ),
+        ) }
+
+        consumers.forEach { (label, consumer) ->
+            val graph = compile(sceneOf(consumer), label = label)
+            assertEquals(1, graph.visualCommandCount)
+            assertTrue(graph.passes().filterIsInstance<PlanPass.PathRenderPass>().all { pass ->
+                pass.draw is ClippedGeneralPathDraw || pass.draw is ClippedBinaryMaskedPathDraw
+            })
+            assertTrue(graph.verifyW4eCompilerWitness())
+        }
+    }
+
+    @Test
+    fun `inverse stroke and fill is a W4e candidate without a complex clip`() {
+        val graph = compile(sceneOf(
+            w4eConsumerDraw(
+                GeometryNode.Path(inverseClipPath()), DrawOrigin.PATH, PaintStyleNode.STROKE_AND_FILL,
+                ClipStackNode.Empty,
+                strokeWidth = 0f,
+            ),
+        ))
+
+        val strategy = assertIs<ClippedGeneralPathDraw>(
+            graph.passes().filterIsInstance<PlanPass.PathRenderPass>().last().draw,
+        ).clip
+        assertIs<ClipPlanStrategy.InverseDomain>(strategy)
+    }
+
+    @Test
+    fun `W4e native clip payload expands the sealed shared buffer inventory`() {
+        val clip = complexClip(
+            ClipEntry(
+                geometry = GeometryNode.Path(clipPath()),
+                operation = ClipOperation.INTERSECT,
+                antiAlias = false,
+                transform = ClipTransformSnapshot.Known.of(Matrix3x3F32.Identity),
+            ),
+            ClipEntry(
+                geometry = GeometryNode.RRect.of(RRectF32.of(RectF32(2f, 2f, 13f, 13f), 3f)),
+                operation = ClipOperation.DIFFERENCE,
+                antiAlias = false,
+                transform = ClipTransformSnapshot.Known.of(Matrix3x3F32.Identity),
+            ),
+        )
+        val caps = capabilities(
+            alignment = 16,
+            policy = PlanBufferAllocationPolicy.of(8, 4, 16),
+        )
+        val clipped = compile(sceneOf(pathDraw(clip = clip)), capabilities = caps)
+        val plainScene = sceneOf(pathDraw(clip = ClipStackNode.Empty))
+        val plainCompiler = W4dGeneralPathPlanCompiler()
+        val plainSelection = assertIs<GpuPlanSelection.Candidate>(
+            plainCompiler.select(plainScene, target(plainScene)),
+        )
+        val plain = assertIs<RenderPlanResult.Ready<RenderGraph>>(
+            plainCompiler.plan(plainSelection.candidate, caps, PlanBudget(1L shl 20)),
+        ).plan
+
+        fun buffer(graph: RenderGraph, role: PlanResourceRole): PlanResource =
+            graph.resources().single { it.role == role }
+
+        assertTrue(buffer(clipped, PlanResourceRole.VertexData).byteSize >
+            buffer(plain, PlanResourceRole.VertexData).byteSize)
+        assertTrue(buffer(clipped, PlanResourceRole.IndexData).byteSize >
+            buffer(plain, PlanResourceRole.IndexData).byteSize)
+        assertTrue(buffer(clipped, PlanResourceRole.UniformData).byteSize >
+            buffer(plain, PlanResourceRole.UniformData).byteSize)
+    }
+
+    @Test
+    fun `W4e native clip buffers begin at their sealed prefix bindings`() {
+        val clip = complexClip(
+            ClipEntry(
+                geometry = GeometryNode.Path(clipPath()),
+                operation = ClipOperation.INTERSECT,
+                antiAlias = false,
+                transform = ClipTransformSnapshot.Known.of(Matrix3x3F32.Identity),
+            ),
+            ClipEntry(
+                geometry = GeometryNode.RRect.of(RRectF32.of(RectF32(2f, 2f, 13f, 13f), 3f)),
+                operation = ClipOperation.DIFFERENCE,
+                antiAlias = false,
+                transform = ClipTransformSnapshot.Known.of(Matrix3x3F32.Identity),
+            ),
+        )
+        val graph = compile(sceneOf(pathDraw(clip = clip)))
+        val producers = graph.passes().withIndex().filter { (_, pass) ->
+            pass is PlanPass.ClipMaskProducer
+        }
+        val pathProducer = producers.first { (_, pass) ->
+            (pass as PlanPass.ClipMaskProducer).copyGeometryF32() is ClipGeometryF32.Path
+        }.index
+        val analyticProducer = producers.first { (_, pass) ->
+            (pass as PlanPass.ClipMaskProducer).copyGeometryF32() is ClipGeometryF32.RRect
+        }.index
+
+        fun buffer(role: PlanResourceRole): PlanResource = graph.resources().single { it.role == role }
+
+        assertEquals(pathProducer, buffer(PlanResourceRole.VertexData).firstPassIndex)
+        assertEquals(pathProducer, buffer(PlanResourceRole.IndexData).firstPassIndex)
+        assertEquals(analyticProducer, buffer(PlanResourceRole.UniformData).firstPassIndex)
+        assertEquals(0, buffer(PlanResourceRole.LogicalTarget).firstPassIndex)
     }
 
     @Test
@@ -279,14 +407,14 @@ class W4eClipPlanCompilerTest {
     }
 
     @Test
-    fun `513 clip entries are refused before graph emission`() {
+    fun `65 clip entries are refused before graph emission`() {
         val entry = ClipEntry(
             geometry = GeometryNode.Rect.of(RectF32(1f, 1f, 14f, 14f)),
             operation = ClipOperation.INTERSECT,
             antiAlias = false,
             transform = ClipTransformSnapshot.Known.of(Matrix3x3F32.Identity),
         )
-        val clip = ClipStackNode.Operations.of(List(513) { entry })
+        val clip = ClipStackNode.Operations.of(List(65) { entry })
 
         assertIs<GpuPlanSelection.ResourceLimitExceeded>(
             compiler.select(sceneOf(pathDraw(clip = clip)), RenderTargetDescriptor(SceneExtent(16, 16), ColorSpace.SRGB)),
@@ -533,7 +661,7 @@ class W4eClipPlanCompilerTest {
     }
 
     @Test
-    fun `512 clip entries compile successfully`() {
+    fun `64 clip entries compile successfully`() {
         val entry = ClipEntry(
             geometry = GeometryNode.Rect.of(RectF32(1f, 1f, 14f, 14f)),
             operation = ClipOperation.INTERSECT,
@@ -541,7 +669,7 @@ class W4eClipPlanCompilerTest {
             transform = ClipTransformSnapshot.Known.of(Matrix3x3F32.Identity),
         )
 
-        val graph = compile(sceneOf(pathDraw(clip = ClipStackNode.Operations.of(List(512) { entry }))))
+        val graph = compile(sceneOf(pathDraw(clip = ClipStackNode.Operations.of(List(64) { entry }))))
 
         assertTrue(graph.verifyW4eCompilerWitness())
     }
@@ -759,10 +887,20 @@ class W4eClipPlanCompilerTest {
         assertTrue(result.diagnostics().single().message.contains("at most 512 visual path draws"))
     }
 
-    private fun compile(scene: SceneSnapshot, planner: W4eClipPlanCompiler = compiler): RenderGraph {
-        val candidate = assertIs<GpuPlanSelection.Candidate>(planner.select(scene, target(scene))).candidate
+    private fun compile(
+        scene: SceneSnapshot,
+        planner: W4eClipPlanCompiler = compiler,
+        label: String = "",
+        capabilities: PlanCapabilitySnapshot = capabilities(),
+    ): RenderGraph {
+        val selection = planner.select(scene, target(scene))
+        val candidate = assertIs<GpuPlanSelection.Candidate>(
+            selection,
+            "$label ${(selection as? GpuPlanSelection.ResourceLimitExceeded)
+                ?.diagnostics()?.joinToString { diagnostic -> diagnostic.message }}",
+        ).candidate
         return assertIs<RenderPlanResult.Ready<RenderGraph>>(
-            planner.plan(candidate, capabilities(), PlanBudget(1L shl 20)),
+            planner.plan(candidate, capabilities, PlanBudget(1L shl 20)),
         ).plan
     }
 
@@ -861,6 +999,30 @@ class W4eClipPlanCompilerTest {
         ))
     }
 
+    private fun w4eConsumerDraw(
+        geometry: GeometryNode,
+        origin: DrawOrigin,
+        style: PaintStyleNode,
+        clip: ClipStackNode,
+        strokeWidth: Float = 2f,
+    ): SceneCommand.Draw {
+        val color = ColorARGB.fromPackedUInt(0xC0FF0000u)
+        return SceneCommand.Draw(DrawNode(
+            geometry = geometry,
+            material = MaterialNode.Solid(color),
+            coverage = CoverageRequest.HARD_EDGE,
+            clip = clip,
+            blend = BlendNode.SrcOver,
+            effects = EffectStack.Empty,
+            transform = Matrix3x3F32.rotation(0.25f),
+            origin = origin,
+            paint = PaintNode(
+                color, null, BlendMode.SRC_OVER, null, null, null, null, null,
+                style, strokeWidth, StrokeCapNode.ROUND, StrokeJoinNode.ROUND, 4f, false,
+            ),
+        ))
+    }
+
     private fun path(): PathF32 = PathBuilder()
         .moveTo(2f, 2f).lineTo(12f, 2f).lineTo(2f, 12f).close().build()
 
@@ -876,16 +1038,18 @@ class W4eClipPlanCompilerTest {
     private fun capabilities(
         includeMasks: Boolean = true,
         includeAaMaskSamples: Boolean = true,
+        alignment: Int = 256,
+        policy: PlanBufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 4_096, 4_096),
     ): PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(
         deviceGeneration = 0,
         maxTextureDimension2D = 64,
         maxBufferSizeBytes = 1L shl 20,
         copyBytesPerRowAlignment = 256,
         supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
-        minUniformBufferOffsetAlignment = 256,
+        minUniformBufferOffsetAlignment = alignment,
         maxDynamicUniformBuffersPerPipelineLayout = 1,
         supportedOperations = PlanOperationCapability.entries.toSet(),
-        bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 4_096, 4_096),
+        bufferAllocationPolicy = policy,
         supportedDepthStencilFormats = setOf(PlanDepthStencilFormat.Depth24PlusStencil8),
         supportedTextureSampleSupports = setOf(
             PlanTextureSampleSupport.of(PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), 1, setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource)),

@@ -114,7 +114,13 @@ class GpuPlanTaskListLowererW4eTest {
         assertTrue(producer.depthStencilResourceId != null)
         val producerTask = renders.single { it.drawPackets.single().w4ePreparedClipPass === producer }
         assertEquals(
-            listOf(GPUFrameResourceRole.ClipMask, GPUFrameResourceRole.ClipMask, GPUFrameResourceRole.ClipDepthStencil),
+            listOf(
+                GPUFrameResourceRole.ClipMask,
+                GPUFrameResourceRole.ClipMask,
+                GPUFrameResourceRole.ClipDepthStencil,
+                GPUFrameResourceRole.VertexData,
+                GPUFrameResourceRole.IndexData,
+            ),
             producerTask.resourceUses.map { it.role },
         )
         assertTrue(producerTask.resourceUses.single { use ->

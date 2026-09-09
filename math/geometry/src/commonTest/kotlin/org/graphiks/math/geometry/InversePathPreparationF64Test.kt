@@ -129,6 +129,27 @@ class InversePathPreparationF64Test {
     }
 
     @Test
+    fun `inverse geometry publication debits its defensive snapshot before copying it`() {
+        val result = prepareInversePathGeometryF32(
+            finiteFillF64 = triangleInputF64(FillRule.INVERSE_WINDING),
+            deviceStrokeOutlineF64 = null,
+            styleF64 = null,
+            mode = InversePathDrawMode.Fill,
+            domainI32 = RectI32(0, 0, 16, 16),
+            policyF64 = PathStrokePolicyF64(
+                // 80 bytes for the finite-input snapshot, 52 for the emitted direct triangle,
+                // and 84 for the inverse geometry snapshot plus its wrapper are required.
+                limitsI64 = PathStrokeLimitsI64(maxSnapshotByteCountPerPathI64 = 215L),
+            ),
+        )
+
+        assertEquals(
+            PathStrokeResourceLimitReason.SnapshotByteLimit,
+            assertIs<InversePathPreparationResult.ResourceLimitExceeded>(result).reason,
+        )
+    }
+
+    @Test
     fun `inverse boolean conversion rejects finite F64 values outside F32 instead of throwing`() {
         val result = prepareInversePathGeometryF32(
             rectangleInputF64(0.0, 0.0, Double.MAX_VALUE, 1.0),

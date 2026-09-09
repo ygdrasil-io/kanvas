@@ -57,6 +57,7 @@ import kotlin.math.floor
 import org.graphiks.kanvas.gpu.plan.AttachmentLoadPlan
 import org.graphiks.kanvas.gpu.plan.PlanDepthStencilLoadStore
 import org.graphiks.kanvas.gpu.plan.PlanResourceRole
+import org.graphiks.kanvas.gpu.plan.W4eNativePayloadPlan
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
@@ -2588,6 +2589,12 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             }
             Entry(index, render, scope, packet)
         }
+        val frameAuthority = entries.firstOrNull()?.packet?.w4ePreparedFrameAuthority
+            ?: return refused("invalid.native-core-primitive.w4e-authority", "W4e requires one frame-native payload authority.")
+        if (entries.any { entry -> entry.packet.w4ePreparedFrameAuthority !== frameAuthority }) {
+            return refused("invalid.native-core-primitive.w4e-authority", "W4e scopes disagree about their sealed frame-native payload authority.")
+        }
+        val nativePayload = frameAuthority.nativePayload
         val readback = framePlan.steps.filterIsInstance<GPUFrameStep.ReadbackCopyStep>().singleOrNull()
             ?: return refused("invalid.native-core-primitive.w4e-readback", "W4e requires one readback step.")
         val readbackScope = encoderPlan.scopes.singleOrNull { it.sourceStepIndex == framePlan.steps.indexOf(readback) && it.operationKind == GPUEncoderOperationKind.Readback }
@@ -2596,6 +2603,57 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             ?: return refused("invalid.native-core-primitive.w4e-readback", "W4e requires one output-owned staging lease.")
         val requests = framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>().flatMap(GPUFrameStep.PrepareResourcesStep::requests)
             .associateBy(GPUResourcePreparationRequest::diagnosticLabel)
+        fun requireNativeBuffer(
+            resourceId: String,
+            role: GPUFrameResourceRole,
+            usage: GPUFrameResourceUsage,
+            usefulBytes: Long,
+            capacityBytes: Long,
+        ) {
+            val request = requests[resourceId]
+                ?: throw Refusal("invalid.native-core-primitive.w4e-native-buffer", "Missing sealed W4e native buffer $resourceId.")
+            val descriptor = request.descriptor as? GPUFrameBufferDescriptor
+                ?: throw Refusal("invalid.native-core-primitive.w4e-native-buffer", "W4e native buffer $resourceId is not a buffer.")
+            if (request.role != role || request.lifetime != GPUFrameResourceLifetime.FrameLocal ||
+                request.byteSize != capacityBytes || descriptor.byteSize != capacityBytes ||
+                request.usages != setOf(GPUFrameResourceUsage.CopyDestination, usage) ||
+                usefulBytes !in 0L..capacityBytes
+            ) {
+                throw Refusal(
+                    "invalid.native-core-primitive.w4e-native-buffer",
+                    "W4e native buffer $resourceId differs from the graph-sealed $role capacity or usage.",
+                )
+            }
+            limits.maxBufferSize?.let { limit ->
+                if (capacityBytes > limit) {
+                    throw Refusal(
+                        "invalid.native-core-primitive.w4e-native-buffer-limit",
+                        "W4e native buffer $resourceId exceeds the observed maxBufferSize.",
+                    )
+                }
+            }
+        }
+        requireNativeBuffer(
+            nativePayload.vertexResourceId.value,
+            GPUFrameResourceRole.VertexData,
+            GPUFrameResourceUsage.Vertex,
+            nativePayload.vertexUsefulBytes,
+            nativePayload.vertexCapacityBytes,
+        )
+        requireNativeBuffer(
+            nativePayload.indexResourceId.value,
+            GPUFrameResourceRole.IndexData,
+            GPUFrameResourceUsage.Index,
+            nativePayload.indexUsefulBytes,
+            nativePayload.indexCapacityBytes,
+        )
+        requireNativeBuffer(
+            nativePayload.uniformResourceId.value,
+            GPUFrameResourceRole.UniformData,
+            GPUFrameResourceUsage.Uniform,
+            nativePayload.uniformReservedBytes,
+            nativePayload.uniformCapacityBytes,
+        )
         val passes = entries.mapNotNull { it.packet.w4ePreparedClipPass }
         val producers = passes.filterIsInstance<GPUW4ePreparedClipPassAuthority.Producer>()
         val accumulators = (passes.filterIsInstance<GPUW4ePreparedClipPassAuthority.Initialize>().map { it.outputResourceId } +
@@ -2951,12 +3009,64 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 },
                 sceneColorResourceIds = sceneMsaaTextures.map { value -> value.first.diagnosticLabel },
                 sceneColorRequirements = sceneMsaaTextures.map(::sceneMsaaRequirement),
+                nativeBuffers = GPUW4eNativeBufferRequirements(
+                    vertexResourceId = nativePayload.vertexResourceId.value,
+                    indexResourceId = nativePayload.indexResourceId.value,
+                    uniformResourceId = nativePayload.uniformResourceId.value,
+                    vertexUsefulBytes = nativePayload.vertexUsefulBytes,
+                    indexUsefulBytes = nativePayload.indexUsefulBytes,
+                    uniformUsefulBytes = nativePayload.uniformUsefulBytes,
+                    uniformReservedBytes = nativePayload.uniformReservedBytes,
+                    vertexCapacityBytes = nativePayload.vertexCapacityBytes,
+                    indexCapacityBytes = nativePayload.indexCapacityBytes,
+                    uniformCapacityBytes = nativePayload.uniformCapacityBytes,
+                ),
             )
             lease = when (val checkout = sessionCache.acquireW4eAttachments(generationSeal.deviceGeneration, requirements)) {
                 is GPUWgpu4kW4eAttachmentPoolCheckout.Acquired -> checkout.lease
                 is GPUWgpu4kW4eAttachmentPoolCheckout.Refused -> throw Refusal("failed.native-core-primitive.w4e-attachment-allocation", "W4e attachment pool refused $checkout.")
             }
             val attachments = requireNotNull(lease).handles
+            val nativeBuffers = requireNotNull(attachments.nativeBuffers) {
+                "W4e attachment lease lacks its compiler-sealed native V/I/U buffers."
+            }
+            if (nativeBuffers.requirements != requirements.nativeBuffers) {
+                throw Refusal(
+                    "invalid.native-core-primitive.w4e-native-buffer",
+                    "W4e attachment lease native V/I/U inventory differs from the sealed graph request.",
+                )
+            }
+            fun upload(buffer: GPUBuffer, bytes: ByteArray, usefulBytes: Long) {
+                if (usefulBytes == 0L) return
+                if (usefulBytes != bytes.size.toLong()) {
+                    throw Refusal(
+                        "invalid.native-core-primitive.w4e-native-buffer",
+                        "W4e native payload byte count differs from its sealed useful-byte count.",
+                    )
+                }
+                queue.writeBuffer(buffer, 0uL, ArrayBuffer.of(bytes), 0uL, usefulBytes.toULong())
+            }
+            upload(nativeBuffers.vertex, nativePayload.copyVertexData().w4eBytes(), nativePayload.vertexUsefulBytes)
+            upload(nativeBuffers.index, nativePayload.copyIndexData().w4eBytes(), nativePayload.indexUsefulBytes)
+            upload(nativeBuffers.uniform, nativePayload.copyUniformData(), nativePayload.uniformReservedBytes)
+            val sealedVertex = GPUPreparedNativeBufferOperand(
+                nativeBuffers.vertex,
+                generationSeal.deviceGeneration,
+                GPUPreparedNativeOperandOwnership.Borrowed,
+                nativePayload.vertexCapacityBytes,
+            )
+            val sealedIndex = GPUPreparedNativeBufferOperand(
+                nativeBuffers.index,
+                generationSeal.deviceGeneration,
+                GPUPreparedNativeOperandOwnership.Borrowed,
+                nativePayload.indexCapacityBytes,
+            )
+            val sealedUniform = GPUPreparedNativeBufferOperand(
+                nativeBuffers.uniform,
+                generationSeal.deviceGeneration,
+                GPUPreparedNativeOperandOwnership.Borrowed,
+                nativePayload.uniformCapacityBytes,
+            )
             val owned = GPUW4eNativeOwnedHandles()
             nativeOwned = owned
             val clearPipelines = mutableMapOf<Float, GPURenderPipeline>()
@@ -3017,49 +3127,52 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                         owned = owned,
                     )
                 }
-            fun uniform(label: String, values: FloatArray): GPUBuffer {
-                val bytes = values.w4eBytes()
-                val buffer = owned.own(device.createBuffer(BufferDescriptor(
-                    size = bytes.size.toULong(), usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
-                    mappedAtCreation = false, label = label,
-                )))
-                queue.writeBuffer(buffer, 0uL, ArrayBuffer.of(bytes), 0uL, bytes.size.toULong())
-                return buffer
+            fun uniformBinding(passId: String, purpose: String): BufferBinding {
+                val slice = nativePayload.uniformSlice(passId, purpose) ?: throw Refusal(
+                    "invalid.native-core-primitive.w4e-native-buffer",
+                    "W4e $purpose uniform for $passId was not sealed into the shared U slab.",
+                )
+                return BufferBinding(sealedUniform.buffer, slice.offsetBytes.toULong(), slice.byteSize.toULong())
             }
-            fun producerBlock(pass: GPUW4ePreparedClipPassAuthority.Producer): FloatArray {
-                val values = FloatArray(16)
-                values[12] = 1f
-                values[13] = if (pass.inverseCoverage) 1f else 0f
-                values[14] = if (pass.antiAlias) 1f else 0f
-                when (val geometry = pass.geometry) {
-                    is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipGeometry.Rect -> {
-                        val rect = geometry.copyRectF32()
-                        values[0] = rect.left; values[1] = rect.top
-                        values[2] = rect.right; values[3] = rect.bottom
-                    }
-                    is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipGeometry.RRect -> {
-                        val rrect = geometry.copyRRectF32()
-                        values[0] = rrect.rect.left; values[1] = rrect.rect.top
-                        values[2] = rrect.rect.right; values[3] = rrect.rect.bottom
-                        values[4] = rrect.topLeft.x; values[5] = rrect.topLeft.y
-                        values[6] = rrect.topRight.x; values[7] = rrect.topRight.y
-                        values[8] = rrect.bottomRight.x; values[9] = rrect.bottomRight.y
-                        values[10] = rrect.bottomLeft.x; values[11] = rrect.bottomLeft.y
-                        values[12] = 2f
-                    }
-                    is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipGeometry.Path -> {
-                        // The sealed path authority already carries a conservative device-space
-                        // domain.  Task 7 uses it only as a temporary producer scissor; the
-                        // path's hard-edge stencil producer is encoded by its dedicated path pass.
-                        val bounds = geometry.copyPathGeometryF32().copyConservativeScissorI32()
-                        values[0] = bounds.left.toFloat(); values[1] = bounds.top.toFloat()
-                        values[2] = bounds.right.toFloat(); values[3] = bounds.bottom.toFloat()
-                    }
-                    org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipGeometry.Empty -> {
-                        values[0] = 0f; values[1] = 0f; values[2] = 0f; values[3] = 0f
-                    }
-                }
-                return values
+            fun indexedGeometryCommands(
+                passId: String,
+                purpose: String,
+                scissor: GPUPixelBounds,
+            ): List<GPUPreparedNativeRenderCommand> {
+                val slice = nativePayload.geometrySlice(passId, purpose) ?: throw Refusal(
+                    "invalid.native-core-primitive.w4e-native-buffer",
+                    "W4e $purpose geometry for $passId was not sealed into the shared V/I slabs.",
+                )
+                return listOf(
+                    GPUPreparedNativeRenderCommand.SetVertexBuffer(
+                        0,
+                        sealedVertex,
+                        0L,
+                        nativePayload.vertexUsefulBytes,
+                        8L,
+                    ),
+                    GPUPreparedNativeRenderCommand.SetIndexBuffer(
+                        sealedIndex,
+                        GPUPreparedNativeIndexFormat.Uint32,
+                        0L,
+                        nativePayload.indexUsefulBytes,
+                    ),
+                    GPUPreparedNativeRenderCommand.SetScissor(
+                        scissor.left,
+                        scissor.top,
+                        scissor.width,
+                        scissor.height,
+                    ),
+                    GPUPreparedNativeRenderCommand.DrawIndexed(
+                        GPUPreparedNativeDrawCall.DrawIndexed(
+                            indexCount = slice.indexCount,
+                            firstIndex = slice.firstIndex,
+                            baseVertex = slice.baseVertex,
+                            vertexCount = slice.vertexCount,
+                            maxLocalIndex = slice.maxLocalIndex,
+                        ),
+                    ),
+                )
             }
             fun attachment(id: String) = GPUPreparedNativeTextureViewOperand(
                 requireNotNull(attachments.viewFor(id)) { "W4e attachment $id was not leased" }, generationSeal.deviceGeneration,
@@ -3097,57 +3210,31 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                         ))
                     is GPUW4ePreparedClipPassAuthority.Producer -> {
                         val depthTarget = pass.depthStencilResourceId?.let(::attachment)
-                        fun geometryBuffer(label: String, usage: GPUBufferUsage, bytes: ByteArray): GPUPreparedNativeBufferOperand {
-                            val buffer = owned.own(device.createBuffer(BufferDescriptor(
-                                size = bytes.size.toULong(), usage = usage or GPUBufferUsage.CopyDst,
-                                mappedAtCreation = false, label = label,
-                            )))
-                            queue.writeBuffer(buffer, 0uL, ArrayBuffer.of(bytes), 0uL, bytes.size.toULong())
-                            return GPUPreparedNativeBufferOperand(buffer, generationSeal.deviceGeneration)
-                        }
                         val producerCommands = when (val geometry = pass.geometry) {
                             is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipGeometry.Path -> {
                                 val pathGeometry = geometry.copyPathGeometryF32()
                                 val scissor = pathGeometry.copyConservativeScissorI32()
-                                val width = accumulatorTextures.first().second.logicalBounds.width.toFloat()
-                                val height = accumulatorTextures.first().second.logicalBounds.height.toFloat()
-                                fun toNdc(vertices: FloatArray): FloatArray = vertices.copyOf().also { points ->
-                                    points.indices.step(2).forEach { index ->
-                                        points[index] = points[index] * 2f / width - 1f
-                                        points[index + 1] = 1f - points[index + 1] * 2f / height
-                                    }
-                                }
                                 val direct = pathGeometry.copyDirectTriangleF32OrNull()
                                 if (direct != null) {
-                                    val vertices = toNdc(direct.copyVerticesF32())
-                                    val indices = direct.copyIndicesI32()
-                                    val vertex = geometryBuffer("Kanvas.frame.w4e.pathDirectVertices", GPUBufferUsage.Vertex, vertices.w4eBytes())
-                                    val index = geometryBuffer("Kanvas.frame.w4e.pathDirectIndices", GPUBufferUsage.Index, indices.w4eBytes())
                                     val pipeline = createW4ePathGeometryPipeline(
                                         device, GPUTextureFormat.RGBA8Unorm, pass.sampleCount,
                                         if (pass.inverseCoverage) 0f else 1f,
                                         stencil = if (depthTarget != null) w4eStencilNoopState() else null,
                                         label = "Kanvas.frame.w4e.pathDirect.pipeline", owned = owned,
                                     )
-                                    listOf(
-                                        GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand.noBindings(pipeline, generationSeal.deviceGeneration)),
-                                        GPUPreparedNativeRenderCommand.SetVertexBuffer(0, vertex, 0L, vertices.size.toLong() * Float.SIZE_BYTES, 8L),
-                                        GPUPreparedNativeRenderCommand.SetIndexBuffer(index, GPUPreparedNativeIndexFormat.Uint32, 0L, indices.size.toLong() * Int.SIZE_BYTES),
-                                        GPUPreparedNativeRenderCommand.SetScissor(scissor.left, scissor.top, scissor.right - scissor.left, scissor.bottom - scissor.top),
-                                        GPUPreparedNativeRenderCommand.DrawIndexed(GPUPreparedNativeDrawCall.DrawIndexed(
-                                            indexCount = indices.size, firstIndex = 0, baseVertex = 0,
-                                            vertexCount = vertices.size / 2, maxLocalIndex = indices.maxOrNull() ?: 0,
-                                        )),
-                                    )
+                                    buildList {
+                                        add(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand.noBindings(pipeline, generationSeal.deviceGeneration)))
+                                        addAll(indexedGeometryCommands(
+                                            entry.packet.passId,
+                                            W4eNativePayloadPlan.PRODUCER_PATH,
+                                            GPUPixelBounds(scissor.left, scissor.top, scissor.right, scissor.bottom),
+                                        ))
+                                    }
                                 } else {
-                                    val fan = requireNotNull(pathGeometry.copyStencilEdgeFanF32OrNull())
+                                    requireNotNull(pathGeometry.copyStencilEdgeFanF32OrNull())
                                     if (depthTarget == null) throw Refusal(
                                         "invalid.native-core-primitive.w4e-path-depth", "W4e path stencil producer lacks its sealed D24S8 attachment.",
                                     )
-                                    val vertices = toNdc(fan.copyVerticesF32())
-                                    val indices = fan.copyIndicesI32()
-                                    val vertex = geometryBuffer("Kanvas.frame.w4e.pathStencilVertices", GPUBufferUsage.Vertex, vertices.w4eBytes())
-                                    val index = geometryBuffer("Kanvas.frame.w4e.pathStencilIndices", GPUBufferUsage.Index, indices.w4eBytes())
                                     val evenOdd = pathGeometry.fillRule == org.graphiks.math.geometry.FillRule.EVEN_ODD ||
                                         pathGeometry.fillRule == org.graphiks.math.geometry.FillRule.INVERSE_EVEN_ODD
                                     val stencilPipeline = createW4ePathGeometryPipeline(
@@ -3159,26 +3246,23 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                                         device, GPUTextureFormat.RGBA8Unorm, pass.sampleCount,
                                         if (pass.inverseCoverage) 0f else 1f, owned,
                                     )
-                                    listOf(
-                                        GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand.noBindings(stencilPipeline, generationSeal.deviceGeneration)),
-                                        GPUPreparedNativeRenderCommand.SetVertexBuffer(0, vertex, 0L, vertices.size.toLong() * Float.SIZE_BYTES, 8L),
-                                        GPUPreparedNativeRenderCommand.SetIndexBuffer(index, GPUPreparedNativeIndexFormat.Uint32, 0L, indices.size.toLong() * Int.SIZE_BYTES),
-                                        GPUPreparedNativeRenderCommand.SetScissor(scissor.left, scissor.top, scissor.right - scissor.left, scissor.bottom - scissor.top),
-                                        GPUPreparedNativeRenderCommand.DrawIndexed(GPUPreparedNativeDrawCall.DrawIndexed(
-                                            indexCount = indices.size, firstIndex = 0, baseVertex = 0,
-                                            vertexCount = vertices.size / 2, maxLocalIndex = indices.maxOrNull() ?: 0,
-                                        )),
-                                        GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand.noBindings(coverPipeline, generationSeal.deviceGeneration)),
-                                        GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3)),
-                                    )
+                                    buildList {
+                                        add(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand.noBindings(stencilPipeline, generationSeal.deviceGeneration)))
+                                        addAll(indexedGeometryCommands(
+                                            entry.packet.passId,
+                                            W4eNativePayloadPlan.PRODUCER_PATH,
+                                            GPUPixelBounds(scissor.left, scissor.top, scissor.right, scissor.bottom),
+                                        ))
+                                        add(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand.noBindings(coverPipeline, generationSeal.deviceGeneration)))
+                                        add(GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3)))
+                                    }
                                 }
                             }
                             else -> {
                                 val pipeline = producerPipeline(pass.sampleCount)
-                                val producerUniform = uniform("Kanvas.frame.w4e.producerUniform", producerBlock(pass))
                                 val producerBindGroup = owned.own(device.createBindGroup(BindGroupDescriptor(
                                     label = "Kanvas.frame.w4e.producerBindGroup", layout = pipeline.layout,
-                                    entries = listOf(BindGroupEntry(0u, BufferBinding(producerUniform, 0uL, 64uL))),
+                                    entries = listOf(BindGroupEntry(0u, uniformBinding(entry.packet.passId, W4eNativePayloadPlan.PRODUCER_UNIFORM))),
                                 )))
                                 listOf(
                                     GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline.pipeline, generationSeal.deviceGeneration)),
@@ -3238,6 +3322,32 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                                 .GPUW4ePreparedClipConsumerAuthority.InverseDomain &&
                             phase == org.graphiks.kanvas.gpu.plan.PathRenderPhase.HardEdgeMaskProducer
                         ) {
+                            if (sealedPath.copyGeometry() is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Empty) {
+                                // The empty inverse source represents full finite-domain coverage.
+                                // Its hard mask is a sealed fullscreen clear, so it consumes no
+                                // invented path V/I buffer after graph publication.
+                                val load = if (sealedPath.load == AttachmentLoadPlan.ClearTransparent) {
+                                    GPUPreparedNativeLoadOperation.Clear
+                                } else {
+                                    GPUPreparedNativeLoadOperation.Load
+                                }
+                                GPUPreparedNativeScopeOperand.Render(entry.index,
+                                    GPUPreparedNativeRenderPassConfig(
+                                        colorTarget = attachment(sealedPath.targetResourceId),
+                                        loadOperation = load,
+                                        storeOperation = GPUPreparedNativeStoreOperation.Store,
+                                        clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)
+                                            .takeIf { load == GPUPreparedNativeLoadOperation.Clear },
+                                    ), listOf(
+                                        GPUPreparedNativeRenderCommand.SetPipeline(
+                                            GPUPreparedNativeRenderPipelineOperand.noBindings(
+                                                clearPipeline(1f),
+                                                generationSeal.deviceGeneration,
+                                            ),
+                                        ),
+                                        GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3)),
+                                    ))
+                            } else {
                             val fillGeometry = when (val geometry = sealedPath.copyGeometry()) {
                                 is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Fill -> geometry.valueF32
                                 is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Stroke -> geometry.valueF32.copyFillGeometryF32()
@@ -3247,28 +3357,9 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                                     "Only an inverse-domain consumer may carry empty W4e path geometry.",
                                 )
                             }
-                            val direct = fillGeometry.copyDirectTriangleF32OrNull() ?: throw Refusal(
+                            fillGeometry.copyDirectTriangleF32OrNull() ?: throw Refusal(
                                 "invalid.native-core-primitive.w4e-path", "W4e hard-edge mask producer requires direct-triangle geometry.",
                             )
-                            val width = accumulatorTextures.first().second.logicalBounds.width.toFloat()
-                            val height = accumulatorTextures.first().second.logicalBounds.height.toFloat()
-                            val vertices = direct.copyVerticesF32().also { points ->
-                                points.indices.step(2).forEach { index ->
-                                    points[index] = points[index] * 2f / width - 1f
-                                    points[index + 1] = 1f - points[index + 1] * 2f / height
-                                }
-                            }
-                            val indices = direct.copyIndicesI32()
-                            val vertex = owned.own(device.createBuffer(BufferDescriptor(
-                                size = (vertices.size * Float.SIZE_BYTES).toULong(), usage = GPUBufferUsage.Vertex or GPUBufferUsage.CopyDst,
-                                mappedAtCreation = false, label = "Kanvas.frame.w4e.hardMaskVertices",
-                            )))
-                            val index = owned.own(device.createBuffer(BufferDescriptor(
-                                size = (indices.size * Int.SIZE_BYTES).toULong(), usage = GPUBufferUsage.Index or GPUBufferUsage.CopyDst,
-                                mappedAtCreation = false, label = "Kanvas.frame.w4e.hardMaskIndices",
-                            )))
-                            queue.writeBuffer(vertex, 0uL, ArrayBuffer.of(vertices.w4eBytes()), 0uL, (vertices.size * Float.SIZE_BYTES).toULong())
-                            queue.writeBuffer(index, 0uL, ArrayBuffer.of(indices.w4eBytes()), 0uL, (indices.size * Int.SIZE_BYTES).toULong())
                             val pipeline = createW4ePathGeometryPipeline(
                                 device, GPUTextureFormat.RGBA8Unorm, 1, 1f,
                                 label = "Kanvas.frame.w4e.hardMaskProducer", owned = owned,
@@ -3280,16 +3371,11 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                                     loadOperation = load,
                                     storeOperation = GPUPreparedNativeStoreOperation.Store,
                                     clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0).takeIf { load == GPUPreparedNativeLoadOperation.Clear },
-                                ), listOf(
-                                    GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand.noBindings(pipeline, generationSeal.deviceGeneration)),
-                                    GPUPreparedNativeRenderCommand.SetVertexBuffer(0, GPUPreparedNativeBufferOperand(vertex, generationSeal.deviceGeneration), 0L, vertices.size.toLong() * Float.SIZE_BYTES, 8L),
-                                    GPUPreparedNativeRenderCommand.SetIndexBuffer(GPUPreparedNativeBufferOperand(index, generationSeal.deviceGeneration), GPUPreparedNativeIndexFormat.Uint32, 0L, indices.size.toLong() * Int.SIZE_BYTES),
-                                    GPUPreparedNativeRenderCommand.SetScissor(sealedPath.scissor.left, sealedPath.scissor.top, sealedPath.scissor.width, sealedPath.scissor.height),
-                                    GPUPreparedNativeRenderCommand.DrawIndexed(GPUPreparedNativeDrawCall.DrawIndexed(
-                                        indexCount = indices.size, firstIndex = 0, baseVertex = 0,
-                                        vertexCount = vertices.size / 2, maxLocalIndex = indices.maxOrNull() ?: 0,
-                                    )),
-                                ))
+                                ), buildList {
+                                    add(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand.noBindings(pipeline, generationSeal.deviceGeneration)))
+                                    addAll(indexedGeometryCommands(entry.packet.passId, W4eNativePayloadPlan.HARD_MASK_PRODUCER, sealedPath.scissor))
+                                })
+                            }
                         } else if ((consumer !is org.graphiks.kanvas.gpu.renderer.passes
                                 .GPUW4ePreparedClipConsumerAuthority.InverseDomain || preservesZeroInverseSource) && isStencilProducer
                         ) {
@@ -3304,27 +3390,11 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                             }
                             val direct = fillGeometry.copyDirectTriangleF32OrNull()
                             val fan = fillGeometry.copyStencilEdgeFanF32OrNull()
-                            val rawVertices = when {
-                                direct != null -> direct.copyVerticesF32()
-                                fan != null -> fan.copyVerticesF32()
-                                else -> throw Refusal("invalid.native-core-primitive.w4e-path", "W4e stencil producer has no sealed drawable geometry.")
-                            }
-                            val rawIndices = when {
-                                direct != null -> direct.copyIndicesI32()
-                                fan != null -> fan.copyIndicesI32()
-                                else -> error("drawable geometry was checked above")
-                            }
+                            if (direct == null && fan == null) throw Refusal(
+                                "invalid.native-core-primitive.w4e-path",
+                                "W4e stencil producer has no sealed drawable geometry.",
+                            )
                             val maskTarget = attachments.isCoverageMaskResource(sealedPath.targetResourceId)
-                            val width = if (maskTarget) accumulatorTextures.first().second.logicalBounds.width.toFloat()
-                            else preparedSceneTarget.width.toFloat()
-                            val height = if (maskTarget) accumulatorTextures.first().second.logicalBounds.height.toFloat()
-                            else preparedSceneTarget.height.toFloat()
-                            val vertices = rawVertices.also { points ->
-                                points.indices.step(2).forEach { index ->
-                                    points[index] = points[index] * 2f / width - 1f
-                                    points[index + 1] = 1f - points[index + 1] * 2f / height
-                                }
-                            }
                             val sampleCount = if (sealedPath.sample == org.graphiks.kanvas.gpu.plan.SamplePlan.Multisample4) 4 else 1
                             val format = if (maskTarget) GPUTextureFormat.RGBA8Unorm else GPUTextureFormat.RGBA8UnormSrgb
                             val depth = sealedPath.depthStencilResourceId?.let(::attachment)
@@ -3341,20 +3411,6 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                                 label = "Kanvas.frame.w4e.pathPhase.stencilProducer",
                                 owned = owned,
                             )
-                            val vertex = owned.own(device.createBuffer(BufferDescriptor(
-                                size = (vertices.size * Float.SIZE_BYTES).toULong(),
-                                usage = GPUBufferUsage.Vertex or GPUBufferUsage.CopyDst,
-                                mappedAtCreation = false,
-                                label = "Kanvas.frame.w4e.pathPhase.stencilVertices",
-                            )))
-                            val index = owned.own(device.createBuffer(BufferDescriptor(
-                                size = (rawIndices.size * Int.SIZE_BYTES).toULong(),
-                                usage = GPUBufferUsage.Index or GPUBufferUsage.CopyDst,
-                                mappedAtCreation = false,
-                                label = "Kanvas.frame.w4e.pathPhase.stencilIndices",
-                            )))
-                            queue.writeBuffer(vertex, 0uL, ArrayBuffer.of(vertices.w4eBytes()), 0uL, (vertices.size * Float.SIZE_BYTES).toULong())
-                            queue.writeBuffer(index, 0uL, ArrayBuffer.of(rawIndices.w4eBytes()), 0uL, (rawIndices.size * Int.SIZE_BYTES).toULong())
                             val load = if (sealedPath.load == AttachmentLoadPlan.ClearTransparent) GPUPreparedNativeLoadOperation.Clear else GPUPreparedNativeLoadOperation.Load
                             val stencilLoad = when (sealedPath.depthStencilLoadStore) {
                                 PlanDepthStencilLoadStore.ClearZeroStore -> GPUPreparedNativeLoadOperation.Clear
@@ -3374,20 +3430,11 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                                     stencilLoadOperation = stencilLoad,
                                     stencilStoreOperation = GPUPreparedNativeStoreOperation.Store,
                                     stencilReadOnly = false,
-                                ), listOf(
-                                    GPUPreparedNativeRenderCommand.SetStencilReference(1u),
-                                    GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand.noBindings(pipeline, generationSeal.deviceGeneration)),
-                                    GPUPreparedNativeRenderCommand.SetVertexBuffer(0, GPUPreparedNativeBufferOperand(vertex, generationSeal.deviceGeneration), 0L, vertices.size.toLong() * Float.SIZE_BYTES, 8L),
-                                    GPUPreparedNativeRenderCommand.SetIndexBuffer(GPUPreparedNativeBufferOperand(index, generationSeal.deviceGeneration), GPUPreparedNativeIndexFormat.Uint32, 0L, rawIndices.size.toLong() * Int.SIZE_BYTES),
-                                    GPUPreparedNativeRenderCommand.SetScissor(sealedPath.scissor.left, sealedPath.scissor.top, sealedPath.scissor.width, sealedPath.scissor.height),
-                                    GPUPreparedNativeRenderCommand.DrawIndexed(GPUPreparedNativeDrawCall.DrawIndexed(
-                                        indexCount = rawIndices.size,
-                                        firstIndex = 0,
-                                        baseVertex = 0,
-                                        vertexCount = vertices.size / 2,
-                                        maxLocalIndex = rawIndices.maxOrNull() ?: 0,
-                                    )),
-                                ))
+                                ), buildList {
+                                    add(GPUPreparedNativeRenderCommand.SetStencilReference(1u))
+                                    add(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand.noBindings(pipeline, generationSeal.deviceGeneration)))
+                                    addAll(indexedGeometryCommands(entry.packet.passId, W4eNativePayloadPlan.STENCIL_PRODUCER, sealedPath.scissor))
+                                })
                         } else if ((consumer !is org.graphiks.kanvas.gpu.renderer.passes
                                 .GPUW4ePreparedClipConsumerAuthority.InverseDomain || preservesZeroInverseSource) && isStencilCover
                         ) {
@@ -3424,38 +3471,10 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                                 val geometry = inverseDomain.interiorCoverage.copyGeometryF32()
                                 val direct = geometry.copyDirectTriangleF32OrNull()
                                 val fan = geometry.copyStencilEdgeFanF32OrNull()
-                                val rawVertices = when {
-                                    direct != null -> direct.copyVerticesF32()
-                                    fan != null -> fan.copyVerticesF32()
-                                    else -> throw Refusal("invalid.native-core-primitive.w4e-inverse-domain", "W4e inverse-domain interior is not drawable.")
-                                }
-                                val rawIndices = when {
-                                    direct != null -> direct.copyIndicesI32()
-                                    fan != null -> fan.copyIndicesI32()
-                                    else -> error("drawable geometry was checked above")
-                                }
-                                val width = accumulatorTextures.first().second.logicalBounds.width.toFloat()
-                                val height = accumulatorTextures.first().second.logicalBounds.height.toFloat()
-                                val vertices = rawVertices.also { points ->
-                                    points.indices.step(2).forEach { index ->
-                                        points[index] = points[index] * 2f / width - 1f
-                                        points[index + 1] = 1f - points[index + 1] * 2f / height
-                                    }
-                                }
-                                val vertex = owned.own(device.createBuffer(BufferDescriptor(
-                                    size = (vertices.size * Float.SIZE_BYTES).toULong(),
-                                    usage = GPUBufferUsage.Vertex or GPUBufferUsage.CopyDst,
-                                    mappedAtCreation = false,
-                                    label = "Kanvas.frame.w4e.pathPhase.inverseInteriorVertices",
-                                )))
-                                val index = owned.own(device.createBuffer(BufferDescriptor(
-                                    size = (rawIndices.size * Int.SIZE_BYTES).toULong(),
-                                    usage = GPUBufferUsage.Index or GPUBufferUsage.CopyDst,
-                                    mappedAtCreation = false,
-                                    label = "Kanvas.frame.w4e.pathPhase.inverseInteriorIndices",
-                                )))
-                                queue.writeBuffer(vertex, 0uL, ArrayBuffer.of(vertices.w4eBytes()), 0uL, (vertices.size * Float.SIZE_BYTES).toULong())
-                                queue.writeBuffer(index, 0uL, ArrayBuffer.of(rawIndices.w4eBytes()), 0uL, (rawIndices.size * Int.SIZE_BYTES).toULong())
+                                if (direct == null && fan == null) throw Refusal(
+                                    "invalid.native-core-primitive.w4e-inverse-domain",
+                                    "W4e inverse-domain interior is not drawable.",
+                                )
                                 val zero = createW4ePathGeometryPipeline(
                                     device,
                                     format,
@@ -3466,19 +3485,10 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                                     label = "Kanvas.frame.w4e.pathPhase.inverseInteriorZero",
                                     owned = owned,
                                 )
-                                listOf(
-                                    GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand.noBindings(zero, generationSeal.deviceGeneration)),
-                                    GPUPreparedNativeRenderCommand.SetVertexBuffer(0, GPUPreparedNativeBufferOperand(vertex, generationSeal.deviceGeneration), 0L, vertices.size.toLong() * Float.SIZE_BYTES, 8L),
-                                    GPUPreparedNativeRenderCommand.SetIndexBuffer(GPUPreparedNativeBufferOperand(index, generationSeal.deviceGeneration), GPUPreparedNativeIndexFormat.Uint32, 0L, rawIndices.size.toLong() * Int.SIZE_BYTES),
-                                    GPUPreparedNativeRenderCommand.SetScissor(coverScissor.left, coverScissor.top, coverScissor.width, coverScissor.height),
-                                    GPUPreparedNativeRenderCommand.DrawIndexed(GPUPreparedNativeDrawCall.DrawIndexed(
-                                        indexCount = rawIndices.size,
-                                        firstIndex = 0,
-                                        baseVertex = 0,
-                                        vertexCount = vertices.size / 2,
-                                        maxLocalIndex = rawIndices.maxOrNull() ?: 0,
-                                    )),
-                                )
+                                buildList {
+                                    add(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand.noBindings(zero, generationSeal.deviceGeneration)))
+                                    addAll(indexedGeometryCommands(entry.packet.passId, W4eNativePayloadPlan.INVERSE_INTERIOR_COVER, coverScissor))
+                                }
                             } else emptyList()
                             val (pipeline, bindGroup) = if (maskTarget) {
                                 val cover = createW4ePathCoverPipeline(device, format, sampleCount, 1f, owned)
@@ -3497,22 +3507,21 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                                         } else {
                                             inverseMaskStencilConsumerPipeline(format, sampleCount)
                                         }
-                                        val data = uniform("Kanvas.frame.w4e.pathPhase.consumer", floatArrayOf(
-                                            color.red, color.green, color.blue, color.alpha, 0f, 0f, 0f, 0f,
-                                        ))
                                         val bindings = owned.own(device.createBindGroup(BindGroupDescriptor(
                                             label = "Kanvas.frame.w4e.pathPhase.consumerBindGroup", layout = cover.layout,
-                                            entries = listOf(BindGroupEntry(0u, attachment(mask).view), BindGroupEntry(1u, BufferBinding(data, 0uL, 32uL))),
+                                            entries = listOf(
+                                                BindGroupEntry(0u, attachment(mask).view),
+                                                BindGroupEntry(1u, uniformBinding(entry.packet.passId, W4eNativePayloadPlan.STENCIL_COVER_UNIFORM)),
+                                            ),
                                         )))
                                         GPUPreparedNativeRenderPipelineOperand(cover.pipeline, generationSeal.deviceGeneration) to
                                             GPUPreparedNativeBindGroupOperand(bindings, generationSeal.deviceGeneration)
                                     }
                                     else -> {
                                         val cover = inverseDomainPipeline(format, sampleCount)
-                                        val data = uniform("Kanvas.frame.w4e.pathPhase.unmasked", floatArrayOf(color.red, color.green, color.blue, color.alpha))
                                         val bindings = owned.own(device.createBindGroup(BindGroupDescriptor(
                                             label = "Kanvas.frame.w4e.pathPhase.unmaskedBindGroup", layout = cover.layout,
-                                            entries = listOf(BindGroupEntry(0u, BufferBinding(data, 0uL, 16uL))),
+                                            entries = listOf(BindGroupEntry(0u, uniformBinding(entry.packet.passId, W4eNativePayloadPlan.STENCIL_COVER_UNIFORM))),
                                         )))
                                         GPUPreparedNativeRenderPipelineOperand(cover.pipeline, generationSeal.deviceGeneration) to
                                             GPUPreparedNativeBindGroupOperand(bindings, generationSeal.deviceGeneration)
@@ -3552,8 +3561,6 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                                     geometry is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Stroke
                             }
                             val pathSampleCount = if (inversePath.sample == org.graphiks.kanvas.gpu.plan.SamplePlan.Multisample4) 4 else 1
-                            val width = preparedSceneTarget.width.toFloat()
-                            val height = preparedSceneTarget.height.toFloat()
                             fun intersect(a: GPUPixelBounds, b: GPUPixelBounds): GPUPixelBounds = GPUPixelBounds(
                                 maxOf(a.left, b.left), maxOf(a.top, b.top),
                                 minOf(a.right, b.right), minOf(a.bottom, b.bottom),
@@ -3563,102 +3570,21 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                                 }
                             }
                             fun geometryCommands(
-                                geometry: org.graphiks.math.geometry.PathFillGeometryF32,
+                                purpose: String,
                                 pipeline: GPURenderPipeline,
                                 scissor: GPUPixelBounds,
-                                label: String,
-                            ): List<GPUPreparedNativeRenderCommand> {
-                                val directTriangle = geometry.copyDirectTriangleF32OrNull()
-                                val stencilFan = geometry.copyStencilEdgeFanF32OrNull()
-                                val rawVertices = when {
-                                    directTriangle != null -> directTriangle.copyVerticesF32()
-                                    stencilFan != null -> stencilFan.copyVerticesF32()
-                                    else -> throw Refusal("invalid.native-core-primitive.w4e-inverse-domain", "W4e inverse-domain geometry is not drawable.")
-                                }
-                                val rawIndices = when {
-                                    directTriangle != null -> directTriangle.copyIndicesI32()
-                                    stencilFan != null -> stencilFan.copyIndicesI32()
-                                    else -> error("drawable geometry was checked above")
-                                }
-                                val vertices = rawVertices.also { points ->
-                                    points.indices.step(2).forEach { index ->
-                                        points[index] = points[index] * 2f / width - 1f
-                                        points[index + 1] = 1f - points[index + 1] * 2f / height
-                                    }
-                                }
-                                val indices = rawIndices
-                                val vertexBuffer = owned.own(device.createBuffer(BufferDescriptor(
-                                    size = (vertices.size * Float.SIZE_BYTES).toULong(),
-                                    usage = GPUBufferUsage.Vertex or GPUBufferUsage.CopyDst,
-                                    mappedAtCreation = false,
-                                    label = "Kanvas.frame.w4e.$label.vertices",
-                                )))
-                                val indexBuffer = owned.own(device.createBuffer(BufferDescriptor(
-                                    size = (indices.size * Int.SIZE_BYTES).toULong(),
-                                    usage = GPUBufferUsage.Index or GPUBufferUsage.CopyDst,
-                                    mappedAtCreation = false,
-                                    label = "Kanvas.frame.w4e.$label.indices",
-                                )))
-                                queue.writeBuffer(vertexBuffer, 0uL, ArrayBuffer.of(vertices.w4eBytes()), 0uL, (vertices.size * Float.SIZE_BYTES).toULong())
-                                queue.writeBuffer(indexBuffer, 0uL, ArrayBuffer.of(indices.w4eBytes()), 0uL, (indices.size * Int.SIZE_BYTES).toULong())
-                                return listOf(
-                                    GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand.noBindings(pipeline, generationSeal.deviceGeneration)),
-                                    GPUPreparedNativeRenderCommand.SetVertexBuffer(0, GPUPreparedNativeBufferOperand(vertexBuffer, generationSeal.deviceGeneration), 0L, vertices.size.toLong() * Float.SIZE_BYTES, 8L),
-                                    GPUPreparedNativeRenderCommand.SetIndexBuffer(GPUPreparedNativeBufferOperand(indexBuffer, generationSeal.deviceGeneration), GPUPreparedNativeIndexFormat.Uint32, 0L, indices.size.toLong() * Int.SIZE_BYTES),
-                                    GPUPreparedNativeRenderCommand.SetScissor(scissor.left, scissor.top, scissor.width, scissor.height),
-                                    GPUPreparedNativeRenderCommand.DrawIndexed(GPUPreparedNativeDrawCall.DrawIndexed(
-                                        indexCount = indices.size,
-                                        firstIndex = 0,
-                                        baseVertex = 0,
-                                        vertexCount = vertices.size / 2,
-                                        maxLocalIndex = indices.maxOrNull() ?: 0,
-                                    )),
-                                )
+                            ): List<GPUPreparedNativeRenderCommand> = buildList {
+                                add(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand.noBindings(pipeline, generationSeal.deviceGeneration)))
+                                addAll(indexedGeometryCommands(entry.packet.passId, purpose, scissor))
                             }
                             fun domainStencilCommands(
                                 pipeline: GPURenderPipeline,
                                 domain: GPUPixelBounds,
-                            ): List<GPUPreparedNativeRenderCommand> {
-                                val vertices = floatArrayOf(
-                                    domain.left.toFloat(), domain.top.toFloat(),
-                                    domain.right.toFloat(), domain.top.toFloat(),
-                                    domain.right.toFloat(), domain.bottom.toFloat(),
-                                    domain.left.toFloat(), domain.bottom.toFloat(),
-                                ).also { points ->
-                                    points.indices.step(2).forEach { index ->
-                                        points[index] = points[index] * 2f / width - 1f
-                                        points[index + 1] = 1f - points[index + 1] * 2f / height
-                                    }
-                                }
-                                val indices = intArrayOf(0, 1, 2, 0, 2, 3)
-                                val vertexBuffer = owned.own(device.createBuffer(BufferDescriptor(
-                                    size = (vertices.size * Float.SIZE_BYTES).toULong(),
-                                    usage = GPUBufferUsage.Vertex or GPUBufferUsage.CopyDst,
-                                    mappedAtCreation = false,
-                                    label = "Kanvas.frame.w4e.inverseDomain.domain.vertices",
-                                )))
-                                val indexBuffer = owned.own(device.createBuffer(BufferDescriptor(
-                                    size = (indices.size * Int.SIZE_BYTES).toULong(),
-                                    usage = GPUBufferUsage.Index or GPUBufferUsage.CopyDst,
-                                    mappedAtCreation = false,
-                                    label = "Kanvas.frame.w4e.inverseDomain.domain.indices",
-                                )))
-                                queue.writeBuffer(vertexBuffer, 0uL, ArrayBuffer.of(vertices.w4eBytes()), 0uL, (vertices.size * Float.SIZE_BYTES).toULong())
-                                queue.writeBuffer(indexBuffer, 0uL, ArrayBuffer.of(indices.w4eBytes()), 0uL, (indices.size * Int.SIZE_BYTES).toULong())
-                                return listOf(
-                                    GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand.noBindings(pipeline, generationSeal.deviceGeneration)),
-                                    GPUPreparedNativeRenderCommand.SetVertexBuffer(0, GPUPreparedNativeBufferOperand(vertexBuffer, generationSeal.deviceGeneration), 0L, vertices.size.toLong() * Float.SIZE_BYTES, 8L),
-                                    GPUPreparedNativeRenderCommand.SetIndexBuffer(GPUPreparedNativeBufferOperand(indexBuffer, generationSeal.deviceGeneration), GPUPreparedNativeIndexFormat.Uint32, 0L, indices.size.toLong() * Int.SIZE_BYTES),
-                                    GPUPreparedNativeRenderCommand.SetScissor(domain.left, domain.top, domain.width, domain.height),
-                                    GPUPreparedNativeRenderCommand.DrawIndexed(GPUPreparedNativeDrawCall.DrawIndexed(
-                                        indexCount = indices.size,
-                                        firstIndex = 0,
-                                        baseVertex = 0,
-                                        vertexCount = vertices.size / 2,
-                                        maxLocalIndex = 3,
-                                    )),
-                                )
-                            }
+                            ): List<GPUPreparedNativeRenderCommand> = geometryCommands(
+                                W4eNativePayloadPlan.INVERSE_DOMAIN_QUAD,
+                                pipeline,
+                                domain,
+                            )
                             // The finite inverse domain is clip authority.  The source scissor only bounds
                             // the interior geometry; intersecting the cover with it would incorrectly erase
                             // the exterior of every non-rectangular inverse draw.
@@ -3677,9 +3603,10 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                                 // No interior clip must not erase the sealed source draw.  A genuinely empty
                                 // source remains the one case where the finite domain itself is the draw;
                                 // otherwise rasterize the original geometry without manufacturing a D24S8.
-                                val colorUniform = uniform("Kanvas.frame.w4e.inverseDomainZeroColor", floatArrayOf(
-                                    color.red, color.green, color.blue, color.alpha,
-                                ))
+                                val colorUniform = uniformBinding(
+                                    entry.packet.passId,
+                                    W4eNativePayloadPlan.INVERSE_DOMAIN_ZERO_UNIFORM,
+                                )
                                 val sourceDirect = when (val source = inversePath.copyGeometry()) {
                                     is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Fill ->
                                         source.valueF32.copyDirectTriangleF32OrNull()
@@ -3698,7 +3625,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                                     val bindings = owned.own(device.createBindGroup(BindGroupDescriptor(
                                         label = "Kanvas.frame.w4e.inverseDomainZeroBindGroup",
                                         layout = cover.layout,
-                                        entries = listOf(BindGroupEntry(0u, BufferBinding(colorUniform, 0uL, 16uL))),
+                                        entries = listOf(BindGroupEntry(0u, colorUniform)),
                                     )))
                                     Triple(
                                         GPUPreparedNativeRenderPipelineOperand(cover.pipeline, generationSeal.deviceGeneration),
@@ -3706,30 +3633,9 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                                         listOf(GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3))),
                                     )
                                 } else {
-                                    val direct = requireNotNull(sourceDirect) {
+                                    requireNotNull(sourceDirect) {
                                         "W4e zero-interior path geometry requires a direct D24-free triangulation."
                                     }
-                                    val vertices = direct.copyVerticesF32().also { points ->
-                                        points.indices.step(2).forEach { index ->
-                                            points[index] = points[index] * 2f / width - 1f
-                                            points[index + 1] = 1f - points[index + 1] * 2f / height
-                                        }
-                                    }
-                                    val indices = direct.copyIndicesI32()
-                                    val vertex = owned.own(device.createBuffer(BufferDescriptor(
-                                        size = (vertices.size * Float.SIZE_BYTES).toULong(),
-                                        usage = GPUBufferUsage.Vertex or GPUBufferUsage.CopyDst,
-                                        mappedAtCreation = false,
-                                        label = "Kanvas.frame.w4e.inverseDomainZero.sourceVertices",
-                                    )))
-                                    val index = owned.own(device.createBuffer(BufferDescriptor(
-                                        size = (indices.size * Int.SIZE_BYTES).toULong(),
-                                        usage = GPUBufferUsage.Index or GPUBufferUsage.CopyDst,
-                                        mappedAtCreation = false,
-                                        label = "Kanvas.frame.w4e.inverseDomainZero.sourceIndices",
-                                    )))
-                                    queue.writeBuffer(vertex, 0uL, ArrayBuffer.of(vertices.w4eBytes()), 0uL, (vertices.size * Float.SIZE_BYTES).toULong())
-                                    queue.writeBuffer(index, 0uL, ArrayBuffer.of(indices.w4eBytes()), 0uL, (indices.size * Int.SIZE_BYTES).toULong())
                                     val directPipeline = createW4eUnmaskedPathPipeline(
                                         device,
                                         GPUTextureFormat.RGBA8UnormSrgb,
@@ -3739,21 +3645,15 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                                     val bindings = owned.own(device.createBindGroup(BindGroupDescriptor(
                                         label = "Kanvas.frame.w4e.inverseDomainZeroSourceBindGroup",
                                         layout = directPipeline.layout,
-                                        entries = listOf(BindGroupEntry(0u, BufferBinding(colorUniform, 0uL, 16uL))),
+                                        entries = listOf(BindGroupEntry(0u, colorUniform)),
                                     )))
                                     Triple(
                                         GPUPreparedNativeRenderPipelineOperand(directPipeline.pipeline, generationSeal.deviceGeneration),
                                         GPUPreparedNativeBindGroupOperand(bindings, generationSeal.deviceGeneration),
-                                        listOf(
-                                            GPUPreparedNativeRenderCommand.SetVertexBuffer(0, GPUPreparedNativeBufferOperand(vertex, generationSeal.deviceGeneration), 0L, vertices.size.toLong() * Float.SIZE_BYTES, 8L),
-                                            GPUPreparedNativeRenderCommand.SetIndexBuffer(GPUPreparedNativeBufferOperand(index, generationSeal.deviceGeneration), GPUPreparedNativeIndexFormat.Uint32, 0L, indices.size.toLong() * Int.SIZE_BYTES),
-                                            GPUPreparedNativeRenderCommand.DrawIndexed(GPUPreparedNativeDrawCall.DrawIndexed(
-                                                indexCount = indices.size,
-                                                firstIndex = 0,
-                                                baseVertex = 0,
-                                                vertexCount = vertices.size / 2,
-                                                maxLocalIndex = indices.maxOrNull() ?: 0,
-                                            )),
+                                        indexedGeometryCommands(
+                                            entry.packet.passId,
+                                            W4eNativePayloadPlan.INVERSE_DOMAIN_ZERO_SOURCE,
+                                            drawDomain,
                                         ),
                                     )
                                 }
@@ -3791,8 +3691,6 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                                     label = "Kanvas.frame.w4e.inverseDomain.domainStencil",
                                     owned = owned,
                                 )
-                                val interior = (consumer.interiorCoverage as org.graphiks.kanvas.gpu.renderer.passes
-                                    .GPUW4ePreparedInverseInteriorCoverage.Geometry).copyGeometryF32()
                                 val zeroPipeline = createW4ePathGeometryPipeline(
                                     device,
                                     GPUTextureFormat.RGBA8UnormSrgb,
@@ -3804,13 +3702,14 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                                     owned = owned,
                                 )
                                 val cover = inverseDomainPipeline(GPUTextureFormat.RGBA8UnormSrgb, pathSampleCount)
-                                val colorUniform = uniform("Kanvas.frame.w4e.inverseDomainColor", floatArrayOf(
-                                    color.red, color.green, color.blue, color.alpha,
-                                ))
+                                val colorUniform = uniformBinding(
+                                    entry.packet.passId,
+                                    W4eNativePayloadPlan.INVERSE_DOMAIN_UNIFORM,
+                                )
                                 val bindGroup = owned.own(device.createBindGroup(BindGroupDescriptor(
                                     label = "Kanvas.frame.w4e.inverseDomainBindGroup",
                                     layout = cover.layout,
-                                    entries = listOf(BindGroupEntry(0u, BufferBinding(colorUniform, 0uL, 16uL))),
+                                    entries = listOf(BindGroupEntry(0u, colorUniform)),
                                 )))
                                 val commands = buildList {
                                     // The domain is the clip support.  The original sealed draw geometry is
@@ -3818,7 +3717,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                                     // never replaced by this rectangle.
                                     add(GPUPreparedNativeRenderCommand.SetStencilReference(1u))
                                     addAll(domainStencilCommands(domainStencil, drawDomain))
-                                    addAll(geometryCommands(interior, zeroPipeline, drawDomain, "inverseDomain-interior"))
+                                    addAll(geometryCommands(W4eNativePayloadPlan.INVERSE_DOMAIN_INTERIOR, zeroPipeline, drawDomain))
                                     add(GPUPreparedNativeRenderCommand.SetStencilReference(0u))
                                     add(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(cover.pipeline, generationSeal.deviceGeneration)))
                                     add(GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(bindGroup, generationSeal.deviceGeneration)))
@@ -3844,17 +3743,21 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                                     ), commands)
                             }
                         } else {
-                        val maskConsumer = requireNotNull(consumer) {
-                            "W4e color path has no sealed read-only clip consumer."
-                        }
-                        val (maskResource, inverse) = when (maskConsumer) {
-                            is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.Mask ->
-                                maskConsumer.maskResourceId to false
-                            is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseMask ->
-                                maskConsumer.maskResourceId to true
+                        val maskConsumer = when (consumer) {
+                            is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.Mask -> consumer
+                            is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseMask -> consumer
                             is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseDomain ->
                                 error("Inverse-domain was handled by its dedicated stencil branch.")
+                            null -> null
                         }
+                        val maskResource = when (maskConsumer) {
+                            is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.Mask -> maskConsumer.maskResourceId
+                            is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseMask -> maskConsumer.maskResourceId
+                            is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseDomain ->
+                                error("Inverse-domain was handled by its dedicated stencil branch.")
+                            null -> null
+                        }
+                        val inverse = maskConsumer is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseMask
                         val color = path?.color ?: throw Refusal("invalid.native-core-primitive.w4e-path", "W4e consumer path authority is absent.")
                         val directGeometry = when (val geometry = path.copyGeometry()) {
                             is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Fill -> geometry.valueF32
@@ -3866,64 +3769,47 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                         val hardBinaryCover = path.phase == org.graphiks.kanvas.gpu.plan.PathRenderPhase.HardEdgeBinaryColorCover
                         val directPath = directGeometry != null && !hardBinaryCover
                         val pipeline = when {
+                            maskConsumer == null && directPath -> createW4eUnmaskedPathPipeline(
+                                device, GPUTextureFormat.RGBA8UnormSrgb, pathSampleCount, owned,
+                            )
+                            maskConsumer == null -> createW4eUnmaskedCoverPipeline(
+                                device, GPUTextureFormat.RGBA8UnormSrgb, pathSampleCount, owned = owned,
+                            )
                             hardBinaryCover -> binaryConsumerPipeline(GPUTextureFormat.RGBA8UnormSrgb, pathSampleCount)
-                            directPath ->
-                            maskedPathPipeline(GPUTextureFormat.RGBA8UnormSrgb, pathSampleCount)
+                            directPath -> maskedPathPipeline(GPUTextureFormat.RGBA8UnormSrgb, pathSampleCount)
                             else -> consumerPipeline(GPUTextureFormat.RGBA8UnormSrgb, pathSampleCount)
                         }
-                        val consumerUniform = uniform("Kanvas.frame.w4e.consumerUniform", floatArrayOf(
-                            color.red, color.green, color.blue, color.alpha, if (inverse) 1f else 0f, 0f, 0f, 0f,
-                        ))
+                        val consumerUniform = uniformBinding(entry.packet.passId, W4eNativePayloadPlan.CONSUMER_UNIFORM)
                         val bindGroup = owned.own(device.createBindGroup(BindGroupDescriptor(
                             label = "Kanvas.frame.w4e.consumerBindGroup", layout = pipeline.layout,
-                            entries = if (hardBinaryCover) listOf(
+                            entries = if (maskConsumer == null) listOf(
+                                BindGroupEntry(0u, consumerUniform),
+                            ) else if (hardBinaryCover) listOf(
                                 BindGroupEntry(0u, attachment(requireNotNull(path.binarySourceMaskResourceId) {
                                     "W4e hard-edge binary color cover lacks its sealed source mask."
                                 }).view),
-                                BindGroupEntry(1u, attachment(maskResource).view),
-                                BindGroupEntry(2u, BufferBinding(consumerUniform, 0uL, 32uL)),
+                                BindGroupEntry(1u, attachment(requireNotNull(maskResource)).view),
+                                BindGroupEntry(2u, consumerUniform),
                             ) else listOf(
-                                BindGroupEntry(0u, attachment(maskResource).view),
-                                BindGroupEntry(1u, BufferBinding(consumerUniform, 0uL, 32uL)),
+                                BindGroupEntry(0u, attachment(requireNotNull(maskResource)).view),
+                                BindGroupEntry(1u, consumerUniform),
                             ),
                         )))
                         val pathCommands = if (!directPath) {
-                            listOf(
-                                GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline.pipeline, generationSeal.deviceGeneration)),
-                                GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(bindGroup, generationSeal.deviceGeneration)),
-                                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3)),
-                            )
-                        } else {
-                            val width = accumulatorTextures.first().second.logicalBounds.width.toFloat()
-                            val height = accumulatorTextures.first().second.logicalBounds.height.toFloat()
-                            val vertices = directGeometry.copyVerticesF32().also { points ->
-                                points.indices.step(2).forEach { index ->
-                                    points[index] = points[index] * 2f / width - 1f
-                                    points[index + 1] = 1f - points[index + 1] * 2f / height
+                            buildList {
+                                if (maskConsumer == null) {
+                                    add(GPUPreparedNativeRenderCommand.SetScissor(path.scissor.left, path.scissor.top, path.scissor.width, path.scissor.height))
                                 }
+                                add(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline.pipeline, generationSeal.deviceGeneration)))
+                                add(GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(bindGroup, generationSeal.deviceGeneration)))
+                                add(GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3)))
                             }
-                            val indices = directGeometry.copyIndicesI32()
-                            val vertexBuffer = owned.own(device.createBuffer(BufferDescriptor(
-                                size = (vertices.size * Float.SIZE_BYTES).toULong(), usage = GPUBufferUsage.Vertex or GPUBufferUsage.CopyDst,
-                                mappedAtCreation = false, label = "Kanvas.frame.w4e.consumerPathVertices",
-                            )))
-                            val indexBuffer = owned.own(device.createBuffer(BufferDescriptor(
-                                size = (indices.size * Int.SIZE_BYTES).toULong(), usage = GPUBufferUsage.Index or GPUBufferUsage.CopyDst,
-                                mappedAtCreation = false, label = "Kanvas.frame.w4e.consumerPathIndices",
-                            )))
-                            queue.writeBuffer(vertexBuffer, 0uL, ArrayBuffer.of(vertices.w4eBytes()), 0uL, (vertices.size * Float.SIZE_BYTES).toULong())
-                            queue.writeBuffer(indexBuffer, 0uL, ArrayBuffer.of(indices.w4eBytes()), 0uL, (indices.size * Int.SIZE_BYTES).toULong())
-                            listOf(
-                                GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline.pipeline, generationSeal.deviceGeneration)),
-                                GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(bindGroup, generationSeal.deviceGeneration)),
-                                GPUPreparedNativeRenderCommand.SetVertexBuffer(0, GPUPreparedNativeBufferOperand(vertexBuffer, generationSeal.deviceGeneration), 0L, vertices.size.toLong() * Float.SIZE_BYTES, 8L),
-                                GPUPreparedNativeRenderCommand.SetIndexBuffer(GPUPreparedNativeBufferOperand(indexBuffer, generationSeal.deviceGeneration), GPUPreparedNativeIndexFormat.Uint32, 0L, indices.size.toLong() * Int.SIZE_BYTES),
-                                GPUPreparedNativeRenderCommand.SetScissor(path.scissor.left, path.scissor.top, path.scissor.width, path.scissor.height),
-                                GPUPreparedNativeRenderCommand.DrawIndexed(GPUPreparedNativeDrawCall.DrawIndexed(
-                                    indexCount = indices.size, firstIndex = 0, baseVertex = 0,
-                                    vertexCount = vertices.size / 2, maxLocalIndex = indices.maxOrNull() ?: 0,
-                                )),
-                            )
+                        } else {
+                            buildList {
+                                add(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline.pipeline, generationSeal.deviceGeneration)))
+                                add(GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(bindGroup, generationSeal.deviceGeneration)))
+                                addAll(indexedGeometryCommands(entry.packet.passId, W4eNativePayloadPlan.CONSUMER_DIRECT, path.scissor))
+                            }
                         }
                         val scenePathSampleCount = pathSampleCount
                         val pathDepth = path.depthStencilResourceId?.let(::attachment)

@@ -60,6 +60,7 @@ public fun prepareTransformedClipStackGeometryF32(
     frameWorkUsageBeforeI64: ClipWorkUsageI64 = ClipWorkUsageI64(),
 ): ClipStackPreparationResult = try {
     val ledgerI64 = MatrixClipWorkLedgerI64(stackWorkUsageBeforeI64, frameWorkUsageBeforeI64, policyF64)
+    ledgerI64.preflightEntryCountBeforeProjectionI64(entriesF64.size.toLong())
     val deviceInputsF64 = entriesF64.map { inputF64 ->
         val entryI64 = ledgerI64.beginEntryI64()
         val geometryF64 = transformClipGeometryF64(inputF64.geometryF64, inputF64.matrixF64, entryI64, policyF64)
@@ -104,8 +105,11 @@ private fun transformRectF64(sourceF64: ClipTransformGeometryF64.Rect, matrixF64
 private fun transformRRectF64(sourceF64: ClipTransformGeometryF64.RRect, matrixF64: Matrix3x3F64, entryI64: MatrixClipEntryLedgerI64, policyF64: ClipPreparationPolicyF64): ClipDeviceGeometryF64 {
     val transformClassF64 = matrixF64.classifyPathTransform()
     entryI64.debitBeforeProjectionI64(ClipWorkUsageI64(snapshotByteCountI64 = rrectSnapshotByteCountI64))
-    val rrectF64 = sourceF64.copyRRectF64()
-    if (!rrectF64.isFinite()) throw MatrixClipInvalidAbort()
+    val sourceRRectF64 = sourceF64.copyRRectF64()
+    if (!sourceRRectF64.isFinite()) throw MatrixClipInvalidAbort()
+    // Normalize once before classifying the realization so typed and path branches share Skia's
+    // exact F64 radii authority, including reflection remapping below.
+    val rrectF64 = sourceRRectF64.normalizedForSkiaF64()
     if (transformClassF64 == PathTransformClass.Identity || transformClassF64 == PathTransformClass.AxisAlignedAffine) {
         entryI64.debitBeforeProjectionI64(ClipWorkUsageI64(snapshotByteCountI64 = rectSnapshotByteCountI64))
         val bounds = rrectF64.copyRectF64()
@@ -224,6 +228,12 @@ private class MatrixClipAbort(val reason: ClipPreparationResourceLimitReason) : 
 private class MatrixClipWorkLedgerI64(stackI64: ClipWorkUsageI64, frameI64: ClipWorkUsageI64, private val policyF64: ClipPreparationPolicyF64) {
     private var stackUsageI64 = stackI64; private var frameUsageI64 = frameI64
     init { checkUsageI64(stackI64, Scope.Stack); checkUsageI64(frameI64, Scope.Frame) }
+    fun preflightEntryCountBeforeProjectionI64(entryCountI64: Long) {
+        if (entryCountI64 < 0L) throw MatrixClipAbort(ClipPreparationResourceLimitReason.HostSizeOverflow)
+        val deltaI64 = ClipWorkUsageI64(clipEntryCountI64 = entryCountI64)
+        checkUsageI64(addI64(stackUsageI64, deltaI64), Scope.Stack)
+        checkUsageI64(addI64(frameUsageI64, deltaI64), Scope.Frame)
+    }
     fun beginEntryI64(): MatrixClipEntryLedgerI64 = MatrixClipEntryLedgerI64(this)
     fun stackSnapshotI64(): ClipWorkUsageI64 = stackUsageI64; fun frameSnapshotI64(): ClipWorkUsageI64 = frameUsageI64
     fun preflightI64(entryI64: MatrixClipEntryLedgerI64, deltaI64: ClipWorkUsageI64) { checkUsageI64(addI64(entryI64.usageI64, deltaI64), Scope.Entry); checkUsageI64(addI64(stackUsageI64, deltaI64), Scope.Stack); checkUsageI64(addI64(frameUsageI64, deltaI64), Scope.Frame) }
@@ -239,6 +249,8 @@ private class MatrixClipWorkLedgerI64(stackI64: ClipWorkUsageI64, frameI64: Clip
         val vertices = when (scope) { Scope.Entry -> limits32.maxEmittedVertexCountPerEntryI32; Scope.Stack -> limits32.maxEmittedVertexCountPerStackI32; Scope.Frame -> limits32.maxEmittedVertexCountPerFrameI32 }
         val indices = when (scope) { Scope.Entry -> limits32.maxEmittedIndexCountPerEntryI32; Scope.Stack -> limits32.maxEmittedIndexCountPerStackI32; Scope.Frame -> limits32.maxEmittedIndexCountPerFrameI32 }
         val bytes = when (scope) { Scope.Entry -> limits64.maxSnapshotByteCountPerEntryI64; Scope.Stack -> limits64.maxSnapshotByteCountPerStackI64; Scope.Frame -> limits64.maxSnapshotByteCountPerFrameI64 }
+        val entries = when (scope) { Scope.Entry -> 0; Scope.Stack -> limits32.maxClipEntryCountPerStackI32; Scope.Frame -> limits32.maxClipEntryCountPerFrameI32 }
+        if (scope != Scope.Entry && usage.clipEntryCountI64 > entries.toLong()) throw MatrixClipAbort(when (scope) { Scope.Stack -> ClipPreparationResourceLimitReason.StackEntryCountLimit; Scope.Frame -> ClipPreparationResourceLimitReason.FrameEntryCountLimit; Scope.Entry -> error("entry count is not a per-entry budget") })
         if (usage.attemptedEdgeCountI64 > attempted.toLong()) throw MatrixClipAbort(when (scope) { Scope.Entry -> ClipPreparationResourceLimitReason.EntryAttemptedEdgeLimit; Scope.Stack -> ClipPreparationResourceLimitReason.StackAttemptedEdgeLimit; Scope.Frame -> ClipPreparationResourceLimitReason.FrameAttemptedEdgeLimit })
         if (usage.emittedVertexCountI64 > vertices.toLong()) throw MatrixClipAbort(when (scope) { Scope.Entry -> ClipPreparationResourceLimitReason.EntryVertexLimit; Scope.Stack -> ClipPreparationResourceLimitReason.StackVertexLimit; Scope.Frame -> ClipPreparationResourceLimitReason.FrameVertexLimit })
         if (usage.emittedIndexCountI64 > indices.toLong()) throw MatrixClipAbort(when (scope) { Scope.Entry -> ClipPreparationResourceLimitReason.EntryIndexLimit; Scope.Stack -> ClipPreparationResourceLimitReason.StackIndexLimit; Scope.Frame -> ClipPreparationResourceLimitReason.FrameIndexLimit })
@@ -246,5 +258,5 @@ private class MatrixClipWorkLedgerI64(stackI64: ClipWorkUsageI64, frameI64: Clip
     }
 }
 private class MatrixClipEntryLedgerI64(private val parentI64: MatrixClipWorkLedgerI64) { internal var usageI64 = ClipWorkUsageI64(); fun debitBeforeProjectionI64(deltaI64: ClipWorkUsageI64) = parentI64.debitI64(this, deltaI64); fun preflightBeforeProjectionI64(deltaI64: ClipWorkUsageI64) = parentI64.preflightI64(this, deltaI64); fun snapshotI64(): ClipWorkUsageI64 = usageI64; fun frameSnapshotI64(): ClipWorkUsageI64 = parentI64.frameSnapshotI64() }
-private fun addI64(first: ClipWorkUsageI64, second: ClipWorkUsageI64): ClipWorkUsageI64 = try { ClipWorkUsageI64(addComponent(first.attemptedEdgeCountI64, second.attemptedEdgeCountI64), addComponent(first.emittedVertexCountI64, second.emittedVertexCountI64), addComponent(first.emittedIndexCountI64, second.emittedIndexCountI64), addComponent(first.snapshotByteCountI64, second.snapshotByteCountI64)) } catch (_: IllegalStateException) { throw MatrixClipAbort(ClipPreparationResourceLimitReason.HostSizeOverflow) }
+private fun addI64(first: ClipWorkUsageI64, second: ClipWorkUsageI64): ClipWorkUsageI64 = try { ClipWorkUsageI64(addComponent(first.attemptedEdgeCountI64, second.attemptedEdgeCountI64), addComponent(first.emittedVertexCountI64, second.emittedVertexCountI64), addComponent(first.emittedIndexCountI64, second.emittedIndexCountI64), addComponent(first.snapshotByteCountI64, second.snapshotByteCountI64), addComponent(first.clipEntryCountI64, second.clipEntryCountI64)) } catch (_: IllegalStateException) { throw MatrixClipAbort(ClipPreparationResourceLimitReason.HostSizeOverflow) }
 private fun addComponent(first: Long, second: Long): Long { if (first > Long.MAX_VALUE - second) throw IllegalStateException(); return first + second }

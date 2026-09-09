@@ -406,11 +406,19 @@ private fun isFiniteInverseInputSegmentF64(segmentF64: PathFillSegmentF64): Bool
 }
 
 private fun inversePublicationBytesI64(geometryF32: PathFillGeometryF32): Long {
-    if (geometryF32.snapshotByteCostI64 > Long.MAX_VALUE - 16L) {
+    val snapshotByteCostI64 = try {
+        geometryF32.snapshotByteCostI64
+    } catch (_: IllegalStateException) {
         throw PathStrokeResourceLimitAbort(PathStrokeResourceLimitReason.HostSizeOverflow)
     }
-    return 32L
+    if (snapshotByteCostI64 > Long.MAX_VALUE - inversePublicationOverheadBytesI64) {
+        throw PathStrokeResourceLimitAbort(PathStrokeResourceLimitReason.HostSizeOverflow)
+    }
+    return snapshotByteCostI64 + inversePublicationOverheadBytesI64
 }
+
+/** The inverse wrapper retains its own domain and interior-coverage object beside the copied payload. */
+private const val inversePublicationOverheadBytesI64: Long = 32L
 
 private fun PathFillInputF64.inverseInputSnapshotBytesI64(): Long =
     16L + segmentCountI32.toLong() * 16L

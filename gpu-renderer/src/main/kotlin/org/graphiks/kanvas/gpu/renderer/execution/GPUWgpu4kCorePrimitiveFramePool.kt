@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.execution
 
 import io.ygdrasil.webgpu.GPUBindGroup
 import io.ygdrasil.webgpu.GPUBuffer
+import io.ygdrasil.webgpu.GPUBufferUsage
 import io.ygdrasil.webgpu.GPUDevice
 import io.ygdrasil.webgpu.Extent3D
 import io.ygdrasil.webgpu.GPUSampler
@@ -10,6 +11,7 @@ import io.ygdrasil.webgpu.GPUTextureFormat
 import io.ygdrasil.webgpu.GPUTextureUsage
 import io.ygdrasil.webgpu.GPUTextureView
 import io.ygdrasil.webgpu.TextureDescriptor
+import io.ygdrasil.webgpu.BufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.corePrimitiveFramePoolCapacitiesOrNull
@@ -263,6 +265,46 @@ internal data class GPUWgpu4kCorePrimitiveCoverageMaskRequirement(
 }
 
 /**
+ * Compiler-sealed W4e V/I/U inventory.  These are deliberately leased with the W4e attachments:
+ * their exact identities, capacities, usages, and completion lifetime are already part of the
+ * graph, so the materializer must never invent a per-pass native buffer after `Ready`.
+ */
+internal data class GPUW4eNativeBufferRequirements(
+    val vertexResourceId: String,
+    val indexResourceId: String,
+    val uniformResourceId: String,
+    val vertexUsefulBytes: Long,
+    val indexUsefulBytes: Long,
+    val uniformUsefulBytes: Long,
+    /** Aligned byte span uploaded to the U slab; it may include padding after useful uniforms. */
+    val uniformReservedBytes: Long,
+    val vertexCapacityBytes: Long,
+    val indexCapacityBytes: Long,
+    val uniformCapacityBytes: Long,
+) {
+    init {
+        require(listOf(vertexResourceId, indexResourceId, uniformResourceId).all(String::isNotBlank) &&
+            setOf(vertexResourceId, indexResourceId, uniformResourceId).size == 3
+        ) { "W4e native buffer IDs must be distinct and non-blank" }
+        require(listOf(vertexUsefulBytes, indexUsefulBytes, uniformUsefulBytes, uniformReservedBytes).all { it >= 0L } &&
+            listOf(vertexCapacityBytes, indexCapacityBytes, uniformCapacityBytes).all { it > 0L } &&
+            vertexUsefulBytes <= vertexCapacityBytes && indexUsefulBytes <= indexCapacityBytes &&
+            uniformUsefulBytes <= uniformReservedBytes && uniformReservedBytes <= uniformCapacityBytes
+        ) { "W4e native buffer useful bytes must fit their sealed capacities" }
+        require(vertexCapacityBytes % 4L == 0L && indexCapacityBytes % 4L == 0L &&
+            uniformCapacityBytes % 4L == 0L
+        ) { "W4e native buffer capacities must remain WebGPU-aligned" }
+    }
+}
+
+internal data class GPUW4eNativeBufferHandles(
+    val requirements: GPUW4eNativeBufferRequirements,
+    val vertex: GPUBuffer,
+    val index: GPUBuffer,
+    val uniform: GPUBuffer,
+)
+
+/**
  * Exact physical W4e attachment inventory.  This is intentionally a separate pool request:
  * a legacy CoverageMask slot owns one texture, whereas W4e owns the compiler-sealed set of
  * masks and D24S8 attachments.  The first producer scratch/depth pair remains named for ABI
@@ -296,6 +338,8 @@ internal data class GPUW4eAttachmentPoolRequirements(
     /** AA4 scene colors are declared resources, not materializer-local temporary textures. */
     val sceneColorResourceIds: List<String> = emptyList(),
     val sceneColorRequirements: List<GPUWgpu4kCorePrimitiveMsaaColorRequirement> = emptyList(),
+    /** The one compiler-sealed V/I/U triple shared by every W4e native pass in this frame. */
+    val nativeBuffers: GPUW4eNativeBufferRequirements? = null,
 ) {
     init {
         require(accumulatorResourceIds.size == request.accumulatorCountI32 &&
@@ -455,6 +499,7 @@ internal data class GPUWgpu4kW4eAttachmentHandles(
     val additionalDepthStencils: List<GPUWgpu4kCorePrimitiveClipDepthStencilHandles>,
     val sceneDepthStencils: List<GPUWgpu4kCorePrimitiveClipDepthStencilHandles>,
     val sceneColors: List<GPUWgpu4kCorePrimitiveMsaaColorHandles>,
+    val nativeBuffers: GPUW4eNativeBufferHandles?,
 ) {
     init {
         require(accumulators.size == requirements.request.accumulatorCountI32 &&
@@ -463,7 +508,8 @@ internal data class GPUWgpu4kW4eAttachmentHandles(
             additionalMasks.size == requirements.additionalMaskResourceIds.size &&
             additionalDepthStencils.size == requirements.additionalDepthStencilResourceIds.size &&
             sceneDepthStencils.size == requirements.sceneDepthStencilResourceIds.size &&
-            sceneColors.size == requirements.sceneColorResourceIds.size)
+            sceneColors.size == requirements.sceneColorResourceIds.size &&
+            (nativeBuffers?.requirements == requirements.nativeBuffers))
     }
 
     fun viewFor(resourceId: String): GPUTextureView? = when (resourceId) {
@@ -650,6 +696,22 @@ internal class GPUWgpu4kW4eAttachmentPool(
             val view = texture.createView().also(allocated::add)
             return GPUWgpu4kCorePrimitiveMsaaColorHandles(requirement, texture, view)
         }
+        fun native(requirement: GPUW4eNativeBufferRequirements): GPUW4eNativeBufferHandles {
+            fun buffer(label: String, size: Long, usage: GPUBufferUsage): GPUBuffer = device.createBuffer(
+                BufferDescriptor(
+                    size = size.toULong(),
+                    usage = usage or GPUBufferUsage.CopyDst,
+                    mappedAtCreation = false,
+                    label = label,
+                ),
+            ).also(allocated::add)
+            return GPUW4eNativeBufferHandles(
+                requirement,
+                buffer("Kanvas.session.corePrimitive.w4e.vertex", requirement.vertexCapacityBytes, GPUBufferUsage.Vertex),
+                buffer("Kanvas.session.corePrimitive.w4e.index", requirement.indexCapacityBytes, GPUBufferUsage.Index),
+                buffer("Kanvas.session.corePrimitive.w4e.uniform", requirement.uniformCapacityBytes, GPUBufferUsage.Uniform),
+            )
+        }
         return try {
             GPUWgpu4kW4eAttachmentHandles(
                 requirements,
@@ -663,6 +725,7 @@ internal class GPUWgpu4kW4eAttachmentPool(
                 requirements.additionalDepthStencilRequirements.map(::depth),
                 requirements.sceneDepthStencilRequirements.map(::depth),
                 requirements.sceneColorRequirements.map(::sceneColor),
+                requirements.nativeBuffers?.let(::native),
             )
         } catch (failure: Throwable) {
             retireFailedAllocations(allocated).also { cleanupFailure ->
@@ -684,6 +747,7 @@ internal class GPUWgpu4kW4eAttachmentPool(
             handles.additionalMasks.asReversed().forEach { add(it.view); add(it.texture) }
             handles.resolved?.let { add(it.view); add(it.texture) }
             handles.accumulators.asReversed().forEach { add(it.view); add(it.texture) }
+            handles.nativeBuffers?.let { add(it.uniform); add(it.index); add(it.vertex) }
         })
 
     /** Closes every supplied handle, retaining only failures for a later completion-safe retry. */

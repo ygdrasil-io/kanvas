@@ -187,8 +187,15 @@ class SurfaceTest {
             resetMatrix()
             drawRect(RectF32.ofLTRB(0f, 0f, 32f, 16f), Paint.fill(ColorARGB.Red).copy(antiAlias = false))
         }
-        val failure = assertThrows(IllegalStateException::class.java) { surface.render() }
-        assertTrue(failure.message.orEmpty().startsWith("unsupported.clip.path_transform"), failure.message)
+        surface.render()
+        assertArrayEquals(
+            byteArrayOf(-1, 0, 0, -1),
+            requireNotNull(surface.makeImageSnapshot(RectF32.ofLTRB(16f, 8f, 17f, 9f))).pixels,
+        )
+        assertArrayEquals(
+            byteArrayOf(0, 0, 0, 0),
+            requireNotNull(surface.makeImageSnapshot(RectF32.ofLTRB(4f, 8f, 5f, 9f))).pixels,
+        )
     }
 
     @Test
