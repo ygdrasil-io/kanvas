@@ -80,8 +80,19 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
         public fun of(entries: List<MaterialPlanEntry>): MaterialPlanTable {
             require(entries.isNotEmpty()) { "A material table must contain a root entry" }
             entries.forEachIndexed { index, entry ->
-                if (entry.program is MaterialProgramPlan.OpacityV1) {
-                    require(entry.program.child.indexI32 < index) { "Opacity children must precede their parent" }
+                when (val program = entry.program) {
+                    MaterialProgramPlan.TransparentV1 -> require(entry.bindings is MaterialBindingPlan.EmptyV1) {
+                        "Transparent programs require empty bindings"
+                    }
+                    MaterialProgramPlan.SolidLinearPremulV1 -> require(entry.bindings is MaterialBindingPlan.SolidRgbaF32V1) {
+                        "Solid programs require RGBA bindings"
+                    }
+                    is MaterialProgramPlan.OpacityV1 -> {
+                        require(entry.bindings is MaterialBindingPlan.OpacityF32V1) {
+                            "Opacity programs require opacity bindings"
+                        }
+                        require(program.child.indexI32 < index) { "Opacity children must precede their parent" }
+                    }
                 }
             }
             return MaterialPlanTable(entries)

@@ -520,13 +520,12 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
         b = this.color.b,
         a = this.color.a,
     )
-    is Shader.Opacity -> when (val child = shader.toMaterial()) {
-        is GPUMaterialDescriptor.SolidColor -> child.copy(a = child.a * alphaF32)
-        else -> GPUMaterialDescriptor.Unsupported(
-            reason = GPUPreparedMaterialUnsupportedReason.OPACITY_CHILD,
-            originalKind = materialKind(),
-        )
-    }
+    // Opacity is a W5 material operation.  Legacy descriptors must not fold it into a solid
+    // colour: doing so would select a second, incompatible semantic authority.
+    is Shader.Opacity -> GPUMaterialDescriptor.Unsupported(
+        reason = GPUPreparedMaterialUnsupportedReason.OPACITY_CHILD,
+        originalKind = materialKind(),
+    )
     is Shader.LinearGradient -> {
         val first = this.stops.first()
         val last = this.stops.last()
@@ -876,7 +875,10 @@ private fun Shader.toPreparedMaterial(
 
     return when (this) {
         is Shader.SolidColor -> toMaterial()
-        is Shader.Opacity -> toMaterial()
+        is Shader.Opacity -> mapper.descriptorAssembly.preparedUnsupported(
+            GPUPreparedMaterialUnsupportedReason.OPACITY_CHILD,
+            materialKind(),
+        )
         is Shader.LinearGradient ->
             if (interpolation != ColorSpaceInterpolation.SRGB) {
                 mapper.descriptorAssembly.preparedUnsupported(

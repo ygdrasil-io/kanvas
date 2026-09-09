@@ -309,8 +309,8 @@ class Picture internal constructor(
 // ---- Binary serialization helpers ------------------------------------------
 
 private val MAGIC = byteArrayOf(0x4B, 0x50, 0x49, 0x43)
-private const val FORMAT_VERSION = 8
-private const val STABLE_WIRE_VERSION = 8
+private const val FORMAT_VERSION = 9
+private const val STABLE_WIRE_VERSION = 9
 
 // type discriminators
 private const val OP_DRAW_RECT: Byte = 0
@@ -945,7 +945,7 @@ private fun decodePicture(data: ByteArray, decodedRuntimeEffects: MutableList<Ru
     val version = r.int()
     if (!r.valid) return null
     return when (version) {
-        in 1..7 -> decodeLegacyPicture(data, version, decodedRuntimeEffects)
+        in 1..8 -> decodeLegacyPicture(data, version, decodedRuntimeEffects)
         STABLE_WIRE_VERSION -> when (val decoded = SceneArchiveCodec.decodePicture(data)) {
             is SceneArchiveDecodeResult.Decoded -> try {
                 Picture(decoded.copyCullRect(), SceneDisplayOpAdapter.toDisplayOps(decoded.scene))

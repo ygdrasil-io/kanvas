@@ -293,7 +293,6 @@ public sealed interface PathRenderDraw : PlanDraw {
 
 public class SolidRectDraw private constructor(
     override public val commandIndex: Int,
-    override public val color: ColorF32,
     override public val materialAuthority: PlanDrawMaterialAuthority,
     visibleBounds: RectI32,
     scissor: RectI32,
@@ -307,6 +306,11 @@ public class SolidRectDraw private constructor(
     public fun copyVisibleBounds(): RectI32 = storedVisibleBounds.copy()
     public fun copyScissor(): RectI32 = storedScissor.copy()
 
+    /** Legacy-only compatibility view. W5 draws never carry a duplicated colour value. */
+    override public val color: ColorF32
+        get() = (materialAuthority as? PlanDrawMaterialAuthority.LegacyColorV1)?.copyColorF32()
+            ?: throw IllegalStateException("W5 material draws have no legacy colour authority")
+
     public companion object {
         public fun of(
             commandIndex: Int,
@@ -316,11 +320,32 @@ public class SolidRectDraw private constructor(
             coverage: CoveragePlan = CoveragePlan.FullOrScissor,
             sample: SamplePlan = SamplePlan.SingleSample,
             blend: BlendPlan = BlendPlan.SrcOver,
-            materialAuthority: PlanDrawMaterialAuthority = PlanDrawMaterialAuthority.LegacyColorV1.of(color),
         ): SolidRectDraw {
             require(commandIndex >= 0) { "Command index must be non-negative" }
             require(!visibleBounds.isEmpty && !scissor.isEmpty) { "Draw rectangles must be non-empty" }
-            return SolidRectDraw(commandIndex, color, materialAuthority, visibleBounds, scissor, coverage, sample, blend)
+            return SolidRectDraw(
+                commandIndex,
+                PlanDrawMaterialAuthority.LegacyColorV1.of(color),
+                visibleBounds,
+                scissor,
+                coverage,
+                sample,
+                blend,
+            )
+        }
+
+        public fun ofMaterial(
+            commandIndex: Int,
+            material: MaterialPlanRef,
+            visibleBounds: RectI32,
+            scissor: RectI32,
+            coverage: CoveragePlan = CoveragePlan.FullOrScissor,
+            sample: SamplePlan = SamplePlan.SingleSample,
+            blend: BlendPlan = BlendPlan.SrcOver,
+        ): SolidRectDraw {
+            require(commandIndex >= 0) { "Command index must be non-negative" }
+            require(!visibleBounds.isEmpty && !scissor.isEmpty) { "Draw rectangles must be non-empty" }
+            return SolidRectDraw(commandIndex, PlanDrawMaterialAuthority.MaterialV1(material), visibleBounds, scissor, coverage, sample, blend)
         }
     }
 }

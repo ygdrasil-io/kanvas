@@ -216,12 +216,11 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
                 is EffectiveMaterialPlanner.Result.Ready -> {
                     val root = appendMaterialPlan(materialEntries, planned.table, planned.root)
                     DrawRecognition.Accepted(
-                        SolidRectDraw.of(
+                        SolidRectDraw.ofMaterial(
                             index,
-                            ColorF32.of(0f, 0f, 0f, 0f),
+                            root,
                             clipped,
                             clipped,
-                            materialAuthority = PlanDrawMaterialAuthority.MaterialV1(root),
                         ),
                     )
                 }

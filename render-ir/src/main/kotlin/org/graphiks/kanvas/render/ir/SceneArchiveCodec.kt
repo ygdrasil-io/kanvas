@@ -27,7 +27,7 @@ import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.vector.Vector2F32
 
 /**
- * The owner of the version-8 Picture payload.
+ * The owner of the version-9 Picture payload.
  *
  * A v8 archive starts with the public `KPIC` magic, its v8 integer and the
  * cull rectangle.  The following negative marker occupies the old v8
@@ -37,9 +37,9 @@ import org.graphiks.math.vector.Vector2F32
  */
 public object SceneArchiveCodec {
     private val magic: ByteArray = byteArrayOf(0x4b, 0x50, 0x49, 0x43)
-    private const val pictureVersion: Int = 8
+    private const val pictureVersion: Int = 9
     private const val irMarker: Int = -1_391_019_346
-    private const val schemaVersion: Int = 2
+    private const val schemaVersion: Int = 3
 
     /** Encodes a deeply immutable Scene IR as the sole v8 Picture writer. */
     public fun encodePicture(scene: SceneSnapshot, cullRect: RectF32): ByteArray {
@@ -59,7 +59,7 @@ public object SceneArchiveCodec {
         val reader = ArchiveReader(data)
         return try {
             if (!reader.bytesEqual(magic)) return SceneArchiveDecodeResult.Invalid("invalid-magic", "Picture magic is not KPIC")
-            if (reader.i32() != pictureVersion) return SceneArchiveDecodeResult.Invalid("unknown-version", "Picture version is not 8")
+            if (reader.i32() != pictureVersion) return SceneArchiveDecodeResult.Invalid("unknown-version", "Picture version is not 9")
             val cull = reader.rect()
             val markerOrLegacyOpCount = reader.i32()
             if (markerOrLegacyOpCount != irMarker) {

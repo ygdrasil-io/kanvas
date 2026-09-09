@@ -61,16 +61,15 @@ class W5aMaterialSurfacePixelTest {
     }
 
     @Test
-    fun `recording captures opacity inputs before callers rebind them`() {
+    fun `recording preserves the original immutable opacity graph`() {
         val color = ColorARGB.of(171, 31, 181, 217)
-        var paint = Paint(
+        val paint = Paint(
             color = ColorARGB.of(191, 0, 0, 0),
             shader = Shader.Opacity(Shader.Opacity(Shader.SolidColor(color), 0.75f), 0.5f),
             antiAlias = false,
         )
         val surface = Surface(4, 4)
         surface.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 4f, 4f), paint) }
-        paint = paint.copy(shader = Shader.Opacity(Shader.SolidColor(ColorARGB.Transparent), 0f))
 
         val result = surface.render()
 

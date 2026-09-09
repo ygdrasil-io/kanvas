@@ -16,6 +16,7 @@ import org.graphiks.kanvas.gpu.plan.MaterialBindingPlan
 import org.graphiks.kanvas.gpu.plan.MaterialPlanRef
 import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
 import org.graphiks.kanvas.gpu.plan.MaterialProgramPlan
+import org.graphiks.kanvas.gpu.plan.NumericOperationGraphV1
 import org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority
 import org.graphiks.kanvas.gpu.plan.RenderGraph
 import org.graphiks.kanvas.gpu.plan.SamplePlan
@@ -425,14 +426,36 @@ public class GpuPlanTaskListLowerer {
             return null
         }
         return when (val program = entry.program) {
-            MaterialProgramPlan.TransparentV1 -> (entry.bindings as? MaterialBindingPlan.EmptyV1)?.let { ColorF32.of(0f, 0f, 0f, 0f) }
-            MaterialProgramPlan.SolidLinearPremulV1 -> (entry.bindings as? MaterialBindingPlan.SolidRgbaF32V1)?.copyRgbaF32()
+            MaterialProgramPlan.TransparentV1 -> evaluateNumericGraph(
+                program.copyNumericOperationGraphV1(), entry.bindings, null,
+            )
+            MaterialProgramPlan.SolidLinearPremulV1 -> evaluateNumericGraph(
+                program.copyNumericOperationGraphV1(), entry.bindings, null,
+            )
             is MaterialProgramPlan.OpacityV1 -> {
-                val alpha = (entry.bindings as? MaterialBindingPlan.OpacityF32V1)?.alphaF32 ?: return null
                 val child = resolveMaterialColor(table, program.child) ?: return null
-                ColorF32.of(child.red * alpha, child.green * alpha, child.blue * alpha, child.alpha * alpha)
+                evaluateNumericGraph(program.copyNumericOperationGraphV1(), entry.bindings, child)
             }
         }
+    }
+
+    /** The W5a renderer evaluates the sealed operation DAG, never a legacy material descriptor. */
+    private fun evaluateNumericGraph(
+        graph: NumericOperationGraphV1,
+        bindings: MaterialBindingPlan,
+        child: ColorF32?,
+    ): ColorF32? = when (graph) {
+        NumericOperationGraphV1.Transparent -> (bindings as? MaterialBindingPlan.EmptyV1)?.let {
+            ColorF32.of(0f, 0f, 0f, 0f)
+        }
+        NumericOperationGraphV1.SolidSrgbToLinearPremul ->
+            (bindings as? MaterialBindingPlan.SolidRgbaF32V1)?.copyRgbaF32()
+        is NumericOperationGraphV1.Opacity -> {
+            val alpha = (bindings as? MaterialBindingPlan.OpacityF32V1)?.alphaF32 ?: return null
+            val source = child ?: return null
+            ColorF32.of(source.red * alpha, source.green * alpha, source.blue * alpha, source.alpha * alpha)
+        }
+        is NumericOperationGraphV1.Node -> null
     }
 
     private sealed interface W3BaseTaskListResult {
