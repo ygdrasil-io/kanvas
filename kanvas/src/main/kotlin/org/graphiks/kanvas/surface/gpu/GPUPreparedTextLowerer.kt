@@ -820,6 +820,7 @@ private class PreparedTextPaintSnapshotter {
         shaderSnapshots[shader]?.let { return it }
         val snapshot = when (shader) {
             is Shader.SolidColor -> shader.copy()
+            is Shader.Opacity -> shader.copy(shader = snapshotShader(shader.shader, depth + 1))
             is Shader.LinearGradient -> shader.copy(
                 stops = immutablePreparedTextList(shader.stops.map(GradientStop::copy)),
             )

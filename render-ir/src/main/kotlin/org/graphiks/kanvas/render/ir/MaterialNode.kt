@@ -211,6 +211,11 @@ public sealed interface MaterialNode : CanonicalValue {
     }
 
     public data class Opacity(public val material: MaterialNode, public val alpha: Float) : MaterialNode {
+        init {
+            require(alpha.isFinite() && alpha in 0f..1f) {
+                "Material opacity alpha must be finite and within 0..1"
+            }
+        }
         override val canonicalId: CanonicalId = canonicalId("material-opacity-v1", material.canonicalId.value, alpha.canonicalBits())
     }
 

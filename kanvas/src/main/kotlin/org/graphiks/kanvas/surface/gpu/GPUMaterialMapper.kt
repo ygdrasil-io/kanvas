@@ -520,6 +520,13 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
         b = this.color.b,
         a = this.color.a,
     )
+    is Shader.Opacity -> when (val child = shader.toMaterial()) {
+        is GPUMaterialDescriptor.SolidColor -> child.copy(a = child.a * alphaF32)
+        else -> GPUMaterialDescriptor.Unsupported(
+            reason = GPUPreparedMaterialUnsupportedReason.OPACITY_CHILD,
+            originalKind = materialKind(),
+        )
+    }
     is Shader.LinearGradient -> {
         val first = this.stops.first()
         val last = this.stops.last()
@@ -869,6 +876,7 @@ private fun Shader.toPreparedMaterial(
 
     return when (this) {
         is Shader.SolidColor -> toMaterial()
+        is Shader.Opacity -> toMaterial()
         is Shader.LinearGradient ->
             if (interpolation != ColorSpaceInterpolation.SRGB) {
                 mapper.descriptorAssembly.preparedUnsupported(
@@ -1350,6 +1358,7 @@ private fun Shader.preparedGraphChildren(): List<Shader> =
         is Shader.WithColorFilter -> listOf(shader)
         is Shader.WithWorkingColorSpace -> listOf(shader)
         is Shader.CoordClamp -> listOf(shader)
+        is Shader.Opacity -> listOf(shader)
         is Shader.SolidColor,
         is Shader.LinearGradient,
         is Shader.RadialGradient,
@@ -1395,6 +1404,7 @@ private fun Shader.materialKind(): GPUMaterialKind {
             is Shader.WithColorFilter -> current = shader.shader
             is Shader.WithWorkingColorSpace -> current = shader.shader
             is Shader.CoordClamp -> current = shader.shader
+            is Shader.Opacity -> current = shader.shader
             is Shader.PerlinNoise,
             is Shader.FractalNoise,
             -> return GPUMaterialKind.SolidColor

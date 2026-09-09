@@ -20,6 +20,7 @@ public class RenderGraph private constructor(
     private val w4dGeneralCompilerWitness: W4dGeneralCompilerWitness?,
     private val w4eNativePayloadPlan: W4eNativePayloadPlan?,
     private val w4eCompilerWitness: W4eCompilerWitness?,
+    private val materialPlanTable: MaterialPlanTable?,
 ) {
     private val storedTargetExtent: SizeI32 = targetExtent.copy()
     public val targetExtent: SizeI32
@@ -31,6 +32,9 @@ public class RenderGraph private constructor(
     public fun resources(): List<PlanResource> = storedResources
     public fun passes(): List<PlanPass> = storedPasses
     public fun dependencies(): List<PlanPassDependency> = storedDependencies
+
+    /** Immutable W5 material authority, present only on material-plan graphs. */
+    public fun materialPlanTableOrNull(): MaterialPlanTable? = materialPlanTable
 
     /** Verifies that this exact immutable graph snapshot was issued by the W4d compiler. */
     public fun verifyW4dCompilerWitness(): Boolean =
@@ -63,6 +67,7 @@ public class RenderGraph private constructor(
             passes: List<PlanPass>,
             dependencies: List<PlanPassDependency>,
             peakFrameLocalBytes: Long,
+            materialPlanTable: MaterialPlanTable? = null,
         ): RenderGraph {
             require(capabilityId.isNotBlank()) { "Capability ID must not be blank" }
             require(!targetExtent.isEmpty()) { "Target extent must be non-empty" }
@@ -167,7 +172,7 @@ public class RenderGraph private constructor(
             require(calculatedPeak == peakFrameLocalBytes) { "Peak memory does not match resource lifetimes" }
             require(calculatedPeak <= budget.maxFrameLocalBytes) { "Peak memory exceeds budget" }
             return RenderGraph(id, capabilityId, targetExtent, colorFormat, capabilities, budget, visualCommandCount,
-                resources, passes, dependencies, peakFrameLocalBytes, null, null, null, null)
+                resources, passes, dependencies, peakFrameLocalBytes, null, null, null, null, materialPlanTable)
         }
 
         /** Trust-boundary factory available only to the W4d compiler after public validation. */
@@ -193,6 +198,7 @@ public class RenderGraph private constructor(
                 null,
                 null,
                 null,
+                graph.materialPlanTable,
             )
         }
 
@@ -222,6 +228,7 @@ public class RenderGraph private constructor(
                 W4dGeneralCompilerWitness.issue(graph),
                 null,
                 null,
+                graph.materialPlanTable,
             )
         }
 
@@ -258,6 +265,7 @@ public class RenderGraph private constructor(
                 null,
                 nativePayload,
                 null,
+                graph.materialPlanTable,
             )
             return RenderGraph(
                 payloadGraph.id,
@@ -275,6 +283,7 @@ public class RenderGraph private constructor(
                 null,
                 nativePayload,
                 W4eCompilerWitness.issue(payloadGraph),
+                payloadGraph.materialPlanTable,
             )
         }
 

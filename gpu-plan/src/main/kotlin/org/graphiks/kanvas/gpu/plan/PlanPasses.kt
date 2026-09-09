@@ -109,6 +109,12 @@ public sealed interface PathDrawGeometry {
 public sealed interface PlanDraw {
     public val commandIndex: Int
     public val color: ColorF32
+    /**
+     * The closed material authority consumed by a renderer.  Pre-W5 draw kinds retain their
+     * colour through the legacy arm; W5 draws use only the material-table reference.
+     */
+    public val materialAuthority: PlanDrawMaterialAuthority
+        get() = PlanDrawMaterialAuthority.LegacyColorV1.of(color)
     public val coverage: CoveragePlan
     public val sample: SamplePlan
     public val blend: BlendPlan
@@ -121,6 +127,7 @@ public class ClippedPlanDraw private constructor(
 ) : PlanDraw {
     override public val commandIndex: Int get() = source.commandIndex
     override public val color: ColorF32 get() = source.color
+    override public val materialAuthority: PlanDrawMaterialAuthority get() = source.materialAuthority
     override public val coverage: CoveragePlan get() = source.coverage
     override public val sample: SamplePlan get() = source.sample
     override public val blend: BlendPlan get() = source.blend
@@ -287,6 +294,7 @@ public sealed interface PathRenderDraw : PlanDraw {
 public class SolidRectDraw private constructor(
     override public val commandIndex: Int,
     override public val color: ColorF32,
+    override public val materialAuthority: PlanDrawMaterialAuthority,
     visibleBounds: RectI32,
     scissor: RectI32,
     override public val coverage: CoveragePlan,
@@ -308,10 +316,11 @@ public class SolidRectDraw private constructor(
             coverage: CoveragePlan = CoveragePlan.FullOrScissor,
             sample: SamplePlan = SamplePlan.SingleSample,
             blend: BlendPlan = BlendPlan.SrcOver,
+            materialAuthority: PlanDrawMaterialAuthority = PlanDrawMaterialAuthority.LegacyColorV1.of(color),
         ): SolidRectDraw {
             require(commandIndex >= 0) { "Command index must be non-negative" }
             require(!visibleBounds.isEmpty && !scissor.isEmpty) { "Draw rectangles must be non-empty" }
-            return SolidRectDraw(commandIndex, color, visibleBounds, scissor, coverage, sample, blend)
+            return SolidRectDraw(commandIndex, color, materialAuthority, visibleBounds, scissor, coverage, sample, blend)
         }
     }
 }

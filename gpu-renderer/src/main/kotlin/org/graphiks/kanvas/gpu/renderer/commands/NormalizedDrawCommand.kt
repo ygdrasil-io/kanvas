@@ -165,6 +165,10 @@ enum class GPUPreparedMaterialUnsupportedReason(
     val diagnosticCode: String,
     val diagnosticMessage: String,
 ) {
+    OPACITY_CHILD(
+        "unsupported.material.mapping.opacity_child",
+        "Prepared opacity mapping currently requires a solid child material",
+    ),
     IMAGE_CUBIC_SAMPLING(
         "unsupported.material.mapping.image_cubic_sampling",
         "Prepared image mapping does not implement cubic sampling",

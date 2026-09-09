@@ -12,6 +12,11 @@ import org.graphiks.kanvas.gpu.plan.PlanResourceLifetime
 import org.graphiks.kanvas.gpu.plan.PlanResourceRole
 import org.graphiks.kanvas.gpu.plan.PlanResourceUsage
 import org.graphiks.kanvas.gpu.plan.PlanTextureFormat
+import org.graphiks.kanvas.gpu.plan.MaterialBindingPlan
+import org.graphiks.kanvas.gpu.plan.MaterialPlanRef
+import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
+import org.graphiks.kanvas.gpu.plan.MaterialProgramPlan
+import org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority
 import org.graphiks.kanvas.gpu.plan.RenderGraph
 import org.graphiks.kanvas.gpu.plan.SamplePlan
 import org.graphiks.kanvas.gpu.plan.SolidRectDraw
@@ -95,6 +100,7 @@ import org.graphiks.kanvas.render.ir.RenderDiagnostic
 import org.graphiks.kanvas.render.ir.RenderDiagnosticCode
 import org.graphiks.kanvas.render.ir.RenderDiagnosticDomain
 import org.graphiks.kanvas.render.ir.RenderDiagnosticSeverity
+import org.graphiks.math.color.ColorF32
 
 /** Converts closed W3 through W4d.2 graphs into prepared frame tasks without invoking legacy planning. */
 public class GpuPlanTaskListLowerer {
@@ -106,7 +112,9 @@ public class GpuPlanTaskListLowerer {
         if (request.graph.capabilities != current) return unsupported("The graph capability snapshot is stale.")
         if (request.graph.budget != request.currentBudget) return invalid("The graph budget is stale.")
         return when (request.graph.capabilityId) {
-            W3SolidRectPlanCompiler.CAPABILITY_ID -> lowerW3(request, current)
+            W3SolidRectPlanCompiler.CAPABILITY_ID,
+            W3SolidRectPlanCompiler.W5A_CAPABILITY_ID,
+            -> lowerW3(request, current)
             W4aAnalyticRectPlanCompiler.CAPABILITY_ID -> W4aAnalyticRectGraphLowerer().lower(request)
             W4bAnalyticRRectPlanCompiler.CAPABILITY_ID -> W4bAnalyticRRectGraphLowerer().lower(request)
             W4cPathFillPlanCompiler.CAPABILITY_ID -> W4cPathFillGraphLowerer().lower(request)
@@ -168,7 +176,12 @@ public class GpuPlanTaskListLowerer {
         targetBounds: GPUPixelBounds,
         memory: GPUFrameMemoryBudgetPlan,
     ): W3BaseTaskListResult {
-        val packets = graph.draws.mapIndexed { paintOrder, draw -> packet(draw, paintOrder, targetBounds) }
+        val packets = mutableListOf<GPUDrawPacket>()
+        graph.draws.forEachIndexed { paintOrder, draw ->
+            val color = resolveMaterialColor(graph.materialPlanTable, draw.materialAuthority)
+                ?: return W3BaseTaskListResult.Invalid(invalidDiagnostic("W5 material authority is invalid."))
+            packets += packet(draw, color, paintOrder, targetBounds)
+        }
         val replay = "w3:${request.graph.id.value}"
         val seal = GPUFrameCapabilitySeal.capture(request.frameId, request.deviceGeneration, request.capabilities)
         val scratch = when (val sealed = sealW3Scratch(request, target, staging, targetBounds, seal.sealHash, packets)) {
@@ -313,7 +326,7 @@ public class GpuPlanTaskListLowerer {
         }
     }
 
-    private fun packet(draw: SolidRectDraw, paintOrder: Int, target: GPUPixelBounds): GPUDrawPacket {
+    private fun packet(draw: SolidRectDraw, color: ColorF32, paintOrder: Int, target: GPUPixelBounds): GPUDrawPacket {
         val bounds = draw.copyVisibleBounds()
         val scissor = draw.copyScissor()
         require(bounds.roundTripsExactlyThroughF32() && scissor.roundTripsExactlyThroughF32()) {
@@ -325,7 +338,7 @@ public class GpuPlanTaskListLowerer {
         val execution = if (scissorBounds == target) GPUClipExecutionPlan.NoClip else GPUClipExecutionPlan.ScissorOnly(scissorBounds)
         val blend = canonicalSolidRectSrcOverBlendPlan()
         val analysisRecordId = "analysis.fill_rect.${draw.commandIndex}"
-        val semantic = GPUCorePrimitivePayloadGatherer().gatherSemantic(GPUCorePrimitivePayloadInput(draw.commandIndex, GPUCorePrimitiveSourceFamily.Rect, GPUCorePrimitiveGeometryInput.Rect(rect.left, rect.top, rect.right, rect.bottom), listOf(draw.color.red, draw.color.green, draw.color.blue, draw.color.alpha), target, scissorBounds, clip, execution.canonicalIdentity(), blend.canonicalIdentity(), GPUFrameProvenance.None, GPUCorePrimitiveCoverageMode.FullOrScissor, analysisRecordId, "FillRect", GPUCorePrimitiveRectRouteAuthority.RectAxisAligned, corePrimitiveRectGeometryAuthority(rect, GPUTransformFacts.identity())))
+        val semantic = GPUCorePrimitivePayloadGatherer().gatherSemantic(GPUCorePrimitivePayloadInput(draw.commandIndex, GPUCorePrimitiveSourceFamily.Rect, GPUCorePrimitiveGeometryInput.Rect(rect.left, rect.top, rect.right, rect.bottom), listOf(color.red, color.green, color.blue, color.alpha), target, scissorBounds, clip, execution.canonicalIdentity(), blend.canonicalIdentity(), GPUFrameProvenance.None, GPUCorePrimitiveCoverageMode.FullOrScissor, analysisRecordId, "FillRect", GPUCorePrimitiveRectRouteAuthority.RectAxisAligned, corePrimitiveRectGeometryAuthority(rect, GPUTransformFacts.identity())))
         val structuralKey = corePrimitiveRenderPipelineStructuralKey(
             semantic,
             execution,
@@ -346,7 +359,7 @@ public class GpuPlanTaskListLowerer {
     }
 
     private fun validateW3Graph(graph: RenderGraph): W3Graph? {
-        if (graph.capabilityId != W3SolidRectPlanCompiler.CAPABILITY_ID || graph.colorFormat != PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL) return null
+        if (graph.capabilityId !in setOf(W3SolidRectPlanCompiler.CAPABILITY_ID, W3SolidRectPlanCompiler.W5A_CAPABILITY_ID) || graph.colorFormat != PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL) return null
         val resources = graph.resources()
         if (resources.size != 2) return null
         val target = resources.singleOrNull { it.role == PlanResourceRole.LogicalTarget } ?: return null
@@ -374,7 +387,18 @@ public class GpuPlanTaskListLowerer {
         if (staging.id != expectedStagingResource.id || staging.ordinal != 0 || staging.kind != PlanResourceKind.Buffer || staging.format != null || staging.copyExtent() != null || staging.byteSize != expectedStaging || staging.usages() != setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead) || staging.lifetime != PlanResourceLifetime.FrameLocal || staging.firstPassIndex != 1 || staging.lastPassIndexExclusive != 2 || render.ordinal != 0 || readback.ordinal != 0 || render.id != expectedRenderId || readback.id != expectedReadbackId || render.target != target.id || readback.source != target.id || readback.staging != staging.id || readback.bytesPerRow != expectedRow || render.load != AttachmentLoadPlan.ClearTransparent || render.store != AttachmentStorePlan.Store || render.drawDataResources != null || graph.dependencies().singleOrNull()?.let { it.before == render.id && it.after == readback.id } != true || graph.visualCommandCount != draws.size || draws.size !in 1..512 || graph.peakFrameLocalBytes != expectedTargetBytes + expectedStaging) return null
         val targetRect = org.graphiks.math.geometry.RectI32(0, 0, graph.targetExtent.width, graph.targetExtent.height)
         if (draws.any { draw -> draw.coverage != CoveragePlan.FullOrScissor || draw.sample != SamplePlan.SingleSample || draw.blend != BlendPlan.SrcOver || draw.copyVisibleBounds().isEmpty || draw.copyScissor().isEmpty || !targetRect.copy().intersect(draw.copyVisibleBounds()) || !draw.copyVisibleBounds().copy().intersect(draw.copyScissor()) || draw.copyScissor() != draw.copyVisibleBounds() }) return null
-        return W3Graph(target, staging, render, readback, draws)
+        val table = graph.materialPlanTableOrNull()
+        if (draws.any { draw ->
+                when (val authority = draw.materialAuthority) {
+                    is PlanDrawMaterialAuthority.LegacyColorV1 -> false
+                    is PlanDrawMaterialAuthority.MaterialV1 -> table == null || authority.ref.indexI32 >= table.sizeI32
+                }
+            }
+        ) return null
+        if (graph.capabilityId == W3SolidRectPlanCompiler.W5A_CAPABILITY_ID &&
+            (table == null || draws.none { it.materialAuthority is PlanDrawMaterialAuthority.MaterialV1 })
+        ) return null
+        return W3Graph(target, staging, render, readback, draws, table)
     }
 
     private data class W3Graph(
@@ -383,7 +407,33 @@ public class GpuPlanTaskListLowerer {
         val render: PlanPass.RenderPass,
         val readback: PlanPass.ReadbackPass,
         val draws: List<SolidRectDraw>,
+        val materialPlanTable: MaterialPlanTable?,
     )
+
+    private fun resolveMaterialColor(
+        table: MaterialPlanTable?,
+        authority: PlanDrawMaterialAuthority,
+    ): ColorF32? = when (authority) {
+        is PlanDrawMaterialAuthority.LegacyColorV1 -> authority.copyColorF32()
+        is PlanDrawMaterialAuthority.MaterialV1 -> resolveMaterialColor(requireNotNull(table), authority.ref)
+    }
+
+    private fun resolveMaterialColor(table: MaterialPlanTable, ref: MaterialPlanRef): ColorF32? {
+        val entry = try {
+            table.entry(ref)
+        } catch (_: IllegalArgumentException) {
+            return null
+        }
+        return when (val program = entry.program) {
+            MaterialProgramPlan.TransparentV1 -> (entry.bindings as? MaterialBindingPlan.EmptyV1)?.let { ColorF32.of(0f, 0f, 0f, 0f) }
+            MaterialProgramPlan.SolidLinearPremulV1 -> (entry.bindings as? MaterialBindingPlan.SolidRgbaF32V1)?.copyRgbaF32()
+            is MaterialProgramPlan.OpacityV1 -> {
+                val alpha = (entry.bindings as? MaterialBindingPlan.OpacityF32V1)?.alphaF32 ?: return null
+                val child = resolveMaterialColor(table, program.child) ?: return null
+                ColorF32.of(child.red * alpha, child.green * alpha, child.blue * alpha, child.alpha * alpha)
+            }
+        }
+    }
 
     private sealed interface W3BaseTaskListResult {
         data class Ready(val taskList: GPUTaskList) : W3BaseTaskListResult

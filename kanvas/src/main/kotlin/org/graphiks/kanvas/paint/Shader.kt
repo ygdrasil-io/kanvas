@@ -10,6 +10,14 @@ enum class ColorSpaceInterpolation { SRGB, LINEAR, OKLAB, HSL, OKLCH }
 
 sealed interface Shader {
     data class SolidColor(val color: ColorARGB) : Shader
+    /** Applies a finite alpha in [0, 1] to the child material without changing its structure. */
+    data class Opacity(val shader: Shader, val alphaF32: Float) : Shader {
+        init {
+            require(alphaF32.isFinite() && alphaF32 in 0f..1f) {
+                "Shader opacity alpha must be finite and within 0..1"
+            }
+        }
+    }
     data class LinearGradient(
         val start: Point2F32, val end: Point2F32,
         val stops: List<GradientStop>,

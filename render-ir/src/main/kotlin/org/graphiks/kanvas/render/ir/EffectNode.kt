@@ -467,9 +467,7 @@ public object SceneSemanticValidator {
             }
             when (current) {
                 is GraphWork.Scene -> validateSceneCommands(current.value)?.let { return it }
-                is GraphWork.Material -> if (current.shaderPosition && current.value is MaterialNode.Opacity) {
-                    return invalidScene("invalid-shader-material", "Opacity material has no public Shader equivalent")
-                }
+                is GraphWork.Material,
                 is GraphWork.Effect,
                 is GraphWork.MeshProgram,
                 is GraphWork.Blender,

@@ -12,6 +12,7 @@ import org.graphiks.kanvas.render.ir.DrawNode
 import org.graphiks.kanvas.render.ir.DrawOrigin
 import org.graphiks.kanvas.render.ir.EffectStack
 import org.graphiks.kanvas.render.ir.GeometryNode
+import org.graphiks.kanvas.render.ir.MaterialNode
 import org.graphiks.kanvas.render.ir.PaintNode
 import org.graphiks.kanvas.render.ir.PaintStyleNode
 import org.graphiks.kanvas.render.ir.RenderDiagnostic
@@ -49,7 +50,7 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
             is Recognition.Accepted -> return if (target.colorSpace != ColorSpace.SRGB) {
                 notCandidate(diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.TARGET, "W3 supports only sRGB targets"))
             } else {
-                GpuPlanSelection.Candidate(W3Candidate(this, scene.canonicalId, target, recognition.draws))
+                GpuPlanSelection.Candidate(W3Candidate(this, scene.canonicalId, target, recognition.draws, recognition.materialPlanTable, recognition.capabilityId))
             }
         }
     }
@@ -112,8 +113,8 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
             val readback = PlanPass.ReadbackPass(0, logicalTarget.id, staging.id, withinBudget.readbackBytesPerRow)
             RenderPlanResult.Ready(
                 RenderGraph.of(
-                    id = PlanId(planIdentity(selected.sceneCanonicalId, target, capabilities, budget)),
-                    capabilityId = CAPABILITY_ID,
+                    id = PlanId(planIdentity(selected.sceneCanonicalId, target, capabilities, budget, selected.capabilityId)),
+                    capabilityId = selected.capabilityId,
                     targetExtent = targetExtent,
                     colorFormat = FORMAT,
                     capabilities = capabilities,
@@ -123,6 +124,7 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
                     passes = listOf(render, readback),
                     dependencies = listOf(PlanPassDependency(render.id, readback.id)),
                     peakFrameLocalBytes = withinBudget.peakBytes,
+                    materialPlanTable = selected.materialPlanTable,
                 ),
             )
         } catch (_: IllegalArgumentException) {
@@ -136,9 +138,10 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
         )
         val targetBounds = RectI32(0, 0, scene.extent.width, scene.extent.height)
         val draws = mutableListOf<SolidRectDraw>()
+        val materialEntries = mutableListOf<MaterialPlanEntry>()
         for ((index, command) in scene.withIndex()) {
             when (command) {
-                is SceneCommand.Draw -> when (val result = recognizeDraw(command.node, index, targetBounds)) {
+                is SceneCommand.Draw -> when (val result = recognizeDraw(command.node, index, targetBounds, materialEntries)) {
                     is DrawRecognition.Accepted -> draws += result.draw
                     is DrawRecognition.Gap -> return Recognition.Gap(result.diagnostic)
                     is DrawRecognition.Invalid -> return Recognition.Invalid(result.diagnostic)
@@ -168,18 +171,28 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
         }
         return if (draws.isEmpty()) Recognition.Gap(
             diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "W3 requires at least one visible draw"),
-        ) else Recognition.Accepted(draws)
+        ) else Recognition.Accepted(
+            draws,
+            materialEntries.takeIf { it.isNotEmpty() }?.let(MaterialPlanTable::of),
+            if (materialEntries.isNotEmpty()) W5A_CAPABILITY_ID else CAPABILITY_ID,
+        )
     }
 
-    private fun recognizeDraw(node: DrawNode, index: Int, target: RectI32): DrawRecognition {
+    private fun recognizeDraw(
+        node: DrawNode,
+        index: Int,
+        target: RectI32,
+        materialEntries: MutableList<MaterialPlanEntry>,
+    ): DrawRecognition {
         val geometryNode = node.geometry as? GeometryNode.Rect
             ?: return semanticGap("Draw geometry or material is outside W3")
-        val material = node.material as? org.graphiks.kanvas.render.ir.MaterialNode.Solid
-            ?: return semanticGap("Draw geometry or material is outside W3")
+        val material = node.material
+        val isW5aMaterial = material is MaterialNode.Opacity || material == MaterialNode.Transparent
+        if (material !is MaterialNode.Solid && !isW5aMaterial) return semanticGap("Draw geometry or material is outside W3")
         if (node.origin != DrawOrigin.RECT) {
             return semanticGap("Draw geometry or material is outside W3")
         }
-        if (!w3Blend(node.blend) || node.effects !is EffectStack.Empty || node.resource != null || node.operationBlendMode != null || !w3Paint(node.paint)) {
+        if (!w3Blend(node.blend) || node.effects !is EffectStack.Empty || node.resource != null || node.operationBlendMode != null || !w3Paint(node.paint, isW5aMaterial)) {
             return semanticGap("Draw state is outside W3")
         }
         if (node.coverage != CoverageRequest.HARD_EDGE && node.coverage != CoverageRequest.ANTIALIASED) return semanticGap("Coverage is outside W3")
@@ -197,7 +210,25 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
         val visible = intersect(target, geometry) ?: return semanticGap("Draw is outside the target")
         val clipped = if (clip == null) visible else intersect(visible, clip)
             ?: return semanticGap("Draw is fully clipped out")
-        return DrawRecognition.Accepted(SolidRectDraw.of(index, linearPremultiplied(material.color), clipped, clipped))
+        return if (isW5aMaterial) {
+            when (val planned = EffectiveMaterialPlanner.plan(node)) {
+                is EffectiveMaterialPlanner.Result.Refused -> semanticGap("W5a material is outside the Solid/Opacity subset")
+                is EffectiveMaterialPlanner.Result.Ready -> {
+                    val root = appendMaterialPlan(materialEntries, planned.table, planned.root)
+                    DrawRecognition.Accepted(
+                        SolidRectDraw.of(
+                            index,
+                            ColorF32.of(0f, 0f, 0f, 0f),
+                            clipped,
+                            clipped,
+                            materialAuthority = PlanDrawMaterialAuthority.MaterialV1(root),
+                        ),
+                    )
+                }
+            }
+        } else {
+            DrawRecognition.Accepted(SolidRectDraw.of(index, linearPremultiplied((material as MaterialNode.Solid).color), clipped, clipped))
+        }
     }
 
     private fun recognizeDrawColor(command: SceneCommand.DrawColor, index: Int, target: RectI32): DrawRecognition {
@@ -270,8 +301,8 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
         is BlendNode.Custom -> false
     }
 
-    private fun w3Paint(paint: PaintNode?): Boolean = paint == null || (
-        paint.shader == null && paint.blender == null && paint.colorFilter == null && paint.maskFilter == null &&
+    private fun w3Paint(paint: PaintNode?, acceptsMaterialShader: Boolean): Boolean = paint == null || (
+        (paint.shader == null || acceptsMaterialShader) && paint.blender == null && paint.colorFilter == null && paint.maskFilter == null &&
             paint.pathEffect == null && paint.imageFilter == null && paint.style == PaintStyleNode.FILL &&
             paint.blendMode == BlendMode.SRC_OVER
         )
@@ -284,6 +315,22 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
             ColorTransferFunction.sRgb.toLinear(color.blueNormalized) * alpha,
             alpha,
         )
+    }
+
+    private fun appendMaterialPlan(
+        entries: MutableList<MaterialPlanEntry>,
+        incoming: MaterialPlanTable,
+        root: MaterialPlanRef,
+    ): MaterialPlanRef {
+        val offset = entries.size
+        incoming.entries().forEach { entry ->
+            val program = when (val value = entry.program) {
+                is MaterialProgramPlan.OpacityV1 -> MaterialProgramPlan.OpacityV1(MaterialPlanRef(offset + value.child.indexI32))
+                else -> value
+            }
+            entries += MaterialPlanEntry(program, entry.bindings)
+        }
+        return MaterialPlanRef(offset + root.indexI32)
     }
 
     private fun finite(bounds: RectF32): Boolean = listOf(bounds.left, bounds.top, bounds.right, bounds.bottom).all(Float::isFinite)
@@ -313,9 +360,15 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
     private fun invalid(diagnostic: RenderDiagnostic): RenderPlanResult<Nothing> = RenderPlanResult.InvalidScene(listOf(diagnostic))
     private fun resourceLimit(diagnostic: RenderDiagnostic): RenderPlanResult<Nothing> = RenderPlanResult.ResourceLimitExceeded(listOf(diagnostic))
 
-    private fun planIdentity(sceneCanonicalId: CanonicalId, target: RenderTargetDescriptor, capabilities: PlanCapabilitySnapshot, budget: PlanBudget): String {
+    private fun planIdentity(
+        sceneCanonicalId: CanonicalId,
+        target: RenderTargetDescriptor,
+        capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget,
+        capabilityId: String,
+    ): String {
         val fields = listOf(
-            "w3-plan-v1", sceneCanonicalId.value, target.extent.width.toString(), target.extent.height.toString(),
+            capabilityId, sceneCanonicalId.value, target.extent.width.toString(), target.extent.height.toString(),
             target.colorSpace.name, target.colorSpace.transferFunction.name, target.colorSpace.gamut.name,
             capabilities.deviceGeneration.toString(), capabilities.maxTextureDimension2D.toString(), capabilities.maxBufferSizeBytes.toString(),
             capabilities.copyBytesPerRowAlignment.toString(), capabilities.supportedFormats().map { it.name }.sorted().joinToString(","),
@@ -337,7 +390,11 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
     }
 
     private sealed interface Recognition {
-        data class Accepted(val draws: List<SolidRectDraw>) : Recognition
+        data class Accepted(
+            val draws: List<SolidRectDraw>,
+            val materialPlanTable: MaterialPlanTable?,
+            val capabilityId: String,
+        ) : Recognition
         data class Gap(val diagnostic: RenderDiagnostic) : Recognition
         data class Invalid(val diagnostic: RenderDiagnostic) : Recognition
     }
@@ -347,14 +404,15 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
         override val sceneCanonicalId: CanonicalId,
         override val target: RenderTargetDescriptor,
         draws: List<SolidRectDraw>,
+        val materialPlanTable: MaterialPlanTable?,
+        override val capabilityId: String,
     ) : GpuPlanCandidate {
-        override val capabilityId: String = CAPABILITY_ID
         val draws: List<SolidRectDraw> = Collections.unmodifiableList(draws.toList())
         private val sceneFingerprint: CanonicalId = sceneCanonicalId
         private val targetFingerprint: CanonicalId = target.canonicalId
 
         fun hasMatchingFingerprints(): Boolean =
-            capabilityId == CAPABILITY_ID && sceneCanonicalId == sceneFingerprint && target.canonicalId == targetFingerprint
+            capabilityId in setOf(CAPABILITY_ID, W5A_CAPABILITY_ID) && sceneCanonicalId == sceneFingerprint && target.canonicalId == targetFingerprint
     }
     private sealed interface DrawRecognition {
         data class Accepted(val draw: SolidRectDraw) : DrawRecognition
@@ -374,6 +432,7 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
 
     public companion object {
         public const val CAPABILITY_ID: String = "solid-rect-pixel-aligned-simple-clip-src-over-srgb-v1"
+        public const val W5A_CAPABILITY_ID: String = "w5a-solid-opacity-rect-v1"
         private val FORMAT: PlanLogicalColorFormat = PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL
         private const val PIXEL_BYTES: Long = 4L
         private const val MAX_W3_COMMANDS: Int = 512
