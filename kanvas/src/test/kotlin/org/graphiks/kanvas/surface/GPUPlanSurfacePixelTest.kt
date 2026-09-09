@@ -92,19 +92,19 @@ class GPUPlanSurfacePixelTest {
             W4eClipCpuOracle.Clip(
                 W4eClipCpuOracle.Shape.Rect(1.0, 1.0, 9.0, 9.0),
                 W4eClipCpuOracle.ClipOperation.Intersect,
-                antiAlias = false,
+                antiAlias = W4eClipCpuOracle.AA.Hard,
             ),
             W4eClipCpuOracle.Clip(
                 W4eClipCpuOracle.Shape.RRect(W4eClipCpuOracle.Shape.Rect(2.0, 2.0, 8.0, 8.0), 2.0, 2.0),
                 W4eClipCpuOracle.ClipOperation.Intersect,
-                antiAlias = false,
+                antiAlias = W4eClipCpuOracle.AA.Hard,
             ),
             W4eClipCpuOracle.Clip(
                 W4eClipCpuOracle.Shape.Polygon(
                     listOf(W4eClipCpuOracle.Point(4.0, 2.0), W4eClipCpuOracle.Point(8.0, 2.0), W4eClipCpuOracle.Point(8.0, 6.0)),
                 ),
                 W4eClipCpuOracle.ClipOperation.Difference,
-                antiAlias = false,
+                antiAlias = W4eClipCpuOracle.AA.Hard,
             ),
         )
         val expected = W4eClipCpuOracle.render(
@@ -114,7 +114,7 @@ class GPUPlanSurfacePixelTest {
                 W4eClipCpuOracle.Draw(
                     W4eClipCpuOracle.Shape.Rect(0.0, 0.0, 10.0, 10.0),
                     W4eClipCpuOracle.Rgba8(255, 43, 71, 255),
-                    antiAlias = false,
+                    antiAlias = W4eClipCpuOracle.AA.Hard,
                     clips = clips,
                 ),
                 W4eClipCpuOracle.Draw(
@@ -122,7 +122,7 @@ class GPUPlanSurfacePixelTest {
                         listOf(W4eClipCpuOracle.Point(1.0, 8.0), W4eClipCpuOracle.Point(8.0, 3.0), W4eClipCpuOracle.Point(8.0, 8.0)),
                     ),
                     W4eClipCpuOracle.Rgba8(38, 161, 99, 255),
-                    antiAlias = false,
+                    antiAlias = W4eClipCpuOracle.AA.Hard,
                     clips = clips,
                 ),
             ),
@@ -165,9 +165,20 @@ class GPUPlanSurfacePixelTest {
             val expected = W4eClipCpuOracle.render(
                 16,
                 16,
-                listOf(W4eClipCpuOracle.Draw(shape, W4eClipCpuOracle.Rgba8(255, 0, 0, 255), false,
-                    listOf(W4eClipCpuOracle.Clip(W4eClipCpuOracle.Shape.Rect(0.0, 0.0, 0.0, 0.0), W4eClipCpuOracle.ClipOperation.Difference, false)),
-                )),
+                listOf(
+                    W4eClipCpuOracle.Draw(
+                        shape = shape,
+                        color = W4eClipCpuOracle.Rgba8(255, 0, 0, 255),
+                        antiAlias = W4eClipCpuOracle.AA.Hard,
+                        clips = listOf(
+                            W4eClipCpuOracle.Clip(
+                                shape = W4eClipCpuOracle.Shape.Rect(0.0, 0.0, 0.0, 0.0),
+                                operation = W4eClipCpuOracle.ClipOperation.Difference,
+                                antiAlias = W4eClipCpuOracle.AA.Hard,
+                            ),
+                        ),
+                    ),
+                ),
             )
             val surface = Surface(16, 16)
             surface.canvas {
@@ -178,6 +189,141 @@ class GPUPlanSurfacePixelTest {
             assertPreparedRouteEvidence(result)
             assertPixelsEqual(expected, result.pixels)
         }
+    }
+
+    @Test
+    fun `W4e oracle inverse-maps affine clip geometry before ordered folds`() {
+        val pixels = W4eClipCpuOracle.render(
+            width = 2,
+            height = 1,
+            draws = listOf(
+                W4eClipCpuOracle.Draw(
+                    shape = W4eClipCpuOracle.Shape.Rect(0.0, 0.0, 2.0, 1.0),
+                    color = W4eClipCpuOracle.Rgba8(255, 0, 0, 255),
+                    antiAlias = W4eClipCpuOracle.AA.Hard,
+                    clips = listOf(
+                        W4eClipCpuOracle.Clip(
+                            shape = W4eClipCpuOracle.Shape.Rect(0.0, 0.0, 1.0, 1.0),
+                            operation = W4eClipCpuOracle.ClipOperation.Intersect,
+                            antiAlias = W4eClipCpuOracle.AA.Hard,
+                            transformF64 = W4eClipCpuOracle.HomographyF64.translation(1.0, 0.0),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        assertPixelsEqual(
+            ubyteArrayOf(
+                0u, 0u, 0u, 0u,
+                255u, 0u, 0u, 255u,
+            ),
+            pixels,
+        )
+    }
+
+    @Test
+    fun `W4e oracle inverse-maps projective draw geometry instead of dropping perspective`() {
+        val pixels = W4eClipCpuOracle.render(
+            width = 2,
+            height = 1,
+            draws = listOf(
+                W4eClipCpuOracle.Draw(
+                    shape = W4eClipCpuOracle.Shape.Rect(0.0, 0.0, 1.0, 1.0),
+                    color = W4eClipCpuOracle.Rgba8(255, 0, 0, 255),
+                    antiAlias = W4eClipCpuOracle.AA.Hard,
+                    transformF64 = W4eClipCpuOracle.HomographyF64(
+                        m00F64 = 1.0, m01F64 = 0.0, m02F64 = 0.0,
+                        m10F64 = 0.0, m11F64 = 1.0, m12F64 = 0.0,
+                        m20F64 = -0.5, m21F64 = 0.0, m22F64 = 1.0,
+                    ),
+                    clips = emptyList(),
+                ),
+            ),
+        )
+
+        assertPixelsEqual(
+            ubyteArrayOf(
+                255u, 0u, 0u, 255u,
+                255u, 0u, 0u, 255u,
+            ),
+            pixels,
+        )
+    }
+
+    @Test
+    fun `W4e oracle restricts coverage to its local half-open I32 scissor`() {
+        val pixels = W4eClipCpuOracle.render(
+            width = 3,
+            height = 2,
+            draws = listOf(
+                W4eClipCpuOracle.Draw(
+                    shape = W4eClipCpuOracle.Shape.Rect(-1.0, -1.0, 4.0, 3.0),
+                    color = W4eClipCpuOracle.Rgba8(255, 0, 0, 255),
+                    antiAlias = W4eClipCpuOracle.AA.Hard,
+                    clips = emptyList(),
+                    scissorI32 = W4eClipCpuOracle.ScissorI32(1, 0, 2, 2),
+                ),
+            ),
+        )
+
+        assertPixelsEqual(
+            ubyteArrayOf(
+                0u, 0u, 0u, 0u,
+                255u, 0u, 0u, 255u,
+                0u, 0u, 0u, 0u,
+                0u, 0u, 0u, 0u,
+                255u, 0u, 0u, 255u,
+                0u, 0u, 0u, 0u,
+            ),
+            pixels,
+        )
+    }
+
+    @Test
+    fun `W4e oracle analytic 2x2 coverage uses producer positions without inventing PathMsaa4 positions`() {
+        val fractionalEdge = W4eClipCpuOracle.Shape.Rect(0.2, 0.0, 0.3, 1.0)
+        val hard = W4eClipCpuOracle.render(
+            width = 1,
+            height = 1,
+            draws = listOf(
+                W4eClipCpuOracle.Draw(
+                    shape = fractionalEdge,
+                    color = W4eClipCpuOracle.Rgba8(255, 0, 0, 255),
+                    antiAlias = W4eClipCpuOracle.AA.Hard,
+                    clips = emptyList(),
+                ),
+            ),
+        )
+        val analytic = W4eClipCpuOracle.render(
+            width = 1,
+            height = 1,
+            draws = listOf(
+                W4eClipCpuOracle.Draw(
+                    shape = fractionalEdge,
+                    color = W4eClipCpuOracle.Rgba8(255, 0, 0, 255),
+                    antiAlias = W4eClipCpuOracle.AA.Analytic2x2,
+                    clips = emptyList(),
+                ),
+            ),
+        )
+        val pathMsaa4Binary = W4eClipCpuOracle.render(
+            width = 1,
+            height = 1,
+            draws = listOf(
+                W4eClipCpuOracle.Draw(
+                    shape = W4eClipCpuOracle.Shape.Rect(-1.0, -1.0, 2.0, 2.0),
+                    color = W4eClipCpuOracle.Rgba8(255, 0, 0, 255),
+                    antiAlias = W4eClipCpuOracle.AA.PathMsaa4,
+                    clips = emptyList(),
+                ),
+            ),
+        )
+
+        assertPixelsEqual(ubyteArrayOf(0u, 0u, 0u, 0u), hard)
+        assertPixelsEqual(ubyteArrayOf(188u, 0u, 0u, 128u), analytic)
+        assertPixelsEqual(ubyteArrayOf(255u, 0u, 0u, 255u), pathMsaa4Binary)
+        assertFalse(hard.contentEquals(analytic))
     }
 
     @Test
