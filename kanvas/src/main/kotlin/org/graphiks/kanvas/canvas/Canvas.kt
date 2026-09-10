@@ -279,7 +279,7 @@ class Canvas internal constructor(buffer: DisplayListBuffer) {
 
     /** Draw a triangle mesh from [vertices]. */
     fun drawVertices(vertices: Vertices, paint: Paint) {
-        buffer.append(DisplayOp.DrawVertices(vertices, paint, currentTransform, currentRecordedClip))
+        buffer.append(DisplayOp.DrawVertices(vertices.snapshotForDisplayList(), paint, currentTransform, currentRecordedClip))
     }
 
     fun drawMesh(mesh: Mesh, paint: Paint, blendMode: BlendMode? = null) {
@@ -485,6 +485,18 @@ class Canvas internal constructor(buffer: DisplayListBuffer) {
         val recordedClip: ClipStack,
     )
 }
+
+/**
+ * [Vertices] carries caller-owned collections.  Recording must close that mutable boundary
+ * before a deferred Picture or GPU prepared-frame lowering observes the operation.
+ */
+private fun Vertices.snapshotForDisplayList(): Vertices = Vertices(
+    mode = mode,
+    positions = positions.map { point -> Point2F32(point.x, point.y) },
+    texCoords = texCoords?.map { point -> Point2F32(point.x, point.y) },
+    colors = colors?.toList(),
+    indices = indices?.toList(),
+)
 
 private fun ClipStackOp.RectOp.isLosslessDeviceRect(): Boolean =
     (transform as? ClipTransformSnapshot.Known)?.copyMatrixF32() == Matrix3x3F32.Identity &&

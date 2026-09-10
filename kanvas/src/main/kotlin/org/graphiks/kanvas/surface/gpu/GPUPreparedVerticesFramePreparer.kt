@@ -50,6 +50,11 @@ internal object GPUPreparedVerticesFramePreparer {
         mappingBoundary: GPUPreparedFrameMappingBoundary = canonicalPreparedFrameMappingBoundary,
     ): GPUPreparedVerticesFramePreparation {
         val operationSnapshot = operations.toList()
+        val materialBridge = W5aPreparedVerticesMaterialBridge.capture(
+            operations = operationSnapshot,
+            width = target.width,
+            height = target.height,
+        )
         val draws = ArrayList<GPUPreparedVerticesDraw>()
         operationSnapshot.forEachIndexed { operationIndex, operation ->
             if (operation !is DisplayOp.DrawVertices && operation !is DisplayOp.DrawMesh) {
@@ -61,6 +66,7 @@ internal object GPUPreparedVerticesFramePreparer {
                     operationIndex = operationIndex,
                     target = target,
                     capabilities = capabilities,
+                    materialPlan = materialBridge?.materialFor(operationIndex),
                 )
             ) {
                 is GPUPreparedVerticesLowering.Ready -> draws += lowered.draw

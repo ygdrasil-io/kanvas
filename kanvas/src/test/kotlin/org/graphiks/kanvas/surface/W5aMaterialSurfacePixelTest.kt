@@ -23,6 +23,8 @@ import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.PointMode
+import org.graphiks.kanvas.types.VertexMode
+import org.graphiks.kanvas.types.Vertices
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
@@ -749,6 +751,67 @@ class W5aMaterialSurfacePixelTest {
                 .any { channel -> channel != 0u.toUByte() },
         )
         assertContentEquals(expectedPixels, actualSurface.render().pixels)
+    }
+
+    @Test
+    fun `Picture playback retains a planned uncolored triangle after caller vertex and index mutation`() {
+        val positions = mutableListOf(
+            Point2F32(-1f, -1f), Point2F32(5f, -1f), Point2F32(-1f, 5f),
+        )
+        val indices = mutableListOf(0, 1, 2)
+        val vertices = Vertices(VertexMode.TRIANGLES, positions, indices = indices)
+        val source = ColorARGB.of(197, 231, 83, 37)
+        val paint = Paint(
+            color = ColorARGB.of(149, 1, 3, 5),
+            shader = Shader.Opacity(Shader.Opacity(Shader.SolidColor(source), 0.625f), 0.4f),
+            antiAlias = false,
+        )
+        val recorder = PictureRecorder()
+        recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 4f, 4f)).drawVertices(vertices, paint)
+        val captured = recorder.finishRecordingAsPicture()
+        positions[0] = Point2F32(10f, 10f)
+        positions[1] = Point2F32(11f, 10f)
+        positions[2] = Point2F32(10f, 11f)
+        indices[0] = 2
+
+        val surface = Surface(4, 4)
+        surface.canvas { captured.playback(this) }
+        val result = surface.render()
+
+        WgslFloatEnvelopeV1Oracle.assertAdmits(
+            W5aSolidOpacityCpuOracle.draw(source, 0.4f, 0.625f, 149f / 255f),
+            result.pixels.copyOfRange(0, 4),
+        )
+    }
+
+    @Test
+    fun `Picture playback retains planned vertex colors which modulate rather than replace the material`() {
+        val positions = mutableListOf(
+            Point2F32(-1f, -1f), Point2F32(5f, -1f), Point2F32(-1f, 5f),
+        )
+        val colors = mutableListOf(ColorARGB.White, ColorARGB.White, ColorARGB.White)
+        val vertices = Vertices(VertexMode.TRIANGLES, positions, colors = colors)
+        val source = ColorARGB.of(211, 71, 199, 127)
+        val paint = Paint(
+            color = ColorARGB.of(173, 7, 11, 13),
+            shader = Shader.Opacity(Shader.SolidColor(source), 0.5f),
+            antiAlias = false,
+        )
+        val recorder = PictureRecorder()
+        recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 4f, 4f)).drawVertices(vertices, paint)
+        val captured = recorder.finishRecordingAsPicture()
+        colors[0] = ColorARGB.Transparent
+        colors[1] = ColorARGB.Transparent
+        colors[2] = ColorARGB.Transparent
+
+        val surface = Surface(4, 4)
+        surface.canvas { captured.playback(this) }
+        val result = surface.render()
+
+        WgslFloatEnvelopeV1Oracle.assertAdmits(
+            W5aSolidOpacityCpuOracle.draw(source, 0.5f, paintAlphaF32 = 173f / 255f),
+            result.pixels.copyOfRange(0, 4),
+        )
     }
 
 }

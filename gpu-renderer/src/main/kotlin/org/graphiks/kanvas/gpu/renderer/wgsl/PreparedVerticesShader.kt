@@ -2,6 +2,8 @@ package org.graphiks.kanvas.gpu.renderer.artifacts
 
 import org.graphiks.kanvas.gpu.renderer.materials.CanonicalIdentityEncoder
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram
+import org.graphiks.kanvas.gpu.plan.MaterialPlanRef
+import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialFragment
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialSampledBinding
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesLayoutAuthority
@@ -58,11 +60,15 @@ object PreparedVerticesShaderAssembler {
         topology: GPUVertexMode,
         material: GPUPreparedMaterialProgram,
         hasPrimitiveColor: Boolean,
+        materialPlanTable: MaterialPlanTable? = null,
+        materialPlanRef: MaterialPlanRef? = null,
     ): GPUPreparedVerticesShaderResult = assembleObserved(
         layout = layout,
         topology = topology,
         material = material,
         hasPrimitiveColor = hasPrimitiveColor,
+        materialPlanTable = materialPlanTable,
+        materialPlanRef = materialPlanRef,
         validator = KanvasWGSLValidator(),
         reflectionProvider = KanvasWGSLReflectionProvider(),
     )
@@ -72,9 +78,22 @@ object PreparedVerticesShaderAssembler {
         topology: GPUVertexMode,
         material: GPUPreparedMaterialProgram,
         hasPrimitiveColor: Boolean,
+        materialPlanTable: MaterialPlanTable? = null,
+        materialPlanRef: MaterialPlanRef? = null,
         validator: WGSLValidator,
         reflectionProvider: WGSLReflectionProvider,
     ): GPUPreparedVerticesShaderResult {
+        if ((materialPlanTable == null) != (materialPlanRef == null) ||
+            (materialPlanTable != null && runCatching {
+                val entry = materialPlanTable.entry(requireNotNull(materialPlanRef))
+                entry.program.versionI32 == 1 && entry.bindings.versionI32 == 1
+            }.getOrDefault(false).not())
+        ) {
+            return preparedVerticesRefused(
+                GPUPreparedVerticesRefusalCodes.Material,
+                "Prepared vertices W5a material provenance is invalid",
+            )
+        }
         if (!GPUPreparedVerticesLayoutAuthority.isCanonical(layout)) {
             return preparedVerticesRefused(
                 GPUPreparedVerticesRefusalCodes.AttributeLayout,

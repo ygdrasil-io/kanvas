@@ -61,6 +61,7 @@ internal object GPUPreparedVerticesLowerer {
         target: GPUTargetFacts,
         capabilities: GPUCapabilities,
         runtimeEffectResolver: GPUPreparedRuntimeEffectResolver = KanvasPreparedRuntimeEffectResolver(),
+        materialPlan: GPUPreparedVerticesMaterialPlan? = null,
     ): GPUPreparedVerticesLowering = lower(
         operation = operation,
         operationIndex = operationIndex,
@@ -68,6 +69,7 @@ internal object GPUPreparedVerticesLowerer {
         capabilities = capabilities,
         runtimeEffectResolver = runtimeEffectResolver,
         materialCompiler = canonicalPreparedVerticesMaterialCompiler,
+        materialPlan = materialPlan,
     )
 
     internal fun lower(
@@ -77,6 +79,7 @@ internal object GPUPreparedVerticesLowerer {
         capabilities: GPUCapabilities,
         runtimeEffectResolver: GPUPreparedRuntimeEffectResolver,
         materialCompiler: GPUPreparedVerticesMaterialCompiler,
+        materialPlan: GPUPreparedVerticesMaterialPlan? = null,
     ): GPUPreparedVerticesLowering {
         if (operation is DisplayOp.DrawVertices) {
             val vertices = operation.vertices.snapshotForPreparedVertices()
@@ -100,11 +103,12 @@ internal object GPUPreparedVerticesLowerer {
             provenance = "drawVertices",
             meshBounds = null,
             finalBlend = paint.blendMode.toGpuBlendFacts(),
+            materialPlan = materialPlan,
             )
         }
         if (operation is DisplayOp.DrawMesh) {
             return lowerMesh(
-                operation, operationIndex, target, capabilities, runtimeEffectResolver, materialCompiler,
+                operation, operationIndex, target, capabilities, runtimeEffectResolver, materialCompiler, materialPlan,
             )
         }
         return refused(
@@ -123,6 +127,7 @@ internal object GPUPreparedVerticesLowerer {
         capabilities: GPUCapabilities,
         runtimeEffectResolver: GPUPreparedRuntimeEffectResolver,
         materialCompiler: GPUPreparedVerticesMaterialCompiler,
+        materialPlan: GPUPreparedVerticesMaterialPlan?,
     ): GPUPreparedVerticesLowering {
         val vertices = operation.mesh.vertices.snapshotForPreparedVertices()
         val bounds = operation.mesh.bounds.copy()
@@ -153,6 +158,7 @@ internal object GPUPreparedVerticesLowerer {
                 provenance = "drawMesh:no-program",
                 meshBounds = null,
                 finalBlend = resolvedBlendMode.toGpuBlendFacts(),
+                materialPlan = materialPlan,
             )
         }
         // The MeshProgram material replaces the paint entirely: the paint
@@ -240,6 +246,7 @@ internal object GPUPreparedVerticesLowerer {
             meshBounds = bounds,
             finalBlend = finalBlend,
             material = material,
+            materialPlan = null,
         )
     }
 
@@ -256,6 +263,7 @@ internal object GPUPreparedVerticesLowerer {
         meshBounds: org.graphiks.math.geometry.RectF32?,
         finalBlend: GPUBlendFacts,
         material: GPUPreparedMaterialProgram? = null,
+        materialPlan: GPUPreparedVerticesMaterialPlan? = null,
     ): GPUPreparedVerticesLowering {
         val transformFailure = transformFailure(transform)
         if (transformFailure != null) return refused(
@@ -277,7 +285,19 @@ internal object GPUPreparedVerticesLowerer {
                 result.code, operationIndex, "geometry", result.facts["reason"] ?: "packer_refused", result.facts,
             )
         }
-        val resolvedMaterial = material ?: when (val compiled = compilePaint(paint, target, capabilities)) {
+        val resolvedMaterial = material ?: materialPlan?.let { planned ->
+            when (val compiled = GPUPreparedMaterialProgramCompiler.compileW5a(
+                table = planned.table,
+                root = planned.ref,
+                context = materialContext(target, capabilities),
+            )) {
+                is GPUPreparedMaterialProgramResult.Ready -> compiled.program
+                is GPUPreparedMaterialProgramResult.Refused -> return refused(
+                    GPUPreparedVerticesRefusalCodes.Material, operationIndex, "material-plan", "compiler_refused",
+                    mapOf("compilerCode" to compiled.code, "sourceKind" to compiled.sourceKind.name),
+                )
+            }
+        } ?: when (val compiled = compilePaint(paint, target, capabilities)) {
             is MaterialResult.Ready -> compiled.material
             is MaterialResult.Refused -> return refused(
                 GPUPreparedVerticesRefusalCodes.Material, operationIndex, "material", compiled.reason, compiled.facts,
@@ -328,6 +348,7 @@ internal object GPUPreparedVerticesLowerer {
                 artifact = packed.artifact,
                 operationKind = operationKind,
                 material = resolvedMaterial,
+                materialPlan = materialPlan,
                 transform = transform,
                 clip = clip,
                 clipSnapshot = preparedClip,

@@ -2365,7 +2365,8 @@ internal class GPUPreparedSurfaceNativePreflight(
             material.abiHash.isBlank() ||
                 !material.abiHash.matches(PREPARED_VERTICES_ABI_HASH_PATTERN) ||
                 material.materialKey.isBlank() ||
-                evidence.semantic.materialIdentity.isBlank()
+                evidence.semantic.materialIdentity.isBlank() ||
+                !evidence.semantic.hasValidW5aMaterialPlanProvenance()
         }?.let {
             return refused(
                 GPUPreparedVerticesPreflightRefusalCodes.MATERIAL_ABI,
@@ -2380,6 +2381,8 @@ internal class GPUPreparedSurfaceNativePreflight(
                     topology = semantic.artifact.topology,
                     material = semantic.material,
                     hasPrimitiveColor = semantic.primitiveColorPresent,
+                    materialPlanTable = semantic.materialPlanTable,
+                    materialPlanRef = semantic.materialPlanRef,
                 )
             ) {
                 is GPUPreparedVerticesShaderResult.Ready -> null
@@ -3481,6 +3484,8 @@ internal class GPUPreparedSurfaceNativePreflight(
                                 topology = semantic.artifact.topology,
                                 material = semantic.material,
                                 hasPrimitiveColor = semantic.primitiveColorPresent,
+                                materialPlanTable = semantic.materialPlanTable,
+                                materialPlanRef = semantic.materialPlanRef,
                             )
                         ) {
                             is GPUPreparedVerticesShaderResult.Ready ->
@@ -5800,6 +5805,17 @@ private fun preparedVerticesArtifactKeyOfUpload(upload: GPUFrameStep.UploadResou
 }
 
 private val PREPARED_VERTICES_ABI_HASH_PATTERN = Regex("sha256:[0-9a-f]{64}")
+
+/** The native seam accepts a W5a draw only with its sealed table/reference pair intact. */
+private fun GPUDrawSemanticPayload.Vertices.hasValidW5aMaterialPlanProvenance(): Boolean {
+    val table = materialPlanTable
+    val ref = materialPlanRef
+    if (table == null || ref == null) return table == null && ref == null
+    return runCatching {
+        val entry = table.entry(ref)
+        entry.program.versionI32 == 1 && entry.bindings.versionI32 == 1
+    }.getOrDefault(false)
+}
 
 private inline fun <T> List<T>.anyIndexed(predicate: (Int, T) -> Boolean): Boolean {
     forEachIndexed { index, value ->
