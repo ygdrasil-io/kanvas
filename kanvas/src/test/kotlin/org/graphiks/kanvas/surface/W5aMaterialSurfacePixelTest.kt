@@ -19,6 +19,7 @@ import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.surface.gpu.GPUPreparedTextTestFixtures
 import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.text.KanvasGlyphRun
@@ -843,5 +844,42 @@ class W5aMaterialSurfacePixelTest {
         val failure = assertFailsWith<IllegalStateException> { surface.render() }
         assertTrue(failure.message.orEmpty().contains("unsupported.vertices.material"), failure.message)
     }
+
+    @Test
+    fun `public W5a vertices keep a non-finite transform refusal outside material planning`() {
+        val surface = Surface(4, 4)
+        surface.canvas {
+            setMatrix(Matrix3x3F32(sx = Float.NaN))
+            drawVertices(
+                w5aTriangle(),
+                Paint(shader = Shader.Opacity(Shader.SolidColor(ColorARGB.of(211, 71, 199, 127)), 0.5f)),
+            )
+        }
+
+        val failure = assertFailsWith<IllegalStateException> { surface.render() }
+        assertTrue(failure.message.orEmpty().contains("unsupported.vertices.transform"), failure.message)
+    }
+
+    @Test
+    fun `public W5a vertices keep an invalid clip refusal outside material planning`() {
+        val surface = Surface(4, 4)
+        surface.canvas {
+            setMatrix(Matrix3x3F32(sx = Float.NaN))
+            clipRect(RectF32.ofLTRB(0f, 0f, 4f, 4f), antiAlias = false)
+            resetMatrix()
+            drawVertices(
+                w5aTriangle(),
+                Paint(shader = Shader.Opacity(Shader.SolidColor(ColorARGB.of(211, 71, 199, 127)), 0.5f)),
+            )
+        }
+
+        val failure = assertFailsWith<IllegalStateException> { surface.render() }
+        assertTrue(failure.message.orEmpty().contains("unsupported.vertices.clip_coverage"), failure.message)
+    }
+
+    private fun w5aTriangle(): Vertices = Vertices(
+        VertexMode.TRIANGLES,
+        listOf(Point2F32(-1f, -1f), Point2F32(5f, -1f), Point2F32(-1f, 5f)),
+    )
 
 }

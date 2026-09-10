@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.gpu.plan.EffectiveMaterialPlanner
 import org.graphiks.kanvas.paint.BlendMode
@@ -9,7 +10,10 @@ import org.graphiks.kanvas.render.ir.DisplayOpSceneAdapter
 import org.graphiks.kanvas.render.ir.SceneCaptureResult
 import org.graphiks.kanvas.render.ir.SceneCommand
 import org.graphiks.kanvas.render.ir.SceneExtent
+import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
+import org.graphiks.math.geometry.Point2F32
+import org.graphiks.math.matrix.Matrix3x3F32
 
 /**
  * Selects the W5a material authority before prepared vertices lowering.  The lowerer receives
@@ -30,9 +34,12 @@ internal class W5aPreparedVerticesMaterialBridge private constructor(
     fun materialFor(operationIndex: Int): Result {
         val operation = operations.getOrNull(operationIndex) ?: return Result.NotCandidate
         if (!operation.isW5aPreparedVerticesCandidate()) return Result.NotCandidate
+        // W5a owns paint material only. Capture it against neutral geometry/state so transform,
+        // clip, bounds, and public geometry validation retain their established lowerer authority.
+        val materialCaptureOperation = operation.materialCaptureOperation()
         val captured = runCatching {
             DisplayOpSceneAdapter.capture(
-                operations = listOf(operation),
+                operations = listOf(materialCaptureOperation),
                 extent = SceneExtent(width, height),
                 colorSpace = ColorSpace.SRGB,
             )
@@ -76,16 +83,38 @@ internal class W5aPreparedVerticesMaterialBridge private constructor(
             W5aPreparedVerticesMaterialBridge(operations.toList(), width, height)
 
         private fun DisplayOp.isW5aPreparedVerticesCandidate(): Boolean = when (this) {
-            is DisplayOp.DrawVertices -> vertices.isW5aCandidateGeometry() &&
-                paint.blendMode == BlendMode.SRC_OVER && paint.shader.isW5aSolidOpacity()
+            is DisplayOp.DrawVertices -> paint.blendMode == BlendMode.SRC_OVER &&
+                paint.shader.isW5aSolidOpacity()
             is DisplayOp.DrawMesh -> mesh.program == null &&
-                mesh.vertices.isW5aCandidateGeometry() &&
-                listOf(mesh.bounds.left, mesh.bounds.top, mesh.bounds.right, mesh.bounds.bottom)
-                    .all(Float::isFinite) && mesh.bounds.right >= mesh.bounds.left &&
-                mesh.bounds.bottom >= mesh.bounds.top &&
                 (blendMode ?: paint.blendMode) == BlendMode.SRC_OVER && paint.shader.isW5aSolidOpacity()
             else -> false
         }
+
+        /**
+         * A material-only Scene capture cannot reclassify invalid caller geometry, transform, or
+         * clip as a material failure. DrawMesh without a program normalizes its selected blend
+         * into the same DrawVertices paint route used by the lowerer.
+         */
+        private fun DisplayOp.materialCaptureOperation(): DisplayOp.DrawVertices = when (this) {
+            is DisplayOp.DrawVertices -> DisplayOp.DrawVertices(
+                vertices = materialCaptureTriangle(),
+                paint = paint,
+                transform = Matrix3x3F32.Identity,
+                clip = ClipStack.WideOpen,
+            )
+            is DisplayOp.DrawMesh -> DisplayOp.DrawVertices(
+                vertices = materialCaptureTriangle(),
+                paint = paint.copy(blendMode = blendMode ?: paint.blendMode),
+                transform = Matrix3x3F32.Identity,
+                clip = ClipStack.WideOpen,
+            )
+            else -> error("W5a material capture only accepts prepared vertices operations")
+        }
+
+        private fun materialCaptureTriangle(): Vertices = Vertices(
+            VertexMode.TRIANGLES,
+            listOf(Point2F32(0f, 0f), Point2F32(1f, 0f), Point2F32(0f, 1f)),
+        )
 
         private fun Shader?.isW5aSolidOpacity(): Boolean {
             var source = this
@@ -96,13 +125,5 @@ internal class W5aPreparedVerticesMaterialBridge private constructor(
             }
             return source == null || source is Shader.SolidColor
         }
-
-        /** Geometry owns its own public refusal codes, so malformed geometry never enters W5a. */
-        private fun Vertices.isW5aCandidateGeometry(): Boolean =
-            positions.size >= 3 && positions.all { it.x.isFinite() && it.y.isFinite() } &&
-                (texCoords == null ||
-                    (texCoords.size == positions.size && texCoords.all { it.x.isFinite() && it.y.isFinite() })) &&
-                (colors == null || colors.size == positions.size) &&
-                (indices == null || (indices.size >= 3 && indices.all { it in positions.indices }))
     }
 }
