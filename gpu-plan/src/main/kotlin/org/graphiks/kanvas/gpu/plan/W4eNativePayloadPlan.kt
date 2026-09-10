@@ -85,7 +85,7 @@ public class W4eNativePayloadPlan private constructor(
             resources: List<PlanResource>,
             targetExtent: SizeI32,
             capabilities: PlanCapabilitySnapshot,
-            materialPlanTable: MaterialPlanTable,
+            materialPlanTable: MaterialPlanTable?,
         ): W4eNativePayloadPlan? = try {
             if (targetExtent.isEmpty()) return null
             val pathPasses = passes.filterIsInstance<PlanPass.PathRenderPass>()
@@ -247,15 +247,17 @@ public class W4eNativePayloadPlan private constructor(
         private fun collectPathPayload(
             pass: PlanPass.PathRenderPass,
             resourcesById: Map<PlanResourceId, PlanResource>,
-            materialPlanTable: MaterialPlanTable,
+            materialPlanTable: MaterialPlanTable?,
             addGeometry: (String, String, FloatArray, IntArray) -> Boolean,
             addDirectGeometry: (String, String, PathFillGeometryF32) -> Boolean,
             addUniform: (String, String, FloatArray) -> Boolean,
         ): Boolean {
-            fun materialColor(): org.graphiks.math.color.ColorF32? =
-                (pass.draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV1)?.let { authority ->
-                    W5aMaterialPlanEvaluator.lower(materialPlanTable, authority.ref)
+            fun materialColor(): org.graphiks.math.color.ColorF32? = when (val authority = pass.draw.materialAuthority) {
+                is PlanDrawMaterialAuthority.MaterialV1 -> materialPlanTable?.let { table ->
+                    W5aMaterialPlanEvaluator.lower(table, authority.ref)
                 }
+                is PlanDrawMaterialAuthority.LegacyColorV1 -> authority.copyColorF32()
+            }
             fun drawableGeometry(): PathFillGeometryF32? = when (val geometry = pass.draw.copyPathGeometry()) {
                 is PathDrawGeometry.Fill -> geometry.valueF32
                 is PathDrawGeometry.Stroke -> geometry.valueF32.copyFillGeometryF32()

@@ -56,7 +56,7 @@ class W4eClipPlanCompilerTest {
         val scene = sceneOf(pathDraw(coverage = CoverageRequest.ANTIALIASED, clip = clip))
         val graph = compile(scene)
 
-        assertEquals(W4eClipPlanCompiler.AA_CAPABILITY_ID, graph.capabilityId)
+        assertEquals(W4eClipPlanCompiler.W5A_AA_CAPABILITY_ID, graph.capabilityId)
         assertEquals(1, graph.passes().filterIsInstance<PlanPass.ClipMaskInitialize>().size)
         assertEquals(1, graph.passes().filterIsInstance<PlanPass.ClipMaskProducer>().size)
         assertEquals(ClipCombineOperation.Difference, graph.passes().filterIsInstance<PlanPass.ClipMaskFold>().single().operation)
@@ -79,7 +79,7 @@ class W4eClipPlanCompilerTest {
         )
         val graph = compile(sceneOf(pathDraw(clip = clip)))
 
-        assertEquals(W4eClipPlanCompiler.HARD_CAPABILITY_ID, graph.capabilityId)
+        assertEquals(W4eClipPlanCompiler.W5A_HARD_CAPABILITY_ID, graph.capabilityId)
         assertTrue(graph.resources().none { it.role == PlanResourceRole.CoverageMaskAccumulator })
         val draw = graph.passes().filterIsInstance<PlanPass.PathRenderPass>().single().draw
         assertIs<ClippedGeneralPathDraw>(draw)
@@ -295,7 +295,7 @@ class W4eClipPlanCompilerTest {
             pathDraw(coverage = CoverageRequest.HARD_EDGE, clip = clip),
         ))
 
-        assertEquals(W4eClipPlanCompiler.AA_CAPABILITY_ID, graph.capabilityId)
+        assertEquals(W4eClipPlanCompiler.W5A_AA_CAPABILITY_ID, graph.capabilityId)
         assertTrue(graph.resources().any { it.role == PlanResourceRole.PathHardEdgeMask && it.sampleCountI32 == 1 })
         assertTrue(graph.passes().filterIsInstance<PlanPass.PathRenderPass>().any { it.draw is ClippedBinaryMaskedPathDraw })
     }
@@ -434,7 +434,7 @@ class W4eClipPlanCompilerTest {
 
         val graph = compile(sceneOf(pathDraw(coverage = CoverageRequest.HARD_EDGE, clip = clip)))
 
-        assertEquals(W4eClipPlanCompiler.HARD_CAPABILITY_ID, graph.capabilityId)
+        assertEquals(W4eClipPlanCompiler.W5A_HARD_CAPABILITY_ID, graph.capabilityId)
         assertTrue(graph.resources().none { it.role == PlanResourceRole.MultisampleColorTarget })
         assertTrue(graph.resources().any { it.role == PlanResourceRole.CoverageMaskDepthStencil && it.sampleCountI32 == 1 })
     }
@@ -452,7 +452,7 @@ class W4eClipPlanCompilerTest {
 
         val graph = compile(sceneOf(pathDraw(coverage = CoverageRequest.HARD_EDGE, clip = clip)))
 
-        assertEquals(W4eClipPlanCompiler.AA_CAPABILITY_ID, graph.capabilityId)
+        assertEquals(W4eClipPlanCompiler.W5A_AA_CAPABILITY_ID, graph.capabilityId)
         assertTrue(graph.resources().any { it.role == PlanResourceRole.MultisampleColorTarget && it.sampleCountI32 == 4 })
         assertTrue(graph.passes().filterIsInstance<PlanPass.PathRenderPass>().any { it.draw is ClippedBinaryMaskedPathDraw })
     }
@@ -569,7 +569,7 @@ class W4eClipPlanCompilerTest {
         val producer = graph.passes().filterIsInstance<PlanPass.ClipMaskProducer>().single()
         assertTrue(producer.antiAlias)
         assertEquals(4, producer.sampleCountI32)
-        assertEquals(W4eClipPlanCompiler.AA_CAPABILITY_ID, graph.capabilityId)
+        assertEquals(W4eClipPlanCompiler.W5A_AA_CAPABILITY_ID, graph.capabilityId)
     }
 
     @Test
@@ -588,7 +588,7 @@ class W4eClipPlanCompilerTest {
         val producer = graph.passes().filterIsInstance<PlanPass.ClipMaskProducer>().single()
         assertTrue(producer.antiAlias)
         assertEquals(1, producer.sampleCountI32)
-        assertEquals(W4eClipPlanCompiler.HARD_CAPABILITY_ID, graph.capabilityId)
+        assertEquals(W4eClipPlanCompiler.W5A_HARD_CAPABILITY_ID, graph.capabilityId)
     }
 
     @Test
@@ -606,7 +606,7 @@ class W4eClipPlanCompilerTest {
             pathDraw(coverage = CoverageRequest.HARD_EDGE, clip = clip),
         ))
 
-        assertEquals(W4eClipPlanCompiler.AA_CAPABILITY_ID, graph.capabilityId)
+        assertEquals(W4eClipPlanCompiler.W5A_AA_CAPABILITY_ID, graph.capabilityId)
         val inverse = assertIs<ClippedBinaryMaskedPathDraw>(
             graph.passes().filterIsInstance<PlanPass.PathRenderPass>().first {
                 it.phase == PathRenderPhase.HardEdgeBinaryColorCover
@@ -737,7 +737,7 @@ class W4eClipPlanCompilerTest {
             compiler.plan(candidate, capabilities(includeAaMaskSamples = false), PlanBudget(1L shl 20)),
         ).plan
 
-        assertEquals(W4eClipPlanCompiler.HARD_CAPABILITY_ID, graph.capabilityId)
+        assertEquals(W4eClipPlanCompiler.W5A_HARD_CAPABILITY_ID, graph.capabilityId)
         assertEquals(1, graph.passes().filterIsInstance<PlanPass.ClipMaskProducer>().single().sampleCountI32)
     }
 

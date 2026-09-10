@@ -701,8 +701,8 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         }
         passes += PlanPass.ReadbackPass(0, target.id, staging.id, memory.readbackBytesPerRow)
         return RenderGraph.of(
-            id = PlanId(identity(selected, capabilities, budget, HARD_CAPABILITY_ID)),
-            capabilityId = HARD_CAPABILITY_ID,
+            id = PlanId(identity(selected, capabilities, budget, W5A_HARD_CAPABILITY_ID)),
+            capabilityId = W5A_HARD_CAPABILITY_ID,
             targetExtent = extent,
             colorFormat = FORMAT,
             capabilities = capabilities,
@@ -835,8 +835,8 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         val staging = resources.single { it.role == PlanResourceRole.ReadbackStaging }
         passes += PlanPass.ReadbackPass(0, logicalId, staging.id, memory.base.readbackBytesPerRow)
         return RenderGraph.of(
-            id = PlanId(identity(selected, capabilities, budget, AA_CAPABILITY_ID)),
-            capabilityId = AA_CAPABILITY_ID,
+            id = PlanId(identity(selected, capabilities, budget, W5A_AA_CAPABILITY_ID)),
+            capabilityId = W5A_AA_CAPABILITY_ID,
             targetExtent = extent,
             colorFormat = FORMAT,
             capabilities = capabilities,
@@ -1092,7 +1092,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
 
     private fun identity(selected: Candidate, capabilities: PlanCapabilitySnapshot, budget: PlanBudget, capability: String): String {
         val fields = listOf(
-            "w4d-general-plan-v1", capability, selected.sceneCanonicalId.value, selected.target.canonicalId.value,
+            "w4d-general-plan-v2-material-v1", capability, selected.sceneCanonicalId.value, selected.target.canonicalId.value,
             capabilities.deviceGeneration.toString(), capabilities.maxTextureDimension2D.toString(), capabilities.maxBufferSizeBytes.toString(),
             capabilities.copyBytesPerRowAlignment.toString(), capabilities.supportedFormats().map { it.name }.sorted().joinToString(","),
             capabilities.minUniformBufferOffsetAlignment.toString(), capabilities.maxDynamicUniformBuffersPerPipelineLayout.toString(),
@@ -1151,16 +1151,32 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         val colorConsumerPassByCommand: Map<Int, Int>,
     )
     private class Candidate(val owner: W4dGeneralPathPlanCompiler, override val sceneCanonicalId: org.graphiks.kanvas.render.ir.CanonicalId, override val target: RenderTargetDescriptor, draws: List<SealedDraw>, val materialPlanTable: MaterialPlanTable) : GpuPlanCandidate {
-        override val capabilityId: String = if (owner.forceAaFrame || draws.any { it.requestsAntiAlias }) AA_CAPABILITY_ID else HARD_CAPABILITY_ID
+        override val capabilityId: String = if (owner.forceAaFrame || draws.any { it.requestsAntiAlias }) W5A_AA_CAPABILITY_ID else W5A_HARD_CAPABILITY_ID
         val draws: List<SealedDraw> = Collections.unmodifiableList(draws.map { it.copy(scissorI32 = it.scissorI32.copy()) })
         private val sceneFingerprint = sceneCanonicalId
         private val targetFingerprint = target.canonicalId
-        fun hasMatchingFingerprints(): Boolean = (capabilityId == AA_CAPABILITY_ID || capabilityId == HARD_CAPABILITY_ID) && sceneCanonicalId == sceneFingerprint && target.canonicalId == targetFingerprint
+        fun hasMatchingFingerprints(): Boolean = isW5aMaterialCapabilityId(capabilityId) && sceneCanonicalId == sceneFingerprint && target.canonicalId == targetFingerprint
     }
 
     public companion object {
         public const val HARD_CAPABILITY_ID: String = "solid-path-geometry-hard-1x-general-transform-simple-scissor-src-over-srgb-v1"
         public const val AA_CAPABILITY_ID: String = "solid-path-geometry-mixed-aa4-general-transform-simple-scissor-src-over-srgb-v1"
+        /** W5a material-bearing successor to the historical [HARD_CAPABILITY_ID] contract. */
+        public const val W5A_HARD_CAPABILITY_ID: String = "solid-path-geometry-hard-1x-general-transform-simple-scissor-src-over-srgb-w5a-material-v2"
+        /** W5a material-bearing successor to the historical [AA_CAPABILITY_ID] contract. */
+        public const val W5A_AA_CAPABILITY_ID: String = "solid-path-geometry-mixed-aa4-general-transform-simple-scissor-src-over-srgb-w5a-material-v2"
+
+        public fun isLegacyCapabilityId(capabilityId: String): Boolean =
+            capabilityId == HARD_CAPABILITY_ID || capabilityId == AA_CAPABILITY_ID
+
+        public fun isW5aMaterialCapabilityId(capabilityId: String): Boolean =
+            capabilityId == W5A_HARD_CAPABILITY_ID || capabilityId == W5A_AA_CAPABILITY_ID
+
+        public fun isHardCapabilityId(capabilityId: String): Boolean =
+            capabilityId == HARD_CAPABILITY_ID || capabilityId == W5A_HARD_CAPABILITY_ID
+
+        public fun isAaCapabilityId(capabilityId: String): Boolean =
+            capabilityId == AA_CAPABILITY_ID || capabilityId == W5A_AA_CAPABILITY_ID
         private val FORMAT = PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL
         private val REQUIRED = setOf(PlanOperationCapability.RenderPass, PlanOperationCapability.CopyUpload, PlanOperationCapability.UniformBuffer, PlanOperationCapability.Readback)
         private const val MAX_DRAWS = 512

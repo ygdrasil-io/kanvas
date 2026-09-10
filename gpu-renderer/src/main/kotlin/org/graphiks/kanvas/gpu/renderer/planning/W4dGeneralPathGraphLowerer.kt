@@ -20,6 +20,8 @@ import org.graphiks.kanvas.gpu.plan.PlanTextureFormat
 import org.graphiks.kanvas.gpu.plan.RenderGraph
 import org.graphiks.kanvas.gpu.plan.SamplePlan
 import org.graphiks.kanvas.gpu.plan.W4dGeneralPathPlanCompiler
+import org.graphiks.kanvas.gpu.plan.hasLegacyPathColorContract
+import org.graphiks.kanvas.gpu.plan.hasW5aMaterialPathContract
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
@@ -281,10 +283,13 @@ internal class W4dGeneralPathGraphLowerer {
     /** Revalidates the entire immutable graph before any W4d.2 packet is converted or published. */
     private fun preflight(graph: RenderGraph): ValidatedGraph? {
         if (!graph.verifyW4dGeneralCompilerWitness()) return null
-        if (graph.capabilityId !in setOf(
-                W4dGeneralPathPlanCompiler.HARD_CAPABILITY_ID,
-                W4dGeneralPathPlanCompiler.AA_CAPABILITY_ID,
-            )
+        if (!(W4dGeneralPathPlanCompiler.isLegacyCapabilityId(graph.capabilityId) ||
+                W4dGeneralPathPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId))) return null
+        if (if (W4dGeneralPathPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)) {
+                !graph.hasW5aMaterialPathContract()
+            } else {
+                !graph.hasLegacyPathColorContract()
+            }
         ) return null
         val passes = graph.passes()
         val readback = passes.lastOrNull() as? PlanPass.ReadbackPass ?: return null
@@ -324,15 +329,13 @@ internal class W4dGeneralPathGraphLowerer {
         ) return null
         if (colorPasses.any { pass -> pass.store.name != "Store" }) return null
         val usesAa = pathPasses.any { pass -> pass.draw.sample == SamplePlan.Multisample4 }
-        return when (graph.capabilityId) {
-            W4dGeneralPathPlanCompiler.HARD_CAPABILITY_ID -> {
+        return if (W4dGeneralPathPlanCompiler.isHardCapabilityId(graph.capabilityId)) {
                 if (usesAa || graph.resources().any { resource ->
                         resource.role in setOf(PlanResourceRole.MultisampleColorTarget, PlanResourceRole.PathHardEdgeMask,
                             PlanResourceRole.PathHardEdgeDepthStencil)
                     } || pathPasses.any { it.resolveTarget != null }
                 ) null else ValidatedGraph(pathPasses, logical.id, logical.byteSize, staging.byteSize)
-            }
-            W4dGeneralPathPlanCompiler.AA_CAPABILITY_ID -> {
+        } else if (W4dGeneralPathPlanCompiler.isAaCapabilityId(graph.capabilityId)) {
                 val multisample = graph.resources().singleOrNull { it.role == PlanResourceRole.MultisampleColorTarget }
                     ?.takeIf { resource -> resource.kind == PlanResourceKind.Texture2D && resource.sampleCountI32 == 4 &&
                         resource.format == PlanTextureFormat.Color(graph.colorFormat) &&
@@ -342,9 +345,7 @@ internal class W4dGeneralPathGraphLowerer {
                     colorPasses.dropLast(1).any { it.resolveTarget != null } ||
                     colorPasses.last().resolveTarget != logical.id
                 ) null else ValidatedGraph(pathPasses, logical.id, logical.byteSize, staging.byteSize)
-            }
-            else -> null
-        }
+        } else null
     }
 
     private fun packet(

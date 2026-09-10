@@ -9,13 +9,27 @@ import org.graphiks.math.geometry.RectI32
 /** Canonical, raw-bit-stable snapshot used only by the opaque W4d.2 compiler witness. */
 @JvmSynthetic
 internal fun canonicalW4dGeneralGraphDigest(graph: RenderGraph): ByteArray {
-    return canonicalGraphDigest(graph, "w4d-general-render-graph-witness-v1")
+    return canonicalGraphDigest(
+        graph,
+        if (W4dGeneralPathPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)) {
+            "w4d-general-render-graph-witness-w5a-material-v2"
+        } else {
+            "w4d-general-render-graph-witness-v1"
+        },
+    )
 }
 
 /** Canonical W4e inventory seal.  It shares W4d.2's path/pass serialization seam. */
 @JvmSynthetic
 internal fun canonicalW4eGraphDigest(graph: RenderGraph): ByteArray {
-    return canonicalGraphDigest(graph, "w4e-complex-clip-render-graph-witness-v1")
+    return canonicalGraphDigest(
+        graph,
+        if (W4eClipPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)) {
+            "w4e-complex-clip-render-graph-witness-w5a-material-v2"
+        } else {
+            "w4e-complex-clip-render-graph-witness-v1"
+        },
+    )
 }
 
 private fun canonicalGraphDigest(graph: RenderGraph, schema: String): ByteArray {
@@ -30,6 +44,7 @@ private fun canonicalGraphDigest(graph: RenderGraph, schema: String): ByteArray 
     writer.i64("budget.frame-local-bytes", graph.budget.maxFrameLocalBytes)
     writer.i32("draw-count", graph.visualCommandCount)
     writer.i64("peak-frame-local-bytes", graph.peakFrameLocalBytes)
+    graph.materialPlanTableOrNull()?.let(writer::materialTable) ?: writer.text("material-table", "none")
 
     graph.resources().forEachIndexed { index, resource -> writer.resource("resources[$index]", resource) }
     graph.passes().forEachIndexed { index, pass -> writer.pass("passes[$index]", pass) }
@@ -84,6 +99,28 @@ private class W4dGeneralGraphDigestWriter {
                 i32("capabilities.texture-resolve-supports[$index].source-sample-count", support.sourceSampleCountI32)
                 i32("capabilities.texture-resolve-supports[$index].destination-sample-count", support.destinationSampleCountI32)
             }
+    }
+
+    fun materialTable(table: MaterialPlanTable) {
+        i32("material-table.entry-count", table.sizeI32)
+        table.entries().forEachIndexed { index, entry ->
+            val prefix = "material-table.entries[$index]"
+            i32("$prefix.program.version", entry.program.versionI32)
+            text("$prefix.program.id", entry.program.structuralId.value)
+            when (val binding = entry.bindings) {
+                MaterialBindingPlan.EmptyV1 -> text("$prefix.binding", "empty-v1")
+                is MaterialBindingPlan.SolidRgbaF32V1 -> {
+                    text("$prefix.binding", "solid-rgba-f32-v1")
+                    val color = binding.copyRgbaF32()
+                    f32("$prefix.red", color.red); f32("$prefix.green", color.green)
+                    f32("$prefix.blue", color.blue); f32("$prefix.alpha", color.alpha)
+                }
+                is MaterialBindingPlan.OpacityF32V1 -> {
+                    text("$prefix.binding", "opacity-f32-v1")
+                    f32("$prefix.alpha", binding.alphaF32)
+                }
+            }
+        }
     }
 
     fun resource(prefix: String, resource: PlanResource) {

@@ -58,7 +58,7 @@ class W4dGeneralPathPlanCompilerTest {
         val scene = sceneOf(pathDraw(transform = Matrix3x3F32.rotation(0.25f)))
         val graph = compile(compiler, scene)
 
-        assertEquals(W4dGeneralPathPlanCompiler.HARD_CAPABILITY_ID, graph.capabilityId)
+        assertEquals(W4dGeneralPathPlanCompiler.W5A_HARD_CAPABILITY_ID, graph.capabilityId)
         assertTrue(graph.resources().none { it.role == PlanResourceRole.MultisampleColorTarget })
         assertTrue(graph.resources().none { it.role == PlanResourceRole.PathHardEdgeMask })
         graph.passes().filterIsInstance<PlanPass.PathRenderPass>().forEach { pass ->
@@ -88,7 +88,7 @@ class W4dGeneralPathPlanCompilerTest {
         val binary = assertIs<BinaryMaskedPathDraw>(hardCover.draw)
         val hardOnlyDraw = hardGraph.passes().filterIsInstance<PlanPass.PathRenderPass>().first().draw
 
-        assertEquals(W4dGeneralPathPlanCompiler.AA_CAPABILITY_ID, graph.capabilityId)
+        assertEquals(W4dGeneralPathPlanCompiler.W5A_AA_CAPABILITY_ID, graph.capabilityId)
         assertEquals(listOf(0, 1), colorPasses.map { it.draw.commandIndex })
         assertEquals(CoveragePlan.BinaryMaskCover4, binary.coverage)
         assertEquals(SamplePlan.Multisample4, binary.sample)
@@ -192,7 +192,7 @@ class W4dGeneralPathPlanCompilerTest {
             compiler.plan(candidate, capabilities, PlanBudget(1L shl 20)),
         ).plan
 
-        assertEquals(W4dGeneralPathPlanCompiler.AA_CAPABILITY_ID, graph.capabilityId)
+        assertEquals(W4dGeneralPathPlanCompiler.W5A_AA_CAPABILITY_ID, graph.capabilityId)
         val direct = graph.passes().filterIsInstance<PlanPass.PathRenderPass>().single()
         assertEquals(PathRenderPhase.MultisampleDirectColor, direct.phase)
         assertEquals(PlanResourceRole.DepthStencil, graph.resources().single { it.id == direct.depthStencil }.role)

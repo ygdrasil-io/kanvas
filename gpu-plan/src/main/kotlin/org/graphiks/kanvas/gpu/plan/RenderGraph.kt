@@ -205,10 +205,17 @@ public class RenderGraph private constructor(
         /** Trust-boundary factory available only to the W4d.2 compiler after public validation. */
         @JvmSynthetic
         internal fun issueW4dGeneralCompilerWitness(graph: RenderGraph): RenderGraph {
-            require(graph.capabilityId in setOf(
-                W4dGeneralPathPlanCompiler.HARD_CAPABILITY_ID,
-                W4dGeneralPathPlanCompiler.AA_CAPABILITY_ID,
-            )) { "Only a W4d.2 graph may receive a W4d.2 compiler witness" }
+            require(
+                W4dGeneralPathPlanCompiler.isLegacyCapabilityId(graph.capabilityId) ||
+                    W4dGeneralPathPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId),
+            ) { "Only a W4d.2 graph may receive a W4d.2 compiler witness" }
+            require(
+                if (W4dGeneralPathPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)) {
+                    graph.hasW5aMaterialPathContract()
+                } else {
+                    graph.hasLegacyPathColorContract()
+                },
+            ) { "W4d.2 graph material authority does not match its capability version" }
             require(graph.w4dGeneralCompilerWitness == null) {
                 "A W4d.2 compiler witness may be issued only once"
             }
@@ -238,10 +245,17 @@ public class RenderGraph private constructor(
             graph: RenderGraph,
             nativePayload: W4eNativePayloadPlan,
         ): RenderGraph {
-            require(graph.capabilityId in setOf(
-                W4eClipPlanCompiler.HARD_CAPABILITY_ID,
-                W4eClipPlanCompiler.AA_CAPABILITY_ID,
-            )) { "Only a W4e graph may receive a W4e compiler witness" }
+            require(
+                W4eClipPlanCompiler.isLegacyCapabilityId(graph.capabilityId) ||
+                    W4eClipPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId),
+            ) { "Only a W4e graph may receive a W4e compiler witness" }
+            require(
+                if (W4eClipPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)) {
+                    graph.hasW5aMaterialPathContract()
+                } else {
+                    graph.hasLegacyPathColorContract()
+                },
+            ) { "W4e graph material authority does not match its capability version" }
             require(graph.w4dCompilerWitness == null && graph.w4dGeneralCompilerWitness == null &&
                 graph.w4eNativePayloadPlan == null && graph.w4eCompilerWitness == null) {
                 "A W4e graph must be sealed exactly once"

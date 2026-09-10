@@ -11,6 +11,8 @@ import org.graphiks.kanvas.gpu.plan.PlanResourceUsage
 import org.graphiks.kanvas.gpu.plan.PlanTextureFormat
 import org.graphiks.kanvas.gpu.plan.SamplePlan
 import org.graphiks.kanvas.gpu.plan.W4eClipPlanCompiler
+import org.graphiks.kanvas.gpu.plan.hasLegacyPathColorContract
+import org.graphiks.kanvas.gpu.plan.hasW5aMaterialPathContract
 import org.graphiks.math.geometry.ClipGeometryF32
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
@@ -65,7 +67,15 @@ import org.graphiks.kanvas.render.ir.RenderDiagnosticSeverity
 internal class W4eClipGraphLowerer {
     fun lower(request: GpuPlanLoweringRequest): GpuPlanLoweringResult = try {
         val graph = request.graph
-        if (!graph.verifyW4eCompilerWitness() || graph.capabilityId !in setOf(W4eClipPlanCompiler.HARD_CAPABILITY_ID, W4eClipPlanCompiler.AA_CAPABILITY_ID)) return invalid()
+        if (!graph.verifyW4eCompilerWitness() ||
+            !(W4eClipPlanCompiler.isLegacyCapabilityId(graph.capabilityId) ||
+                W4eClipPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)) ||
+            if (W4eClipPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)) {
+                !graph.hasW5aMaterialPathContract()
+            } else {
+                !graph.hasLegacyPathColorContract()
+            }
+        ) return invalid()
         val passes = graph.passes()
         if (passes.lastOrNull() !is PlanPass.ReadbackPass || graph.dependencies() != passes.zipWithNext().map { (a, b) -> PlanPassDependency(a.id, b.id) }) return invalid()
         val authority = GPUPlanW4ePreparedAuthority.issueAfterFullGraphValidation(graph)

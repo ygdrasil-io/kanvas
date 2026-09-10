@@ -123,9 +123,13 @@ public class GpuPlanTaskListLowerer {
             W4dPathStrokePlanCompiler.CAPABILITY_ID -> W4dPathStrokeGraphLowerer().lower(request)
             W4dGeneralPathPlanCompiler.HARD_CAPABILITY_ID,
             W4dGeneralPathPlanCompiler.AA_CAPABILITY_ID,
+            W4dGeneralPathPlanCompiler.W5A_HARD_CAPABILITY_ID,
+            W4dGeneralPathPlanCompiler.W5A_AA_CAPABILITY_ID,
             -> W4dGeneralPathGraphLowerer().lower(request)
             W4eClipPlanCompiler.HARD_CAPABILITY_ID,
             W4eClipPlanCompiler.AA_CAPABILITY_ID,
+            W4eClipPlanCompiler.W5A_HARD_CAPABILITY_ID,
+            W4eClipPlanCompiler.W5A_AA_CAPABILITY_ID,
             -> W4eClipGraphLowerer().lower(request)
             else -> invalid("Unknown gpu-plan capability id.")
         }
