@@ -376,7 +376,7 @@ public class W4dPathStrokePlanCompiler internal constructor(
     ).all { value -> value > 0L && value and (value - 1L) == 0L }
     private fun identity(selected: Candidate, caps: PlanCapabilitySnapshot, budget: PlanBudget): String {
         val fields = listOf(
-            "w4d-plan-v1", selected.sceneCanonicalId.value, selected.target.canonicalId.value,
+            "w4d-plan-w5a-material-v2", selected.sceneCanonicalId.value, selected.target.canonicalId.value,
             caps.deviceGeneration.toString(), caps.maxTextureDimension2D.toString(), caps.maxBufferSizeBytes.toString(),
             caps.copyBytesPerRowAlignment.toString(), caps.supportedFormats().map { it.name }.sorted().joinToString(","),
             caps.minUniformBufferOffsetAlignment.toString(), caps.maxDynamicUniformBuffersPerPipelineLayout.toString(),
@@ -434,5 +434,14 @@ public class W4dPathStrokePlanCompiler internal constructor(
     private data class SealedDraw(val commandIndex: Int, val material: MaterialPlanRef, val geometry: org.graphiks.math.geometry.PathFillGeometryF32, val stroke: org.graphiks.math.geometry.PathStrokeGeometryF32?, val mode: PathStrokeDrawMode?, val styleF64: PathStrokeStyleF64?, val scissor: RectI32) { val strategy: PathFillStrategy = if (geometry.copyDirectTriangleF32OrNull() != null) PathFillStrategy.DirectTriangle else PathFillStrategy.StencilCover }
     private class Candidate(val owner: W4dPathStrokePlanCompiler, override val sceneCanonicalId: org.graphiks.kanvas.render.ir.CanonicalId, override val target: RenderTargetDescriptor, draws: List<SealedDraw>, val materialPlanTable: MaterialPlanTable) : GpuPlanCandidate { override val capabilityId: String = CAPABILITY_ID; val draws = Collections.unmodifiableList(draws.toList()) }
 
-    public companion object { public const val CAPABILITY_ID: String = "w5a-solid-path-stroke-tessellation-stencil-hard-1x-simple-scissor-src-over-srgb-v2"; private val FORMAT = PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL; private val REQUIRED = setOf(PlanOperationCapability.RenderPass, PlanOperationCapability.CopyUpload, PlanOperationCapability.UniformBuffer, PlanOperationCapability.Readback); private const val MAX_DRAWS = 512 }
+    public companion object {
+        /** Historical public graph contract; it carries only legacy per-draw colors. */
+        public const val HISTORICAL_CAPABILITY_ID: String = "solid-path-stroke-tessellation-stencil-hard-1x-simple-scissor-src-over-srgb-v1"
+        public const val CAPABILITY_ID: String = "w5a-solid-path-stroke-tessellation-stencil-hard-1x-simple-scissor-src-over-srgb-v2"
+        public fun isHistoricalCapabilityId(capabilityId: String): Boolean = capabilityId == HISTORICAL_CAPABILITY_ID
+        public fun isW5aMaterialCapabilityId(capabilityId: String): Boolean = capabilityId == CAPABILITY_ID
+        private val FORMAT = PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL
+        private val REQUIRED = setOf(PlanOperationCapability.RenderPass, PlanOperationCapability.CopyUpload, PlanOperationCapability.UniformBuffer, PlanOperationCapability.Readback)
+        private const val MAX_DRAWS = 512
+    }
 }

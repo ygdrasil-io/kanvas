@@ -684,7 +684,7 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
         budget: PlanBudget,
     ): String {
         val fields = listOf(
-            "w4c-plan-v1",
+            "w4c-plan-w5a-material-v2",
             scene.value,
             target.canonicalId.value,
             target.extent.width.toString(),
@@ -781,8 +781,17 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
     }
 
     public companion object {
+        /** Historical public graph contract; it carries only legacy per-draw colors. */
+        public const val HISTORICAL_CAPABILITY_ID: String =
+            "solid-path-fill-tessellation-stencil-hard-1x-simple-scissor-src-over-srgb-v1"
         public const val CAPABILITY_ID: String =
             "w5a-solid-path-fill-tessellation-stencil-hard-1x-simple-scissor-src-over-srgb-v2"
+
+        public fun isHistoricalCapabilityId(capabilityId: String): Boolean =
+            capabilityId == HISTORICAL_CAPABILITY_ID
+
+        public fun isW5aMaterialCapabilityId(capabilityId: String): Boolean =
+            capabilityId == CAPABILITY_ID
 
         private val FORMAT = PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL
         private val REQUIRED_OPERATIONS = setOf(

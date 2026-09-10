@@ -21,3 +21,30 @@ public fun RenderGraph.hasLegacyPathColorContract(): Boolean =
         passes().filterIsInstance<PlanPass.PathRenderPass>().all { pass ->
             pass.draw.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1
         }
+
+/** Versioned material contract for the historical W4c/W4d pass families. */
+@JvmSynthetic
+public fun RenderGraph.hasW5aPathDrawMaterialContract(): Boolean {
+    val table = materialPlanTableOrNull() ?: return false
+    val draws = passes().flatMap { pass -> when (pass) {
+        is PlanPass.RenderPass -> pass.draws().filterIsInstance<PathDraw>()
+        is PlanPass.StencilProducer -> listOf(pass.draw)
+        is PlanPass.StencilCover -> listOf(pass.draw)
+        else -> emptyList()
+    } }
+    return draws.isNotEmpty() && draws.all { draw ->
+        val authority = draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV1
+            ?: return@all false
+        runCatching { table.entry(authority.ref) }.isSuccess
+    }
+}
+
+@JvmSynthetic
+public fun RenderGraph.hasLegacyPathDrawColorContract(): Boolean =
+    materialPlanTableOrNull() == null &&
+        passes().flatMap { pass -> when (pass) {
+            is PlanPass.RenderPass -> pass.draws().filterIsInstance<PathDraw>()
+            is PlanPass.StencilProducer -> listOf(pass.draw)
+            is PlanPass.StencilCover -> listOf(pass.draw)
+            else -> emptyList()
+        } }.all { draw -> draw.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1 }

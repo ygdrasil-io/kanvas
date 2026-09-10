@@ -173,8 +173,11 @@ internal class W4dSessionScratchV1(
         require(planId.isCanonicalSha256() && capabilitySealHash.isNotBlank() && deviceGeneration >= 0L) {
             "W4d scratch requires exact graph and capability hashes"
         }
-        require(capabilityId == W4dPathStrokePlanCompiler.CAPABILITY_ID) {
-            "W4d scratch requires the exact W4d capability id"
+        require(
+            W4dPathStrokePlanCompiler.isHistoricalCapabilityId(capabilityId) ||
+                W4dPathStrokePlanCompiler.isW5aMaterialCapabilityId(capabilityId),
+        ) {
+            "W4d scratch requires a recognized W4d capability id"
         }
         require(
             this.renderPassIds.isNotEmpty() && this.renderPassIds.distinct().size == this.renderPassIds.size &&

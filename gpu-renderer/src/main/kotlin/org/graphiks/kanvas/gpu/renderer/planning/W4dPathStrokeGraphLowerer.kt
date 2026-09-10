@@ -120,7 +120,8 @@ import org.graphiks.math.color.ColorF32
 /** Lowers only the authenticated W4d path-draw graph; it never re-enters Scene IR or legacy tessellation. */
 internal class W4dPathStrokeGraphLowerer {
     fun lower(request: GpuPlanLoweringRequest): GpuPlanLoweringResult = try {
-        if (request.graph.capabilityId != W4dPathStrokePlanCompiler.CAPABILITY_ID) {
+        if (!(W4dPathStrokePlanCompiler.isHistoricalCapabilityId(request.graph.capabilityId) ||
+                W4dPathStrokePlanCompiler.isW5aMaterialCapabilityId(request.graph.capabilityId))) {
             return invalid("The graph is not a W4d path-draw graph.")
         }
         if (!request.graph.verifyW4dCompilerWitness()) {
@@ -189,6 +190,7 @@ internal class W4dPathStrokeGraphLowerer {
             graph = graph,
             builtPasses = builtPasses,
             planId = request.graph.id.value,
+            capabilityId = request.graph.capabilityId,
             target = target,
             staging = staging,
             targetBounds = targetBounds,
@@ -264,7 +266,8 @@ internal class W4dPathStrokeGraphLowerer {
     }
 
     private fun validateW4dGraph(graph: RenderGraph): W4dGraph? {
-        if (graph.capabilityId != W4dPathStrokePlanCompiler.CAPABILITY_ID ||
+        if (!(W4dPathStrokePlanCompiler.isHistoricalCapabilityId(graph.capabilityId) ||
+                W4dPathStrokePlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)) ||
             graph.colorFormat != PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL ||
             !hasExactW4dCapabilityFacts(graph)
         ) return null
@@ -280,8 +283,18 @@ internal class W4dPathStrokeGraphLowerer {
             graph.visualCommandCount != visual.size ||
             visual.zipWithNext().any { (first, second) -> first.draw.commandIndex >= second.draw.commandIndex }
         ) return null
-        val materialPlanTable = graph.materialPlanTableOrNull() ?: return null
-        if (visual.any { it.draw.materialAuthority !is PlanDrawMaterialAuthority.MaterialV1 }) return null
+        val materialPlanTable = graph.materialPlanTableOrNull()
+        if (W4dPathStrokePlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)) {
+            val table = materialPlanTable ?: return null
+            if (visual.any { visualDraw ->
+                    val authority = visualDraw.draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV1
+                        ?: return@any true
+                    runCatching { W5aMaterialPlanLowerer().lower(table, authority.ref) }.getOrNull() == null
+                }
+            ) return null
+        } else if (materialPlanTable != null ||
+            visual.any { it.draw.materialAuthority !is PlanDrawMaterialAuthority.LegacyColorV1 }
+        ) return null
         val footprint = when (val result = PathStrokePlanBudget.calculate(
             graph.targetExtent,
             visual.map { visualDraw -> visualDraw.draw.copyFillGeometryF32() },
@@ -783,6 +796,7 @@ internal class W4dPathStrokeGraphLowerer {
         graph: W4dGraph,
         builtPasses: List<W4dBuiltPass>,
         planId: String,
+        capabilityId: String,
         target: GPUFrameTargetRef,
         staging: GPUFrameBufferRef,
         targetBounds: GPUPixelBounds,
@@ -864,7 +878,7 @@ internal class W4dPathStrokeGraphLowerer {
                 depthStencilResourceId = depthStencilResourceId,
                 targetBytes = graph.target.byteSize,
                 stagingBytes = graph.staging.byteSize,
-                capabilityId = W4dPathStrokePlanCompiler.CAPABILITY_ID,
+                capabilityId = capabilityId,
                 renderPassIds = graph.renderPasses.map(PlanPass::id),
                 readbackPassId = graph.readback.id,
                 resourceLastPassIndexExclusive = graph.renderPasses.size + 1,
@@ -1015,7 +1029,7 @@ internal class W4dPathStrokeGraphLowerer {
         val readback: PlanPass.ReadbackPass,
         val visualDraws: List<W4dVisualDraw>,
         val footprint: PathFillMemoryFootprint,
-        val materialPlanTable: MaterialPlanTable,
+        val materialPlanTable: MaterialPlanTable?,
     )
 
     private fun resolveMaterialColor(

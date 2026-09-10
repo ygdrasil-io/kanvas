@@ -115,7 +115,8 @@ import org.graphiks.math.geometry.PathFillGeometryF32
 /** Lowers only the authenticated W4c path-fill graph; it never re-enters Scene IR or legacy tessellation. */
 internal class W4cPathFillGraphLowerer {
     fun lower(request: GpuPlanLoweringRequest): GpuPlanLoweringResult = try {
-        if (request.graph.capabilityId != W4cPathFillPlanCompiler.CAPABILITY_ID) {
+        if (!(W4cPathFillPlanCompiler.isHistoricalCapabilityId(request.graph.capabilityId) ||
+                W4cPathFillPlanCompiler.isW5aMaterialCapabilityId(request.graph.capabilityId))) {
             return invalid("The graph is not a W4c path-fill graph.")
         }
         val current = when (val adapted = request.capabilities.toPlanCapabilitySnapshot(request.deviceGeneration)) {
@@ -254,7 +255,8 @@ internal class W4cPathFillGraphLowerer {
     }
 
     private fun validateW4cGraph(graph: RenderGraph): W4cGraph? {
-        if (graph.capabilityId != W4cPathFillPlanCompiler.CAPABILITY_ID ||
+        if (!(W4cPathFillPlanCompiler.isHistoricalCapabilityId(graph.capabilityId) ||
+                W4cPathFillPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)) ||
             graph.colorFormat != PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL ||
             !hasExactW4cCapabilityFacts(graph)
         ) return null
@@ -269,8 +271,18 @@ internal class W4cPathFillGraphLowerer {
         if (visual.size !in 1..512 || graph.visualCommandCount != visual.size ||
             visual.zipWithNext().any { (first, second) -> first.draw.commandIndex >= second.draw.commandIndex }
         ) return null
-        val materialPlanTable = graph.materialPlanTableOrNull() ?: return null
-        if (visual.any { it.draw.materialAuthority !is PlanDrawMaterialAuthority.MaterialV1 }) return null
+        val materialPlanTable = graph.materialPlanTableOrNull()
+        if (W4cPathFillPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)) {
+            val table = materialPlanTable ?: return null
+            if (visual.any { visualDraw ->
+                    val authority = visualDraw.draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV1
+                        ?: return@any true
+                    runCatching { W5aMaterialPlanLowerer().lower(table, authority.ref) }.getOrNull() == null
+                }
+            ) return null
+        } else if (materialPlanTable != null ||
+            visual.any { it.draw.materialAuthority !is PlanDrawMaterialAuthority.LegacyColorV1 }
+        ) return null
         val footprint = when (val result = PathFillPlanBudget.calculate(
             graph.targetExtent,
             visual.map { visualDraw -> visualDraw.draw.copyGeometryF32() },
@@ -984,7 +996,7 @@ internal class W4cPathFillGraphLowerer {
         val readback: PlanPass.ReadbackPass,
         val visualDraws: List<W4cVisualDraw>,
         val footprint: PathFillMemoryFootprint,
-        val materialPlanTable: MaterialPlanTable,
+        val materialPlanTable: MaterialPlanTable?,
     )
 
     private fun resolveMaterialColor(

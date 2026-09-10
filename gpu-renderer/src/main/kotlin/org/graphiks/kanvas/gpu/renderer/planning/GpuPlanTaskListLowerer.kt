@@ -119,8 +119,12 @@ public class GpuPlanTaskListLowerer {
             W4bAnalyticRRectPlanCompiler.HISTORICAL_CAPABILITY_ID,
             W4bAnalyticRRectPlanCompiler.CAPABILITY_ID,
             -> W4bAnalyticRRectGraphLowerer().lower(request)
-            W4cPathFillPlanCompiler.CAPABILITY_ID -> W4cPathFillGraphLowerer().lower(request)
-            W4dPathStrokePlanCompiler.CAPABILITY_ID -> W4dPathStrokeGraphLowerer().lower(request)
+            W4cPathFillPlanCompiler.HISTORICAL_CAPABILITY_ID,
+            W4cPathFillPlanCompiler.CAPABILITY_ID,
+            -> W4cPathFillGraphLowerer().lower(request)
+            W4dPathStrokePlanCompiler.HISTORICAL_CAPABILITY_ID,
+            W4dPathStrokePlanCompiler.CAPABILITY_ID,
+            -> W4dPathStrokeGraphLowerer().lower(request)
             W4dGeneralPathPlanCompiler.HARD_CAPABILITY_ID,
             W4dGeneralPathPlanCompiler.AA_CAPABILITY_ID,
             W4dGeneralPathPlanCompiler.W5A_HARD_CAPABILITY_ID,

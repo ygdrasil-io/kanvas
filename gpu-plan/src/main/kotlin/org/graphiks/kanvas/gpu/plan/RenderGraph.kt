@@ -178,9 +178,19 @@ public class RenderGraph private constructor(
         /** Trust-boundary factory available only to the W4d compiler after public validation. */
         @JvmSynthetic
         internal fun issueW4dCompilerWitness(graph: RenderGraph): RenderGraph {
-            require(graph.capabilityId == W4dPathStrokePlanCompiler.CAPABILITY_ID) {
+            require(
+                W4dPathStrokePlanCompiler.isHistoricalCapabilityId(graph.capabilityId) ||
+                    W4dPathStrokePlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId),
+            ) {
                 "Only a W4d graph may receive a W4d compiler witness"
             }
+            require(
+                if (W4dPathStrokePlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)) {
+                    graph.hasW5aPathDrawMaterialContract()
+                } else {
+                    graph.hasLegacyPathDrawColorContract()
+                },
+            ) { "W4d graph material authority does not match its capability version" }
             require(graph.w4dCompilerWitness == null) { "A W4d compiler witness may be issued only once" }
             return RenderGraph(
                 graph.id,

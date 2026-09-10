@@ -2455,7 +2455,8 @@ internal class GPUFramePreflighter(
 
         if (scratch.lane == GPUPlannedPathSessionScratch.Lane.W4d &&
             (preparations.size != 2 ||
-                scratch.capabilityId != W4dPathStrokePlanCompiler.CAPABILITY_ID ||
+                (scratch.capabilityId != W4dPathStrokePlanCompiler.HISTORICAL_CAPABILITY_ID &&
+                    scratch.capabilityId != W4dPathStrokePlanCompiler.CAPABILITY_ID) ||
                 scratch.targetBytes != targetBytes || scratch.stagingBytes != stagingBytes ||
                 scratch.renderPassIds != renders.map { (_, render) ->
                 PlanPassId(render.drawPackets.singleOrNull()?.passId ?: return null)
