@@ -11,7 +11,31 @@ import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialP
  * witness keeps the issuing table, root reference, version, command identity and authenticated
  * program together so no later stage can silently substitute an equivalent-looking material.
  */
-public class GPUPreparedTextMaterialPlanProvenance private constructor(
+public class GPUPreparedTextMaterialPlanEmission internal constructor(
+    private val table: MaterialPlanTable,
+    private val ref: MaterialPlanRef,
+    private val program: GPUPreparedMaterialProgram,
+) {
+    /** Binds this compiler-issued material result to its one normalized command. */
+    public fun bind(
+        commandIdValue: Int,
+        candidate: GPUPreparedMaterialProgram,
+    ): GPUPreparedTextMaterialPlanProvenance? {
+        if (commandIdValue < 0 || candidate != program) return null
+        val entry = runCatching { table.entry(ref) }.getOrNull() ?: return null
+        if (entry.program.versionI32 != 1 || entry.bindings.versionI32 != 1) return null
+        return GPUPreparedTextMaterialPlanProvenance(
+            table = table,
+            ref = ref,
+            commandIdValue = commandIdValue,
+            program = program,
+            programVersionI32 = entry.program.versionI32,
+            bindingVersionI32 = entry.bindings.versionI32,
+        )
+    }
+}
+
+public class GPUPreparedTextMaterialPlanProvenance internal constructor(
     private val table: MaterialPlanTable,
     val ref: MaterialPlanRef,
     private val commandIdValue: Int,
@@ -33,27 +57,6 @@ public class GPUPreparedTextMaterialPlanProvenance private constructor(
                     entry.bindings.versionI32 == bindingVersionI32 &&
                     programVersionI32 == 1 && bindingVersionI32 == 1
             }.getOrDefault(false)
-
-    companion object {
-        fun issue(
-            table: MaterialPlanTable,
-            ref: MaterialPlanRef,
-            commandIdValue: Int,
-            program: GPUPreparedMaterialProgram,
-        ): GPUPreparedTextMaterialPlanProvenance? {
-            if (commandIdValue < 0) return null
-            val entry = runCatching { table.entry(ref) }.getOrNull() ?: return null
-            if (entry.program.versionI32 != 1 || entry.bindings.versionI32 != 1) return null
-            return GPUPreparedTextMaterialPlanProvenance(
-                table = table,
-                ref = ref,
-                commandIdValue = commandIdValue,
-                program = program.authenticatedSnapshot(),
-                programVersionI32 = entry.program.versionI32,
-                bindingVersionI32 = entry.bindings.versionI32,
-            )
-        }
-    }
 
     private fun tableSnapshotIdentity(): String = table.entries().joinToString("|") { entry ->
         val binding = when (val value = entry.bindings) {

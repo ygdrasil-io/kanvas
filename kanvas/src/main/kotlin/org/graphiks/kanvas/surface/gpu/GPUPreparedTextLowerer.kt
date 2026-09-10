@@ -474,12 +474,20 @@ internal object GPUPreparedTextLowerer {
             )
         }
 
-        val materialResult = materialPlan?.let { planned ->
-            GPUPreparedMaterialProgramCompiler.compileW5a(
+        val w5aResult = materialPlan?.let { planned ->
+            GPUPreparedMaterialProgramCompiler.compileW5aForPreparedText(
                 table = planned.table,
                 root = planned.ref,
                 context = preparedTextMaterialContext(target, capabilities),
             )
+        }
+        val materialResult = w5aResult?.let { result ->
+            when (result) {
+                is org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextW5aProgramResult.Ready ->
+                    GPUPreparedMaterialProgramResult.Ready(result.program)
+                is org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextW5aProgramResult.Refused ->
+                    result.refusal
+            }
         } ?: runCatching {
             val mapped = paint.toPreparedMaterialMapping()
             GPUPreparedMaterialProgramCompiler.compile(
@@ -550,6 +558,10 @@ internal object GPUPreparedTextLowerer {
                 paint = paint.snapshotForPreparedText(),
                 material = material,
                 materialPlan = materialPlan,
+                materialPlanEmission = (
+                    w5aResult as?
+                        org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextW5aProgramResult.Ready
+                    )?.emission,
                 blendPlan = blendPlan,
                 targetColorFormat = target.colorFormat,
                 capabilitySnapshotHash = capabilitySnapshotHash,

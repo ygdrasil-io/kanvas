@@ -1122,12 +1122,10 @@ private fun GPUPreparedTextSubRun.toPreparedTextVisual(
     )
     val stableRunIdentity =
         "prepared-text:${inventory.contentSha256}:operation=$operationIndex:subrun=$subRunIndex"
-    val w5aMaterialProvenance = draw.materialPlan?.let { plan ->
-        org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextMaterialPlanProvenance.issue(
-            table = plan.table,
-            ref = plan.ref,
+    val w5aMaterialProvenance = draw.materialPlanEmission?.let { emission ->
+        emission.bind(
             commandIdValue = commandId,
-            program = draw.material,
+            candidate = draw.material,
         ) ?: return GPUPreparedTextVisualLowering.Invalid
     }
     val normalized = NormalizedDrawCommand.DrawTextRun(

@@ -149,6 +149,8 @@ internal class GPUPreparedTextDraw private constructor(
     paint: Paint,
     val material: GPUPreparedMaterialProgram,
     val materialPlan: GPUPreparedTextMaterialPlan?,
+    val materialPlanEmission:
+        org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextMaterialPlanEmission?,
     val blendPlan: GPUBlendPlan,
     val targetColorFormat: String,
     val capabilitySnapshotHash: String,
@@ -159,6 +161,9 @@ internal class GPUPreparedTextDraw private constructor(
         require(clipContentKey.isNotBlank()) { "Prepared text clipContentKey must not be blank" }
         require(capabilitySnapshotHash.isNotBlank()) {
             "Prepared text capability snapshot hash must not be blank"
+        }
+        require((materialPlan == null) == (materialPlanEmission == null)) {
+            "Prepared text W5a plan and compiler emission must be retained together"
         }
     }
     private val clipSnapshot: ClipStack = clip.snapshotForPreparedText()
@@ -196,6 +201,8 @@ internal class GPUPreparedTextDraw private constructor(
             paint: Paint,
             material: GPUPreparedMaterialProgram,
             materialPlan: GPUPreparedTextMaterialPlan? = null,
+            materialPlanEmission:
+                org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextMaterialPlanEmission? = null,
             blendPlan: GPUBlendPlan,
             targetColorFormat: String,
             capabilitySnapshotHash: String,
@@ -222,6 +229,7 @@ internal class GPUPreparedTextDraw private constructor(
             paint = paint,
             material = material,
             materialPlan = materialPlan,
+            materialPlanEmission = materialPlanEmission,
             blendPlan = blendPlan,
             targetColorFormat = targetColorFormat,
             capabilitySnapshotHash = capabilitySnapshotHash,

@@ -46,6 +46,16 @@ sealed interface GPUPreparedMaterialProgramResult {
     ) : GPUPreparedMaterialProgramResult
 }
 
+/** Compiler-only W5a emission used to bind prepared A8 text provenance without reconstruction. */
+sealed interface GPUPreparedTextW5aProgramResult {
+    data class Ready(
+        val program: GPUPreparedMaterialProgram,
+        val emission: GPUPreparedTextMaterialPlanEmission,
+    ) : GPUPreparedTextW5aProgramResult
+
+    data class Refused(val refusal: GPUPreparedMaterialProgramResult.Refused) : GPUPreparedTextW5aProgramResult
+}
+
 object GPUPreparedMaterialProgramCompiler {
     private val blendPlanner = GPUBlendPlanner()
 
@@ -111,6 +121,23 @@ object GPUPreparedMaterialProgramCompiler {
             },
             context = context,
         )
+    }
+
+    /** Emits the exact compiled W5a program together with its table/ref provenance seed. */
+    fun compileW5aForPreparedText(
+        table: MaterialPlanTable,
+        root: MaterialPlanRef,
+        context: GPUMaterialLoweringContext,
+    ): GPUPreparedTextW5aProgramResult = when (val result = compileW5a(table, root, context)) {
+        is GPUPreparedMaterialProgramResult.Ready -> GPUPreparedTextW5aProgramResult.Ready(
+            program = result.program,
+            emission = GPUPreparedTextMaterialPlanEmission(
+                table = table,
+                ref = root,
+                program = result.program.authenticatedSnapshot(),
+            ),
+        )
+        is GPUPreparedMaterialProgramResult.Refused -> GPUPreparedTextW5aProgramResult.Refused(result)
     }
 
     private fun compilePrepared(
