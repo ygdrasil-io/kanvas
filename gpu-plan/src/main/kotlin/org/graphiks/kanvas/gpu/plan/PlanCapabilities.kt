@@ -1,6 +1,10 @@
 package org.graphiks.kanvas.gpu.plan
 
-public enum class PlanLogicalColorFormat { RGBA8_UNORM_SRGB_LINEAR_PREMUL }
+public enum class PlanLogicalColorFormat(
+    public val clampsNormalizedColorWrites: Boolean,
+) {
+    RGBA8_UNORM_SRGB_LINEAR_PREMUL(true),
+}
 public enum class PlanDepthStencilFormat { Depth24PlusStencil8 }
 public enum class PlanOperationCapability {
     RenderPass,

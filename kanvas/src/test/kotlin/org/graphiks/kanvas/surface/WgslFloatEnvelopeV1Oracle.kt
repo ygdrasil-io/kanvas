@@ -67,6 +67,33 @@ internal object WgslFloatEnvelopeV1Oracle {
         is DrawResult.Unbounded -> error("WgslFloatEnvelopeV1 is unbounded: ${result.reason}")
     }
 
+    /** Closes a fixed-function DST_OVER attachment blend over the evaluated W5 material source. */
+    fun drawDstOver(
+        table: MaterialPlanTable,
+        root: MaterialPlanRef,
+        destinationTable: MaterialPlanTable,
+        destinationRoot: MaterialPlanRef,
+        coverageF32: Float = 1f,
+    ): DrawResult {
+        if (!coverageF32.isFinite()) return DrawResult.Unbounded("Non-finite coverage")
+        val blended = try {
+            val clear = Array(4) { Interval.ZERO }
+            val source = evaluateMaterialSource(table, root, clear, Interval.input(coverageF32))
+            val destination = evaluateMaterialSource(destinationTable, destinationRoot, clear, Interval.input(coverageF32))
+            Array(4) { channel -> fixedFunctionDstOver(source[channel], destination[channel], destination[3]).clamp01() }
+        } catch (failure: IllegalArgumentException) {
+            return DrawResult.Unbounded(failure.message.orEmpty())
+        } catch (failure: ArithmeticException) {
+            return DrawResult.Unbounded(failure.message.orEmpty())
+        }
+        val encoded = blended.mapIndexed { channel, value -> if (channel < 3) attachmentEncode(value) else value }
+        val codes = encoded.mapIndexed { channel, value -> if (channel < 3) codesForSrgbAttachment(value) else codesFor(value) }
+        if (codes.any { it.isEmpty() || it.size > 2 || it.maxOrNull()!! - it.minOrNull()!! > 1 }) {
+            return DrawResult.Unbounded("Attachment code sets exceed two adjacent codes: $codes")
+        }
+        return DrawResult.Bounded(codes, AttachmentState(decodeStoredAttachment(codes)))
+    }
+
     fun assertAdmits(expected: DrawResult, observedRgba8: UByteArray) {
         require(observedRgba8.size == 4)
         val bounded = expected as? DrawResult.Bounded
@@ -115,6 +142,31 @@ internal object WgslFloatEnvelopeV1Oracle {
             opacity = (bindings as? MaterialBindingPlan.OpacityF32V1)?.alphaF32?.let(Interval::input),
         )
         return evaluate(entry.program.copyNumericOperationGraphV1().root, inputs).rgba()
+    }
+
+    private fun evaluateMaterialSource(
+        table: MaterialPlanTable,
+        root: MaterialPlanRef,
+        destination: Array<Interval>,
+        coverage: Interval,
+    ): Array<Interval> {
+        fun materialSource(ref: MaterialPlanRef): Array<Interval> {
+            val entry = table.entry(ref)
+            val bindings = entry.bindings
+            val inputs = Inputs(
+                solid = (bindings as? MaterialBindingPlan.SolidRgbaF32V1)?.copyRgbaF32()?.let {
+                    arrayOf(Interval.input(it.red), Interval.input(it.green), Interval.input(it.blue), Interval.input(it.alpha))
+                },
+                material = if (entry.program is MaterialProgramPlan.OpacityV1 && ref.indexI32 > 0) {
+                    { materialSource(MaterialPlanRef(ref.indexI32 - 1)) }
+                } else null,
+                destination = destination,
+                coverage = coverage,
+                opacity = (bindings as? MaterialBindingPlan.OpacityF32V1)?.alphaF32?.let(Interval::input),
+            )
+            return evaluate(sourceNode(entry.program.copyNumericOperationGraphV1()), inputs).rgba()
+        }
+        return materialSource(root)
     }
 
     private data class Inputs(
@@ -230,6 +282,26 @@ internal object WgslFloatEnvelopeV1Oracle {
             conversion = true,
         )
         return exactAdd(sourceTimesOne, product(destination, inverseAlpha)).clamp01()
+    }
+
+    /** Same F32/FTZ/fusion and fixed-precision closure as SrcOver, with DST_OVER factors. */
+    private fun fixedFunctionDstOver(source: Interval, destination: Interval, destinationAlpha: Interval): Interval {
+        fun exactAdd(a: Interval, b: Interval) = directedBinary(a, b, ::downAdd, ::upAdd)
+        fun exactMultiply(a: Interval, b: Interval) = directedBinary(a, b, ::downMultiply, ::upMultiply)
+        fun product(a: Interval, b: Interval): Interval = when {
+            a == Interval.ZERO || b == Interval.ZERO -> Interval.ZERO
+            a == Interval.ONE -> b
+            b == Interval.ONE -> a
+            else -> fixedPrecisionEnvelope(exactMultiply(a, b), conversion = false)
+        }
+        val sourceFactor = fixedPrecisionEnvelope(
+            directedBinary(Interval.ONE, destinationAlpha, ::downSubtract, ::upSubtract),
+            conversion = true,
+        )
+        val destinationTimesOne = if (destination == Interval.ZERO || destination == Interval.ONE) destination
+            else fixedPrecisionEnvelope(destination, conversion = true)
+        val floating = sumOfProducts(source, Interval.ONE - destinationAlpha, destination, Interval.ONE).clamp01()
+        return floating.hull(exactAdd(product(source, sourceFactor), destinationTimesOne)).clamp01()
     }
 
     /**

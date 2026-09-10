@@ -44,7 +44,8 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
         if (scene.commandCount > MAX_W3_COMMANDS) {
             return notCandidate(diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "W3 accepts at most 512 total commands"))
         }
-        when (val recognition = recognize(scene)) {
+        val targetClamp = FORMAT.blendTargetClampV1()
+        when (val recognition = recognize(scene, targetClamp)) {
             is Recognition.MaterialRefused -> return if (target.colorSpace == ColorSpace.SRGB) {
                 GpuPlanSelection.MaterialOnlyRefusal(W5A_CAPABILITY_ID, scene.canonicalId, target, recognition.refusals)
             } else notCandidate(diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.TARGET, "W3 supports only sRGB targets"))
@@ -135,7 +136,7 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
         }
     }
 
-    private fun recognize(scene: SceneSnapshot): Recognition {
+    private fun recognize(scene: SceneSnapshot, targetClamp: BlendTargetClampV1): Recognition {
         if (scene.colorSpace != ColorSpace.SRGB) return Recognition.Gap(
             diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "W3 supports only sRGB scenes"),
         )
@@ -145,7 +146,7 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
         val materialRefusals = mutableListOf<EffectiveMaterialPlanner.Result.Refused>()
         for ((index, command) in scene.withIndex()) {
             when (command) {
-                is SceneCommand.Draw -> when (val result = recognizeDraw(command.node, index, targetBounds, materialEntries)) {
+                is SceneCommand.Draw -> when (val result = recognizeDraw(command.node, index, targetBounds, materialEntries, targetClamp)) {
                     is DrawRecognition.MaterialRefused -> materialRefusals += result.refusal
                     is DrawRecognition.Accepted -> draws += result.draw
                     is DrawRecognition.Gap -> return Recognition.Gap(result.diagnostic)
@@ -197,13 +198,14 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
         index: Int,
         target: RectI32,
         materialEntries: MutableList<MaterialPlanEntry>,
+        targetClamp: BlendTargetClampV1,
     ): DrawRecognition {
         val geometryNode = node.geometry as? GeometryNode.Rect
             ?: return semanticGap("Draw geometry or material is outside W3")
         if (node.origin != DrawOrigin.RECT) {
             return semanticGap("Draw geometry or material is outside W3")
         }
-        if (!w3Blend(node.blend) || node.effects !is EffectStack.Empty || node.resource != null || node.operationBlendMode != null || !w3Paint(node.paint, true)) {
+        if (!w3Blend(node.blend, targetClamp) || node.effects !is EffectStack.Empty || node.resource != null || node.operationBlendMode != null || !w3Paint(node.paint, true)) {
             return semanticGap("Draw state is outside W3")
         }
         if (!materialMatchesPaintAuthority(node)) {
@@ -224,7 +226,7 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
         val visible = intersect(target, geometry) ?: return semanticGap("Draw is outside the target")
         val clipped = if (clip == null) visible else intersect(visible, clip)
             ?: return semanticGap("Draw is fully clipped out")
-        return when (val planned = EffectiveMaterialPlanner.plan(node)) {
+        return when (val planned = EffectiveMaterialPlanner.plan(node, targetClamp)) {
                 is EffectiveMaterialPlanner.Result.Refused -> DrawRecognition.MaterialRefused(planned)
                 is EffectiveMaterialPlanner.Result.Ready -> {
                     val root = appendMaterialPlan(materialEntries, planned.table, planned.root)
@@ -304,10 +306,11 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
 
     private fun intersect(first: RectI32, second: RectI32): RectI32? = first.copy().takeIf { it.intersect(second) }
 
-    private fun w3Blend(blend: BlendNode): Boolean = FinalBlendPlanner.plan(
+    private fun w3Blend(blend: BlendNode, targetClamp: BlendTargetClampV1): Boolean = FinalBlendPlanner.plan(
         blend,
         CoveragePlan.FullOrScissor,
         SamplePlan.SingleSample,
+        targetClamp,
     ) != null
 
     private fun w3Paint(paint: PaintNode?, acceptsMaterialShader: Boolean): Boolean = paint == null || (

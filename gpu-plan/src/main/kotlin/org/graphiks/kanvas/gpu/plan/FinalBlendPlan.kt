@@ -19,6 +19,10 @@ public enum class BlendCoverageEncodingV1 { FullOrScissor, ScalarCoverageInShade
 /** Authenticated target clamp fact; an unavailable fact is never inferred as a clamp. */
 public enum class BlendTargetClampV1 { Unavailable, UnitInterval }
 
+/** Derives the target fact from the sealed logical target format, never a device default. */
+public fun PlanLogicalColorFormat.blendTargetClampV1(): BlendTargetClampV1 =
+    if (clampsNormalizedColorWrites) BlendTargetClampV1.UnitInterval else BlendTargetClampV1.Unavailable
+
 /** Handle-free final target composition selected before a graph becomes Ready. */
 public sealed interface BlendPlan {
     public val canonicalLabel: String
@@ -55,7 +59,7 @@ public object FinalBlendPlanner {
         blend: BlendNode,
         coverage: CoveragePlan,
         sample: SamplePlan,
-        targetClamp: BlendTargetClampV1 = BlendTargetClampV1.Unavailable,
+        targetClamp: BlendTargetClampV1,
     ): BlendPlan? {
         val mode = when (blend) {
             BlendNode.SrcOver -> BlendMode.SRC_OVER

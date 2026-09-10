@@ -17,8 +17,11 @@ public object EffectiveMaterialPlanner {
         public data class Refused(public val diagnosticCode: String) : Result
     }
 
-    public fun plan(draw: DrawNode): Result {
-        val blend = FinalBlendPlanner.plan(draw.blend, CoveragePlan.FullOrScissor, SamplePlan.SingleSample)
+    /** Callers without a sealed target fact intentionally retain no clamp capability. */
+    public fun plan(draw: DrawNode): Result = plan(draw, BlendTargetClampV1.Unavailable)
+
+    public fun plan(draw: DrawNode, targetClamp: BlendTargetClampV1): Result {
+        val blend = FinalBlendPlanner.plan(draw.blend, CoveragePlan.FullOrScissor, SamplePlan.SingleSample, targetClamp)
             ?: return Result.Refused(W5aPlanDiagnostics.UnsupportedDrawState)
         if (blend is BlendPlan.DestinationReadV1) {
             return Result.Refused("unsupported.w5b.destination-read.task-2")
