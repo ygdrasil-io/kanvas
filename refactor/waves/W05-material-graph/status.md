@@ -1,6 +1,6 @@
 # État W05 — material graph, W5a Solid/Opacity
 
-Révision vérifiée : correction Task 7 « authenticate material-only refusal ownership », sur `328a3366c8e70705333fd139c7c2b40c6cf104d9`, le 10 septembre 2026. Cette entrée décrit le code du commit correctif qui la contient, et non l'ancienne tentative de conversion Rect/RRect en Path. Les reviews indépendantes de Task 8 restent à effectuer.
+Révision vérifiée : HEAD W5a `7782151fa993dc41d14c511362dbf1ac573edc64` (« authenticate material-only refusal ownership »), le 10 septembre 2026. Il contient la correction d'interning Task 7 `328a3366c8e70705333fd139c7c2b40c6cf104d9` et remplace l'ancienne tentative de conversion Rect/RRect en Path. Les reviews spec et qualité de Task 7 sont `READY`. Les deux reviews globales indépendantes de Task 8 restent à effectuer ; elles ne sont pas implicites dans cette vérification.
 
 ## Gates publiques W5a
 
@@ -52,19 +52,24 @@ Cet audit porte sur le code de production. Aucun test de source shape, réflexio
 
 ## Vérification
 
-Commande finale, sérielle :
+Vérification JVM Task 8, fraîche et sérielle, à HEAD `7782151` :
 
 ```bash
-rtk ./gradlew :gpu-plan:compileKotlin :gpu-renderer:compileKotlin :kanvas:compileTestKotlin :kanvas:test --tests 'org.graphiks.kanvas.surface.W5aMaterialSurfacePixelTest' --tests 'org.graphiks.kanvas.surface.GPUPlanSurfacePixelTest' --no-parallel
+rtk ./gradlew :gpu-plan:compileKotlin :gpu-renderer:compileKotlin :kanvas:compileKotlin --no-parallel
+rtk ./gradlew :kanvas:test --tests '*W5aMaterialSurfacePixelTest*' --no-parallel
+rtk ./gradlew :kanvas:test --tests '*GPUPlanSurfacePixelTest*' --no-parallel
+rtk git diff --check
 ```
 
-Résultat : `BUILD SUCCESSFUL`, 104 tests, 101 passés, 0 failure/error, 3 skips AA4 authentiques. Répartition : W5a 33 tests (32 passés, 1 skip); GPUPlan 71 tests (69 passés, 2 skips), incluant les régressions publiques standalone W3/W4a/W4b/W4c et le cas W4b à 512 draws. La nouvelle preuve legacy et la récupération W5a ont aussi été exécutées séparément : 2/2 passées. Les trois frames mixtes restent vertes dans la suite complète. `rtk git diff --check` est propre.
+Résultat : les trois commandes Gradle sont `BUILD SUCCESSFUL`; 104 tests publics, 101 passés, 0 failure/error, 3 skips AA4 authentiques. Répartition : W5a 33 tests (32 passés, 1 skip); GPUPlan 71 tests (69 passés, 2 skips), incluant les régressions publiques standalone W3/W4a/W4b/W4c et le cas W4b à 512 draws. Les trois frames mixtes restent vertes dans la suite complète. `rtk git diff --check` est propre.
+
+La commande planifiée `:kanvas:jsNodeTest` est absente : `:kanvas` applique `buildsrc.convention.kotlin-jvm` et l'inventaire Gradle ne publie aucune tâche JS/Node. Aucun substitut de test d'infrastructure n'a été exécuté.
 
 ## Limites et suite
 
 - Les trois skips AA4 restent attachés à l'indisponibilité native documentée; aucune capability ni réussite AA4 n'est simulée.
 - SolidColor, Opacity et Paint sont immuables. La mutation publique observable porte sur Path, tableaux vertices et listes glyphs après capture.
 - Les dépendances font se compilent transitivement, mais aucune suite font/codec/GM/dashboard/baseline/Skia/`jpg-color-cube` n'a été exécutée. Les fixtures text utilisent seulement des glyphs déjà résolus.
-- Aucun test d'infrastructure n'a servi de preuve. La vérification Task 8 et ses reviews Sol indépendantes restent distinctes de cette implémentation.
-- Une variante exploratoire non retenue, gradient Rect suivi de gradient RRect hard-edge, atteint legacy mais y rencontre `invalid.preflight.core_primitive_direct_geometry_resources` (uniform slab). Ce refus de ressources legacy distinct reste hors de ce correctif; la preuve retenue concerne la RRect seule demandée.
+- Aucun test d'infrastructure n'a servi de preuve. Les deux reviews globales Sol indépendantes de Task 8 restent à effectuer après cette vérification.
+- Une variante exploratoire non retenue, gradient Rect suivi de gradient RRect hard-edge, atteint legacy mais y rencontre `invalid.preflight.core_primitive_direct_geometry_resources` (uniform slab). Ce refus de ressources legacy distinct, suivi comme gap non bloquant, reste hors de ce correctif; la preuve retenue concerne la RRect seule demandée.
 - W5b porte les blends communs; gradients, images, local matrices, filters, noise et runtime effects restent les tranches suivantes avec refus typés.
