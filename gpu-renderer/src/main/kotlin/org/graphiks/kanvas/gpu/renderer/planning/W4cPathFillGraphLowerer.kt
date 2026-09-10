@@ -650,6 +650,8 @@ internal class W4cPathFillGraphLowerer {
                 sourceFamily = GPUCorePrimitiveSourceFamily.Path,
                 geometry = geometryInput(geometry, plannedScissor, draw.strategy),
                 premultipliedRgba = listOf(color.red, color.green, color.blue, color.alpha),
+                material = if (role == GPUDrawPacketRole.PathStencilProducer) null else
+                    W5aMaterialPlanLowerer().material(materialPlanTable, draw.materialAuthority, draw.commandIndex),
                 targetBounds = targetBounds,
                 scissorBounds = plannedScissor,
                 clipCoveragePlan = clipCoverage,

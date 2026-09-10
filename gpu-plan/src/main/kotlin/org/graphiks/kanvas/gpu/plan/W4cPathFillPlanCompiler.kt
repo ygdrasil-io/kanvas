@@ -539,7 +539,7 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
             var firstColorAttachment = true
             selected.draws.forEach { sealed ->
                 val draw = PathFillDraw.ofMaterial(
-                    commandIndex = sealed.commandIndex,
+                    commandIndexI32 = sealed.commandIndex,
                     material = sealed.material,
                     geometryF32 = sealed.geometryF32,
                     strategy = sealed.strategy,

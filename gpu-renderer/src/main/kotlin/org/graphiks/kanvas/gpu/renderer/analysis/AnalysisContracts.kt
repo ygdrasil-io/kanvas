@@ -313,9 +313,9 @@ class GPUFirstRoutePlanner(
             is GPUMaterialDescriptor.RadialGradient,
             is GPUMaterialDescriptor.SweepGradient,
             -> command.rectRouteAuthority()
-            else -> null
+            else -> if (command.w5aMaterialPlanRef != null) command.rectRouteAuthority() else null
         }
-        val isAffineSolid = command.material is GPUMaterialDescriptor.SolidColor &&
+        val isAffineSolid = (command.material is GPUMaterialDescriptor.SolidColor || command.w5aMaterialPlanRef != null) &&
             rectRouteAuthority == GPUCorePrimitiveRectRouteAuthority.RectAffineDirectTrianglesV1
         val recordId = "analysis.fill_rect.${command.commandId.value}"
         val pipelineKey: String
@@ -647,7 +647,7 @@ class GPUFirstRoutePlanner(
         }
 
         val isLinearGradient = command.material is GPUMaterialDescriptor.LinearGradient
-        val isSolid = command.material.kind == GPUMaterialKind.SolidColor
+        val isSolid = command.material?.kind == GPUMaterialKind.SolidColor || command.w5aMaterialPlanRef != null
         if (!isSolid && !isLinearGradient) {
             return refusedPlan(
                 command = command,
@@ -1919,7 +1919,7 @@ class GPUFirstRoutePlanner(
             when (mf) {
                 is NormalizedMaskFilter.Blur -> mf.refusalCode()
             }
-        } ?: uniformScaleThreeStopLinearGradientStrokeRefusalCode() ?: uniformScaleTwoStopLinearGradientStrokeRefusalCode() ?: uniformScaleThreeStopSweepGradientStrokeRefusalCode() ?: uniformScaleTwoStopSweepGradientStrokeRefusalCode() ?: uniformScaleThreeStopRadialGradientStrokeRefusalCode() ?: uniformScaleTwoStopRadialGradientStrokeRefusalCode() ?: translatedThreeStopLinearGradientStrokeRefusalCode() ?: translatedTwoStopLinearGradientStrokeRefusalCode() ?: material.analysisRefusalCodeOrNull(
+        } ?: uniformScaleThreeStopLinearGradientStrokeRefusalCode() ?: uniformScaleTwoStopLinearGradientStrokeRefusalCode() ?: uniformScaleThreeStopSweepGradientStrokeRefusalCode() ?: uniformScaleTwoStopSweepGradientStrokeRefusalCode() ?: uniformScaleThreeStopRadialGradientStrokeRefusalCode() ?: uniformScaleTwoStopRadialGradientStrokeRefusalCode() ?: translatedThreeStopLinearGradientStrokeRefusalCode() ?: translatedTwoStopLinearGradientStrokeRefusalCode() ?: material?.analysisRefusalCodeOrNull(
             allowThreeStopLinearGradient = supportsBoundedThreeStopLinearGradient() ||
                 supportsThreeStopLinearGradientStroke() || supportsTranslatedThreeStopLinearGradientStroke() || supportsUniformScaleThreeStopLinearGradientStroke(),
             allowThreeStopRadialGradient = hasThreeStopRadialGradient(),
@@ -1946,6 +1946,7 @@ class GPUFirstRoutePlanner(
             transform.isAffineDeterminantSingular() -> "unsupported.transform.affine_singular"
             transform.type in setOf(GPUTransformType.Scale, GPUTransformType.Affine) &&
                 material !is GPUMaterialDescriptor.SolidColor &&
+                w5aMaterialPlanRef == null &&
                 !supportsHardPathClipClampLinearGradientUniformScale() ->
                 "unsupported.transform.affine_material"
             transform.isNonAxisAlignedAffine() && antiAlias ->
@@ -1959,7 +1960,7 @@ class GPUFirstRoutePlanner(
                 (clip.coveragePlan == null || clip.coveragePlan is org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan.Refused) ->
                 "unsupported.clip.complex_stack"
             clip.kind !in acceptedClipKinds -> "unsupported.clip.analytic_unsupported"
-            material.kind !in acceptedMaterialKinds -> "unsupported.material.source_unimplemented"
+            w5aMaterialPlanRef == null && material?.kind !in acceptedMaterialKinds -> "unsupported.material.source_unimplemented"
             material is GPUMaterialDescriptor.LinearGradient &&
                 material.refusalCode(allowRepeat = maskFilter == null) != null ->
                 material.refusalCode(allowRepeat = maskFilter == null)
@@ -2326,11 +2327,11 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
             when (mf) {
                 is NormalizedMaskFilter.Blur -> mf.refusalCode()
             }
-        } ?: material.analysisRefusalCodeOrNull() ?: when {
+        } ?: material?.analysisRefusalCodeOrNull() ?: when {
             transform.type == GPUTransformType.Perspective -> "unsupported.transform.perspective"
             transform.type == GPUTransformType.Singular -> "unsupported.transform.singular"
             transform.type == GPUTransformType.Scale &&
-                (material.kind != GPUMaterialKind.SolidColor || antiAlias || maskFilter != null) ->
+                ((material?.kind != GPUMaterialKind.SolidColor && w5aMaterialPlanRef == null) || antiAlias || maskFilter != null) ->
                 "unsupported.transform.rrect_scale_unproven"
             transform.type == GPUTransformType.Affine -> "unsupported.transform.rrect_affine_unproven"
             transform.type !in acceptedTransformTypes -> "unsupported.transform.class_downgrade"
@@ -2339,7 +2340,7 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
             clip.kind !in acceptedClipKinds -> "unsupported.clip.analytic_unsupported"
             clip.kind == GPUClipKind.DeviceRect && !capabilities.hasFact(firstScissorCapabilityName) ->
                 "unsupported.clip.scissor_capability_missing"
-            material.kind !in acceptedMaterialKinds -> "unsupported.material.source_unimplemented"
+            w5aMaterialPlanRef == null && material?.kind !in acceptedMaterialKinds -> "unsupported.material.source_unimplemented"
             material is GPUMaterialDescriptor.LinearGradient && material.refusalCode() != null ->
                 material.refusalCode()
             material is GPUMaterialDescriptor.LinearGradient &&
@@ -2429,7 +2430,7 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
             }
         } ?: descriptor?.analysisRefusalCodeOrNull() ?: when {
             w5aPointMaterial &&
-                source.operation !in setOf("drawPoint", "drawPoints.points") ->
+                source.operation !in setOf("drawPoint", "drawPoints.points", "drawPath") ->
                 "unsupported.material.w5a_core_primitive_source"
             stroke -> {
                 val aaMode = if (antiAlias) "coverage-aa" else "none"
@@ -2541,7 +2542,7 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
     }
 
     private fun NormalizedDrawCommand.analysisMaterialKey(): String =
-        (this as? NormalizedDrawCommand.FillPath)?.w5aMaterialPlanRef?.let { ref -> "pending.material.w5a.ref.${ref.indexI32}" }
+        w5aMaterialPlanRef?.let { ref -> "pending.material.w5a.ref.${ref.indexI32}" }
             ?: (this as? NormalizedDrawCommand.FillPath)?.preMaterialGeometryRefusalCode?.let { "geometry.refused:$it" }
             ?: "pending.material.${requireNotNull(material).kind.name.lowercase()}"
 

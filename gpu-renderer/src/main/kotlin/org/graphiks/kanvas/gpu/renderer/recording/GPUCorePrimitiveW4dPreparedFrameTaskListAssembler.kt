@@ -29,6 +29,7 @@ internal data class GPUCorePrimitiveW4dPreparedFrameRequest(
     val renderPassIds: List<PlanPassId>,
     val readbackPassId: PlanPassId,
     val scratch: W4dSessionScratchV1,
+    val compositeWitness: GPUW5aCompositeLaneWitnessV1? = null,
 )
 
 /**
@@ -157,6 +158,11 @@ internal class GPUCorePrimitiveW4dPreparedFrameTaskListAssembler {
         request: GPUCorePrimitiveW4dPreparedFrameRequest,
         renders: List<GPUTask.Render>,
     ): Boolean {
+        if (request.compositeWitness?.let { witness ->
+                witness.planId != request.planId.value ||
+                    witness.packetIds != renders.flatMap(GPUTask.Render::drawPackets).map(GPUDrawPacket::packetId) ||
+                    request.target.value != "${witness.sessionIdentity}.target" || request.staging.value != "${witness.sessionIdentity}.staging"
+            } == true) return false
         val preparationRoles = listOf(request.targetPreparation.role, request.stagingPreparation.role)
         return request.baseTaskList.diagnostics.none(GPUDiagnostic::isTerminal) &&
             request.baseTaskList.compositeCommands.isEmpty() &&

@@ -218,6 +218,8 @@ internal object GPUPreparedSurfaceFrameBuilder {
             } else {
                 0
             }
+            var pointMaterials: W5aPreparedCorePointMaterialBridge? = null
+            var admittedVerticesDraws: List<GPUPreparedVerticesDraw> = emptyList()
             val textMaterials = if (request.candidate.color.interpretation == GPUColorInterpretation.LinearPremul) {
                 W5aPreparedTextMaterialBridge.capture(
                     operations, request.targetBounds.width, request.targetBounds.height,
@@ -229,6 +231,34 @@ internal object GPUPreparedSurfaceFrameBuilder {
                 capabilities = request.capabilities,
                 generation = GPUTextArtifactGeneration(frameGeneration),
                 materialBridge = textMaterials,
+                sealAdmittedDraws = { textDraws ->
+                    // Lower each family once, then intern only genuine admissions before
+                    // constructing either inventory. Rebase provenance, never geometry.
+                    val loweredVertices = when (val lowered = GPUPreparedVerticesFramePreparer.lowerDraws(
+                        operations, request.targetFacts, request.capabilities,
+                    )) {
+                        is GPUPreparedVerticesDrawPreparation.Ready -> lowered.draws
+                        is GPUPreparedVerticesDrawPreparation.Refused -> throw GPUPreparedSurfaceTerminalException(
+                            diagnostic(lowered.refusal.code, "Prepared Surface operation could not be lowered.",
+                                lowered.refusal.facts + mapOf(
+                                    "boundary" to "surface",
+                                    "commandId" to lowered.refusal.commandId.toString(),
+                                    "operationIndex" to lowered.refusal.operationIndex.toString(),
+                                )),
+                        )
+                    }
+                    if (request.candidate.color.interpretation == GPUColorInterpretation.LinearPremul) {
+                        pointMaterials = W5aPreparedCorePointMaterialBridge.capture(
+                            operations, request.targetBounds.width, request.targetBounds.height,
+                            textDraws, loweredVertices,
+                        )
+                        admittedVerticesDraws = loweredVertices.map { it.withFrameMaterials(pointMaterials) }
+                        textDraws.map { it.withFrameMaterials(pointMaterials) }
+                    } else {
+                        admittedVerticesDraws = loweredVertices
+                        textDraws
+                    }
+                },
             )
             if (textPreparation is GPUPreparedTextFrameInventoryPreparation.Refused) {
                 val refusal = textPreparation.refusal
@@ -245,17 +275,14 @@ internal object GPUPreparedSurfaceFrameBuilder {
                 )
             }
             textPreparation as GPUPreparedTextFrameInventoryPreparation.Ready
-            val pointMaterials = if (request.candidate.color.interpretation == GPUColorInterpretation.LinearPremul) {
-                W5aPreparedCorePointMaterialBridge.capture(
-                    operations, request.targetBounds.width, request.targetBounds.height,
-                )
-            } else null
             val verticesPreparation = GPUPreparedVerticesFramePreparer.prepare(
                 operations = operations,
                 target = request.targetFacts,
                 config = request.candidate.config,
                 capabilities = request.capabilities,
                 preparedTextInventory = textPreparation.inventory,
+                frameMaterials = pointMaterials,
+                admittedDraws = admittedVerticesDraws,
                 mappingBoundary = flatElidedOperationIndices.let { elided ->
                     GPUPreparedFrameMappingBoundary { operations, target, config, capabilities,
                         textInventory, verticesInventory ->
@@ -431,8 +458,8 @@ internal object GPUPreparedSurfaceFrameBuilder {
                     semanticsByCommandId = semantics,
                     w5aCoreMaterialAuthority = pointMaterials?.let { materials ->
                         val refs = preparedMapping.visualCommands.mapNotNull { visual ->
-                            val command = visual.normalized as? NormalizedDrawCommand.FillPath
-                            command?.w5aMaterialPlanRef?.let { command.commandId.value to it }
+                            val command = visual.normalized
+                            command.w5aMaterialPlanRef?.let { command.commandId.value to it }
                         }.toMap()
                         if (refs.isEmpty()) null else requireNotNull(
                             org.graphiks.kanvas.gpu.renderer.passes.W5aCorePrimitiveMaterialAuthorityV2.issue(

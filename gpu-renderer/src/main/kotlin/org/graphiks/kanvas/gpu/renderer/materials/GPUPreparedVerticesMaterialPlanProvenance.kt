@@ -15,17 +15,24 @@ public class GPUPreparedVerticesMaterialPlanEmission internal constructor(
             "Prepared vertices W5a emission requires a compiler-issued admission token"
         }
 
+    /** Rebase only an identical sealed source; retain the original compiler-issued program. */
+    public fun remap(table: MaterialPlanTable, ref: MaterialPlanRef): GPUPreparedVerticesMaterialPlanEmission {
+        require(requireNotNull(W5aMaterialSourceStage.lower(this.table, this.ref)).canonicalIdentity ==
+            requireNotNull(W5aMaterialSourceStage.lower(table, ref)).canonicalIdentity)
+        return GPUPreparedVerticesMaterialPlanEmission(table, ref, program)
+    }
+
     public fun bind(
-        commandIdValue: Int,
+        commandIdValueI32: Int,
         candidate: GPUPreparedMaterialProgram,
     ): GPUPreparedVerticesMaterialPlanProvenance? {
-        if (commandIdValue < 0 || candidate != program ||
+        if (commandIdValueI32 < 0 || candidate != program ||
             candidate.preparedVerticesW5aAdmissionToken !== admissionToken
         ) return null
         val entry = runCatching { table.entry(ref) }.getOrNull() ?: return null
         if (entry.program.versionI32 != 1 || entry.bindings.versionI32 != 1) return null
         return GPUPreparedVerticesMaterialPlanProvenance(
-            table, ref, commandIdValue, program, admissionToken,
+            table, ref, commandIdValueI32, program, admissionToken,
             entry.program.versionI32, entry.bindings.versionI32,
         )
     }
@@ -35,7 +42,7 @@ public class GPUPreparedVerticesMaterialPlanEmission internal constructor(
 public class GPUPreparedVerticesMaterialPlanProvenance internal constructor(
     private val table: MaterialPlanTable,
     val ref: MaterialPlanRef,
-    private val commandIdValue: Int,
+    private val commandIdValueI32: Int,
     private val program: GPUPreparedMaterialProgram,
     private val admissionToken: GPUPreparedVerticesW5aAdmissionToken,
     private val programVersionI32: Int,
@@ -48,12 +55,12 @@ public class GPUPreparedVerticesMaterialPlanProvenance internal constructor(
     }
 
     public fun canonicalIdentity(): String =
-        "w5a-vertices-plan-v1:command=$commandIdValue:ref=${ref.indexI32}:" +
+        "w5a-vertices-plan-v1:command=$commandIdValueI32:ref=${ref.indexI32}:" +
             "program=$programVersionI32:binding=$bindingVersionI32:" +
             "material=${program.materialKey}:${program.abiHash}:table=${tableSnapshotIdentity()}"
 
-    public fun validates(commandIdValue: Int, candidate: GPUPreparedMaterialProgram): Boolean =
-        commandIdValue == this.commandIdValue && candidate == program &&
+    public fun validates(commandIdValueI32: Int, candidate: GPUPreparedMaterialProgram): Boolean =
+        commandIdValueI32 == this.commandIdValueI32 && candidate == program &&
             candidate.preparedVerticesW5aAdmissionToken === admissionToken &&
             runCatching {
                 val entry = table.entry(ref)

@@ -28,7 +28,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRRect(
 
     val blendMode = cmd.blend.canonicalFixedFunctionState()
     val material = cmd.material as? GPUMaterialDescriptor.SolidColor ?: run {
-        refuse("unsupported_material:${cmd.material.kind.name}")
+        refuse("unsupported_material:${cmd.material?.kind?.name ?: "w5a_plan_requires_prepared_route"}")
         return
     }
 

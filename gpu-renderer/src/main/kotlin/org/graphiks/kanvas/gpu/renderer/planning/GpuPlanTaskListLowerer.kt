@@ -196,7 +196,7 @@ public class GpuPlanTaskListLowerer {
         graph.draws.forEachIndexed { paintOrder, draw ->
             val color = resolveMaterialColor(graph.materialPlanTable, draw.materialAuthority)
                 ?: return W3BaseTaskListResult.Invalid(invalidDiagnostic("W5 material authority is invalid."))
-            packets += packet(draw, color, paintOrder, targetBounds)
+            packets += packet(draw, color, paintOrder, targetBounds, graph.materialPlanTable)
         }
         val replay = "w3:${request.graph.id.value}"
         val seal = GPUFrameCapabilitySeal.capture(request.frameId, request.deviceGeneration, request.capabilities)
@@ -342,7 +342,7 @@ public class GpuPlanTaskListLowerer {
         }
     }
 
-    private fun packet(draw: SolidRectDraw, color: ColorF32, paintOrder: Int, target: GPUPixelBounds): GPUDrawPacket {
+    private fun packet(draw: SolidRectDraw, color: ColorF32, paintOrder: Int, target: GPUPixelBounds, materialPlanTable: MaterialPlanTable?): GPUDrawPacket {
         val bounds = draw.copyVisibleBounds()
         val scissor = draw.copyScissor()
         require(bounds.roundTripsExactlyThroughF32() && scissor.roundTripsExactlyThroughF32()) {
@@ -354,7 +354,7 @@ public class GpuPlanTaskListLowerer {
         val execution = if (scissorBounds == target) GPUClipExecutionPlan.NoClip else GPUClipExecutionPlan.ScissorOnly(scissorBounds)
         val blend = canonicalSolidRectSrcOverBlendPlan()
         val analysisRecordId = "analysis.fill_rect.${draw.commandIndex}"
-        val semantic = GPUCorePrimitivePayloadGatherer().gatherSemantic(GPUCorePrimitivePayloadInput(draw.commandIndex, GPUCorePrimitiveSourceFamily.Rect, GPUCorePrimitiveGeometryInput.Rect(rect.left, rect.top, rect.right, rect.bottom), listOf(color.red, color.green, color.blue, color.alpha), target, scissorBounds, clip, execution.canonicalIdentity(), blend.canonicalIdentity(), GPUFrameProvenance.None, GPUCorePrimitiveCoverageMode.FullOrScissor, analysisRecordId, "FillRect", GPUCorePrimitiveRectRouteAuthority.RectAxisAligned, corePrimitiveRectGeometryAuthority(rect, GPUTransformFacts.identity())))
+        val semantic = GPUCorePrimitivePayloadGatherer().gatherSemantic(GPUCorePrimitivePayloadInput(draw.commandIndex, GPUCorePrimitiveSourceFamily.Rect, GPUCorePrimitiveGeometryInput.Rect(rect.left, rect.top, rect.right, rect.bottom), listOf(color.red, color.green, color.blue, color.alpha), target, scissorBounds, clip, execution.canonicalIdentity(), blend.canonicalIdentity(), GPUFrameProvenance.None, GPUCorePrimitiveCoverageMode.FullOrScissor, analysisRecordId, "FillRect", GPUCorePrimitiveRectRouteAuthority.RectAxisAligned, corePrimitiveRectGeometryAuthority(rect, GPUTransformFacts.identity()), material = W5aMaterialPlanLowerer().material(materialPlanTable, draw.materialAuthority, draw.commandIndex)))
         val structuralKey = corePrimitiveRenderPipelineStructuralKey(
             semantic,
             execution,

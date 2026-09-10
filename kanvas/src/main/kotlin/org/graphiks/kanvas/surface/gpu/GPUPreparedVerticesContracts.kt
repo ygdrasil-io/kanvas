@@ -126,6 +126,19 @@ internal class GPUPreparedVerticesDraw private constructor(
     val meshBounds: RectF32?
         get() = meshBoundsSnapshot?.copy()
 
+    internal fun withFrameMaterials(frame: W5aPreparedCorePointMaterialBridge?): GPUPreparedVerticesDraw {
+        if (materialPlan == null) return this
+        val authority = requireNotNull(frame)
+        val ref = authority.refsByOperationIndex.getValue(operationIndex)
+        return GPUPreparedVerticesDraw(
+            artifact, operationKind, material, GPUPreparedVerticesMaterialPlan(authority.table, ref),
+            requireNotNull(materialPlanEmission).remap(authority.table, ref), transform,
+            clipState, clipSnapshot, finalBlend, blendPlan, sourceBounds, deviceBounds,
+            clippedBounds, culledByClip, meshBoundsSnapshot, operationIndex, provenance,
+            paintAlphaApplicationCount, primitiveColorPresent, primitiveBlendPlan,
+        )
+    }
+
     companion object {
         @JvmSynthetic
         internal fun create(

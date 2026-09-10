@@ -97,6 +97,18 @@ internal class W4eClipGraphLowerer {
             val preparedPath = path?.let { authority.pathFor(it.id.value) ?: return invalid() }
             val packet = preparedPath?.let { pathPacket(it, consumer, index) }
                 ?: preparedClipPacket(pass, index, authority.clipPassFor(pass.id.value) ?: return invalid())
+            if (path != null && path.phase in setOf(
+                    org.graphiks.kanvas.gpu.plan.PathRenderPhase.SingleSampleDirectColor,
+                    org.graphiks.kanvas.gpu.plan.PathRenderPhase.SingleSampleStencilColorCover,
+                    org.graphiks.kanvas.gpu.plan.PathRenderPhase.MultisampleDirectColor,
+                    org.graphiks.kanvas.gpu.plan.PathRenderPhase.MultisampleStencilColorCover,
+                    org.graphiks.kanvas.gpu.plan.PathRenderPhase.HardEdgeBinaryColorCover,
+                )) {
+                (path.draw.materialAuthority as? org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV1)?.let { material ->
+                    packet.attachW5aSourceStageV2(org.graphiks.kanvas.gpu.renderer.materials.W5aPacketMaterialSourceV2.issue(
+                        requireNotNull(graph.materialPlanTableOrNull()), material.ref, packet.commandIdValue))
+                }
+            }
             val targetId = when (pass) {
                 is PlanPass.PathMaskClearPass -> pass.target
                 is PlanPass.ClipMaskInitialize -> pass.output

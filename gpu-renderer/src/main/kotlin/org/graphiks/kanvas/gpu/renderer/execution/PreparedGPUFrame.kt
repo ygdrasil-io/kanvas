@@ -1482,7 +1482,9 @@ internal class PreparedGPUFrame(
                     "Prepared composite frames require their exact ordered lane authority"
                 }
                 val plannedPathFrame = if (compositeAuthority != null) {
-                    step.drawPackets.all { it.corePrimitivePreparedAuthority?.w4cSessionScratch != null }
+                    step.drawPackets.all { it.corePrimitivePreparedAuthority?.let { authority ->
+                        authority.w4cSessionScratch != null || authority.w4dSessionScratch != null
+                    } == true }
                 } else semanticPlan.hasSealedW4cSessionMarker() || semanticPlan.hasSealedW4dSessionMarker()
                 val plannedPathPacket = step.drawPackets.singleOrNull()
                 val plannedPathAuthority = plannedPathPacket?.corePrimitivePreparedAuthority

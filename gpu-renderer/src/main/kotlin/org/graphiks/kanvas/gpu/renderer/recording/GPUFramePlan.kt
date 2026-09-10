@@ -1526,6 +1526,7 @@ private fun GPUFrameStep.canonicalTypeTag(): String = when (this) {
 private fun CanonicalHashSink.packet(value: GPUDrawPacket) {
     tag("GPUDrawPacket")
     string("packetId", value.packetId.value)
+    nullableString("w5aSourceStageV2", value.w5aSourceStageV2?.canonicalIdentity)
     int("commandIdValue", value.commandIdValue)
     string("analysisRecordId", value.analysisRecordId)
     string("passId", value.passId)

@@ -152,7 +152,7 @@ internal class W4dPathStrokeGraphLowerer {
                 "W4d lowering requires one dynamic uniform buffer binding.",
             )
         val targetBounds = GPUPixelBounds(0, 0, request.graph.targetExtent.width, request.graph.targetExtent.height)
-        val sessionIdentity = w4dSessionIdentity(request.deviceGeneration, targetBounds)
+        val sessionIdentity = request.w5aCompositeSessionIdentity ?: w4dSessionIdentity(request.deviceGeneration, targetBounds)
         val target = GPUFrameTargetRef("$sessionIdentity.target")
         val staging = GPUFrameBufferRef("$sessionIdentity.staging")
         val depthStencil = graph.depthStencil?.let { GPUFrameTextureRef("$sessionIdentity.depth-stencil") }
@@ -180,6 +180,7 @@ internal class W4dPathStrokeGraphLowerer {
             targetBounds,
             request.deviceGeneration,
             limits.capabilityFacts("frame-memory-budget"),
+            request.w5aCompositeSessionIdentity,
         ) ?: return invalid("The W4d graph memory facts cannot be represented by the renderer.")
 
         val builtPasses = graph.renderPasses.map { pass ->
@@ -253,6 +254,12 @@ internal class W4dPathStrokeGraphLowerer {
                 renderPassIds = graph.renderPasses.map(PlanPass::id),
                 readbackPassId = graph.readback.id,
                 scratch = scratch,
+                compositeWitness = request.w5aCompositeSessionIdentity?.let {
+                    org.graphiks.kanvas.gpu.renderer.recording.GPUW5aCompositeLaneWitnessV1(
+                        it, requireNotNull(request.w5aCompositeLaneOrdinal), request.graph.id.value,
+                        renders.flatMap { render -> render.drawPackets }.map { packet -> packet.packetId },
+                    )
+                },
             ),
         )) {
             is GPUCorePrimitivePreparedFrameResult.Recorded ->
@@ -668,6 +675,8 @@ internal class W4dPathStrokeGraphLowerer {
                 sourceFamily = GPUCorePrimitiveSourceFamily.Path,
                 geometry = geometryInput(geometry, plannedScissor, draw.strategy),
                 premultipliedRgba = listOf(color.red, color.green, color.blue, color.alpha),
+                material = if (role == GPUDrawPacketRole.PathStencilProducer) null else
+                    W5aMaterialPlanLowerer().material(materialPlanTable, draw.materialAuthority, draw.commandIndex),
                 targetBounds = targetBounds,
                 scissorBounds = plannedScissor,
                 clipCoveragePlan = clipCoverage,
@@ -989,6 +998,7 @@ internal class W4dPathStrokeGraphLowerer {
         bounds: GPUPixelBounds,
         generation: GPUDeviceGenerationID,
         deviceLimitFacts: List<GPUCapabilityFact>,
+        compositeSessionIdentity: String? = null,
     ): GPUFrameMemoryBudgetPlan? {
         val transient = try {
             listOf(
@@ -1003,7 +1013,7 @@ internal class W4dPathStrokeGraphLowerer {
         }
         val peak = try { Math.addExact(shape.target.byteSize, transient) } catch (_: ArithmeticException) { return null }
         if (peak != graph.peakFrameLocalBytes || peak > graph.budget.maxFrameLocalBytes) return null
-        val identity = w4dSessionIdentity(generation, bounds)
+        val identity = compositeSessionIdentity ?: w4dSessionIdentity(generation, bounds)
         val allocations = buildList {
             add(GPUFrameMemoryAllocation("$identity.target", GPUFrameMemoryCategory.CanonicalTarget, shape.target.byteSize, GPUFrameMemoryResourceKind.Texture2D, bounds))
             add(GPUFrameMemoryAllocation("$identity.staging", GPUFrameMemoryCategory.ReadbackStaging, shape.staging.byteSize, GPUFrameMemoryResourceKind.Buffer, null))

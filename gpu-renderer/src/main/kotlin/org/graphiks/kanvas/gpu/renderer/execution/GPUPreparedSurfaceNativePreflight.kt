@@ -2382,7 +2382,7 @@ internal class GPUPreparedSurfaceNativePreflight(
                     material = semantic.material,
                     hasPrimitiveColor = semantic.primitiveColorPresent,
                     materialPlanProvenance = semantic.materialPlanProvenance,
-                    commandIdValue = semantic.payloadRef.commandIdValue,
+                    commandIdValueI32 = semantic.payloadRef.commandIdValue,
                 )
             ) {
                 is GPUPreparedVerticesShaderResult.Ready -> null
@@ -3485,7 +3485,7 @@ internal class GPUPreparedSurfaceNativePreflight(
                                 material = semantic.material,
                                 hasPrimitiveColor = semantic.primitiveColorPresent,
                                 materialPlanProvenance = semantic.materialPlanProvenance,
-                                commandIdValue = semantic.payloadRef.commandIdValue,
+                                commandIdValueI32 = semantic.payloadRef.commandIdValue,
                             )
                         ) {
                             is GPUPreparedVerticesShaderResult.Ready ->

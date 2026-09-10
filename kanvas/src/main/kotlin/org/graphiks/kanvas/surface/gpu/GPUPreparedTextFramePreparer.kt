@@ -70,6 +70,7 @@ internal object GPUPreparedTextFramePreparer {
         generation: GPUTextArtifactGeneration,
         limits: PreparedTextFrameInventoryLimits = defaultLimits(target, capabilities),
         materialBridge: W5aPreparedTextMaterialBridge? = null,
+        sealAdmittedDraws: (List<GPUPreparedTextDraw>) -> List<GPUPreparedTextDraw> = { it },
     ): GPUPreparedTextFrameInventoryPreparation {
         val preparedDraws = ArrayList<GPUPreparedTextDraw>()
         val elidedTextOperationIndices = linkedSetOf<Int>()
@@ -108,9 +109,10 @@ internal object GPUPreparedTextFramePreparer {
             }
         }
         val loweringNanoseconds = Math.subtractExact(System.nanoTime(), loweringStartedAt)
+        val sealedDraws = sealAdmittedDraws(preparedDraws)
         val inventoryResult = when (
             val built = PreparedTextFrameInventoryBuilder.build(
-                draws = preparedDraws,
+                draws = sealedDraws,
                 generation = generation,
                 limits = limits,
                 elidedTextOperationIndices = elidedTextOperationIndices,

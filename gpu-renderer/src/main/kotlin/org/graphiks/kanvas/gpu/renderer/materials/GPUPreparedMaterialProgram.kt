@@ -31,7 +31,6 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUTargetBlendFacts
 import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.hasMaterialColorFunctionSignature
 import org.graphiks.kanvas.gpu.renderer.wgsl.reflectWgslModule
-import org.graphiks.kanvas.gpu.renderer.planning.W5aMaterialPlanLowerer
 import org.graphiks.math.color.ColorF32
 import org.graphiks.wgsl.parser.Lowerer
 import org.graphiks.wgsl.parser.parseWgslResult
@@ -133,16 +132,16 @@ object GPUPreparedMaterialProgramCompiler {
             sourceKind = GPUMaterialSourceKind.SolidColor,
             message = "The sealed W5a material table contains non-finite Solid or Opacity bindings",
         )
-        val color = W5aMaterialPlanLowerer().lower(table, root) ?: return refused(
+        val source = W5aMaterialSourceStage.lower(table, root) ?: return refused(
             code = "unsupported.material.w5a_plan",
             sourceKind = GPUMaterialSourceKind.SolidColor,
             message = "The sealed W5a material table has no evaluable Solid/Opacity result",
         )
-        val prepared = prepareW5aSolid(color)
+        val prepared = prepareW5aSource(source)
         return compilePrepared(
             prepared = prepared,
             paintAlpha = 1f,
-            preCoverageSourceAlpha = if (color.alpha == 1f) {
+            preCoverageSourceAlpha = if (source.provenOpaque) {
                 GPUSourceAlphaClassification.ProvenOpaque
             } else {
                 GPUSourceAlphaClassification.Translucent
@@ -341,27 +340,23 @@ object GPUPreparedMaterialProgramCompiler {
         )
     }
 
-    /** W5a bindings are already linear premultiplied; applying the legacy sRGB path again is invalid. */
-    private fun prepareW5aSolid(color: ColorF32): PreparedSource {
-        val uniforms = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN).apply {
-            putFloat(color.red)
-            putFloat(color.green)
-            putFloat(color.blue)
-            putFloat(color.alpha)
-        }.array()
+    /** Raw bindings and graph-derived source code share one authenticated ABI. */
+    private fun prepareW5aSource(source: W5aMaterialSourceStage): PreparedSource {
         return PreparedSource(
-            wgslSource = solidMaterialWgsl(),
+            wgslSource = wrapMaterialSource(source.declarationsWgsl, MATERIAL_SOURCE_FUNCTION),
             entryPoint = FINAL_FRAGMENT_ENTRY_POINT,
-            composableDeclarationsWgsl = solidComposableDeclarationsWgsl(),
+            composableDeclarationsWgsl = source.declarationsWgsl,
             sourceFunction = MATERIAL_SOURCE_FUNCTION,
             sourceColorContract = PreparedSourceColorContract.LinearPremultipliedRgba,
-            uniformBytes = uniforms,
+            uniformBytes = source.uniformBytes,
             sampledResources = emptyList(),
             sourceKind = GPUMaterialSourceKind.SolidColor,
-            uniformLayoutHash = GPUSolidMaterialDictionary.SolidMaterialLayoutHash,
-            abiExpectation = solidAbiExpectation(),
+            uniformLayoutHash = "w5a-raw-bindings-v1:${source.bindingCountI32}",
+            abiExpectation = uniformAbiExpectation(group = 1, binding = 0,
+                size = source.uniformBytes.size,
+                members = (0 until source.bindingCountI32).map { vec4Member("binding$it", it * 16) }),
             keyFacts = listOf(
-                "w5aMaterialPlan=solid-opacity-linear-premultiplied-rgba-f32",
+                "w5aMaterialPlan=${source.structuralId}",
                 "solidSemantics=linear-premultiplied-rgba-f32",
             ),
         )

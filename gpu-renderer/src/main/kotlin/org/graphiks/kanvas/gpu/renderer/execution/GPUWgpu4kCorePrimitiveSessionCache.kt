@@ -498,7 +498,7 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
     deviceGeneration: GPUDeviceGenerationID,
     private val nativeFactory: GPUWgpu4kCorePrimitiveSessionNativeFactory =
         GPUWgpu4kCorePrimitiveDeviceSessionNativeFactory(device),
-) : AutoCloseable {
+) : AutoCloseable, GPUW5aGeometryPipelineTemplateProvider {
     private enum class State { Open, Closing, Closed }
 
     private var state = State.Open
@@ -516,6 +516,24 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
     >()
     private var creations = 0L
     private var reuses = 0L
+
+    @Synchronized
+    override fun sourceTemplate(pipeline: GPURenderPipeline): GPUW5aGeometryPipelineTemplate? {
+        val (key, acquired) = live.entries.singleOrNull { it.value.pipeline === pipeline } ?: return null
+        val result = when (key.componentIdentity) {
+            PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY -> buildCorePrimitiveNativeShader()
+            PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY -> buildCorePrimitiveAnalyticShapeNativeShader()
+            PRODUCTION_CORE_PRIMITIVE_ANALYTIC_DRRECT_COMPONENT_IDENTITY -> buildCorePrimitiveAnalyticDRRectNativeShader()
+            PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY -> buildCorePrimitiveAnalyticClipNativeShader()
+            PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY -> buildCorePrimitiveAnalyticIntersection4NativeShader()
+            PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_COMPONENT_IDENTITY -> buildCorePrimitiveCoverageMaskConsumerNativeShader()
+            else -> return null
+        }
+        val source = (result as? GPUCorePrimitiveNativeShaderResult.Ready)?.plan?.wgslSource ?: return null
+        return GPUW5aGeometryPipelineTemplate(source,
+            corePrimitiveWgpu4kRenderPipelineDescriptor(key.pipelineIdentity, acquired.shader, acquired.pipelineLayout),
+            acquired.bindGroupLayout)
+    }
 
     private val framePoolFactory = object : GPUWgpu4kCorePrimitiveFramePoolFactory {
             override fun createVertexBuffer(capacityBytes: Long): GPUBuffer = device.createBuffer(

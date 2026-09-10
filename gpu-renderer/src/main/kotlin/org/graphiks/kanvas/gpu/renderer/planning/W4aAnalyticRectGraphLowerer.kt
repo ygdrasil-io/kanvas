@@ -149,7 +149,7 @@ internal class W4aAnalyticRectGraphLowerer {
         val builtPackets = graph.draws.mapIndexed { paintOrder, draw ->
             val color = resolveMaterialColor(graph.materialPlanTable, draw.materialAuthority)
                 ?: return invalid("W5 material authority is invalid.")
-            packet(draw, color, paintOrder, targetBounds)
+            packet(draw, color, paintOrder, targetBounds, graph.materialPlanTable)
         }
         val packets = builtPackets.map(W4aBuiltPacket::packet)
         val replay = "w4a:${request.graph.id.value}"
@@ -455,6 +455,7 @@ internal class W4aAnalyticRectGraphLowerer {
         color: ColorF32,
         paintOrder: Int,
         target: GPUPixelBounds,
+        materialPlanTable: MaterialPlanTable?,
     ): W4aBuiltPacket {
         val device = draw.copyDeviceBounds()
         val raster = draw.copyRasterBounds()
@@ -491,6 +492,7 @@ internal class W4aAnalyticRectGraphLowerer {
                     deviceRect.bottom,
                 ),
                 premultipliedRgba = listOf(color.red, color.green, color.blue, color.alpha),
+                material = W5aMaterialPlanLowerer().material(materialPlanTable, draw.materialAuthority, draw.commandIndex),
                 targetBounds = target,
                 scissorBounds = plannedScissor,
                 clipCoveragePlan = plannedClip,

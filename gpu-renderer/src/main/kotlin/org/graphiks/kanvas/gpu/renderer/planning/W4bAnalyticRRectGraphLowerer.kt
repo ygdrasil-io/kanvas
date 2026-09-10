@@ -162,7 +162,7 @@ internal class W4bAnalyticRRectGraphLowerer {
         val builtPackets = graph.draws.mapIndexed { paintOrder, draw ->
             val color = resolveMaterialColor(graph.materialPlanTable, draw.materialAuthority)
                 ?: return invalid("W5 material authority is invalid.")
-            packet(draw, color, paintOrder, targetBounds)
+            packet(draw, color, paintOrder, targetBounds, graph.materialPlanTable)
         }
         val capabilitySeal = GPUFrameCapabilitySeal.capture(request.frameId, request.deviceGeneration, request.capabilities)
         val scratch = sealScratch(
@@ -498,6 +498,7 @@ internal class W4bAnalyticRRectGraphLowerer {
         color: ColorF32,
         paintOrder: Int,
         target: GPUPixelBounds,
+        materialPlanTable: MaterialPlanTable?,
     ): W4bBuiltPacket {
         val shape = draw.copyDeviceShape()
         val raster = draw.copyRasterBounds()
@@ -538,6 +539,7 @@ internal class W4bAnalyticRRectGraphLowerer {
                 sourceFamily = GPUCorePrimitiveSourceFamily.RRect,
                 geometry = plannedAuthority.geometryInput,
                 premultipliedRgba = listOf(color.red, color.green, color.blue, color.alpha),
+                material = W5aMaterialPlanLowerer().material(materialPlanTable, draw.materialAuthority, draw.commandIndex),
                 targetBounds = target,
                 scissorBounds = plannedScissor,
                 clipCoveragePlan = plannedClip,

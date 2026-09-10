@@ -187,6 +187,18 @@ internal class GPUPreparedTextDraw private constructor(
     internal val foregroundColor: ColorARGB
         get() = paintSnapshot.color
 
+    internal fun withFrameMaterials(frame: W5aPreparedCorePointMaterialBridge?): GPUPreparedTextDraw {
+        if (materialPlan == null) return this
+        val authority = requireNotNull(frame)
+        val ref = authority.refsByOperationIndex.getValue(operationIndex)
+        return GPUPreparedTextDraw(
+            operationIndex, face, glyphs, originX, originY, transform, clipContentKey,
+            clipSnapshot, paintSnapshot, material, GPUPreparedTextMaterialPlan(authority.table, ref),
+            requireNotNull(materialPlanEmission).remap(authority.table, ref), blendPlan,
+            targetColorFormat, capabilitySnapshotHash, representationPolicy,
+        )
+    }
+
     companion object {
         @JvmSynthetic
         internal fun create(

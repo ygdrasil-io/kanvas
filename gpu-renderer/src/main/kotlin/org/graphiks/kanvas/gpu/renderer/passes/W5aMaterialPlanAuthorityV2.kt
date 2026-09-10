@@ -57,6 +57,7 @@ class W5aCorePrimitiveMaterialAuthorityV2 private constructor(
     sealed interface MaterializedSolidV2 {
         val commandIdI32: Int
         val ref: MaterialPlanRef
+        val sourcePlanTable: MaterialPlanTable
         val premultipliedRgba: List<Float>
         fun validates(commandIdI32: Int): Boolean
     }
@@ -67,6 +68,7 @@ class W5aCorePrimitiveMaterialAuthorityV2 private constructor(
         rgba: List<Float>,
         private val frameAuthority: W5aCorePrimitiveMaterialAuthorityV2,
     ) : MaterializedSolidV2 {
+        override val sourcePlanTable: MaterialPlanTable get() = frameAuthority.table
         override val premultipliedRgba: List<Float> =
             java.util.Collections.unmodifiableList(ArrayList(rgba))
 
@@ -79,6 +81,12 @@ class W5aCorePrimitiveMaterialAuthorityV2 private constructor(
             ref.indexI32 < table.sizeI32 &&
             table.entry(ref).program.versionI32 == W5aMaterialPlanVersionWitnessV2.MATERIAL_PLAN_VERSION_I32 &&
             table.entry(ref).bindings.versionI32 == W5aMaterialPlanVersionWitnessV2.MATERIAL_PLAN_VERSION_I32
+
+    internal fun materializeSource(commandIdI32: Int, materialRef: MaterialPlanRef): MaterializedSolidV2? {
+        if (!validates(commandIdI32, materialRef)) return null
+        val color = W5aMaterialPlanLowerer().lower(table, materialRef) ?: return null
+        return MaterializedSolid(commandIdI32, materialRef, listOf(color.red, color.green, color.blue, color.alpha), this)
+    }
 
     internal fun materialize(
         semanticsByCommandId: Map<Int, GPUDrawSemanticPayload>,
@@ -99,9 +107,8 @@ class W5aCorePrimitiveMaterialAuthorityV2 private constructor(
             val materialRef = (core.material as? GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1)
                 ?.ref ?: return null
             if (materialRef != expectedRef || !validates(commandId, materialRef) || !core.hasStructuralIntegrity()) return null
-            val color = W5aMaterialPlanLowerer().lower(table, materialRef) ?: return null
             result[commandId] = core.materializeW5aSolid(
-                MaterializedSolid(commandId, materialRef, listOf(color.red, color.green, color.blue, color.alpha), this),
+                materializeSource(commandId, materialRef) ?: return null,
             )
         }
         return java.util.Collections.unmodifiableMap(result)

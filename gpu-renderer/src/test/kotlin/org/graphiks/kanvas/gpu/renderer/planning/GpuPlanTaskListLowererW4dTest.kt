@@ -326,7 +326,7 @@ class GpuPlanTaskListLowererW4dTest {
         val graphFill = assertIs<org.graphiks.kanvas.gpu.plan.PathStrokeDraw>(fillPass.draws().single())
             .copyGeometryF32().copyFillGeometryF32()
         val forgedDraw = org.graphiks.kanvas.gpu.plan.PathFillDraw.ofMaterial(
-            commandIndex = 0,
+            commandIndexI32 = 0,
             material = assertIs<PlanDrawMaterialAuthority.MaterialV1>(fillPass.draws().single().materialAuthority).ref,
             geometryF32 = graphFill,
             strategy = org.graphiks.kanvas.gpu.plan.PathFillStrategy.DirectTriangle,

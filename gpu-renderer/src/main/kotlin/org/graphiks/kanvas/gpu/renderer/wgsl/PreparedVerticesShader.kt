@@ -60,14 +60,14 @@ object PreparedVerticesShaderAssembler {
         material: GPUPreparedMaterialProgram,
         hasPrimitiveColor: Boolean,
         materialPlanProvenance: GPUPreparedVerticesMaterialPlanProvenance? = null,
-        commandIdValue: Int? = null,
+        commandIdValueI32: Int? = null,
     ): GPUPreparedVerticesShaderResult = assembleObserved(
         layout = layout,
         topology = topology,
         material = material,
         hasPrimitiveColor = hasPrimitiveColor,
         materialPlanProvenance = materialPlanProvenance,
-        commandIdValue = commandIdValue,
+        commandIdValueI32 = commandIdValueI32,
         validator = KanvasWGSLValidator(),
         reflectionProvider = KanvasWGSLReflectionProvider(),
     )
@@ -78,14 +78,14 @@ object PreparedVerticesShaderAssembler {
         material: GPUPreparedMaterialProgram,
         hasPrimitiveColor: Boolean,
         materialPlanProvenance: GPUPreparedVerticesMaterialPlanProvenance? = null,
-        commandIdValue: Int? = null,
+        commandIdValueI32: Int? = null,
         validator: WGSLValidator,
         reflectionProvider: WGSLReflectionProvider,
     ): GPUPreparedVerticesShaderResult {
         if ((materialPlanProvenance == null) !=
             (material.preparedVerticesW5aAdmissionToken == null) ||
             (materialPlanProvenance != null &&
-                (commandIdValue == null || !materialPlanProvenance.validates(commandIdValue, material)))
+                (commandIdValueI32 == null || !materialPlanProvenance.validates(commandIdValueI32, material)))
         ) {
             return preparedVerticesRefused(
                 GPUPreparedVerticesRefusalCodes.Material,

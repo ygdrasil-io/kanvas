@@ -16,6 +16,11 @@ internal sealed interface GPUPreparedVerticesFramePreparation {
     ) : GPUPreparedVerticesFramePreparation
 }
 
+internal sealed interface GPUPreparedVerticesDrawPreparation {
+    data class Ready(val draws: List<GPUPreparedVerticesDraw>) : GPUPreparedVerticesDrawPreparation
+    data class Refused(val refusal: GPUPreparedOperationRefusal) : GPUPreparedVerticesDrawPreparation
+}
+
 internal fun interface GPUPreparedFrameMappingBoundary {
     fun map(
         operations: List<DisplayOp>,
@@ -40,20 +45,18 @@ private val canonicalPreparedFrameMappingBoundary = GPUPreparedFrameMappingBound
 }
 
 internal object GPUPreparedVerticesFramePreparer {
-    fun prepare(
+    fun lowerDraws(
         operations: List<DisplayOp>,
         target: GPUTargetFacts,
-        config: RenderConfig,
         capabilities: GPUCapabilities,
-        limits: PreparedVerticesFrameInventoryLimits = defaultLimits(capabilities),
-        preparedTextInventory: PreparedTextFrameInventory? = null,
-        mappingBoundary: GPUPreparedFrameMappingBoundary = canonicalPreparedFrameMappingBoundary,
-    ): GPUPreparedVerticesFramePreparation {
+        frameMaterials: W5aPreparedCorePointMaterialBridge? = null,
+    ): GPUPreparedVerticesDrawPreparation {
         val operationSnapshot = operations.toList()
         val materialBridge = W5aPreparedVerticesMaterialBridge.capture(
             operations = operationSnapshot,
             width = target.width,
             height = target.height,
+            frameMaterials = frameMaterials,
         )
         val draws = ArrayList<GPUPreparedVerticesDraw>()
         operationSnapshot.forEachIndexed { operationIndex, operation ->
@@ -64,7 +67,7 @@ internal object GPUPreparedVerticesFramePreparer {
                 W5aPreparedVerticesMaterialBridge.Result.NotCandidate -> null
                 is W5aPreparedVerticesMaterialBridge.Result.Ready -> bridgeResult.materialPlan
                 is W5aPreparedVerticesMaterialBridge.Result.Refused ->
-                    return GPUPreparedVerticesFramePreparation.Refused(
+                    return GPUPreparedVerticesDrawPreparation.Refused(
                         GPUPreparedOperationRefusal(
                             commandId = operationIndex,
                             operationIndex = operationIndex,
@@ -84,7 +87,7 @@ internal object GPUPreparedVerticesFramePreparer {
             ) {
                 is GPUPreparedVerticesLowering.Ready -> draws += lowered.draw
                 is GPUPreparedVerticesLowering.Refused ->
-                    return GPUPreparedVerticesFramePreparation.Refused(
+                    return GPUPreparedVerticesDrawPreparation.Refused(
                         GPUPreparedOperationRefusal(
                             commandId = operationIndex,
                             operationIndex = operationIndex,
@@ -93,6 +96,28 @@ internal object GPUPreparedVerticesFramePreparer {
                         ),
                     )
             }
+        }
+        return GPUPreparedVerticesDrawPreparation.Ready(draws.toList())
+    }
+
+    fun prepare(
+        operations: List<DisplayOp>,
+        target: GPUTargetFacts,
+        config: RenderConfig,
+        capabilities: GPUCapabilities,
+        limits: PreparedVerticesFrameInventoryLimits = defaultLimits(capabilities),
+        preparedTextInventory: PreparedTextFrameInventory? = null,
+        frameMaterials: W5aPreparedCorePointMaterialBridge? = null,
+        admittedDraws: List<GPUPreparedVerticesDraw>? = null,
+        mappingBoundary: GPUPreparedFrameMappingBoundary = canonicalPreparedFrameMappingBoundary,
+    ): GPUPreparedVerticesFramePreparation {
+        val operationSnapshot = operations.toList()
+        val draws = admittedDraws ?: when (val lowered = lowerDraws(
+            operationSnapshot, target, capabilities, frameMaterials,
+        )) {
+            is GPUPreparedVerticesDrawPreparation.Ready -> lowered.draws
+            is GPUPreparedVerticesDrawPreparation.Refused ->
+                return GPUPreparedVerticesFramePreparation.Refused(lowered.refusal)
         }
 
         val inventory = when (

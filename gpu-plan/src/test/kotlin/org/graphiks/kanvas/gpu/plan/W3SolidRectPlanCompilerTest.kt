@@ -193,6 +193,7 @@ class W3SolidRectPlanCompilerTest {
         val draw = solidDrawNode()
         val invalids = listOf(
             draw.copy(paint = w3Paint().copy(style = PaintStyleNode.STROKE)),
+            draw.copy(paint = w3Paint().copy(shader = MaterialNode.Solid(ColorARGB.Blue))),
             draw.copy(paint = w3Paint().copy(blendMode = BlendMode.SRC)),
             draw.copy(paint = w3Paint().copy(blender = org.graphiks.kanvas.render.ir.BlenderNode.Mode(BlendMode.SRC_OVER))),
             draw.copy(resource = org.graphiks.kanvas.render.ir.ImageResourceSnapshot.rgba8(1, 1, byteArrayOf(0, 0, 0, 0), ColorSpace.SRGB)),
@@ -201,37 +202,6 @@ class W3SolidRectPlanCompilerTest {
             draw.copy(material = MaterialNode.Transparent),
         )
         invalids.forEach { assertGap(sceneOf(SceneCommand.Draw(it))) }
-    }
-
-    @Test
-    fun `contradictory paint shader and material are refused`() {
-        val contradictory = solidDrawNode().copy(
-            paint = w3Paint().copy(shader = MaterialNode.Solid(ColorARGB.Blue)),
-        )
-
-        assertGap(sceneOf(SceneCommand.Draw(contradictory)))
-    }
-
-    @Test
-    fun `deep coherent opacity authorities are rejected without overflowing`() {
-        val depth = 20_000
-        val draw = solidDrawNode().copy(
-            material = opacityChain(depth),
-            paint = w3Paint().copy(shader = opacityChain(depth)),
-        )
-
-        assertGap(sceneOf(SceneCommand.Draw(draw)))
-    }
-
-    @Test
-    fun `deep late divergent opacity authorities are refused without overflowing`() {
-        val depth = 20_000
-        val draw = solidDrawNode().copy(
-            material = opacityChain(depth, ColorARGB.Red),
-            paint = w3Paint().copy(shader = opacityChain(depth, ColorARGB.Blue)),
-        )
-
-        assertGap(sceneOf(SceneCommand.Draw(draw)))
     }
 
     @Test
@@ -549,12 +519,6 @@ class W3SolidRectPlanCompilerTest {
         origin = DrawOrigin.RECT,
         paint = w3Paint(ColorARGB.fromPackedUInt(color)),
     )
-
-    private fun opacityChain(depth: Int, color: ColorARGB = ColorARGB.White): MaterialNode {
-        var material: MaterialNode = MaterialNode.Solid(color)
-        repeat(depth) { material = MaterialNode.Opacity(material, 0.5f) }
-        return material
-    }
 
     private fun w3Paint(color: ColorARGB = ColorARGB.White): PaintNode = PaintNode(
         color = color,

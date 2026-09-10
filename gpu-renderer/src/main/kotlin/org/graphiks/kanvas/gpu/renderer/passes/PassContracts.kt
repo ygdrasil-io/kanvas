@@ -424,6 +424,24 @@ class GPUDrawPacket(
     internal var corePrimitivePreparedAuthority: GPUCorePrimitivePreparedPacketAuthority? = null
         private set
 
+    internal var w5aSourceStageV2: org.graphiks.kanvas.gpu.renderer.materials.W5aPacketMaterialSourceV2? =
+        ((semanticPayload as? org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.CorePrimitive)
+            ?.material as? org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload.SolidColor)
+            ?.w5aAuthority?.takeIf {
+                role == GPUDrawPacketRole.Shading || role == GPUDrawPacketRole.StencilConsumer ||
+                    role == GPUDrawPacketRole.PathStencilCover
+            }?.let { witness ->
+                require(witness.validates(commandIdValue))
+                org.graphiks.kanvas.gpu.renderer.materials.W5aPacketMaterialSourceV2.issue(
+                    witness.sourcePlanTable, witness.ref, commandIdValue)
+            }
+        private set
+
+    internal fun attachW5aSourceStageV2(source: org.graphiks.kanvas.gpu.renderer.materials.W5aPacketMaterialSourceV2) {
+        check(w5aSourceStageV2 == null && source.commandIdI32 == commandIdValue)
+        w5aSourceStageV2 = source
+    }
+
     internal var w5aCompositeFrameAuthority: org.graphiks.kanvas.gpu.renderer.planning.W5aCompositeFrameAuthorityV1? = null
         private set
 

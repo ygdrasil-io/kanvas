@@ -1,5 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import org.graphiks.kanvas.gpu.renderer.materials.w5aMaterialAllocationsV2
+import org.graphiks.kanvas.gpu.renderer.materials.w5aCombinedMemoryBudgetV2
+
 import io.ygdrasil.webgpu.GPUTextureFormat
 import org.graphiks.kanvas.gpu.plan.PlanResourceId
 import org.graphiks.kanvas.gpu.plan.W4dPathStrokePlanCompiler
@@ -245,6 +248,18 @@ internal class GPUFramePreflighter(
         value == resourceId || value.endsWith(".$resourceId")
 
     fun preflight(framePlan: GPUFramePlan): GPUFramePreflightResult {
+        framePlan.w5aMaterialAllocationsV2().takeIf { it.isNotEmpty() }?.let { allocations ->
+            val limits = capabilities.limits ?: return GPUFramePreflightResult.Refused(
+                diagnostic("unsupported.preflight.w5a-source-limits", "W5a source bindings require observed device limits."))
+            // 16 KiB is the portable WebGPU uniform-binding floor. W5a stays inside it.
+            if (allocations.any { it.bytes > minOf(limits.maxBufferSize ?: 0L, 16_384L) }) {
+                return GPUFramePreflightResult.Refused(diagnostic(
+                    "resource.material.w5a.binding-limit", "W5a raw source binding exceeds its bounded uniform ABI."))
+            }
+            framePlan.w5aCombinedMemoryBudgetV2(limits).diagnostic?.let {
+                return GPUFramePreflightResult.Refused(it)
+            }
+        }
         framePlan.steps.filterIsInstance<GPUFrameStep.RefusedLeafDrawStep>()
             .firstOrNull { step ->
                 step.diagnostic.code.value ==
@@ -434,7 +449,7 @@ internal class GPUFramePreflighter(
         val hasW4aSessionMarker = compositeAuthority == null && framePlan.hasSealedW4aSessionMarker()
         val hasW4bSessionMarker = compositeAuthority == null && framePlan.hasSealedW4bSessionMarker()
         val hasW4cSessionMarker = compositeAuthority == null && framePlan.hasSealedW4cSessionMarker()
-        val hasW4dSessionMarker = framePlan.hasSealedW4dSessionMarker()
+        val hasW4dSessionMarker = compositeAuthority == null && framePlan.hasSealedW4dSessionMarker()
         val w5aRectScratch = renderPackets
             .mapNotNull { it.corePrimitivePreparedAuthority?.w5aAnalyticRectSessionScratch }
             .firstOrNull()
@@ -1009,6 +1024,12 @@ internal class GPUFramePreflighter(
                         diagnostic(materialization.code, materialization.message),
                     )
                 }
+            }
+            if (!validatesW5aSourcePartitionV2(framePlan, requireNotNull(nativeDraft).payload)) {
+                boundary.terminalizeCallerRetainedDraft(requireNotNull(nativeDraft))
+                return refuseWithRollback(rollback, true, diagnostic(
+                    "invalid.preflight.w5a-source-partition-v2",
+                    "Native W5a source bindings do not exactly match the sealed color-writing packet inventory."))
             }
             validateNativeRenderSemanticPayloads(framePlan, requireNotNull(nativeDraft))?.let { invalid ->
                 boundary.terminalizeCallerRetainedDraft(requireNotNull(nativeDraft))
@@ -2377,6 +2398,8 @@ internal class GPUFramePreflighter(
                 }
                 org.graphiks.kanvas.gpu.plan.W4cPathFillPlanCompiler.CAPABILITY_ID ->
                     validateW4cSessionScratch(laneFrame, scratch.w4cSessionScratch ?: return null) ?: return null
+                org.graphiks.kanvas.gpu.plan.W4dPathStrokePlanCompiler.CAPABILITY_ID ->
+                    validateW4dSessionScratch(laneFrame, scratch.w4dSessionScratch ?: return null, authority.sessionIdentity) ?: return null
                 else -> return null
             }
             direct = direct.appended(validation.directRouteSeal.reindexed(indices))
@@ -2402,14 +2425,17 @@ internal class GPUFramePreflighter(
     private fun validateW4dSessionScratch(
         framePlan: GPUFramePlan,
         scratch: W4dSessionScratchV1,
+        compositeSessionIdentity: String? = null,
     ): PlannedPathSessionValidation? = validatePlannedPathSessionScratch(
         framePlan,
         GPUPlannedPathSessionScratch.from(scratch),
+        compositeSessionIdentity,
     )
 
     private fun validatePlannedPathSessionScratch(
         framePlan: GPUFramePlan,
         scratch: GPUPlannedPathSessionScratch,
+        compositeSessionIdentity: String? = null,
     ): PlannedPathSessionValidation? = try {
         val limits = capabilities.limits ?: return null
         val lane = scratch.lane.label
@@ -2625,8 +2651,8 @@ internal class GPUFramePreflighter(
         ) return null
 
         if (scratch.lane == GPUPlannedPathSessionScratch.Lane.W4d) {
-            val identity = "w4d.session.${scratch.deviceGeneration}." +
-                "${scratch.targetBounds.width}x${scratch.targetBounds.height}.rgba8unorm-srgb"
+            val identity = compositeSessionIdentity ?: ("w4d.session.${scratch.deviceGeneration}." +
+                "${scratch.targetBounds.width}x${scratch.targetBounds.height}.rgba8unorm-srgb")
             val expectedAllocations = buildList {
                 add(
                     GPUFrameMemoryAllocation(

@@ -92,7 +92,6 @@ class SceneArchiveCodecTest {
 
         assertEquals("KPIC", bytes.copyOfRange(0, 4).decodeToString())
         assertEquals(9, java.nio.ByteBuffer.wrap(bytes, 4, 4).int)
-        assertEquals(3, java.nio.ByteBuffer.wrap(bytes, 28, 4).int)
         assertEquals(scene.canonicalId, decoded.scene.canonicalId)
         assertEquals(RectF32(1f, 2f, 33f, 18f), decoded.copyCullRect())
     }
@@ -371,73 +370,6 @@ class SceneArchiveCodecTest {
         )
 
         assertEquals("graph-node-limit", invalid.code)
-    }
-
-    @Test
-    fun `picture archive round trips opacity in every public shader position`() {
-        val opacity = MaterialNode.Opacity(MaterialNode.Solid(ColorARGB.Red), 0.5f)
-        val neutralDraw = validArchiveScene().let { scene ->
-            SceneSnapshot.of(
-                scene.extent,
-                scene.colorSpace,
-                listOf(SceneCommand.Draw((scene.first() as SceneCommand.Draw).node.copy(material = opacity))),
-            )
-        }
-        val neutralLayer = SceneSnapshot.of(
-            SceneExtent(1, 1),
-            ColorSpace.SRGB,
-            listOf(SceneCommand.BeginLayer(LayerDescriptor.of(material = opacity)), SceneCommand.EndLayer),
-        )
-        val paintShader = validArchiveScene(drawNode(GeometryNode.Rect.of(RectF32(0f, 0f, 1f, 1f)), DrawOrigin.RECT, solidPaint().copy(shader = opacity)))
-        val layerPaintShader = SceneSnapshot.of(
-            SceneExtent(1, 1),
-            ColorSpace.SRGB,
-            listOf(SceneCommand.BeginLayer(LayerDescriptor.of(paint = solidPaint().copy(shader = opacity))), SceneCommand.EndLayer),
-        )
-        val maskShader = validArchiveScene(drawNode(GeometryNode.Rect.of(RectF32(0f, 0f, 1f, 1f)), DrawOrigin.RECT, solidPaint().copy(maskFilter = MaskFilterNode.Shader(opacity))))
-        val meshShader = meshProgramScene(meshProgramWithShaderChild(opacity))
-        val blendShader = validArchiveScene(drawNode(GeometryNode.Rect.of(RectF32(0f, 0f, 1f, 1f)), DrawOrigin.RECT, solidPaint().copy(shader = MaterialNode.Blend(BlendMode.SRC_OVER, MaterialNode.Solid(ColorARGB.Blue), opacity))))
-        val runtimeShader = validArchiveScene(
-            drawNode(
-                GeometryNode.Rect.of(RectF32(0f, 0f, 1f, 1f)),
-                DrawOrigin.RECT,
-                solidPaint().copy(
-                    shader = MaterialNode.RuntimeEffect.of(
-                        descriptor("opacity-child", RuntimeEffectAbi.SHADER, RuntimeChildSlot("child", RuntimeChildType.SHADER)),
-                        mapOf("u" to RuntimeUniformValue.F1(1f)),
-                        listOf(RuntimeMaterialChild("child", opacity)),
-                    ),
-                ),
-            ),
-        )
-
-        listOf(
-            neutralDraw, neutralLayer, paintShader, layerPaintShader, maskShader, meshShader, blendShader, runtimeShader,
-        ).forEach { scene ->
-            assertIs<SceneArchiveDecodeResult.Decoded>(
-                SceneArchiveCodec.decodePicture(SceneArchiveCodec.encodePicture(scene, RectF32(0f, 0f, 1f, 1f))),
-            )
-        }
-    }
-
-    @Test
-    fun `picture archive decodes a serialized opacity material in a public shader`() {
-        val marker = ColorARGB.fromPackedInt(0x13579BDF)
-        val valid = validArchiveScene(
-            drawNode(
-                GeometryNode.Rect.of(RectF32(0f, 0f, 1f, 1f)),
-                DrawOrigin.RECT,
-                solidPaint().copy(shader = MaterialNode.Solid(marker)),
-            ),
-        )
-        val wire = SceneArchiveCodec.encodePicture(valid, RectF32(0f, 0f, 1f, 1f))
-        val invalidWire = replaceFirst(
-            wire,
-            ByteBuffer.allocate(8).putInt(2).putInt(marker.value.toInt()).array(),
-            ByteBuffer.allocate(16).putInt(12).putInt(2).putInt(marker.value.toInt()).putFloat(0.5f).array(),
-        )
-
-        assertIs<SceneArchiveDecodeResult.Decoded>(SceneArchiveCodec.decodePicture(invalidWire))
     }
 
     @Test

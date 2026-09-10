@@ -187,9 +187,27 @@ private fun GPUFramePlan.corePrimitiveSceneTargetDescriptor(
  * legacy CorePrimitive pipeline: these shaders are the concrete implementation of the sealed
  * mask algebra (producer, quantised fold, and read-only consumer).
  */
-private class GPUW4eNativeOwnedHandles : AutoCloseable {
+private class GPUW4eNativeOwnedHandles : AutoCloseable, GPUW5aGeometryPipelineTemplateProvider {
     private val handles = mutableListOf<AutoCloseable>()
     private var closed = false
+    private val shaders = java.util.IdentityHashMap<io.ygdrasil.webgpu.GPUShaderModule, String>()
+    private val layouts = java.util.IdentityHashMap<io.ygdrasil.webgpu.GPUPipelineLayout, List<io.ygdrasil.webgpu.GPUBindGroupLayout>>()
+    private val templates = java.util.IdentityHashMap<GPURenderPipeline, GPUW5aGeometryPipelineTemplate>()
+
+    fun createShaderModule(device: GPUDevice, descriptor: ShaderModuleDescriptor): io.ygdrasil.webgpu.GPUShaderModule =
+        own(device.createShaderModule(descriptor)).also { shaders[it] = descriptor.code }
+
+    fun createPipelineLayout(device: GPUDevice, descriptor: PipelineLayoutDescriptor): io.ygdrasil.webgpu.GPUPipelineLayout =
+        own(device.createPipelineLayout(descriptor)).also { layouts[it] = descriptor.bindGroupLayouts.toList() }
+
+    fun createRenderPipeline(device: GPUDevice, descriptor: RenderPipelineDescriptor): GPURenderPipeline =
+        own(device.createRenderPipeline(descriptor)).also { pipeline ->
+            val groupZero = layouts[descriptor.layout]?.singleOrNull()
+            val source = shaders[descriptor.vertex.module]
+            if (groupZero != null && source != null) templates[pipeline] = GPUW5aGeometryPipelineTemplate(source, descriptor, groupZero)
+        }
+
+    override fun sourceTemplate(pipeline: GPURenderPipeline): GPUW5aGeometryPipelineTemplate? = templates[pipeline]
 
 
     fun <T : AutoCloseable> own(handle: T): T {
@@ -234,23 +252,23 @@ private fun createW4eClearPipeline(
     coverage: Float,
     owned: GPUW4eNativeOwnedHandles,
 ): GPURenderPipeline {
-    val shader = owned.own(device.createShaderModule(ShaderModuleDescriptor(
+    val shader = owned.createShaderModule(device, ShaderModuleDescriptor(
         label = "Kanvas.frame.w4e.clearShader.$coverage",
         code = w4eFullscreenVertexShader() + """
             @fragment fn fs_main() -> @location(0) vec4f { return vec4f($coverage); }
         """.trimIndent(),
-    )))
-    val pipelineLayout = owned.own(device.createPipelineLayout(PipelineLayoutDescriptor(
+    ))
+    val pipelineLayout = owned.createPipelineLayout(device, PipelineLayoutDescriptor(
         label = "Kanvas.frame.w4e.clearPipelineLayout.$coverage", bindGroupLayouts = emptyList(),
-    )))
-    return owned.own(device.createRenderPipeline(RenderPipelineDescriptor(
+    ))
+    return owned.createRenderPipeline(device, RenderPipelineDescriptor(
         label = "Kanvas.frame.w4e.clearPipeline.$coverage",
         layout = pipelineLayout,
         vertex = VertexState(module = shader, entryPoint = "vs_main"),
         primitive = PrimitiveState(),
         multisample = MultisampleState(count = 1u),
         fragment = FragmentState(module = shader, entryPoint = "fs_main", targets = listOf(ColorTargetState(GPUTextureFormat.RGBA8Unorm))),
-    )))
+    ))
 }
 
 private fun createW4eProducerPipeline(
@@ -267,7 +285,7 @@ private fun createW4eProducerPipeline(
             buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
         )),
     )))
-    val shader = owned.own(device.createShaderModule(ShaderModuleDescriptor(
+    val shader = owned.createShaderModule(device, ShaderModuleDescriptor(
         label = "Kanvas.frame.w4e.producerShader",
         code = w4eFullscreenVertexShader() + """
             struct ProducerBlock {
@@ -321,18 +339,18 @@ private fun createW4eProducerPipeline(
                 return vec4f(coverage);
             }
         """.trimIndent(),
-    )))
-    val pipelineLayout = owned.own(device.createPipelineLayout(PipelineLayoutDescriptor(
+    ))
+    val pipelineLayout = owned.createPipelineLayout(device, PipelineLayoutDescriptor(
         label = "Kanvas.frame.w4e.producerPipelineLayout", bindGroupLayouts = listOf(bindGroupLayout),
-    )))
-    val pipeline = owned.own(device.createRenderPipeline(RenderPipelineDescriptor(
+    ))
+    val pipeline = owned.createRenderPipeline(device, RenderPipelineDescriptor(
         label = "Kanvas.frame.w4e.producerPipeline",
         layout = pipelineLayout,
         vertex = VertexState(module = shader, entryPoint = "vs_main"),
         primitive = PrimitiveState(),
         multisample = MultisampleState(count = sampleCount.toUInt()),
         fragment = FragmentState(module = shader, entryPoint = "fs_main", targets = listOf(ColorTargetState(format))),
-    )))
+    ))
     return GPUW4eNativePipeline(pipeline, bindGroupLayout)
 }
 
@@ -357,7 +375,7 @@ private fun createW4eFoldPipeline(
         org.graphiks.kanvas.gpu.plan.ClipCombineOperation.Intersect -> "previousI32 * sourceI32"
         org.graphiks.kanvas.gpu.plan.ClipCombineOperation.Difference -> "previousI32 * (255 - sourceI32)"
     }
-    val shader = owned.own(device.createShaderModule(ShaderModuleDescriptor(
+    val shader = owned.createShaderModule(device, ShaderModuleDescriptor(
         label = "Kanvas.frame.w4e.foldShader.${operation.name.lowercase()}",
         code = w4eFullscreenVertexShader() + """
             @group(0) @binding(0) var previousMask: texture_2d<f32>;
@@ -371,18 +389,18 @@ private fun createW4eFoldPipeline(
                 return vec4f(coverage);
             }
         """.trimIndent(),
-    )))
-    val pipelineLayout = owned.own(device.createPipelineLayout(PipelineLayoutDescriptor(
+    ))
+    val pipelineLayout = owned.createPipelineLayout(device, PipelineLayoutDescriptor(
         label = "Kanvas.frame.w4e.foldPipelineLayout", bindGroupLayouts = listOf(bindGroupLayout),
-    )))
-    val pipeline = owned.own(device.createRenderPipeline(RenderPipelineDescriptor(
+    ))
+    val pipeline = owned.createRenderPipeline(device, RenderPipelineDescriptor(
         label = "Kanvas.frame.w4e.foldPipeline.${operation.name.lowercase()}",
         layout = pipelineLayout,
         vertex = VertexState(module = shader, entryPoint = "vs_main"),
         primitive = PrimitiveState(),
         multisample = MultisampleState(count = 1u),
         fragment = FragmentState(module = shader, entryPoint = "fs_main", targets = listOf(ColorTargetState(GPUTextureFormat.RGBA8Unorm))),
-    )))
+    ))
     return GPUW4eNativePipeline(pipeline, bindGroupLayout)
 }
 
@@ -402,23 +420,24 @@ private fun createW4eConsumerPipeline(
             BindGroupLayoutEntry(binding = 1u, visibility = GPUShaderStage.Fragment, buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform)),
         ),
     )))
-    val shader = owned.own(device.createShaderModule(ShaderModuleDescriptor(
+    val shader = owned.createShaderModule(device, ShaderModuleDescriptor(
         label = "Kanvas.frame.w4e.consumerShader",
         code = w4eFullscreenVertexShader() + """
             struct ConsumerBlock { color: vec4f, inverse: f32, padding0: f32, padding1: f32, padding2: f32 };
             @group(0) @binding(0) var clipMask: texture_2d<f32>;
             @group(0) @binding(1) var<uniform> consumer: ConsumerBlock;
             @fragment fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
-                let rawCoverage = clamp(textureLoad(clipMask, vec2i(position.xy), 0).r, 0.0, 1.0);
+                let maskSample: vec4f = textureLoad(clipMask, vec2i(position.xy), 0);
+                let rawCoverage = clamp(maskSample.r, 0.0, 1.0);
                 let coverage = select(rawCoverage, 1.0 - rawCoverage, consumer.inverse > 0.5);
                 return consumer.color * coverage;
             }
         """.trimIndent(),
-    )))
-    val pipelineLayout = owned.own(device.createPipelineLayout(PipelineLayoutDescriptor(
+    ))
+    val pipelineLayout = owned.createPipelineLayout(device, PipelineLayoutDescriptor(
         label = "Kanvas.frame.w4e.consumerPipelineLayout", bindGroupLayouts = listOf(bindGroupLayout),
-    )))
-    val pipeline = owned.own(device.createRenderPipeline(RenderPipelineDescriptor(
+    ))
+    val pipeline = owned.createRenderPipeline(device, RenderPipelineDescriptor(
         label = "Kanvas.frame.w4e.consumerPipeline",
         layout = pipelineLayout,
         vertex = VertexState(module = shader, entryPoint = "vs_main"),
@@ -428,7 +447,7 @@ private fun createW4eConsumerPipeline(
         fragment = FragmentState(module = shader, entryPoint = "fs_main", targets = listOf(ColorTargetState(
             format = format, blend = w4eSrcOverBlendState(),
         ))),
-    )))
+    ))
     return GPUW4eNativePipeline(pipeline, bindGroupLayout)
 }
 
@@ -455,7 +474,7 @@ private fun createW4eBinaryConsumerPipeline(
             buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
         ),
     )))
-    val shader = owned.own(device.createShaderModule(ShaderModuleDescriptor(
+    val shader = owned.createShaderModule(device, ShaderModuleDescriptor(
         label = "Kanvas.frame.w4e.binaryConsumerShader",
         code = w4eFullscreenVertexShader() + """
             struct ConsumerBlock { color: vec4f, inverse: f32, padding0: f32, padding1: f32, padding2: f32 };
@@ -464,17 +483,19 @@ private fun createW4eBinaryConsumerPipeline(
             @group(0) @binding(2) var<uniform> consumer: ConsumerBlock;
             @fragment fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
                 let coordinate = vec2i(position.xy);
-                let pathCoverage = clamp(textureLoad(pathMask, coordinate, 0).r, 0.0, 1.0);
-                let rawClip = clamp(textureLoad(clipMask, coordinate, 0).r, 0.0, 1.0);
+                let pathSample: vec4f = textureLoad(pathMask, coordinate, 0);
+                let clipSample: vec4f = textureLoad(clipMask, coordinate, 0);
+                let pathCoverage = clamp(pathSample.r, 0.0, 1.0);
+                let rawClip = clamp(clipSample.r, 0.0, 1.0);
                 let clipCoverage = select(rawClip, 1.0 - rawClip, consumer.inverse > 0.5);
                 return consumer.color * (pathCoverage * clipCoverage);
             }
         """.trimIndent(),
-    )))
-    val pipelineLayout = owned.own(device.createPipelineLayout(PipelineLayoutDescriptor(
+    ))
+    val pipelineLayout = owned.createPipelineLayout(device, PipelineLayoutDescriptor(
         label = "Kanvas.frame.w4e.binaryConsumerPipelineLayout", bindGroupLayouts = listOf(bindGroupLayout),
-    )))
-    val pipeline = owned.own(device.createRenderPipeline(RenderPipelineDescriptor(
+    ))
+    val pipeline = owned.createRenderPipeline(device, RenderPipelineDescriptor(
         label = "Kanvas.frame.w4e.binaryConsumerPipeline",
         layout = pipelineLayout,
         vertex = VertexState(module = shader, entryPoint = "vs_main"),
@@ -483,7 +504,7 @@ private fun createW4eBinaryConsumerPipeline(
         fragment = FragmentState(module = shader, entryPoint = "fs_main", targets = listOf(ColorTargetState(
             format = format, blend = w4eSrcOverBlendState(),
         ))),
-    )))
+    ))
     return GPUW4eNativePipeline(pipeline, bindGroupLayout)
 }
 
@@ -509,7 +530,7 @@ private fun createW4eMaskedPathPipeline(
                 buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform)),
         ),
     )))
-    val shader = owned.own(device.createShaderModule(ShaderModuleDescriptor(
+    val shader = owned.createShaderModule(device, ShaderModuleDescriptor(
         label = "Kanvas.frame.w4e.maskedPathShader",
         code = """
             struct ConsumerBlock { color: vec4f, inverse: f32, padding0: f32, padding1: f32, padding2: f32 };
@@ -519,16 +540,17 @@ private fun createW4eMaskedPathPipeline(
                 return vec4f(position, 0.0, 1.0);
             }
             @fragment fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
-                let rawCoverage = clamp(textureLoad(clipMask, vec2i(position.xy), 0).r, 0.0, 1.0);
+                let maskSample: vec4f = textureLoad(clipMask, vec2i(position.xy), 0);
+                let rawCoverage = clamp(maskSample.r, 0.0, 1.0);
                 let coverage = select(rawCoverage, 1.0 - rawCoverage, consumer.inverse > 0.5);
                 return consumer.color * coverage;
             }
         """.trimIndent(),
-    )))
-    val pipelineLayout = owned.own(device.createPipelineLayout(PipelineLayoutDescriptor(
+    ))
+    val pipelineLayout = owned.createPipelineLayout(device, PipelineLayoutDescriptor(
         label = "Kanvas.frame.w4e.maskedPathPipelineLayout", bindGroupLayouts = listOf(bindGroupLayout),
-    )))
-    val pipeline = owned.own(device.createRenderPipeline(RenderPipelineDescriptor(
+    ))
+    val pipeline = owned.createRenderPipeline(device, RenderPipelineDescriptor(
         label = "Kanvas.frame.w4e.maskedPathPipeline",
         layout = pipelineLayout,
         vertex = VertexState(
@@ -545,7 +567,7 @@ private fun createW4eMaskedPathPipeline(
         fragment = FragmentState(module = shader, entryPoint = "fs_main", targets = listOf(ColorTargetState(
             format = format, blend = w4eSrcOverBlendState(),
         ))),
-    )))
+    ))
     return GPUW4eNativePipeline(pipeline, bindGroupLayout)
 }
 
@@ -565,18 +587,18 @@ private fun createW4eUnmaskedCoverPipeline(
             buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
         )),
     )))
-    val shader = owned.own(device.createShaderModule(ShaderModuleDescriptor(
+    val shader = owned.createShaderModule(device, ShaderModuleDescriptor(
         label = "Kanvas.frame.w4e.unmaskedPathShader",
         code = w4eFullscreenVertexShader() + """
             struct ColorBlock { color: vec4f };
             @group(0) @binding(0) var<uniform> consumer: ColorBlock;
             @fragment fn fs_main() -> @location(0) vec4f { return consumer.color; }
         """.trimIndent(),
-    )))
-    val pipelineLayout = owned.own(device.createPipelineLayout(PipelineLayoutDescriptor(
+    ))
+    val pipelineLayout = owned.createPipelineLayout(device, PipelineLayoutDescriptor(
         label = "Kanvas.frame.w4e.unmaskedPathPipelineLayout", bindGroupLayouts = listOf(bindGroupLayout),
-    )))
-    val pipeline = owned.own(device.createRenderPipeline(RenderPipelineDescriptor(
+    ))
+    val pipeline = owned.createRenderPipeline(device, RenderPipelineDescriptor(
         label = "Kanvas.frame.w4e.unmaskedPathPipeline",
         layout = pipelineLayout,
         vertex = VertexState(module = shader, entryPoint = "vs_main"),
@@ -586,7 +608,7 @@ private fun createW4eUnmaskedCoverPipeline(
         fragment = FragmentState(module = shader, entryPoint = "fs_main", targets = listOf(ColorTargetState(
             format = format, blend = w4eSrcOverBlendState(),
         ))),
-    )))
+    ))
     return GPUW4eNativePipeline(pipeline, bindGroupLayout)
 }
 
@@ -605,7 +627,7 @@ private fun createW4eUnmaskedPathPipeline(
             buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
         )),
     )))
-    val shader = owned.own(device.createShaderModule(ShaderModuleDescriptor(
+    val shader = owned.createShaderModule(device, ShaderModuleDescriptor(
         label = "Kanvas.frame.w4e.unmaskedDirectPathShader",
         code = """
             struct ColorBlock { color: vec4f };
@@ -615,11 +637,11 @@ private fun createW4eUnmaskedPathPipeline(
             }
             @fragment fn fs_main() -> @location(0) vec4f { return consumer.color; }
         """.trimIndent(),
-    )))
-    val pipelineLayout = owned.own(device.createPipelineLayout(PipelineLayoutDescriptor(
+    ))
+    val pipelineLayout = owned.createPipelineLayout(device, PipelineLayoutDescriptor(
         label = "Kanvas.frame.w4e.unmaskedDirectPathPipelineLayout", bindGroupLayouts = listOf(bindGroupLayout),
-    )))
-    val pipeline = owned.own(device.createRenderPipeline(RenderPipelineDescriptor(
+    ))
+    val pipeline = owned.createRenderPipeline(device, RenderPipelineDescriptor(
         label = "Kanvas.frame.w4e.unmaskedDirectPathPipeline",
         layout = pipelineLayout,
         vertex = VertexState(
@@ -635,7 +657,7 @@ private fun createW4eUnmaskedPathPipeline(
         fragment = FragmentState(module = shader, entryPoint = "fs_main", targets = listOf(ColorTargetState(
             format = format, blend = w4eSrcOverBlendState(),
         ))),
-    )))
+    ))
     return GPUW4eNativePipeline(pipeline, bindGroupLayout)
 }
 
@@ -741,7 +763,7 @@ private fun createW4ePathGeometryPipeline(
     label: String,
     owned: GPUW4eNativeOwnedHandles,
 ): GPURenderPipeline {
-    val shader = owned.own(device.createShaderModule(ShaderModuleDescriptor(
+    val shader = owned.createShaderModule(device, ShaderModuleDescriptor(
         label = "$label.shader",
         code = """
             @vertex fn vs_main(@location(0) position: vec2f) -> @builtin(position) vec4f {
@@ -749,11 +771,11 @@ private fun createW4ePathGeometryPipeline(
             }
             @fragment fn fs_main() -> @location(0) vec4f { return vec4f($fragmentCoverage); }
         """.trimIndent(),
-    )))
-    val pipelineLayout = owned.own(device.createPipelineLayout(PipelineLayoutDescriptor(
+    ))
+    val pipelineLayout = owned.createPipelineLayout(device, PipelineLayoutDescriptor(
         label = "$label.pipelineLayout", bindGroupLayouts = emptyList(),
-    )))
-    return owned.own(device.createRenderPipeline(RenderPipelineDescriptor(
+    ))
+    return owned.createRenderPipeline(device, RenderPipelineDescriptor(
         label = label,
         layout = pipelineLayout,
         vertex = VertexState(
@@ -779,7 +801,7 @@ private fun createW4ePathGeometryPipeline(
                 writeMask = if (colorWrite) GPUColorWrite.All else GPUColorWrite.None,
             )),
         ),
-    )))
+    ))
 }
 
 private fun createW4ePathCoverPipeline(
@@ -789,15 +811,15 @@ private fun createW4ePathCoverPipeline(
     coverage: Float,
     owned: GPUW4eNativeOwnedHandles,
 ): GPURenderPipeline {
-    val shader = owned.own(device.createShaderModule(ShaderModuleDescriptor(
+    val shader = owned.createShaderModule(device, ShaderModuleDescriptor(
         label = "Kanvas.frame.w4e.pathStencilCover.shader",
         code = w4eFullscreenVertexShader() + """
             @fragment fn fs_main() -> @location(0) vec4f { return vec4f($coverage); }
         """.trimIndent(),
-    )))
-    val pipelineLayout = owned.own(device.createPipelineLayout(PipelineLayoutDescriptor(
+    ))
+    val pipelineLayout = owned.createPipelineLayout(device, PipelineLayoutDescriptor(
         label = "Kanvas.frame.w4e.pathStencilCover.pipelineLayout", bindGroupLayouts = emptyList(),
-    )))
+    ))
     val readableStencil = DepthStencilState(
         format = GPUTextureFormat.Depth24PlusStencil8,
         depthWriteEnabled = false,
@@ -817,7 +839,7 @@ private fun createW4ePathCoverPipeline(
         stencilReadMask = 0xffu,
         stencilWriteMask = 0u,
     )
-    return owned.own(device.createRenderPipeline(RenderPipelineDescriptor(
+    return owned.createRenderPipeline(device, RenderPipelineDescriptor(
         label = "Kanvas.frame.w4e.pathStencilCover.pipeline",
         layout = pipelineLayout,
         vertex = VertexState(module = shader, entryPoint = "vs_main"),
@@ -825,7 +847,7 @@ private fun createW4ePathCoverPipeline(
         depthStencil = readableStencil,
         multisample = MultisampleState(count = sampleCount.toUInt()),
         fragment = FragmentState(module = shader, entryPoint = "fs_main", targets = listOf(ColorTargetState(format))),
-    )))
+    ))
 }
 
 private fun w4ePathStencilProducerState(evenOdd: Boolean): DepthStencilState = DepthStencilState(
@@ -982,6 +1004,9 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     org.graphiks.kanvas.gpu.plan.W4cPathFillPlanCompiler.CAPABILITY_ID ->
                         materializePlannedPathSessionScratch(framePlan, laneEncoder, resources, generationSeal, laneRenders,
                             GPUPlannedPathSessionScratch.from(requireNotNull(packetAuthority.w4cSessionScratch)), context)
+                    org.graphiks.kanvas.gpu.plan.W4dPathStrokePlanCompiler.CAPABILITY_ID ->
+                        materializePlannedPathSessionScratch(framePlan, laneEncoder, resources, generationSeal, laneRenders,
+                            GPUPlannedPathSessionScratch.from(requireNotNull(packetAuthority.w4dSessionScratch)), context)
                     else -> return retainCleanup(refused("invalid.native-core-primitive.w5a-composite", "Unknown composite native lane."))
                 }
                 when (result) {

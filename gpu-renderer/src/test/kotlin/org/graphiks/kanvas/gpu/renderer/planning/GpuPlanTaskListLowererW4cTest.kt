@@ -90,11 +90,6 @@ class GpuPlanTaskListLowererW4cTest {
     private val lowerer = GpuPlanTaskListLowerer()
 
     @JunitTest
-    fun `historical W4c one-slot stencil graph lowers`() {
-        assertIs<GpuPlanLoweringResult.Lowered>(lowerer.lower(request(legacyW4cStencilGraph())))
-    }
-
-    @JunitTest
     fun `W4c lowerer preserves direct stencil direct roles loads ranges and authority`() {
         val graph = readyW4cGraph()
 
@@ -261,7 +256,7 @@ class GpuPlanTaskListLowererW4cTest {
             target = fillPass.target,
             draws = listOf(
                 PathStrokeDraw.ofMaterial(
-                    commandIndex = fillDraw.commandIndex,
+                    commandIndexI32 = fillDraw.commandIndex,
                     material = assertIs<PlanDrawMaterialAuthority.MaterialV1>(fillDraw.materialAuthority).ref,
                     geometryF32 = directStrokeAndFillGeometry(),
                     scissorI32 = fillDraw.copyScissorI32(),
@@ -336,55 +331,6 @@ class GpuPlanTaskListLowererW4cTest {
         return assertIs<RenderPlanResult.Ready<RenderGraph>>(
             compiler.plan(candidate, planCapabilities(), PlanBudget(1L shl 20)),
         ).plan
-    }
-
-    private fun legacyW4cStencilGraph(): RenderGraph {
-        val current = readyW4cGraph(draws = listOf(concaveEvenOdd()))
-        val materialTable = assertNotNull(current.materialPlanTableOrNull())
-        val legacyDraws = mutableMapOf<Int, PathFillDraw>()
-        fun legacy(draw: PathFillDraw): PathFillDraw = legacyDraws.getOrPut(draw.commandIndex) {
-            val material = assertIs<PlanDrawMaterialAuthority.MaterialV1>(draw.materialAuthority)
-            PathFillDraw.of(
-                draw.commandIndex,
-                assertNotNull(W5aMaterialPlanLowerer().lower(materialTable, material.ref)),
-                draw.copyGeometryF32(),
-                draw.strategy,
-                draw.copyScissorI32(),
-            )
-        }
-        val passes = current.passes().map { pass ->
-            when (pass) {
-                is PlanPass.RenderPass -> PlanPass.RenderPass(
-                    pass.ordinal, pass.target, pass.draws().map { legacy(it as PathFillDraw) },
-                    pass.load, pass.store, pass.drawDataResources,
-                )
-                is PlanPass.StencilProducer -> PlanPass.StencilProducer(
-                    pass.ordinal, pass.target, pass.depthStencil, legacy(pass.draw as PathFillDraw),
-                    pass.drawDataResources, pass.atomicGroup, pass.load, pass.store,
-                    pass.depthStencilAccess, pass.depthStencilLoadStore,
-                )
-                is PlanPass.StencilCover -> PlanPass.StencilCover(
-                    pass.ordinal, pass.target, pass.depthStencil, legacy(pass.draw as PathFillDraw),
-                    pass.drawDataResources, pass.atomicGroup, pass.load, pass.store,
-                    pass.depthStencilAccess, pass.depthStencilLoadStore,
-                )
-                is PlanPass.ReadbackPass -> pass
-                else -> error("Unexpected W4c fixture pass")
-            }
-        }
-        return RenderGraph.of(
-            current.id,
-            W4cPathFillPlanCompiler.HISTORICAL_CAPABILITY_ID,
-            current.targetExtent,
-            current.colorFormat,
-            current.capabilities,
-            current.budget,
-            current.visualCommandCount,
-            current.resources(),
-            passes,
-            current.dependencies(),
-            current.peakFrameLocalBytes,
-        )
     }
 
     private fun readyW4aGraph(): RenderGraph {

@@ -7,9 +7,8 @@ import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialP
 /**
  * Sealed W5a provenance retained by the prepared A8 text lane.
  *
- * The existing TextA8 ABI still consumes evaluated linear-premultiplied uniforms, but this
- * witness keeps the issuing table, root reference, version, command identity and authenticated
- * program together so no later stage can silently substitute an equivalent-looking material.
+ * The TextA8 source-stage consumes raw W5a bindings. This witness keeps the issuing table,
+ * root reference, version, command identity and authenticated program together.
  */
 public class GPUPreparedTextMaterialPlanEmission internal constructor(
     private val table: MaterialPlanTable,
@@ -21,12 +20,19 @@ public class GPUPreparedTextMaterialPlanEmission internal constructor(
         "Prepared text W5a emission requires a compiler-issued admission token"
     }
 
+    /** Rebase only an identical sealed source; retain the original compiler-issued program. */
+    public fun remap(table: MaterialPlanTable, ref: MaterialPlanRef): GPUPreparedTextMaterialPlanEmission {
+        require(requireNotNull(W5aMaterialSourceStage.lower(this.table, this.ref)).canonicalIdentity ==
+            requireNotNull(W5aMaterialSourceStage.lower(table, ref)).canonicalIdentity)
+        return GPUPreparedTextMaterialPlanEmission(table, ref, program)
+    }
+
     /** Binds this compiler-issued material result to its one normalized command. */
     public fun bind(
-        commandIdValue: Int,
+        commandIdValueI32: Int,
         candidate: GPUPreparedMaterialProgram,
     ): GPUPreparedTextMaterialPlanProvenance? {
-        if (commandIdValue < 0 || candidate != program ||
+        if (commandIdValueI32 < 0 || candidate != program ||
             candidate.preparedTextW5aAdmissionToken !== admissionToken
         ) return null
         val entry = runCatching { table.entry(ref) }.getOrNull() ?: return null
@@ -34,7 +40,7 @@ public class GPUPreparedTextMaterialPlanEmission internal constructor(
         return GPUPreparedTextMaterialPlanProvenance(
             table = table,
             ref = ref,
-            commandIdValue = commandIdValue,
+            commandIdValueI32 = commandIdValueI32,
             program = program,
             admissionToken = admissionToken,
             programVersionI32 = entry.program.versionI32,
@@ -46,7 +52,7 @@ public class GPUPreparedTextMaterialPlanEmission internal constructor(
 public class GPUPreparedTextMaterialPlanProvenance internal constructor(
     private val table: MaterialPlanTable,
     val ref: MaterialPlanRef,
-    private val commandIdValue: Int,
+    private val commandIdValueI32: Int,
     private val program: GPUPreparedMaterialProgram,
     private val admissionToken: GPUPreparedTextW5aAdmissionToken,
     private val programVersionI32: Int,
@@ -59,12 +65,12 @@ public class GPUPreparedTextMaterialPlanProvenance internal constructor(
     }
 
     fun canonicalIdentity(): String =
-        "w5a-text-plan-v1:command=$commandIdValue:ref=${ref.indexI32}:" +
+        "w5a-text-plan-v1:command=$commandIdValueI32:ref=${ref.indexI32}:" +
             "program=$programVersionI32:binding=$bindingVersionI32:" +
             "material=${program.materialKey}:${program.abiHash}:table=${tableSnapshotIdentity()}"
 
-    fun validates(commandIdValue: Int, candidate: GPUPreparedMaterialProgram): Boolean =
-        commandIdValue == this.commandIdValue &&
+    fun validates(commandIdValueI32: Int, candidate: GPUPreparedMaterialProgram): Boolean =
+        commandIdValueI32 == this.commandIdValueI32 &&
             candidate == program &&
             candidate.preparedTextW5aAdmissionToken === admissionToken &&
             runCatching {

@@ -3666,6 +3666,8 @@ sealed interface NormalizedDrawCommand {
      * this value is null only for that explicit command variant.
      */
     val material: GPUMaterialDescriptor?
+    /** Sealed W5a source reference; a promoted command has no legacy descriptor. */
+    val w5aMaterialPlanRef: MaterialPlanRef? get() = null
     /** Captured blend facts. */
     val blend: GPUBlendFacts
     /** Conservative command bounds. */
@@ -3686,7 +3688,7 @@ sealed interface NormalizedDrawCommand {
         override val transform: GPUTransformFacts,
         override val clip: GPUClipFacts,
         override val layer: GPULayerFacts,
-        override val material: GPUMaterialDescriptor,
+        override val material: GPUMaterialDescriptor?,
         override val blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
         override val bounds: GPUBounds,
         override val ordering: GPUOrderingFacts,
@@ -3701,7 +3703,9 @@ sealed interface NormalizedDrawCommand {
         val antiAlias: Boolean = true,
         /** Mask filter descriptor for post-processing the fill output. Null when no mask filter is active. */
         val maskFilter: NormalizedMaskFilter? = null,
+        override val w5aMaterialPlanRef: MaterialPlanRef? = null,
     ) : NormalizedDrawCommand {
+        init { require((material != null) xor (w5aMaterialPlanRef != null)) }
         override val drawKind: GPUDrawKind = GPUDrawKind.FillRect
     }
 
@@ -3712,7 +3716,7 @@ sealed interface NormalizedDrawCommand {
         override val transform: GPUTransformFacts,
         override val clip: GPUClipFacts,
         override val layer: GPULayerFacts,
-        override val material: GPUMaterialDescriptor,
+        override val material: GPUMaterialDescriptor?,
         override val blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
         override val bounds: GPUBounds,
         override val ordering: GPUOrderingFacts,
@@ -3722,7 +3726,9 @@ sealed interface NormalizedDrawCommand {
         val antiAlias: Boolean = true,
         /** Mask filter descriptor for post-processing the fill output. Null when no mask filter is active. */
         val maskFilter: NormalizedMaskFilter? = null,
+        override val w5aMaterialPlanRef: MaterialPlanRef? = null,
     ) : NormalizedDrawCommand {
+        init { require((material != null) xor (w5aMaterialPlanRef != null)) }
         override val drawKind: GPUDrawKind = GPUDrawKind.FillRRect
     }
 
@@ -3764,7 +3770,7 @@ sealed interface NormalizedDrawCommand {
          */
         override val material: GPUMaterialDescriptor? = null,
         /** Versioned sealed material reference used only by the W5a prepared point bridge. */
-        val w5aMaterialPlanRef: MaterialPlanRef? = null,
+        override val w5aMaterialPlanRef: MaterialPlanRef? = null,
         /** Non-renderable geometry keeps its command and has no material to evaluate. */
         val preMaterialGeometryRefusalCode: String? = null,
         override val blend: GPUBlendFacts = GPUBlendFacts.srcOver(),

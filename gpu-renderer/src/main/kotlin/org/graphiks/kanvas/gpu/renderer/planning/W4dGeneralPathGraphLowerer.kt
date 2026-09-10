@@ -441,6 +441,8 @@ internal class W4dGeneralPathGraphLowerer {
                 sourceFamily = GPUCorePrimitiveSourceFamily.Path,
                 geometry = geometryInput,
                 premultipliedRgba = listOf(color.red, color.green, color.blue, color.alpha),
+                material = if (!pass.phase.isColorProducing()) null else
+                    W5aMaterialPlanLowerer().material(graph.materialPlanTableOrNull(), draw.materialAuthority, draw.commandIndex),
                 targetBounds = bounds,
                 scissorBounds = scissorBounds,
                 clipCoveragePlan = clip.first,

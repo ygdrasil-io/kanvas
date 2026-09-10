@@ -355,16 +355,15 @@ class GPUWgpu4kCorePrimitiveW4dGeneralFrameTest {
     }
 
     @Test
-    fun `W5a hard mask passes carry no material while binary cover retains each premultiplied color`() {
+    fun `hard mask and binary cover retain their geometry uniform layout for each paint`() {
         listOf(
-            Triple("green", ColorARGB.fromPackedUInt(0xff00ff00u), listOf(0f, 1f, 0f, 1f)),
-            Triple("black", ColorARGB.fromPackedUInt(0xff000000u), listOf(0f, 0f, 0f, 1f)),
-            Triple(
+            Pair("green", ColorARGB.fromPackedUInt(0xff00ff00u)),
+            Pair("black", ColorARGB.fromPackedUInt(0xff000000u)),
+            Pair(
                 "translucent red",
                 ColorARGB.fromPackedUInt(0x80ff0000u),
-                listOf(128f / 255f, 0f, 0f, 128f / 255f),
             ),
-        ).forEach { (label, paint, premultiplied) ->
+        ).forEach { (label, paint) ->
             val taskList = loweredMixedAaGraph(color = paint).taskList
             withMaterialized(taskList) { frame, draft, native ->
                 val uniformUpload = native.writeBufferCalls.single { call ->
@@ -387,7 +386,7 @@ class GPUWgpu4kCorePrimitiveW4dGeneralFrameTest {
                     assertEquals(
                         transparentUniform32(),
                         uniformUpload.copyOfRange(offset, offset + 32).toList(),
-                        "$label W5a hard-mask pass must exclude material from its producer payload",
+                        "$label hard-mask producer uses its canonical geometry-only uniform",
                     )
                 }
                 val consumer = nativeRenders.flatMap { render -> render.commands }
@@ -398,9 +397,9 @@ class GPUWgpu4kCorePrimitiveW4dGeneralFrameTest {
                     }
                 val consumerOffset = consumer.dynamicOffsets.single().toInt()
                 assertEquals(
-                    binaryCoverUniform64(premultiplied),
+                    binaryCoverUniform64(listOf(0f, 0f, 0f, 0f)),
                     uniformUpload.copyOfRange(consumerOffset, consumerOffset + 64).toList(),
-                    "$label binary color cover must retain the graph premultiplied color",
+                    "$label binary color cover retains its neutral geometry uniform slot",
                 )
             }
         }

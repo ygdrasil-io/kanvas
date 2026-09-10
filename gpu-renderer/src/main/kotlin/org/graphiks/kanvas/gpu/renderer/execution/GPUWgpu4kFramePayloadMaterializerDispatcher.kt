@@ -289,6 +289,17 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
         resources: GPUPreparedResourceSet,
         generationSeal: GPUPreparedGenerationSeal,
     ): GPUPreparedNativeFramePayloadMaterialization {
+        val geometry = materializeGeometry(framePlan, encoderPlan, resources, generationSeal)
+        val limits = corePrimitiveLimits ?: return geometry
+        return materializeW5aSourcePartitionV2(device, queue, limits, framePlan, geometry, corePrimitiveCache)
+    }
+
+    private fun materializeGeometry(
+        framePlan: GPUFramePlan,
+        encoderPlan: GPUCommandEncoderPlan,
+        resources: GPUPreparedResourceSet,
+        generationSeal: GPUPreparedGenerationSeal,
+    ): GPUPreparedNativeFramePayloadMaterialization {
         if (closed || delegate != null) {
             return GPUPreparedNativeFramePayloadMaterialization.Refused(
                 "unsupported.native-frame-payload.dispatcher-state",

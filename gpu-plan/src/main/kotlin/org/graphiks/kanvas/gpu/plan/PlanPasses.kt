@@ -192,7 +192,7 @@ public class GeneralPathDraw private constructor(
         }
 
         public fun ofMaterial(
-            commandIndex: Int,
+            commandIndexI32: Int,
             material: MaterialPlanRef,
             geometry: PathDrawGeometry,
             strategy: PathFillStrategy,
@@ -200,7 +200,7 @@ public class GeneralPathDraw private constructor(
             coverage: CoveragePlan,
             sample: SamplePlan,
         ): GeneralPathDraw {
-            require(commandIndex >= 0) { "Command index must not be negative" }
+            require(commandIndexI32 >= 0) { "Command index must not be negative" }
             require(!scissorI32.isEmpty) { "General path scissor must be non-empty" }
             require(
                 (coverage == CoveragePlan.FullOrScissor && sample == SamplePlan.SingleSample) ||
@@ -208,7 +208,7 @@ public class GeneralPathDraw private constructor(
             ) { "General path draws require an explicit hard or four-sample AA contract" }
             requirePathRenderGeometryForStrategy(geometry, strategy)
             return GeneralPathDraw(
-                commandIndex, PlanDrawMaterialAuthority.MaterialV1(material), geometry, strategy, scissorI32, coverage, sample,
+                commandIndexI32, PlanDrawMaterialAuthority.MaterialV1(material), geometry, strategy, scissorI32, coverage, sample,
             )
         }
 
@@ -366,7 +366,7 @@ public class SolidRectDraw private constructor(
         }
 
         public fun ofMaterial(
-            commandIndex: Int,
+            commandIndexI32: Int,
             material: MaterialPlanRef,
             visibleBounds: RectI32,
             scissor: RectI32,
@@ -374,9 +374,9 @@ public class SolidRectDraw private constructor(
             sample: SamplePlan = SamplePlan.SingleSample,
             blend: BlendPlan = BlendPlan.SrcOver,
         ): SolidRectDraw {
-            require(commandIndex >= 0) { "Command index must be non-negative" }
+            require(commandIndexI32 >= 0) { "Command index must be non-negative" }
             require(!visibleBounds.isEmpty && !scissor.isEmpty) { "Draw rectangles must be non-empty" }
-            return SolidRectDraw(commandIndex, PlanDrawMaterialAuthority.MaterialV1(material), visibleBounds, scissor, coverage, sample, blend)
+            return SolidRectDraw(commandIndexI32, PlanDrawMaterialAuthority.MaterialV1(material), visibleBounds, scissor, coverage, sample, blend)
         }
     }
 }
@@ -431,18 +431,18 @@ public class AnalyticRectDraw private constructor(
         }
 
         public fun ofMaterial(
-            commandIndex: Int,
+            commandIndexI32: Int,
             material: MaterialPlanRef,
             deviceBounds: RectF32,
             rasterBounds: RectI32,
             scissor: RectI32,
         ): AnalyticRectDraw {
-            require(commandIndex >= 0) { "Command index must not be negative" }
+            require(commandIndexI32 >= 0) { "Command index must not be negative" }
             require(!deviceBounds.isEmpty && !rasterBounds.isEmpty && !scissor.isEmpty) {
                 "Draw rectangles must be non-empty"
             }
             return AnalyticRectDraw(
-                commandIndex,
+                commandIndexI32,
                 PlanDrawMaterialAuthority.MaterialV1(material),
                 deviceBounds,
                 rasterBounds,
@@ -515,14 +515,14 @@ public class AnalyticRRectDraw private constructor(
         }
 
         public fun ofMaterial(
-            commandIndex: Int,
+            commandIndexI32: Int,
             material: MaterialPlanRef,
             origin: DrawOrigin,
             deviceShape: RRectF32,
             rasterBounds: RectI32,
             scissor: RectI32,
         ): AnalyticRRectDraw {
-            require(commandIndex >= 0) { "Command index must not be negative" }
+            require(commandIndexI32 >= 0) { "Command index must not be negative" }
             require(origin == DrawOrigin.RECT || origin == DrawOrigin.RRECT) {
                 "Analytic rrect draws require RECT or RRECT origin"
             }
@@ -530,7 +530,7 @@ public class AnalyticRRectDraw private constructor(
                 "Draw rectangles must be non-empty"
             }
             return AnalyticRRectDraw(
-                commandIndex,
+                commandIndexI32,
                 PlanDrawMaterialAuthority.MaterialV1(material),
                 origin,
                 deviceShape,
@@ -595,13 +595,13 @@ public class PathFillDraw private constructor(
         }
 
         public fun ofMaterial(
-            commandIndex: Int,
+            commandIndexI32: Int,
             material: MaterialPlanRef,
             geometryF32: PathFillGeometryF32,
             strategy: PathFillStrategy,
             scissorI32: RectI32,
         ): PathFillDraw = ofAuthority(
-            commandIndex, PlanDrawMaterialAuthority.MaterialV1(material), geometryF32, strategy, scissorI32,
+            commandIndexI32, PlanDrawMaterialAuthority.MaterialV1(material), geometryF32, strategy, scissorI32,
         )
 
         private fun ofAuthority(
@@ -672,7 +672,7 @@ public class PathStrokeDraw private constructor(
         }
 
         public fun ofMaterial(
-            commandIndex: Int,
+            commandIndexI32: Int,
             material: MaterialPlanRef,
             geometryF32: PathStrokeGeometryF32,
             scissorI32: RectI32,
@@ -681,11 +681,11 @@ public class PathStrokeDraw private constructor(
                 PathStrokeWidthF64.Hairline, PathStrokeCap.Butt, PathStrokeJoin.Miter, 4.0,
             ),
         ): PathStrokeDraw {
-            require(commandIndex >= 0) { "Command index must not be negative" }
+            require(commandIndexI32 >= 0) { "Command index must not be negative" }
             require(!scissorI32.isEmpty) { "Path stroke scissor must be non-empty" }
             pathFillStrategy(geometryF32.copyFillGeometryF32())
             return PathStrokeDraw(
-                commandIndex, PlanDrawMaterialAuthority.MaterialV1(material), geometryF32, mode, styleF64, scissorI32,
+                commandIndexI32, PlanDrawMaterialAuthority.MaterialV1(material), geometryF32, mode, styleF64, scissorI32,
             )
         }
     }

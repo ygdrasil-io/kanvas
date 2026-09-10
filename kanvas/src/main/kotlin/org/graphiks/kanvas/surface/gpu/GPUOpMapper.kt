@@ -882,7 +882,7 @@ internal object GPUOpMapper {
             is DisplayOp.DrawRect -> if (operation.paint.isStroke()) {
                 operation.toStrokePathCommand(commandId, target)
             } else {
-                operation.toNormalizedCommand(commandId, target)
+                operation.toNormalizedCommand(commandId, target, w5aMaterialPlanRef)
             }
             is DisplayOp.DrawRRect -> if (operation.paint.isStroke()) {
                 DisplayOp.DrawPath(
@@ -892,13 +892,14 @@ internal object GPUOpMapper {
                     operation.clip,
                 ).toPathCommand(commandId, target, config)
             } else {
-                operation.toNormalizedCommand(commandId, target)
+                operation.toNormalizedCommand(commandId, target, w5aMaterialPlanRef)
             }
             is DisplayOp.DrawPath -> operation.toPathCommand(
                 commandId,
                 target,
                 config,
                 operation.directTriangleSourceAuthority(),
+                w5aMaterialPlanRef = w5aMaterialPlanRef,
             )
             is DisplayOp.DrawPoints -> DisplayOp.DrawPath(
                 operation.toPath(),
@@ -1124,7 +1125,7 @@ private fun GPUPreparedTextSubRun.toPreparedTextVisual(
         "prepared-text:${inventory.contentSha256}:operation=$operationIndex:subrun=$subRunIndex"
     val w5aMaterialProvenance = draw.materialPlanEmission?.let { emission ->
         emission.bind(
-            commandIdValue = commandId,
+            commandIdValueI32 = commandId,
             candidate = draw.material,
         ) ?: return GPUPreparedTextVisualLowering.Invalid
     }
@@ -2010,9 +2011,10 @@ private fun PathEffect?.toExactPathEffectKind(): String? = when (this) {
 internal fun DisplayOp.DrawRect.toNormalizedCommand(
     cmdId: GPUDrawCommandID,
     target: GPUTargetFacts,
+    w5aMaterialPlanRef: org.graphiks.kanvas.gpu.plan.MaterialPlanRef? = null,
 ): NormalizedDrawCommand.FillRect {
     val paint = this.paint
-    val material = paint.toMaterial()
+    val material = if (w5aMaterialPlanRef == null) paint.toMaterial() else null
     val gpRect = GPURect(this.rect.left, this.rect.top, this.rect.right, this.rect.bottom)
     val bounds = GPUBounds(gpRect.left, gpRect.top, gpRect.right, gpRect.bottom)
     val clip = this.clip.toGPUClipFacts(target)
@@ -2020,6 +2022,7 @@ internal fun DisplayOp.DrawRect.toNormalizedCommand(
     return NormalizedDrawCommand.FillRect(
         commandId = cmdId,
         rect = gpRect,
+        w5aMaterialPlanRef = w5aMaterialPlanRef,
         transform = transform,
         clip = clip,
         layer = GPULayerFacts.root(target),
@@ -2170,9 +2173,10 @@ internal fun DisplayOp.DrawRect.toStrokePathCommand(
 internal fun DisplayOp.DrawRRect.toNormalizedCommand(
     cmdId: GPUDrawCommandID,
     target: GPUTargetFacts,
+    w5aMaterialPlanRef: org.graphiks.kanvas.gpu.plan.MaterialPlanRef? = null,
 ): NormalizedDrawCommand.FillRRect {
     val paint = this.paint
-    val material = paint.toMaterial()
+    val material = if (w5aMaterialPlanRef == null) paint.toMaterial() else null
     val sourceRRect = this.rrect
     val gpRect = GPURect(
         sourceRRect.rect.left, sourceRRect.rect.top,
@@ -2191,6 +2195,7 @@ internal fun DisplayOp.DrawRRect.toNormalizedCommand(
     return NormalizedDrawCommand.FillRRect(
         commandId = cmdId,
         rrect = gpRRect,
+        w5aMaterialPlanRef = w5aMaterialPlanRef,
         transform = transform,
         clip = clip,
         layer = GPULayerFacts.root(target),

@@ -254,7 +254,10 @@ public class W4eNativePayloadPlan private constructor(
         ): Boolean {
             fun materialColor(): org.graphiks.math.color.ColorF32? = when (val authority = pass.draw.materialAuthority) {
                 is PlanDrawMaterialAuthority.MaterialV1 -> materialPlanTable?.let { table ->
-                    W5aMaterialPlanEvaluator.lower(table, authority.ref)
+                    // W5a material source is evaluated by the renderer fragment DAG. This
+                    // historical geometry block does not own a flattened material value.
+                    table.entry(authority.ref)
+                    org.graphiks.math.color.ColorF32.Transparent
                 }
                 is PlanDrawMaterialAuthority.LegacyColorV1 -> authority.copyColorF32()
             }

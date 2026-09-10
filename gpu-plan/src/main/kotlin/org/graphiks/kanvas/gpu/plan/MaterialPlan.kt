@@ -164,11 +164,11 @@ public class MaterialPlanTableInterning internal constructor(
     laneRemaps: List<List<MaterialPlanRef>>,
 ) {
     private val storedLaneRemaps: List<List<MaterialPlanRef>> = laneRemaps.map { it.toList() }
-    public fun remap(laneOrdinal: Int, ref: MaterialPlanRef): MaterialPlanRef =
-        storedLaneRemaps.getOrNull(laneOrdinal)?.getOrNull(ref.indexI32)
+    public fun remap(laneOrdinalI32: Int, ref: MaterialPlanRef): MaterialPlanRef =
+        storedLaneRemaps.getOrNull(laneOrdinalI32)?.getOrNull(ref.indexI32)
             ?: throw IllegalArgumentException("Material reference is outside its sealed lane table")
-    public fun copyLaneRemap(laneOrdinal: Int): List<MaterialPlanRef> =
-        storedLaneRemaps.getOrElse(laneOrdinal) { throw IllegalArgumentException("Unknown material lane") }.toList()
+    public fun copyLaneRemap(laneOrdinalI32: Int): List<MaterialPlanRef> =
+        storedLaneRemaps.getOrElse(laneOrdinalI32) { throw IllegalArgumentException("Unknown material lane") }.toList()
 }
 
 private fun MaterialPlanEntry.copyForInterning(): MaterialPlanEntry = MaterialPlanEntry(

@@ -452,7 +452,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
             }
         }
         else -> {
-            refuse("unsupported_material:${material.kind.name}")
+            refuse("unsupported_material:${material?.kind?.name ?: "w5a_plan_requires_prepared_route"}")
             return
         }
     }

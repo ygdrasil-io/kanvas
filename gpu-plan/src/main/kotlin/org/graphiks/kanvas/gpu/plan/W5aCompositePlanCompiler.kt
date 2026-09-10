@@ -21,7 +21,7 @@ public class W5aCompositePlanCompiler : GpuPlanCompiler {
         fun kind(command: SceneCommand): Int? = when ((command as? SceneCommand.Draw)?.node?.geometry) {
             is GeometryNode.Rect -> 0
             is GeometryNode.RRect -> 1
-            is GeometryNode.Path -> 2
+            is GeometryNode.Path -> if (command.node.paint?.style == PaintStyleNode.FILL) 2 else 3
             else -> null
         }
         if (draws.isEmpty() || draws.any { kind(it.value) == null } ||
@@ -34,6 +34,10 @@ public class W5aCompositePlanCompiler : GpuPlanCompiler {
             if (runs.lastOrNull()?.lastOrNull()?.let { kind(it.value) } != kind(draw.value)) runs += mutableListOf<IndexedValue<SceneCommand>>()
             runs.last() += draw
         }
+        if (runs.size > MAX_LANES_I32) return GpuPlanSelection.ResourceLimitExceeded(listOf(
+            RenderDiagnostic(RenderDiagnosticCode("w5a.composite.resource-limit"), RenderDiagnosticDomain.RESOURCE,
+                RenderDiagnosticSeverity.ERROR, "Composite lane count exceeds its bound"),
+        ))
         val lanes = mutableListOf<Lane>()
         val materialRefusals = mutableListOf<EffectiveMaterialPlanner.Result.Refused>()
         for (run in runs) {
@@ -47,7 +51,8 @@ public class W5aCompositePlanCompiler : GpuPlanCompiler {
             val compiler: GpuPlanCompiler = when (kind(run.first().value)) {
                 0 -> W3SolidRectPlanCompiler()
                 1 -> W4bAnalyticRRectPlanCompiler()
-                else -> W4cPathFillPlanCompiler()
+                2 -> W4cPathFillPlanCompiler()
+                else -> W4dPathStrokePlanCompiler()
             }
             when (val selection = compiler.select(laneScene, target)) {
                 is GpuPlanSelection.Candidate -> lanes += Lane(compiler, selection.candidate)
@@ -56,7 +61,6 @@ public class W5aCompositePlanCompiler : GpuPlanCompiler {
             }
         }
         if (materialRefusals.isNotEmpty()) {
-            if (runs.size > MAX_LANES_I32) return GpuPlanSelection.ResourceLimitExceeded(listOf(diagnostic("Composite lane count exceeds its bound")))
             return GpuPlanSelection.MaterialOnlyRefusal(CAPABILITY_ID, scene.canonicalId, target, materialRefusals)
         }
         return GpuPlanSelection.Candidate(Candidate(this, scene.canonicalId, target, lanes.toList()))
@@ -108,7 +112,8 @@ public class W5aCompositePlanV1 private constructor(
             require(graphs.size in 2..W5aCompositePlanCompiler.MAX_LANES_I32)
             val first = graphs.first()
             require(graphs.all { it.capabilityId in setOf(W3SolidRectPlanCompiler.W5A_CAPABILITY_ID,
-                W4bAnalyticRRectPlanCompiler.CAPABILITY_ID, W4cPathFillPlanCompiler.CAPABILITY_ID) &&
+                W4bAnalyticRRectPlanCompiler.CAPABILITY_ID, W4cPathFillPlanCompiler.CAPABILITY_ID,
+                W4dPathStrokePlanCompiler.CAPABILITY_ID) &&
                 it.targetExtent == first.targetExtent && it.capabilities == first.capabilities &&
                 it.budget == first.budget && it.colorFormat == first.colorFormat })
             val interned = MaterialPlanTable.intern(graphs.map { requireNotNull(it.materialPlanTableOrNull()) })
@@ -120,6 +125,8 @@ public class W5aCompositePlanV1 private constructor(
                         is SolidRectDraw -> draw.withMaterialRef(ref)
                         is AnalyticRRectDraw -> draw.withMaterialRef(ref)
                         is PathFillDraw -> draw.withMaterialRef(ref)
+                        is PathStrokeDraw -> PathStrokeDraw.ofMaterial(draw.commandIndex, ref,
+                            draw.copyGeometryF32(), draw.copyScissorI32(), draw.mode, draw.styleF64)
                         else -> error("Unrecognized native composite draw")
                     }
                 }
@@ -130,9 +137,13 @@ public class W5aCompositePlanV1 private constructor(
                     is PlanPass.ReadbackPass -> pass
                     else -> error("Unrecognized native composite pass")
                 } }
-                RenderGraph.of(graph.id, graph.capabilityId, graph.targetExtent, graph.colorFormat, graph.capabilities,
+                val remapped = RenderGraph.of(graph.id, graph.capabilityId, graph.targetExtent, graph.colorFormat, graph.capabilities,
                     graph.budget, graph.visualCommandCount, graph.resources(), passes, graph.dependencies(),
                     graph.peakFrameLocalBytes, interned.table)
+                if (graph.capabilityId == W4dPathStrokePlanCompiler.CAPABILITY_ID) {
+                    require(graph.verifyW4dCompilerWitness())
+                    RenderGraph.issueW4dCompilerWitness(remapped)
+                } else remapped
             }
             val commandOrder = remapped.flatMap { graph -> graph.passes().flatMap { pass -> when (pass) {
                 is PlanPass.RenderPass -> pass.draws().map { it.commandIndex }
