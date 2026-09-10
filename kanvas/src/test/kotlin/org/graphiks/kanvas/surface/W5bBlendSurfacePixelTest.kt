@@ -18,34 +18,36 @@ class W5bBlendSurfacePixelTest {
 
     @Test
     fun `Picture replays fixed function DST OVER Solid Opacity`() {
-        val background = ColorARGB.Red
+        val background = ColorARGB.Black
         val foreground = ColorARGB.Blue
-        val picture = record(background, BlendMode.SRC_OVER, foreground, BlendMode.DST_OVER)
+        val picture = record(background, .015625f, BlendMode.SRC_OVER, foreground, .9921875f, BlendMode.DST_OVER)
         val result = Surface(4, 4).also { surface ->
             surface.canvas { requireNotNull(Picture.fromByteArray(picture.toByteArray())).playback(this) }
         }.render()
-        W5bBlendCpuOracle.assertDstOver(background, 1f, foreground, .9921875f, result.pixels.copyOfRange(0, 4))
+        W5bBlendCpuOracle.assertDstOver(background, .015625f, foreground, .9921875f, result.pixels.copyOfRange(0, 4))
     }
 
     @Test
     fun `Picture replays DST NoOp Solid Opacity`() {
-        val background = ColorARGB.Red
-        val picture = record(background, BlendMode.SRC_OVER, ColorARGB.Blue, BlendMode.DST)
+        val background = ColorARGB.White
+        val picture = record(background, .5f, BlendMode.SRC_OVER, ColorARGB.Blue, 1f, BlendMode.DST)
         val result = Surface(4, 4).also { surface ->
             surface.canvas { requireNotNull(Picture.fromByteArray(picture.toByteArray())).playback(this) }
         }.render()
-        W5bBlendCpuOracle.assertDst(background, 1f, result.pixels.copyOfRange(0, 4))
+        W5bBlendCpuOracle.assertDst(background, .5f, result.pixels.copyOfRange(0, 4))
     }
 
     private fun record(
         background: ColorARGB,
+        backgroundOpacity: Float,
         backgroundMode: BlendMode,
         foreground: ColorARGB,
+        foregroundOpacity: Float,
         foregroundMode: BlendMode,
     ) = PictureRecorder().also { recorder ->
         recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 4f, 4f)).apply {
-            drawRect(RectF32.ofLTRB(0f, 0f, 4f, 4f), Paint(shader = Shader.Opacity(Shader.SolidColor(background), 1f), antiAlias = false, blendMode = backgroundMode))
-            drawRect(RectF32.ofLTRB(0f, 0f, 4f, 4f), Paint(shader = Shader.Opacity(Shader.SolidColor(foreground), if (foregroundMode == BlendMode.DST_OVER) .9921875f else 1f), antiAlias = false, blendMode = foregroundMode))
+            drawRect(RectF32.ofLTRB(0f, 0f, 4f, 4f), Paint(shader = Shader.Opacity(Shader.SolidColor(background), backgroundOpacity), antiAlias = false, blendMode = backgroundMode))
+            drawRect(RectF32.ofLTRB(0f, 0f, 4f, 4f), Paint(shader = Shader.Opacity(Shader.SolidColor(foreground), foregroundOpacity), antiAlias = false, blendMode = foregroundMode))
         }
     }.finishRecordingAsPicture()
 }

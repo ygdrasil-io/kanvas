@@ -2,6 +2,7 @@
 
 package org.graphiks.kanvas.surface
 
+import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.plan.MaterialBindingPlan
 import org.graphiks.kanvas.gpu.plan.MaterialPlanEntry
 import org.graphiks.kanvas.gpu.plan.MaterialPlanRef
@@ -14,14 +15,26 @@ import org.graphiks.math.color.ColorF32
 internal object W5bBlendCpuOracle {
     fun assertDstOver(background: ColorARGB, backgroundOpacityF32: Float, foreground: ColorARGB, foregroundOpacityF32: Float, actual: UByteArray) {
         val destination = table(background, backgroundOpacityF32)
-        WgslFloatEnvelopeV1Oracle.assertAdmits(
-            WgslFloatEnvelopeV1Oracle.drawDstOver(table(foreground, foregroundOpacityF32), MaterialPlanRef(1), destination, MaterialPlanRef(1)),
-            actual,
-        )
+        val source = table(foreground, foregroundOpacityF32)
+        val forward = WgslFloatEnvelopeV1Oracle.drawDstOver(source, MaterialPlanRef(1), destination, MaterialPlanRef(1))
+        val reverse = WgslFloatEnvelopeV1Oracle.drawDstOver(destination, MaterialPlanRef(1), source, MaterialPlanRef(1))
+        assertDisjoint(forward, reverse)
+        WgslFloatEnvelopeV1Oracle.assertAdmits(forward, actual)
     }
 
     fun assertDst(background: ColorARGB, backgroundOpacityF32: Float, actual: UByteArray) =
         WgslFloatEnvelopeV1Oracle.assertAdmits(W5aSolidOpacityCpuOracle.draw(background, backgroundOpacityF32), actual)
+
+    private fun assertDisjoint(forward: WgslFloatEnvelopeV1Oracle.DrawResult, reverse: WgslFloatEnvelopeV1Oracle.DrawResult) {
+        val forwardCodes = (forward as? WgslFloatEnvelopeV1Oracle.DrawResult.Bounded)?.channels
+            ?: error("Forward DST_OVER result is not bounded: $forward")
+        val reverseCodes = (reverse as? WgslFloatEnvelopeV1Oracle.DrawResult.Bounded)?.channels
+            ?: error("Reversed draw result is not bounded: $reverse")
+        assertTrue(
+            forwardCodes.zip(reverseCodes).any { (direct, inverted) -> direct.intersect(inverted).isEmpty() },
+            "DST_OVER result must be disjoint from the reversed draw order: forward=$forwardCodes reverse=$reverseCodes",
+        )
+    }
 
     private fun table(color: ColorARGB, opacityF32: Float): MaterialPlanTable = MaterialPlanTable.of(listOf(
         MaterialPlanEntry(

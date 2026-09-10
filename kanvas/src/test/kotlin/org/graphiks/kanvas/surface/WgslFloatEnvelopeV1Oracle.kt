@@ -313,6 +313,10 @@ internal object WgslFloatEnvelopeV1Oracle {
      */
     private fun fixedPrecisionEnvelope(value: Interval, conversion: Boolean): Interval {
         val clamped = value.clamp01()
+        // A preserved or flushed subnormal is still below the least UNORM8 code;
+        // it therefore quantizes exactly to zero rather than acquiring a generic
+        // FLOAT-to-UNORM error interval.
+        if (clamped.upper <= F32_MIN_NORMAL) return Interval.ZERO
         if (clamped == Interval.ZERO || clamped == Interval.ONE) return clamped
         var result = clamped
         for (bits in 8..24) {
