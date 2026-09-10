@@ -784,10 +784,10 @@ class W5aMaterialSurfacePixelTest {
         )
         // A uniform but non-neutral premultiplied color makes the observed pixel depend on the
         // documented material × vertex composition, while keeping interpolation out of scope.
-        val vertexColor = ColorARGB.Black
+        val vertexColor = ColorARGB.Green
         val colors = mutableListOf(vertexColor, vertexColor, vertexColor)
         val vertices = Vertices(VertexMode.TRIANGLES, positions, colors = colors)
-        val source = ColorARGB.White
+        val source = ColorARGB.Red
         val paint = Paint(
             color = ColorARGB.of(253, 7, 11, 13),
             shader = Shader.Opacity(Shader.SolidColor(source), 0.9921875f),
@@ -804,15 +804,23 @@ class W5aMaterialSurfacePixelTest {
         surface.canvas { captured.playback(this) }
         val result = surface.render()
 
-        WgslFloatEnvelopeV1Oracle.assertAdmits(
-            W5aSolidOpacityCpuOracle.drawVertexColorModulated(
+        val expected = W5aSolidOpacityCpuOracle.drawVertexColorModulated(
                 color = source,
                 vertexColor = vertexColor,
                 shaderOpacityOuterF32 = 0.9921875f,
                 paintAlphaF32 = 253f / 255f,
-            ),
-            result.pixels.copyOfRange(0, 4),
+            )
+        val observed = result.pixels.copyOfRange(0, 4)
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expected, observed)
+        val replacement = W5aSolidOpacityCpuOracle.drawVertexColorModulated(
+            color = vertexColor,
+            vertexColor = vertexColor,
+            shaderOpacityOuterF32 = 0.9921875f,
+            paintAlphaF32 = 253f / 255f,
         )
+        assertFailsWith<IllegalArgumentException> {
+            WgslFloatEnvelopeV1Oracle.assertAdmits(replacement, observed)
+        }
     }
 
     @Test
@@ -966,9 +974,19 @@ class W5aMaterialSurfacePixelTest {
         val rectColor = ColorARGB.of(255, 255, 0, 0)
         val rrectColor = ColorARGB.Blue
         val pathColor = ColorARGB.Green
-        // The Path occupies its own lower-right cell. This leaves the RRect
-        // center and its separate AA witness outside every opaque Path pixel.
-        val path = Path().apply { addRect(RectF32.ofLTRB(6f, 6f, 8f, 8f)) }
+        // The direct triangle and stencil Rect occupy distinct public geometry lanes:
+        // (1,7) is covered only by the direct triangle, whereas (7,7) is covered
+        // only by the stencil Rect. Both leave the RRect center and AA witness
+        // outside opaque Path pixels.
+        val path = Path().apply {
+            if (stencil) addRect(RectF32.ofLTRB(6f, 6f, 8f, 8f))
+            else {
+                moveTo(0f, 6f)
+                lineTo(4f, 6f)
+                lineTo(0f, 10f)
+                close()
+            }
+        }
         val recorder = PictureRecorder()
         recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 8f, 8f)).apply {
             drawRect(
@@ -1014,17 +1032,18 @@ class W5aMaterialSurfacePixelTest {
         // Separate public observations keep Rect, RRect, and Path materialized;
         // the interleaved Rect replaces the RRect only in its own hard-edge cell.
         WgslFloatEnvelopeV1Oracle.assertAdmits(second, result.pixels.copyOfRange((3 * 8 + 5) * 4, (3 * 8 + 6) * 4))
-        WgslFloatEnvelopeV1Oracle.assertAdmits(third, result.pixels.copyOfRange((7 * 8 + 7) * 4, (7 * 8 + 8) * 4))
+        val pathOffset = if (stencil) (7 * 8 + 7) * 4 else (7 * 8 + 1) * 4
+        WgslFloatEnvelopeV1Oracle.assertAdmits(third, result.pixels.copyOfRange(pathOffset, pathOffset + 4))
         WgslFloatEnvelopeV1Oracle.assertAdmits(first, result.pixels.copyOfRange((0 * 8 + 0) * 4, (0 * 8 + 1) * 4))
         if (interleavedRect) WgslFloatEnvelopeV1Oracle.assertAdmits(
             first, result.pixels.copyOfRange((2 * 8 + 2) * 4, (2 * 8 + 3) * 4),
         )
-        path.addRect(RectF32.ofLTRB(0f, 7f, 1f, 8f))
+        path.addRect(RectF32.ofLTRB(7f, 0f, 8f, 1f))
         val replay = Surface(8, 8)
         replay.canvas { captured.playback(this) }
         val replayPixels = replay.render().pixels
         assertContentEquals(result.pixels, replayPixels)
-        WgslFloatEnvelopeV1Oracle.assertAdmits(first, replayPixels.copyOfRange((7 * 8) * 4, (7 * 8 + 1) * 4))
+        WgslFloatEnvelopeV1Oracle.assertAdmits(first, replayPixels.copyOfRange((0 * 8 + 7) * 4, (0 * 8 + 8) * 4))
     }
 
     @Test
@@ -1194,13 +1213,15 @@ class W5aMaterialSurfacePixelTest {
 
     @Test
     fun `mixed Rect Point Rect retains opacity source capture and paint order`() {
-        assertPreparedMixedFrame { paint -> drawPoint(1.5f, 1.5f, paint.copy(strokeWidth = 2f)) }
+        assertPreparedMixedFrame(middleX = 0, middleY = 1) { paint ->
+            drawPoint(1.5f, 1.5f, paint.copy(strokeWidth = 2f))
+        }
     }
 
     @Test
     fun `mixed Rect Vertices Rect retains opacity source capture and paint order`() {
         val positions = w5aTriangle().positions.toMutableList()
-        assertPreparedMixedFrame(afterCapture = { positions.clear() }) { paint ->
+        assertPreparedMixedFrame(afterCapture = { positions.clear() }, middleX = 0, middleY = 0) { paint ->
             drawVertices(Vertices(VertexMode.TRIANGLES, positions), paint)
         }
     }
@@ -1210,7 +1231,7 @@ class W5aMaterialSurfacePixelTest {
         val positions = w5aTriangle().positions.toMutableList()
         val mesh = org.graphiks.kanvas.types.Mesh(Vertices(VertexMode.TRIANGLES, positions),
             bounds = RectF32.ofLTRB(-1f, -1f, 5f, 5f))
-        assertPreparedMixedFrame(afterCapture = { positions.clear() }) { paint -> drawMesh(mesh, paint) }
+        assertPreparedMixedFrame(afterCapture = { positions.clear() }, middleX = 0, middleY = 0) { paint -> drawMesh(mesh, paint) }
     }
 
     @Test
@@ -1225,7 +1246,7 @@ class W5aMaterialSurfacePixelTest {
 
     private fun assertMixedRRectPath(strokeWidthF32: Float) {
         val path = Path().apply { moveTo(-1f, 1.5f); lineTo(5f, 1.5f) }
-        assertPreparedMixedFrame(afterCapture = { path.moveTo(-1f, 3.5f); path.lineTo(5f, 3.5f) }, rounded = true) { paint ->
+        assertPreparedMixedFrame(afterCapture = { path.moveTo(-1f, 3.5f); path.lineTo(5f, 3.5f) }, rounded = true, middleX = 3, middleY = 1) { paint ->
             drawPath(path, paint.copy(style = PaintStyle.STROKE, strokeWidth = strokeWidthF32))
         }
     }
@@ -1267,6 +1288,8 @@ class W5aMaterialSurfacePixelTest {
     private fun assertPreparedMixedFrame(
         afterCapture: () -> Unit = {},
         rounded: Boolean = false,
+        middleX: Int,
+        middleY: Int,
         drawMiddle: org.graphiks.kanvas.canvas.Canvas.(Paint) -> Unit,
     ) {
         val back = ColorARGB.of(255, 255, 0, 0)
@@ -1297,6 +1320,8 @@ class W5aMaterialSurfacePixelTest {
         val expected = W5aSolidOpacityCpuOracle.draw(front, 1f, paintAlphaF32 = 1f,
             destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(second)))
         WgslFloatEnvelopeV1Oracle.assertAdmits(expected, pixels.copyOfRange(20, 24))
+        val middleOffset = (middleY * 4 + middleX) * 4
+        WgslFloatEnvelopeV1Oracle.assertAdmits(second, pixels.copyOfRange(middleOffset, middleOffset + 4))
         WgslFloatEnvelopeV1Oracle.assertAdmits(first, pixels.copyOfRange(60, 64))
     }
 
