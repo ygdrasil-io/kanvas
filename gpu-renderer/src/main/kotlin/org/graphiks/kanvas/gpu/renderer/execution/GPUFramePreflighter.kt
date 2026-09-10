@@ -427,9 +427,13 @@ internal class GPUFramePreflighter(
         }
         val renderPackets = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
             .flatMap(GPUFrameStep.RenderPassStep::drawPackets)
-        val hasW4aSessionMarker = framePlan.hasSealedW4aSessionMarker()
-        val hasW4bSessionMarker = framePlan.hasSealedW4bSessionMarker()
-        val hasW4cSessionMarker = framePlan.hasSealedW4cSessionMarker()
+        val compositeAuthority = renderPackets.mapNotNull { it.w5aCompositeFrameAuthority }.firstOrNull()
+        val compositeValidation = compositeAuthority?.let { validateW5aComposite(framePlan, it) }
+        if (compositeAuthority != null && compositeValidation == null) return GPUFramePreflightResult.Refused(
+            diagnostic("invalid.preflight.w5a_composite", "Composite native lanes fail their exact preflight envelopes."))
+        val hasW4aSessionMarker = compositeAuthority == null && framePlan.hasSealedW4aSessionMarker()
+        val hasW4bSessionMarker = compositeAuthority == null && framePlan.hasSealedW4bSessionMarker()
+        val hasW4cSessionMarker = compositeAuthority == null && framePlan.hasSealedW4cSessionMarker()
         val hasW4dSessionMarker = framePlan.hasSealedW4dSessionMarker()
         val w5aRectScratch = renderPackets
             .mapNotNull { it.corePrimitivePreparedAuthority?.w5aAnalyticRectSessionScratch }
@@ -444,7 +448,7 @@ internal class GPUFramePreflighter(
         val w5aRRectScratch = renderPackets
             .mapNotNull { it.corePrimitivePreparedAuthority?.w5aAnalyticRRectSessionScratch }
             .firstOrNull()
-        if (w5aRRectScratch != null &&
+        if (compositeAuthority == null && w5aRRectScratch != null &&
             (renderPackets.any { it.corePrimitivePreparedAuthority?.w5aAnalyticRRectSessionScratch !== w5aRRectScratch } ||
                 !w5aRRectScratch.validatesMaterialPlanVersion() ||
                 !hasExactW4bSessionScratch(framePlan, w5aRRectScratch.payloadFacts, w5aRRectScratch))
@@ -537,10 +541,10 @@ internal class GPUFramePreflighter(
             framePlan,
             skipNativeCorePrimitiveClassification =
                 hasW4aSessionMarker || hasW4bSessionMarker || hasW4cSessionMarker ||
-                    hasW4dSessionMarker,
+                    hasW4dSessionMarker || compositeAuthority != null,
         )
         pureValidation.diagnostic?.let { return GPUFramePreflightResult.Refused(it) }
-        val plannedPathValidation = w4dValidation ?: w4cValidation
+        val plannedPathValidation = compositeValidation ?: w4dValidation ?: w4cValidation
         val corePrimitiveDirectRoutes = plannedPathValidation?.directRouteSeal
             ?: pureValidation.corePrimitiveDirectRoutes
         val corePrimitivePathStencilRoutes = plannedPathValidation?.pathRouteSeal
@@ -2336,6 +2340,51 @@ internal class GPUFramePreflighter(
         val pathRouteSeal: GPUCorePrimitivePathStencilNativeFrameRouteSeal,
         val unifiedRouteSeal: GPUCorePrimitiveNativeScopeFrameRouteSeal,
     )
+
+    /** Reuses strict standalone preflight, then relocates only its already sealed packet ranges. */
+    private fun validateW5aComposite(
+        frame: GPUFramePlan,
+        authority: org.graphiks.kanvas.gpu.renderer.planning.W5aCompositeFrameAuthorityV1,
+    ): PlannedPathSessionValidation? {
+        val renders = frame.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        if (!authority.validates(frame, renders)) return null
+        var direct = GPUCorePrimitiveDirectNativeFrameRouteSeal.Empty
+        var path = GPUCorePrimitivePathStencilNativeFrameRouteSeal.Empty
+        var unified = GPUCorePrimitiveNativeScopeFrameRouteSeal.Empty
+        var cursor = 0
+        for (lane in authority.lanes) {
+            val laneFrame = org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlanner.plan(lane.standaloneTaskList)
+            if (laneFrame.atomicallyRefused) return null
+            val laneRenders = laneFrame.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+            val indices = laneRenders.mapIndexed { index, render ->
+                laneFrame.steps.indexOf(render) to frame.steps.indexOf(renders[cursor + index])
+            }.toMap()
+            cursor += laneRenders.size
+            val scratch = lane.packets.first().corePrimitivePreparedAuthority ?: return null
+            val validation = when (lane.capabilityId) {
+                org.graphiks.kanvas.gpu.plan.W3SolidRectPlanCompiler.W5A_CAPABILITY_ID -> {
+                    if (!hasExactW3SessionScratch(laneFrame, laneRenders, scratch.w3SessionScratch ?: return null)) return null
+                    val pure = pureValidation(laneFrame)
+                    if (pure.diagnostic != null) return null
+                    PlannedPathSessionValidation(pure.corePrimitiveDirectRoutes, pure.corePrimitivePathStencilRoutes, pure.corePrimitiveNativeScopeRoutes)
+                }
+                org.graphiks.kanvas.gpu.plan.W4bAnalyticRRectPlanCompiler.CAPABILITY_ID -> {
+                    val material = scratch.w5aAnalyticRRectSessionScratch ?: return null
+                    if (!material.validatesMaterialPlanVersion() || !hasExactW4bSessionScratch(laneFrame, material.payloadFacts, material, authority.sessionIdentity)) return null
+                    val pure = pureValidation(laneFrame, skipNativeCorePrimitiveClassification = true)
+                    if (pure.diagnostic != null) return null
+                    PlannedPathSessionValidation(pure.corePrimitiveDirectRoutes, pure.corePrimitivePathStencilRoutes, pure.corePrimitiveNativeScopeRoutes)
+                }
+                org.graphiks.kanvas.gpu.plan.W4cPathFillPlanCompiler.CAPABILITY_ID ->
+                    validateW4cSessionScratch(laneFrame, scratch.w4cSessionScratch ?: return null) ?: return null
+                else -> return null
+            }
+            direct = direct.appended(validation.directRouteSeal.reindexed(indices))
+            path = path.appended(validation.pathRouteSeal.reindexed(indices))
+            unified = unified.appended(validation.unifiedRouteSeal.reindexed(indices))
+        }
+        return PlannedPathSessionValidation(direct, path, unified)
+    }
 
     /**
      * Re-authenticates a sealed W4c/W4d envelope mechanically before generic path classification.
@@ -5019,6 +5068,7 @@ internal class GPUFramePreflighter(
         framePlan: GPUFramePlan,
         scratch: W4bSessionScratchV1,
         expectedW5aScratch: W5aAnalyticRRectSessionScratchV2? = null,
+        compositeSessionIdentity: String? = null,
     ): Boolean {
         val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().singleOrNull() ?: return false
         val readback = framePlan.steps.filterIsInstance<GPUFrameStep.ReadbackCopyStep>().singleOrNull() ?: return false
@@ -5083,8 +5133,8 @@ internal class GPUFramePreflighter(
         } catch (_: ArithmeticException) {
             return false
         }
-        val identity = "w4b.session.${scratch.deviceGeneration}." +
-            "${targetBounds.width}x${targetBounds.height}.rgba8unorm-srgb"
+        val identity = compositeSessionIdentity ?: ("w4b.session.${scratch.deviceGeneration}." +
+            "${targetBounds.width}x${targetBounds.height}.rgba8unorm-srgb")
         val expectedAllocations = listOf(
             GPUFrameMemoryAllocation(
                 "$identity.target",

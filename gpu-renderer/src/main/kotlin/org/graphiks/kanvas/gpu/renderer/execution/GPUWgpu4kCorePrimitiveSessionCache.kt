@@ -517,9 +517,7 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
     private var creations = 0L
     private var reuses = 0L
 
-    private val framePool = GPUWgpu4kCorePrimitiveFramePool(
-        deviceGeneration,
-        object : GPUWgpu4kCorePrimitiveFramePoolFactory {
+    private val framePoolFactory = object : GPUWgpu4kCorePrimitiveFramePoolFactory {
             override fun createVertexBuffer(capacityBytes: Long): GPUBuffer = device.createBuffer(
                 BufferDescriptor(
                     size = capacityBytes.toULong(),
@@ -668,8 +666,11 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
 
             override fun createMsaaColorView(texture: GPUTexture): GPUTextureView =
                 texture.createView()
-        },
-    )
+        }
+    private val framePool = GPUWgpu4kCorePrimitiveFramePool(deviceGeneration, framePoolFactory)
+    /** Composite lanes borrow independent exact ranges; the historical three-slot pool stays closed. */
+    private val w5aCompositePool = GPUWgpu4kCorePrimitiveFramePool(deviceGeneration, framePoolFactory,
+        org.graphiks.kanvas.gpu.plan.W5aCompositePlanCompiler.MAX_LANES_I32)
     private val w4eAttachmentPool = GPUWgpu4kW4eAttachmentPool(device, deviceGeneration)
 
     @Synchronized
@@ -737,6 +738,11 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
     ): GPUWgpu4kCorePrimitiveFramePoolCheckout = framePool.acquire(requirements)
 
     @Synchronized
+    fun acquireW5aCompositeFrame(
+        requirements: GPUWgpu4kCorePrimitiveFramePoolRequirements,
+    ): GPUWgpu4kCorePrimitiveFramePoolCheckout = w5aCompositePool.acquire(requirements)
+
+    @Synchronized
     fun acquireW4eAttachments(
         generation: GPUDeviceGenerationID,
         requirements: GPUW4eAttachmentPoolRequirements,
@@ -752,19 +758,19 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
 
     @Synchronized
     fun counters(): GPUCorePrimitiveNativeCacheCounters {
-        val pool = framePool.counters()
+        val pools = listOf(framePool.counters(), w5aCompositePool.counters())
         return GPUCorePrimitiveNativeCacheCounters(
             invariantCreations = creations,
             invariantReuses = reuses,
             invariantInvalidations = 0,
-            coverageMaskTextureCreations = pool.coverageMaskTextureCreations,
-            coverageMaskSlotReuses = pool.coverageMaskSlotReuses,
-            msaaColorTextureCreations = pool.msaaColorTextureCreations,
-            msaaColorSlotReuses = pool.msaaColorSlotReuses,
-            pathDepthStencilTextureCreations = pool.pathDepthStencilTextureCreations,
-            pathDepthStencilSlotReuses = pool.pathDepthStencilSlotReuses,
-            clipDepthStencilTextureCreations = pool.clipDepthStencilTextureCreations,
-            clipDepthStencilSlotReuses = pool.clipDepthStencilSlotReuses,
+            coverageMaskTextureCreations = pools.sumOf { it.coverageMaskTextureCreations },
+            coverageMaskSlotReuses = pools.sumOf { it.coverageMaskSlotReuses },
+            msaaColorTextureCreations = pools.sumOf { it.msaaColorTextureCreations },
+            msaaColorSlotReuses = pools.sumOf { it.msaaColorSlotReuses },
+            pathDepthStencilTextureCreations = pools.sumOf { it.pathDepthStencilTextureCreations },
+            pathDepthStencilSlotReuses = pools.sumOf { it.pathDepthStencilSlotReuses },
+            clipDepthStencilTextureCreations = pools.sumOf { it.clipDepthStencilTextureCreations },
+            clipDepthStencilSlotReuses = pools.sumOf { it.clipDepthStencilSlotReuses },
         )
     }
 
@@ -773,6 +779,7 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
         if (state == State.Closed) return
         state = State.Closing
         w4eAttachmentPool.close()
+        w5aCompositePool.close()
         framePool.close()
 
         live.keys.toList().asReversed().forEach { key ->

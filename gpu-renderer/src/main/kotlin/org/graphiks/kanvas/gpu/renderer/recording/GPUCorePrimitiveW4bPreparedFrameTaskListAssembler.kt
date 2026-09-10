@@ -63,6 +63,7 @@ internal data class GPUCorePrimitiveW4bPreparedFrameRequest(
     val readbackBytesPerRow: Long,
     val scratch: W4bSessionScratchV1,
     val w5aMaterialWitness: W5aMaterialPlanVersionWitnessV2? = null,
+    val compositeWitness: GPUW5aCompositeLaneWitnessV1? = null,
 )
 
 /**
@@ -224,6 +225,10 @@ internal class GPUCorePrimitiveW4bPreparedFrameTaskListAssembler {
         request: GPUCorePrimitiveW4bPreparedFrameRequest,
         render: GPUTask.Render,
     ): Boolean {
+        if (request.compositeWitness?.let { witness ->
+                witness.planId != request.planId.value || witness.packetIds != render.drawPackets.map(GPUDrawPacket::packetId) ||
+                    request.target.value != "${witness.sessionIdentity}.target" || request.staging.value != "${witness.sessionIdentity}.staging"
+            } == true) return false
         val targetDescriptor = request.targetPreparation.descriptor as? GPUFrameTextureDescriptor ?: return false
         val stagingDescriptor = request.stagingPreparation.descriptor as? GPUFrameBufferDescriptor ?: return false
         val scratch = request.scratch

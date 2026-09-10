@@ -424,6 +424,15 @@ class GPUDrawPacket(
     internal var corePrimitivePreparedAuthority: GPUCorePrimitivePreparedPacketAuthority? = null
         private set
 
+    internal var w5aCompositeFrameAuthority: org.graphiks.kanvas.gpu.renderer.planning.W5aCompositeFrameAuthorityV1? = null
+        private set
+
+    internal fun attachW5aCompositeFrameAuthority(authority: org.graphiks.kanvas.gpu.renderer.planning.W5aCompositeFrameAuthorityV1) {
+        check(w5aCompositeFrameAuthority == null)
+        check(authority.owns(this))
+        w5aCompositeFrameAuthority = authority
+    }
+
     /** One lowering-local frame seal; every W4e packet must carry the same immutable authority. */
     internal var w4ePreparedFrameAuthority: GPUW4ePreparedFrameAuthority? = null
         private set

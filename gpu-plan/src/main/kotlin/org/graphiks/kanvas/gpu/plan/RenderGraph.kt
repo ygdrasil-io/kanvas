@@ -21,6 +21,7 @@ public class RenderGraph private constructor(
     private val w4eNativePayloadPlan: W4eNativePayloadPlan?,
     private val w4eCompilerWitness: W4eCompilerWitness?,
     private val materialPlanTable: MaterialPlanTable?,
+    private val w5aCompositePlan: W5aCompositePlanV1? = null,
 ) {
     private val storedTargetExtent: SizeI32 = targetExtent.copy()
     public val targetExtent: SizeI32
@@ -35,6 +36,8 @@ public class RenderGraph private constructor(
 
     /** Immutable W5 material authority, present only on material-plan graphs. */
     public fun materialPlanTableOrNull(): MaterialPlanTable? = materialPlanTable
+
+    public fun w5aCompositePlanOrNull(): W5aCompositePlanV1? = w5aCompositePlan
 
     /** Verifies that this exact immutable graph snapshot was issued by the W4d compiler. */
     public fun verifyW4dCompilerWitness(): Boolean =
@@ -55,6 +58,20 @@ public class RenderGraph private constructor(
     public fun w4eNativePayloadOrNull(): W4eNativePayloadPlan? = w4eNativePayloadPlan
 
     public companion object {
+        /** Only the composite compiler can issue this distinct, lane-owned graph representation. */
+        internal fun issueW5aComposite(composite: W5aCompositePlanV1): RenderGraph {
+            val lanes = composite.lanes()
+            val first = lanes.first()
+            val identity = MessageDigest.getInstance("SHA-256").digest(
+                lanes.joinToString("|") { it.id.value }.encodeToByteArray(),
+            ).joinToString("") { "%02x".format(it) }
+            // Composite resources/passes live in typed lanes; no standalone topology is forged.
+            return RenderGraph(PlanId("w5a.composite.$identity"), W5aCompositePlanCompiler.CAPABILITY_ID,
+                first.targetExtent, first.colorFormat, first.capabilities, first.budget,
+                lanes.sumOf { it.visualCommandCount }, emptyList(), emptyList(), emptyList(),
+                composite.peakFrameLocalBytesI64, null, null, null, null, composite.materialTable, composite)
+        }
+
         public fun of(
             id: PlanId,
             capabilityId: String,

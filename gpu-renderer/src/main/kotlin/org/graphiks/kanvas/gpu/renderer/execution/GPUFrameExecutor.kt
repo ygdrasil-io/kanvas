@@ -1402,9 +1402,13 @@ internal class GPUFrameExecutor(
         frame: PreparedGPUFrame,
         payload: GPUPreparedNativeFramePayload?,
     ): GPUDiagnostic? {
+        val allRenders = frame.semanticPlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        val composite = allRenders.flatMap { it.drawPackets }.mapNotNull { it.w5aCompositeFrameAuthority }.firstOrNull()
+        if (composite != null && !composite.validates(frame.semanticPlan, allRenders)) return executionDiagnostic(
+            "invalid.native-frame-payload.w5a-composite", "Composite execution requires its exact lane and packet authority.")
         val renders = frame.semanticPlan.steps.mapIndexedNotNull { stepIndex, step ->
             (step as? GPUFrameStep.RenderPassStep)?.let { render -> Triple(stepIndex, render, render.drawPackets.singleOrNull()) }
-        }
+        }.filter { (_, render, _) -> composite == null || render.drawPackets.all { it.corePrimitivePreparedAuthority?.w4cSessionScratch != null } }
         val writableLoads = renders.filter { (_, render, _) ->
             (render.depthStencilLoadStore as?
                 org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan
@@ -1640,6 +1644,7 @@ internal class GPUFrameExecutor(
             "A planned $laneName frame is missing its common packet authority.",
         )
         var sharedPathDepthStencilView: Any? = null
+        val compositeDepthViews = java.util.IdentityHashMap<Any, Any>()
         renders.forEach { (stepIndex, render, packet) ->
             val exactPacket = packet ?: return executionDiagnostic(
                 "invalid.native-frame-payload.$lane-authority",
@@ -1648,7 +1653,10 @@ internal class GPUFrameExecutor(
             val packetScratch = exactPacket.corePrimitivePreparedAuthority?.let { authority ->
                 if (hasW4d) authority.w4dSessionScratch else authority.w4cSessionScratch
             }
-            if (packetScratch !== plannedScratch) {
+            val expectedScratch = if (composite == null) plannedScratch else composite.lanes.singleOrNull { lane ->
+                lane.packets.any { it === exactPacket }
+            }?.packets?.firstOrNull()?.corePrimitivePreparedAuthority?.w4cSessionScratch
+            if (expectedScratch == null || packetScratch !== expectedScratch) {
                 return executionDiagnostic(
                     "invalid.native-frame-payload.$lane-authority",
                     "$laneName render packets must retain one shared planned scratch authority.",
@@ -1726,13 +1734,15 @@ internal class GPUFrameExecutor(
                     "$laneName path producer and cover operands must retain their exact writable stencil state.",
                 )
             }
-            if (sharedPathDepthStencilView != null && sharedPathDepthStencilView !== depthStencil.view) {
+            val previousDepthView = if (composite == null) sharedPathDepthStencilView else compositeDepthViews[expectedScratch]
+            if (previousDepthView != null && previousDepthView !== depthStencil.view) {
                 return executionDiagnostic(
                     "invalid.native-frame-payload.$lane-depth-stencil-continuity",
                     "$laneName producer and cover operands must share one D24S8 view.",
                 )
             }
             sharedPathDepthStencilView = depthStencil.view
+            if (composite != null) compositeDepthViews[expectedScratch] = depthStencil.view
         }
         val coverStepIndices = renders.mapNotNull { (stepIndex, _, packet) ->
             stepIndex.takeIf {

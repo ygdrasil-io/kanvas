@@ -1476,8 +1476,14 @@ internal class PreparedGPUFrame(
                 // path render may retain a non-writable stencil authority too.
                 val hasPathStencilLoadStore = pathUses.size == 1 &&
                     step.depthStencilLoadStore != null
-                val plannedPathFrame = semanticPlan.hasSealedW4cSessionMarker() ||
-                    semanticPlan.hasSealedW4dSessionMarker()
+                val compositeAuthority = step.drawPackets.firstOrNull()?.w5aCompositeFrameAuthority
+                if (compositeAuthority != null) require(compositeAuthority.validates(semanticPlan,
+                    semanticPlan.steps.filterIsInstance<org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep>())) {
+                    "Prepared composite frames require their exact ordered lane authority"
+                }
+                val plannedPathFrame = if (compositeAuthority != null) {
+                    step.drawPackets.all { it.corePrimitivePreparedAuthority?.w4cSessionScratch != null }
+                } else semanticPlan.hasSealedW4cSessionMarker() || semanticPlan.hasSealedW4dSessionMarker()
                 val plannedPathPacket = step.drawPackets.singleOrNull()
                 val plannedPathAuthority = plannedPathPacket?.corePrimitivePreparedAuthority
                 // W4d.2-general has a separate, sealed Task 7 materialization table.  Its

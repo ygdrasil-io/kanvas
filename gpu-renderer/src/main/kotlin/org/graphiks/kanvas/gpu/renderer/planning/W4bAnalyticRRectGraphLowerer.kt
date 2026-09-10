@@ -130,7 +130,7 @@ internal class W4bAnalyticRRectGraphLowerer {
                 "W4b lowering requires at least one dynamic uniform buffer binding.",
             )
         val targetBounds = GPUPixelBounds(0, 0, request.graph.targetExtent.width, request.graph.targetExtent.height)
-        val sessionIdentity = w4bSessionIdentity(request.deviceGeneration, targetBounds)
+        val sessionIdentity = request.w5aCompositeSessionIdentity ?: w4bSessionIdentity(request.deviceGeneration, targetBounds)
         val target = GPUFrameTargetRef("$sessionIdentity.target")
         val staging = GPUFrameBufferRef("$sessionIdentity.staging")
         val targetPreparation = GPUResourcePreparationRequest(
@@ -157,6 +157,7 @@ internal class W4bAnalyticRRectGraphLowerer {
             targetBounds,
             request.deviceGeneration,
             limits.capabilityFacts("frame-memory-budget"),
+            request.w5aCompositeSessionIdentity,
         ) ?: return invalid("The W4b graph memory facts cannot be represented by the renderer.")
         val builtPackets = graph.draws.mapIndexed { paintOrder, draw ->
             val color = resolveMaterialColor(graph.materialPlanTable, draw.materialAuthority)
@@ -228,6 +229,11 @@ internal class W4bAnalyticRRectGraphLowerer {
                 copyBytesPerRowAlignment = request.graph.capabilities.copyBytesPerRowAlignment.toLong(),
                 readbackBytesPerRow = graph.readback.bytesPerRow,
                 scratch = scratch,
+                compositeWitness = request.w5aCompositeSessionIdentity?.let {
+                    org.graphiks.kanvas.gpu.renderer.recording.GPUW5aCompositeLaneWitnessV1(
+                        it, requireNotNull(request.w5aCompositeLaneOrdinal), request.graph.id.value, packets.map { packet -> packet.packetId },
+                    )
+                },
                 w5aMaterialWitness = if (request.graph.capabilityId == W4bAnalyticRRectPlanCompiler.CAPABILITY_ID) {
                     W5aMaterialPlanVersionWitnessV2.issue(
                         graph.materialPlanTable,
@@ -663,6 +669,7 @@ internal class W4bAnalyticRRectGraphLowerer {
         bounds: GPUPixelBounds,
         generation: GPUDeviceGenerationID,
         deviceLimitFacts: List<org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact>,
+        compositeSessionIdentity: String?,
     ): GPUFrameMemoryBudgetPlan? {
         val transient = try {
             Math.addExact(
@@ -674,7 +681,7 @@ internal class W4bAnalyticRRectGraphLowerer {
         }
         val peak = try { Math.addExact(shape.target.byteSize, transient) } catch (_: ArithmeticException) { return null }
         if (peak != graph.peakFrameLocalBytes || peak > graph.budget.maxFrameLocalBytes) return null
-        val identity = w4bSessionIdentity(generation, bounds)
+        val identity = compositeSessionIdentity ?: w4bSessionIdentity(generation, bounds)
         val allocations = listOf(
             GPUFrameMemoryAllocation(
                 "$identity.target",

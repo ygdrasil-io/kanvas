@@ -326,7 +326,7 @@ public class GpuRenderBackend(
     ): RenderExecutionResult.DeviceFailure = if (isDeviceLoss(diagnostic)) {
         device("w3.execution.device_failure", "GPU device failed during submission.")
     } else {
-        device("w3.execution.submit_failure", submitMessage)
+        device("w3.execution.submit_failure", "$submitMessage ${diagnostic.code.value}: ${diagnostic.message} ${diagnostic.facts["failureMessage"].orEmpty()}".trim())
     }
 
     private fun isAuthenticatedForTarget(

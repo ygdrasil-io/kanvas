@@ -880,14 +880,26 @@ class W5aMaterialSurfacePixelTest {
 
     @Test
     fun `Picture playback composes planned Rect RRect and Path bindings in recorded order`() {
+        assertNativeMixedFrame(stencil = false, interleavedRect = false)
+    }
+
+    @Test
+    fun `native mixed stencil frame preserves interleaved Rect bindings and captured mutation`() {
+        assertNativeMixedFrame(stencil = true, interleavedRect = true)
+    }
+
+    private fun assertNativeMixedFrame(stencil: Boolean, interleavedRect: Boolean) {
         val rectColor = ColorARGB.of(191, 31, 163, 229)
         val rrectColor = ColorARGB.of(203, 227, 89, 43)
         val pathColor = ColorARGB.of(179, 67, 193, 113)
         val path = Path().apply {
-            moveTo(-1f, -1f)
-            lineTo(9f, -1f)
-            lineTo(-1f, 9f)
-            close()
+            if (stencil) addRect(RectF32.ofLTRB(0f, 0f, 6f, 6f))
+            else {
+                moveTo(-1f, -1f)
+                lineTo(9f, -1f)
+                lineTo(-1f, 9f)
+                close()
+            }
         }
         val recorder = PictureRecorder()
         recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 8f, 8f)).apply {
@@ -900,11 +912,11 @@ class W5aMaterialSurfacePixelTest {
                 ),
             )
             drawRRect(
-                RRectF32.of(RectF32.ofLTRB(1f, 1f, 7f, 7f), CornerRadiiF32.of(1f)),
+                RRectF32.of(RectF32.ofLTRB(1.25f, 1.25f, 6.75f, 6.75f), CornerRadiiF32.of(1f)),
                 Paint(
                     color = ColorARGB.of(179, 4, 5, 6),
                     shader = Shader.Opacity(Shader.SolidColor(rrectColor), 0.625f),
-                    antiAlias = false,
+                    antiAlias = true,
                 ),
             )
             drawPath(
@@ -915,8 +927,12 @@ class W5aMaterialSurfacePixelTest {
                     antiAlias = false,
                 ),
             )
+            if (interleavedRect) drawRect(
+                RectF32.ofLTRB(2f, 2f, 4f, 4f),
+                Paint(color = ColorARGB.of(153, 1, 2, 3),
+                    shader = Shader.Opacity(Shader.SolidColor(rectColor), 0.8f), antiAlias = false),
+            )
         }
-        path.addRect(RectF32.ofLTRB(7f, 7f, 8f, 8f))
         val captured = recorder.finishRecordingAsPicture()
         val surface = Surface(8, 8)
         surface.canvas { captured.playback(this) }
@@ -929,19 +945,50 @@ class W5aMaterialSurfacePixelTest {
             paintAlphaF32 = 179f / 255f,
             destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(first)),
         )
-        val expected = W5aSolidOpacityCpuOracle.draw(
+        val third = W5aSolidOpacityCpuOracle.draw(
             pathColor,
             0.4f,
             paintAlphaF32 = 193f / 255f,
             destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(second)),
         )
+        val expected = if (interleavedRect) W5aSolidOpacityCpuOracle.draw(
+            rectColor, 0.8f, paintAlphaF32 = 153f / 255f,
+            destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(third)),
+        ) else third
 
         WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange((2 * 8 + 2) * 4, (2 * 8 + 3) * 4))
         WgslFloatEnvelopeV1Oracle.assertAdmits(first, result.pixels.copyOfRange((7 * 8 + 7) * 4, (7 * 8 + 8) * 4))
+        // At the straight top edge, the analytic RRect covers exactly 3/4 of this pixel.
+        // A hard-edge Path substitution cannot satisfy this separate geometry observation.
+        val edgeRRect = W5aSolidOpacityCpuOracle.draw(rrectColor, 0.625f, paintAlphaF32 = 179f / 255f,
+            coverageF32 = 0.75f, destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(first)))
+        val edge = W5aSolidOpacityCpuOracle.draw(pathColor, 0.4f, paintAlphaF32 = 193f / 255f,
+            destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(edgeRRect)))
+        WgslFloatEnvelopeV1Oracle.assertAdmits(edge, result.pixels.copyOfRange((1 * 8 + 3) * 4, (1 * 8 + 4) * 4))
+        path.addRect(RectF32.ofLTRB(7f, 7f, 8f, 8f))
+        val replay = Surface(8, 8)
+        replay.canvas { captured.playback(this) }
+        assertContentEquals(result.pixels, replay.render().pixels)
     }
 
     @Test
     fun `public W5b gradient refusal leaves the runtime able to render a later W5a frame`() {
+        val color = ColorARGB.of(197, 71, 199, 127)
+        val expected = W5aSolidOpacityCpuOracle.draw(color, 0.5f, paintAlphaF32 = 173f / 255f)
+        val beforeRefusal = Surface(4, 4)
+        beforeRefusal.canvas {
+            drawRect(
+                RectF32.ofLTRB(0f, 0f, 4f, 4f),
+                Paint(
+                    color = ColorARGB.of(173, 11, 13, 17),
+                    shader = Shader.Opacity(Shader.SolidColor(color), 0.5f),
+                    antiAlias = false,
+                ),
+            )
+        }
+        val beforePixels = beforeRefusal.render().pixels
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expected, beforePixels.copyOfRange(0, 4))
+
         val rejected = Surface(4, 4)
         rejected.canvas {
             drawRect(
@@ -963,7 +1010,6 @@ class W5aMaterialSurfacePixelTest {
         val failure = assertFailsWith<IllegalStateException> { rejected.render() }
         assertTrue(failure.message.orEmpty().contains("unsupported.material.w5a.kind"), failure.message)
 
-        val color = ColorARGB.of(197, 71, 199, 127)
         val recovered = Surface(4, 4)
         recovered.canvas {
             drawRect(
@@ -978,10 +1024,8 @@ class W5aMaterialSurfacePixelTest {
 
         val result = recovered.render()
 
-        WgslFloatEnvelopeV1Oracle.assertAdmits(
-            W5aSolidOpacityCpuOracle.draw(color, 0.5f, paintAlphaF32 = 173f / 255f),
-            result.pixels.copyOfRange(0, 4),
-        )
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange(0, 4))
+        assertContentEquals(beforePixels, result.pixels)
     }
 
     private fun w5aTriangle(): Vertices = Vertices(

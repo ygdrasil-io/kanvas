@@ -321,6 +321,7 @@ internal class GPUPreparedNativeCompositeFrameLeaseLifecycle(
     }
 
     private val children = lifecycles.toList()
+    internal fun contains(lifecycle: GPUPreparedNativeFrameLeaseLifecycle?): Boolean = children.any { it === lifecycle }
     private val childStates = MutableList(children.size) { State.CheckedOut }
     private var state = State.CheckedOut
 
@@ -2097,6 +2098,21 @@ internal class GPUPreparedNativeFrameDraft internal constructor(
                 true
             }
         }
+
+    /** Transfers a constituent journal into the one composite draft that owns its lease and handles. */
+    internal fun transferOwnershipToComposite(replacement: GPUPreparedNativeFrameDraft): Boolean = synchronized(this) {
+        synchronized(replacement) {
+            val lifecycle = replacement.payload.leaseLifecycle as? GPUPreparedNativeCompositeFrameLeaseLifecycle
+                ?: return@synchronized false
+            if (ownershipState != OwnershipState.Draft || replacement.ownershipState != OwnershipState.Draft ||
+                !lifecycle.contains(payload.leaseLifecycle) || pendingOwnedHandles.any { source ->
+                    replacement.pendingOwnedHandles.none { it === source }
+                }) return@synchronized false
+            pendingOwnedHandles.clear()
+            ownershipState = OwnershipState.Released
+            true
+        }
+    }
 
     @Synchronized
     internal fun pendingOwnedHandlesSnapshot(): List<AutoCloseable> = pendingOwnedHandles.toList()

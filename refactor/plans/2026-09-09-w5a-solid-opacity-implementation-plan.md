@@ -228,13 +228,15 @@ Le nom final peut être ajusté lors de l'implémentation, mais les invariants s
 - Create: `refactor/waves/W05-material-graph/status.md`
 - Modify: `refactor/README.md`
 
-- [ ] Add a RED public mixed-frame test combining Rect, RRect and Path with distinct planned bindings and draw order.
-- [ ] Add a public refusal reachable without test injection (for example a W5b-only material on an otherwise W5a-promoted frame), then render a valid W5a frame on the same Surface/runtime and require exact recovery.
-- [ ] Remove only fallbacks now owned by W5a: Solid/Opacity must never become a child, arbitrary transparent, or legacy route after W5 selection. Leave later W5 kinds as explicit typed gaps, not semantic substitutions.
-- [ ] Search all production call sites for alternate Solid/Opacity compilation. Migrate or document every remaining call site; review is the architectural proof, not a source-shape test.
-- [ ] Update W05 status with gate evidence, exact deferred gaps and no intermediate status files elsewhere.
-- [ ] Update `refactor/README.md` to mark W5a complete and W5b next only if every W5a cell is proven.
-- [ ] Run bounded public regression suites and commit `refactor(material): remove W5a silent fallbacks`.
+- [x] Add a RED public mixed-frame test combining Rect, RRect and Path with distinct planned bindings and draw order.
+- [x] Add a public refusal reachable without test injection (for example a W5b-only material on an otherwise W5a-promoted frame), then render a valid W5a frame on the same Surface/runtime and require exact recovery.
+- [x] Remove only fallbacks now owned by W5a: Solid/Opacity must never become a child, arbitrary transparent, or legacy route after W5 selection. Leave later W5 kinds as explicit typed gaps, not semantic substitutions.
+- [x] Search all production call sites for alternate Solid/Opacity compilation. Migrate or document every remaining call site; review is the architectural proof, not a source-shape test.
+- [x] Update W05 status with gate evidence, exact deferred gaps and no intermediate status files elsewhere.
+- [x] Update `refactor/README.md` to mark W5a complete and W5b next only if every W5a cell is proven.
+- [x] Run bounded public regression suites and commit `refactor(material): remove W5a silent fallbacks`.
+
+Correction native Task 7 : `feat(gpu-renderer): compose native W5a material lanes` remplace la conversion Rect/RRect en Path par une capability composite distincte. Les gates publiques sont vertes; la clôture après reviews reste à Task 8.
 
 ### Task 8: Vérification finale, review indépendante et préparation de la stack
 

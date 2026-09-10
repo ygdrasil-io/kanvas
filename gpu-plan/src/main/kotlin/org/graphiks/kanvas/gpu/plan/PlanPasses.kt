@@ -381,6 +381,11 @@ public class SolidRectDraw private constructor(
     }
 }
 
+/** Reissues only the sealed W5 material reference; geometry and raster facts are copied verbatim. */
+public fun SolidRectDraw.withMaterialRef(material: MaterialPlanRef): SolidRectDraw = SolidRectDraw.ofMaterial(
+    commandIndex, material, copyVisibleBounds(), copyScissor(), coverage, sample, blend,
+)
+
 public class AnalyticRectDraw private constructor(
     override public val commandIndex: Int,
     override public val materialAuthority: PlanDrawMaterialAuthority,
@@ -536,6 +541,11 @@ public class AnalyticRRectDraw private constructor(
     }
 }
 
+/** Reissues only the sealed W5 material reference; analytic RRect geometry remains native. */
+public fun AnalyticRRectDraw.withMaterialRef(material: MaterialPlanRef): AnalyticRRectDraw = AnalyticRRectDraw.ofMaterial(
+    commandIndex, material, origin, copyDeviceShape(), copyRasterBounds(), copyScissor(),
+)
+
 /** A sealed W4c path-fill draw whose geometry authority remains owned by `:math`. */
 public class PathFillDraw private constructor(
     override public val commandIndex: Int,
@@ -611,6 +621,11 @@ public class PathFillDraw private constructor(
         }
     }
 }
+
+/** Reissues only the sealed W5 material reference; no Path is reconstructed from another shape. */
+public fun PathFillDraw.withMaterialRef(material: MaterialPlanRef): PathFillDraw = PathFillDraw.ofMaterial(
+    commandIndex, material, copyGeometryF32(), strategy, copyScissorI32(),
+)
 
 /** A sealed W4d stroke draw whose immutable geometry authority remains owned by `:math`. */
 public class PathStrokeDraw private constructor(

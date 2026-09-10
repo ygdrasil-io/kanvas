@@ -118,6 +118,62 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
             }
             return MaterialPlanTable(entries)
         }
+
+        /**
+         * Interns sealed lane tables in input order and returns one frame-owned table plus
+         * exact old-to-new reference maps.  This is deliberately structural: no material is
+         * re-evaluated and every reference remains a table index issued before lowering.
+         */
+        public fun intern(tables: List<MaterialPlanTable>): MaterialPlanTableInterning {
+            require(tables.isNotEmpty()) { "At least one lane table is required" }
+            val entries = mutableListOf<MaterialPlanEntry>()
+            val indexByKey = linkedMapOf<String, Int>()
+            val remaps = tables.map { table ->
+                table.entries().map { entry ->
+                    val key = entry.interningKey()
+                    val index = indexByKey.getOrPut(key) {
+                        entries += entry.copyForInterning()
+                        entries.lastIndex
+                    }
+                    MaterialPlanRef(index)
+                }
+            }
+            return MaterialPlanTableInterning(of(entries), remaps)
+        }
+    }
+}
+
+/** Immutable result of deterministic frame-wide material-table interning. */
+public class MaterialPlanTableInterning internal constructor(
+    public val table: MaterialPlanTable,
+    laneRemaps: List<List<MaterialPlanRef>>,
+) {
+    private val storedLaneRemaps: List<List<MaterialPlanRef>> = laneRemaps.map { it.toList() }
+    public fun remap(laneOrdinal: Int, ref: MaterialPlanRef): MaterialPlanRef =
+        storedLaneRemaps.getOrNull(laneOrdinal)?.getOrNull(ref.indexI32)
+            ?: throw IllegalArgumentException("Material reference is outside its sealed lane table")
+    public fun copyLaneRemap(laneOrdinal: Int): List<MaterialPlanRef> =
+        storedLaneRemaps.getOrElse(laneOrdinal) { throw IllegalArgumentException("Unknown material lane") }.toList()
+}
+
+private fun MaterialPlanEntry.copyForInterning(): MaterialPlanEntry = MaterialPlanEntry(
+    program,
+    when (val binding = bindings) {
+        MaterialBindingPlan.EmptyV1 -> MaterialBindingPlan.EmptyV1
+        is MaterialBindingPlan.SolidRgbaF32V1 -> MaterialBindingPlan.SolidRgbaF32V1.of(binding.copyRgbaF32())
+        is MaterialBindingPlan.OpacityF32V1 -> MaterialBindingPlan.OpacityF32V1.of(binding.alphaF32)
+    },
+)
+
+private fun MaterialPlanEntry.interningKey(): String = buildString {
+    append(program.structuralId.value).append('|')
+    when (val binding = bindings) {
+        MaterialBindingPlan.EmptyV1 -> append("empty")
+        is MaterialBindingPlan.SolidRgbaF32V1 -> binding.copyRgbaF32().let { color ->
+            append("solid:").append(color.red.toBits()).append(':').append(color.green.toBits()).append(':')
+                .append(color.blue.toBits()).append(':').append(color.alpha.toBits())
+        }
+        is MaterialBindingPlan.OpacityF32V1 -> append("opacity:").append(binding.alphaF32.toBits())
     }
 }
 
