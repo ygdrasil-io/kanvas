@@ -217,17 +217,19 @@ internal object WgslFloatEnvelopeV1Oracle {
             b == Interval.ONE -> a
             else -> fixedPrecisionEnvelope(exactMultiply(a, b), conversion = false)
         }
-        // §17.5 only permits the *blend operation* to use target-format
-        // precision. It does not authorize a prior FLOAT->UNORM conversion of
-        // the fragment source or of the decoded attachment. ONE consequently
-        // preserves the WGSL source exactly; only INV_SRC_ALPHA and its
-        // destination product take the fixed-point branch. This also keeps the
-        // stored destination as the same value throughout the term.
+        // §17.5 permits target-format precision for the blend operation itself.
+        // Consequently the source term, including its ONE factor, has a legal
+        // fixed-point product schedule. This is distinct from a prior
+        // FLOAT->UNORM attachment conversion: zero and one stay exact, while a
+        // non-trivial source is quantized only as the product result. The
+        // destination remains the same correlated value throughout its term.
+        val sourceTimesOne = if (source == Interval.ZERO || source == Interval.ONE) source
+            else fixedPrecisionEnvelope(source, conversion = true)
         val inverseAlpha = fixedPrecisionEnvelope(
             directedBinary(Interval.ONE, alpha, ::downSubtract, ::upSubtract),
             conversion = true,
         )
-        return exactAdd(source, product(destination, inverseAlpha)).clamp01()
+        return exactAdd(sourceTimesOne, product(destination, inverseAlpha)).clamp01()
     }
 
     /**
