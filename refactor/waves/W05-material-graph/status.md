@@ -1,6 +1,6 @@
 # État W05 — material graph, W5a Solid/Opacity
 
-Révision vérifiée : implémentation Task 7 « compose native W5a material lanes », sur la base `3cfd61ccd8b1e2120d4883981eb7959d274b1fcb`, le 10 septembre 2026. Cette entrée décrit le code du commit Task 7 qui la contient, et non l'ancienne tentative de conversion Rect/RRect en Path. Les reviews indépendantes de Task 8 restent à effectuer.
+Révision vérifiée : correction Task 7 « preserve opacity chains during material interning », sur la composition native `e75d66389636d1911f87c6ebb09bab32f164b0ba`, le 10 septembre 2026. Cette entrée décrit le code du commit correctif qui la contient, et non l'ancienne tentative de conversion Rect/RRect en Path. Les reviews indépendantes de Task 8 restent à effectuer.
 
 ## Gates publiques W5a
 
@@ -17,6 +17,7 @@ W5a ferme `Transparent`, `Solid` et `Opacity` sous `SRC_OVER`. Chaque draw promu
 | Vertices, avec/sans couleurs vertex | fixtures Picture et mutation des tableaux publics (Task 6) |
 | Frame Rect + RRect + Path | `Picture playback composes planned Rect RRect and Path bindings in recorded order` : trois bindings distincts, composition indépendante, observation AA, puis comparaison de tous les bytes après mutation du Path |
 | Ordre intercalé et stencil | `native mixed stencil frame preserves interleaved Rect bindings and captured mutation` : Rect → RRect → Path stencil-cover → Rect, réutilisation d'un binding et comparaison de tous les bytes après mutation |
+| Opacité identique, children distincts | `native mixed equal opacity preserves distinct Solid children and nested chains` : Rect rouge et RRect bleu à opacité 0.5, puis Path rouge et Rect bleu avec chaînes shader/Paint imbriquées et children réutilisés non adjacents; quatre observations pixel indépendantes |
 | Refus puis récupération | `public W5b gradient refusal leaves the runtime able to render a later W5a frame` : W5a valide → gradient refusé `unsupported.material.w5a.kind` → W5a valide, sans dispose entre les trois frames, et pixels avant/après identiques |
 
 ## Composition native Task 7
@@ -24,6 +25,8 @@ W5a ferme `Transparent`, `Solid` et `Opacity` sous `SRC_OVER`. Chaque draw promu
 La capability distincte `w5a-native-rect-rrect-path-composite-v1` est sélectionnée après les capabilities standalone existantes. Elle partitionne les commandes en runs natifs ordonnés, conserve leurs indices publics et confie Rect à W3, RRect analytique à W4b, Path fill à W4c. W4c n'accepte plus de conversion Rect/RRect en Path.
 
 `W5aCompositePlanV1` possède les graphs de lanes, la table material internée et les réservations communes. Les refs locales sont remappées exactement dans la table de frame; la copie des draws conserve les faits de géométrie/raster sans reconstruction sémantique. Le graph composite utilise cette représentation hiérarchique typée, sans fabriquer une topologie standalone.
+
+Correction d'interning : la clé d'une entrée inclut son child canonique et donc toute sa chaîne de bindings accessible, pas seulement sa structure et son alpha local. Puisque V1 évalue le child à `ref - 1`, toute nouvelle chaîne dont le child réutilisé n'est pas adjacent est copiée contiguë avant son parent. Les remaps canoniques restent déterministes, les bindings copiés défensivement et la borne de 2048 entrées contrôlée avant chaque ajout. Aucun changement de l'évaluateur ou des contrats standalone. La preuve RED a produit du rouge dans le pixel bleu (`channel=0 observed=188 expected=[0]`); elle passe après correction, y compris pour les chaînes imbriquées.
 
 Le lowerer réutilise chaque lowerer et assembler natif avec un witness composite explicite. Il conserve les enveloppes d'origine pour le preflight exact, puis transporte seulement les ranges scellés vers les indices de la frame. Un witness de frame vérifie cible, readback, préparations, ordre, packets, états raster, dépendances et budget. La frame prépare une seule cible et un seul staging, efface au premier rendu puis charge l'attachement, et conserve les paires stencil atomiques.
 
@@ -37,7 +40,7 @@ Les premières preuves RED ont révélé les anciennes exigences « toute la fra
 | --- | --- |
 | compilers W3/W4a/W4b/W4c/W4d/W4e | `EffectiveMaterialPlanner` produit table/ref sur W5a; l'adaptateur historique conserve seulement `LegacyColorV1` |
 | lowerers natifs | évaluation de la table scellée; aucune couleur legacy concurrente |
-| composite Task 7 | interning structure + bindings et remap exact; aucune nouvelle évaluation du shader ni conversion de géométrie |
+| composite Task 7 | interning structure + bindings + chaîne child canonique et remap exact, adjacency V1 conservée; aucune nouvelle évaluation du shader ni conversion de géométrie |
 | bridges points/text/vertices | capture commune puis `compileW5a*`; les lanes non promues conservent leur entrée générique |
 | `GPUMaterialMapper` | Opacity legacy reste un refus `OPACITY_CHILD`; aucun aplatissement Solid après sélection W5a |
 | images, glyphs couleur, mesh et dispatchs legacy restants | hors promotion W5a de ces routes; retrait global reporté aux tranches concernées |
@@ -52,7 +55,7 @@ Commande finale, sérielle :
 rtk ./gradlew :gpu-plan:compileKotlin :gpu-renderer:compileKotlin :kanvas:compileTestKotlin :kanvas:test --tests 'org.graphiks.kanvas.surface.W5aMaterialSurfacePixelTest' --tests 'org.graphiks.kanvas.surface.GPUPlanSurfacePixelTest' --no-parallel
 ```
 
-Résultat : `BUILD SUCCESSFUL`, 102 tests, 99 passés, 0 failure/error, 3 skips AA4 authentiques. Répartition : W5a 31 tests (30 passés, 1 skip); GPUPlan 71 tests (69 passés, 2 skips), incluant les régressions publiques standalone W3/W4a/W4b/W4c et le cas W4b à 512 draws. Les deux frames mixtes et la récupération ont aussi été exécutées séparément : 3/3 passées. `rtk git diff --check` est propre.
+Résultat : `BUILD SUCCESSFUL`, 103 tests, 100 passés, 0 failure/error, 3 skips AA4 authentiques. Répartition : W5a 32 tests (31 passés, 1 skip); GPUPlan 71 tests (69 passés, 2 skips), incluant les régressions publiques standalone W3/W4a/W4b/W4c et le cas W4b à 512 draws. Les trois frames mixtes et la récupération ont aussi été exécutées séparément : 4/4 passées. `rtk git diff --check` est propre.
 
 ## Limites et suite
 

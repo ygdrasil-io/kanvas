@@ -888,6 +888,35 @@ class W5aMaterialSurfacePixelTest {
         assertNativeMixedFrame(stencil = true, interleavedRect = true)
     }
 
+    @Test
+    fun `native mixed equal opacity preserves distinct Solid children and nested chains`() {
+        val red = ColorARGB.of(255, 255, 0, 0)
+        val blue = ColorARGB.of(255, 0, 0, 255)
+        val redHalf = Shader.Opacity(Shader.SolidColor(red), 0.5f)
+        val blueHalf = Shader.Opacity(Shader.SolidColor(blue), 0.5f)
+        val surface = Surface(16, 4)
+        surface.canvas {
+            drawRect(RectF32.ofLTRB(0f, 0f, 4f, 4f), Paint(shader = redHalf, antiAlias = false))
+            drawRRect(RRectF32.of(RectF32.ofLTRB(4f, 0f, 8f, 4f), CornerRadiiF32.of(1f)),
+                Paint(shader = blueHalf, antiAlias = true))
+            drawPath(Path().apply { addRect(RectF32.ofLTRB(8f, 0f, 12f, 4f)) },
+                Paint(color = ColorARGB.of(128, 0, 0, 0), shader = Shader.Opacity(redHalf, 0.25f), antiAlias = false))
+            drawRect(RectF32.ofLTRB(12f, 0f, 16f, 4f),
+                Paint(color = ColorARGB.of(128, 0, 0, 0), shader = Shader.Opacity(blueHalf, 0.25f), antiAlias = false))
+        }
+        val pixels = surface.render().pixels
+        val expected = listOf(
+            W5aSolidOpacityCpuOracle.draw(red, 0.5f),
+            W5aSolidOpacityCpuOracle.draw(blue, 0.5f),
+            W5aSolidOpacityCpuOracle.draw(red, 0.25f, 0.5f, 128f / 255f),
+            W5aSolidOpacityCpuOracle.draw(blue, 0.25f, 0.5f, 128f / 255f),
+        )
+        expected.forEachIndexed { index, envelope ->
+            val offset = (2 * 16 + index * 4 + 2) * 4
+            WgslFloatEnvelopeV1Oracle.assertAdmits(envelope, pixels.copyOfRange(offset, offset + 4))
+        }
+    }
+
     private fun assertNativeMixedFrame(stencil: Boolean, interleavedRect: Boolean) {
         val rectColor = ColorARGB.of(191, 31, 163, 229)
         val rrectColor = ColorARGB.of(203, 227, 89, 43)

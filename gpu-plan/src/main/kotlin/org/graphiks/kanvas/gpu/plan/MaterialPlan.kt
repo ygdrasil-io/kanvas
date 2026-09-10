@@ -127,16 +127,31 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
         public fun intern(tables: List<MaterialPlanTable>): MaterialPlanTableInterning {
             require(tables.isNotEmpty()) { "At least one lane table is required" }
             val entries = mutableListOf<MaterialPlanEntry>()
-            val indexByKey = linkedMapOf<String, Int>()
+            // A canonical child ref identifies its entire reachable binding chain, not only code shape.
+            data class ChainKey(val entryKey: String, val childRef: MaterialPlanRef?)
+            val indexByKey = linkedMapOf<ChainKey, Int>()
             val remaps = tables.map { table ->
-                table.entries().map { entry ->
-                    val key = entry.interningKey()
+                val source = table.entries()
+                val laneRemap = mutableListOf<MaterialPlanRef>()
+                source.forEachIndexed { localIndex, entry ->
+                    val childRef = if (entry.program is MaterialProgramPlan.OpacityV1) laneRemap[localIndex - 1] else null
+                    val key = ChainKey(entry.interningKey(), childRef)
                     val index = indexByKey.getOrPut(key) {
-                        entries += entry.copyForInterning()
+                        var first = localIndex
+                        if (childRef != null && childRef.indexI32 != entries.lastIndex) {
+                            // V1 evaluates child at ref - 1. Reuse an existing whole chain, or append
+                            // an exact contiguous copy; never append a parent after an unrelated child.
+                            while (source[first].program is MaterialProgramPlan.OpacityV1) first--
+                        }
+                        require(localIndex - first + 1 <= MAX_ENTRIES_I32 - entries.size) {
+                            "A material table must contain at most $MAX_ENTRIES_I32 entries"
+                        }
+                        for (indexToCopy in first..localIndex) entries += source[indexToCopy].copyForInterning()
                         entries.lastIndex
                     }
-                    MaterialPlanRef(index)
+                    laneRemap += MaterialPlanRef(index)
                 }
+                laneRemap
             }
             return MaterialPlanTableInterning(of(entries), remaps)
         }
