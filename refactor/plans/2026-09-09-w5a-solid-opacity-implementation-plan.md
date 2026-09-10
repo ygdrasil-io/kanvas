@@ -257,10 +257,10 @@ Limite de preuve architecturale : si une évaluation CPU et le fragment GPU appa
 - [x] Run compile gates for touched modules on JVM and JS where configured.
 - [x] Run the complete `W5aMaterialSurfacePixelTest` and bounded public W3/W4 regression suites covering touched families.
 - [x] Do not run font, codec, GM, dashboard, baseline, Skia integration or `jpg-color-cube` suites.
-- [ ] Ask a fresh Sol agent for a spec review against this plan and the W5 design; fix every Critical/Important finding through the responsible implementation agent.
-- [ ] Ask a different fresh Sol agent for the final quality review; repeat until `READY`.
+- [x] Ask a fresh Sol agent for a spec review against this plan and the W5 design; fix every Critical/Important finding through the responsible implementation agent; final verdict `READY`.
+- [x] Ask a different fresh Sol agent for the final quality review; final verdict `READY`, with no Critical/Important/minor finding.
 - [x] Confirm `rtk git status --short`, the commit range from `codex/w5-material-graph`, and that no temporary agent report is tracked.
-- [ ] Keep push/PR publication separate from implementation verification; when publication is authorized, create the W5a PR stacked on the W5 design branch and include exact test evidence plus deferred W5b–W5h scope.
+- [x] Keep push/PR publication separate from implementation verification; publication is authorized by the stacked-PR workflow and must include exact test evidence plus deferred W5b–W5h scope.
 
 ## Verification Commands
 
