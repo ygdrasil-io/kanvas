@@ -167,7 +167,8 @@ public class GpuPlanTaskListLowerer {
             request.w5aCompositeSessionIdentity)
             ?: return invalid("The graph memory facts cannot be represented by the renderer.")
         val readback = GPUFrameReadbackRequest(GPUReadbackRequestID("w3.${request.graph.id.value}.readback"), targetBounds, GPUReadbackPixelFormat.Rgba8Unorm, GPUColorInterpretation.EncodedPremulSrgb)
-        val base = when (val rendered = renderOnlyTaskList(request, graph, target, staging, targetBounds, memory)) {
+        val base = when (val rendered = renderOnlyTaskList(request, graph, target, staging, targetBounds, memory,
+            targetPreparation, stagingPreparation, readback)) {
             is W3BaseTaskListResult.Ready -> rendered.taskList
             is W3BaseTaskListResult.Unsupported -> return GpuPlanLoweringResult.UnsupportedCapability(rendered.diagnostic)
             is W3BaseTaskListResult.Invalid -> return GpuPlanLoweringResult.InvalidPlan(rendered.diagnostic)
@@ -190,6 +191,9 @@ public class GpuPlanTaskListLowerer {
         staging: GPUFrameBufferRef,
         targetBounds: GPUPixelBounds,
         memory: GPUFrameMemoryBudgetPlan,
+        targetPreparation: GPUResourcePreparationRequest,
+        stagingPreparation: GPUResourcePreparationRequest,
+        readback: GPUFrameReadbackRequest,
     ): W3BaseTaskListResult {
         val packets = mutableListOf<GPUDrawPacket>()
         graph.draws.forEachIndexed { paintOrder, draw ->
@@ -201,8 +205,10 @@ public class GpuPlanTaskListLowerer {
         val seal = GPUFrameCapabilitySeal.capture(request.frameId, request.deviceGeneration, request.capabilities)
         if (graph.draws.isEmpty()) {
             val witness = org.graphiks.kanvas.gpu.renderer.passes.W5bClearOnlyFrameWitnessV3(
-                requireNotNull(graph.destinationGraph), target, staging, seal.sealHash)
-            val render = GPUTask.Render(GPUTaskID("task.w5b.${request.graph.id.value}.initial-clear"),
+                requireNotNull(graph.destinationGraph), target, staging, seal,
+                GPURecordingSeal(request.recordingId, 0L, replay, replay, seal.sealHash), memory,
+                targetPreparation, stagingPreparation, readback)
+            val render = GPUTask.Render(witness.clearTaskId,
                 request.recordingId, GPUTaskPhase.Render, target, GPULoadStorePlan("clear", GPUStorePlan.Store),
                 GPUSamplePlan.SingleSampleFrame, drawPackets = emptyList(), batchEligibilityByPacketId = emptyMap(),
                 w5bInitialClearV3 = org.graphiks.kanvas.gpu.renderer.passes.W5bInitialClearV3(witness))

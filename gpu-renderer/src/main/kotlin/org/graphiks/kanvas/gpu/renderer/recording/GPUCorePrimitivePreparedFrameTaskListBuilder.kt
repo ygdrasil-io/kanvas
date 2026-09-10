@@ -1786,15 +1786,14 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 graph.peakFrameLocalBytes != request.memoryBudget.targetResidentBytes + request.memoryBudget.peakFrameTransientBytes) {
                 return refused("invalid.w5b.clear-only", "W5b clear-only graph authority changed.")
             }
-            val prepare = GPUTask.PrepareResources(GPUTaskID("task.w5b.${graph.id.value}.prepare"), base.recordingId,
+            val prepare = GPUTask.PrepareResources(witness.prepareTaskId, base.recordingId,
                 GPUTaskPhase.Prepare, listOf(request.targetPreparation, request.stagingPreparation))
-            val readback = GPUTask.Readback(GPUTaskID("task.w5b.${graph.id.value}.readback"), base.recordingId,
+            val readback = GPUTask.Readback(witness.readbackTaskId, base.recordingId,
                 GPUTaskPhase.Readback, request.target, request.staging, request.readbackRequest)
             val tasks = listOf(prepare, base, readback)
             return GPUCorePrimitivePreparedFrameResult.Recorded(GPUTaskList(request.baseTaskList.frameId,
                 request.baseTaskList.capabilitySeal, request.baseTaskList.recordingSeals, request.baseTaskList.expectedReplayKeyHash,
-                tasks, tasks.zipWithNext { before, after -> GPUTaskDependency(before.taskId, after.taskId, "w5b-clear-order",
-                    GPUTaskUseToken("${before.taskId.value}->${after.taskId.value}"), "w5b-clear-order") },
+                tasks, witness.dependencies,
                 request.baseTaskList.phaseOrder, request.memoryBudget))
         }
         val witness = base.drawPackets.firstOrNull()?.corePrimitivePreparedAuthority?.w5bFrameWitnessV3
