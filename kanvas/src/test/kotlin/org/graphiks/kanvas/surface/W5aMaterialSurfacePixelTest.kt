@@ -3,9 +3,12 @@
 package org.graphiks.kanvas.surface
 
 import kotlin.test.assertContentEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.geometry.Path
@@ -14,6 +17,8 @@ import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.geometry.Point2F32
+import org.graphiks.kanvas.types.PointMode
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
@@ -455,6 +460,160 @@ class W5aMaterialSurfacePixelTest {
         WgslFloatEnvelopeV1Oracle.assertAdmits(
             W5aSolidOpacityCpuOracle.draw(source, 0.75f, paintAlphaF32 = 167f / 255f),
             result.pixels.copyOfRange(0, 4),
+        )
+    }
+
+    @Test
+    fun `public drawPoint composes three planned Solid Opacity commands in paint order`() {
+        val back = ColorARGB.of(183, 37, 149, 223)
+        val middle = ColorARGB.of(197, 211, 79, 41)
+        val front = ColorARGB.of(229, 67, 191, 113)
+        val surface = Surface(4, 4)
+        surface.canvas {
+            drawPoint(1.5f, 1.5f, Paint(
+                color = ColorARGB.of(137, 1, 2, 3),
+                shader = Shader.Opacity(Shader.SolidColor(back), 0.625f),
+                strokeWidth = 2f,
+                antiAlias = false,
+            ))
+            drawPoint(1.5f, 1.5f, Paint(
+                color = ColorARGB.of(151, 4, 5, 6),
+                shader = Shader.Opacity(Shader.SolidColor(middle), 0.5f),
+                strokeWidth = 2f,
+                antiAlias = false,
+            ))
+            drawPoint(1.5f, 1.5f, Paint(
+                color = ColorARGB.of(173, 7, 8, 9),
+                shader = Shader.Opacity(Shader.SolidColor(front), 0.4f),
+                strokeWidth = 2f,
+                antiAlias = false,
+            ))
+        }
+
+        val result = surface.render()
+        val first = W5aSolidOpacityCpuOracle.draw(back, 0.625f, paintAlphaF32 = 137f / 255f)
+        val second = W5aSolidOpacityCpuOracle.draw(
+            middle, 0.5f, paintAlphaF32 = 151f / 255f,
+            destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(first)),
+        )
+        val expected = W5aSolidOpacityCpuOracle.draw(
+            front, 0.4f, paintAlphaF32 = 173f / 255f,
+            destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(second)),
+        )
+
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange(20, 24))
+    }
+
+    @Test
+    fun `public drawPoints composes three planned Solid Opacity commands in paint order`() {
+        val back = ColorARGB.of(183, 37, 149, 223)
+        val middle = ColorARGB.of(197, 211, 79, 41)
+        val front = ColorARGB.of(229, 67, 191, 113)
+        val points = listOf(Point2F32(1.5f, 1.5f), Point2F32(3.5f, 3.5f))
+        val surface = Surface(4, 4)
+        surface.canvas {
+            drawPoints(PointMode.POINTS, points, Paint(
+                color = ColorARGB.of(137, 1, 2, 3),
+                shader = Shader.Opacity(Shader.SolidColor(back), 0.625f),
+                strokeWidth = 2f,
+                antiAlias = false,
+            ))
+            drawPoints(PointMode.POINTS, points, Paint(
+                color = ColorARGB.of(151, 4, 5, 6),
+                shader = Shader.Opacity(Shader.SolidColor(middle), 0.5f),
+                strokeWidth = 2f,
+                antiAlias = false,
+            ))
+            drawPoints(PointMode.POINTS, points, Paint(
+                color = ColorARGB.of(173, 7, 8, 9),
+                shader = Shader.Opacity(Shader.SolidColor(front), 0.4f),
+                strokeWidth = 2f,
+                antiAlias = false,
+            ))
+        }
+
+        val result = surface.render()
+        val first = W5aSolidOpacityCpuOracle.draw(back, 0.625f, paintAlphaF32 = 137f / 255f)
+        val second = W5aSolidOpacityCpuOracle.draw(
+            middle, 0.5f, paintAlphaF32 = 151f / 255f,
+            destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(first)),
+        )
+        val expected = W5aSolidOpacityCpuOracle.draw(
+            front, 0.4f, paintAlphaF32 = 173f / 255f,
+            destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(second)),
+        )
+
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange(20, 24))
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange(60, 64))
+    }
+
+    @Test
+    fun `public stroked drawPoint keeps its captured point square without a second stroke`() {
+        val source = ColorARGB.of(197, 211, 79, 41)
+        val surface = Surface(6, 6)
+        surface.canvas {
+            drawPoint(3f, 3f, Paint(
+                color = ColorARGB.of(151, 1, 2, 3),
+                shader = Shader.Opacity(Shader.SolidColor(source), 0.5f),
+                style = PaintStyle.STROKE,
+                strokeWidth = 2f,
+                antiAlias = false,
+            ))
+        }
+
+        val result = surface.render()
+
+        WgslFloatEnvelopeV1Oracle.assertAdmits(
+            W5aSolidOpacityCpuOracle.draw(source, 0.5f, paintAlphaF32 = 151f / 255f),
+            result.pixels.copyOfRange(2 * 6 * 4 + 2 * 4, 2 * 6 * 4 + 3 * 4),
+        )
+        assertContentEquals(ubyteArrayOf(0u, 0u, 0u, 0u), result.pixels.copyOfRange(1 * 6 * 4 + 1 * 4, 1 * 6 * 4 + 2 * 4))
+    }
+
+    @Test
+    fun `public zero width drawPoints retain one device pixel hairlines for every point`() {
+        val source = ColorARGB.of(211, 71, 199, 127)
+        val surface = Surface(6, 4)
+        surface.canvas {
+            drawPoints(
+                PointMode.POINTS,
+                listOf(Point2F32(1.5f, 1.5f), Point2F32(4.5f, 1.5f)),
+                Paint(
+                    color = ColorARGB.of(173, 7, 8, 9),
+                    shader = Shader.Opacity(Shader.SolidColor(source), 0.4f),
+                    strokeWidth = 0f,
+                    antiAlias = false,
+                ),
+            )
+        }
+
+        val result = surface.render()
+        val expected = W5aSolidOpacityCpuOracle.draw(source, 0.4f, paintAlphaF32 = 173f / 255f)
+
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange(1 * 6 * 4 + 1 * 4, 1 * 6 * 4 + 2 * 4))
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange(1 * 6 * 4 + 4 * 4, 1 * 6 * 4 + 5 * 4))
+        assertContentEquals(ubyteArrayOf(0u, 0u, 0u, 0u), result.pixels.copyOfRange(1 * 6 * 4 + 2 * 4, 1 * 6 * 4 + 3 * 4))
+    }
+
+    @Test
+    fun `public ROUND drawPoints retain the exact lowering refusal`() {
+        val surface = Surface(6, 6)
+        surface.canvas {
+            drawPoints(
+                PointMode.POINTS,
+                listOf(Point2F32(3f, 3f)),
+                Paint.stroke(ColorARGB.of(255, 71, 199, 127), 2f).copy(
+                    strokeCap = StrokeCap.ROUND,
+                    antiAlias = false,
+                ),
+            )
+        }
+
+        val failure = assertFailsWith<IllegalStateException> { surface.render() }
+
+        assertTrue(
+            failure.message.orEmpty().contains("unsupported.core_primitive.point.round_cap_exact_lowering"),
+            failure.message,
         )
     }
 

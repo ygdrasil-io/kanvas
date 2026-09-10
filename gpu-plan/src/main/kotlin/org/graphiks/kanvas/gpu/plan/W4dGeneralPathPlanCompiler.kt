@@ -15,6 +15,7 @@ import org.graphiks.kanvas.render.ir.MaterialNode
 import org.graphiks.kanvas.render.ir.PaintNode
 import org.graphiks.kanvas.render.ir.PaintStyleNode
 import org.graphiks.kanvas.render.ir.PathEffectNode
+import org.graphiks.kanvas.render.ir.PointMode
 import org.graphiks.kanvas.render.ir.RenderDiagnostic
 import org.graphiks.kanvas.render.ir.RenderDiagnosticDomain
 import org.graphiks.kanvas.render.ir.RenderPlanResult
@@ -30,6 +31,7 @@ import org.graphiks.math.color.ColorF32
 import org.graphiks.math.color.ColorTransferFunction
 import org.graphiks.math.geometry.FillRule
 import org.graphiks.math.geometry.PathF32
+import org.graphiks.math.geometry.PathBuilder
 import org.graphiks.math.geometry.PathStrokeCap
 import org.graphiks.math.geometry.PathStrokeDashF64
 import org.graphiks.math.geometry.PathStrokeDrawMode
@@ -53,6 +55,7 @@ import org.graphiks.math.matrix.classifyPathTransform
 import org.graphiks.math.matrix.preparePathFillGeometryF32
 import org.graphiks.math.matrix.preparePathStrokeGeometryF32
 import org.graphiks.math.matrix.toMatrix3x3F64
+import kotlin.math.floor
 
 /** Exact W4d.2 resource lifetimes, represented without graph or GPU resource objects. */
 internal class W4dGeneralFramePreview(
@@ -155,6 +158,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
 
         var visualDrawCountI32 = 0
         var requiresGeneral = false
+        var containsPreparedPoints = false
         var outside = false
         scene.forEach { command ->
             when (command) {
@@ -167,6 +171,9 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                         is DrawScope.Gap -> outside = true
                         is DrawScope.Invalid -> return Preflight.Invalid(scope.message)
                     }
+                    containsPreparedPoints = containsPreparedPoints ||
+                        command.node.origin == DrawOrigin.POINT ||
+                        command.node.origin == DrawOrigin.POINTS
                 }
                 is SceneCommand.SetTransform,
                 is SceneCommand.SetClip,
@@ -175,7 +182,9 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                 else -> outside = true
             }
         }
-        if (outside || (!requiresGeneral && !acceptsNarrowTransforms)) return Preflight.Outside
+        if (outside || (!requiresGeneral && !containsPreparedPoints && !acceptsNarrowTransforms)) {
+            return Preflight.Outside
+        }
         return if (visualDrawCountI32 > MAX_DRAWS) Preflight.Limit("W4d.2 accepts at most 512 visual path draws") else Preflight.Member
     }
 
@@ -304,12 +313,26 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         }
 
     private fun classifyDrawScope(node: DrawNode): DrawScope {
-        val path = (node.geometry as? GeometryNode.Path)?.path ?: return DrawScope.Gap("Draw geometry is outside W4d.2")
         val paint = node.paint ?: return DrawScope.Gap("W4d.2 requires paint")
-        if (!finite(path) || !finite(node.transform) || !finite(paint) || !finite(node.effects) || !finiteClip(node.clip)) {
+        val preparedPoints = (node.geometry as? GeometryNode.Points)?.toPreparedPointsPathOrNull(
+            strokeWidth = paint.strokeWidth,
+            transform = node.transform,
+        )
+        val path = when (val geometry = node.geometry) {
+            is GeometryNode.Path -> geometry.path
+            is GeometryNode.Points -> preparedPoints?.path
+                ?: return DrawScope.Gap("Point topology is outside W4d.2")
+            else -> return DrawScope.Gap("Draw geometry is outside W4d.2")
+        }
+        val transform = preparedPoints?.transform ?: node.transform
+        if (!finite(path) || !finite(transform) || !finite(paint) || !finite(node.effects) || !finiteClip(node.clip)) {
             return DrawScope.Invalid("Draw facts are non-finite")
         }
-        if (node.origin != DrawOrigin.PATH || path.fillRule !in setOf(FillRule.WINDING, FillRule.EVEN_ODD)) {
+        if ((node.origin != DrawOrigin.PATH &&
+            node.origin != DrawOrigin.POINT &&
+            node.origin != DrawOrigin.POINTS) ||
+            path.fillRule !in setOf(FillRule.WINDING, FillRule.EVEN_ODD)
+        ) {
             return DrawScope.Gap("Path provenance or fill rule is outside W4d.2")
         }
         if (node.coverage !in setOf(CoverageRequest.HARD_EDGE, CoverageRequest.ANTIALIASED)) {
@@ -324,8 +347,10 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             else -> return DrawScope.Gap("Clip is outside W4d.2")
         }
         if (!solid(node, paint)) return DrawScope.Gap("Material, blend, or effect is outside W4d.2")
-        val fill = paint.style == PaintStyleNode.FILL
-        val stroke = paint.style == PaintStyleNode.STROKE || paint.style == PaintStyleNode.STROKE_AND_FILL
+        // Legacy point mapping seals POINTS as filled squares regardless of Paint style.
+        // Re-stroking their already final-width contours expands the point a second time.
+        val fill = preparedPoints != null || paint.style == PaintStyleNode.FILL
+        val stroke = preparedPoints == null && (paint.style == PaintStyleNode.STROKE || paint.style == PaintStyleNode.STROKE_AND_FILL)
         if (fill && paint.pathEffect != null) return DrawScope.Gap("Path effects require a stroke in W4d.2")
         val mode = if (stroke) if (paint.style == PaintStyleNode.STROKE_AND_FILL) {
             PathStrokeDrawMode.StrokeAndFill
@@ -337,7 +362,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         } catch (_: IllegalArgumentException) {
             return DrawScope.Invalid("Stroke style is invalid")
         } else null
-        val matrixF64 = node.transform.toMatrix3x3F64()
+        val matrixF64 = transform.toMatrix3x3F64()
         return DrawScope.Ready(
             path = path,
             matrixF64 = matrixF64,
@@ -348,6 +373,37 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             styleF64 = style,
             requestsAntiAlias = node.coverage == CoverageRequest.ANTIALIASED,
         )
+    }
+
+    /** Replays the immutable POINTS snapshot as final filled squares, including device hairlines. */
+    private fun GeometryNode.Points.toPreparedPointsPathOrNull(
+        strokeWidth: Float,
+        transform: Matrix3x3F32,
+    ): PreparedPointsPath? {
+        if (mode != PointMode.POINTS || !strokeWidth.isFinite() || strokeWidth < 0f) return null
+        if (strokeWidth == 0f) {
+            return PathBuilder().also { builder ->
+                for (point in this) {
+                    val devicePoint = transform.transform(point)
+                    if (!finite(devicePoint)) return null
+                    val left = floor(devicePoint.x.toDouble()).toFloat()
+                    val top = floor(devicePoint.y.toDouble()).toFloat()
+                    builder.addRect(RectF32.ofLTRB(left, top, left + 1f, top + 1f))
+                }
+            }.build().let { path -> PreparedPointsPath(path, Matrix3x3F32.Identity) }
+        }
+        val halfWidth = strokeWidth * 0.5f
+        if (!halfWidth.isFinite()) return null
+        return PathBuilder().also { builder ->
+            for (point in this) {
+                builder.addRect(RectF32.ofLTRB(
+                    point.x - halfWidth,
+                    point.y - halfWidth,
+                    point.x + halfWidth,
+                    point.y + halfWidth,
+                ))
+            }
+        }.build().let { path -> PreparedPointsPath(path, transform) }
     }
 
     override fun plan(
@@ -1134,6 +1190,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
 
     private sealed interface Preflight { data object Member : Preflight; data object Outside : Preflight; data class Invalid(val message: String) : Preflight; data class Limit(val message: String) : Preflight }
     private sealed interface Recognition { data class Ready(val draws: List<SealedDraw>, val materialPlanTable: MaterialPlanTable) : Recognition; data class Gap(val message: String) : Recognition; data class Invalid(val message: String) : Recognition; data class Horizon(val message: String) : Recognition; data class Limit(val message: String) : Recognition }
+    private data class PreparedPointsPath(val path: PathF32, val transform: Matrix3x3F32)
     private sealed interface DrawScope {
         data class Ready(val path: PathF32, val matrixF64: Matrix3x3F64, val transformClass: PathTransformClass, val clip: RectI32?, val fill: Boolean, val mode: PathStrokeDrawMode?, val styleF64: PathStrokeStyleF64?, val requestsAntiAlias: Boolean) : DrawScope
         data class Gap(val message: String) : DrawScope
