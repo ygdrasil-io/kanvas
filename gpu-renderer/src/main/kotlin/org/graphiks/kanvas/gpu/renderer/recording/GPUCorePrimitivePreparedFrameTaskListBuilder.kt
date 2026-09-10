@@ -1928,7 +1928,17 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             authority?.w3SessionScratch === scratch &&
                 authority.uniformSlabSeal == null &&
                 authority.structuralPipelineKey == expectedStructuralKey &&
-                scratch.structuralPipelineKey == expectedStructuralKey &&
+                scratch.packetStructuralPipelineKeys == packets.map { candidate ->
+                    val candidateSemantic = candidate.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive
+                        ?: return false
+                    corePrimitiveRenderPipelineStructuralKey(
+                        candidateSemantic,
+                        requireNotNull(candidate.clipExecutionPlan),
+                        requireNotNull(candidate.blendPlan),
+                        sampleCount = 1,
+                        colorFormat = GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat(),
+                    )
+                } &&
                 authority.renderPipelineKey == packet.renderPipelineKey
         }
     }

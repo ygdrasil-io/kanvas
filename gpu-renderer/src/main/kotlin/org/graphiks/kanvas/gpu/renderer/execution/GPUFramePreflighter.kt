@@ -5030,7 +5030,17 @@ internal class GPUFramePreflighter(
                 semantic != null &&
                     authority?.w3SessionScratch === scratch &&
                     authority.uniformSlabSeal == null &&
-                    authority.structuralPipelineKey == scratch.structuralPipelineKey &&
+                    scratch.packetStructuralPipelineKeys == packets.map { candidate ->
+                        val candidateSemantic = candidate.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive
+                            ?: return false
+                        corePrimitiveRenderPipelineStructuralKey(
+                            candidateSemantic,
+                            requireNotNull(candidate.clipExecutionPlan),
+                            requireNotNull(candidate.blendPlan),
+                            sampleCount = 1,
+                            colorFormat = GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat(),
+                        )
+                    } &&
                     packet.analysisRecordId == semantic.analysisRecordId &&
                     packet.blendPlan?.isW5bW3Blend() == true &&
                     packet.clipExecutionPlan == if (semantic.scissorBounds == firstSemantic.targetBounds) {
@@ -9135,17 +9145,17 @@ internal class GPUFramePreflighter(
                         it.corePrimitivePreparedAuthority?.w3SessionScratch === w3Scratch
                     }
                 ) {
-                    return listOf(
-                        key(GPUPreparedNativeOperandRole.RenderColorTarget, GPUPreparedNativeOperandKind.TextureView, targetResourceLabel),
-                        key(GPUPreparedNativeOperandRole.RenderPipeline, GPUPreparedNativeOperandKind.RenderPipeline, "w3.${w3Scratch.planId}.pipeline"),
-                        key(GPUPreparedNativeOperandRole.RenderVertexBuffer, GPUPreparedNativeOperandKind.Buffer, "w3.${w3Scratch.planId}.scratch.vertex"),
-                        key(GPUPreparedNativeOperandRole.RenderIndexBuffer, GPUPreparedNativeOperandKind.Buffer, "w3.${w3Scratch.planId}.scratch.index"),
-                    ) + step.drawPackets.map { packet ->
-                        key(
-                            GPUPreparedNativeOperandRole.RenderBindGroup,
-                            GPUPreparedNativeOperandKind.BindGroup,
-                            "w3.${w3Scratch.planId}.scratch.uniform.${packet.commandIdValue}",
-                        )
+                    return buildList {
+                        add(key(GPUPreparedNativeOperandRole.RenderColorTarget, GPUPreparedNativeOperandKind.TextureView, targetResourceLabel))
+                        add(key(GPUPreparedNativeOperandRole.RenderPipeline, GPUPreparedNativeOperandKind.RenderPipeline, "w3.${w3Scratch.planId}.pipeline.0"))
+                        add(key(GPUPreparedNativeOperandRole.RenderVertexBuffer, GPUPreparedNativeOperandKind.Buffer, "w3.${w3Scratch.planId}.scratch.vertex"))
+                        add(key(GPUPreparedNativeOperandRole.RenderIndexBuffer, GPUPreparedNativeOperandKind.Buffer, "w3.${w3Scratch.planId}.scratch.index"))
+                        step.drawPackets.forEachIndexed { index, packet ->
+                            if (index > 0 && w3Scratch.packetStructuralPipelineKeys[index - 1] != w3Scratch.packetStructuralPipelineKeys[index]) {
+                                add(key(GPUPreparedNativeOperandRole.RenderPipeline, GPUPreparedNativeOperandKind.RenderPipeline, "w3.${w3Scratch.planId}.pipeline.$index"))
+                            }
+                            add(key(GPUPreparedNativeOperandRole.RenderBindGroup, GPUPreparedNativeOperandKind.BindGroup, "w3.${w3Scratch.planId}.scratch.uniform.${packet.commandIdValue}"))
+                        }
                     }
                 }
                 val textA8 = step.drawPackets.all {

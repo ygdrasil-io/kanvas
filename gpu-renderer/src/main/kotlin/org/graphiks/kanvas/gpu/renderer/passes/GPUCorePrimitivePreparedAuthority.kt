@@ -1675,7 +1675,7 @@ internal class W3SessionScratchV1(
     val targetBounds: GPUPixelBounds,
     packetIds: List<GPUDrawPacketID>,
     commandIds: List<Int>,
-    val structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+    packetStructuralPipelineKeys: List<GPUCorePrimitiveRenderPipelineStructuralKey>,
     val uniformPlan: GPUUniformSlabPlan,
     /** Exact device limits used when sealing the physical encoder scratch. */
     val maxBufferSize: Long,
@@ -1687,6 +1687,10 @@ internal class W3SessionScratchV1(
 ) {
     val packetIds: List<GPUDrawPacketID> = immutableList(packetIds)
     val commandIds: List<Int> = immutableList(commandIds)
+    val packetStructuralPipelineKeys: List<GPUCorePrimitiveRenderPipelineStructuralKey> =
+        immutableList(packetStructuralPipelineKeys)
+    val structuralPipelineKeys: List<GPUCorePrimitiveRenderPipelineStructuralKey> =
+        immutableList(this.packetStructuralPipelineKeys.distinct())
 
     init {
         require(planId.isNotBlank() && capabilitySealHash.isNotBlank()) {
@@ -1702,10 +1706,13 @@ internal class W3SessionScratchV1(
             this.commandIds.size == this.packetIds.size && this.commandIds.distinct().size == this.commandIds.size &&
             this.commandIds.all { it >= 0 }
         ) { "W3 scratch requires one ordered packet and command identity per draw" }
-        require(structuralPipelineKey.shader == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry &&
-            structuralPipelineKey.topology == GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList &&
-            structuralPipelineKey.sampleCount == 1 &&
-            structuralPipelineKey.uniformLayout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2
+        require(this.packetStructuralPipelineKeys.size == this.packetIds.size &&
+            structuralPipelineKeys.all { structuralPipelineKey ->
+                structuralPipelineKey.shader == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry &&
+                    structuralPipelineKey.topology == GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList &&
+                    structuralPipelineKey.sampleCount == 1 &&
+                    structuralPipelineKey.uniformLayout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2
+            }
         ) { "W3 scratch accepts only the direct single-sample uniform32 pipeline" }
         require(vertexBytes == this.packetIds.size.toLong() * 32L &&
             indexBytes == this.packetIds.size.toLong() * 24L &&

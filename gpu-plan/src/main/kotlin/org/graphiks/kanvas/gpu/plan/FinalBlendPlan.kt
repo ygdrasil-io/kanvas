@@ -16,6 +16,9 @@ public enum class BlendFactorV1 {
 public enum class BlendOperationV1 { Add }
 public enum class BlendCoverageEncodingV1 { FullOrScissor, ScalarCoverageInShader }
 
+/** Authenticated target clamp fact; an unavailable fact is never inferred as a clamp. */
+public enum class BlendTargetClampV1 { Unavailable, UnitInterval }
+
 /** Handle-free final target composition selected before a graph becomes Ready. */
 public sealed interface BlendPlan {
     public val canonicalLabel: String
@@ -52,6 +55,7 @@ public object FinalBlendPlanner {
         blend: BlendNode,
         coverage: CoveragePlan,
         sample: SamplePlan,
+        targetClamp: BlendTargetClampV1 = BlendTargetClampV1.Unavailable,
     ): BlendPlan? {
         val mode = when (blend) {
             BlendNode.SrcOver -> BlendMode.SRC_OVER
@@ -65,7 +69,7 @@ public object FinalBlendPlanner {
         } else {
             BlendCoverageEncodingV1.ScalarCoverageInShader
         }
-        fixed(mode, coverageEncoding)?.let { return it }
+        fixed(mode, coverageEncoding, targetClamp)?.let { return it }
         return BlendPlan.DestinationReadV1(
             mode = mode,
             formulaIdentity = "${mode.name.lowercase()}@v1",
@@ -74,7 +78,11 @@ public object FinalBlendPlanner {
         )
     }
 
-    private fun fixed(mode: BlendMode, coverage: BlendCoverageEncodingV1): BlendPlan.FixedFunctionV1? {
+    private fun fixed(
+        mode: BlendMode,
+        coverage: BlendCoverageEncodingV1,
+        targetClamp: BlendTargetClampV1,
+    ): BlendPlan.FixedFunctionV1? {
         if (coverage != BlendCoverageEncodingV1.FullOrScissor) return null
         fun state(source: BlendFactorV1, destination: BlendFactorV1) = BlendPlan.FixedFunctionV1(
             mode, source, destination, source, destination,
@@ -99,7 +107,9 @@ public object FinalBlendPlanner {
                 mode, BlendFactorV1.One, BlendFactorV1.OneMinusSrcColor,
                 BlendFactorV1.One, BlendFactorV1.OneMinusSrcAlpha,
             )
-            BlendMode.PLUS,
+            BlendMode.PLUS -> if (targetClamp == BlendTargetClampV1.UnitInterval) {
+                state(BlendFactorV1.One, BlendFactorV1.One)
+            } else null
             BlendMode.MULTIPLY, BlendMode.OVERLAY, BlendMode.DARKEN, BlendMode.LIGHTEN,
             BlendMode.COLOR_DODGE, BlendMode.COLOR_BURN, BlendMode.HARD_LIGHT, BlendMode.SOFT_LIGHT,
             BlendMode.DIFFERENCE, BlendMode.EXCLUSION, BlendMode.HUE, BlendMode.SATURATION,

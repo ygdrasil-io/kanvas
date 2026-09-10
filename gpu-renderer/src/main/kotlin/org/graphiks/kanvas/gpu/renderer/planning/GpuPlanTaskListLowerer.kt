@@ -290,12 +290,6 @@ public class GpuPlanTaskListLowerer {
         val first = packets.firstOrNull() ?: return W3SessionScratchSealResult.Invalid(
             invalidDiagnostic("W3 scratch requires at least one packet."),
         )
-        val semantic = first.semanticPayload as? org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.CorePrimitive
-            ?: return W3SessionScratchSealResult.Invalid(invalidDiagnostic("W3 packet is missing CorePrimitive semantic authority."))
-        val clip = first.clipExecutionPlan
-            ?: return W3SessionScratchSealResult.Invalid(invalidDiagnostic("W3 packet is missing clip authority."))
-        val blend = first.blendPlan
-            ?: return W3SessionScratchSealResult.Invalid(invalidDiagnostic("W3 packet is missing blend authority."))
         val vertexBytes = packets.size.toLong() * 32L
         val indexBytes = packets.size.toLong() * 24L
         val poolCapacities = corePrimitiveFramePoolCapacitiesOrNull(
@@ -315,10 +309,18 @@ public class GpuPlanTaskListLowerer {
                 targetBounds = targetBounds,
                 packetIds = packets.map(GPUDrawPacket::packetId),
                 commandIds = packets.map(GPUDrawPacket::commandIdValue),
-                structuralPipelineKey = corePrimitiveRenderPipelineStructuralKey(
-                    semantic, clip, blend, sampleCount = 1,
-                    colorFormat = GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat(),
-                ),
+                packetStructuralPipelineKeys = packets.map { packet ->
+                    val semantic = packet.semanticPayload as? org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.CorePrimitive
+                        ?: throw IllegalArgumentException("W3 packet is missing CorePrimitive semantic authority.")
+                    val clip = packet.clipExecutionPlan
+                        ?: throw IllegalArgumentException("W3 packet is missing clip authority.")
+                    val blend = packet.blendPlan
+                        ?: throw IllegalArgumentException("W3 packet is missing blend authority.")
+                    corePrimitiveRenderPipelineStructuralKey(
+                        semantic, clip, blend, sampleCount = 1,
+                        colorFormat = GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat(),
+                    )
+                },
                 uniformPlan = plan,
                 maxBufferSize = maxBufferSize,
                 maxDynamicUniformBuffersPerPipelineLayout = maxDynamicUniformBuffers,

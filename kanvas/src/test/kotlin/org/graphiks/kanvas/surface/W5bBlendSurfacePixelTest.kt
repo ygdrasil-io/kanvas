@@ -2,7 +2,6 @@
 
 package org.graphiks.kanvas.surface
 
-import kotlin.test.assertContentEquals
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
@@ -19,30 +18,34 @@ class W5bBlendSurfacePixelTest {
 
     @Test
     fun `Picture replays fixed function DST OVER Solid Opacity`() {
-        val foreground = ColorARGB.White
-        val picture = record(foreground, BlendMode.DST_OVER)
+        val background = ColorARGB.of(0xD5, 0x2B, 0x7F, 0xB9)
+        val foreground = ColorARGB.of(0x9A, 0xE3, 0xA4, 0x1C)
+        val picture = record(background, BlendMode.SRC_OVER, foreground, BlendMode.DST_OVER)
         val result = Surface(4, 4).also { surface ->
             surface.canvas { requireNotNull(Picture.fromByteArray(picture.toByteArray())).playback(this) }
         }.render()
-        W5bBlendCpuOracle.assertDstOver(ColorARGB.Transparent, foreground, .9921875f, result.pixels.copyOfRange(0, 4))
-        WgslFloatEnvelopeV1Oracle.assertAdmits(
-            W5aSolidOpacityCpuOracle.draw(foreground, .9921875f, 1f),
-            result.pixels.copyOfRange(0, 4),
-        )
+        W5bBlendCpuOracle.assertDstOver(background, .9921875f, foreground, .9921875f, result.pixels.copyOfRange(0, 4))
     }
 
     @Test
     fun `Picture replays DST NoOp Solid Opacity`() {
-        val picture = record(ColorARGB.White, BlendMode.DST)
+        val background = ColorARGB.of(0xD5, 0x2B, 0x7F, 0xB9)
+        val picture = record(background, BlendMode.SRC_OVER, ColorARGB.of(0x9A, 0xE3, 0xA4, 0x1C), BlendMode.DST)
         val result = Surface(4, 4).also { surface ->
             surface.canvas { requireNotNull(Picture.fromByteArray(picture.toByteArray())).playback(this) }
         }.render()
-        assertContentEquals(UByteArray(4), result.pixels.copyOfRange(0, 4))
+        W5bBlendCpuOracle.assertDst(background, .9921875f, result.pixels.copyOfRange(0, 4))
     }
 
-    private fun record(foreground: ColorARGB, mode: BlendMode) = PictureRecorder().also { recorder ->
+    private fun record(
+        background: ColorARGB,
+        backgroundMode: BlendMode,
+        foreground: ColorARGB,
+        foregroundMode: BlendMode,
+    ) = PictureRecorder().also { recorder ->
         recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 4f, 4f)).apply {
-            drawRect(RectF32.ofLTRB(0f, 0f, 4f, 4f), Paint(shader = Shader.Opacity(Shader.SolidColor(foreground), .9921875f), antiAlias = false, blendMode = mode))
+            drawRect(RectF32.ofLTRB(0f, 0f, 4f, 4f), Paint(shader = Shader.Opacity(Shader.SolidColor(background), .9921875f), antiAlias = false, blendMode = backgroundMode))
+            drawRect(RectF32.ofLTRB(0f, 0f, 4f, 4f), Paint(shader = Shader.Opacity(Shader.SolidColor(foreground), .9921875f), antiAlias = false, blendMode = foregroundMode))
         }
     }.finishRecordingAsPicture()
 }

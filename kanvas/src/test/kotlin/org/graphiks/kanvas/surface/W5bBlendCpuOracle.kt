@@ -2,31 +2,63 @@
 
 package org.graphiks.kanvas.surface
 
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.pow
 import kotlin.test.assertTrue
 import org.graphiks.math.color.ColorARGB
 
-/** Independent public-test-only linear-premultiplied W5b fixed-function oracle. */
+/** Independent bounded linear-premultiplied oracle for public W5b pixel tests. */
 internal object W5bBlendCpuOracle {
-    fun srgbBytes(color: ColorARGB): UByteArray = ubyteArrayOf(color.red.toUByte(), color.green.toUByte(), color.blue.toUByte(), color.alpha.toUByte())
+    fun assertDstOver(background: ColorARGB, backgroundOpacityF32: Float, foreground: ColorARGB, foregroundOpacityF32: Float, actual: UByteArray) =
+        assertAdmits(dstOver(premul(background, backgroundOpacityF32), premul(foreground, foregroundOpacityF32)), actual)
 
-    fun assertDstOver(background: ColorARGB, foreground: ColorARGB, opacityF32: Float, actual: UByteArray) {
-        val destination = premul(background, 1f)
-        val source = premul(foreground, opacityF32)
-        val result = FloatArray(4) { index -> destination[index] + source[index] * (1f - destination[3]) }
-        val expected = encode(result)
-        actual.indices.forEach { index -> assertTrue(kotlin.math.abs(actual[index].toInt() - expected[index].toInt()) <= 1, "channel=$index expected=${expected.toList()} actual=${actual.toList()}") }
+    fun assertDst(background: ColorARGB, backgroundOpacityF32: Float, actual: UByteArray) =
+        assertAdmits(premul(background, backgroundOpacityF32), actual)
+
+    private fun dstOver(destination: List<Interval>, source: List<Interval>): List<Interval> =
+        List(4) { index -> (destination[index] + source[index] * (one - destination[3])).clamp() }
+
+    private fun premul(color: ColorARGB, opacityF32: Float): List<Interval> {
+        val alpha = input(color.alpha) * input(opacityF32)
+        return listOf(linear(input(color.red)) * alpha, linear(input(color.green)) * alpha, linear(input(color.blue)) * alpha, alpha)
     }
 
-    private fun premul(color: ColorARGB, opacityF32: Float): FloatArray {
-        val alpha = color.alpha / 255f * opacityF32
-        return floatArrayOf(linear(color.red / 255f) * alpha, linear(color.green / 255f) * alpha, linear(color.blue / 255f) * alpha, alpha)
+    private fun assertAdmits(premulRgba: List<Interval>, actual: UByteArray) {
+        val admissible = listOf(srgb(premulRgba[0]), srgb(premulRgba[1]), srgb(premulRgba[2]), premulRgba[3]).map(::quantizedCodes)
+        actual.indices.forEach { index ->
+            assertTrue(actual[index].toInt() in admissible[index], "channel=$index admissible=${admissible[index]} actual=${actual.toList()}")
+        }
     }
-    private fun encode(value: FloatArray): UByteArray {
-        val alpha = value[3].coerceIn(0f, 1f)
-        fun channel(index: Int) = (value[index].coerceIn(0f, 1f).let(::srgb) * 255f + .5f).toInt().coerceIn(0, 255).toUByte()
-        return ubyteArrayOf(channel(0), channel(1), channel(2), (alpha * 255f + .5f).toInt().toUByte())
+
+    private fun input(code: Int): Interval = interval(code / 255.0)
+    private fun input(value: Float): Interval = interval(value.toDouble())
+    private fun linear(value: Interval): Interval = if (value.hi <= .04045) value / 12.92 else if (value.lo >= .04045) ((value + .055) / 1.055).pow(2.4) else Interval(0.0, ((value.hi + .055) / 1.055).pow(2.4)).outward()
+    private fun srgb(value: Interval): Interval = if (value.hi <= .0031308) value * 12.92 else if (value.lo >= .0031308) value.pow(1.0 / 2.4) * 1.055 - .055 else Interval(0.0, value.hi.pow(1.0 / 2.4) * 1.055 - .055).outward()
+
+    private fun quantizedCodes(value: Interval): Set<Int> {
+        val bounded = value.clamp()
+        val first = ceil(bounded.lo * 255.0 - .5).toInt().coerceIn(0, 255)
+        val last = floor(bounded.hi * 255.0 + .5).toInt().coerceIn(0, 255)
+        val codes = (first..last).toSet()
+        require(codes.size in 1..2 && last - first <= 1) { "Analytic RGBA8 envelope must be singleton or adjacent: $bounded -> $codes" }
+        return codes
     }
-    private fun linear(value: Float): Float = if (value <= .04045f) value / 12.92f else ((value + .055f) / 1.055f).pow(2.4f)
-    private fun srgb(value: Float): Float = if (value <= .0031308f) value * 12.92f else 1.055f * value.pow(1f / 2.4f) - .055f
+
+    private data class Interval(val lo: Double, val hi: Double) {
+        init { require(lo.isFinite() && hi.isFinite() && lo <= hi) }
+        fun outward() = Interval(Math.nextDown(lo), Math.nextUp(hi))
+        operator fun plus(other: Interval) = Interval(Math.nextDown(lo + other.lo), Math.nextUp(hi + other.hi))
+        operator fun plus(other: Double) = Interval(Math.nextDown(lo + other), Math.nextUp(hi + other))
+        operator fun minus(other: Double) = Interval(Math.nextDown(lo - other), Math.nextUp(hi - other))
+        operator fun div(other: Double) = Interval(Math.nextDown(lo / other), Math.nextUp(hi / other))
+        operator fun times(other: Interval) = Interval(Math.nextDown(lo * other.lo), Math.nextUp(hi * other.hi))
+        operator fun times(other: Double) = Interval(Math.nextDown(lo * other), Math.nextUp(hi * other))
+        fun pow(exponent: Double) = Interval(Math.nextDown(lo.pow(exponent)), Math.nextUp(hi.pow(exponent)))
+        fun clamp() = Interval(lo.coerceIn(0.0, 1.0), hi.coerceIn(0.0, 1.0))
+    }
+
+    private fun interval(value: Double) = Interval(Math.nextDown(value), Math.nextUp(value))
+    private val one = Interval(1.0, 1.0)
+    private operator fun Interval.minus(other: Interval) = Interval(Math.nextDown(lo - other.hi), Math.nextUp(hi - other.lo))
 }

@@ -6182,14 +6182,20 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             }
             bytes.copyInto(uniformBytes, slot.alignedOffset.toInt())
         }
-        val mapping = mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(scratch.structuralPipelineKey)
-            as? GPUWgpu4kCorePrimitivePipelineMapping.Mapped
-            ?: return refused("unsupported.native-core-primitive.w3-pipeline", "W3 structural pipeline is unavailable.")
-        val cache = when (val acquired = sessionCache.acquire(
-            GPUWgpu4kCorePrimitivePipelineCacheKey(mapping.componentIdentity, mapping.identity),
-        )) {
-            is GPUWgpu4kCorePrimitiveSessionCacheAcquire.Acquired -> acquired
-            is GPUWgpu4kCorePrimitiveSessionCacheAcquire.Refused -> return refusedSessionCacheAcquire(acquired.reason)
+        val mappings = scratch.structuralPipelineKeys.associateWith { structuralKey ->
+            mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(structuralKey)
+                as? GPUWgpu4kCorePrimitivePipelineMapping.Mapped
+                ?: return refused("unsupported.native-core-primitive.w3-pipeline", "W3 structural pipeline is unavailable.")
+        }
+        val componentIdentity = mappings.values.map { it.componentIdentity }.distinct().singleOrNull()
+            ?: return refused("unsupported.native-core-primitive.w3-pipeline", "W3 structural pipelines require one bind-group layout.")
+        val caches = mappings.mapValues { (_, mapping) ->
+            when (val acquired = sessionCache.acquire(
+                GPUWgpu4kCorePrimitivePipelineCacheKey(mapping.componentIdentity, mapping.identity),
+            )) {
+                is GPUWgpu4kCorePrimitiveSessionCacheAcquire.Acquired -> acquired
+                is GPUWgpu4kCorePrimitiveSessionCacheAcquire.Refused -> return refusedSessionCacheAcquire(acquired.reason)
+            }
         }
         synchronized(this) {
             if (closed) return refused("unsupported.native-core-primitive.materializer-state", "The W3 materializer is closed.")
@@ -6206,7 +6212,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     scratch.uniformPlan.totalBytes,
                     expectedCapacities = composite?.let { GPUWgpu4kCorePrimitiveFramePoolCapacities(
                         scratch.poolCapacities.vertexBytes, scratch.poolCapacities.indexBytes, scratch.poolCapacities.uniformBytes) },
-                    componentIdentity = mapping.componentIdentity,
+                    componentIdentity = componentIdentity,
                     sampleCount = 1,
                 ),
             )) {
@@ -6230,15 +6236,21 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 ),
             ).tracked()
             val generation = generationSeal.deviceGeneration
-            val pipeline = GPUPreparedNativeRenderPipelineOperand(cache.pipeline, generation, GPUPreparedNativeOperandOwnership.Borrowed)
+            val pipelines = caches.mapValues { (_, cache) ->
+                GPUPreparedNativeRenderPipelineOperand(cache.pipeline, generation, GPUPreparedNativeOperandOwnership.Borrowed)
+            }
             val vertex = GPUPreparedNativeBufferOperand(pooled.handles.vertexBuffer, generation, GPUPreparedNativeOperandOwnership.Borrowed, pooled.capacities.vertexBytes)
             val index = GPUPreparedNativeBufferOperand(pooled.handles.indexBuffer, generation, GPUPreparedNativeOperandOwnership.Borrowed, pooled.capacities.indexBytes)
             val bindGroup = GPUPreparedNativeBindGroupOperand(pooled.handles.bindGroup, generation, GPUPreparedNativeOperandOwnership.Borrowed)
             val commands = buildList {
-                add(GPUPreparedNativeRenderCommand.SetPipeline(pipeline))
+                add(GPUPreparedNativeRenderCommand.SetPipeline(requireNotNull(pipelines[scratch.packetStructuralPipelineKeys.first()])))
                 add(GPUPreparedNativeRenderCommand.SetVertexBuffer(0, vertex, 0L, scratch.vertexBytes, 8L))
                 add(GPUPreparedNativeRenderCommand.SetIndexBuffer(index, GPUPreparedNativeIndexFormat.Uint32, 0L, scratch.indexBytes))
                 coreSemantics.indices.forEach { indexValue ->
+                    val structuralKey = scratch.packetStructuralPipelineKeys[indexValue]
+                    if (indexValue > 0 && structuralKey != scratch.packetStructuralPipelineKeys[indexValue - 1]) {
+                        add(GPUPreparedNativeRenderCommand.SetPipeline(requireNotNull(pipelines[structuralKey])))
+                    }
                     val slice = arena.slices[indexValue]
                     val scissor = coreSemantics[indexValue].scissorBounds
                     add(GPUPreparedNativeRenderCommand.SetBindGroup(0, bindGroup, listOf(scratch.uniformPlan.slots[indexValue].alignedOffset)))

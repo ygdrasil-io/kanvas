@@ -20,6 +20,9 @@ public object EffectiveMaterialPlanner {
     public fun plan(draw: DrawNode): Result {
         val blend = FinalBlendPlanner.plan(draw.blend, CoveragePlan.FullOrScissor, SamplePlan.SingleSample)
             ?: return Result.Refused(W5aPlanDiagnostics.UnsupportedDrawState)
+        if (blend is BlendPlan.DestinationReadV1) {
+            return Result.Refused("unsupported.w5b.destination-read.task-2")
+        }
         if (draw.effects !is EffectStack.Empty || draw.resource != null || draw.operationBlendMode != null) {
             return Result.Refused(W5aPlanDiagnostics.UnsupportedDrawState)
         }
