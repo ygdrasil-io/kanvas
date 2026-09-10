@@ -125,17 +125,23 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
         frameAttemptedEdgesBeforeI32: Int,
         materialEntries: MutableList<MaterialPlanEntry>,
     ): DrawRecognition {
-        val geometry = node.geometry as? GeometryNode.Path
-            ?: return DrawRecognition.Gap("Draw geometry is outside W4c")
-        if (!finite(geometry.path)) return DrawRecognition.Invalid("Path geometry is non-finite")
+        val sourcePath = when (val geometry = node.geometry) {
+            is GeometryNode.Path -> geometry.path
+            is GeometryNode.Rect -> PathBuilder().addRect(geometry.copyBounds()).build()
+            is GeometryNode.RRect -> PathBuilder().addRRect(geometry.copyShape()).build()
+            else -> return DrawRecognition.Gap("Draw geometry is outside W4c")
+        }
+        if (!finite(sourcePath)) return DrawRecognition.Invalid("Path geometry is non-finite")
         if (!finite(node.transform)) return DrawRecognition.Invalid("Draw transform is non-finite")
         val clip = when (val recognized = recognizeClip(node.clip)) {
             is ClipRecognition.Accepted -> recognized.bounds
             is ClipRecognition.Gap -> return DrawRecognition.Gap(recognized.message)
             is ClipRecognition.Invalid -> return DrawRecognition.Invalid(recognized.message)
         }
-        if (node.origin != DrawOrigin.PATH) return DrawRecognition.Gap("Path provenance is outside W4c")
-        if (geometry.path.fillRule !in setOf(FillRule.WINDING, FillRule.EVEN_ODD)) {
+        if (node.origin !in setOf(DrawOrigin.RECT, DrawOrigin.RRECT, DrawOrigin.PATH)) {
+            return DrawRecognition.Gap("Path provenance is outside W4c")
+        }
+        if (sourcePath.fillRule !in setOf(FillRule.WINDING, FillRule.EVEN_ODD)) {
             return DrawRecognition.Gap("Inverse path fills are outside W4c")
         }
         if (node.coverage != CoverageRequest.HARD_EDGE) {
@@ -148,7 +154,7 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
             return DrawRecognition.Gap("Draw material, paint, blend, or effect is outside W4c")
         }
 
-        val pathSnapshot = snapshotPath(geometry.path)
+        val pathSnapshot = snapshotPath(sourcePath)
         val input = try {
             node.transform.mapPathFillInputF64(pathSnapshot)
         } catch (_: IllegalArgumentException) {

@@ -405,9 +405,15 @@ public class GpuPlanTaskListLowerer {
                 }
             }
         ) return null
-        if (graph.capabilityId == W3SolidRectPlanCompiler.W5A_CAPABILITY_ID &&
-            (table == null || draws.any { it.materialAuthority !is PlanDrawMaterialAuthority.MaterialV1 })
-        ) return null
+        when (graph.capabilityId) {
+            W3SolidRectPlanCompiler.CAPABILITY_ID -> if (
+                table != null || draws.any { it.materialAuthority !is PlanDrawMaterialAuthority.LegacyColorV1 }
+            ) return null
+            W3SolidRectPlanCompiler.W5A_CAPABILITY_ID -> if (
+                table == null || draws.any { it.materialAuthority !is PlanDrawMaterialAuthority.MaterialV1 }
+            ) return null
+            else -> return null
+        }
         return W3Graph(target, staging, render, readback, draws, table)
     }
 

@@ -8,8 +8,14 @@ import org.graphiks.kanvas.render.ir.RenderDiagnostic
 import org.graphiks.kanvas.render.ir.RenderTargetDescriptor
 import org.graphiks.kanvas.render.ir.SceneCaptureLimits
 import org.graphiks.kanvas.render.ir.SceneCaptureResult
+import org.graphiks.kanvas.render.ir.SceneCommand
 import org.graphiks.kanvas.render.ir.SceneExtent
 import org.graphiks.kanvas.render.ir.SceneSnapshot
+import org.graphiks.kanvas.render.ir.RenderDiagnosticCode
+import org.graphiks.kanvas.render.ir.RenderDiagnosticDomain
+import org.graphiks.kanvas.render.ir.RenderDiagnosticSeverity
+import org.graphiks.kanvas.gpu.plan.EffectiveMaterialPlanner
+import org.graphiks.kanvas.gpu.plan.W5aPlanDiagnostics
 import org.graphiks.kanvas.gpu.renderer.planning.GpuPlanSurfacePlanResult
 import org.graphiks.kanvas.gpu.renderer.planning.GpuPlanSurfaceReadyToken
 import org.graphiks.kanvas.gpu.renderer.planning.GpuPlanSurfaceSubmitResult
@@ -80,7 +86,16 @@ internal class GPUPlanSurfaceRouter(
                 config.frameLocalBudgetBytes,
             )
         ) {
-            is GpuPlanSurfacePlanResult.GapNotMigrated -> legacy()
+            is GpuPlanSurfacePlanResult.GapNotMigrated -> {
+                w5aMaterialRefusal(scene)?.let { refusal -> throw terminal(listOf(refusal)) }
+                val w5aMaterialGap = planned.diagnostics.firstOrNull { diagnostic ->
+                    diagnostic.code.value == W5aPlanDiagnostics.UnsupportedMaterial ||
+                        diagnostic.code.value == W5aPlanDiagnostics.UnsupportedDrawState ||
+                        diagnostic.code.value == W5aPlanDiagnostics.InvalidOpacity
+                }
+                if (w5aMaterialGap != null) throw terminal(listOf(w5aMaterialGap))
+                legacy()
+            }
             is GpuPlanSurfacePlanResult.Terminal -> throw terminal(planned.diagnostics)
             is GpuPlanSurfacePlanResult.Ready -> when (val submitted = planPort.submit(planned.token)) {
                 is GpuPlanSurfaceSubmitResult.Completed -> completed(submitted.output, format)
@@ -132,6 +147,19 @@ internal class GPUPlanSurfaceRouter(
             ?: return GPUPlanSurfaceTerminalException("w3.surface.unknown", "The W3 route failed without a diagnostic.")
         return GPUPlanSurfaceTerminalException(diagnostic.code.value, diagnostic.message)
     }
+
+    /** A W5-shaped frame must not re-enter legacy material mapping after W5 rejects its material. */
+    private fun w5aMaterialRefusal(scene: SceneSnapshot): RenderDiagnostic? =
+        scene.filterIsInstance<SceneCommand.Draw>().firstNotNullOfOrNull { command ->
+            val refusal = EffectiveMaterialPlanner.plan(command.node) as? EffectiveMaterialPlanner.Result.Refused
+                ?: return@firstNotNullOfOrNull null
+            RenderDiagnostic(
+                code = RenderDiagnosticCode(refusal.diagnosticCode),
+                domain = RenderDiagnosticDomain.SCENE,
+                severity = RenderDiagnosticSeverity.ERROR,
+                message = "W5a selected this frame but does not support its material or draw state.",
+            )
+        }
 
     private companion object {
         val CAPTURE_LIMIT_CODES = setOf("scene-node-limit", "scene-resource-limit", "graph-node-limit")

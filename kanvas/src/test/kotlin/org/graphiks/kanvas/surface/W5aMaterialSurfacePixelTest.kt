@@ -8,6 +8,7 @@ import kotlin.test.assertTrue
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.ColorFilter
+import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.picture.Picture
@@ -875,6 +876,112 @@ class W5aMaterialSurfacePixelTest {
 
         val failure = assertFailsWith<IllegalStateException> { surface.render() }
         assertTrue(failure.message.orEmpty().contains("unsupported.vertices.clip_coverage"), failure.message)
+    }
+
+    @Test
+    fun `Picture playback composes planned Rect RRect and Path bindings in recorded order`() {
+        val rectColor = ColorARGB.of(191, 31, 163, 229)
+        val rrectColor = ColorARGB.of(203, 227, 89, 43)
+        val pathColor = ColorARGB.of(179, 67, 193, 113)
+        val path = Path().apply {
+            moveTo(-1f, -1f)
+            lineTo(9f, -1f)
+            lineTo(-1f, 9f)
+            close()
+        }
+        val recorder = PictureRecorder()
+        recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 8f, 8f)).apply {
+            drawRect(
+                RectF32.ofLTRB(0f, 0f, 8f, 8f),
+                Paint(
+                    color = ColorARGB.of(153, 1, 2, 3),
+                    shader = Shader.Opacity(Shader.SolidColor(rectColor), 0.8f),
+                    antiAlias = false,
+                ),
+            )
+            drawRRect(
+                RRectF32.of(RectF32.ofLTRB(1f, 1f, 7f, 7f), CornerRadiiF32.of(1f)),
+                Paint(
+                    color = ColorARGB.of(179, 4, 5, 6),
+                    shader = Shader.Opacity(Shader.SolidColor(rrectColor), 0.625f),
+                    antiAlias = false,
+                ),
+            )
+            drawPath(
+                path,
+                Paint(
+                    color = ColorARGB.of(193, 7, 8, 9),
+                    shader = Shader.Opacity(Shader.SolidColor(pathColor), 0.4f),
+                    antiAlias = false,
+                ),
+            )
+        }
+        path.addRect(RectF32.ofLTRB(7f, 7f, 8f, 8f))
+        val captured = recorder.finishRecordingAsPicture()
+        val surface = Surface(8, 8)
+        surface.canvas { captured.playback(this) }
+
+        val result = surface.render()
+        val first = W5aSolidOpacityCpuOracle.draw(rectColor, 0.8f, paintAlphaF32 = 153f / 255f)
+        val second = W5aSolidOpacityCpuOracle.draw(
+            rrectColor,
+            0.625f,
+            paintAlphaF32 = 179f / 255f,
+            destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(first)),
+        )
+        val expected = W5aSolidOpacityCpuOracle.draw(
+            pathColor,
+            0.4f,
+            paintAlphaF32 = 193f / 255f,
+            destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(second)),
+        )
+
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange((2 * 8 + 2) * 4, (2 * 8 + 3) * 4))
+        WgslFloatEnvelopeV1Oracle.assertAdmits(first, result.pixels.copyOfRange((7 * 8 + 7) * 4, (7 * 8 + 8) * 4))
+    }
+
+    @Test
+    fun `public W5b gradient refusal leaves the runtime able to render a later W5a frame`() {
+        val rejected = Surface(4, 4)
+        rejected.canvas {
+            drawRect(
+                RectF32.ofLTRB(0f, 0f, 4f, 4f),
+                Paint(
+                    shader = Shader.LinearGradient(
+                        Point2F32(0f, 0f),
+                        Point2F32(4f, 0f),
+                        listOf(
+                            GradientStop(0f, ColorARGB.Red),
+                            GradientStop(1f, ColorARGB.Blue),
+                        ),
+                    ),
+                    antiAlias = false,
+                ),
+            )
+        }
+
+        val failure = assertFailsWith<IllegalStateException> { rejected.render() }
+        assertTrue(failure.message.orEmpty().contains("unsupported.material.w5a.kind"), failure.message)
+
+        val color = ColorARGB.of(197, 71, 199, 127)
+        val recovered = Surface(4, 4)
+        recovered.canvas {
+            drawRect(
+                RectF32.ofLTRB(0f, 0f, 4f, 4f),
+                Paint(
+                    color = ColorARGB.of(173, 11, 13, 17),
+                    shader = Shader.Opacity(Shader.SolidColor(color), 0.5f),
+                    antiAlias = false,
+                ),
+            )
+        }
+
+        val result = recovered.render()
+
+        WgslFloatEnvelopeV1Oracle.assertAdmits(
+            W5aSolidOpacityCpuOracle.draw(color, 0.5f, paintAlphaF32 = 173f / 255f),
+            result.pixels.copyOfRange(0, 4),
+        )
     }
 
     private fun w5aTriangle(): Vertices = Vertices(

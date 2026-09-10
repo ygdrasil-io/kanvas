@@ -190,7 +190,15 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
             ?: return semanticGap("Draw geometry or material is outside W3")
         val material = node.material
         val isW5aMaterial = material is MaterialNode.Solid || material is MaterialNode.Opacity || material == MaterialNode.Transparent
-        if (!isW5aMaterial) return semanticGap("Draw geometry or material is outside W3")
+        if (!isW5aMaterial) {
+            return DrawRecognition.Gap(
+                diag(
+                    org.graphiks.kanvas.render.ir.RenderDiagnosticCode(W5aPlanDiagnostics.UnsupportedMaterial),
+                    RenderDiagnosticDomain.SCENE,
+                    "W5a material is outside the Solid/Opacity subset",
+                ),
+            )
+        }
         if (node.origin != DrawOrigin.RECT) {
             return semanticGap("Draw geometry or material is outside W3")
         }
