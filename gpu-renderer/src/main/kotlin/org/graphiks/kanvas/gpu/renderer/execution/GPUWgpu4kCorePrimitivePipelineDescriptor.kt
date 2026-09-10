@@ -48,6 +48,7 @@ internal enum class GPUWgpu4kCorePrimitiveBlendProgram(
 ) {
     ColorWriteNone(null, null, null, null, null, null, null),
     DestinationNoOp(GPUBlendMode.DST, null, null, null, null, null, null),
+    PremulDst(GPUBlendMode.DST, "zero", "one", "add", "zero", "one", "add"),
     PremulClear(GPUBlendMode.CLEAR, "zero", "zero", "add", "zero", "zero", "add"),
     PremulSrc(GPUBlendMode.SRC, "one", "zero", "add", "one", "zero", "add"),
     PremulSrcOver(

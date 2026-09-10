@@ -20,7 +20,6 @@ import org.graphiks.math.matrix.Matrix3x3F32
 
 public enum class CoveragePlan { FullOrScissor, AnalyticScalarAA, StencilAA4, BinaryMaskCover4 }
 public enum class SamplePlan { SingleSample, Multisample4 }
-public enum class BlendPlan { SrcOver }
 public enum class AttachmentLoadPlan { ClearTransparent, Load }
 public enum class AttachmentStorePlan { Store }
 public enum class PlanDepthStencilLoadStore { ClearZeroStore, LoadStoreTestReset }

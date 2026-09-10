@@ -105,10 +105,9 @@ private fun composeSource(template: GPUW5aGeometryPipelineTemplate, source: W5aP
     val target = requireNotNull(template.descriptor.fragment).targets.single()
     val blend = requireNotNull(target.blend)
     require(target.format == GPUTextureFormat.RGBA8UnormSrgb &&
-        listOf(blend.color, blend.alpha).all {
-            it.operation == GPUBlendOperation.Add && it.srcFactor == GPUBlendFactor.One &&
-                it.dstFactor == GPUBlendFactor.OneMinusSrcAlpha
-        }) { "W5a source DAG requires the authenticated premultiplied SRC_OVER sRGB attachment tail" }
+        listOf(blend.color, blend.alpha).all { it.operation == GPUBlendOperation.Add }) {
+        "W5b source DAG requires an authenticated premultiplied fixed-function sRGB attachment tail"
+    }
     // The renderer reflection parser uses explicit scalar type parameters; W4e's native
     // spelling uses WGSL's equivalent vector aliases. Normalize those before composition.
     var geometry = template.source.replace(Regex("\\bvec([234])([fiu])\\b")) {

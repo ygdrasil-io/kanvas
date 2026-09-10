@@ -382,6 +382,7 @@ internal class W4eClipGraphLowerer {
             PlanResourceUsage.Vertex -> GPUFrameResourceUsage.Vertex
             PlanResourceUsage.Index -> GPUFrameResourceUsage.Index
             PlanResourceUsage.Uniform -> GPUFrameResourceUsage.Uniform
+            PlanResourceUsage.StorageRead -> GPUFrameResourceUsage.TextureBinding
         } }.toSet()
         val lifetime = when (resource.lifetime) { PlanResourceLifetime.FrameLocal -> GPUFrameResourceLifetime.FrameLocal }
         val descriptor = when (resource.kind) {

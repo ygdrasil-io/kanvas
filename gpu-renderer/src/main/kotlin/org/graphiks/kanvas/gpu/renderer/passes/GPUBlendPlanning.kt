@@ -114,6 +114,17 @@ sealed interface GPUBlendPlan {
     }
 }
 
+/** The W5b W3 lane admits only plan-first fixed-function states and destination NoOp. */
+internal fun GPUBlendPlan.isW5bW3Blend(): Boolean = when (this) {
+    is GPUBlendPlan.FixedFunctionBlend -> sourceCoverageEncoding == GPUSourceCoverageEncoding.None
+    is GPUBlendPlan.NoOp -> mode == GPUBlendMode.DST
+    is GPUBlendPlan.ShaderBlendNoDstRead,
+    is GPUBlendPlan.ShaderBlendWithDstRead,
+    is GPUBlendPlan.LayerCompositeBlend,
+    is GPUBlendPlan.UnsupportedBlend,
+    -> false
+}
+
 /** Exact handle-free identity retained by semantic payloads without importing pass contracts. */
 fun GPUBlendPlan.canonicalIdentity(): String = when (this) {
     is GPUBlendPlan.FixedFunctionBlend ->

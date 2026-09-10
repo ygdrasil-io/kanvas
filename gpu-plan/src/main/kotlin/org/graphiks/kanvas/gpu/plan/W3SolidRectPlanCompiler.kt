@@ -234,6 +234,7 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
                             root,
                             clipped,
                             clipped,
+                            blend = planned.blend,
                         ),
                     )
                 }
@@ -303,17 +304,15 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
 
     private fun intersect(first: RectI32, second: RectI32): RectI32? = first.copy().takeIf { it.intersect(second) }
 
-    private fun w3Blend(blend: BlendNode): Boolean = when (blend) {
-        BlendNode.SrcOver -> true
-        is BlendNode.Mode -> blend.mode == BlendMode.SRC_OVER
-        is BlendNode.Paint -> blend.mode == BlendMode.SRC_OVER && blend.blender == null
-        is BlendNode.Custom -> false
-    }
+    private fun w3Blend(blend: BlendNode): Boolean = FinalBlendPlanner.plan(
+        blend,
+        CoveragePlan.FullOrScissor,
+        SamplePlan.SingleSample,
+    ) != null
 
     private fun w3Paint(paint: PaintNode?, acceptsMaterialShader: Boolean): Boolean = paint == null || (
         (paint.shader == null || acceptsMaterialShader) && paint.blender == null && paint.colorFilter == null && paint.maskFilter == null &&
-            paint.pathEffect == null && paint.imageFilter == null && paint.style == PaintStyleNode.FILL &&
-            paint.blendMode == BlendMode.SRC_OVER
+            paint.pathEffect == null && paint.imageFilter == null && paint.style == PaintStyleNode.FILL
         )
 
     /**

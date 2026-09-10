@@ -74,7 +74,6 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskPhase
 import org.graphiks.kanvas.gpu.renderer.recording.PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION
-import org.graphiks.kanvas.gpu.renderer.recording.canonicalSolidRectSrcOverBlendPlan
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveScissorAuthority
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveTargetStateHash
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
@@ -317,10 +316,7 @@ public class GpuPlanTaskListLowerer {
                 packetIds = packets.map(GPUDrawPacket::packetId),
                 commandIds = packets.map(GPUDrawPacket::commandIdValue),
                 structuralPipelineKey = corePrimitiveRenderPipelineStructuralKey(
-                    semantic,
-                    clip,
-                    blend,
-                    sampleCount = 1,
+                    semantic, clip, blend, sampleCount = 1,
                     colorFormat = GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat(),
                 ),
                 uniformPlan = plan,
@@ -352,7 +348,7 @@ public class GpuPlanTaskListLowerer {
         val scissorBounds = GPUPixelBounds(scissor.left, scissor.top, scissor.right, scissor.bottom)
         val clip = if (scissorBounds == target) GPUClipCoveragePlan.NoClip else GPUClipCoveragePlan.Scissor(GPUBounds(scissor.left.toFloat(), scissor.top.toFloat(), scissor.right.toFloat(), scissor.bottom.toFloat()))
         val execution = if (scissorBounds == target) GPUClipExecutionPlan.NoClip else GPUClipExecutionPlan.ScissorOnly(scissorBounds)
-        val blend = canonicalSolidRectSrcOverBlendPlan()
+        val blend = W5bBlendPlanLowerer.lower(draw.blend)
         val analysisRecordId = "analysis.fill_rect.${draw.commandIndex}"
         val semantic = GPUCorePrimitivePayloadGatherer().gatherSemantic(GPUCorePrimitivePayloadInput(draw.commandIndex, GPUCorePrimitiveSourceFamily.Rect, GPUCorePrimitiveGeometryInput.Rect(rect.left, rect.top, rect.right, rect.bottom), listOf(color.red, color.green, color.blue, color.alpha), target, scissorBounds, clip, execution.canonicalIdentity(), blend.canonicalIdentity(), GPUFrameProvenance.None, GPUCorePrimitiveCoverageMode.FullOrScissor, analysisRecordId, "FillRect", GPUCorePrimitiveRectRouteAuthority.RectAxisAligned, corePrimitiveRectGeometryAuthority(rect, GPUTransformFacts.identity()), material = W5aMaterialPlanLowerer().material(materialPlanTable, draw.materialAuthority, draw.commandIndex)))
         val structuralKey = corePrimitiveRenderPipelineStructuralKey(
@@ -402,7 +398,7 @@ public class GpuPlanTaskListLowerer {
         val draws = planDraws.filterIsInstance<SolidRectDraw>()
         if (staging.id != expectedStagingResource.id || staging.ordinal != 0 || staging.kind != PlanResourceKind.Buffer || staging.format != null || staging.copyExtent() != null || staging.byteSize != expectedStaging || staging.usages() != setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead) || staging.lifetime != PlanResourceLifetime.FrameLocal || staging.firstPassIndex != 1 || staging.lastPassIndexExclusive != 2 || render.ordinal != 0 || readback.ordinal != 0 || render.id != expectedRenderId || readback.id != expectedReadbackId || render.target != target.id || readback.source != target.id || readback.staging != staging.id || readback.bytesPerRow != expectedRow || render.load != AttachmentLoadPlan.ClearTransparent || render.store != AttachmentStorePlan.Store || render.drawDataResources != null || graph.dependencies().singleOrNull()?.let { it.before == render.id && it.after == readback.id } != true || graph.visualCommandCount != draws.size || draws.size !in 1..512 || graph.peakFrameLocalBytes != expectedTargetBytes + expectedStaging) return null
         val targetRect = org.graphiks.math.geometry.RectI32(0, 0, graph.targetExtent.width, graph.targetExtent.height)
-        if (draws.any { draw -> draw.coverage != CoveragePlan.FullOrScissor || draw.sample != SamplePlan.SingleSample || draw.blend != BlendPlan.SrcOver || draw.copyVisibleBounds().isEmpty || draw.copyScissor().isEmpty || !targetRect.copy().intersect(draw.copyVisibleBounds()) || !draw.copyVisibleBounds().copy().intersect(draw.copyScissor()) || draw.copyScissor() != draw.copyVisibleBounds() }) return null
+        if (draws.any { draw -> draw.coverage != CoveragePlan.FullOrScissor || draw.sample != SamplePlan.SingleSample || draw.copyVisibleBounds().isEmpty || draw.copyScissor().isEmpty || !targetRect.copy().intersect(draw.copyVisibleBounds()) || !draw.copyVisibleBounds().copy().intersect(draw.copyScissor()) || draw.copyScissor() != draw.copyVisibleBounds() }) return null
         val table = graph.materialPlanTableOrNull()
         if (draws.any { draw ->
                 when (val authority = draw.materialAuthority) {

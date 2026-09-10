@@ -46,6 +46,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.passes.isCorePrimitiveDirectLaneBlend
+import org.graphiks.kanvas.gpu.renderer.passes.isW5bW3Blend
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedPacketAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedSemanticAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.W3SessionScratchV1
@@ -2018,7 +2019,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             packet.renderStepId.value != CORE_PRIMITIVE_RENDER_STEP_IDENTITY ||
             packet.renderStepVersion != 1 ||
             packet.role != GPUDrawPacketRole.Shading ||
-            blend.canonicalIdentity() != canonicalSolidRectSrcOverBlendPlan().canonicalIdentity() ||
+            !blend.isW5bW3Blend() ||
             packet.renderPipelineKey != corePrimitiveRenderPipelineStructuralKey(
                 semantic,
                 clip,
@@ -2045,7 +2046,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             semantic.material !is GPUCorePrimitiveMaterialPayload.SolidColor ||
             semantic.targetBounds != targetBounds ||
             semantic.coverageMode != GPUCorePrimitiveCoverageMode.FullOrScissor ||
-            semantic.blendPlanIdentity != canonicalSolidRectSrcOverBlendPlan().canonicalIdentity() ||
+            semantic.blendPlanIdentity != blend.canonicalIdentity() ||
             semantic.analysisRecordId != "analysis.fill_rect.${packet.commandIdValue}" ||
             semantic.analysisCommandFamily != "FillRect" ||
             semantic.payloadRef.commandIdValue != packet.commandIdValue ||
@@ -2072,6 +2073,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             else -> false
         }
     }
+
 
     fun build(
         request: GPUCorePrimitivePreparedFrameRequest,

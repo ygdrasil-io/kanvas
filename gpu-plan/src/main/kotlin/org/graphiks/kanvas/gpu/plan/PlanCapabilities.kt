@@ -9,6 +9,7 @@ public enum class PlanOperationCapability {
     Readback,
     DepthStencilAttachment,
     StencilCover,
+    StorageBuffer,
 }
 
 /** Exact texture format, sample count, and usage envelope supported by a planning device. */
@@ -86,6 +87,14 @@ public class PlanCapabilitySnapshot private constructor(
     supportedDepthStencilFormats: Set<PlanDepthStencilFormat>,
     supportedTextureSampleSupports: Set<PlanTextureSampleSupport>,
     supportedTextureResolveSupports: Set<PlanTextureResolveSupport>,
+    public val maxUniformBufferBindingSizeBytesI64: Long?,
+    public val maxStorageBufferBindingSizeBytesI64: Long?,
+    public val maxStorageBuffersPerShaderStageI32: Int?,
+    public val maxUniformBuffersPerShaderStageI32: Int?,
+    public val maxSampledTexturesPerShaderStageI32: Int?,
+    public val maxSamplersPerShaderStageI32: Int?,
+    public val maxBindingsPerBindGroupI32: Int?,
+    public val maxBindGroupsI32: Int?,
 ) {
     private val formats: Set<PlanLogicalColorFormat> = supportedFormats.toSet().let(::immutableSet)
     private val operations: Set<PlanOperationCapability> = supportedOperations.toSet().let(::immutableSet)
@@ -137,12 +146,24 @@ public class PlanCapabilitySnapshot private constructor(
         bufferAllocationPolicy == other.bufferAllocationPolicy &&
         depthStencilFormats == other.depthStencilFormats &&
         textureSampleSupports == other.textureSampleSupports &&
-        textureResolveSupports == other.textureResolveSupports
+        textureResolveSupports == other.textureResolveSupports &&
+        maxUniformBufferBindingSizeBytesI64 == other.maxUniformBufferBindingSizeBytesI64 &&
+        maxStorageBufferBindingSizeBytesI64 == other.maxStorageBufferBindingSizeBytesI64 &&
+        maxStorageBuffersPerShaderStageI32 == other.maxStorageBuffersPerShaderStageI32 &&
+        maxUniformBuffersPerShaderStageI32 == other.maxUniformBuffersPerShaderStageI32 &&
+        maxSampledTexturesPerShaderStageI32 == other.maxSampledTexturesPerShaderStageI32 &&
+        maxSamplersPerShaderStageI32 == other.maxSamplersPerShaderStageI32 &&
+        maxBindingsPerBindGroupI32 == other.maxBindingsPerBindGroupI32 &&
+        maxBindGroupsI32 == other.maxBindGroupsI32
 
     override fun hashCode(): Int = listOf(
         deviceGeneration, maxTextureDimension2D, maxBufferSizeBytes, copyBytesPerRowAlignment, formats,
         minUniformBufferOffsetAlignment, maxDynamicUniformBuffersPerPipelineLayout, operations, bufferAllocationPolicy,
         depthStencilFormats, textureSampleSupports, textureResolveSupports,
+        maxUniformBufferBindingSizeBytesI64, maxStorageBufferBindingSizeBytesI64,
+        maxStorageBuffersPerShaderStageI32, maxUniformBuffersPerShaderStageI32,
+        maxSampledTexturesPerShaderStageI32, maxSamplersPerShaderStageI32,
+        maxBindingsPerBindGroupI32, maxBindGroupsI32,
     ).hashCode()
 
     public companion object {
@@ -162,6 +183,14 @@ public class PlanCapabilitySnapshot private constructor(
                 supportedDepthStencilFormats,
             ),
             supportedTextureResolveSupports: Set<PlanTextureResolveSupport> = emptySet(),
+            maxUniformBufferBindingSizeBytesI64: Long? = null,
+            maxStorageBufferBindingSizeBytesI64: Long? = null,
+            maxStorageBuffersPerShaderStageI32: Int? = null,
+            maxUniformBuffersPerShaderStageI32: Int? = null,
+            maxSampledTexturesPerShaderStageI32: Int? = null,
+            maxSamplersPerShaderStageI32: Int? = null,
+            maxBindingsPerBindGroupI32: Int? = null,
+            maxBindGroupsI32: Int? = null,
         ): PlanCapabilitySnapshot {
             require(deviceGeneration >= 0) { "Device generation must be non-negative" }
             require(maxTextureDimension2D > 0) { "Maximum texture dimension must be positive" }
@@ -194,7 +223,11 @@ public class PlanCapabilitySnapshot private constructor(
             return PlanCapabilitySnapshot(deviceGeneration, maxTextureDimension2D, maxBufferSizeBytes,
                 copyBytesPerRowAlignment, supportedFormats, minUniformBufferOffsetAlignment,
                 maxDynamicUniformBuffersPerPipelineLayout, supportedOperations, bufferAllocationPolicy,
-                supportedDepthStencilFormats, supportedTextureSampleSupports, supportedTextureResolveSupports)
+                supportedDepthStencilFormats, supportedTextureSampleSupports, supportedTextureResolveSupports,
+                maxUniformBufferBindingSizeBytesI64, maxStorageBufferBindingSizeBytesI64,
+                maxStorageBuffersPerShaderStageI32, maxUniformBuffersPerShaderStageI32,
+                maxSampledTexturesPerShaderStageI32, maxSamplersPerShaderStageI32,
+                maxBindingsPerBindGroupI32, maxBindGroupsI32)
         }
 
         private fun defaultTextureSampleSupports(

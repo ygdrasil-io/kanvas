@@ -19,6 +19,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.passes.isW5bW3Blend
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveClipStencilAttachmentAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveClipStencilAttachmentFormat
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskPreparedAuthorityValidation
@@ -5031,7 +5032,7 @@ internal class GPUFramePreflighter(
                     authority.uniformSlabSeal == null &&
                     authority.structuralPipelineKey == scratch.structuralPipelineKey &&
                     packet.analysisRecordId == semantic.analysisRecordId &&
-                    packet.blendPlan.isCanonicalSolidRectSrcOver() &&
+                    packet.blendPlan?.isW5bW3Blend() == true &&
                     packet.clipExecutionPlan == if (semantic.scissorBounds == firstSemantic.targetBounds) {
                         org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan.NoClip
                     } else {

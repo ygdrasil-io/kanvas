@@ -9,18 +9,18 @@ import org.graphiks.math.color.ColorF32
 /** Normalizes the W5a Solid/Opacity subset once, before a graph is published Ready. */
 public object EffectiveMaterialPlanner {
     public sealed interface Result {
-        public data class Ready(public val table: MaterialPlanTable, public val root: MaterialPlanRef) : Result
+        public data class Ready(
+            public val table: MaterialPlanTable,
+            public val root: MaterialPlanRef,
+            public val blend: BlendPlan = BlendPlan.LegacySrcOverV1,
+        ) : Result
         public data class Refused(public val diagnosticCode: String) : Result
     }
 
     public fun plan(draw: DrawNode): Result {
-        val srcOver = when (val blend = draw.blend) {
-            BlendNode.SrcOver -> true
-            is BlendNode.Mode -> blend.mode == org.graphiks.kanvas.render.ir.BlendMode.SRC_OVER
-            is BlendNode.Paint -> blend.mode == org.graphiks.kanvas.render.ir.BlendMode.SRC_OVER && blend.blender == null
-            is BlendNode.Custom -> false
-        }
-        if (!srcOver || draw.effects !is EffectStack.Empty || draw.resource != null || draw.operationBlendMode != null) {
+        val blend = FinalBlendPlanner.plan(draw.blend, CoveragePlan.FullOrScissor, SamplePlan.SingleSample)
+            ?: return Result.Refused(W5aPlanDiagnostics.UnsupportedDrawState)
+        if (draw.effects !is EffectStack.Empty || draw.resource != null || draw.operationBlendMode != null) {
             return Result.Refused(W5aPlanDiagnostics.UnsupportedDrawState)
         }
         var material = draw.material
@@ -36,7 +36,7 @@ public object EffectiveMaterialPlanner {
         val base = when (material) {
             MaterialNode.Transparent -> return Result.Ready(
                 MaterialPlanTable.of(listOf(MaterialPlanEntry(MaterialProgramPlan.TransparentV1, MaterialBindingPlan.EmptyV1))),
-                MaterialPlanRef(0),
+                MaterialPlanRef(0), blend,
             )
             is MaterialNode.Solid -> MaterialPlanEntry(
                 MaterialProgramPlan.SolidLinearPremulV1,
@@ -57,7 +57,7 @@ public object EffectiveMaterialPlanner {
         if (shaderAlpha == 0f || paintAlpha == 0f) {
             return Result.Ready(
                 MaterialPlanTable.of(listOf(MaterialPlanEntry(MaterialProgramPlan.TransparentV1, MaterialBindingPlan.EmptyV1))),
-                MaterialPlanRef(0),
+                MaterialPlanRef(0), blend,
             )
         }
         val entries = mutableListOf(base)
@@ -75,6 +75,6 @@ public object EffectiveMaterialPlanner {
                 MaterialBindingPlan.OpacityF32V1.of(paintAlpha),
             )
         }
-        return Result.Ready(MaterialPlanTable.of(entries), MaterialPlanRef(entries.lastIndex))
+        return Result.Ready(MaterialPlanTable.of(entries), MaterialPlanRef(entries.lastIndex), blend)
     }
 }

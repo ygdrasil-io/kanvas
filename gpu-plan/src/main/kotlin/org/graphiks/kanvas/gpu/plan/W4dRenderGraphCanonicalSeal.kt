@@ -258,7 +258,7 @@ private class W4dGraphDigestWriter {
         }
         text("$prefix.coverage", pathDraw.coverage.name)
         text("$prefix.sample", pathDraw.sample.name)
-        text("$prefix.blend", pathDraw.blend.name)
+        text("$prefix.blend", pathDraw.blend.canonicalLabel)
         text("$prefix.strategy", pathDraw.strategy.name)
         rect("$prefix.scissor", pathDraw.copyScissorI32())
         when (pathDraw) {

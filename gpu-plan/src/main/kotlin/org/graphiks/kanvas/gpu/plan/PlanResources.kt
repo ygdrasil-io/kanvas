@@ -17,6 +17,7 @@ public enum class PlanResourceRole {
     IndexData,
     UniformData,
     DepthStencil,
+    DestinationSnapshot,
 }
 public enum class PlanResourceUsage {
     RenderAttachment,
@@ -28,6 +29,7 @@ public enum class PlanResourceUsage {
     Index,
     Uniform,
     DepthStencilAttachment,
+    StorageRead,
 }
 public enum class PlanResourceLifetime { FrameLocal }
 
