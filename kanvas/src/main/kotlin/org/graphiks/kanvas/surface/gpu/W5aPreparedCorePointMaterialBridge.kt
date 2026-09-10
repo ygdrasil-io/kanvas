@@ -35,6 +35,7 @@ internal data class W5aPreparedCorePointMaterialBridge(
             val entries = mutableListOf<MaterialPlanEntry>()
             val refs = linkedMapOf<Int, MaterialPlanRef>()
             operations.forEachIndexed { operationIndex, operation ->
+                if (operation.corePointGeometryRefusalOrNull() != null) return@forEachIndexed
                 if (!operation.isW5aPreparedCorePointCandidate()) return@forEachIndexed
                 val captured = DisplayOpSceneAdapter.capture(
                     operations = listOf(operation),

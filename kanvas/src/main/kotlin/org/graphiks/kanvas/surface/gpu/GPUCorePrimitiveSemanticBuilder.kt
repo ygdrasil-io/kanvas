@@ -4,6 +4,9 @@ import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.pow
 import kotlin.math.sqrt
+import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.paint.PathEffect
+import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUDrawAnalysisRecord
 import org.graphiks.kanvas.gpu.renderer.analysis.matchesCorePrimitiveRectGeometry
 import org.graphiks.kanvas.gpu.renderer.analysis.matchesCorePrimitiveRRectGeometry
@@ -105,6 +108,9 @@ internal object GPUCorePrimitiveSemanticBuilder {
             .flatMap(GPUTask.Render::drawPackets)
             .groupBy { packet -> packet.commandIdValue }
         visualCommands.forEach { visual ->
+            (visual.normalized as? NormalizedDrawCommand.FillPath)?.corePointGeometryRefusalOrNull()?.let { refusal ->
+                return refusal.toGatherRefusal(visual)
+            }
             visual.geometryRefusal?.let { refusal ->
                 return refusal.toGatherRefusal(visual)
             }
@@ -1043,22 +1049,7 @@ private fun NormalizedDrawCommand.FillPath.pathDeviceGeometry(
     targetBounds: GPUPixelBounds,
 ): GPUCorePrimitiveGeometryInput {
     if (source.operation == "drawPoint" || source.operation == "drawPoints.points") {
-        val refusalCode = when {
-            dashIntervals?.isNotEmpty() == true -> "unsupported.core_primitive.point.path_effect_exact_lowering"
-            !strokeWidth.isFinite() || strokeWidth < 0f -> "unsupported.core_primitive.point.invalid_width"
-            strokeCap == "round" -> "unsupported.core_primitive.point.round_cap_exact_lowering"
-            else -> null
-        }
-        if (refusalCode != null) {
-            refuseGeometry(
-                refusalCode,
-                mapOf(
-                    "width" to strokeWidth.toString(),
-                    "cap" to strokeCap,
-                    "dashIntervals" to dashIntervals?.joinToString(",").orEmpty(),
-                ),
-            )
-        }
+        corePointGeometryRefusalOrNull()?.let { refuseGeometry(it.code, it.refusalFacts) }
         if (strokeWidth == 0f) return hairlinePointDeviceGeometry(targetBounds)
     }
     if (stroke) return strokeDeviceGeometry(targetBounds)
@@ -1127,6 +1118,42 @@ private fun NormalizedDrawCommand.FillPath.directTriangleDeviceGeometryOrNull(
         inverseFill = false,
         sourceAuthority = pathDescriptor.sourceAuthority,
     )
+}
+
+/** Validates point geometry before either the legacy mapper or W5a planner evaluates paint. */
+internal fun DisplayOp.corePointGeometryRefusalOrNull(): GPUCorePrimitiveGeometryRefusal? {
+    val pointPaint = when (this) {
+        is DisplayOp.DrawPoint -> paint
+        is DisplayOp.DrawPoints -> paint.takeIf { mode == PointMode.POINTS }
+        else -> null
+    } ?: return null
+    return corePointGeometryRefusal(
+        pointPaint.strokeWidth, pointPaint.strokeCap.name.lowercase(),
+        (pointPaint.pathEffect as? PathEffect.Dash)?.intervals,
+    )
+}
+
+private fun NormalizedDrawCommand.FillPath.corePointGeometryRefusalOrNull(): GPUCorePrimitiveGeometryRefusal? =
+    if (source.operation == "drawPoint" || source.operation == "drawPoints.points") {
+        corePointGeometryRefusal(strokeWidth, strokeCap, dashIntervals)
+    } else null
+
+private fun corePointGeometryRefusal(
+    strokeWidth: Float,
+    strokeCap: String,
+    dashIntervals: FloatArray?,
+): GPUCorePrimitiveGeometryRefusal? {
+    val code = when {
+        dashIntervals?.isNotEmpty() == true -> "unsupported.core_primitive.point.path_effect_exact_lowering"
+        !strokeWidth.isFinite() || strokeWidth < 0f -> "unsupported.core_primitive.point.invalid_width"
+        strokeCap == "round" -> "unsupported.core_primitive.point.round_cap_exact_lowering"
+        else -> return null
+    }
+    return GPUCorePrimitiveGeometryRefusal(code, mapOf(
+        "width" to strokeWidth.toString(),
+        "cap" to strokeCap,
+        "dashIntervals" to dashIntervals?.joinToString(",").orEmpty(),
+    ))
 }
 
 private fun NormalizedDrawCommand.FillPath.isHairlinePointCommand(): Boolean =

@@ -3765,6 +3765,8 @@ sealed interface NormalizedDrawCommand {
         override val material: GPUMaterialDescriptor? = null,
         /** Versioned sealed material reference used only by the W5a prepared point bridge. */
         val w5aMaterialPlanRef: MaterialPlanRef? = null,
+        /** Non-renderable geometry keeps its command and has no material to evaluate. */
+        val preMaterialGeometryRefusalCode: String? = null,
         override val blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
         override val bounds: GPUBounds,
         override val ordering: GPUOrderingFacts,
@@ -3790,8 +3792,8 @@ sealed interface NormalizedDrawCommand {
         val maskFilter: NormalizedMaskFilter? = null,
     ) : NormalizedDrawCommand {
         init {
-            require((material == null) != (w5aMaterialPlanRef == null)) {
-                "FillPath requires exactly one legacy descriptor or W5a material reference"
+            require(listOf(material, w5aMaterialPlanRef, preMaterialGeometryRefusalCode).count { it != null } == 1) {
+                "FillPath requires one legacy descriptor, W5a material reference, or geometry refusal"
             }
         }
 

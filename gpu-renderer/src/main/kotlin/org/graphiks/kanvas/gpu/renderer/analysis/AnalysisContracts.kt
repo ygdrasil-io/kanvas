@@ -2423,7 +2423,7 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
         val descriptor = material
         val w5aPointMaterial = w5aMaterialPlanRef != null
         val materialIsSolid = descriptor?.kind == GPUMaterialKind.SolidColor || w5aPointMaterial
-        return coordinateRefusalCode() ?: maskFilter?.let { mf ->
+        return preMaterialGeometryRefusalCode ?: coordinateRefusalCode() ?: maskFilter?.let { mf ->
             when (mf) {
                 is NormalizedMaskFilter.Blur -> mf.refusalCode()
             }
@@ -2542,6 +2542,7 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
 
     private fun NormalizedDrawCommand.analysisMaterialKey(): String =
         (this as? NormalizedDrawCommand.FillPath)?.w5aMaterialPlanRef?.let { ref -> "pending.material.w5a.ref.${ref.indexI32}" }
+            ?: (this as? NormalizedDrawCommand.FillPath)?.preMaterialGeometryRefusalCode?.let { "geometry.refused:$it" }
             ?: "pending.material.${requireNotNull(material).kind.name.lowercase()}"
 
     /**
