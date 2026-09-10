@@ -972,7 +972,7 @@ class W5aMaterialSurfacePixelTest {
         // Fixed-function encode/decode bounds are propagated between every draw, including
         // the interleaved fourth Rect and the RRect's 3/4-coverage observation.
         val rectColor = ColorARGB.of(255, 255, 0, 0)
-        val rrectColor = ColorARGB.Blue
+        val rrectColor = ColorARGB.White
         val pathColor = ColorARGB.Green
         // The direct triangle and stencil Rect occupy distinct public geometry lanes:
         // (1,7) is covered only by the direct triangle, whereas (7,7) is covered
@@ -990,7 +990,9 @@ class W5aMaterialSurfacePixelTest {
         val recorder = PictureRecorder()
         recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 8f, 8f)).apply {
             drawRect(
-                RectF32.ofLTRB(0f, 0f, 8f, 8f),
+                // Leave the RRect's fractional right edge over the transparent attachment;
+                // its full-cover interior still overlaps this Rect to prove recorded order.
+                RectF32.ofLTRB(0f, 0f, 6f, 8f),
                 Paint(
                     color = ColorARGB.of(255, 1, 2, 3),
                     shader = Shader.Opacity(Shader.SolidColor(rectColor), 1f),
@@ -1027,23 +1029,30 @@ class W5aMaterialSurfacePixelTest {
         val first = W5aSolidOpacityCpuOracle.draw(rectColor, 1f, paintAlphaF32 = 1f)
         val second = W5aSolidOpacityCpuOracle.draw(rrectColor, 1f, paintAlphaF32 = 1f,
             destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(first)))
+        val rrectFractional = W5aSolidOpacityCpuOracle.draw(
+            rrectColor,
+            1f,
+            paintAlphaF32 = 1f,
+            coverageF32 = 0.75f,
+        )
         val third = W5aSolidOpacityCpuOracle.draw(pathColor, 1f, paintAlphaF32 = 1f,
             destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(first)))
         // Separate public observations keep Rect, RRect, and Path materialized;
         // the interleaved Rect replaces the RRect only in its own hard-edge cell.
         WgslFloatEnvelopeV1Oracle.assertAdmits(second, result.pixels.copyOfRange((3 * 8 + 5) * 4, (3 * 8 + 6) * 4))
+        WgslFloatEnvelopeV1Oracle.assertAdmits(rrectFractional, result.pixels.copyOfRange((3 * 8 + 6) * 4, (3 * 8 + 7) * 4))
         val pathOffset = if (stencil) (7 * 8 + 7) * 4 else (7 * 8 + 1) * 4
         WgslFloatEnvelopeV1Oracle.assertAdmits(third, result.pixels.copyOfRange(pathOffset, pathOffset + 4))
         WgslFloatEnvelopeV1Oracle.assertAdmits(first, result.pixels.copyOfRange((0 * 8 + 0) * 4, (0 * 8 + 1) * 4))
         if (interleavedRect) WgslFloatEnvelopeV1Oracle.assertAdmits(
             first, result.pixels.copyOfRange((2 * 8 + 2) * 4, (2 * 8 + 3) * 4),
         )
-        path.addRect(RectF32.ofLTRB(7f, 0f, 8f, 1f))
+        path.addRect(RectF32.ofLTRB(5f, 0f, 6f, 1f))
         val replay = Surface(8, 8)
         replay.canvas { captured.playback(this) }
         val replayPixels = replay.render().pixels
         assertContentEquals(result.pixels, replayPixels)
-        WgslFloatEnvelopeV1Oracle.assertAdmits(first, replayPixels.copyOfRange((0 * 8 + 7) * 4, (0 * 8 + 8) * 4))
+        WgslFloatEnvelopeV1Oracle.assertAdmits(first, replayPixels.copyOfRange((0 * 8 + 5) * 4, (0 * 8 + 6) * 4))
     }
 
     @Test
