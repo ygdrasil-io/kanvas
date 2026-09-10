@@ -596,6 +596,47 @@ class W5aMaterialSurfacePixelTest {
     }
 
     @Test
+    fun `public 64 point POINTS command preserves prepared core point capacity`() {
+        val source = ColorARGB.of(211, 71, 199, 127)
+        val points = (0 until 64).map { index ->
+            Point2F32((index % 8) * 4f + 1.5f, (index / 8) * 4f + 1.5f)
+        }
+        val surface = Surface(32, 32)
+        surface.canvas {
+            drawPoints(
+                PointMode.POINTS,
+                points,
+                Paint(
+                    color = ColorARGB.of(173, 7, 8, 9),
+                    shader = Shader.Opacity(Shader.SolidColor(source), 0.4f),
+                    strokeWidth = 2f,
+                    antiAlias = false,
+                ),
+            )
+        }
+
+        val result = surface.render()
+        val expected = W5aSolidOpacityCpuOracle.draw(source, 0.4f, paintAlphaF32 = 173f / 255f)
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange(1 * 32 * 4 + 1 * 4, 1 * 32 * 4 + 2 * 4))
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange(29 * 32 * 4 + 29 * 4, 29 * 32 * 4 + 30 * 4))
+    }
+
+    @Test
+    fun `public ROUND opacity point refuses before W5a material selection`() {
+        val surface = Surface(6, 6)
+        surface.canvas {
+            drawPoint(3f, 3f, Paint(
+                shader = Shader.Opacity(Shader.SolidColor(ColorARGB.of(197, 71, 199, 127)), 0.4f),
+                strokeCap = StrokeCap.ROUND,
+                strokeWidth = 2f,
+                antiAlias = false,
+            ))
+        }
+        val failure = assertFailsWith<IllegalStateException> { surface.render() }
+        assertTrue(failure.message.orEmpty().contains("unsupported.core_primitive.point.round_cap_exact_lowering"), failure.message)
+    }
+
+    @Test
     fun `public ROUND drawPoints retain the exact lowering refusal`() {
         val surface = Surface(6, 6)
         surface.canvas {

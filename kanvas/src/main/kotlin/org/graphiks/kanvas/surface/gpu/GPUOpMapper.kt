@@ -130,6 +130,7 @@ internal object GPUOpMapper {
         preparedTextInventory: PreparedTextFrameInventory? = null,
         preparedVerticesInventory: PreparedVerticesFrameInventory? = null,
         elidedOperationIndices: Set<Int> = emptySet(),
+        w5aPointMaterialRefs: Map<Int, org.graphiks.kanvas.gpu.plan.MaterialPlanRef> = emptyMap(),
     ): GPUOpMapping {
         val visual = mutableListOf<GPUFramePathVisualCommand>()
         val stateEvents = mutableListOf<GPUFramePathStateEvent>()
@@ -172,6 +173,25 @@ internal object GPUOpMapper {
         operations.forEachIndexed { operationIndex, operation ->
             if (operationIndex in elidedOperationIndices) {
                 return@forEachIndexed
+            }
+            // ROUND points have no exact core geometry lowering. Reject before either
+            // material authority can be selected, including an otherwise valid W5a shader.
+            val pointPaint = when (operation) {
+                is DisplayOp.DrawPoint -> operation.paint
+                is DisplayOp.DrawPoints -> operation.paint.takeIf { operation.mode == PointMode.POINTS }
+                else -> null
+            }
+            if (pointPaint?.strokeCap == org.graphiks.kanvas.paint.StrokeCap.ROUND) {
+                return GPUOpMapping(
+                    visualCommands = emptyList(),
+                    stateEvents = stateEvents.toList(),
+                    preparedRefusal = GPUPreparedOperationRefusal(
+                        commandId = nextCommandId(),
+                        operationIndex = operationIndex,
+                        code = "unsupported.core_primitive.point.round_cap_exact_lowering",
+                        facts = mapOf("source" to operation.coreSourceOperation()),
+                    ),
+                )
             }
             operation.clipTransformRefusalOrNull(target)?.let { refusal ->
                 return GPUOpMapping(
@@ -622,6 +642,7 @@ internal object GPUOpMapper {
                         operation = operation,
                         commandId = GPUDrawCommandID(paintOrder),
                         paintOrder = paintOrder,
+                        w5aMaterialPlanRef = w5aPointMaterialRefs[operationIndex],
                         context = GPUPreparedImageLoweringContext(
                             provenance = provenance,
                             target = target,
@@ -790,6 +811,7 @@ internal object GPUOpMapper {
         commandId: GPUDrawCommandID,
         paintOrder: Int,
         context: GPUPreparedImageLoweringContext,
+        w5aMaterialPlanRef: org.graphiks.kanvas.gpu.plan.MaterialPlanRef? = null,
     ): GPUFramePathVisualCommand? {
         var loweringRefusal: GPUCorePrimitiveGeometryRefusal? = null
         val rawNormalized = mapCoreOperation(
@@ -799,6 +821,7 @@ internal object GPUOpMapper {
             provenance = context.provenance,
             target = context.target,
             config = context.config,
+            w5aMaterialPlanRef = w5aMaterialPlanRef,
             onGeometryRefusal = { refusal -> loweringRefusal = refusal },
         ) ?: return null
         val geometryRefusal = loweringRefusal ?: operation.coreGeometryRefusalOrNull()
@@ -846,6 +869,7 @@ internal object GPUOpMapper {
         provenance: GPUFrameProvenance,
         target: GPUTargetFacts,
         config: RenderConfig,
+        w5aMaterialPlanRef: org.graphiks.kanvas.gpu.plan.MaterialPlanRef?,
         onGeometryRefusal: (GPUCorePrimitiveGeometryRefusal) -> Unit,
     ): NormalizedDrawCommand? {
         var loweringRefusal: GPUCorePrimitiveGeometryRefusal? = null
@@ -865,7 +889,7 @@ internal object GPUOpMapper {
                     points.paint,
                     points.transform,
                     points.clip,
-                ).toPathCommand(commandId, target, config).copy(
+                ).toPathCommand(commandId, target, config, w5aMaterialPlanRef = w5aMaterialPlanRef).copy(
                     stroke = false,
                     source = GPUCommandSource(adapter = "kanvas-surface", operation = "drawPoint"),
                 )
@@ -896,7 +920,7 @@ internal object GPUOpMapper {
                 operation.paint,
                 operation.transform,
                 operation.clip,
-            ).toPathCommand(commandId, target, config).copy(
+            ).toPathCommand(commandId, target, config, w5aMaterialPlanRef = w5aMaterialPlanRef).copy(
                 stroke = operation.mode != PointMode.POINTS,
                 source = GPUCommandSource(
                     adapter = "kanvas-surface",
@@ -936,7 +960,7 @@ internal object GPUOpMapper {
                     "reason" to (failure.message ?: "path_vertex_budget"),
                 ),
             ).also(onGeometryRefusal)
-            operation.toPathBudgetPlaceholder(commandId, target)
+            operation.toPathBudgetPlaceholder(commandId, target, w5aMaterialPlanRef)
         } ?: return null
 
         val targetBounds = when {
@@ -1217,6 +1241,7 @@ private fun DisplayOp.isCorePathOperation(): Boolean = when (this) {
 private fun DisplayOp.toPathBudgetPlaceholder(
     commandId: GPUDrawCommandID,
     target: GPUTargetFacts,
+    w5aMaterialPlanRef: org.graphiks.kanvas.gpu.plan.MaterialPlanRef?,
 ): NormalizedDrawCommand.FillPath {
     val (paint, clip) = when (this) {
         is DisplayOp.DrawPoint -> paint to clip
@@ -1233,6 +1258,7 @@ private fun DisplayOp.toPathBudgetPlaceholder(
         tessellatedVertices = emptyList(),
         contourStarts = listOf(0),
         edgeCount = 0,
+        w5aMaterialPlanRef = w5aMaterialPlanRef,
     )
 }
 
@@ -1336,6 +1362,7 @@ private fun DisplayOp.DrawPath.toPathCommand(
     target: GPUTargetFacts,
     config: RenderConfig,
     sourceAuthority: GPUPathSourceAuthority = GPUPathSourceAuthority.Unknown,
+    w5aMaterialPlanRef: org.graphiks.kanvas.gpu.plan.MaterialPlanRef? = null,
 ): NormalizedDrawCommand.FillPath {
     config.pathEdgeFanBudgetRefusalCodeOrNull()?.let { code ->
         throw PathTessellationBudgetExceeded(
@@ -1358,6 +1385,7 @@ private fun DisplayOp.DrawPath.toPathCommand(
         flattened.contourStarts.ifEmpty { listOf(0) },
         flattened.points.size,
         sourceAuthority,
+        w5aMaterialPlanRef,
     )
 }
 
@@ -2018,9 +2046,10 @@ internal fun DisplayOp.DrawPath.toNormalizedCommand(
     contourStarts: List<Int>,
     edgeCount: Int,
     sourceAuthority: GPUPathSourceAuthority = GPUPathSourceAuthority.Unknown,
+    w5aMaterialPlanRef: org.graphiks.kanvas.gpu.plan.MaterialPlanRef? = null,
 ): NormalizedDrawCommand.FillPath {
     val paint = this.paint
-    val material = paint.toMaterial()
+    val material = if (w5aMaterialPlanRef == null) paint.toMaterial() else null
     val bounds = computeBounds(tessellatedVertices)
     val clip = this.clip.toGPUClipFacts(target)
     val transform = this.transform.toGPUTransformFacts()
@@ -2054,6 +2083,7 @@ internal fun DisplayOp.DrawPath.toNormalizedCommand(
         clip = clip,
         layer = GPULayerFacts.root(target),
         material = material,
+        w5aMaterialPlanRef = w5aMaterialPlanRef,
         bounds = bounds,
         ordering = GPUOrderingFacts(
             paintOrder = 0,

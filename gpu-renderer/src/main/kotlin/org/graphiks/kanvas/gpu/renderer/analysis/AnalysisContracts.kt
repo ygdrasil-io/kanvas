@@ -564,7 +564,7 @@ class GPUFirstRoutePlanner(
             commandFamily = "FillRect",
             boundsHash = command.bounds.stableHash(),
             routeDecisionLabel = routeLabel,
-            materialKeyHash = "pending.material.${command.material.kind.name.lowercase()}",
+            materialKeyHash = command.analysisMaterialKey(),
             renderStepCandidates = listOf(renderStep),
             sortKey = SortKey(command.ordering.paintOrder.toLong()),
             diagnostics = command.transform.analysisDiagnostics(recordId = recordId),
@@ -852,7 +852,7 @@ class GPUFirstRoutePlanner(
             commandFamily = "FillRRect",
             boundsHash = command.bounds.stableHash(),
             routeDecisionLabel = routeLabel,
-            materialKeyHash = "pending.material.${command.material.kind.name.lowercase()}",
+            materialKeyHash = command.analysisMaterialKey(),
             renderStepCandidates = listOf(renderStep),
             sortKey = SortKey(command.ordering.paintOrder.toLong()),
             diagnostics = command.transform.analysisDiagnostics(recordId = recordId) +
@@ -942,7 +942,7 @@ class GPUFirstRoutePlanner(
             commandFamily = "FillPath",
             boundsHash = command.bounds.stableHash(),
             routeDecisionLabel = "native.path_hairline.direct",
-            materialKeyHash = "pending.material.${command.material.kind.name.lowercase()}",
+            materialKeyHash = command.analysisMaterialKey(),
             renderStepCandidates = listOf(renderStep),
             sortKey = SortKey(command.ordering.paintOrder.toLong()),
             diagnostics = command.transform.analysisDiagnostics(recordId = recordId) +
@@ -1009,7 +1009,7 @@ class GPUFirstRoutePlanner(
             commandFamily = "FillPath",
             boundsHash = command.bounds.stableHash(),
             routeDecisionLabel = "prepared.path_stroke.tessellated",
-            materialKeyHash = "pending.material.${command.material.kind.name.lowercase()}",
+            materialKeyHash = command.analysisMaterialKey(),
             renderStepCandidates = listOf(renderStep),
             sortKey = SortKey(command.ordering.paintOrder.toLong()),
             diagnostics = command.transform.analysisDiagnostics(recordId = recordId) +
@@ -1062,7 +1062,7 @@ class GPUFirstRoutePlanner(
             commandFamily = "FillPath",
             boundsHash = command.bounds.stableHash(),
             routeDecisionLabel = "native.path_stroke.stencil_cover",
-            materialKeyHash = "pending.material.${command.material.kind.name.lowercase()}",
+            materialKeyHash = command.analysisMaterialKey(),
             renderStepCandidates = listOf(renderStep),
             sortKey = SortKey(command.ordering.paintOrder.toLong()),
             diagnostics = command.transform.analysisDiagnostics(recordId = recordId) +
@@ -1118,7 +1118,7 @@ class GPUFirstRoutePlanner(
             commandFamily = "FillPath",
             boundsHash = command.bounds.stableHash(),
             routeDecisionLabel = "prepared.path_fill.tessellated",
-            materialKeyHash = "pending.material.${command.material.kind.name.lowercase()}",
+            materialKeyHash = command.analysisMaterialKey(),
             renderStepCandidates = listOf(renderStep),
             sortKey = SortKey(command.ordering.paintOrder.toLong()),
             diagnostics = command.transform.analysisDiagnostics(recordId = recordId) +
@@ -1193,7 +1193,7 @@ class GPUFirstRoutePlanner(
             commandFamily = "FillPath",
             boundsHash = command.bounds.stableHash(),
             routeDecisionLabel = routeLabel,
-            materialKeyHash = "pending.material.${command.material.kind.name.lowercase()}",
+            materialKeyHash = command.analysisMaterialKey(),
             renderStepCandidates = listOf(renderStep),
             sortKey = SortKey(command.ordering.paintOrder.toLong()),
             diagnostics = command.transform.analysisDiagnostics(recordId = recordId) +
@@ -1247,7 +1247,7 @@ class GPUFirstRoutePlanner(
             commandFamily = "FillPath",
             boundsHash = command.bounds.stableHash(),
             routeDecisionLabel = "native.path_fill.stencil_cover",
-            materialKeyHash = "pending.material.${command.material.kind.name.lowercase()}",
+            materialKeyHash = command.analysisMaterialKey(),
             renderStepCandidates = listOf(renderStep),
             sortKey = SortKey(command.ordering.paintOrder.toLong()),
             diagnostics = command.transform.analysisDiagnostics(recordId = recordId) +
@@ -2419,12 +2419,18 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
             scaleX == 1f && scaleY == 1f && skewX == 0f && skewY == 0f
 
     /** Returns the canonical FillPath refusal code, or null when analysis may keep a candidate. */
-    private fun NormalizedDrawCommand.FillPath.refusalCode(): String? =
-        coordinateRefusalCode() ?: maskFilter?.let { mf ->
+    private fun NormalizedDrawCommand.FillPath.refusalCode(): String? {
+        val descriptor = material
+        val w5aPointMaterial = w5aMaterialPlanRef != null
+        val materialIsSolid = descriptor?.kind == GPUMaterialKind.SolidColor || w5aPointMaterial
+        return coordinateRefusalCode() ?: maskFilter?.let { mf ->
             when (mf) {
                 is NormalizedMaskFilter.Blur -> mf.refusalCode()
             }
-        } ?: material.analysisRefusalCodeOrNull() ?: when {
+        } ?: descriptor?.analysisRefusalCodeOrNull() ?: when {
+            w5aPointMaterial &&
+                source.operation !in setOf("drawPoint", "drawPoints.points") ->
+                "unsupported.material.w5a_core_primitive_source"
             stroke -> {
                 val aaMode = if (antiAlias) "coverage-aa" else "none"
                 val shapeDesc = GPUShapeDescriptor(
@@ -2483,14 +2489,14 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
             transform.type == GPUTransformType.Singular -> "unsupported.transform.singular"
             transform.type == GPUTransformType.Scale &&
                 antiAlias &&
-                material.kind == GPUMaterialKind.SolidColor &&
+                materialIsSolid &&
                 pathDescriptor.fillRule == "NonZero" &&
                 !pathDescriptor.inverseFill &&
                 !stroke &&
                 maskFilter == null ->
                 "unsupported.core_primitive.coverage_sample.color_capability"
             !transform.isAcceptedFillPathTransform(
-                scaleAdmitted = material.kind == GPUMaterialKind.SolidColor &&
+                scaleAdmitted = materialIsSolid &&
                     pathDescriptor.fillRule == "NonZero" &&
                     !pathDescriptor.inverseFill &&
                     !stroke &&
@@ -2508,10 +2514,11 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
             clip.kind !in acceptedClipKinds -> "unsupported.clip.analytic_unsupported"
             clip.kind == GPUClipKind.DeviceRect && !capabilities.hasFact(firstScissorCapabilityName) ->
                 "unsupported.clip.scissor_capability_missing"
-            material.kind !in acceptedFillPathMaterialKinds -> "unsupported.material.source_unimplemented"
-            material is GPUMaterialDescriptor.LinearGradient && material.refusalCode() != null ->
-                material.refusalCode()
-            material is GPUMaterialDescriptor.LinearGradient &&
+            !w5aPointMaterial && descriptor?.kind !in acceptedFillPathMaterialKinds ->
+                "unsupported.material.source_unimplemented"
+            descriptor is GPUMaterialDescriptor.LinearGradient && descriptor.refusalCode() != null ->
+                descriptor.refusalCode()
+            descriptor is GPUMaterialDescriptor.LinearGradient &&
                 !capabilities.hasFact(firstLinearGradientCapabilityName) ->
                 "unsupported.material.linear_gradient_capability_missing"
             blend.canonicalRefusalCode(layer.target.colorFormat) != null ->
@@ -2531,6 +2538,11 @@ private fun GPUTransformFacts.isExactQuarterTurnGradientRotation(): Boolean =
                 "unsupported.pipeline.capability_missing"
             else -> null
         }
+    }
+
+    private fun NormalizedDrawCommand.analysisMaterialKey(): String =
+        (this as? NormalizedDrawCommand.FillPath)?.w5aMaterialPlanRef?.let { ref -> "pending.material.w5a.ref.${ref.indexI32}" }
+            ?: "pending.material.${requireNotNull(material).kind.name.lowercase()}"
 
     /**
      * The native path-stencil route is intentionally smaller than generic prepared strokes:

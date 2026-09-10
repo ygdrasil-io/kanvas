@@ -23,6 +23,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialProgram
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceAlphaClassification
 import org.graphiks.kanvas.gpu.renderer.state.GPUPathSourceAuthority
+import org.graphiks.kanvas.gpu.plan.MaterialPlanRef
 
 private val IDENTITY_GRADIENT_LOCAL_MATRIX = listOf(
     1f, 0f, 0f,
@@ -3757,7 +3758,13 @@ sealed interface NormalizedDrawCommand {
         override val transform: GPUTransformFacts,
         override val clip: GPUClipFacts,
         override val layer: GPULayerFacts,
-        override val material: GPUMaterialDescriptor,
+        /**
+         * Legacy material authority.  W5a point commands deliberately leave this absent: their
+         * source authority is [w5aMaterialPlanRef], never a reconstructed descriptor.
+         */
+        override val material: GPUMaterialDescriptor? = null,
+        /** Versioned sealed material reference used only by the W5a prepared point bridge. */
+        val w5aMaterialPlanRef: MaterialPlanRef? = null,
         override val blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
         override val bounds: GPUBounds,
         override val ordering: GPUOrderingFacts,
@@ -3782,6 +3789,12 @@ sealed interface NormalizedDrawCommand {
         /** Mask filter descriptor for post-processing the fill output. Null when no mask filter is active. */
         val maskFilter: NormalizedMaskFilter? = null,
     ) : NormalizedDrawCommand {
+        init {
+            require((material == null) != (w5aMaterialPlanRef == null)) {
+                "FillPath requires exactly one legacy descriptor or W5a material reference"
+            }
+        }
+
         override val drawKind: GPUDrawKind = GPUDrawKind.FillPath
     }
 

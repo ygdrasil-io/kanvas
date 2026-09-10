@@ -239,6 +239,11 @@ internal object GPUPreparedSurfaceFrameBuilder {
                 )
             }
             textPreparation as GPUPreparedTextFrameInventoryPreparation.Ready
+            val pointMaterials = if (request.candidate.color.interpretation == GPUColorInterpretation.LinearPremul) {
+                W5aPreparedCorePointMaterialBridge.capture(
+                    operations, request.targetBounds.width, request.targetBounds.height,
+                )
+            } else null
             val verticesPreparation = GPUPreparedVerticesFramePreparer.prepare(
                 operations = operations,
                 target = request.targetFacts,
@@ -256,6 +261,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                             preparedTextInventory = textInventory,
                             preparedVerticesInventory = verticesInventory,
                             elidedOperationIndices = elided,
+                            w5aPointMaterialRefs = pointMaterials?.refsByOperationIndex.orEmpty(),
                         )
                     }
                 },
@@ -417,6 +423,17 @@ internal object GPUPreparedSurfaceFrameBuilder {
                     target = request.target,
                     targetBounds = request.targetBounds,
                     semanticsByCommandId = semantics,
+                    w5aCoreMaterialAuthority = pointMaterials?.let { materials ->
+                        val refs = preparedMapping.visualCommands.mapNotNull { visual ->
+                            val command = visual.normalized as? NormalizedDrawCommand.FillPath
+                            command?.w5aMaterialPlanRef?.let { command.commandId.value to it }
+                        }.toMap()
+                        if (refs.isEmpty()) null else requireNotNull(
+                            org.graphiks.kanvas.gpu.renderer.passes.W5aCorePrimitiveMaterialAuthorityV2.issue(
+                                materials.table, refs,
+                            ),
+                        ) { "invalid.material.w5a_core_authority" }
+                    },
                     readbackRequestId = request.readbackRequestId.takeIf { request.includeReadback },
                     targetFormat = GPUColorFormat(request.targetFacts.colorFormat),
                     maskBlurIntermediateBudgetBytes = request.candidate.config.maxMaskBlurIntermediateBytes.toLong(),

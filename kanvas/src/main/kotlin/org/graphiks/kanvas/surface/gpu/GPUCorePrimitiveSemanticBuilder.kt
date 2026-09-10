@@ -567,7 +567,10 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
     ) {
         refuseGeometry("unsupported.core_primitive.material.path_stencil", normalizedMaterial.corePrimitiveMaterialFacts())
     }
-    val (material, premultipliedRgba) = normalizedMaterial.toCorePrimitiveMaterial(
+    val materialRef = (normalized as? NormalizedDrawCommand.FillPath)?.w5aMaterialPlanRef
+    val (material, premultipliedRgba) = if (materialRef != null) {
+        GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1(materialRef) to emptyList<Float>()
+    } else normalizedMaterial.toCorePrimitiveMaterial(
         colorTransform = colorTransform,
         deviceGradientTransform = nativeHardPathClipGradientTransformOrNull(),
     )

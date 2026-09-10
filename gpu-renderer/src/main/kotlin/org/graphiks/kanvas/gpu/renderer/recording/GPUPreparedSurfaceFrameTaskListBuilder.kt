@@ -120,6 +120,7 @@ data class GPUPreparedSurfaceFrameRequest(
     val targetFormat: GPUColorFormat = GPUColorFormat.RGBA8Unorm,
     /** Legacy mask-blur intermediate budget (RenderConfig.maxMaskBlurIntermediateBytes). */
     val maskBlurIntermediateBudgetBytes: Long = 67_108_864L,
+    val w5aCoreMaterialAuthority: org.graphiks.kanvas.gpu.renderer.passes.W5aCorePrimitiveMaterialAuthorityV2? = null,
 )
 
 /** Checked structural ceilings applied before one prepared task graph is published. */
@@ -908,6 +909,19 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
             GPUPreparedSurfaceTaskGraphLimits(),
         allowEmptyBaseTaskList: Boolean = false,
     ): GPUPreparedSurfaceFrameResult {
+        request.w5aCoreMaterialAuthority?.let { authority ->
+            val materialized = authority.materialize(request.semanticsByCommandId)
+                ?: return refused("invalid.material.w5a_core_authority", "W5a core material authority does not match the frame.")
+            return build(
+                request.copy(semanticsByCommandId = materialized, w5aCoreMaterialAuthority = null),
+                configuredAggregateBudgetBytes, taskGraphLimits, allowEmptyBaseTaskList,
+            )
+        }
+        if (request.semanticsByCommandId.values.any { semantic ->
+                semantic is GPUDrawSemanticPayload.CorePrimitive &&
+                    semantic.material is org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1
+            }
+        ) return refused("invalid.material.w5a_core_authority", "W5a core material references require a sealed frame authority.")
         request.baseTaskList.tasks.filterIsInstance<GPUTask.Refused>().firstOrNull()?.let {
             return GPUPreparedSurfaceFrameResult.Refused(it.diagnostic.atRecordingBoundary())
         }
