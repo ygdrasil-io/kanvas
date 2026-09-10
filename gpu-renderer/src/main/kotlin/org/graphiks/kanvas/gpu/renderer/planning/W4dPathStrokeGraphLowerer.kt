@@ -300,6 +300,7 @@ internal class W4dPathStrokeGraphLowerer {
             visual.map { visualDraw -> visualDraw.draw.copyFillGeometryF32() },
             graph.capabilities,
             graph.budget,
+            W4dPathStrokePlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId),
         )) {
             is PathStrokePlanBudgetResult.WithinBudget -> result.footprint
             is PathStrokePlanBudgetResult.Exceeded,
@@ -331,6 +332,7 @@ internal class W4dPathStrokeGraphLowerer {
             !hasExactPasses(renderPasses, target.id, depthStencil?.id, bindings, visual)
         ) return null
         return W4dGraph(
+            capabilityId = graph.capabilityId,
             target = target,
             staging = staging,
             vertex = vertex,
@@ -647,7 +649,14 @@ internal class W4dPathStrokeGraphLowerer {
         val scissor = draw.copyScissorI32()
         val plannedScissor = GPUPixelBounds(scissor.left, scissor.top, scissor.right, scissor.bottom)
         val color = when (role) {
-            GPUDrawPacketRole.PathStencilProducer -> ColorF32.Transparent
+            GPUDrawPacketRole.PathStencilProducer -> if (
+                materialPlanTable == null
+            ) {
+                resolveMaterialColor(materialPlanTable, draw.materialAuthority)
+                    ?: error("Historical W4d color authority is invalid")
+            } else {
+                ColorF32.Transparent
+            }
             GPUDrawPacketRole.Shading, GPUDrawPacketRole.PathStencilCover ->
                 resolveMaterialColor(materialPlanTable, draw.materialAuthority)
                     ?: error("W5 material authority is invalid for a color-writing path phase")
@@ -806,14 +815,17 @@ internal class W4dPathStrokeGraphLowerer {
         maxBufferSize: Long,
         maxDynamicUniformBuffers: Long,
     ): W4dSessionScratchV1? {
+        val materialV2 = W4dPathStrokePlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)
         val payloads = graph.visualDraws.flatMap { visual ->
-            val passCount = if (visual.draw.strategy == PathFillStrategy.StencilCover) 2 else 1
+            val passCount = if (materialV2 && visual.draw.strategy == PathFillStrategy.StencilCover) 2 else 1
             (0 until passCount).map { passOffset ->
                 val semantic = builtPasses.getOrNull(visual.firstPassIndex + passOffset)
                     ?.packet?.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive ?: return null
                 val bytes = semantic.payloadRef.uniformBlock?.bytes ?: return null
                 if (bytes.size.toLong() != W4dSessionScratchV1.UNIFORM_PAYLOAD_BYTES) return null
-                val label = if (passOffset == 0 && passCount == 2) {
+                val label = if (!materialV2) {
+                    "path-draw-${visual.draw.commandIndex}"
+                } else if (passOffset == 0 && passCount == 2) {
                     "path-draw-producer-${visual.draw.commandIndex}"
                 } else "path-draw-color-${visual.draw.commandIndex}"
                 GPUUniformSlabPayload(label, bytes.map(Int::toByte).toByteArray())
@@ -840,7 +852,7 @@ internal class W4dPathStrokeGraphLowerer {
         var vertexOffset = 0L
         var indexOffset = 0L
         var uniformSlot = 0
-        graph.visualDraws.forEach { visual ->
+        graph.visualDraws.forEachIndexed { visualIndex, visual ->
             val geometry = visual.draw.copyFillGeometryF32()
             val vertexRange = try { Math.multiplyExact(geometry.vertexCostI64, VERTEX_BYTES) } catch (_: ArithmeticException) { return null }
             val indexRange = try { Math.multiplyExact(geometry.indexCostI64, INDEX_BYTES) } catch (_: ArithmeticException) { return null }
@@ -856,13 +868,17 @@ internal class W4dPathStrokeGraphLowerer {
                 vertexRangeBytes = vertexRange,
                 indexOffsetBytes = indexOffset,
                 indexRangeBytes = indexRange,
-                uniformSlotIndex = uniformSlot + if (visual.draw.strategy == PathFillStrategy.StencilCover) 1 else 0,
-                producerUniformSlotIndex = if (visual.draw.strategy == PathFillStrategy.StencilCover) uniformSlot else null,
+                uniformSlotIndex = if (materialV2) {
+                    uniformSlot + if (visual.draw.strategy == PathFillStrategy.StencilCover) 1 else 0
+                } else {
+                    visualIndex
+                },
+                producerUniformSlotIndex = if (materialV2 && visual.draw.strategy == PathFillStrategy.StencilCover) uniformSlot else null,
                 atomicGroupId = visual.atomicGroupId,
             )
             vertexOffset = try { Math.addExact(vertexOffset, vertexRange) } catch (_: ArithmeticException) { return null }
             indexOffset = try { Math.addExact(indexOffset, indexRange) } catch (_: ArithmeticException) { return null }
-            uniformSlot += if (visual.draw.strategy == PathFillStrategy.StencilCover) 2 else 1
+            uniformSlot += if (materialV2 && visual.draw.strategy == PathFillStrategy.StencilCover) 2 else 1
         }
         return try {
             W4dSessionScratchV1(
@@ -1019,6 +1035,7 @@ internal class W4dPathStrokeGraphLowerer {
     private fun Long.isPositivePowerOfTwo(): Boolean = this > 0L && this and (this - 1L) == 0L
 
     private data class W4dGraph(
+        val capabilityId: String,
         val target: PlanResource,
         val staging: PlanResource,
         val vertex: PlanResource,

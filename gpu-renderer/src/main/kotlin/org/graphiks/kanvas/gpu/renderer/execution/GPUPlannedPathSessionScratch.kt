@@ -221,7 +221,7 @@ internal class GPUPlannedPathSessionScratch private constructor(
                 depthStencilResourceId = scratch.depthStencilResourceId,
                 targetBytes = null,
                 stagingBytes = null,
-                capabilityId = null,
+                capabilityId = scratch.capabilityId,
                 draws = scratch.draws.map { draw ->
                     Draw(
                         draw.commandId,

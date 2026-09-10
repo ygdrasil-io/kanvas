@@ -33,15 +33,16 @@ public object PathFillPlanBudget {
         geometriesF32: Collection<PathFillGeometryF32>,
         capabilities: PlanCapabilitySnapshot,
         budget: PlanBudget,
+        usesW5aMaterialContract: Boolean = true,
     ): PathFillPlanBudgetResult {
         if (targetExtent.isEmpty() || geometriesF32.isEmpty()) {
             return PathFillPlanBudgetResult.Invalid(INVALID_INPUT)
         }
         return try {
-            // A stencil fill has two executable phases.  Its producer carries a geometry-only
-            // uniform and its cover carries the material-bearing color uniform.
+            // W5a splits a stencil fill into geometry-only producer and material color-cover
+            // uniforms. Historical v1 retains its one shared legacy-color slot.
             val uniformPayloadCount = geometriesF32.sumOf { geometry ->
-                if (geometry.copyStencilEdgeFanF32OrNull() != null) 2L else 1L
+                if (usesW5aMaterialContract && geometry.copyStencilEdgeFanF32OrNull() != null) 2L else 1L
             }
             val targetPixelCount = Math.multiplyExact(targetExtent.width.toLong(), targetExtent.height.toLong())
             val targetBytes = Math.multiplyExact(targetPixelCount, PIXEL_BYTES)
