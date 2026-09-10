@@ -50,42 +50,61 @@
 - Consumes: `DrawNode.blend`, `CoveragePlan`, `SamplePlan`, `PlanCapabilitySnapshot`, `MaterialPlanTable`, `MaterialPlanRef`.
 - Produces: sealed `BlendPlan` variants `LegacySrcOverV1`, `FixedFunctionV1`, `DestinationReadV1`, and `NoOpV1`; refusals remain `EffectiveMaterialPlanner.Result.Refused` and can never appear inside a `Ready` plan. Also produces `EffectiveMaterialPlanner.Result.Ready(table, root, blend)`, `DestinationVersionI64`, `PlanResourceRole.DestinationSnapshot`, `PlanResourceUsage.StorageRead`, `PlanOperationCapability.StorageBuffer`, and versioned capability limits named with I32/I64 suffixes.
 
-- [ ] Add a public RED `Surface` test with Solid/Opacity Rect draws covering one non-`SRC_OVER` fixed-function mode and `DST`. The test must observe nontrivial alpha and paint order through `Picture`; add mutation counterfactuals only for mutable captured inputs. Use an independent bounded pixel oracle.
-- [ ] Run `rtk ./gradlew :kanvas:test --tests '*W5bBlendSurfacePixelTest*' --no-parallel`; verify RED is a W5a `unsupported.material.w5a.draw-state`/legacy-routing outcome, not a fixture error.
-- [ ] Replace the `BlendPlan { SrcOver }` enum with a sealed handle-free plan. The fixed-function variant stores backend-neutral factors/operations and coverage encoding; the destination-read variant stores the exact formula identity and required source/coverage contract; `LegacySrcOverV1` exists only for unchanged W3/W4 witnesses.
-- [ ] Make `EffectiveMaterialPlanner` return material and final blend together. It must keep Solid/Opacity normalization unchanged, accept every standard `BlendNode.Mode`/non-custom `BlendNode.Paint`, reject custom blender state, and never fold final draw blend into the source material DAG.
-- [ ] Extend `PlanCapabilitySnapshot` with the exact binding-size/count facts from spec section 5.4. Every newly introduced device limit is nullable/absent until a production adapter supplies an authentic value; absence means capability unavailable and no synthetic default is permitted. Add `StorageBuffer`, `StorageRead`, `DestinationSnapshot`, and frame-local destination texture planning without adding backend handles.
-- [ ] Add `W5bBlendCpuOracle` as a public-test-only independent implementation of section 10.1 over linear premultiplied colors. Reuse `WgslFloatEnvelopeV1Oracle` for interval/attachment closure; no renderer formula helper may be imported.
-- [ ] Lower the fixed-function and `NoOp` variants far enough through the existing W5a execution boundary for the new public cells to turn GREEN. A `DestinationReadV1` may be planned but remains a terminal typed refusal until Task 2; no public destination-read test is committed as passing evidence in Task 1.
-- [ ] Run the fixed-function/`DST` RED test to GREEN plus `:gpu-plan:compileKotlin`, `:gpu-renderer:compileKotlin`, and the existing W5a public suite. Commit `feat(gpu-plan): seal W5b final blend authority`.
+- [x] Add a public RED `Surface` test with Solid/Opacity Rect draws covering one non-`SRC_OVER` fixed-function mode and `DST`. The test observes nontrivial alpha and true reversed-order replay through `Picture`, with an independent bounded pixel oracle.
+- [x] Run `rtk ./gradlew :kanvas:test --tests '*W5bBlendSurfacePixelTest*' --no-parallel`; verify RED is a W5a legacy-routing outcome, not a fixture error.
+- [x] Replace the `BlendPlan { SrcOver }` enum with a sealed handle-free plan carrying backend-neutral factors/operations, coverage encoding and destination formula identity.
+- [x] Make `EffectiveMaterialPlanner` normalize material and final blend together, preserve Solid/Opacity normalization, reject custom blender state and keep final draw blend outside the source DAG.
+- [x] Extend `PlanCapabilitySnapshot` with nullable authentic binding-size/count facts and add `StorageBuffer`, `StorageRead`, `DestinationSnapshot` vocabulary without backend handles.
+- [x] Add the independent public-test W5b oracle through `WgslFloatEnvelopeV1Oracle`, without renderer formula imports or empirical tolerance.
+- [x] Lower fixed-function and `NoOp` through the W5a execution boundary; destination-read remained typed-refused until Task 2.
+- [x] Verify two W5b public tests, W5a public regressions and compiles; commits `e1a05bafd`, `effefbabe`, `3038e46e2`, `c6252ba05`, `39a6f9177`.
 
 ### Task 2: Complete destination-read lowering without a second semantic planner
 
 **Files:**
 - Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/FinalBlendPlan.kt`
 - Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/EffectiveMaterialPlanner.kt`
+- Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/PlanPasses.kt`
+- Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/RenderGraph.kt`
+- Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/W3SolidRectPlanCompiler.kt`
+- Create: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/RawMaterialRequirementsV2.kt`
+- Create: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/W5bDestinationGraph.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/planning/W5bBlendPlanLowerer.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/planning/GpuPlanTaskListLowerer.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/planning/GpuPlanCapabilityAdapter.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUBlendPlanning.kt`
-- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/materials/GPUBlendFormulaLibrary.kt`
-- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/pipelines/GPUBlendFormulaProgramLibrary.kt`
+- Reuse unchanged: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/materials/GPUBlendFormulaLibrary.kt`
+- Reuse unchanged: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/pipelines/GPUBlendFormulaProgramLibrary.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/capabilities/CapabilityContracts.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNative.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUW5aSourceStageNativeV2.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFramePreflighter.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedNativeFramePayload.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kCorePrimitiveFramePayloadMaterializer.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kCorePrimitivePipelineDescriptor.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kFramePayloadMaterializerDispatcher.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/PreparedGPUFrame.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/materials/W5aMaterialSourceStage.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUCorePrimitivePreparedAuthority.kt`
+- Create: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/W5bPreparedFrameWitnessV3.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPUCorePrimitivePreparedFrameTaskListBuilder.kt`
-- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/destination/GPUDestinationSnapshotGrouping.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPUFramePlan.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPUFramePlanner.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/recording/RecordingContracts.kt`
+- Reuse unchanged: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/destination/GPUDestinationSnapshotGrouping.kt`
 - Modify: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5bBlendSurfacePixelTest.kt`
+- Modify: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/WgslFloatEnvelopeV1Oracle.kt`
 
 **Interfaces:**
 - Consumes: sealed `org.graphiks.kanvas.gpu.plan.BlendPlan` plus the existing W5a source-stage program/bindings.
 - Produces: one renderer execution descriptor containing either exact native blend state, no color write, or one registered destination formula/layout. `GPUBlendPlanner` becomes a compatibility adapter for legacy routes and may not re-plan W5b draws.
 
-- [ ] Add RED public Rect and fractional Rect tests proving that the same captured source executes under destination-read modes, including scalar coverage on a fractional edge. Retain the fixed-function and `DST/NoOp` cells from Task 1 as regressions. RRect remains in Task 4, where its compiler acquires W5b ownership.
-- [ ] Verify RED through `Surface.render()` and exact public pixels; do not assert shader text, pipeline keys, bindings, counters or route scopes.
-- [ ] Implement `W5bBlendPlanLowerer` as an exhaustive mapping from the sealed plan to existing native state/formula registries. Validate plan/formula version and source/coverage ABI before allocation; never call `GPUBlendPlanner.plan()` for a W5b draw.
-- [ ] Generalize W5a fragment composition so the source DAG remains unchanged while the authenticated target tail comes from the W5b blend plan. Destination-read adds its texture/sampler group without renumbering geometry group 0 or raw material group 1; the new ABI version must be explicit.
-- [ ] Keep fixed-function and destination-read color math sourced from one formula registry. Remove only duplicate W5b classification tables; preserve legacy adapters needed by non-migrated branches.
-- [ ] Run the W5b public tests, W5a public tests and targeted W3/W4 public pixel tests; commit `feat(gpu-renderer): lower sealed W5b blend plans`.
+- [x] Add RED public integral Rect tests for full/scissor destination-read and retain Task 1 fixed-function/`DST` regressions. Scalar coverage is deferred to Task 3's Point × `ALPHA_MASK`; fractional Rect and RRect remain in Task 4 with their geometry compilers.
+- [x] Verify RED through `Surface.render()` and exact public pixels; do not assert shader text, pipeline keys, bindings, counters or route scopes.
+- [x] Implement `W5bBlendPlanLowerer` as an exhaustive mapping from the sealed plan to existing native state/formula registries. Validate plan/formula version and source/coverage ABI before allocation; never call `GPUBlendPlanner.plan()` for a W5b draw.
+- [x] Generalize W5a fragment composition so the source DAG remains unchanged while the authenticated target tail comes from the W5b blend plan. Destination-read adds its texture/sampler group without renumbering geometry group 0 or raw material group 1; ABI v3 is explicit.
+- [x] Keep fixed-function and destination-read color math sourced from one formula registry. Preserve legacy adapters needed by non-migrated branches.
+- [x] Run eight W5b public tests, 45 selected W5a public pixel tests (44 pass, one authentic AA4 skip), compiles and targeted public regressions; commits `57bdd4ae3`, `4b4c091b0`, `7aab83979`.
 
 ### Task 3: Close the 45 historical DrawPoint cells
 
@@ -93,9 +112,19 @@
 - Modify: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUAllApiBlendSurfaceTest.kt`
 - Modify: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5bBlendSurfacePixelTest.kt`
 - Modify: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5bBlendCpuOracle.kt`
+- Modify: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/WgslFloatEnvelopeV1Oracle.kt`
 - Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUCorePrimitiveSemanticBuilder.kt`
+- Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/W5bDestinationGraph.kt`
+- Create or modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/W5bCorePrimitiveGraph.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/planning/GpuPlanTaskListLowerer.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/planning/W5bBlendPlanLowerer.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/planning/W4eClipGraphLowerer.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/W5bPreparedFrameWitnessV3.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUCorePrimitivePreparedAuthority.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPUCorePrimitivePreparedFrameTaskListBuilder.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFramePreflighter.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUW5aSourceStageNativeV2.kt`
+- Modify as required inside the existing W5b direct pipeline/cache cone: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kCorePrimitivePipelineDescriptor.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kCorePrimitiveFramePayloadMaterializer.kt`
 
 **Interfaces:**
@@ -106,7 +135,9 @@
 - [ ] Change the generic matrix expectation for those same DrawPoint cells from terminal refusal to prepared rendering. Keep all unrelated API expectations unchanged.
 - [ ] Run only the filterable DrawPoint gate and verify all 45 cells RED on the current direct-geometry/preflight refusal or wrong pixel; no font or image fixture may execute in this command.
 - [ ] Preserve the core point fan/hairline authority from W5a. Seal shared V/I/U resources once for the ordered multi-render frame, and issue a distinct destination version for every visible target write. Do not convert points to paths and do not weaken the 64-point capacity boundary.
+- [ ] Keep W4e as the producer/owner of alpha-mask coverage and resources. The W5b scalar consumer ABI receives that sealed coverage, evaluates `blend(source,destination)`, then returns `destination + coverage * (blended - destination)`; it must not synthesize a scissor, premultiply only the source, or reuse clip handles as destination snapshots.
 - [ ] Materialize each required GPU copy/formula consumer with conservative bounds and exact row-pitch/budget accounting. A culled point produces neither a write version nor a snapshot.
+- [ ] Prove ordering, versions, scalar coverage and culling only through the filterable 45-cell public pixel gate and W5a public regressions. Do not add structural/order/witness tests or inspect internal tasks, counters, scopes, bind groups or shader text.
 - [ ] Verify the 45 cells GREEN with singleton/two-adjacent oracle sets, then run W5a Point/Points regressions and the 512/513 W5a resource-bound tests. Commit `feat(gpu-renderer): close W5b DrawPoint blend matrix`.
 
 ### Task 4: Promote Rect, RRect, Path fill, stroke and hairline blends
